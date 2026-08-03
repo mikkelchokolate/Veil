@@ -1,18 +1,78 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/clientaccess"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
+
+type subscriptionRateBucket struct {
+	window int64
+	count  int
+}
+
+type subscriptionRateLimiter struct {
+	mu      sync.Mutex
+	buckets map[string]subscriptionRateBucket
+}
+
+func (l *subscriptionRateLimiter) allow(token, remote string, now time.Time) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.buckets == nil {
+		l.buckets = make(map[string]subscriptionRateBucket)
+	}
+	window := now.Unix() / 60
+	digest := sha256.Sum256([]byte(token))
+	tokenKey := "token:" + hex.EncodeToString(digest[:])
+	host, _, err := net.SplitHostPort(strings.TrimSpace(remote))
+	if err != nil {
+		host = strings.TrimSpace(remote)
+	}
+	sourceKey := "source:" + host
+	limits := map[string]int{tokenKey: 60, sourceKey: 300}
+	updates := make(map[string]subscriptionRateBucket, len(limits))
+	for key, limit := range limits {
+		bucket := l.buckets[key]
+		if bucket.window != window {
+			bucket = subscriptionRateBucket{window: window}
+		}
+		if bucket.count >= limit {
+			return false
+		}
+		bucket.count++
+		updates[key] = bucket
+	}
+	for key, bucket := range updates {
+		l.buckets[key] = bucket
+	}
+	if len(l.buckets) > 8192 {
+		for key, bucket := range l.buckets {
+			if bucket.window < window {
+				delete(l.buckets, key)
+			}
+		}
+		for key := range l.buckets {
+			if len(l.buckets) <= 8192 {
+				break
+			}
+			delete(l.buckets, key)
+		}
+	}
+	return true
+}
 
 // registerSubscriptionRoutes wires the public token-based subscription
 // delivery endpoint (/s/{token}) and the authenticated token-management
@@ -35,12 +95,24 @@ func (s *managementState) handlePublicSubscription(w http.ResponseWriter, r *htt
 		writeError(w, "subscription store unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	s.mu.Lock()
+	runtimeUnknown := s.runtimeVerificationUnknown || s.clientSubsystemStopping
+	s.mu.Unlock()
+	if runtimeUnknown {
+		w.Header().Set("X-Veil-Configuration-State", "recovering")
+		writeError(w, "applied runtime is recovering", http.StatusServiceUnavailable)
+		return
+	}
 	rest := strings.TrimPrefix(r.URL.Path, "/s/")
 	if rest == "" || strings.Contains(rest, "/") {
 		writeNotFound(w)
 		return
 	}
 	token := rest
+	if !s.subscriptionLimiter.allow(token, r.RemoteAddr, time.Now()) {
+		writeError(w, "subscription rate limit exceeded", http.StatusTooManyRequests)
+		return
+	}
 	var tok *client.SubscriptionToken
 	var err error
 	if r.Method == http.MethodHead {
@@ -76,7 +148,70 @@ func (s *managementState) handlePublicSubscription(w http.ResponseWriter, r *htt
 	w.Header().Set("X-Veil-Configuration-State", configurationState)
 	w.Header().Set("X-Veil-Applied-Revision", strconv.FormatUint(applied, 10))
 	w.Header().Set("X-Veil-Desired-Revision", strconv.FormatUint(desired, 10))
+	quotaPeriodGeneration := int64(0)
+	if cl.Client.QuotaResetAt != nil {
+		quotaPeriodGeneration = *cl.Client.QuotaResetAt
+	}
+	w.Header().Set("X-Veil-Quota-Period-Generation", strconv.FormatInt(quotaPeriodGeneration, 10))
+	var trafficGeneration int64
+	if s.db != nil {
+		_ = s.db.QueryRow(`SELECT COALESCE(MAX(bucket_start),0) FROM traffic_buckets WHERE client_id=?`, cl.Client.ID).Scan(&trafficGeneration)
+	}
+	w.Header().Set("X-Veil-Traffic-Observation-Generation", strconv.FormatInt(trafficGeneration, 10))
 	s.writeSubscription(w, r, cl, links)
+}
+
+func (s *managementState) appliedClientProjection(revision uint64, payload []byte, clientID string) (managementSnapshot, error) {
+	s.appliedProjectionMu.Lock()
+	defer s.appliedProjectionMu.Unlock()
+	if s.appliedProjectionRevision != revision || s.appliedProjections == nil {
+		var full managementSnapshot
+		if err := json.Unmarshal(payload, &full); err != nil {
+			return managementSnapshot{}, fmt.Errorf("decode applied subscription snapshot: %w", err)
+		}
+		projections := make(map[string]managementSnapshot, len(full.Clients))
+		inboundIDs := make(map[string]map[string]struct{}, len(full.Clients))
+		bindingIDs := make(map[string]map[string]struct{}, len(full.Clients))
+		for _, row := range full.Clients {
+			projections[row.ID] = managementSnapshot{
+				SchemaVersion: full.SchemaVersion, EffectiveAt: full.EffectiveAt, Setup: full.Setup,
+				Settings: full.Settings, Rules: full.Rules, RoutingPreset: full.RoutingPreset,
+				RoutingSource: full.RoutingSource, Warp: full.Warp, Clients: []model.ClientSnapshot{row},
+			}
+			inboundIDs[row.ID] = make(map[string]struct{})
+			bindingIDs[row.ID] = make(map[string]struct{})
+		}
+		for _, binding := range full.Bindings {
+			projection, ok := projections[binding.ClientID]
+			if !ok {
+				continue
+			}
+			projection.Bindings = append(projection.Bindings, binding)
+			projections[binding.ClientID] = projection
+			inboundIDs[binding.ClientID][binding.InboundID] = struct{}{}
+			bindingIDs[binding.ClientID][binding.ID] = struct{}{}
+		}
+		for clientID, projection := range projections {
+			for _, inbound := range full.Inbounds {
+				if _, ok := inboundIDs[clientID][inbound.Name]; ok {
+					projection.Inbounds = append(projection.Inbounds, inbound)
+				}
+			}
+			for _, credential := range full.Credentials {
+				if _, ok := bindingIDs[clientID][credential.BindingID]; ok {
+					projection.Credentials = append(projection.Credentials, credential)
+				}
+			}
+			projections[clientID] = projection
+		}
+		s.appliedProjectionRevision = revision
+		s.appliedProjections = projections
+	}
+	projection, ok := s.appliedProjections[clientID]
+	if !ok {
+		return managementSnapshot{}, client.ErrNotFound
+	}
+	return projection, nil
 }
 
 func (s *managementState) appliedSubscription(clientID string) (client.View, []model.ClientLink, uint64, uint64, error) {
@@ -94,9 +229,9 @@ func (s *managementState) appliedSubscription(clientID string) (client.View, []m
 	if err != nil {
 		return client.View{}, nil, 0, revisions.Desired, err
 	}
-	var snapshot managementSnapshot
-	if err := json.Unmarshal(payload, &snapshot); err != nil {
-		return client.View{}, nil, 0, revisions.Desired, fmt.Errorf("decode applied subscription snapshot: %w", err)
+	snapshot, err := s.appliedClientProjection(revisions.Applied, payload, clientID)
+	if err != nil {
+		return client.View{}, nil, revisions.Applied, revisions.Desired, err
 	}
 	if err := s.decryptSnapshot(&snapshot); err != nil {
 		return client.View{}, nil, 0, revisions.Desired, err
@@ -253,6 +388,7 @@ func (s *managementState) handleV1ClientTokens(w http.ResponseWriter, r *http.Re
 		}
 		issued.URL = s.subscriptionURLFor(issued.Plaintext)
 		s.logUserAction(r, "issue_subscription_token", clientID, true, issued.Token.Prefix)
+		markIdempotencySecretResponse(w, issued.Token.ID, uint64(issued.Token.CreatedAt))
 		writeJSONStatus(w, http.StatusCreated, issued)
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodPost)
@@ -293,6 +429,7 @@ func (s *managementState) handleV1ClientTokenByID(w http.ResponseWriter, r *http
 		}
 		issued.URL = s.subscriptionURLFor(issued.Plaintext)
 		s.logUserAction(r, "rotate_subscription_token", clientID, true, issued.Token.Prefix)
+		markIdempotencySecretResponse(w, issued.Token.ID, uint64(issued.Token.CreatedAt))
 		writeJSON(w, issued)
 		return
 	}

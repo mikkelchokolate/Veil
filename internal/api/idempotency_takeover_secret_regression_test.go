@@ -39,10 +39,10 @@ func TestStaleIdempotencyReservationTakeoverFencesOldOwner(t *testing.T) {
 	if err != nil || !owned || newRecord.Generation != 2 {
 		t.Fatalf("takeover: owned=%v record=%+v err=%v", owned, newRecord, err)
 	}
-	if err := oldStore.completeDurable(scope, fingerprint, oldRecord, http.StatusCreated, http.Header{}, []byte("old")); err == nil {
+	if err := oldStore.completeDurable(scope, fingerprint, oldRecord, http.StatusCreated, http.Header{}, []byte("old"), "committed"); err == nil {
 		t.Fatal("old owner completed after generation takeover")
 	}
-	if err := newStore.completeDurable(scope, fingerprint, newRecord, http.StatusCreated, http.Header{}, []byte("new")); err != nil {
+	if err := newStore.completeDurable(scope, fingerprint, newRecord, http.StatusCreated, http.Header{}, []byte("new"), "committed"); err != nil {
 		t.Fatalf("new owner completion: %v", err)
 	}
 	persisted, err := newStore.readDurable(scope)
@@ -66,9 +66,14 @@ func TestSecretIdempotencyReplayIsEncryptedAndInvalidatedByRotate(t *testing.T) 
 		t.Fatal(err)
 	}
 	var calls atomic.Int32
-	handler := store.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := store.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
+		generation := uint64(1)
+		if strings.HasSuffix(r.URL.Path, "/rotate") {
+			generation = 2
+		}
+		markIdempotencySecretResponse(w, "c1", generation)
 		_, _ = w.Write([]byte(`{"plaintext":"one-time-secret"}`))
 	}))
 	issue := func() *httptest.ResponseRecorder {
@@ -84,7 +89,7 @@ func TestSecretIdempotencyReplayIsEncryptedAndInvalidatedByRotate(t *testing.T) 
 	}
 	var stored []byte
 	var encrypted int
-	if err := db.QueryRow(`SELECT response_body,response_encrypted FROM idempotency_records WHERE response_encrypted=1`).Scan(&stored, &encrypted); err != nil {
+	if err := db.QueryRow(`SELECT response_body,encrypted FROM idempotency_results WHERE encrypted=1`).Scan(&stored, &encrypted); err != nil {
 		t.Fatal(err)
 	}
 	if encrypted != 1 || bytes.Contains(stored, []byte("one-time-secret")) {
@@ -124,11 +129,8 @@ func TestOversizedPostCommitResultDoesNotRepeatMutation(t *testing.T) {
 		return w
 	}
 	first := request()
-	if first.Code != http.StatusOK {
-		t.Fatalf("first=%d", first.Code)
-	}
 	second := request()
-	if second.Code != http.StatusAccepted || calls.Load() != 1 || !strings.Contains(second.Body.String(), "response_too_large") {
-		t.Fatalf("retry=%d body=%s calls=%d", second.Code, second.Body.String(), calls.Load())
+	if first.Code != http.StatusAccepted || second.Code != http.StatusAccepted || calls.Load() != 1 || first.Body.String() != second.Body.String() || !strings.Contains(second.Body.String(), "response_too_large") {
+		t.Fatalf("first=%d retry=%d firstBody=%s retryBody=%s calls=%d", first.Code, second.Code, first.Body.String(), second.Body.String(), calls.Load())
 	}
 }

@@ -51,6 +51,8 @@ func closeClientDatabase(s *managementState) error {
 		return nil
 	}
 	db := s.db
+	runner := s.applyRunner
+	tokenStore := s.tokenStore
 	s.db = nil
 	s.applyRevisions = nil
 	s.applyJobs = nil
@@ -63,6 +65,12 @@ func closeClientDatabase(s *managementState) error {
 	s.tokenStore = nil
 	s.subRenderer = nil
 	s.trafficStore = nil
+	if runner != nil {
+		runner.Close()
+	}
+	if tokenStore != nil {
+		tokenStore.Close()
+	}
 	return db.Close()
 }
 
@@ -85,11 +93,11 @@ func initApplySubsystem(s *managementState) {
 	dbPath := filepath.Join(filepath.Dir(s.statePath), "veil.db")
 	db, err := storage.Open(dbPath)
 	if err != nil {
-		// A broken store must not prevent the panel from serving; log and run
-		// without revision tracking rather than refusing to start.
-		log.Printf("apply subsystem: open %s: %v (revision tracking disabled)", dbPath, err)
+		s.storageDegradedErr = err
+		log.Printf("apply subsystem: persistent SQLite unavailable: %v", err)
 		return
 	}
+	s.storageDegradedErr = nil
 	s.db = db
 	if s.idempotency != nil {
 		s.idempotency.mu.Lock()
@@ -100,6 +108,13 @@ func initApplySubsystem(s *managementState) {
 	s.applyJobs = apply.NewJobStore(s.db)
 	s.applySnapshots = apply.NewSnapshotStore(s.db)
 	s.applyRunner = apply.NewRunner(s.applyRevisions, s.applyJobs, apply.ContextExecutorFunc(s.executeApplyRevisionContext))
+	var runtimeStatus string
+	if err := s.db.QueryRow(`SELECT status FROM runtime_verification WHERE id=1`).Scan(&runtimeStatus); err != nil {
+		s.storageDegradedErr = fmt.Errorf("read runtime verification state: %w", err)
+		s.runtimeVerificationUnknown = true
+	} else {
+		s.runtimeVerificationUnknown = runtimeStatus != "verified"
+	}
 }
 
 // bindingCapabilityForInbound resolves the protocol capabilities of the named
@@ -210,7 +225,9 @@ func (s *managementState) registerTrafficProvidersLocked() {
 	if s.trafficCollector == nil || s.clientRepo == nil {
 		return
 	}
-	s.trafficCollector.ResetProviders(s.buildTrafficProvidersLocked())
+	if err := s.trafficCollector.ResetProductionProviders(s.buildTrafficProvidersLocked()); err != nil {
+		s.trafficCollector.MarkDegraded("collector", err)
+	}
 }
 
 // buildTrafficProvidersLocked constructs TrafficProviders for every supported
@@ -277,9 +294,23 @@ func (s *managementState) convergeRevisionForSideEffect(ctx context.Context, rev
 		return apply.Result{}, err
 	}
 	if revisions.Applied == revision {
-		return apply.Result{Success: true}, nil
+		return apply.Result{
+			Success: true, Disposition: apply.ApplyDispositionRuntimeConverged, MarkRevisionLive: true,
+		}, nil
 	}
 	return s.executeApplyRevisionContext(ctx, revision)
+}
+
+func completeSideEffectPublication(ctx context.Context, details apply.PublicationDetails) error {
+	for _, phase := range []string{
+		apply.PublicationPhaseSideEffectCommitted,
+		apply.PublicationPhaseSideEffectVerified,
+	} {
+		if err := apply.AdvanceRuntimePublication(ctx, phase, details); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // bumpDesiredRevisionLocked records a committed configuration mutation for the
@@ -401,7 +432,33 @@ func (s *managementState) executeApplyRevisionRequestContext(operationContext co
 	s.orphanedUnits = append([]string(nil), execution.orphanedUnits...)
 	s.mu.Unlock()
 
-	result := apply.Result{Success: err == nil && status == http.StatusOK, RolledBack: response.RolledBack}
+	result := apply.Result{
+		Success:    err == nil && status == http.StatusOK,
+		RolledBack: response.RolledBack,
+		RuntimeMutation: apply.RuntimeMutationOutcome{
+			MutationStarted:        response.MutationStarted,
+			ArtifactsChanged:       response.ArtifactsChanged,
+			ServicesChanged:        response.ServicesChanged,
+			FirewallChanged:        response.FirewallChanged,
+			ArtifactsRestored:      response.ArtifactsRestored,
+			ServicesRestored:       response.ServicesRestored,
+			FirewallRestored:       response.FirewallRestored,
+			PostRollbackHealthPass: response.PostRollbackHealthPass,
+			RollbackComplete:       response.RollbackComplete,
+			Ambiguous:              response.Ambiguous,
+		},
+	}
+	if result.Success {
+		switch {
+		case response.Applied:
+			result.Disposition = apply.ApplyDispositionRuntimeConverged
+			result.MarkRevisionLive = true
+		case response.LiveApplied:
+			result.Disposition = apply.ApplyDispositionArtifactsCommitted
+		default:
+			result.Disposition = apply.ApplyDispositionStaged
+		}
+	}
 	if err != nil {
 		result.ErrorCode = "APPLY_ERROR"
 		result.ErrorMessage = err.Error()

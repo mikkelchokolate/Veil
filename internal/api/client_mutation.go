@@ -29,7 +29,31 @@ import (
 func (s *managementState) withClientMutation(r *http.Request, actor string, mutate func(tx *client.Tx) error) (autoApplyOutcome, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.commitClientMutationLocked(mutate)
+	operation, trackedOperation := idempotencyDomainOperationFromContext(r.Context())
+	var bind func(tx *client.Tx, revision uint64) error
+	if trackedOperation {
+		bind = func(tx *client.Tx, revision uint64) error {
+			resultBody, err := json.Marshal(map[string]any{"revision": revision})
+			if err != nil {
+				return err
+			}
+			result, err := tx.Exec(`UPDATE domain_operations SET state='mutation_committed',domain_result_json=?,mutation_bound_at=?,committed_at=?
+WHERE id=? AND scope=? AND operation_generation=? AND state='reserved'`,
+				string(resultBody), time.Now().UTC().Unix(), time.Now().UTC().Unix(), operation.ID, operation.Scope, operation.Generation)
+			if err != nil {
+				return err
+			}
+			rows, err := result.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if rows != 1 {
+				return errors.New("idempotency domain operation fence lost")
+			}
+			return nil
+		}
+	}
+	_, err := s.commitClientMutationBoundLocked(mutate, bind)
 	if errors.Is(err, errNoClientChanges) {
 		// The closure determined nothing actually changed: transaction rolled
 		// back, no revision, no apply. The response reports success against
@@ -38,6 +62,9 @@ func (s *managementState) withClientMutation(r *http.Request, actor string, muta
 	}
 	if err != nil {
 		return autoApplyOutcome{}, err
+	}
+	if s.expirationReconciler != nil {
+		s.expirationReconciler.Signal()
 	}
 	return s.autoApplyResultLocked(r, actor), nil
 }

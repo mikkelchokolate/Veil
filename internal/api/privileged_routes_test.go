@@ -170,7 +170,12 @@ func (c *recordingPrivilegedClient) Backup(_ context.Context, request privileged
 			Name: "veil_backup_20260605_120000.tar.gz.enc", Size: 8, Encrypted: true,
 		}}}, nil
 	case privileged.BackupActionRead:
-		return privileged.BackupResult{ArchiveName: request.ArchiveName, Archives: []privileged.BackupArchive{{Name: request.ArchiveName, Size: 8, CreatedAt: "2026-06-05T12:00:00Z"}}, Data: []byte("VEILBACK")}, nil
+		return privileged.BackupResult{
+			ArchiveName: request.ArchiveName,
+			Archives:    []privileged.BackupArchive{{Name: request.ArchiveName, Size: 8, CreatedAt: "2026-06-05T12:00:00Z"}},
+			Data:        []byte("VEILBACK"), TransactionID: "0123456789abcdef0123456789abcdef",
+			ContentDigest: "5269965b9479151ca2cf88176e9e71af426fc170ed5a85f6940f186b26e8409d", InodeGeneration: "1:1:1", BoundSize: 8,
+		}, nil
 	case privileged.BackupActionVerify:
 		return privileged.BackupResult{ArchiveName: request.ArchiveName, Verified: true}, nil
 	case privileged.BackupActionPrune:

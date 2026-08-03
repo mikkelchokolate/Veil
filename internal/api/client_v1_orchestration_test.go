@@ -416,10 +416,10 @@ func TestClientMutationApplyFailureSuccessFalse(t *testing.T) {
 	if env.Success {
 		t.Errorf("(6) success = true despite failed apply: %+v", env)
 	}
-	// A rolled-back apply is the terminal failure state for a health/reload
-	// failure; both "failed" and "rolled_back" are non-success terminals.
-	if env.ApplyJob == nil || (env.ApplyJob.Status != "failed" && env.ApplyJob.Status != "rolled_back") {
-		t.Errorf("(6) applyJob status = %+v, want failed/rolled_back", env.ApplyJob)
+	// A failed rollback remains recovery_pending until every changed component
+	// is restored and verified; it must never be reported as success.
+	if env.ApplyJob == nil || (env.ApplyJob.Status != "failed" && env.ApplyJob.Status != "rolled_back" && env.ApplyJob.Status != "recovery_pending") {
+		t.Errorf("(6) applyJob status = %+v, want failed/rolled_back/recovery_pending", env.ApplyJob)
 	}
 }
 

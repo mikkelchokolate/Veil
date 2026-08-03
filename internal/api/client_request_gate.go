@@ -19,3 +19,30 @@ func clientRequestGateMiddleware(state *managementState, next http.Handler) http
 		next.ServeHTTP(w, r)
 	})
 }
+
+func degradedStateMiddleware(state *managementState, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+			state.mu.Lock()
+			storageUnavailable := state.storageDegradedErr != nil || (state.requireApplyTracking && state.db == nil)
+			stateUnavailable := state.startupStateLoadFailed
+			state.mu.Unlock()
+			if storageUnavailable || stateUnavailable {
+				code := "state_unavailable"
+				component := "state_store"
+				if storageUnavailable {
+					code = "storage_unavailable"
+					component = "sqlite"
+				}
+				setJSONHeaders(w)
+				w.WriteHeader(http.StatusServiceUnavailable)
+				writeJSON(w, map[string]any{
+					"error":     map[string]string{"code": code, "message": "management mutations are unavailable while persistent state is degraded"},
+					"component": component,
+				})
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}

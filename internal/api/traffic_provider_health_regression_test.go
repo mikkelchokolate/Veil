@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/client"
 )
@@ -22,8 +23,12 @@ type healthRegressionTrafficProvider struct {
 }
 
 func (p *healthRegressionTrafficProvider) Key() string { return p.key }
-func (p *healthRegressionTrafficProvider) Read() (map[string]client.ProviderReading, error) {
-	return p.readings, p.err
+func (p *healthRegressionTrafficProvider) Read() (client.ProviderBatch, error) {
+	readings := make([]client.ProviderReading, 0, len(p.readings))
+	for _, reading := range p.readings {
+		readings = append(readings, reading)
+	}
+	return client.ProviderBatch{Readings: readings, ObservedAt: time.Now().UTC(), RuntimeInstance: p.key}, p.err
 }
 
 func loopbackServerPort(t *testing.T, server *httptest.Server) int {

@@ -64,7 +64,11 @@ func (s *managementState) handleFirewall(w http.ResponseWriter, r *http.Request)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	active, _ := firewallStatusReader()
+	active, err := firewallStatusReader()
+	if err != nil {
+		writeError(w, "firewall status unavailable", http.StatusServiceUnavailable)
+		return
+	}
 	rules := firewall.BuildRuleResponses(s.settings, s.inbounds)
 	if r.Method == http.MethodGet {
 		writeJSON(w, map[string]any{
@@ -295,40 +299,28 @@ func (s *managementState) applyStateViewLocked() applyStateResponse {
 			resp.ActiveJobID = latest.ID
 		}
 	}
-	if lastOK, ok, _ := s.latestJobWithStatus(apply.StatusSucceeded); ok {
-		resp.LastSuccessfulJobID = lastOK
+	if lastOK, ok, _ := s.applyJobs.LatestWithStatus(apply.StatusSucceeded); ok {
+		resp.LastSuccessfulJobID = lastOK.ID
 	}
-	if lastFail, ok, _ := s.latestFailedJob(); ok {
+	if lastFail, ok, _ := s.applyJobs.LatestFailed(); ok {
 		resp.LastFailedJobID = lastFail.ID
-		resp.LastError = &applyErrorView{Code: lastFail.ErrorCode, Message: lastFail.ErrorMessage}
+	}
+	if len(jobs) > 0 {
+		latest := jobs[0]
+		if latest.Status == apply.StatusFailed || latest.Status == apply.StatusRolledBack || latest.Status == apply.StatusRollbackFailed {
+			resp.LastError = &applyErrorView{Code: latest.ErrorCode, Message: latest.ErrorMessage}
+		}
 	}
 	return resp
 }
 
 func (s *managementState) latestJobWithStatus(status string) (string, bool, error) {
-	jobs, err := s.applyJobs.List(200)
-	if err != nil {
-		return "", false, err
-	}
-	for _, j := range jobs {
-		if j.Status == status {
-			return j.ID, true, nil
-		}
-	}
-	return "", false, nil
+	job, ok, err := s.applyJobs.LatestWithStatus(status)
+	return job.ID, ok, err
 }
 
 func (s *managementState) latestFailedJob() (apply.Job, bool, error) {
-	jobs, err := s.applyJobs.List(200)
-	if err != nil {
-		return apply.Job{}, false, err
-	}
-	for _, j := range jobs {
-		if j.Status == apply.StatusFailed || j.Status == apply.StatusRolledBack || j.Status == apply.StatusRollbackFailed {
-			return j, true, nil
-		}
-	}
-	return apply.Job{}, false, nil
+	return s.applyJobs.LatestFailed()
 }
 
 // deriveSystemState maps revisions + latest job to the public system state.

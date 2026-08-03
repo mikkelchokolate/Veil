@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/client"
 )
@@ -450,11 +451,16 @@ func (s *managementState) handleV1CreateClient(w http.ResponseWriter, r *http.Re
 	if !decodeJSONRequest(w, r, &req) {
 		return
 	}
+	if req.DeviceLimit != nil {
+		writeError(w, "deviceLimit is unsupported until protocol-aware connection enforcement is available", http.StatusBadRequest)
+		return
+	}
 	enabled := true
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
 	c := client.Client{
+		ID:               uuid.NewString(),
 		Name:             req.Name,
 		Email:            req.Email,
 		Enabled:          enabled,
@@ -509,11 +515,11 @@ func (s *managementState) handleV1CreateClient(w http.ResponseWriter, r *http.Re
 		return nil
 	})
 	if err != nil {
-		s.logUserAction(r, "create_client", req.Name, false, err.Error())
+		s.logUserAction(r, "create_client", c.ID, false, err.Error())
 		s.writeV1ClientError(w, err)
 		return
 	}
-	s.logUserAction(r, "create_client", req.Name, true, "")
+	s.logUserAction(r, "create_client", createdID, true, "")
 	// Build the response view after commit (outside the mutation lock).
 	final, err := s.clientService.Get(createdID)
 	if err != nil {
@@ -526,6 +532,7 @@ func (s *managementState) handleV1CreateClient(w http.ResponseWriter, r *http.Re
 	resp := map[string]any{"client": final}
 	if len(issued) > 0 {
 		resp["issuedCredentials"] = issued
+		markIdempotencySecretResponse(w, createdID, 1)
 	}
 	s.mergeOutcomeInto(resp, outcome)
 	writeJSONStatus(w, http.StatusCreated, resp)
@@ -575,6 +582,10 @@ func (s *managementState) handleV1ClientByID(w http.ResponseWriter, r *http.Requ
 func (s *managementState) handleV1UpdateClient(w http.ResponseWriter, r *http.Request, id string) {
 	var req v1PatchClientRequest
 	if !decodeJSONRequest(w, r, &req) {
+		return
+	}
+	if req.DeviceLimit.Present && !req.DeviceLimit.Null {
+		writeError(w, "deviceLimit is unsupported until protocol-aware connection enforcement is available", http.StatusBadRequest)
 		return
 	}
 	existing, err := s.clientService.Get(id)
@@ -920,6 +931,7 @@ func (s *managementState) handleV1ClientCredentials(w http.ResponseWriter, r *ht
 				return
 			}
 			s.logUserAction(r, "rotate_credential", clientID, true, bindingID)
+			markIdempotencySecretResponse(w, bindingID, uint64(gen.Credential.CredentialVersion))
 			s.writeMutationResponse(w, http.StatusOK, gen, outcome)
 			return
 		}

@@ -359,14 +359,18 @@ func (s *managementState) handleAuthSessions(w http.ResponseWriter, r *http.Requ
 			writeError(w, "session id is required", http.StatusBadRequest)
 			return
 		}
-		if !s.sessionRegistry().DeleteByID(req.ID) {
+		if err := s.sessionRegistry().DeleteByID(req.ID); err != nil {
 			s.recordRequestAudit(r, audit.Record{
 				Action:  "auth.session.revoke",
 				Target:  req.ID,
 				Success: false,
-				Error:   "session not found",
+				Error:   err.Error(),
 			})
-			writeNotFound(w)
+			if errors.Is(err, ErrSessionNotFound) {
+				writeNotFound(w)
+			} else {
+				writeError(w, "session revocation failed", http.StatusServiceUnavailable)
+			}
 			return
 		}
 		s.recordRequestAudit(r, audit.Record{

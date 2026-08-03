@@ -43,6 +43,7 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	panelRoutes.Register(mux)
 	DiagnosticToolRoutes{}.Register(mux)
 	StatusRoutes{Info: info, State: state}.Register(mux)
+	HealthRoutes{State: state}.Register(mux)
 	ProfilePreviewRoutes{}.Register(mux)
 	LogRoutes{State: state}.Register(mux)
 
@@ -50,7 +51,6 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	if err := state.idempotency.setReplayCipher(state.cipher); err != nil {
 		_ = state.idempotency.Close()
 	}
-	gated := clientRequestGateMiddleware(state, mux)
 	restoreGuarded := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if info.RequirePrivilegedHelper {
 			switch r.URL.Path {
@@ -69,9 +69,10 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 				return
 			}
 		}
-		gated.ServeHTTP(w, r)
+		mux.ServeHTTP(w, r)
 	})
-	var handler http.Handler = state.idempotency.Middleware(restoreGuarded)
+	idempotent := state.idempotency.Middleware(restoreGuarded)
+	var handler http.Handler = clientRequestGateMiddleware(state, idempotent)
 	if basePath != "/" {
 		handler = stripBasePathMiddleware(basePath, handler)
 	}
@@ -86,5 +87,5 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	}, rateLimited)
 	secured := securityHeadersMiddleware(authenticated)
 	healthAware := auditHealthMiddleware(state, metrics.MetricsMiddleware(secured))
-	return requestIDMiddleware(healthAware), state
+	return requestIDMiddleware(degradedStateMiddleware(state, healthAware)), state
 }

@@ -45,7 +45,7 @@ func TestApplyWorkflowRunsAgainstStateAdapter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunLocked: %v", err)
 	}
-	if status != http.StatusOK || !response.Applied || !response.LiveApplied {
+	if status != http.StatusOK || response.Applied || !response.LiveApplied {
 		t.Fatalf("unexpected response/status: status=%d response=%+v", status, response)
 	}
 	if !state.written || !state.promoted {

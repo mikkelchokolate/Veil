@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -99,7 +101,7 @@ func (s *managementState) handleServiceAction(w http.ResponseWriter, r *http.Req
 			if !ok || fence.Owner == "" || fence.Generation == 0 {
 				return veilapply.Result{Success: false, ErrorCode: "FENCE_REQUIRED"}, veilapply.ErrApplyLeaseLost
 			}
-			if err := veilapply.MarkRuntimeMutationStarting(ctx, veilapply.PublicationDetails{
+			if err := veilapply.MarkSideEffectStarting(ctx, veilapply.PublicationDetails{
 				Artifacts: []string{runtime.Unit}, ServicePhase: action,
 			}); err != nil {
 				return veilapply.Result{Success: false, ErrorCode: "PUBLICATION_INTENT"}, err
@@ -109,6 +111,23 @@ func (s *managementState) handleServiceAction(w http.ResponseWriter, r *http.Req
 				Fence: privileged.FenceToken{Owner: fence.Owner, Generation: fence.Generation,
 					LeaseExpiresAt: fence.LeaseExpiresAt, OperationID: fence.OperationID},
 			})
+			if actionErr == nil {
+				statusResult, statusErr := s.privileged.ServiceStatus(ctx, privileged.ServiceStatusRequest{Units: []string{runtime.Unit}})
+				if statusErr != nil {
+					actionErr = statusErr
+				} else if len(statusResult.Services) != 1 {
+					actionErr = errors.New("service status evidence is incomplete")
+				} else {
+					active := statusResult.Services[0].ActiveState == "active"
+					wantActive := action != string(privileged.ServiceActionStop)
+					if active != wantActive {
+						actionErr = fmt.Errorf("service state %q does not match requested action %q", statusResult.Services[0].ActiveState, action)
+					}
+				}
+			}
+			if actionErr == nil {
+				actionErr = completeSideEffectPublication(ctx, veilapply.PublicationDetails{Artifacts: []string{runtime.Unit}, ServicePhase: action})
+			}
 			operation := veilapply.OperationResult{Type: "service", Target: runtime.Unit, Success: actionErr == nil}
 			if actionErr != nil {
 				operation.Detail = actionErr.Error()

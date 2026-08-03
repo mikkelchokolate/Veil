@@ -81,6 +81,13 @@ func (a applyWorkflowStateAdapter) RollbackFirewallLocked(transactionID string) 
 	return nil
 }
 
+func (a applyWorkflowStateAdapter) AdvancePublicationPhaseLocked(phase string) error {
+	if state, ok := a.state.(interface{ advancePublicationPhaseLocked(string) error }); ok {
+		return state.advancePublicationPhaseLocked(phase)
+	}
+	return nil
+}
+
 func (a applyWorkflowStateAdapter) AppendApplyHistoryLocked(stage string, success bool, response ApplyResponse) error {
 	return a.state.appendApplyHistoryLocked(stage, success, response)
 }

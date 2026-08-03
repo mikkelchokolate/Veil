@@ -129,7 +129,7 @@ func TestEveryOperationHasExplicitAnonymousViewerAdminAuthorization(t *testing.T
 		},
 		sessions: mustNewSessionRegistry(""),
 	}
-	viewer := state.sessions.NewSession("viewer", "viewer")
+	viewer := mustCreateSession(t, state.sessions, "viewer", "viewer")
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	handler := authMiddlewareWithOptions(state, authMiddlewareOptions{
 		Token:             "admin-token",
@@ -205,7 +205,7 @@ func TestViewerResponsesNeverContainSecretMaterial(t *testing.T) {
 		users:    []User{{Username: "viewer", Role: "viewer"}},
 		sessions: mustNewSessionRegistry(""),
 	}
-	viewer := state.sessions.NewSession("viewer", "viewer")
+	viewer := mustCreateSession(t, state.sessions, "viewer", "viewer")
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/settings", state.handleSettings)
 	mux.HandleFunc("/api/warp", state.handleWarp)

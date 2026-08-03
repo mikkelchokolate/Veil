@@ -68,6 +68,10 @@ func (ctx ManagementApplyContext) operationContext() context.Context {
 	return context.TODO()
 }
 
+func (ctx ManagementApplyContext) advancePublicationPhaseLocked(phase string) error {
+	return veilapply.AdvanceRuntimePublication(ctx.operationContext(), phase, veilapply.PublicationDetails{})
+}
+
 func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
 	s := ctx.state
 	plan := NewManagementApplyIntent(ManagementApplyIntentInput{
@@ -178,6 +182,9 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 	})
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	if err := veilapply.AdvanceRuntimePublication(ctx.operationContext(), veilapply.PublicationPhaseArtifactsCommitted, veilapply.PublicationDetails{}); err != nil {
+		return nil, nil, nil, fmt.Errorf("persist committed artifact publication phase: %w", err)
 	}
 	liveFiles := livePathsForArtifactIDs(ctx.state.liveRoot, result.WrittenArtifacts)
 	records := make([]livePromotionRecord, 0, len(result.WrittenArtifacts)+len(result.RemovedArtifacts))

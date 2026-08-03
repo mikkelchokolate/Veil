@@ -94,7 +94,7 @@ func TestManagementApplyWritesStagedFilesWhenConfirmed(t *testing.T) {
 	}
 	planPath := filepath.Join(applyRoot, "generated", "veil", "apply-plan.json")
 	statePath := filepath.Join(applyRoot, "generated", "veil", "management-state.json")
-	if !response.Applied || !containsString(response.WrittenFiles, planPath) || !containsString(response.WrittenFiles, statePath) {
+	if response.Applied || !containsString(response.WrittenFiles, planPath) || !containsString(response.WrittenFiles, statePath) {
 		t.Fatalf("unexpected apply response: %+v", response)
 	}
 	planBody, err := os.ReadFile(planPath)

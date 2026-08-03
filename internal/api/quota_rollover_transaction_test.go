@@ -11,8 +11,9 @@ import (
 
 func TestQuotaRolloverCommitsPeriodStateSnapshotAndExactlyOneApplyJob(t *testing.T) {
 	state := newClientLifecycleTestState(t)
+	state.applyRunner.Close()
 	state.applyRunner = veilapply.NewRunner(state.applyRevisions, state.applyJobs, veilapply.ExecutorFunc(func(uint64) (veilapply.Result, error) {
-		return veilapply.Result{Success: true}, nil
+		return veilapply.Result{Success: true, Disposition: veilapply.ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
 	}))
 	quota := int64(100)
 	expired := time.Now().UTC().Add(-40 * 24 * time.Hour).Unix()

@@ -389,11 +389,11 @@ func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 	// The forward Caddy load succeeds, the following Hysteria2 restart fails,
-	// and the transaction rolls back the already-published files. Re-applying
-	// the previous Caddy state probes the unit and attempts to start it because
-	// the injected runner reports every systemd command as failed.
-	if response.ServicesApplied || !response.RolledBack || len(response.ServiceActions) != 2 || len(response.RollbackActions) != 1 {
-		t.Fatalf("expected failed service action followed by Caddy rollback: response=%+v calls=%+v", response, serviceCalls)
+	// and rollback then fails to restore the previous Caddy service. Filesystem
+	// restoration alone is not a complete rollback, so the result stays
+	// ambiguous/recovery-pending.
+	if response.ServicesApplied || response.RolledBack || !response.Ambiguous || len(response.ServiceActions) != 2 || len(response.RollbackActions) != 1 {
+		t.Fatalf("expected failed service action and incomplete Caddy rollback: response=%+v calls=%+v", response, serviceCalls)
 	}
 	wantCalls := [][]string{
 		{"systemctl", "restart", "veil-hysteria2@hysteria2.service"},
@@ -503,8 +503,8 @@ func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T)
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.ServicesApplied || !response.RolledBack || len(response.RollbackFiles) != 1 || len(response.RollbackActions) != 1 {
-		t.Fatalf("expected rollback response after failed health check: %+v", response)
+	if response.ServicesApplied || response.RolledBack || !response.Ambiguous || len(response.RollbackFiles) != 1 || len(response.RollbackActions) != 1 {
+		t.Fatalf("expected recovery-pending response after rollback health could not be verified: %+v", response)
 	}
 	body, err := os.ReadFile(liveCaddy)
 	if err != nil {
@@ -626,8 +626,8 @@ func TestManagementApplyWritesAuditHistoryForRollback(t *testing.T) {
 	if err := json.Unmarshal(body, &history); err != nil {
 		t.Fatalf("decode history: %v", err)
 	}
-	if len(history) != 1 || history[0].Success || history[0].Stage != "rollback" || !history[0].RolledBack || len(history[0].RollbackFiles) != 1 || len(history[0].RollbackActions) != 1 {
-		t.Fatalf("expected rollback history entry: %+v", history)
+	if len(history) != 1 || history[0].Success || history[0].Stage != "rollback" || history[0].RolledBack || len(history[0].RollbackFiles) != 1 || len(history[0].RollbackActions) != 1 {
+		t.Fatalf("expected incomplete rollback history entry with preserved evidence: %+v", history)
 	}
 }
 

@@ -2,11 +2,14 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -34,18 +37,43 @@ type idempotencyEntry struct {
 
 func (e *idempotencyEntry) signal() { e.doneOnce.Do(func() { close(e.done) }) }
 
+type idempotencyDomainOperation struct {
+	ID         string
+	Scope      string
+	Generation uint64
+}
+
+type idempotencyDomainOperationContextKey struct{}
+
+func withIdempotencyDomainOperation(ctx context.Context, operation idempotencyDomainOperation) context.Context {
+	return context.WithValue(ctx, idempotencyDomainOperationContextKey{}, operation)
+}
+
+func idempotencyDomainOperationFromContext(ctx context.Context) (idempotencyDomainOperation, bool) {
+	if ctx == nil {
+		return idempotencyDomainOperation{}, false
+	}
+	operation, ok := ctx.Value(idempotencyDomainOperationContextKey{}).(idempotencyDomainOperation)
+	return operation, ok && operation.ID != "" && operation.Scope != "" && operation.Generation > 0
+}
+
 type idempotencyStore struct {
-	mu           sync.Mutex
-	entries      map[string]*idempotencyEntry
-	now          func() time.Time
-	closed       bool
-	db           *sql.DB
-	owner        string
-	replayCipher *secrets.Cipher
+	mu             sync.Mutex
+	entries        map[string]*idempotencyEntry
+	now            func() time.Time
+	closed         bool
+	db             *sql.DB
+	owner          string
+	replayCipher   *secrets.Cipher
+	reservationTTL time.Duration
+	notifications  map[string]chan struct{}
 }
 
 func newIdempotencyStore(databases ...*sql.DB) *idempotencyStore {
-	store := &idempotencyStore{entries: make(map[string]*idempotencyEntry), now: time.Now}
+	store := &idempotencyStore{
+		entries: make(map[string]*idempotencyEntry), now: time.Now,
+		reservationTTL: 2 * time.Minute, notifications: make(map[string]chan struct{}),
+	}
 	if len(databases) > 0 {
 		store.db = databases[0]
 	}
@@ -79,6 +107,10 @@ func (s *idempotencyStore) Close() error {
 		for key, entry := range s.entries {
 			delete(s.entries, key)
 			entry.signal()
+		}
+		for scope, notification := range s.notifications {
+			delete(s.notifications, scope)
+			close(notification)
 		}
 	}
 	s.mu.Unlock()
@@ -261,8 +293,23 @@ func idempotencyAuthGeneration(r *http.Request) string {
 func idempotencyFingerprint(r *http.Request, body []byte) string {
 	digest := sha256.New()
 	_, _ = io.WriteString(digest, r.Method)
-	_, _ = io.WriteString(digest, "\n"+r.URL.EscapedPath()+"?"+r.URL.RawQuery+"\n")
-	_, _ = digest.Write(body)
+	query := r.URL.Query()
+	for key := range query {
+		sort.Strings(query[key])
+	}
+	canonicalBody := body
+	if strings.Contains(strings.ToLower(r.Header.Get("Content-Type")), "json") && len(bytes.TrimSpace(body)) > 0 {
+		decoder := json.NewDecoder(bytes.NewReader(body))
+		decoder.UseNumber()
+		var value any
+		if decoder.Decode(&value) == nil {
+			if encoded, err := json.Marshal(value); err == nil {
+				canonicalBody = encoded
+			}
+		}
+	}
+	_, _ = io.WriteString(digest, "\n"+r.URL.EscapedPath()+"?"+query.Encode()+"\n")
+	_, _ = digest.Write(canonicalBody)
 	return hex.EncodeToString(digest.Sum(nil))
 }
 
@@ -285,13 +332,15 @@ func copyHTTPHeader(destination, source http.Header) {
 }
 
 type bufferedResponse struct {
-	header http.Header
-	status int
-	body   bytes.Buffer
+	header   http.Header
+	status   int
+	body     bytes.Buffer
+	limit    int
+	overflow bool
 }
 
 func newBufferedResponse(initial http.Header) *bufferedResponse {
-	return &bufferedResponse{header: initial.Clone()}
+	return &bufferedResponse{header: initial.Clone(), limit: maxIdempotencyBody}
 }
 func (w *bufferedResponse) Header() http.Header { return w.header }
 func (w *bufferedResponse) WriteHeader(status int) {
@@ -303,5 +352,20 @@ func (w *bufferedResponse) Write(body []byte) (int, error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
-	return w.body.Write(body)
+	if w.limit <= 0 {
+		w.overflow = len(body) > 0
+		return len(body), nil
+	}
+	remaining := w.limit - w.body.Len()
+	if remaining > 0 {
+		writeLength := len(body)
+		if writeLength > remaining {
+			writeLength = remaining
+		}
+		_, _ = w.body.Write(body[:writeLength])
+	}
+	if len(body) > remaining {
+		w.overflow = true
+	}
+	return len(body), nil
 }

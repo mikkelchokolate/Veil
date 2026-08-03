@@ -96,6 +96,7 @@ func newManagementState(info ServerInfo) *managementState {
 		lifecycleCancel:                lifecycleCancel,
 		statePath:                      info.StatePath,
 		requireApplyTracking:           info.StatePath != "",
+		requirePrivilegedHelper:        info.RequirePrivilegedHelper,
 		applyRoot:                      defaultApplyRoot(applyRoot),
 		liveRoot:                       info.LiveRoot,
 		keyPath:                        keyPath,

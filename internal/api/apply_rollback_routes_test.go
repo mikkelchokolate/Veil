@@ -17,7 +17,6 @@ func TestIntentionalRollbackCreatesNewDesiredRevisionWithoutDecrementing(t *test
 		"quotaResetPolicy":"weekly",
 		"quotaResetAt":1893456000,
 		"expiresAt":1924992000,
-		"deviceLimit":4,
 		"notes":"selected-notes"
 	}`)
 	if createdResponse.Code != http.StatusCreated {

@@ -38,6 +38,7 @@ func TestQuotaEnforcementRetriesUntilDepletedRevisionIsApplied(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	state.applyRunner.Close()
 	state.applyRunner = veilapply.NewRunner(state.applyRevisions, state.applyJobs, veilapply.ExecutorFunc(func(uint64) (veilapply.Result, error) {
 		return veilapply.Result{Success: false}, errors.New("simulated quota runtime apply failure")
 	}))
@@ -75,6 +76,7 @@ func TestQuotaEnforcementRetriesUntilDepletedRevisionIsApplied(t *testing.T) {
 		}
 	}
 
+	state.applyRunner.Close()
 	state.applyRunner = veilapply.NewRunner(state.applyRevisions, state.applyJobs, state.executeApplyRevision)
 	if _, err := state.db.Exec(`UPDATE quota_enforcement SET next_retry_at=0 WHERE client_id=?`, clientID); err != nil {
 		t.Fatal(err)

@@ -3,6 +3,7 @@ package api
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/client"
 )
@@ -98,8 +99,12 @@ type lifecycleTrafficProvider struct {
 }
 
 func (*lifecycleTrafficProvider) Key() string { return "lifecycle-test" }
-func (p *lifecycleTrafficProvider) Read() (map[string]client.ProviderReading, error) {
-	return p.readings, nil
+func (p *lifecycleTrafficProvider) Read() (client.ProviderBatch, error) {
+	readings := make([]client.ProviderReading, 0, len(p.readings))
+	for _, reading := range p.readings {
+		readings = append(readings, reading)
+	}
+	return client.ProviderBatch{Readings: readings, ObservedAt: time.Now().UTC(), RuntimeInstance: "lifecycle-test"}, nil
 }
 
 func TestTwoCollectionIntervalsAfterReloadRecordOneMonotonicDelta(t *testing.T) {

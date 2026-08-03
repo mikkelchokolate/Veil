@@ -7,13 +7,62 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
+
+var ErrSessionNotFound = errors.New("session not found")
+
+func validateSessionIdentity(username, role, userAgent, remoteAddr string) error {
+	username = strings.TrimSpace(username)
+	if username == "" || len(username) > 128 || !utf8.ValidString(username) {
+		return errors.New("invalid session username")
+	}
+	if role != "admin" && role != "viewer" {
+		return errors.New("invalid session role")
+	}
+	if len(userAgent) > 1024 || !utf8.ValidString(userAgent) || strings.ContainsAny(userAgent, "\r\n\x00") {
+		return errors.New("invalid session user agent")
+	}
+	if len(remoteAddr) > 255 || !utf8.ValidString(remoteAddr) {
+		return errors.New("invalid session remote address")
+	}
+	if remoteAddr != "" {
+		host := remoteAddr
+		if splitHost, _, err := net.SplitHostPort(remoteAddr); err == nil {
+			host = splitHost
+		}
+		if net.ParseIP(strings.Trim(host, "[]")) == nil {
+			return errors.New("invalid session remote address")
+		}
+	}
+	return nil
+}
+
+func validateStoredSession(session storedSession) error {
+	if err := validateSessionIdentity(session.Username, session.Role, session.UserAgent, session.RemoteAddr); err != nil {
+		return err
+	}
+	for _, hash := range []string{session.TokenHash, session.CSRFHash} {
+		decoded, err := hex.DecodeString(hash)
+		if err != nil || len(decoded) != sha256.Size {
+			return errors.New("invalid session hash")
+		}
+	}
+	if session.ID == "" || len(session.ID) > 64 || session.CreatedAt.IsZero() || session.LastSeenAt.Before(session.CreatedAt) ||
+		session.IdleExpiresAt.Before(session.LastSeenAt) || session.ExpiresAt.Before(session.IdleExpiresAt) {
+		return errors.New("invalid session timestamps")
+	}
+	return nil
+}
 
 const (
 	defaultSessionIdleTimeout     = 30 * time.Minute
@@ -151,6 +200,9 @@ func (r *SessionRegistry) enforceSessionBoundLocked() []evictedSession {
 }
 
 func (r *SessionRegistry) Create(input SessionCreateInput) (Session, error) {
+	if err := validateSessionIdentity(input.Username, input.Role, input.UserAgent, input.RemoteAddr); err != nil {
+		return Session{}, err
+	}
 	token, err := generateRandomHex(32)
 	if err != nil {
 		return Session{}, err
@@ -200,9 +252,8 @@ func (r *SessionRegistry) Create(input SessionCreateInput) (Session, error) {
 	return publicSession(record, token, csrf), nil
 }
 
-func (r *SessionRegistry) NewSession(username, role string) Session {
-	session, _ := r.Create(SessionCreateInput{Username: username, Role: role})
-	return session
+func (r *SessionRegistry) NewSession(username, role string) (Session, error) {
+	return r.Create(SessionCreateInput{Username: username, Role: role})
 }
 
 func (r *SessionRegistry) Get(token string) (Session, bool) {
@@ -342,7 +393,7 @@ func (r *SessionRegistry) List(currentToken string) []SessionInfo {
 	return list
 }
 
-func (r *SessionRegistry) DeleteByID(id string) bool {
+func (r *SessionRegistry) DeleteByID(id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for tokenHash, session := range r.sessions {
@@ -355,12 +406,12 @@ func (r *SessionRegistry) DeleteByID(id string) bool {
 				if csrf != "" {
 					r.rawCSRF[tokenHash] = csrf
 				}
-				return false
+				return err
 			}
-			return true
+			return nil
 		}
 	}
-	return false
+	return ErrSessionNotFound
 }
 
 func (r *SessionRegistry) DeleteByUsername(username string) (int, error) {
@@ -426,10 +477,16 @@ func (r *SessionRegistry) load() error {
 		if err := json.Unmarshal(body, &file); err != nil {
 			return err
 		}
+		if file.Version != 1 {
+			return fmt.Errorf("unsupported session snapshot version %d", file.Version)
+		}
 		now := r.now().UTC()
 		for _, session := range file.Sessions {
-			if session.TokenHash == "" || sessionExpired(session, now) {
+			if sessionExpired(session, now) {
 				continue
+			}
+			if err := validateStoredSession(session); err != nil {
+				return err
 			}
 			if session.ID == "" {
 				session.ID = session.TokenHash[:minInt(16, len(session.TokenHash))]
@@ -602,7 +659,7 @@ func (r *SessionRegistry) loadJournalLocked() error {
 		}
 		switch record.Operation {
 		case "upsert":
-			if record.Session == nil || record.TokenHash == "" || record.Session.TokenHash != record.TokenHash {
+			if record.Session == nil || record.TokenHash == "" || record.Session.TokenHash != record.TokenHash || validateStoredSession(*record.Session) != nil {
 				return errors.New("invalid session journal upsert")
 			}
 			r.sessions[record.TokenHash] = *record.Session
@@ -617,7 +674,7 @@ func (r *SessionRegistry) loadJournalLocked() error {
 		case "replace_all":
 			r.sessions = make(map[string]storedSession, len(record.Sessions))
 			for _, session := range record.Sessions {
-				if session.TokenHash == "" {
+				if validateStoredSession(session) != nil {
 					return errors.New("invalid session journal checkpoint")
 				}
 				r.sessions[session.TokenHash] = session

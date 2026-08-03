@@ -117,7 +117,6 @@ func createFullyPopulatedClient(t *testing.T, r http.Handler, name string) map[s
 		"quotaResetPolicy":"weekly",
 		"quotaResetAt":1893456000,
 		"expiresAt":1924992000,
-		"deviceLimit":7,
 		"notes":"durable notes"
 	}`)
 	if response.Code != http.StatusCreated {

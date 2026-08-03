@@ -176,11 +176,11 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, name))
 		w.Header().Set("Cache-Control", "no-store")
 		var offset, expectedSize int64
-		expectedCreatedAt := ""
+		expectedCreatedAt, transactionID, contentDigest, inodeGeneration := "", "", "", ""
 		for {
 			result, err := s.backupOperation(r.Context(), privileged.BackupRequest{
 				Action: privileged.BackupActionRead, ArchiveName: name,
-				Offset: offset, Limit: 1024 * 1024,
+				Offset: offset, Limit: 1024 * 1024, TransactionID: transactionID,
 			})
 			if err != nil {
 				if offset == 0 {
@@ -193,9 +193,16 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 			}
 			identity := result.Archives[0]
 			if offset == 0 {
+				if result.TransactionID == "" || len(result.ContentDigest) != 64 || result.InodeGeneration == "" || result.BoundSize != identity.Size {
+					writeError(w, "backup helper did not bind a stable stream", http.StatusBadGateway)
+					return
+				}
 				expectedSize, expectedCreatedAt = identity.Size, identity.CreatedAt
+				transactionID, contentDigest, inodeGeneration = result.TransactionID, result.ContentDigest, result.InodeGeneration
 				w.Header().Set("Content-Length", strconv.FormatInt(expectedSize, 10))
-			} else if identity.Size != expectedSize || identity.CreatedAt != expectedCreatedAt {
+			} else if identity.Size != expectedSize || identity.CreatedAt != expectedCreatedAt ||
+				result.BoundSize != expectedSize || result.TransactionID != transactionID ||
+				result.ContentDigest != contentDigest || result.InodeGeneration != inodeGeneration {
 				return
 			}
 			if len(result.Data) == 0 && result.More {
@@ -368,20 +375,45 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 	// on failure, so this reconnects either the restored DB or the original DB.
 	s.mu.Lock()
 	s.clientSubsystemStopping = false
+	if result.Restored {
+		s.runtimeVerificationUnknown = true
+	}
 	reopenErr := NewManagementStateLifecycle(s).ReloadLocked()
 	var fenceReleaseErr error
 	if restoreLease.Generation > 0 && s.db != nil {
 		fenceReleaseErr = restoreLeaseFloorAndRelease(s.db, restoreLease)
 	}
 	s.mu.Unlock()
+	var convergenceErr error
+	if err == nil && result.Restored && reopenErr == nil {
+		s.mu.Lock()
+		runner := s.applyRunner
+		s.mu.Unlock()
+		if runner == nil {
+			convergenceErr = errors.New("restored runtime convergence runner unavailable")
+		} else {
+			desiredRevision, revisionErr := s.ensureRunnableRevision()
+			if revisionErr != nil {
+				convergenceErr = revisionErr
+			} else {
+				_, convergenceErr = runner.RunContext(s.lifecycleContext(), desiredRevision, "backup-restore-convergence", "system")
+			}
+		}
+		if convergenceErr == nil {
+			s.mu.Lock()
+			s.runtimeVerificationUnknown = false
+			s.mu.Unlock()
+		}
+	}
 	helperErr := err
 	finalizationErr := fenceReleaseErr
-	if helperErr == nil && result.Restored && reopenErr == nil {
+	revalidationErr := errors.Join(reopenErr, convergenceErr)
+	if helperErr == nil && result.Restored && revalidationErr == nil {
 		_, sessionErr := s.sessionRegistry().DeleteAllExceptPersisted(ownerSessionToken)
 		finalizationErr = errors.Join(finalizationErr, sessionErr)
 	}
-	status, outcome, phase, restored, responseStatus := classifyRestoreOutcome(result, helperErr, reopenErr, finalizationErr)
-	combinedErr := errors.Join(helperErr, reopenErr, finalizationErr)
+	status, outcome, phase, restored, responseStatus := classifyRestoreOutcome(result, helperErr, revalidationErr, finalizationErr)
+	combinedErr := errors.Join(helperErr, revalidationErr, finalizationErr)
 	_ = s.appendBackupRestoreAudit(audit.Record{
 		Actor:     actor,
 		Role:      role,

@@ -91,18 +91,29 @@ func (s *managementState) installPanelUpdate(ctx context.Context, version string
 			if err != nil {
 				return result, err
 			}
-			if err := veilapply.MarkRuntimeMutationStarting(operationContext, veilapply.PublicationDetails{ServicePhase: "update-install"}); err != nil {
-				return veilapply.Result{ErrorCode: "publication_intent"}, err
-			}
 			fence, ok := veilapply.FenceFromContext(operationContext)
 			if !ok {
 				return veilapply.Result{ErrorCode: "fence_missing"}, errors.New("update fence unavailable")
+			}
+			if err := veilapply.MarkSideEffectStarting(operationContext, veilapply.PublicationDetails{
+				ServicePhase: "update-install", UpdateTransactionID: fence.OperationID,
+				TargetVersion: version, ActivationManifest: "/usr/local/bin/.veil-update-evidence.json",
+			}); err != nil {
+				return veilapply.Result{ErrorCode: "publication_intent"}, err
 			}
 			updateResult, err = s.privileged.StageUpdate(operationContext, privileged.UpdateRequest{
 				ArtifactID: "veil-update", Version: version,
 				Fence: privileged.FenceToken{Owner: fence.Owner, Generation: fence.Generation,
 					OperationID: fence.OperationID, LeaseExpiresAt: fence.LeaseExpiresAt},
 			})
+			if err == nil {
+				err = completeSideEffectPublication(operationContext, veilapply.PublicationDetails{
+					Artifacts: []string{"veil-update"}, ServicePhase: "update-install",
+					UpdateTransactionID: updateResult.TransactionID, ExpectedBinaryDigest: updateResult.ExpectedDigest,
+					OldBinaryDigest: updateResult.OldDigest, InstalledInode: updateResult.InstalledInode,
+					TargetVersion: updateResult.Version, ActivationManifest: updateResult.ActivationManifest, CommitPhase: updateResult.CommitPhase,
+				})
+			}
 			operation := veilapply.OperationResult{Type: "panel-update-install", Target: version, Success: err == nil}
 			if err != nil {
 				operation.Detail = err.Error()
@@ -126,23 +137,32 @@ func (s *managementState) restartPanelForUpdate(updateJobID string) {
 		s.updatePanelUpdateJob(updateJobID, "failed", "", "", err)
 		return
 	}
-	job, runErr := s.applyRunner.RunOperationContext(context.Background(), revision, "panel-update-restart", "system",
+	job, runErr := s.applyRunner.RunOperationContext(s.lifecycleContext(), revision, "panel-update-restart", "system",
 		veilapply.ContextExecutorFunc(func(operationContext context.Context, pinnedRevision uint64) (veilapply.Result, error) {
 			result, err := s.convergeRevisionForSideEffect(operationContext, pinnedRevision)
 			if err != nil {
 				return result, err
 			}
-			if err := veilapply.MarkRuntimeMutationStarting(operationContext, veilapply.PublicationDetails{ServicePhase: "restart-panel"}); err != nil {
-				return veilapply.Result{ErrorCode: "publication_intent"}, err
-			}
 			fence, ok := veilapply.FenceFromContext(operationContext)
 			if !ok {
 				return veilapply.Result{ErrorCode: "fence_missing"}, errors.New("restart fence unavailable")
+			}
+			if err := veilapply.MarkSideEffectStarting(operationContext, veilapply.PublicationDetails{
+				ServicePhase: "restart-panel", UpdateTransactionID: fence.OperationID,
+				ActivationManifest: "/usr/local/bin/.veil-restart-evidence.json",
+			}); err != nil {
+				return veilapply.Result{ErrorCode: "publication_intent"}, err
 			}
 			operationContext = privileged.ContextWithRestartPanelRequest(operationContext, privileged.RestartPanelRequest{Fence: privileged.FenceToken{
 				Owner: fence.Owner, Generation: fence.Generation, OperationID: fence.OperationID, LeaseExpiresAt: fence.LeaseExpiresAt,
 			}})
 			err = s.privileged.RestartPanel(operationContext)
+			if err == nil {
+				err = completeSideEffectPublication(operationContext, veilapply.PublicationDetails{
+					Artifacts: []string{"veil.service"}, ServicePhase: "restart-panel",
+					UpdateTransactionID: fence.OperationID, ActivationManifest: "/usr/local/bin/.veil-restart-evidence.json",
+				})
+			}
 			operation := veilapply.OperationResult{Type: "panel-update-restart", Target: "veil.service", Success: err == nil}
 			if err != nil {
 				operation.Detail = err.Error()

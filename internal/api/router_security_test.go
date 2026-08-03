@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -36,7 +37,7 @@ func TestSessionRegistry(t *testing.T) {
 	now := time.Now().UTC()
 	registry.now = func() time.Time { return now }
 
-	sess := registry.NewSession("alice", "admin")
+	sess := mustCreateSession(t, registry, "alice", "admin")
 	if sess.Username != "alice" || sess.Role != "admin" {
 		t.Fatalf("expected Username=alice, Role=admin; got %+v", sess)
 	}
@@ -57,7 +58,7 @@ func TestSessionRegistry(t *testing.T) {
 	}
 
 	// Delete test
-	sess2 := registry.NewSession("bob", "viewer")
+	sess2 := mustCreateSession(t, registry, "bob", "viewer")
 	registry.Delete(sess2.Token)
 	_, ok = registry.Get(sess2.Token)
 	if ok {
@@ -70,8 +71,8 @@ func TestSessionRegistryListsAndDeletesByStableID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	alice := registry.NewSession("alice", "admin")
-	bob := registry.NewSession("bob", "viewer")
+	alice := mustCreateSession(t, registry, "alice", "admin")
+	bob := mustCreateSession(t, registry, "bob", "viewer")
 
 	list := registry.List(alice.Token)
 	if len(list) != 2 {
@@ -83,14 +84,14 @@ func TestSessionRegistryListsAndDeletesByStableID(t *testing.T) {
 	if list[1].Username != "bob" || list[1].Current {
 		t.Fatalf("unexpected second session: %+v", list[1])
 	}
-	if !registry.DeleteByID(sessionID(bob.Token)) {
-		t.Fatalf("expected DeleteByID to delete bob session")
+	if err := registry.DeleteByID(sessionID(bob.Token)); err != nil {
+		t.Fatal("failed to revoke bob session")
 	}
 	if _, ok := registry.Get(bob.Token); ok {
 		t.Fatalf("bob session should be deleted")
 	}
-	if registry.DeleteByID("missing") {
-		t.Fatalf("missing session id should not delete")
+	if err := registry.DeleteByID("missing"); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("missing DeleteByID error = %v", err)
 	}
 }
 
@@ -162,7 +163,7 @@ func TestAuthMiddleware(t *testing.T) {
 	}
 
 	// 6. Cookie session
-	sess := globalSessions.NewSession("admin-user", "admin")
+	sess := mustCreateSession(t, globalSessions, "admin-user", "admin")
 	defer globalSessions.Delete(sess.Token)
 
 	req = httptest.NewRequest(http.MethodGet, "/api/inbounds", nil)
@@ -193,7 +194,7 @@ func TestAuthMiddleware(t *testing.T) {
 	}
 
 	// 9. RBAC: viewer role cannot perform mutating request even with CSRF (403)
-	viewerSess := globalSessions.NewSession("viewer-user", "viewer")
+	viewerSess := mustCreateSession(t, globalSessions, "viewer-user", "viewer")
 	defer globalSessions.Delete(viewerSess.Token)
 
 	req = httptest.NewRequest(http.MethodPost, "/api/inbounds", nil)
@@ -231,8 +232,8 @@ func TestRouterUsersEndpointAcceptsStaticAdminToken(t *testing.T) {
 
 func TestAuthSessionsEndpointListsAndRevokesSessions(t *testing.T) {
 	state := &managementState{}
-	admin := globalSessions.NewSession("alice", "admin")
-	viewer := globalSessions.NewSession("bob", "viewer")
+	admin := mustCreateSession(t, globalSessions, "alice", "admin")
+	viewer := mustCreateSession(t, globalSessions, "bob", "viewer")
 	defer globalSessions.Delete(admin.Token)
 	defer globalSessions.Delete(viewer.Token)
 
@@ -266,7 +267,7 @@ func TestAuthSessionsEndpointListsAndRevokesSessions(t *testing.T) {
 
 func TestAuthSessionsEndpointRejectsViewer(t *testing.T) {
 	state := &managementState{}
-	viewer := globalSessions.NewSession("bob", "viewer")
+	viewer := mustCreateSession(t, globalSessions, "bob", "viewer")
 	defer globalSessions.Delete(viewer.Token)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/sessions", nil)

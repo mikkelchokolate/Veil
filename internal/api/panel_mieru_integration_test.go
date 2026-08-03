@@ -28,10 +28,8 @@ func TestPanelMieruHTML(t *testing.T) {
 
 func TestPanelManagementFlowForMieruInboundClientAccessAndApply(t *testing.T) {
 	dir := t.TempDir()
-	statePath := filepath.Join(dir, "state.json")
-	keyPath := filepath.Join(dir, "state.key")
 	applyRoot := filepath.Join(dir, "apply")
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: keyPath, ApplyRoot: applyRoot})
+	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 
 	putJSON(t, r, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com"}`, http.StatusOK)
 	putJSON(t, r, "/api/inbounds", `{"name":"mieru-tcp","protocol":"mieru","transport":"tcp","port":443,"enabled":true,"profiles":[{"name":"alice","password":"alice-pass","enabled":true}]}`, http.StatusCreated)

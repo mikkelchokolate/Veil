@@ -48,7 +48,7 @@ func TestRestoreJobsPersistTruthfulOutcomeAndPhase(t *testing.T) {
 		{name: "pending_key_publication", helperPhase: "key_publication_pending", helperOutcome: "pending_key_publication", helperErr: errors.New("key publication pending"), wantStatus: "pending", wantOutcome: "pending_key_publication", wantPhase: "key_publication_pending", wantHTTP: http.StatusAccepted},
 		{name: "finalization_failure_after_commit", helperRestored: true, helperPhase: "finalization_failed", helperOutcome: "restored", helperErr: errors.New("restore journal finalization failed"), wantStatus: "degraded", wantOutcome: "restored", wantPhase: "finalization_failed", wantRestored: true, wantHTTP: http.StatusInternalServerError},
 		{name: "revalidation_failure_after_commit", helperRestored: true, helperPhase: "committed", helperOutcome: "restored", breakReload: true, wantStatus: "degraded", wantOutcome: "restored", wantPhase: "revalidation_failed", wantRestored: true, wantHTTP: http.StatusInternalServerError},
-		{name: "restored", helperRestored: true, helperPhase: "committed", helperOutcome: "restored", wantStatus: "succeeded", wantOutcome: "restored", wantPhase: "completed", wantRestored: true, wantHTTP: http.StatusOK},
+		{name: "restored_without_runtime_evidence", helperRestored: true, helperPhase: "committed", helperOutcome: "restored", wantStatus: "degraded", wantOutcome: "restored", wantPhase: "revalidation_failed", wantRestored: true, wantHTTP: http.StatusInternalServerError},
 	}
 
 	for _, test := range tests {

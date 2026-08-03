@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -128,6 +130,9 @@ func TestBackupCreateReturnsCreatedWhenOptionalPruneFails(t *testing.T) {
 func TestBackupDownloadStreamsHelperChunks(t *testing.T) {
 	state := newPanelBackupState(t)
 	body := []byte(strings.Repeat("chunked-download-payload-", 100000))
+	digestBytes := sha256.Sum256(body)
+	contentDigest := hex.EncodeToString(digestBytes[:])
+	const transactionID = "0123456789abcdef0123456789abcdef"
 	readCalls := 0
 	state.privileged = backupStubClient{backup: func(_ context.Context, request privileged.BackupRequest) (privileged.BackupResult, error) {
 		if request.Action != privileged.BackupActionRead {
@@ -144,8 +149,8 @@ func TestBackupDownloadStreamsHelperChunks(t *testing.T) {
 		}
 		return privileged.BackupResult{
 			Archives: []privileged.BackupArchive{{Name: "large.enc", Size: int64(len(body)), CreatedAt: "2026-08-01T00:00:00Z"}},
-			Data:     body[start:end],
-			More:     end < int64(len(body)),
+			Data:     body[start:end], More: end < int64(len(body)), TransactionID: transactionID,
+			ContentDigest: contentDigest, InodeGeneration: "1:2:3", BoundSize: int64(len(body)),
 		}, nil
 	}}
 

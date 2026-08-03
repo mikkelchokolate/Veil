@@ -74,7 +74,7 @@ func TestValidationEndpointRejectsViewerRole(t *testing.T) {
 	state.mu.Lock()
 	state.users = []User{{Username: "reader", Role: "viewer"}}
 	state.mu.Unlock()
-	session := state.sessionRegistry().NewSession("reader", "viewer")
+	session := mustCreateSession(t, state.sessionRegistry(), "reader", "viewer")
 
 	request := httptest.NewRequest(http.MethodPost, "/api/validation", strings.NewReader(`{"settings":{},"inbounds":[],"warp":{}}`))
 	request.Header.Set("Content-Type", "application/json")

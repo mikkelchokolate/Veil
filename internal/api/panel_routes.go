@@ -1,12 +1,42 @@
 package api
 
 import (
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
 	"net/http"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/panel"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
+
+var (
+	legacyStyleTag  = regexp.MustCompile(`<style(\s|>)`)
+	legacyScriptTag = regexp.MustCompile(`<script(\s|>)`)
+)
+
+func secureLegacyPanelHTML(body string) (string, string, error) {
+	nonceBytes := make([]byte, 18)
+	if _, err := rand.Read(nonceBytes); err != nil {
+		return "", "", err
+	}
+	nonce := base64.RawStdEncoding.EncodeToString(nonceBytes)
+	lines := strings.Split(body, "\n")
+	filtered := lines[:0]
+	for _, line := range lines {
+		if strings.Contains(line, "fonts.googleapis.com") || strings.Contains(line, "fonts.gstatic.com") {
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+	secured := strings.Join(filtered, "\n")
+	secured = legacyStyleTag.ReplaceAllString(secured, `<style nonce="`+nonce+`"$1`)
+	secured = legacyScriptTag.ReplaceAllString(secured, `<script nonce="`+nonce+`"$1`)
+	return secured, fmt.Sprintf("default-src 'self'; img-src 'self' data: blob:; script-src 'self' 'nonce-%s'; style-src 'self' 'nonce-%s'; font-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'", nonce, nonce), nil
+}
 
 type PanelRoutes struct {
 	Info     ServerInfo
@@ -84,13 +114,28 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
 	w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
 	w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 	w.Header().Set("Origin-Agent-Cluster", "?1")
+	writeLegacyHTML := func(body string) bool {
+		secured, csp, err := secureLegacyPanelHTML(body)
+		if err != nil {
+			writeError(w, "panel security policy unavailable", http.StatusInternalServerError)
+			return false
+		}
+		w.Header().Set("Content-Security-Policy", csp)
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(secured))
+		}
+		return true
+	}
+	if r.Method == http.MethodHead {
+		writeLegacyHTML("")
+		return
+	}
 	if r.Method == http.MethodGet {
 		// Check session; if no valid session, show login page.
 		csrfToken := ""
@@ -111,7 +156,7 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 				setupRequired := routes.State.setupAllowed && !routes.State.setup.Completed && noUsers
 				routes.State.mu.Unlock()
 				if setupRequired {
-					_, _ = w.Write([]byte(panel.ReliableSetupHTML(routes.BasePath, locale)))
+					writeLegacyHTML(panel.ReliableSetupHTML(routes.BasePath, locale))
 					return
 				}
 				if routes.Info.PublicListen && noUsers {
@@ -119,12 +164,12 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				if !noUsers {
-					_, _ = w.Write([]byte(panel.ReliableLoginHTML(routes.BasePath, locale)))
+					writeLegacyHTML(panel.ReliableLoginHTML(routes.BasePath, locale))
 					return
 				}
 			}
 		}
-		_, _ = w.Write([]byte(panelHTMLForCatalog(routes.BasePath, csrfToken, locale, NewVisibleManagedRuntimeCatalogForState(routes.State))))
+		writeLegacyHTML(panelHTMLForCatalog(routes.BasePath, csrfToken, locale, NewVisibleManagedRuntimeCatalogForState(routes.State)))
 	}
 }
 
