@@ -57,6 +57,7 @@ func TestBackupPruneRejectsInvalidRetention(t *testing.T) {
 }
 
 func TestBackupRestoreSerializesMutatingBackupOperations(t *testing.T) {
+	stubManagementApplySideEffects(t)
 	state := newPanelBackupState(t)
 	state.backupRestoreOwnerSessionGrace = -1
 	create := adminJSONRequest(http.MethodPost, "/api/backups", `{}`)
@@ -122,6 +123,7 @@ func TestBackupRestoreSerializesMutatingBackupOperations(t *testing.T) {
 }
 
 func TestBackupRestoreImmediatelyRevokesOwnerMissingFromRestoredUsers(t *testing.T) {
+	stubManagementApplySideEffects(t)
 	state := newPanelBackupState(t)
 	create := adminJSONRequest(http.MethodPost, "/api/backups", `{}`)
 	createResponse := httptest.NewRecorder()

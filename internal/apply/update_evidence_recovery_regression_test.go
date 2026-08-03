@@ -12,6 +12,9 @@ import (
 )
 
 func TestUpdateRecoveryAcceptsOnlyExactHelperCommittedEvidence(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("positive helper evidence requires a root-controlled directory")
+	}
 	root := t.TempDir()
 	binaryPath := filepath.Join(root, "veil")
 	binary := []byte("verified-panel-binary")

@@ -118,6 +118,7 @@ func TestBackupRoutesRejectTraversalAndPruneManagedArchives(t *testing.T) {
 }
 
 func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
+	stubManagementApplySideEffects(t)
 	state := newPanelBackupState(t)
 	collectorBeforeRestore := state.trafficCollector
 	reconcilerBeforeRestore := state.trafficReconciler
