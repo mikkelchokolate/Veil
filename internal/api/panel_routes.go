@@ -7,15 +7,15 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/panel"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
 var (
-	legacyStyleTag  = regexp.MustCompile(`<style(\s|>)`)
-	legacyScriptTag = regexp.MustCompile(`<script(\s|>)`)
+	legacyStyleTag      = regexp.MustCompile(`<style(\s|>)`)
+	legacyScriptTag     = regexp.MustCompile(`<script(\s|>)`)
+	legacyRemoteFontTag = regexp.MustCompile(`<link[^>]+(?:fonts\.googleapis\.com|fonts\.gstatic\.com)[^>]*>`)
 )
 
 func secureLegacyPanelHTML(body string) (string, string, error) {
@@ -24,15 +24,7 @@ func secureLegacyPanelHTML(body string) (string, string, error) {
 		return "", "", err
 	}
 	nonce := base64.RawStdEncoding.EncodeToString(nonceBytes)
-	lines := strings.Split(body, "\n")
-	filtered := lines[:0]
-	for _, line := range lines {
-		if strings.Contains(line, "fonts.googleapis.com") || strings.Contains(line, "fonts.gstatic.com") {
-			continue
-		}
-		filtered = append(filtered, line)
-	}
-	secured := strings.Join(filtered, "\n")
+	secured := legacyRemoteFontTag.ReplaceAllString(body, "")
 	secured = legacyStyleTag.ReplaceAllString(secured, `<style nonce="`+nonce+`"$1`)
 	secured = legacyScriptTag.ReplaceAllString(secured, `<script nonce="`+nonce+`"$1`)
 	return secured, fmt.Sprintf("default-src 'self'; img-src 'self' data: blob:; script-src 'self' 'nonce-%s'; style-src 'self' 'nonce-%s'; font-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'", nonce, nonce), nil
