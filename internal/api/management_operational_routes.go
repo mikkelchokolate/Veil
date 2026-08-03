@@ -314,15 +314,6 @@ func (s *managementState) applyStateViewLocked() applyStateResponse {
 	return resp
 }
 
-func (s *managementState) latestJobWithStatus(status string) (string, bool, error) {
-	job, ok, err := s.applyJobs.LatestWithStatus(status)
-	return job.ID, ok, err
-}
-
-func (s *managementState) latestFailedJob() (apply.Job, bool, error) {
-	return s.applyJobs.LatestFailed()
-}
-
 // deriveSystemState maps revisions + latest job to the public system state.
 func deriveSystemState(rev apply.Revisions, latest *apply.Job) string {
 	if latest != nil {

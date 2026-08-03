@@ -572,7 +572,3 @@ func (s *idempotencyStore) replayDurableIdempotencyResponse(w http.ResponseWrite
 	w.WriteHeader(status)
 	_, _ = w.Write(body)
 }
-
-func isSecretReplayEndpoint(endpoint string) bool {
-	return strings.Contains(endpoint, "/credentials/") || strings.Contains(endpoint, "/tokens")
-}
