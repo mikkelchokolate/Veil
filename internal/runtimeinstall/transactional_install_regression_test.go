@@ -29,24 +29,25 @@ func TestRuntimeInstallPublishesVersionedTargetAndDurableManifest(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("active runtime %s is not an atomic versioned symlink", active)
+	if !info.Mode().IsRegular() {
+		t.Fatalf("active runtime %s is not an atomically renamed regular file", active)
 	}
-	target, err := os.Readlink(active)
+	body, err := os.ReadFile(active)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(target, runtime.Version) || !strings.Contains(target, result.SHA256) {
-		t.Fatalf("active target %q is not bound to version+digest", target)
+	digest := sha256.Sum256(body)
+	if got := hex.EncodeToString(digest[:]); got != result.SHA256 {
+		t.Fatalf("active digest = %s, want %s", got, result.SHA256)
 	}
-	manifestPath := filepath.Join(binDir, ".veil-runtimes", "manifest.json")
+	manifestPath := filepath.Join(binDir, runtimeSetManifestName)
 	manifest, err := os.ReadFile(manifestPath)
 	if err != nil {
-		t.Fatalf("runtime provenance manifest missing: %v", err)
+		t.Fatalf("runtime generation manifest missing: %v", err)
 	}
-	for _, value := range []string{runtime.Name, runtime.Version, result.VerifiedVersion, result.SHA256, target} {
+	for _, value := range []string{runtime.Binary, result.SHA256, "transactionId"} {
 		if !strings.Contains(string(manifest), value) {
-			t.Errorf("runtime manifest lacks %q: %s", value, manifest)
+			t.Errorf("runtime generation manifest lacks %q: %s", value, manifest)
 		}
 	}
 	if _, err := os.Stat(orphan); !errors.Is(err, os.ErrNotExist) {

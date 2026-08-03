@@ -30,10 +30,10 @@ func TestRuntimeVersionProbeSandboxRejectsHostEscapeCapabilities(t *testing.T) {
 		}
 	}
 	separator := slices.Index(args, "--")
-	if separator < 0 || separator+1 >= len(args) || args[separator+1] != "/var/tmp/veil-runtime-probe" {
+	if separator < 0 || separator+1 >= len(args) || args[separator+1] != "/probe/runtime" {
 		t.Fatalf("runtime command is not isolated after --: %q", args)
 	}
-	bind := "--property=BindReadOnlyPaths=" + binary + ":/var/tmp/veil-runtime-probe"
+	bind := "--property=BindReadOnlyPaths=" + binary + ":/probe/runtime"
 	if !slices.Contains(args[:separator], bind) {
 		t.Fatalf("staged runtime is not bound into the systemd sandbox: %q", args)
 	}
@@ -49,17 +49,17 @@ func TestRuntimeVersionProbeBubblewrapFallbackIsReadOnlyAndNetworkIsolated(t *te
 	joined := strings.Join(args, " ")
 	for _, required := range []string{
 		"--unshare-all",
-		"--ro-bind / /",
+		"--tmpfs /",
 		"--tmpfs /tmp",
-		"--ro-bind /tmp/staged-runtime /var/tmp/veil-runtime-probe",
+		"--ro-bind /tmp/staged-runtime /probe/runtime",
 		"--clearenv",
-		"-- /var/tmp/veil-runtime-probe version",
+		"-- /probe/runtime version",
 	} {
 		if !strings.Contains(joined, required) {
 			t.Fatalf("bubblewrap probe missing %q: %s", required, joined)
 		}
 	}
-	if strings.Contains(joined, "--share-net") || strings.Contains(joined, "--bind / /") {
+	if strings.Contains(joined, "--share-net") || strings.Contains(joined, "--bind / /") || strings.Contains(joined, "--ro-bind / /") {
 		t.Fatalf("bubblewrap probe exposes host capabilities: %s", joined)
 	}
 }

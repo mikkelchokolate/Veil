@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -90,7 +91,7 @@ func TestInstallCaddyNaiveInvokesBuilder(t *testing.T) {
 		t.Fatalf("Install: %v", result.Err)
 	}
 	wantPath := filepath.Join(binDir, "caddy")
-	if filepath.Base(gotOutPath) != "caddy" || filepath.Dir(filepath.Dir(gotOutPath)) != binDir {
+	if filepath.Base(gotOutPath) != "caddy" || !strings.HasPrefix(filepath.Clean(gotOutPath), filepath.Clean(binDir)+string(filepath.Separator)) {
 		t.Fatalf("BuildCaddy outPath = %q, want staged caddy beneath %q", gotOutPath, binDir)
 	}
 	body, _ := os.ReadFile(wantPath)
@@ -357,7 +358,7 @@ func TestInstallGoInstallRuntimeInvokesBuilder(t *testing.T) {
 	if result.Err != nil {
 		t.Fatalf("Install: %v", result.Err)
 	}
-	if filepath.Dir(gotBinDir) != binDir {
+	if !strings.HasPrefix(filepath.Clean(gotBinDir), filepath.Clean(binDir)+string(filepath.Separator)) {
 		t.Fatalf("go install bin dir = %q, want staging beneath %q", gotBinDir, binDir)
 	}
 	if gotPackage != "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@v0.0.0" {

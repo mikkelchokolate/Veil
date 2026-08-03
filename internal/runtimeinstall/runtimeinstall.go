@@ -21,6 +21,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"debug/buildinfo"
+	"debug/elf"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -33,9 +34,11 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -206,39 +209,212 @@ const defaultBinDir = "/usr/local/bin"
 func DefaultBinDir() string { return defaultBinDir }
 
 func runtimeVersionProbeArgs(binary string, args []string) []string {
-	return runtimeVersionProbeArgsAt(binary, "/var/tmp/veil-runtime-probe", args)
+	return runtimeVersionProbeArgsAt(binary, "/probe/runtime", args)
 }
 
 func runtimeVersionProbeArgsAt(binary, sandboxBinary string, args []string) []string {
+	return runtimeVersionProbeArgsAtRoot(binary, sandboxBinary, "", args)
+}
+
+func runtimeVersionProbeArgsAtRoot(binary, sandboxBinary, root string, args []string) []string {
 	probe := []string{
 		"--quiet", "--pipe", "--wait", "--collect",
-		"--property=Type=exec", "--property=NoNewPrivileges=yes",
-		"--property=PrivateNetwork=yes", "--property=PrivateDevices=yes", "--property=PrivateTmp=yes",
-		"--property=ProtectSystem=strict", "--property=ProtectHome=yes",
+		"--property=Type=exec", "--property=NoNewPrivileges=yes", "--property=DynamicUser=yes",
+		"--property=PrivateNetwork=yes", "--property=PrivateDevices=yes", "--property=PrivateTmp=yes", "--property=PrivateMounts=yes",
+		"--property=ProtectSystem=strict", "--property=ProtectHome=yes", "--property=ProtectProc=invisible", "--property=ProcSubset=pid",
 		"--property=ProtectKernelTunables=yes", "--property=ProtectKernelModules=yes", "--property=ProtectControlGroups=yes",
 		"--property=RestrictSUIDSGID=yes", "--property=LockPersonality=yes", "--property=MemoryDenyWriteExecute=yes",
 		"--property=CapabilityBoundingSet=", "--property=RestrictAddressFamilies=AF_UNIX",
 		"--property=SystemCallArchitectures=native",
 		"--property=SystemCallFilter=@system-service ~@mount @privileged @resources @raw-io @reboot @swap @obsolete @debug",
-		"--property=MemoryMax=128M", "--property=TasksMax=32",
+		"--property=MemoryMax=128M", "--property=TasksMax=32", "--property=CPUQuota=25%", "--property=RuntimeMaxSec=15s",
+		"--property=WorkingDirectory=/empty", "--property=UMask=0077",
 		"--property=BindReadOnlyPaths=" + binary + ":" + sandboxBinary,
+		"--setenv=PATH=/usr/bin:/bin", "--setenv=LANG=C", "--setenv=LC_ALL=C",
 		"--", sandboxBinary,
+	}
+	if root != "" {
+		probe = append(probe[:4], append([]string{"--property=RootDirectory=" + root, "--property=MountAPIVFS=yes"}, probe[4:]...)...)
 	}
 	return append(probe, args...)
 }
 
 func bubblewrapVersionProbeArgs(binary string, args []string) []string {
-	const sandboxBinary = "/var/tmp/veil-runtime-probe"
+	const sandboxBinary = "/probe/runtime"
 	probe := []string{
 		"--die-with-parent", "--new-session", "--unshare-all",
-		"--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp",
+		"--tmpfs", "/", "--dir", "/probe", "--dir", "/tmp", "--dir", "/proc", "--dir", "/dev",
+		"--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
 		"--ro-bind", binary, sandboxBinary,
-		"--clearenv", "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin", "--", sandboxBinary,
+		"--clearenv", "--setenv", "PATH", "/usr/bin:/bin", "--setenv", "LANG", "C", "--setenv", "LC_ALL", "C",
+		"--", sandboxBinary,
 	}
 	return append(probe, args...)
 }
 
+func runtimeProbeDependencies(binary string) ([]string, error) {
+	searchRoots := []string{
+		"/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu", "/lib/aarch64-linux-gnu", "/usr/lib/aarch64-linux-gnu", "/lib64", "/usr/lib64", "/lib", "/usr/lib",
+	}
+	queue := []string{binary}
+	seenFiles := map[string]struct{}{binary: {}}
+	dependencies := make([]string, 0)
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		file, err := elf.Open(current)
+		if err != nil {
+			// Scripts and static non-ELF probes have no loader dependencies.
+			if current == binary {
+				return nil, nil
+			}
+			return nil, err
+		}
+		libraries, err := file.ImportedLibraries()
+		if err != nil {
+			_ = file.Close()
+			return nil, err
+		}
+		for _, program := range file.Progs {
+			if program.Type != elf.PT_INTERP {
+				continue
+			}
+			body, readErr := io.ReadAll(program.Open())
+			if readErr != nil {
+				_ = file.Close()
+				return nil, readErr
+			}
+			interpreter := strings.TrimRight(string(body), "\x00")
+			if filepath.IsAbs(interpreter) {
+				if _, ok := seenFiles[interpreter]; !ok {
+					seenFiles[interpreter] = struct{}{}
+					dependencies = append(dependencies, interpreter)
+					queue = append(queue, interpreter)
+				}
+			}
+		}
+		_ = file.Close()
+		for _, library := range libraries {
+			resolved := ""
+			for _, root := range searchRoots {
+				candidate := filepath.Join(root, library)
+				if info, statErr := os.Stat(candidate); statErr == nil && info.Mode().IsRegular() {
+					resolved = candidate
+					break
+				}
+			}
+			if resolved == "" {
+				return nil, fmt.Errorf("resolve runtime probe library %s", library)
+			}
+			if _, ok := seenFiles[resolved]; !ok {
+				seenFiles[resolved] = struct{}{}
+				dependencies = append(dependencies, resolved)
+				queue = append(queue, resolved)
+			}
+		}
+	}
+	sort.Strings(dependencies)
+	return dependencies, nil
+}
+
+func prepareRuntimeProbeDependencyTargets(root string, dependencies []string) error {
+	for _, dependency := range dependencies {
+		target := filepath.Join(root, strings.TrimPrefix(dependency, "/"))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		file, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o400)
+		if err != nil {
+			return err
+		}
+		if err := file.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func insertSystemdProbeBinds(args []string, dependencies []string) []string {
+	separator := slices.Index(args, "--")
+	if separator < 0 {
+		return args
+	}
+	binds := make([]string, 0, len(dependencies))
+	for _, dependency := range dependencies {
+		binds = append(binds, "--property=BindReadOnlyPaths="+dependency+":"+dependency)
+	}
+	result := append([]string(nil), args[:separator]...)
+	result = append(result, binds...)
+	return append(result, args[separator:]...)
+}
+
+func insertBubblewrapProbeBinds(args []string, dependencies []string) []string {
+	separator := slices.Index(args, "--")
+	if separator < 0 {
+		return args
+	}
+	seenDirs := map[string]struct{}{`/`: {}}
+	binds := make([]string, 0)
+	for _, dependency := range dependencies {
+		directory := filepath.Dir(dependency)
+		parts := strings.Split(strings.TrimPrefix(directory, "/"), "/")
+		current := ""
+		for _, part := range parts {
+			if part == "" {
+				continue
+			}
+			current += "/" + part
+			if _, ok := seenDirs[current]; !ok {
+				seenDirs[current] = struct{}{}
+				binds = append(binds, "--dir", current)
+			}
+		}
+		binds = append(binds, "--ro-bind", dependency, dependency)
+	}
+	result := append([]string(nil), args[:separator]...)
+	result = append(result, binds...)
+	return append(result, args[separator:]...)
+}
+
+type boundedProbeOutput struct {
+	mu        sync.Mutex
+	buffer    bytes.Buffer
+	limit     int
+	truncated bool
+}
+
+func (w *boundedProbeOutput) Write(body []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	remaining := w.limit - w.buffer.Len()
+	if remaining > 0 {
+		part := body
+		if len(part) > remaining {
+			part = part[:remaining]
+		}
+		_, _ = w.buffer.Write(part)
+	}
+	if len(body) > remaining {
+		w.truncated = true
+	}
+	return len(body), nil
+}
+
+func (w *boundedProbeOutput) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	result := w.buffer.String()
+	if w.truncated {
+		result += "…"
+	}
+	return result
+}
+
 func runSandboxedVersionProbe(ctx context.Context, binary string, args []string) (string, error) {
+	dependencies, dependencyErr := runtimeProbeDependencies(binary)
+	if dependencyErr != nil {
+		return "", fmt.Errorf("resolve runtime probe dependencies: %w", dependencyErr)
+	}
 	command := "systemd-run"
 	commandArgs := []string(nil)
 	if _, err := os.Stat("/run/systemd/private"); err != nil {
@@ -250,34 +426,49 @@ func runSandboxedVersionProbe(ctx context.Context, binary string, args []string)
 		if lookupErr != nil {
 			return "", errors.New("no supported runtime version-probe sandbox is available")
 		}
-		commandArgs = bubblewrapVersionProbeArgs(binary, args)
+		commandArgs = insertBubblewrapProbeBinds(bubblewrapVersionProbeArgs(binary, args), dependencies)
 	} else {
-		placeholder, createErr := os.CreateTemp("/var/tmp", "veil-runtime-probe-*")
+		rootDir, createErr := os.MkdirTemp("/var/tmp", "veil-runtime-probe-root-*")
+		if createErr != nil {
+			return "", fmt.Errorf("create systemd probe root: %w", createErr)
+		}
+		defer os.RemoveAll(rootDir)
+		if err := os.Chmod(rootDir, 0o755); err != nil {
+			return "", err
+		}
+		for path, mode := range map[string]os.FileMode{"probe": 0o755, "empty": 0o555, "tmp": 0o1777} {
+			if err := os.Mkdir(filepath.Join(rootDir, path), mode); err != nil {
+				return "", fmt.Errorf("prepare systemd probe root: %w", err)
+			}
+		}
+		if err := prepareRuntimeProbeDependencyTargets(rootDir, dependencies); err != nil {
+			return "", fmt.Errorf("prepare systemd probe libraries: %w", err)
+		}
+		placeholderPath := filepath.Join(rootDir, "probe", "runtime")
+		placeholder, createErr := os.OpenFile(placeholderPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o500)
 		if createErr != nil {
 			return "", fmt.Errorf("create systemd probe placeholder: %w", createErr)
 		}
-		placeholderPath := placeholder.Name()
-		defer os.Remove(placeholderPath)
 		if closeErr := placeholder.Close(); closeErr != nil {
 			return "", fmt.Errorf("close systemd probe placeholder: %w", closeErr)
 		}
-		if chmodErr := os.Chmod(placeholderPath, 0500); chmodErr != nil {
-			return "", fmt.Errorf("secure systemd probe placeholder: %w", chmodErr)
-		}
-		commandArgs = runtimeVersionProbeArgsAt(binary, placeholderPath, args)
+		commandArgs = insertSystemdProbeBinds(runtimeVersionProbeArgsAtRoot(binary, "/probe/runtime", rootDir, args), dependencies)
 	}
-	output, err := exec.CommandContext(ctx, command, commandArgs...).CombinedOutput()
+	probeOutput := &boundedProbeOutput{limit: 4096}
+	cmd := exec.CommandContext(ctx, command, commandArgs...)
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "LANG=C", "LC_ALL=C"}
+	cmd.Stdout = probeOutput
+	cmd.Stderr = probeOutput
+	err := cmd.Run()
+	output := probeOutput.String()
 	if err != nil {
-		detail := strings.TrimSpace(string(output))
-		if len(detail) > 4096 {
-			detail = detail[:4096] + "…"
-		}
+		detail := strings.TrimSpace(output)
 		if detail != "" {
-			return string(output), fmt.Errorf("run %s sandboxed version probe: %w: %s", filepath.Base(binary), err, detail)
+			return output, fmt.Errorf("run %s sandboxed version probe: %w: %s", filepath.Base(binary), err, detail)
 		}
-		return string(output), fmt.Errorf("run %s sandboxed version probe: %w", filepath.Base(binary), err)
+		return output, fmt.Errorf("run %s sandboxed version probe: %w", filepath.Base(binary), err)
 	}
-	return string(output), nil
+	return output, nil
 }
 
 func (o Options) withDefaults() Options {
@@ -378,24 +569,28 @@ func (o Options) withDefaults() Options {
 	return o
 }
 
-// InstallAll installs every runtime in the catalog and returns per-runtime
-// results. It does not stop at the first failure: each runtime is independent,
-// so a single broken upstream release should not block the others.
+// InstallAll stages and verifies the complete requested runtime set before
+// publishing one atomic generation.
 func InstallAll(ctx context.Context, opts Options) []Result {
 	opts = opts.withDefaults()
-	return installRuntimes(ctx, opts, Catalog(opts.Arch))
+	return installRuntimeSet(ctx, opts, Catalog(opts.Arch))
 }
 
 func installRuntimes(ctx context.Context, opts Options, runtimes []Runtime) []Result {
-	results := make([]Result, 0, len(runtimes))
-	for _, runtime := range runtimes {
-		results = append(results, Install(ctx, opts, runtime))
-	}
-	return results
+	return installRuntimeSet(ctx, opts.withDefaults(), runtimes)
 }
 
-// Install acquires and installs a single runtime binary.
+// Install stages, verifies, and atomically publishes a one-runtime set.
 func Install(ctx context.Context, opts Options, runtime Runtime) Result {
+	results := installRuntimeSet(ctx, opts.withDefaults(), []Runtime{runtime})
+	if len(results) == 0 {
+		return Result{Name: runtime.Name, Binary: runtime.Binary, Method: runtime.Method, Err: errors.New("runtime installation produced no result")}
+	}
+	return results[0]
+}
+
+// installOne acquires and installs one runtime into a transaction staging directory.
+func installOne(ctx context.Context, opts Options, runtime Runtime) Result {
 	opts = opts.withDefaults()
 	result := Result{Name: runtime.Name, Binary: runtime.Binary, Method: runtime.Method}
 	switch runtime.Method {
