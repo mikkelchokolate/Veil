@@ -394,7 +394,7 @@ WHERE j.status=? ORDER BY j.created_at,j.id LIMIT 1`, StatusRecoveryPending).Sca
 		return fmt.Errorf("apply: side-effect publication %s requires helper-owned commit evidence", job.ID)
 	}
 	if job.OwnerProcess != r.ownerID || job.LeaseGeneration == 0 {
-		return fmt.Errorf("apply: recovery-pending publication %s is not fenced to this runner", job.ID)
+		return fmt.Errorf("%w: recovery-pending publication %s is not fenced to this runner", ErrApplyBusy, job.ID)
 	}
 	if err := advanceRuntimePublicationPhase(r.revs.db, job.ID, job.LeaseGeneration, PublicationPhaseRecoveryTransferred, PublicationDetails{}, r.now().UTC().Unix()); err != nil {
 		return fmt.Errorf("apply: transfer recovery evidence: %w", err)

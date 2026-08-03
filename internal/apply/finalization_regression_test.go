@@ -54,7 +54,7 @@ END;`); err != nil {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if persisted.Status != StatusApplying || persisted.ErrorCode != "FINALIZATION_PENDING" {
+	if persisted.Status != StatusRecoveryPending || persisted.ErrorCode != "FINALIZATION_PENDING" {
 		t.Errorf("unresolved finalization was not durably retained: %+v", persisted)
 	}
 	if persisted.FinishedAt != nil {

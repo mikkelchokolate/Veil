@@ -39,14 +39,14 @@ func TestEmptyOperationListDoesNotProveRollback(t *testing.T) {
 	if err == nil {
 		t.Fatal("ambiguous mutation was reported successful")
 	}
-	if job.Status != StatusApplying || job.ErrorCode != "RECOVERY_PENDING" {
+	if job.Status != StatusRecoveryPending || job.ErrorCode != "RECOVERY_PENDING" {
 		t.Fatalf("ambiguous empty-operation mutation became terminal: %+v", job)
 	}
 	persisted, err := jobs.Get(job.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if persisted.Status != StatusApplying || persisted.ErrorCode != "FINALIZATION_PENDING" {
+	if persisted.Status != StatusRecoveryPending || persisted.ErrorCode != "FINALIZATION_PENDING" {
 		t.Fatalf("recovery evidence was not retained: %+v", persisted)
 	}
 	var receipts int
