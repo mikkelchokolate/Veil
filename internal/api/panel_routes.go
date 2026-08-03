@@ -23,7 +23,7 @@ func secureLegacyPanelHTML(body string) (string, string, error) {
 	if _, err := rand.Read(nonceBytes); err != nil {
 		return "", "", err
 	}
-	nonce := base64.RawStdEncoding.EncodeToString(nonceBytes)
+	nonce := base64.RawURLEncoding.EncodeToString(nonceBytes)
 	secured := legacyRemoteFontTag.ReplaceAllString(body, "")
 	secured = legacyStyleTag.ReplaceAllString(secured, `<style nonce="`+nonce+`"$1`)
 	secured = legacyScriptTag.ReplaceAllString(secured, `<script nonce="`+nonce+`"$1`)
