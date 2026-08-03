@@ -170,12 +170,17 @@ func TestRevisionSnapshotStoresDeterministicEffectiveTime(t *testing.T) {
 
 func TestExpiredClientIsRemovedFromLiveRuntimeWithoutUserMutation(t *testing.T) {
 	router, state := newApplyTrackedRouterWithState(t)
+	// Drive the boundary synchronously: under -race with coverage, a two-second
+	// wall-clock deadline can pass while the initial apply is still publishing.
+	// Stopping the background worker and moving only the persisted deadline
+	// preserves the production reconciliation path without timing the fixture.
+	state.expirationReconciler.Stop()
 	inbound := v1Request(t, router, http.MethodPost, "/api/inbounds",
 		`{"name":"expiry-hy","protocol":"hysteria2","transport":"udp","port":32443,"enabled":true}`)
 	if inbound.Code != http.StatusCreated && inbound.Code != http.StatusOK {
 		t.Fatalf("create inbound: %d %s", inbound.Code, inbound.Body.String())
 	}
-	expires := time.Now().UTC().Add(2 * time.Second).Unix()
+	expires := time.Now().UTC().Add(30 * time.Second).Unix()
 	created := v1Request(t, router, http.MethodPost, "/api/v1/clients", fmt.Sprintf(
 		`{"name":"expiry-client","expiresAt":%d,"bindings":[{"inboundId":"expiry-hy","runtimeIdentity":"expiry_runtime_identity","credential":"expiry-secret"}]}`, expires))
 	if created.Code != http.StatusCreated {
@@ -189,6 +194,13 @@ func TestExpiredClientIsRemovedFromLiveRuntimeWithoutUserMutation(t *testing.T) 
 	}
 	if !snapshotTreeContains(state.liveRoot, "expiry_runtime_identity") {
 		t.Fatal("precondition: expiring identity was not published to the live runtime")
+	}
+	crossedAt := time.Now().UTC().Add(-time.Second).Unix()
+	if _, err := state.db.Exec(`UPDATE clients SET expires_at=? WHERE id=?`, crossedAt, clientID); err != nil {
+		t.Fatal(err)
+	}
+	if err := state.expirationReconciler.ReconcileOnce(context.Background()); err != nil {
+		t.Fatalf("reconcile crossed expiry boundary: %v", err)
 	}
 
 	deadline := time.Now().Add(10 * time.Second)
