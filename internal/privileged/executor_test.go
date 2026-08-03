@@ -276,6 +276,7 @@ func TestProductionExecutorRestoresPromotionByOpaqueBackupID(t *testing.T) {
 
 func TestProductionExecutorUsesOnlyFixedCommandMappings(t *testing.T) {
 	var commands [][]string
+	var showCalls int
 	ufw := &transactionalUFWModel{enabled: true, rules: map[string]string{"2096/tcp": "Veil panel"}}
 	run := func(_ context.Context, command []string, _ time.Duration) (string, error) {
 		commands = append(commands, append([]string(nil), command...))
@@ -283,15 +284,21 @@ func TestProductionExecutorUsesOnlyFixedCommandMappings(t *testing.T) {
 			return ufw.runner(context.Background(), command, 0)
 		}
 		if len(command) > 1 && command[0] == "systemctl" && command[1] == "show" {
-			return "LoadState=loaded\nActiveState=active\nSubState=running\n", nil
+			showCalls++
+			return fmt.Sprintf("LoadState=loaded\nActiveState=active\nSubState=running\nMainPID=%d\nExecMainStartTimestampMonotonic=%d\n", os.Getpid(), showCalls), nil
 		}
 		if len(command) > 0 && command[0] == "journalctl" {
 			return "line one\nline two\n", nil
 		}
 		return "", nil
 	}
+	executablePath, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
 	executor := NewProductionExecutor(ProductionConfig{
 		RunCommand:          run,
+		BinaryPath:          executablePath,
 		PromotionBackupRoot: t.TempDir(),
 		FirewallCommands: map[string][]string{
 			"allow-panel": {"ufw", "allow", "2096/tcp", "comment", "Veil panel"},
@@ -313,15 +320,18 @@ func TestProductionExecutorUsesOnlyFixedCommandMappings(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(firewall.AppliedRuleIDs, []string{"allow-panel"}) {
 		t.Fatalf("firewall: %+v err=%v", firewall, err)
 	}
-	if err := executor.RestartPanel(context.Background()); err != nil {
+	restartCtx := ContextWithRestartPanelRequest(context.Background(), RestartPanelRequest{Fence: FenceToken{Owner: "test", Generation: 1, OperationID: "restart-op", LeaseExpiresAt: time.Now().Add(time.Minute).Unix()}})
+	if err := executor.RestartPanel(restartCtx); err != nil {
 		t.Fatalf("restart Panel: %v", err)
 	}
 
 	wantNonFirewall := [][]string{
 		{"systemctl", "restart", "veil.service"},
-		{"systemctl", "show", "veil.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--no-page"},
+		{"systemctl", "show", "veil.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--property=MainPID", "--property=ExecMainStartTimestampMonotonic", "--no-page"},
 		{"journalctl", "-u", "veil.service", "--no-pager", "-n", "25", "-o", "short-iso"},
+		{"systemctl", "show", "veil.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--property=MainPID", "--property=ExecMainStartTimestampMonotonic", "--no-page"},
 		{"systemctl", "restart", "veil.service"},
+		{"systemctl", "show", "veil.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--property=MainPID", "--property=ExecMainStartTimestampMonotonic", "--no-page"},
 	}
 	var nonFirewall [][]string
 	for _, command := range commands {

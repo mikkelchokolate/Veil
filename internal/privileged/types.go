@@ -110,11 +110,14 @@ type ServiceStatusRequest struct {
 }
 
 type ServiceStatus struct {
-	Unit        string `json:"unit"`
-	LoadState   string `json:"loadState,omitempty"`
-	ActiveState string `json:"activeState,omitempty"`
-	SubState    string `json:"subState,omitempty"`
-	Error       string `json:"error,omitempty"`
+	Unit                   string `json:"unit"`
+	LoadState              string `json:"loadState,omitempty"`
+	ActiveState            string `json:"activeState,omitempty"`
+	SubState               string `json:"subState,omitempty"`
+	MainPID                int    `json:"mainPid,omitempty"`
+	ExecMainStartMonotonic uint64 `json:"execMainStartMonotonic,omitempty"`
+	ExecutableDigest       string `json:"executableDigest,omitempty"`
+	Error                  string `json:"error,omitempty"`
 }
 
 type ServiceStatusResult struct {
@@ -141,6 +144,7 @@ type BackupRequest struct {
 	AllowVersionMismatch bool         `json:"allowVersionMismatch,omitempty"`
 	Offset               int64        `json:"offset,omitempty"`
 	Limit                int64        `json:"limit,omitempty"`
+	TransactionID        string       `json:"transactionId,omitempty"`
 	Fence                FenceToken   `json:"fence"`
 }
 
@@ -166,6 +170,10 @@ type BackupResult struct {
 	SafetyDatabasePath string                    `json:"safetyDatabasePath,omitempty"`
 	Data               []byte                    `json:"data,omitempty"`
 	More               bool                      `json:"more,omitempty"`
+	TransactionID      string                    `json:"transactionId,omitempty"`
+	ContentDigest      string                    `json:"contentDigest,omitempty"`
+	InodeGeneration    string                    `json:"inodeGeneration,omitempty"`
+	BoundSize          int64                     `json:"boundSize,omitempty"`
 	Warning            string                    `json:"warning,omitempty"`
 }
 
@@ -209,10 +217,16 @@ type UpdateRequest struct {
 }
 
 type UpdateResult struct {
-	ArtifactID string `json:"artifactId"`
-	Staged     bool   `json:"staged"`
-	Installed  bool   `json:"installed,omitempty"`
-	Version    string `json:"version,omitempty"`
+	ArtifactID         string `json:"artifactId"`
+	Staged             bool   `json:"staged"`
+	Installed          bool   `json:"installed,omitempty"`
+	Version            string `json:"version,omitempty"`
+	TransactionID      string `json:"transactionId,omitempty"`
+	ExpectedDigest     string `json:"expectedDigest,omitempty"`
+	OldDigest          string `json:"oldDigest,omitempty"`
+	InstalledInode     string `json:"installedInode,omitempty"`
+	ActivationManifest string `json:"activationManifest,omitempty"`
+	CommitPhase        string `json:"commitPhase,omitempty"`
 }
 
 type RestartPanelRequest struct {

@@ -11,7 +11,7 @@ func TestSystemdServiceStatusCommandBuildsCommandArgsAndTimeout(t *testing.T) {
 	if command.Name() != "systemctl" {
 		t.Fatalf("name = %q", command.Name())
 	}
-	wantArgs := []string{"show", "caddy.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--no-page"}
+	wantArgs := []string{"show", "caddy.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--property=MainPID", "--property=ExecMainStartTimestampMonotonic", "--no-page"}
 	if !reflect.DeepEqual(command.Args(), wantArgs) {
 		t.Fatalf("args = %+v", command.Args())
 	}

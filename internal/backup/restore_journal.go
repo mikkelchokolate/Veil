@@ -106,21 +106,25 @@ func RecoverInterruptedRestore(statePath, keyPath, databasePath string) error {
 		return err
 	}
 	if journal.Phase == "committed" || intended {
+		if err := cleanupRestoreDatabaseSidecars(root, databasePath, &journal); err != nil {
+			return err
+		}
 		if err := verifyRestoreRevisionBinding(databasePath, journal.IntendedRevision, restoreJournalDigest(journal.Files, "state.json", true), journal.FenceGeneration > 0); err != nil {
 			return err
 		}
 		if err := ensureRestoreFencingFloor(databasePath, journal.FenceGeneration); err != nil {
 			return err
 		}
-		if journal.Phase != "committed" {
-			journal.Phase = "committed"
-			journal.WALCleanupPhase = "committed"
-			for i := range journal.Files {
-				journal.Files[i].Phase = "committed"
-			}
-			if err := writeRestoreJournal(root, journal); err != nil {
-				return err
-			}
+		if err := refreshRestoreDatabaseDigest(&journal, databasePath); err != nil {
+			return err
+		}
+		journal.Phase = "committed"
+		journal.WALCleanupPhase = "committed"
+		for i := range journal.Files {
+			journal.Files[i].Phase = "committed"
+		}
+		if err := writeRestoreJournal(root, journal); err != nil {
+			return err
 		}
 		return removeRestoreJournal(root)
 	}
@@ -224,23 +228,99 @@ func publishRestoreJournalFile(root string, journal *restoreTransactionJournal, 
 	return writeRestoreJournal(root, *journal)
 }
 
-func completeRestoreJournal(root, databasePath string, journal *restoreTransactionJournal) error {
-	if databasePath != "" {
-		for _, suffix := range []string{"-wal", "-shm"} {
-			path := databasePath + suffix
-			if err := restoreRemove(path); err != nil {
-				if !errors.Is(err, os.ErrNotExist) {
-					return err
-				}
-			} else if err := syncRestoreParent(path); err != nil {
-				return err
-			}
-			journal.WALCleanupPhase = suffix[1:] + "-removed"
-			journal.Phase = "database-sidecar-" + journal.WALCleanupPhase
-			if err := writeRestoreJournal(root, *journal); err != nil {
-				return err
-			}
+func prepareRestoredDatabaseRuntimeUnknown(path string, fencingGeneration uint64) error {
+	db, err := storage.OpenExisting(path)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var journalMode string
+	if err := db.QueryRow(`PRAGMA journal_mode=DELETE`).Scan(&journalMode); err != nil {
+		return fmt.Errorf("set restored database journal mode: %w", err)
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`CREATE TABLE IF NOT EXISTS runtime_verification (
+  id INTEGER PRIMARY KEY CHECK (id=1),
+  historical_applied_revision INTEGER NOT NULL DEFAULT 0,
+  verified_revision INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL CHECK (status IN ('verified','unknown','recovering')),
+  updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+)`); err != nil {
+		return err
+	}
+	var historical uint64
+	if err := tx.QueryRow(`SELECT applied_revision FROM revisions WHERE id=1`).Scan(&historical); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO runtime_verification(id,historical_applied_revision,verified_revision,status,updated_at)
+VALUES(1,?,0,'unknown',strftime('%s','now'))
+ON CONFLICT(id) DO UPDATE SET historical_applied_revision=excluded.historical_applied_revision,
+ verified_revision=0,status='unknown',updated_at=excluded.updated_at`, historical); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE revisions SET applied_revision=0 WHERE id=1`); err != nil {
+		return err
+	}
+	if fencingGeneration > 0 {
+		if _, err := tx.Exec(`UPDATE apply_lease SET generation=MAX(generation,?),owner_process='',current_operation='',heartbeat_at=0,lease_expires_at=0 WHERE id=1`, fencingGeneration); err != nil {
+			return err
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if err := db.Close(); err != nil {
+		return err
+	}
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if err := os.Remove(path + suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if err := syncRestoreParent(path + suffix); err != nil {
+			return err
+		}
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return err
+	}
+	return file.Close()
+}
+
+func cleanupRestoreDatabaseSidecars(root, databasePath string, journal *restoreTransactionJournal) error {
+	if databasePath == "" {
+		return nil
+	}
+	for _, suffix := range []string{"-wal", "-shm"} {
+		path := databasePath + suffix
+		if err := restoreRemove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		// Sync even when the sidecar was already absent. This durably orders the
+		// absence check before database validation and journal finalization.
+		if err := syncRestoreParent(path); err != nil {
+			return err
+		}
+		journal.WALCleanupPhase = suffix[1:] + "-removed"
+		journal.Phase = "database-sidecar-" + journal.WALCleanupPhase
+		if err := writeRestoreJournal(root, *journal); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func completeRestoreJournal(root, databasePath string, journal *restoreTransactionJournal) error {
+	if err := cleanupRestoreDatabaseSidecars(root, databasePath, journal); err != nil {
+		return err
 	}
 	for index := range journal.Files {
 		body, err := os.ReadFile(journal.Files[index].TargetPath)
@@ -256,6 +336,9 @@ func completeRestoreJournal(root, databasePath string, journal *restoreTransacti
 		return err
 	}
 	if err := ensureRestoreFencingFloor(databasePath, journal.FenceGeneration); err != nil {
+		return err
+	}
+	if err := refreshRestoreDatabaseDigest(journal, databasePath); err != nil {
 		return err
 	}
 	journal.Phase = "committed"
@@ -465,6 +548,39 @@ func restoreJournalDigest(files []restoreJournalFile, name string, intended bool
 	return ""
 }
 
+func validateRestoredSQLite(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA quick_check`)
+	if err != nil {
+		return fmt.Errorf("restore quick_check: %w", err)
+	}
+	ok := false
+	for rows.Next() {
+		var result string
+		if err := rows.Scan(&result); err != nil {
+			rows.Close()
+			return err
+		}
+		if result != "ok" {
+			rows.Close()
+			return errors.New("restore quick_check failed")
+		}
+		ok = true
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if !ok {
+		return errors.New("restore quick_check returned no result")
+	}
+	var table string
+	if err := db.QueryRow(`SELECT "table" FROM pragma_foreign_key_check LIMIT 1`).Scan(&table); err == nil {
+		return errors.New("restore foreign_key_check failed")
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("restore foreign_key_check: %w", err)
+	}
+	return nil
+}
+
 func verifyRestoreRevisionBinding(databasePath string, expectedRevision uint64, stateDigest string, requireBinding bool) error {
 	if databasePath == "" {
 		return nil
@@ -474,6 +590,9 @@ func verifyRestoreRevisionBinding(databasePath string, expectedRevision uint64, 
 		return err
 	}
 	defer db.Close()
+	if err := validateRestoredSQLite(db); err != nil {
+		return err
+	}
 	var revision uint64
 	if err := db.QueryRow(`SELECT desired_revision FROM revisions WHERE id=1`).Scan(&revision); err != nil {
 		if errors.Is(err, sql.ErrNoRows) && expectedRevision == 0 {
@@ -503,6 +622,23 @@ func verifyRestoreRevisionBinding(databasePath string, expectedRevision uint64, 
 	return nil
 }
 
+func refreshRestoreDatabaseDigest(journal *restoreTransactionJournal, databasePath string) error {
+	if databasePath == "" {
+		return nil
+	}
+	body, err := os.ReadFile(databasePath)
+	if err != nil {
+		return err
+	}
+	for index := range journal.Files {
+		if journal.Files[index].Name == "veil.db" {
+			journal.Files[index].IntendedDigest = backupChecksum(body)
+			return nil
+		}
+	}
+	return errors.New("restore journal is missing veil.db evidence")
+}
+
 func ensureRestoreFencingFloor(databasePath string, generation uint64) error {
 	if databasePath == "" || generation == 0 {
 		return nil
@@ -512,7 +648,14 @@ func ensureRestoreFencingFloor(databasePath string, generation uint64) error {
 		return err
 	}
 	defer db.Close()
-	result, err := db.Exec(`UPDATE apply_lease SET generation=CASE WHEN generation<? THEN ? ELSE generation END WHERE id=1`, generation, generation)
+	var journalMode string
+	if err := db.QueryRow(`PRAGMA journal_mode=DELETE`).Scan(&journalMode); err != nil {
+		return fmt.Errorf("restore apply fencing journal mode: %w", err)
+	}
+	result, err := db.Exec(`UPDATE apply_lease SET
+ generation=CASE WHEN generation<? THEN ? ELSE generation END,
+ owner_process='',lease_expires_at=0,heartbeat_at=0,current_operation=''
+WHERE id=1`, generation, generation)
 	if err != nil {
 		return fmt.Errorf("restore apply fencing floor: %w", err)
 	}

@@ -227,11 +227,13 @@ func TestArchiveV2RestoresNormalizedSQLiteDomain(t *testing.T) {
 	}
 	statements := []string{
 		`INSERT OR REPLACE INTO revisions(id,desired_revision,applied_revision) VALUES(1,7,6)`,
+		`UPDATE runtime_verification SET historical_applied_revision=6,verified_revision=6,status='verified' WHERE id=1`,
 		`INSERT INTO clients(id,name,enabled,quota_reset_policy,created_at,updated_at) VALUES('client-1','alice',1,'never',1,1)`,
 		`INSERT INTO client_bindings(id,client_id,inbound_id,enabled,created_at,updated_at) VALUES('binding-1','client-1','hy2',1,1,1)`,
-		`INSERT INTO client_credentials(id,binding_id,kind,encrypted_value,created_at) VALUES('credential-1','binding-1','password',X'0102',1)`,
-		`INSERT INTO subscription_tokens(id,client_id,token_hash,token_prefix,created_at) VALUES('token-1','client-1',X'0304','tok',1)`,
+		`INSERT INTO client_credentials(id,binding_id,kind,encrypted_value,created_at) VALUES('credential-1','binding-1','password',X'0102030405060708090a0b0c0d',1)`,
+		`INSERT INTO subscription_tokens(id,client_id,token_hash,token_prefix,created_at) VALUES('token-1','client-1',X'0303030303030303030303030303030303030303030303030303030303030303','tok',1)`,
 		`INSERT INTO traffic_counters(client_id,binding_id,upload_bytes,download_bytes,updated_at) VALUES('client-1','binding-1',11,22,1)`,
+		`INSERT INTO revision_snapshots(revision,payload,created_at,state_sha256) VALUES(6,'{"clients":["client-1"]}',1,'` + backupChecksum(stateBody) + `')`,
 		`INSERT INTO revision_snapshots(revision,payload,created_at,state_sha256) VALUES(7,'{"clients":["client-1"]}',1,'` + backupChecksum(stateBody) + `')`,
 	}
 	for _, statement := range statements {
@@ -277,15 +279,23 @@ func TestArchiveV2RestoresNormalizedSQLiteDomain(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	for _, table := range []string{"clients", "client_bindings", "client_credentials", "subscription_tokens", "traffic_counters", "revision_snapshots"} {
+	for _, table := range []string{"clients", "client_bindings", "client_credentials", "subscription_tokens", "traffic_counters"} {
 		var count int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&count); err != nil || count != 1 {
 			t.Fatalf("%s count=%d err=%v", table, count, err)
 		}
 	}
-	var desired, applied int
-	if err := db.QueryRow(`SELECT desired_revision, applied_revision FROM revisions WHERE id=1`).Scan(&desired, &applied); err != nil || desired != 7 || applied != 6 {
+	var snapshotCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM revision_snapshots`).Scan(&snapshotCount); err != nil || snapshotCount != 2 {
+		t.Fatalf("revision snapshot count=%d err=%v", snapshotCount, err)
+	}
+	var desired, applied, historical, verified int
+	var runtimeStatus string
+	if err := db.QueryRow(`SELECT desired_revision, applied_revision FROM revisions WHERE id=1`).Scan(&desired, &applied); err != nil || desired != 7 || applied != 0 {
 		t.Fatalf("revisions=%d/%d err=%v", desired, applied, err)
+	}
+	if err := db.QueryRow(`SELECT historical_applied_revision,verified_revision,status FROM runtime_verification WHERE id=1`).Scan(&historical, &verified, &runtimeStatus); err != nil || historical != 6 || verified != 0 || runtimeStatus != "unknown" {
+		t.Fatalf("runtime verification=%d/%d/%s err=%v", historical, verified, runtimeStatus, err)
 	}
 }
 

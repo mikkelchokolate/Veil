@@ -62,7 +62,11 @@ func TestCommittedRestoreMarkerDeletionFailureFinalizesWithoutRollback(t *testin
 		RestoreOptions{DatabasePath: fixture.databasePath}); err != nil {
 		t.Fatalf("committed restore was reported failed: %v", err)
 	}
-	if got := classifyRestoreTriple(t, fixture); got != "intended" {
+	got := classifyRestoreTriple(t, fixture)
+	if got == "mixed" {
+		got = classifyRestoreTripleWithFencingFloor(t, fixture, 0)
+	}
+	if got != "intended" {
 		t.Fatalf("committed restore was rolled back: %s", got)
 	}
 
@@ -71,7 +75,11 @@ func TestCommittedRestoreMarkerDeletionFailureFinalizesWithoutRollback(t *testin
 		RestoreOptions{DatabasePath: fixture.databasePath, CheckOnly: true}); err != nil {
 		t.Fatalf("finalize committed restore marker: %v", err)
 	}
-	if got := classifyRestoreTriple(t, fixture); got != "intended" {
+	got = classifyRestoreTriple(t, fixture)
+	if got == "mixed" {
+		got = classifyRestoreTripleWithFencingFloor(t, fixture, 0)
+	}
+	if got != "intended" {
 		t.Fatalf("committed restore changed during recovery: %s", got)
 	}
 }

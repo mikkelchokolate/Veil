@@ -100,6 +100,7 @@ type ResolvedBackup struct {
 	AllowVersionMismatch bool
 	Offset               int64
 	Limit                int64
+	TransactionID        string
 	FenceGeneration      uint64
 }
 
@@ -341,6 +342,7 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 		FenceGeneration:      request.Fence.Generation,
 		Offset:               request.Offset,
 		Limit:                request.Limit,
+		TransactionID:        request.TransactionID,
 	}
 	if resolved.StatePath == "" {
 		resolved.StatePath = filepath.Join(p.StateRoot, "state.json")

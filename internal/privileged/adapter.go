@@ -138,7 +138,7 @@ func (a *LocalAdapter) RestartPanel(ctx context.Context) error {
 	if a.executor.RestartPanel == nil {
 		return newError(ErrorOperationFailed, "Panel restart executor is unavailable")
 	}
-	return wrapOperationError(a.executor.RestartPanel(ctx))
+	return wrapOperationError(a.executor.RestartPanel(ContextWithRestartPanelRequest(ctx, request)))
 }
 
 func (a *LocalAdapter) SyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest) (SyncCaddyCertResult, error) {

@@ -1,9 +1,9 @@
 package privileged
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -16,10 +16,13 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/backup"
+	"github.com/mikkelchokolate/Veil/internal/caddyadmin"
 	"github.com/mikkelchokolate/Veil/internal/caddycert"
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 	"github.com/mikkelchokolate/Veil/internal/releaseverify"
@@ -216,11 +219,16 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 					continue
 				}
 				status := service.NewSystemdServiceStatusParser().Parse(unit, output)
+				executableDigest := ""
+				if status.MainPID > 0 {
+					if body, readErr := os.ReadFile(fmt.Sprintf("/proc/%d/exe", status.MainPID)); readErr == nil {
+						digest := sha256.Sum256(body)
+						executableDigest = hex.EncodeToString(digest[:])
+					}
+				}
 				result.Services = append(result.Services, ServiceStatus{
-					Unit:        status.Unit,
-					LoadState:   status.LoadState,
-					ActiveState: status.ActiveState,
-					SubState:    status.SubState,
+					Unit: status.Unit, LoadState: status.LoadState, ActiveState: status.ActiveState, SubState: status.SubState,
+					MainPID: status.MainPID, ExecMainStartMonotonic: status.ExecMainStartMonotonic, ExecutableDigest: executableDigest,
 				})
 			}
 			return result, nil
@@ -267,29 +275,64 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 		},
 		Update: config.UpdateWorkflow,
 		RestartPanel: func(ctx context.Context) error {
-			_, err := config.RunCommand(ctx, []string{"systemctl", "restart", "veil.service"}, 30*time.Second)
-			return err
+			request, ok := RestartPanelRequestFromContext(ctx)
+			if !ok || request.Fence.OperationID == "" {
+				return errors.New("restart panel fencing context is missing")
+			}
+			statusCommand := service.NewSystemdServiceStatusCommand("veil.service")
+			statusArgs := append([]string{"systemctl"}, statusCommand.Args()...)
+			beforeOutput, err := config.RunCommand(ctx, statusArgs, 15*time.Second)
+			if err != nil {
+				return err
+			}
+			before := service.NewSystemdServiceStatusParser().Parse("veil.service", beforeOutput)
+			binaryPath := config.BinaryPath
+			if binaryPath == "" {
+				binaryPath, err = osExecutable()
+				if err != nil {
+					return err
+				}
+			}
+			binaryBody, err := os.ReadFile(binaryPath)
+			if err != nil {
+				return err
+			}
+			digestBytes := sha256.Sum256(binaryBody)
+			expectedDigest := hex.EncodeToString(digestBytes[:])
+			manifestPath := filepath.Join(filepath.Dir(binaryPath), ".veil-restart-evidence.json")
+			intent, _ := json.Marshal(map[string]any{
+				"version": 1, "transactionId": request.Fence.OperationID, "expectedExecutableDigest": expectedDigest,
+				"previousStartGeneration": before.ExecMainStartMonotonic, "commitPhase": "intent",
+			})
+			if err := atomicfile.Write(manifestPath, intent, 0o600, 0o700); err != nil {
+				return err
+			}
+			if _, err := config.RunCommand(ctx, []string{"systemctl", "restart", "veil.service"}, 30*time.Second); err != nil {
+				return err
+			}
+			afterOutput, err := config.RunCommand(ctx, statusArgs, 15*time.Second)
+			if err != nil {
+				return err
+			}
+			after := service.NewSystemdServiceStatusParser().Parse("veil.service", afterOutput)
+			if after.ActiveState != "active" || after.MainPID <= 0 || after.ExecMainStartMonotonic <= before.ExecMainStartMonotonic {
+				return errors.New("panel restart did not produce a new healthy service generation")
+			}
+			committed, _ := json.Marshal(map[string]any{
+				"version": 1, "transactionId": request.Fence.OperationID, "expectedExecutableDigest": expectedDigest,
+				"previousStartGeneration": before.ExecMainStartMonotonic, "newStartGeneration": after.ExecMainStartMonotonic,
+				"mainPid": after.MainPID, "serviceActive": true, "activationManifest": manifestPath, "commitPhase": "committed",
+			})
+			return atomicfile.Write(manifestPath, committed, 0o600, 0o700)
 		},
 		SyncCaddyCert: func(ctx context.Context, request SyncCaddyCertRequest) (SyncCaddyCertResult, error) {
 			return runSyncCaddyCert(ctx, request, config)
 		},
 		CaddyLoad: func(ctx context.Context, request CaddyLoadRequest) error {
-			httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, config.CaddyAdminURL, bytes.NewReader(request.Config))
-			if err != nil {
-				return err
-			}
-			httpRequest.Header.Set("Content-Type", "application/json")
-			response, err := config.HTTPClient.Do(httpRequest)
-			if err != nil {
-				return err
-			}
-			defer response.Body.Close()
-			if response.StatusCode < 200 || response.StatusCode >= 300 {
-				body, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
-				return fmt.Errorf("caddy load status %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
-			}
-			_, err = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
-			return err
+			endpoint := strings.TrimSuffix(config.CaddyAdminURL, "/load")
+			client := caddyadmin.NewClient(endpoint)
+			client.HTTPClient = config.HTTPClient
+			return client.LoadConfigContext(ctx, request.Config)
 		},
 	}
 }
@@ -337,17 +380,76 @@ func runProductionUpdate(config ProductionConfig, request ResolvedUpdate) (Updat
 			return UpdateResult{}, fmt.Errorf("resolve current executable: %w", err)
 		}
 	}
+	oldDigest := ""
+	if oldBody, readErr := os.ReadFile(binaryPath); readErr == nil {
+		digest := sha256.Sum256(oldBody)
+		oldDigest = hex.EncodeToString(digest[:])
+	} else if !errors.Is(readErr, os.ErrNotExist) {
+		return UpdateResult{}, readErr
+	}
+	expectedBinary, err := updateflow.ExtractVeilBinary(archive)
+	if err != nil {
+		return UpdateResult{}, err
+	}
+	expectedDigestBytes := sha256.Sum256(expectedBinary)
+	expectedDigest := hex.EncodeToString(expectedDigestBytes[:])
+	transactionID := request.Fence.OperationID
+	if transactionID == "" {
+		transactionBytes := make([]byte, 16)
+		if _, err := rand.Read(transactionBytes); err != nil {
+			return UpdateResult{}, err
+		}
+		transactionID = hex.EncodeToString(transactionBytes)
+	}
+	manifestPath := filepath.Join(filepath.Dir(binaryPath), ".veil-update-evidence.json")
+	intentBody, err := json.Marshal(map[string]any{
+		"version": 1, "transactionId": transactionID, "expectedBinaryDigest": expectedDigest,
+		"oldBinaryDigest": oldDigest, "targetVersion": request.Version, "commitPhase": "intent",
+	})
+	if err != nil {
+		return UpdateResult{}, err
+	}
+	if err := atomicfile.Write(manifestPath, intentBody, 0o600, 0o700); err != nil {
+		return UpdateResult{}, err
+	}
 	if _, err := updateflow.ReplaceBinaryFromArchive(binaryPath, archive, true); err != nil {
 		return UpdateResult{}, fmt.Errorf("install staged update: %w", err)
+	}
+	installedBody, err := os.ReadFile(binaryPath)
+	if err != nil {
+		return UpdateResult{}, err
+	}
+	installedDigestBytes := sha256.Sum256(installedBody)
+	installedDigest := hex.EncodeToString(installedDigestBytes[:])
+	info, err := os.Stat(binaryPath)
+	if err != nil {
+		return UpdateResult{}, err
+	}
+	inode := "unknown"
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+		inode = fmt.Sprintf("%d:%d:%d:%d", stat.Dev, stat.Ino, stat.Ctim.Sec, stat.Ctim.Nsec)
+	}
+	if installedDigest != expectedDigest {
+		return UpdateResult{}, errors.New("installed panel binary digest does not match verified archive")
+	}
+	evidenceBody, err := json.Marshal(map[string]any{
+		"version": 1, "transactionId": transactionID, "expectedBinaryDigest": installedDigest,
+		"oldBinaryDigest": oldDigest, "installedPathInode": inode, "targetVersion": request.Version,
+		"activationManifest": manifestPath, "commitPhase": "committed",
+	})
+	if err != nil {
+		return UpdateResult{}, err
+	}
+	if err := atomicfile.Write(manifestPath, evidenceBody, 0o600, 0o700); err != nil {
+		return UpdateResult{}, err
 	}
 	for _, path := range []string{request.Path, request.ChecksumsPath, request.ChecksumsBundlePath, request.ProvenancePath, request.ProvenanceBundlePath} {
 		_ = os.Remove(path)
 	}
 	return UpdateResult{
-		ArtifactID: request.ArtifactID,
-		Staged:     true,
-		Installed:  true,
-		Version:    request.Version,
+		ArtifactID: request.ArtifactID, Staged: true, Installed: true, Version: request.Version,
+		TransactionID: transactionID, ExpectedDigest: installedDigest, OldDigest: oldDigest,
+		InstalledInode: inode, ActivationManifest: manifestPath, CommitPhase: "committed",
 	}, nil
 }
 
@@ -626,6 +728,121 @@ func grantPanelReadAccessToCaddyArtifact(path string) error {
 	return nil
 }
 
+type backupReadSession struct {
+	file            *os.File
+	archiveName     string
+	size            int64
+	createdAt       string
+	contentDigest   string
+	inodeGeneration string
+	expiresAt       time.Time
+}
+
+var backupReadSessionRegistry = struct {
+	sync.Mutex
+	sessions map[string]*backupReadSession
+}{sessions: make(map[string]*backupReadSession)}
+
+func readBackupArchiveFromStableDescriptor(config ProductionConfig, request ResolvedBackup) (BackupResult, error) {
+	maxBytes, err := configuredBackupMaxBytes(config)
+	if err != nil {
+		return BackupResult{}, err
+	}
+	backupReadSessionRegistry.Lock()
+	defer backupReadSessionRegistry.Unlock()
+	now := time.Now().UTC()
+	if config.Now != nil {
+		now = config.Now().UTC()
+	}
+	for id, session := range backupReadSessionRegistry.sessions {
+		if !session.expiresAt.After(now) {
+			_ = session.file.Close()
+			delete(backupReadSessionRegistry.sessions, id)
+		}
+	}
+	transactionID := request.TransactionID
+	session := backupReadSessionRegistry.sessions[transactionID]
+	if transactionID == "" {
+		if request.Offset != 0 {
+			return BackupResult{}, errors.New("backup read transaction must start at offset zero")
+		}
+		file, openErr := openRegularNoFollow(request.ArchivePath)
+		if openErr != nil {
+			return BackupResult{}, openErr
+		}
+		info, statErr := file.Stat()
+		if statErr != nil {
+			_ = file.Close()
+			return BackupResult{}, statErr
+		}
+		if !info.Mode().IsRegular() || info.Size() > maxBytes {
+			_ = file.Close()
+			return BackupResult{}, errors.New("backup archive violates regular-file or size policy")
+		}
+		hash := sha256.New()
+		if _, copyErr := io.Copy(hash, file); copyErr != nil {
+			_ = file.Close()
+			return BackupResult{}, copyErr
+		}
+		identity := "unknown"
+		if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+			identity = fmt.Sprintf("%d:%d:%d:%d", stat.Dev, stat.Ino, stat.Ctim.Sec, stat.Ctim.Nsec)
+		}
+		idBytes := make([]byte, 16)
+		if _, randomErr := rand.Read(idBytes); randomErr != nil {
+			_ = file.Close()
+			return BackupResult{}, randomErr
+		}
+		transactionID = hex.EncodeToString(idBytes)
+		session = &backupReadSession{
+			file: file, archiveName: request.ArchiveName, size: info.Size(),
+			createdAt:     info.ModTime().UTC().Format(time.RFC3339),
+			contentDigest: hex.EncodeToString(hash.Sum(nil)), inodeGeneration: identity,
+			expiresAt: now.Add(5 * time.Minute),
+		}
+		backupReadSessionRegistry.sessions[transactionID] = session
+	} else if session == nil || session.archiveName != request.ArchiveName {
+		return BackupResult{}, errors.New("backup read transaction is unknown or mismatched")
+	}
+	if request.Offset < 0 || request.Offset > session.size {
+		return BackupResult{}, errors.New("backup read offset exceeds bound archive size")
+	}
+	limit := request.Limit
+	if limit == 0 {
+		limit = maxBackupReadChunkBytes
+	}
+	if limit < 0 || limit > maxBackupReadChunkBytes {
+		return BackupResult{}, errors.New("backup read limit is invalid")
+	}
+	remaining := session.size - request.Offset
+	if limit > remaining {
+		limit = remaining
+	}
+	data := make([]byte, int(limit))
+	if limit > 0 {
+		n, readErr := session.file.ReadAt(data, request.Offset)
+		if readErr != nil && readErr != io.EOF {
+			return BackupResult{}, readErr
+		}
+		if int64(n) != limit {
+			return BackupResult{}, io.ErrUnexpectedEOF
+		}
+	}
+	more := request.Offset+int64(len(data)) < session.size
+	session.expiresAt = now.Add(5 * time.Minute)
+	result := BackupResult{
+		ArchiveName: request.ArchiveName,
+		Archives:    []BackupArchive{{Name: request.ArchiveName, Size: session.size, CreatedAt: session.createdAt}},
+		Data:        data, More: more, TransactionID: transactionID, ContentDigest: session.contentDigest,
+		InodeGeneration: session.inodeGeneration, BoundSize: session.size,
+	}
+	if !more {
+		_ = session.file.Close()
+		delete(backupReadSessionRegistry.sessions, transactionID)
+	}
+	return result, nil
+}
+
 func runProductionBackup(_ context.Context, config ProductionConfig, request ResolvedBackup) (BackupResult, error) {
 	switch request.Action {
 	case BackupActionList:
@@ -641,52 +858,7 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 		}
 		return result, nil
 	case BackupActionRead:
-		maxBytes, err := configuredBackupMaxBytes(config)
-		if err != nil {
-			return BackupResult{}, err
-		}
-		file, err := openRegularNoFollow(request.ArchivePath)
-		if err != nil {
-			return BackupResult{}, err
-		}
-		defer file.Close()
-		info, err := file.Stat()
-		if err != nil {
-			return BackupResult{}, err
-		}
-		if !info.Mode().IsRegular() {
-			return BackupResult{}, errors.New("backup archive is not a regular file")
-		}
-		if info.Size() > maxBytes {
-			return BackupResult{}, fmt.Errorf("configured backup size policy exceeded: %d bytes > %d bytes", info.Size(), maxBytes)
-		}
-		if request.Offset > info.Size() {
-			return BackupResult{}, errors.New("backup read offset exceeds archive size")
-		}
-		limit := request.Limit
-		if limit == 0 {
-			limit = maxBackupReadChunkBytes
-		}
-		remaining := info.Size() - request.Offset
-		if limit > remaining {
-			limit = remaining
-		}
-		data := make([]byte, int(limit))
-		if limit > 0 {
-			n, err := file.ReadAt(data, request.Offset)
-			if err != nil && err != io.EOF {
-				return BackupResult{}, err
-			}
-			if int64(n) != limit {
-				return BackupResult{}, io.ErrUnexpectedEOF
-			}
-		}
-		return BackupResult{
-			ArchiveName: request.ArchiveName,
-			Archives:    []BackupArchive{{Name: request.ArchiveName, Size: info.Size(), CreatedAt: info.ModTime().UTC().Format(time.RFC3339)}},
-			Data:        data,
-			More:        request.Offset+int64(len(data)) < info.Size(),
-		}, nil
+		return readBackupArchiveFromStableDescriptor(config, request)
 	case BackupActionPrune:
 		policy := backup.RetentionPolicy{Daily: request.Daily, Weekly: request.Weekly, Monthly: request.Monthly}
 		if request.Daily == 0 && request.Weekly == 0 && request.Monthly == 0 {

@@ -253,6 +253,12 @@ func RestoreBackupWithOptions(data []byte, statePath, keyPath, passphrase string
 			_ = keyBackup.cleanupStaged()
 			return RestoreResult{}, fmt.Errorf("stage database restore: %w", err)
 		}
+		if err := prepareRestoredDatabaseRuntimeUnknown(databaseBackup.temp, options.FencingGeneration); err != nil {
+			_ = stateBackup.cleanupStaged()
+			_ = keyBackup.cleanupStaged()
+			_ = databaseBackup.cleanupStaged()
+			return RestoreResult{}, fmt.Errorf("mark restored runtime unverified: %w", err)
+		}
 		staged = append(staged, databaseBackup)
 	}
 	for i, file := range staged {
