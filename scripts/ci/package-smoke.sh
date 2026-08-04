@@ -11,7 +11,7 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${CI_ROOT}"
 
 ci_step "web/dist (embedded into the binary)"
-(cd web && pnpm install --frozen-lockfile && pnpm build)
+bash "${CI_SCRIPTS_DIR}/prepare-frontend-dist.sh"
 
 ci_step "build package payload"
 mkdir -p dist

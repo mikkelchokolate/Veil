@@ -20,7 +20,7 @@ fi
 if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
 
 ci_step "web/dist (embedded into the binary)"
-(cd web && pnpm install --frozen-lockfile && pnpm build)
+bash "${CI_SCRIPTS_DIR}/prepare-frontend-dist.sh"
 
 ci_step "build and install Veil"
 go build -o /tmp/veil-e2e ./cmd/veil

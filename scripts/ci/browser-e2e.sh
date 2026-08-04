@@ -30,8 +30,9 @@ PANEL_WORK="$(mktemp -d /tmp/veil-browser-e2e.XXXXXX)"
 chmod 0755 "${PANEL_WORK}"
 BROWSER_HELPER_SOCKET=/run/veil/helper-browser.sock
 
-ci_step "web/dist (embedded into the binary)"
-(cd web && pnpm install --frozen-lockfile && pnpm build)
+ci_step "web dependencies (frozen install)"
+ci_run frontend-install bash -c 'cd web && pnpm install --frozen-lockfile'
+bash "${CI_SCRIPTS_DIR}/prepare-frontend-dist.sh"
 
 ci_step "browser-mode unit tests (Chromium)"
 (cd web && pnpm test:browser)

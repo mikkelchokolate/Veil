@@ -307,6 +307,9 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 		"scripts/ci/browser-e2e.sh",
 		"scripts/ci/package-smoke.sh",
 		"scripts/ci/image-build.sh",
+		"ci-frontend-dist-${{ github.sha }}",
+		"actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+		"needs: frontend",
 	} {
 		if !strings.Contains(workflow, want) {
 			t.Fatalf("ci.yml does not route to shared CI script %q:\n%s", want, workflow)
@@ -317,13 +320,44 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 	for _, want := range []string{
 		"go test ./sdk/go -race -count=1",
 		"go list ./... | grep -v '/sdk/go$'",
-		"go test ${packages} -race -count=1 -timeout 30m -coverprofile=coverage.out",
+		"${CI_SCRIPTS_DIR}/prepare-frontend-dist.sh",
+		"${CI_SCRIPTS_DIR}/api-shards.sh",
+		"coverage.out",
 		"go vet ./...",
 		"make build",
 		"gofmt -l",
 	} {
 		if !strings.Contains(testScript, want) {
 			t.Fatalf("scripts/ci/test.sh missing required gate %q", want)
+		}
+	}
+
+	frontendScript := read("../../scripts/ci/frontend.sh")
+	for _, want := range []string{"frontend_dist_artifact_dir", "source.sha", "git -C \"${CI_ROOT}\" rev-parse HEAD"} {
+		if !strings.Contains(frontendScript, want) {
+			t.Fatalf("scripts/ci/frontend.sh missing source-keyed artifact gate %q", want)
+		}
+	}
+	prepareFrontendScript := read("../../scripts/ci/prepare-frontend-dist.sh")
+	for _, want := range []string{"CI_FRONTEND_DIST_ARTIFACT_DIR", "git rev-parse HEAD", "source.sha", "frontend-install-build"} {
+		if !strings.Contains(prepareFrontendScript, want) {
+			t.Fatalf("prepare-frontend-dist.sh missing artifact gate %q", want)
+		}
+	}
+
+	apiShardScript := read("../../scripts/ci/api-shards.sh")
+	for _, want := range []string{
+		"CI_API_SHARDS",
+		"CI_API_SERIAL_ROOTS",
+		"go test \"${package}\" -race -count=1 -timeout \"${CI_API_SHARD_TIMEOUT}\"",
+		"-coverprofile=\"${shard_dir}/coverage-${i}.out\"",
+		"coverage-serial.out",
+		"serial.regex",
+		"verify-test-shards.py",
+		"merge-coverprofiles.py",
+	} {
+		if !strings.Contains(apiShardScript, want) {
+			t.Fatalf("scripts/ci/api-shards.sh missing required gate %q", want)
 		}
 	}
 

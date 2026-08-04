@@ -14,7 +14,7 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${CI_ROOT}"
 
 ci_step "web/dist (embedded into the binary)"
-(cd web && pnpm install --frozen-lockfile && pnpm build)
+bash "${CI_SCRIPTS_DIR}/prepare-frontend-dist.sh"
 
 ci_step "go.mod tidy drift"
 go mod tidy
@@ -52,16 +52,37 @@ ci_run sdk-tests go test ./sdk/go -race -count=1
 
 ci_step "product tests: -race -count=1 -coverprofile"
 packages="$(go list ./... | grep -v '/sdk/go$')"
+api_package="$(go list ./internal/api)"
+non_api_packages="$(printf '%s\n' "${packages}" | grep -v "^${api_package}$")"
+rm -f coverage.out coverage-non-api.out coverage-api.out
+: > "${CI_ARTIFACT_DIR}/product-test.log"
 set -o pipefail
+# Keep the non-API packages in one process; the API package is intentionally
+# run by api-shards.sh in isolated processes because its global test seams and
+# SQLite state must never be shared between concurrent test functions.
 # shellcheck disable=SC2086
-# The API package intentionally exercises durable recovery and fault paths and
-# can exceed 15 minutes under -race on constrained CI hosts.
 # This is one bounded run, not a retry.
-go test ${packages} -race -count=1 -timeout 30m -coverprofile=coverage.out 2>&1 | tee "${CI_ARTIFACT_DIR}/product-test.log"
-test_rc=${PIPESTATUS[0]}
+go test ${non_api_packages} -race -count=1 -timeout 30m -coverprofile=coverage-non-api.out 2>&1 \
+  | tee -a "${CI_ARTIFACT_DIR}/product-test.log"
+non_api_rc=${PIPESTATUS[0]}
+if [ "${non_api_rc}" -ne 0 ]; then
+  ci_fail_banner
+  exit "${non_api_rc}"
+fi
+
+CI_API_SHARD_DIR="${CI_ARTIFACT_DIR}/api-shards" \
+  bash "${CI_SCRIPTS_DIR}/api-shards.sh" ./internal/api coverage-api.out 2>&1 \
+  | tee -a "${CI_ARTIFACT_DIR}/product-test.log"
+api_rc=${PIPESTATUS[0]}
+if [ "${api_rc}" -ne 0 ]; then
+  ci_fail_banner
+  exit "${api_rc}"
+fi
+
+python3 "${CI_SCRIPTS_DIR}/merge-coverprofiles.py" coverage.out \
+  coverage-non-api.out coverage-api.out
 set +o pipefail
 cp -f coverage.out "${CI_ARTIFACT_DIR}/coverage.out" 2>/dev/null || true
-[ "${test_rc}" -eq 0 ] || { ci_fail_banner; exit "${test_rc}"; }
 
 ci_step "coverage threshold (min ${CI_COVERAGE_THRESHOLD}%)"
 total_coverage="$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')"

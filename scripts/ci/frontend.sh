@@ -27,4 +27,10 @@ ci_run frontend-unit pnpm test
 
 ci_run frontend-build pnpm build
 
+frontend_dist_artifact_dir="${CI_ARTIFACT_DIR}/frontend-dist"
+rm -rf "${frontend_dist_artifact_dir}"
+mkdir -p "${frontend_dist_artifact_dir}"
+cp -a dist "${frontend_dist_artifact_dir}/"
+git -C "${CI_ROOT}" rev-parse HEAD > "${frontend_dist_artifact_dir}/source.sha"
+
 ci_log "frontend job passed"
