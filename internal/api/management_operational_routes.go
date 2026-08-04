@@ -152,6 +152,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 			log.Printf("apply runner rejected revision %d: %v", desiredRevision, runErr)
 		}
 		if workflowErr != nil {
+			log.Printf("apply workflow failed for revision %d: %v", desiredRevision, workflowErr)
 			writeError(w, workflowErr.Error(), status)
 			return
 		}
