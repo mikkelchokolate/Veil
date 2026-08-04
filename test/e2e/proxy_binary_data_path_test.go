@@ -310,7 +310,10 @@ func testHysteria2DataPath(t *testing.T, hysteriaPath string) {
 
 	resp = srv.do(http.MethodPost, "/api/apply", `{"confirm":true}`)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("apply expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
+		applyResponse := readJSON(t, resp)
+		stateResponse := readJSON(t, srv.do(http.MethodGet, "/api/apply/state", ""))
+		jobsResponse := readJSON(t, srv.do(http.MethodGet, "/api/apply/jobs", ""))
+		t.Fatalf("apply expected 200, got %d: %v\napply state: %v\napply jobs: %v\nserver log:\n%s", resp.StatusCode, applyResponse, stateResponse, jobsResponse, srv.logBuf.String())
 	}
 	drain(resp)
 
