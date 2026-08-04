@@ -200,6 +200,7 @@ func TestInvalidLiveValidationStopsApplyBeforeStaging(t *testing.T) {
 }
 
 func TestLiveValidationAllowsUnchangedPersistedBinding(t *testing.T) {
+	stubManagementApplySideEffects(t)
 	state := newManagementState(ServerInfo{
 		Mode:        "dev",
 		PanelListen: "127.0.0.1:2096",
@@ -209,6 +210,11 @@ func TestLiveValidationAllowsUnchangedPersistedBinding(t *testing.T) {
 				return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC)
 			},
 		},
+	})
+	t.Cleanup(func() {
+		if err := closeClientSubsystem(state); err != nil {
+			t.Errorf("close live-validation state: %v", err)
+		}
 	})
 	state.inbounds = []Inbound{{
 		Name: "edge", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret",
