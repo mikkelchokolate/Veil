@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"log"
 	"net/http"
 
 	"github.com/mikkelchokolate/Veil/internal/apply"
@@ -147,6 +148,9 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusUnprocessableEntity
 		}
 		s.logUserAction(r, "apply_configuration", "system", runErr == nil && status == http.StatusOK, "")
+		if runErr != nil {
+			log.Printf("apply runner rejected revision %d: %v", desiredRevision, runErr)
+		}
 		if workflowErr != nil {
 			writeError(w, workflowErr.Error(), status)
 			return
