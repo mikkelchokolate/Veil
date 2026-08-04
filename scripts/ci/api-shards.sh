@@ -45,14 +45,11 @@ fi
 printf '%s\n' "${tests[@]}" > "${shard_dir}/expected-roots.txt"
 
 declare -A serial_set=()
-serial_csv=""
-if [[ -v CI_API_SERIAL_ROOTS ]]; then
-  serial_csv="${CI_API_SERIAL_ROOTS}"
-else
-  # This root passed serially but failed under concurrent process scheduling;
-  # keep its coverage and assertions while avoiding an unsafe parallel lane.
-  serial_csv="TestRollbackPreservesRuntimeIdentityAndProtocolConfigBytes"
-fi
+# This root passed serially but failed under concurrent process scheduling;
+# keep its coverage and assertions while avoiding an unsafe parallel lane.
+# Treat an explicitly empty override like an unset override: CI wrappers often
+# export optional variables as empty, and that must not silently disable fencing.
+serial_csv="${CI_API_SERIAL_ROOTS:-TestRollbackPreservesRuntimeIdentityAndProtocolConfigBytes}"
 if [ -n "${serial_csv}" ]; then
   IFS=',' read -r -a requested_serial <<< "${serial_csv}"
   for serial_root in "${requested_serial[@]}"; do

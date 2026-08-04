@@ -349,6 +349,7 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 	for _, want := range []string{
 		"CI_API_SHARDS",
 		"CI_API_SERIAL_ROOTS",
+		"${CI_API_SERIAL_ROOTS:-TestRollbackPreservesRuntimeIdentityAndProtocolConfigBytes}",
 		"go test \"${package}\" -race -count=1 -timeout \"${CI_API_SHARD_TIMEOUT}\"",
 		"-coverprofile=\"${shard_dir}/coverage-${i}.out\"",
 		"coverage-serial.out",
