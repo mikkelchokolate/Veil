@@ -132,6 +132,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 	if s.applyTrackingEnabled() {
 		desiredRevision, err := s.ensureRunnableRevision()
 		if err != nil {
+			log.Printf("failed to read desired revision: %v", err)
 			writeError(w, "failed to read desired revision", http.StatusServiceUnavailable)
 			return
 		}
