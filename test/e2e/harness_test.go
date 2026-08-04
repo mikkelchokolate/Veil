@@ -179,7 +179,48 @@ func startServer(t *testing.T, opts serverOptions) *serverProc {
 func startRecoveryHelper(t *testing.T, dir, statePath string) string {
 	t.Helper()
 	socketPath := filepath.Join(dir, "helper.sock")
-	server := privileged.NewServer(privileged.NewLocalAdapter(privileged.Policy{}, privileged.Executor{
+	applyRoot := filepath.Join(dir, "apply")
+	policy := privileged.DefaultPolicy()
+	policy.StagingRoot = filepath.Join(applyRoot, "generated")
+	policy.GeneratedRoot = filepath.Join(applyRoot, "live")
+	policy.StateRoot = dir
+	policy.StatePath = statePath
+	policy.KeyPath = filepath.Join(dir, "state.key")
+	policy.BackupPassphrasePath = filepath.Join(dir, "backup.passphrase")
+	policy.BackupRoot = filepath.Join(dir, "backups")
+	policy.UpdateRoot = filepath.Join(dir, "updates")
+	policy.FencePath = filepath.Join(dir, "runtime-fence.json")
+	promotionExecutor := privileged.NewProductionExecutor(privileged.ProductionConfig{
+		PromotionBackupRoot: filepath.Join(dir, "promotion-backups"),
+		StatePath:           statePath,
+		KeyPath:             policy.KeyPath,
+	})
+	server := privileged.NewServer(privileged.NewLocalAdapter(policy, privileged.Executor{
+		Promote: promotionExecutor.Promote,
+		ServiceAction: func(context.Context, privileged.ServiceActionRequest) error {
+			return nil
+		},
+		ServiceStatus: func(_ context.Context, request privileged.ServiceStatusRequest) (privileged.ServiceStatusResult, error) {
+			result := privileged.ServiceStatusResult{Services: make([]privileged.ServiceStatus, 0, len(request.Units))}
+			for _, unit := range request.Units {
+				result.Services = append(result.Services, privileged.ServiceStatus{
+					Unit: unit, LoadState: "loaded", ActiveState: "active", SubState: "running",
+				})
+			}
+			return result, nil
+		},
+		Firewall: func(_ context.Context, request privileged.ResolvedFirewall) (privileged.FirewallResult, error) {
+			result := privileged.FirewallResult{TransactionID: request.TransactionID, AppliedRuleIDs: append([]string(nil), request.RuleIDs...)}
+			if request.Action == privileged.FirewallActionPrepare {
+				result.TransactionID = request.TransactionID
+				if result.TransactionID == "" {
+					result.TransactionID = "e2e-firewall-transaction"
+				}
+				result.Prepared = true
+			}
+			return result, nil
+		},
+		CaddyLoad: func(context.Context, privileged.CaddyLoadRequest) error { return nil },
 		RecoverKeyRotation: func(context.Context) error {
 			return statecommit.RecoverKeyRotation(statecommit.RecoverKeyRotationOptions{StatePath: statePath})
 		},

@@ -207,7 +207,7 @@ func applyPanelConfiguration(t *testing.T, srv *testServer) {
 
 	resp = srv.do(http.MethodPost, "/api/apply", `{"confirm":true}`)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("apply expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
+		t.Fatalf("apply expected 200, got %d: %v\nserver log:\n%s", resp.StatusCode, readJSON(t, resp), srv.logBuf.String())
 	}
 	drain(resp)
 }
