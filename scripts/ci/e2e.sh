@@ -13,6 +13,10 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "${CI_ROOT}"
 
+if [ "$(id -u)" -eq 0 ] && ! id veil >/dev/null 2>&1; then
+  useradd --system --user-group --no-create-home --shell /usr/sbin/nologin veil
+fi
+
 if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
 
 ci_step "web/dist (embedded into the binary)"
