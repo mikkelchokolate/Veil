@@ -1,6 +1,7 @@
 package privileged
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,15 +42,37 @@ func TestPromotionLockCoversPreflightThroughPublicationAcrossProcesses(t *testin
 	}()
 
 	command := exec.Command(os.Args[0], "-test.run=^TestPromotionLockSubprocessHelper$")
+	readyRead, readyWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readyRead.Close()
+	command.ExtraFiles = []*os.File{readyWrite}
 	command.Env = append(os.Environ(),
 		"VEIL_PROMOTION_LOCK_HELPER=1",
+		"VEIL_PROMOTION_LOCK_READY=1",
 		"VEIL_PROMOTION_BACKUP_ROOT="+backupRoot,
 		"VEIL_PROMOTION_SOURCE="+source,
 		"VEIL_PROMOTION_DESTINATION="+destination,
 		"VEIL_PROMOTION_DONE="+done,
 	)
 	if err := command.Start(); err != nil {
+		readyWrite.Close()
 		t.Fatal(err)
+	}
+	_ = readyWrite.Close()
+	ready := make(chan error, 1)
+	go func() {
+		_, readErr := io.ReadFull(readyRead, make([]byte, 1))
+		ready <- readErr
+	}()
+	select {
+	case err := <-ready:
+		if err != nil {
+			t.Fatalf("promotion helper did not signal lock attempt: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("promotion helper did not signal lock attempt")
 	}
 	defer func() {
 		if command.Process != nil {
@@ -57,7 +80,6 @@ func TestPromotionLockCoversPreflightThroughPublicationAcrossProcesses(t *testin
 		}
 	}()
 
-	time.Sleep(300 * time.Millisecond)
 	if _, err := os.Stat(done); err == nil {
 		_ = unix.Flock(int(lock.Fd()), unix.LOCK_UN)
 		locked = false
@@ -91,6 +113,18 @@ func TestPromotionLockCoversPreflightThroughPublicationAcrossProcesses(t *testin
 func TestPromotionLockSubprocessHelper(t *testing.T) {
 	if os.Getenv("VEIL_PROMOTION_LOCK_HELPER") != "1" {
 		t.Skip("subprocess helper")
+	}
+	if os.Getenv("VEIL_PROMOTION_LOCK_READY") == "1" {
+		ready := os.NewFile(3, "promotion-lock-ready")
+		if ready == nil {
+			t.Fatal("promotion lock ready pipe unavailable")
+		}
+		if _, err := ready.Write([]byte{1}); err != nil {
+			t.Fatal(err)
+		}
+		if err := ready.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	result, err := executePromotionTransaction(os.Getenv("VEIL_PROMOTION_BACKUP_ROOT"), time.Now, "promotion", []ResolvedArtifact{{
 		ID: "caddy/config.json", Source: os.Getenv("VEIL_PROMOTION_SOURCE"), Destination: os.Getenv("VEIL_PROMOTION_DESTINATION"),

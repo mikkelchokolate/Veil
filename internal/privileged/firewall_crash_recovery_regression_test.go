@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,26 +33,40 @@ func TestFirewallTransactionRecoversExactStateAfterSIGKILL(t *testing.T) {
 	writeFirewallCrashState(t, statePath, initial)
 
 	command := exec.Command(os.Args[0], "-test.run=^TestFirewallTransactionSubprocessHelper$")
+	readyRead, readyWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readyRead.Close()
+	command.ExtraFiles = []*os.File{readyWrite}
 	command.Env = append(os.Environ(),
 		"VEIL_FIREWALL_HELPER=apply",
+		"VEIL_FIREWALL_READY=1",
 		"VEIL_FIREWALL_STATE="+statePath,
 		"VEIL_FIREWALL_SIGNAL="+signalPath,
 		"VEIL_FIREWALL_TRANSACTION_ROOT="+transactionRoot,
 	)
 	if err := command.Start(); err != nil {
+		readyWrite.Close()
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if _, err := os.Stat(signalPath); err == nil {
-			break
-		}
-		if time.Now().After(deadline) {
+	_ = readyWrite.Close()
+	ready := make(chan error, 1)
+	go func() {
+		_, readErr := io.ReadFull(readyRead, make([]byte, 1))
+		ready <- readErr
+	}()
+	select {
+	case err := <-ready:
+		if err != nil {
 			_ = command.Process.Kill()
 			_ = command.Wait()
-			t.Fatal("firewall subprocess did not stage a rule")
+			t.Fatalf("firewall subprocess did not stage a rule: %v", err)
 		}
-		time.Sleep(10 * time.Millisecond)
+	case <-time.After(5 * time.Second):
+		_ = command.Process.Kill()
+		_ = command.Wait()
+		t.Fatal("firewall subprocess did not stage a rule")
 	}
 	if err := command.Process.Kill(); err != nil {
 		t.Fatal(err)
@@ -144,6 +159,18 @@ func firewallCrashRunner(t *testing.T, statePath, signalPath string, blockAfterS
 			if blockAfterStage && args[1] == "2096/tcp" {
 				if err := os.WriteFile(signalPath, []byte("staged"), 0o600); err != nil {
 					t.Fatal(err)
+				}
+				if os.Getenv("VEIL_FIREWALL_READY") == "1" {
+					ready := os.NewFile(3, "firewall-crash-ready")
+					if ready == nil {
+						t.Fatal("firewall ready pipe unavailable")
+					}
+					if _, err := ready.Write([]byte{1}); err != nil {
+						t.Fatal(err)
+					}
+					if err := ready.Close(); err != nil {
+						t.Fatal(err)
+					}
 				}
 				<-ctx.Done()
 				return "", ctx.Err()

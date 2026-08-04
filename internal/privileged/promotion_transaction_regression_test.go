@@ -3,6 +3,7 @@ package privileged
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/user"
@@ -153,6 +154,18 @@ func TestPromotionCrashProcess(t *testing.T) {
 			if err := os.WriteFile(marker, []byte("published"), 0o600); err != nil {
 				os.Exit(93)
 			}
+			if os.Getenv("VEIL_PROMOTION_READY") == "1" {
+				ready := os.NewFile(3, "promotion-crash-ready")
+				if ready == nil {
+					os.Exit(94)
+				}
+				if _, err := ready.Write([]byte{1}); err != nil {
+					os.Exit(94)
+				}
+				if err := ready.Close(); err != nil {
+					os.Exit(94)
+				}
+			}
 			select {}
 		}
 		return nil
@@ -172,8 +185,15 @@ func TestPromotionCrashProcess(t *testing.T) {
 func runPromotionCrashHelper(t *testing.T, root, mode, backupID string, faultArtifact int) {
 	t.Helper()
 	command := exec.Command(os.Args[0], "-test.run=^TestPromotionCrashProcess$")
+	readyRead, readyWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readyRead.Close()
+	command.ExtraFiles = []*os.File{readyWrite}
 	command.Env = append(os.Environ(),
 		promotionCrashHelperEnv+"=1",
+		"VEIL_PROMOTION_READY=1",
 		"VEIL_PROMOTION_ROOT="+root,
 		"VEIL_PROMOTION_MODE="+mode,
 		"VEIL_PROMOTION_BACKUP_ID="+backupID,
@@ -183,20 +203,26 @@ func runPromotionCrashHelper(t *testing.T, root, mode, backupID string, faultArt
 	command.Stdout = &output
 	command.Stderr = &output
 	if err := command.Start(); err != nil {
+		readyWrite.Close()
 		t.Fatal(err)
 	}
-	marker := filepath.Join(root, "crash-marker")
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		if _, err := os.Stat(marker); err == nil {
-			break
-		}
-		if time.Now().After(deadline) {
+	_ = readyWrite.Close()
+	ready := make(chan error, 1)
+	go func() {
+		_, readErr := io.ReadFull(readyRead, make([]byte, 1))
+		ready <- readErr
+	}()
+	select {
+	case err := <-ready:
+		if err != nil {
 			_ = command.Process.Kill()
 			_, _ = command.Process.Wait()
-			t.Fatalf("crash helper did not reach artifact %d: %s", faultArtifact, output.String())
+			t.Fatalf("crash helper did not reach artifact %d: %v: %s", faultArtifact, err, output.String())
 		}
-		time.Sleep(10 * time.Millisecond)
+	case <-time.After(10 * time.Second):
+		_ = command.Process.Kill()
+		_, _ = command.Process.Wait()
+		t.Fatalf("crash helper did not reach artifact %d: %s", faultArtifact, output.String())
 	}
 	if err := command.Process.Kill(); err != nil {
 		t.Fatal(err)
