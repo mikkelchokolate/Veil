@@ -37,6 +37,9 @@ type ArchiveOptions struct {
 	// archive and the total expanded members. Zero selects the production
 	// default.
 	MaxBytes int64
+	// Crypto is scoped to this operation. Production callers leave it empty;
+	// tests may provide a deterministic derivation without global state.
+	Crypto CryptoOptions
 	// afterStateCapture is a deterministic package-test hook. Production callers
 	// leave it nil.
 	afterStateCapture func()
@@ -78,6 +81,8 @@ type RestoreOptions struct {
 	DatabasePath      string
 	MaxBytes          int64
 	FencingGeneration uint64
+	// Crypto is scoped to this restore operation; empty selects production KDF.
+	Crypto CryptoOptions
 }
 
 type RestoreResult struct {
@@ -108,7 +113,7 @@ func CreateBackupWithOptions(statePath, keyPath, passphrase string, options Arch
 	if err != nil {
 		return nil, err
 	}
-	return encryptBackupTarball(tarball, passphrase)
+	return encryptBackupTarballWithOptions(tarball, passphrase, options.Crypto)
 }
 
 func createTarballWithManifest(statePath, keyPath string, options ArchiveOptions) ([]byte, error) {
@@ -195,7 +200,11 @@ func consistentSQLiteSnapshot(databasePath, stateDigest string) ([]byte, uint64,
 }
 
 func VerifyBackup(data []byte, passphrase string) (VerificationReport, error) {
-	verified, err := inspectBackup(data, passphrase)
+	return VerifyBackupWithOptions(data, passphrase, CryptoOptions{})
+}
+
+func VerifyBackupWithOptions(data []byte, passphrase string, crypto CryptoOptions) (VerificationReport, error) {
+	verified, err := inspectBackupWithOptions(data, passphrase, crypto)
 	if err != nil {
 		return VerificationReport{}, err
 	}
@@ -203,7 +212,7 @@ func VerifyBackup(data []byte, passphrase string) (VerificationReport, error) {
 }
 
 func RestoreBackupWithOptions(data []byte, statePath, keyPath, passphrase string, options RestoreOptions) (RestoreResult, error) {
-	verified, err := inspectBackup(data, passphrase)
+	verified, err := inspectBackupWithOptions(data, passphrase, options.Crypto)
 	if err != nil {
 		return RestoreResult{}, err
 	}
@@ -296,7 +305,11 @@ func RestoreBackupWithOptions(data []byte, statePath, keyPath, passphrase string
 }
 
 func inspectBackup(data []byte, passphrase string) (verifiedBackup, error) {
-	tarball, encrypted, encryptionVersion, err := decryptBackup(data, passphrase)
+	return inspectBackupWithOptions(data, passphrase, CryptoOptions{})
+}
+
+func inspectBackupWithOptions(data []byte, passphrase string, options CryptoOptions) (verifiedBackup, error) {
+	tarball, encrypted, encryptionVersion, err := decryptBackupWithOptions(data, passphrase, options)
 	if err != nil {
 		return verifiedBackup{}, err
 	}
@@ -483,6 +496,10 @@ func validateSQLiteDesiredSnapshotDB(db interface {
 }
 
 func decryptBackup(data []byte, passphrase string) ([]byte, bool, int, error) {
+	return decryptBackupWithOptions(data, passphrase, CryptoOptions{})
+}
+
+func decryptBackupWithOptions(data []byte, passphrase string, options CryptoOptions) ([]byte, bool, int, error) {
 	if len(data) < len(magicHeader) || !bytes.Equal(data[:len(magicHeader)], magicHeader) {
 		if passphrase != "" {
 			return nil, false, 0, errors.New("passphrase provided but backup is not encrypted")
@@ -502,7 +519,7 @@ func decryptBackup(data []byte, passphrase string) ([]byte, bool, int, error) {
 	}
 	salt := data[len(magicHeader)+1 : len(magicHeader)+1+16]
 	nonce := data[len(magicHeader)+1+16 : headerLen]
-	key := deriveKey(passphrase, salt, byte(version))
+	key := deriveKeyWithOptions(passphrase, salt, byte(version), options)
 	block, err := decryptAESNewCipher(key)
 	if err != nil {
 		return nil, true, version, err

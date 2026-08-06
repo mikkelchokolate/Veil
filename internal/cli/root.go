@@ -19,6 +19,13 @@ var (
 )
 
 func NewRootCommand(version string) *cobra.Command {
+	return NewRootCommandWithOptions(version, productionRootOptions())
+}
+
+func NewRootCommandWithOptions(version string, options RootOptions) *cobra.Command {
+	if options.PasswordHasher == nil {
+		options.PasswordHasher = productionRootOptions().PasswordHasher
+	}
 	cmd := &cobra.Command{
 		Use:   "veil",
 		Short: "Veil panel and CLI for protocols through Panel Inbounds",
@@ -58,7 +65,7 @@ func NewRootCommand(version string) *cobra.Command {
 	cmd.AddCommand(newUpdateCommand(version))
 	cmd.AddCommand(newStatusCommand(version))
 	cmd.AddCommand(newConfigCommand())
-	cmd.AddCommand(newAdminCommand())
+	cmd.AddCommand(newAdminCommand(options.PasswordHasher))
 	cmd.AddCommand(newBackupCommand(version))
 	cmd.AddCommand(newHelperCommand(version))
 	cmd.AddCommand(newRuntimeCommand())

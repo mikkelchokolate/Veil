@@ -416,33 +416,27 @@ func TestEncryptBackupTarballCipherErrors(t *testing.T) {
 	fastKey := func(string, []byte, byte) []byte { return bytes.Repeat([]byte{0xab}, 32) }
 
 	t.Run("aes new cipher error", func(t *testing.T) {
-		origDerive := deriveKeyHook
 		orig := encryptAESNewCipher
 		defer func() {
-			deriveKeyHook = origDerive
 			encryptAESNewCipher = orig
 		}()
-		deriveKeyHook = fastKey
 		encryptAESNewCipher = func([]byte) (cipher.Block, error) {
 			return nil, errors.New("injected aes error")
 		}
-		if _, err := encryptBackupTarball([]byte("tarball"), "passphrase"); err == nil {
+		if _, err := encryptBackupTarballWithOptions([]byte("tarball"), "passphrase", CryptoOptions{DeriveKey: fastKey}); err == nil {
 			t.Fatal("expected error")
 		}
 	})
 
 	t.Run("gcm error", func(t *testing.T) {
-		origDerive := deriveKeyHook
 		orig := encryptNewGCM
 		defer func() {
-			deriveKeyHook = origDerive
 			encryptNewGCM = orig
 		}()
-		deriveKeyHook = fastKey
 		encryptNewGCM = func(cipher.Block) (cipher.AEAD, error) {
 			return nil, errors.New("injected gcm error")
 		}
-		if _, err := encryptBackupTarball([]byte("tarball"), "passphrase"); err == nil {
+		if _, err := encryptBackupTarballWithOptions([]byte("tarball"), "passphrase", CryptoOptions{DeriveKey: fastKey}); err == nil {
 			t.Fatal("expected error")
 		}
 	})

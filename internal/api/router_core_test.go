@@ -14,7 +14,7 @@ import (
 )
 
 func TestRouterHealthz(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	for _, method := range []string{http.MethodGet, http.MethodHead} {
 		t.Run(method, func(t *testing.T) {
 			req := httptest.NewRequest(method, "/healthz", nil)
@@ -58,7 +58,7 @@ func TestHealthzReturnsOKWhenStateAccessible(t *testing.T) {
 	if err := os.WriteFile(statePath, []byte("{}"), 0o600); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", StatePath: statePath})
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
 
@@ -78,7 +78,7 @@ func TestHealthzReturnsOKWhenStateAccessible(t *testing.T) {
 
 func TestHealthzReturns503WhenStateMissing(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "nonexistent", "management-state.json")
-	r, _ := NewRouter(ServerInfo{Version: "test", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", StatePath: statePath})
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
 
@@ -100,7 +100,7 @@ func TestHealthzReturns503WhenStateMissing(t *testing.T) {
 }
 
 func TestRouterRequiresAuthTokenForAPIWhenConfigured(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	w := httptest.NewRecorder()
 
@@ -115,7 +115,7 @@ func TestRouterRequiresAuthTokenForAPIWhenConfigured(t *testing.T) {
 }
 
 func TestRouterProtectsHealthzWhenPublicListenIsProtected(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token", PublicListen: true})
+	r, _ := newTestRouter(ServerInfo{Version: "test", AuthToken: "secret-token", PublicListen: true})
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
@@ -134,7 +134,7 @@ func TestRouterProtectsHealthzWhenPublicListenIsProtected(t *testing.T) {
 }
 
 func TestRouterDisablesAnonymousDevFallbackOnPublicListen(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", PublicListen: true})
+	r, _ := newTestRouter(ServerInfo{Version: "test", PublicListen: true})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	w := httptest.NewRecorder()
 
@@ -146,7 +146,7 @@ func TestRouterDisablesAnonymousDevFallbackOnPublicListen(t *testing.T) {
 }
 
 func TestRouterDoesNotRenderPanelOnPublicListenWithoutSessionUsers(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", PublicListen: true})
+	r, _ := newTestRouter(ServerInfo{Version: "test", PublicListen: true})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 
@@ -161,7 +161,7 @@ func TestRouterDoesNotRenderPanelOnPublicListenWithoutSessionUsers(t *testing.T)
 }
 
 func TestAuthErrorResponseIncludesSecurityHeaders(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	w := httptest.NewRecorder()
 
@@ -182,7 +182,7 @@ func TestAuthErrorResponseIncludesSecurityHeaders(t *testing.T) {
 }
 
 func TestRouterAcceptsBearerAuthTokenForAPIWhenConfigured(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	req.Header.Set("Authorization", "Bearer secret-token")
 	w := httptest.NewRecorder()
@@ -195,7 +195,7 @@ func TestRouterAcceptsBearerAuthTokenForAPIWhenConfigured(t *testing.T) {
 }
 
 func TestRouterAcceptsBearerAuthTokenCaseInsensitive(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	req.Header.Set("Authorization", "bearer secret-token")
 	w := httptest.NewRecorder()
@@ -227,7 +227,7 @@ func TestStatusEndpointIncludesRuntimeServiceStates(t *testing.T) {
 	if err := os.WriteFile(statePath, stateBody, 0o600); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: filepath.Join(stateDir, "state.key")})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: filepath.Join(stateDir, "state.key")})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	w := httptest.NewRecorder()
 
@@ -274,7 +274,7 @@ func TestStatusEndpointSupportsHEAD(t *testing.T) {
 	}
 	t.Cleanup(func() { serviceStatusReader = old })
 
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 
 	// HEAD /api/status returns 200, JSON/security headers, empty body
 	t.Run("HEAD", func(t *testing.T) {
@@ -328,7 +328,7 @@ func TestRouterAcceptsVeilTokenHeaderForAPIWhenConfigured(t *testing.T) {
 		}, nil
 	}
 
-	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	body := strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408"}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/warp", body)
 	req.Header.Set("X-Veil-Token", "secret-token")
@@ -342,7 +342,7 @@ func TestRouterAcceptsVeilTokenHeaderForAPIWhenConfigured(t *testing.T) {
 }
 
 func TestRouterLeavesHealthzPublicWhenAuthTokenConfigured(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
 
@@ -354,7 +354,7 @@ func TestRouterLeavesHealthzPublicWhenAuthTokenConfigured(t *testing.T) {
 }
 
 func TestRouterStatus(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	w := httptest.NewRecorder()
 
@@ -376,7 +376,7 @@ func TestRouterStatus(t *testing.T) {
 }
 
 func TestAPIVersionEndpoint(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "1.2.3"})
+	r, _ := newTestRouter(ServerInfo{Version: "1.2.3"})
 
 	t.Run("GET returns version JSON", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/version", nil)

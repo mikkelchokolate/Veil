@@ -226,7 +226,7 @@ func (c *recordingPrivilegedClient) SyncCaddyCert(_ context.Context, request pri
 
 func TestPrivilegedServiceStatusAndLogsUseManagedUnits(t *testing.T) {
 	client := &recordingPrivilegedClient{}
-	router, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", Privileged: client})
+	router, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", Privileged: client})
 
 	restart := httptest.NewRequest(http.MethodPost, "/api/services/caddy/restart", strings.NewReader(`{"confirm":true}`))
 	restart.Header.Set("Content-Type", "application/json")
@@ -401,7 +401,7 @@ func TestMissingPrivilegedHelperSocketTellsOperatorHowToRepair(t *testing.T) {
 			Message: "privileged operation failed: dial unix /run/veil/helper.sock: connect: no such file or directory",
 		},
 	}
-	router, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", Privileged: client})
+	router, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", Privileged: client})
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/status", nil))
 	if response.Code != http.StatusServiceUnavailable {
@@ -451,7 +451,7 @@ func TestPrivilegedErrorsUseStructuredEnvelope(t *testing.T) {
 	client := &recordingPrivilegedClient{
 		err: &privileged.Error{Code: privileged.ErrorForbiddenOperation, Message: "denied"},
 	}
-	router, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", Privileged: client})
+	router, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", Privileged: client})
 	request := httptest.NewRequest(http.MethodPost, "/api/services/veil/restart", strings.NewReader(`{"confirm":true}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()

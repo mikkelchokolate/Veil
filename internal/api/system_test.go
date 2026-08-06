@@ -12,7 +12,7 @@ import (
 )
 
 func TestSystemEndpointRejectsNonGet(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/system", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -25,7 +25,7 @@ func TestSystemEndpointReturnsValidJSON(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/system", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -42,7 +42,7 @@ func TestSystemEndpointCPUInRange(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/system", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -59,7 +59,7 @@ func TestSystemEndpointMemoryPositive(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/system", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -77,7 +77,7 @@ func TestSystemEndpointDiskPositive(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/system", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -92,7 +92,7 @@ func TestSystemEndpointUptimePositive(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/system", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -107,7 +107,7 @@ func TestSystemEndpointHasAllFields(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/system", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

@@ -24,15 +24,12 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/releaseverify"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
-	"github.com/mikkelchokolate/Veil/internal/storage"
+	"github.com/mikkelchokolate/Veil/internal/testutil/testdb"
 )
 
 func createBackupTestDatabase(t *testing.T, root string) {
 	t.Helper()
-	db, err := storage.Open(filepath.Join(root, "veil.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := testdb.CloneTo(t, filepath.Join(root, "veil.db"))
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}

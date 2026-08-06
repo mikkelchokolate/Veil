@@ -8,7 +8,7 @@ import (
 )
 
 func TestMetricsEndpointRequiresGET(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -18,7 +18,7 @@ func TestMetricsEndpointRequiresGET(t *testing.T) {
 }
 
 func TestMetricsEndpointReturnsPrometheusFormat(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -46,7 +46,7 @@ func TestMetricsEndpointReturnsPrometheusFormat(t *testing.T) {
 }
 
 func TestMetricsEndpointRequiresAuthWhenPolicyEnabled(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token", MetricsAuthRequired: true})
+	r, _ := newTestRouter(ServerInfo{Version: "test", AuthToken: "secret-token", MetricsAuthRequired: true})
 
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	w := httptest.NewRecorder()
@@ -65,7 +65,7 @@ func TestMetricsEndpointRequiresAuthWhenPolicyEnabled(t *testing.T) {
 }
 
 func TestMetricsEndpointHEADReturnsNoBody(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodHead, "/metrics", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

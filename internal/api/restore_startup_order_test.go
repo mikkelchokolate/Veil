@@ -12,7 +12,7 @@ func TestPanelDoesNotOpenDatabaseWhenPrivilegedRestoreRecoveryFails(t *testing.T
 	if err := os.WriteFile(filepath.Join(root, ".veil-restore-journal.json"), []byte("not-json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, reloader := NewRouter(ServerInfo{StatePath: statePath})
+	_, reloader := newTestRouter(ServerInfo{StatePath: statePath})
 	state := reloader.(*managementState)
 	if !state.startupStateLoadFailed {
 		t.Fatal("startup must fail closed when privileged restore recovery fails")

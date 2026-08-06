@@ -435,7 +435,7 @@ func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Reques
 			req.Locale = locale
 		}
 
-		hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), 10)
+		hashed, err := s.hashPassword([]byte(req.Password))
 		if err != nil {
 			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -526,7 +526,7 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 
 		hash := targetUser.PasswordHash
 		if req.Password != "" {
-			hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), 10)
+			hashed, err := s.hashPassword([]byte(req.Password))
 			if err != nil {
 				writeError(w, err.Error(), http.StatusInternalServerError)
 				return

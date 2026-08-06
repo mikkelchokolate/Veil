@@ -48,6 +48,8 @@ type managementState struct {
 	mu                             sync.Mutex
 	clientLifecycleMu              sync.RWMutex
 	clientRequestMu                sync.RWMutex
+	passwordHasher                 PasswordHasher
+	databaseOpener                 func(string) (*sql.DB, error)
 	lifecycleCtx                   context.Context
 	lifecycleCancel                context.CancelFunc
 	statePath                      string

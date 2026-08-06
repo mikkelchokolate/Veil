@@ -31,7 +31,7 @@ func TestManagementAPIWarpEnableAutoRegisters(t *testing.T) {
 		}, nil
 	}
 
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 
 	// Flip the toggle with nothing else.
 	w := httptest.NewRecorder()
@@ -85,7 +85,7 @@ func TestManagementAPIWarpReEnableWithRedactedPlaceholderReRegisters(t *testing.
 			License:       "auto-license",
 		}, nil
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 
 	// Enable, then disable clearing the key (a minimal client sends empty).
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true}`)))
@@ -124,7 +124,7 @@ func TestManagementAPIWarpEnableRegistersWhenConfigIncomplete(t *testing.T) {
 			Reserved: []int{1, 2, 3}, License: "auto-license",
 		}, nil
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 
 	// Store a key but leave peer/address empty (an incomplete config), disabled.
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/warp",
@@ -156,7 +156,7 @@ func TestManagementAPIWarpEnableSurfacesRegistrationFailure(t *testing.T) {
 	warpRegisterFunc = func(ctx context.Context) (veilwarp.Registration, error) {
 		return veilwarp.Registration{}, context.DeadlineExceeded
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true}`)))
 	if w.Code != http.StatusBadGateway {

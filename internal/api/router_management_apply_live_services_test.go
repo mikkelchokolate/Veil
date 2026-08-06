@@ -29,7 +29,7 @@ func TestManagementApplyLiveRequiresExplicitFlagAndKeepsStagedOnlyByDefault(t *t
 		}
 		return results
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
@@ -71,7 +71,7 @@ func TestManagementApplyLivePromotesValidatedConfigsAndBacksUpExistingFiles(t *t
 		}
 		return results
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true}`)))
@@ -125,7 +125,7 @@ func TestManagementApplyLiveRejectsFailedValidationBeforeReplacingLiveFiles(t *t
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Valid: false, Error: "invalid caddy"}}
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true}`)))
@@ -173,7 +173,7 @@ func TestManagementApplyDoesNotRunServiceActionsWithoutExplicitFlag(t *testing.T
 		serviceCalls = append(serviceCalls, append([]string(nil), command...))
 		return ServiceActionResult{Command: command, Success: true}
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true}`)))
@@ -208,7 +208,7 @@ func TestManagementApplyServicesRequiresLiveApply(t *testing.T) {
 		t.Fatalf("service action should not run when applyLive=false: %+v", command)
 		return ServiceActionResult{}
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyServices":true}`)))
@@ -255,7 +255,7 @@ func TestManagementApplyServicesRestartsMieruAfterLivePromotion(t *testing.T) {
 		healthCalls = append(healthCalls, service)
 		return ServiceHealthResult{Name: service, Command: []string{"systemctl", "is-active", "--quiet", service}, Healthy: true}
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
@@ -320,7 +320,7 @@ func TestManagementApplyServicesRunsAllowlistedReloadsAfterLivePromotion(t *test
 	oldCaddyLoader := caddyAdminLoader
 	defer func() { caddyAdminLoader = oldCaddyLoader }()
 	caddyAdminLoader = func(_ []byte) error { return nil }
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
@@ -376,7 +376,7 @@ func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
 	oldCaddyLoader := caddyAdminLoader
 	defer func() { caddyAdminLoader = oldCaddyLoader }()
 	caddyAdminLoader = func(_ []byte) error { return nil }
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
@@ -432,7 +432,7 @@ func TestManagementApplyServicesChecksHealthAfterReload(t *testing.T) {
 	oldCaddyLoader := caddyAdminLoader
 	defer func() { caddyAdminLoader = oldCaddyLoader }()
 	caddyAdminLoader = func(_ []byte) error { return nil }
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
@@ -491,7 +491,7 @@ func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T)
 		}
 		return fmt.Errorf("caddy admin api unavailable during rollback")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
@@ -548,7 +548,7 @@ func TestManagementApplyWritesAuditHistoryForSuccessfulServiceApply(t *testing.T
 	oldCaddyLoader := caddyAdminLoader
 	defer func() { caddyAdminLoader = oldCaddyLoader }()
 	caddyAdminLoader = func(_ []byte) error { return nil }
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
@@ -610,7 +610,7 @@ func TestManagementApplyWritesAuditHistoryForRollback(t *testing.T) {
 	oldCaddyLoader := caddyAdminLoader
 	defer func() { caddyAdminLoader = oldCaddyLoader }()
 	caddyAdminLoader = func(_ []byte) error { return nil }
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
@@ -679,7 +679,7 @@ func TestManagementApplyServicesCleansOrphanedInstances(t *testing.T) {
 
 	caddyAdminLoader = func(_ []byte) error { return nil }
 
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))
@@ -767,7 +767,7 @@ func TestManagementApplyServicesRestoresOrphanedInstancesOnRollback(t *testing.T
 
 	caddyAdminLoader = func(_ []byte) error { return nil }
 
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true,"applyLive":true,"applyServices":true}`)))

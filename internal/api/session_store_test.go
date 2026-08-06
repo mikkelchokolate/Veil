@@ -156,7 +156,7 @@ func TestRouterSessionSurvivesRestart(t *testing.T) {
 		PanelListen:  "127.0.0.1:2096",
 		SetupAllowed: true,
 	}
-	first, _ := NewRouter(info)
+	first, _ := newTestRouter(info)
 
 	setup := httptest.NewRequest(http.MethodPost, "/api/setup/complete", strings.NewReader(
 		`{"username":"alice","password":"a-long-secure-password","backupAcknowledged":true}`,
@@ -187,7 +187,7 @@ func TestRouterSessionSurvivesRestart(t *testing.T) {
 		t.Fatal("login did not set a session cookie")
 	}
 
-	restarted, _ := NewRouter(info)
+	restarted, _ := newTestRouter(info)
 	status := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
 	status.AddCookie(cookie)
 	statusRec := httptest.NewRecorder()

@@ -14,7 +14,7 @@ func TestInboundCreateThroughHTTPGeneratesClientProfilePassword(t *testing.T) {
 	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	body := strings.NewReader(`{"name":"naive-profiles","protocol":"naiveproxy","transport":"tcp","port":9443,"enabled":true,"profiles":[{"name":"alice","username":"alice","enabled":true}]}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/inbounds", body)

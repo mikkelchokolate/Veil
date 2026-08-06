@@ -30,7 +30,7 @@ func NewManagementStateLifecycle(state *managementState) ManagementStateLifecycl
 	return ManagementStateLifecycle{state: state}
 }
 
-func newManagementState(info ServerInfo) *managementState {
+func newManagementStateProduction(info ServerInfo) *managementState {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	keyPath := info.KeyPath
 	if keyPath == "" && info.StatePath != "" {
@@ -91,6 +91,10 @@ func newManagementState(info ServerInfo) *managementState {
 	if configurationValidator == nil {
 		configurationValidator = livevalidation.Validator{}
 	}
+	passwordHasher := info.PasswordHasher
+	if passwordHasher == nil {
+		passwordHasher = productionPasswordHasher()
+	}
 	state := &managementState{
 		lifecycleCtx:                   lifecycleCtx,
 		lifecycleCancel:                lifecycleCancel,
@@ -110,6 +114,7 @@ func newManagementState(info ServerInfo) *managementState {
 		version:                        info.Version,
 		backupJobs:                     make(map[string]BackupRestoreJob),
 		configurationValidator:         configurationValidator,
+		passwordHasher:                 passwordHasher,
 		enforceConfigurationValidation: enforceConfigurationValidation,
 		privileged:                     info.Privileged,
 		updateStager:                   info.UpdateStager,

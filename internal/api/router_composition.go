@@ -28,7 +28,7 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	info.WebBasePath = basePath
 
 	mux := http.NewServeMux()
-	state := newManagementState(info)
+	state := newManagementStateProduction(info)
 	metrics := observability.NewMetricsCollector()
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		metrics.ServeHTTP(w, r)

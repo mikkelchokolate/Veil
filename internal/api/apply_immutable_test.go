@@ -3,12 +3,11 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/apply"
-	"github.com/mikkelchokolate/Veil/internal/storage"
+	"github.com/mikkelchokolate/Veil/internal/testutil/testdb"
 )
 
 // TestPinStateToRevisionSwapsAndRestores verifies (A3) that the executor pins
@@ -121,10 +120,5 @@ func TestSnapshotDoesNotContainPlaintextCredentials(t *testing.T) {
 
 func openApplyTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := storage.Open(filepath.Join(t.TempDir(), "veil.db"))
-	if err != nil {
-		t.Fatalf("open storage: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	return db
+	return testdb.Open(t)
 }

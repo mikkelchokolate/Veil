@@ -12,7 +12,7 @@ import (
 )
 
 func TestProcessesEndpointRejectsNonGet(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/processes", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -25,7 +25,7 @@ func TestProcessesEndpointReturnsJSON(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/processes", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -41,7 +41,7 @@ func TestProcessesEndpointFieldsPresent(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/processes", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -70,7 +70,7 @@ func TestProcessesEndpointValuesValid(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/processes", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

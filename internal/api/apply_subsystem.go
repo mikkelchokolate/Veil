@@ -91,7 +91,11 @@ func initApplySubsystem(s *managementState) {
 		return
 	}
 	dbPath := filepath.Join(filepath.Dir(s.statePath), "veil.db")
-	db, err := storage.Open(dbPath)
+	opener := storage.Open
+	if s.databaseOpener != nil {
+		opener = s.databaseOpener
+	}
+	db, err := opener(dbPath)
 	if err != nil {
 		s.storageDegradedErr = err
 		log.Printf("apply subsystem: persistent SQLite unavailable: %v", err)

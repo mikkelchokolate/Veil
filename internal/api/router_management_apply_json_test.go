@@ -12,7 +12,7 @@ import (
 
 func TestManagementApplyRejectsOversizedJSONBody(t *testing.T) {
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	body := strings.NewReader(`{"confirm":true,"note":"` + strings.Repeat("a", 1024*1024+1) + `"}`)
 	w := httptest.NewRecorder()
 
@@ -28,7 +28,7 @@ func TestManagementApplyRejectsOversizedJSONBody(t *testing.T) {
 
 func TestManagementApplyRejectsTrailingJSONDataWithoutWritingFiles(t *testing.T) {
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true} {}`)))
@@ -43,7 +43,7 @@ func TestManagementApplyRejectsTrailingJSONDataWithoutWritingFiles(t *testing.T)
 
 func TestManagementApplyRejectsMalformedJSONWithoutWritingFiles(t *testing.T) {
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{broken`)))
@@ -65,7 +65,7 @@ func TestManagementApplyRejectsMalformedJSONWithoutWritingFiles(t *testing.T) {
 
 func TestManagementApplyRequiresConfirmBeforeWritingFiles(t *testing.T) {
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":false}`)))
@@ -80,7 +80,7 @@ func TestManagementApplyRequiresConfirmBeforeWritingFiles(t *testing.T) {
 
 func TestManagementApplyWritesStagedFilesWhenConfirmed(t *testing.T) {
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
@@ -137,7 +137,7 @@ func TestManagementApplyStagesRenderedConfigsFromManagementState(t *testing.T) {
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
@@ -201,7 +201,7 @@ func TestManagementApplyStagesWarpOutboundWhenEnabled(t *testing.T) {
 		t.Fatalf("write state: %v", err)
 	}
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
@@ -260,7 +260,7 @@ func TestManagementApplyRunsFixedValidatorsForStagedRenderedConfigs(t *testing.T
 			{Name: "caddy", Config: filepath.Join(applyRoot, "generated", "caddy", "config.json"), Command: []string{"caddy", "validate", "--config", filepath.Join(applyRoot, "generated", "caddy", "config.json")}, Valid: true},
 		}
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
@@ -302,7 +302,7 @@ func TestManagementApplyReportsValidatorFailureWithoutSystemdSideEffects(t *test
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Command: []string{"caddy", "validate", "--config", paths[0]}, Valid: false, Error: "caddy validation failed"}}
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: t.TempDir()})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -47,6 +48,8 @@ type ServerInfo struct {
 	RequirePrivilegedHelper bool
 	UpdateStager            func(context.Context) (string, error)
 	TrustedProxyCIDRs       []string
+	PasswordHasher          PasswordHasher
+	DatabaseOpener          func(string) (*sql.DB, error)
 }
 
 func NewRouter(info ServerInfo) (http.Handler, Reloader) {

@@ -16,7 +16,7 @@ func TestInboundCreateThroughHTTPGeneratesPasswordWhenMissing(t *testing.T) {
 	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	body := strings.NewReader(`{"name":"hy2-auto","protocol":"hysteria2","transport":"udp","port":9443,"enabled":true}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/inbounds", body)

@@ -35,7 +35,7 @@ func TestManagementApplyHistoryRetentionKeepsNewestEntries(t *testing.T) {
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Valid: true}}
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
@@ -73,7 +73,7 @@ func TestManagementApplyHistoryEndpointReturnsNewestFirstAndPersistsAcrossRouter
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		return []ConfigValidationResult{{Name: "caddy", Config: paths[0], Valid: true}}
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	for i := 0; i < 2; i++ {
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
@@ -81,7 +81,7 @@ func TestManagementApplyHistoryEndpointReturnsNewestFirstAndPersistsAcrossRouter
 			t.Fatalf("apply %d expected 200, got %d: %s", i, w.Code, w.Body.String())
 		}
 	}
-	freshRouter, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
+	freshRouter, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 	freshRouter.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/apply/history", nil))
 
@@ -118,7 +118,7 @@ func TestManagementApplyHistoryEndpointFiltersStageSuccessAndLimit(t *testing.T)
 	if err := atomicfile.Write(filepath.Join(applyRoot, "generated", "veil", "apply-history.json"), append(body, '\n'), 0o600, 0o700); err != nil {
 		t.Fatalf("write history: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/apply/history?stage=rollback&success=false&limit=1", nil))
@@ -136,7 +136,7 @@ func TestManagementApplyHistoryEndpointFiltersStageSuccessAndLimit(t *testing.T)
 }
 
 func TestManagementApplyHistoryEndpointRejectsInvalidFilterNamesAndValues(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: t.TempDir()})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: t.TempDir()})
 	cases := []string{
 		"/api/apply/history?success=maybe",
 		"/api/apply/history?limit=-1",
@@ -154,7 +154,7 @@ func TestManagementApplyHistoryEndpointRejectsInvalidFilterNamesAndValues(t *tes
 }
 
 func TestManagementApplyHistoryEndpointReportsFirstUnsupportedFilterDeterministically(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: t.TempDir()})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: t.TempDir()})
 
 	for i := 0; i < 50; i++ {
 		w := httptest.NewRecorder()

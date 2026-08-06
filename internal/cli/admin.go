@@ -11,10 +11,9 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/statecommit"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/bcrypt"
 )
 
-func newAdminCommand() *cobra.Command {
+func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 	var statePath string
 	var keyPath string
 
@@ -41,7 +40,7 @@ func newAdminCommand() *cobra.Command {
 			}
 			username := "admin_" + suffix
 
-			hashed, err := bcrypt.GenerateFromPassword([]byte(pass), 10)
+			hashed, err := hasher.Hash([]byte(pass))
 			if err != nil {
 				return fmt.Errorf("hash password: %w", err)
 			}
@@ -83,7 +82,7 @@ func newAdminCommand() *cobra.Command {
 			resolvedState, _ := env.StatePath(statePath)
 			resolvedKey, _ := env.KeyPath(keyPath)
 
-			hashed, err := bcrypt.GenerateFromPassword([]byte(customPassword), 10)
+			hashed, err := hasher.Hash([]byte(customPassword))
 			if err != nil {
 				return fmt.Errorf("hash password: %w", err)
 			}

@@ -163,7 +163,7 @@ func runIdempotentSettingsRequest(t *testing.T, info ServerInfo, key, body strin
 	previousAutoApply := autoApplyAfterMutation
 	autoApplyAfterMutation = false
 	defer func() { autoApplyAfterMutation = previousAutoApply }()
-	handler, reloader := NewRouter(info)
+	handler, reloader := newTestRouter(info)
 	request := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Veil-Token", info.AuthToken)

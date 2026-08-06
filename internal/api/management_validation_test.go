@@ -35,7 +35,7 @@ func (busyPortProbe) Available(context.Context, string, int) (bool, error) {
 
 func TestValidationEndpointRequiresAuthentication(t *testing.T) {
 	validator := validStubValidator()
-	router, _ := NewRouter(ServerInfo{
+	router, _ := newTestRouter(ServerInfo{
 		Version:                "test",
 		Mode:                   "server",
 		AuthToken:              "secret-token",
@@ -64,7 +64,7 @@ func TestValidationEndpointRequiresAuthentication(t *testing.T) {
 
 func TestValidationEndpointRejectsViewerRole(t *testing.T) {
 	validator := validStubValidator()
-	router, reloader := NewRouter(ServerInfo{
+	router, reloader := newTestRouter(ServerInfo{
 		Version:                "test",
 		Mode:                   "server",
 		PublicListen:           true,
@@ -89,7 +89,7 @@ func TestValidationEndpointRejectsViewerRole(t *testing.T) {
 }
 
 func TestValidationEndpointRejectsMalformedPayload(t *testing.T) {
-	router, _ := NewRouter(ServerInfo{
+	router, _ := newTestRouter(ServerInfo{
 		Version:                "test",
 		Mode:                   "dev",
 		ConfigurationValidator: validStubValidator(),
@@ -107,7 +107,7 @@ func TestValidationEndpointRejectsMalformedPayload(t *testing.T) {
 
 func TestValidationEndpointReturnsStructuredIssues(t *testing.T) {
 	validator := &stubConfigurationValidator{response: invalidValidationResponse()}
-	router, _ := NewRouter(ServerInfo{
+	router, _ := newTestRouter(ServerInfo{
 		Version:                "test",
 		Mode:                   "dev",
 		ConfigurationValidator: validator,

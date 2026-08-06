@@ -9,7 +9,6 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/panel"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type SetupStatusResponse struct {
@@ -77,7 +76,7 @@ func (s *managementState) handleSetupComplete(w http.ResponseWriter, r *http.Req
 	} else {
 		req.Locale = panel.ResolveLocale("", r)
 	}
-	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hashed, err := s.hashPassword([]byte(req.Password))
 	if err != nil {
 		writeError(w, "failed to hash password", http.StatusInternalServerError)
 		return

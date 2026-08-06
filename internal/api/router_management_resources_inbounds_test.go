@@ -12,7 +12,7 @@ import (
 )
 
 func TestManagementAPICreatesInbound(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"name":"hy2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/inbounds", body)
 	w := httptest.NewRecorder()
@@ -41,7 +41,7 @@ func TestManagementAPICreatesInbound(t *testing.T) {
 }
 
 func TestManagementAPIInboundsRejectOversizedJSONBodies(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	seed := httptest.NewRecorder()
 	r.ServeHTTP(seed, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}`)))
 	if seed.Code != http.StatusCreated {
@@ -82,7 +82,7 @@ func TestManagementAPIInboundsRejectOversizedJSONBodies(t *testing.T) {
 }
 
 func TestManagementAPIRejectsDuplicateInboundName(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	seed := httptest.NewRecorder()
 	r.ServeHTTP(seed, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}`)))
 	if seed.Code != http.StatusCreated {
@@ -100,7 +100,7 @@ func TestManagementAPIRejectsDuplicateInboundName(t *testing.T) {
 }
 
 func TestManagementAPIRejectsDuplicateInboundTransportPort(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	seed := httptest.NewRecorder()
 	r.ServeHTTP(seed, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}`)))
 	if seed.Code != http.StatusCreated {
@@ -119,7 +119,7 @@ func TestManagementAPIRejectsDuplicateInboundTransportPort(t *testing.T) {
 
 func TestManagementAPIUpdatesAndDeletesInboundByName(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	create := httptest.NewRecorder()
 	r.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hy2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true}`)))
@@ -140,7 +140,7 @@ func TestManagementAPIUpdatesAndDeletesInboundByName(t *testing.T) {
 		t.Fatalf("unexpected updated inbound: %+v", updated)
 	}
 
-	restarted, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	restarted, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	readAfterUpdate := httptest.NewRecorder()
 	restarted.ServeHTTP(readAfterUpdate, httptest.NewRequest(http.MethodGet, "/api/inbounds", nil))
 	if !strings.Contains(readAfterUpdate.Body.String(), `"port":9443`) || strings.Contains(readAfterUpdate.Body.String(), `"port":8443`) {
@@ -163,7 +163,7 @@ func TestManagementAPIUpdatesAndDeletesInboundByName(t *testing.T) {
 }
 
 func TestManagementAPIRejectsInboundUpdateToDuplicateTransportPort(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	seedNaive := httptest.NewRecorder()
 	r.ServeHTTP(seedNaive, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"naive","protocol":"naiveproxy","transport":"tcp","port":443,"enabled":true}`)))
 	if seedNaive.Code != http.StatusCreated {
@@ -184,7 +184,7 @@ func TestManagementAPIRejectsInboundUpdateToDuplicateTransportPort(t *testing.T)
 
 func TestManagementAPIGetsInboundByName(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	create := httptest.NewRecorder()
 	r.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hy2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true}`)))
@@ -208,7 +208,7 @@ func TestManagementAPIGetsInboundByName(t *testing.T) {
 }
 
 func TestManagementAPIGetInboundByNameReturnsNotFoundForMissing(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/inbounds/nonexistent", nil))
@@ -220,7 +220,7 @@ func TestManagementAPIGetInboundByNameReturnsNotFoundForMissing(t *testing.T) {
 
 func TestManagementAPIInboundProtocolOverrides(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	payload := `{
 		"name": "naive-overridden",
@@ -261,7 +261,7 @@ func TestManagementAPIInboundProtocolOverrides(t *testing.T) {
 	}
 
 	// Reload state from path and verify persistence
-	restarted, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	restarted, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	readRecorder := httptest.NewRecorder()
 	restarted.ServeHTTP(readRecorder, httptest.NewRequest(http.MethodGet, "/api/inbounds/naive-overridden", nil))
 

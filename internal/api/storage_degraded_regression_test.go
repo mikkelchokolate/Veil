@@ -15,7 +15,7 @@ func TestCorruptProductionDatabaseStartsReadOnlyDegraded(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "veil.db"), []byte("not-a-sqlite-database"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	router, reloader := NewRouter(ServerInfo{
+	router, reloader := newTestRouter(ServerInfo{
 		Version:   "test",
 		Mode:      "production",
 		StatePath: statePath,

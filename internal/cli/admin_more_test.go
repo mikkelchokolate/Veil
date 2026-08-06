@@ -12,10 +12,11 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/storage"
+	"github.com/mikkelchokolate/Veil/internal/testutil/testdb"
 )
 
 func TestAdminSetRejectsMissingPassword(t *testing.T) {
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	cmd.SetOut(os.Stdout)
 	cmd.SetErr(os.Stderr)
 	cmd.SetArgs([]string{
@@ -48,15 +49,12 @@ func TestAdminSetCommitsDesiredRevisionAndStateDigest(t *testing.T) {
 		t.Fatal(err)
 	}
 	databasePath := filepath.Join(root, "veil.db")
-	db, err := storage.Open(databasePath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := testdb.CloneTo(t, databasePath)
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
 
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SetArgs([]string{"admin", "set", "--state", statePath, "--key-path", keyPath, "--password", "a-new-long-password"})
@@ -106,7 +104,7 @@ func TestAdminShowReportsNoUsers(t *testing.T) {
 		t.Fatalf("save empty state: %v", err)
 	}
 
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -121,7 +119,7 @@ func TestAdminShowReportsNoUsers(t *testing.T) {
 }
 
 func TestAdminRotateKeyRejectsMissingKeyFile(t *testing.T) {
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	cmd.SetOut(os.Stdout)
 	cmd.SetErr(os.Stderr)
 	cmd.SetArgs([]string{
@@ -144,7 +142,7 @@ func TestAdminRotateKeyRejectsWrongKeyLength(t *testing.T) {
 		t.Fatalf("write key: %v", err)
 	}
 
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	cmd.SetOut(os.Stdout)
 	cmd.SetErr(os.Stderr)
 	cmd.SetArgs([]string{
@@ -167,7 +165,7 @@ func TestAdminRotateKeyRejectsMissingState(t *testing.T) {
 		t.Fatalf("write key: %v", err)
 	}
 
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	cmd.SetOut(os.Stdout)
 	cmd.SetErr(os.Stderr)
 	cmd.SetArgs([]string{
@@ -205,7 +203,7 @@ func TestAdminSetUpdatesFirstAdminWhenUsernameOmitted(t *testing.T) {
 		t.Fatalf("save state: %v", err)
 	}
 
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -251,7 +249,7 @@ func TestAdminSetCreatesUserWhenUsernameNotFound(t *testing.T) {
 		t.Fatalf("save state: %v", err)
 	}
 
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)

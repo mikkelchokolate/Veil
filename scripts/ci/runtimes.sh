@@ -18,6 +18,62 @@ fetch_verified() { # <url> <file> <sha256>
   echo "$3  $2" | sha256sum --check - >/dev/null
 }
 
+install_pinned_caddy_binary() { # <destdir> <veil-binary-for-caddy-build>
+  local dest="$1" veil_bin="${2:-}"
+  mkdir -p "${dest}"
+  # Hosted runners require authorization for systemd transient units and
+  # restrict unprivileged Bubblewrap namespaces. Enter either sandbox through
+  # the runner's explicitly provisioned passwordless sudo. Root-owned Docker
+  # CI containers do not take this branch.
+  if [ -n "${veil_bin}" ] && [ -x "${veil_bin}" ]; then
+    if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+      sudo -- "${veil_bin}" runtime install --only naiveproxy --bin-dir "${dest}"
+    else
+      "${veil_bin}" runtime install --only naiveproxy --bin-dir "${dest}"
+    fi
+  else
+    local tmp gopath_cache
+    tmp="$(mktemp -d /tmp/veil-pinned-caddy.XXXXXX)"
+    gopath_cache="${tmp}/go"
+    trap 'rm -rf "${tmp}"' RETURN
+    mkdir -p "${tmp}/caddy-build" "${gopath_cache}"
+    (
+      cd "${tmp}/caddy-build"
+      cat > main.go <<'EOF'
+package main
+
+import (
+	caddycmd "github.com/caddyserver/caddy/v2/cmd"
+	_ "github.com/caddyserver/caddy/v2/modules/standard"
+	_ "github.com/caddyserver/forwardproxy"
+)
+
+func main() {
+	caddycmd.Main()
+}
+EOF
+      go mod init caddy >/dev/null
+      go mod edit -require "github.com/caddyserver/caddy/v2@${CI_CADDY_VERSION}"
+      go mod edit -replace "github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@${CI_FORWARDPROXY_VERSION}"
+      go mod tidy
+      CGO_ENABLED=0 go build -o "${dest}/caddy" -ldflags='-s -w' -trimpath .
+    )
+  fi
+  "${dest}/caddy" list-modules | grep -Fx http.handlers.forward_proxy >/dev/null
+}
+
+install_pinned_caddy_for_tests() { # <destdir> <veil-binary-for-caddy-build>
+  local dest="$1" veil_bin="${2:-}"
+  mkdir -p "${dest}"
+  if [ -x "${dest}/caddy" ] && "${dest}/caddy" list-modules 2>/dev/null | grep -Fx http.handlers.forward_proxy >/dev/null; then
+    printf '[ci] validated cached Caddy test runtime at %s\n' "${dest}"
+    return 0
+  fi
+  rm -f "${dest}/caddy"
+  install_pinned_caddy_binary "${dest}" "${veil_bin}"
+  printf '[ci] pinned Caddy test runtime installed to %s\n' "${dest}"
+}
+
 install_pinned_runtimes() { # <destdir> <veil-binary-for-caddy-build>
   local dest="$1" veil_bin="${2:-}"
   local tmp
@@ -48,42 +104,7 @@ install_pinned_runtimes() { # <destdir> <veil-binary-for-caddy-build>
   )
 
   # caddy with naive forward_proxy: source-built with product-pinned modules.
-  if [ -n "${veil_bin}" ] && [ -x "${veil_bin}" ]; then
-    # Hosted runners require authorization for systemd transient units and
-    # restrict unprivileged Bubblewrap namespaces. Enter either sandbox through
-    # the runner's explicitly provisioned passwordless sudo. Root-owned Docker
-    # CI containers do not take this branch.
-    if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
-      sudo -- "${veil_bin}" runtime install --only naiveproxy --bin-dir "${dest}"
-    else
-      "${veil_bin}" runtime install --only naiveproxy --bin-dir "${dest}"
-    fi
-  else
-    local gopath_cache="${tmp}/go"
-    mkdir -p "${tmp}/caddy-build" "${gopath_cache}"
-    (
-      cd "${tmp}/caddy-build"
-      cat > main.go <<'EOF'
-package main
-
-import (
-	caddycmd "github.com/caddyserver/caddy/v2/cmd"
-	_ "github.com/caddyserver/caddy/v2/modules/standard"
-	_ "github.com/caddyserver/forwardproxy"
-)
-
-func main() {
-	caddycmd.Main()
-}
-EOF
-      go mod init caddy >/dev/null
-      go mod edit -require "github.com/caddyserver/caddy/v2@${CI_CADDY_VERSION}"
-      go mod edit -replace "github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@${CI_FORWARDPROXY_VERSION}"
-      go mod tidy
-      CGO_ENABLED=0 go build -o "${dest}/caddy" -ldflags='-s -w' -trimpath .
-    )
-  fi
-  "${dest}/caddy" list-modules | grep -Fx http.handlers.forward_proxy >/dev/null
+  install_pinned_caddy_binary "${dest}" "${veil_bin}"
 
   (cd "${dest}" && printf '[ci] pinned runtimes installed to %s: %s\n' "${dest}" "$(echo *)")
 }

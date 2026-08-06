@@ -218,7 +218,7 @@ func TestAuthMiddleware(t *testing.T) {
 }
 
 func TestRouterUsersEndpointAcceptsStaticAdminToken(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
 	req.Header.Set("X-Veil-Token", "secret-token")
 	w := httptest.NewRecorder()

@@ -193,7 +193,7 @@ func TestV1OrphanClientDetection(t *testing.T) {
 }
 
 func TestV1ClientsRequireAuth(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: t.TempDir() + "/state.json", ApplyRoot: t.TempDir(), AuthToken: "tok"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: t.TempDir() + "/state.json", ApplyRoot: t.TempDir(), AuthToken: "tok"})
 	w := v1Request(t, r, http.MethodGet, "/api/v1/clients", "")
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", w.Code)

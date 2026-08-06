@@ -65,7 +65,7 @@ func TestSettingsUpdateTriggersAutoApply(t *testing.T) {
 	defer restore()
 
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	seedInboundForAutoApplyTests(r, calls)
 
 	update := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:8080","mode":"dev","fallbackRoot":"/var/lib/veil/www","domain":"hy2.example.com"}`))
@@ -85,7 +85,7 @@ func TestRoutingRuleCreateTriggersAutoApply(t *testing.T) {
 	defer restore()
 
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	seedInboundForAutoApplyTests(r, calls)
 
 	create := httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"openai","match":"geosite:openai","outbound":"direct","enabled":true}`))
@@ -105,7 +105,7 @@ func TestRoutingRuleUpdateTriggersAutoApply(t *testing.T) {
 	defer restore()
 
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	seedInboundForAutoApplyTests(r, calls)
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"openai","match":"geosite:openai","outbound":"direct","enabled":true}`)))
 	*calls = (*calls)[:0]
@@ -127,7 +127,7 @@ func TestRoutingRuleDeleteTriggersAutoApply(t *testing.T) {
 	defer restore()
 
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	seedInboundForAutoApplyTests(r, calls)
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"openai","match":"geosite:openai","outbound":"direct","enabled":true}`)))
 	*calls = (*calls)[:0]
@@ -149,7 +149,7 @@ func TestRoutingPresetApplyTriggersAutoApply(t *testing.T) {
 	defer restore()
 
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	seedInboundForAutoApplyTests(r, calls)
 
 	apply := httptest.NewRequest(http.MethodPost, "/api/routing/presets/all", nil)
@@ -169,7 +169,7 @@ func TestWarpUpdateTriggersAutoApply(t *testing.T) {
 	defer restore()
 
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 
 	body := strings.NewReader(`{"enabled":true,"licenseKey":"","endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/warp", body)

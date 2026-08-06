@@ -12,7 +12,7 @@ import (
 )
 
 func TestNetworkEndpointRejectsNonGet(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/network", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -25,7 +25,7 @@ func TestNetworkEndpointReturnsJSON(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/network", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -41,7 +41,7 @@ func TestNetworkEndpointHasLoopback(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/network", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -65,7 +65,7 @@ func TestNetworkEndpointBytesPositive(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/network", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -82,7 +82,7 @@ func TestNetworkEndpointHasPackets(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/network", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

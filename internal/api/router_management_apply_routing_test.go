@@ -65,7 +65,7 @@ func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
 	})
 
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	warp := httptest.NewRecorder()
 	r.ServeHTTP(warp, httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)))
 	if warp.Code != http.StatusOK {
@@ -144,7 +144,7 @@ func TestManagementApplyRejectsRoutingDatChecksumMismatch(t *testing.T) {
 	})
 
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	warp := httptest.NewRecorder()
 	r.ServeHTTP(warp, httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)))
 	if warp.Code != http.StatusOK {
@@ -176,7 +176,7 @@ func TestManagementApplyPlanRejectsRoutingRuleUsingDisabledWarpOutbound(t *testi
 	}`), 0o600); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
@@ -203,7 +203,7 @@ func TestManagementApplyPlanRejectsUnknownRoutingOutbound(t *testing.T) {
 	}`), 0o600); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))

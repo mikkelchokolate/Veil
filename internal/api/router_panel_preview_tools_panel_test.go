@@ -13,7 +13,7 @@ import (
 func TestRouterServesPanelShell(t *testing.T) {
 	for _, method := range []string{http.MethodGet, http.MethodHead} {
 		t.Run(method, func(t *testing.T) {
-			r, _ := NewRouter(ServerInfo{Version: "test"})
+			r, _ := newTestRouter(ServerInfo{Version: "test"})
 			req := httptest.NewRequest(method, "/", nil)
 			w := httptest.NewRecorder()
 
@@ -62,7 +62,7 @@ func TestRouterServesPanelShell(t *testing.T) {
 
 // SPA client-side routes render the same shell (history-API fallback).
 func TestRouterServesPanelShellForClientRoutes(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	for _, p := range []string{"/clients", "/clients/abc", "/inbounds", "/apply", "/traffic"} {
 		req := httptest.NewRequest(http.MethodGet, p, nil)
 		w := httptest.NewRecorder()

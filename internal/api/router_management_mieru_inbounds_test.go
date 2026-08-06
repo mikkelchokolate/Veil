@@ -9,7 +9,7 @@ import (
 
 func TestManagementAPICreatesMieruTCPAndUDPInbounds(t *testing.T) {
 	stubManagementApplySideEffects(t)
-	r, reloader := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, reloader := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	if state, ok := reloader.(*managementState); ok {
 		t.Cleanup(func() {
 			if err := state.Close(); err != nil {
@@ -30,7 +30,7 @@ func TestManagementAPICreatesMieruTCPAndUDPInbounds(t *testing.T) {
 }
 
 func TestManagementAPIRejectsUnsupportedInboundProtocolAndTransport(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	for _, body := range []string{
 		`{"name":"unknown","protocol":"unknown","transport":"tcp","port":443,"enabled":true}`,
 		`{"name":"hy2-tcp","protocol":"hysteria2","transport":"tcp","port":8443,"enabled":true}`,

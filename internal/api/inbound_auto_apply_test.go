@@ -38,7 +38,7 @@ func TestInboundCreateTriggersAutoApply(t *testing.T) {
 	firewallApplierInstance = &fakeFirewallApplier{}
 
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"hy.example.com"}`)))
 	body := strings.NewReader(`{"name":"hy2-auto","protocol":"hysteria2","transport":"udp","port":9443,"enabled":true}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/inbounds", body)
@@ -91,7 +91,7 @@ func TestInboundUpdateTriggersAutoApply(t *testing.T) {
 	firewallApplierInstance = &fakeFirewallApplier{}
 
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"hy.example.com"}`)))
 	// Create seed inbound first (auto-apply runs here too).
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hy2-update","protocol":"hysteria2","transport":"udp","port":9443,"enabled":true}`)))
@@ -146,7 +146,7 @@ func TestInboundDeleteTriggersAutoApply(t *testing.T) {
 	firewallApplierInstance = &fakeFirewallApplier{}
 
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"hy.example.com"}`)))
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hy2-delete","protocol":"hysteria2","transport":"udp","port":9443,"enabled":true}`)))
 

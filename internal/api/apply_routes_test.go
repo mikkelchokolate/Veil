@@ -55,7 +55,7 @@ func newApplyTrackedRouter(t *testing.T) (http.Handler, *[][]string) {
 	if err := atomicfile.Write(statePath, []byte(`{"schemaVersion":4,"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"hy.example.com"}}`), 0o600, 0o700); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, reloader := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: dir})
+	r, reloader := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: dir})
 	state, ok := reloader.(*managementState)
 	if !ok {
 		t.Fatalf("reloader is not *managementState: %T", reloader)
@@ -242,7 +242,7 @@ func TestApplyEndpointsRequireAuth(t *testing.T) {
 		t.Fatalf("write state: %v", err)
 	}
 	// A static token makes the API require auth.
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: dir, AuthToken: "secret-token"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: dir, AuthToken: "secret-token"})
 	for _, path := range []string{"/api/apply/state", "/api/apply/jobs"} {
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))

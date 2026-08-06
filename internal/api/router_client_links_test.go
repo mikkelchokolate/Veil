@@ -16,7 +16,7 @@ func TestClientLinksEndpointBuildsEnabledProxyLinks(t *testing.T) {
 	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	req := httptest.NewRequest(http.MethodGet, "/api/client-links", nil)
 	w := httptest.NewRecorder()
 
@@ -89,7 +89,7 @@ func TestClientLinksEndpointAllowsDomainlessDirectPanel(t *testing.T) {
 	}`), 0o600); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	req := httptest.NewRequest(http.MethodGet, "/api/client-links", nil)
 	w := httptest.NewRecorder()
 
@@ -112,7 +112,7 @@ func TestClientLinksUsesPerInboundPassword(t *testing.T) {
 	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	// Add a second hysteria2 inbound with its own password via API
 	body := strings.NewReader(`{"name":"hysteria2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true,"password":"alt-hy2-secret"}`)
@@ -157,7 +157,7 @@ func TestClientLinksHysteria2InsecureFlag(t *testing.T) {
 	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	// Enable insecure mode globally.
 	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","defaultAcmeEmail":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret","hysteria2Password":"hy2-secret","hysteria2Insecure":true}`)
@@ -193,7 +193,7 @@ func TestClientLinksSubscriptionEndpointReturnsBase64URIs(t *testing.T) {
 	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	req := httptest.NewRequest(http.MethodGet, "/api/client-links/subscription", nil)
 	w := httptest.NewRecorder()
 
@@ -226,7 +226,7 @@ func TestClientLinksSubscriptionEndpointReturnsRawURIs(t *testing.T) {
 	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	req := httptest.NewRequest(http.MethodGet, "/api/client-links/subscription?format=raw", nil)
 	w := httptest.NewRecorder()
 
@@ -258,7 +258,7 @@ func TestClientLinksSubscriptionEndpointRejectsUnknownFormat(t *testing.T) {
 	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	req := httptest.NewRequest(http.MethodGet, "/api/client-links/subscription?format=json", nil)
 	w := httptest.NewRecorder()
 
@@ -268,7 +268,7 @@ func TestClientLinksSubscriptionEndpointRejectsUnknownFormat(t *testing.T) {
 }
 
 func TestClientLinksSubscriptionEndpointRejectsUnknownFormatBeforeConfigValidation(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodGet, "/api/client-links/subscription?format=json", nil)
 	w := httptest.NewRecorder()
 
@@ -278,7 +278,7 @@ func TestClientLinksSubscriptionEndpointRejectsUnknownFormatBeforeConfigValidati
 }
 
 func TestClientLinksSubscriptionEndpointRejectsUnknownQueryBeforeConfigValidation(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodGet, "/api/client-links/subscription?offset=1", nil)
 	w := httptest.NewRecorder()
 
@@ -293,7 +293,7 @@ func TestClientLinksSubscriptionEndpointRejectsUnknownQueryBeforeConfigValidatio
 }
 
 func TestClientLinkQREndpointReturnsLocalPNG(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodPost, "/api/client-links/qr", strings.NewReader(`{"uri":"hysteria2://secret@example.test:443/#demo"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -319,7 +319,7 @@ func TestClientLinkQREndpointReturnsLocalPNG(t *testing.T) {
 }
 
 func TestClientLinkQREndpointRejectsInvalidPayload(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	for name, body := range map[string]string{
 		"empty":     `{"uri":""}`,
 		"too-large": `{"uri":"` + strings.Repeat("x", maxClientLinkQRBytes+1) + `"}`,

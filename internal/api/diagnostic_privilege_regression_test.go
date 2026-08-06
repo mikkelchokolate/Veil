@@ -7,7 +7,7 @@ import (
 )
 
 func TestPublicMetricsAlwaysRequireAuthentication(t *testing.T) {
-	router, _ := NewRouter(ServerInfo{
+	router, _ := newTestRouter(ServerInfo{
 		Version:             "test",
 		Mode:                "production",
 		AuthToken:           "metrics-secret",
@@ -29,7 +29,7 @@ func TestPublicMetricsAlwaysRequireAuthentication(t *testing.T) {
 }
 
 func TestProductionDiagnosticsFailClosedWithoutRootHelper(t *testing.T) {
-	router, _ := NewRouter(ServerInfo{
+	router, _ := newTestRouter(ServerInfo{
 		Version:                 "test",
 		Mode:                    "production",
 		AuthToken:               "diagnostic-secret",

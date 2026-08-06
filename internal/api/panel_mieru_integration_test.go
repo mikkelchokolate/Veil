@@ -30,7 +30,7 @@ func TestPanelManagementFlowForMieruInboundClientAccessAndApply(t *testing.T) {
 	stubManagementApplySideEffects(t)
 	dir := t.TempDir()
 	applyRoot := filepath.Join(dir, "apply")
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 
 	putJSON(t, r, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com"}`, http.StatusOK)
 	putJSON(t, r, "/api/inbounds", `{"name":"mieru-tcp","protocol":"mieru","transport":"tcp","port":443,"enabled":true,"profiles":[{"name":"alice","password":"alice-pass","enabled":true}]}`, http.StatusCreated)

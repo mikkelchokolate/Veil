@@ -65,20 +65,21 @@ jobs:
       - id: versions
         run: |
           source scripts/ci/versions.sh
-          { echo "go_version=${CI_GO_VERSION}"; echo "node_version=${CI_NODE_VERSION}"; echo "pnpm_version=${CI_PNPM_VERSION}"; } >> "$GITHUB_OUTPUT"
+          echo "go_version=${CI_GO_VERSION}" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ steps.versions.outputs.go_version }}
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+      - name: Cache pinned Caddy test runtime
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          version: ${{ steps.versions.outputs.pnpm_version }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: ${{ steps.versions.outputs.node_version }}
-          cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
+          path: ~/.cache/veil-caddy-test
+          key: ${{ runner.os }}-${{ runner.arch }}-veil-caddy-test-${{ hashFiles('scripts/ci/versions.sh', 'scripts/ci/runtimes.sh', 'internal/runtimeinstall/**') }}
       - name: runtime probe sandbox
-        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+        run: |
+          if ! command -v bwrap >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends bubblewrap
+          fi
       - name: test job
         run: bash scripts/ci/test.sh
       - name: Upload CI artifacts (incl. product-test.log and coverage)

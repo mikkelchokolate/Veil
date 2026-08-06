@@ -315,7 +315,7 @@ func createBackupFileWithOptionsUnlocked(destination, statePath, keyPath, passph
 	var archiveWriter io.Writer = limitedOutput
 	var encryptWriter *chunkEncryptWriter
 	if passphrase != "" {
-		encryptWriter, err = newChunkEncryptWriter(limitedOutput, passphrase)
+		encryptWriter, err = newChunkEncryptWriterWithOptions(limitedOutput, passphrase, options.Crypto)
 		if err != nil {
 			return err
 		}
@@ -371,7 +371,7 @@ func RestoreBackupFileWithOptions(archivePath, statePath, keyPath, passphrase st
 	if err := RecoverInterruptedRestore(statePath, keyPath, options.DatabasePath); err != nil {
 		return RestoreResult{}, fmt.Errorf("recover interrupted restore: %w", err)
 	}
-	verified, err := inspectBackupFile(archivePath, passphrase, options.MaxBytes)
+	verified, err := inspectBackupFileWithOptions(archivePath, passphrase, options.MaxBytes, options.Crypto)
 	if err != nil {
 		return RestoreResult{}, err
 	}
@@ -474,6 +474,10 @@ restoreCommitted:
 }
 
 func inspectBackupFile(path, passphrase string, configuredMax int64) (*extractedBackup, error) {
+	return inspectBackupFileWithOptions(path, passphrase, configuredMax, CryptoOptions{})
+}
+
+func inspectBackupFileWithOptions(path, passphrase string, configuredMax int64, options CryptoOptions) (*extractedBackup, error) {
 	maxBytes, err := normalizeBackupMaxBytes(configuredMax)
 	if err != nil {
 		return nil, err
@@ -499,7 +503,7 @@ func inspectBackupFile(path, passphrase string, configuredMax int64) (*extracted
 			result.cleanup()
 		}
 	}()
-	tarballPath, encrypted, encryptionVersion, err := prepareTarballFile(path, passphrase, maxBytes, workDir)
+	tarballPath, encrypted, encryptionVersion, err := prepareTarballFileWithOptions(path, passphrase, maxBytes, workDir, options)
 	if err != nil {
 		return nil, err
 	}
@@ -641,6 +645,10 @@ func extractAndVerifyTarball(tarballPath string, maxBytes int64, result *extract
 }
 
 func prepareTarballFile(path, passphrase string, maxBytes int64, workDir string) (string, bool, int, error) {
+	return prepareTarballFileWithOptions(path, passphrase, maxBytes, workDir, CryptoOptions{})
+}
+
+func prepareTarballFileWithOptions(path, passphrase string, maxBytes int64, workDir string, options CryptoOptions) (string, bool, int, error) {
 	input, err := openBackupRegularNoFollow(path)
 	if err != nil {
 		return "", false, 0, err
@@ -671,7 +679,7 @@ func prepareTarballFile(path, passphrase string, maxBytes int64, workDir string)
 	}
 	limitedOutput := &backupPolicyWriter{writer: output, maxBytes: maxBytes}
 	if version == int(chunkedEncryptionVersion) {
-		err = decryptChunkedBackup(input, limitedOutput, passphrase)
+		err = decryptChunkedBackupWithOptions(input, limitedOutput, passphrase, options)
 	} else if version == 1 || version == 2 {
 		// Legacy single-message GCM cannot be authenticated incrementally. This
 		// bounded compatibility path is retained only for existing archives; all
@@ -683,7 +691,7 @@ func prepareTarballFile(path, passphrase string, maxBytes int64, workDir string)
 			err = backupPolicyError(int64(len(legacyData)), maxBytes)
 		} else {
 			var plaintext []byte
-			plaintext, _, _, err = decryptBackup(legacyData, passphrase)
+			plaintext, _, _, err = decryptBackupWithOptions(legacyData, passphrase, options)
 			if err == nil {
 				_, err = limitedOutput.Write(plaintext)
 			}
@@ -957,6 +965,10 @@ type chunkEncryptWriter struct {
 }
 
 func newChunkEncryptWriter(destination io.Writer, passphrase string) (*chunkEncryptWriter, error) {
+	return newChunkEncryptWriterWithOptions(destination, passphrase, CryptoOptions{})
+}
+
+func newChunkEncryptWriterWithOptions(destination io.Writer, passphrase string, options CryptoOptions) (*chunkEncryptWriter, error) {
 	salt := make([]byte, 16)
 	if _, err := backupRandRead(salt); err != nil {
 		return nil, fmt.Errorf("generate salt: %w", err)
@@ -965,7 +977,7 @@ func newChunkEncryptWriter(destination io.Writer, passphrase string) (*chunkEncr
 	if _, err := backupRandRead(nonce); err != nil {
 		return nil, fmt.Errorf("generate nonce: %w", err)
 	}
-	key := deriveKey(passphrase, salt, chunkedEncryptionVersion)
+	key := deriveKeyWithOptions(passphrase, salt, chunkedEncryptionVersion, options)
 	block, err := encryptAESNewCipher(key)
 	if err != nil {
 		return nil, err
@@ -1041,6 +1053,10 @@ func (w *chunkEncryptWriter) flushFrame(plaintext []byte) error {
 }
 
 func decryptChunkedBackup(source io.Reader, destination io.Writer, passphrase string) error {
+	return decryptChunkedBackupWithOptions(source, destination, passphrase, CryptoOptions{})
+}
+
+func decryptChunkedBackupWithOptions(source io.Reader, destination io.Writer, passphrase string, options CryptoOptions) error {
 	header := make([]byte, len(magicHeader)+1+16+12)
 	if _, err := io.ReadFull(source, header); err != nil {
 		return errors.New("invalid or corrupted encrypted backup file (too short)")
@@ -1051,7 +1067,7 @@ func decryptChunkedBackup(source io.Reader, destination io.Writer, passphrase st
 	saltStart := len(magicHeader) + 1
 	salt := header[saltStart : saltStart+16]
 	baseNonce := header[saltStart+16:]
-	key := deriveKey(passphrase, salt, chunkedEncryptionVersion)
+	key := deriveKeyWithOptions(passphrase, salt, chunkedEncryptionVersion, options)
 	block, err := decryptAESNewCipher(key)
 	if err != nil {
 		return err

@@ -15,7 +15,7 @@ import (
 )
 
 func TestManagementErrorResponsesIncludeSecurityHeaders(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":""}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/settings", body)
 	w := httptest.NewRecorder()
@@ -34,7 +34,7 @@ func TestManagementErrorResponsesIncludeSecurityHeaders(t *testing.T) {
 }
 
 func TestMethodNotAllowedResponsesIncludeAllowAndSecurityHeaders(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodPatch, "/api/settings", nil)
 	w := httptest.NewRecorder()
 
@@ -55,7 +55,7 @@ func TestMethodNotAllowedResponsesIncludeAllowAndSecurityHeaders(t *testing.T) {
 }
 
 func TestJSONDecodeErrorResponseIncludesSecurityHeaders(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`not json`)
 	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
 	w := httptest.NewRecorder()
@@ -202,7 +202,7 @@ func TestReadSystemdServiceStatusTimeout(t *testing.T) {
 	}
 	t.Cleanup(func() { serviceStatusReader = old })
 
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	w := httptest.NewRecorder()
 
@@ -425,7 +425,7 @@ func TestValidateEmptyJSONBody(t *testing.T) {
 }
 
 func TestSecurityHeadersMiddleware(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	paths := []string{"/", "/healthz", "/api/status", "/api/settings", "/api/warp", "/api/nonexistent"}
 
 	for _, path := range paths {
@@ -464,7 +464,7 @@ func TestSecurityHeadersMiddleware(t *testing.T) {
 }
 
 func TestSecurityHeadersMiddlewareOnErrorPaths(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", AuthToken: "secret"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", AuthToken: "secret"})
 
 	// Unauthorized POST without token — should still have security headers
 	req := httptest.NewRequest(http.MethodPost, "/api/settings", strings.NewReader("bad"))
@@ -481,7 +481,7 @@ func TestSecurityHeadersMiddlewareOnErrorPaths(t *testing.T) {
 }
 
 func TestSecurityHeadersMiddlewareHSTSOnHTTPS(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	// Simulate a TLS connection by setting req.TLS
@@ -502,7 +502,7 @@ func TestSecurityHeadersMiddlewareHSTSOnHTTPS(t *testing.T) {
 }
 
 func TestLogsEndpointRequiresGET(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/logs", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -512,7 +512,7 @@ func TestLogsEndpointRequiresGET(t *testing.T) {
 }
 
 func TestLogsEndpointRejectsInvalidUnit(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/logs?unit=rm%20-rf", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -522,7 +522,7 @@ func TestLogsEndpointRejectsInvalidUnit(t *testing.T) {
 }
 
 func TestLogsEndpointRejectsInvalidLines(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	for _, qs := range []string{"lines=0", "lines=501", "lines=abc"} {
 		req := httptest.NewRequest(http.MethodGet, "/api/logs?"+qs, nil)
 		w := httptest.NewRecorder()

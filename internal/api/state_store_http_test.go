@@ -16,7 +16,7 @@ func TestInboundPasswordSavedThroughHTTPIsEncryptedAtRest(t *testing.T) {
 	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: keyPath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: keyPath})
 
 	body := strings.NewReader(`{"name":"hy2-secret","protocol":"hysteria2","transport":"udp","port":9555,"enabled":true,"password":"plain-inbound-secret"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/inbounds", body)

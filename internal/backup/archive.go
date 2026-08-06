@@ -21,7 +21,12 @@ var magicHeader = []byte("VEILBACK")
 // backupRandRead is overridable in tests to inject failures during encryption.
 var backupRandRead = rand.Read
 
-// Test hooks for createTarball and encryptBackupTarball.
+type DeriveKeyFunc func(passphrase string, salt []byte, version byte) []byte
+
+type CryptoOptions struct {
+	DeriveKey DeriveKeyFunc
+}
+
 var (
 	createTarballStat        = os.Stat
 	createTarballFileHeader  = tar.FileInfoHeader
@@ -32,14 +37,15 @@ var (
 
 	encryptAESNewCipher = aes.NewCipher
 	encryptNewGCM       = cipher.NewGCM
-
-	// deriveKeyHook is overridable in tests to avoid expensive PBKDF2 iterations.
-	deriveKeyHook func(passphrase string, salt []byte, version byte) []byte
 )
 
 func deriveKey(passphrase string, salt []byte, version byte) []byte {
-	if deriveKeyHook != nil {
-		return deriveKeyHook(passphrase, salt, version)
+	return deriveKeyWithOptions(passphrase, salt, version, CryptoOptions{})
+}
+
+func deriveKeyWithOptions(passphrase string, salt []byte, version byte, options CryptoOptions) []byte {
+	if options.DeriveKey != nil {
+		return options.DeriveKey(passphrase, salt, version)
 	}
 	iterations := 600000 // OWASP recommendation for PBKDF2-HMAC-SHA256
 	if version == 1 {
@@ -104,6 +110,10 @@ func CreateBackup(statePath, keyPath, passphrase string) ([]byte, error) {
 }
 
 func encryptBackupTarball(tarball []byte, passphrase string) ([]byte, error) {
+	return encryptBackupTarballWithOptions(tarball, passphrase, CryptoOptions{})
+}
+
+func encryptBackupTarballWithOptions(tarball []byte, passphrase string, options CryptoOptions) ([]byte, error) {
 	if passphrase == "" {
 		return tarball, nil
 	}
@@ -118,7 +128,7 @@ func encryptBackupTarball(tarball []byte, passphrase string) ([]byte, error) {
 		return nil, fmt.Errorf("generate nonce: %w", err)
 	}
 
-	key := deriveKey(passphrase, salt, 2)
+	key := deriveKeyWithOptions(passphrase, salt, 2, options)
 	block, err := encryptAESNewCipher(key)
 	if err != nil {
 		return nil, err
