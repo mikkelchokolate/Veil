@@ -2,9 +2,8 @@ name: ci
 
 on:
   push:
-    branches:
-      - '**'
   pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
