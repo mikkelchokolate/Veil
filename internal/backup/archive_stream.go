@@ -644,10 +644,6 @@ func extractAndVerifyTarball(tarballPath string, maxBytes int64, result *extract
 	return nil
 }
 
-func prepareTarballFile(path, passphrase string, maxBytes int64, workDir string) (string, bool, int, error) {
-	return prepareTarballFileWithOptions(path, passphrase, maxBytes, workDir, CryptoOptions{})
-}
-
 func prepareTarballFileWithOptions(path, passphrase string, maxBytes int64, workDir string, options CryptoOptions) (string, bool, int, error) {
 	input, err := openBackupRegularNoFollow(path)
 	if err != nil {
