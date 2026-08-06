@@ -6,6 +6,7 @@ set -euo pipefail
 
 _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/ci/common.sh
+# shellcheck disable=SC1091
 . "${_script_dir}/common.sh"
 
 cd "${CI_ROOT}"
@@ -38,11 +39,13 @@ caddy_stage() {
   if [ ! -x "${runtime_dir}/caddy" ]; then
     runtime_dir="${VEIL_CI_CADDY_CACHE_DIR:-${HOME}/.cache/veil-caddy-test}"
     # shellcheck source=scripts/ci/runtimes.sh
+    # shellcheck disable=SC1091
     . "${CI_SCRIPTS_DIR}/runtimes.sh"
     install_pinned_caddy_for_tests "${runtime_dir}" "./bin/veil"
   elif ! "${runtime_dir}/caddy" list-modules 2>/dev/null | grep -Fx http.handlers.forward_proxy >/dev/null; then
     rm -f "${runtime_dir}/caddy"
     # shellcheck source=scripts/ci/runtimes.sh
+    # shellcheck disable=SC1091
     . "${CI_SCRIPTS_DIR}/runtimes.sh"
     install_pinned_caddy_for_tests "${runtime_dir}" "./bin/veil"
   fi
@@ -107,15 +110,23 @@ report_args=(--repo "${CI_ROOT}" --artifact-dir "${CI_ARTIFACT_DIR}")
 for log in "${CI_ARTIFACT_DIR}/sdk-tests.log" "${task_logs[@]}"; do
   [ -f "${log}" ] && report_args+=(--log "${log}")
 done
-ci_test_stage "coverage merge" bash -c 'profiles=("'"${CI_ARTIFACT_DIR}"'/coverage-tasks/"*.out); [ -f "${profiles[0]}" ]; python3 "'"${CI_SCRIPTS_DIR}"'/merge-coverprofiles.py" coverage.out "${profiles[@]}"'
+coverage_merge_stage() {
+  local profiles=("${CI_ARTIFACT_DIR}/coverage-tasks/"*.out)
+  [ -f "${profiles[0]}" ]
+  python3 "${CI_SCRIPTS_DIR}/merge-coverprofiles.py" coverage.out "${profiles[@]}"
+}
+coverage_check_stage() {
+  local total_coverage
+  total_coverage="$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')"
+  printf 'Total statement coverage is %s%%\n' "${total_coverage}" | tee "${CI_ARTIFACT_DIR}/coverage-summary.txt"
+  awk -v cov="${total_coverage}" -v min="${CI_COVERAGE_THRESHOLD}" \
+    'BEGIN { if (cov+0 < min+0) { print "Error: coverage " cov "% is below threshold (" min "%)"; exit 1 } }'
+}
+ci_test_stage "coverage merge" coverage_merge_stage
 cp -f coverage.out "${CI_ARTIFACT_DIR}/coverage.out"
 ci_test_stage "test inventory report" python3 "${CI_SCRIPTS_DIR}/test-inventory.py" "${report_args[@]}"
 
-ci_test_stage "coverage check" bash -c '
-total_coverage="$(go tool cover -func=coverage.out | grep total | awk "{print \$3}" | tr -d "%")"
-echo "Total statement coverage is ${total_coverage}%" | tee "'"${CI_ARTIFACT_DIR}"'/coverage-summary.txt"
-awk -v cov="${total_coverage}" -v min="${CI_COVERAGE_THRESHOLD}" '\''BEGIN { if (cov+0 < min+0) { print "Error: coverage " cov "% is below threshold (" min "%)"; exit 1 } }'\''
-'
+ci_test_stage "coverage check" coverage_check_stage
 
 ci_test_stage "shell hygiene" bash -c '
 sh -n scripts/install.sh
