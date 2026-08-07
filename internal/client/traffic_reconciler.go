@@ -2,7 +2,6 @@ package client
 
 import (
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -200,31 +199,6 @@ func (r *Reconciler) pendingEnforcementTargets(clientIDs []string) (map[string]s
 	return out, rows.Err()
 }
 
-func (r *Reconciler) pendingEnforcementTarget(clientID string) (bool, QuotaMutation, error) {
-	if r == nil || r.repo == nil || r.repo.db == nil {
-		return false, QuotaMutation{}, nil
-	}
-	var mutation QuotaMutation
-	mutation.ClientID = clientID
-	var state string
-	var nextRetry int64
-	var depleted int
-	err := r.repo.db.QueryRow(`SELECT state,next_retry_at,target_generation,target_payload_hash,target_depleted,target_period_epoch
-FROM quota_enforcement WHERE client_id=? AND state<>'superseded'`, clientID).
-		Scan(&state, &nextRetry, &mutation.TargetGeneration, &mutation.TargetPayloadHash, &depleted, &mutation.TargetPeriodEpoch)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, QuotaMutation{}, nil
-	}
-	if err != nil {
-		return false, QuotaMutation{}, err
-	}
-	mutation.Depleted = depleted != 0
-	if state == "failed" && nextRetry > r.now().UTC().Unix() {
-		return false, QuotaMutation{}, nil
-	}
-	return state == "pending" || state == "applying" || state == "failed", mutation, nil
-}
-
 type enforcementUpdate struct {
 	clientID string
 	state    string
@@ -281,18 +255,6 @@ WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND state<>'
 		}
 	}
 	return tx.Commit()
-}
-
-func (r *Reconciler) plan(current Client, now time.Time) (QuotaMutation, bool, error) {
-	var totals [2]int64
-	if r.traffic != nil {
-		var err error
-		totals[0], totals[1], err = r.traffic.TotalsForClient(current.ID)
-		if err != nil {
-			return QuotaMutation{}, false, err
-		}
-	}
-	return r.planWithTotals(current, now, totals)
 }
 
 func (r *Reconciler) planWithTotals(current Client, now time.Time, totals [2]int64) (QuotaMutation, bool, error) {
