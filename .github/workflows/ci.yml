@@ -1,10 +1,13 @@
 name: ci
 
 on:
+  # Feature branches are validated by the pull_request workflow below.
+  # Restrict push runs to main so each PR change gets one CI run instead of
+  # duplicate push + pull_request checks.
   push:
+    branches: [main]
   pull_request:
     types: [opened, synchronize, reopened]
-  workflow_dispatch:
 
 permissions:
   contents: read
