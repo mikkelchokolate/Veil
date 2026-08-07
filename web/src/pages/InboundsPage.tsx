@@ -37,9 +37,6 @@ interface MutationFeedback {
 	success?: boolean;
 }
 
-const PROTOCOLS = ["naiveproxy", "hysteria2", "olcrtc", "mieru"] as const;
-const TRANSPORTS = ["tcp", "udp"] as const;
-
 interface InboundForm {
 	name: string;
 	protocol: string;
@@ -98,6 +95,10 @@ export function InboundsPage() {
 		queryFn: () => apiFetch("/api/inbounds"),
 	});
 	// Attached clients per inbound (normalized clients read model).
+	const protocolCatalog = useQuery<Array<{ protocol: string; displayName: string; transports: string[]; inboundFieldSchema?: Array<{ key: string; label: string; type: string; required?: boolean; default?: unknown; options?: Array<{ label: string; value: string }>; generateAction?: string; generateActionField?: string }> }>>({
+		queryKey: ["protocols"],
+		queryFn: () => apiFetch("/api/protocols"),
+	});
 	const clients = useQuery<{ items?: ClientView[] } | ClientView[]>({
 		queryKey: ["clients", "for-inbounds"],
 		queryFn: () => apiFetch("/api/v1/clients?pageSize=500"),
@@ -262,9 +263,9 @@ export function InboundsPage() {
 							value={form.protocol}
 							onChange={(e) => setForm({ ...form, protocol: e.target.value })}
 						>
-							{PROTOCOLS.map((p) => (
-								<option key={p} value={p}>
-									{p}
+							{(protocolCatalog.data ?? []).map((p) => (
+								<option key={p.protocol} value={p.protocol}>
+									{p.displayName}
 								</option>
 							))}
 						</Select>
@@ -276,9 +277,9 @@ export function InboundsPage() {
 							value={form.transport}
 							onChange={(e) => setForm({ ...form, transport: e.target.value })}
 						>
-							{TRANSPORTS.map((t) => (
-								<option key={t} value={t}>
-									{t}
+							{(protocolCatalog.data?.find((p) => p.protocol === form.protocol)?.transports ?? []).map((transport) => (
+								<option key={transport} value={transport}>
+									{transport}
 								</option>
 							))}
 						</Select>
