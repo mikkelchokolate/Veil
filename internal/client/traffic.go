@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
@@ -217,6 +218,38 @@ func (s *TrafficStore) TotalsForClient(clientID string) (upload, download int64,
 		return 0, 0, fmt.Errorf("client: traffic totals: %w", err)
 	}
 	return upload, download, nil
+}
+
+// TotalsForClients loads quota totals for one reconciliation page in one query.
+func (s *TrafficStore) TotalsForClients(clientIDs []string) (map[string][2]int64, error) {
+	out := make(map[string][2]int64, len(clientIDs))
+	if len(clientIDs) == 0 {
+		return out, nil
+	}
+	placeholders := make([]string, len(clientIDs))
+	args := make([]any, len(clientIDs))
+	for i, id := range clientIDs {
+		placeholders[i], args[i] = "?", id
+	}
+	query := "SELECT client_id, COALESCE(SUM(upload_bytes),0), COALESCE(SUM(download_bytes),0) " +
+		"FROM traffic_counters WHERE client_id IN (" + strings.Join(placeholders, ",") + ") GROUP BY client_id"
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("client: traffic totals batch: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var upload, download int64
+		if err := rows.Scan(&id, &upload, &download); err != nil {
+			return nil, fmt.Errorf("client: traffic totals batch scan: %w", err)
+		}
+		out[id] = [2]int64{upload, download}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("client: traffic totals batch rows: %w", err)
+	}
+	return out, nil
 }
 
 // ResetForClient zeroes current-period usage while retaining lifetime samples.

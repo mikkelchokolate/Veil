@@ -1,7 +1,10 @@
 package testdb
 
 import (
+	"path/filepath"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/storage"
 )
 
 func TestTemplateIsClosedAndHasNoActiveWAL(t *testing.T) {
@@ -35,5 +38,27 @@ func TestClonesAreWritableAndIsolated(t *testing.T) {
 	}
 	if firstRevision != 41 || secondRevision != 0 {
 		t.Fatalf("clone mutation leaked: first=%d second=%d", firstRevision, secondRevision)
+	}
+}
+
+func TestCloneIfMissingUsesProductionOpenForExistingDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "veil.db")
+	db, err := storage.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("CREATE TABLE migration_probe(value TEXT)"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := CloneIfMissing(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	if _, err := opened.Exec("INSERT INTO migration_probe(value) VALUES('ok')"); err != nil {
+		t.Fatal(err)
 	}
 }

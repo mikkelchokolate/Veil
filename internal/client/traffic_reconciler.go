@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 )
@@ -79,17 +80,26 @@ func (r *Reconciler) ReconcileOnce() (changed int, err error) {
 			break
 		}
 		planned := make([]plannedMutation, 0, len(clients))
+		clientIDs := make([]string, 0, len(clients))
 		for _, current := range clients {
-			mutation, needed, planErr := r.plan(current, now)
+			clientIDs = append(clientIDs, current.ID)
+		}
+		trafficTotals, totalsErr := r.traffic.TotalsForClients(clientIDs)
+		if totalsErr != nil {
+			return changed, errors.Join(append(reconcileErrors, totalsErr)...)
+		}
+		pendingTargets, pendingErr := r.pendingEnforcementTargets(clientIDs)
+		if pendingErr != nil {
+			return changed, errors.Join(append(reconcileErrors, pendingErr)...)
+		}
+		for _, current := range clients {
+			mutation, needed, planErr := r.planWithTotals(current, now, trafficTotals[current.ID])
 			if planErr != nil {
 				reconcileErrors = append(reconcileErrors, fmt.Errorf("client %s: %w", current.ID, planErr))
 				continue
 			}
-			pending, pendingMutation, pendingErr := r.pendingEnforcementTarget(current.ID)
-			if pendingErr != nil {
-				reconcileErrors = append(reconcileErrors, fmt.Errorf("client %s enforcement state: %w", current.ID, pendingErr))
-				continue
-			}
+			pendingEntry := pendingTargets[current.ID]
+			pendingMutation, pending := pendingEntry.mutation, pendingEntry.pending
 			if needed {
 				mutation = BindQuotaTarget(current, mutation)
 			} else if pending {
@@ -146,6 +156,48 @@ func BindQuotaTarget(current Client, mutation QuotaMutation) QuotaMutation {
 		mutation.ClientID, mutation.TargetGeneration, mutation.Depleted, mutation.ResetPeriod, mutation.TargetPeriodEpoch, nextReset)))
 	mutation.TargetPayloadHash = hex.EncodeToString(digest[:])
 	return mutation
+}
+
+func (r *Reconciler) pendingEnforcementTargets(clientIDs []string) (map[string]struct {
+	mutation QuotaMutation
+	pending  bool
+}, error) {
+	out := make(map[string]struct {
+		mutation QuotaMutation
+		pending  bool
+	}, len(clientIDs))
+	if len(clientIDs) == 0 || r == nil || r.repo == nil || r.repo.db == nil {
+		return out, nil
+	}
+	placeholders := make([]string, len(clientIDs))
+	args := make([]any, len(clientIDs))
+	for i, id := range clientIDs {
+		placeholders[i], args[i] = "?", id
+	}
+	query := "SELECT client_id,state,next_retry_at,target_generation,target_payload_hash,target_depleted,target_period_epoch FROM quota_enforcement WHERE client_id IN (" + strings.Join(placeholders, ",") + ") AND state<>'superseded'"
+	rows, err := r.repo.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, state, hash string
+		var nextRetry, generation, period int64
+		var depleted int
+		if err := rows.Scan(&id, &state, &nextRetry, &generation, &hash, &depleted, &period); err != nil {
+			return nil, err
+		}
+		mutation := QuotaMutation{ClientID: id, TargetGeneration: generation, TargetPayloadHash: hash, TargetPeriodEpoch: period, Depleted: depleted != 0}
+		pending := state == "pending" || state == "applying" || state == "failed"
+		if state == "failed" && nextRetry > r.now().UTC().Unix() {
+			pending = false
+		}
+		out[id] = struct {
+			mutation QuotaMutation
+			pending  bool
+		}{mutation: mutation, pending: pending}
+	}
+	return out, rows.Err()
 }
 
 func (r *Reconciler) pendingEnforcementTarget(clientID string) (bool, QuotaMutation, error) {
@@ -232,6 +284,18 @@ WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND state<>'
 }
 
 func (r *Reconciler) plan(current Client, now time.Time) (QuotaMutation, bool, error) {
+	var totals [2]int64
+	if r.traffic != nil {
+		var err error
+		totals[0], totals[1], err = r.traffic.TotalsForClient(current.ID)
+		if err != nil {
+			return QuotaMutation{}, false, err
+		}
+	}
+	return r.planWithTotals(current, now, totals)
+}
+
+func (r *Reconciler) planWithTotals(current Client, now time.Time, totals [2]int64) (QuotaMutation, bool, error) {
 	mutation := QuotaMutation{ClientID: current.ID, Depleted: current.Depleted}
 	if current.QuotaBytes == nil {
 		if current.Depleted {
@@ -264,10 +328,7 @@ func (r *Reconciler) plan(current Client, now time.Time) (QuotaMutation, bool, e
 		return QuotaMutation{}, false, fmt.Errorf("client: unsupported quota reset policy %q", current.QuotaResetPolicy)
 	}
 
-	upload, download, err := r.traffic.TotalsForClient(current.ID)
-	if err != nil {
-		return QuotaMutation{}, false, err
-	}
+	upload, download := totals[0], totals[1]
 	mutation.Depleted = quotaReached(upload, download, *current.QuotaBytes)
 	return mutation, mutation.Depleted != current.Depleted || mutation.NextResetAt != nil, nil
 }

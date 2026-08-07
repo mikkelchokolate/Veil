@@ -115,6 +115,7 @@ func newManagementStateProduction(info ServerInfo) *managementState {
 		backupJobs:                     make(map[string]BackupRestoreJob),
 		configurationValidator:         configurationValidator,
 		passwordHasher:                 passwordHasher,
+		databaseOpener:                 info.DatabaseOpener,
 		enforceConfigurationValidation: enforceConfigurationValidation,
 		privileged:                     info.Privileged,
 		updateStager:                   info.UpdateStager,

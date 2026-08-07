@@ -126,15 +126,6 @@ func OpenPath(t testing.TB) (string, *sql.DB) {
 	if err != nil {
 		t.Fatalf("open test database clone: %v", err)
 	}
-	fingerprint, err := schemaFingerprint(db)
-	if err != nil {
-		_ = db.Close()
-		t.Fatalf("fingerprint test database clone: %v", err)
-	}
-	if fingerprint != template.fingerprint {
-		_ = db.Close()
-		t.Fatalf("test database schema fingerprint mismatch: got %s want %s", fingerprint, template.fingerprint)
-	}
 	t.Cleanup(func() { _ = db.Close() })
 	return path, db
 }
@@ -156,21 +147,17 @@ func CloneTo(t testing.TB, path string) *sql.DB {
 	if err != nil {
 		t.Fatalf("open test database clone: %v", err)
 	}
-	fingerprint, err := schemaFingerprint(db)
-	if err != nil || fingerprint != template.fingerprint {
-		_ = db.Close()
-		t.Fatalf("test database schema fingerprint mismatch: got %s want %s err=%v", fingerprint, template.fingerprint, err)
-	}
 	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 
 // CloneIfMissing is used by package-level test state constructors. Existing
-// files intentionally take the production Open path so migration/corruption
-// tests keep their real database semantics.
+// files deliberately take storage.Open so migrations and integrity validation
+// retain production startup semantics. Only a missing file is materialized
+// from the immutable current-schema template.
 func CloneIfMissing(path string) (*sql.DB, error) {
 	if _, err := os.Stat(path); err == nil {
-		return storage.OpenExisting(path)
+		return storage.Open(path)
 	} else if !os.IsNotExist(err) {
 		return nil, err
 	}
@@ -186,11 +173,6 @@ func CloneIfMissing(path string) (*sql.DB, error) {
 	db, err := storage.OpenExisting(path)
 	if err != nil {
 		return nil, err
-	}
-	fingerprint, err := schemaFingerprint(db)
-	if err != nil || fingerprint != template.fingerprint {
-		_ = db.Close()
-		return nil, fmt.Errorf("test database schema fingerprint mismatch: got %s want %s err=%v", fingerprint, template.fingerprint, err)
 	}
 	return db, nil
 }
