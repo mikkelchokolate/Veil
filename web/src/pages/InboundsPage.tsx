@@ -49,6 +49,17 @@ interface InboundForm {
 	masqueradeURL: string;
 	fallbackRoot: string;
 	olcrtcRoomID: string;
+	password: string;
+	profiles: NonNullable<Inbound["profiles"]>;
+	naiveUsername: string;
+	naivePassword: string;
+	hysteria2Password: string;
+	hysteria2Insecure: boolean;
+	olcrtcAuth: string;
+	olcrtcTransport: string;
+	protocolFields: Record<string, unknown>;
+	original?: string;
+	originalRecord?: Inbound;
 }
 
 const EMPTY: InboundForm = {
@@ -60,6 +71,15 @@ const EMPTY: InboundForm = {
 	masqueradeURL: "",
 	fallbackRoot: "",
 	olcrtcRoomID: "",
+	password: "",
+	profiles: [],
+	naiveUsername: "",
+	naivePassword: "",
+	hysteria2Password: "",
+	hysteria2Insecure: false,
+	olcrtcAuth: "",
+	olcrtcTransport: "",
+	protocolFields: {},
 };
 
 export function InboundsPage() {
@@ -109,11 +129,20 @@ export function InboundsPage() {
 			protocol: f.protocol,
 			transport: f.transport,
 			enabled: f.enabled,
+			protocolFields: { ...f.protocolFields },
+			password: f.password || f.originalRecord?.password || undefined,
+			profiles: f.profiles.length ? f.profiles : f.originalRecord?.profiles || undefined,
+			naiveUsername: f.naiveUsername || f.originalRecord?.naiveUsername || undefined,
+			naivePassword: f.naivePassword || f.originalRecord?.naivePassword || undefined,
+			hysteria2Password: f.hysteria2Password || f.originalRecord?.hysteria2Password || undefined,
+			hysteria2Insecure: f.hysteria2Insecure,
+			olcrtcAuth: f.olcrtcAuth || f.originalRecord?.olcrtcAuth || undefined,
+			olcrtcTransport: f.olcrtcTransport || f.originalRecord?.olcrtcTransport || undefined,
 		};
 		if (port != null) body.port = port;
-		if (f.masqueradeURL) body.masqueradeURL = f.masqueradeURL;
-		if (f.fallbackRoot) body.fallbackRoot = f.fallbackRoot;
-		if (f.olcrtcRoomID) body.olcrtcRoomID = f.olcrtcRoomID;
+		body.masqueradeURL = f.masqueradeURL || f.originalRecord?.masqueradeURL || undefined;
+		body.fallbackRoot = f.fallbackRoot || f.originalRecord?.fallbackRoot || undefined;
+		body.olcrtcRoomID = f.olcrtcRoomID || f.originalRecord?.olcrtcRoomID || undefined;
 		return body;
 	}
 
@@ -186,6 +215,16 @@ export function InboundsPage() {
 			masqueradeURL: ib.masqueradeURL ?? "",
 			fallbackRoot: ib.fallbackRoot ?? "",
 			olcrtcRoomID: ib.olcrtcRoomID ?? "",
+			password: ib.password ?? "",
+			profiles: ib.profiles ?? [],
+			naiveUsername: ib.naiveUsername ?? "",
+			naivePassword: ib.naivePassword ?? "",
+			hysteria2Password: ib.hysteria2Password ?? "",
+			hysteria2Insecure: false,
+			olcrtcAuth: ib.olcrtcAuth ?? "",
+			olcrtcTransport: ib.olcrtcTransport ?? "",
+			protocolFields: { ...(ib.protocolFields ?? {}) },
+			originalRecord: ib,
 		});
 		setEditing(ib.name);
 		setCreating(false);
@@ -491,6 +530,16 @@ export function InboundsPage() {
 																masqueradeURL: ib.masqueradeURL ?? "",
 																fallbackRoot: ib.fallbackRoot ?? "",
 																olcrtcRoomID: ib.olcrtcRoomID ?? "",
+																password: ib.password ?? "",
+																profiles: ib.profiles ?? [],
+																naiveUsername: ib.naiveUsername ?? "",
+																naivePassword: ib.naivePassword ?? "",
+																hysteria2Password: ib.hysteria2Password ?? "",
+																hysteria2Insecure: false,
+																olcrtcAuth: ib.olcrtcAuth ?? "",
+																olcrtcTransport: ib.olcrtcTransport ?? "",
+																protocolFields: { ...(ib.protocolFields ?? {}) },
+																originalRecord: ib,
 																original: ib.name,
 															})
 														}
