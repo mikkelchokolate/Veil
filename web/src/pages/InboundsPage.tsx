@@ -37,6 +37,17 @@ interface MutationFeedback {
 	success?: boolean;
 }
 
+type ProtocolField = {
+	key: string;
+	label: string;
+	type: string;
+	required?: boolean;
+	default?: unknown;
+	options?: Array<{ label: string; value: string }>;
+	generateAction?: string;
+	generateActionField?: string;
+};
+
 interface InboundForm {
 	name: string;
 	protocol: string;
@@ -95,7 +106,7 @@ export function InboundsPage() {
 		queryFn: () => apiFetch("/api/inbounds"),
 	});
 	// Attached clients per inbound (normalized clients read model).
-	const protocolCatalog = useQuery<Array<{ protocol: string; displayName: string; transports: string[]; inboundFieldSchema?: Array<{ key: string; label: string; type: string; required?: boolean; default?: unknown; options?: Array<{ label: string; value: string }>; generateAction?: string; generateActionField?: string }> }>>({
+	const protocolCatalog = useQuery<Array<{ protocol: string; displayName: string; transports: string[]; inboundFieldSchema?: ProtocolField[] }>>({
 		queryKey: ["protocols"],
 		queryFn: () => apiFetch("/api/protocols"),
 	});
@@ -313,6 +324,32 @@ export function InboundsPage() {
 							}
 						/>
 					</FormItem>
+					{(protocolCatalog.data?.find((p) => p.protocol === form.protocol)?.inboundFieldSchema ?? []).map((field) => {
+						const value = form.protocolFields[field.key] ?? field.default ?? "";
+						const setValue = (next: unknown) =>
+							setForm({ ...form, protocolFields: { ...form.protocolFields, [field.key]: next } });
+						if (field.type === "checkbox") {
+							return (
+								<Label key={field.key} htmlFor={`ib-field-${field.key}`} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+									<input id={`ib-field-${field.key}`} type="checkbox" checked={Boolean(value)} onChange={(e) => setValue(e.target.checked)} />
+									<span>{field.label}</span>
+								</Label>
+							);
+						}
+						return (
+							<FormItem key={field.key}>
+								<Label htmlFor={`ib-field-${field.key}`}>{field.label}{field.required ? " *" : ""}</Label>
+								{field.type === "select" ? (
+									<Select id={`ib-field-${field.key}`} value={String(value)} onChange={(e) => setValue(e.target.value)}>
+										{(field.options ?? []).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+									</Select>
+								) : (
+									<Input id={`ib-field-${field.key}`} type={field.type === "password" ? "password" : field.type === "number" ? "number" : "text"} value={String(value)} onChange={(e) => setValue(field.type === "number" ? Number(e.target.value) : e.target.value)} />
+								)}
+							</FormItem>
+						);
+					})}
+
 					{form.protocol === "olcrtc" ? (
 						<FormItem>
 							<Label htmlFor="ib-room">{t("inbounds.olcrtcRoomID")}</Label>
