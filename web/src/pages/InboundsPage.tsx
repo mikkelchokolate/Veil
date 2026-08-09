@@ -106,7 +106,14 @@ export function InboundsPage() {
 		queryFn: () => apiFetch("/api/inbounds"),
 	});
 	// Attached clients per inbound (normalized clients read model).
-	const protocolCatalog = useQuery<Array<{ protocol: string; displayName: string; transports: string[]; inboundFieldSchema?: ProtocolField[] }>>({
+	const protocolCatalog = useQuery<
+		Array<{
+			protocol: string;
+			displayName: string;
+			transports: string[];
+			inboundFieldSchema?: ProtocolField[];
+		}>
+	>({
 		queryKey: ["protocols"],
 		queryFn: () => apiFetch("/api/protocols"),
 	});
@@ -143,18 +150,27 @@ export function InboundsPage() {
 			enabled: f.enabled,
 			protocolFields: { ...f.protocolFields },
 			password: f.password || f.originalRecord?.password || undefined,
-			profiles: f.profiles.length ? f.profiles : f.originalRecord?.profiles || undefined,
-			naiveUsername: f.naiveUsername || f.originalRecord?.naiveUsername || undefined,
-			naivePassword: f.naivePassword || f.originalRecord?.naivePassword || undefined,
-			hysteria2Password: f.hysteria2Password || f.originalRecord?.hysteria2Password || undefined,
+			profiles: f.profiles.length
+				? f.profiles
+				: f.originalRecord?.profiles || undefined,
+			naiveUsername:
+				f.naiveUsername || f.originalRecord?.naiveUsername || undefined,
+			naivePassword:
+				f.naivePassword || f.originalRecord?.naivePassword || undefined,
+			hysteria2Password:
+				f.hysteria2Password || f.originalRecord?.hysteria2Password || undefined,
 			hysteria2Insecure: f.hysteria2Insecure,
 			olcrtcAuth: f.olcrtcAuth || f.originalRecord?.olcrtcAuth || undefined,
-			olcrtcTransport: f.olcrtcTransport || f.originalRecord?.olcrtcTransport || undefined,
+			olcrtcTransport:
+				f.olcrtcTransport || f.originalRecord?.olcrtcTransport || undefined,
 		};
 		if (port != null) body.port = port;
-		body.masqueradeURL = f.masqueradeURL || f.originalRecord?.masqueradeURL || undefined;
-		body.fallbackRoot = f.fallbackRoot || f.originalRecord?.fallbackRoot || undefined;
-		body.olcrtcRoomID = f.olcrtcRoomID || f.originalRecord?.olcrtcRoomID || undefined;
+		body.masqueradeURL =
+			f.masqueradeURL || f.originalRecord?.masqueradeURL || undefined;
+		body.fallbackRoot =
+			f.fallbackRoot || f.originalRecord?.fallbackRoot || undefined;
+		body.olcrtcRoomID =
+			f.olcrtcRoomID || f.originalRecord?.olcrtcRoomID || undefined;
 		return body;
 	}
 
@@ -288,7 +304,10 @@ export function InboundsPage() {
 							value={form.transport}
 							onChange={(e) => setForm({ ...form, transport: e.target.value })}
 						>
-							{(protocolCatalog.data?.find((p) => p.protocol === form.protocol)?.transports ?? []).map((transport) => (
+							{(
+								protocolCatalog.data?.find((p) => p.protocol === form.protocol)
+									?.transports ?? []
+							).map((transport) => (
 								<option key={transport} value={transport}>
 									{transport}
 								</option>
@@ -324,27 +343,70 @@ export function InboundsPage() {
 							}
 						/>
 					</FormItem>
-					{(protocolCatalog.data?.find((p) => p.protocol === form.protocol)?.inboundFieldSchema ?? []).map((field) => {
+					{(
+						protocolCatalog.data?.find((p) => p.protocol === form.protocol)
+							?.inboundFieldSchema ?? []
+					).map((field) => {
 						const value = form.protocolFields[field.key] ?? field.default ?? "";
 						const setValue = (next: unknown) =>
-							setForm({ ...form, protocolFields: { ...form.protocolFields, [field.key]: next } });
+							setForm({
+								...form,
+								protocolFields: { ...form.protocolFields, [field.key]: next },
+							});
 						if (field.type === "checkbox") {
 							return (
-								<Label key={field.key} htmlFor={`ib-field-${field.key}`} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-									<input id={`ib-field-${field.key}`} type="checkbox" checked={Boolean(value)} onChange={(e) => setValue(e.target.checked)} />
+								<Label
+									key={field.key}
+									htmlFor={`ib-field-${field.key}`}
+									style={{ display: "flex", gap: 8, alignItems: "center" }}
+								>
+									<input
+										id={`ib-field-${field.key}`}
+										type="checkbox"
+										checked={Boolean(value)}
+										onChange={(e) => setValue(e.target.checked)}
+									/>
 									<span>{field.label}</span>
 								</Label>
 							);
 						}
 						return (
 							<FormItem key={field.key}>
-								<Label htmlFor={`ib-field-${field.key}`}>{field.label}{field.required ? " *" : ""}</Label>
+								<Label htmlFor={`ib-field-${field.key}`}>
+									{field.label}
+									{field.required ? " *" : ""}
+								</Label>
 								{field.type === "select" ? (
-									<Select id={`ib-field-${field.key}`} value={String(value)} onChange={(e) => setValue(e.target.value)}>
-										{(field.options ?? []).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+									<Select
+										id={`ib-field-${field.key}`}
+										value={String(value)}
+										onChange={(e) => setValue(e.target.value)}
+									>
+										{(field.options ?? []).map((option) => (
+											<option key={option.value} value={option.value}>
+												{option.label}
+											</option>
+										))}
 									</Select>
 								) : (
-									<Input id={`ib-field-${field.key}`} type={field.type === "password" ? "password" : field.type === "number" ? "number" : "text"} value={String(value)} onChange={(e) => setValue(field.type === "number" ? Number(e.target.value) : e.target.value)} />
+									<Input
+										id={`ib-field-${field.key}`}
+										type={
+											field.type === "password"
+												? "password"
+												: field.type === "number"
+													? "number"
+													: "text"
+										}
+										value={String(value)}
+										onChange={(e) =>
+											setValue(
+												field.type === "number"
+													? Number(e.target.value)
+													: e.target.value,
+											)
+										}
+									/>
 								)}
 							</FormItem>
 						);
@@ -576,7 +638,9 @@ export function InboundsPage() {
 																hysteria2Insecure: false,
 																olcrtcAuth: ib.olcrtcAuth ?? "",
 																olcrtcTransport: ib.olcrtcTransport ?? "",
-																protocolFields: { ...(ib.protocolFields ?? {}) },
+																protocolFields: {
+																	...(ib.protocolFields ?? {}),
+																},
 																originalRecord: ib,
 																original: ib.name,
 															})
