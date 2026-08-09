@@ -57,7 +57,7 @@ func installRuntimeSet(ctx context.Context, opts Options, runtimes []Runtime) []
 		return runtimeSetFailure(results, runtimes, fmt.Errorf("create runtime bin directory: %w", err))
 	}
 	lockPath := filepath.Join(opts.BinDir, runtimeSetLockName)
-	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE, 0o600)
 	if err != nil {
 		return runtimeSetFailure(results, runtimes, fmt.Errorf("open runtime activation lock: %w", err))
 	}
@@ -299,7 +299,7 @@ func finalizeRuntimeSet(binDir string, journal runtimeSetJournal) error {
 	return syncRuntimeDirectory(binDir)
 }
 
-func copyRuntimeFile(source, target string, mode os.FileMode) error {
+func copyRuntimeFile(source, target string, mode os.FileMode) (returnErr error) {
 	info, err := os.Lstat(source)
 	if err != nil {
 		return err
@@ -319,7 +319,11 @@ func copyRuntimeFile(source, target string, mode os.FileMode) error {
 	}
 	ok := false
 	defer func() {
-		out.Close()
+		if out != nil {
+			if closeErr := out.Close(); returnErr == nil && closeErr != nil {
+				returnErr = closeErr
+			}
+		}
 		if !ok {
 			os.Remove(tmp)
 		}
@@ -333,6 +337,7 @@ func copyRuntimeFile(source, target string, mode os.FileMode) error {
 	if err := out.Close(); err != nil {
 		return err
 	}
+	out = nil
 	if err := os.Rename(tmp, target); err != nil {
 		return err
 	}
@@ -349,7 +354,7 @@ func digestRuntimeFile(path string) (string, error) {
 	return hex.EncodeToString(digest[:]), nil
 }
 
-func writeRuntimeJSONAtomic(path string, value any, mode os.FileMode) error {
+func writeRuntimeJSONAtomic(path string, value any, mode os.FileMode) (returnErr error) {
 	body, err := json.Marshal(value)
 	if err != nil {
 		return err
@@ -361,7 +366,11 @@ func writeRuntimeJSONAtomic(path string, value any, mode os.FileMode) error {
 	}
 	ok := false
 	defer func() {
-		file.Close()
+		if file != nil {
+			if closeErr := file.Close(); returnErr == nil && closeErr != nil {
+				returnErr = closeErr
+			}
+		}
 		if !ok {
 			os.Remove(tmp)
 		}
@@ -375,6 +384,7 @@ func writeRuntimeJSONAtomic(path string, value any, mode os.FileMode) error {
 	if err := file.Close(); err != nil {
 		return err
 	}
+	file = nil
 	if err := os.Rename(tmp, path); err != nil {
 		return err
 	}

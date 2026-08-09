@@ -416,7 +416,7 @@ func runSandboxedVersionProbe(ctx context.Context, binary string, args []string)
 		return "", fmt.Errorf("resolve runtime probe dependencies: %w", dependencyErr)
 	}
 	command := "systemd-run"
-	commandArgs := []string(nil)
+	var commandArgs []string
 	if _, err := os.Stat("/run/systemd/private"); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			return "", fmt.Errorf("inspect systemd manager: %w", err)
