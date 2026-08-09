@@ -10,6 +10,7 @@ import (
 // InboundFieldSchema returns the dynamic fields for an olcRTC inbound form.
 func (Plugin) InboundFieldSchema() []schema.FieldSchema {
 	return []schema.FieldSchema{
+		{Key: "password", Label: "Encryption key", Type: schema.FieldPassword, GenerateAction: "hex64", Scope: "inbound"},
 		{
 			Key:     "olcrtcAuth",
 			Label:   "olcRTC Auth Provider",
@@ -77,6 +78,13 @@ func (Plugin) SettingsFieldSchema() []schema.FieldSchema {
 func (Plugin) Autofill(inbound model.Inbound) (model.Inbound, error) {
 	if inbound.ProtocolFields == nil {
 		inbound.ProtocolFields = map[string]any{}
+	}
+	// Dynamic Panel fields are submitted through ProtocolFields. Preserve an
+	// explicitly generated/provided encryption key instead of replacing it.
+	if inbound.Password == "" {
+		if password, ok := inbound.ProtocolFields["password"].(string); ok {
+			inbound.Password = password
+		}
 	}
 	if inbound.OlcrtcAuth == "" {
 		if v, ok := inbound.ProtocolFields["olcrtcAuth"].(string); ok && v != "" {

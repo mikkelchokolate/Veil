@@ -1,7 +1,9 @@
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const assetsDir = new URL("../dist/assets/", import.meta.url);
+const assetsPath = fileURLToPath(assetsDir);
 const maxBytes = 500_000;
 const files = (await readdir(assetsDir)).filter((name) => name.endsWith(".js"));
 
@@ -12,7 +14,7 @@ if (files.length === 0) {
 const chunks = await Promise.all(
 	files.map(async (name) => ({
 		name,
-		size: (await stat(join(assetsDir.pathname, name))).size,
+		size: (await stat(join(assetsPath, name))).size,
 	})),
 );
 chunks.sort((left, right) => right.size - left.size);
