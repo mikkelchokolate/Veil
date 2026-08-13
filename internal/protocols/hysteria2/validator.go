@@ -1,6 +1,8 @@
 package hysteria2
 
 import (
+	"errors"
+	"net/url"
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
@@ -51,7 +53,39 @@ func (Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) []
 			})
 		}
 	}
+	// The masquerade URL is rendered verbatim into the server config and
+	// upstream refuses to start on an unparsable or non-http(s) URL
+	// (audit #64). Validate it here so the panel rejects bad values before
+	// apply instead of crash-looping the service.
+	if masquerade := masqueradeURL(settings, inbound); masquerade != "" {
+		if err := validateMasqueradeURL(masquerade); err != nil {
+			issues = append(issues, model.ValidationIssue{
+				Code:        "hysteria2_masquerade_invalid",
+				Severity:    "error",
+				Field:       "masqueradeURL",
+				Message:     "Hysteria2 masquerade URL is invalid: " + err.Error(),
+				Remediation: "Use an absolute http:// or https:// URL.",
+				Source:      "hysteria2",
+			})
+		}
+	}
 	return issues
+}
+
+// validateMasqueradeURL requires an absolute http(s) URL with a host, mirroring
+// what the hysteria2 server accepts at startup.
+func validateMasqueradeURL(raw string) error {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return err
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return errors.New("scheme must be http or https")
+	}
+	if parsed.Host == "" {
+		return errors.New("host is required")
+	}
+	return nil
 }
 
 // NeedsDomain reports that Hysteria2 needs a public domain.
