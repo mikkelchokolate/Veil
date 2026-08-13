@@ -7,6 +7,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/protocols/schema"
 	"github.com/mikkelchokolate/Veil/internal/runtimeinstall"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
@@ -390,8 +391,16 @@ func TestHasCredential(t *testing.T) {
 
 func TestUIProviderSchemas(t *testing.T) {
 	p := New()
-	if got := p.InboundFieldSchema(); got != nil {
-		t.Errorf("InboundFieldSchema = %v, want nil", got)
+	fields := p.InboundFieldSchema()
+	if len(fields) != 1 {
+		t.Fatalf("InboundFieldSchema length = %d, want 1", len(fields))
+	}
+	f := fields[0]
+	if f.Key != "password" || f.Type != schema.FieldPassword {
+		t.Errorf("InboundFieldSchema[0] = %+v, want password field", f)
+	}
+	if f.Scope != "inbound" {
+		t.Errorf("InboundFieldSchema[0].Scope = %q, want inbound", f.Scope)
 	}
 	if got := p.SettingsFieldSchema(); got != nil {
 		t.Errorf("SettingsFieldSchema = %v, want nil", got)

@@ -321,10 +321,10 @@ func TestValidator(t *testing.T) {
 func TestInboundFieldSchema(t *testing.T) {
 	p := New()
 	fields := p.InboundFieldSchema()
-	if len(fields) != 3 {
-		t.Fatalf("expected 3 inbound fields, got %d", len(fields))
+	if len(fields) != 4 {
+		t.Fatalf("expected 4 inbound fields, got %d", len(fields))
 	}
-	wantKeys := []string{"olcrtcAuth", "olcrtcTransport", "olcrtcRoomID"}
+	wantKeys := []string{"password", "olcrtcAuth", "olcrtcTransport", "olcrtcRoomID"}
 	for i, key := range wantKeys {
 		if fields[i].Key != key {
 			t.Errorf("field[%d].Key = %q, want %q", i, fields[i].Key, key)
@@ -333,20 +333,26 @@ func TestInboundFieldSchema(t *testing.T) {
 			t.Errorf("field[%d].Scope = %q, want inbound", i, fields[i].Scope)
 		}
 	}
-	if fields[0].Type != schema.FieldSelect {
-		t.Errorf("olcrtcAuth type = %q, want select", fields[0].Type)
+	if fields[0].Type != schema.FieldPassword {
+		t.Errorf("password type = %q, want password", fields[0].Type)
 	}
-	if fields[0].Default != "jitsi" {
-		t.Errorf("olcrtcAuth default = %v, want jitsi", fields[0].Default)
+	if fields[0].GenerateAction != "hex64" {
+		t.Errorf("password generateAction = %q, want hex64", fields[0].GenerateAction)
 	}
-	if len(fields[0].Options) != 3 {
-		t.Errorf("olcrtcAuth options = %d, want 3", len(fields[0].Options))
+	if fields[1].Type != schema.FieldSelect {
+		t.Errorf("olcrtcAuth type = %q, want select", fields[1].Type)
 	}
-	if fields[2].GenerateAction != "room" {
-		t.Errorf("olcrtcRoomID generateAction = %q, want room", fields[2].GenerateAction)
+	if fields[1].Default != "jitsi" {
+		t.Errorf("olcrtcAuth default = %v, want jitsi", fields[1].Default)
 	}
-	if fields[2].GenerateActionField != "olcrtcAuth" {
-		t.Errorf("olcrtcRoomID generateActionField = %q, want olcrtcAuth", fields[2].GenerateActionField)
+	if len(fields[1].Options) != 3 {
+		t.Errorf("olcrtcAuth options = %d, want 3", len(fields[1].Options))
+	}
+	if fields[3].GenerateAction != "room" {
+		t.Errorf("olcrtcRoomID generateAction = %q, want room", fields[3].GenerateAction)
+	}
+	if fields[3].GenerateActionField != "olcrtcAuth" {
+		t.Errorf("olcrtcRoomID generateActionField = %q, want olcrtcAuth", fields[3].GenerateActionField)
 	}
 }
 
