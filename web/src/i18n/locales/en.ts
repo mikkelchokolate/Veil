@@ -271,6 +271,7 @@ export const en: Record<string, string> = {
 	"settings.field.webBasePath": "Web base path",
 	"settings.field.email": "Email",
 	"settings.field.panelEmail": "Panel email",
+	"settings.field.panelPublicPort": "Panel public port",
 	"settings.field.naiveUsername": "NaiveProxy username",
 	"settings.field.naivePassword": "NaiveProxy password",
 	"settings.field.hysteria2Password": "hysteria2 password",

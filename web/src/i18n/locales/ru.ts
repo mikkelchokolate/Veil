@@ -204,6 +204,7 @@ export const ru: Record<string, string> = {
 	"settings.field.webBasePath": "Базовый путь веба",
 	"settings.field.email": "Email",
 	"settings.field.panelEmail": "Email панели",
+	"settings.field.panelPublicPort": "Публичный порт панели",
 	"settings.field.naiveUsername": "Имя пользователя NaiveProxy",
 	"settings.field.naivePassword": "Пароль NaiveProxy",
 	"settings.field.hysteria2Password": "Пароль hysteria2",

@@ -54,6 +54,7 @@ export function SettingsPage() {
 		{ key: "webBasePath", label: t("settings.field.webBasePath") },
 		{ key: "email", label: t("settings.field.email") },
 		{ key: "panelEmail", label: t("settings.field.panelEmail") },
+		{ key: "panelPublicPort", label: t("settings.field.panelPublicPort") },
 		{ key: "defaultAcmeEmail", label: t("settings.field.defaultAcmeEmail") },
 		{
 			key: "acmeChallengeMode",
@@ -146,6 +147,12 @@ export function SettingsPage() {
 		[t("settings.field.mode"), s?.mode],
 		[t("settings.field.panelListen"), s?.panelListen],
 		[t("settings.field.panelAccess"), s?.panelAccess],
+		[
+			t("settings.field.panelPublicPort"),
+			(s as Record<string, unknown> | undefined)?.panelPublicPort != null
+				? String((s as Record<string, unknown> | undefined)?.panelPublicPort)
+				: undefined,
+		],
 		[t("settings.field.webBasePath"), s?.webBasePath],
 		[t("settings.field.email"), s?.email],
 		[
