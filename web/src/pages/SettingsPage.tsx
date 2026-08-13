@@ -39,7 +39,11 @@ export function SettingsPage() {
 	});
 	const s = settings.data;
 
-	const GLOBAL_FIELDS: Array<{ key: string; label: string; placeholder?: string }> = [
+	const GLOBAL_FIELDS: Array<{
+		key: string;
+		label: string;
+		placeholder?: string;
+	}> = [
 		{ key: "domain", label: t("settings.field.domain") },
 		{ key: "panelDomain", label: t("settings.field.panelDomain") },
 		{
