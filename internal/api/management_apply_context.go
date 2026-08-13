@@ -330,6 +330,19 @@ func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []S
 		if !result.Success {
 			return results
 		}
+		// Enable protocol units for boot persistence. The installer only
+		// enables veil.service, veil-helper.socket and (optionally)
+		// veil-caddy.service; per-instance protocol units (hysteria2/olcrtc)
+		// and the mieru singleton are otherwise dead after a reboot with no
+		// Veil-side signal (audit #117/#137). WARP is handled above; caddy and
+		// the panel unit are handled by the installer.
+		if runtime.Unit != renderer.UnitVeil && runtime.Unit != unitCaddy && runtime.Unit != renderer.UnitWarp {
+			enable := ctx.runPrivilegedServiceAction(runtime.Unit, privileged.ServiceActionEnable)
+			results = append(results, enable)
+			if !enable.Success {
+				return results
+			}
+		}
 	}
 
 	// Stop and disable units whose configs were removed after the new

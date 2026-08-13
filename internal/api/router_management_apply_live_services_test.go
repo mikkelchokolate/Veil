@@ -271,8 +271,8 @@ func TestManagementApplyServicesRestartsMieruAfterLivePromotion(t *testing.T) {
 	if !response.LiveApplied || !response.ServicesApplied || !containsString(response.LiveFiles, liveMieru) {
 		t.Fatalf("expected live Mieru services apply: %+v", response)
 	}
-	if len(serviceCalls) != 1 || !stringSlicesEqual(serviceCalls[0], []string{"systemctl", "restart", "veil-mieru.service"}) {
-		t.Fatalf("unexpected Mieru service calls: %+v", serviceCalls)
+	if len(serviceCalls) != 2 || !stringSlicesEqual(serviceCalls[0], []string{"systemctl", "restart", "veil-mieru.service"}) || !stringSlicesEqual(serviceCalls[1], []string{"systemctl", "enable", "veil-mieru.service"}) {
+		t.Fatalf("unexpected Mieru service calls (want restart+enable for boot persistence): %+v", serviceCalls)
 	}
 	if len(healthCalls) != 1 || healthCalls[0] != "veil-mieru.service" {
 		t.Fatalf("unexpected Mieru health checks: %+v", healthCalls)
@@ -334,16 +334,17 @@ func TestManagementApplyServicesRunsAllowlistedReloadsAfterLivePromotion(t *test
 	}
 	expectedCaddyAdminLoad := []string{"caddy", "admin", "load"}
 	expectedHy2 := []string{"systemctl", "restart", "veil-hysteria2@hysteria2.service"}
-	if !response.ServicesApplied || len(response.ServiceActions) != 2 || len(serviceCalls) != 1 {
-		t.Fatalf("expected caddy admin load + hysteria2 restart and one systemctl call: response=%+v calls=%+v", response, serviceCalls)
+	expectedHy2Enable := []string{"systemctl", "enable", "veil-hysteria2@hysteria2.service"}
+	if !response.ServicesApplied || len(response.ServiceActions) != 3 || len(serviceCalls) != 2 {
+		t.Fatalf("expected caddy admin load + hysteria2 restart + enable: response=%+v calls=%+v", response, serviceCalls)
 	}
 	if !stringSlicesEqual(response.ServiceActions[0].Command, expectedCaddyAdminLoad) {
 		t.Fatalf("expected caddy admin load action: %+v", response.ServiceActions)
 	}
-	if !stringSlicesEqual(serviceCalls[0], expectedHy2) {
-		t.Fatalf("unexpected service calls: %+v", serviceCalls)
+	if !stringSlicesEqual(serviceCalls[0], expectedHy2) || !stringSlicesEqual(serviceCalls[1], expectedHy2Enable) {
+		t.Fatalf("unexpected service calls (want restart+enable): %+v", serviceCalls)
 	}
-	if !response.ServiceActions[0].Success || !response.ServiceActions[1].Success {
+	if !response.ServiceActions[0].Success || !response.ServiceActions[1].Success || !response.ServiceActions[2].Success {
 		t.Fatalf("expected successful service action results: %+v", response.ServiceActions)
 	}
 }

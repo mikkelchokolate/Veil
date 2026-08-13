@@ -55,11 +55,15 @@ func TestReloadPromotedServicesUsesCurrentStateRuntimeCatalog(t *testing.T) {
 	if len(results) == 0 {
 		t.Fatalf("expected service actions, got none")
 	}
-	if len(client.serviceActions) != 1 {
+	if len(client.serviceActions) != 2 {
 		t.Fatalf("actions = %+v", client.serviceActions)
 	}
 	if client.serviceActions[0].Unit != "veil-hysteria2@edge.service" || client.serviceActions[0].Action != privileged.ServiceActionRestart {
 		t.Fatalf("unexpected action: %+v", client.serviceActions[0])
+	}
+	// Boot persistence: the instance unit must also be enabled (audit #117).
+	if client.serviceActions[1].Unit != "veil-hysteria2@edge.service" || client.serviceActions[1].Action != privileged.ServiceActionEnable {
+		t.Fatalf("expected enable after restart for boot persistence: %+v", client.serviceActions)
 	}
 }
 
@@ -389,6 +393,7 @@ func TestReloadPromotedServicesStopsOrphansAfterReloading(t *testing.T) {
 	}
 	want := []string{
 		"veil-hysteria2@new.service:restart",
+		"veil-hysteria2@new.service:enable",
 		"veil-hysteria2@old.service:stop",
 		"veil-hysteria2@old.service:disable",
 	}
