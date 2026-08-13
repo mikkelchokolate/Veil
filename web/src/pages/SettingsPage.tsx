@@ -138,11 +138,17 @@ export function SettingsPage() {
 	}
 
 	function saveEdit() {
-		const patch: Record<string, unknown> = {};
+		// The settings PUT contract replaces the whole settings object and
+		// requires panelListen/mode, so the SPA echoes the current GET payload
+		// and overlays the edited fields on top. Password-typed fields that
+		// arrive as "[REDACTED]" are preserved server-side by the settings
+		// redaction policy.
+		const base: Record<string, unknown> =
+			(s as Record<string, unknown> | undefined) != null
+				? { ...(s as unknown as Record<string, unknown>) }
+				: {};
 		for (const f of ALL_FIELDS) {
-			const cur = String(
-				(s as Record<string, unknown> | undefined)?.[f.key] ?? "",
-			);
+			const cur = String(base[f.key] ?? "");
 			if (form[f.key] !== cur) {
 				if (form[f.key] !== "") {
 					if (
@@ -150,23 +156,19 @@ export function SettingsPage() {
 						f.key === "panelPublicPort"
 					) {
 						const n = Number(form[f.key]);
-						patch[f.key] = Number.isNaN(n) ? form[f.key] : n;
+						base[f.key] = Number.isNaN(n) ? form[f.key] : n;
 					} else if (
 						f.key === "firewallManagement" ||
 						f.key === "hysteria2Insecure"
 					) {
-						patch[f.key] = form[f.key] === "true";
+						base[f.key] = form[f.key] === "true";
 					} else {
-						patch[f.key] = form[f.key];
+						base[f.key] = form[f.key];
 					}
 				}
 			}
 		}
-		if (Object.keys(patch).length === 0) {
-			setEditing(false);
-			return;
-		}
-		save.mutate(patch);
+		save.mutate(base);
 	}
 
 	const rows: Array<[string, string | undefined]> = [
