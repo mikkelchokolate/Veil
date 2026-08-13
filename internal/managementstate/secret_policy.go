@@ -37,11 +37,15 @@ func (p SecretPolicy) Transform(snapshot *model.ManagementSnapshot, transform fu
 	var err error
 
 	// Transform password-typed protocol fields in settings, both in the dynamic
-	// ProtocolFields map and in the legacy flat fields.
+	// ProtocolFields map and in the legacy flat fields. Multiple protocols may
+	// declare the same key (for example "password"), so deduplicate by key to
+	// avoid transforming one value more than once.
+	seenSettingsKeys := make(map[string]bool)
 	for _, f := range p.settingsFieldSchemas {
-		if f.Type != schema.FieldPassword {
+		if f.Type != schema.FieldPassword || seenSettingsKeys[f.Key] {
 			continue
 		}
+		seenSettingsKeys[f.Key] = true
 		if snapshot.Settings.ProtocolFields != nil {
 			if pfValue, ok := snapshot.Settings.ProtocolFields[f.Key].(string); ok {
 				if transformed, err := transform(pfValue); err != nil {
@@ -65,11 +69,16 @@ func (p SecretPolicy) Transform(snapshot *model.ManagementSnapshot, transform fu
 		inbound := &snapshot.Inbounds[i]
 
 		// Transform password-typed protocol fields in the inbound, both in the
-		// dynamic ProtocolFields map and in the legacy flat fields.
+		// dynamic ProtocolFields map and in the legacy flat fields. Deduplicate
+		// by key: several protocols (mieru, olcrtc) expose the generic
+		// "password" key, and it must be transformed exactly once.
+		seenInboundKeys := make(map[string]bool)
+		passwordViaSchema := false
 		for _, f := range p.inboundFieldSchemas {
-			if f.Type != schema.FieldPassword {
+			if f.Type != schema.FieldPassword || seenInboundKeys[f.Key] {
 				continue
 			}
+			seenInboundKeys[f.Key] = true
 			if inbound.ProtocolFields != nil {
 				if pfValue, ok := inbound.ProtocolFields[f.Key].(string); ok {
 					if transformed, err := transform(pfValue); err != nil {
@@ -86,13 +95,21 @@ func (p SecretPolicy) Transform(snapshot *model.ManagementSnapshot, transform fu
 				} else {
 					field.SetString(transformed)
 				}
+				if veilsettings.StructFieldName(f.Key) == "Password" {
+					passwordViaSchema = true
+				}
 			}
 		}
 
 		// The inbound password and profile passwords are generic fields used by
 		// protocols such as mieru and olcrtc and are not part of ProtocolFields.
-		if inbound.Password, err = transform(inbound.Password); err != nil {
-			return err
+		// When a password-typed schema key maps onto the flat Password field
+		// (for example the shared "password" key), it was already transformed
+		// above, so do not transform it a second time.
+		if !passwordViaSchema {
+			if inbound.Password, err = transform(inbound.Password); err != nil {
+				return err
+			}
 		}
 		for j := range inbound.Profiles {
 			if inbound.Profiles[j].Password, err = transform(inbound.Profiles[j].Password); err != nil {
