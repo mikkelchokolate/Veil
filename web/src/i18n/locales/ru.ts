@@ -213,6 +213,8 @@ export const ru: Record<string, string> = {
 	"settings.field.naiveUsername": "Имя пользователя NaiveProxy",
 	"settings.field.naivePassword": "Пароль NaiveProxy",
 	"settings.field.hysteria2Password": "Пароль hysteria2",
+	"settings.field.hysteria2Insecure":
+		"Небезопасный hysteria2 (самоподписанный серт)",
 	"settings.field.masqueradeURL": "URL маскировки",
 	"settings.field.fallbackRoot": "Корень fallback",
 	"settings.field.olcrtcRoomID": "ID комнаты olcRTC",

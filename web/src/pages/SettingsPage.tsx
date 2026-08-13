@@ -82,10 +82,16 @@ export function SettingsPage() {
 		key: string;
 		label: string;
 		placeholder?: string;
+		type?: "text" | "checkbox";
 	}> = [
 		{ key: "naiveUsername", label: t("settings.field.naiveUsername") },
 		{ key: "naivePassword", label: t("settings.field.naivePassword") },
 		{ key: "hysteria2Password", label: t("settings.field.hysteria2Password") },
+		{
+			key: "hysteria2Insecure",
+			label: t("settings.field.hysteria2Insecure"),
+			type: "checkbox",
+		},
 		{ key: "masqueradeURL", label: t("settings.field.masqueradeURL") },
 		{ key: "fallbackRoot", label: t("settings.field.fallbackRoot") },
 		{ key: "olcrtcRoomID", label: t("settings.field.olcrtcRoomID") },
@@ -147,29 +153,57 @@ export function SettingsPage() {
 			(s as Record<string, unknown> | undefined) != null
 				? { ...(s as unknown as Record<string, unknown>) }
 				: {};
+		// Shallow-copy protocolFields so clearing fields below does not mutate
+		// the react-query cached settings object.
+		if (
+			typeof base.protocolFields === "object" &&
+			base.protocolFields != null
+		) {
+			base.protocolFields = {
+				...(base.protocolFields as Record<string, unknown>),
+			};
+		} else {
+			base.protocolFields = {};
+		}
+		// Schema-declared string settings (protocolFields-backed): the flat
+		// "" value means "not provided", so clearing must write the empty
+		// string into protocolFields itself.
+		const protocolStringKeys = new Set([
+			"naiveUsername",
+			"naivePassword",
+			"hysteria2Password",
+			"masqueradeURL",
+			"fallbackRoot",
+			"olcrtcAuth",
+			"olcrtcTransport",
+			"olcrtcRoomID",
+		]);
 		for (const f of ALL_FIELDS) {
 			const cur = String(base[f.key] ?? "");
-			if (form[f.key] !== cur) {
-				if (
-					f.key === "defaultInboundPublicPort" ||
-					f.key === "panelPublicPort"
-				) {
-					if (form[f.key] !== "") {
-						const n = Number(form[f.key]);
-						base[f.key] = Number.isNaN(n) ? form[f.key] : n;
-					}
-				} else if (
-					f.key === "firewallManagement" ||
-					f.key === "hysteria2Insecure"
-				) {
-					if (form[f.key] !== "") {
-						base[f.key] = form[f.key] === "true";
-					}
+			if (form[f.key] === cur) {
+				continue;
+			}
+			const cleared = form[f.key] === "";
+			if (f.key === "defaultInboundPublicPort" || f.key === "panelPublicPort") {
+				// Empty input clears the port back to 0 (unset).
+				base[f.key] = cleared ? 0 : Number(form[f.key]) || form[f.key];
+			} else if (f.key === "firewallManagement") {
+				// Empty input restores the default (nil = enabled).
+				base[f.key] = cleared ? null : form[f.key] === "true";
+			} else if (f.key === "hysteria2Insecure") {
+				base[f.key] = cleared ? false : form[f.key] === "true";
+			} else if (protocolStringKeys.has(f.key)) {
+				const pf = base.protocolFields as Record<string, unknown>;
+				if (cleared) {
+					pf[f.key] = "";
 				} else {
-					// String fields may be cleared: an empty input must
-					// overwrite the echoed GET value instead of being skipped.
-					base[f.key] = form[f.key];
+					pf[f.key] = form[f.key];
 				}
+				base[f.key] = form[f.key];
+			} else {
+				// Plain string fields may be cleared: an empty input must
+				// overwrite the echoed GET value instead of being skipped.
+				base[f.key] = form[f.key];
 			}
 		}
 		save.mutate(base);
@@ -318,14 +352,29 @@ export function SettingsPage() {
 						{PROTOCOL_DEFAULT_FIELDS.map((f) => (
 							<FormItem key={f.key}>
 								<Label htmlFor={`set-${f.key}`}>{f.label}</Label>
-								<Input
-									id={`set-${f.key}`}
-									{...(f.placeholder ? { placeholder: f.placeholder } : {})}
-									value={form[f.key] ?? ""}
-									onChange={(e) =>
-										setForm({ ...form, [f.key]: e.target.value })
-									}
-								/>
+								{f.type === "checkbox" ? (
+									<input
+										id={`set-${f.key}`}
+										type="checkbox"
+										checked={form[f.key] === "true"}
+										onChange={(e) =>
+											setForm({
+												...form,
+												[f.key]: e.target.checked ? "true" : "false",
+											})
+										}
+										style={{ width: 18, height: 18 }}
+									/>
+								) : (
+									<Input
+										id={`set-${f.key}`}
+										{...(f.placeholder ? { placeholder: f.placeholder } : {})}
+										value={form[f.key] ?? ""}
+										onChange={(e) =>
+											setForm({ ...form, [f.key]: e.target.value })
+										}
+									/>
+								)}
 							</FormItem>
 						))}
 					</div>

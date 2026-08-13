@@ -202,7 +202,7 @@ func panelDynamicFieldsJS() string {
         const authEl = actionField ? document.getElementById(protocolFieldElementId(actionField)) : null;
         const provider = authEl ? authEl.value : '';
         try {
-          const resp = await fetch('/api/' + encodeURIComponent(protocol) + '/room', {
+          const resp = await fetch('/api/protocols/' + encodeURIComponent(protocol) + '/room', {
             method: 'POST',
             headers: requestHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ provider })

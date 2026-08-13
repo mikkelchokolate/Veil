@@ -31,6 +31,9 @@ All notable changes to Veil will be documented in this file.
   installed those runtime binaries, so every protocol (NaiveProxy, Hysteria2,
   Mieru, olcRTC, and WARP) failed to launch. `veil install` now provisions the
   runtimes automatically after the Panel is installed. (#20)
+- Room generation is now served under `POST /api/protocols/{protocol}/room`
+  (was `/api/{protocol}/room`) so OpenAPI paths resolve unambiguously; the
+  legacy server-rendered panel uses the same endpoint.
 
 ### Added
 

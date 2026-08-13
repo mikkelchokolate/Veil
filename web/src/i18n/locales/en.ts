@@ -279,6 +279,8 @@ export const en: Record<string, string> = {
 	"settings.field.naiveUsername": "NaiveProxy username",
 	"settings.field.naivePassword": "NaiveProxy password",
 	"settings.field.hysteria2Password": "hysteria2 password",
+	"settings.field.hysteria2Insecure":
+		"Insecure hysteria2 (allow self-signed cert)",
 	"settings.field.masqueradeURL": "Masquerade URL",
 	"settings.field.fallbackRoot": "Fallback root",
 	"settings.field.olcrtcRoomID": "olcRTC room ID",

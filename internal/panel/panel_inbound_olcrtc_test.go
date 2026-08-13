@@ -15,7 +15,7 @@ import (
 func TestInboundOlcrtcFormUsesRealProvidersAndGenerateButton(t *testing.T) {
 	js := panelDynamicFieldsJS()
 	for _, want := range []string{
-		`'/api/' + encodeURIComponent(protocol) + '/room'`,
+		`'/api/protocols/' + encodeURIComponent(protocol) + '/room'`,
 		`veilRenderDynamicProtocolFields`,
 		`veilGenerateProtocolField`,
 		`generateActionField`,

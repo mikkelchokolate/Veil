@@ -209,3 +209,45 @@ func TestSettingsValidationCaddyRequiresWebBasePathEvenFromCurrent(t *testing.T)
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// TestSettingsValidationDropsUnknownProtocolKeys guards against persisting the
+// redaction sentinel (or any value) under keys no settings-scoped schema
+// declares: unknown keys are never consumed by renderers and must not
+// accumulate in state.
+func TestSettingsValidationDropsUnknownProtocolKeys(t *testing.T) {
+	settings := Settings{
+		PanelListen: "127.0.0.1:2096",
+		Mode:        "server",
+		ProtocolFields: map[string]any{
+			"bogusKey":      RedactedSecret,
+			"naiveUsername": "veil",
+		},
+	}
+	err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{})
+	if err != nil {
+		t.Fatalf("NormalizeAndValidate: %v", err)
+	}
+	if _, ok := settings.ProtocolFields["bogusKey"]; ok {
+		t.Fatalf("unknown key was persisted: %+v", settings.ProtocolFields)
+	}
+	if settings.ProtocolFields["naiveUsername"] != "veil" {
+		t.Fatalf("known key was dropped: %+v", settings.ProtocolFields)
+	}
+}
+
+// TestSettingsValidationRejectsNonStringPasswordValue guards the FieldPassword
+// guard: a non-string value (e.g. an object) must be rejected outright instead
+// of being persisted and silently dropped by renderers.
+func TestSettingsValidationRejectsNonStringPasswordValue(t *testing.T) {
+	settings := Settings{
+		PanelListen: "127.0.0.1:2096",
+		Mode:        "server",
+		ProtocolFields: map[string]any{
+			"naivePassword": map[string]any{"x": 1},
+		},
+	}
+	err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{})
+	if err == nil || !strings.Contains(err.Error(), "naivePassword must be a string") {
+		t.Fatalf("err = %v", err)
+	}
+}

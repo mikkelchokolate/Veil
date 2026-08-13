@@ -100,6 +100,20 @@ func (v SettingsValidation) normalizeProtocolFields(settings *Settings, current 
 	if settings.ProtocolFields == nil {
 		settings.ProtocolFields = map[string]any{}
 	}
+	// Drop keys that no registered settings-scoped schema declares. The
+	// redaction sentinel must never be persisted verbatim under an unknown
+	// key, and unknown keys are never consumed by renderers.
+	schemaKeys := map[string]schema.FieldSchema{}
+	for _, f := range v.fieldSchemas {
+		if f.Scope == "" || f.Scope == "settings" {
+			schemaKeys[f.Key] = f
+		}
+	}
+	for key := range settings.ProtocolFields {
+		if _, ok := schemaKeys[key]; !ok {
+			delete(settings.ProtocolFields, key)
+		}
+	}
 	for _, f := range v.fieldSchemas {
 		if f.Scope != "" && f.Scope != "settings" {
 			continue
@@ -115,7 +129,14 @@ func (v SettingsValidation) normalizeProtocolFields(settings *Settings, current 
 			}
 		}
 		if f.Type == schema.FieldPassword {
-			if s, ok := val.(string); ok && s == RedactedSecret {
+			if val == nil {
+				continue
+			}
+			s, isString := val.(string)
+			if !isString {
+				return fmt.Errorf("protocolFields.%s must be a string", f.Key)
+			}
+			if s == RedactedSecret {
 				if cv, ok := current.ProtocolFields[f.Key].(string); ok && cv != "" && cv != RedactedSecret {
 					val = cv
 				} else if cv, ok := flatFieldValue(current, f.Key); ok {

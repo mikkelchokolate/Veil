@@ -51,7 +51,7 @@ func panelDynamicFieldsGenerationReliabilityJS() string {
         } else if (action === 'room') {
           const authElement = actionField ? document.getElementById(protocolFieldElementId(actionField)) : null;
           const provider = authElement ? authElement.value : '';
-          const response = await fetch('/api/' + encodeURIComponent(protocol) + '/room', {
+          const response = await fetch('/api/protocols/' + encodeURIComponent(protocol) + '/room', {
             method: 'POST',
             headers: requestHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ provider }),
