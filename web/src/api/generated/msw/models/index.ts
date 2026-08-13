@@ -174,6 +174,7 @@ export * from './serviceUnavailableResponse.msw.ts';
 export * from './sessionDeleteRequest.msw.ts';
 export * from './sessionInfo.msw.ts';
 export * from './settings.msw.ts';
+export * from './settingsAcmeChallengeMode.msw.ts';
 export * from './settingsPanelAccess.msw.ts';
 export * from './settingsProtocolFields.msw.ts';
 export * from './setupCompleteRequest.msw.ts';

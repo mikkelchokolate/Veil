@@ -43,13 +43,15 @@ export function SettingsPage() {
 		key: string;
 		label: string;
 		placeholder?: string;
+		type?: "text" | "checkbox" | "select";
+		options?: Array<{ value: string; label: string }>;
 	}> = [
 		{ key: "domain", label: t("settings.field.domain") },
 		{ key: "panelDomain", label: t("settings.field.panelDomain") },
 		{
 			key: "panelAccess",
 			label: t("settings.field.panelAccess"),
-			placeholder: "public | private",
+			placeholder: "local | direct | caddy",
 		},
 		{ key: "webBasePath", label: t("settings.field.webBasePath") },
 		{ key: "email", label: t("settings.field.email") },
@@ -69,7 +71,12 @@ export function SettingsPage() {
 		{
 			key: "firewallManagement",
 			label: t("settings.field.firewallManagement"),
-			placeholder: "true | false",
+			type: "select",
+			options: [
+				{ value: "", label: t("settings.option.firewallDefault") },
+				{ value: "true", label: t("settings.option.enabled") },
+				{ value: "false", label: t("settings.option.disabled") },
+			],
 		},
 	];
 
@@ -82,7 +89,8 @@ export function SettingsPage() {
 		key: string;
 		label: string;
 		placeholder?: string;
-		type?: "text" | "checkbox";
+		type?: "text" | "checkbox" | "select";
+		options?: Array<{ value: string; label: string }>;
 	}> = [
 		{ key: "naiveUsername", label: t("settings.field.naiveUsername") },
 		{ key: "naivePassword", label: t("settings.field.naivePassword") },
@@ -95,8 +103,27 @@ export function SettingsPage() {
 		{ key: "masqueradeURL", label: t("settings.field.masqueradeURL") },
 		{ key: "fallbackRoot", label: t("settings.field.fallbackRoot") },
 		{ key: "olcrtcRoomID", label: t("settings.field.olcrtcRoomID") },
-		{ key: "olcrtcAuth", label: t("settings.field.olcrtcAuth") },
-		{ key: "olcrtcTransport", label: t("settings.field.olcrtcTransport") },
+		{
+			key: "olcrtcAuth",
+			label: t("settings.field.olcrtcAuth"),
+			type: "select",
+			options: [
+				{ value: "jitsi", label: "jitsi" },
+				{ value: "telemost", label: "telemost" },
+				{ value: "wbstream", label: "wbstream" },
+			],
+		},
+		{
+			key: "olcrtcTransport",
+			label: t("settings.field.olcrtcTransport"),
+			type: "select",
+			options: [
+				{ value: "datachannel", label: "datachannel" },
+				{ value: "vp8channel", label: "vp8channel" },
+				{ value: "seichannel", label: "seichannel" },
+				{ value: "videochannel", label: "videochannel" },
+			],
+		},
 	];
 
 	const save = useMutation({
@@ -132,10 +159,14 @@ export function SettingsPage() {
 
 	function startEdit() {
 		const next: Record<string, string> = {};
+		const sRecord = s as Record<string, unknown> | undefined;
+		const pf = (sRecord?.protocolFields ?? {}) as Record<string, unknown>;
 		for (const f of ALL_FIELDS) {
-			next[f.key] = String(
-				(s as Record<string, unknown> | undefined)?.[f.key] ?? "",
-			);
+			// Prefer the flat value, but fall back to the protocolFields copy
+			// for states created before the SPA echoed both (legacy panel or
+			// older revisions); otherwise checkboxes/bools render wrong.
+			const raw = sRecord?.[f.key] ?? pf[f.key];
+			next[f.key] = raw != null ? String(raw) : "";
 		}
 		setForm(next);
 		setEditing(true);
@@ -153,6 +184,9 @@ export function SettingsPage() {
 			(s as Record<string, unknown> | undefined) != null
 				? { ...(s as unknown as Record<string, unknown>) }
 				: {};
+		// Snapshot BEFORE overlaying edits: the no-op guard below must compare
+		// the form against the pristine echo, not against the mutated base.
+		const original = { ...base };
 		// Shallow-copy protocolFields so clearing fields below does not mutate
 		// the react-query cached settings object.
 		if (
@@ -165,10 +199,12 @@ export function SettingsPage() {
 		} else {
 			base.protocolFields = {};
 		}
-		// Schema-declared string settings (protocolFields-backed): the flat
-		// "" value means "not provided", so clearing must write the empty
-		// string into protocolFields itself.
-		const protocolStringKeys = new Set([
+		// Schema-declared settings (protocolFields-backed): the flat "" value
+		// means "not provided", so writes must go into protocolFields too.
+		// The flat value of these keys must always mirror the protocolFields
+		// copy, otherwise a stale flat zero/"" wins the server-side flat
+		// precedence check and silently reverts the user's edit (or clearing).
+		const pfKeys = new Set([
 			"naiveUsername",
 			"naivePassword",
 			"hysteria2Password",
@@ -177,34 +213,79 @@ export function SettingsPage() {
 			"olcrtcAuth",
 			"olcrtcTransport",
 			"olcrtcRoomID",
+			"hysteria2Insecure",
+			"panelDomain",
+			"panelEmail",
+			"panelPublicPort",
 		]);
+		const pf = base.protocolFields as Record<string, unknown>;
 		for (const f of ALL_FIELDS) {
-			const cur = String(base[f.key] ?? "");
+			const cur = String(original[f.key] ?? "");
 			if (form[f.key] === cur) {
 				continue;
 			}
 			const cleared = form[f.key] === "";
 			if (f.key === "defaultInboundPublicPort" || f.key === "panelPublicPort") {
-				// Empty input clears the port back to 0 (unset).
-				base[f.key] = cleared ? 0 : Number(form[f.key]) || form[f.key];
+				// Empty or invalid input clears the port back to 0 (unset).
+				// Number(x) || x would turn "0" back into the string "0",
+				// which the Go decoder rejects (int field) with a 400, so
+				// parse with an explicit NaN check instead.
+				const n = Number(form[f.key]);
+				const port = cleared || Number.isNaN(n) ? 0 : n;
+				base[f.key] = port;
+				// panelPublicPort is a schema key: mirror into protocolFields
+				// so a stale pf copy cannot win the flat precedence check.
+				if (f.key === "panelPublicPort") {
+					pf[f.key] = port;
+				}
 			} else if (f.key === "firewallManagement") {
 				// Empty input restores the default (nil = enabled).
 				base[f.key] = cleared ? null : form[f.key] === "true";
 			} else if (f.key === "hysteria2Insecure") {
-				base[f.key] = cleared ? false : form[f.key] === "true";
-			} else if (protocolStringKeys.has(f.key)) {
-				const pf = base.protocolFields as Record<string, unknown>;
+				const value = cleared ? false : form[f.key] === "true";
+				base[f.key] = value;
+				pf[f.key] = value;
+			} else if (pfKeys.has(f.key)) {
 				if (cleared) {
 					pf[f.key] = "";
 				} else {
 					pf[f.key] = form[f.key];
 				}
 				base[f.key] = form[f.key];
+			} else if (f.key === "webBasePath") {
+				// The server always inherits the live webBasePath when the
+				// field is empty (it is required for caddy Panel access), so
+				// a "cleared" input would silently no-op. Keep the echoed
+				// value instead of pretending the clear succeeded.
+				if ((form[f.key] ?? "") !== "" && form[f.key] !== cur) {
+					base[f.key] = form[f.key];
+				}
 			} else {
 				// Plain string fields may be cleared: an empty input must
 				// overwrite the echoed GET value instead of being skipped.
 				base[f.key] = form[f.key];
 			}
+		}
+		// No field changed: avoid a no-op PUT that would still trigger the
+		// full apply pipeline (re-render, service restarts, firewall sync).
+		// Compare against the pristine echo snapshot, not the mutated base.
+		// The echo may carry schema values only in protocolFields (legacy
+		// states), so compare the form value against flat ?? protocolFields.
+		const originalPf = (original.protocolFields ?? {}) as Record<
+			string,
+			unknown
+		>;
+		let changed = false;
+		for (const f of ALL_FIELDS) {
+			const originalValue = String(original[f.key] ?? originalPf[f.key] ?? "");
+			if (form[f.key] !== originalValue) {
+				changed = true;
+				break;
+			}
+		}
+		if (!changed) {
+			setEditing(false);
+			return;
 		}
 		save.mutate(base);
 	}
@@ -317,14 +398,31 @@ export function SettingsPage() {
 						{GLOBAL_FIELDS.map((f) => (
 							<FormItem key={f.key}>
 								<Label htmlFor={`set-${f.key}`}>{f.label}</Label>
-								<Input
-									id={`set-${f.key}`}
-									{...(f.placeholder ? { placeholder: f.placeholder } : {})}
-									value={form[f.key] ?? ""}
-									onChange={(e) =>
-										setForm({ ...form, [f.key]: e.target.value })
-									}
-								/>
+								{f.type === "select" ? (
+									<select
+										id={`set-${f.key}`}
+										value={form[f.key] ?? ""}
+										onChange={(e) =>
+											setForm({ ...form, [f.key]: e.target.value })
+										}
+										style={{ width: "100%", padding: 6 }}
+									>
+										{(f.options ?? []).map((o) => (
+											<option key={o.value} value={o.value}>
+												{o.label}
+											</option>
+										))}
+									</select>
+								) : (
+									<Input
+										id={`set-${f.key}`}
+										{...(f.placeholder ? { placeholder: f.placeholder } : {})}
+										value={form[f.key] ?? ""}
+										onChange={(e) =>
+											setForm({ ...form, [f.key]: e.target.value })
+										}
+									/>
+								)}
 							</FormItem>
 						))}
 					</div>
@@ -365,6 +463,21 @@ export function SettingsPage() {
 										}
 										style={{ width: 18, height: 18 }}
 									/>
+								) : f.type === "select" ? (
+									<select
+										id={`set-${f.key}`}
+										value={form[f.key] ?? ""}
+										onChange={(e) =>
+											setForm({ ...form, [f.key]: e.target.value })
+										}
+										style={{ width: "100%", padding: 6 }}
+									>
+										{(f.options ?? []).map((o) => (
+											<option key={o.value} value={o.value}>
+												{o.label}
+											</option>
+										))}
+									</select>
 								) : (
 									<Input
 										id={`set-${f.key}`}

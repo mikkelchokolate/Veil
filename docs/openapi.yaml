@@ -4293,11 +4293,55 @@ components:
           type: string
         protocolFields:
           type: object
-          description: Protocol-specific settings keyed by field identifier.
+          description: >-
+            Protocol-specific settings keyed by field identifier. Schema
+            fields that also have a top-level flat counterpart (e.g.
+            hysteria2Insecure, panelPublicPort, panelDomain) must be echoed in
+            BOTH places: the flat value wins the server-side precedence check,
+            so a stale protocolFields copy can silently revert an edit made
+            through the flat field (and vice versa). Clients that only submit
+            the protocolFields copy (legacy panel) rely on the flat zero value
+            being treated as "not provided".
           additionalProperties: true
         firewallManagement:
+          type:
+          - boolean
+          - 'null'
+          description: >-
+            When null (default), Veil synchronizes UFW rules for the panel and
+            enabled inbounds during apply. Set false to disable firewall
+            synchronization, true to force it.
+        hysteria2Insecure:
           type: boolean
-          description: When true (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply.
+          description: Allow self-signed server certificates for hysteria2 inbounds.
+        panelDomain:
+          type: string
+          description: Public domain for the panel when served through Caddy.
+        panelEmail:
+          type: string
+          format: email
+          description: ACME contact email for the panel domain.
+        panelPublicPort:
+          type: integer
+          minimum: 0
+          maximum: 65535
+          description: Public port for the panel when served through Caddy. Defaults to 443 when zero.
+        defaultInboundPublicPort:
+          type: integer
+          minimum: 0
+          maximum: 65535
+          description: Default public port for new inbounds. Falls back to 443 when zero.
+        defaultAcmeEmail:
+          type: string
+          format: email
+          description: Default ACME contact email for inbound certificates.
+        acmeChallengeMode:
+          type: string
+          enum:
+          - http-01
+          - dns-01
+          - tls-alpn-01
+          description: ACME challenge mode used for inbound certificates.
     ClientProfile:
       type: object
       required:

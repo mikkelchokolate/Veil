@@ -484,6 +484,27 @@ func (e RevisionViewState) Valid() bool {
 	}
 }
 
+// Defines values for SettingsAcmeChallengeMode.
+const (
+	Dns01     SettingsAcmeChallengeMode = "dns-01"
+	Http01    SettingsAcmeChallengeMode = "http-01"
+	TlsAlpn01 SettingsAcmeChallengeMode = "tls-alpn-01"
+)
+
+// Valid indicates whether the value is a known member of the SettingsAcmeChallengeMode enum.
+func (e SettingsAcmeChallengeMode) Valid() bool {
+	switch e {
+	case Dns01:
+		return true
+	case Http01:
+		return true
+	case TlsAlpn01:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SettingsPanelAccess.
 const (
 	SettingsPanelAccessCaddy  SettingsPanelAccess = "caddy"
@@ -1568,14 +1589,25 @@ type SessionInfo struct {
 
 // Settings defines model for Settings.
 type Settings struct {
-	Domain       *string              `json:"domain,omitempty"`
-	Email        *openapi_types.Email `json:"email,omitempty"`
-	FallbackRoot *string              `json:"fallbackRoot,omitempty"`
+	// AcmeChallengeMode ACME challenge mode used for inbound certificates.
+	AcmeChallengeMode *SettingsAcmeChallengeMode `json:"acmeChallengeMode,omitempty"`
 
-	// FirewallManagement When true (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply.
-	FirewallManagement *bool   `json:"firewallManagement,omitempty"`
-	Hysteria2Password  *string `json:"hysteria2Password,omitempty"`
-	MasqueradeURL      *string `json:"masqueradeURL,omitempty"`
+	// DefaultAcmeEmail Default ACME contact email for inbound certificates.
+	DefaultAcmeEmail *openapi_types.Email `json:"defaultAcmeEmail,omitempty"`
+
+	// DefaultInboundPublicPort Default public port for new inbounds. Falls back to 443 when zero.
+	DefaultInboundPublicPort *int                 `json:"defaultInboundPublicPort,omitempty"`
+	Domain                   *string              `json:"domain,omitempty"`
+	Email                    *openapi_types.Email `json:"email,omitempty"`
+	FallbackRoot             *string              `json:"fallbackRoot,omitempty"`
+
+	// FirewallManagement When null (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply. Set false to disable firewall synchronization, true to force it.
+	FirewallManagement nullable.Nullable[bool] `json:"firewallManagement,omitempty"`
+
+	// Hysteria2Insecure Allow self-signed server certificates for hysteria2 inbounds.
+	Hysteria2Insecure *bool   `json:"hysteria2Insecure,omitempty"`
+	Hysteria2Password *string `json:"hysteria2Password,omitempty"`
+	MasqueradeURL     *string `json:"masqueradeURL,omitempty"`
 
 	// Mode Examples: server
 	Mode string `json:"mode"`
@@ -1588,15 +1620,27 @@ type Settings struct {
 	OlcrtcTransport *string              `json:"olcrtcTransport,omitempty"`
 	PanelAccess     *SettingsPanelAccess `json:"panelAccess,omitempty"`
 
+	// PanelDomain Public domain for the panel when served through Caddy.
+	PanelDomain *string `json:"panelDomain,omitempty"`
+
+	// PanelEmail ACME contact email for the panel domain.
+	PanelEmail *openapi_types.Email `json:"panelEmail,omitempty"`
+
 	// PanelListen Examples: 127.0.0.1:2096
 	PanelListen string `json:"panelListen"`
 
-	// ProtocolFields Protocol-specific settings keyed by field identifier.
+	// PanelPublicPort Public port for the panel when served through Caddy. Defaults to 443 when zero.
+	PanelPublicPort *int `json:"panelPublicPort,omitempty"`
+
+	// ProtocolFields Protocol-specific settings keyed by field identifier. Schema fields that also have a top-level flat counterpart (e.g. hysteria2Insecure, panelPublicPort, panelDomain) must be echoed in BOTH places: the flat value wins the server-side precedence check, so a stale protocolFields copy can silently revert an edit made through the flat field (and vice versa). Clients that only submit the protocolFields copy (legacy panel) rely on the flat zero value being treated as "not provided".
 	ProtocolFields *map[string]interface{} `json:"protocolFields,omitempty"`
 
 	// WebBasePath Examples: /a1b2c3d4e5f6/
 	WebBasePath *string `json:"webBasePath,omitempty"`
 }
+
+// SettingsAcmeChallengeMode ACME challenge mode used for inbound certificates.
+type SettingsAcmeChallengeMode string
 
 // SettingsPanelAccess defines model for Settings.PanelAccess.
 type SettingsPanelAccess string

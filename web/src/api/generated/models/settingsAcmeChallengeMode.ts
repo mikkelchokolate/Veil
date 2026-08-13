@@ -42,6 +42,13 @@
  */
 
 /**
- * Protocol-specific settings keyed by field identifier. Schema fields that also have a top-level flat counterpart (e.g. hysteria2Insecure, panelPublicPort, panelDomain) must be echoed in BOTH places: the flat value wins the server-side precedence check, so a stale protocolFields copy can silently revert an edit made through the flat field (and vice versa). Clients that only submit the protocolFields copy (legacy panel) rely on the flat zero value being treated as "not provided".
+ * ACME challenge mode used for inbound certificates.
  */
-export type SettingsProtocolFields = { [key: string]: unknown };
+export type SettingsAcmeChallengeMode = typeof SettingsAcmeChallengeMode[keyof typeof SettingsAcmeChallengeMode];
+
+
+export const SettingsAcmeChallengeMode = {
+  'http-01': 'http-01',
+  'dns-01': 'dns-01',
+  'tls-alpn-01': 'tls-alpn-01',
+} as const;

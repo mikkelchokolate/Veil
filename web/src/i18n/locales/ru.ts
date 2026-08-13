@@ -208,6 +208,9 @@ export const ru: Record<string, string> = {
 	"settings.field.defaultInboundPublicPort":
 		"Публичный порт инбаундов по умолчанию",
 	"settings.field.firewallManagement": "Управление файрволом",
+	"settings.option.firewallDefault": "По умолчанию (включено)",
+	"settings.option.enabled": "Включено",
+	"settings.option.disabled": "Отключено",
 	"settings.field.olcrtcAuth": "Провайдер авторизации olcRTC",
 	"settings.field.olcrtcTransport": "Транспорт olcRTC",
 	"settings.field.naiveUsername": "Имя пользователя NaiveProxy",

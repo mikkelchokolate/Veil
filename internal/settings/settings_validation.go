@@ -1,8 +1,10 @@
 package settings
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"path/filepath"
 	"reflect"
@@ -111,6 +113,10 @@ func (v SettingsValidation) normalizeProtocolFields(settings *Settings, current 
 	}
 	for key := range settings.ProtocolFields {
 		if _, ok := schemaKeys[key]; !ok {
+			// Log legacy keys so a future version can migrate instead of
+			// silently erasing data written by older releases. Never log the
+			// value: the key may be a password sentinel.
+			slog.Debug("settings: dropping unknown protocol field", "field", key)
 			delete(settings.ProtocolFields, key)
 		}
 	}
@@ -130,6 +136,12 @@ func (v SettingsValidation) normalizeProtocolFields(settings *Settings, current 
 		}
 		if f.Type == schema.FieldPassword {
 			if val == nil {
+				// Distinguish "key absent" (fine: nothing to set) from an
+				// explicit JSON null (invalid: would persist nil and drop
+				// the secret from rendered configs).
+				if _, present := settings.ProtocolFields[f.Key]; present {
+					return fmt.Errorf("protocolFields.%s must be a string", f.Key)
+				}
 				continue
 			}
 			s, isString := val.(string)
@@ -150,12 +162,44 @@ func (v SettingsValidation) normalizeProtocolFields(settings *Settings, current 
 				}
 			}
 		}
+		if f.Type == schema.FieldSelect && len(f.Options) > 0 && provided {
+			// Validate only values the client actually submitted. Values
+			// inherited from current or defaults may predate the declared
+			// options (live states written by older releases); rejecting
+			// them would turn every PUT into a permanent 400 with no
+			// migration path.
+			s, isString := val.(string)
+			if !isString {
+				return fmt.Errorf("protocolFields.%s must be a string", f.Key)
+			}
+			if s == "" {
+				continue
+			}
+			valid := false
+			for _, option := range f.Options {
+				if option.Value == s {
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				return fmt.Errorf("protocolFields.%s must be one of %s", f.Key, selectOptionValues(f.Options))
+			}
+		}
 		if val != nil {
 			settings.ProtocolFields[f.Key] = val
 			setFlatFieldValue(settings, f.Key, val)
 		}
 	}
 	return nil
+}
+
+func selectOptionValues(options []schema.FieldOption) string {
+	values := make([]string, 0, len(options))
+	for _, option := range options {
+		values = append(values, strconv.Quote(option.Value))
+	}
+	return strings.Join(values, ", ")
 }
 
 func protocolFieldUpdateValue(settings *Settings, f schema.FieldSchema) (any, bool) {
@@ -184,9 +228,18 @@ func flatFieldValue(settings Settings, key string) (any, bool) {
 			return s, true
 		}
 	case reflect.Bool:
-		return field.Bool(), true
+		// A zero flat bool means "not provided" (the client did not send the
+		// flat copy, e.g. the legacy panel which only submits protocolFields).
+		// Treating false as absent lets the protocolFields copy win; a client
+		// that explicitly sends false with an empty protocolFields entry
+		// still lands on false through the protocolFields branch.
+		if b := field.Bool(); b {
+			return b, true
+		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return int(field.Int()), true
+		if i := int(field.Int()); i != 0 {
+			return i, true
+		}
 	}
 	return nil, false
 }
@@ -206,8 +259,19 @@ func setFlatFieldValue(settings *Settings, key string, val any) {
 			field.SetBool(b)
 		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if i, ok := val.(int); ok {
-			field.SetInt(int64(i))
+		// JSON numbers decode into float64 (or json.Number with UseNumber),
+		// so accept both forms, not just int.
+		switch n := val.(type) {
+		case int:
+			field.SetInt(int64(n))
+		case int64:
+			field.SetInt(n)
+		case float64:
+			field.SetInt(int64(n))
+		case json.Number:
+			if i, err := n.Int64(); err == nil {
+				field.SetInt(i)
+			}
 		}
 	}
 }

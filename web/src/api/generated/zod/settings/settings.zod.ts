@@ -46,6 +46,14 @@ import * as zod from 'zod';
 /**
  * @summary Read Panel settings with secrets redacted
  */
+export const getApiSettingsResponsePanelPublicPortMin = 0;
+export const getApiSettingsResponsePanelPublicPortMax = 65535;
+
+export const getApiSettingsResponseDefaultInboundPublicPortMin = 0;
+export const getApiSettingsResponseDefaultInboundPublicPortMax = 65535;
+
+
+
 export const GetApiSettingsResponse = zod.object({
   "panelListen": zod.string(),
   "panelAccess": zod.enum(['local', 'direct', 'caddy', '']).optional(),
@@ -61,8 +69,15 @@ export const GetApiSettingsResponse = zod.object({
   "olcrtcAuth": zod.string().optional(),
   "olcrtcTransport": zod.string().optional(),
   "olcrtcRoomID": zod.string().optional(),
-  "protocolFields": zod.record(zod.string(), zod.unknown()).optional().describe('Protocol-specific settings keyed by field identifier.'),
-  "firewallManagement": zod.boolean().optional().describe('When true (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply.')
+  "protocolFields": zod.record(zod.string(), zod.unknown()).optional().describe('Protocol-specific settings keyed by field identifier. Schema fields that also have a top-level flat counterpart (e.g. hysteria2Insecure, panelPublicPort, panelDomain) must be echoed in BOTH places: the flat value wins the server-side precedence check, so a stale protocolFields copy can silently revert an edit made through the flat field (and vice versa). Clients that only submit the protocolFields copy (legacy panel) rely on the flat zero value being treated as \"not provided\".'),
+  "firewallManagement": zod.boolean().nullish().describe('When null (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply. Set false to disable firewall synchronization, true to force it.'),
+  "hysteria2Insecure": zod.boolean().optional().describe('Allow self-signed server certificates for hysteria2 inbounds.'),
+  "panelDomain": zod.string().optional().describe('Public domain for the panel when served through Caddy.'),
+  "panelEmail": zod.email().optional().describe('ACME contact email for the panel domain.'),
+  "panelPublicPort": zod.number().min(getApiSettingsResponsePanelPublicPortMin).max(getApiSettingsResponsePanelPublicPortMax).optional().describe('Public port for the panel when served through Caddy. Defaults to 443 when zero.'),
+  "defaultInboundPublicPort": zod.number().min(getApiSettingsResponseDefaultInboundPublicPortMin).max(getApiSettingsResponseDefaultInboundPublicPortMax).optional().describe('Default public port for new inbounds. Falls back to 443 when zero.'),
+  "defaultAcmeEmail": zod.email().optional().describe('Default ACME contact email for inbound certificates.'),
+  "acmeChallengeMode": zod.enum(['http-01', 'dns-01', 'tls-alpn-01']).optional().describe('ACME challenge mode used for inbound certificates.')
 })
 
 /**
@@ -77,6 +92,14 @@ export const putApiSettingsHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
 export const PutApiSettingsHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(putApiSettingsHeaderIdempotencyKeyMax).regex(putApiSettingsHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
+
+export const putApiSettingsBodyPanelPublicPortMin = 0;
+export const putApiSettingsBodyPanelPublicPortMax = 65535;
+
+export const putApiSettingsBodyDefaultInboundPublicPortMin = 0;
+export const putApiSettingsBodyDefaultInboundPublicPortMax = 65535;
+
+
 
 export const PutApiSettingsBody = zod.object({
   "panelListen": zod.string(),
@@ -93,9 +116,24 @@ export const PutApiSettingsBody = zod.object({
   "olcrtcAuth": zod.string().optional(),
   "olcrtcTransport": zod.string().optional(),
   "olcrtcRoomID": zod.string().optional(),
-  "protocolFields": zod.record(zod.string(), zod.unknown()).optional().describe('Protocol-specific settings keyed by field identifier.'),
-  "firewallManagement": zod.boolean().optional().describe('When true (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply.')
+  "protocolFields": zod.record(zod.string(), zod.unknown()).optional().describe('Protocol-specific settings keyed by field identifier. Schema fields that also have a top-level flat counterpart (e.g. hysteria2Insecure, panelPublicPort, panelDomain) must be echoed in BOTH places: the flat value wins the server-side precedence check, so a stale protocolFields copy can silently revert an edit made through the flat field (and vice versa). Clients that only submit the protocolFields copy (legacy panel) rely on the flat zero value being treated as \"not provided\".'),
+  "firewallManagement": zod.boolean().nullish().describe('When null (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply. Set false to disable firewall synchronization, true to force it.'),
+  "hysteria2Insecure": zod.boolean().optional().describe('Allow self-signed server certificates for hysteria2 inbounds.'),
+  "panelDomain": zod.string().optional().describe('Public domain for the panel when served through Caddy.'),
+  "panelEmail": zod.email().optional().describe('ACME contact email for the panel domain.'),
+  "panelPublicPort": zod.number().min(putApiSettingsBodyPanelPublicPortMin).max(putApiSettingsBodyPanelPublicPortMax).optional().describe('Public port for the panel when served through Caddy. Defaults to 443 when zero.'),
+  "defaultInboundPublicPort": zod.number().min(putApiSettingsBodyDefaultInboundPublicPortMin).max(putApiSettingsBodyDefaultInboundPublicPortMax).optional().describe('Default public port for new inbounds. Falls back to 443 when zero.'),
+  "defaultAcmeEmail": zod.email().optional().describe('Default ACME contact email for inbound certificates.'),
+  "acmeChallengeMode": zod.enum(['http-01', 'dns-01', 'tls-alpn-01']).optional().describe('ACME challenge mode used for inbound certificates.')
 })
+
+export const putApiSettingsResponsePanelPublicPortMin = 0;
+export const putApiSettingsResponsePanelPublicPortMax = 65535;
+
+export const putApiSettingsResponseDefaultInboundPublicPortMin = 0;
+export const putApiSettingsResponseDefaultInboundPublicPortMax = 65535;
+
+
 
 export const PutApiSettingsResponse = zod.object({
   "panelListen": zod.string(),
@@ -112,7 +150,14 @@ export const PutApiSettingsResponse = zod.object({
   "olcrtcAuth": zod.string().optional(),
   "olcrtcTransport": zod.string().optional(),
   "olcrtcRoomID": zod.string().optional(),
-  "protocolFields": zod.record(zod.string(), zod.unknown()).optional().describe('Protocol-specific settings keyed by field identifier.'),
-  "firewallManagement": zod.boolean().optional().describe('When true (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply.')
+  "protocolFields": zod.record(zod.string(), zod.unknown()).optional().describe('Protocol-specific settings keyed by field identifier. Schema fields that also have a top-level flat counterpart (e.g. hysteria2Insecure, panelPublicPort, panelDomain) must be echoed in BOTH places: the flat value wins the server-side precedence check, so a stale protocolFields copy can silently revert an edit made through the flat field (and vice versa). Clients that only submit the protocolFields copy (legacy panel) rely on the flat zero value being treated as \"not provided\".'),
+  "firewallManagement": zod.boolean().nullish().describe('When null (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply. Set false to disable firewall synchronization, true to force it.'),
+  "hysteria2Insecure": zod.boolean().optional().describe('Allow self-signed server certificates for hysteria2 inbounds.'),
+  "panelDomain": zod.string().optional().describe('Public domain for the panel when served through Caddy.'),
+  "panelEmail": zod.email().optional().describe('ACME contact email for the panel domain.'),
+  "panelPublicPort": zod.number().min(putApiSettingsResponsePanelPublicPortMin).max(putApiSettingsResponsePanelPublicPortMax).optional().describe('Public port for the panel when served through Caddy. Defaults to 443 when zero.'),
+  "defaultInboundPublicPort": zod.number().min(putApiSettingsResponseDefaultInboundPublicPortMin).max(putApiSettingsResponseDefaultInboundPublicPortMax).optional().describe('Default public port for new inbounds. Falls back to 443 when zero.'),
+  "defaultAcmeEmail": zod.email().optional().describe('Default ACME contact email for inbound certificates.'),
+  "acmeChallengeMode": zod.enum(['http-01', 'dns-01', 'tls-alpn-01']).optional().describe('ACME challenge mode used for inbound certificates.')
 })
 

@@ -40,6 +40,7 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import type { SettingsAcmeChallengeMode } from './settingsAcmeChallengeMode.ts';
 import type { SettingsPanelAccess } from './settingsPanelAccess.ts';
 import type { SettingsProtocolFields } from './settingsProtocolFields.ts';
 
@@ -59,8 +60,33 @@ export interface Settings {
   olcrtcAuth?: string;
   olcrtcTransport?: string;
   olcrtcRoomID?: string;
-  /** Protocol-specific settings keyed by field identifier. */
+  /** Protocol-specific settings keyed by field identifier. Schema fields that also have a top-level flat counterpart (e.g. hysteria2Insecure, panelPublicPort, panelDomain) must be echoed in BOTH places: the flat value wins the server-side precedence check, so a stale protocolFields copy can silently revert an edit made through the flat field (and vice versa). Clients that only submit the protocolFields copy (legacy panel) rely on the flat zero value being treated as "not provided". */
   protocolFields?: SettingsProtocolFields;
-  /** When true (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply. */
-  firewallManagement?: boolean;
+  /**
+     * When null (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply. Set false to disable firewall synchronization, true to force it.
+     * @nullable
+     */
+  firewallManagement?: boolean | null;
+  /** Allow self-signed server certificates for hysteria2 inbounds. */
+  hysteria2Insecure?: boolean;
+  /** Public domain for the panel when served through Caddy. */
+  panelDomain?: string;
+  /** ACME contact email for the panel domain. */
+  panelEmail?: string;
+  /**
+     * Public port for the panel when served through Caddy. Defaults to 443 when zero.
+     * @minimum 0
+     * @maximum 65535
+     */
+  panelPublicPort?: number;
+  /**
+     * Default public port for new inbounds. Falls back to 443 when zero.
+     * @minimum 0
+     * @maximum 65535
+     */
+  defaultInboundPublicPort?: number;
+  /** Default ACME contact email for inbound certificates. */
+  defaultAcmeEmail?: string;
+  /** ACME challenge mode used for inbound certificates. */
+  acmeChallengeMode?: SettingsAcmeChallengeMode;
 }

@@ -174,6 +174,7 @@ export * from './serviceUnavailableResponse.ts';
 export * from './sessionDeleteRequest.ts';
 export * from './sessionInfo.ts';
 export * from './settings.ts';
+export * from './settingsAcmeChallengeMode.ts';
 export * from './settingsPanelAccess.ts';
 export * from './settingsProtocolFields.ts';
 export * from './setupCompleteRequest.ts';

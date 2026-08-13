@@ -1,6 +1,11 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -9,6 +14,54 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
+
+// decodeSettingsBody decodes a settings PUT body with the same strictness as
+// decodeJSONRequest (unknown fields rejected) but from an already-read byte
+// slice, so the handler can also inspect which fields were present. Parse
+// errors are masked to a generic message, matching decodeJSONRequest.
+func decodeSettingsBody(body []byte, v *Settings) error {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(v); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	return nil
+}
+
+// inheritMissingSettings returns a copy of update where top-level settings
+// fields that were NOT present in the request body keep their current live
+// value. The PUT endpoint decodes into a Settings struct, which cannot
+// distinguish "field omitted" from "field set to its zero value"; without this
+// step a client that sends a partial payload (e.g. the legacy server-rendered
+// panel, which only submits panelListen/panelAccess/webBasePath/mode/domain/
+// email/protocolFields) would silently zero out firewallManagement, the port
+// defaults and the ACME fields on every save.
+//
+// Only truly non-schema fields are inherited here. Schema-declared keys
+// (panelDomain, panelEmail, panelPublicPort, protocol credentials) are
+// resolved by normalizeProtocolFields from their protocolFields copy, which
+// the legacy panel submits; inheriting their flat value here would override a
+// fresh protocolFields edit with the stale flat value.
+func inheritMissingSettings(update, current Settings, body []byte) Settings {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return update
+	}
+	inherited := update
+	if _, ok := raw["firewallManagement"]; !ok {
+		inherited.FirewallManagement = current.FirewallManagement
+	}
+	if _, ok := raw["defaultInboundPublicPort"]; !ok {
+		inherited.DefaultInboundPublicPort = current.DefaultInboundPublicPort
+	}
+	if _, ok := raw["defaultAcmeEmail"]; !ok {
+		inherited.DefaultAcmeEmail = current.DefaultAcmeEmail
+	}
+	if _, ok := raw["acmeChallengeMode"]; !ok {
+		inherited.AcmeChallengeMode = current.AcmeChallengeMode
+	}
+	return inherited
+}
 
 func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request) {
 	_ = s.withMutation(func(mutation managementstate.Mutation) error {
@@ -21,11 +74,27 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 				writeJSON(w, settings)
 			}
 		case http.MethodPut:
-			var settings Settings
-			if !decodeJSONRequest(w, r, &settings) {
+			ct := r.Header.Get("Content-Type")
+			if ct != "" && !isJSONMediaType(ct) {
+				writeError(w, "Unsupported Media Type: Content-Type must be application/json", http.StatusUnsupportedMediaType)
 				return nil
 			}
-			candidate := settings
+			body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes))
+			if err != nil {
+				var maxBytesErr *http.MaxBytesError
+				if errors.As(err, &maxBytesErr) {
+					writeError(w, "Request body too large", http.StatusRequestEntityTooLarge)
+				} else {
+					writeError(w, "Failed to read request body", http.StatusBadRequest)
+				}
+				return nil
+			}
+			var settings Settings
+			if err := decodeSettingsBody(body, &settings); err != nil {
+				writeError(w, err.Error(), http.StatusBadRequest)
+				return nil
+			}
+			candidate := inheritMissingSettings(settings, s.settings, body)
 			if err := veilsettings.NewSettingsValidationWithFieldSchemas(protocols.NewRegistry().SettingsFieldSchemas()).NormalizeAndValidate(&candidate, s.settings); err != nil {
 				writeError(w, err.Error(), http.StatusBadRequest)
 				return nil
