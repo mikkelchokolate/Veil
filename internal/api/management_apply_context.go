@@ -156,6 +156,16 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 		!slices.Contains(removeIDs, generatedconfig.WarpConfigSubpath) {
 		removeIDs = append(removeIDs, generatedconfig.WarpConfigSubpath)
 	}
+	// Same teardown contract for Caddy: when no naive inbound and no
+	// panel-via-caddy remain, the live caddy/config.json must go or the
+	// orphan scan will never touch it (config.json is excluded as a shared
+	// singleton artifact) and veil-caddy.service would keep serving the
+	// STALE auth_credentials forever (audit #123). Removing the artifact
+	// stops and disables the unit via UnitForArtifactID.
+	if !caddyRequired(ctx.state.settings, ctx.state.inbounds) && ctx.caddyUnitActiveLocked() &&
+		!slices.Contains(removeIDs, generatedconfig.CaddyJSONConfigSubpath) {
+		removeIDs = append(removeIDs, generatedconfig.CaddyJSONConfigSubpath)
+	}
 	if len(artifactIDs) == 0 && len(removeIDs) == 0 {
 		return nil, nil, nil, nil
 	}
@@ -668,6 +678,26 @@ func (ctx ManagementApplyContext) warpUnitActiveLocked() bool {
 	}
 	for _, status := range statuses.Services {
 		if status.Unit == renderer.UnitWarp && status.ActiveState == "active" {
+			return true
+		}
+	}
+	return false
+}
+
+// caddyUnitActiveLocked reports whether veil-caddy.service is currently
+// active, used to gate Caddy config teardown on desired state.
+func (ctx ManagementApplyContext) caddyUnitActiveLocked() bool {
+	if ctx.state.privileged == nil {
+		return false
+	}
+	statuses, err := ctx.state.privileged.ServiceStatus(ctx.operationContext(), privileged.ServiceStatusRequest{
+		Units: []string{unitCaddy},
+	})
+	if err != nil {
+		return false
+	}
+	for _, status := range statuses.Services {
+		if status.Unit == unitCaddy && status.ActiveState == "active" {
 			return true
 		}
 	}

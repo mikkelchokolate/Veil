@@ -21,7 +21,7 @@ func TestPromoteRemovesWarpConfigAndStopsUnitWhenWarpDisabledAndActive(t *testin
 		// active, modelling a running veil-warp.service.
 		promoteResult: privileged.PromoteResult{
 			BackupID:         "20260608T120000.000000000Z",
-			RemovedArtifacts: []string{"sing-box/warp.json"},
+			RemovedArtifacts: []string{"sing-box/warp.json", "caddy/config.json"},
 		},
 	}
 	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: t.TempDir(), Privileged: client})
@@ -34,14 +34,20 @@ func TestPromoteRemovesWarpConfigAndStopsUnitWhenWarpDisabledAndActive(t *testin
 	if len(client.promotions) != 1 {
 		t.Fatalf("promotions = %+v", client.promotions)
 	}
-	if !reflect.DeepEqual(client.promotions[0].RemoveArtifactIDs, []string{"sing-box/warp.json"}) {
-		t.Fatalf("remove artifact ids = %+v, want [sing-box/warp.json]", client.promotions[0].RemoveArtifactIDs)
+	if !reflect.DeepEqual(client.promotions[0].RemoveArtifactIDs, []string{"sing-box/warp.json", "caddy/config.json"}) {
+		t.Fatalf("remove artifact ids = %+v, want [sing-box/warp.json caddy/config.json] (recording client reports caddy active; no naive inbounds remain)", client.promotions[0].RemoveArtifactIDs)
 	}
 
 	ctx.reloadPromotedServices(nil)
 	wantActions := []privileged.ServiceActionRequest{
 		{Unit: "veil-warp.service", Action: privileged.ServiceActionStop},
 		{Unit: "veil-warp.service", Action: privileged.ServiceActionDisable},
+		// The recording client also reports veil-caddy.service active; with no
+		// naive inbounds and no panel-via-caddy the Caddy config is torn down
+		// too (audit #123: stale auth_credentials must not outlive the last
+		// naive inbound).
+		{Unit: "veil-caddy.service", Action: privileged.ServiceActionStop},
+		{Unit: "veil-caddy.service", Action: privileged.ServiceActionDisable},
 	}
 	if !reflect.DeepEqual(client.serviceActions, wantActions) {
 		t.Fatalf("service actions = %+v, want %+v", client.serviceActions, wantActions)
