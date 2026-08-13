@@ -25,7 +25,13 @@ func (Plugin) SettingsFieldSchema() []schema.FieldSchema {
 	}
 }
 
-// Autofill is a no-op for Hysteria2.
+// Autofill promotes the panel-submitted ProtocolFields password into the
+// canonical flat Password field the renderer consumes, and applies defaults.
 func (Plugin) Autofill(inbound model.Inbound) (model.Inbound, error) {
+	if inbound.Password == "" && inbound.ProtocolFields != nil {
+		if password, ok := inbound.ProtocolFields["hysteria2Password"].(string); ok {
+			inbound.Password = password
+		}
+	}
 	return inbound, nil
 }
