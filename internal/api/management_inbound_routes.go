@@ -170,6 +170,19 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 			if !decodeJSONRequest(w, r, &update) {
 				return nil
 			}
+			// The panel echoes the redacted GET representation on save; restore
+			// the stored secrets before validation and persistence so that an
+			// untouched password field is never written back as "[REDACTED]".
+			update = preserveRedactedInbound(update, inbound)
+			// Protocol plugins own one-click provisioning; running it on update
+			// promotes ProtocolFields credentials (for example mieru/olcrtc
+			// password) into the canonical flat fields the renderers consume.
+			update, autoErr := autofillInbound(update)
+			if autoErr != nil {
+				s.logUserAction(r, "update_inbound", name, false, "provisioning failed")
+				writeError(w, autoErr.Error(), http.StatusInternalServerError)
+				return nil
+			}
 			updated, candidate, err := inbounds.NewInboundCatalog(s.inbounds).Update(name, update)
 			if err != nil {
 				s.logUserAction(r, "update_inbound", name, false, "")

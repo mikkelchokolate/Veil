@@ -40,3 +40,42 @@ func redactInboundList(inbounds []Inbound) []Inbound {
 	}
 	return redacted
 }
+
+// preserveRedactedInbound returns a copy of update where password-typed fields
+// that carry the redaction sentinel "[REDACTED]" are replaced with the current
+// stored value. This is the inbound-side mirror of the settings un-redaction
+// path: a PUT from the panel echoes the redacted GET representation, and saving
+// it verbatim would silently replace live credentials with the sentinel.
+func preserveRedactedInbound(update Inbound, current Inbound) Inbound {
+	preserved := update
+	disclosure := veilsettings.NewCredentialDisclosure()
+	preserved.Password = disclosure.PreserveRedacted(update.Password, current.Password)
+	preserved.NaivePassword = disclosure.PreserveRedacted(update.NaivePassword, current.NaivePassword)
+	preserved.Hysteria2Password = disclosure.PreserveRedacted(update.Hysteria2Password, current.Hysteria2Password)
+	if update.ProtocolFields != nil {
+		preserved.ProtocolFields = make(map[string]any, len(update.ProtocolFields))
+		for k, v := range update.ProtocolFields {
+			preserved.ProtocolFields[k] = v
+		}
+		// ProtocolFields password keys mirror the flat credential fields, so
+		// fall back to the flat value when the map key is absent on the current
+		// record (the panel may echo only one representation).
+		flatFallback := map[string]string{
+			"password":          current.Password,
+			"naivePassword":     current.NaivePassword,
+			"hysteria2Password": current.Hysteria2Password,
+		}
+		for _, key := range []string{"password", "naivePassword", "hysteria2Password"} {
+			if v, ok := preserved.ProtocolFields[key]; ok {
+				if s, ok := v.(string); ok {
+					currentValue, ok := current.ProtocolFields[key].(string)
+					if !ok || currentValue == "" {
+						currentValue = flatFallback[key]
+					}
+					preserved.ProtocolFields[key] = disclosure.PreserveRedacted(s, currentValue)
+				}
+			}
+		}
+	}
+	return preserved
+}

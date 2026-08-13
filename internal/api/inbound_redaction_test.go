@@ -59,3 +59,72 @@ func TestRedactInboundList(t *testing.T) {
 		t.Errorf("unexpected list redaction: %+v", out)
 	}
 }
+
+func TestPreserveRedactedInboundRestoresStoredSecrets(t *testing.T) {
+	current := Inbound{
+		Name:              "x",
+		Password:          "live-pw",
+		NaivePassword:     "live-naive",
+		Hysteria2Password: "live-hy2",
+		ProtocolFields: map[string]any{
+			"password":          "live-pw",
+			"naivePassword":     "live-naive",
+			"hysteria2Password": "live-hy2",
+		},
+	}
+	// A PUT from the panel echoes the redacted GET representation.
+	update := Inbound{
+		Name:              "x",
+		Password:          veilsettings.RedactedSecret,
+		NaivePassword:     veilsettings.RedactedSecret,
+		Hysteria2Password: veilsettings.RedactedSecret,
+		Port:              8443,
+		ProtocolFields: map[string]any{
+			"password":          veilsettings.RedactedSecret,
+			"naivePassword":     veilsettings.RedactedSecret,
+			"hysteria2Password": veilsettings.RedactedSecret,
+		},
+	}
+	out := preserveRedactedInbound(update, current)
+	if out.Password != "live-pw" || out.NaivePassword != "live-naive" || out.Hysteria2Password != "live-hy2" {
+		t.Errorf("flat secrets not preserved: %+v", out)
+	}
+	for _, k := range []string{"password", "naivePassword", "hysteria2Password"} {
+		if got := out.ProtocolFields[k]; got != current.ProtocolFields[k] {
+			t.Errorf("ProtocolFields[%s] = %v, want %v", k, got, current.ProtocolFields[k])
+		}
+	}
+	if out.Port != 8443 {
+		t.Errorf("non-secret update lost: port = %d", out.Port)
+	}
+	// Input must not be mutated.
+	if update.Password != veilsettings.RedactedSecret {
+		t.Errorf("preserveRedactedInbound mutated its input")
+	}
+}
+
+func TestPreserveRedactedInboundKeepsNewSecrets(t *testing.T) {
+	current := Inbound{Name: "x", Password: "old"}
+	update := Inbound{Name: "x", Password: "new-secret"}
+	out := preserveRedactedInbound(update, current)
+	if out.Password != "new-secret" {
+		t.Errorf("real new secret replaced: %q", out.Password)
+	}
+}
+
+func TestPreserveRedactedInboundFallsBackToFlatForMissingMapKey(t *testing.T) {
+	// ProtocolFields password keys mirror flat fields; when the map key is
+	// absent on the stored record, the flat value must be preserved instead of
+	// writing the sentinel.
+	current := Inbound{Name: "x", Password: "flat-live"}
+	update := Inbound{
+		Name: "x",
+		ProtocolFields: map[string]any{
+			"password": veilsettings.RedactedSecret,
+		},
+	}
+	out := preserveRedactedInbound(update, current)
+	if got := out.ProtocolFields["password"]; got != "flat-live" {
+		t.Errorf("ProtocolFields[password] = %v, want flat fallback %q", got, "flat-live")
+	}
+}
