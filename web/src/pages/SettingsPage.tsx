@@ -73,6 +73,7 @@ export function SettingsPage() {
 		placeholder?: string;
 	}> = [
 		{ key: "naiveUsername", label: t("settings.field.naiveUsername") },
+		{ key: "naivePassword", label: t("settings.field.naivePassword") },
 		{ key: "hysteria2Password", label: t("settings.field.hysteria2Password") },
 		{ key: "masqueradeURL", label: t("settings.field.masqueradeURL") },
 		{ key: "fallbackRoot", label: t("settings.field.fallbackRoot") },
@@ -155,6 +156,18 @@ export function SettingsPage() {
 		],
 		[t("settings.field.masqueradeURL"), s?.masqueradeURL],
 		[t("settings.field.fallbackRoot"), s?.fallbackRoot],
+		[
+			t("settings.field.naiveUsername"),
+			(s as Record<string, unknown> | undefined)?.naiveUsername as
+				| string
+				| undefined,
+		],
+		[
+			t("settings.field.naivePassword"),
+			(s as Record<string, unknown> | undefined)?.naivePassword as
+				| string
+				| undefined,
+		],
 		[
 			t("settings.field.acmeEmail"),
 			(s as Record<string, unknown> | undefined)?.defaultAcmeEmail as

@@ -268,6 +268,7 @@ export const en: Record<string, string> = {
 	"settings.field.email": "Email",
 	"settings.field.panelEmail": "Panel email",
 	"settings.field.naiveUsername": "NaiveProxy username",
+	"settings.field.naivePassword": "NaiveProxy password",
 	"settings.field.hysteria2Password": "hysteria2 password",
 	"settings.field.masqueradeURL": "Masquerade URL",
 	"settings.field.fallbackRoot": "Fallback root",

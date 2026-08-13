@@ -201,6 +201,7 @@ export const ru: Record<string, string> = {
 	"settings.field.email": "Email",
 	"settings.field.panelEmail": "Email панели",
 	"settings.field.naiveUsername": "Имя пользователя NaiveProxy",
+	"settings.field.naivePassword": "Пароль NaiveProxy",
 	"settings.field.hysteria2Password": "Пароль hysteria2",
 	"settings.field.masqueradeURL": "URL маскировки",
 	"settings.field.fallbackRoot": "Корень fallback",
