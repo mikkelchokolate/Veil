@@ -210,7 +210,14 @@ export function InboundsPage() {
 			protocol: f.protocol,
 			transport: f.transport,
 			enabled: f.enabled,
-			protocolFields: { ...f.protocolFields },
+			// Dual-copy contract: hysteria2Insecure lives in protocolFields
+			// (schema field), so mirror the flat value into the copy the
+			// server receives — otherwise a flat-only write is lost and a
+			// stale flat value wins server-side precedence (audit #67/#119).
+			protocolFields: {
+				...f.protocolFields,
+				hysteria2Insecure: f.hysteria2Insecure,
+			},
 			password: f.password || f.originalRecord?.password || undefined,
 			profiles: f.profiles.length
 				? f.profiles
@@ -319,7 +326,15 @@ export function InboundsPage() {
 			naiveUsername: ib.naiveUsername ?? "",
 			naivePassword: ib.naivePassword ?? "",
 			hysteria2Password: ib.hysteria2Password ?? "",
-			hysteria2Insecure: false,
+			// Prefer the flat value, but fall back to the protocolFields copy
+			// (legacy panel / raw API created flat-only records); otherwise
+			// the checkbox renders wrong and a save silently drops insecure
+			// (audit #67/#119).
+			hysteria2Insecure: Boolean(
+				(ib as unknown as Record<string, unknown>).hysteria2Insecure ??
+					ib.protocolFields?.hysteria2Insecure ??
+					false,
+			),
 			olcrtcAuth: ib.olcrtcAuth ?? "",
 			olcrtcTransport: ib.olcrtcTransport ?? "",
 			protocolFields: { ...(ib.protocolFields ?? {}) },
@@ -758,7 +773,12 @@ export function InboundsPage() {
 																naiveUsername: ib.naiveUsername ?? "",
 																naivePassword: ib.naivePassword ?? "",
 																hysteria2Password: ib.hysteria2Password ?? "",
-																hysteria2Insecure: false,
+																hysteria2Insecure: Boolean(
+																	(ib as unknown as Record<string, unknown>)
+																		.hysteria2Insecure ??
+																		ib.protocolFields?.hysteria2Insecure ??
+																		false,
+																),
 																olcrtcAuth: ib.olcrtcAuth ?? "",
 																olcrtcTransport: ib.olcrtcTransport ?? "",
 																protocolFields: {
