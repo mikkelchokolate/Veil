@@ -124,8 +124,10 @@ func TestMieruPutPromotesNewProtocolPassword(t *testing.T) {
 		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
 	}
 
-	// The panel changes the password via the dynamic field on save.
-	updateBody := `{"name":"mieru-edit","protocol":"mieru","transport":"tcp","port":9446,"enabled":true,"protocolFields":{"password":"rotated-pw"}}`
+	// The panel changes the password via the dynamic field on save. The SPA
+	// always echoes the flat password as "[REDACTED]" (from the edited GET
+	// record) while the user-edited value lives in protocolFields.
+	updateBody := `{"name":"mieru-edit","protocol":"mieru","transport":"tcp","port":9446,"enabled":true,"password":"[REDACTED]","protocolFields":{"password":"rotated-pw"}}`
 	req2 := httptest.NewRequest(http.MethodPut, "/api/inbounds/mieru-edit", strings.NewReader(updateBody))
 	req2.Header.Set("Content-Type", "application/json")
 	w2 := httptest.NewRecorder()
@@ -146,5 +148,53 @@ func TestMieruPutPromotesNewProtocolPassword(t *testing.T) {
 	}
 	if strings.Contains(links, "[REDACTED]") {
 		t.Fatalf("mieru client config leaks the redaction sentinel: %s", links)
+	}
+}
+
+// TestHysteria2PutRotatesPasswordWithSpaEcho is the regression for the update
+// path with the real panel payload shape: flat password echoed as "[REDACTED]"
+// plus a user-edited dynamic field in protocolFields. The new password must win
+// over the restored flat echo and reach the renderer/client links.
+func TestHysteria2PutRotatesPasswordWithSpaEcho(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := writeRenderableManagementState(statePath, "dual"); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+
+	createBody := `{"name":"hy2-rotate","protocol":"hysteria2","transport":"udp","port":9447,"enabled":true,"protocolFields":{"hysteria2Password":"original-pw"}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(createBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// SPA payload: flat echo [REDACTED] + new password in the dynamic field.
+	updateBody := `{"name":"hy2-rotate","protocol":"hysteria2","transport":"udp","port":9447,"enabled":true,"password":"[REDACTED]","protocolFields":{"hysteria2Password":"rotated-hy2-pw"}}`
+	req2 := httptest.NewRequest(http.MethodPut, "/api/inbounds/hy2-rotate", strings.NewReader(updateBody))
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w2.Code, w2.Body.String())
+	}
+
+	req3 := httptest.NewRequest(http.MethodGet, "/api/client-links", nil)
+	w3 := httptest.NewRecorder()
+	r.ServeHTTP(w3, req3)
+	if w3.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w3.Code, w3.Body.String())
+	}
+	links := w3.Body.String()
+	if !strings.Contains(links, "rotated-hy2-pw") {
+		t.Fatalf("hysteria2 client links lost the rotated password after SPA-echo PUT: %s", links)
+	}
+	if strings.Contains(links, "original-pw") {
+		t.Fatalf("hysteria2 client links still use the old password: %s", links)
+	}
+	if strings.Contains(links, "[REDACTED]") {
+		t.Fatalf("hysteria2 client links leak the redaction sentinel: %s", links)
 	}
 }

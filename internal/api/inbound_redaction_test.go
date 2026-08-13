@@ -3,6 +3,7 @@ package api
 import (
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/model"
 	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
@@ -126,5 +127,64 @@ func TestPreserveRedactedInboundFallsBackToFlatForMissingMapKey(t *testing.T) {
 	out := preserveRedactedInbound(update, current)
 	if got := out.ProtocolFields["password"]; got != "flat-live" {
 		t.Errorf("ProtocolFields[password] = %v, want flat fallback %q", got, "flat-live")
+	}
+}
+
+func TestRedactInboundMasksProfilePasswords(t *testing.T) {
+	in := Inbound{
+		Name: "x",
+		Profiles: []model.ClientProfile{
+			{Name: "alice", Password: "profile-secret", Enabled: true},
+			{Name: "bob", Password: "", Enabled: false},
+		},
+	}
+	out := redactInbound(in)
+	if len(out.Profiles) != 2 {
+		t.Fatalf("profiles lost: %+v", out.Profiles)
+	}
+	if out.Profiles[0].Password != veilsettings.RedactedSecret {
+		t.Errorf("profile password not redacted: %q", out.Profiles[0].Password)
+	}
+	if out.Profiles[1].Password != "" {
+		t.Errorf("empty profile password should stay empty: %q", out.Profiles[1].Password)
+	}
+	// Input must not be mutated.
+	if in.Profiles[0].Password != "profile-secret" {
+		t.Errorf("redactInbound mutated its input")
+	}
+}
+
+func TestPreserveRedactedInboundRestoresProfilePasswords(t *testing.T) {
+	current := Inbound{
+		Name: "x",
+		Profiles: []model.ClientProfile{
+			{Name: "alice", Password: "live-alice", Enabled: true},
+			{Name: "bob", Password: "live-bob", Enabled: false},
+		},
+	}
+	// The panel echoes the redacted GET representation on save.
+	update := Inbound{
+		Name: "x",
+		Profiles: []model.ClientProfile{
+			{Name: "alice", Password: veilsettings.RedactedSecret, Enabled: true},
+			{Name: "bob", Password: veilsettings.RedactedSecret, Enabled: false},
+		},
+	}
+	out := preserveRedactedInbound(update, current)
+	if out.Profiles[0].Password != "live-alice" || out.Profiles[1].Password != "live-bob" {
+		t.Errorf("profile passwords not preserved: %+v", out.Profiles)
+	}
+	// Input must not be mutated.
+	if update.Profiles[0].Password != veilsettings.RedactedSecret {
+		t.Errorf("preserveRedactedInbound mutated its input")
+	}
+}
+
+func TestPreserveRedactedInboundKeepsNewProfilePassword(t *testing.T) {
+	current := Inbound{Name: "x", Profiles: []model.ClientProfile{{Name: "alice", Password: "old"}}}
+	update := Inbound{Name: "x", Profiles: []model.ClientProfile{{Name: "alice", Password: "new-profile-secret"}}}
+	out := preserveRedactedInbound(update, current)
+	if out.Profiles[0].Password != "new-profile-secret" {
+		t.Errorf("real new profile secret replaced: %q", out.Profiles[0].Password)
 	}
 }

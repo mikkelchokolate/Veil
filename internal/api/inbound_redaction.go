@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/mikkelchokolate/Veil/internal/model"
 	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
@@ -24,6 +25,15 @@ func redactInbound(inbound Inbound) Inbound {
 					redacted.ProtocolFields[key] = disclosure.Redact(s)
 				}
 			}
+		}
+	}
+	// Legacy client profiles embed per-profile credentials; they are encrypted
+	// at rest and must never be disclosed to API readers (viewer role included).
+	if len(redacted.Profiles) > 0 {
+		redacted.Profiles = make([]model.ClientProfile, len(inbound.Profiles))
+		copy(redacted.Profiles, inbound.Profiles)
+		for i := range redacted.Profiles {
+			redacted.Profiles[i].Password = disclosure.Redact(redacted.Profiles[i].Password)
 		}
 	}
 	return redacted
@@ -74,6 +84,20 @@ func preserveRedactedInbound(update Inbound, current Inbound) Inbound {
 					}
 					preserved.ProtocolFields[key] = disclosure.PreserveRedacted(s, currentValue)
 				}
+			}
+		}
+	}
+	// Per-profile credentials are echoed back from the redacted GET
+	// representation on save; restore the stored values so the sentinel is
+	// never persisted as a live credential.
+	if update.Profiles != nil && current.Profiles != nil {
+		preserved.Profiles = make([]model.ClientProfile, len(update.Profiles))
+		for i := range update.Profiles {
+			preserved.Profiles[i] = update.Profiles[i]
+			if i < len(current.Profiles) {
+				preserved.Profiles[i].Password = disclosure.PreserveRedacted(update.Profiles[i].Password, current.Profiles[i].Password)
+			} else {
+				preserved.Profiles[i].Password = disclosure.PreserveRedacted(update.Profiles[i].Password, "")
 			}
 		}
 	}
