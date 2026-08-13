@@ -37,7 +37,33 @@ func Hysteria2ClientURI(domain string, port int, password string, name string, i
 		query.Set("insecure", "1")
 	}
 	fragment := url.QueryEscape(name)
-	return fmt.Sprintf("hysteria2://%s@%s:%d/?%s#%s", url.QueryEscape(password), domain, port, query.Encode(), fragment)
+	// Userinfo must be percent-encoded per RFC 3986. url.QueryEscape maps
+	// space to '+', which hysteria clients do not translate back in the
+	// userinfo component, silently breaking auth for passwords containing
+	// spaces or other query-reserved characters (audit #71/#120).
+	return fmt.Sprintf("hysteria2://%s@%s:%d/?%s#%s", escapeUserInfoComponent(password), domain, port, query.Encode(), fragment)
+}
+
+// escapeUserInfoComponent percent-encodes a single userinfo component
+// (username or password) per RFC 3986, keeping only unreserved characters
+// (A-Z a-z 0-9 - . _ ~). Everything else — including ':' which Go's url.Parse
+// and hysteria clients treat as the user/password separator — is encoded.
+func escapeUserInfoComponent(value string) string {
+	const hexDigits = "0123456789ABCDEF"
+	var b strings.Builder
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9',
+			c == '-', c == '.', c == '_', c == '~':
+			b.WriteByte(c)
+		default:
+			b.WriteByte('%')
+			b.WriteByte(hexDigits[c>>4])
+			b.WriteByte(hexDigits[c&0x0f])
+		}
+	}
+	return b.String()
 }
 
 func Hysteria2UserPassClientURI(domain string, port int, username string, password string, name string, insecure bool) string {
