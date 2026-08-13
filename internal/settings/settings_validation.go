@@ -285,11 +285,22 @@ func StructFieldName(key string) string {
 
 func normalizeFallbackRoot(root *string) error {
 	*root = filepath.Clean(*root)
-	if !strings.HasPrefix(filepath.ToSlash(*root), "/var/lib/veil") {
+	slash := filepath.ToSlash(*root)
+	if !strings.HasPrefix(slash, "/var/lib/veil/") {
+		// Exactly /var/lib/veil and unrelated paths are invalid: serving the
+		// state directory itself would expose state.json, audit/ and backups/
+		// to anonymous naive-port visitors (audit #77 F1). The prefix check
+		// uses a trailing slash so /var/lib/veilfoo is rejected too (F4).
+		if slash == "/var/lib/veil" {
+			return errors.New("fallbackRoot must be a subdirectory of /var/lib/veil, not the state directory itself")
+		}
+		if strings.HasPrefix(slash, "/") {
+			return errors.New("fallbackRoot must be within /var/lib/veil")
+		}
 		*root = filepath.Clean("/var/lib/veil/" + *root)
 	}
-	if !strings.HasPrefix(filepath.ToSlash(*root), "/var/lib/veil") {
-		return errors.New("fallbackRoot must be within /var/lib/veil")
+	if filepath.ToSlash(*root) == "/var/lib/veil" {
+		return errors.New("fallbackRoot must be a subdirectory of /var/lib/veil, not the state directory itself")
 	}
 	*root = filepath.ToSlash(*root)
 	return nil

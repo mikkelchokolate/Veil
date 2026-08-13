@@ -333,6 +333,10 @@ func TestRenderCaddyJSONNaiveFallbackRootRejectsOutsideVeil(t *testing.T) {
 		"/var/lib/veil-evil",
 		"/var/lib/veil2/sub",
 		"/var/lib",
+		// Serving the state directory itself would expose state.json, audit/
+		// and backups/ to anonymous naive-port visitors (audit #77 F1).
+		"/var/lib/veil",
+		"/var/lib/veil/",
 	}
 	for _, root := range cases {
 		t.Run(root, func(t *testing.T) {
@@ -363,8 +367,6 @@ func TestRenderCaddyJSONNaiveFallbackRootAcceptsWithinVeil(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"/var/lib/veil", "/var/lib/veil"},
-		{"/var/lib/veil/", "/var/lib/veil"},
 		{"/var/lib/veil/custom", "/var/lib/veil/custom"},
 		{"/var/lib/veil/www", "/var/lib/veil/www"},
 	}
