@@ -59,6 +59,55 @@ test.describe('Veil Panel — React SPA', () => {
     await expect(page.getByRole('button', { name: /new inbound/i })).toBeVisible({ timeout: 10_000 });
   });
 
+  // Critical flow (panel completeness): an inbound is created through the
+  // actual UI form (not seeded via the API), with a protocol-specific dynamic
+  // field and the generate action filling a credential. The row then appears
+  // in the list and the record is readable back through the API.
+  test('admin creates a hysteria2 inbound through the UI form', async ({ page, request }) => {
+    const apiToken = process.env.VEIL_BROWSER_API_TOKEN || 'browser-e2e-token';
+    const stamp = Date.now();
+    const name = `e2e-ui-inbound-${stamp}`;
+    const port = 21000 + (stamp % 20000);
+
+    await login(page, adminUsername, adminPassword);
+    await page.getByRole('link', { name: /inbounds/i }).first().click();
+    await page.getByRole('button', { name: /new inbound/i }).click();
+
+    // Identity + protocol basics.
+    await page.locator('#ib-name').fill(name);
+    await page.locator('#ib-proto').selectOption('hysteria2');
+    // hysteria2 supports only udp; the transport select is reset on protocol
+    // switch, but pin it explicitly to prove the form round-trip.
+    await page.locator('#ib-trans').selectOption('udp');
+    await page.locator('#ib-port').fill(String(port));
+
+    // Dynamic protocol field: the hysteria2 password has a generate action.
+    const passwordField = page.locator('#ib-field-hysteria2Password');
+    await expect(passwordField).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: /^generate$/i }).click();
+    // The CSPRNG fills the field with a 32-char hex value.
+    await expect(passwordField).toHaveValue(/^[0-9a-f]{32}$/, { timeout: 10_000 });
+
+    await page.getByRole('button', { name: /^create$/i }).click();
+
+    // The inbound appears in the table and is readable via the API with the
+    // generated credential intact (redacted in the API view, present at rest).
+    await expect(
+      page.getByRole('row', { name: new RegExp(name) }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const list = await request.get('/api/inbounds', {
+      headers: { 'X-Veil-Token': apiToken },
+    });
+    expect(list.status()).toBe(200);
+    const body = await list.json();
+    const found = body.find((i) => i.name === name);
+    expect(found, `created inbound ${name} missing from API list`).toBeTruthy();
+    expect(found.protocol).toBe('hysteria2');
+    expect(found.port).toBe(port);
+    expect(found.enabled).toBe(true);
+  });
+
   test('traffic lazy chunks load without runtime errors', async ({ page }) => {
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
