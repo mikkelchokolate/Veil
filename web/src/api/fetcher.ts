@@ -165,12 +165,21 @@ export async function apiFetch<T>(
 	}
 	if (!response.ok) {
 		const maybe = body as
-			| { error?: string; message?: string; code?: string; details?: unknown }
+			| {
+					error?: string | { message?: string; code?: string };
+					message?: string;
+					code?: string;
+					details?: unknown;
+			  }
 			| undefined;
+		const errorValue =
+			typeof maybe?.error === "string"
+				? maybe.error
+				: (maybe?.error?.message ?? maybe?.message ?? response.statusText);
 		throw new ApiError(
 			response.status,
-			maybe?.error ?? maybe?.message ?? response.statusText,
-			maybe?.code,
+			errorValue,
+			typeof maybe?.error === "object" ? maybe.error.code : maybe?.code,
 			maybe?.details,
 		);
 	}

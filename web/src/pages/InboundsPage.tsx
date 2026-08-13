@@ -288,7 +288,23 @@ export function InboundsPage() {
 						<Select
 							id="ib-proto"
 							value={form.protocol}
-							onChange={(e) => setForm({ ...form, protocol: e.target.value })}
+							onChange={(e) => {
+								const nextProtocol = e.target.value;
+								const nextTransports =
+									protocolCatalog.data?.find((p) => p.protocol === nextProtocol)
+										?.transports ?? [];
+								// Reset transport to the first transport the new
+								// protocol supports (e.g. naiveproxy is tcp-only);
+								// keeping the previous protocol's transport makes
+								// creation fail with a 400.
+								setForm({
+									...form,
+									protocol: nextProtocol,
+									transport: nextTransports.includes(form.transport)
+										? form.transport
+										: (nextTransports[0] ?? ""),
+								});
+							}}
 						>
 							{(protocolCatalog.data ?? []).map((p) => (
 								<option key={p.protocol} value={p.protocol}>
