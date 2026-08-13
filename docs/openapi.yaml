@@ -1301,6 +1301,61 @@ paths:
       x-roles:
       - admin
       - viewer
+  /api/{protocol}/room:
+    post:
+      x-veil-role: admin
+      tags:
+      - protocols
+      summary: Generate a room id for a protocol that supports automatic room creation
+      description: >-
+        Returns a fresh room id for the given provider. Only protocols that
+        implement a room generator expose this route; unknown protocols return
+        404 and providers that require a manually created room return 400.
+      parameters:
+      - name: protocol
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider:
+                  type: string
+                  description: Provider name (e.g. jitsi). Defaults to the protocol default when omitted.
+      responses:
+        '200':
+          description: Generated room id.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - provider
+                - roomID
+                properties:
+                  provider:
+                    type: string
+                  roomID:
+                    type: string
+        '400':
+          description: Provider does not support automatic room creation.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Protocol is unknown or has no room generator.
+      x-roles:
+      - admin
   /api/inbounds:
     get:
       x-veil-role: viewer
