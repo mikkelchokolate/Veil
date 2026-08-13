@@ -96,6 +96,16 @@ export const PostApiProtocolRoomParams = zod.object({
   "protocol": zod.string()
 })
 
+export const postApiProtocolRoomHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiProtocolRoomHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiProtocolRoomHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiProtocolRoomHeaderIdempotencyKeyMax).regex(postApiProtocolRoomHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
 export const PostApiProtocolRoomBody = zod.object({
   "provider": zod.string().optional().describe('Provider name (e.g. jitsi). Defaults to the protocol default when omitted.')
 })

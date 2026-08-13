@@ -2272,6 +2272,12 @@ type PostApiProtocolRoomJSONBody struct {
 	Provider *string `json:"provider,omitempty"`
 }
 
+// PostApiProtocolRoomParams defines parameters for PostApiProtocolRoom.
+type PostApiProtocolRoomParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // GetSTokenParams defines parameters for GetSToken.
 type GetSTokenParams struct {
 	Format *GetSTokenParamsFormat `form:"format,omitempty" json:"format,omitempty"`
@@ -3530,7 +3536,7 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/{protocol}/room (the `PostApiProtocolRoom` operationId).
-	PostApiProtocolRoomWithBody(ctx context.Context, protocol string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiProtocolRoomWithBody(ctx context.Context, protocol string, params *PostApiProtocolRoomParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiProtocolRoom Generate a room id for a protocol that supports automatic room creation
 	//
@@ -3539,7 +3545,7 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/{protocol}/room (the `PostApiProtocolRoom` operationId).
-	PostApiProtocolRoom(ctx context.Context, protocol string, body PostApiProtocolRoomJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiProtocolRoom(ctx context.Context, protocol string, params *PostApiProtocolRoomParams, body PostApiProtocolRoomJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetHealthz Liveness/readiness probe
 	//
@@ -5738,8 +5744,8 @@ func (c *Client) PutApiWarp(ctx context.Context, params *PutApiWarpParams, body 
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/{protocol}/room (the `PostApiProtocolRoom` operationId).
-func (c *Client) PostApiProtocolRoomWithBody(ctx context.Context, protocol string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiProtocolRoomRequestWithBody(c.Server, protocol, contentType, body)
+func (c *Client) PostApiProtocolRoomWithBody(ctx context.Context, protocol string, params *PostApiProtocolRoomParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiProtocolRoomRequestWithBody(c.Server, protocol, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5757,8 +5763,8 @@ func (c *Client) PostApiProtocolRoomWithBody(ctx context.Context, protocol strin
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/{protocol}/room (the `PostApiProtocolRoom` operationId).
-func (c *Client) PostApiProtocolRoom(ctx context.Context, protocol string, body PostApiProtocolRoomJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiProtocolRoomRequest(c.Server, protocol, body)
+func (c *Client) PostApiProtocolRoom(ctx context.Context, protocol string, params *PostApiProtocolRoomParams, body PostApiProtocolRoomJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiProtocolRoomRequest(c.Server, protocol, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9939,18 +9945,18 @@ func NewPutApiWarpRequestWithBody(server string, params *PutApiWarpParams, conte
 }
 
 // NewPostApiProtocolRoomRequest calls the generic PostApiProtocolRoom builder with application/json body
-func NewPostApiProtocolRoomRequest(server string, protocol string, body PostApiProtocolRoomJSONRequestBody) (*http.Request, error) {
+func NewPostApiProtocolRoomRequest(server string, protocol string, params *PostApiProtocolRoomParams, body PostApiProtocolRoomJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostApiProtocolRoomRequestWithBody(server, protocol, "application/json", bodyReader)
+	return NewPostApiProtocolRoomRequestWithBody(server, protocol, params, "application/json", bodyReader)
 }
 
 // NewPostApiProtocolRoomRequestWithBody constructs an http.Request for the PostApiProtocolRoom method, with any body, and a specified content type
-func NewPostApiProtocolRoomRequestWithBody(server string, protocol string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostApiProtocolRoomRequestWithBody(server string, protocol string, params *PostApiProtocolRoomParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -9981,6 +9987,21 @@ func NewPostApiProtocolRoomRequestWithBody(server string, protocol string, conte
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -11199,7 +11220,7 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/{protocol}/room (the `PostApiProtocolRoom` operationId).
-	PostApiProtocolRoomWithBodyWithResponse(ctx context.Context, protocol string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiProtocolRoomResponse, error)
+	PostApiProtocolRoomWithBodyWithResponse(ctx context.Context, protocol string, params *PostApiProtocolRoomParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiProtocolRoomResponse, error)
 
 	// PostApiProtocolRoomWithResponse Generate a room id for a protocol that supports automatic room creation
 	//
@@ -11208,7 +11229,7 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/{protocol}/room (the `PostApiProtocolRoom` operationId).
-	PostApiProtocolRoomWithResponse(ctx context.Context, protocol string, body PostApiProtocolRoomJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiProtocolRoomResponse, error)
+	PostApiProtocolRoomWithResponse(ctx context.Context, protocol string, params *PostApiProtocolRoomParams, body PostApiProtocolRoomJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiProtocolRoomResponse, error)
 
 	// GetHealthzWithResponse Liveness/readiness probe
 	//
@@ -19090,8 +19111,8 @@ func (c *ClientWithResponses) PutApiWarpWithResponse(ctx context.Context, params
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/{protocol}/room (the `PostApiProtocolRoom` operationId).
-func (c *ClientWithResponses) PostApiProtocolRoomWithBodyWithResponse(ctx context.Context, protocol string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiProtocolRoomResponse, error) {
-	rsp, err := c.PostApiProtocolRoomWithBody(ctx, protocol, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostApiProtocolRoomWithBodyWithResponse(ctx context.Context, protocol string, params *PostApiProtocolRoomParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiProtocolRoomResponse, error) {
+	rsp, err := c.PostApiProtocolRoomWithBody(ctx, protocol, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -19105,8 +19126,8 @@ func (c *ClientWithResponses) PostApiProtocolRoomWithBodyWithResponse(ctx contex
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/{protocol}/room (the `PostApiProtocolRoom` operationId).
-func (c *ClientWithResponses) PostApiProtocolRoomWithResponse(ctx context.Context, protocol string, body PostApiProtocolRoomJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiProtocolRoomResponse, error) {
-	rsp, err := c.PostApiProtocolRoom(ctx, protocol, body, reqEditors...)
+func (c *ClientWithResponses) PostApiProtocolRoomWithResponse(ctx context.Context, protocol string, params *PostApiProtocolRoomParams, body PostApiProtocolRoomJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiProtocolRoomResponse, error) {
+	rsp, err := c.PostApiProtocolRoom(ctx, protocol, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}

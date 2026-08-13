@@ -1303,7 +1303,7 @@ paths:
       - viewer
   /api/{protocol}/room:
     post:
-      x-veil-role: admin
+      x-veil-role: admin-secret
       tags:
       - protocols
       summary: Generate a room id for a protocol that supports automatic room creation
@@ -1317,6 +1317,7 @@ paths:
         required: true
         schema:
           type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
       security:
       - veilToken: []
       - bearerAuth: []

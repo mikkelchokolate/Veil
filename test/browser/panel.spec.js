@@ -88,6 +88,11 @@ test.describe('Veil Panel — React SPA', () => {
     // The CSPRNG fills the field with a 32-char hex value.
     await expect(passwordField).toHaveValue(/^[0-9a-f]{32}$/, { timeout: 10_000 });
 
+    // hysteria2 needs a public domain to run; the browser-e2e panel has none,
+    // so disable the inbound before creating it (same convention as the API
+    // seed helper) — the form round-trip is what this test covers.
+    await page.locator('#ib-enabled').uncheck();
+
     await page.getByRole('button', { name: /^create$/i }).click();
 
     // The inbound appears in the table and is readable via the API with the
@@ -105,7 +110,7 @@ test.describe('Veil Panel — React SPA', () => {
     expect(found, `created inbound ${name} missing from API list`).toBeTruthy();
     expect(found.protocol).toBe('hysteria2');
     expect(found.port).toBe(port);
-    expect(found.enabled).toBe(true);
+    expect(found.enabled).toBe(false);
   });
 
   test('traffic lazy chunks load without runtime errors', async ({ page }) => {
