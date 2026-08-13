@@ -22,7 +22,15 @@ func (s *managementState) handleClientLinks(w http.ResponseWriter, r *http.Reque
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	response, err := protocols.BuildClientLinks(s.settings, s.inbounds)
+	// Attach normalized Client+Binding credentials so admin links include
+	// normalized clients, matching what the live config actually renders
+	// (audit #65/#68: links and server config diverged).
+	inbounds, err := s.inboundsWithRuntimeCredentialsLocked()
+	if err != nil {
+		writeError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	response, err := protocols.BuildClientLinks(s.settings, inbounds)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return

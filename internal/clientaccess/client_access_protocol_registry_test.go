@@ -20,7 +20,7 @@ func TestClientAccessProtocolRegistryBuildsProtocolSpecificLinks(t *testing.T) {
 	}
 
 	mieru := registry.BuildLinks(settings, Inbound{Name: "mieru", Protocol: "mieru", Transport: "udp", Port: 9443, Enabled: true, Password: "mieru-secret"}, nil)
-	if len(mieru) != 1 || mieru[0].Name != "mieru" || mieru[0].URI != "" || !strings.Contains(mieru[0].Config, `"protocol": "UDP"`) || !strings.Contains(mieru[0].Config, `"password": "mieru-secret"`) {
+	if len(mieru) != 1 || mieru[0].Name != "mieru" || !strings.HasPrefix(mieru[0].URI, "mierus://") || !strings.Contains(mieru[0].URI, "port=9443") || !strings.Contains(mieru[0].Config, `"protocol": "UDP"`) || !strings.Contains(mieru[0].Config, `"password": "mieru-secret"`) {
 		t.Fatalf("mieru fallback links = %+v", mieru)
 	}
 }

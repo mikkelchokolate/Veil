@@ -137,6 +137,14 @@ func testRequiredMieruDataPath(t *testing.T, transport string) {
 	if err := json.Unmarshal([]byte(clientConfigJSON), &clientMap); err != nil {
 		t.Fatal(err)
 	}
+	// Regression guard (audit series #51/#101): the delivered client config
+	// must be importable as-is — upstream mieru rejects socks5Port < 1 with
+	// "socks5 port number 0 is invalid". The renderer now emits a valid
+	// deterministic port, so assert it before the runtime override below.
+	socksPortValue, ok := clientMap["socks5Port"].(float64)
+	if !ok || int(socksPortValue) < 1 {
+		t.Fatalf("delivered Mieru client config has invalid socks5Port: %v (config must be importable without patching)", clientMap["socks5Port"])
+	}
 	socksPort := freePort(t)
 	clientMap["socks5Port"] = socksPort
 	clientMap["socks5ListenLAN"] = false

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -406,5 +407,50 @@ func TestValidatorDuplicateMieruUsernameFallsBackToInboundName(t *testing.T) {
 
 	if count := countIssueCode(response, "mieru_duplicate_username"); count != 1 {
 		t.Fatalf("expected duplicate from inbound-name fallback, got %d: %+v", count, response.Issues)
+	}
+}
+
+func TestValidatorRejectsOversizedMieruUsername(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-mieru.service": true}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{},
+		Inbounds: []model.Inbound{
+			{
+				Name: "a", Protocol: "mieru", Transport: "tcp", Port: 9443, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "alice", Username: strings.Repeat("x", 65), Password: "pw1", Enabled: true}},
+			},
+		},
+	})
+
+	if count := countIssueCode(response, "mieru_username_too_long"); count != 1 {
+		t.Fatalf("expected 1 username-too-long issue, got %d: %+v", count, response.Issues)
+	}
+	if response.Valid {
+		t.Fatalf("oversized username must make the config invalid")
+	}
+}
+
+func TestValidatorAcceptsBoundaryMieruUsernameAndRejectsOversizedPassword(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-mieru.service": true}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{},
+		Inbounds: []model.Inbound{
+			{
+				Name: "a", Protocol: "mieru", Transport: "tcp", Port: 9443, Enabled: true,
+				// 64-byte username is the upstream cap: must pass.
+				Profiles: []model.ClientProfile{{Name: "alice", Username: strings.Repeat("y", 64), Password: strings.Repeat("z", 65), Enabled: true}},
+			},
+		},
+	})
+
+	if count := countIssueCode(response, "mieru_username_too_long"); count != 0 {
+		t.Fatalf("64-byte username must be accepted: %+v", response.Issues)
+	}
+	if count := countIssueCode(response, "mieru_password_too_long"); count != 1 {
+		t.Fatalf("expected 1 password-too-long issue, got %d: %+v", count, response.Issues)
 	}
 }

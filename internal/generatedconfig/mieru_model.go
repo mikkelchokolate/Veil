@@ -35,6 +35,13 @@ func (m MieruGeneratedConfigModel) Build(inbounds []Inbound) (renderer.MieruConf
 			return renderer.MieruConfig{}, false, err
 		}
 		if len(credentials) == 0 {
+			// Fall back to the inbound credential only when the inbound has no
+			// client profiles at all. If profiles exist but every one of them
+			// is disabled, the user deliberately revoked all clients: falling
+			// back would silently re-enable the legacy inbound user (audit #3).
+			if hasProfiles(inbound) {
+				continue
+			}
 			if err := addUser(inbound.Name, inbound.Password); err != nil {
 				return renderer.MieruConfig{}, false, err
 			}
@@ -50,6 +57,13 @@ func (m MieruGeneratedConfigModel) Build(inbounds []Inbound) (renderer.MieruConf
 		return renderer.MieruConfig{}, false, nil
 	}
 	return config, true, nil
+}
+
+// hasProfiles reports whether the inbound carries any client profile entries
+// at all (enabled or not), distinguishing "no profiles configured" from
+// "profiles configured but all disabled".
+func hasProfiles(inbound Inbound) bool {
+	return len(inbound.Profiles) > 0
 }
 
 func (m MieruGeneratedConfigModel) includes(inbound Inbound) bool {

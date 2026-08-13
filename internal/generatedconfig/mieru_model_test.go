@@ -2,6 +2,53 @@ package generatedconfig
 
 import "testing"
 
+// TestMieruGeneratedConfigModelAllDisabledProfilesDoNotReviveInboundCredential
+// covers audit #3: when profiles exist but every one is disabled, the inbound
+// fallback credential must NOT be silently re-enabled.
+func TestMieruGeneratedConfigModelAllDisabledProfilesDoNotReviveInboundCredential(t *testing.T) {
+	config, ok, err := NewMieruGeneratedConfigModel(Settings{}).Build([]Inbound{
+		{
+			Name:      "mieru-a",
+			Protocol:  "mieru",
+			Transport: "tcp",
+			Port:      443,
+			Enabled:   true,
+			Password:  "legacy-inbound-pass",
+			Profiles:  []ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: false}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected Mieru config model")
+	}
+	if len(config.Users) != 0 {
+		t.Fatalf("users = %+v, want none (all profiles disabled must revoke the user, not fall back)", config.Users)
+	}
+	// The binding is still rendered (the inbound is enabled).
+	if len(config.PortBindings) != 1 {
+		t.Fatalf("bindings = %+v", config.PortBindings)
+	}
+}
+
+// TestMieruGeneratedConfigModelNoProfilesFallsBackToInboundCredential keeps the
+// legacy contract: an inbound without any profiles uses its own credential.
+func TestMieruGeneratedConfigModelNoProfilesFallsBackToInboundCredential(t *testing.T) {
+	config, ok, err := NewMieruGeneratedConfigModel(Settings{}).Build([]Inbound{
+		{Name: "mieru-a", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "legacy-pass"},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected Mieru config model")
+	}
+	if len(config.Users) != 1 || config.Users[0].Name != "mieru-a" || config.Users[0].Password != "legacy-pass" {
+		t.Fatalf("users = %+v", config.Users)
+	}
+}
+
 func TestMieruGeneratedConfigModelAggregatesEnabledMieruBindingsAndUsers(t *testing.T) {
 	config, ok, err := NewMieruGeneratedConfigModel(Settings{}).Build([]Inbound{
 		{Name: "disabled", Protocol: "mieru", Transport: "tcp", Port: 80, Enabled: false, Password: "disabled"},

@@ -2,6 +2,7 @@ package clientaccess
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -15,6 +16,13 @@ func TestBuildClientLinksIncludesMieruClientConfigForClientProfile(t *testing.T)
 	}
 	if response.Count != 1 || response.Links[0].Protocol != "mieru" || response.Links[0].Config == "" {
 		t.Fatalf("response = %+v", response)
+	}
+	// The per-client subscription path drops URI-less links; the registry
+	// builder must emit the same mierus:// URI as the aggregator (audit
+	// #59/#109). Assert it here so the subscription for mieru cannot regress
+	// to empty again.
+	if !strings.HasPrefix(response.Links[0].URI, "mierus://") {
+		t.Fatalf("link URI = %q, want mierus:// scheme", response.Links[0].URI)
 	}
 	var config struct {
 		ActiveProfile string `json:"activeProfile"`

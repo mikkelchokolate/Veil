@@ -283,6 +283,7 @@ RuntimeDirectory=veil-mieru
 StateDirectory=mita
 ExecStart=` + cfg.MieruBinary + ` run
 ExecStartPost=/bin/sh -c 'i=0; while [ $$i -lt 50 ]; do if [ -S /run/veil-mieru/mita.sock ]; then ` + cfg.MieruBinary + ` apply config ` + mieruConfig + ` && ` + cfg.MieruBinary + ` start && exit 0; fi; i=$$((i+1)); sleep 0.2; done; echo "mita activation timed out" >&2; exit 1'
+ExecStop=` + cfg.MieruBinary + ` stop
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

@@ -227,6 +227,10 @@ func mieruClientConfigLink(input ClientAccessLinkInput) (ClientLink, bool) {
 		return ClientLink{}, false
 	}
 	link.Config = config
+	// The subscription payload drops links without a URI, so the per-client
+	// path must carry the same mierus:// URI the aggregator emits. Without it
+	// the per-client subscription for mieru would be empty (audit #59/#109).
+	link.URI = MieruClientURI(clientEndpoint(input.Settings), input.Inbound.Port, input.Credential.Username, input.Credential.Password, link.Name, input.Inbound.Transport)
 	return link, true
 }
 

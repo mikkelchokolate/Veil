@@ -18,6 +18,12 @@ type Request struct {
 	Inbounds        []model.Inbound
 	CurrentInbounds []model.Inbound
 	Warp            model.WarpConfig
+	// RuntimeIdentities carries the normalized Client+Binding identities per
+	// inbound (from the SQLite credential store). The generated mieru config
+	// aggregates users globally, so identities across inbounds must be unique
+	// and within the upstream 64-byte cap even when they never appear in the
+	// legacy inbound-embedded profiles (audit #3/#104).
+	RuntimeIdentities map[string][]string
 }
 
 type Response struct {

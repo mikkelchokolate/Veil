@@ -40,7 +40,7 @@ func (v Validator) Validate(ctx context.Context, request Request) Response {
 			needsDNS = true
 		}
 	}
-	response.Issues = append(response.Issues, crossInboundIssues(request.Settings, request.Inbounds)...)
+	response.Issues = append(response.Issues, crossInboundIssues(request.Settings, request.Inbounds, request.RuntimeIdentities)...)
 
 	if needsDNS && v.DNS != nil {
 		checked := map[string]struct{}{}
@@ -269,12 +269,34 @@ func protocolInboundIssues(settings model.Settings, inbound model.Inbound) []mod
 // generated mieru config rejects duplicate usernames across all enabled mieru
 // inbounds at render time; surface the same failure during live validation so
 // the panel refuses to apply instead of failing mid-apply.
-func crossInboundIssues(settings model.Settings, inbounds []model.Inbound) []model.ValidationIssue {
+func crossInboundIssues(settings model.Settings, inbounds []model.Inbound, runtimeIdentities map[string][]string) []model.ValidationIssue {
 	var issues []model.ValidationIssue
 	seen := map[string]string{}
 	for _, inbound := range inbounds {
 		if !inbound.Enabled || inbound.Protocol != "mieru" {
 			continue
+		}
+		// Normalized client identities are aggregated into the same global
+		// user list as legacy profiles, so they join the duplicate and
+		// length checks too.
+		for _, identity := range runtimeIdentities[inbound.Name] {
+			if len(identity) > 64 {
+				issues = append(issues, model.ValidationIssue{
+					Code:        "mieru_username_too_long",
+					Severity:    SeverityError,
+					Field:       "profiles",
+					InboundID:   inbound.Name,
+					Message:     fmt.Sprintf("mieru username %q exceeds the 64-byte limit", identity),
+					Remediation: "Use a username of at most 64 bytes.",
+					Source:      "mieru",
+				})
+				continue
+			}
+			if previous, ok := seen[identity]; ok {
+				issues = append(issues, mieruDuplicateUsernameIssue(identity, previous, inbound))
+				continue
+			}
+			seen[identity] = inbound.Name
 		}
 		credentials, err := clientaccess.BuildClientCredentials(inbound)
 		if err != nil {
@@ -290,6 +312,33 @@ func crossInboundIssues(settings model.Settings, inbounds []model.Inbound) []mod
 			continue
 		}
 		for _, credential := range credentials {
+			// Upstream mieru caps user names and passwords at 64 bytes
+			// (audit #53/#103): longer values are rejected at apply time.
+			// Fail during live validation instead, with a clear issue.
+			if len(credential.Username) > 64 {
+				issues = append(issues, model.ValidationIssue{
+					Code:        "mieru_username_too_long",
+					Severity:    SeverityError,
+					Field:       "profiles",
+					InboundID:   inbound.Name,
+					Message:     fmt.Sprintf("mieru username %q exceeds the 64-byte limit", credential.Username),
+					Remediation: "Use a username of at most 64 bytes.",
+					Source:      "mieru",
+				})
+				continue
+			}
+			if len(credential.Password) > 64 {
+				issues = append(issues, model.ValidationIssue{
+					Code:        "mieru_password_too_long",
+					Severity:    SeverityError,
+					Field:       "profiles",
+					InboundID:   inbound.Name,
+					Message:     fmt.Sprintf("mieru password for username %q exceeds the 64-byte limit", credential.Username),
+					Remediation: "Use a password of at most 64 bytes.",
+					Source:      "mieru",
+				})
+				continue
+			}
 			if previous, ok := seen[credential.Username]; ok {
 				issues = append(issues, mieruDuplicateUsernameIssue(credential.Username, previous, inbound))
 				continue

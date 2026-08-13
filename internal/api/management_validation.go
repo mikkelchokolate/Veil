@@ -43,11 +43,26 @@ func (s *managementState) validateConfigurationLocked(
 	inbounds []Inbound,
 	warp WarpConfig,
 ) livevalidation.Response {
+	runtimeIdentities := map[string][]string{}
+	if s.clientService != nil && s.renderBindings == nil {
+		for _, inbound := range inbounds {
+			creds, err := s.clientService.CredentialsForInbound(inbound.Name)
+			if err != nil {
+				continue
+			}
+			for _, credential := range creds {
+				if identity := credential.Username; identity != "" {
+					runtimeIdentities[inbound.Name] = append(runtimeIdentities[inbound.Name], identity)
+				}
+			}
+		}
+	}
 	return s.configurationValidator.Validate(ctx, livevalidation.Request{
-		Settings:        settings,
-		Inbounds:        append([]Inbound(nil), inbounds...),
-		CurrentInbounds: append([]Inbound(nil), s.inbounds...),
-		Warp:            warp,
+		Settings:          settings,
+		Inbounds:          append([]Inbound(nil), inbounds...),
+		CurrentInbounds:   append([]Inbound(nil), s.inbounds...),
+		Warp:              warp,
+		RuntimeIdentities: runtimeIdentities,
 	})
 }
 

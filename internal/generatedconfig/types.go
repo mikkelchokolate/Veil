@@ -27,26 +27,10 @@ func NewRuntimeCommandExecutor() RuntimeCommandExecutor {
 	return veilruntime.NewRuntimeCommandExecutor()
 }
 
+// BuildClientCredentials resolves the effective client credentials for an
+// inbound, including normalized Client+Binding credentials attached as
+// runtime-only data. The merge lives in clientaccess.BuildClientCredentials
+// so links, subscriptions, live validation and renderers all agree.
 func BuildClientCredentials(inbound Inbound) ([]clientaccess.ClientCredential, error) {
-	credentials, err := clientaccess.BuildClientCredentials(inbound)
-	if err != nil {
-		return nil, err
-	}
-	if len(inbound.RuntimeCredentials) == 0 {
-		return credentials, nil
-	}
-	overrides := make(map[string]struct{}, len(inbound.RuntimeCredentials))
-	for _, credential := range inbound.RuntimeCredentials {
-		overrides[credential.Username] = struct{}{}
-	}
-	merged := make([]clientaccess.ClientCredential, 0, len(credentials)+len(inbound.RuntimeCredentials))
-	for _, credential := range credentials {
-		if _, replaced := overrides[credential.Username]; !replaced {
-			merged = append(merged, credential)
-		}
-	}
-	for _, credential := range inbound.RuntimeCredentials {
-		merged = append(merged, clientaccess.ClientCredential{Name: credential.Name, Username: credential.Username, Password: credential.Password})
-	}
-	return merged, nil
+	return clientaccess.BuildClientCredentials(inbound)
 }
