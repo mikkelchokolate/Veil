@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/clientaccess"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/service"
@@ -39,6 +40,7 @@ func (v Validator) Validate(ctx context.Context, request Request) Response {
 			needsDNS = true
 		}
 	}
+	response.Issues = append(response.Issues, crossInboundIssues(request.Settings, request.Inbounds)...)
 
 	if needsDNS && v.DNS != nil {
 		checked := map[string]struct{}{}
@@ -260,6 +262,54 @@ func protocolInboundIssues(settings model.Settings, inbound model.Inbound) []mod
 		return nil
 	}
 	return validator.ValidateInbound(settings, inbound)
+}
+
+// crossInboundIssues collects checks that span multiple inbounds and therefore
+// cannot be expressed through the per-inbound ValidateInbound interface. The
+// generated mieru config rejects duplicate usernames across all enabled mieru
+// inbounds at render time; surface the same failure during live validation so
+// the panel refuses to apply instead of failing mid-apply.
+func crossInboundIssues(settings model.Settings, inbounds []model.Inbound) []model.ValidationIssue {
+	var issues []model.ValidationIssue
+	seen := map[string]string{}
+	for _, inbound := range inbounds {
+		if !inbound.Enabled || inbound.Protocol != "mieru" {
+			continue
+		}
+		credentials, err := clientaccess.BuildClientCredentials(inbound)
+		if err != nil {
+			continue
+		}
+		if len(credentials) == 0 {
+			name := inbound.Name
+			if previous, ok := seen[name]; ok {
+				issues = append(issues, mieruDuplicateUsernameIssue(name, previous, inbound))
+				continue
+			}
+			seen[name] = inbound.Name
+			continue
+		}
+		for _, credential := range credentials {
+			if previous, ok := seen[credential.Username]; ok {
+				issues = append(issues, mieruDuplicateUsernameIssue(credential.Username, previous, inbound))
+				continue
+			}
+			seen[credential.Username] = inbound.Name
+		}
+	}
+	return issues
+}
+
+func mieruDuplicateUsernameIssue(username, previousInbound string, inbound model.Inbound) model.ValidationIssue {
+	return model.ValidationIssue{
+		Code:        "mieru_duplicate_username",
+		Severity:    SeverityError,
+		Field:       "profiles",
+		InboundID:   inbound.Name,
+		Message:     fmt.Sprintf("mieru username %q is already used by inbound %q", username, previousInbound),
+		Remediation: "Use a distinct username for each mieru client profile.",
+		Source:      "mieru",
+	}
 }
 
 func protocolNeedsDomain(settings model.Settings, inbound model.Inbound) bool {

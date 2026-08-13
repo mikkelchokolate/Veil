@@ -340,3 +340,71 @@ func issueSeverity(response Response, code string) string {
 	}
 	return ""
 }
+
+func TestValidatorRejectsDuplicateMieruUsernamesAcrossInbounds(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-mieru.service": true}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{},
+		Inbounds: []model.Inbound{
+			{
+				Name: "a", Protocol: "mieru", Transport: "tcp", Port: 9443, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "alice", Username: "alice", Password: "pw1", Enabled: true}},
+			},
+			{
+				Name: "b", Protocol: "mieru", Transport: "tcp", Port: 9444, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "alice-dup", Username: "alice", Password: "pw2", Enabled: true}},
+			},
+		},
+	})
+
+	if count := countIssueCode(response, "mieru_duplicate_username"); count != 1 {
+		t.Fatalf("expected 1 duplicate username issue, got %d: %+v", count, response.Issues)
+	}
+	if response.Valid {
+		t.Fatalf("duplicate usernames must make the config invalid")
+	}
+}
+
+func TestValidatorAllowsDistinctMieruUsernames(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-mieru.service": true}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{},
+		Inbounds: []model.Inbound{
+			{
+				Name: "a", Protocol: "mieru", Transport: "tcp", Port: 9443, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "alice", Username: "alice", Password: "pw1", Enabled: true}},
+			},
+			{
+				Name: "b", Protocol: "mieru", Transport: "tcp", Port: 9444, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "bob", Username: "bob", Password: "pw2", Enabled: true}},
+			},
+		},
+	})
+
+	if count := countIssueCode(response, "mieru_duplicate_username"); count != 0 {
+		t.Fatalf("distinct usernames must not report duplicates: %+v", response.Issues)
+	}
+}
+
+func TestValidatorDuplicateMieruUsernameFallsBackToInboundName(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-mieru.service": true}}
+
+	// Two mieru inbounds without profiles fall back to inbound.Name as the
+	// username; the generated config would reject the duplicate at render.
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{},
+		Inbounds: []model.Inbound{
+			{Name: "edge", Protocol: "mieru", Transport: "tcp", Port: 9443, Enabled: true, Password: "pw1"},
+			{Name: "edge", Protocol: "mieru", Transport: "tcp", Port: 9444, Enabled: true, Password: "pw2"},
+		},
+	})
+
+	if count := countIssueCode(response, "mieru_duplicate_username"); count != 1 {
+		t.Fatalf("expected duplicate from inbound-name fallback, got %d: %+v", count, response.Issues)
+	}
+}
