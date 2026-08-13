@@ -191,6 +191,18 @@ export function InboundsPage() {
 		}
 	}
 
+	// hasDynamicField reports whether the current protocol's schema renders a
+	// dynamic field with the given key. Flat fallback inputs (masqueradeURL,
+	// fallbackRoot, olcrtcRoomID) are hidden when the dynamic schema already
+	// exposes the same key so the form does not render the field twice.
+	function hasDynamicField(key: string): boolean {
+		return (
+			protocolCatalog.data
+				?.find((p) => p.protocol === form.protocol)
+				?.inboundFieldSchema?.some((f) => f.key === key) ?? false
+		);
+	}
+
 	function toBody(f: InboundForm, keepName?: string) {
 		const port = f.port === "" ? undefined : Number.parseInt(f.port, 10);
 		const body: Record<string, unknown> = {
@@ -398,26 +410,30 @@ export function InboundsPage() {
 							onChange={(e) => setForm({ ...form, port: e.target.value })}
 						/>
 					</FormItem>
-					<FormItem>
-						<Label htmlFor="ib-masq">{t("inbounds.masqueradeURL")}</Label>
-						<Input
-							id="ib-masq"
-							value={form.masqueradeURL}
-							onChange={(e) =>
-								setForm({ ...form, masqueradeURL: e.target.value })
-							}
-						/>
-					</FormItem>
-					<FormItem>
-						<Label htmlFor="ib-fb">{t("inbounds.fallbackRoot")}</Label>
-						<Input
-							id="ib-fb"
-							value={form.fallbackRoot}
-							onChange={(e) =>
-								setForm({ ...form, fallbackRoot: e.target.value })
-							}
-						/>
-					</FormItem>
+					{!hasDynamicField("masqueradeURL") ? (
+						<FormItem>
+							<Label htmlFor="ib-masq">{t("inbounds.masqueradeURL")}</Label>
+							<Input
+								id="ib-masq"
+								value={form.masqueradeURL}
+								onChange={(e) =>
+									setForm({ ...form, masqueradeURL: e.target.value })
+								}
+							/>
+						</FormItem>
+					) : null}
+					{!hasDynamicField("fallbackRoot") ? (
+						<FormItem>
+							<Label htmlFor="ib-fb">{t("inbounds.fallbackRoot")}</Label>
+							<Input
+								id="ib-fb"
+								value={form.fallbackRoot}
+								onChange={(e) =>
+									setForm({ ...form, fallbackRoot: e.target.value })
+								}
+							/>
+						</FormItem>
+					) : null}
 					{(
 						protocolCatalog.data?.find((p) => p.protocol === form.protocol)
 							?.inboundFieldSchema ?? []
@@ -477,7 +493,9 @@ export function InboundsPage() {
 										onChange={(e) =>
 											setValue(
 												field.type === "number"
-													? Number(e.target.value)
+													? e.target.value === ""
+														? undefined
+														: Number(e.target.value)
 													: e.target.value,
 											)
 										}
@@ -499,7 +517,7 @@ export function InboundsPage() {
 						);
 					})}
 
-					{form.protocol === "olcrtc" ? (
+					{form.protocol === "olcrtc" && !hasDynamicField("olcrtcRoomID") ? (
 						<FormItem>
 							<Label htmlFor="ib-room">{t("inbounds.olcrtcRoomID")}</Label>
 							<Input
