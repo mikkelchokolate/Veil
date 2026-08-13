@@ -152,7 +152,9 @@ func naiveProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 		return ClientLink{}, false
 	}
 	link := newProtocolClientLink(input)
-	link.URI = NaiveClientURI(model.ResolveInboundDomain(input.Inbound, input.Settings), input.Inbound.Port, input.Credential.Username, input.Credential.Password)
+	// The registry path must emit the effective public port Caddy binds and
+	// the upstream https:// scheme, matching the plugin path (audit #79/#177).
+	link.URI = NaiveClientURI(model.ResolveInboundDomain(input.Inbound, input.Settings), model.ResolveNaivePublicPort(input.Settings, input.Inbound), input.Credential.Username, input.Credential.Password)
 	return link, true
 }
 
@@ -175,7 +177,7 @@ func naiveFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	if username == "" {
 		username = model.DefaultNaiveUsername
 	}
-	link.URI = NaiveClientURI(model.ResolveInboundDomain(input.Inbound, input.Settings), input.Inbound.Port, username, password)
+	link.URI = NaiveClientURI(model.ResolveInboundDomain(input.Inbound, input.Settings), model.ResolveNaivePublicPort(input.Settings, input.Inbound), username, password)
 	return link, true
 }
 

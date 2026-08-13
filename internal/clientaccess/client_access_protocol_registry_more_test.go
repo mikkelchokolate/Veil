@@ -196,7 +196,7 @@ func TestNaiveProfileLinkUsesInboundDomain(t *testing.T) {
 	if !ok {
 		t.Fatal("expected link")
 	}
-	want := "naive+https://alice:pass@inbound.example.com:8443"
+	want := "https://alice:pass@inbound.example.com:8443"
 	if link.URI != want {
 		t.Fatalf("URI = %q, want %q", link.URI, want)
 	}
@@ -227,7 +227,7 @@ func TestNaiveFallbackLinkUsesInboundDomain(t *testing.T) {
 	if !ok {
 		t.Fatal("expected link")
 	}
-	want := "naive+https://veil:global@inbound.example.com:8443"
+	want := "https://veil:global@inbound.example.com:8443"
 	if link.URI != want {
 		t.Fatalf("URI = %q, want %q", link.URI, want)
 	}

@@ -84,22 +84,10 @@ func NaiveEmail(_ model.Settings, inbound model.Inbound) string {
 
 // NaivePublicPort returns the public port for the inbound, falling back to the
 // inbound listen port, the global default inbound public port, and finally 443.
+// The canonical resolver lives in model so firewall rules, client links and
+// the bind plan all agree (audit #81/#128).
 func NaivePublicPort(settings model.Settings, inbound model.Inbound) int {
-	if v, ok := inbound.ProtocolFields["publicPort"]; ok {
-		if n, ok := v.(float64); ok {
-			return int(n)
-		}
-		if n, ok := v.(int); ok {
-			return n
-		}
-	}
-	if inbound.Port != 0 {
-		return inbound.Port
-	}
-	if settings.DefaultInboundPublicPort != 0 {
-		return settings.DefaultInboundPublicPort
-	}
-	return 443
+	return model.ResolveNaivePublicPort(settings, inbound)
 }
 
 // NaiveTransport returns the transport from the inbound ProtocolFields,

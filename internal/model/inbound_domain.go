@@ -13,12 +13,34 @@ const (
 )
 
 // DefaultNaiveUsername is the single source of truth for the fallback naiveproxy
-// username when none is configured on the inbound or in global settings. The UI
-// schema, validators (apply-plan and protocol plugin), the caddy renderer, and
-// the client-access exporter all share it so that a freshly created naiveproxy
+// username when neither the inbound nor settings define one. The UI schema,
+// validators (apply-plan and protocol plugin), the caddy renderer, and the
+// client-access exporter all share it so that a freshly created naiveproxy
 // inbound (which only has a generated password) resolves a consistent, usable
 // credential instead of producing an empty username / broken client link.
 const DefaultNaiveUsername = "veil"
+
+// ResolveNaivePublicPort returns the effective public port for a naiveproxy
+// inbound: protocolFields publicPort -> flat inbound port -> global default
+// inbound public port -> 443. Centralized here so the firewall rules, client
+// links and the Caddy bind plan all open/emit the same port (audit #81/#128).
+func ResolveNaivePublicPort(settings Settings, inbound Inbound) int {
+	if v, ok := inbound.ProtocolFields["publicPort"]; ok {
+		if n, ok := v.(float64); ok {
+			return int(n)
+		}
+		if n, ok := v.(int); ok {
+			return n
+		}
+	}
+	if inbound.Port != 0 {
+		return inbound.Port
+	}
+	if settings.DefaultInboundPublicPort != 0 {
+		return settings.DefaultInboundPublicPort
+	}
+	return 443
+}
 
 // InboundDomain returns the inbound-specific domain declared in
 // inbound.ProtocolFields[InboundDomainField], trimmed of whitespace and

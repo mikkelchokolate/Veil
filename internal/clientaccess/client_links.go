@@ -24,8 +24,21 @@ func BuildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 }
 
 func NaiveClientURI(domain string, port int, username string, password string) string {
+	return naiveClientURITransport(domain, port, username, password, "https", 443)
+}
+
+// naiveClientURITransport renders the upstream naiveproxy share URI. The
+// client (klzgrad/naiveproxy) accepts https:// (TCP/HTTP2) and quic://
+// (HTTP/3/UDP); the port is omitted when it equals the scheme default
+// (audit #177 — the legacy naive+https:// scheme is not understood by
+// upstream clients). Userinfo is percent-encoded via url.UserPassword.
+func naiveClientURITransport(domain string, port int, username, password, scheme string, defaultPort int) string {
 	userinfo := url.UserPassword(username, password).String()
-	return fmt.Sprintf("naive+https://%s@%s:%d", userinfo, domain, port)
+	host := domain
+	if port != defaultPort {
+		host = fmt.Sprintf("%s:%d", domain, port)
+	}
+	return fmt.Sprintf("%s://%s@%s", scheme, userinfo, host)
 }
 
 func Hysteria2ClientURI(domain string, port int, password string, name string, insecure bool) string {
