@@ -23,9 +23,23 @@ func TestAutofillOlcrtcInboundProvisionsRoomAndKey(t *testing.T) {
 	if strings.Contains(strings.ToLower(in.OlcrtcRoomID), "veil") {
 		t.Fatalf("room URL leaks a panel marker: %q", in.OlcrtcRoomID)
 	}
-	if !isOlcrtcKey(in.Password) {
+	if !is64LowerHex(in.Password) {
 		t.Fatalf("password is not a 64-hex olcrtc key: %q", in.Password)
 	}
+}
+
+// is64LowerHex mirrors the olcrtc key-shape check (the api-level duplicate was
+// removed as dead code).
+func is64LowerHex(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			return false
+		}
+	}
+	return true
 }
 
 func TestAutofillOlcrtcInboundPreservesExistingAndIgnoresOthers(t *testing.T) {

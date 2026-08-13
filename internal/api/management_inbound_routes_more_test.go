@@ -77,19 +77,6 @@ func TestHandleOlcrtcRoom(t *testing.T) {
 	}
 }
 
-func TestIsOlcrtcKey(t *testing.T) {
-	valid := strings.Repeat("a", 64)
-	if !isOlcrtcKey(valid) {
-		t.Fatal("expected valid key")
-	}
-	if isOlcrtcKey(strings.Repeat("g", 64)) {
-		t.Fatal("expected invalid hex")
-	}
-	if isOlcrtcKey(strings.Repeat("a", 63)) {
-		t.Fatal("expected invalid length")
-	}
-}
-
 func TestHandleInboundByNameValidation(t *testing.T) {
 	state := newManagementState(ServerInfo{Mode: "dev"})
 

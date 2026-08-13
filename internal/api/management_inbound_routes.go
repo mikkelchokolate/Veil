@@ -328,18 +328,9 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 	})
 }
 
-// isOlcrtcKey reports whether s is a 64-char lowercase hex string.
-func isOlcrtcKey(s string) bool {
-	if len(s) != 64 {
-		return false
-	}
-	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
-			return false
-		}
-	}
-	return true
-}
+// isOlcrtcKey was a dead duplicate of internal/protocols/olcrtc.isOlcrtcKey
+// (removed in the protocol-fields sanitize change; the olcrtc package owns the
+// key-shape check).
 
 func (s *managementState) handleProtocols(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, protocols.NewRegistry().ProtocolInfos())
