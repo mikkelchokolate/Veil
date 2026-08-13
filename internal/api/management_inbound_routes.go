@@ -177,7 +177,35 @@ func autofillInbound(inbound Inbound) (Inbound, error) {
 	if err != nil {
 		return inbound, err
 	}
+	// Drop protocolFields keys that are not part of the protocol's inbound
+	// schema: stale keys from a previously selected protocol or raw-API junk
+	// otherwise persist and can reach renderers/links (audit #48/#98). Only
+	// the fields the selected protocol declares are kept.
+	filled.ProtocolFields = sanitizeInboundProtocolFields(p.Protocol(), filled.ProtocolFields)
 	return filled, nil
+}
+
+// sanitizeInboundProtocolFields keeps only schema-declared inbound field keys
+// for the given protocol, preserving the rest of the map untouched.
+func sanitizeInboundProtocolFields(protocol string, fields map[string]any) map[string]any {
+	if len(fields) == 0 {
+		return fields
+	}
+	allowed := map[string]bool{}
+	if plugin, ok := protocols.NewRegistry().Get(protocol); ok {
+		if ui, ok := protocols.AsUIProvider(plugin); ok {
+			for _, f := range ui.InboundFieldSchema() {
+				allowed[f.Key] = true
+			}
+		}
+	}
+	clean := make(map[string]any, len(fields))
+	for key, value := range fields {
+		if allowed[key] {
+			clean[key] = value
+		}
+	}
+	return clean
 }
 
 // handleProtocolRoom returns a handler that backs the panel's "Generate" room
