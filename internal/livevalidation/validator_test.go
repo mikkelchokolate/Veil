@@ -258,7 +258,7 @@ func TestValidatorAllowsOlcrtcWithoutDomain(t *testing.T) {
 			Transport: "udp",
 			Port:      3478,
 			Enabled:   true,
-			Password:  "relay-secret",
+			Password:  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		}},
 	})
 

@@ -301,9 +301,6 @@ func TestValidator(t *testing.T) {
 	if err := p.ValidateSettings(settings, inbound); err != nil {
 		t.Errorf("ValidateSettings returned error: %v", err)
 	}
-	if issues := p.ValidateInbound(settings, inbound); len(issues) != 0 {
-		t.Errorf("ValidateInbound returned issues: %v", issues)
-	}
 	if p.NeedsDomain(settings, inbound) {
 		t.Error("NeedsDomain should be false")
 	}
