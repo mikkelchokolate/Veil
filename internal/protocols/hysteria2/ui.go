@@ -3,6 +3,7 @@ package hysteria2
 import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols/schema"
+	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
 // InboundFieldSchema returns the dynamic fields for a Hysteria2 inbound form.
@@ -26,10 +27,13 @@ func (Plugin) SettingsFieldSchema() []schema.FieldSchema {
 }
 
 // Autofill promotes the panel-submitted ProtocolFields password into the
-// canonical flat Password field the renderer consumes, and applies defaults.
+// canonical flat Password field the renderer consumes. A non-empty dynamic
+// value wins over the flat field: on update the panel echoes the flat password
+// as "[REDACTED]" (restored to the stored value by the API layer), and the
+// field the user actually edited lives in ProtocolFields.
 func (Plugin) Autofill(inbound model.Inbound) (model.Inbound, error) {
-	if inbound.Password == "" && inbound.ProtocolFields != nil {
-		if password, ok := inbound.ProtocolFields["hysteria2Password"].(string); ok {
+	if inbound.ProtocolFields != nil {
+		if password, ok := inbound.ProtocolFields["hysteria2Password"].(string); ok && password != "" && password != veilsettings.RedactedSecret {
 			inbound.Password = password
 		}
 	}

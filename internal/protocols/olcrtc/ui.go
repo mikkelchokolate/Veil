@@ -5,6 +5,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols/schema"
+	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
 // InboundFieldSchema returns the dynamic fields for an olcRTC inbound form.
@@ -79,10 +80,13 @@ func (Plugin) Autofill(inbound model.Inbound) (model.Inbound, error) {
 	if inbound.ProtocolFields == nil {
 		inbound.ProtocolFields = map[string]any{}
 	}
-	// Dynamic Panel fields are submitted through ProtocolFields. Preserve an
+	// Dynamic Panel fields are submitted through ProtocolFields. A non-empty
+	// value wins over the flat field: on update the panel echoes the flat
+	// password as "[REDACTED]" (restored to the stored value by the API layer),
+	// and the key the user actually edited lives in ProtocolFields. Preserve an
 	// explicitly generated/provided encryption key instead of replacing it.
-	if inbound.Password == "" {
-		if password, ok := inbound.ProtocolFields["password"].(string); ok {
+	if inbound.ProtocolFields != nil {
+		if password, ok := inbound.ProtocolFields["password"].(string); ok && password != "" && password != veilsettings.RedactedSecret {
 			inbound.Password = password
 		}
 	}
