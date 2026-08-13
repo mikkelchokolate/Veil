@@ -180,6 +180,22 @@ export function SettingsPage() {
 				? String((s as Record<string, unknown> | undefined)?.panelPublicPort)
 				: undefined,
 		],
+		[
+			t("settings.field.defaultInboundPublicPort"),
+			(s as Record<string, unknown> | undefined)?.defaultInboundPublicPort !=
+			null
+				? String(
+						(s as Record<string, unknown> | undefined)
+							?.defaultInboundPublicPort,
+					)
+				: undefined,
+		],
+		[
+			t("settings.field.firewallManagement"),
+			(s as Record<string, unknown> | undefined)?.firewallManagement != null
+				? String((s as Record<string, unknown> | undefined)?.firewallManagement)
+				: undefined,
+		],
 		[t("settings.field.webBasePath"), s?.webBasePath],
 		[t("settings.field.email"), s?.email],
 		[
