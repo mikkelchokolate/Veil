@@ -457,3 +457,56 @@ func TestValidatorAcceptsBoundaryMieruUsernameAndRejectsOversizedPassword(t *tes
 		t.Fatalf("expected 1 password-too-long issue, got %d: %+v", count, response.Issues)
 	}
 }
+
+// TestValidatorRejectsDuplicateHysteria2Usernames locks in audit #21: the
+// rendered userpass map is keyed by username, so a duplicate across inbounds
+// silently overwrites the first credential. Live validation must refuse it.
+func TestValidatorRejectsDuplicateHysteria2Usernames(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-hysteria2@a.service": true, "veil-hysteria2@b.service": true}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{Domain: "hy.example.com"},
+		Inbounds: []model.Inbound{
+			{
+				Name: "a", Protocol: "hysteria2", Transport: "udp", Port: 9443, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "alice", Username: "alice", Password: "pw1", Enabled: true}},
+			},
+			{
+				Name: "b", Protocol: "hysteria2", Transport: "udp", Port: 9444, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "alice2", Username: "alice", Password: "pw2", Enabled: true}},
+			},
+		},
+	})
+
+	if count := countIssueCode(response, "hysteria2_duplicate_username"); count != 1 {
+		t.Fatalf("expected 1 duplicate hysteria2 username issue, got %d: %+v", count, response.Issues)
+	}
+	if response.Valid {
+		t.Fatalf("duplicate hysteria2 usernames must make the config invalid")
+	}
+}
+
+// TestValidatorAllowsDistinctHysteria2Usernames is the positive control.
+func TestValidatorAllowsDistinctHysteria2Usernames(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-hysteria2@a.service": true, "veil-hysteria2@b.service": true}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{Domain: "hy.example.com"},
+		Inbounds: []model.Inbound{
+			{
+				Name: "a", Protocol: "hysteria2", Transport: "udp", Port: 9443, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "alice", Username: "alice", Password: "pw1", Enabled: true}},
+			},
+			{
+				Name: "b", Protocol: "hysteria2", Transport: "udp", Port: 9444, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "bob", Username: "bob", Password: "pw2", Enabled: true}},
+			},
+		},
+	})
+
+	if count := countIssueCode(response, "hysteria2_duplicate_username"); count != 0 {
+		t.Fatalf("distinct hysteria2 usernames must not report duplicates: %+v", response.Issues)
+	}
+}
