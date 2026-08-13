@@ -98,6 +98,8 @@ export * from './errorObject.msw.ts';
 export * from './fieldOption.msw.ts';
 export * from './fieldOptionAttributes.msw.ts';
 export * from './fieldSchema.msw.ts';
+export * from './fieldSchemaScope.msw.ts';
+export * from './fieldSchemaType.msw.ts';
 export * from './firewallRule.msw.ts';
 export * from './firewallRuleProtocol.msw.ts';
 export * from './forbiddenResponse.msw.ts';

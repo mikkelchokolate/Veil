@@ -4353,6 +4353,12 @@ components:
           type: string
         type:
           type: string
+          enum: [text, password, select, checkbox, number]
+        required:
+          type: boolean
+        scope:
+          type: string
+          enum: [inbound, settings]
         placeholder:
           type: string
         default:

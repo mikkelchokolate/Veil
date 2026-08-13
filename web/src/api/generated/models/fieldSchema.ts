@@ -41,11 +41,15 @@
  * OpenAPI spec version: 0.6.3
  */
 import type { FieldOption } from './fieldOption.ts';
+import type { FieldSchemaScope } from './fieldSchemaScope.ts';
+import type { FieldSchemaType } from './fieldSchemaType.ts';
 
 export interface FieldSchema {
   key: string;
   label: string;
-  type: string;
+  type: FieldSchemaType;
+  required?: boolean;
+  scope?: FieldSchemaScope;
   placeholder?: string;
   /** Protocol-defined default value for the field. */
   default?: unknown;

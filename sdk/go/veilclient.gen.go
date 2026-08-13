@@ -265,6 +265,51 @@ func (e ClientViewStatus) Valid() bool {
 	}
 }
 
+// Defines values for FieldSchemaScope.
+const (
+	FieldSchemaScopeInbound  FieldSchemaScope = "inbound"
+	FieldSchemaScopeSettings FieldSchemaScope = "settings"
+)
+
+// Valid indicates whether the value is a known member of the FieldSchemaScope enum.
+func (e FieldSchemaScope) Valid() bool {
+	switch e {
+	case FieldSchemaScopeInbound:
+		return true
+	case FieldSchemaScopeSettings:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FieldSchemaType.
+const (
+	Checkbox FieldSchemaType = "checkbox"
+	Number   FieldSchemaType = "number"
+	Password FieldSchemaType = "password"
+	Select   FieldSchemaType = "select"
+	Text     FieldSchemaType = "text"
+)
+
+// Valid indicates whether the value is a known member of the FieldSchemaType enum.
+func (e FieldSchemaType) Valid() bool {
+	switch e {
+	case Checkbox:
+		return true
+	case Number:
+		return true
+	case Password:
+		return true
+	case Select:
+		return true
+	case Text:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FirewallRuleProtocol.
 const (
 	FirewallRuleProtocolTcp FirewallRuleProtocol = "tcp"
@@ -1170,13 +1215,21 @@ type FieldSchema struct {
 	GenerateAction *string     `json:"generateAction,omitempty"`
 
 	// GenerateActionField Field key that provides input for generateAction (e.g. the provider used by a room generator).
-	GenerateActionField *string        `json:"generateActionField,omitempty"`
-	Key                 string         `json:"key"`
-	Label               string         `json:"label"`
-	Options             *[]FieldOption `json:"options,omitempty"`
-	Placeholder         *string        `json:"placeholder,omitempty"`
-	Type                string         `json:"type"`
+	GenerateActionField *string           `json:"generateActionField,omitempty"`
+	Key                 string            `json:"key"`
+	Label               string            `json:"label"`
+	Options             *[]FieldOption    `json:"options,omitempty"`
+	Placeholder         *string           `json:"placeholder,omitempty"`
+	Required            *bool             `json:"required,omitempty"`
+	Scope               *FieldSchemaScope `json:"scope,omitempty"`
+	Type                FieldSchemaType   `json:"type"`
 }
+
+// FieldSchemaScope defines model for FieldSchema.Scope.
+type FieldSchemaScope string
+
+// FieldSchemaType defines model for FieldSchema.Type.
+type FieldSchemaType string
 
 // FirewallRule defines model for FirewallRule.
 type FirewallRule struct {

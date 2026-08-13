@@ -56,7 +56,9 @@ export const GetApiProtocolsResponseItem = zod.object({
   "inboundFieldSchema": zod.array(zod.object({
   "key": zod.string(),
   "label": zod.string(),
-  "type": zod.string(),
+  "type": zod.enum(['text', 'password', 'select', 'checkbox', 'number']),
+  "required": zod.boolean().optional(),
+  "scope": zod.enum(['inbound', 'settings']).optional(),
   "placeholder": zod.string().optional(),
   "default": zod.unknown().optional().describe('Protocol-defined default value for the field.'),
   "generateAction": zod.string().optional(),
@@ -70,7 +72,9 @@ export const GetApiProtocolsResponseItem = zod.object({
   "settingsFieldSchema": zod.array(zod.object({
   "key": zod.string(),
   "label": zod.string(),
-  "type": zod.string(),
+  "type": zod.enum(['text', 'password', 'select', 'checkbox', 'number']),
+  "required": zod.boolean().optional(),
+  "scope": zod.enum(['inbound', 'settings']).optional(),
   "placeholder": zod.string().optional(),
   "default": zod.unknown().optional().describe('Protocol-defined default value for the field.'),
   "generateAction": zod.string().optional(),

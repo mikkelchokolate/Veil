@@ -40,21 +40,11 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { FieldOption } from './fieldOption.msw.ts';
-import type { FieldSchemaScope } from './fieldSchemaScope.msw.ts';
-import type { FieldSchemaType } from './fieldSchemaType.msw.ts';
 
-export interface FieldSchema {
-  key: string;
-  label: string;
-  type: FieldSchemaType;
-  required?: boolean;
-  scope?: FieldSchemaScope;
-  placeholder?: string;
-  /** Protocol-defined default value for the field. */
-  default?: unknown;
-  generateAction?: string;
-  /** Field key that provides input for generateAction (e.g. the provider used by a room generator). */
-  generateActionField?: string;
-  options?: FieldOption[];
-}
+export type FieldSchemaScope = typeof FieldSchemaScope[keyof typeof FieldSchemaScope];
+
+
+export const FieldSchemaScope = {
+  inbound: 'inbound',
+  settings: 'settings',
+} as const;

@@ -98,6 +98,8 @@ export * from './errorObject.ts';
 export * from './fieldOption.ts';
 export * from './fieldOptionAttributes.ts';
 export * from './fieldSchema.ts';
+export * from './fieldSchemaScope.ts';
+export * from './fieldSchemaType.ts';
 export * from './firewallRule.ts';
 export * from './firewallRuleProtocol.ts';
 export * from './forbiddenResponse.ts';
