@@ -103,8 +103,8 @@ interface AuditEntry {
 	target?: string;
 	actor?: string;
 	success?: boolean;
-	details?: string;
-	at?: number;
+	timestamp?: string;
+	details?: unknown;
 }
 
 export function ClientDetailPage() {
@@ -714,7 +714,9 @@ export function ClientDetailPage() {
 								{auditItems.map((a, i) => (
 									<TableRow key={a.id ?? i}>
 										<TableCell className="muted">
-											{a.at ? new Date(a.at * 1000).toLocaleString() : "—"}
+											{a.timestamp
+												? new Date(a.timestamp).toLocaleString()
+												: "—"}
 										</TableCell>
 										<TableCell>{a.actor ?? "—"}</TableCell>
 										<TableCell>{a.action ?? "—"}</TableCell>
@@ -727,7 +729,13 @@ export function ClientDetailPage() {
 													: t("clientDetail.auditOk")}
 											</Badge>
 										</TableCell>
-										<TableCell className="muted">{a.details ?? ""}</TableCell>
+										<TableCell className="muted">
+											{typeof a.details === "string"
+												? a.details
+												: a.details
+													? JSON.stringify(a.details)
+													: ""}
+										</TableCell>
 									</TableRow>
 								))}
 							</TableBody>

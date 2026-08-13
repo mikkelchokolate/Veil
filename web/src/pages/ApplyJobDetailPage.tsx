@@ -73,8 +73,17 @@ interface ApplyPlan {
 	actions?: string[];
 	runtimes?: string[];
 	errors?: string[];
-	issues?: { message?: string; severity?: string; path?: string }[];
+	issues?: ApplyPlanIssue[];
 	operations?: ApplyPlanOperation[];
+}
+interface ApplyPlanIssue {
+	code?: string;
+	severity?: string;
+	field?: string;
+	inboundId?: string;
+	message?: string;
+	remediation?: string;
+	source?: string;
 }
 interface HistoryEntry {
 	id: string;
@@ -336,10 +345,19 @@ export function ApplyJobDetailPage() {
 							) : null}
 							{plan.data.issues && plan.data.issues.length > 0 ? (
 								<ul>
-									{plan.data.issues.map((iss, i) => (
-										// biome-ignore lint/suspicious/noArrayIndexKey: stable prefix + index dedup for API rows without ids
-										<li key={`${iss.path ?? ""}-${i}`} className="muted">
-											[{iss.severity ?? "info"}] {iss.path ?? ""}{" "}
+									{plan.data.issues.map((iss) => (
+										<li
+											key={
+												iss.field ??
+												iss.inboundId ??
+												iss.code ??
+												iss.message ??
+												"issue"
+											}
+											className="muted"
+										>
+											[{iss.severity ?? "info"}]{" "}
+											{iss.field ? `${iss.field}: ` : ""}
 											{iss.message ?? ""}
 										</li>
 									))}
