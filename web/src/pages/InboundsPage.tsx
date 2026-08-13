@@ -101,6 +101,55 @@ export function InboundsPage() {
 	const [creating, setCreating] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 	const [form, setForm] = useState<InboundForm>(EMPTY);
+	const [generateError, setGenerateError] = useState<string | null>(null);
+
+	// generateFieldValue fills a dynamic protocol field marked with a
+	// generateAction. Passwords/keys are produced client-side with a CSPRNG;
+	// room ids are delegated to the backend room endpoint which knows the
+	// provider's auto-room rules.
+	async function generateFieldValue(field: ProtocolField) {
+		setGenerateError(null);
+		const action = field.generateAction;
+		if (action === "password" || action === "hex64") {
+			const bytes = new Uint8Array(action === "hex64" ? 32 : 16);
+			crypto.getRandomValues(bytes);
+			const value = Array.from(bytes, (b) =>
+				b.toString(16).padStart(2, "0"),
+			).join("");
+			setForm((prev) => ({
+				...prev,
+				protocolFields: { ...prev.protocolFields, [field.key]: value },
+			}));
+			return;
+		}
+		if (action === "room") {
+			try {
+				const provider = String(
+					form.protocolFields[field.generateActionField ?? ""] ??
+						form.olcrtcAuth ??
+						"",
+				);
+				const result = (await apiFetch(`/api/${form.protocol}/room`, {
+					method: "POST",
+					body: JSON.stringify({ provider }),
+				})) as { roomID?: string };
+				if (!result.roomID) {
+					throw new Error("empty room response");
+				}
+				setForm((prev) => ({
+					...prev,
+					protocolFields: {
+						...prev.protocolFields,
+						[field.key]: result.roomID,
+					},
+				}));
+			} catch {
+				setGenerateError(t("inbounds.generateFailed"));
+			}
+			return;
+		}
+		setGenerateError(t("inbounds.generateFailed"));
+	}
 
 	const inbounds = useQuery<Inbound[]>({
 		queryKey: ["inbounds", "all"],
@@ -434,6 +483,18 @@ export function InboundsPage() {
 										}
 									/>
 								)}
+								{field.generateAction ? (
+									<button
+										type="button"
+										className="btn btn-secondary"
+										style={{ marginTop: 6, fontSize: 12 }}
+										onClick={() => void generateFieldValue(field)}
+									>
+										{field.generateAction === "room"
+											? t("inbounds.generateRoom")
+											: t("inbounds.generatePassword")}
+									</button>
+								) : null}
 							</FormItem>
 						);
 					})}
@@ -527,6 +588,12 @@ export function InboundsPage() {
 							))}
 						</ul>
 					) : null}
+				</div>
+			) : null}
+
+			{generateError ? (
+				<div className="card">
+					<p className="form-error">{generateError}</p>
 				</div>
 			) : null}
 
