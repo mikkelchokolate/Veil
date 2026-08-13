@@ -39,7 +39,7 @@ export function SettingsPage() {
 	});
 	const s = settings.data;
 
-	const FIELDS: Array<{ key: string; label: string; placeholder?: string }> = [
+	const GLOBAL_FIELDS: Array<{ key: string; label: string; placeholder?: string }> = [
 		{ key: "domain", label: t("settings.field.domain") },
 		{ key: "panelDomain", label: t("settings.field.panelDomain") },
 		{
@@ -50,17 +50,29 @@ export function SettingsPage() {
 		{ key: "webBasePath", label: t("settings.field.webBasePath") },
 		{ key: "email", label: t("settings.field.email") },
 		{ key: "panelEmail", label: t("settings.field.panelEmail") },
-		{ key: "naiveUsername", label: t("settings.field.naiveUsername") },
-		{ key: "hysteria2Password", label: t("settings.field.hysteria2Password") },
-		{ key: "masqueradeURL", label: t("settings.field.masqueradeURL") },
-		{ key: "fallbackRoot", label: t("settings.field.fallbackRoot") },
-		{ key: "olcrtcRoomID", label: t("settings.field.olcrtcRoomID") },
 		{ key: "defaultAcmeEmail", label: t("settings.field.defaultAcmeEmail") },
 		{
 			key: "acmeChallengeMode",
 			label: t("settings.field.acmeChallengeMode"),
 			placeholder: "http-01 | dns-01",
 		},
+	];
+
+	// Protocol-scoped credentials exposed at the settings level act purely as a
+	// fallback for inbounds that do not set their own value. With per-inbound
+	// domains and credentials the panel configures protocols inside each
+	// inbound; these global defaults exist for backward compatibility and must
+	// not be presented as "the protocol configuration".
+	const PROTOCOL_DEFAULT_FIELDS: Array<{
+		key: string;
+		label: string;
+		placeholder?: string;
+	}> = [
+		{ key: "naiveUsername", label: t("settings.field.naiveUsername") },
+		{ key: "hysteria2Password", label: t("settings.field.hysteria2Password") },
+		{ key: "masqueradeURL", label: t("settings.field.masqueradeURL") },
+		{ key: "fallbackRoot", label: t("settings.field.fallbackRoot") },
+		{ key: "olcrtcRoomID", label: t("settings.field.olcrtcRoomID") },
 	];
 
 	const save = useMutation({
@@ -92,9 +104,11 @@ export function SettingsPage() {
 		},
 	});
 
+	const ALL_FIELDS = [...GLOBAL_FIELDS, ...PROTOCOL_DEFAULT_FIELDS];
+
 	function startEdit() {
 		const next: Record<string, string> = {};
-		for (const f of FIELDS) {
+		for (const f of ALL_FIELDS) {
 			next[f.key] = String(
 				(s as Record<string, unknown> | undefined)?.[f.key] ?? "",
 			);
@@ -107,7 +121,7 @@ export function SettingsPage() {
 
 	function saveEdit() {
 		const patch: Record<string, unknown> = {};
-		for (const f of FIELDS) {
+		for (const f of ALL_FIELDS) {
 			const cur = String(
 				(s as Record<string, unknown> | undefined)?.[f.key] ?? "",
 			);
@@ -193,7 +207,42 @@ export function SettingsPage() {
 							gap: 12,
 						}}
 					>
-						{FIELDS.map((f) => (
+						{GLOBAL_FIELDS.map((f) => (
+							<FormItem key={f.key}>
+								<Label htmlFor={`set-${f.key}`}>{f.label}</Label>
+								<Input
+									id={`set-${f.key}`}
+									{...(f.placeholder ? { placeholder: f.placeholder } : {})}
+									value={form[f.key] ?? ""}
+									onChange={(e) =>
+										setForm({ ...form, [f.key]: e.target.value })
+									}
+								/>
+							</FormItem>
+						))}
+					</div>
+					<h2
+						style={{
+							fontSize: 15,
+							marginTop: 16,
+							borderTop: "1px solid var(--border)",
+							paddingTop: 12,
+						}}
+					>
+						{t("settings.section.protocolDefaults")}
+					</h2>
+					<p className="muted" style={{ fontSize: 12 }}>
+						{t("settings.section.protocolDefaultsHint")}
+					</p>
+					<div
+						style={{
+							display: "grid",
+							gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+							gap: 12,
+							marginTop: 8,
+						}}
+					>
+						{PROTOCOL_DEFAULT_FIELDS.map((f) => (
 							<FormItem key={f.key}>
 								<Label htmlFor={`set-${f.key}`}>{f.label}</Label>
 								<Input

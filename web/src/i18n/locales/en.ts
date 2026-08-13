@@ -280,6 +280,9 @@ export const en: Record<string, string> = {
 	"settings.field.acmeChallenge": "ACME challenge",
 	"settings.readOnlyHint":
 		"Listen address and mode are changed through the CLI / setup flow. Everything else above is editable.",
+	"settings.section.protocolDefaults": "Protocol defaults",
+	"settings.section.protocolDefaultsHint":
+		"These global values are only used as a fallback when an inbound does not set its own. Each protocol is configured per inbound with its own domain and credentials.",
 	"settings.security": "Security",
 	"settings.rotateDescription":
 		"Rotate the state encryption key. This revokes every other session and re-encrypts the state file.",
