@@ -150,21 +150,25 @@ export function SettingsPage() {
 		for (const f of ALL_FIELDS) {
 			const cur = String(base[f.key] ?? "");
 			if (form[f.key] !== cur) {
-				if (form[f.key] !== "") {
-					if (
-						f.key === "defaultInboundPublicPort" ||
-						f.key === "panelPublicPort"
-					) {
+				if (
+					f.key === "defaultInboundPublicPort" ||
+					f.key === "panelPublicPort"
+				) {
+					if (form[f.key] !== "") {
 						const n = Number(form[f.key]);
 						base[f.key] = Number.isNaN(n) ? form[f.key] : n;
-					} else if (
-						f.key === "firewallManagement" ||
-						f.key === "hysteria2Insecure"
-					) {
-						base[f.key] = form[f.key] === "true";
-					} else {
-						base[f.key] = form[f.key];
 					}
+				} else if (
+					f.key === "firewallManagement" ||
+					f.key === "hysteria2Insecure"
+				) {
+					if (form[f.key] !== "") {
+						base[f.key] = form[f.key] === "true";
+					}
+				} else {
+					// String fields may be cleared: an empty input must
+					// overwrite the echoed GET value instead of being skipped.
+					base[f.key] = form[f.key];
 				}
 			}
 		}
