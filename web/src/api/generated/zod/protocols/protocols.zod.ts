@@ -88,3 +88,20 @@ export const GetApiProtocolsResponseItem = zod.object({
 })
 export const GetApiProtocolsResponse = zod.array(GetApiProtocolsResponseItem)
 
+/**
+ * Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
+ * @summary Generate a room id for a protocol that supports automatic room creation
+ */
+export const PostApiProtocolRoomParams = zod.object({
+  "protocol": zod.string()
+})
+
+export const PostApiProtocolRoomBody = zod.object({
+  "provider": zod.string().optional().describe('Provider name (e.g. jitsi). Defaults to the protocol default when omitted.')
+})
+
+export const PostApiProtocolRoomResponse = zod.object({
+  "provider": zod.string(),
+  "roomID": zod.string()
+})
+

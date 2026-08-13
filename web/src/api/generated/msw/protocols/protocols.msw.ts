@@ -41,22 +41,28 @@
  * OpenAPI spec version: 0.6.3
  */
 import {
+  useMutation,
   useQuery
 } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
   ForbiddenResponse,
+  PostApiProtocolRoom200,
+  PostApiProtocolRoomBody,
   ProtocolInfo,
   UnauthorizedResponse
 } from '../models';
@@ -207,3 +213,109 @@ export function useGetApiProtocols<TData = Awaited<ReturnType<typeof getApiProto
 
 
 
+export type postApiProtocolRoomResponse200 = {
+  data: PostApiProtocolRoom200
+  status: 200
+}
+
+export type postApiProtocolRoomResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postApiProtocolRoomResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type postApiProtocolRoomResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type postApiProtocolRoomResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postApiProtocolRoomResponseSuccess = (postApiProtocolRoomResponse200) & {
+  headers: Headers;
+};
+export type postApiProtocolRoomResponseError = (postApiProtocolRoomResponse400 | postApiProtocolRoomResponse401 | postApiProtocolRoomResponse403 | postApiProtocolRoomResponse404) & {
+  headers: Headers;
+};
+
+export type postApiProtocolRoomResponse = (postApiProtocolRoomResponseSuccess | postApiProtocolRoomResponseError)
+
+export const getPostApiProtocolRoomUrl = (protocol: string,) => {
+
+
+
+
+  return `/api/${protocol}/room`
+}
+
+/**
+ * Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
+ * @summary Generate a room id for a protocol that supports automatic room creation
+ */
+export const postApiProtocolRoom = async (protocol: string,
+    postApiProtocolRoomBody?: PostApiProtocolRoomBody, options?: RequestInit): Promise<postApiProtocolRoomResponse> => {
+
+  return apiFetch<postApiProtocolRoomResponse>(getPostApiProtocolRoomUrl(protocol),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(postApiProtocolRoomBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiProtocolRoomMutationOptions = <TError = void | UnauthorizedResponse | ForbiddenResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiProtocolRoom>>, TError,{protocol: string;data?: PostApiProtocolRoomBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiProtocolRoom>>, TError,{protocol: string;data?: PostApiProtocolRoomBody}, TContext> => {
+
+const mutationKey = ['postApiProtocolRoom'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiProtocolRoom>>, {protocol: string;data?: PostApiProtocolRoomBody}> = (props) => {
+          const {protocol,data} = props ?? {};
+
+          return  postApiProtocolRoom(protocol,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiProtocolRoomMutationResult = NonNullable<Awaited<ReturnType<typeof postApiProtocolRoom>>>
+    export type PostApiProtocolRoomMutationBody = PostApiProtocolRoomBody | undefined
+    export type PostApiProtocolRoomMutationError = void | UnauthorizedResponse | ForbiddenResponse
+
+    /**
+ * @summary Generate a room id for a protocol that supports automatic room creation
+ */
+export const usePostApiProtocolRoom = <TError = void | UnauthorizedResponse | ForbiddenResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiProtocolRoom>>, TError,{protocol: string;data?: PostApiProtocolRoomBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiProtocolRoom>>,
+        TError,
+        {protocol: string;data?: PostApiProtocolRoomBody},
+        TContext
+      > => {
+      return useMutation(getPostApiProtocolRoomMutationOptions(options), queryClient);
+    }

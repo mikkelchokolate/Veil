@@ -138,6 +138,8 @@ export * from './patchApiV1ClientsIdBindingsBindingIdBody.ts';
 export * from './pingRequest.ts';
 export * from './pingResult.ts';
 export * from './postApiApplyRollbackBody.ts';
+export * from './postApiProtocolRoom200.ts';
+export * from './postApiProtocolRoomBody.ts';
 export * from './postApiV1ClientsBulkBody.ts';
 export * from './postApiV1ClientsBulkBodyAction.ts';
 export * from './postApiV1ClientsIdBindingsBody.ts';

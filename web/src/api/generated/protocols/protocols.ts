@@ -41,17 +41,28 @@
  * OpenAPI spec version: 0.6.3
  */
 import {
-  useMutation
+  useMutation,
+  useQuery
 } from '@tanstack/react-query';
 import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
   MutationFunction,
   QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
   UseMutationOptions,
-  UseMutationResult
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
   ForbiddenResponse,
+  PostApiProtocolRoom200,
+  PostApiProtocolRoomBody,
   ProtocolInfo,
   UnauthorizedResponse
 } from '../models';
@@ -62,6 +73,21 @@ import { apiFetch } from '../../fetcher.ts';
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
 export type getApiProtocolsResponse200 = {
   data: ProtocolInfo[]
@@ -157,3 +183,145 @@ export const useGetApiProtocols = <TError = UnauthorizedResponse | ForbiddenResp
       > => {
       return useMutation(getGetApiProtocolsMutationOptions(options), queryClient);
     }
+    export type postApiProtocolRoomResponse200 = {
+  data: PostApiProtocolRoom200
+  status: 200
+}
+
+export type postApiProtocolRoomResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postApiProtocolRoomResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type postApiProtocolRoomResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type postApiProtocolRoomResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postApiProtocolRoomResponseSuccess = (postApiProtocolRoomResponse200) & {
+  headers: Headers;
+};
+export type postApiProtocolRoomResponseError = (postApiProtocolRoomResponse400 | postApiProtocolRoomResponse401 | postApiProtocolRoomResponse403 | postApiProtocolRoomResponse404) & {
+  headers: Headers;
+};
+
+export type postApiProtocolRoomResponse = (postApiProtocolRoomResponseSuccess | postApiProtocolRoomResponseError)
+
+export const getPostApiProtocolRoomUrl = (protocol: string,) => {
+
+
+
+
+  return `/api/${protocol}/room`
+}
+
+/**
+ * Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
+ * @summary Generate a room id for a protocol that supports automatic room creation
+ */
+export const postApiProtocolRoom = async (protocol: string,
+    postApiProtocolRoomBody?: PostApiProtocolRoomBody, options?: RequestInit): Promise<postApiProtocolRoomResponse> => {
+
+  return apiFetch<postApiProtocolRoomResponse>(getPostApiProtocolRoomUrl(protocol),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(postApiProtocolRoomBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiProtocolRoomQueryKey = (protocol: string,
+    postApiProtocolRoomBody?: PostApiProtocolRoomBody,) => {
+    return [
+    'POST', `/api/${protocol}/room`, postApiProtocolRoomBody
+    ] as const;
+    }
+
+
+export const getPostApiProtocolRoomQueryOptions = <TData = Awaited<ReturnType<typeof postApiProtocolRoom>>, TError = void | UnauthorizedResponse | ForbiddenResponse>(protocol: string,
+    postApiProtocolRoomBody?: PostApiProtocolRoomBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiProtocolRoom>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiProtocolRoomQueryKey(protocol,postApiProtocolRoomBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiProtocolRoom>>> = ({ signal }) => postApiProtocolRoom(protocol,postApiProtocolRoomBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: protocol !== null && protocol !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiProtocolRoom>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiProtocolRoomQueryResult = NonNullable<Awaited<ReturnType<typeof postApiProtocolRoom>>>
+export type PostApiProtocolRoomQueryError = void | UnauthorizedResponse | ForbiddenResponse
+
+
+export function usePostApiProtocolRoom<TData = Awaited<ReturnType<typeof postApiProtocolRoom>>, TError = void | UnauthorizedResponse | ForbiddenResponse>(
+ protocol: string,
+    postApiProtocolRoomBody: undefined |  PostApiProtocolRoomBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiProtocolRoom>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiProtocolRoom>>,
+          TError,
+          Awaited<ReturnType<typeof postApiProtocolRoom>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiProtocolRoom<TData = Awaited<ReturnType<typeof postApiProtocolRoom>>, TError = void | UnauthorizedResponse | ForbiddenResponse>(
+ protocol: string,
+    postApiProtocolRoomBody?: PostApiProtocolRoomBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiProtocolRoom>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiProtocolRoom>>,
+          TError,
+          Awaited<ReturnType<typeof postApiProtocolRoom>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiProtocolRoom<TData = Awaited<ReturnType<typeof postApiProtocolRoom>>, TError = void | UnauthorizedResponse | ForbiddenResponse>(
+ protocol: string,
+    postApiProtocolRoomBody?: PostApiProtocolRoomBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiProtocolRoom>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Generate a room id for a protocol that supports automatic room creation
+ */
+
+export function usePostApiProtocolRoom<TData = Awaited<ReturnType<typeof postApiProtocolRoom>>, TError = void | UnauthorizedResponse | ForbiddenResponse>(
+ protocol: string,
+    postApiProtocolRoomBody?: PostApiProtocolRoomBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiProtocolRoom>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiProtocolRoomQueryOptions(protocol,postApiProtocolRoomBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
