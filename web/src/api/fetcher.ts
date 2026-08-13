@@ -4,22 +4,35 @@ export function setCsrfToken(token: string | null) {
 	csrfToken = token;
 }
 
+export interface ApiValidationIssue {
+	code?: string;
+	severity?: string;
+	field?: string;
+	inboundId?: string;
+	message?: string;
+	remediation?: string;
+	source?: string;
+}
+
 export class ApiError extends Error {
 	status: number;
 	code: string | undefined;
 	details: unknown;
+	issues: ApiValidationIssue[] | undefined;
 
 	constructor(
 		status: number,
 		message: string,
 		code?: string,
 		details?: unknown,
+		issues?: ApiValidationIssue[],
 	) {
 		super(message);
 		this.name = "ApiError";
 		this.status = status;
 		this.code = code;
 		this.details = details;
+		this.issues = issues;
 	}
 }
 
@@ -170,6 +183,7 @@ export async function apiFetch<T>(
 					message?: string;
 					code?: string;
 					details?: unknown;
+					issues?: ApiValidationIssue[];
 			  }
 			| undefined;
 		const errorValue =
@@ -181,6 +195,7 @@ export async function apiFetch<T>(
 			errorValue,
 			typeof maybe?.error === "object" ? maybe.error.code : maybe?.code,
 			maybe?.details,
+			maybe?.issues,
 		);
 	}
 	return body as T;

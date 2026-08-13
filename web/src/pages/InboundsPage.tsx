@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { ApiError, apiFetch } from "../api/fetcher";
+import { ApiError, type ApiValidationIssue, apiFetch } from "../api/fetcher";
 import type { ClientView, Inbound } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import {
@@ -95,6 +95,7 @@ export function InboundsPage() {
 	const { t } = useI18n();
 	const qc = useQueryClient();
 	const [error, setError] = useState<string | null>(null);
+	const [issues, setIssues] = useState<ApiValidationIssue[] | null>(null);
 	const [feedback, setFeedback] = useState<MutationFeedback | null>(null);
 	const [editing, setEditing] = useState<string | null>(null); // name being edited
 	const [creating, setCreating] = useState(false);
@@ -184,13 +185,16 @@ export function InboundsPage() {
 			setCreating(false);
 			setForm(EMPTY);
 			setError(null);
+			setIssues(null);
 			record(data);
 			invalidate();
 		},
-		onError: (e) =>
+		onError: (e) => {
+			setIssues(e instanceof ApiError ? (e.issues ?? null) : null);
 			setError(
 				e instanceof ApiError ? e.message : t("inbounds.error.createFailed"),
-			),
+			);
+		},
 	});
 
 	const update = useMutation({
@@ -202,13 +206,16 @@ export function InboundsPage() {
 		onSuccess: (data) => {
 			setEditing(null);
 			setError(null);
+			setIssues(null);
 			record(data);
 			invalidate();
 		},
-		onError: (e) =>
+		onError: (e) => {
+			setIssues(e instanceof ApiError ? (e.issues ?? null) : null);
 			setError(
 				e instanceof ApiError ? e.message : t("inbounds.error.updateFailed"),
-			),
+			);
+		},
 	});
 
 	const remove = useMutation({
@@ -219,13 +226,16 @@ export function InboundsPage() {
 		onSuccess: (data) => {
 			setConfirmDelete(null);
 			setError(null);
+			setIssues(null);
 			record(data);
 			invalidate();
 		},
-		onError: (e) =>
+		onError: (e) => {
+			setIssues(e instanceof ApiError ? (e.issues ?? null) : null);
 			setError(
 				e instanceof ApiError ? e.message : t("inbounds.error.deleteFailed"),
-			),
+			);
+		},
 	});
 
 	function startCreate() {
@@ -505,6 +515,18 @@ export function InboundsPage() {
 			{error ? (
 				<div className="card">
 					<p className="form-error">{error}</p>
+					{issues && issues.length > 0 ? (
+						<ul className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+							{issues.map((iss) => (
+								<li
+									key={`${iss.field ?? iss.inboundId ?? iss.code ?? "issue"}`}
+								>
+									[{iss.severity ?? "info"}] {iss.field ? `${iss.field}: ` : ""}
+									{iss.message ?? ""}
+								</li>
+							))}
+						</ul>
+					) : null}
 				</div>
 			) : null}
 

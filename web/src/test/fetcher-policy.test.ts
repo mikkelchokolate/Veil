@@ -123,4 +123,42 @@ describe("apiFetch request policy", () => {
 			/redirect|origin/i,
 		);
 	});
+
+	it("carries validation issues from a 422 envelope on ApiError", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(
+				jsonResponse(
+					{
+						error: {
+							code: "configuration_failed_live_validation",
+							message: "configuration failed live validation",
+						},
+						issues: [
+							{
+								code: "port_invalid",
+								severity: "error",
+								field: "port",
+								message: "port must be between 1 and 65535",
+								source: "livevalidation",
+							},
+						],
+					},
+					{ ok: false, status: 422, statusText: "Unprocessable Entity" },
+				),
+			),
+		);
+		const failure = await fetcher.apiFetch("/api/inbounds").then(
+			() => undefined,
+			(error: unknown) => error,
+		);
+		expect(failure).toBeInstanceOf(fetcher.ApiError);
+		const apiError = failure as fetcher.ApiError;
+		expect(apiError.status).toBe(422);
+		expect(apiError.message).toBe("configuration failed live validation");
+		expect(apiError.code).toBe("configuration_failed_live_validation");
+		expect(apiError.issues).toHaveLength(1);
+		expect(apiError.issues?.[0]?.field).toBe("port");
+		expect(apiError.issues?.[0]?.message).toContain("between 1 and 65535");
+	});
 });
