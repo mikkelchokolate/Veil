@@ -27,7 +27,7 @@ func TestReadOnlyPOSTAllowlistExcludesMutations(t *testing.T) {
 		"/api/apply",
 		"/api/version/update",
 		"/api/inbounds",
-		"/api/olcrtc/room",
+		"/api/protocols/olcrtc/room",
 	} {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		if isReadOnlyDiagnosticRequest(req) {

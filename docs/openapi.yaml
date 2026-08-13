@@ -1301,7 +1301,7 @@ paths:
       x-roles:
       - admin
       - viewer
-  /api/{protocol}/room:
+  /api/protocols/{protocol}/room:
     post:
       x-veil-role: admin-secret
       tags:

@@ -92,25 +92,25 @@ export const GetApiProtocolsResponse = zod.array(GetApiProtocolsResponseItem)
  * Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
  * @summary Generate a room id for a protocol that supports automatic room creation
  */
-export const PostApiProtocolRoomParams = zod.object({
+export const PostApiProtocolsProtocolRoomParams = zod.object({
   "protocol": zod.string()
 })
 
-export const postApiProtocolRoomHeaderIdempotencyKeyMax = 128;
+export const postApiProtocolsProtocolRoomHeaderIdempotencyKeyMax = 128;
 
 
-export const postApiProtocolRoomHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+export const postApiProtocolsProtocolRoomHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
 
 
-export const PostApiProtocolRoomHeader = zod.object({
-  "Idempotency-Key": zod.string().min(1).max(postApiProtocolRoomHeaderIdempotencyKeyMax).regex(postApiProtocolRoomHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+export const PostApiProtocolsProtocolRoomHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiProtocolsProtocolRoomHeaderIdempotencyKeyMax).regex(postApiProtocolsProtocolRoomHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
-export const PostApiProtocolRoomBody = zod.object({
+export const PostApiProtocolsProtocolRoomBody = zod.object({
   "provider": zod.string().optional().describe('Provider name (e.g. jitsi). Defaults to the protocol default when omitted.')
 })
 
-export const PostApiProtocolRoomResponse = zod.object({
+export const PostApiProtocolsProtocolRoomResponse = zod.object({
   "provider": zod.string(),
   "roomID": zod.string()
 })

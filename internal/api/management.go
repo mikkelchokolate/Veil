@@ -88,7 +88,7 @@ func (s *managementState) registerProtocolRoomRoutes(mux *http.ServeMux) {
 			continue
 		}
 		protocol := p.Protocol()
-		mux.HandleFunc("/api/"+protocol+"/room", s.handleProtocolRoom(protocol))
+		mux.HandleFunc("/api/protocols/"+protocol+"/room", s.handleProtocolRoom(protocol))
 	}
 }
 

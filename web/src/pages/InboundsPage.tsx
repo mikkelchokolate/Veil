@@ -129,7 +129,7 @@ export function InboundsPage() {
 						form.olcrtcAuth ??
 						"",
 				);
-				const result = (await apiFetch(`/api/${form.protocol}/room`, {
+				const result = (await apiFetch(`/api/protocols/${form.protocol}/room`, {
 					method: "POST",
 					body: JSON.stringify({ provider }),
 				})) as { roomID?: string };

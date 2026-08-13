@@ -93,7 +93,7 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodPost, "/api/v1/clients/{id}/credentials/{bindingId}/rotate", capabilityAdminSecret},
 	{http.MethodPost, "/api/v1/clients/{id}/tokens", capabilityAdminSecret},
 	{http.MethodPost, "/api/v1/clients/{id}/tokens/{tokenId}/rotate", capabilityAdminSecret},
-	{http.MethodPost, "/api/{protocol}/room", capabilityAdminSecret},
+	{http.MethodPost, "/api/protocols/{protocol}/room", capabilityAdminSecret},
 
 	{http.MethodPut, "/api/settings", capabilityAdminMutation},
 	{http.MethodPost, "/api/inbounds", capabilityAdminMutation},

@@ -2021,6 +2021,18 @@ type PostApiProfilesRuRecommendedPreviewParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// PostApiProtocolsProtocolRoomJSONBody defines parameters for PostApiProtocolsProtocolRoom.
+type PostApiProtocolsProtocolRoomJSONBody struct {
+	// Provider Provider name (e.g. jitsi). Defaults to the protocol default when omitted.
+	Provider *string `json:"provider,omitempty"`
+}
+
+// PostApiProtocolsProtocolRoomParams defines parameters for PostApiProtocolsProtocolRoom.
+type PostApiProtocolsProtocolRoomParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // PostApiRoutingPresetsNameParams defines parameters for PostApiRoutingPresetsName.
 type PostApiRoutingPresetsNameParams struct {
 	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
@@ -2266,18 +2278,6 @@ type PutApiWarpParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
-// PostApiProtocolRoomJSONBody defines parameters for PostApiProtocolRoom.
-type PostApiProtocolRoomJSONBody struct {
-	// Provider Provider name (e.g. jitsi). Defaults to the protocol default when omitted.
-	Provider *string `json:"provider,omitempty"`
-}
-
-// PostApiProtocolRoomParams defines parameters for PostApiProtocolRoom.
-type PostApiProtocolRoomParams struct {
-	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
-	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
-}
-
 // GetSTokenParams defines parameters for GetSToken.
 type GetSTokenParams struct {
 	Format *GetSTokenParamsFormat `form:"format,omitempty" json:"format,omitempty"`
@@ -2335,6 +2335,9 @@ type PutApiInboundsNameJSONRequestBody = Inbound
 
 // PostApiProfilesRuRecommendedPreviewJSONRequestBody defines body for PostApiProfilesRuRecommendedPreview for application/json ContentType.
 type PostApiProfilesRuRecommendedPreviewJSONRequestBody = RURecommendedPreviewRequest
+
+// PostApiProtocolsProtocolRoomJSONRequestBody defines body for PostApiProtocolsProtocolRoom for application/json ContentType.
+type PostApiProtocolsProtocolRoomJSONRequestBody PostApiProtocolsProtocolRoomJSONBody
 
 // PostApiRoutingRulesJSONRequestBody defines body for PostApiRoutingRules for application/json ContentType.
 type PostApiRoutingRulesJSONRequestBody = RoutingRule
@@ -2401,9 +2404,6 @@ type PostApiVersionUpdateJSONRequestBody = EmptyObject
 
 // PutApiWarpJSONRequestBody defines body for PutApiWarp for application/json ContentType.
 type PutApiWarpJSONRequestBody = WarpConfig
-
-// PostApiProtocolRoomJSONRequestBody defines body for PostApiProtocolRoom for application/json ContentType.
-type PostApiProtocolRoomJSONRequestBody PostApiProtocolRoomJSONBody
 
 // AsRoutingSourceFile0 returns the union data inside the RoutingSourceFile as a RoutingSourceFile0
 func (t RoutingSourceFile) AsRoutingSourceFile0() (RoutingSourceFile0, error) {
@@ -3044,6 +3044,24 @@ type ClientInterface interface {
 	// Corresponds with GET /api/protocols (the `GetApiProtocols` operationId).
 	GetApiProtocols(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostApiProtocolsProtocolRoomWithBody Generate a room id for a protocol that supports automatic room creation
+	//
+	// Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/protocols/{protocol}/room (the `PostApiProtocolsProtocolRoom` operationId).
+	PostApiProtocolsProtocolRoomWithBody(ctx context.Context, protocol string, params *PostApiProtocolsProtocolRoomParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiProtocolsProtocolRoom Generate a room id for a protocol that supports automatic room creation
+	//
+	// Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/protocols/{protocol}/room (the `PostApiProtocolsProtocolRoom` operationId).
+	PostApiProtocolsProtocolRoom(ctx context.Context, protocol string, params *PostApiProtocolsProtocolRoomParams, body PostApiProtocolsProtocolRoomJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiRoutingPresets List routing presets and source material
 	//
 	// Corresponds with GET /api/routing/presets (the `GetApiRoutingPresets` operationId).
@@ -3528,24 +3546,6 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /api/warp (the `PutApiWarp` operationId).
 	PutApiWarp(ctx context.Context, params *PutApiWarpParams, body PutApiWarpJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostApiProtocolRoomWithBody Generate a room id for a protocol that supports automatic room creation
-	//
-	// Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
-	//
-	// Takes any type of body and a specified content type.
-	//
-	// Corresponds with POST /api/{protocol}/room (the `PostApiProtocolRoom` operationId).
-	PostApiProtocolRoomWithBody(ctx context.Context, protocol string, params *PostApiProtocolRoomParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostApiProtocolRoom Generate a room id for a protocol that supports automatic room creation
-	//
-	// Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
-	//
-	// Takes a body of the `application/json` content type.
-	//
-	// Corresponds with POST /api/{protocol}/room (the `PostApiProtocolRoom` operationId).
-	PostApiProtocolRoom(ctx context.Context, protocol string, params *PostApiProtocolRoomParams, body PostApiProtocolRoomJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetHealthz Liveness/readiness probe
 	//
@@ -4501,6 +4501,44 @@ func (c *Client) PostApiProfilesRuRecommendedPreview(ctx context.Context, params
 // Corresponds with GET /api/protocols (the `GetApiProtocols` operationId).
 func (c *Client) GetApiProtocols(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiProtocolsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiProtocolsProtocolRoomWithBody Generate a room id for a protocol that supports automatic room creation
+//
+// Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/protocols/{protocol}/room (the `PostApiProtocolsProtocolRoom` operationId).
+func (c *Client) PostApiProtocolsProtocolRoomWithBody(ctx context.Context, protocol string, params *PostApiProtocolsProtocolRoomParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiProtocolsProtocolRoomRequestWithBody(c.Server, protocol, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiProtocolsProtocolRoom Generate a room id for a protocol that supports automatic room creation
+//
+// Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/protocols/{protocol}/room (the `PostApiProtocolsProtocolRoom` operationId).
+func (c *Client) PostApiProtocolsProtocolRoom(ctx context.Context, protocol string, params *PostApiProtocolsProtocolRoomParams, body PostApiProtocolsProtocolRoomJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiProtocolsProtocolRoomRequest(c.Server, protocol, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5727,44 +5765,6 @@ func (c *Client) PutApiWarpWithBody(ctx context.Context, params *PutApiWarpParam
 // Corresponds with PUT /api/warp (the `PutApiWarp` operationId).
 func (c *Client) PutApiWarp(ctx context.Context, params *PutApiWarpParams, body PutApiWarpJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutApiWarpRequest(c.Server, params, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// PostApiProtocolRoomWithBody Generate a room id for a protocol that supports automatic room creation
-//
-// Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
-//
-// Takes any type of body and a specified content type.
-//
-// Corresponds with POST /api/{protocol}/room (the `PostApiProtocolRoom` operationId).
-func (c *Client) PostApiProtocolRoomWithBody(ctx context.Context, protocol string, params *PostApiProtocolRoomParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiProtocolRoomRequestWithBody(c.Server, protocol, params, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// PostApiProtocolRoom Generate a room id for a protocol that supports automatic room creation
-//
-// Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
-//
-// Takes a body of the `application/json` content type.
-//
-// Corresponds with POST /api/{protocol}/room (the `PostApiProtocolRoom` operationId).
-func (c *Client) PostApiProtocolRoom(ctx context.Context, protocol string, params *PostApiProtocolRoomParams, body PostApiProtocolRoomJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiProtocolRoomRequest(c.Server, protocol, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -7528,6 +7528,68 @@ func NewGetApiProtocolsRequest(server string) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiProtocolsProtocolRoomRequest calls the generic PostApiProtocolsProtocolRoom builder with application/json body
+func NewPostApiProtocolsProtocolRoomRequest(server string, protocol string, params *PostApiProtocolsProtocolRoomParams, body PostApiProtocolsProtocolRoomJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiProtocolsProtocolRoomRequestWithBody(server, protocol, params, "application/json", bodyReader)
+}
+
+// NewPostApiProtocolsProtocolRoomRequestWithBody constructs an http.Request for the PostApiProtocolsProtocolRoom method, with any body, and a specified content type
+func NewPostApiProtocolsProtocolRoomRequestWithBody(server string, protocol string, params *PostApiProtocolsProtocolRoomParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "protocol", protocol, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/protocols/%s/room", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
 	}
 
 	return req, nil
@@ -9944,68 +10006,6 @@ func NewPutApiWarpRequestWithBody(server string, params *PutApiWarpParams, conte
 	return req, nil
 }
 
-// NewPostApiProtocolRoomRequest calls the generic PostApiProtocolRoom builder with application/json body
-func NewPostApiProtocolRoomRequest(server string, protocol string, params *PostApiProtocolRoomParams, body PostApiProtocolRoomJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPostApiProtocolRoomRequestWithBody(server, protocol, params, "application/json", bodyReader)
-}
-
-// NewPostApiProtocolRoomRequestWithBody constructs an http.Request for the PostApiProtocolRoom method, with any body, and a specified content type
-func NewPostApiProtocolRoomRequestWithBody(server string, protocol string, params *PostApiProtocolRoomParams, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "protocol", protocol, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/%s/room", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	if params != nil {
-
-		if params.IdempotencyKey != nil {
-			var headerParam0 string
-
-			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
-			if err != nil {
-				return nil, err
-			}
-
-			req.Header.Set("Idempotency-Key", headerParam0)
-		}
-
-	}
-
-	return req, nil
-}
-
 // NewGetHealthzRequest constructs an http.Request for the GetHealthz method
 func NewGetHealthzRequest(server string) (*http.Request, error) {
 	var err error
@@ -10668,6 +10668,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/protocols (the `GetApiProtocols` operationId).
 	GetApiProtocolsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiProtocolsResponse, error)
 
+	// PostApiProtocolsProtocolRoomWithBodyWithResponse Generate a room id for a protocol that supports automatic room creation
+	//
+	// Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/protocols/{protocol}/room (the `PostApiProtocolsProtocolRoom` operationId).
+	PostApiProtocolsProtocolRoomWithBodyWithResponse(ctx context.Context, protocol string, params *PostApiProtocolsProtocolRoomParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiProtocolsProtocolRoomResponse, error)
+
+	// PostApiProtocolsProtocolRoomWithResponse Generate a room id for a protocol that supports automatic room creation
+	//
+	// Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/protocols/{protocol}/room (the `PostApiProtocolsProtocolRoom` operationId).
+	PostApiProtocolsProtocolRoomWithResponse(ctx context.Context, protocol string, params *PostApiProtocolsProtocolRoomParams, body PostApiProtocolsProtocolRoomJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiProtocolsProtocolRoomResponse, error)
+
 	// GetApiRoutingPresetsWithResponse List routing presets and source material
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -11212,24 +11230,6 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PUT /api/warp (the `PutApiWarp` operationId).
 	PutApiWarpWithResponse(ctx context.Context, params *PutApiWarpParams, body PutApiWarpJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiWarpResponse, error)
-
-	// PostApiProtocolRoomWithBodyWithResponse Generate a room id for a protocol that supports automatic room creation
-	//
-	// Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
-	//
-	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with POST /api/{protocol}/room (the `PostApiProtocolRoom` operationId).
-	PostApiProtocolRoomWithBodyWithResponse(ctx context.Context, protocol string, params *PostApiProtocolRoomParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiProtocolRoomResponse, error)
-
-	// PostApiProtocolRoomWithResponse Generate a room id for a protocol that supports automatic room creation
-	//
-	// Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
-	//
-	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with POST /api/{protocol}/room (the `PostApiProtocolRoom` operationId).
-	PostApiProtocolRoomWithResponse(ctx context.Context, protocol string, params *PostApiProtocolRoomParams, body PostApiProtocolRoomJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiProtocolRoomResponse, error)
 
 	// GetHealthzWithResponse Liveness/readiness probe
 	//
@@ -13926,6 +13926,74 @@ func (r GetApiProtocolsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetApiProtocolsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PostApiProtocolsProtocolRoomResponse401Headers the declared response headers of an HTTP 401 response for PostApiProtocolsProtocolRoom
+type PostApiProtocolsProtocolRoomResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type PostApiProtocolsProtocolRoomResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Provider string `json:"provider"`
+		RoomID   string `json:"roomID"`
+	}
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *PostApiProtocolsProtocolRoomResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostApiProtocolsProtocolRoomResponse) GetJSON200() *struct {
+	Provider string `json:"provider"`
+	RoomID   string `json:"roomID"`
+} {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiProtocolsProtocolRoomResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostApiProtocolsProtocolRoomResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetBody returns the raw response body bytes
+func (r PostApiProtocolsProtocolRoomResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiProtocolsProtocolRoomResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiProtocolsProtocolRoomResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostApiProtocolsProtocolRoomResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -17102,74 +17170,6 @@ func (r PutApiWarpResponse) ContentType() string {
 	return ""
 }
 
-// PostApiProtocolRoomResponse401Headers the declared response headers of an HTTP 401 response for PostApiProtocolRoom
-type PostApiProtocolRoomResponse401Headers struct {
-	WWWAuthenticate *string
-}
-
-type PostApiProtocolRoomResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *struct {
-		Provider string `json:"provider"`
-		RoomID   string `json:"roomID"`
-	}
-	// JSON401 the response for an HTTP 401 `application/json` response
-	JSON401 *Unauthorized
-	// JSON403 the response for an HTTP 403 `application/json` response
-	JSON403 *Forbidden
-	// Headers401 the parsed response headers for an HTTP 401 response
-	Headers401 *PostApiProtocolRoomResponse401Headers
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r PostApiProtocolRoomResponse) GetJSON200() *struct {
-	Provider string `json:"provider"`
-	RoomID   string `json:"roomID"`
-} {
-	return r.JSON200
-}
-
-// GetJSON401 returns the response for an HTTP 401 `application/json` response
-func (r PostApiProtocolRoomResponse) GetJSON401() *Unauthorized {
-	return r.JSON401
-}
-
-// GetJSON403 returns the response for an HTTP 403 `application/json` response
-func (r PostApiProtocolRoomResponse) GetJSON403() *Forbidden {
-	return r.JSON403
-}
-
-// GetBody returns the raw response body bytes
-func (r PostApiProtocolRoomResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r PostApiProtocolRoomResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostApiProtocolRoomResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r PostApiProtocolRoomResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
 // GetHealthzResponse401Headers the declared response headers of an HTTP 401 response for GetHealthz
 type GetHealthzResponse401Headers struct {
 	WWWAuthenticate *string
@@ -18112,6 +18112,36 @@ func (c *ClientWithResponses) GetApiProtocolsWithResponse(ctx context.Context, r
 		return nil, err
 	}
 	return ParseGetApiProtocolsResponse(rsp)
+}
+
+// PostApiProtocolsProtocolRoomWithBodyWithResponse Generate a room id for a protocol that supports automatic room creation
+//
+// Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/protocols/{protocol}/room (the `PostApiProtocolsProtocolRoom` operationId).
+func (c *ClientWithResponses) PostApiProtocolsProtocolRoomWithBodyWithResponse(ctx context.Context, protocol string, params *PostApiProtocolsProtocolRoomParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiProtocolsProtocolRoomResponse, error) {
+	rsp, err := c.PostApiProtocolsProtocolRoomWithBody(ctx, protocol, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiProtocolsProtocolRoomResponse(rsp)
+}
+
+// PostApiProtocolsProtocolRoomWithResponse Generate a room id for a protocol that supports automatic room creation
+//
+// Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/protocols/{protocol}/room (the `PostApiProtocolsProtocolRoom` operationId).
+func (c *ClientWithResponses) PostApiProtocolsProtocolRoomWithResponse(ctx context.Context, protocol string, params *PostApiProtocolsProtocolRoomParams, body PostApiProtocolsProtocolRoomJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiProtocolsProtocolRoomResponse, error) {
+	rsp, err := c.PostApiProtocolsProtocolRoom(ctx, protocol, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiProtocolsProtocolRoomResponse(rsp)
 }
 
 // GetApiRoutingPresetsWithResponse List routing presets and source material
@@ -19102,36 +19132,6 @@ func (c *ClientWithResponses) PutApiWarpWithResponse(ctx context.Context, params
 		return nil, err
 	}
 	return ParsePutApiWarpResponse(rsp)
-}
-
-// PostApiProtocolRoomWithBodyWithResponse Generate a room id for a protocol that supports automatic room creation
-//
-// Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
-//
-// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with POST /api/{protocol}/room (the `PostApiProtocolRoom` operationId).
-func (c *ClientWithResponses) PostApiProtocolRoomWithBodyWithResponse(ctx context.Context, protocol string, params *PostApiProtocolRoomParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiProtocolRoomResponse, error) {
-	rsp, err := c.PostApiProtocolRoomWithBody(ctx, protocol, params, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiProtocolRoomResponse(rsp)
-}
-
-// PostApiProtocolRoomWithResponse Generate a room id for a protocol that supports automatic room creation
-//
-// Returns a fresh room id for the given provider. Only protocols that implement a room generator expose this route; unknown protocols return 404 and providers that require a manually created room return 400.
-//
-// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with POST /api/{protocol}/room (the `PostApiProtocolRoom` operationId).
-func (c *ClientWithResponses) PostApiProtocolRoomWithResponse(ctx context.Context, protocol string, params *PostApiProtocolRoomParams, body PostApiProtocolRoomJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiProtocolRoomResponse, error) {
-	rsp, err := c.PostApiProtocolRoom(ctx, protocol, params, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiProtocolRoomResponse(rsp)
 }
 
 // GetHealthzWithResponse Liveness/readiness probe
@@ -21357,6 +21357,68 @@ func ParseGetApiProtocolsResponse(rsp *http.Response) (*GetApiProtocolsResponse,
 	switch {
 	case rsp.StatusCode == 401:
 		var headers GetApiProtocolsResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePostApiProtocolsProtocolRoomResponse parses an HTTP response from a PostApiProtocolsProtocolRoomWithResponse call
+func ParsePostApiProtocolsProtocolRoomResponse(rsp *http.Response) (*PostApiProtocolsProtocolRoomResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiProtocolsProtocolRoomResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Provider string `json:"provider"`
+			RoomID   string `json:"roomID"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case rsp.StatusCode == 400:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case rsp.StatusCode == 404:
+		break // No content-type
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers PostApiProtocolsProtocolRoomResponse401Headers
 		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
@@ -23851,68 +23913,6 @@ func ParsePutApiWarpResponse(rsp *http.Response) (*PutApiWarpResponse, error) {
 		}
 		response.JSON503 = &dest
 
-	}
-
-	return response, nil
-}
-
-// ParsePostApiProtocolRoomResponse parses an HTTP response from a PostApiProtocolRoomWithResponse call
-func ParsePostApiProtocolRoomResponse(rsp *http.Response) (*PostApiProtocolRoomResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostApiProtocolRoomResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Provider string `json:"provider"`
-			RoomID   string `json:"roomID"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case rsp.StatusCode == 400:
-		break // No content-type
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case rsp.StatusCode == 404:
-		break // No content-type
-
-	}
-
-	switch {
-	case rsp.StatusCode == 401:
-		var headers PostApiProtocolRoomResponse401Headers
-		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
-			var value string
-			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			}
-			headers.WWWAuthenticate = &value
-		}
-		response.Headers401 = &headers
 	}
 
 	return response, nil

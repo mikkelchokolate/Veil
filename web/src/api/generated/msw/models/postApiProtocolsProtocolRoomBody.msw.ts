@@ -41,7 +41,7 @@
  * OpenAPI spec version: 0.6.3
  */
 
-export type PostApiProtocolRoom200 = {
-  provider: string;
-  roomID: string;
+export type PostApiProtocolsProtocolRoomBody = {
+  /** Provider name (e.g. jitsi). Defaults to the protocol default when omitted. */
+  provider?: string;
 };
