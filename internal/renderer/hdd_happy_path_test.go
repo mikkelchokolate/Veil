@@ -59,12 +59,21 @@ func TestRenderCaddyJSON_NaiveTCP443HappyPath(t *testing.T) {
 	}
 
 	routes := server["routes"].([]any)
-	if len(routes) != 1 {
-		t.Fatalf("expected exactly one route, got %d", len(routes))
+	// With a resolved domain the naive route must carry a host matcher: Caddy
+	// only provisions certificates for hosts discovered from route matchers
+	// (audit #122), and the catch-all file_server keeps probe resistance.
+	if len(routes) != 2 {
+		t.Fatalf("expected 2 routes (host-matched proxy + catch-all fallback), got %d", len(routes))
 	}
 	route := routes[0].(map[string]any)
-	if _, hasMatch := route["match"]; hasMatch {
-		t.Error("naive server route must not contain a host matcher")
+	matches, ok := route["match"].([]any)
+	if !ok || len(matches) != 1 {
+		t.Fatalf("naive proxy route must carry a host matcher for the certificate: %v", route)
+	}
+	hostMatch := matches[0].(map[string]any)
+	hosts, ok := hostMatch["host"].([]any)
+	if !ok || len(hosts) != 1 || hosts[0] != "vpn.example.com" {
+		t.Fatalf("host matcher = %v, want [vpn.example.com]", hostMatch)
 	}
 
 	handlers := route["handle"].([]any)

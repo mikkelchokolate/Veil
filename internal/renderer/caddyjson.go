@@ -164,7 +164,27 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 			// forward_proxy. The panel-only catch-all 404 would intercept CONNECT.
 			routes = append(routes, panelRoutes(owner.PanelDomain, owner.BackendPort, owner.WebBasePath, false)...)
 		}
-		routes = append(routes, map[string]any{"handle": handlers})
+		proxyRoute := map[string]any{"handle": handlers}
+		if domain := strings.TrimSpace(owner.Domain); domain != "" {
+			// Caddy only manages certificates for domains it discovers from
+			// route host matchers (or certificates.automate). Without a host
+			// matcher the naive inbound domain never receives a certificate
+			// and every TLS handshake fails (audit #122). Match the resolved
+			// domain so automatic HTTPS provisions it; probe resistance is
+			// preserved because forward_proxy still handles CONNECT on the
+			// matched host and non-matching hosts fall through to the
+			// catch-all file_server below.
+			proxyRoute = map[string]any{
+				"match":  []map[string]any{{"host": []string{domain}}},
+				"handle": handlers,
+			}
+			routes = append(routes, proxyRoute)
+			// Catch-all fallback keeps the site reachable for any other host
+			// (probe resistance), while the matched route owns the certificate.
+			routes = append(routes, map[string]any{"handle": []map[string]any{{"handler": "file_server", "root": fallbackRoot}}})
+		} else {
+			routes = append(routes, proxyRoute)
+		}
 		server["routes"] = routes
 	}
 	return server, nil

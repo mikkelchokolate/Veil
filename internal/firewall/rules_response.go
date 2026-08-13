@@ -6,6 +6,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/protocols/naiveproxy"
 )
 
 type Settings = model.Settings
@@ -27,7 +28,15 @@ func BuildRuleResponses(settings model.Settings, inbounds []model.Inbound) []Rul
 			continue
 		}
 		if service, ok := registry.FirewallService(inbound.Protocol); ok {
-			builder.Add(inbound.Port, inbound.Transport, service)
+			// naiveproxy binds the effective public port (protocolFields
+			// publicPort -> flat port -> global default -> 443), not the
+			// flat inbound.Port; open exactly what Caddy listens on
+			// (audit #81/#128/#147).
+			port := inbound.Port
+			if inbound.Protocol == "naiveproxy" {
+				port = naiveproxy.NaivePublicPort(settings, inbound)
+			}
+			builder.Add(port, inbound.Transport, service)
 		}
 	}
 	if settings.PanelAccess == "caddy" {
