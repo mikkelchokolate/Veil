@@ -260,6 +260,9 @@ func TestValidatorAllowsOlcrtcWithoutDomain(t *testing.T) {
 			Port:      3478,
 			Enabled:   true,
 			Password:  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			// A room is required for every provider (audit #83/#87); supply one
+			// so this test keeps focusing on the domain question.
+			OlcrtcRoomID: "https://meet.example/room",
 		}},
 	})
 

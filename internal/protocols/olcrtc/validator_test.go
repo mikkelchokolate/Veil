@@ -19,13 +19,16 @@ func issuesByCode(t *testing.T, issues []model.ValidationIssue, code string) *mo
 	return nil
 }
 
-func TestValidateInboundMissingKeyIsWarning(t *testing.T) {
+// TestValidateInboundMissingKeyIsError locks in audit #95/#140: an empty key
+// renders a fresh random key per render (never persisted), so client links
+// and the server config diverge. Missing key is an error, not a warning.
+func TestValidateInboundMissingKeyIsError(t *testing.T) {
 	p := New()
 	issues := p.ValidateInbound(model.Settings{}, model.Inbound{})
 	if got := issuesByCode(t, issues, "olcrtc_key_missing"); got == nil {
 		t.Fatalf("expected olcrtc_key_missing issue, got %+v", issues)
-	} else if got.Severity != "warning" {
-		t.Errorf("olcrtc_key_missing severity = %q, want warning", got.Severity)
+	} else if got.Severity != "error" {
+		t.Errorf("olcrtc_key_missing severity = %q, want error", got.Severity)
 	}
 }
 
@@ -75,18 +78,24 @@ func TestValidateInboundRoomRequiredForNonAutoProvider(t *testing.T) {
 	}
 }
 
-func TestValidateInboundRoomMissingForAutoProviderIsWarning(t *testing.T) {
+// TestValidateInboundRoomRequiredForAutoProviderToo locks in audit #83/#87:
+// an empty room must be an error for EVERY provider — no room is created at
+// apply time, and an empty room.id makes the daemon exit with ErrRoomIDRequired.
+func TestValidateInboundRoomRequiredForAutoProviderToo(t *testing.T) {
 	p := New()
 	issues := p.ValidateInbound(model.Settings{}, model.Inbound{
 		Password:   validKey(),
 		OlcrtcAuth: "jitsi",
 	})
-	got := issuesByCode(t, issues, "olcrtc_room_missing")
+	got := issuesByCode(t, issues, "olcrtc_room_required")
 	if got == nil {
-		t.Fatalf("expected olcrtc_room_missing for jitsi without room, got %+v", issues)
+		t.Fatalf("expected olcrtc_room_required for jitsi without room, got %+v", issues)
 	}
-	if got.Severity != "warning" {
-		t.Errorf("olcrtc_room_missing severity = %q, want warning", got.Severity)
+	if got.Severity != "error" {
+		t.Errorf("olcrtc_room_required severity = %q, want error", got.Severity)
+	}
+	if issuesByCode(t, issues, "olcrtc_room_missing") != nil {
+		t.Errorf("olcrtc_room_missing must no longer be emitted: %+v", issues)
 	}
 }
 
@@ -113,5 +122,68 @@ func TestValidateInboundProtocolFieldsWinOverFlat(t *testing.T) {
 	})
 	if issuesByCode(t, issues, "olcrtc_key_invalid") != nil {
 		t.Errorf("ProtocolFields key should win over flat: %+v", issues)
+	}
+}
+
+func TestValidateInboundRejectsUnknownAuthProvider(t *testing.T) {
+	p := New()
+	issues := p.ValidateInbound(model.Settings{}, model.Inbound{
+		Password:     validKey(),
+		OlcrtcAuth:   "garbage",
+		OlcrtcRoomID: "https://meet.example/room",
+	})
+	got := issuesByCode(t, issues, "olcrtc_auth_invalid")
+	if got == nil {
+		t.Fatalf("expected olcrtc_auth_invalid for unknown provider, got %+v", issues)
+	}
+	if got.Severity != "error" {
+		t.Errorf("olcrtc_auth_invalid severity = %q, want error", got.Severity)
+	}
+}
+
+func TestValidateInboundRejectsUnknownTransport(t *testing.T) {
+	p := New()
+	issues := p.ValidateInbound(model.Settings{}, model.Inbound{
+		Password:        validKey(),
+		OlcrtcAuth:      "jitsi",
+		OlcrtcRoomID:    "https://meet.example/room",
+		OlcrtcTransport: "garbage",
+	})
+	got := issuesByCode(t, issues, "olcrtc_transport_invalid")
+	if got == nil {
+		t.Fatalf("expected olcrtc_transport_invalid for unknown transport, got %+v", issues)
+	}
+	if got.Severity != "error" {
+		t.Errorf("olcrtc_transport_invalid severity = %q, want error", got.Severity)
+	}
+}
+
+func TestValidateInboundWarnsOnWbstreamDatachannel(t *testing.T) {
+	p := New()
+	issues := p.ValidateInbound(model.Settings{}, model.Inbound{
+		Password:        validKey(),
+		OlcrtcAuth:      "wbstream",
+		OlcrtcRoomID:    "room-123",
+		OlcrtcTransport: "datachannel",
+	})
+	got := issuesByCode(t, issues, "olcrtc_wbstream_datachannel")
+	if got == nil {
+		t.Fatalf("expected olcrtc_wbstream_datachannel warning, got %+v", issues)
+	}
+	if got.Severity != "warning" {
+		t.Errorf("olcrtc_wbstream_datachannel severity = %q, want warning", got.Severity)
+	}
+}
+
+func TestValidateInboundAcceptsKnownAuthAndTransport(t *testing.T) {
+	p := New()
+	issues := p.ValidateInbound(model.Settings{}, model.Inbound{
+		Password:        validKey(),
+		OlcrtcAuth:      "telemost",
+		OlcrtcRoomID:    "https://telemost.example/room",
+		OlcrtcTransport: "vp8channel",
+	})
+	if issuesByCode(t, issues, "olcrtc_auth_invalid") != nil || issuesByCode(t, issues, "olcrtc_transport_invalid") != nil {
+		t.Errorf("known auth/transport reported invalid: %+v", issues)
 	}
 }
