@@ -238,8 +238,13 @@ export function InboundsPage() {
 			f.masqueradeURL || f.originalRecord?.masqueradeURL || undefined;
 		body.fallbackRoot =
 			f.fallbackRoot || f.originalRecord?.fallbackRoot || undefined;
+		// Clearing the room must be possible: an explicit "" wins over the
+		// stale echo (audit #139). Undefined is only used when the field was
+		// never touched and the record has no value.
 		body.olcrtcRoomID =
-			f.olcrtcRoomID || f.originalRecord?.olcrtcRoomID || undefined;
+			f.olcrtcRoomID !== ""
+				? f.olcrtcRoomID || f.originalRecord?.olcrtcRoomID || undefined
+				: "";
 		return body;
 	}
 

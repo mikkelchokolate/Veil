@@ -441,17 +441,20 @@ func TestAutofillPreservesExistingValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Autofill error: %v", err)
 	}
-	if out.OlcrtcAuth != "telemost" {
-		t.Errorf("OlcrtcAuth = %q, want telemost", out.OlcrtcAuth)
+	// The SPA edits dynamic fields while echoing the stale flat value;
+	// protocolFields must win so a provider/transport switch is honored
+	// (audit #133 F1). Previously flat-wins silently ignored the switch.
+	if out.OlcrtcAuth != "wbstream" {
+		t.Errorf("OlcrtcAuth = %q, want wbstream (protocolFields-first)", out.OlcrtcAuth)
 	}
-	if out.OlcrtcTransport != "vp8channel" {
-		t.Errorf("OlcrtcTransport = %q, want vp8channel", out.OlcrtcTransport)
+	if out.OlcrtcTransport != "seichannel" {
+		t.Errorf("OlcrtcTransport = %q, want seichannel (protocolFields-first)", out.OlcrtcTransport)
 	}
 	if out.Password != key {
 		t.Errorf("Password changed to %q, want %q", out.Password, key)
 	}
-	if out.OlcrtcRoomID != "manual-room" {
-		t.Errorf("OlcrtcRoomID = %q, want manual-room", out.OlcrtcRoomID)
+	if out.OlcrtcRoomID != "pf-room" {
+		t.Errorf("OlcrtcRoomID = %q, want pf-room (protocolFields-first)", out.OlcrtcRoomID)
 	}
 }
 
