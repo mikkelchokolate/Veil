@@ -61,6 +61,16 @@ export function SettingsPage() {
 			label: t("settings.field.acmeChallengeMode"),
 			placeholder: "http-01 | dns-01",
 		},
+		{
+			key: "defaultInboundPublicPort",
+			label: t("settings.field.defaultInboundPublicPort"),
+			placeholder: "e.g. 443",
+		},
+		{
+			key: "firewallManagement",
+			label: t("settings.field.firewallManagement"),
+			placeholder: "true | false",
+		},
 	];
 
 	// Protocol-scoped credentials exposed at the settings level act purely as a
@@ -79,6 +89,8 @@ export function SettingsPage() {
 		{ key: "masqueradeURL", label: t("settings.field.masqueradeURL") },
 		{ key: "fallbackRoot", label: t("settings.field.fallbackRoot") },
 		{ key: "olcrtcRoomID", label: t("settings.field.olcrtcRoomID") },
+		{ key: "olcrtcAuth", label: t("settings.field.olcrtcAuth") },
+		{ key: "olcrtcTransport", label: t("settings.field.olcrtcTransport") },
 	];
 
 	const save = useMutation({
@@ -132,7 +144,22 @@ export function SettingsPage() {
 				(s as Record<string, unknown> | undefined)?.[f.key] ?? "",
 			);
 			if (form[f.key] !== cur) {
-				if (form[f.key] !== "") patch[f.key] = form[f.key];
+				if (form[f.key] !== "") {
+					if (
+						f.key === "defaultInboundPublicPort" ||
+						f.key === "panelPublicPort"
+					) {
+						const n = Number(form[f.key]);
+						patch[f.key] = Number.isNaN(n) ? form[f.key] : n;
+					} else if (
+						f.key === "firewallManagement" ||
+						f.key === "hysteria2Insecure"
+					) {
+						patch[f.key] = form[f.key] === "true";
+					} else {
+						patch[f.key] = form[f.key];
+					}
+				}
 			}
 		}
 		if (Object.keys(patch).length === 0) {

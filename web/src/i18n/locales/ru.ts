@@ -205,6 +205,11 @@ export const ru: Record<string, string> = {
 	"settings.field.email": "Email",
 	"settings.field.panelEmail": "Email панели",
 	"settings.field.panelPublicPort": "Публичный порт панели",
+	"settings.field.defaultInboundPublicPort":
+		"Публичный порт инбаундов по умолчанию",
+	"settings.field.firewallManagement": "Управление файрволом",
+	"settings.field.olcrtcAuth": "Провайдер авторизации olcRTC",
+	"settings.field.olcrtcTransport": "Транспорт olcRTC",
 	"settings.field.naiveUsername": "Имя пользователя NaiveProxy",
 	"settings.field.naivePassword": "Пароль NaiveProxy",
 	"settings.field.hysteria2Password": "Пароль hysteria2",
