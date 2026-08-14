@@ -70,9 +70,11 @@ func TestSanitizeServiceLogOutputSecretFormats(t *testing.T) {
 			wantClean: true,
 		},
 		{
-			// audit #186: hysteria2 userpass map with arbitrary username
-			name:      "hysteria2 userpass map",
-			in:        "auth:\n  type: userpass\n  userpass:\n    alice: " + secret + "\n    bob: other",
+			// audit #186: hysteria2 userpass map with arbitrary usernames;
+			// EVERY entry must be redacted, not just the first
+			// (code-review round 3 P1).
+			name:      "hysteria2 userpass map multiple entries",
+			in:        "auth:\n  type: userpass\n  userpass:\n    alice: " + secret + "\n    bob: " + secret + "2\n    carol: " + secret + "3",
 			wantClean: true,
 		},
 		{

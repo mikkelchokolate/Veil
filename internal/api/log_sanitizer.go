@@ -24,10 +24,13 @@ var (
 	// crossing newlines ate "type: password" and left the secret in place).
 	logYAMLSecretPattern = regexp.MustCompile(`(?m)^(\s*(?:password|passwd|token|secret|private[_-]?key|license[_-]?key|auth_pass|auth_credentials|key)\s*:\s*)([^#\n][^\n]*)$`)
 	// hysteria2 userpass map: "alice: SECRET" entries nested directly under a
-	// "userpass:" key. Anchoring on the userpass line prevents over-redaction
-	// of unrelated 4-space-indented YAML keys (port:, sni:, listen:, ...)
-	// (code-review round 2 P2).
-	logUserPassMapPattern = regexp.MustCompile(`(?m)(^[ 	]*userpass:[^\n]*\n)([ 	]{4,}[A-Za-z][A-Za-z0-9_.-]*: )[^\n]+`)
+	// "userpass:" key. The block pattern captures userpass: plus ALL following
+	// entries, and each entry line is redacted inside the callback — anchoring
+	// on the block prevents over-redaction of unrelated 4-space YAML keys
+	// (port:, sni:, ...) while covering every map entry, not just the first
+	// (code-review round 3 P1: single-line anchor leaked 2nd+ entries).
+	logUserPassBlockPattern = regexp.MustCompile(`(?m)^[ 	]*userpass:[^\n]*\n(?:[ 	]{4,}[A-Za-z][A-Za-z0-9_.-]*: [^\n]*\n?)+`)
+	logUserPassEntryPattern = regexp.MustCompile(`(?m)^([ 	]{4,}[A-Za-z][A-Za-z0-9_.-]*: )[^\n]+`)
 )
 
 func sanitizeServiceLogOutput(output string) string {
@@ -39,7 +42,9 @@ func sanitizeServiceLogOutput(output string) string {
 	output = logBasicAuthPattern.ReplaceAllString(output, `${1}`+settings.RedactedSecret)
 	output = logSecretPattern.ReplaceAllString(output, `${1}`+settings.RedactedSecret)
 	output = logYAMLSecretPattern.ReplaceAllString(output, `${1}`+settings.RedactedSecret)
-	output = logUserPassMapPattern.ReplaceAllString(output, `${1}`+`${2}`+settings.RedactedSecret)
+	output = logUserPassBlockPattern.ReplaceAllStringFunc(output, func(block string) string {
+		return logUserPassEntryPattern.ReplaceAllString(block, `${1}`+settings.RedactedSecret)
+	})
 	output = logUserInfoPattern.ReplaceAllString(output, `${1}`+settings.RedactedSecret+`${2}`)
 	output = logUserInfoOnlyPattern.ReplaceAllString(output, `${1}`+settings.RedactedSecret+`${2}`)
 	output = logFragmentKeyPattern.ReplaceAllString(output, `${1}`+settings.RedactedSecret+`${2}`)
