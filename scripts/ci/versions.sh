@@ -15,8 +15,8 @@
 CI_UBUNTU_BASE="ubuntu:24.04@sha256:52df9b1ee71626e0088f7d400d5c6b5f7bb916f8f0c82b474289a4ece6cf3faf"
 
 # --- Core toolchain ---------------------------------------------------------
-CI_GO_VERSION="1.26.5"
-CI_GO_TARBALL_SHA256="5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053" # go1.26.5.linux-amd64.tar.gz
+CI_GO_VERSION="1.26.6"
+CI_GO_TARBALL_SHA256="708effb774be8237570d0add163225abbdfaf4fca28b2611df167beba4feef89" # go1.26.6.linux-amd64.tar.gz
 # The live-host network path intermittently stalls Go's HTTP/2 proxy connections
 # with bytes stuck in Send-Q. Pin HTTP/1.1 transport for deterministic clean-cache
 # downloads in both local CI and GitHub Actions. Fall back to checksum-verified

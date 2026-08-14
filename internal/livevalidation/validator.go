@@ -294,6 +294,14 @@ func crossInboundIssues(settings model.Settings, inbounds []model.Inbound, runti
 // mieru, whose generated config aggregates all users into one global list.
 func mieruCrossInboundIssues(inbound model.Inbound, runtimeIdentities map[string][]string, seen map[string]string) []model.ValidationIssue {
 	var issues []model.ValidationIssue
+	// Runtime identities are merged into the legacy profiles by
+	// BuildClientCredentials (runtime replaces the profile with the same
+	// username), so a collision between a runtime identity and a legacy
+	// profile of the SAME inbound is the intended merge, not a duplicate.
+	runtimeNames := map[string]bool{}
+	for _, identity := range runtimeIdentities[inbound.Name] {
+		runtimeNames[identity] = true
+	}
 	// Normalized client identities are aggregated into the same global
 	// user list as legacy profiles, so they join the duplicate and
 	// length checks too.
@@ -358,11 +366,11 @@ func mieruCrossInboundIssues(inbound model.Inbound, runtimeIdentities map[string
 			continue
 		}
 		if previous, ok := seen[credential.Username]; ok {
-			// Runtime identities are merged into the legacy profiles of the
-			// same inbound by BuildClientCredentials (runtime replaces the
-			// profile with the same username), so a hit from this very
-			// inbound is a merge, not a duplicate (code-review P2).
-			if previous == inbound.Name {
+			// Only a runtime-identity collision is the intended merge; a
+			// duplicate between two legacy profiles of the same inbound is
+			// still rejected, matching the renderer's global user list
+			// (code-review round 2 P2).
+			if previous == inbound.Name && runtimeNames[credential.Username] {
 				continue
 			}
 			issues = append(issues, mieruDuplicateUsernameIssue(credential.Username, previous, inbound))

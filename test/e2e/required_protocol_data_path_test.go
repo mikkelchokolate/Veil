@@ -523,8 +523,11 @@ func caddyServerHandler(server map[string]any, handlerName string) map[string]an
 	return nil
 }
 
-// caddyRouteMatcher returns the matcher object of the route that contains the
-// named handler (used to repoint the forward_proxy host matcher in e2e).
+// caddyRouteMatcher returns the first matcher object of the route that
+// contains the named handler (used to repoint the forward_proxy host matcher
+// in e2e). The renderer emits "match": [{"host": [...]}] — an ARRAY of
+// matcher sets — so the element access must unwrap the slice (code-review P1:
+// a map assertion silently returned nil and the repoint never applied).
 func caddyRouteMatcher(server map[string]any, handlerName string) map[string]any {
 	routes, _ := server["routes"].([]any)
 	for _, rawRoute := range routes {
@@ -533,8 +536,12 @@ func caddyRouteMatcher(server map[string]any, handlerName string) map[string]any
 		for _, rawHandler := range handlers {
 			handler, _ := rawHandler.(map[string]any)
 			if handler["handler"] == handlerName {
-				matcher, _ := route["match"].(map[string]any)
-				return matcher
+				matches, _ := route["match"].([]any)
+				if len(matches) > 0 {
+					first, _ := matches[0].(map[string]any)
+					return first
+				}
+				return nil
 			}
 		}
 	}
