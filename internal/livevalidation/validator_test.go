@@ -458,10 +458,10 @@ func TestValidatorAcceptsBoundaryMieruUsernameAndRejectsOversizedPassword(t *tes
 	}
 }
 
-// TestValidatorRejectsDuplicateHysteria2Usernames locks in audit #21: the
-// rendered userpass map is keyed by username, so a duplicate across inbounds
-// silently overwrites the first credential. Live validation must refuse it.
-func TestValidatorRejectsDuplicateHysteria2Usernames(t *testing.T) {
+// TestValidatorAllowsSameHysteria2UsernameAcrossInbounds locks in the code
+// review of 7556d840: each hysteria2 inbound renders its OWN userpass map and
+// process, so the same username on two different inbounds is perfectly valid.
+func TestValidatorAllowsSameHysteria2UsernameAcrossInbounds(t *testing.T) {
 	validator := testValidator()
 	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-hysteria2@a.service": true, "veil-hysteria2@b.service": true}}
 
@@ -479,11 +479,39 @@ func TestValidatorRejectsDuplicateHysteria2Usernames(t *testing.T) {
 		},
 	})
 
+	if count := countIssueCode(response, "hysteria2_duplicate_username"); count != 0 {
+		t.Fatalf("same username on different inbounds must be valid: %+v", response.Issues)
+	}
+	if !response.Valid {
+		t.Fatalf("config with same hysteria2 username on separate inbounds must be valid: %+v", response.Issues)
+	}
+}
+
+// TestValidatorRejectsDuplicateHysteria2UsernameWithinInbound is the case that
+// actually breaks rendering: two profiles with the same username inside ONE
+// inbound overwrite each other in the single userpass map.
+func TestValidatorRejectsDuplicateHysteria2UsernameWithinInbound(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-hysteria2@a.service": true}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{Domain: "hy.example.com"},
+		Inbounds: []model.Inbound{
+			{
+				Name: "a", Protocol: "hysteria2", Transport: "udp", Port: 9443, Enabled: true,
+				Profiles: []model.ClientProfile{
+					{Name: "alice1", Username: "alice", Password: "pw1", Enabled: true},
+					{Name: "alice2", Username: "alice", Password: "pw2", Enabled: true},
+				},
+			},
+		},
+	})
+
 	if count := countIssueCode(response, "hysteria2_duplicate_username"); count != 1 {
 		t.Fatalf("expected 1 duplicate hysteria2 username issue, got %d: %+v", count, response.Issues)
 	}
 	if response.Valid {
-		t.Fatalf("duplicate hysteria2 usernames must make the config invalid")
+		t.Fatalf("duplicate hysteria2 usernames within one inbound must make the config invalid")
 	}
 }
 

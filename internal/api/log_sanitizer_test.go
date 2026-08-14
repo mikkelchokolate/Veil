@@ -82,8 +82,8 @@ func TestSanitizeServiceLogOutputSecretFormats(t *testing.T) {
 			wantClean: true,
 		},
 		{
-			name:      "generic key=value",
-			in:        "config: key=" + secret,
+			name:      "generic secret=value",
+			in:        "config: secret=" + secret,
 			wantClean: true,
 		},
 		{

@@ -349,9 +349,10 @@ func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []S
 		if runtime.Unit != renderer.UnitVeil && runtime.Unit != unitCaddy && runtime.Unit != renderer.UnitWarp {
 			enable := ctx.runPrivilegedServiceAction(runtime.Unit, privileged.ServiceActionEnable)
 			results = append(results, enable)
-			if !enable.Success {
-				return results
-			}
+			// A failed enable must not abort the rest of the reload: the
+			// remaining restarts and the orphan stop/disable phase still
+			// need to run (code-review P3). The failed result is already
+			// recorded for the caller.
 		}
 	}
 

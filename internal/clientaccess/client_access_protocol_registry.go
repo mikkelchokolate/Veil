@@ -153,9 +153,19 @@ func naiveProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	}
 	link := newProtocolClientLink(input)
 	// The registry path must emit the effective public port Caddy binds and
-	// the upstream https:// scheme, matching the plugin path (audit #79/#177).
-	link.URI = NaiveClientURI(model.ResolveInboundDomain(input.Inbound, input.Settings), model.ResolveNaivePublicPort(input.Settings, input.Inbound), input.Credential.Username, input.Credential.Password)
+	// the upstream scheme, matching the plugin path (audit #79/#177).
+	link.URI = naiveClientURITransport(model.ResolveInboundDomain(input.Inbound, input.Settings), model.ResolveNaivePublicPort(input.Settings, input.Inbound), input.Credential.Username, input.Credential.Password, naiveRegistryScheme(input), 443)
 	return link, true
+}
+
+// naiveRegistryScheme mirrors the plugin transport handling so the registry
+// path stays consistent if quic/dual transports are ever enabled again
+// (code-review P3: the validator currently only allows tcp).
+func naiveRegistryScheme(input ClientAccessLinkInput) string {
+	if transport := protocolString(input.Inbound.ProtocolFields, "transport", ""); transport == "quic" {
+		return "quic"
+	}
+	return "https"
 }
 
 func naiveFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
@@ -177,7 +187,7 @@ func naiveFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 	if username == "" {
 		username = model.DefaultNaiveUsername
 	}
-	link.URI = NaiveClientURI(model.ResolveInboundDomain(input.Inbound, input.Settings), model.ResolveNaivePublicPort(input.Settings, input.Inbound), username, password)
+	link.URI = naiveClientURITransport(model.ResolveInboundDomain(input.Inbound, input.Settings), model.ResolveNaivePublicPort(input.Settings, input.Inbound), username, password, naiveRegistryScheme(input), 443)
 	return link, true
 }
 

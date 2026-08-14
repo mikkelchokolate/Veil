@@ -173,6 +173,10 @@ func TestHandleSettingsRejectsFallbackRootPathTraversal(t *testing.T) {
 		{"PUT /var/lib/veil/../../../etc → 400", "/var/lib/veil/../../../etc", http.StatusBadRequest, false},
 		{"PUT traversal attempt → 400", "/var/lib/veil/../../../../etc", http.StatusBadRequest, false},
 		{"PUT /var/lib/veil → 400 (state dir itself)", "/var/lib/veil", http.StatusBadRequest, false},
+		// Relative traversal must not escape the veil root after prepend
+		// (code-review P2: "../www" cleans to /var/lib/www).
+		{"PUT ../www → 400 (relative escape)", "../www", http.StatusBadRequest, false},
+		{"PUT ../www-again → 400", "../www2", http.StatusBadRequest, false},
 		{"PUT empty → 200", "", http.StatusOK, false},
 		{"PUT relative/path → 200", "relative/path", http.StatusOK, true},
 	}

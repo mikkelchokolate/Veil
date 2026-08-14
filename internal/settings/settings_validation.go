@@ -299,6 +299,12 @@ func normalizeFallbackRoot(root *string) error {
 		}
 		*root = filepath.Clean("/var/lib/veil/" + *root)
 	}
+	// Re-check the boundary after the relative prepend: a "../www" input
+	// cleans to /var/lib/www, which escapes /var/lib/veil even though the
+	// pre-check saw a relative path (code-review P2, audit #77 F4).
+	if !strings.HasPrefix(filepath.ToSlash(*root), "/var/lib/veil/") {
+		return errors.New("fallbackRoot must be within /var/lib/veil")
+	}
 	if filepath.ToSlash(*root) == "/var/lib/veil" {
 		return errors.New("fallbackRoot must be a subdirectory of /var/lib/veil, not the state directory itself")
 	}

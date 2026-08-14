@@ -272,7 +272,6 @@ func protocolInboundIssues(settings model.Settings, inbound model.Inbound) []mod
 func crossInboundIssues(settings model.Settings, inbounds []model.Inbound, runtimeIdentities map[string][]string) []model.ValidationIssue {
 	var issues []model.ValidationIssue
 	seen := map[string]string{}
-	hy2Seen := map[string]string{}
 	for _, inbound := range inbounds {
 		if !inbound.Enabled {
 			continue
@@ -282,7 +281,9 @@ func crossInboundIssues(settings model.Settings, inbounds []model.Inbound, runti
 			continue
 		}
 		if inbound.Protocol == "hysteria2" {
-			issues = append(issues, hysteria2CrossInboundIssues(inbound, hy2Seen)...)
+			// hysteria2 renders one config/process per inbound, so duplicates
+			// are only invalid within a single inbound's userpass map.
+			issues = append(issues, hysteria2DuplicateUsernamesInInbound(inbound)...)
 			continue
 		}
 	}
@@ -357,6 +358,13 @@ func mieruCrossInboundIssues(inbound model.Inbound, runtimeIdentities map[string
 			continue
 		}
 		if previous, ok := seen[credential.Username]; ok {
+			// Runtime identities are merged into the legacy profiles of the
+			// same inbound by BuildClientCredentials (runtime replaces the
+			// profile with the same username), so a hit from this very
+			// inbound is a merge, not a duplicate (code-review P2).
+			if previous == inbound.Name {
+				continue
+			}
 			issues = append(issues, mieruDuplicateUsernameIssue(credential.Username, previous, inbound))
 			continue
 		}
@@ -365,11 +373,13 @@ func mieruCrossInboundIssues(inbound model.Inbound, runtimeIdentities map[string
 	return issues
 }
 
-// hysteria2CrossInboundIssues checks for duplicate usernames across hysteria2
-// inbounds. The rendered userpass map is keyed by username, so a duplicate
-// silently overwrites the first user and one credential becomes unreachable
-// (audit #21).
-func hysteria2CrossInboundIssues(inbound model.Inbound, seen map[string]string) []model.ValidationIssue {
+// hysteria2DuplicateUsernamesInInbound checks for duplicate usernames WITHIN
+// a single hysteria2 inbound. Each inbound renders its own userpass map in its
+// own config file and process (hysteria2/<name>.yaml, veil-hysteria2@<name>
+// unit), so the same username across different inbounds is valid — only a
+// duplicate inside one map would silently overwrite the first user (code
+// review of 7556d840; audit #21 scoped to the single config).
+func hysteria2DuplicateUsernamesInInbound(inbound model.Inbound) []model.ValidationIssue {
 	var issues []model.ValidationIssue
 	credentials, err := clientaccess.BuildClientCredentials(inbound)
 	if err != nil {
@@ -378,6 +388,7 @@ func hysteria2CrossInboundIssues(inbound model.Inbound, seen map[string]string) 
 	if len(credentials) == 0 {
 		return issues
 	}
+	seen := map[string]string{}
 	for _, credential := range credentials {
 		if previous, ok := seen[credential.Username]; ok {
 			issues = append(issues, model.ValidationIssue{
@@ -385,13 +396,13 @@ func hysteria2CrossInboundIssues(inbound model.Inbound, seen map[string]string) 
 				Severity:    SeverityError,
 				Field:       "profiles",
 				InboundID:   inbound.Name,
-				Message:     fmt.Sprintf("hysteria2 username %q is already used by inbound %q", credential.Username, previous),
-				Remediation: "Use a distinct username for each hysteria2 client profile.",
+				Message:     fmt.Sprintf("hysteria2 username %q is used twice in inbound %q (profile %q and %q)", credential.Username, inbound.Name, previous, credential.Username),
+				Remediation: "Use a distinct username for each hysteria2 client profile in the same inbound.",
 				Source:      "hysteria2",
 			})
 			continue
 		}
-		seen[credential.Username] = inbound.Name
+		seen[credential.Username] = credential.Username
 	}
 	return issues
 }

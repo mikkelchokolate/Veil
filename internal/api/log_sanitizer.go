@@ -12,7 +12,7 @@ const maxServiceLogResponseBytes = 256 * 1024
 var (
 	logBearerPattern        = regexp.MustCompile(`(?i)(\bbearer\s+)[A-Za-z0-9._~+/=-]+`)
 	logJSONSecretPattern    = regexp.MustCompile(`(?i)("(?:password|passwd|token|secret|private[_-]?key|license[_-]?key|authorization|auth_credentials|auth_pass|basic_auth)"\s*:\s*\[?\")[^"]*(")`)
-	logSecretPattern        = regexp.MustCompile(`(?i)(\b(?:password|passwd|token|secret|private[_-]?key|license[_-]?key|authorization|key|auth_pass|basic_auth)\b["']?[ \t]*(?::|=|[ \t])[ \t]*["']?)[^ \t,\"'};]+`)
+	logSecretPattern        = regexp.MustCompile(`(?i)(\b(?:password|passwd|token|secret|private[_-]?key|license[_-]?key|authorization|auth_pass|basic_auth)\b["']?[ 	]*(?::|=|[ 	])[ 	]*["']?)[^ 	,\"'};]+`)
 	logUserInfoPattern      = regexp.MustCompile(`(://[^:/\s]+:)[^@/\s]+(@)`)
 	logUserInfoOnlyPattern  = regexp.MustCompile(`(://)[^@/:\s]+(@)`)
 	logFragmentKeyPattern   = regexp.MustCompile(`(#)[0-9a-fA-F]{32,64}(\$)`)
