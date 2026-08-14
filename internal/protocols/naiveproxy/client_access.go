@@ -3,6 +3,7 @@ package naiveproxy
 import (
 	"errors"
 	"fmt"
+	"net/url"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
@@ -75,5 +76,9 @@ func naiveURI(scheme, user, pass, domain string, port, defaultPort int) string {
 	if port != defaultPort {
 		host = fmt.Sprintf("%s:%d", domain, port)
 	}
-	return fmt.Sprintf("%s://%s:%s@%s", scheme, user, pass, host)
+	// Userinfo must be percent-encoded (RFC 3986): raw interpolation lets a
+	// username/password containing '@' or ':' redirect the URI to another
+	// host or break parsing (audit #191, red-team verified).
+	userinfo := url.UserPassword(user, pass).String()
+	return fmt.Sprintf("%s://%s@%s", scheme, userinfo, host)
 }

@@ -76,6 +76,22 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 			capability = capabilityAdminMutation
 		}
 		if capability == capabilityPublic {
+			// Public endpoints short-circuit auth, but a mutating public
+			// request that arrives with a LIVE cookie session must still
+			// prove CSRF (audit #198: logout was revocable cross-site).
+			// Login has no session cookie yet; setup/complete runs before
+			// any session exists, so neither is affected.
+			if isMutatingRequest(r) {
+				if cookie, err := r.Cookie("veil_session"); err == nil {
+					if _, ok := state.sessionRegistry().Get(cookie.Value); ok {
+						providedCSRF := r.Header.Get("X-CSRF-Token")
+						if !state.sessionRegistry().ValidateCSRF(cookie.Value, providedCSRF) {
+							writeError(w, "invalid or missing CSRF token", http.StatusForbidden)
+							return
+						}
+					}
+				}
+			}
 			next.ServeHTTP(w, r)
 			return
 		}

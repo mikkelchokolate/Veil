@@ -64,6 +64,24 @@ func TestSanitizeServiceLogOutputSecretFormats(t *testing.T) {
 			wantClean: true,
 		},
 		{
+			// audit #186: snake_case JSON key used by Caddy
+			name:      "caddy JSON auth_pass snake_case",
+			in:        `{"auth_pass":"` + secret + `","username":"alice"}`,
+			wantClean: true,
+		},
+		{
+			// audit #186: hysteria2 userpass map with arbitrary username
+			name:      "hysteria2 userpass map",
+			in:        "auth:\n  type: userpass\n  userpass:\n    alice: " + secret + "\n    bob: other",
+			wantClean: true,
+		},
+		{
+			// audit #186: Caddyfile basic_auth directive
+			name:      "caddy basic_auth directive",
+			in:        "basic_auth alice " + secret + " {\n  realm vpn\n}",
+			wantClean: true,
+		},
+		{
 			name:      "generic key=value",
 			in:        "config: key=" + secret,
 			wantClean: true,
