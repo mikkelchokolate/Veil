@@ -30,7 +30,6 @@ type olcrtcYAML struct {
 		Transport string `yaml:"transport"`
 		DNS       string `yaml:"dns"`
 	} `yaml:"net"`
-	Data string `yaml:"data"`
 }
 
 func RenderOlcrtc(cfg OlcrtcConfig) (string, error) {
@@ -51,7 +50,6 @@ func RenderOlcrtc(cfg OlcrtcConfig) (string, error) {
 	doc.Crypto.Key = cfg.Key
 	doc.Net.Transport = cfg.Transport
 	doc.Net.DNS = cfg.DNS
-	doc.Data = "data"
 
 	var out bytes.Buffer
 	enc := yaml.NewEncoder(&out)

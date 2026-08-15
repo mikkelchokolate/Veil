@@ -48,18 +48,22 @@ func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.Ma
 	return runtimes
 }
 
-// RuntimeInstall returns the olcRTC runtime descriptor.
+// RuntimeInstall returns the olcRTC runtime descriptor. Keep this source pin in
+// lockstep with the wire format consumed by current olcRTC clients: the current
+// OLC2 record layer has no compatibility fallback to the legacy pre-OLC2 wire.
 func (Plugin) RuntimeInstall(string) runtimeinstall.Runtime {
+	const sourceCommit = "48cae636f88e16863c99d4147bbc327a856cdf00"
 	return runtimeinstall.Runtime{
 		Name:           "olcrtc",
 		Binary:         "olcrtc",
 		Method:         runtimeinstall.MethodGoInstall,
-		SourcePackage:  "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@82667e4001b209fdb911d73495ff79e285924215",
-		Version:        "82667e4001b209fdb911d73495ff79e285924215",
+		SourcePackage:  "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@" + sourceCommit,
+		Version:        sourceCommit,
+		SourceCommit:   sourceCommit,
 		Integrity:      "go-module-sum",
 		VersionArgs:    []string{"__go_buildinfo__"},
 		VersionCommand: "go version -m olcrtc",
-		VersionPattern: `82667e4001b2`,
+		VersionPattern: `48cae636f88e`,
 		Description:    "olcrtc is built from source with \"go install\"",
 	}
 }
