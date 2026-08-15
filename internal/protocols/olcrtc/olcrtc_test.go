@@ -31,7 +31,7 @@ func TestPluginMetadata(t *testing.T) {
 		t.Errorf("FirewallService() = %q, want %q", got, want)
 	}
 	if got, want := p.MaxEnabled(), 0; got != want {
-		t.Errorf("MaxEnabled() = %d, want %d", got, want)
+		t.Errorf("MaxEnabled() = %d, want 0", got)
 	}
 }
 
@@ -276,16 +276,18 @@ func TestRuntimeDescriptorsWithoutMatchingInbound(t *testing.T) {
 func TestRuntimeInstall(t *testing.T) {
 	p := New()
 	got := p.RuntimeInstall("amd64")
+	const sourceCommit = "48cae636f88e16863c99d4147bbc327a856cdf00"
 	want := runtimeinstall.Runtime{
 		Name:           "olcrtc",
 		Binary:         "olcrtc",
 		Method:         runtimeinstall.MethodGoInstall,
-		SourcePackage:  "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@82667e4001b209fdb911d73495ff79e285924215",
-		Version:        "82667e4001b209fdb911d73495ff79e285924215",
+		SourcePackage:  "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@" + sourceCommit,
+		Version:        sourceCommit,
+		SourceCommit:   sourceCommit,
 		Integrity:      "go-module-sum",
 		VersionArgs:    []string{"__go_buildinfo__"},
 		VersionCommand: "go version -m olcrtc",
-		VersionPattern: `82667e4001b2`,
+		VersionPattern: `48cae636f88e`,
 		Description:    "olcrtc is built from source with \"go install\"",
 	}
 	if !reflect.DeepEqual(got, want) {
