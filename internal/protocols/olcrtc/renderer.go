@@ -37,8 +37,11 @@ func (Plugin) ArtifactSpec() generatedconfig.ArtifactSpec {
 }
 
 func renderOlcrtc(settings model.Settings, inbound model.Inbound) (string, error) {
-	password := inbound.Password
+	password := olcrtcKey(inbound)
 	if password == "" {
+		// Apply validation rejects an empty effective key. Keep this defensive
+		// fallback for direct renderer callers, but never ignore a key supplied
+		// through protocolFields.
 		bytes := make([]byte, 32)
 		if _, err := randRead(bytes); err != nil {
 			return "", err

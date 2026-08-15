@@ -13,7 +13,7 @@ func (Plugin) ValidateSettings(model.Settings, model.Inbound) error { return nil
 // render a config the pinned upstream runtime cannot use.
 func (Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) []model.ValidationIssue {
 	var issues []model.ValidationIssue
-	key := protocolString(inbound.ProtocolFields, "password", inbound.Password)
+	key := olcrtcKey(inbound)
 	if key != "" && !isOlcrtcKey(key) {
 		issues = append(issues, model.ValidationIssue{
 			Code:        "olcrtc_key_invalid",
@@ -153,6 +153,6 @@ func isOneOf(value string, candidates ...string) bool {
 func (Plugin) NeedsEmail(model.Settings, model.Inbound) bool { return false }
 
 // HasCredential reports whether the inbound has a usable olcRTC credential.
-func (Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bool {
-	return strings.TrimSpace(inbound.Password) != ""
+func (Plugin) HasCredential(_ model.Settings, inbound model.Inbound) bool {
+	return olcrtcKey(inbound) != ""
 }

@@ -10,6 +10,7 @@ func (Plugin) BuildLinks(settings model.Settings, inbound model.Inbound) ([]mode
 	auth := olcrtcAuth(settings, inbound)
 	transport := olcrtcTransport(settings, inbound)
 	roomID := olcrtcRoomID(settings, inbound)
+	key := olcrtcKey(inbound)
 	creds, err := clientaccess.BuildClientCredentials(inbound)
 	if err != nil {
 		return nil, err
@@ -20,7 +21,7 @@ func (Plugin) BuildLinks(settings model.Settings, inbound model.Inbound) ([]mode
 			Protocol:  inbound.Protocol,
 			Transport: inbound.Transport,
 			Port:      inbound.Port,
-			URI:       clientaccess.OlcrtcClientURI(auth, transport, roomID, inbound.Password, ""),
+			URI:       clientaccess.OlcrtcClientURI(auth, transport, roomID, key, ""),
 		}
 		return []model.ClientLink{link}, nil
 	}
@@ -31,7 +32,7 @@ func (Plugin) BuildLinks(settings model.Settings, inbound model.Inbound) ([]mode
 			Protocol:  inbound.Protocol,
 			Transport: inbound.Transport,
 			Port:      inbound.Port,
-			URI:       clientaccess.OlcrtcClientURI(auth, transport, roomID, inbound.Password, cred.Username),
+			URI:       clientaccess.OlcrtcClientURI(auth, transport, roomID, key, cred.Username),
 		}
 		links = append(links, link)
 	}
