@@ -748,7 +748,7 @@ func TestIsOlcrtcKey(t *testing.T) {
 		{strings.Repeat("a", 64), true},
 		{strings.Repeat("0", 64), true},
 		{"abc", false},
-		{strings.Repeat("A", 64), false},
+		{strings.Repeat("A", 64), true},
 		{strings.Repeat("a", 63) + "g", false},
 	}
 	for _, tc := range cases {

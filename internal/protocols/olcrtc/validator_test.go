@@ -158,7 +158,7 @@ func TestValidateInboundRejectsUnknownTransport(t *testing.T) {
 	}
 }
 
-func TestValidateInboundWarnsOnWbstreamDatachannel(t *testing.T) {
+func TestValidateInboundRejectsWbstreamDatachannel(t *testing.T) {
 	p := New()
 	issues := p.ValidateInbound(model.Settings{}, model.Inbound{
 		Password:        validKey(),
@@ -168,10 +168,10 @@ func TestValidateInboundWarnsOnWbstreamDatachannel(t *testing.T) {
 	})
 	got := issuesByCode(t, issues, "olcrtc_wbstream_datachannel")
 	if got == nil {
-		t.Fatalf("expected olcrtc_wbstream_datachannel warning, got %+v", issues)
+		t.Fatalf("expected olcrtc_wbstream_datachannel error, got %+v", issues)
 	}
-	if got.Severity != "warning" {
-		t.Errorf("olcrtc_wbstream_datachannel severity = %q, want warning", got.Severity)
+	if got.Severity != "error" {
+		t.Errorf("olcrtc_wbstream_datachannel severity = %q, want error", got.Severity)
 	}
 }
 
