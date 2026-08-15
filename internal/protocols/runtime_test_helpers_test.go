@@ -36,5 +36,5 @@ func fakeProtocolRuntimeVersion(_ context.Context, path string, _ []string) (str
 }
 
 func fakeOlcrtcBuildInfo(string) (string, error) {
-	return "github.com/openlibrecommunity/olcrtc@v0.0.0-20260726002220-82667e4001b2", nil
+	return "github.com/openlibrecommunity/olcrtc@v0.0.0-20260814163019-48cae636f88e", nil
 }
