@@ -108,6 +108,9 @@ func TestMieruDataPath(t *testing.T) {
 		_, _ = w.Write([]byte(expectedResponse))
 	}))
 	defer backend.Close()
+	backendHost := "veil-mieru-e2e.test"
+	registerLoopbackHostname(t, backendHost)
+	backendURL := strings.Replace(backend.URL, "127.0.0.1", backendHost, 1)
 
 	// 2. Start Veil serving panel
 	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
@@ -274,7 +277,7 @@ func TestMieruDataPath(t *testing.T) {
 		t.Fatalf("mieru client did not listen: %v\nserver log:\n%s\nclient log:\n%s", err, serverBytes, clientBytes)
 	}
 
-	assertHTTPThroughSOCKS(t, socksAddr, backend.URL, expectedResponse)
+	assertHTTPThroughSOCKS(t, socksAddr, backendURL, expectedResponse)
 }
 
 // TestHysteria2DataPath tests data flow through a real Hysteria2 server/client if Hysteria binary is installed.
