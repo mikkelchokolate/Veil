@@ -2,6 +2,7 @@ package generatedconfig
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
@@ -38,11 +39,11 @@ func (m MieruGeneratedConfigModel) Build(inbounds []Inbound) (renderer.MieruConf
 			// Fall back to the inbound credential only when the inbound has no
 			// client profiles at all. If profiles exist but every one of them
 			// is disabled, the user deliberately revoked all clients: falling
-			// back would silently re-enable the legacy inbound user (audit #3).
+			// back would silently re-enable the legacy inbound user.
 			if hasProfiles(inbound) {
 				continue
 			}
-			if err := addUser(inbound.Name, inbound.Password); err != nil {
+			if err := addUser(inbound.Name, mieruEffectivePassword(inbound)); err != nil {
 				return renderer.MieruConfig{}, false, err
 			}
 			continue
@@ -59,9 +60,17 @@ func (m MieruGeneratedConfigModel) Build(inbounds []Inbound) (renderer.MieruConf
 	return config, true, nil
 }
 
-// hasProfiles reports whether the inbound carries any client profile entries
-// at all (enabled or not), distinguishing "no profiles configured" from
-// "profiles configured but all disabled".
+func mieruEffectivePassword(inbound Inbound) string {
+	if inbound.ProtocolFields != nil {
+		if value, ok := inbound.ProtocolFields["password"].(string); ok {
+			if value = strings.TrimSpace(value); value != "" {
+				return value
+			}
+		}
+	}
+	return strings.TrimSpace(inbound.Password)
+}
+
 func hasProfiles(inbound Inbound) bool {
 	return len(inbound.Profiles) > 0
 }

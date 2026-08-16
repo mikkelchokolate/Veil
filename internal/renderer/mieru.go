@@ -46,11 +46,8 @@ func RenderMieru(cfg MieruConfig) (string, error) {
 	out := mieruServerConfigJSON{LoggingLevel: "INFO"}
 	seenBindings := make(map[mieruPortBindingJSON]struct{}, len(cfg.PortBindings))
 	for _, binding := range cfg.PortBindings {
-		if binding.Port <= 0 {
-			return "", errors.New("mieru port is required")
-		}
-		if binding.Port > 65535 {
-			return "", errors.New("mieru port must be between 1 and 65535")
+		if binding.Port < 1025 || binding.Port > 65535 {
+			return "", errors.New("mieru port must be between 1025 and 65535")
 		}
 		protocol := normalizeMieruProtocol(binding.Protocol)
 		if protocol != "TCP" && protocol != "UDP" {

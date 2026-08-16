@@ -23,19 +23,17 @@ func BuildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 	return NewClientLinksResponseFinalizer().Finalize(response)
 }
 
-// clientLinkEffectiveInbounds keeps the legacy client-access registry aligned
-// with protocol-specific effective fields. olcRTC's dynamic form stores the
-// shared crypto key in protocolFields.password; registry link builders consume
-// the legacy flat Password field, so materialize the effective key on a copy
-// before exporting links. The source desired state is never mutated.
+// clientLinkEffectiveInbounds materializes protocol-specific dynamic password
+// fields onto a copy for legacy client-access paths that still consume the flat
+// Password field. The persisted desired state is never mutated.
 func clientLinkEffectiveInbounds(inbounds []Inbound) []Inbound {
 	out := append([]Inbound(nil), inbounds...)
 	for i := range out {
-		if out[i].Protocol != "olcrtc" {
-			continue
-		}
-		if password := protocolString(out[i].ProtocolFields, "password", ""); password != "" {
-			out[i].Password = password
+		switch out[i].Protocol {
+		case "olcrtc", "mieru":
+			if password := protocolString(out[i].ProtocolFields, "password", ""); password != "" {
+				out[i].Password = password
+			}
 		}
 	}
 	return out
@@ -47,9 +45,8 @@ func NaiveClientURI(domain string, port int, username string, password string) s
 
 // naiveClientURITransport renders the upstream naiveproxy share URI. The
 // client (klzgrad/naiveproxy) accepts https:// (TCP/HTTP2) and quic://
-// (HTTP/3/UDP); the port is omitted when it equals the scheme default
-// (audit #177 — the legacy naive+https:// scheme is not understood by
-// upstream clients). Userinfo is percent-encoded via url.UserPassword.
+// (HTTP/3/UDP); the port is omitted when it equals the scheme default.
+// Userinfo is percent-encoded via url.UserPassword.
 func naiveClientURITransport(domain string, port int, username, password, scheme string, defaultPort int) string {
 	userinfo := url.UserPassword(username, password).String()
 	host := domain
