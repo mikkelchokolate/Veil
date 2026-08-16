@@ -10,6 +10,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 )
 
 func setStatsProviderSecretForRegression(t *testing.T, provider *StatsProvider, secret string) {
@@ -82,7 +83,7 @@ func TestStatsProviderBoundsTrafficAPIResponse(t *testing.T) {
 	}
 }
 
-func TestHysteriaRenderConfigEnablesAuthenticatedLoopbackTrafficStats(t *testing.T) {
+func TestHysteriaRenderConfigEnablesAuthenticatedIsolatedTrafficStats(t *testing.T) {
 	const port = 24443
 	settings := model.Settings{Domain: "vpn.example.test", Hysteria2Password: "fallback-secret"}
 	inbound := model.Inbound{
@@ -100,7 +101,7 @@ func TestHysteriaRenderConfigEnablesAuthenticatedLoopbackTrafficStats(t *testing
 	body := artifacts[0].Body
 	for _, want := range []string{
 		"trafficStats:",
-		fmt.Sprintf("listen: 127.0.0.1:%d", port),
+		"listen: " + runtimeports.Hysteria2TrafficStatsAddress(port),
 		"secret:",
 		"custom_identity",
 	} {
@@ -108,7 +109,20 @@ func TestHysteriaRenderConfigEnablesAuthenticatedLoopbackTrafficStats(t *testing
 			t.Errorf("rendered Hysteria config missing %q", want)
 		}
 	}
-	if strings.Contains(body, "listen: :9999") {
-		t.Error("Traffic Stats API must not listen on a wildcard address")
+	if strings.Contains(body, fmt.Sprintf("listen: 127.0.0.1:%d", port)) {
+		t.Error("Traffic Stats API reused the public Hysteria port and can collide with a TCP listener")
+	}
+}
+
+func TestAuthenticatedStatsProviderTargetsSameIsolatedEndpointAsRenderer(t *testing.T) {
+	const publicPort = 24443
+	provider := NewAuthenticatedStatsProvider(
+		"hysteria2:one",
+		fmt.Sprintf("http://127.0.0.1:%d/traffic", publicPort),
+		"secret",
+		nil,
+	)
+	if provider.endpoint != runtimeports.Hysteria2TrafficStatsEndpoint(publicPort) {
+		t.Fatalf("provider endpoint = %q, want %q", provider.endpoint, runtimeports.Hysteria2TrafficStatsEndpoint(publicPort))
 	}
 }

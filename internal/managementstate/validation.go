@@ -9,6 +9,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/inbounds"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 )
 
 type Validation struct{}
@@ -40,12 +41,22 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 	var errs []string
 	seenPorts := map[string]string{}
 	protocolCatalog := protocols.NewCatalog()
+	hysteriaStatsActive := false
+	for _, inbound := range snapshot.Inbounds {
+		if inbound.Enabled && inbound.Protocol == "hysteria2" {
+			hysteriaStatsActive = true
+			break
+		}
+	}
 
 	if _, ok := fields["settings"]; ok {
 		if snapshot.Settings.PanelListen == "" {
 			errs = append(errs, "settings.panelListen is required")
 		} else if _, portStr, err := net.SplitHostPort(snapshot.Settings.PanelListen); err == nil {
 			if port, err := strconv.Atoi(portStr); err == nil {
+				if hysteriaStatsActive && port == runtimeports.Hysteria2TrafficStatsPort {
+					errs = append(errs, fmt.Sprintf("settings.panelListen: TCP port %d is reserved for Hysteria2 traffic statistics", port))
+				}
 				seenPorts["tcp:"+itoa(port)] = "panel"
 			}
 		}
@@ -60,6 +71,9 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 		port := snapshot.Warp.SocksPort
 		if port == 0 {
 			port = 40000
+		}
+		if hysteriaStatsActive && port == runtimeports.Hysteria2TrafficStatsPort {
+			errs = append(errs, fmt.Sprintf("warp.socksPort: TCP port %d is reserved for Hysteria2 traffic statistics", port))
 		}
 		seenPorts["tcp:"+itoa(port)] = "warp"
 		seenPorts["udp:"+itoa(port)] = "warp"
@@ -88,6 +102,9 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 			}
 			if inbound.Port <= 0 || inbound.Port > 65535 {
 				errs = append(errs, "inbounds["+itoa(i)+"].port must be 1-65535, got: "+itoa(inbound.Port))
+			}
+			if hysteriaStatsActive && inbound.Transport == "tcp" && inbound.Port == runtimeports.Hysteria2TrafficStatsPort {
+				errs = append(errs, fmt.Sprintf("inbounds[%d]: TCP port %d is reserved for Hysteria2 traffic statistics", i, inbound.Port))
 			}
 			key := inbound.Transport + ":" + itoa(inbound.Port)
 			if owner, exists := seenPorts[key]; exists {

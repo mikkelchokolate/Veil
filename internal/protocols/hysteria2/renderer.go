@@ -7,6 +7,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 )
 
 // RenderConfig generates one Hysteria2 config per enabled inbound.
@@ -51,7 +52,7 @@ func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.
 		Password:           password,
 		Users:              access.Hysteria2Users(),
 		MasqueradeURL:      url,
-		TrafficStatsListen: "127.0.0.1:" + strconv.Itoa(inbound.Port),
+		TrafficStatsListen: runtimeports.Hysteria2TrafficStatsAddress(inbound.Port),
 		TrafficStatsSecret: TrafficStatsSecret(settings, inbound),
 	}
 	// Use Caddy-managed certificates whenever the inbound has its own domain

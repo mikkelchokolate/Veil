@@ -11,10 +11,12 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/client"
+	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 )
 
 const maxTrafficStatsResponseBytes int64 = 1 << 20
@@ -44,10 +46,28 @@ func NewStatsProvider(key, endpoint string, bindings map[string]string) *StatsPr
 	}
 }
 
+// NewAuthenticatedStatsProvider is the production constructor. The management
+// layer historically passes a loopback URL whose port is the inbound's public
+// UDP port. Preserve that call contract while translating it to the isolated
+// local Traffic Stats endpoint rendered for the same inbound. NewStatsProvider
+// remains an exact-endpoint constructor for tests and adapters.
 func NewAuthenticatedStatsProvider(key, endpoint, secret string, bindings map[string]string) *StatsProvider {
+	endpoint = productionTrafficStatsEndpoint(endpoint)
 	provider := NewStatsProvider(key, endpoint, bindings)
 	provider.secret = secret
 	return provider
+}
+
+func productionTrafficStatsEndpoint(endpoint string) string {
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed == nil || parsed.Scheme != "http" || parsed.Hostname() != "127.0.0.1" {
+		return endpoint
+	}
+	port, err := strconv.Atoi(parsed.Port())
+	if err != nil || port < 1 || port > 65535 {
+		return endpoint
+	}
+	return runtimeports.Hysteria2TrafficStatsEndpoint(port)
 }
 
 func (p *StatsProvider) Key() string { return p.key }

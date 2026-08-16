@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/client"
+	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 )
 
 type healthRegressionTrafficProvider struct {
@@ -31,40 +31,32 @@ func (p *healthRegressionTrafficProvider) Read() (client.ProviderBatch, error) {
 	return client.ProviderBatch{Readings: readings, ObservedAt: time.Now().UTC(), RuntimeInstance: p.key}, p.err
 }
 
-func loopbackServerPort(t *testing.T, server *httptest.Server) int {
-	t.Helper()
-	parsed, err := url.Parse(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, portText, err := net.SplitHostPort(parsed.Host)
-	if err != nil {
-		t.Fatal(err)
-	}
-	port, err := strconv.Atoi(portText)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return port
-}
-
 func TestTrafficProvidersScopeRuntimeIdentityMappingsPerInbound(t *testing.T) {
+	const firstPublicPort = 25443
+	const secondPublicPort = 25444
 	var firstCounters atomic.Int64
 	var secondCounters atomic.Int64
 	firstCounters.Store(100)
 	secondCounters.Store(1000)
 	var firstAuth, secondAuth atomic.Value
-	newServer := func(counters *atomic.Int64, auth *atomic.Value) *httptest.Server {
-		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	newServer := func(publicPort int, counters *atomic.Int64, auth *atomic.Value) *httptest.Server {
+		listener, err := net.Listen("tcp", runtimeports.Hysteria2TrafficStatsAddress(publicPort))
+		if err != nil {
+			t.Fatalf("listen on isolated Hysteria stats endpoint for UDP port %d: %v", publicPort, err)
+		}
+		server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			auth.Store(r.Header.Get("Authorization"))
 			value := counters.Load()
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"shared_runtime_identity":{"tx":` + strconv.FormatInt(value, 10) + `,"rx":` + strconv.FormatInt(value, 10) + `}}`))
 		}))
+		server.Listener = listener
+		server.Start()
+		return server
 	}
-	firstServer := newServer(&firstCounters, &firstAuth)
+	firstServer := newServer(firstPublicPort, &firstCounters, &firstAuth)
 	defer firstServer.Close()
-	secondServer := newServer(&secondCounters, &secondAuth)
+	secondServer := newServer(secondPublicPort, &secondCounters, &secondAuth)
 	defer secondServer.Close()
 
 	state := newClientLifecycleTestState(t)
@@ -94,8 +86,8 @@ func TestTrafficProvidersScopeRuntimeIdentityMappingsPerInbound(t *testing.T) {
 
 	state.mu.Lock()
 	state.inbounds = []Inbound{
-		{Name: "hy-first", Protocol: "hysteria2", Transport: "udp", Port: loopbackServerPort(t, firstServer), Enabled: true, Password: "first-fallback-secret"},
-		{Name: "hy-second", Protocol: "hysteria2", Transport: "udp", Port: loopbackServerPort(t, secondServer), Enabled: true, Password: "second-fallback-secret"},
+		{Name: "hy-first", Protocol: "hysteria2", Transport: "udp", Port: firstPublicPort, Enabled: true, Password: "first-fallback-secret"},
+		{Name: "hy-second", Protocol: "hysteria2", Transport: "udp", Port: secondPublicPort, Enabled: true, Password: "second-fallback-secret"},
 	}
 	state.registerTrafficProvidersLocked()
 	state.mu.Unlock()
