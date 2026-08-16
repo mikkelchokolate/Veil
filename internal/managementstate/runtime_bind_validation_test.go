@@ -115,7 +115,7 @@ func TestValidationAllowsNaiveToSharePanelCaddyPublicPort(t *testing.T) {
 	settings.PanelPublicPort = 443
 	snapshot := model.ManagementSnapshot{
 		Settings: settings,
-		Inbounds: []model.Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 8443, Enabled: true, ProtocolFields: map[string]any{"publicPort": float64(443)}},
+		Inbounds: []model.Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 8443, Enabled: true, ProtocolFields: map[string]any{"publicPort": float64(443)}}},
 	}
 	errs := NewValidation().ValidateSnapshot(snapshot, runtimeBindValidationFields())
 	for _, err := range errs {
