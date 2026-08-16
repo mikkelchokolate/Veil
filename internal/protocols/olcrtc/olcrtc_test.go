@@ -702,7 +702,7 @@ func TestProtocolString(t *testing.T) {
 	}
 }
 
-func TestRenderConfigGeneratesKeyWhenMissing(t *testing.T) {
+func TestRenderConfigRejectsMissingPersistedKey(t *testing.T) {
 	p := New()
 	input := generatedconfig.ProtocolRenderInput{
 		Settings: model.Settings{},
@@ -710,14 +710,11 @@ func TestRenderConfigGeneratesKeyWhenMissing(t *testing.T) {
 		Inbounds: []model.Inbound{{Name: "beta", Protocol: "olcrtc"}},
 	}
 	arts, ok, err := p.RenderConfig(input)
-	if err != nil {
-		t.Fatalf("RenderConfig error: %v", err)
+	if err == nil {
+		t.Fatalf("RenderConfig accepted missing persisted key: ok=%v artifacts=%d", ok, len(arts))
 	}
-	if !ok || len(arts) != 1 {
-		t.Fatalf("expected one artifact, ok=%v, len=%d", ok, len(arts))
-	}
-	if !strings.Contains(arts[0].Body, "crypto:") {
-		t.Errorf("rendered body missing crypto section:\n%s", arts[0].Body)
+	if !strings.Contains(strings.ToLower(err.Error()), "key") {
+		t.Fatalf("RenderConfig missing-key error = %q, want explicit key error", err)
 	}
 }
 
