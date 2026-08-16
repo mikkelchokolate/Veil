@@ -139,22 +139,42 @@ func TestMieruDataPath(t *testing.T) {
 	}
 	drain(resp)
 
-	// 3. Start Mieru server (mita) using the generated config
+	// 3. Start Mieru server (mita) using the generated config via control socket
 	serverConfig := filepath.Join(srv.applyRoot, "generated", "mieru", "server_config.json")
-	// mita run uses MITA_CONFIG_JSON_FILE env var, needs /var/run/mita dir
-	if err := os.MkdirAll("/var/run/mita", 0755); err != nil {
-		t.Fatalf("create /var/run/mita: %v", err)
+	serverRuntime := t.TempDir()
+	serverSocket := filepath.Join(serverRuntime, "mita.sock")
+	serverPB := filepath.Join(serverRuntime, "server.conf.pb")
+	serverLogPath := filepath.Join(serverRuntime, "mita.log")
+	serverLog, err := os.Create(serverLogPath)
+	if err != nil {
+		t.Fatal(err)
 	}
+	defer serverLog.Close()
+
+	serverEnv := append(os.Environ(),
+		"MITA_CONFIG_FILE="+serverPB,
+		"MITA_UDS_PATH="+serverSocket,
+		"MITA_INSECURE_UDS=1",
+		"MITA_LOG_NO_TIMESTAMP=true",
+	)
 	cmdServer := exec.Command(mitaPath, "run")
-	cmdServer.Env = append(os.Environ(), "MITA_CONFIG_JSON_FILE="+serverConfig)
+	cmdServer.Env = serverEnv
+	cmdServer.Stdout = serverLog
+	cmdServer.Stderr = serverLog
 	if err := cmdServer.Start(); err != nil {
-		t.Fatalf("start mita server: %v", err)
+		t.Fatalf("start mita daemon: %v", err)
 	}
 	defer func() {
 		if cmdServer.Process != nil {
 			_ = cmdServer.Process.Kill()
 		}
 	}()
+	if err := waitUnixSocket(serverSocket, 15*time.Second); err != nil {
+		logBytes, _ := os.ReadFile(serverLogPath)
+		t.Fatalf("mita control socket did not appear: %v\nlog:\n%s", err, logBytes)
+	}
+	runMieruControl(t, serverEnv, mitaPath, serverLogPath, "apply", "config", serverConfig)
+	runMieruControl(t, serverEnv, mitaPath, serverLogPath, "start")
 
 	// 4. Retrieve client configuration
 	resp = srv.do(http.MethodGet, "/api/client-links", "")
@@ -193,13 +213,24 @@ func TestMieruDataPath(t *testing.T) {
 	clientMap["socks5Port"] = socksPort
 	clientMap["socks5ListenLAN"] = false
 
-	servers, ok := clientMap["servers"].([]any)
-	if ok && len(servers) > 0 {
-		server, ok := servers[0].(map[string]any)
-		if ok {
-			server["domainName"] = "127.0.0.1"
-		}
+	profiles, ok := clientMap["profiles"].([]any)
+	if !ok || len(profiles) == 0 {
+		t.Fatalf("Mieru config has no profiles: %s", clientConfigJSON)
 	}
+	profile, ok := profiles[0].(map[string]any)
+	if !ok {
+		t.Fatalf("Mieru profile has unexpected shape: %T", profiles[0])
+	}
+	servers, ok := profile["servers"].([]any)
+	if !ok || len(servers) == 0 {
+		t.Fatalf("Mieru profile has no servers: %s", clientConfigJSON)
+	}
+	server, ok := servers[0].(map[string]any)
+	if !ok {
+		t.Fatalf("Mieru server has unexpected shape: %T", servers[0])
+	}
+	delete(server, "domainName")
+	server["ipAddress"] = "127.0.0.1"
 
 	modifiedClientJSON, err := json.Marshal(clientMap)
 	if err != nil {
@@ -212,12 +243,20 @@ func TestMieruDataPath(t *testing.T) {
 	}
 
 	// 6. Start Mieru client
-	// mieru run uses MIERU_CONFIG_JSON_FILE env var, needs /var/run/mieru dir
-	if err := os.MkdirAll("/var/run/mieru", 0755); err != nil {
-		t.Fatalf("create /var/run/mieru: %v", err)
+	clientLogPath := filepath.Join(t.TempDir(), "mieru.log")
+	clientLog, err := os.Create(clientLogPath)
+	if err != nil {
+		t.Fatal(err)
 	}
+	defer clientLog.Close()
+
 	cmdClient := exec.Command(mieruPath, "run")
-	cmdClient.Env = append(os.Environ(), "MIERU_CONFIG_JSON_FILE="+tempClientFile)
+	cmdClient.Env = append(os.Environ(),
+		"MIERU_CONFIG_JSON_FILE="+tempClientFile,
+		"MIERU_LOG_NO_TIMESTAMP=true",
+	)
+	cmdClient.Stdout = clientLog
+	cmdClient.Stderr = clientLog
 	if err := cmdClient.Start(); err != nil {
 		t.Fatalf("start mieru client: %v", err)
 	}
@@ -229,39 +268,13 @@ func TestMieruDataPath(t *testing.T) {
 
 	// Wait for Mieru client SOCKS5 to start listening
 	socksAddr := fmt.Sprintf("127.0.0.1:%d", socksPort)
-	if err := waitListen(socksAddr, 5*time.Second); err != nil {
-		t.Fatalf("mieru client SOCKS5 did not listen: %v", err)
+	if err := waitListen(socksAddr, 15*time.Second); err != nil {
+		serverBytes, _ := os.ReadFile(serverLogPath)
+		clientBytes, _ := os.ReadFile(clientLogPath)
+		t.Fatalf("mieru client did not listen: %v\nserver log:\n%s\nclient log:\n%s", err, serverBytes, clientBytes)
 	}
 
-	// 7. Test proxying through client SOCKS5
-	dialer, err := proxy.SOCKS5("tcp", socksAddr, nil, proxy.Direct)
-	if err != nil {
-		t.Fatalf("create SOCKS5 dialer: %v", err)
-	}
-
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return dialer.Dial(network, addr)
-			},
-		},
-		Timeout: 5 * time.Second,
-	}
-
-	res, err := httpClient.Get(backend.URL)
-	if err != nil {
-		t.Fatalf("GET request failed: %v", err)
-	}
-	defer res.Body.Close()
-
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		t.Fatalf("read response body: %v", err)
-	}
-
-	if string(body) != expectedResponse {
-		t.Fatalf("expected response %q, got %q", expectedResponse, string(body))
-	}
+	assertHTTPThroughSOCKS(t, socksAddr, backend.URL, expectedResponse)
 }
 
 // TestHysteria2DataPath tests data flow through a real Hysteria2 server/client if Hysteria binary is installed.
