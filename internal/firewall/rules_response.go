@@ -40,7 +40,14 @@ func BuildRuleResponses(settings model.Settings, inbounds []model.Inbound) []Rul
 		}
 	}
 	if settings.PanelAccess == "caddy" {
-		builder.Add(443, "tcp", "Veil panel HTTPS")
+		// Match caddyassembly's effective public bind. A custom PanelPublicPort
+		// must be opened instead of blindly allowing 443, otherwise the panel is
+		// rendered and started on one port while UFW exposes another.
+		port := settings.PanelPublicPort
+		if port == 0 {
+			port = 443
+		}
+		builder.Add(port, "tcp", "Veil panel HTTPS")
 	} else if _, portStr, err := net.SplitHostPort(settings.PanelListen); err == nil {
 		if port, err := strconv.Atoi(portStr); err == nil {
 			builder.Add(port, "tcp", "Veil panel")
