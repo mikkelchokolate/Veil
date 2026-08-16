@@ -36,6 +36,22 @@ func protocolBool(m map[string]any, key string, fallback bool) bool {
 	return b
 }
 
+// normalizeClientAccessInbound materializes dynamic generic credentials onto
+// the runtime-facing inbound copy before any client-access path consumes it.
+// The Panel stores the editable Mieru/olcRTC password in protocolFields while
+// legacy code still reads Inbound.Password. Normalizing at the registry
+// boundary keeps BuildAllLinks, direct BuildLinks, aggregators and compact URI
+// export on the same effective credential without mutating desired state.
+func normalizeClientAccessInbound(inbound Inbound) Inbound {
+	switch inbound.Protocol {
+	case "mieru", "olcrtc":
+		if password := protocolString(inbound.ProtocolFields, "password", ""); password != "" {
+			inbound.Password = password
+		}
+	}
+	return inbound
+}
+
 type ClientAccessProtocolRegistry struct {
 	protocols map[string]ClientAccessProtocol
 }
@@ -92,6 +108,7 @@ func (r ClientAccessProtocolRegistry) BuildAllLinks(settings Settings, inbounds 
 		if _, ok := r.protocols[inbound.Protocol]; !ok {
 			continue
 		}
+		inbound = normalizeClientAccessInbound(inbound)
 		if _, ok := byProtocol[inbound.Protocol]; !ok {
 			order = append(order, inbound.Protocol)
 		}
@@ -121,6 +138,7 @@ func (r ClientAccessProtocolRegistry) BuildAllLinks(settings Settings, inbounds 
 }
 
 func (r ClientAccessProtocolRegistry) BuildLinks(settings Settings, inbound Inbound, credentials []ClientCredential) []ClientLink {
+	inbound = normalizeClientAccessInbound(inbound)
 	protocol, ok := r.protocols[inbound.Protocol]
 	if !ok {
 		return nil
