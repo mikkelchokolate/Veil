@@ -20,6 +20,7 @@ func TestRenderOlcrtcProducesValidServerYAML(t *testing.T) {
 		"mode: srv",
 		"provider: jitsi",
 		"id: https://meet.example.com/myroom",
+		"data: /var/lib/veil/olcrtc",
 		"key: abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
 		"transport: datachannel",
 		"dns: 1.1.1.1:53",
@@ -27,9 +28,6 @@ func TestRenderOlcrtcProducesValidServerYAML(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("output missing %q:\n%s", want, body)
 		}
-	}
-	if strings.Contains(body, "\ndata:") || strings.HasPrefix(body, "data:") {
-		t.Fatalf("default olcRTC config must use embedded dictionaries and omit data override:\n%s", body)
 	}
 }
 

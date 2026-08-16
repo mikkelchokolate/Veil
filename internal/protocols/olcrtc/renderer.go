@@ -2,6 +2,7 @@ package olcrtc
 
 import (
 	"errors"
+	"path/filepath"
 
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -47,6 +48,7 @@ func renderOlcrtc(settings model.Settings, inbound model.Inbound) (string, error
 	return renderer.RenderOlcrtc(renderer.OlcrtcConfig{
 		Auth:      olcrtcAuth(settings, inbound),
 		RoomID:    olcrtcRoomID(settings, inbound),
+		Data:      filepath.Clean("/var/lib/veil/olcrtc/" + inbound.Name),
 		Key:       password,
 		Transport: olcrtcTransport(settings, inbound),
 		DNS:       "",
