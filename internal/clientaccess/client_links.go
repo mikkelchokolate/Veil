@@ -15,12 +15,30 @@ func BuildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 		return ClientLinksResponse{}, err
 	}
 	response := NewClientLinksResponseMetadata(settings).Build()
-	links, err := NewClientAccessProtocolRegistry().BuildAllLinks(settings, inbounds)
+	links, err := NewClientAccessProtocolRegistry().BuildAllLinks(settings, clientLinkEffectiveInbounds(inbounds))
 	if err != nil {
 		return ClientLinksResponse{}, err
 	}
 	response.Links = append(response.Links, links...)
 	return NewClientLinksResponseFinalizer().Finalize(response)
+}
+
+// clientLinkEffectiveInbounds keeps the legacy client-access registry aligned
+// with protocol-specific effective fields. olcRTC's dynamic form stores the
+// shared crypto key in protocolFields.password; registry link builders consume
+// the legacy flat Password field, so materialize the effective key on a copy
+// before exporting links. The source desired state is never mutated.
+func clientLinkEffectiveInbounds(inbounds []Inbound) []Inbound {
+	out := append([]Inbound(nil), inbounds...)
+	for i := range out {
+		if out[i].Protocol != "olcrtc" {
+			continue
+		}
+		if password := protocolString(out[i].ProtocolFields, "password", ""); password != "" {
+			out[i].Password = password
+		}
+	}
+	return out
 }
 
 func NaiveClientURI(domain string, port int, username string, password string) string {
@@ -45,22 +63,12 @@ func Hysteria2ClientURI(domain string, port int, password string, name string, i
 	query := url.Values{}
 	query.Set("sni", domain)
 	if insecure {
-		// Allow clients to skip verification when the server is using a
-		// self-signed certificate instead of a publicly-trusted one.
 		query.Set("insecure", "1")
 	}
 	fragment := url.QueryEscape(name)
-	// Userinfo must be percent-encoded per RFC 3986. url.QueryEscape maps
-	// space to '+', which hysteria clients do not translate back in the
-	// userinfo component, silently breaking auth for passwords containing
-	// spaces or other query-reserved characters (audit #71/#120).
 	return fmt.Sprintf("hysteria2://%s@%s:%d/?%s#%s", escapeUserInfoComponent(password), domain, port, query.Encode(), fragment)
 }
 
-// escapeUserInfoComponent percent-encodes a single userinfo component
-// (username or password) per RFC 3986, keeping only unreserved characters
-// (A-Z a-z 0-9 - . _ ~). Everything else — including ':' which Go's url.Parse
-// and hysteria clients treat as the user/password separator — is encoded.
 func escapeUserInfoComponent(value string) string {
 	const hexDigits = "0123456789ABCDEF"
 	var b strings.Builder
@@ -90,9 +98,6 @@ func Hysteria2UserPassClientURI(domain string, port int, username string, passwo
 	return fmt.Sprintf("hysteria2://%s@%s:%d/?%s#%s", userinfo, domain, port, query.Encode(), fragment)
 }
 
-// MieruClientURI builds mieru's "simple" share URI (mierus://), which the mieru
-// client imports via `mieru import config`. Example:
-// mierus://user:pass@host?port=3453&profile=name&protocol=UDP
 func MieruClientURI(domain string, port int, username, password, profile, transport string) string {
 	proto := strings.ToUpper(strings.TrimSpace(transport))
 	if proto != "UDP" {
