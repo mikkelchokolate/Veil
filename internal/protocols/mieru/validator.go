@@ -9,21 +9,11 @@ import (
 // ValidateSettings is a no-op for Mieru global settings.
 func (Plugin) ValidateSettings(model.Settings, model.Inbound) error { return nil }
 
-// ValidateInbound checks Mieru constraints that are stricter than the common
-// inbound model. Upstream mita only accepts server ports in 1025..65535.
-func (Plugin) ValidateInbound(_ model.Settings, inbound model.Inbound) []model.ValidationIssue {
-	if inbound.Port >= 1025 && inbound.Port <= 65535 {
-		return nil
-	}
-	return []model.ValidationIssue{{
-		Code:        "mieru_port_invalid",
-		Severity:    "error",
-		Field:       "port",
-		Message:     "Mieru server port must be between 1025 and 65535.",
-		Remediation: "Choose a non-privileged Mieru TCP/UDP port from 1025 to 65535.",
-		Source:      "mieru",
-	}}
-}
+// ValidateInbound is a no-op for Mieru-specific inbound checks. The common
+// inbound validator owns the generic 1..65535 port constraint. Pinned mita
+// v3.34.1 accepts that full range in FlatPortBindings, including privileged
+// ports; Veil's systemd unit grants CAP_NET_BIND_SERVICE for those ports.
+func (Plugin) ValidateInbound(model.Settings, model.Inbound) []model.ValidationIssue { return nil }
 
 // NeedsDomain reports that Mieru does not require a public domain.
 func (Plugin) NeedsDomain(model.Settings, model.Inbound) bool { return false }
