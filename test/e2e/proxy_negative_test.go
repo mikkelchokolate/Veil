@@ -70,6 +70,7 @@ func TestPortCollisionPanel(t *testing.T) {
 // restart failure and correctly report or handle the conflict.
 func TestPortCollisionInbound(t *testing.T) {
 	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
+	inboundPort := freePort(t)
 
 	// Setup settings
 	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com"}`)
@@ -78,8 +79,7 @@ func TestPortCollisionInbound(t *testing.T) {
 	}
 	drain(resp)
 
-	// Bind to port 9443 to create a collision for the inbound
-	inboundPort := 9443
+	// Bind to a free port to create a collision for the inbound
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", inboundPort))
 	if err != nil {
 		t.Fatalf("failed to bind mock inbound port: %v", err)
@@ -127,6 +127,10 @@ func TestPortCollisionInbound(t *testing.T) {
 // TestBadAuthentication validates rejections for invalid tokens, invalid cookies, and CSRF token issues.
 func TestBadAuthentication(t *testing.T) {
 	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
+	sessionsPath := filepath.Join(filepath.Dir(srv.statePath), "sessions.json")
+	if err := os.WriteFile(sessionsPath, []byte(`{"version":1,"sessions":[]}`), 0o600); err != nil {
+		t.Fatalf("seed empty sessions store: %v", err)
+	}
 
 	// 1. Invalid Bearer Token -> 401
 	req, _ := http.NewRequest(http.MethodGet, srv.baseURL+"/api/status", nil)

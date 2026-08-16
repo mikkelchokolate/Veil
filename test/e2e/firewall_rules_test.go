@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 )
@@ -12,6 +13,11 @@ import (
 // matching the configured settings and enabled inbounds.
 func TestFirewallRulesReflectSettingsAndInbounds(t *testing.T) {
 	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
+	hysteriaPort := freePort(t)
+	disabledPort := freePort(t)
+	if disabledPort == hysteriaPort {
+		disabledPort = freePort(t)
+	}
 
 	// 1. Setup Panel settings
 	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com"}`)
@@ -21,14 +27,14 @@ func TestFirewallRulesReflectSettingsAndInbounds(t *testing.T) {
 	drain(resp)
 
 	// 2. Add an enabled Hysteria2 Inbound on port 8443
-	resp = srv.do(http.MethodPost, "/api/inbounds", `{"name":"hy2-inbound","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true,"password":"pass"}`)
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"hy2-inbound","protocol":"hysteria2","transport":"udp","port":%d,"enabled":true,"password":"pass"}`, hysteriaPort))
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("inbound expected 201, got %d", resp.StatusCode)
 	}
 	drain(resp)
 
 	// 3. Add a disabled Mieru Inbound on port 9443 (should not appear in firewall rules)
-	resp = srv.do(http.MethodPost, "/api/inbounds", `{"name":"mieru-disabled","protocol":"mieru","transport":"tcp","port":9443,"enabled":false,"password":"pass"}`)
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"mieru-disabled","protocol":"mieru","transport":"tcp","port":%d,"enabled":false,"password":"pass"}`, disabledPort))
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("inbound expected 201, got %d", resp.StatusCode)
 	}
@@ -64,10 +70,10 @@ func TestFirewallRulesReflectSettingsAndInbounds(t *testing.T) {
 		if int(port) == 2096 && proto == "tcp" && service == "Veil panel" {
 			foundPanel = true
 		}
-		if int(port) == 8443 && proto == "udp" && (service == "Hysteria2" || service == "Veil Hysteria2") {
+		if int(port) == hysteriaPort && proto == "udp" && (service == "Hysteria2" || service == "Veil Hysteria2") {
 			foundHy2 = true
 		}
-		if int(port) == 9443 {
+		if int(port) == disabledPort {
 			foundMieru = true
 		}
 	}
@@ -76,9 +82,9 @@ func TestFirewallRulesReflectSettingsAndInbounds(t *testing.T) {
 		t.Errorf("expected to find firewall rule for panel on port 2096/tcp, rules: %+v", rules)
 	}
 	if !foundHy2 {
-		t.Errorf("expected to find firewall rule for enabled Hysteria2 on port 8443/udp, rules: %+v", rules)
+		t.Errorf("expected to find firewall rule for enabled Hysteria2 on port %d/udp, rules: %+v", hysteriaPort, rules)
 	}
 	if foundMieru {
-		t.Errorf("should NOT find firewall rule for disabled Mieru on port 9443, rules: %+v", rules)
+		t.Errorf("should NOT find firewall rule for disabled Mieru on port %d, rules: %+v", disabledPort, rules)
 	}
 }
