@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/inbounds"
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -41,11 +42,31 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 	var errs []string
 	seenPorts := map[string]string{}
 	protocolCatalog := protocols.NewCatalog()
+
 	hysteriaStatsActive := false
+	caddyActive := false
 	for _, inbound := range snapshot.Inbounds {
-		if inbound.Enabled && inbound.Protocol == "hysteria2" {
+		if !inbound.Enabled {
+			continue
+		}
+		if inbound.Protocol == "hysteria2" {
 			hysteriaStatsActive = true
-			break
+		}
+		if inbound.Protocol == "naiveproxy" {
+			caddyActive = true
+		}
+	}
+	panelCaddyPort, panelCaddyActive := effectivePanelCaddyPort(snapshot.Settings)
+	if panelCaddyActive {
+		caddyActive = true
+	}
+
+	if panelCaddyActive {
+		if hysteriaStatsActive && panelCaddyPort == runtimeports.Hysteria2TrafficStatsPort {
+			errs = append(errs, fmt.Sprintf("settings.panelPublicPort: TCP port %d is reserved for Hysteria2 traffic statistics", panelCaddyPort))
+		}
+		if panelCaddyPort == runtimeports.CaddyAdminPort {
+			errs = append(errs, fmt.Sprintf("settings.panelPublicPort: TCP port %d conflicts with the Caddy admin listener", panelCaddyPort))
 		}
 	}
 
@@ -56,6 +77,12 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 			if port, err := strconv.Atoi(portStr); err == nil {
 				if hysteriaStatsActive && port == runtimeports.Hysteria2TrafficStatsPort {
 					errs = append(errs, fmt.Sprintf("settings.panelListen: TCP port %d is reserved for Hysteria2 traffic statistics", port))
+				}
+				if caddyActive && port == runtimeports.CaddyAdminPort {
+					errs = append(errs, fmt.Sprintf("settings.panelListen: TCP port %d conflicts with the Caddy admin listener", port))
+				}
+				if panelCaddyActive && port == panelCaddyPort {
+					errs = append(errs, fmt.Sprintf("settings.panelListen: TCP port %d conflicts with the Caddy public panel listener", port))
 				}
 				seenPorts["tcp:"+itoa(port)] = "panel"
 			}
@@ -74,6 +101,12 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 		}
 		if hysteriaStatsActive && port == runtimeports.Hysteria2TrafficStatsPort {
 			errs = append(errs, fmt.Sprintf("warp.socksPort: TCP port %d is reserved for Hysteria2 traffic statistics", port))
+		}
+		if caddyActive && port == runtimeports.CaddyAdminPort {
+			errs = append(errs, fmt.Sprintf("warp.socksPort: TCP port %d conflicts with the Caddy admin listener", port))
+		}
+		if panelCaddyActive && port == panelCaddyPort {
+			errs = append(errs, fmt.Sprintf("warp.socksPort: TCP port %d conflicts with the Caddy public panel listener", port))
 		}
 		seenPorts["tcp:"+itoa(port)] = "warp"
 		seenPorts["udp:"+itoa(port)] = "warp"
@@ -103,13 +136,36 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 			if inbound.Port <= 0 || inbound.Port > 65535 {
 				errs = append(errs, "inbounds["+itoa(i)+"].port must be 1-65535, got: "+itoa(inbound.Port))
 			}
-			if hysteriaStatsActive && inbound.Transport == "tcp" && inbound.Port == runtimeports.Hysteria2TrafficStatsPort {
-				errs = append(errs, fmt.Sprintf("inbounds[%d]: TCP port %d is reserved for Hysteria2 traffic statistics", i, inbound.Port))
+
+			// NaiveProxy's actual Caddy bind can be overridden independently via
+			// protocolFields.publicPort. Collision detection must use that effective
+			// port; checking only the legacy inbound.Port lets a desired state pass
+			// validation and fail when Caddy attempts to bind the real listener.
+			bindTransport := inbound.Transport
+			bindPort := inbound.Port
+			if inbound.Protocol == "naiveproxy" {
+				bindTransport = "tcp"
+				bindPort = model.ResolveNaivePublicPort(snapshot.Settings, inbound)
 			}
-			key := inbound.Transport + ":" + itoa(inbound.Port)
+
+			if bindTransport == "tcp" {
+				if hysteriaStatsActive && bindPort == runtimeports.Hysteria2TrafficStatsPort {
+					errs = append(errs, fmt.Sprintf("inbounds[%d]: effective TCP port %d is reserved for Hysteria2 traffic statistics", i, bindPort))
+				}
+				if caddyActive && bindPort == runtimeports.CaddyAdminPort {
+					errs = append(errs, fmt.Sprintf("inbounds[%d]: effective TCP port %d conflicts with the Caddy admin listener", i, bindPort))
+				}
+				// Panel Caddy and NaiveProxy intentionally share one Caddy server/bind;
+				// any other TCP runtime on that wildcard port is a real collision.
+				if panelCaddyActive && inbound.Protocol != "naiveproxy" && bindPort == panelCaddyPort {
+					errs = append(errs, fmt.Sprintf("inbounds[%d]: effective TCP port %d conflicts with the Caddy public panel listener", i, bindPort))
+				}
+			}
+
+			key := bindTransport + ":" + itoa(bindPort)
 			if owner, exists := seenPorts[key]; exists {
 				if owner == "panel" || owner == "warp" {
-					errs = append(errs, fmt.Sprintf("inbounds[%d]: port %d conflicts with %s", i, inbound.Port, owner))
+					errs = append(errs, fmt.Sprintf("inbounds[%d]: port %d conflicts with %s", i, bindPort, owner))
 				} else {
 					errs = append(errs, "inbounds["+itoa(i)+"]: duplicate transport/port "+key)
 				}
@@ -136,6 +192,24 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 		}
 	}
 	return errs
+}
+
+func effectivePanelCaddyPort(settings model.Settings) (int, bool) {
+	if settings.PanelAccess != "caddy" {
+		return 0, false
+	}
+	domain := strings.TrimSpace(settings.PanelDomain)
+	if domain == "" {
+		domain = strings.TrimSpace(settings.Domain)
+	}
+	if domain == "" {
+		return 0, false
+	}
+	port := settings.PanelPublicPort
+	if port == 0 {
+		port = 443
+	}
+	return port, true
 }
 
 func itoa(value int) string {
