@@ -858,7 +858,7 @@ func safeRuntimePathPart(value string) string {
 	return value
 }
 
-var runtimeSetScratchNamePattern = regexp.MustCompile("^\\..+\\.(new|old)\\.[0-9a-f]{32}(\\.tmp)?$")
+var runtimeSetScratchNamePattern = regexp.MustCompile(`^\..+\.(new|old)\.[0-9a-f]{32}(\.tmp)?$`)
 
 func cleanupRuntimeStages(binDir string) error {
 	entries, err := os.ReadDir(binDir)
