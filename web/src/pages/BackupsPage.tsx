@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ApiError, apiFetch } from "../api/fetcher";
+import { ApiError, apiFetch, apiUrl } from "../api/fetcher";
 import type { BackupArchive } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import {
@@ -149,7 +149,7 @@ export function BackupsPage() {
 	async function download(name: string) {
 		try {
 			const res = await fetch(
-				`/api/backups/${encodeURIComponent(name)}/download`,
+				apiUrl(`/api/backups/${encodeURIComponent(name)}/download`),
 				{
 					credentials: "same-origin",
 				},
