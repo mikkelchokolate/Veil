@@ -20,8 +20,8 @@
 	--danger: #ef4444;
 	--warning: #f59e0b;
 	--accent-danger: #ef4444;
-	--border: color-mix(in srgb, #ffe6cb 15%, transparent);
-	--border-hover: color-mix(in srgb, #ffe6cb 32%, transparent);
+	--border: color-mix(in srgb, #ffe6cb 20%, transparent);
+	--border-hover: color-mix(in srgb, #ffe6cb 38%, transparent);
 	--bg-hover: color-mix(in srgb, #ffe6cb 6%, transparent);
 	--veil-mono:
 		"JetBrains Mono", "Cascadia Code", "IBM Plex Mono", Consolas, monospace;
@@ -34,9 +34,9 @@ html {
 
 body {
 	background:
-		linear-gradient(145deg, rgb(6 13 13 / 88%), rgb(7 16 15 / 72%)),
-		radial-gradient(circle at 86% 12%, rgb(52 88 78 / 22%), transparent 31rem),
-		radial-gradient(circle at 46% 108%, rgb(139 92 246 / 9%), transparent 38rem),
+		linear-gradient(145deg, rgb(6 13 13 / 96%), rgb(7 16 15 / 91%)),
+		radial-gradient(circle at 86% 12%, rgb(52 88 78 / 12%), transparent 31rem),
+		radial-gradient(circle at 46% 108%, rgb(139 92 246 / 5%), transparent 38rem),
 		url("./assets/prometheus-bg.jpg") center / cover no-repeat fixed;
 	color: var(--text-main);
 	font-family: var(--veil-sans);
@@ -84,15 +84,22 @@ a:hover {
 }
 
 .sidebar {
-	background: color-mix(in srgb, var(--surface) 83%, transparent);
+	padding: 0;
+	background: rgb(8 17 17 / 96%);
 	border-right: 1px solid var(--border);
 	box-shadow: none;
 	backdrop-filter: blur(18px) saturate(112%);
 }
 
 .sidebar-brand {
+	display: flex;
+	height: 70px;
+	align-items: center;
+	padding: 0 24px;
+	border-bottom: 1px solid var(--border);
 	color: var(--primary);
 	font-family: var(--veil-mono);
+	font-size: 1.35rem;
 	font-weight: 600;
 	letter-spacing: 0.2em;
 	text-transform: uppercase;
@@ -100,17 +107,28 @@ a:hover {
 }
 
 .nav-menu {
-	border-top: 1px solid var(--border);
+	gap: 0;
+	margin: 0;
+	padding: 0;
+	border-top: 0;
+}
+
+.nav-menu li {
+	width: 100%;
 }
 
 .nav-item {
 	position: relative;
+	width: 100%;
+	min-height: 54px;
+	margin: 0;
+	padding: 0 24px;
 	border-bottom: 1px solid color-mix(in srgb, var(--primary) 9%, transparent);
 	border-radius: 0;
 	background: transparent;
 	color: var(--text-muted);
 	font-family: var(--veil-mono);
-	font-size: 0.75rem;
+	font-size: 0.82rem;
 	font-weight: 500;
 	letter-spacing: 0.075em;
 	text-transform: uppercase;
@@ -122,12 +140,19 @@ a:hover {
 }
 
 .nav-item.active {
+	border-left: 0;
 	background: linear-gradient(90deg, rgb(255 230 203 / 8%), transparent 78%);
 	box-shadow: inset 3px 0 0 var(--primary);
 	color: var(--primary);
 }
 
+.nav-item.active::before {
+	display: none;
+}
+
 .nav-item .icon {
+	width: 20px;
+	height: 20px;
 	opacity: 0.72;
 	stroke-width: 1.5;
 }
@@ -142,7 +167,8 @@ a:hover {
 }
 
 .top-bar {
-	background: color-mix(in srgb, var(--canvas) 76%, transparent);
+	min-height: 70px;
+	background: rgb(6 13 13 / 94%);
 	border-bottom: 1px solid var(--border);
 	box-shadow: none;
 	backdrop-filter: blur(18px) saturate(112%);
@@ -165,7 +191,7 @@ a:hover {
 .auth-card {
 	border: 1px solid var(--border);
 	border-radius: 0;
-	background: color-mix(in srgb, var(--surface) 72%, transparent);
+	background: rgb(9 19 19 / 94%);
 	box-shadow: 0 18px 60px rgb(0 0 0 / 13%);
 	backdrop-filter: blur(14px) saturate(108%);
 }
@@ -214,7 +240,7 @@ textarea[class*="rounded-md"],
 select[class*="rounded-md"] {
 	border-color: var(--border);
 	border-radius: 0;
-	background: color-mix(in srgb, var(--canvas) 68%, transparent);
+	background: rgb(5 12 12 / 88%);
 	box-shadow: none;
 	color: var(--text-main);
 }
@@ -243,7 +269,7 @@ input[type="radio"] {
 
 .form-field > div[style*="border"] {
 	border-radius: 0;
-	background: color-mix(in srgb, var(--surface) 58%, transparent);
+	background: rgb(8 17 17 / 90%);
 }
 
 .btn,
@@ -310,11 +336,11 @@ table {
 table.data-table,
 table.w-full {
 	border: 1px solid var(--border);
-	background: color-mix(in srgb, var(--canvas) 42%, transparent);
+	background: rgb(6 13 13 / 82%);
 }
 
 table th {
-	background: color-mix(in srgb, var(--canvas) 76%, transparent);
+	background: rgb(5 11 11 / 94%);
 	color: var(--text-muted);
 	font-size: 0.7rem;
 }
@@ -332,7 +358,7 @@ table tbody tr:hover {
 [role="menu"] {
 	border-color: var(--border-hover);
 	border-radius: 0;
-	background: color-mix(in srgb, var(--surface-raised) 94%, transparent);
+	background: rgb(13 25 24 / 98%);
 	box-shadow: 0 28px 90px rgb(0 0 0 / 45%);
 	backdrop-filter: blur(20px);
 }
