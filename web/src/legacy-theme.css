@@ -46,12 +46,16 @@ body {
 body::after {
 	position: fixed;
 	z-index: 9999;
-	inset: 0;
+	inset: -12%;
 	pointer-events: none;
 	content: "";
-	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.95' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-	opacity: 0.28;
-	mix-blend-mode: overlay;
+	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='film'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='5' seed='17' stitchTiles='stitch' result='fine'/%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.16' numOctaves='2' seed='31' stitchTiles='stitch' result='cloud'/%3E%3CfeBlend in='fine' in2='cloud' mode='soft-light'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23film)'/%3E%3C/svg%3E");
+	background-repeat: repeat;
+	background-size: 180px 180px;
+	opacity: 0.14;
+	filter: contrast(145%) brightness(112%);
+	mix-blend-mode: soft-light;
+	animation: veil-grain-drift 12s steps(10) infinite;
 }
 
 ::selection {
@@ -180,6 +184,15 @@ a:hover {
 	font-weight: 500;
 	letter-spacing: 0.12em;
 	text-transform: uppercase;
+}
+
+.top-bar-divider {
+	margin: 0 0.55em;
+	color: var(--border-hover);
+}
+
+.top-bar-section {
+	color: var(--text-muted);
 }
 
 .page-content {
@@ -403,15 +416,38 @@ code {
 	}
 }
 
+@keyframes veil-grain-drift {
+	0%,
+	100% {
+		transform: translate3d(0, 0, 0);
+	}
+	20% {
+		transform: translate3d(-1.5%, 1%, 0);
+	}
+	40% {
+		transform: translate3d(1%, -1.25%, 0);
+	}
+	60% {
+		transform: translate3d(1.4%, 0.75%, 0);
+	}
+	80% {
+		transform: translate3d(-0.75%, -1%, 0);
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.page-content {
+		animation: none;
+	}
+
+	body::after {
 		animation: none;
 	}
 }
 
 @media (max-width: 768px) {
 	body::after {
-		opacity: 0.2;
+		opacity: 0.1;
 	}
 
 	.sidebar,
