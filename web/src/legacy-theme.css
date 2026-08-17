@@ -49,9 +49,9 @@ body::after {
 	inset: 0;
 	pointer-events: none;
 	content: "";
-	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E");
-	opacity: 0.035;
-	mix-blend-mode: soft-light;
+	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.95' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+	opacity: 0.28;
+	mix-blend-mode: overlay;
 }
 
 ::selection {
@@ -120,7 +120,7 @@ a:hover {
 .nav-item {
 	position: relative;
 	width: 100%;
-	min-height: 54px;
+	min-height: 56px;
 	margin: 0;
 	padding: 0 24px;
 	border-bottom: 1px solid color-mix(in srgb, var(--primary) 9%, transparent);
@@ -128,7 +128,7 @@ a:hover {
 	background: transparent;
 	color: var(--text-muted);
 	font-family: var(--veil-mono);
-	font-size: 0.82rem;
+	font-size: 0.9rem;
 	font-weight: 500;
 	letter-spacing: 0.075em;
 	text-transform: uppercase;
@@ -151,8 +151,8 @@ a:hover {
 }
 
 .nav-item .icon {
-	width: 20px;
-	height: 20px;
+	width: 22px;
+	height: 22px;
 	opacity: 0.72;
 	stroke-width: 1.5;
 }
@@ -411,7 +411,7 @@ code {
 
 @media (max-width: 768px) {
 	body::after {
-		opacity: 0.025;
+		opacity: 0.2;
 	}
 
 	.sidebar,
