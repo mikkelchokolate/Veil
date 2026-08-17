@@ -311,6 +311,8 @@ describe("ClientDetailPage lossless UI mutations", () => {
 				true,
 			),
 		);
+		expect(await screen.findByText("new-one-time-secret")).toBeInTheDocument();
+		expect(screen.queryByText(/rotate failed/i)).not.toBeInTheDocument();
 		await user.selectOptions(screen.getByLabelText(/attach inbound/i), "spare");
 		await user.click(screen.getByRole("button", { name: /^attach$/i }));
 		await waitFor(() =>

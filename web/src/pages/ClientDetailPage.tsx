@@ -218,7 +218,7 @@ export function ClientDetailPage() {
 					? { notes: v.notes || null }
 					: {}),
 			});
-			return res.data;
+			return res as unknown as MutationFeedback;
 		},
 		onSuccess: (data) => {
 			setError(null);
@@ -239,7 +239,7 @@ export function ClientDetailPage() {
 				enabled: !c.enabled,
 				version: c.version ?? 0,
 			});
-			return res.data;
+			return res as unknown as MutationFeedback;
 		},
 		onSuccess: (data) => {
 			setError(null);
@@ -255,7 +255,7 @@ export function ClientDetailPage() {
 	const remove = useMutation({
 		mutationFn: async () => {
 			const res = await deleteApiV1ClientsId(clientId);
-			return res.data;
+			return res as unknown as MutationFeedback;
 		},
 		onSuccess: () => {
 			void qc.invalidateQueries({ queryKey: ["clients"] });
@@ -275,7 +275,7 @@ export function ClientDetailPage() {
 				{},
 			);
 			// The backend envelope merges plaintext + revision/applyJob/success.
-			return res.data as unknown as MutationFeedback & { plaintext?: string };
+			return res as unknown as MutationFeedback & { plaintext?: string };
 		},
 		onSuccess: (res, bindingId) => {
 			if (res.plaintext) {
@@ -300,7 +300,7 @@ export function ClientDetailPage() {
 				enabled: !b.enabled,
 				version: b.version ?? 0,
 			});
-			return res.data;
+			return res as unknown as MutationFeedback;
 		},
 		onSuccess: (data) => {
 			setError(null);
@@ -316,7 +316,7 @@ export function ClientDetailPage() {
 	const attach = useMutation({
 		mutationFn: async (inboundId: string) => {
 			const res = await postApiV1ClientsIdBindings(clientId, { inboundId });
-			return res.data;
+			return res as unknown as MutationFeedback;
 		},
 		onSuccess: (data) => {
 			setAttachInbound("");
@@ -336,7 +336,7 @@ export function ClientDetailPage() {
 				clientId,
 				bindingId,
 			);
-			return res.data;
+			return res as unknown as MutationFeedback;
 		},
 		onSuccess: (data) => {
 			setError(null);
