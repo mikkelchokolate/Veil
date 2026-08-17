@@ -129,29 +129,6 @@ body::after {
 	max-width: 720px;
 }
 
-.creation-dialog > .card {
-	width: 100%;
-	max-width: none !important;
-	margin: 0;
-	padding: 30px;
-	border: 0;
-	background: transparent;
-	box-shadow: none;
-	backdrop-filter: none;
-}
-
-.creation-dialog > .card:hover {
-	border-color: transparent;
-}
-
-.creation-dialog h2,
-.creation-dialog h3,
-.creation-dialog [role="heading"] {
-	margin: 0 0 22px;
-	font-size: 1.05rem;
-	letter-spacing: 0.085em;
-}
-
 .creation-dialog form {
 	display: grid;
 	gap: 16px;
@@ -164,18 +141,7 @@ body::after {
 	margin-top: 4px;
 }
 
-@media (max-width: 640px) {
-	.creation-dialog,
-	.creation-dialog-wide,
-	.creation-dialog-client {
-		width: calc(100vw - 16px);
-		max-height: calc(100dvh - 16px);
-	}
 
-	.creation-dialog > .card {
-		padding: 24px 18px 20px;
-	}
-}
 
 h1,
 h2,
@@ -563,5 +529,41 @@ code {
 	.sidebar,
 	.top-bar {
 		backdrop-filter: blur(12px);
+	}
+}
+
+.creation-dialog h2,
+.creation-dialog h3,
+.creation-dialog [role="heading"] {
+	margin: 0 0 22px;
+	font-size: 1.05rem;
+	letter-spacing: 0.085em;
+}
+
+.creation-dialog > .card {
+	width: 100%;
+	max-width: none;
+	margin: 0;
+	padding: 30px;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	backdrop-filter: none;
+}
+
+.creation-dialog > .card:hover {
+	border-color: transparent;
+}
+
+@media (max-width: 640px) {
+	.creation-dialog,
+	.creation-dialog-wide,
+	.creation-dialog-client {
+		width: calc(100vw - 16px);
+		max-height: calc(100dvh - 16px);
+	}
+
+	.creation-dialog > .card {
+		padding: 24px 18px 20px;
 	}
 }

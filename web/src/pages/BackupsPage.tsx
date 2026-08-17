@@ -112,7 +112,10 @@ export function BackupsPage() {
 					body: JSON.stringify({}),
 				},
 			);
-			return { name, res: res as VerifyResult };
+			// A non-2xx response is rejected by apiFetch. A successfully decoded
+			// verification report therefore means the archive is valid even though
+			// the report contract carries metadata rather than an `ok` flag.
+			return { name, res: { ...(res as VerifyResult), valid: true } };
 		},
 		onSuccess: ({ name, res }) => {
 			setError(null);

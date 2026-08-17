@@ -24,7 +24,7 @@ type olcrtcYAML struct {
 	Room struct {
 		ID string `yaml:"id"`
 	} `yaml:"room"`
-	Data   string `yaml:"data"`
+	Data   string `yaml:"data,omitempty"`
 	Crypto struct {
 		Key string `yaml:"key"`
 	} `yaml:"crypto"`
@@ -40,9 +40,6 @@ func RenderOlcrtc(cfg OlcrtcConfig) (string, error) {
 	}
 	if cfg.Transport == "" {
 		cfg.Transport = "datachannel"
-	}
-	if cfg.Data == "" {
-		cfg.Data = "/var/lib/veil/olcrtc"
 	}
 	if cfg.DNS == "" {
 		cfg.DNS = "1.1.1.1:53"

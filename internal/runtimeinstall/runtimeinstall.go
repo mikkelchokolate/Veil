@@ -858,14 +858,24 @@ func safeRuntimePathPart(value string) string {
 	return value
 }
 
+var runtimeSetScratchNamePattern = regexp.MustCompile("^\\..+\\.(new|old)\\.[0-9a-f]{32}(\\.tmp)?$")
+
 func cleanupRuntimeStages(binDir string) error {
 	entries, err := os.ReadDir(binDir)
 	if err != nil {
 		return err
 	}
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".veil-runtime-stage-") {
-			if err := os.RemoveAll(filepath.Join(binDir, entry.Name())); err != nil {
+		name := entry.Name()
+		path := filepath.Join(binDir, name)
+		if strings.HasPrefix(name, ".veil-runtime-stage-") || strings.HasPrefix(name, ".veil-runtime-set-stage-") {
+			if err := os.RemoveAll(path); err != nil {
+				return err
+			}
+			continue
+		}
+		if runtimeSetScratchNamePattern.MatchString(name) {
+			if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return err
 			}
 		}

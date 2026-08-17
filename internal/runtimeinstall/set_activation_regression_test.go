@@ -1,8 +1,10 @@
 package runtimeinstall
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -48,5 +50,43 @@ func TestRuntimeSetRecoveryRollsBackEntirePartiallyActivatedGeneration(t *testin
 		if digest != item.OldDigest {
 			t.Fatalf("target %s was not rolled back atomically", item.Name)
 		}
+	}
+}
+
+func TestCleanupRuntimeStagesRemovesAbandonedSetTransactions(t *testing.T) {
+	binDir := t.TempDir()
+	tx := "0123456789abcdef0123456789abcdef"
+	stale := []string{
+		".veil-runtime-set-stage-abandoned",
+		".hysteria.new." + tx,
+		".caddy.old." + tx,
+		".mieru.new." + tx + ".tmp",
+	}
+	for _, name := range stale {
+		path := filepath.Join(binDir, name)
+		if strings.Contains(name, "set-stage") {
+			if err := os.Mkdir(path, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		if err := os.WriteFile(path, []byte("stale"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	keep := filepath.Join(binDir, ".operator-runtime-note")
+	if err := os.WriteFile(keep, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanupRuntimeStages(binDir); err != nil {
+		t.Fatalf("cleanupRuntimeStages: %v", err)
+	}
+	for _, name := range stale {
+		if _, err := os.Stat(filepath.Join(binDir, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("stale runtime scratch %q remains: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatalf("unrelated operator file was removed: %v", err)
 	}
 }

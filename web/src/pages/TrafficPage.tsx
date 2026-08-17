@@ -54,16 +54,17 @@ export function TrafficPage() {
 		queryKey: ["traffic", "top"],
 		queryFn: () => apiFetch("/api/v1/traffic/top"),
 		refetchInterval: 10000,
-		enabled: summary.data?.state === "collecting",
+		enabled: (summary.data?.providerCount ?? 0) > 0,
 	});
 
 	const state = summary.data?.state;
+	const hasTelemetry = (summary.data?.providerCount ?? 0) > 0;
 	const chartRef = useRef<HTMLDivElement>(null);
 	const chartInstance = useRef<echarts.ECharts | null>(null);
 
 	// Initialize chart when collecting.
 	useEffect(() => {
-		if (state !== "collecting" || !chartRef.current) return;
+		if (!hasTelemetry || !chartRef.current) return;
 		if (!chartInstance.current) {
 			chartInstance.current = echarts.init(chartRef.current);
 		}
@@ -121,7 +122,7 @@ export function TrafficPage() {
 		const onResize = () => chartInstance.current?.resize();
 		window.addEventListener("resize", onResize);
 		return () => window.removeEventListener("resize", onResize);
-	}, [state, top.data, t]);
+	}, [hasTelemetry, top.data, t]);
 
 	// Cleanup on unmount.
 	useEffect(() => {
@@ -143,11 +144,11 @@ export function TrafficPage() {
 					<>
 						<p>
 							<strong>{t("traffic.telemetryState")}:</strong>{" "}
-							<Badge variant={state === "collecting" ? "success" : "warning"}>
+							<Badge variant={state === "healthy" ? "success" : "warning"}>
 								{state}
 							</Badge>
 						</p>
-						{state !== "collecting" ? (
+						{!hasTelemetry ? (
 							<p className="muted">{t("traffic.noTrafficSource")}</p>
 						) : (
 							<>
@@ -169,7 +170,7 @@ export function TrafficPage() {
 				) : null}
 			</div>
 
-			{state === "collecting" ? (
+			{hasTelemetry ? (
 				<div className="card">
 					<h2>{t("traffic.usageBreakdown")}</h2>
 					{top.isLoading ? (

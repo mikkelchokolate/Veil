@@ -28,7 +28,8 @@ import (
 //     represented when the marker was written, so the marker is an audit
 //     record, never a skip gate.
 //   - BACKUP: before migrating, a consistent copy of the state file and the
-//     SQLite store is written under backupDir/migrations/legacy-profiles-<ts>/
+//     SQLite store is written under the panel-owned
+//     migration-backups/legacy-profiles-<ts>/ directory.
 //     (the DB copy uses VACUUM INTO, consistent even on a live database).
 //   - ORCHESTRATION: the migration runs through commitClientMutationLocked —
 //     normalized clients, the desired-revision bump, and the immutable
@@ -253,7 +254,10 @@ func (l ManagementStateLifecycle) backupForLegacyMigration() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(s.backupDir, "migrations", fmt.Sprintf("legacy-profiles-%d-%s", time.Now().UnixNano(), suffix))
+	// Managed encrypted archives are root-only and accessed through the
+	// privileged helper. Startup migration runs as the unprivileged panel user,
+	// so its safety snapshots belong in the dedicated panel-owned sibling.
+	dir := filepath.Join(filepath.Dir(s.backupDir), "migration-backups", fmt.Sprintf("legacy-profiles-%d-%s", time.Now().UnixNano(), suffix))
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}

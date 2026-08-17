@@ -97,6 +97,10 @@ func installRuntimeSet(ctx context.Context, opts Options, runtimes []Runtime) []
 	}
 	journal, err := prepareRuntimeSetActivation(opts.BinDir, results)
 	if err != nil {
+		cleanupErr := cleanupRuntimeStages(opts.BinDir)
+		if cleanupErr != nil {
+			err = errors.Join(err, fmt.Errorf("clean failed runtime activation preparation: %w", cleanupErr))
+		}
 		return runtimeSetFailureFromResults(results, err)
 	}
 	if err := activateRuntimeSet(opts.BinDir, &journal); err != nil {

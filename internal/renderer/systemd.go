@@ -1,6 +1,9 @@
 package renderer
 
-import "path"
+import (
+	"path"
+	"strings"
+)
 
 const (
 	UnitVeil          = "veil.service"
@@ -38,6 +41,13 @@ type SystemdConfig struct {
 	OlcrtcBinary   string
 	EtcDir         string
 }
+
+var systemdHardeningBlockOlcrtc = strings.Replace(
+	systemdHardeningBlock,
+	"RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+	"RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK",
+	1,
+)
 
 func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 	if cfg.VeilBinary == "" {
@@ -227,7 +237,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlock + `ReadWritePaths=/etc/veil /var/lib/veil
+` + systemdHardeningBlockOlcrtc + `ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target

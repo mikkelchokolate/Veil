@@ -98,12 +98,31 @@ func TestRenderCaddyJSONSharedPanelNaiveDoesNotBlockForwardProxy(t *testing.T) {
 	}
 	server := cfg["apps"].(map[string]any)["http"].(map[string]any)["servers"].(map[string]any)["tcp-0.0.0.0-443"].(map[string]any)
 	seenForwardProxy := false
+	seenSubscription := false
 	for _, rawRoute := range server["routes"].([]any) {
 		route := rawRoute.(map[string]any)
+		if matches, ok := route["match"].([]any); ok {
+			for _, rawMatch := range matches {
+				paths, _ := rawMatch.(map[string]any)["path"].([]any)
+				for _, path := range paths {
+					if path == "/s/*" {
+						seenSubscription = true
+					}
+				}
+			}
+		}
 		for _, rawHandler := range route["handle"].([]any) {
-			handler := rawHandler.(map[string]any)["handler"]
+			handlerMap := rawHandler.(map[string]any)
+			handler := handlerMap["handler"]
 			if handler == "forward_proxy" {
 				seenForwardProxy = true
+				if _, matched := route["match"]; matched {
+					t.Fatalf("forward_proxy route must see CONNECT target hosts: %+v", route)
+				}
+				hosts, ok := handlerMap["hosts"].([]any)
+				if !ok || len(hosts) != 1 || hosts[0] != "vpn.example.com" {
+					t.Fatalf("forward_proxy handler hosts = %+v", handlerMap["hosts"])
+				}
 			}
 			if handler == "static_response" && !seenForwardProxy {
 				if match, ok := route["match"].([]any); !ok || len(match) == 0 {
@@ -114,6 +133,9 @@ func TestRenderCaddyJSONSharedPanelNaiveDoesNotBlockForwardProxy(t *testing.T) {
 	}
 	if !seenForwardProxy {
 		t.Fatalf("shared Panel/Naive server has no forward_proxy route: %+v", server)
+	}
+	if !seenSubscription {
+		t.Fatalf("shared Panel/Naive server has no public subscription route: %+v", server)
 	}
 }
 

@@ -282,7 +282,7 @@ func TestStartupMigrateLegacyMarkerBackupAndIdempotency(t *testing.T) {
 	if total != 2 {
 		t.Fatalf("second boot duplicated clients: got %d, want 2", total)
 	}
-	backups2, err := filepath.Glob(filepath.Join(dir, "backups", "migrations", "legacy-profiles-*"))
+	backups2, err := filepath.Glob(filepath.Join(dir, "migration-backups", "legacy-profiles-*"))
 	if err != nil || len(backups2) != 1 {
 		t.Fatalf("second boot created another backup: %v (err %v)", backups2, err)
 	}
@@ -368,7 +368,7 @@ func TestStartupMigrateLegacyRestoredStateMigratesNewProfiles(t *testing.T) {
 	if !st2.applySnapshots.Has(rev2.Desired) {
 		t.Fatalf("boot 2: snapshot missing for revision %d", rev2.Desired)
 	}
-	backups, err := filepath.Glob(filepath.Join(dir, "backups", "migrations", "legacy-profiles-*"))
+	backups, err := filepath.Glob(filepath.Join(dir, "migration-backups", "legacy-profiles-*"))
 	if err != nil || len(backups) != 2 {
 		t.Fatalf("boot 2: expected 2 migration backups (one per migration run), got %v (err %v)", backups, err)
 	}
