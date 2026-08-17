@@ -54,7 +54,7 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	restoreGuarded := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if info.RequirePrivilegedHelper {
 			switch r.URL.Path {
-			case "/api/system", "/api/tls", "/api/network", "/api/connections", "/api/processes", "/api/disk", "/api/runtime/observation":
+			case "/api/tls", "/api/network", "/api/connections", "/api/processes", "/api/disk", "/api/runtime/observation":
 				writeError(w, "diagnostic requires bounded root-helper support", http.StatusServiceUnavailable)
 				return
 			}

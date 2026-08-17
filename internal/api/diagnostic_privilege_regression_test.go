@@ -48,3 +48,20 @@ func TestProductionDiagnosticsFailClosedWithoutRootHelper(t *testing.T) {
 		})
 	}
 }
+
+func TestProductionSystemStatsDoNotRequireRootHelper(t *testing.T) {
+	router, _ := newTestRouter(ServerInfo{
+		Version:                 "test",
+		Mode:                    "production",
+		AuthToken:               "diagnostic-secret",
+		PublicListen:            true,
+		RequirePrivilegedHelper: true,
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/system", nil)
+	request.Header.Set("X-Veil-Token", "diagnostic-secret")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("system stats status=%d want=200 body=%s", response.Code, response.Body.String())
+	}
+}
