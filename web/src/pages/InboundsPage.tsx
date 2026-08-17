@@ -16,6 +16,7 @@ import {
 } from "../components/ui/alert-dialog";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "../components/ui/dialog";
 import { FormItem, FormMessage } from "../components/ui/form";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -349,14 +350,20 @@ export function InboundsPage() {
 		setCreating(false);
 	}
 
+	function cancelEditor() {
+		setCreating(false);
+		setEditing(null);
+		setForm(EMPTY);
+	}
+
 	const formCard =
 		creating || editing ? (
 			<div className="card">
-				<h2 style={{ fontSize: 15 }}>
+				<DialogTitle style={{ fontSize: 15 }}>
 					{creating
 						? t("inbounds.newInbound")
 						: t("inbounds.edit", { name: editing ?? "" })}
-				</h2>
+				</DialogTitle>
 				<div
 					style={{
 						display: "grid",
@@ -581,15 +588,7 @@ export function InboundsPage() {
 					>
 						{creating ? t("common.create") : t("common.save")}
 					</Button>
-					<Button
-						onClick={() => {
-							setCreating(false);
-							setEditing(null);
-							setForm(EMPTY);
-						}}
-					>
-						{t("common.cancel")}
-					</Button>
+					<Button onClick={cancelEditor}>{t("common.cancel")}</Button>
 				</div>
 			</div>
 		) : null;
@@ -681,7 +680,16 @@ export function InboundsPage() {
 				</div>
 			) : null}
 
-			{formCard}
+			<Dialog
+				open={creating || editing !== null}
+				onOpenChange={(open) => {
+					if (!open) cancelEditor();
+				}}
+			>
+				<DialogContent className="creation-dialog creation-dialog-wide">
+					{formCard}
+				</DialogContent>
+			</Dialog>
 
 			<div className="card">
 				{inbounds.isLoading ? (

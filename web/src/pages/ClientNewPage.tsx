@@ -159,274 +159,295 @@ export function ClientNewPage() {
 	];
 
 	return (
-		<div className="card" style={{ maxWidth: 640 }}>
-			<h2>{t("clientNew.title")}</h2>
-			<div className="muted" style={{ marginBottom: 20, fontSize: 13 }}>
-				{steps.map((s, i) => (
-					<span
-						key={s}
-						style={{
-							fontWeight: i === step ? 700 : 400,
-							color: i === step ? "var(--text-main)" : undefined,
-						}}
-					>
-						{i > 0 ? " · " : ""}
-						{s}
-					</span>
-				))}
-			</div>
-
-			{step === 0 ? (
-				<>
-					<FormItem>
-						<Label htmlFor="nc-name">{t("common.name")}</Label>
-						<Input
-							id="nc-name"
-							value={name}
-							onChange={(e) => setName(e.target.value)}
-							required
-						/>
-					</FormItem>
-					<FormItem>
-						<Label htmlFor="nc-email">{t("clientNew.emailLabel")}</Label>
-						<Input
-							id="nc-email"
-							type="email"
-							value={email}
-							onChange={(e) => setEmail(e.target.value)}
-						/>
-					</FormItem>
-					<FormItem>
-						<Label htmlFor="nc-notes">{t("clientNew.notesLabel")}</Label>
-						<Textarea
-							id="nc-notes"
-							value={notes}
-							onChange={(e) => setNotes(e.target.value)}
-						/>
-					</FormItem>
-				</>
-			) : null}
-
-			{step === 1 ? (
-				<>
-					<FormItem>
-						<Label htmlFor="nc-quota">{t("clientNew.quotaLabel")}</Label>
-						<Input
-							id="nc-quota"
-							type="number"
-							min="0"
-							value={quotaBytes}
-							onChange={(e) => setQuotaBytes(e.target.value)}
-						/>
-						{quotaError ? <FormMessage>{quotaError}</FormMessage> : null}
-					</FormItem>
-					<FormItem>
-						<Label htmlFor="nc-exp">{t("clientNew.expiryLabel")}</Label>
-						<Input
-							id="nc-exp"
-							type="date"
-							value={expiresAt}
-							onChange={(e) => setExpiresAt(e.target.value)}
-						/>
-					</FormItem>
-				</>
-			) : null}
-
-			{step === 2 ? (
-				<fieldset className="form-field" style={{ border: "none", padding: 0 }}>
-					<legend>{t("clientNew.bindingsLegend")}</legend>
-					{inboundList.length === 0 ? (
-						<p className="muted">{t("clientNew.noInbounds")}</p>
-					) : (
-						inboundList.map((ib) => {
-							const bound = bindings.find((b) => b.inboundId === ib.name);
-							return (
-								<div
-									key={ib.name}
-									style={{
-										border: "1px solid var(--border)",
-										borderRadius: 0,
-										padding: 12,
-										marginBottom: 8,
-									}}
-								>
-									<Label
-										style={{
-											display: "flex",
-											alignItems: "center",
-											gap: 8,
-											cursor: "pointer",
-										}}
-									>
-										<input
-											type="checkbox"
-											checked={!!bound}
-											onChange={() => toggleBinding(ib.name)}
-										/>
-										<span>{ib.name}</span>
-										<span className="muted" style={{ fontSize: 12 }}>
-											{ib.protocol}
-										</span>
-									</Label>
-									{bound ? (
-										<Input
-											className="mono"
-											style={{ marginTop: 8 }}
-											placeholder={t("clientNew.credentialPlaceholder")}
-											value={bound.credential}
-											onChange={(e) => setCred(ib.name, e.target.value)}
-										/>
-									) : null}
-								</div>
-							);
-						})
-					)}
-				</fieldset>
-			) : null}
-
-			{step === 3 ? (
-				<div>
-					{create.isSuccess ? (
-						<>
-							<Badge variant="success">{t("clientNew.clientCreated")}</Badge>
-							<Dialog
-								open={issuedCreds.length > 0}
-								onOpenChange={(open) => {
-									if (!open) clearIssued();
+		<Dialog
+			open
+			onOpenChange={(open) => {
+				if (!open) void navigate({ to: "/clients" });
+			}}
+		>
+			<DialogContent className="creation-dialog creation-dialog-client">
+				<div className="card" style={{ maxWidth: 640 }}>
+					<DialogTitle>{t("clientNew.title")}</DialogTitle>
+					<div className="muted" style={{ marginBottom: 20, fontSize: 13 }}>
+						{steps.map((s, i) => (
+							<span
+								key={s}
+								style={{
+									fontWeight: i === step ? 700 : 400,
+									color: i === step ? "var(--text-main)" : undefined,
 								}}
 							>
-								<DialogContent>
-									<DialogHeader>
-										<DialogTitle>
-											{t("clientNew.oneTimeCredentialsTitle")}
-										</DialogTitle>
-										<DialogDescription>
-											{t("clientNew.oneTimeCredentialsDescription")}
-										</DialogDescription>
-									</DialogHeader>
-									{issuedCreds.map((c) => (
-										<div key={c.bindingId} style={{ marginBottom: 8 }}>
-											<div className="muted" style={{ fontSize: 12 }}>
-												{c.inboundId} ({c.kind})
-											</div>
-											<code className="mono">{c.plaintext}</code>
-										</div>
-									))}
-									<DialogFooter>
-										<Button
-											type="button"
-											variant="primary"
-											onClick={() => {
-												clearIssued();
-												void navigate({ to: "/clients" });
+								{i > 0 ? " · " : ""}
+								{s}
+							</span>
+						))}
+					</div>
+
+					{step === 0 ? (
+						<>
+							<FormItem>
+								<Label htmlFor="nc-name">{t("common.name")}</Label>
+								<Input
+									id="nc-name"
+									value={name}
+									onChange={(e) => setName(e.target.value)}
+									required
+								/>
+							</FormItem>
+							<FormItem>
+								<Label htmlFor="nc-email">{t("clientNew.emailLabel")}</Label>
+								<Input
+									id="nc-email"
+									type="email"
+									value={email}
+									onChange={(e) => setEmail(e.target.value)}
+								/>
+							</FormItem>
+							<FormItem>
+								<Label htmlFor="nc-notes">{t("clientNew.notesLabel")}</Label>
+								<Textarea
+									id="nc-notes"
+									value={notes}
+									onChange={(e) => setNotes(e.target.value)}
+								/>
+							</FormItem>
+						</>
+					) : null}
+
+					{step === 1 ? (
+						<>
+							<FormItem>
+								<Label htmlFor="nc-quota">{t("clientNew.quotaLabel")}</Label>
+								<Input
+									id="nc-quota"
+									type="number"
+									min="0"
+									value={quotaBytes}
+									onChange={(e) => setQuotaBytes(e.target.value)}
+								/>
+								{quotaError ? <FormMessage>{quotaError}</FormMessage> : null}
+							</FormItem>
+							<FormItem>
+								<Label htmlFor="nc-exp">{t("clientNew.expiryLabel")}</Label>
+								<Input
+									id="nc-exp"
+									type="date"
+									value={expiresAt}
+									onChange={(e) => setExpiresAt(e.target.value)}
+								/>
+							</FormItem>
+						</>
+					) : null}
+
+					{step === 2 ? (
+						<fieldset
+							className="form-field"
+							style={{ border: "none", padding: 0 }}
+						>
+							<legend>{t("clientNew.bindingsLegend")}</legend>
+							{inboundList.length === 0 ? (
+								<p className="muted">{t("clientNew.noInbounds")}</p>
+							) : (
+								inboundList.map((ib) => {
+									const bound = bindings.find((b) => b.inboundId === ib.name);
+									return (
+										<div
+											key={ib.name}
+											style={{
+												border: "1px solid var(--border)",
+												borderRadius: 0,
+												padding: 12,
+												marginBottom: 8,
 											}}
 										>
-											{t("common.done")}
-										</Button>
-									</DialogFooter>
-								</DialogContent>
-							</Dialog>
-							{issuedCreds.length === 0 ? (
-								<div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-									<Button
-										type="button"
-										variant="primary"
-										onClick={() => {
-											clearIssued();
-											void navigate({ to: "/clients" });
+											<Label
+												style={{
+													display: "flex",
+													alignItems: "center",
+													gap: 8,
+													cursor: "pointer",
+												}}
+											>
+												<input
+													type="checkbox"
+													checked={!!bound}
+													onChange={() => toggleBinding(ib.name)}
+												/>
+												<span>{ib.name}</span>
+												<span className="muted" style={{ fontSize: 12 }}>
+													{ib.protocol}
+												</span>
+											</Label>
+											{bound ? (
+												<Input
+													className="mono"
+													style={{ marginTop: 8 }}
+													placeholder={t("clientNew.credentialPlaceholder")}
+													value={bound.credential}
+													onChange={(e) => setCred(ib.name, e.target.value)}
+												/>
+											) : null}
+										</div>
+									);
+								})
+							)}
+						</fieldset>
+					) : null}
+
+					{step === 3 ? (
+						<div>
+							{create.isSuccess ? (
+								<>
+									<Badge variant="success">
+										{t("clientNew.clientCreated")}
+									</Badge>
+									<Dialog
+										open={issuedCreds.length > 0}
+										onOpenChange={(open) => {
+											if (!open) clearIssued();
 										}}
 									>
-										{t("common.done")}
-									</Button>
-								</div>
-							) : null}
-						</>
-					) : (
-						<>
-							<h2 style={{ fontSize: 14 }}>{t("clientNew.reviewHeading")}</h2>
-							<p>
-								<strong>{t("clientNew.reviewName")}:</strong> {name}
-							</p>
-							{email ? (
-								<p>
-									<strong>{t("clientNew.reviewEmail")}:</strong> {email}
-								</p>
-							) : null}
-							{quotaBytes ? (
-								<p>
-									<strong>{t("clientNew.reviewQuota")}:</strong>{" "}
-									{t("clientNew.reviewQuotaValue", { quotaBytes })}
-								</p>
-							) : null}
-							{expiresAt ? (
-								<p>
-									<strong>{t("clientNew.reviewExpires")}:</strong> {expiresAt}
-								</p>
-							) : null}
-							<p>
-								<strong>{t("clientNew.reviewBindings")}:</strong>{" "}
-								{bindings.length}
-							</p>
-						</>
-					)}
-				</div>
-			) : null}
+										<DialogContent>
+											<DialogHeader>
+												<DialogTitle>
+													{t("clientNew.oneTimeCredentialsTitle")}
+												</DialogTitle>
+												<DialogDescription>
+													{t("clientNew.oneTimeCredentialsDescription")}
+												</DialogDescription>
+											</DialogHeader>
+											{issuedCreds.map((c) => (
+												<div key={c.bindingId} style={{ marginBottom: 8 }}>
+													<div className="muted" style={{ fontSize: 12 }}>
+														{c.inboundId} ({c.kind})
+													</div>
+													<code className="mono">{c.plaintext}</code>
+												</div>
+											))}
+											<DialogFooter>
+												<Button
+													type="button"
+													variant="primary"
+													onClick={() => {
+														clearIssued();
+														void navigate({ to: "/clients" });
+													}}
+												>
+													{t("common.done")}
+												</Button>
+											</DialogFooter>
+										</DialogContent>
+									</Dialog>
+									{issuedCreds.length === 0 ? (
+										<div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+											<Button
+												type="button"
+												variant="primary"
+												onClick={() => {
+													clearIssued();
+													void navigate({ to: "/clients" });
+												}}
+											>
+												{t("common.done")}
+											</Button>
+										</div>
+									) : null}
+								</>
+							) : (
+								<>
+									<h2 style={{ fontSize: 14 }}>
+										{t("clientNew.reviewHeading")}
+									</h2>
+									<p>
+										<strong>{t("clientNew.reviewName")}:</strong> {name}
+									</p>
+									{email ? (
+										<p>
+											<strong>{t("clientNew.reviewEmail")}:</strong> {email}
+										</p>
+									) : null}
+									{quotaBytes ? (
+										<p>
+											<strong>{t("clientNew.reviewQuota")}:</strong>{" "}
+											{t("clientNew.reviewQuotaValue", { quotaBytes })}
+										</p>
+									) : null}
+									{expiresAt ? (
+										<p>
+											<strong>{t("clientNew.reviewExpires")}:</strong>{" "}
+											{expiresAt}
+										</p>
+									) : null}
+									<p>
+										<strong>{t("clientNew.reviewBindings")}:</strong>{" "}
+										{bindings.length}
+									</p>
+								</>
+							)}
+						</div>
+					) : null}
 
-			{error ? (
-				<FormMessage style={{ marginTop: 8 }}>{error}</FormMessage>
-			) : null}
+					{error ? (
+						<FormMessage style={{ marginTop: 8 }}>{error}</FormMessage>
+					) : null}
 
-			{step < 3 || !create.isSuccess ? (
-				// A <div>, not a <form>: with a form, clicking "Review" advanced the
-				// step and the SAME cursor position turned into the submit button, so
-				// the trailing mouse-up submitted the create — the user never saw the
-				// review screen. Explicit onClick keeps each action deliberate.
-				<div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-					<Button
-						type="button"
-						disabled={create.isPending}
-						onClick={() => {
-							if (step === 0) {
-								void navigate({ to: "/clients" });
-								return;
-							}
-							setStep((s) => Math.max(0, s - 1));
-						}}
-					>
-						{t("common.back")}
-					</Button>
-					{step < 2 ? (
-						<Button
-							type="button"
-							variant="primary"
-							disabled={
-								(step === 0 && !name) || (step === 1 && quotaError != null)
-							}
-							onClick={() => setStep((s) => s + 1)}
-						>
-							{t("common.next")}
-						</Button>
-					) : step === 2 ? (
-						<Button type="button" variant="primary" onClick={() => setStep(3)}>
-							{t("clientNew.reviewButton")}
-						</Button>
-					) : (
-						<Button
-							type="button"
-							variant="primary"
-							disabled={create.isPending}
-							onClick={() => {
-								setError(null);
-								create.mutate();
-							}}
-						>
-							{create.isPending
-								? t("clientNew.creating")
-								: t("clientNew.createClient")}
-						</Button>
-					)}
+					{step < 3 || !create.isSuccess ? (
+						// A <div>, not a <form>: with a form, clicking "Review" advanced the
+						// step and the SAME cursor position turned into the submit button, so
+						// the trailing mouse-up submitted the create — the user never saw the
+						// review screen. Explicit onClick keeps each action deliberate.
+						<div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+							<Button
+								type="button"
+								disabled={create.isPending}
+								onClick={() => {
+									if (step === 0) {
+										void navigate({ to: "/clients" });
+										return;
+									}
+									setStep((s) => Math.max(0, s - 1));
+								}}
+							>
+								{t("common.back")}
+							</Button>
+							{step < 2 ? (
+								<Button
+									type="button"
+									variant="primary"
+									disabled={
+										(step === 0 && !name) || (step === 1 && quotaError != null)
+									}
+									onClick={() => setStep((s) => s + 1)}
+								>
+									{t("common.next")}
+								</Button>
+							) : step === 2 ? (
+								<Button
+									type="button"
+									variant="primary"
+									onClick={() => setStep(3)}
+								>
+									{t("clientNew.reviewButton")}
+								</Button>
+							) : (
+								<Button
+									type="button"
+									variant="primary"
+									disabled={create.isPending}
+									onClick={() => {
+										setError(null);
+										create.mutate();
+									}}
+								>
+									{create.isPending
+										? t("clientNew.creating")
+										: t("clientNew.createClient")}
+								</Button>
+							)}
+						</div>
+					) : null}
 				</div>
-			) : null}
-		</div>
+			</DialogContent>
+		</Dialog>
 	);
 }

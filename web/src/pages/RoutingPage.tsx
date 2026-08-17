@@ -5,6 +5,7 @@ import type { RoutingRule } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "../components/ui/dialog";
 import { FormItem, FormMessage } from "../components/ui/form";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -102,84 +103,96 @@ export function RoutingPage() {
 				</div>
 			</div>
 
-			{creating || editing ? (
-				<div className="card">
-					<h3>
-						{creating
-							? t("routing.createRule")
-							: t("routing.editRule", { name: editing?.name ?? "" })}
-					</h3>
-					<div style={{ display: "grid", gap: 12, maxWidth: 480 }}>
-						<FormItem>
-							<Label htmlFor="rule-name">{t("routing.name")}</Label>
-							<Input
-								id="rule-name"
-								value={form.name}
-								onChange={(e) => setForm({ ...form, name: e.target.value })}
-								disabled={!creating}
-							/>
-						</FormItem>
-						<FormItem>
-							<Label htmlFor="rule-match">{t("routing.match")}</Label>
-							<Input
-								id="rule-match"
-								value={form.match}
-								onChange={(e) => setForm({ ...form, match: e.target.value })}
-							/>
-						</FormItem>
-						<FormItem>
-							<Label htmlFor="rule-outbound">{t("routing.outbound")}</Label>
-							<Input
-								id="rule-outbound"
-								value={form.outbound}
-								onChange={(e) => setForm({ ...form, outbound: e.target.value })}
-							/>
-						</FormItem>
-						<FormItem>
-							<Label
-								htmlFor="rule-enabled"
-								style={{ display: "flex", gap: 8, alignItems: "center" }}
-							>
-								<input
-									id="rule-enabled"
-									type="checkbox"
-									checked={form.enabled}
+			<Dialog
+				open={creating || editing !== null}
+				onOpenChange={(open) => {
+					if (!open) cancel();
+				}}
+			>
+				<DialogContent className="creation-dialog">
+					<div className="card">
+						<DialogTitle>
+							{creating
+								? t("routing.createRule")
+								: t("routing.editRule", { name: editing?.name ?? "" })}
+						</DialogTitle>
+						<div style={{ display: "grid", gap: 12, maxWidth: 480 }}>
+							<FormItem>
+								<Label htmlFor="rule-name">{t("routing.name")}</Label>
+								<Input
+									id="rule-name"
+									value={form.name}
+									onChange={(e) => setForm({ ...form, name: e.target.value })}
+									disabled={!creating}
+								/>
+							</FormItem>
+							<FormItem>
+								<Label htmlFor="rule-match">{t("routing.match")}</Label>
+								<Input
+									id="rule-match"
+									value={form.match}
+									onChange={(e) => setForm({ ...form, match: e.target.value })}
+								/>
+							</FormItem>
+							<FormItem>
+								<Label htmlFor="rule-outbound">{t("routing.outbound")}</Label>
+								<Input
+									id="rule-outbound"
+									value={form.outbound}
 									onChange={(e) =>
-										setForm({ ...form, enabled: e.target.checked })
+										setForm({ ...form, outbound: e.target.value })
 									}
 								/>
-								{t("routing.enabled")}
-							</Label>
-						</FormItem>
-						<div style={{ display: "flex", gap: 8 }}>
-							<Button
-								variant="primary"
-								disabled={
-									save.isPending || !form.name || !form.match || !form.outbound
-								}
-								onClick={() =>
-									save.mutate({
-										name: form.name,
-										match: form.match,
-										outbound: form.outbound,
-										enabled: form.enabled,
-									})
-								}
-							>
-								{save.isPending ? t("routing.saving") : t("common.save")}
-							</Button>
-							<Button onClick={cancel}>{t("common.cancel")}</Button>
+							</FormItem>
+							<FormItem>
+								<Label
+									htmlFor="rule-enabled"
+									style={{ display: "flex", gap: 8, alignItems: "center" }}
+								>
+									<input
+										id="rule-enabled"
+										type="checkbox"
+										checked={form.enabled}
+										onChange={(e) =>
+											setForm({ ...form, enabled: e.target.checked })
+										}
+									/>
+									{t("routing.enabled")}
+								</Label>
+							</FormItem>
+							<div style={{ display: "flex", gap: 8 }}>
+								<Button
+									variant="primary"
+									disabled={
+										save.isPending ||
+										!form.name ||
+										!form.match ||
+										!form.outbound
+									}
+									onClick={() =>
+										save.mutate({
+											name: form.name,
+											match: form.match,
+											outbound: form.outbound,
+											enabled: form.enabled,
+										})
+									}
+								>
+									{save.isPending ? t("routing.saving") : t("common.save")}
+								</Button>
+								<Button onClick={cancel}>{t("common.cancel")}</Button>
+							</div>
+							{save.isError ? (
+								<FormMessage>
+									{save.error instanceof ApiError
+										? save.error.message
+										: t("routing.saveFailed")}
+								</FormMessage>
+							) : null}
 						</div>
-						{save.isError ? (
-							<FormMessage>
-								{save.error instanceof ApiError
-									? save.error.message
-									: t("routing.saveFailed")}
-							</FormMessage>
-						) : null}
 					</div>
-				</div>
-			) : null}
+				</DialogContent>
+			</Dialog>
 
 			<div className="card">
 				{rules.isLoading ? (

@@ -15,6 +15,7 @@ import {
 } from "../components/ui/alert-dialog";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "../components/ui/dialog";
 import { FormItem, FormMessage } from "../components/ui/form";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -50,6 +51,7 @@ export function UsersPage() {
 	const isAdmin = useIsAdmin();
 	const { session } = useAuth();
 	const qc = useQueryClient();
+	const [creatingUser, setCreatingUser] = useState(false);
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
 	const [role, setRole] = useState<"admin" | "viewer">("viewer");
@@ -83,6 +85,7 @@ export function UsersPage() {
 		onSuccess: () => {
 			setUsername("");
 			setPassword("");
+			setCreatingUser(false);
 			setError(null);
 			setNotice(t("users.createdNotice", { name: username }));
 			invalidate();
@@ -159,7 +162,18 @@ export function UsersPage() {
 	return (
 		<>
 			<div className="card">
-				<h2>{t("users.panelUsers")}</h2>
+				<div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+					<h2 style={{ margin: 0, flex: 1 }}>{t("users.panelUsers")}</h2>
+					<Button
+						variant="primary"
+						onClick={() => {
+							setError(null);
+							setCreatingUser(true);
+						}}
+					>
+						{t("users.createUser")}
+					</Button>
+				</div>
 				{notice ? <p className="muted">{notice}</p> : null}
 				{error ? <FormMessage>{error}</FormMessage> : null}
 				{users.isLoading ? (
@@ -272,44 +286,64 @@ export function UsersPage() {
 				)}
 			</div>
 
-			<div className="card">
-				<h2>{t("users.createUser")}</h2>
-				<form onSubmit={onSubmit}>
-					<FormItem>
-						<Label htmlFor="nu-username">{t("auth.username")}</Label>
-						<Input
-							id="nu-username"
-							value={username}
-							onChange={(e) => setUsername(e.target.value)}
-							required
-						/>
-					</FormItem>
-					<FormItem>
-						<Label htmlFor="nu-password">{t("auth.password")}</Label>
-						<Input
-							id="nu-password"
-							type="password"
-							value={password}
-							onChange={(e) => setPassword(e.target.value)}
-							required
-						/>
-					</FormItem>
-					<FormItem>
-						<Label htmlFor="nu-role">{t("users.role")}</Label>
-						<Select
-							id="nu-role"
-							value={role}
-							onChange={(e) => setRole(e.target.value as "admin" | "viewer")}
-						>
-							<option value="viewer">{t("users.role.viewerReadOnly")}</option>
-							<option value="admin">{t("users.role.admin")}</option>
-						</Select>
-					</FormItem>
-					<Button type="submit" variant="primary" disabled={create.isPending}>
-						{create.isPending ? t("users.creating") : t("users.createUser")}
-					</Button>
-				</form>
-			</div>
+			<Dialog open={creatingUser} onOpenChange={setCreatingUser}>
+				<DialogContent className="creation-dialog">
+					<div className="card">
+						<DialogTitle>{t("users.createUser")}</DialogTitle>
+						<form onSubmit={onSubmit}>
+							<FormItem>
+								<Label htmlFor="nu-username">{t("auth.username")}</Label>
+								<Input
+									id="nu-username"
+									value={username}
+									onChange={(e) => setUsername(e.target.value)}
+									required
+								/>
+							</FormItem>
+							<FormItem>
+								<Label htmlFor="nu-password">{t("auth.password")}</Label>
+								<Input
+									id="nu-password"
+									type="password"
+									value={password}
+									onChange={(e) => setPassword(e.target.value)}
+									required
+								/>
+							</FormItem>
+							<FormItem>
+								<Label htmlFor="nu-role">{t("users.role")}</Label>
+								<Select
+									id="nu-role"
+									value={role}
+									onChange={(e) =>
+										setRole(e.target.value as "admin" | "viewer")
+									}
+								>
+									<option value="viewer">
+										{t("users.role.viewerReadOnly")}
+									</option>
+									<option value="admin">{t("users.role.admin")}</option>
+								</Select>
+							</FormItem>
+							{error ? <FormMessage>{error}</FormMessage> : null}
+							<div className="creation-dialog-actions">
+								<Button type="button" onClick={() => setCreatingUser(false)}>
+									{t("common.cancel")}
+								</Button>
+								<Button
+									type="submit"
+									variant="primary"
+									disabled={create.isPending}
+								>
+									{create.isPending
+										? t("users.creating")
+										: t("users.createUser")}
+								</Button>
+							</div>
+						</form>
+					</div>
+				</DialogContent>
+			</Dialog>
 
 			<div className="card">
 				<h2>{t("users.activeSessions")}</h2>
