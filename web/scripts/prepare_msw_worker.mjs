@@ -2,11 +2,16 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const workerPath = resolve(process.cwd(), "public/mockServiceWorker.js");
-const messageHandler = "addEventListener('message', async function (event) {\n";
-const originGuard =
-	"  if (event.origin !== self.location.origin) {\n    return\n  }\n";
-
 const worker = await readFile(workerPath, "utf8");
+const newline = worker.includes("\r\n") ? "\r\n" : "\n";
+const messageHandler = `addEventListener('message', async function (event) {${newline}`;
+const originGuard = [
+	"  if (event.origin !== self.location.origin) {",
+	"    return",
+	"  }",
+	"",
+].join(newline);
+
 if (worker.includes(originGuard)) {
 	process.exit(0);
 }
