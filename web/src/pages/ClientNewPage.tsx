@@ -245,7 +245,7 @@ export function ClientNewPage() {
 									key={ib.name}
 									style={{
 										border: "1px solid var(--border)",
-										borderRadius: 6,
+										borderRadius: 0,
 										padding: 12,
 										marginBottom: 8,
 									}}
@@ -384,8 +384,14 @@ export function ClientNewPage() {
 				<div style={{ display: "flex", gap: 8, marginTop: 20 }}>
 					<Button
 						type="button"
-						disabled={step === 0 || create.isPending}
-						onClick={() => setStep((s) => Math.max(0, s - 1))}
+						disabled={create.isPending}
+						onClick={() => {
+							if (step === 0) {
+								void navigate({ to: "/clients" });
+								return;
+							}
+							setStep((s) => Math.max(0, s - 1));
+						}}
 					>
 						{t("common.back")}
 					</Button>

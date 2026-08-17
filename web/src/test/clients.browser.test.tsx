@@ -4,7 +4,7 @@ import {
 	createRouter,
 	RouterProvider,
 } from "@tanstack/react-router";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AuthProvider } from "../auth/AuthContext";
 import { I18nProvider } from "../i18n/I18nContext";
@@ -25,7 +25,7 @@ function renderApp(initialPath = "/clients") {
 		routeTree,
 		history: createMemoryHistory({ initialEntries: [initialPath] }),
 	});
-	return render(
+	render(
 		<QueryClientProvider client={qc}>
 			<AuthProvider>
 				<I18nProvider>
@@ -34,6 +34,7 @@ function renderApp(initialPath = "/clients") {
 			</AuthProvider>
 		</QueryClientProvider>,
 	);
+	return router;
 }
 
 describe("ClientsPage (real browser)", () => {
@@ -72,6 +73,23 @@ describe("ClientsPage (real browser)", () => {
 		renderApp("/clients");
 		await waitFor(() =>
 			expect(screen.getByText(/no clients/i)).toBeInTheDocument(),
+		);
+	});
+
+	it("leaves the new-client wizard from Back on the first step", async () => {
+		worker.use(
+			http.get("/api/inbounds", () => HttpResponse.json({ items: [] })),
+			http.get("/api/v1/clients", () =>
+				HttpResponse.json({ items: [], total: 0, page: 1, pageSize: 20 }),
+			),
+		);
+		const router = renderApp("/clients/new");
+		const back = await screen.findByRole("button", { name: /back/i });
+		expect(back).toBeEnabled();
+
+		fireEvent.click(back);
+		await waitFor(() =>
+			expect(router.state.location.pathname).toBe("/clients"),
 		);
 	});
 });
