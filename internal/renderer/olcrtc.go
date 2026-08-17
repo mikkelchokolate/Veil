@@ -24,7 +24,7 @@ type olcrtcYAML struct {
 	Room struct {
 		ID string `yaml:"id"`
 	} `yaml:"room"`
-	Data string `yaml:"data"`
+	Data   string `yaml:"data"`
 	Crypto struct {
 		Key string `yaml:"key"`
 	} `yaml:"crypto"`
