@@ -79,11 +79,13 @@ jobs:
         with:
           path: ~/.cache/veil-caddy-test
           key: ${{ runner.os }}-${{ runner.arch }}-veil-caddy-test-${{ hashFiles('scripts/ci/versions.sh', 'scripts/ci/runtimes.sh', 'internal/runtimeinstall/**') }}
+      - name: Unstick Ubuntu apt mirrors
+        run: bash scripts/ci/apt-bootstrap.sh
       - name: runtime probe sandbox
         run: |
           if ! command -v bwrap >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends bubblewrap
+            sudo DEBIAN_FRONTEND=noninteractive apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bubblewrap
           fi
       - name: test job
         run: bash scripts/ci/test.sh
@@ -107,8 +109,14 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ steps.versions.outputs.go_version }}
+      - name: Unstick Ubuntu apt mirrors
+        run: bash scripts/ci/apt-bootstrap.sh
       - name: shellcheck (runner package)
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
+        run: |
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo DEBIAN_FRONTEND=noninteractive apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends shellcheck
+          fi
       - name: lint job
         run: bash scripts/ci/lint.sh
       - name: Upload CI artifacts
@@ -251,8 +259,14 @@ jobs:
           node-version: ${{ steps.versions.outputs.node_version }}
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
+      - name: Unstick Ubuntu apt mirrors
+        run: bash scripts/ci/apt-bootstrap.sh
       - name: runtime probe sandbox
-        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+        run: |
+          if ! command -v bwrap >/dev/null 2>&1; then
+            sudo DEBIAN_FRONTEND=noninteractive apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bubblewrap
+          fi
       - name: e2e job (real pinned protocol runtimes)
         run: bash scripts/ci/e2e.sh
       - name: Upload CI artifacts (incl. protocol logs)
@@ -291,6 +305,8 @@ jobs:
           node-version: ${{ steps.versions.outputs.node_version }}
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
+      - name: Unstick Ubuntu apt mirrors
+        run: bash scripts/ci/apt-bootstrap.sh
       - name: Provision Chromium (runner-side provisioning, pinned version)
         working-directory: test/browser
         run: |
