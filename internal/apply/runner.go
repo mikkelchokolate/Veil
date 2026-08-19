@@ -453,6 +453,71 @@ func (r *Runner) RunContextWithConfirmations(ctx context.Context, revision uint6
 	return r.runContext(ctx, revision, trigger, actor, executor)
 }
 
+// RunLatest applies the current desired revision and keeps applying as long as
+// a newer desired revision is published while a job is in flight. Concurrent
+// callers wait for the active job instead of returning ErrApplyBusy and leaving
+// the system pending forever.
+func (r *Runner) RunLatest(ctx context.Context, trigger, actor string) (Job, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	var last Job
+	for {
+		if err := ctx.Err(); err != nil {
+			return last, err
+		}
+		revs, err := r.revs.Get()
+		if err != nil {
+			return last, err
+		}
+		if revs.Desired <= revs.Applied {
+			return last, nil
+		}
+		attempted := revs.Desired
+		job, err := r.RunContext(ctx, attempted, trigger, actor)
+		if job.ID != "" {
+			last = job
+		}
+		if errors.Is(err, ErrApplyBusy) {
+			if waitErr := r.waitIdle(ctx); waitErr != nil {
+				return last, waitErr
+			}
+			continue
+		}
+		if errors.Is(err, ErrStaleRevision) {
+			continue
+		}
+		if err != nil {
+			return last, err
+		}
+		after, afterErr := r.revs.Get()
+		if afterErr != nil {
+			return last, afterErr
+		}
+		if after.Applied < attempted {
+			return last, nil
+		}
+	}
+}
+
+func (r *Runner) waitIdle(ctx context.Context) error {
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		r.mu.Lock()
+		idle := !r.active
+		r.mu.Unlock()
+		if idle {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
 func (r *Runner) runContext(ctx context.Context, revision uint64, trigger, actor string, executor Executor) (job Job, runErr error) {
 	if ctx == nil {
 		ctx = context.Background()

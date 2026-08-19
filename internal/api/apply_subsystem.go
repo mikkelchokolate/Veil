@@ -175,7 +175,7 @@ func initClientSubsystem(s *managementState) {
 	// returns that exact revision/job in the response.
 	s.clientService = client.NewService(clientRepo, clientCreds).WithInboundLookup(s.bindingCapabilityForInbound)
 	s.clientMigrator = client.NewMigrator(clientRepo, clientCreds, client.WithIncludeDisabled())
-	s.tokenStore = client.NewTokenStore(s.db)
+	s.tokenStore = client.NewTokenStore(s.db).WithCipher(s.cipher)
 	s.subRenderer = client.NewSubscriptionRenderer(clientRepo, clientCreds)
 	if s.trafficStore == nil {
 		s.trafficStore = client.NewTrafficStore(s.db)

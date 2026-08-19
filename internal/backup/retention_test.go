@@ -8,6 +8,24 @@ import (
 	"time"
 )
 
+func TestDeleteArchiveRemovesManagedNameOnly(t *testing.T) {
+	dir := t.TempDir()
+	name := "veil_backup_20260605_020000.tar.gz.enc"
+	writeArchivePlaceholder(t, dir, name)
+	if err := DeleteArchive(dir, name); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+		t.Fatalf("archive still present: %v", err)
+	}
+	if err := DeleteArchive(dir, "../escape.enc"); err == nil {
+		t.Fatal("expected reject traversal")
+	}
+	if err := DeleteArchive(dir, "notes.txt"); err == nil {
+		t.Fatal("expected reject unmanaged name")
+	}
+}
+
 func TestListArchivesIgnoresUnrelatedFilesAndSortsNewestFirst(t *testing.T) {
 	dir := t.TempDir()
 	writeArchivePlaceholder(t, dir, "veil_backup_20260604_020000.tar.gz.enc")

@@ -3,9 +3,9 @@ package client
 import "time"
 
 // SubscriptionToken is an unguessable, revocable, rotatable capability token
-// that grants read access to one client's subscription artifact. The database
-// stores only the SHA-256 hash of the token; the plaintext is shown exactly
-// once at creation and is never recoverable afterward.
+// that grants read access to one client's subscription artifact. The hash is
+// used for lookup. When a cipher is configured the panel also stores an
+// encrypted copy so an administrator can re-open the subscription URL and QR.
 type SubscriptionToken struct {
 	ID         string `json:"id"`
 	ClientID   string `json:"clientId"`
@@ -19,6 +19,7 @@ type SubscriptionToken struct {
 	RotatedAt  *int64 `json:"rotatedAt,omitempty"`
 	RevokedAt  *int64 `json:"revokedAt,omitempty"`
 	LastUsedAt *int64 `json:"lastUsedAt,omitempty"`
+	HasSecret  bool   `json:"hasSecret,omitempty"`
 }
 
 // IsActive reports whether the token currently grants access.

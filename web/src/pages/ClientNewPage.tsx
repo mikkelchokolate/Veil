@@ -184,7 +184,7 @@ export function ClientNewPage() {
 					</div>
 
 					{step === 0 ? (
-						<>
+						<div className="creation-dialog-fields">
 							<FormItem>
 								<Label htmlFor="nc-name">{t("common.name")}</Label>
 								<Input
@@ -211,11 +211,11 @@ export function ClientNewPage() {
 									onChange={(e) => setNotes(e.target.value)}
 								/>
 							</FormItem>
-						</>
+						</div>
 					) : null}
 
 					{step === 1 ? (
-						<>
+						<div className="creation-dialog-fields">
 							<FormItem>
 								<Label htmlFor="nc-quota">{t("clientNew.quotaLabel")}</Label>
 								<Input
@@ -236,7 +236,7 @@ export function ClientNewPage() {
 									onChange={(e) => setExpiresAt(e.target.value)}
 								/>
 							</FormItem>
-						</>
+						</div>
 					) : null}
 
 					{step === 2 ? (

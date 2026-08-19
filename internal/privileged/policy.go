@@ -323,7 +323,7 @@ func protocolHasTemplateRuntime(plugin protocols.ProtocolPlugin) bool {
 
 func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 	switch request.Action {
-	case BackupActionCreate, BackupActionList, BackupActionVerify, BackupActionRead, BackupActionPrune, BackupActionRestore:
+	case BackupActionCreate, BackupActionList, BackupActionVerify, BackupActionRead, BackupActionPrune, BackupActionRestore, BackupActionDelete:
 	default:
 		return ResolvedBackup{}, newError(ErrorInvalidRequest, "unsupported backup action")
 	}
@@ -354,7 +354,7 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 	if resolved.BackupPassphrasePath == "" {
 		resolved.BackupPassphrasePath = filepath.Join(p.StateRoot, "backup.passphrase")
 	}
-	requiresArchive := request.Action == BackupActionVerify || request.Action == BackupActionRead || request.Action == BackupActionRestore
+	requiresArchive := request.Action == BackupActionVerify || request.Action == BackupActionRead || request.Action == BackupActionRestore || request.Action == BackupActionDelete
 	if request.ArchiveName == "" {
 		if requiresArchive {
 			return ResolvedBackup{}, newError(ErrorInvalidRequest, "archiveName is required")

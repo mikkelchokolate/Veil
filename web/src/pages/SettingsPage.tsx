@@ -17,6 +17,7 @@ import { Button } from "../components/ui/button";
 import { FormItem, FormMessage } from "../components/ui/form";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { Select } from "../components/ui/select";
 import { Table, TableBody, TableCell, TableRow } from "../components/ui/table";
 import { useI18n } from "../i18n/I18nContext";
 
@@ -388,31 +389,24 @@ export function SettingsPage() {
 			{editing ? (
 				<div className="card">
 					<h2 style={{ fontSize: 15 }}>{t("settings.editTitle")}</h2>
-					<div
-						style={{
-							display: "grid",
-							gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-							gap: 12,
-						}}
-					>
+					<div className="form-stack">
 						{GLOBAL_FIELDS.map((f) => (
 							<FormItem key={f.key}>
 								<Label htmlFor={`set-${f.key}`}>{f.label}</Label>
 								{f.type === "select" ? (
-									<select
+									<Select
 										id={`set-${f.key}`}
 										value={form[f.key] ?? ""}
 										onChange={(e) =>
 											setForm({ ...form, [f.key]: e.target.value })
 										}
-										style={{ width: "100%", padding: 6 }}
 									>
 										{(f.options ?? []).map((o) => (
 											<option key={o.value} value={o.value}>
 												{o.label}
 											</option>
 										))}
-									</select>
+									</Select>
 								) : (
 									<Input
 										id={`set-${f.key}`}
@@ -439,14 +433,7 @@ export function SettingsPage() {
 					<p className="muted" style={{ fontSize: 12 }}>
 						{t("settings.section.protocolDefaultsHint")}
 					</p>
-					<div
-						style={{
-							display: "grid",
-							gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-							gap: 12,
-							marginTop: 8,
-						}}
-					>
+					<div className="form-stack" style={{ marginTop: 8 }}>
 						{PROTOCOL_DEFAULT_FIELDS.map((f) => (
 							<FormItem key={f.key}>
 								<Label htmlFor={`set-${f.key}`}>{f.label}</Label>
@@ -464,20 +451,19 @@ export function SettingsPage() {
 										style={{ width: 18, height: 18 }}
 									/>
 								) : f.type === "select" ? (
-									<select
+									<Select
 										id={`set-${f.key}`}
 										value={form[f.key] ?? ""}
 										onChange={(e) =>
 											setForm({ ...form, [f.key]: e.target.value })
 										}
-										style={{ width: "100%", padding: 6 }}
 									>
 										{(f.options ?? []).map((o) => (
 											<option key={o.value} value={o.value}>
 												{o.label}
 											</option>
 										))}
-									</select>
+									</Select>
 								) : (
 									<Input
 										id={`set-${f.key}`}

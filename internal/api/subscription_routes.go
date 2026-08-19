@@ -433,6 +433,22 @@ func (s *managementState) handleV1ClientTokenByID(w http.ResponseWriter, r *http
 		writeJSON(w, issued)
 		return
 	}
+	if action == "" && r.Method == http.MethodGet {
+		plaintext, err := s.tokenStore.Reveal(tokenID)
+		if err != nil {
+			if errors.Is(err, client.ErrSecretUnavailable) {
+				writeError(w, "subscription URL is no longer recoverable; rotate the token to issue a new one", http.StatusNotFound)
+				return
+			}
+			s.writeV1ClientError(w, err)
+			return
+		}
+		writeJSON(w, map[string]any{
+			"token": token,
+			"url":   s.subscriptionURLFor(plaintext),
+		})
+		return
+	}
 	if action == "" && r.Method == http.MethodDelete {
 		if err := s.tokenStore.Revoke(tokenID); err != nil {
 			s.writeV1ClientError(w, err)
@@ -443,6 +459,49 @@ func (s *managementState) handleV1ClientTokenByID(w http.ResponseWriter, r *http
 		return
 	}
 	writeNotFound(w)
+}
+
+func (s *managementState) handleV1ClientLinks(w http.ResponseWriter, r *http.Request, clientID string) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	if s.clientService == nil || s.subRenderer == nil {
+		writeError(w, "client store unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	view, err := s.clientService.Get(clientID)
+	if err != nil {
+		writeNotFound(w)
+		return
+	}
+	s.mu.Lock()
+	settings := s.settings
+	inbounds := append([]Inbound(nil), s.inbounds...)
+	renderer := s.subRenderer
+	s.mu.Unlock()
+	links, err := renderer.WithSettings(clientaccess.Settings{Domain: settings.Domain}).LinksForClient(view.Client, func(inboundID string) (client.InboundSnapshot, bool) {
+		for _, inbound := range inbounds {
+			if inbound.Name != inboundID {
+				continue
+			}
+			return client.InboundSnapshot{
+				Name: inbound.Name, Protocol: inbound.Protocol, Transport: inbound.Transport,
+				Port: inbound.Port, Enabled: inbound.Enabled, Password: inbound.Password,
+				ProtocolFields: inbound.ProtocolFields,
+			}, true
+		}
+		return client.InboundSnapshot{}, false
+	})
+	if err != nil {
+		writeError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if links == nil {
+		links = []model.ClientLink{}
+	}
+	clientaccess.NewClientLinkDeliveryHeaders().Apply(w.Header())
+	writeJSON(w, map[string]any{"items": links})
 }
 
 // subscriptionURLFor builds the absolute subscription URL for a plaintext

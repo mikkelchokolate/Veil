@@ -22,6 +22,17 @@ function fmtTime(ts?: number): string {
 	return new Date(ts * 1000).toLocaleString();
 }
 
+function fmtDuration(startedAt?: number, finishedAt?: number): string {
+	if (!startedAt || !finishedAt || finishedAt < startedAt) return "—";
+	const seconds = finishedAt - startedAt;
+	if (seconds < 60) return `${seconds}s`;
+	const minutes = Math.floor(seconds / 60);
+	const rem = seconds % 60;
+	if (minutes < 60) return rem ? `${minutes}m ${rem}s` : `${minutes}m`;
+	const hours = Math.floor(minutes / 60);
+	return `${hours}h ${minutes % 60}m`;
+}
+
 const STATUS_VARIANT: Record<
 	string,
 	"success" | "danger" | "warning" | "default"
@@ -141,6 +152,8 @@ export function ApplyJobDetailPage() {
 	const qc = useQueryClient();
 	const { t } = useI18n();
 	const [showPlan, setShowPlan] = useState(false);
+	const [copied, setCopied] = useState(false);
+	const [logOpen, setLogOpen] = useState(true);
 
 	const job = useQuery<ApplyJob>({
 		queryKey: ["apply", "jobs", jobId],
@@ -242,6 +255,12 @@ export function ApplyJobDetailPage() {
 								<span className="muted">{fmtTime(j.finishedAt)}</span>
 							</p>
 						) : null}
+						<p>
+							<strong>{t("applyJob.duration")}:</strong>{" "}
+							<span className="muted">
+								{fmtDuration(j.startedAt, j.finishedAt)}
+							</span>
+						</p>
 						{j.errorMessage ? (
 							<FormMessage>
 								{j.errorCode ? `[${j.errorCode}] ` : ""}
@@ -272,6 +291,107 @@ export function ApplyJobDetailPage() {
 					</>
 				) : null}
 			</div>
+
+			{j ? (
+				<div className="card">
+					<div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+						<h2 style={{ margin: 0, fontSize: 15, flex: 1 }}>
+							{t("applyJob.diagnosticsTitle")}
+						</h2>
+						<Button
+							onClick={() => {
+								const report = [
+									"Veil apply job report",
+									`id: ${j.id}`,
+									`status: ${j.status}`,
+									`revision: ${j.baseRevision} -> ${j.desiredRevision}`,
+									`trigger: ${j.trigger}`,
+									`actor: ${j.actorId ?? ""}`,
+									`createdAt: ${fmtTime(j.createdAt)}`,
+									`startedAt: ${fmtTime(j.startedAt)}`,
+									`finishedAt: ${fmtTime(j.finishedAt)}`,
+									`duration: ${fmtDuration(j.startedAt, j.finishedAt)}`,
+									`error: ${j.errorCode ? `[${j.errorCode}] ` : ""}${j.errorMessage ?? ""}`,
+									"",
+									"operations:",
+									ops.length
+										? ops
+												.map(
+													(op) =>
+														`- ${op.success ? "ok" : "FAIL"} ${op.type} ${op.target ?? ""} ${op.detail ?? ""}`,
+												)
+												.join("\n")
+										: "(none)",
+									"",
+									"history:",
+									historyItems.length
+										? historyItems
+												.map((h) =>
+													JSON.stringify(
+														{
+															id: h.id,
+															timestamp: h.timestamp,
+															stage: h.stage,
+															success: h.success,
+															applied: h.applied,
+															liveApplied: h.liveApplied,
+															servicesApplied: h.servicesApplied,
+															rolledBack: h.rolledBack,
+															validations: h.validations,
+															serviceActions: h.serviceActions,
+															healthChecks: h.healthChecks,
+															rollbackActions: h.rollbackActions,
+														},
+														null,
+														2,
+													),
+												)
+												.join("\n")
+										: "(none)",
+								].join("\n");
+								void navigator.clipboard.writeText(report).then(() => {
+									setCopied(true);
+									setTimeout(() => setCopied(false), 1500);
+								});
+							}}
+						>
+							{copied ? t("applyJob.copied") : t("applyJob.copyReport")}
+						</Button>
+						<Button onClick={() => setLogOpen((v) => !v)}>
+							{logOpen ? t("applyJob.hideLogs") : t("applyJob.showLogs")}
+						</Button>
+					</div>
+					{logOpen ? (
+						<pre
+							className="mono"
+							style={{
+								marginTop: 12,
+								padding: 12,
+								maxHeight: 360,
+								overflow: "auto",
+								fontSize: 12,
+								whiteSpace: "pre-wrap",
+								wordBreak: "break-word",
+								border: "1px solid var(--border)",
+								background: "rgb(5 12 12 / 70%)",
+							}}
+						>
+							{JSON.stringify(
+								{
+									job: j,
+									operations: ops,
+									history: historyItems,
+								},
+								null,
+								2,
+							)}
+						</pre>
+					) : null}
+					<p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+						{t("applyJob.diagnosticsHint")}
+					</p>
+				</div>
+			) : null}
 
 			{/* S5: operation breakdown for this job */}
 			{ops.length > 0 ? (

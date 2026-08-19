@@ -869,6 +869,14 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 			return BackupResult{}, err
 		}
 		return BackupResult{Pruned: pruned.Deleted, Kept: pruned.Kept}, nil
+	case BackupActionDelete:
+		if err := backup.DeleteArchive(request.BackupRoot, request.ArchiveName); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return BackupResult{}, newError(ErrorNotFound, "backup archive not found")
+			}
+			return BackupResult{}, err
+		}
+		return BackupResult{ArchiveName: request.ArchiveName, Pruned: []string{request.ArchiveName}}, nil
 	}
 	passphraseBody, err := readBoundedRegularFile(request.BackupPassphrasePath, maxBackupPassphraseBytes)
 	if err != nil {

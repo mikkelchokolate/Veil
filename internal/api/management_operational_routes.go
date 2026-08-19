@@ -260,10 +260,12 @@ func (s *managementState) autoApplyResultLocked(r *http.Request, actor string) a
 	func() {
 		s.mu.Unlock()
 		defer s.mu.Lock()
-		job, runErr = runner.RunContext(operationContext, rev.Desired, "mutation", actor)
+		job, runErr = runner.RunLatest(operationContext, "mutation", actor)
 	}()
-	outcome.job = &job
-	outcome.success = runErr == nil && job.Status == apply.StatusSucceeded
+	if job.ID != "" {
+		outcome.job = &job
+	}
+	outcome.success = runErr == nil && (job.ID == "" || job.Status == apply.StatusSucceeded)
 	s.registerTrafficProvidersLocked()
 	if after, err := revisions.Get(); err == nil {
 		outcome.revision = after

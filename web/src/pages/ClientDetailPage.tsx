@@ -47,6 +47,7 @@ import {
 	fmtBytes,
 	parseQuotaDecimal,
 } from "../lib/bytes";
+import { ClientConnectionLinks } from "../subscription/ClientConnectionLinks";
 import { ClientTrafficPanel } from "../subscription/ClientTrafficPanel";
 import { SubscriptionTokensPanel } from "../subscription/SubscriptionTokensPanel";
 
@@ -685,7 +686,10 @@ export function ClientDetailPage() {
 			) : null}
 
 			{tab === "subscription" ? (
-				<SubscriptionTokensPanel clientId={clientId} />
+				<>
+					<ClientConnectionLinks clientId={clientId} />
+					<SubscriptionTokensPanel clientId={clientId} />
+				</>
 			) : null}
 
 			{tab === "traffic" ? <ClientTrafficPanel clientId={clientId} /> : null}

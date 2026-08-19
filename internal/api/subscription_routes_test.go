@@ -205,3 +205,40 @@ func TestPublicSubscriptionHTMLLanding(t *testing.T) {
 		t.Fatalf("html landing should show the profile title, got %q", w.Body.String())
 	}
 }
+
+func TestClientLinksAndTokenRevealStayAvailableAfterIssue(t *testing.T) {
+	r, _ := newSubscriptionTestRouter(t)
+	_, clientID := seedClientWithToken(t, r)
+
+	links := v1Request(t, r, http.MethodGet, "/api/v1/clients/"+clientID+"/links", "")
+	if links.Code != http.StatusOK {
+		t.Fatalf("links: %d %s", links.Code, links.Body.String())
+	}
+	if !strings.Contains(links.Body.String(), "pw-alice") && !strings.Contains(links.Body.String(), "hysteria2") {
+		t.Fatalf("expected connection URI in links body, got %s", links.Body.String())
+	}
+
+	listed := v1Request(t, r, http.MethodGet, "/api/v1/clients/"+clientID+"/tokens", "")
+	if listed.Code != http.StatusOK {
+		t.Fatalf("list tokens: %d %s", listed.Code, listed.Body.String())
+	}
+	var tokenList struct {
+		Items []struct {
+			ID        string `json:"id"`
+			HasSecret bool   `json:"hasSecret"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(listed.Body.Bytes(), &tokenList); err != nil || len(tokenList.Items) != 1 {
+		t.Fatalf("token list: %v body=%s", err, listed.Body.String())
+	}
+	if !tokenList.Items[0].HasSecret {
+		t.Fatalf("issued token should keep a recoverable secret: %s", listed.Body.String())
+	}
+	revealed := v1Request(t, r, http.MethodGet, "/api/v1/clients/"+clientID+"/tokens/"+tokenList.Items[0].ID, "")
+	if revealed.Code != http.StatusOK {
+		t.Fatalf("reveal: %d %s", revealed.Code, revealed.Body.String())
+	}
+	if !strings.Contains(revealed.Body.String(), `"/s/`) && !strings.Contains(revealed.Body.String(), "/s/") {
+		t.Fatalf("reveal should include subscription URL, got %s", revealed.Body.String())
+	}
+}

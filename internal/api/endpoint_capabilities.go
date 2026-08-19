@@ -82,6 +82,8 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodGet, "/api/backups/{name}/verify", capabilityAdminMetadata},
 	{http.MethodGet, "/api/backup-restore-jobs/{id}", capabilitySelfService},
 	{http.MethodGet, "/api/v1/clients/{id}/tokens", capabilityAdminMetadata},
+	{http.MethodGet, "/api/v1/clients/{id}/tokens/{tokenId}", capabilityAdminSecret},
+	{http.MethodGet, "/api/v1/clients/{id}/links", capabilityAdminSecret},
 	{http.MethodGet, "/api/v1/clients/{id}/audit", capabilityAdminMetadata},
 
 	{http.MethodGet, "/api/client-links", capabilityAdminSecret},
@@ -119,6 +121,7 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodPost, "/api/backups/prune", capabilityAdminMutation},
 	{http.MethodPost, "/api/backups/{name}/restore", capabilityAdminMutation},
 	{http.MethodPost, "/api/backups/{name}/verify", capabilityAdminMutation},
+	{http.MethodDelete, "/api/backups/{name}", capabilityAdminMutation},
 	{http.MethodPost, "/api/v1/clients", capabilityAdminMutation},
 	{http.MethodPost, "/api/v1/clients/bulk", capabilityAdminMutation},
 	{http.MethodPost, "/api/v1/clients/migrate-legacy", capabilityAdminMutation},

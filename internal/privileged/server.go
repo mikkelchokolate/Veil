@@ -123,7 +123,7 @@ func (s *Server) dispatch(ctx context.Context, request RequestEnvelope) (any, er
 		return s.client.ServiceStatus(ctx, *request.ServiceStatus)
 	case OperationJournal:
 		return s.client.Journal(ctx, *request.Journal)
-	case OperationBackupCreate, OperationBackupList, OperationBackupVerify, OperationBackupRead, OperationBackupPrune, OperationBackupRestore:
+	case OperationBackupCreate, OperationBackupList, OperationBackupVerify, OperationBackupRead, OperationBackupPrune, OperationBackupRestore, OperationBackupDelete:
 		expected := backupActionForOperation(request.Operation)
 		if request.Backup.Action != expected {
 			return nil, newError(ErrorInvalidRequest, "backup action does not match operation")
@@ -178,6 +178,8 @@ func backupActionForOperation(operation Operation) BackupAction {
 		return BackupActionPrune
 	case OperationBackupRestore:
 		return BackupActionRestore
+	case OperationBackupDelete:
+		return BackupActionDelete
 	default:
 		return ""
 	}

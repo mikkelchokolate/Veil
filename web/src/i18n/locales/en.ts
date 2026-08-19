@@ -123,6 +123,7 @@ export const en: Record<string, string> = {
 	"apply.jobsTitle": "Apply jobs",
 	"apply.revisionHeader": "Revision",
 	"apply.triggerHeader": "Trigger",
+	"apply.durationHeader": "Duration",
 	"apply.errorHeader": "Error",
 	"apply.noJobs": "No apply jobs yet.",
 	"apply.status.succeeded": "succeeded",
@@ -339,6 +340,11 @@ export const en: Record<string, string> = {
 	"backups.error.prune": "Failed to prune backups",
 	"backups.error.restore": "Failed to restore backup",
 	"backups.error.verify": "Failed to verify backup",
+	"backups.deleteConfirmTitle": "Delete this backup?",
+	"backups.deleteConfirmDescription": "Delete {name}? This cannot be undone.",
+	"backups.deleting": "Deleting…",
+	"backups.notice.deleted": "Backup deleted.",
+	"backups.error.delete": "Failed to delete backup",
 
 	"clientTraffic.title": "Traffic usage",
 	"clientTraffic.upload": "Upload",
@@ -352,14 +358,19 @@ export const en: Record<string, string> = {
 	"clientTraffic.collected": "Collected {at}",
 
 	"subTokens.title": "Subscription tokens",
-	"subTokens.issuedTitle": "New subscription — copy now (shown once)",
+	"subTokens.issuedTitle": "Subscription URL",
+	"subTokens.revealedTitle": "Subscription URL",
 	"subTokens.url": "Subscription URL",
 	"subTokens.copyUrl": "Copy URL",
 	"subTokens.copied": "Copied",
 	"subTokens.dismiss": "Dismiss",
 	"subTokens.urlLabel": "Subscription URL",
 	"subTokens.issuedNote":
-		"The URL and QR are shown only now. Rotating a token invalidates the old URL.",
+		"Rotating a token invalidates the old URL. You can reopen this URL and QR later from the token list.",
+	"subTokens.revealedNote":
+		"Rotating a token invalidates this URL. Use Show link to open it again.",
+	"subTokens.showLink": "Show link",
+	"subTokens.error.reveal": "Could not load subscription URL",
 	"subTokens.labelPlaceholder": "Label (e.g. phone, laptop)",
 	"subTokens.create": "Create token",
 	"subTokens.creating": "Creating…",
@@ -450,6 +461,14 @@ export const en: Record<string, string> = {
 	"applyJob.actor": "Actor",
 	"applyJob.started": "Started",
 	"applyJob.finished": "Finished",
+	"applyJob.duration": "Duration",
+	"applyJob.diagnosticsTitle": "Job logs",
+	"applyJob.copyReport": "Copy report for issue",
+	"applyJob.copied": "Copied",
+	"applyJob.showLogs": "Show full logs",
+	"applyJob.hideLogs": "Hide logs",
+	"applyJob.diagnosticsHint":
+		"Copy the report and attach it when opening a GitHub issue.",
 	"applyJob.retrying": "Retrying…",
 	"applyJob.retryRevision": "Retry this revision",
 	"applyJob.retryFailed": "Retry failed",
@@ -520,4 +539,13 @@ export const en: Record<string, string> = {
 	"clientNew.createClient": "Create client",
 	"clientNew.creating": "Creating…",
 	"clientNew.createError": "Failed to create client",
+
+	"clientLinks.title": "Connection links",
+	"clientLinks.hint":
+		"These URIs and QR codes stay available after creation. They are rebuilt from stored credentials.",
+	"clientLinks.empty":
+		"No connection links yet. Attach an inbound and apply the configuration.",
+	"clientLinks.copy": "Copy link",
+	"clientLinks.copied": "Copied",
+	"clientLinks.error.load": "Failed to load connection links",
 };

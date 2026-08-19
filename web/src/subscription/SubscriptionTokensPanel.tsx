@@ -15,6 +15,7 @@ interface SubscriptionToken {
 	rotatedAt?: number;
 	revokedAt?: number;
 	lastUsedAt?: number;
+	hasSecret?: boolean;
 }
 
 interface IssuedToken {
@@ -37,6 +38,7 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 	const qc = useQueryClient();
 	const [label, setLabel] = useState("");
 	const [issued, setIssued] = useState<IssuedToken | null>(null);
+	const [revealed, setRevealed] = useState<IssuedToken | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [copied, setCopied] = useState(false);
 
@@ -82,6 +84,20 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 			),
 	});
 
+	const reveal = useMutation({
+		mutationFn: (tokenId: string) =>
+			apiFetch<IssuedToken>(`/api/v1/clients/${clientId}/tokens/${tokenId}`),
+		onSuccess: (res) => {
+			setRevealed(res);
+			setIssued(null);
+			setError(null);
+		},
+		onError: (err) =>
+			setError(
+				err instanceof ApiError ? err.message : t("subTokens.error.reveal"),
+			),
+	});
+
 	const revoke = useMutation({
 		mutationFn: (tokenId: string) =>
 			apiFetch(`/api/v1/clients/${clientId}/tokens/${tokenId}`, {
@@ -97,7 +113,9 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 			),
 	});
 
-	const subURL = issued?.url ?? (issued ? `/s/${issued.plaintext}` : null);
+	const shown = issued ?? revealed;
+	const subURL =
+		shown?.url ?? (shown?.plaintext ? `/s/${shown.plaintext}` : null);
 
 	async function copy(text: string) {
 		try {
@@ -113,9 +131,11 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 		<div className="card">
 			<h2>{t("subTokens.title")}</h2>
 
-			{issued && subURL ? (
+			{shown && subURL ? (
 				<div className="card" style={{ borderColor: "var(--border-hover)" }}>
-					<h2 style={{ fontSize: 14 }}>{t("subTokens.issuedTitle")}</h2>
+					<h2 style={{ fontSize: 14 }}>
+						{issued ? t("subTokens.issuedTitle") : t("subTokens.revealedTitle")}
+					</h2>
 					<div
 						style={{
 							display: "flex",
@@ -160,13 +180,18 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 								<button
 									type="button"
 									className="btn"
-									onClick={() => setIssued(null)}
+									onClick={() => {
+										setIssued(null);
+										setRevealed(null);
+									}}
 								>
 									{t("subTokens.dismiss")}
 								</button>
 							</div>
 							<p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-								{t("subTokens.issuedNote")}
+								{issued
+									? t("subTokens.issuedNote")
+									: t("subTokens.revealedNote")}
 							</p>
 						</div>
 					</div>
@@ -245,6 +270,18 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 											<td style={{ whiteSpace: "nowrap" }}>
 												{!tok.revokedAt ? (
 													<>
+														{tok.hasSecret ? (
+															<>
+																<button
+																	type="button"
+																	className="btn"
+																	disabled={reveal.isPending}
+																	onClick={() => reveal.mutate(tok.id)}
+																>
+																	{t("subTokens.showLink")}
+																</button>{" "}
+															</>
+														) : null}
 														<button
 															type="button"
 															className="btn"

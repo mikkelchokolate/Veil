@@ -364,14 +364,7 @@ export function InboundsPage() {
 						? t("inbounds.newInbound")
 						: t("inbounds.edit", { name: editing ?? "" })}
 				</DialogTitle>
-				<div
-					style={{
-						display: "grid",
-						gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-						gap: 12,
-						marginTop: 8,
-					}}
-				>
+				<div className="creation-dialog-fields" style={{ marginTop: 8 }}>
 					<FormItem>
 						<Label htmlFor="ib-name">{t("common.name")}</Label>
 						<Input
@@ -574,7 +567,7 @@ export function InboundsPage() {
 					/>
 					<span>{t("common.enabled")}</span>
 				</Label>
-				<div style={{ display: "flex", gap: 8 }}>
+				<div className="creation-dialog-actions">
 					<Button
 						variant="primary"
 						disabled={create.isPending || update.isPending}

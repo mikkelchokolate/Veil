@@ -240,6 +240,25 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, backupVerificationFromPrivileged(result))
 	case "restore":
 		s.queuePanelBackupRestore(w, r, name)
+	case "delete":
+		if r.Method != http.MethodDelete && r.Method != http.MethodPost {
+			methodNotAllowed(w, http.MethodDelete)
+			return
+		}
+		if !s.beginBackupMutation(w) {
+			return
+		}
+		defer s.backupMutationMu.Unlock()
+		result, err := s.backupOperation(r.Context(), privileged.BackupRequest{
+			Action: privileged.BackupActionDelete, ArchiveName: name,
+		})
+		if err != nil {
+			s.recordRequestAudit(r, audit.Record{Action: "backup.delete", Target: name, Success: false, Error: err.Error()})
+			writePrivilegedError(w, err)
+			return
+		}
+		s.recordRequestAudit(r, audit.Record{Action: "backup.delete", Target: name, Success: true})
+		writeJSON(w, map[string]any{"deleted": result.ArchiveName})
 	default:
 		writeNotFound(w)
 	}
@@ -565,6 +584,10 @@ func parsePanelBackupPath(r *http.Request) (string, string, bool) {
 	}
 	rest := strings.TrimPrefix(r.URL.Path, "/api/backups/")
 	parts := strings.Split(rest, "/")
+	if len(parts) == 1 && parts[0] != "" && filepath.Base(parts[0]) == parts[0] &&
+		!strings.ContainsAny(parts[0], `\`) && r.Method == http.MethodDelete {
+		return parts[0], "delete", true
+	}
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" ||
 		filepath.Base(parts[0]) != parts[0] || strings.ContainsAny(parts[0], `\`) {
 		return "", "", false

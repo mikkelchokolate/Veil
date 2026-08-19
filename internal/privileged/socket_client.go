@@ -146,7 +146,7 @@ func (c *SocketClient) call(ctx context.Context, request RequestEnvelope, result
 func (c *SocketClient) operationTimeout(operation Operation) time.Duration {
 	switch operation {
 	case OperationBackupCreate, OperationBackupList, OperationBackupVerify,
-		OperationBackupRead, OperationBackupPrune, OperationBackupRestore:
+		OperationBackupRead, OperationBackupPrune, OperationBackupRestore, OperationBackupDelete:
 		return c.backupLimit
 	case OperationPromote, OperationStageUpdate, OperationRotateKey, OperationRecoverKeyRotation:
 		return c.mutationLimit
@@ -169,6 +169,8 @@ func operationForBackupAction(action BackupAction) (Operation, error) {
 		return OperationBackupPrune, nil
 	case BackupActionRestore:
 		return OperationBackupRestore, nil
+	case BackupActionDelete:
+		return OperationBackupDelete, nil
 	default:
 		return "", newError(ErrorInvalidRequest, "unsupported backup action")
 	}

@@ -55,7 +55,6 @@ body::after {
 	opacity: 0.14;
 	filter: contrast(145%) brightness(112%);
 	mix-blend-mode: soft-light;
-	animation: veil-grain-drift 12s steps(10) infinite;
 }
 
 ::selection {
@@ -138,7 +137,14 @@ body::after {
 	display: flex;
 	justify-content: flex-end;
 	gap: 8px;
-	margin-top: 4px;
+	margin-top: 8px;
+}
+
+.creation-dialog-fields,
+.form-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
 }
 
 h1,
@@ -328,8 +334,10 @@ select[class*="rounded-md"] {
 	border-color: var(--border);
 	border-radius: 0;
 	background: rgb(5 12 12 / 88%);
+	background-image: none;
 	box-shadow: none;
 	color: var(--text-main);
+	appearance: none;
 }
 
 .input:hover,
@@ -490,31 +498,8 @@ code {
 	}
 }
 
-@keyframes veil-grain-drift {
-	0%,
-	100% {
-		transform: translate3d(0, 0, 0);
-	}
-	20% {
-		transform: translate3d(-1.5%, 1%, 0);
-	}
-	40% {
-		transform: translate3d(1%, -1.25%, 0);
-	}
-	60% {
-		transform: translate3d(1.4%, 0.75%, 0);
-	}
-	80% {
-		transform: translate3d(-0.75%, -1%, 0);
-	}
-}
-
 @media (prefers-reduced-motion: reduce) {
 	.page-content {
-		animation: none;
-	}
-
-	body::after {
 		animation: none;
 	}
 }

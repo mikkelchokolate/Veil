@@ -665,6 +665,8 @@ func (s *managementState) handleV1ClientSubresource(w http.ResponseWriter, r *ht
 		s.handleV1ClientBindings(w, r, clientID, parts)
 	case "credentials":
 		s.handleV1ClientCredentials(w, r, clientID, parts)
+	case "links":
+		s.handleV1ClientLinks(w, r, clientID)
 	case "tokens":
 		if len(parts) == 1 {
 			s.handleV1ClientTokens(w, r, clientID)
@@ -965,7 +967,7 @@ func (s *managementState) handleV1ClientCredentials(w http.ResponseWriter, r *ht
 // writeV1ClientError maps domain errors to HTTP status codes honestly.
 func (s *managementState) writeV1ClientError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, client.ErrNotFound):
+	case errors.Is(err, client.ErrNotFound), errors.Is(err, client.ErrSecretUnavailable):
 		writeError(w, err.Error(), http.StatusNotFound)
 	case errors.Is(err, client.ErrVersionConflict):
 		writeError(w, err.Error(), http.StatusConflict)

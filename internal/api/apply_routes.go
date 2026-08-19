@@ -154,7 +154,7 @@ func (s *managementState) handleApplyReconcile(w http.ResponseWriter, r *http.Re
 	}
 	runner := s.applyRunner
 	s.mu.Unlock()
-	job, runErr := runner.RunContext(r.Context(), rev.Desired, "reconcile", actor)
+	job, runErr := runner.RunLatest(r.Context(), "reconcile", actor)
 	s.mu.Lock()
 	after, _ := s.applyRevisions.Get()
 	state := s.applyStateViewLocked()

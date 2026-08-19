@@ -185,6 +185,8 @@ func (c *recordingPrivilegedClient) Backup(_ context.Context, request privileged
 			ArchiveName: request.ArchiveName, Verified: true, Restored: true,
 			SafetyStatePath: "state.safety", SafetyKeyPath: "key.safety",
 		}, nil
+	case privileged.BackupActionDelete:
+		return privileged.BackupResult{ArchiveName: request.ArchiveName, Pruned: []string{request.ArchiveName}}, nil
 	default:
 		return privileged.BackupResult{}, errors.New("unexpected backup action")
 	}

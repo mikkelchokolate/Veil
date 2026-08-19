@@ -140,6 +140,54 @@ func TestRunnerSerializesConcurrentJobs(t *testing.T) {
 	}
 }
 
+func TestRunnerRunLatestDrainsNewerDesiredAfterBusy(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	rs := NewRevisionStore(db)
+	js := NewJobStore(db)
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	applied := make([]uint64, 0, 2)
+	exec := func(rev uint64) (Result, error) {
+		if rev == 1 {
+			close(started)
+			<-release
+		}
+		applied = append(applied, rev)
+		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
+	}
+	r := NewRunner(rs, js, exec)
+
+	if _, err := rs.BumpDesired(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := r.RunLatest(context.Background(), "mutation", "admin")
+		done <- err
+	}()
+	<-started
+	d2, err := rs.BumpDesired()
+	if err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatalf("RunLatest: %v", err)
+	}
+	rev, err := rs.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rev.Applied != d2 {
+		t.Fatalf("applied=%d want %d (pending drain missed newer desired)", rev.Applied, d2)
+	}
+	if len(applied) != 2 || applied[0] != 1 || applied[1] != d2 {
+		t.Fatalf("applied revisions = %v, want [1 %d]", applied, d2)
+	}
+}
+
 func TestRunnerRejectsPinnedRevisionWhenItIsNoLongerCurrentDesired(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()

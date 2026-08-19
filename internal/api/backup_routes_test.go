@@ -62,6 +62,13 @@ func TestBackupRoutesCreateListVerifyAndDownload(t *testing.T) {
 		!bytes.HasPrefix(downloadResponse.Body.Bytes(), []byte("VEILBACK")) {
 		t.Fatalf("download status=%d headers=%v", downloadResponse.Code, downloadResponse.Header())
 	}
+
+	remove := adminJSONRequest(http.MethodDelete, "/api/backups/"+created.Archive.Name, "")
+	removeResponse := httptest.NewRecorder()
+	state.handleBackupByName(removeResponse, remove)
+	if removeResponse.Code != http.StatusOK {
+		t.Fatalf("delete status=%d body=%s", removeResponse.Code, removeResponse.Body.String())
+	}
 }
 
 func TestBackupRoutesRequireAdminAndServerSidePassphrase(t *testing.T) {

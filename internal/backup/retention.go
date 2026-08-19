@@ -82,6 +82,26 @@ func ListArchives(dir string) ([]ArchiveEntry, error) {
 	return archives, nil
 }
 
+// DeleteArchive removes one managed encrypted archive by basename. The name
+// must match the generated archive pattern so this cannot be used as a
+// generic file-delete primitive.
+func DeleteArchive(dir, name string) error {
+	if name == "" || filepath.Base(name) != name || strings.ContainsAny(name, `/\`) {
+		return errors.New("archive name must be a basename")
+	}
+	if !archiveNamePattern.MatchString(name) {
+		return fmt.Errorf("unrecognized archive name %q", name)
+	}
+	path := filepath.Join(dir, name)
+	if err := retentionRemove(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return fmt.Errorf("remove backup archive %s: %w", name, err)
+	}
+	return nil
+}
+
 func PruneArchives(dir string, policy RetentionPolicy, dryRun bool) (PruneResult, error) {
 	if policy.Daily < 0 || policy.Weekly < 0 || policy.Monthly < 0 {
 		return PruneResult{}, errors.New("retention counts cannot be negative")

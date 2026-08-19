@@ -188,6 +188,7 @@ func TestOperationForBackupActionMapsAllActions(t *testing.T) {
 		BackupActionRead:    OperationBackupRead,
 		BackupActionPrune:   OperationBackupPrune,
 		BackupActionRestore: OperationBackupRestore,
+		BackupActionDelete:  OperationBackupDelete,
 	}
 	for action, want := range cases {
 		got, err := operationForBackupAction(action)

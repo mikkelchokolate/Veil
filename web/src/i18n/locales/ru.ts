@@ -251,6 +251,7 @@ export const ru: Record<string, string> = {
 	"apply.desiredRevisionLabel": "Желаемая ревизия",
 	"apply.appliedRevisionLabel": "Применённая (рабочая) ревизия",
 	"apply.driftNotice": "Рантайм отстаёт от желаемого — {applied} → {desired}",
+	"apply.durationHeader": "Длительность",
 	"apply.errorHeader": "Ошибка",
 	"apply.lastError": "Последняя ошибка{code}: {message}",
 	"apply.reconcileNow": "Сверить сейчас",
@@ -294,6 +295,12 @@ export const ru: Record<string, string> = {
 	"backups.error.prune": "Не удалось удалить старые бэкапы",
 	"backups.error.restore": "Не удалось восстановить бэкап",
 	"backups.error.verify": "Не удалось проверить бэкап",
+	"backups.deleteConfirmTitle": "Удалить этот бэкап?",
+	"backups.deleteConfirmDescription":
+		"Удалить {name}? Это действие нельзя отменить.",
+	"backups.deleting": "Удаление…",
+	"backups.notice.deleted": "Бэкап удалён.",
+	"backups.error.delete": "Не удалось удалить бэкап",
 
 	"clientTraffic.title": "Использование трафика",
 	"clientTraffic.upload": "Исходящий",
@@ -307,15 +314,19 @@ export const ru: Record<string, string> = {
 	"clientTraffic.collected": "Собрано в {at}",
 
 	"subTokens.title": "Токены подписки",
-	"subTokens.issuedTitle":
-		"Новая подписка — скопируйте сейчас (показывается один раз)",
+	"subTokens.issuedTitle": "URL подписки",
+	"subTokens.revealedTitle": "URL подписки",
 	"subTokens.url": "URL подписки",
 	"subTokens.copyUrl": "Скопировать URL",
 	"subTokens.copied": "Скопировано",
 	"subTokens.dismiss": "Закрыть",
 	"subTokens.urlLabel": "URL подписки",
 	"subTokens.issuedNote":
-		"URL и QR-код показываются только сейчас. Ротация токена делает старый URL недействительным.",
+		"Ротация токена делает старый URL недействительным. Ссылку и QR можно снова открыть из списка токенов.",
+	"subTokens.revealedNote":
+		"Ротация токена делает этот URL недействительным. Нажмите «Показать ссылку», чтобы открыть его снова.",
+	"subTokens.showLink": "Показать ссылку",
+	"subTokens.error.reveal": "Не удалось загрузить URL подписки",
 	"subTokens.labelPlaceholder": "Метка (например, телефон, ноутбук)",
 	"subTokens.create": "Создать токен",
 	"subTokens.creating": "Создание…",
@@ -454,6 +465,14 @@ export const ru: Record<string, string> = {
 	"applyJob.actor": "Инициатор",
 	"applyJob.started": "Запущено",
 	"applyJob.finished": "Завершено",
+	"applyJob.duration": "Длительность",
+	"applyJob.diagnosticsTitle": "Логи задания",
+	"applyJob.copyReport": "Скопировать отчёт для issue",
+	"applyJob.copied": "Скопировано",
+	"applyJob.showLogs": "Показать полные логи",
+	"applyJob.hideLogs": "Скрыть логи",
+	"applyJob.diagnosticsHint":
+		"Скопируйте отчёт и приложите его при создании issue на GitHub.",
 	"applyJob.retrying": "Повтор…",
 	"applyJob.retryRevision": "Повторить эту ревизию",
 	"applyJob.retryFailed": "Повтор не удался",
@@ -525,4 +544,13 @@ export const ru: Record<string, string> = {
 	"clientNew.createClient": "Создать клиента",
 	"clientNew.creating": "Создание…",
 	"clientNew.createError": "Не удалось создать клиента",
+
+	"clientLinks.title": "Ссылки подключения",
+	"clientLinks.hint":
+		"Эти URI и QR-коды остаются доступны после создания. Они собираются заново из сохранённых учёток.",
+	"clientLinks.empty":
+		"Ссылок пока нет. Привяжите инбаунд и примените конфигурацию.",
+	"clientLinks.copy": "Скопировать ссылку",
+	"clientLinks.copied": "Скопировано",
+	"clientLinks.error.load": "Не удалось загрузить ссылки подключения",
 };

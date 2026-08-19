@@ -21,13 +21,24 @@ function useApplyJobs() {
 	return useQuery<{ items: ApplyJob[] }>({
 		queryKey: ["apply", "jobs"],
 		queryFn: () => apiFetch("/api/apply/jobs"),
-		refetchInterval: 5000,
+		refetchInterval: 2000,
 	});
 }
 
 function fmtTime(ts?: number): string {
 	if (!ts) return "—";
 	return new Date(ts * 1000).toLocaleString();
+}
+
+function fmtDuration(startedAt?: number, finishedAt?: number): string {
+	if (!startedAt || !finishedAt || finishedAt < startedAt) return "—";
+	const seconds = finishedAt - startedAt;
+	if (seconds < 60) return `${seconds}s`;
+	const minutes = Math.floor(seconds / 60);
+	const rem = seconds % 60;
+	if (minutes < 60) return rem ? `${minutes}m ${rem}s` : `${minutes}m`;
+	const hours = Math.floor(minutes / 60);
+	return `${hours}h ${minutes % 60}m`;
 }
 
 const STATUS_VARIANT: Record<
@@ -143,6 +154,7 @@ export function ApplyPage() {
 								<TableHead>{t("apply.revisionHeader")}</TableHead>
 								<TableHead>{t("apply.triggerHeader")}</TableHead>
 								<TableHead>{t("common.status")}</TableHead>
+								<TableHead>{t("apply.durationHeader")}</TableHead>
 								<TableHead>{t("apply.errorHeader")}</TableHead>
 								{isAdmin ? <TableHead /> : null}
 							</TableRow>
@@ -150,7 +162,7 @@ export function ApplyPage() {
 						<TableBody>
 							{(jobs.data?.items ?? []).length === 0 ? (
 								<TableRow>
-									<TableCell colSpan={isAdmin ? 6 : 5} className="muted">
+									<TableCell colSpan={isAdmin ? 7 : 6} className="muted">
 										{t("apply.noJobs")}
 									</TableCell>
 								</TableRow>
@@ -174,6 +186,9 @@ export function ApplyPage() {
 											<Badge variant={STATUS_VARIANT[j.status] ?? "default"}>
 												{t(`apply.status.${j.status}`)}
 											</Badge>
+										</TableCell>
+										<TableCell className="muted">
+											{fmtDuration(j.startedAt, j.finishedAt)}
 										</TableCell>
 										<TableCell className="muted" style={{ maxWidth: 320 }}>
 											{j.errorMessage ? (

@@ -246,7 +246,9 @@ func TestStartupMigrateLegacyMarkerBackupAndIdempotency(t *testing.T) {
 	}
 
 	// Backup exists with both the state file and the database copy.
-	backups, err := filepath.Glob(filepath.Join(dir, "backups", "migrations", "legacy-profiles-*"))
+	// Startup migration writes panel-owned safety copies next to the
+	// encrypted archive root, not under backups/migrations/.
+	backups, err := filepath.Glob(filepath.Join(dir, "migration-backups", "legacy-profiles-*"))
 	if err != nil || len(backups) != 1 {
 		t.Fatalf("expected exactly 1 migration backup dir, got %v (err %v)", backups, err)
 	}

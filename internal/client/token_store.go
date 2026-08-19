@@ -13,7 +13,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
+
+var ErrSecretUnavailable = errors.New("client: token secret is not recoverable")
 
 const (
 	tokenByteLen   = 32 // 256-bit token
@@ -38,6 +41,7 @@ type tokenUsageEvent struct {
 
 type TokenStore struct {
 	db            *sql.DB
+	cipher        *secrets.Cipher
 	usageMu       sync.Mutex
 	usage         map[string]int64
 	usageOrder    *list.List
@@ -55,6 +59,13 @@ func NewTokenStore(db *sql.DB) *TokenStore {
 	}
 	go store.runTelemetry()
 	return store
+}
+
+func (s *TokenStore) WithCipher(cipher *secrets.Cipher) *TokenStore {
+	if s != nil {
+		s.cipher = cipher
+	}
+	return s
 }
 
 // Issue creates a new token for a client, returning the plaintext once.
@@ -94,10 +105,15 @@ func (s *TokenStore) IssueBy(clientID, label, createdBy string, expiresAt *int64
 		}
 		return IssuedToken{}, err
 	}
+	ciphertext, err := s.encryptPlaintext(plaintext)
+	if err != nil {
+		return IssuedToken{}, err
+	}
+	t.HasSecret = ciphertext != ""
 	_, err = raw.Exec(`INSERT INTO subscription_tokens
-	  (id, client_id, token_hash, token_prefix, enabled, expires_at, created_at, created_by, label)
-	  VALUES(?,?,?,?,?,?,?,?,?)`,
-		t.ID, t.ClientID, []byte(t.TokenHash), t.Prefix, boolToInt(t.Enabled), t.ExpiresAt, t.CreatedAt, t.CreatedBy, t.Label)
+	  (id, client_id, token_hash, token_prefix, enabled, expires_at, created_at, created_by, label, token_ciphertext)
+	  VALUES(?,?,?,?,?,?,?,?,?,?)`,
+		t.ID, t.ClientID, []byte(t.TokenHash), t.Prefix, boolToInt(t.Enabled), t.ExpiresAt, t.CreatedAt, t.CreatedBy, t.Label, ciphertext)
 	if err != nil {
 		return IssuedToken{}, fmt.Errorf("client: issue token: %w", err)
 	}
@@ -310,6 +326,18 @@ func (s *TokenStore) RotateWithExpiry(id string, expiresAt *int64, expirySupplie
 		_ = raw.Rollback()
 		return IssuedToken{}, err
 	}
+	ciphertext, err := s.encryptPlaintext(issued.Plaintext)
+	if err != nil {
+		_ = raw.Rollback()
+		return IssuedToken{}, err
+	}
+	if ciphertext != "" {
+		if _, err := raw.Exec(`UPDATE subscription_tokens SET token_ciphertext=? WHERE id=?`, ciphertext, issued.Token.ID); err != nil {
+			_ = raw.Rollback()
+			return IssuedToken{}, fmt.Errorf("client: persist rotated token: %w", err)
+		}
+		issued.Token.HasSecret = true
+	}
 	if err := raw.Commit(); err != nil {
 		return IssuedToken{}, err
 	}
@@ -333,7 +361,68 @@ func (s *TokenStore) ListForClient(clientID string) ([]SubscriptionToken, error)
 		}
 		out = append(out, t)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	s.markRecoverableSecrets(clientID, out)
+	return out, nil
+}
+
+func (s *TokenStore) markRecoverableSecrets(clientID string, tokens []SubscriptionToken) {
+	if len(tokens) == 0 {
+		return
+	}
+	rows, err := s.db.Query(`SELECT id FROM subscription_tokens WHERE client_id=? AND token_ciphertext IS NOT NULL AND token_ciphertext<>''`, clientID)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	have := map[string]struct{}{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return
+		}
+		have[id] = struct{}{}
+	}
+	for i := range tokens {
+		_, tokens[i].HasSecret = have[tokens[i].ID]
+	}
+}
+
+func (s *TokenStore) encryptPlaintext(plaintext string) (string, error) {
+	if s == nil || s.cipher == nil || plaintext == "" {
+		return "", nil
+	}
+	value, err := s.cipher.Encrypt(plaintext)
+	if err != nil {
+		return "", fmt.Errorf("client: encrypt token: %w", err)
+	}
+	return value, nil
+}
+
+// Reveal decrypts the stored subscription token so the panel can rebuild the
+// URL and QR after the original issue response is gone.
+func (s *TokenStore) Reveal(id string) (string, error) {
+	if s == nil || s.cipher == nil {
+		return "", ErrSecretUnavailable
+	}
+	var ciphertext sql.NullString
+	err := s.db.QueryRow(`SELECT token_ciphertext FROM subscription_tokens WHERE id=? AND revoked_at IS NULL`, id).Scan(&ciphertext)
+	if err == sql.ErrNoRows {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("client: reveal token: %w", err)
+	}
+	if !ciphertext.Valid || ciphertext.String == "" {
+		return "", ErrSecretUnavailable
+	}
+	plaintext, err := s.cipher.Decrypt(ciphertext.String)
+	if err != nil {
+		return "", fmt.Errorf("client: decrypt token: %w", err)
+	}
+	return plaintext, nil
 }
 
 // --- transactional variants used by the unified mutation orchestration ---

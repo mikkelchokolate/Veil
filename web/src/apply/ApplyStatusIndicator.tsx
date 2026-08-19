@@ -21,7 +21,17 @@ export function useApplyState() {
 	return useQuery<ApplyState>({
 		queryKey: ["apply", "state"],
 		queryFn: () => apiFetch<ApplyState>("/api/apply/state"),
-		refetchInterval: 5000,
+		refetchInterval: (query) => {
+			const state = query.state.data?.state;
+			if (
+				state === "pending" ||
+				state === "applying" ||
+				state === "rolling_back"
+			) {
+				return 1000;
+			}
+			return 5000;
+		},
 	});
 }
 

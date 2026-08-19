@@ -704,6 +704,13 @@ WHEN NEW.target_generation<=0 OR length(NEW.target_payload_hash)<>64 OR NEW.stat
 BEGIN SELECT RAISE(ABORT,'invalid expiration enforcement target'); END;
 `,
 	},
+	{
+		version: 27,
+		name:    "subscription_token_ciphertext",
+		sql: `
+ALTER TABLE subscription_tokens ADD COLUMN token_ciphertext TEXT NOT NULL DEFAULT '';
+`,
+	},
 }
 
 func migrationChecksum(m migration) string {

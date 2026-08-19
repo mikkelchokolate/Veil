@@ -22,6 +22,7 @@ const (
 	OperationBackupRead         Operation = "backup_read"
 	OperationBackupPrune        Operation = "backup_prune"
 	OperationBackupRestore      Operation = "backup_restore"
+	OperationBackupDelete       Operation = "backup_delete"
 	OperationRotateKey          Operation = "rotate_key"
 	OperationRecoverKeyRotation Operation = "recover_key_rotation"
 	OperationFirewallApply      Operation = "firewall_apply"
@@ -43,6 +44,7 @@ func (o Operation) Valid() bool {
 		OperationBackupRead,
 		OperationBackupPrune,
 		OperationBackupRestore,
+		OperationBackupDelete,
 		OperationRotateKey,
 		OperationRecoverKeyRotation,
 		OperationFirewallApply,
@@ -76,6 +78,7 @@ const (
 	BackupActionRead    BackupAction = "read"
 	BackupActionPrune   BackupAction = "prune"
 	BackupActionRestore BackupAction = "restore"
+	BackupActionDelete  BackupAction = "delete"
 )
 
 type FenceToken struct {
@@ -325,7 +328,7 @@ func (r RequestEnvelope) payloadMatchesOperation() bool {
 		return r.ServiceStatus != nil
 	case OperationJournal:
 		return r.Journal != nil
-	case OperationBackupCreate, OperationBackupList, OperationBackupVerify, OperationBackupRead, OperationBackupPrune, OperationBackupRestore:
+	case OperationBackupCreate, OperationBackupList, OperationBackupVerify, OperationBackupRead, OperationBackupPrune, OperationBackupRestore, OperationBackupDelete:
 		return r.Backup != nil
 	case OperationRotateKey:
 		return r.RotateKey != nil

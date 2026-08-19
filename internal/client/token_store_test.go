@@ -4,6 +4,29 @@ import (
 	"testing"
 )
 
+func TestTokenRevealRebuildsPlaintextWhenCipherIsConfigured(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+	ts := NewTokenStore(db).WithCipher(newTestCipher(t))
+	c, _ := repo.Create(Client{Name: "alice", Enabled: true, QuotaResetPolicy: ResetNever})
+	issued, err := ts.Issue(c.ID, "phone", nil)
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	got, err := ts.Reveal(issued.Token.ID)
+	if err != nil {
+		t.Fatalf("reveal: %v", err)
+	}
+	if got != issued.Plaintext {
+		t.Fatalf("reveal = %q, want %q", got, issued.Plaintext)
+	}
+	listed, err := ts.ListForClient(c.ID)
+	if err != nil || len(listed) != 1 || !listed[0].HasSecret {
+		t.Fatalf("list hasSecret = %+v err=%v", listed, err)
+	}
+}
+
 func TestTokenIssuedHashedOnlyPlaintextShownOnce(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()

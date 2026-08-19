@@ -55,6 +55,7 @@ export function BackupsPage() {
 		Record<string, VerifyResult>
 	>({});
 	const [confirmRestore, setConfirmRestore] = useState<string | null>(null);
+	const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 	const [activeJob, setActiveJob] = useState<RestoreJob | null>(null);
 
 	const backups = useQuery<{ items?: BackupArchive[] } | BackupArchive[]>({
@@ -123,6 +124,21 @@ export function BackupsPage() {
 		},
 		onError: (e) =>
 			setError(e instanceof ApiError ? e.message : t("backups.error.verify")),
+	});
+
+	const remove = useMutation({
+		mutationFn: (name: string) =>
+			apiFetch(`/api/backups/${encodeURIComponent(name)}`, {
+				method: "DELETE",
+			}),
+		onSuccess: () => {
+			setConfirmDelete(null);
+			setError(null);
+			setNotice(t("backups.notice.deleted"));
+			void qc.invalidateQueries({ queryKey: ["backups"] });
+		},
+		onError: (e) =>
+			setError(e instanceof ApiError ? e.message : t("backups.error.delete")),
 	});
 
 	const restore = useMutation({
@@ -306,6 +322,13 @@ export function BackupsPage() {
 														>
 															{t("backups.restore")}
 														</Button>
+														<Button
+															size="sm"
+															variant="danger"
+															onClick={() => setConfirmDelete(b.name)}
+														>
+															{t("common.delete")}
+														</Button>
 													</div>
 												</TableCell>
 											) : null}
@@ -317,6 +340,38 @@ export function BackupsPage() {
 					</Table>
 				)}
 			</div>
+
+			<AlertDialog
+				open={confirmDelete !== null}
+				onOpenChange={(open) => {
+					if (!open) setConfirmDelete(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							{t("backups.deleteConfirmTitle")}
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							{t("backups.deleteConfirmDescription", {
+								name: confirmDelete ?? "",
+							})}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={remove.isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								if (confirmDelete) remove.mutate(confirmDelete);
+							}}
+						>
+							{remove.isPending ? t("backups.deleting") : t("common.delete")}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 
 			<AlertDialog
 				open={confirmRestore !== null}

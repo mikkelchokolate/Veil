@@ -769,6 +769,50 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
       x-roles:
       - admin
+  /api/backups/{name}:
+    parameters:
+    - $ref: '#/components/parameters/BackupName'
+    delete:
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-veil-role: admin-mutation
+      tags:
+      - backups
+      summary: Delete one managed encrypted archive
+      description: Requires admin and CSRF for a cookie session.
+      security:
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
+      responses:
+        '200':
+          description: Archive deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/backups/{name}/download:
     parameters:
     - $ref: '#/components/parameters/BackupName'
@@ -3136,6 +3180,39 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
       x-roles:
       - admin
+  /api/v1/clients/{id}/links:
+    get:
+      x-veil-role: admin-secret
+      tags:
+      - clients
+      summary: Connection URIs and configs for one client
+      description: Rebuilds protocol URIs from stored credentials so the panel can show link and QR after creation.
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      parameters:
+      - $ref: '#/components/parameters/ClientId'
+      responses:
+        '200':
+          description: Client connection links.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ClientLink'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      x-roles:
+      - admin
   /api/v1/clients/{id}/tokens:
     get:
       x-veil-role: admin-metadata
@@ -3193,6 +3270,37 @@ paths:
       x-roles:
       - admin
   /api/v1/clients/{id}/tokens/{tokenId}:
+    get:
+      x-veil-role: admin-secret
+      tags:
+      - clients
+      summary: Rebuild the subscription URL for a stored token
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      parameters:
+      - $ref: '#/components/parameters/ClientId'
+      - name: tokenId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Subscription URL rebuilt from the encrypted token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionTokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      x-roles:
+      - admin
     delete:
       x-veil-role: admin-mutation
       tags:
