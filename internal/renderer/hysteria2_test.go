@@ -22,6 +22,7 @@ func TestRenderHysteria2RecommendedConfig(t *testing.T) {
 		"type: proxy",
 		"url: https://www.bing.com/",
 		"rewriteHost: true",
+		"speedTest: true",
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Fatalf("rendered config missing %q:\n%s", want, cfg)

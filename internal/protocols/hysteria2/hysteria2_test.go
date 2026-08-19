@@ -91,6 +91,7 @@ func TestRenderConfigWithInbound(t *testing.T) {
 		"url: https://example.com",
 		"cert: " + paths.PanelCertPath(),
 		"key: " + paths.PanelKeyPath(),
+		"speedTest: true",
 	} {
 		if !strings.Contains(artifacts[0].Body, want) {
 			t.Errorf("rendered config missing %q:\n%s", want, artifacts[0].Body)

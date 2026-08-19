@@ -68,6 +68,9 @@ type hysteria2YAML struct {
 		Listen string `yaml:"listen"`
 		Secret string `yaml:"secret"`
 	} `yaml:"trafficStats,omitempty"`
+	// speedTest lets the official Hysteria client measure the QUIC path
+	// directly (not Ookla through proxied TCP).
+	SpeedTest bool `yaml:"speedTest"`
 }
 
 type hysteria2OutboundYAML struct {
@@ -126,6 +129,7 @@ func RenderHysteria2(cfg Hysteria2Config) (string, error) {
 	doc.Masquerade.Type = "proxy"
 	doc.Masquerade.Proxy.URL = cfg.MasqueradeURL
 	doc.Masquerade.Proxy.RewriteHost = true
+	doc.SpeedTest = true
 	if cfg.Upstream != "" {
 		acl := renderHysteria2ACL(cfg)
 		if len(acl) > 0 {
