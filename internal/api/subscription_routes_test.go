@@ -226,13 +226,14 @@ func TestClientLinksAndTokenRevealStayAvailableAfterIssue(t *testing.T) {
 		Items []struct {
 			ID        string `json:"id"`
 			HasSecret bool   `json:"hasSecret"`
+			URL       string `json:"url"`
 		} `json:"items"`
 	}
 	if err := json.Unmarshal(listed.Body.Bytes(), &tokenList); err != nil || len(tokenList.Items) != 1 {
 		t.Fatalf("token list: %v body=%s", err, listed.Body.String())
 	}
-	if !tokenList.Items[0].HasSecret {
-		t.Fatalf("issued token should keep a recoverable secret: %s", listed.Body.String())
+	if !tokenList.Items[0].HasSecret || !strings.Contains(tokenList.Items[0].URL, "/s/") {
+		t.Fatalf("list must include a recoverable subscription URL after reload: %s", listed.Body.String())
 	}
 	revealed := v1Request(t, r, http.MethodGet, "/api/v1/clients/"+clientID+"/tokens/"+tokenList.Items[0].ID, "")
 	if revealed.Code != http.StatusOK {

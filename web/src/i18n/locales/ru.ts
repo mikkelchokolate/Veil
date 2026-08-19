@@ -314,6 +314,10 @@ export const ru: Record<string, string> = {
 	"clientTraffic.collected": "Собрано в {at}",
 
 	"subTokens.title": "Токены подписки",
+	"subTokens.alwaysAvailable":
+		"У каждого токена URL и QR остаются после перезагрузки страницы. Ротация заменяет URL.",
+	"subTokens.urlUnavailable":
+		"Этот токен создан до сохранения ссылок. Нажмите «Ротировать», чтобы получить URL и QR.",
 	"subTokens.issuedTitle": "URL подписки",
 	"subTokens.revealedTitle": "URL подписки",
 	"subTokens.url": "URL подписки",

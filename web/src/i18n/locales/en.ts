@@ -358,6 +358,10 @@ export const en: Record<string, string> = {
 	"clientTraffic.collected": "Collected {at}",
 
 	"subTokens.title": "Subscription tokens",
+	"subTokens.alwaysAvailable":
+		"Each token keeps its URL and QR after you reload. Rotating a token replaces the URL.",
+	"subTokens.urlUnavailable":
+		"This token was issued before links could be stored. Rotate it to get a URL and QR.",
 	"subTokens.issuedTitle": "Subscription URL",
 	"subTokens.revealedTitle": "Subscription URL",
 	"subTokens.url": "Subscription URL",

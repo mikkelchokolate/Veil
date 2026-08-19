@@ -16,6 +16,7 @@ interface SubscriptionToken {
 	revokedAt?: number;
 	lastUsedAt?: number;
 	hasSecret?: boolean;
+	url?: string;
 }
 
 interface IssuedToken {
@@ -29,18 +30,60 @@ function fmtTime(ts?: number): string {
 	return new Date(ts * 1000).toLocaleDateString();
 }
 
-/** B8: subscription token management for a client. List / create / rotate /
- * revoke. One-time plaintext + subscription URL + QR shown once at issue or
- * rotate. Never persisted. */
+function absoluteSubURL(url: string): string {
+	if (url.startsWith("http://") || url.startsWith("https://")) {
+		return url;
+	}
+	return `${location.origin}${url.startsWith("/") ? url : `/${url}`}`;
+}
+
+function TokenLink({
+	url,
+	copied,
+	onCopy,
+}: {
+	url: string;
+	copied: boolean;
+	onCopy: (text: string) => void;
+}) {
+	const { t } = useI18n();
+	const abs = absoluteSubURL(url);
+	return (
+		<div
+			style={{
+				display: "flex",
+				gap: 20,
+				alignItems: "flex-start",
+				flexWrap: "wrap",
+				marginTop: 12,
+			}}
+		>
+			<QR value={abs} />
+			<div style={{ flex: 1, minWidth: 240 }}>
+				<div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
+					{t("subTokens.urlLabel")}
+				</div>
+				<code className="mono" style={{ wordBreak: "break-all", fontSize: 12 }}>
+					{abs}
+				</code>
+				<div style={{ marginTop: 12 }}>
+					<button type="button" className="btn" onClick={() => onCopy(abs)}>
+						{copied ? t("subTokens.copied") : t("subTokens.copyUrl")}
+					</button>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+/** Subscription tokens: URL and QR stay on each token after reload. */
 export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 	const { t } = useI18n();
 	const isAdmin = useIsAdmin();
 	const qc = useQueryClient();
 	const [label, setLabel] = useState("");
-	const [issued, setIssued] = useState<IssuedToken | null>(null);
-	const [revealed, setRevealed] = useState<IssuedToken | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	const [copied, setCopied] = useState(false);
+	const [copied, setCopied] = useState<string | null>(null);
 
 	const tokens = useQuery<{ items: SubscriptionToken[] }>({
 		queryKey: ["clients", clientId, "tokens"],
@@ -53,8 +96,7 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 				method: "POST",
 				body: JSON.stringify({ label }),
 			}),
-		onSuccess: (res) => {
-			setIssued(res);
+		onSuccess: () => {
 			setLabel("");
 			setError(null);
 			void qc.invalidateQueries({ queryKey: ["clients", clientId, "tokens"] });
@@ -73,28 +115,13 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 					method: "POST",
 				},
 			),
-		onSuccess: (res) => {
-			setIssued(res);
+		onSuccess: () => {
 			setError(null);
 			void qc.invalidateQueries({ queryKey: ["clients", clientId, "tokens"] });
 		},
 		onError: (err) =>
 			setError(
 				err instanceof ApiError ? err.message : t("subTokens.error.rotate"),
-			),
-	});
-
-	const reveal = useMutation({
-		mutationFn: (tokenId: string) =>
-			apiFetch<IssuedToken>(`/api/v1/clients/${clientId}/tokens/${tokenId}`),
-		onSuccess: (res) => {
-			setRevealed(res);
-			setIssued(null);
-			setError(null);
-		},
-		onError: (err) =>
-			setError(
-				err instanceof ApiError ? err.message : t("subTokens.error.reveal"),
 			),
 	});
 
@@ -113,90 +140,24 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 			),
 	});
 
-	const shown = issued ?? revealed;
-	const subURL =
-		shown?.url ?? (shown?.plaintext ? `/s/${shown.plaintext}` : null);
-
 	async function copy(text: string) {
 		try {
 			await navigator.clipboard.writeText(text);
-			setCopied(true);
-			setTimeout(() => setCopied(false), 1500);
+			setCopied(text);
+			setTimeout(() => setCopied(null), 1500);
 		} catch {
 			/* clipboard unavailable */
 		}
 	}
 
+	const items = tokens.data?.items ?? [];
+
 	return (
 		<div className="card">
 			<h2>{t("subTokens.title")}</h2>
-
-			{shown && subURL ? (
-				<div className="card" style={{ borderColor: "var(--border-hover)" }}>
-					<h2 style={{ fontSize: 14 }}>
-						{issued ? t("subTokens.issuedTitle") : t("subTokens.revealedTitle")}
-					</h2>
-					<div
-						style={{
-							display: "flex",
-							gap: 20,
-							alignItems: "flex-start",
-							flexWrap: "wrap",
-						}}
-					>
-						<QR
-							value={
-								subURL.startsWith("http")
-									? subURL
-									: `${location.origin}${subURL}`
-							}
-						/>
-						<div style={{ flex: 1, minWidth: 240 }}>
-							<div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
-								{t("subTokens.urlLabel")}
-							</div>
-							<code
-								className="mono"
-								style={{ wordBreak: "break-all", fontSize: 12 }}
-							>
-								{subURL.startsWith("http")
-									? subURL
-									: `${location.origin}${subURL}`}
-							</code>
-							<div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-								<button
-									type="button"
-									className="btn"
-									onClick={() =>
-										void copy(
-											subURL.startsWith("http")
-												? subURL
-												: `${location.origin}${subURL}`,
-										)
-									}
-								>
-									{copied ? t("subTokens.copied") : t("subTokens.copyUrl")}
-								</button>
-								<button
-									type="button"
-									className="btn"
-									onClick={() => {
-										setIssued(null);
-										setRevealed(null);
-									}}
-								>
-									{t("subTokens.dismiss")}
-								</button>
-							</div>
-							<p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-								{issued
-									? t("subTokens.issuedNote")
-									: t("subTokens.revealedNote")}
-							</p>
-						</div>
-					</div>
-				</div>
-			) : null}
+			<p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+				{t("subTokens.alwaysAvailable")}
+			</p>
 
 			{error ? <p className="form-error">{error}</p> : null}
 
@@ -222,91 +183,77 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 
 			{tokens.isLoading ? (
 				<p className="muted">{t("common.loading")}</p>
+			) : items.length === 0 ? (
+				<p className="muted">{t("subTokens.empty")}</p>
 			) : (
-				<div className="table-container">
-					<table className="data-table">
-						<thead>
-							<tr>
-								<th>{t("subTokens.label")}</th>
-								<th>{t("subTokens.prefix")}</th>
-								<th>{t("common.status")}</th>
-								<th>{t("common.created")}</th>
-								<th>{t("subTokens.lastUsed")}</th>
-								<th>{t("subTokens.expires")}</th>
-								{isAdmin ? <th /> : null}
-							</tr>
-						</thead>
-						<tbody>
-							{(tokens.data?.items ?? []).length === 0 ? (
-								<tr>
-									<td colSpan={isAdmin ? 7 : 6} className="muted">
-										{t("subTokens.empty")}
-									</td>
-								</tr>
+				<div className="form-stack">
+					{items.map((tok) => (
+						<div
+							key={tok.id}
+							style={{
+								border: "1px solid var(--border)",
+								padding: 12,
+							}}
+						>
+							<div
+								style={{
+									display: "flex",
+									gap: 12,
+									alignItems: "center",
+									flexWrap: "wrap",
+								}}
+							>
+								<strong>{tok.label || tok.prefix}</strong>
+								{tok.revokedAt ? (
+									<span className="badge badge-danger">
+										{t("subTokens.status.revoked")}
+									</span>
+								) : tok.enabled ? (
+									<span className="badge badge-success">
+										{t("subTokens.status.active")}
+									</span>
+								) : (
+									<span className="badge">
+										{t("subTokens.status.disabled")}
+									</span>
+								)}
+								<span className="muted" style={{ fontSize: 12 }}>
+									{t("common.created")}: {fmtTime(tok.createdAt)}
+								</span>
+								{isAdmin && !tok.revokedAt ? (
+									<span style={{ marginLeft: "auto", whiteSpace: "nowrap" }}>
+										<button
+											type="button"
+											className="btn"
+											disabled={rotate.isPending}
+											onClick={() => rotate.mutate(tok.id)}
+										>
+											{t("subTokens.rotate")}
+										</button>{" "}
+										<button
+											type="button"
+											className="btn btn-danger"
+											disabled={revoke.isPending}
+											onClick={() => revoke.mutate(tok.id)}
+										>
+											{t("subTokens.revoke")}
+										</button>
+									</span>
+								) : null}
+							</div>
+							{tok.revokedAt ? null : tok.url ? (
+								<TokenLink
+									url={tok.url}
+									copied={copied === absoluteSubURL(tok.url)}
+									onCopy={(text) => void copy(text)}
+								/>
 							) : (
-								(tokens.data?.items ?? []).map((tok) => (
-									<tr key={tok.id}>
-										<td>{tok.label || <span className="muted">—</span>}</td>
-										<td className="mono muted">{tok.prefix}…</td>
-										<td>
-											{tok.revokedAt ? (
-												<span className="badge badge-danger">
-													{t("subTokens.status.revoked")}
-												</span>
-											) : tok.enabled ? (
-												<span className="badge badge-success">
-													{t("subTokens.status.active")}
-												</span>
-											) : (
-												<span className="badge">
-													{t("subTokens.status.disabled")}
-												</span>
-											)}
-										</td>
-										<td className="muted">{fmtTime(tok.createdAt)}</td>
-										<td className="muted">{fmtTime(tok.lastUsedAt)}</td>
-										<td className="muted">{fmtTime(tok.expiresAt)}</td>
-										{isAdmin ? (
-											<td style={{ whiteSpace: "nowrap" }}>
-												{!tok.revokedAt ? (
-													<>
-														{tok.hasSecret ? (
-															<>
-																<button
-																	type="button"
-																	className="btn"
-																	disabled={reveal.isPending}
-																	onClick={() => reveal.mutate(tok.id)}
-																>
-																	{t("subTokens.showLink")}
-																</button>{" "}
-															</>
-														) : null}
-														<button
-															type="button"
-															className="btn"
-															disabled={rotate.isPending}
-															onClick={() => rotate.mutate(tok.id)}
-														>
-															{t("subTokens.rotate")}
-														</button>{" "}
-														<button
-															type="button"
-															className="btn btn-danger"
-															disabled={revoke.isPending}
-															onClick={() => revoke.mutate(tok.id)}
-														>
-															{t("subTokens.revoke")}
-														</button>
-													</>
-												) : null}
-											</td>
-										) : null}
-									</tr>
-								))
+								<p className="muted" style={{ fontSize: 13, marginTop: 12 }}>
+									{t("subTokens.urlUnavailable")}
+								</p>
 							)}
-						</tbody>
-					</table>
+						</div>
+					))}
 				</div>
 			)}
 		</div>

@@ -366,7 +366,22 @@ func (s *managementState) handleV1ClientTokens(w http.ResponseWriter, r *http.Re
 			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, map[string]any{"items": tokens})
+		type tokenView struct {
+			client.SubscriptionToken
+			URL string `json:"url,omitempty"`
+		}
+		items := make([]tokenView, 0, len(tokens))
+		for _, tok := range tokens {
+			item := tokenView{SubscriptionToken: tok}
+			if tok.RevokedAt == nil && tok.HasSecret {
+				plaintext, revealErr := s.tokenStore.Reveal(tok.ID)
+				if revealErr == nil {
+					item.URL = s.subscriptionURLFor(plaintext)
+				}
+			}
+			items = append(items, item)
+		}
+		writeJSON(w, map[string]any{"items": items})
 	case http.MethodPost:
 		var req struct {
 			Label     string `json:"label"`
