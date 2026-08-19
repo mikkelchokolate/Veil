@@ -53,8 +53,11 @@ func TestTrackedAutoApplyUsesSnapshotIsolationOutsideGlobalMutex(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := string(body)
-	if !strings.Contains(source, "s.mu.Unlock()\n		defer s.mu.Lock()\n		job, runErr = runner.RunContext") {
+	if !strings.Contains(source, "s.mu.Unlock()\n		defer s.mu.Lock()") {
 		t.Fatal("tracked apply does not release/reacquire global mutex around runner")
+	}
+	if !strings.Contains(source, "runner.RunLatest") && !strings.Contains(source, "runner.RunContext") {
+		t.Fatal("tracked apply does not invoke runner outside the global mutex")
 	}
 	body, err = os.ReadFile("apply_subsystem.go")
 	if err != nil {

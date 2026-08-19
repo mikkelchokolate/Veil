@@ -148,6 +148,7 @@ if ! curl --fail --silent -X POST -H 'X-Veil-Token: browser-e2e-token' \
 fi
 
 ci_step "playwright"
+pw_status=0
 (
   cd test/browser
   export VEIL_BROWSER_BASE_URL=http://127.0.0.1:2096
@@ -157,10 +158,14 @@ ci_step "playwright"
   export VEIL_BROWSER_PASSWORD='Browser-E2E-Password-123!'
   export VEIL_BROWSER_API_TOKEN=browser-e2e-token
   node_modules/.bin/playwright test
-)
+) || pw_status=$?
 
-# Preserve diagnostics.
+# Preserve diagnostics even when Playwright fails (set -e would skip this).
 cp -rf test/browser/playwright-report "${WORK}/" 2>/dev/null || true
 cp -rf test/browser/test-results "${WORK}/" 2>/dev/null || true
+
+if [ "${pw_status}" -ne 0 ]; then
+  exit "${pw_status}"
+fi
 
 ci_log "browser-e2e job passed"

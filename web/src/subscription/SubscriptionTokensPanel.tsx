@@ -190,6 +190,7 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 					{items.map((tok) => (
 						<div
 							key={tok.id}
+							data-testid="subscription-token"
 							style={{
 								border: "1px solid var(--border)",
 								padding: 12,

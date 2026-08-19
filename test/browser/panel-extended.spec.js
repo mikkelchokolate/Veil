@@ -319,8 +319,13 @@ test.describe('Veil Panel — extended critical flows', () => {
       await page.getByPlaceholder(/label/i).fill(`e2e-label-${stamp}`);
       await page.getByRole('button', { name: /create token/i }).click();
 
-      // Plaintext URL shown exactly once.
-      const urlEl = page.locator('code.mono').filter({ hasText: '/s/' }).first();
+      const tokenCard = page.getByTestId('subscription-token').filter({
+        hasText: `e2e-label-${stamp}`,
+      });
+      await expect(tokenCard).toBeVisible({ timeout: 10_000 });
+      await expect(tokenCard.getByText(/^active$/i)).toBeVisible({ timeout: 10_000 });
+
+      const urlEl = tokenCard.locator('code.mono').filter({ hasText: '/s/' }).first();
       await expect(urlEl).toBeVisible({ timeout: 10_000 });
       const subURL = (await urlEl.textContent()).trim();
       expect(subURL).toContain('/s/');
@@ -330,8 +335,6 @@ test.describe('Veil Panel — extended critical flows', () => {
       expect(live.status(), `live token fetch: ${live.status()}`).toBe(200);
 
       // …until revoked.
-      const tokenRow = page.getByRole('row').filter({ hasText: `e2e-label-${stamp}` });
-      await expect(tokenRow.getByText(/^active$/i)).toBeVisible({ timeout: 10_000 });
       const revoked = page.waitForResponse((response) => {
         const path = new URL(response.url()).pathname;
         return (
@@ -339,10 +342,10 @@ test.describe('Veil Panel — extended critical flows', () => {
           path.startsWith(`/api/v1/clients/${created.id}/tokens/`)
         );
       });
-      await tokenRow.getByRole('button', { name: /^revoke$/i }).click();
+      await tokenCard.getByRole('button', { name: /^revoke$/i }).click();
       const revokedResponse = await revoked;
       expect(revokedResponse.status(), 'token revoke API must complete').toBe(200);
-      await expect(tokenRow.locator('.badge-danger')).toBeVisible({ timeout: 10_000 });
+      await expect(tokenCard.locator('.badge-danger')).toBeVisible({ timeout: 10_000 });
       const dead = await request.get(subURL);
       expect(dead.status(), 'revoked token must 404 (oracle-safe)').toBe(404);
     } finally {
