@@ -52,7 +52,9 @@ export function RevealLink({
 				<code className="mono" style={{ wordBreak: "break-all", fontSize: 12 }}>
 					{value}
 				</code>
-				<div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+				<div
+					style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}
+				>
 					<button type="button" className="btn" onClick={() => onCopy(value)}>
 						{copied ? copiedLabel : copyLabel}
 					</button>
