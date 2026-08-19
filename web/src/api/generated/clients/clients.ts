@@ -67,7 +67,10 @@ import type {
   ClientPatchRequest,
   ClientView,
   ConflictResponse,
+  ForbiddenResponse,
+  GetApiV1ClientsIdLinks200,
   LockedResponse,
+  NotFoundResponse,
   PatchApiV1ClientsIdBindingsBindingIdBody,
   PostApiV1ClientsBulkBody,
   PostApiV1ClientsIdBindingsBody,
@@ -77,6 +80,7 @@ import type {
   PostApiV1ClientsIdTokensTokenIdRotateBody,
   ServiceUnavailableResponse,
   SubscriptionTokenResponse,
+  UnauthorizedResponse,
   ValidationFailedResponse
 } from '../models';
 
@@ -1772,7 +1776,107 @@ export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof delete
 
 
 
-export type getApiV1ClientsIdTokensResponse200 = {
+export type getApiV1ClientsIdLinksResponse200 = {
+  data: GetApiV1ClientsIdLinks200
+  status: 200
+}
+
+export type getApiV1ClientsIdLinksResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getApiV1ClientsIdLinksResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getApiV1ClientsIdLinksResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getApiV1ClientsIdLinksResponseSuccess = (getApiV1ClientsIdLinksResponse200) & {
+  headers: Headers;
+};
+export type getApiV1ClientsIdLinksResponseError = (getApiV1ClientsIdLinksResponse401 | getApiV1ClientsIdLinksResponse403 | getApiV1ClientsIdLinksResponse404) & {
+  headers: Headers;
+};
+
+export type getApiV1ClientsIdLinksResponse = (getApiV1ClientsIdLinksResponseSuccess | getApiV1ClientsIdLinksResponseError)
+
+export const getGetApiV1ClientsIdLinksUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/clients/${id}/links`
+}
+
+/**
+ * Rebuilds protocol URIs from stored credentials so the panel can show link and QR after creation.
+ * @summary Connection URIs and configs for one client
+ */
+export const getApiV1ClientsIdLinks = async (id: string, options?: RequestInit): Promise<getApiV1ClientsIdLinksResponse> => {
+
+  return apiFetch<getApiV1ClientsIdLinksResponse>(getGetApiV1ClientsIdLinksUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1ClientsIdLinksMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['getApiV1ClientsIdLinks'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  getApiV1ClientsIdLinks(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1ClientsIdLinksMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>>
+
+    export type GetApiV1ClientsIdLinksMutationError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+
+    /**
+ * @summary Connection URIs and configs for one client
+ */
+export const useGetApiV1ClientsIdLinks = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getGetApiV1ClientsIdLinksMutationOptions(options), queryClient);
+    }
+    export type getApiV1ClientsIdTokensResponse200 = {
   data: void
   status: 200
 }
@@ -1995,7 +2099,108 @@ export function usePostApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof po
 
 
 
-export type deleteApiV1ClientsIdTokensTokenIdResponse200 = {
+export type getApiV1ClientsIdTokensTokenIdResponse200 = {
+  data: SubscriptionTokenResponse
+  status: 200
+}
+
+export type getApiV1ClientsIdTokensTokenIdResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getApiV1ClientsIdTokensTokenIdResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getApiV1ClientsIdTokensTokenIdResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getApiV1ClientsIdTokensTokenIdResponseSuccess = (getApiV1ClientsIdTokensTokenIdResponse200) & {
+  headers: Headers;
+};
+export type getApiV1ClientsIdTokensTokenIdResponseError = (getApiV1ClientsIdTokensTokenIdResponse401 | getApiV1ClientsIdTokensTokenIdResponse403 | getApiV1ClientsIdTokensTokenIdResponse404) & {
+  headers: Headers;
+};
+
+export type getApiV1ClientsIdTokensTokenIdResponse = (getApiV1ClientsIdTokensTokenIdResponseSuccess | getApiV1ClientsIdTokensTokenIdResponseError)
+
+export const getGetApiV1ClientsIdTokensTokenIdUrl = (id: string,
+    tokenId: string,) => {
+
+
+
+
+  return `/api/v1/clients/${id}/tokens/${tokenId}`
+}
+
+/**
+ * @summary Rebuild the subscription URL for a stored token
+ */
+export const getApiV1ClientsIdTokensTokenId = async (id: string,
+    tokenId: string, options?: RequestInit): Promise<getApiV1ClientsIdTokensTokenIdResponse> => {
+
+  return apiFetch<getApiV1ClientsIdTokensTokenIdResponse>(getGetApiV1ClientsIdTokensTokenIdUrl(id,tokenId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1ClientsIdTokensTokenIdMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError,{id: string;tokenId: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError,{id: string;tokenId: string}, TContext> => {
+
+const mutationKey = ['getApiV1ClientsIdTokensTokenId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, {id: string;tokenId: string}> = (props) => {
+          const {id,tokenId} = props ?? {};
+
+          return  getApiV1ClientsIdTokensTokenId(id,tokenId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1ClientsIdTokensTokenIdMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>>
+
+    export type GetApiV1ClientsIdTokensTokenIdMutationError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+
+    /**
+ * @summary Rebuild the subscription URL for a stored token
+ */
+export const useGetApiV1ClientsIdTokensTokenId = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError,{id: string;tokenId: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>,
+        TError,
+        {id: string;tokenId: string},
+        TContext
+      > => {
+      return useMutation(getGetApiV1ClientsIdTokensTokenIdMutationOptions(options), queryClient);
+    }
+    export type deleteApiV1ClientsIdTokensTokenIdResponse200 = {
   data: void
   status: 200
 }

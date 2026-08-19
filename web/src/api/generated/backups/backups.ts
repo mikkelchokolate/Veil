@@ -70,6 +70,7 @@ import type {
   BackupVerificationReport,
   BadRequestResponse,
   ConflictResponse,
+  DeleteApiBackupsName200,
   EmptyObject,
   ForbiddenResponse,
   LockedResponse,
@@ -487,6 +488,161 @@ export function usePostApiBackupsPrune<TData = Awaited<ReturnType<typeof postApi
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getPostApiBackupsPruneQueryOptions(backupPruneRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type deleteApiBackupsNameResponse200 = {
+  data: DeleteApiBackupsName200
+  status: 200
+}
+
+export type deleteApiBackupsNameResponse400 = {
+  data: BadRequestResponse
+  status: 400
+}
+
+export type deleteApiBackupsNameResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type deleteApiBackupsNameResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type deleteApiBackupsNameResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type deleteApiBackupsNameResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type deleteApiBackupsNameResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type deleteApiBackupsNameResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type deleteApiBackupsNameResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
+export type deleteApiBackupsNameResponseSuccess = (deleteApiBackupsNameResponse200) & {
+  headers: Headers;
+};
+export type deleteApiBackupsNameResponseError = (deleteApiBackupsNameResponse400 | deleteApiBackupsNameResponse401 | deleteApiBackupsNameResponse403 | deleteApiBackupsNameResponse404 | deleteApiBackupsNameResponse409 | deleteApiBackupsNameResponse422 | deleteApiBackupsNameResponse423 | deleteApiBackupsNameResponse503) & {
+  headers: Headers;
+};
+
+export type deleteApiBackupsNameResponse = (deleteApiBackupsNameResponseSuccess | deleteApiBackupsNameResponseError)
+
+export const getDeleteApiBackupsNameUrl = (name: string,) => {
+
+
+
+
+  return `/api/backups/${name}`
+}
+
+/**
+ * Requires admin and CSRF for a cookie session.
+ * @summary Delete one managed encrypted archive
+ */
+export const deleteApiBackupsName = async (name: string, options?: RequestInit): Promise<deleteApiBackupsNameResponse> => {
+
+  return apiFetch<deleteApiBackupsNameResponse>(getDeleteApiBackupsNameUrl(name),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiBackupsNameQueryKey = (name: string,) => {
+    return [
+    'DELETE', `/api/backups/${name}`
+    ] as const;
+    }
+
+
+export const getDeleteApiBackupsNameQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiBackupsName>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiBackupsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeleteApiBackupsNameQueryKey(name);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteApiBackupsName>>> = ({ signal }) => deleteApiBackupsName(name, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: name !== null && name !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof deleteApiBackupsName>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeleteApiBackupsNameQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiBackupsName>>>
+export type DeleteApiBackupsNameQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+
+
+export function useDeleteApiBackupsName<TData = Awaited<ReturnType<typeof deleteApiBackupsName>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
+ name: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiBackupsName>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiBackupsName>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiBackupsName>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiBackupsName<TData = Awaited<ReturnType<typeof deleteApiBackupsName>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
+ name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiBackupsName>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiBackupsName>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiBackupsName>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiBackupsName<TData = Awaited<ReturnType<typeof deleteApiBackupsName>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
+ name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiBackupsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Delete one managed encrypted archive
+ */
+
+export function useDeleteApiBackupsName<TData = Awaited<ReturnType<typeof deleteApiBackupsName>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
+ name: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiBackupsName>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDeleteApiBackupsNameQueryOptions(name,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

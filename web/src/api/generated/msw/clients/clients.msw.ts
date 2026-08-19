@@ -67,7 +67,10 @@ import type {
   ClientPatchRequest,
   ClientView,
   ConflictResponse,
+  ForbiddenResponse,
+  GetApiV1ClientsIdLinks200,
   LockedResponse,
+  NotFoundResponse,
   PatchApiV1ClientsIdBindingsBindingIdBody,
   PostApiV1ClientsBulkBody,
   PostApiV1ClientsIdBindingsBody,
@@ -77,6 +80,7 @@ import type {
   PostApiV1ClientsIdTokensTokenIdRotateBody,
   ServiceUnavailableResponse,
   SubscriptionTokenResponse,
+  UnauthorizedResponse,
   ValidationFailedResponse
 } from '../models';
 
@@ -1508,7 +1512,137 @@ export const useDeleteApiV1ClientsId = <TError = void | ConflictResponse | Valid
       > => {
       return useMutation(getDeleteApiV1ClientsIdMutationOptions(options), queryClient);
     }
-    export type getApiV1ClientsIdTokensResponse200 = {
+    export type getApiV1ClientsIdLinksResponse200 = {
+  data: GetApiV1ClientsIdLinks200
+  status: 200
+}
+
+export type getApiV1ClientsIdLinksResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getApiV1ClientsIdLinksResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getApiV1ClientsIdLinksResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getApiV1ClientsIdLinksResponseSuccess = (getApiV1ClientsIdLinksResponse200) & {
+  headers: Headers;
+};
+export type getApiV1ClientsIdLinksResponseError = (getApiV1ClientsIdLinksResponse401 | getApiV1ClientsIdLinksResponse403 | getApiV1ClientsIdLinksResponse404) & {
+  headers: Headers;
+};
+
+export type getApiV1ClientsIdLinksResponse = (getApiV1ClientsIdLinksResponseSuccess | getApiV1ClientsIdLinksResponseError)
+
+export const getGetApiV1ClientsIdLinksUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/clients/${id}/links`
+}
+
+/**
+ * Rebuilds protocol URIs from stored credentials so the panel can show link and QR after creation.
+ * @summary Connection URIs and configs for one client
+ */
+export const getApiV1ClientsIdLinks = async (id: string, options?: RequestInit): Promise<getApiV1ClientsIdLinksResponse> => {
+
+  return apiFetch<getApiV1ClientsIdLinksResponse>(getGetApiV1ClientsIdLinksUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1ClientsIdLinksQueryKey = (id: string,) => {
+    return [
+    `/api/v1/clients/${id}/links`
+    ] as const;
+    }
+
+
+export const getGetApiV1ClientsIdLinksQueryOptions = <TData = Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiV1ClientsIdLinksQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>> = ({ signal }) => getApiV1ClientsIdLinks(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiV1ClientsIdLinksQueryResult = NonNullable<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>>
+export type GetApiV1ClientsIdLinksQueryError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+
+
+export function useGetApiV1ClientsIdLinks<TData = Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1ClientsIdLinks<TData = Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1ClientsIdLinks<TData = Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Connection URIs and configs for one client
+ */
+
+export function useGetApiV1ClientsIdLinks<TData = Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiV1ClientsIdLinksQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiV1ClientsIdTokensResponse200 = {
   data: void
   status: 200
 }
@@ -1725,7 +1859,144 @@ export const usePostApiV1ClientsIdTokens = <TError = ConflictResponse | Validati
       > => {
       return useMutation(getPostApiV1ClientsIdTokensMutationOptions(options), queryClient);
     }
-    export type deleteApiV1ClientsIdTokensTokenIdResponse200 = {
+    export type getApiV1ClientsIdTokensTokenIdResponse200 = {
+  data: SubscriptionTokenResponse
+  status: 200
+}
+
+export type getApiV1ClientsIdTokensTokenIdResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getApiV1ClientsIdTokensTokenIdResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getApiV1ClientsIdTokensTokenIdResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getApiV1ClientsIdTokensTokenIdResponseSuccess = (getApiV1ClientsIdTokensTokenIdResponse200) & {
+  headers: Headers;
+};
+export type getApiV1ClientsIdTokensTokenIdResponseError = (getApiV1ClientsIdTokensTokenIdResponse401 | getApiV1ClientsIdTokensTokenIdResponse403 | getApiV1ClientsIdTokensTokenIdResponse404) & {
+  headers: Headers;
+};
+
+export type getApiV1ClientsIdTokensTokenIdResponse = (getApiV1ClientsIdTokensTokenIdResponseSuccess | getApiV1ClientsIdTokensTokenIdResponseError)
+
+export const getGetApiV1ClientsIdTokensTokenIdUrl = (id: string,
+    tokenId: string,) => {
+
+
+
+
+  return `/api/v1/clients/${id}/tokens/${tokenId}`
+}
+
+/**
+ * @summary Rebuild the subscription URL for a stored token
+ */
+export const getApiV1ClientsIdTokensTokenId = async (id: string,
+    tokenId: string, options?: RequestInit): Promise<getApiV1ClientsIdTokensTokenIdResponse> => {
+
+  return apiFetch<getApiV1ClientsIdTokensTokenIdResponse>(getGetApiV1ClientsIdTokensTokenIdUrl(id,tokenId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1ClientsIdTokensTokenIdQueryKey = (id: string,
+    tokenId: string,) => {
+    return [
+    `/api/v1/clients/${id}/tokens/${tokenId}`
+    ] as const;
+    }
+
+
+export const getGetApiV1ClientsIdTokensTokenIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(id: string,
+    tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiV1ClientsIdTokensTokenIdQueryKey(id,tokenId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>> = ({ signal }) => getApiV1ClientsIdTokensTokenId(id,tokenId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && tokenId !== null && tokenId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiV1ClientsIdTokensTokenIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>>
+export type GetApiV1ClientsIdTokensTokenIdQueryError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+
+
+export function useGetApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ id: string,
+    tokenId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ id: string,
+    tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ id: string,
+    tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Rebuild the subscription URL for a stored token
+ */
+
+export function useGetApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ id: string,
+    tokenId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiV1ClientsIdTokensTokenIdQueryOptions(id,tokenId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type deleteApiV1ClientsIdTokensTokenIdResponse200 = {
   data: void
   status: 200
 }

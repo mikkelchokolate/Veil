@@ -2009,6 +2009,12 @@ type PostApiBackupsPruneParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// DeleteApiBackupsNameParams defines parameters for DeleteApiBackupsName.
+type DeleteApiBackupsNameParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // PostApiBackupsNameRestoreParams defines parameters for PostApiBackupsNameRestore.
 type PostApiBackupsNameRestoreParams struct {
 	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
@@ -2925,6 +2931,13 @@ type ClientInterface interface {
 	// Corresponds with POST /api/backups/prune (the `PostApiBackupsPrune` operationId).
 	PostApiBackupsPrune(ctx context.Context, params *PostApiBackupsPruneParams, body PostApiBackupsPruneJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// DeleteApiBackupsName Delete one managed encrypted archive
+	//
+	// Requires admin and CSRF for a cookie session.
+	//
+	// Corresponds with DELETE /api/backups/{name} (the `DeleteApiBackupsName` operationId).
+	DeleteApiBackupsName(ctx context.Context, name BackupName, params *DeleteApiBackupsNameParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiBackupsNameDownload Download an encrypted archive
 	//
 	// Requires an admin token or admin session.
@@ -3454,6 +3467,13 @@ type ClientInterface interface {
 	// Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId}/rotate (the `PostApiV1ClientsIdCredentialsBindingIdRotate` operationId).
 	PostApiV1ClientsIdCredentialsBindingIdRotate(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdRotateParams, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetApiV1ClientsIdLinks Connection URIs and configs for one client
+	//
+	// Rebuilds protocol URIs from stored credentials so the panel can show link and QR after creation.
+	//
+	// Corresponds with GET /api/v1/clients/{id}/links (the `GetApiV1ClientsIdLinks` operationId).
+	GetApiV1ClientsIdLinks(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiV1ClientsIdTokens List a client's subscription tokens (redacted)
 	//
 	// Corresponds with GET /api/v1/clients/{id}/tokens (the `GetApiV1ClientsIdTokens` operationId).
@@ -3477,6 +3497,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with DELETE /api/v1/clients/{id}/tokens/{tokenId} (the `DeleteApiV1ClientsIdTokensTokenId` operationId).
 	DeleteApiV1ClientsIdTokensTokenId(ctx context.Context, id ClientId, tokenId string, params *DeleteApiV1ClientsIdTokensTokenIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1ClientsIdTokensTokenId Rebuild the subscription URL for a stored token
+	//
+	// Corresponds with GET /api/v1/clients/{id}/tokens/{tokenId} (the `GetApiV1ClientsIdTokensTokenId` operationId).
+	GetApiV1ClientsIdTokensTokenId(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1ClientsIdTokensTokenIdRotateWithBody Rotate a subscription token; new plaintext returned once
 	//
@@ -4132,6 +4157,23 @@ func (c *Client) PostApiBackupsPruneWithBody(ctx context.Context, params *PostAp
 // Corresponds with POST /api/backups/prune (the `PostApiBackupsPrune` operationId).
 func (c *Client) PostApiBackupsPrune(ctx context.Context, params *PostApiBackupsPruneParams, body PostApiBackupsPruneJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostApiBackupsPruneRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteApiBackupsName Delete one managed encrypted archive
+//
+// Requires admin and CSRF for a cookie session.
+//
+// Corresponds with DELETE /api/backups/{name} (the `DeleteApiBackupsName` operationId).
+func (c *Client) DeleteApiBackupsName(ctx context.Context, name BackupName, params *DeleteApiBackupsNameParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiBackupsNameRequest(c.Server, name, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5481,6 +5523,23 @@ func (c *Client) PostApiV1ClientsIdCredentialsBindingIdRotate(ctx context.Contex
 	return c.Client.Do(req)
 }
 
+// GetApiV1ClientsIdLinks Connection URIs and configs for one client
+//
+// Rebuilds protocol URIs from stored credentials so the panel can show link and QR after creation.
+//
+// Corresponds with GET /api/v1/clients/{id}/links (the `GetApiV1ClientsIdLinks` operationId).
+func (c *Client) GetApiV1ClientsIdLinks(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ClientsIdLinksRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetApiV1ClientsIdTokens List a client's subscription tokens (redacted)
 //
 // Corresponds with GET /api/v1/clients/{id}/tokens (the `GetApiV1ClientsIdTokens` operationId).
@@ -5535,6 +5594,21 @@ func (c *Client) PostApiV1ClientsIdTokens(ctx context.Context, id ClientId, para
 // Corresponds with DELETE /api/v1/clients/{id}/tokens/{tokenId} (the `DeleteApiV1ClientsIdTokensTokenId` operationId).
 func (c *Client) DeleteApiV1ClientsIdTokensTokenId(ctx context.Context, id ClientId, tokenId string, params *DeleteApiV1ClientsIdTokensTokenIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteApiV1ClientsIdTokensTokenIdRequest(c.Server, id, tokenId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetApiV1ClientsIdTokensTokenId Rebuild the subscription URL for a stored token
+//
+// Corresponds with GET /api/v1/clients/{id}/tokens/{tokenId} (the `GetApiV1ClientsIdTokensTokenId` operationId).
+func (c *Client) GetApiV1ClientsIdTokensTokenId(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ClientsIdTokensTokenIdRequest(c.Server, id, tokenId)
 	if err != nil {
 		return nil, err
 	}
@@ -6754,6 +6828,55 @@ func NewPostApiBackupsPruneRequestWithBody(server string, params *PostApiBackups
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewDeleteApiBackupsNameRequest constructs an http.Request for the DeleteApiBackupsName method
+func NewDeleteApiBackupsNameRequest(server string, name BackupName, params *DeleteApiBackupsNameParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "name", name, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/backups/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	if params != nil {
 
@@ -9344,6 +9467,40 @@ func NewPostApiV1ClientsIdCredentialsBindingIdRotateRequestWithBody(server strin
 	return req, nil
 }
 
+// NewGetApiV1ClientsIdLinksRequest constructs an http.Request for the GetApiV1ClientsIdLinks method
+func NewGetApiV1ClientsIdLinksRequest(server string, id ClientId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s/links", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetApiV1ClientsIdTokensRequest constructs an http.Request for the GetApiV1ClientsIdTokens method
 func NewGetApiV1ClientsIdTokensRequest(server string, id ClientId) (*http.Request, error) {
 	var err error
@@ -9491,6 +9648,47 @@ func NewDeleteApiV1ClientsIdTokensTokenIdRequest(server string, id ClientId, tok
 			req.Header.Set("Idempotency-Key", headerParam0)
 		}
 
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1ClientsIdTokensTokenIdRequest constructs an http.Request for the GetApiV1ClientsIdTokensTokenId method
+func NewGetApiV1ClientsIdTokensTokenIdRequest(server string, id ClientId, tokenId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "tokenId", tokenId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s/tokens/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -10523,6 +10721,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/backups/prune (the `PostApiBackupsPrune` operationId).
 	PostApiBackupsPruneWithResponse(ctx context.Context, params *PostApiBackupsPruneParams, body PostApiBackupsPruneJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsPruneResponse, error)
 
+	// DeleteApiBackupsNameWithResponse Delete one managed encrypted archive
+	//
+	// Requires admin and CSRF for a cookie session.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/backups/{name} (the `DeleteApiBackupsName` operationId).
+	DeleteApiBackupsNameWithResponse(ctx context.Context, name BackupName, params *DeleteApiBackupsNameParams, reqEditors ...RequestEditorFn) (*DeleteApiBackupsNameResponse, error)
+
 	// GetApiBackupsNameDownloadWithResponse Download an encrypted archive
 	//
 	// Requires an admin token or admin session.
@@ -11118,6 +11325,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/v1/clients/{id}/credentials/{bindingId}/rotate (the `PostApiV1ClientsIdCredentialsBindingIdRotate` operationId).
 	PostApiV1ClientsIdCredentialsBindingIdRotateWithResponse(ctx context.Context, id ClientId, bindingId string, params *PostApiV1ClientsIdCredentialsBindingIdRotateParams, body PostApiV1ClientsIdCredentialsBindingIdRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdCredentialsBindingIdRotateResponse, error)
 
+	// GetApiV1ClientsIdLinksWithResponse Connection URIs and configs for one client
+	//
+	// Rebuilds protocol URIs from stored credentials so the panel can show link and QR after creation.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/clients/{id}/links (the `GetApiV1ClientsIdLinks` operationId).
+	GetApiV1ClientsIdLinksWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdLinksResponse, error)
+
 	// GetApiV1ClientsIdTokensWithResponse List a client's subscription tokens (redacted)
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -11145,6 +11361,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with DELETE /api/v1/clients/{id}/tokens/{tokenId} (the `DeleteApiV1ClientsIdTokensTokenId` operationId).
 	DeleteApiV1ClientsIdTokensTokenIdWithResponse(ctx context.Context, id ClientId, tokenId string, params *DeleteApiV1ClientsIdTokensTokenIdParams, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdTokensTokenIdResponse, error)
+
+	// GetApiV1ClientsIdTokensTokenIdWithResponse Rebuild the subscription URL for a stored token
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/clients/{id}/tokens/{tokenId} (the `GetApiV1ClientsIdTokensTokenId` operationId).
+	GetApiV1ClientsIdTokensTokenIdWithResponse(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdTokensTokenIdResponse, error)
 
 	// PostApiV1ClientsIdTokensTokenIdRotateWithBodyWithResponse Rotate a subscription token; new plaintext returned once
 	//
@@ -12792,6 +13015,114 @@ func (r PostApiBackupsPruneResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PostApiBackupsPruneResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// DeleteApiBackupsNameResponse401Headers the declared response headers of an HTTP 401 response for DeleteApiBackupsName
+type DeleteApiBackupsNameResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type DeleteApiBackupsNameResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Deleted *string `json:"deleted,omitempty"`
+	}
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Conflict
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *ValidationFailed
+	// JSON423 the response for an HTTP 423 `application/json` response
+	JSON423 *Locked
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *DeleteApiBackupsNameResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DeleteApiBackupsNameResponse) GetJSON200() *struct {
+	Deleted *string `json:"deleted,omitempty"`
+} {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r DeleteApiBackupsNameResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r DeleteApiBackupsNameResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r DeleteApiBackupsNameResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r DeleteApiBackupsNameResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r DeleteApiBackupsNameResponse) GetJSON409() *Conflict {
+	return r.JSON409
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r DeleteApiBackupsNameResponse) GetJSON422() *ValidationFailed {
+	return r.JSON422
+}
+
+// GetJSON423 returns the response for an HTTP 423 `application/json` response
+func (r DeleteApiBackupsNameResponse) GetJSON423() *Locked {
+	return r.JSON423
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r DeleteApiBackupsNameResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteApiBackupsNameResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiBackupsNameResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiBackupsNameResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteApiBackupsNameResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -16382,6 +16713,79 @@ func (r PostApiV1ClientsIdCredentialsBindingIdRotateResponse) ContentType() stri
 	return ""
 }
 
+// GetApiV1ClientsIdLinksResponse401Headers the declared response headers of an HTTP 401 response for GetApiV1ClientsIdLinks
+type GetApiV1ClientsIdLinksResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type GetApiV1ClientsIdLinksResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Items *[]ClientLink `json:"items,omitempty"`
+	}
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetApiV1ClientsIdLinksResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiV1ClientsIdLinksResponse) GetJSON200() *struct {
+	Items *[]ClientLink `json:"items,omitempty"`
+} {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiV1ClientsIdLinksResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetApiV1ClientsIdLinksResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetApiV1ClientsIdLinksResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiV1ClientsIdLinksResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ClientsIdLinksResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ClientsIdLinksResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiV1ClientsIdLinksResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetApiV1ClientsIdTokensResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -16541,6 +16945,75 @@ func (r DeleteApiV1ClientsIdTokensTokenIdResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r DeleteApiV1ClientsIdTokensTokenIdResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetApiV1ClientsIdTokensTokenIdResponse401Headers the declared response headers of an HTTP 401 response for GetApiV1ClientsIdTokensTokenId
+type GetApiV1ClientsIdTokensTokenIdResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type GetApiV1ClientsIdTokensTokenIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SubscriptionTokenResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetApiV1ClientsIdTokensTokenIdResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiV1ClientsIdTokensTokenIdResponse) GetJSON200() *SubscriptionTokenResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiV1ClientsIdTokensTokenIdResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetApiV1ClientsIdTokensTokenIdResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetApiV1ClientsIdTokensTokenIdResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiV1ClientsIdTokensTokenIdResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ClientsIdTokensTokenIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ClientsIdTokensTokenIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiV1ClientsIdTokensTokenIdResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -17819,6 +18292,21 @@ func (c *ClientWithResponses) PostApiBackupsPruneWithResponse(ctx context.Contex
 	return ParsePostApiBackupsPruneResponse(rsp)
 }
 
+// DeleteApiBackupsNameWithResponse Delete one managed encrypted archive
+//
+// Requires admin and CSRF for a cookie session.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/backups/{name} (the `DeleteApiBackupsName` operationId).
+func (c *ClientWithResponses) DeleteApiBackupsNameWithResponse(ctx context.Context, name BackupName, params *DeleteApiBackupsNameParams, reqEditors ...RequestEditorFn) (*DeleteApiBackupsNameResponse, error) {
+	rsp, err := c.DeleteApiBackupsName(ctx, name, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiBackupsNameResponse(rsp)
+}
+
 // GetApiBackupsNameDownloadWithResponse Download an encrypted archive
 //
 // Requires an admin token or admin session.
@@ -18900,6 +19388,21 @@ func (c *ClientWithResponses) PostApiV1ClientsIdCredentialsBindingIdRotateWithRe
 	return ParsePostApiV1ClientsIdCredentialsBindingIdRotateResponse(rsp)
 }
 
+// GetApiV1ClientsIdLinksWithResponse Connection URIs and configs for one client
+//
+// Rebuilds protocol URIs from stored credentials so the panel can show link and QR after creation.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/clients/{id}/links (the `GetApiV1ClientsIdLinks` operationId).
+func (c *ClientWithResponses) GetApiV1ClientsIdLinksWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdLinksResponse, error) {
+	rsp, err := c.GetApiV1ClientsIdLinks(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ClientsIdLinksResponse(rsp)
+}
+
 // GetApiV1ClientsIdTokensWithResponse List a client's subscription tokens (redacted)
 //
 // Returns a wrapper object for the known response body format(s).
@@ -18950,6 +19453,19 @@ func (c *ClientWithResponses) DeleteApiV1ClientsIdTokensTokenIdWithResponse(ctx 
 		return nil, err
 	}
 	return ParseDeleteApiV1ClientsIdTokensTokenIdResponse(rsp)
+}
+
+// GetApiV1ClientsIdTokensTokenIdWithResponse Rebuild the subscription URL for a stored token
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/clients/{id}/tokens/{tokenId} (the `GetApiV1ClientsIdTokensTokenId` operationId).
+func (c *ClientWithResponses) GetApiV1ClientsIdTokensTokenIdWithResponse(ctx context.Context, id ClientId, tokenId string, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdTokensTokenIdResponse, error) {
+	rsp, err := c.GetApiV1ClientsIdTokensTokenId(ctx, id, tokenId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ClientsIdTokensTokenIdResponse(rsp)
 }
 
 // PostApiV1ClientsIdTokensTokenIdRotateWithBodyWithResponse Rotate a subscription token; new plaintext returned once
@@ -20469,6 +20985,103 @@ func ParsePostApiBackupsPruneResponse(rsp *http.Response) (*PostApiBackupsPruneR
 	switch {
 	case rsp.StatusCode == 401:
 		var headers PostApiBackupsPruneResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiBackupsNameResponse parses an HTTP response from a DeleteApiBackupsNameWithResponse call
+func ParseDeleteApiBackupsNameResponse(rsp *http.Response) (*DeleteApiBackupsNameResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiBackupsNameResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Deleted *string `json:"deleted,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ValidationFailed
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 423:
+		var dest Locked
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON423 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers DeleteApiBackupsNameResponse401Headers
 		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
@@ -23340,6 +23953,68 @@ func ParsePostApiV1ClientsIdCredentialsBindingIdRotateResponse(rsp *http.Respons
 	return response, nil
 }
 
+// ParseGetApiV1ClientsIdLinksResponse parses an HTTP response from a GetApiV1ClientsIdLinksWithResponse call
+func ParseGetApiV1ClientsIdLinksResponse(rsp *http.Response) (*GetApiV1ClientsIdLinksResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ClientsIdLinksResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Items *[]ClientLink `json:"items,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetApiV1ClientsIdLinksResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseGetApiV1ClientsIdTokensResponse parses an HTTP response from a GetApiV1ClientsIdTokensWithResponse call
 func ParseGetApiV1ClientsIdTokensResponse(rsp *http.Response) (*GetApiV1ClientsIdTokensResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -23455,6 +24130,66 @@ func ParseDeleteApiV1ClientsIdTokensTokenIdResponse(rsp *http.Response) (*Delete
 		}
 		response.JSON503 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1ClientsIdTokensTokenIdResponse parses an HTTP response from a GetApiV1ClientsIdTokensTokenIdWithResponse call
+func ParseGetApiV1ClientsIdTokensTokenIdResponse(rsp *http.Response) (*GetApiV1ClientsIdTokensTokenIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ClientsIdTokensTokenIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SubscriptionTokenResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetApiV1ClientsIdTokensTokenIdResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
 	}
 
 	return response, nil

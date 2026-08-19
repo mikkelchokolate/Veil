@@ -184,6 +184,31 @@ export const PostApiBackupsPruneResponse = zod.object({
 })
 
 /**
+ * Requires admin and CSRF for a cookie session.
+ * @summary Delete one managed encrypted archive
+ */
+export const deleteApiBackupsNamePathNameRegExp = new RegExp('^veil_backup_[0-9]{8}_[0-9]{6}\\.tar\\.gz\\.enc$');
+
+
+export const DeleteApiBackupsNameParams = zod.object({
+  "name": zod.string().regex(deleteApiBackupsNamePathNameRegExp)
+})
+
+export const deleteApiBackupsNameHeaderIdempotencyKeyMax = 128;
+
+
+export const deleteApiBackupsNameHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const DeleteApiBackupsNameHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(deleteApiBackupsNameHeaderIdempotencyKeyMax).regex(deleteApiBackupsNameHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
+export const DeleteApiBackupsNameResponse = zod.object({
+  "deleted": zod.string().optional()
+})
+
+/**
  * Requires an admin token or admin session.
  * @summary Download an encrypted archive
  */

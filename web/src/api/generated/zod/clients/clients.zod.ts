@@ -561,6 +561,28 @@ export const DeleteApiV1ClientsIdHeader = zod.object({
 export const DeleteApiV1ClientsIdResponse = zod.unknown()
 
 /**
+ * Rebuilds protocol URIs from stored credentials so the panel can show link and QR after creation.
+ * @summary Connection URIs and configs for one client
+ */
+
+
+
+export const GetApiV1ClientsIdLinksParams = zod.object({
+  "id": zod.string().min(1)
+})
+
+export const GetApiV1ClientsIdLinksResponse = zod.object({
+  "items": zod.array(zod.object({
+  "name": zod.string(),
+  "protocol": zod.string(),
+  "transport": zod.string(),
+  "port": zod.number(),
+  "uri": zod.string(),
+  "config": zod.string().optional()
+})).optional()
+})
+
+/**
  * @summary List a client's subscription tokens (redacted)
  */
 
@@ -598,6 +620,23 @@ export const PostApiV1ClientsIdTokensBody = zod.object({
 })
 
 export const PostApiV1ClientsIdTokensResponse = zod.object({
+  "token": zod.string().describe('Full plaintext token, returned only once at issuance.'),
+  "prefix": zod.string().describe('Public prefix used to identify the token.'),
+  "expiresAt": zod.number().optional()
+})
+
+/**
+ * @summary Rebuild the subscription URL for a stored token
+ */
+
+
+
+export const GetApiV1ClientsIdTokensTokenIdParams = zod.object({
+  "id": zod.string().min(1),
+  "tokenId": zod.string()
+})
+
+export const GetApiV1ClientsIdTokensTokenIdResponse = zod.object({
   "token": zod.string().describe('Full plaintext token, returned only once at issuance.'),
   "prefix": zod.string().describe('Public prefix used to identify the token.'),
   "expiresAt": zod.number().optional()

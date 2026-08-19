@@ -70,6 +70,7 @@ import type {
   BackupVerificationReport,
   BadRequestResponse,
   ConflictResponse,
+  DeleteApiBackupsName200,
   EmptyObject,
   ForbiddenResponse,
   LockedResponse,
@@ -467,6 +468,131 @@ export const usePostApiBackupsPrune = <TError = BadRequestResponse | Unauthorize
         TContext
       > => {
       return useMutation(getPostApiBackupsPruneMutationOptions(options), queryClient);
+    }
+    export type deleteApiBackupsNameResponse200 = {
+  data: DeleteApiBackupsName200
+  status: 200
+}
+
+export type deleteApiBackupsNameResponse400 = {
+  data: BadRequestResponse
+  status: 400
+}
+
+export type deleteApiBackupsNameResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type deleteApiBackupsNameResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type deleteApiBackupsNameResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type deleteApiBackupsNameResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type deleteApiBackupsNameResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type deleteApiBackupsNameResponse423 = {
+  data: LockedResponse
+  status: 423
+}
+
+export type deleteApiBackupsNameResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
+export type deleteApiBackupsNameResponseSuccess = (deleteApiBackupsNameResponse200) & {
+  headers: Headers;
+};
+export type deleteApiBackupsNameResponseError = (deleteApiBackupsNameResponse400 | deleteApiBackupsNameResponse401 | deleteApiBackupsNameResponse403 | deleteApiBackupsNameResponse404 | deleteApiBackupsNameResponse409 | deleteApiBackupsNameResponse422 | deleteApiBackupsNameResponse423 | deleteApiBackupsNameResponse503) & {
+  headers: Headers;
+};
+
+export type deleteApiBackupsNameResponse = (deleteApiBackupsNameResponseSuccess | deleteApiBackupsNameResponseError)
+
+export const getDeleteApiBackupsNameUrl = (name: string,) => {
+
+
+
+
+  return `/api/backups/${name}`
+}
+
+/**
+ * Requires admin and CSRF for a cookie session.
+ * @summary Delete one managed encrypted archive
+ */
+export const deleteApiBackupsName = async (name: string, options?: RequestInit): Promise<deleteApiBackupsNameResponse> => {
+
+  return apiFetch<deleteApiBackupsNameResponse>(getDeleteApiBackupsNameUrl(name),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiBackupsNameMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiBackupsName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiBackupsName>>, TError,{name: string}, TContext> => {
+
+const mutationKey = ['deleteApiBackupsName'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiBackupsName>>, {name: string}> = (props) => {
+          const {name} = props ?? {};
+
+          return  deleteApiBackupsName(name,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiBackupsNameMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiBackupsName>>>
+
+    export type DeleteApiBackupsNameMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+
+    /**
+ * @summary Delete one managed encrypted archive
+ */
+export const useDeleteApiBackupsName = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiBackupsName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiBackupsName>>,
+        TError,
+        {name: string},
+        TContext
+      > => {
+      return useMutation(getDeleteApiBackupsNameMutationOptions(options), queryClient);
     }
     export type getApiBackupsNameDownloadResponse200 = {
   data: Blob
