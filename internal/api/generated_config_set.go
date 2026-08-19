@@ -21,6 +21,7 @@ func BuildGeneratedConfigSet(input GeneratedConfigInput) (map[string]string, err
 		LiveRoot:   input.LiveRoot,
 		Settings:   input.Settings,
 		Inbounds:   input.Inbounds,
+		Rules:      input.Rules,
 		WarpConfig: input.Warp,
 		Registry:   protocols.NewGeneratedConfigRegistry(),
 		PanelAccess: func(paths generatedconfig.Paths) (generatedconfig.GeneratedConfigArtifact, bool, error) {

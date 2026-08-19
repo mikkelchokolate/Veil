@@ -163,8 +163,13 @@ export const ru: Record<string, string> = {
 	"routing.createRule": "Создать правило",
 	"routing.editRule": "Изменить {name}",
 	"routing.name": "Имя",
-	"routing.match": "Совпадение (CIDR, домен или geoip)",
+	"routing.match": "Совпадение",
+	"routing.matchHint":
+		"Как в 3x-ui, через запятую. Пример: geosite:category-gov-ru, regexp:.*\\.ru$, regexp:.*\\.su$, geoip:private",
 	"routing.outbound": "Исходящий",
+	"routing.outboundHint": "direct обходит WARP; proxy/warp отправляет остальное в WARP.",
+	"routing.warpRequired":
+		"WARP выключен, поэтому эти правила пока не меняют трафик. Hysteria2 и так выходит напрямую. Включите WARP: прямые совпадения останутся локальными, остальное пойдёт через Cloudflare.",
 	"routing.enabled": "Включено",
 	"routing.saving": "Сохранение…",
 	"routing.saveFailed": "Не удалось сохранить",

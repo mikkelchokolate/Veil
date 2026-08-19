@@ -231,8 +231,13 @@ export const en: Record<string, string> = {
 	"routing.createRule": "Create rule",
 	"routing.editRule": "Edit {name}",
 	"routing.name": "Name",
-	"routing.match": "Match (CIDR, domain, or geoip)",
+	"routing.match": "Match",
+	"routing.matchHint":
+		"3x-ui style, comma-separated. Example: geosite:category-gov-ru, regexp:.*\\.ru$, regexp:.*\\.su$, geoip:private",
 	"routing.outbound": "Outbound",
+	"routing.outboundHint": "direct bypasses WARP; proxy/warp sends the rest through WARP.",
+	"routing.warpRequired":
+		"WARP is off, so these rules do not change traffic yet. Hysteria2 already exits direct. Enable WARP, then direct matches stay local and everything else goes through Cloudflare.",
 	"routing.enabled": "Enabled",
 	"routing.saving": "Saving…",
 	"routing.saveFailed": "Save failed",

@@ -1,6 +1,8 @@
 package hysteria2
 
 import (
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/mikkelchokolate/Veil/internal/clientaccess"
@@ -17,7 +19,7 @@ func (Plugin) RenderConfig(input generatedconfig.ProtocolRenderInput) ([]generat
 	}
 	var artifacts []generatedconfig.GeneratedConfigArtifact
 	for _, inbound := range input.Inbounds {
-		body, err := renderHysteria2(input.Settings, inbound, input.Warp, input.Paths)
+		body, err := renderHysteria2(input.Settings, inbound, input.Warp, input.Rules, input.Paths)
 		if err != nil {
 			return nil, false, err
 		}
@@ -38,7 +40,7 @@ func (Plugin) ArtifactSpec() generatedconfig.ArtifactSpec {
 	}
 }
 
-func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.WarpConfig, paths generatedconfig.Paths) (string, error) {
+func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.WarpConfig, rules []model.RoutingRule, paths generatedconfig.Paths) (string, error) {
 	password := hysteria2Password(settings, inbound)
 	access, err := clientaccess.BuildClientAccess(settings, inbound)
 	if err != nil {
@@ -70,6 +72,33 @@ func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.
 			socksPort = 40000
 		}
 		hystConfig.Upstream = "127.0.0.1:" + strconv.Itoa(socksPort)
+		hystConfig.GeoIPPath = routingDatPath(paths, "geoip.dat")
+		hystConfig.GeoSitePath = routingDatPath(paths, "geosite.dat")
+		for _, rule := range rules {
+			if !rule.Enabled {
+				continue
+			}
+			hystConfig.RoutingRules = append(hystConfig.RoutingRules, renderer.Hysteria2RoutingRule{
+				Match:    rule.Match,
+				Outbound: rule.Outbound,
+			})
+		}
 	}
 	return renderer.RenderHysteria2(hystConfig)
+}
+
+func routingDatPath(paths generatedconfig.Paths, name string) string {
+	candidates := []string{paths.Generated("rules/" + name)}
+	if paths.LiveRoot != "" {
+		candidates = append(candidates, filepath.Join(paths.LiveRoot, "rules", name))
+	}
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
+			return candidate
+		}
+	}
+	if paths.LiveRoot != "" {
+		return filepath.Join(paths.LiveRoot, "rules", name)
+	}
+	return candidates[0]
 }

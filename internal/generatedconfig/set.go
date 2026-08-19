@@ -7,6 +7,7 @@ type SetInput struct {
 	LiveRoot    string
 	Settings    Settings
 	Inbounds    []Inbound
+	Rules       []RoutingRule
 	WarpConfig  WarpConfig
 	Registry    ProtocolRegistry
 	PanelAccess ArtifactRenderer
@@ -28,6 +29,7 @@ func (b SetBuilder) Build() (map[string]string, error) {
 		LiveRoot:  input.LiveRoot,
 		Settings:  input.Settings,
 		Inbounds:  input.Inbounds,
+		Rules:     input.Rules,
 		Warp:      input.WarpConfig,
 	})
 	if err != nil {

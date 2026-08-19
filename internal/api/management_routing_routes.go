@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
@@ -89,12 +90,14 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 }
 
 func writeRoutingRuleManagementError(w http.ResponseWriter, err error) {
-	switch err {
-	case routing.ErrRoutingRuleInvalid:
+	switch {
+	case errors.Is(err, routing.ErrRoutingMatchInvalid):
+		writeError(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, routing.ErrRoutingRuleInvalid):
 		writeError(w, "name, match, and outbound are required", http.StatusBadRequest)
-	case routing.ErrRoutingRuleDuplicateName:
+	case errors.Is(err, routing.ErrRoutingRuleDuplicateName):
 		writeError(w, "routing rule name already exists", http.StatusConflict)
-	case routing.ErrRoutingRuleNotFound:
+	case errors.Is(err, routing.ErrRoutingRuleNotFound):
 		writeNotFound(w)
 	default:
 		writeError(w, err.Error(), http.StatusInternalServerError)

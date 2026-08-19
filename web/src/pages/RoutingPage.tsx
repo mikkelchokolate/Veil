@@ -6,7 +6,7 @@ import { useIsAdmin } from "../auth/AuthContext";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "../components/ui/dialog";
-import { FormItem, FormMessage } from "../components/ui/form";
+import { FormDescription, FormItem, FormMessage } from "../components/ui/form";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import {
@@ -18,6 +18,10 @@ import {
 	TableRow,
 } from "../components/ui/table";
 import { useI18n } from "../i18n/I18nContext";
+
+interface WarpStatus {
+	enabled?: boolean;
+}
 
 /** Routing rules: list + create/edit/delete mutations. */
 export function RoutingPage() {
@@ -36,6 +40,10 @@ export function RoutingPage() {
 	const rules = useQuery<RoutingRule[]>({
 		queryKey: ["routing", "rules"],
 		queryFn: () => apiFetch("/api/routing/rules"),
+	});
+	const warp = useQuery<WarpStatus>({
+		queryKey: ["warp"],
+		queryFn: () => apiFetch("/api/warp"),
 	});
 
 	const save = useMutation({
@@ -101,6 +109,11 @@ export function RoutingPage() {
 						</Button>
 					) : null}
 				</div>
+				{warp.data && !warp.data.enabled ? (
+					<p className="muted" style={{ fontSize: 13, marginTop: 12 }}>
+						{t("routing.warpRequired")}
+					</p>
+				) : null}
 			</div>
 
 			<Dialog
@@ -133,6 +146,7 @@ export function RoutingPage() {
 									value={form.match}
 									onChange={(e) => setForm({ ...form, match: e.target.value })}
 								/>
+								<FormDescription>{t("routing.matchHint")}</FormDescription>
 							</FormItem>
 							<FormItem>
 								<Label htmlFor="rule-outbound">{t("routing.outbound")}</Label>
@@ -143,6 +157,7 @@ export function RoutingPage() {
 										setForm({ ...form, outbound: e.target.value })
 									}
 								/>
+								<FormDescription>{t("routing.outboundHint")}</FormDescription>
 							</FormItem>
 							<FormItem>
 								<Label

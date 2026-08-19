@@ -7,6 +7,7 @@ type ConfigInput struct {
 	LiveRoot  string
 	Settings  Settings
 	Inbounds  []Inbound
+	Rules     []RoutingRule
 	Warp      WarpConfig
 }
 
@@ -27,6 +28,7 @@ type ProtocolRenderInput struct {
 	Settings Settings
 	Paths    Paths
 	Inbounds []Inbound
+	Rules    []RoutingRule
 	Warp     WarpConfig
 }
 
@@ -81,7 +83,7 @@ func (r ProtocolRegistry) Render(input ConfigInput) (map[string]string, error) {
 		if protocol.RequiresRenderSettings && !NewGeneratedRenderSettingsPolicyWithFieldKeys(r.renderSettingKeys).HasRenderSettings(input.Settings, input.Inbounds) {
 			continue
 		}
-		artifacts, ok, err := protocol.Render(ProtocolRenderInput{Settings: input.Settings, Paths: paths, Inbounds: selected, Warp: input.Warp})
+		artifacts, ok, err := protocol.Render(ProtocolRenderInput{Settings: input.Settings, Paths: paths, Inbounds: selected, Rules: input.Rules, Warp: input.Warp})
 		if err != nil {
 			return nil, err
 		}
