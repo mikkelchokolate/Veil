@@ -200,6 +200,9 @@ func newManagementStateProduction(info ServerInfo) *managementState {
 		if err := lifecycle.StartupMigrateLegacyLocked(); err != nil {
 			log.Printf("startup legacy migration: %v", err)
 		}
+		if err := state.catchUpAppliedIfRuntimeUnchangedLocked(); err != nil {
+			log.Printf("apply: startup catch-up of non-runtime revisions: %v", err)
+		}
 	}
 
 	return state
@@ -348,6 +351,9 @@ func (l ManagementStateLifecycle) SaveLocked() error {
 		// report a failed API mutation after both durable stores have committed.
 		if err := commit.Finalize(); err != nil {
 			log.Printf("management state: committed mutation left recovery marker: %v", err)
+		}
+		if err := l.state.catchUpAppliedIfRuntimeUnchangedLocked(); err != nil {
+			log.Printf("apply: catch up applied after non-runtime mutation: %v", err)
 		}
 		return nil
 	})

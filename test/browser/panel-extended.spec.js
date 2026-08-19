@@ -324,6 +324,7 @@ test.describe('Veil Panel — extended critical flows', () => {
       });
       await expect(tokenCard).toBeVisible({ timeout: 10_000 });
       await expect(tokenCard.getByText(/^active$/i)).toBeVisible({ timeout: 10_000 });
+      await tokenCard.getByRole('button', { name: /^show link$/i }).click();
 
       const urlEl = tokenCard.locator('code.mono').filter({ hasText: '/s/' }).first();
       await expect(urlEl).toBeVisible({ timeout: 10_000 });

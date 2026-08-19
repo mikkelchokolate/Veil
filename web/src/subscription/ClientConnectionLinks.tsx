@@ -1,9 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { ApiError, apiFetch } from "../api/fetcher";
-import { Button } from "../components/ui/button";
 import { useI18n } from "../i18n/I18nContext";
-import { QR } from "./QR";
+import { RevealLink } from "./RevealLink";
 
 interface ClientLink {
 	name: string;
@@ -61,34 +60,20 @@ export function ClientConnectionLinks({ clientId }: { clientId: string }) {
 								padding: 12,
 							}}
 						>
-							<div
-								style={{
-									display: "flex",
-									gap: 20,
-									alignItems: "flex-start",
-									flexWrap: "wrap",
-								}}
-							>
-								<QR value={link.uri} />
-								<div style={{ flex: 1, minWidth: 240 }}>
-									<div className="muted" style={{ fontSize: 12 }}>
-										{link.name} · {link.protocol} · {link.transport} ·{" "}
-										{link.port}
-									</div>
-									<code
-										className="mono"
-										style={{ wordBreak: "break-all", fontSize: 12 }}
-									>
-										{link.uri}
-									</code>
-									<div style={{ marginTop: 12 }}>
-										<Button onClick={() => void copy(link.uri)}>
-											{copied === link.uri
-												? t("clientLinks.copied")
-												: t("clientLinks.copy")}
-										</Button>
-									</div>
-									{link.config ? (
+							<div className="muted" style={{ fontSize: 12 }}>
+								{link.name} · {link.protocol} · {link.transport} · {link.port}
+							</div>
+							<RevealLink
+								value={link.uri}
+								copied={copied === link.uri}
+								onCopy={(text) => void copy(text)}
+								showLabel={t("clientLinks.showLink")}
+								hideLabel={t("clientLinks.hideLink")}
+								copyLabel={t("clientLinks.copy")}
+								copiedLabel={t("clientLinks.copied")}
+								urlLabel={t("clientLinks.uriLabel")}
+								extra={
+									link.config ? (
 										<pre
 											className="mono"
 											style={{
@@ -100,9 +85,9 @@ export function ClientConnectionLinks({ clientId }: { clientId: string }) {
 										>
 											{link.config}
 										</pre>
-									) : null}
-								</div>
-							</div>
+									) : null
+								}
+							/>
 						</div>
 					))}
 				</div>

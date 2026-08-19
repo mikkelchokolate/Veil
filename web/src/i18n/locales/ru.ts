@@ -315,7 +315,7 @@ export const ru: Record<string, string> = {
 
 	"subTokens.title": "Токены подписки",
 	"subTokens.alwaysAvailable":
-		"У каждого токена URL и QR остаются после перезагрузки страницы. Ротация заменяет URL.",
+		"У каждого токена URL и QR остаются после перезагрузки страницы. Откройте их кнопкой «Показать ссылку». Ротация заменяет URL.",
 	"subTokens.urlUnavailable":
 		"Этот токен создан до сохранения ссылок. Нажмите «Ротировать», чтобы получить URL и QR.",
 	"subTokens.issuedTitle": "URL подписки",
@@ -330,6 +330,7 @@ export const ru: Record<string, string> = {
 	"subTokens.revealedNote":
 		"Ротация токена делает этот URL недействительным. Нажмите «Показать ссылку», чтобы открыть его снова.",
 	"subTokens.showLink": "Показать ссылку",
+	"subTokens.hideLink": "Скрыть",
 	"subTokens.error.reveal": "Не удалось загрузить URL подписки",
 	"subTokens.labelPlaceholder": "Метка (например, телефон, ноутбук)",
 	"subTokens.create": "Создать токен",
@@ -551,10 +552,13 @@ export const ru: Record<string, string> = {
 
 	"clientLinks.title": "Ссылки подключения",
 	"clientLinks.hint":
-		"Эти URI и QR-коды остаются доступны после создания. Они собираются заново из сохранённых учёток.",
+		"Эти URI и QR-коды остаются доступны после создания. Откройте их кнопкой «Показать ссылку». Они собираются заново из сохранённых учёток.",
 	"clientLinks.empty":
 		"Ссылок пока нет. Привяжите инбаунд и примените конфигурацию.",
 	"clientLinks.copy": "Скопировать ссылку",
 	"clientLinks.copied": "Скопировано",
+	"clientLinks.showLink": "Показать ссылку",
+	"clientLinks.hideLink": "Скрыть",
+	"clientLinks.uriLabel": "URI подключения",
 	"clientLinks.error.load": "Не удалось загрузить ссылки подключения",
 };

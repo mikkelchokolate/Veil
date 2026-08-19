@@ -3,7 +3,7 @@ import { useState } from "react";
 import { ApiError, apiFetch } from "../api/fetcher";
 import { useIsAdmin } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nContext";
-import { QR } from "./QR";
+import { RevealLink } from "./RevealLink";
 
 interface SubscriptionToken {
 	id: string;
@@ -49,30 +49,16 @@ function TokenLink({
 	const { t } = useI18n();
 	const abs = absoluteSubURL(url);
 	return (
-		<div
-			style={{
-				display: "flex",
-				gap: 20,
-				alignItems: "flex-start",
-				flexWrap: "wrap",
-				marginTop: 12,
-			}}
-		>
-			<QR value={abs} />
-			<div style={{ flex: 1, minWidth: 240 }}>
-				<div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
-					{t("subTokens.urlLabel")}
-				</div>
-				<code className="mono" style={{ wordBreak: "break-all", fontSize: 12 }}>
-					{abs}
-				</code>
-				<div style={{ marginTop: 12 }}>
-					<button type="button" className="btn" onClick={() => onCopy(abs)}>
-						{copied ? t("subTokens.copied") : t("subTokens.copyUrl")}
-					</button>
-				</div>
-			</div>
-		</div>
+		<RevealLink
+			value={abs}
+			copied={copied}
+			onCopy={onCopy}
+			showLabel={t("subTokens.showLink")}
+			hideLabel={t("subTokens.hideLink")}
+			copyLabel={t("subTokens.copyUrl")}
+			copiedLabel={t("subTokens.copied")}
+			urlLabel={t("subTokens.urlLabel")}
+		/>
 	);
 }
 

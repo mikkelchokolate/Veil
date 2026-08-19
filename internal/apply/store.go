@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 // RevisionStore persists the desired/applied revision pair in the single-row
@@ -86,6 +87,39 @@ func (s *RevisionStore) MarkApplied(rev uint64) error {
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("apply: cannot move applied revision to %d outside [applied, desired]", rev)
+	}
+	return nil
+}
+
+// CatchUpApplied advances applied_revision and runtime_verification together
+// when a newer desired snapshot has the same runtime config as the already
+// verified applied revision (panel-only mutations such as locale).
+func (s *RevisionStore) CatchUpApplied(rev uint64) error {
+	if err := s.ensureRow(); err != nil {
+		return err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("apply: catch up applied: %w", err)
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`UPDATE revisions SET applied_revision=?
+	  WHERE id=1 AND ? <= desired_revision AND ? >= applied_revision`, rev, rev, rev)
+	if err != nil {
+		return fmt.Errorf("apply: catch up applied: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("apply: cannot catch up applied revision to %d outside [applied, desired]", rev)
+	}
+	now := time.Now().UTC().Unix()
+	if _, err := tx.Exec(`INSERT INTO runtime_verification(id,historical_applied_revision,verified_revision,status,updated_at)
+VALUES(1,?,?, 'verified',?)
+ON CONFLICT(id) DO UPDATE SET verified_revision=excluded.verified_revision,status='verified',updated_at=excluded.updated_at`,
+		rev, rev, now); err != nil {
+		return fmt.Errorf("apply: catch up runtime verification: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("apply: catch up applied: %w", err)
 	}
 	return nil
 }

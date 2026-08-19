@@ -359,7 +359,7 @@ export const en: Record<string, string> = {
 
 	"subTokens.title": "Subscription tokens",
 	"subTokens.alwaysAvailable":
-		"Each token keeps its URL and QR after you reload. Rotating a token replaces the URL.",
+		"Each token keeps its URL and QR after you reload. Open them with Show link. Rotating a token replaces the URL.",
 	"subTokens.urlUnavailable":
 		"This token was issued before links could be stored. Rotate it to get a URL and QR.",
 	"subTokens.issuedTitle": "Subscription URL",
@@ -374,6 +374,7 @@ export const en: Record<string, string> = {
 	"subTokens.revealedNote":
 		"Rotating a token invalidates this URL. Use Show link to open it again.",
 	"subTokens.showLink": "Show link",
+	"subTokens.hideLink": "Hide",
 	"subTokens.error.reveal": "Could not load subscription URL",
 	"subTokens.labelPlaceholder": "Label (e.g. phone, laptop)",
 	"subTokens.create": "Create token",
@@ -546,10 +547,13 @@ export const en: Record<string, string> = {
 
 	"clientLinks.title": "Connection links",
 	"clientLinks.hint":
-		"These URIs and QR codes stay available after creation. They are rebuilt from stored credentials.",
+		"These URIs and QR codes stay available after creation. Open them with Show link. They are rebuilt from stored credentials.",
 	"clientLinks.empty":
 		"No connection links yet. Attach an inbound and apply the configuration.",
 	"clientLinks.copy": "Copy link",
 	"clientLinks.copied": "Copied",
+	"clientLinks.showLink": "Show link",
+	"clientLinks.hideLink": "Hide",
+	"clientLinks.uriLabel": "Connection URI",
 	"clientLinks.error.load": "Failed to load connection links",
 };

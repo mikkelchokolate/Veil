@@ -56,6 +56,42 @@ func TestMarkAppliedOnlyAdvancesApplied(t *testing.T) {
 	}
 }
 
+func TestCatchUpAppliedAdvancesAppliedAndVerification(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	rs := NewRevisionStore(db)
+
+	first, err := rs.BumpDesired()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rs.MarkApplied(first); err != nil {
+		t.Fatal(err)
+	}
+	second, err := rs.BumpDesired()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rs.CatchUpApplied(second); err != nil {
+		t.Fatalf("catch up: %v", err)
+	}
+	rev, err := rs.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rev.Desired != second || rev.Applied != second {
+		t.Fatalf("revisions=%+v want applied=%d", rev, second)
+	}
+	var verified uint64
+	var status string
+	if err := db.QueryRow(`SELECT verified_revision, status FROM runtime_verification WHERE id=1`).Scan(&verified, &status); err != nil {
+		t.Fatal(err)
+	}
+	if verified != second || status != "verified" {
+		t.Fatalf("verification verified=%d status=%q want %d/verified", verified, status, second)
+	}
+}
+
 func TestMarkAppliedRejectsUnknownRevision(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
