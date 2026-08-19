@@ -31,6 +31,10 @@ if ! id -u veil >/dev/null 2>&1; then
     fi
 fi
 
+if [ -f /etc/sysctl.d/99-veil-quic.conf ]; then
+    sysctl -p /etc/sysctl.d/99-veil-quic.conf >/dev/null 2>&1 || true
+fi
+
 install -d -m 0750 -o root -g veil /etc/veil
 install -d -m 0750 -o veil -g veil /var/lib/veil
 

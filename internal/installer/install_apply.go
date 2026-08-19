@@ -10,6 +10,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/backup"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/managedfiles"
 )
 
@@ -95,6 +96,9 @@ func (a InstallApply) Apply() (ApplyResult, error) {
 		if err := applier.ApplyRules(a.firewallActions); err != nil {
 			return result, fmt.Errorf("apply firewall rules: %w", err)
 		}
+	}
+	if err := hostenv.ApplyQUICUDPBuffers(); err != nil {
+		return result, fmt.Errorf("tune QUIC UDP buffers: %w", err)
 	}
 
 	return result, nil
