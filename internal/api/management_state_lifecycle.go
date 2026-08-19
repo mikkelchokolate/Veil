@@ -352,9 +352,6 @@ func (l ManagementStateLifecycle) SaveLocked() error {
 		if err := commit.Finalize(); err != nil {
 			log.Printf("management state: committed mutation left recovery marker: %v", err)
 		}
-		if err := l.state.catchUpAppliedIfRuntimeUnchangedLocked(); err != nil {
-			log.Printf("apply: catch up applied after non-runtime mutation: %v", err)
-		}
 		return nil
 	})
 }

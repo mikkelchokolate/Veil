@@ -57,6 +57,18 @@ func (s *managementState) catchUpAppliedIfRuntimeUnchangedLocked() error {
 	return nil
 }
 
+// catchUpAfterPanelMutation converges desired/applied after a users/locale
+// write. Those mutations pin a snapshot without auto-apply; catch-up must not
+// run inside SaveLocked while the caller still holds s.mu across SQLite I/O
+// that can deadlock with the apply runner.
+func (s *managementState) catchUpAfterPanelMutation() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.catchUpAppliedIfRuntimeUnchangedLocked(); err != nil {
+		log.Printf("apply: catch up applied after panel-only mutation: %v", err)
+	}
+}
+
 func runtimeConfigEqual(a, b managementSnapshot) (bool, error) {
 	left, err := json.Marshal(runtimeProjection(a))
 	if err != nil {

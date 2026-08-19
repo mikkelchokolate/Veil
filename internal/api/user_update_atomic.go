@@ -109,6 +109,7 @@ func (s *managementState) handleAtomicUserUpdate(w http.ResponseWriter, r *http.
 		}
 		return
 	}
+	s.catchUpAfterPanelMutation()
 
 	writeJSON(w, map[string]any{
 		"username": updated.Username,

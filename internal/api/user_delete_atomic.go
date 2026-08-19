@@ -67,6 +67,7 @@ func (s *managementState) handleAtomicUserDelete(w http.ResponseWriter, r *http.
 		}
 		return
 	}
+	s.catchUpAfterPanelMutation()
 
 	s.recordRequestAudit(r, audit.Record{
 		Action:  "user.delete",

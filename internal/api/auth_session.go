@@ -301,6 +301,7 @@ func (s *managementState) handleAuthLocale(w http.ResponseWriter, r *http.Reques
 		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.catchUpAfterPanelMutation()
 
 	s.mu.Lock()
 	panelAccess := s.settings.PanelAccess
@@ -473,6 +474,7 @@ func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Reques
 			})
 			return nil
 		})
+		s.catchUpAfterPanelMutation()
 
 	default:
 		s.handleUserByNameRoute(w, r)
@@ -570,6 +572,7 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 			})
 			return nil
 		})
+		s.catchUpAfterPanelMutation()
 
 	} else if r.Method == http.MethodDelete {
 		s.mu.Lock()
@@ -633,6 +636,7 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 			w.WriteHeader(http.StatusNoContent)
 			return nil
 		})
+		s.catchUpAfterPanelMutation()
 	} else {
 		methodNotAllowed(w, http.MethodPut, http.MethodDelete)
 	}
