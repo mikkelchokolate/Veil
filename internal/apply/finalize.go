@@ -812,6 +812,16 @@ func recoverRuntimePublications(db *sql.DB, leases *LeaseStore, jobs *JobStore, 
 			continue
 		}
 		markApplied := receipt.Phase == "published" || receipt.Phase == "finalization_pending"
+		if markApplied {
+			revs, err := getRevisionsQ(db)
+			if err != nil {
+				_ = leases.Release(owner, lease.Generation)
+				return err
+			}
+			if job.DesiredRevision <= revs.Applied {
+				markApplied = false
+			}
+		}
 		if err := finalizeFencedJob(db, owner, lease.Generation, now(), job, StatusSucceeded, "", "", receipt.Operations, receipt.Confirmations, markApplied, true); err != nil {
 			_ = leases.Release(owner, lease.Generation)
 			return err

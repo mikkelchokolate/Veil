@@ -390,6 +390,20 @@ WHERE j.status=? ORDER BY j.created_at,j.id LIMIT 1`, StatusRecoveryPending).Sca
 	if err != nil {
 		return fmt.Errorf("apply: read recovery-pending publication: %w", err)
 	}
+	revs, err := r.revs.Get()
+	if err != nil {
+		return fmt.Errorf("apply: read revisions during recovery: %w", err)
+	}
+	if job.DesiredRevision <= revs.Applied {
+		// A later job already marked the panel applied. Re-running this
+		// revision would fail finalize (`applied_revision<=desired` is false)
+		// and pin startupErr, blocking every subsequent apply.
+		if err := r.jobs.Finish(job.ID, StatusFailed, "SUPERSEDED",
+			fmt.Sprintf("recovery-pending revision %d is already covered by applied revision %d", job.DesiredRevision, revs.Applied)); err != nil {
+			return fmt.Errorf("apply: close superseded recovery job: %w", err)
+		}
+		return r.resumeRecoveryPending(ctx)
+	}
 	if servicePhase == "restart-panel" || servicePhase == "update-install" {
 		return fmt.Errorf("apply: side-effect publication %s requires helper-owned commit evidence", job.ID)
 	}
