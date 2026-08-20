@@ -1474,7 +1474,7 @@ type RoutingRule struct {
 	Match   string `json:"match"`
 	Name    string `json:"name"`
 
-	// Outbound Examples: direct, warp, block
+	// Outbound Examples: direct, warp, proxy
 	Outbound string `json:"outbound"`
 }
 
