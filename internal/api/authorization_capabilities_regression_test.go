@@ -50,6 +50,7 @@ func productionAuthorizationMatrix() []routeAuthorizationExpectation {
 		{http.MethodPut, "/api/users/alice", false, false, "admin mutation"},
 		{http.MethodGet, "/api/status", false, true, "viewer metadata"},
 		{http.MethodGet, "/api/version", false, true, "viewer metadata"},
+		{http.MethodGet, "/api/health", false, true, "viewer metadata"},
 		{http.MethodPost, "/api/version/update", false, false, "admin mutation"},
 		{http.MethodGet, "/api/settings", false, true, "redacted viewer metadata"},
 		{http.MethodPut, "/api/settings", false, false, "admin mutation"},

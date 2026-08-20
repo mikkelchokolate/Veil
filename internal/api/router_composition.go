@@ -72,11 +72,8 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 		mux.ServeHTTP(w, r)
 	})
 	idempotent := state.idempotency.Middleware(restoreGuarded)
-	var handler http.Handler = clientRequestGateMiddleware(state, idempotent)
-	if basePath != "/" {
-		handler = stripBasePathMiddleware(basePath, handler)
-	}
-	rateLimited, limiter := newRateLimitMiddleware(metrics, info.TrustedProxyCIDRs, handler)
+	gated := clientRequestGateMiddleware(state, idempotent)
+	rateLimited, limiter := newRateLimitMiddleware(metrics, info.TrustedProxyCIDRs, gated)
 	state.httpRateLimiter = limiter
 	authenticated := authMiddlewareWithOptions(state, authMiddlewareOptions{
 		Token:             info.AuthToken,
@@ -85,7 +82,14 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 		AllowDevAnonymous: !info.PublicListen,
 		AllowSetup:        info.SetupAllowed,
 	}, rateLimited)
-	secured := securityHeadersMiddleware(authenticated)
+	// Strip WebBasePath before auth. capabilityForEndpoint treats anything
+	// outside /api and /s as a public SPA route; classifying /<base>/api/*
+	// before the strip made the whole management API anonymous.
+	var handler http.Handler = authenticated
+	if basePath != "/" {
+		handler = stripBasePathMiddleware(basePath, authenticated)
+	}
+	secured := securityHeadersMiddleware(handler)
 	healthAware := auditHealthMiddleware(state, metrics.MetricsMiddleware(secured))
 	return requestIDMiddleware(degradedStateMiddleware(state, healthAware)), state
 }

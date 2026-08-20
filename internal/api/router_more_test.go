@@ -9,6 +9,51 @@ import (
 	"testing"
 )
 
+func TestAuthClassifiesPathsAfterWebBasePathStrip(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/settings", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("/s/public-token", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	state := &managementState{}
+	authenticated := authMiddlewareWithOptions(state, authMiddlewareOptions{
+		Token:             "admin-token",
+		AllowDevAnonymous: false,
+	}, mux)
+	handler := stripBasePathMiddleware("/secret/", authenticated)
+
+	anonymous := httptest.NewRequest(http.MethodGet, "/secret/api/settings", nil)
+	anonymousRec := httptest.NewRecorder()
+	handler.ServeHTTP(anonymousRec, anonymous)
+	if anonymousRec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous prefixed API status=%d want=401 body=%s", anonymousRec.Code, anonymousRec.Body.String())
+	}
+
+	authed := httptest.NewRequest(http.MethodGet, "/secret/api/settings", nil)
+	authed.Header.Set("X-Veil-Token", "admin-token")
+	authedRec := httptest.NewRecorder()
+	handler.ServeHTTP(authedRec, authed)
+	if authedRec.Code != http.StatusNoContent {
+		t.Fatalf("token prefixed API status=%d want=204 body=%s", authedRec.Code, authedRec.Body.String())
+	}
+
+	unprefixed := httptest.NewRequest(http.MethodGet, "/api/settings", nil)
+	unprefixedRec := httptest.NewRecorder()
+	handler.ServeHTTP(unprefixedRec, unprefixed)
+	if unprefixedRec.Code != http.StatusNotFound {
+		t.Fatalf("unprefixed API under secret mount status=%d want=404 body=%s", unprefixedRec.Code, unprefixedRec.Body.String())
+	}
+
+	subscription := httptest.NewRequest(http.MethodGet, "/s/public-token", nil)
+	subscriptionRec := httptest.NewRecorder()
+	handler.ServeHTTP(subscriptionRec, subscription)
+	if subscriptionRec.Code != http.StatusNoContent {
+		t.Fatalf("host-root subscription status=%d want=204 body=%s", subscriptionRec.Code, subscriptionRec.Body.String())
+	}
+}
+
 func TestStripBasePathMiddleware(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {

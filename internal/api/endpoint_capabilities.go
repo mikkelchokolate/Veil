@@ -37,6 +37,7 @@ var endpointPolicies = []endpointPolicy{
 
 	{http.MethodGet, "/api/status", capabilityViewer},
 	{http.MethodGet, "/api/version", capabilityViewer},
+	{http.MethodGet, "/api/health", capabilityViewer},
 	{http.MethodGet, "/api/settings", capabilityViewer},
 	{http.MethodGet, "/api/protocols", capabilityViewer},
 	{http.MethodGet, "/api/inbounds", capabilityViewer},
