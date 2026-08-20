@@ -11,7 +11,7 @@ Go test gate: NEVER `make test` (e2e hangs). Use:
   go test -race <pkgs>; go vet <pkgs>
 internal/api tests are slow (~6 min) — timeout >=400s or targeted -run.
 
-Live host: vpn.example.com, panel 127.0.0.1:47359, webBasePath /panel-example/ (rotates).
+Do not record live panel hosts, listen addresses, or WebBasePath in this repo.
 Deploy atomically: cp bin/veil /usr/local/bin/.veil.new && mv over /usr/local/bin/veil,
 restart veil.service veil-helper.socket veil-helper.service. Commit+push periodically.
 

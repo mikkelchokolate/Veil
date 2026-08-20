@@ -2,7 +2,7 @@
 
 Veil is a management panel for NaiveProxy, Hysteria2, olcRTC, and Mieru. It installs the Panel first; proxy Inbounds are added later from the Panel.
 
-![Veil Panel Dashboard](veil_panel_dashboard.png)
+![Veil panel](docs/assets/veil-panel.gif)
 
 ## Quick start
 
