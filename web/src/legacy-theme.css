@@ -62,29 +62,45 @@ body::after {
 	color: var(--primary);
 }
 
+/* Square cream scrollbar from the original panel chrome. */
 * {
 	scrollbar-width: thin;
-	scrollbar-color: var(--border) var(--canvas);
+	scrollbar-color: color-mix(in srgb, var(--primary) 42%, var(--surface))
+		color-mix(in srgb, var(--canvas) 92%, transparent);
 }
 
 ::-webkit-scrollbar {
-	width: 8px;
-	height: 8px;
+	width: 11px;
+	height: 11px;
 }
 
 ::-webkit-scrollbar-track {
 	border-left: 1px solid var(--border);
-	border-top: 1px solid var(--border);
-	background: var(--canvas);
+	background: rgb(4 10 10 / 88%);
 }
 
 ::-webkit-scrollbar-thumb {
+	min-height: 44px;
+	border: 3px solid var(--canvas);
 	border-radius: 0;
-	background: var(--border);
+	background: linear-gradient(
+		180deg,
+		color-mix(in srgb, var(--primary) 48%, var(--surface)),
+		color-mix(in srgb, var(--primary) 24%, var(--surface))
+	);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-	background: var(--primary);
+	background: color-mix(in srgb, var(--primary) 72%, var(--surface));
+}
+
+::-webkit-scrollbar-button {
+	display: none;
+}
+
+::-webkit-scrollbar-corner {
+	border: 0;
+	background: var(--canvas);
 }
 
 /* Creation and editing should feel like a deliberate workspace, not another
