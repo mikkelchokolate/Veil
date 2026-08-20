@@ -1,16 +1,13 @@
-import { ChevronDown } from "lucide-react";
 import * as React from "react";
 import { cn } from "../../lib/utils";
 
-// Styled native <select>. The product has many simple single-select form
-// fields; a styled native control preserves behavior (no portal/focus-trap
-// surprises) while matching the design system. Use DropdownMenu for action
-// menus and the Radix Select for rich option content.
+// Styled native <select>. Width/maxWidth belong on the wrapper so the CSS
+// chevron stays on the control; appearance and radius are owned by the theme.
 const Select = React.forwardRef<
 	HTMLSelectElement,
 	React.SelectHTMLAttributes<HTMLSelectElement>
->(({ className, children, ...props }, ref) => (
-	<div className="relative min-w-0 w-full max-w-full">
+>(({ className, style, children, ...props }, ref) => (
+	<div className="relative min-w-0 w-full max-w-full" style={style}>
 		<select
 			ref={ref}
 			className={cn(
@@ -21,10 +18,6 @@ const Select = React.forwardRef<
 		>
 			{children}
 		</select>
-		<ChevronDown
-			className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-60"
-			aria-hidden="true"
-		/>
 	</div>
 ));
 Select.displayName = "Select";

@@ -319,7 +319,7 @@ table.data-table tbody tr:last-child td {
 select.input,
 textarea.input {
 	padding: 9px 12px;
-	border-radius: 6px;
+	border-radius: 0;
 	border: 1px solid var(--border);
 	background: color-mix(in srgb, var(--canvas) 60%, transparent);
 	color: var(--text-main);
