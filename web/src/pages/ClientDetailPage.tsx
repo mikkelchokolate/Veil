@@ -197,6 +197,16 @@ export function ClientDetailPage() {
 			// this conversion is exact.
 			const quota =
 				v.quotaBytes === "" ? undefined : parseQuotaDecimal(v.quotaBytes);
+			if (quota != null) {
+				const enabledBindings = (c.bindings ?? []).filter((b) => b.enabled);
+				const quotaUnsupported = enabledBindings.some((b) => {
+					const ib = inboundList.find((item) => item.name === b.inboundId);
+					return !ib || ib.protocol !== "hysteria2" || ib.enabled === false;
+				});
+				if (quotaUnsupported) {
+					throw new ApiError(400, t("clientDetail.quotaHy2Only"));
+				}
+			}
 			const expires = v.expiresAt
 				? Math.floor(new Date(v.expiresAt).getTime() / 1000)
 				: undefined;
@@ -532,6 +542,9 @@ export function ClientDetailPage() {
 									inputMode="numeric"
 									{...form.register("quotaBytes")}
 								/>
+								<FormDescription>
+									{t("clientDetail.quotaHint")}
+								</FormDescription>
 								<FormMessage>
 									{form.formState.errors.quotaBytes?.message}
 								</FormMessage>

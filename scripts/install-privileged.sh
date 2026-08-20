@@ -45,7 +45,7 @@ Options:
   Veil install only installs Panel; configure protocols as Panel Inbounds
   --version VERSION    Release tag to install, default latest
   --install-dir DIR    Directory for the veil binary, default /usr/local/bin
-  --profile NAME       default or ru-recommended, default ru-recommended
+  --profile NAME       ru-recommended (default)
   --domain DOMAIN      Domain used for Panel Caddy access
   --email EMAIL        ACME email for Panel Caddy access
   --panel-access MODE      local, direct, or caddy; prompted interactively when omitted

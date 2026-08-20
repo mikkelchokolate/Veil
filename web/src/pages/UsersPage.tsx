@@ -262,6 +262,7 @@ export function UsersPage() {
 													style={{ maxWidth: 180 }}
 													type="password"
 													placeholder={t("users.newPasswordOptional")}
+													minLength={12}
 													value={editPassword}
 													onChange={(e) => setEditPassword(e.target.value)}
 													aria-label={t("users.newPassword")}
@@ -305,6 +306,7 @@ export function UsersPage() {
 								<Input
 									id="nu-password"
 									type="password"
+									minLength={12}
 									value={password}
 									onChange={(e) => setPassword(e.target.value)}
 									required

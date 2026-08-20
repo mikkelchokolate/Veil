@@ -214,7 +214,7 @@ export function BackupsPage() {
 					<p>
 						<Badge
 							variant={
-								job.status === "finished"
+								job.status === "succeeded"
 									? "success"
 									: job.status === "failed"
 										? "danger"
@@ -226,7 +226,7 @@ export function BackupsPage() {
 						<span className="mono">{job.archive}</span>
 					</p>
 					{job.error ? <FormMessage>{job.error}</FormMessage> : null}
-					{job.status === "finished" || job.status === "failed" ? (
+					{job.status === "succeeded" || job.status === "failed" ? (
 						<Button
 							onClick={() => {
 								setActiveJob(null);

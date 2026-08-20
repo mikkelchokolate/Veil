@@ -40,7 +40,7 @@ curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/inst
 | `--panel-port PORT` | prompted interactively; `2096` with `--yes` | Port the Panel will listen on. Use `0` to select a random high port. |
 | `--le-ip-cert` | `true` for `direct`, otherwise ignored | Obtain a trusted Let's Encrypt IP certificate in `direct` mode (short-lived; see Direct Mode). |
 | `--le-ip-cert-port PORT` | `80` | Port used for the Let's Encrypt HTTP-01 challenge listener. |
-| `--profile NAME` | `ru-recommended` | Initial routing rules profile preset. Choices: `default` or `ru-recommended`. |
+| `--profile NAME` | `ru-recommended` | Initial routing rules profile preset. The implemented value is `ru-recommended`. |
 | `--version TAG` | `latest` | Specify a targeted release tag to install (e.g. `v0.9.9`). |
 | `--force` | *(false)* | Force binary download and re-installation even if Veil is already present. |
 | `--yes` | *(false)* | Run the installation non-interactively (answers defaults). |
@@ -76,7 +76,7 @@ Exposes the Panel on the loopback interface (`127.0.0.1:<panel-port>`) with a se
   ```bash
   ssh -L <panel-port>:127.0.0.1:<panel-port> user@your-server-ip
   ```
-- **URL:** Open `https://127.0.0.1:<panel-port>/` in your browser.
+- **URL:** Open the address printed at the end of install (`https://127.0.0.1:<panel-port>/<web-base-path>/`). The secret Web base path is required; `/` 404s.
 - **Why:** Keeps the administration page completely hidden from public port scans and probes.
 
 ### Caddy Mode
@@ -97,7 +97,7 @@ certificate warning and prevents cached HSTS policies from causing redirect
 loops when accessing the panel by IP. The certificate's SAN is the public IP
 address (no `CN`).
 
-- **URL:** `https://your-server-ip:<panel-port>/`
+- **URL:** `https://your-server-ip:<panel-port>/<web-base-path>/` (the path is printed at the end of install). `/` without that prefix 404s.
 - **Requirements:** Port `80/tcp` must be free and reachable from the internet
   during install/repair so the Let's Encrypt HTTP-01 challenge can complete.
 - **Fallback:** If the IP certificate cannot be issued (for example, port 80 is

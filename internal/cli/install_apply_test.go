@@ -207,6 +207,48 @@ func TestShouldPrepareInstallHostOnlyForCanonicalPaths(t *testing.T) {
 	}
 }
 
+func TestApplyRURecommendedInstallPreparesHostBeforeApply(t *testing.T) {
+	withMockedInstallRuntimes(t)
+	oldApply := installApplyFunc
+	oldSystemd := installSystemdRunFunc
+	oldExecutable := installExecutableFunc
+	oldPrepareHost := installPrepareHostFunc
+	var order []string
+	installExecutableFunc = func() (string, error) { return "/opt/veil/bin/veil", nil }
+	installPrepareHostFunc = func(hostaccess.Paths) error {
+		order = append(order, "prepare")
+		return nil
+	}
+	installApplyFunc = func(installer.RURecommendedProfile, installer.ApplyPaths) (installer.ApplyResult, error) {
+		order = append(order, "apply")
+		return installer.ApplyResult{WrittenFiles: []string{"/etc/veil/veil.env"}}, nil
+	}
+	installSystemdRunFunc = func([]service.SystemdAction) error {
+		order = append(order, "systemd")
+		return nil
+	}
+	t.Cleanup(func() {
+		installApplyFunc = oldApply
+		installSystemdRunFunc = oldSystemd
+		installExecutableFunc = oldExecutable
+		installPrepareHostFunc = oldPrepareHost
+	})
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	if err := applyRURecommendedInstall(cmd, installer.RURecommendedProfile{
+		Domain: "example.com", Username: "veil", Password: "test-password", WebBasePath: "/panel/",
+	}, ruRecommendedInstallOptions{EtcDir: t.TempDir(), VarDir: t.TempDir()}); err != nil {
+		t.Fatalf("applyRURecommendedInstall: %v", err)
+	}
+	want := []string{"prepare", "apply", "systemd"}
+	if strings.Join(order, ",") != strings.Join(want, ",") {
+		t.Fatalf("install step order = %v, want %v", order, want)
+	}
+}
+
 func TestApplyRURecommendedInstallPreservesExistingState(t *testing.T) {
 	withMockedInstallRuntimes(t)
 	oldApply := installApplyFunc

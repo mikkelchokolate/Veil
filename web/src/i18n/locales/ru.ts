@@ -309,6 +309,10 @@ export const ru: Record<string, string> = {
 	"backups.verifyOk": "валиден",
 	"backups.verifyInvalid": "невалиден",
 	"backups.dismiss": "Закрыть",
+	"backups.status.queued": "в очереди",
+	"backups.status.running": "выполняется",
+	"backups.status.succeeded": "успешно",
+	"backups.status.failed": "ошибка",
 	"backups.empty": "Бэкапов пока нет.",
 	"backups.encrypted": "зашифрован",
 	"backups.size": "Размер",
@@ -449,6 +453,9 @@ export const ru: Record<string, string> = {
 	"clientDetail.never": "никогда",
 	"clientDetail.email": "Email",
 	"clientDetail.quotaLabel": "Квота (байты, пусто = без ограничений)",
+	"clientDetail.quotaHint": "Квота действует только на Hysteria2 inbound’ы.",
+	"clientDetail.quotaHy2Only":
+		"Квоту можно задать, только если все включённые привязки — Hysteria2.",
 	"clientDetail.expiryDate": "Дата истечения",
 	"clientDetail.notes": "Заметки",
 	"clientDetail.saving": "Сохранение…",
@@ -557,7 +564,10 @@ export const ru: Record<string, string> = {
 	"clientNew.stepReview": "Проверка",
 	"clientNew.emailLabel": "Email (необязательно)",
 	"clientNew.notesLabel": "Заметки (необязательно)",
-	"clientNew.quotaLabel": "Квота (bytes, необязательно)",
+	"clientNew.quotaLabel": "Квота (байты, необязательно)",
+	"clientNew.quotaHint": "Квота действует только на Hysteria2 inbound’ы.",
+	"clientNew.quotaHy2Only":
+		"Квоту можно задать, только если все выбранные inbound’ы — Hysteria2.",
 	"clientNew.quotaInvalid": "квота должна быть целым числом байт",
 	"clientNew.quotaTooLarge":
 		"квота слишком велика (максимум 9007199254740991 байт)",

@@ -25,7 +25,7 @@ or Caddy unless you choose Caddy Panel access or add a NaiveProxy Inbound later.
 After install you'll see either direct/local Panel access over generated self-signed HTTPS:
 
 ```text
-Panel access: https://127.0.0.1:<panel-port>/
+Panel access: https://127.0.0.1:<panel-port>/<web-base-path>/
 ```
 
 or, if you choose Caddy Panel access:

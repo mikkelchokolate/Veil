@@ -18,7 +18,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "../components/ui/dialog";
-import { FormItem, FormMessage } from "../components/ui/form";
+import { FormDescription, FormItem, FormMessage } from "../components/ui/form";
 import { Input, Textarea } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { useI18n } from "../i18n/I18nContext";
@@ -107,6 +107,15 @@ export function ClientNewPage() {
 			if (email) body.email = email;
 			if (notes) body.notes = notes;
 			if (quotaBytes) body.quotaBytes = parseQuotaDecimal(quotaBytes);
+			if (
+				quotaBytes &&
+				bindings.some((b) => {
+					const ib = inboundList.find((item) => item.name === b.inboundId);
+					return !ib || ib.protocol !== "hysteria2" || ib.enabled === false;
+				})
+			) {
+				throw new ApiError(400, t("clientNew.quotaHy2Only"));
+			}
 			if (expiresAt)
 				body.expiresAt = Math.floor(new Date(expiresAt).getTime() / 1000);
 			if (bindings.length > 0) {
@@ -225,6 +234,7 @@ export function ClientNewPage() {
 									value={quotaBytes}
 									onChange={(e) => setQuotaBytes(e.target.value)}
 								/>
+								<FormDescription>{t("clientNew.quotaHint")}</FormDescription>
 								{quotaError ? <FormMessage>{quotaError}</FormMessage> : null}
 							</FormItem>
 							<FormItem>

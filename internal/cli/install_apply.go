@@ -190,7 +190,17 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		}
 	}
 
-	// 3. Apply profile configurations (veil.env, caddyfile, systemd unit files, etc.)
+	// 3. Create the veil service account before writing/chowning secrets.
+	// installer.Apply chowns generated files to the veil user; that lookup
+	// fails on a fresh host if useradd has not run yet.
+	if shouldPrepareInstallHost(systemdDir) {
+		if err := installPrepareHostFunc(hostaccess.Paths{EtcDir: opts.EtcDir, VarDir: opts.VarDir}); err != nil {
+			_ = writeAuditInstall(opts.AuditLog, "", false, err.Error(), nil)
+			return fmt.Errorf("prepare panel service account and permissions: %w", err)
+		}
+	}
+
+	// 4. Apply profile configurations (veil.env, caddyfile, systemd unit files, etc.)
 	result, err := installApplyFunc(profile, installer.ApplyPaths{
 		EtcDir:      opts.EtcDir,
 		VarDir:      opts.VarDir,
@@ -204,7 +214,7 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		return err
 	}
 
-	// 3a. Ensure the firewall is active and open ports required by the panel.
+	// 4a. Ensure the firewall is active and open ports required by the panel.
 	installPlan, planErr := buildInstallPlan(profile, opts)
 	if planErr == nil && len(installPlan.FirewallActions) > 0 {
 		if err := installFirewallApplyFunc(installPlan.FirewallActions); err != nil {
@@ -214,10 +224,6 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	}
 
 	if shouldPrepareInstallHost(systemdDir) {
-		if err := installPrepareHostFunc(hostaccess.Paths{EtcDir: opts.EtcDir, VarDir: opts.VarDir}); err != nil {
-			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
-			return fmt.Errorf("prepare panel service account and permissions: %w", err)
-		}
 		if err := installSystemdRunFunc(service.SystemdApplyPlan(installer.PanelSystemdUnits(profile))); err != nil {
 			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
 			return err
