@@ -195,12 +195,6 @@ func TestRenderCaddyJSONEnablesTLSOnNonStandardNaivePort(t *testing.T) {
 	}
 }
 
-func containsInOrder(s, a, b string) bool {
-	ia := strings.Index(s, a)
-	ib := strings.Index(s, b)
-	return ia >= 0 && ib > ia
-}
-
 func TestRenderCaddyJSONPanelOnly(t *testing.T) {
 	plan := caddyassembly.CaddyRenderPlan{
 		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
