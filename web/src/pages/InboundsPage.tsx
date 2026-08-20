@@ -217,7 +217,12 @@ export function InboundsPage() {
 			// stale flat value wins server-side precedence (audit #67/#119).
 			protocolFields: {
 				...f.protocolFields,
-				hysteria2Insecure: f.hysteria2Insecure,
+				hysteria2Insecure: Object.hasOwn(
+					f.protocolFields ?? {},
+					"hysteria2Insecure",
+				)
+					? Boolean(f.protocolFields.hysteria2Insecure)
+					: f.hysteria2Insecure,
 			},
 			password: f.password || f.originalRecord?.password || undefined,
 			profiles: f.profiles.length
@@ -229,7 +234,12 @@ export function InboundsPage() {
 				f.naivePassword || f.originalRecord?.naivePassword || undefined,
 			hysteria2Password:
 				f.hysteria2Password || f.originalRecord?.hysteria2Password || undefined,
-			hysteria2Insecure: f.hysteria2Insecure,
+			hysteria2Insecure: Object.hasOwn(
+				f.protocolFields ?? {},
+				"hysteria2Insecure",
+			)
+				? Boolean(f.protocolFields.hysteria2Insecure)
+				: f.hysteria2Insecure,
 			olcrtcAuth: f.olcrtcAuth || f.originalRecord?.olcrtcAuth || undefined,
 			olcrtcTransport:
 				f.olcrtcTransport || f.originalRecord?.olcrtcTransport || undefined,

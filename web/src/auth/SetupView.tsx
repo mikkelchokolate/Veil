@@ -9,6 +9,7 @@ export function SetupView() {
 	const [username, setUsername] = useState("admin");
 	const [password, setPassword] = useState("");
 	const [confirm, setConfirm] = useState("");
+	const [backupAck, setBackupAck] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 
@@ -19,11 +20,19 @@ export function SetupView() {
 			setError(t("auth.setup.mismatch"));
 			return;
 		}
+		if (!backupAck) {
+			setError(t("auth.setup.backupRequired"));
+			return;
+		}
 		setBusy(true);
 		try {
 			await apiFetch("/api/setup/complete", {
 				method: "POST",
-				body: JSON.stringify({ username, password }),
+				body: JSON.stringify({
+					username,
+					password,
+					backupAcknowledged: true,
+				}),
 			});
 			await qc.invalidateQueries();
 		} catch (err) {
@@ -56,6 +65,7 @@ export function SetupView() {
 						className="input"
 						type="password"
 						autoComplete="new-password"
+						minLength={12}
 						value={password}
 						onChange={(e) => setPassword(e.target.value)}
 						required
@@ -68,11 +78,30 @@ export function SetupView() {
 						className="input"
 						type="password"
 						autoComplete="new-password"
+						minLength={12}
 						value={confirm}
 						onChange={(e) => setConfirm(e.target.value)}
 						required
 					/>
 				</div>
+				<label
+					htmlFor="setup-backup-ack"
+					style={{
+						display: "flex",
+						gap: 8,
+						alignItems: "flex-start",
+						marginTop: 8,
+					}}
+				>
+					<input
+						id="setup-backup-ack"
+						type="checkbox"
+						checked={backupAck}
+						onChange={(e) => setBackupAck(e.target.checked)}
+						required
+					/>
+					<span>{t("auth.setup.backupAck")}</span>
+				</label>
 				{error ? (
 					<div className="form-error" role="alert">
 						{error}

@@ -158,6 +158,10 @@ export const en: Record<string, string> = {
 	"auth.setup.subtitle": "Create the initial administrator account",
 	"auth.setup.confirm": "Confirm password",
 	"auth.setup.mismatch": "Passwords do not match.",
+	"auth.setup.backupAck":
+		"I will preserve both the encrypted state and its state key in a protected backup.",
+	"auth.setup.backupRequired":
+		"Backup and recovery acknowledgement is required.",
 	"auth.setup.failed": "Setup failed.",
 	"auth.setup.creating": "Creating…",
 	"auth.setup.create": "Create administrator",

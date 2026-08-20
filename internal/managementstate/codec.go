@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
@@ -146,6 +147,9 @@ func (ManagementStateCodec) Decode(body []byte) (model.ManagementSnapshot, error
 		}
 		return model.ManagementSnapshot{}, err
 	}
+	// Install and admin-reset historically wrote an admin user without flipping
+	// setup.completed. Heal that in-memory so first-run status matches login.
+	CompleteSetupForAdmins(&snapshot, time.Time{})
 	return snapshot, nil
 }
 

@@ -103,6 +103,7 @@ func newManagementStateProduction(info ServerInfo) *managementState {
 		requirePrivilegedHelper:        info.RequirePrivilegedHelper,
 		applyRoot:                      defaultApplyRoot(applyRoot),
 		liveRoot:                       info.LiveRoot,
+		systemdWantsDir:                info.SystemdWantsDir,
 		keyPath:                        keyPath,
 		authToken:                      info.AuthToken,
 		allowDevAnonymous:              !info.PublicListen,

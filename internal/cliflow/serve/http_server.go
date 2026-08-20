@@ -64,6 +64,7 @@ func (s HTTPServer) Build() (*http.Server, api.Reloader) {
 		StatePath:               opts.StatePath,
 		ApplyRoot:               opts.ApplyRoot,
 		LiveRoot:                opts.LiveRoot,
+		SystemdWantsDir:         api.DefaultSystemdWantsDir,
 		KeyPath:                 opts.KeyPath,
 		PanelListen:             opts.Listen,
 		PanelAccess:             opts.PanelAccess,

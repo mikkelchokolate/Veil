@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
@@ -54,6 +55,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 				snapshot.Users = []model.User{{
 					Username: username, PasswordHash: string(hashed), Role: "admin",
 				}}
+				managementstate.CompleteSetupForAdmins(snapshot, time.Now())
 				return nil
 			}); err != nil {
 				return fmt.Errorf("save state: %w", err)
@@ -115,10 +117,12 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 				for index := range snapshot.Users {
 					if snapshot.Users[index].Username == username {
 						snapshot.Users[index] = updatedUser
+						managementstate.CompleteSetupForAdmins(snapshot, time.Now())
 						return nil
 					}
 				}
 				snapshot.Users = append(snapshot.Users, updatedUser)
+				managementstate.CompleteSetupForAdmins(snapshot, time.Now())
 				return nil
 			}); err != nil {
 				return fmt.Errorf("save state: %w", err)

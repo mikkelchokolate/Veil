@@ -89,6 +89,10 @@ export const ru: Record<string, string> = {
 	"auth.setup.subtitle": "Создайте начальную учётную запись администратора",
 	"auth.setup.confirm": "Подтвердите пароль",
 	"auth.setup.mismatch": "Пароли не совпадают.",
+	"auth.setup.backupAck":
+		"Я сохраню и зашифрованное состояние, и ключ состояния в защищённой резервной копии.",
+	"auth.setup.backupRequired":
+		"Нужно подтвердить обязательство по резервному копированию.",
 	"auth.setup.failed": "Ошибка настройки.",
 	"auth.setup.creating": "Создание…",
 	"auth.setup.create": "Создать администратора",

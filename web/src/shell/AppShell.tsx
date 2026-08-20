@@ -24,7 +24,10 @@ export function AppShell({ children }: { children?: ReactNode }) {
 							<li key={entry.to}>
 								<Link
 									to={entry.to}
-									className={`nav-item${active ? " active" : ""}`}
+									className="nav-item"
+									activeProps={{ className: "nav-item active" }}
+									activeOptions={{ exact: entry.to === "/" }}
+									data-active={active ? "true" : undefined}
 								>
 									<entry.icon className="icon" aria-hidden="true" />
 									<span>{t(entry.labelKey)}</span>

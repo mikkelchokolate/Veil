@@ -167,7 +167,12 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 		!slices.Contains(removeIDs, generatedconfig.CaddyJSONConfigSubpath) {
 		removeIDs = append(removeIDs, generatedconfig.CaddyJSONConfigSubpath)
 	}
+	desiredUnits := desiredRuntimeUnits(ctx.state.settings, ctx.state.inbounds, ctx.state.warp)
+	wantsOrphans := scanEnabledOrphanTemplateUnits(ctx.state.systemdWantsDir, desiredUnits)
 	if len(artifactIDs) == 0 && len(removeIDs) == 0 {
+		// No files to promote, but leftover enabled template units still need
+		// stop/disable on the subsequent service reload.
+		ctx.state.orphanedUnits = wantsOrphans
 		return nil, nil, nil, nil
 	}
 	if ctx.state.privileged == nil {
@@ -213,7 +218,7 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 			orphanedUnits = append(orphanedUnits, unit)
 		}
 	}
-	ctx.state.orphanedUnits = orphanedUnits
+	ctx.state.orphanedUnits = mergeOrphanedUnits(orphanedUnits, wantsOrphans)
 	return liveFiles, backupFiles, records, nil
 }
 

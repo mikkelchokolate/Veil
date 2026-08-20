@@ -137,9 +137,13 @@ export function ClientsPage() {
 				page,
 				pageSize,
 				search: searchText,
-				status,
 				inboundId,
 				sort,
+				...(status === "depleted"
+					? { quotaState: "depleted" }
+					: status
+						? { status }
+						: {}),
 			}),
 		placeholderData: keepPreviousData,
 	});

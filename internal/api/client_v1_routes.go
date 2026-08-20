@@ -386,6 +386,11 @@ func (s *managementState) handleV1MigrateLegacy(w http.ResponseWriter, r *http.R
 
 func nowUnixAPI() int64 { return time.Now().Unix() }
 
+// maxV1ClientListPageSize is the public list cap. The inbound editor loads
+// attached clients in one request with pageSize=500; a 100-row clamp truncated
+// that picker while the clients page itself paginates far below the cap.
+const maxV1ClientListPageSize = 500
+
 // actorFromRequest extracts the authenticated username for audit/apply actor.
 func actorFromRequest(r *http.Request) string {
 	actor, _ := r.Context().Value(contextKeyUsername).(string)
@@ -404,8 +409,8 @@ func (s *managementState) handleV1ListClients(w http.ResponseWriter, r *http.Req
 		QuotaState: q.Get("quotaState"),
 		Sort:       q.Get("sort"),
 	}
-	if f.PageSize > 100 {
-		f.PageSize = 100
+	if f.PageSize > maxV1ClientListPageSize {
+		f.PageSize = maxV1ClientListPageSize
 	}
 	if v := q.Get("expiresBefore"); v != "" {
 		if ts, err := strconv.ParseInt(v, 10, 64); err == nil {

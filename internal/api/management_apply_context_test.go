@@ -372,6 +372,43 @@ func TestReloadPromotedServicesStopsLegacyCaddyBeforeStartingSingleton(t *testin
 	}
 }
 
+func TestPromoteStagedConfigsCollectsEnabledOrphanTemplateUnits(t *testing.T) {
+	wants := t.TempDir()
+	if err := os.WriteFile(filepath.Join(wants, "veil-hysteria2@hy2-auto.service"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wants, "veil-hysteria2@sfhgs.service"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	client := &recordingPrivilegedClient{statusActiveState: "inactive"}
+	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: t.TempDir(), Privileged: client, SystemdWantsDir: wants})
+	state.inbounds = []Inbound{{Name: "sfhgs", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
+	ctx := NewManagementApplyContext(state)
+
+	if _, _, _, err := ctx.promoteStagedConfigs(nil); err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+	if len(client.promotions) != 0 {
+		t.Fatalf("no-op promote must not write artifacts: %+v", client.promotions)
+	}
+	if len(state.orphanedUnits) != 1 || state.orphanedUnits[0] != "veil-hysteria2@hy2-auto.service" {
+		t.Fatalf("orphanedUnits = %v, want leftover hy2-auto", state.orphanedUnits)
+	}
+
+	ctx.reloadPromotedServices(nil)
+	var got []string
+	for _, action := range client.serviceActions {
+		got = append(got, action.Unit+":"+string(action.Action))
+	}
+	want := []string{
+		"veil-hysteria2@hy2-auto.service:stop",
+		"veil-hysteria2@hy2-auto.service:disable",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("service actions = %v, want %v", got, want)
+	}
+}
+
 func TestReloadPromotedServicesStopsOrphansAfterReloading(t *testing.T) {
 	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: t.TempDir()})
 	state.liveRoot = filepath.Join(state.applyRoot, "live")

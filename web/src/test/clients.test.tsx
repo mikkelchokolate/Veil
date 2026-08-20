@@ -57,6 +57,24 @@ describe("ClientsPage", () => {
 		await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 	});
 
+	it("maps the depleted status filter to quotaState", async () => {
+		let seen = "";
+		server.use(
+			http.get("/api/v1/clients", ({ request }) => {
+				seen = new URL(request.url).search;
+				return HttpResponse.json({
+					items: [],
+					total: 0,
+					page: 1,
+					pageSize: 20,
+				});
+			}),
+		);
+		renderClients("/clients?status=depleted");
+		await waitFor(() => expect(seen).toContain("quotaState=depleted"));
+		expect(seen).not.toContain("status=depleted");
+	});
+
 	it("shows empty state when no clients", async () => {
 		server.use(
 			http.get("/api/v1/clients", () =>

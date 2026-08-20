@@ -32,8 +32,11 @@ func TestRenderMieruClientDefaultsToValidSocks5Port(t *testing.T) {
 	if decoded.Socks5Port < 1 || decoded.Socks5Port > 65535 {
 		t.Fatalf("socks5Port = %d, want in [1, 65535]", decoded.Socks5Port)
 	}
-	if decoded.RPCPort < 0 {
-		t.Fatalf("rpcPort = %d, want >= 0", decoded.RPCPort)
+	if decoded.RPCPort < 1 || decoded.RPCPort > 65535 {
+		t.Fatalf("rpcPort = %d, want in [1, 65535]", decoded.RPCPort)
+	}
+	if decoded.RPCPort == decoded.Socks5Port {
+		t.Fatalf("rpcPort must not collide with socks5Port %d", decoded.Socks5Port)
 	}
 }
 
@@ -86,6 +89,35 @@ func TestMieruDefaultSocks5PortRange(t *testing.T) {
 	}
 	if len(seen) < 3 {
 		t.Fatalf("port derivation lacks spread: %v", seen)
+	}
+}
+
+func TestRenderMieruClientDefaultsToValidRPCPort(t *testing.T) {
+	body, err := RenderMieruClient(MieruClientConfig{
+		ProfileName:  "mieru/alice",
+		DomainName:   "vpn.example.com",
+		PortBindings: []MieruPortBinding{{Port: 443, Protocol: "tcp"}},
+		User:         MieruUser{Name: "alice", Password: "alice-pass"},
+		Socks5Port:   1080,
+	})
+	if err != nil {
+		t.Fatalf("RenderMieruClient: %v", err)
+	}
+	var decoded struct {
+		Socks5Port int `json:"socks5Port"`
+		RPCPort    int `json:"rpcPort"`
+	}
+	if err := json.Unmarshal([]byte(body), &decoded); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, body)
+	}
+	if decoded.Socks5Port != 1080 {
+		t.Fatalf("socks5Port = %d, want 1080", decoded.Socks5Port)
+	}
+	if decoded.RPCPort < 1 || decoded.RPCPort > 65535 {
+		t.Fatalf("rpcPort = %d, want in [1, 65535]", decoded.RPCPort)
+	}
+	if decoded.RPCPort == 1080 {
+		t.Fatal("rpcPort collided with explicit socks5Port")
 	}
 }
 

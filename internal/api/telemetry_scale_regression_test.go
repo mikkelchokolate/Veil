@@ -63,7 +63,7 @@ func TestClientListReportsServerEnforcedPageMaximum(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if got := int(body["pageSize"].(float64)); got != 100 {
-		t.Fatalf("response pageSize=%d want enforced maximum 100", got)
+	if got := int(body["pageSize"].(float64)); got != maxV1ClientListPageSize {
+		t.Fatalf("response pageSize=%d want enforced maximum %d", got, maxV1ClientListPageSize)
 	}
 }

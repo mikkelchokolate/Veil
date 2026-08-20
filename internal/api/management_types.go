@@ -55,6 +55,7 @@ type managementState struct {
 	statePath                      string
 	applyRoot                      string
 	liveRoot                       string
+	systemdWantsDir                string
 	keyPath                        string
 	cipher                         *secrets.Cipher
 	authToken                      string

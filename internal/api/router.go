@@ -36,6 +36,7 @@ type ServerInfo struct {
 	StatePath               string
 	ApplyRoot               string
 	LiveRoot                string
+	SystemdWantsDir         string
 	KeyPath                 string
 	PanelListen             string
 	PanelAccess             string

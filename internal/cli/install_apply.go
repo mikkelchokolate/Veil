@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/acmeip"
 	installflow "github.com/mikkelchokolate/Veil/internal/cliflow/install"
@@ -172,6 +173,7 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 				},
 			},
 		}
+		managementstate.CompleteSetupForAdmins(&initialSnapshot, time.Now())
 
 		if _, err := statecommit.Save(initialSnapshot, statecommit.Options{StatePath: resolvedStatePath, Cipher: cipher}); err != nil {
 			return fmt.Errorf("write initial state.json: %w", err)

@@ -65,8 +65,18 @@ func RenderMieruClient(cfg MieruClientConfig) (string, error) {
 	if body.Socks5Port < 1 {
 		body.Socks5Port = mieruDefaultSocks5Port(cfg.ProfileName, cfg.User.Name, endpoint)
 	}
-	if body.RPCPort < 0 {
-		body.RPCPort = 0
+	// Upstream `mieru apply config` rejects rpcPort < 1 ("RPC port number 0 is
+	// invalid") the same way it rejects socks5Port 0. Derive a stable local
+	// control port when the caller left it unset.
+	if body.RPCPort < 1 {
+		body.RPCPort = mieruDefaultRPCPort(cfg.ProfileName, cfg.User.Name, endpoint)
+		if body.RPCPort == body.Socks5Port {
+			if body.RPCPort < 65535 {
+				body.RPCPort++
+			} else {
+				body.RPCPort--
+			}
+		}
 	}
 	encoded, err := json.MarshalIndent(body, "", "  ")
 	if err != nil {
@@ -80,8 +90,16 @@ func RenderMieruClient(cfg MieruClientConfig) (string, error) {
 // maps into [1024, 65535]; the port is deterministic across renders so that
 // config diffs stay empty and subscriptions are stable.
 func mieruDefaultSocks5Port(profileName, username, endpoint string) int {
+	return mieruDefaultLocalPort("", profileName, username, endpoint)
+}
+
+func mieruDefaultRPCPort(profileName, username, endpoint string) int {
+	return mieruDefaultLocalPort("rpc", profileName, username, endpoint)
+}
+
+func mieruDefaultLocalPort(kind, profileName, username, endpoint string) int {
 	h := fnv.New32a()
-	_, _ = h.Write([]byte(profileName + "\x00" + username + "\x00" + endpoint))
+	_, _ = h.Write([]byte(kind + "\x00" + profileName + "\x00" + username + "\x00" + endpoint))
 	return 1024 + int(h.Sum32()%(65535-1024+1))
 }
 

@@ -24,6 +24,101 @@ func NewLiveConfigPromotion(applyRoot string, reload func([]string) []ServiceAct
 	return LiveConfigPromotion{applyRoot: applyRoot, reload: reload}
 }
 
+// DefaultSystemdWantsDir is the system wants directory that records enabled
+// protocol template instances (`veil-hysteria2@name.service`). Apply scans it
+// so leftover units whose yaml was already deleted still get stopped.
+const DefaultSystemdWantsDir = "/etc/systemd/system/multi-user.target.wants"
+
+var orphanTemplateUnitPrefixes = []string{
+	"veil-hysteria2@",
+	"veil-olcrtc@",
+	"veil-caddy@",
+}
+
+// scanEnabledOrphanTemplateUnits returns enabled systemd template instances
+// that are not in the desired catalog. Units whose live yaml is already gone
+// never appear in the file-orphan scan, so this wants-dir pass is what stops
+// crash-looping leftovers.
+func scanEnabledOrphanTemplateUnits(wantsDir string, desired map[string]struct{}) []string {
+	if wantsDir == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(wantsDir)
+	if err != nil {
+		return nil
+	}
+	orphaned := []string{}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".service") {
+			continue
+		}
+		matched := false
+		for _, prefix := range orphanTemplateUnitPrefixes {
+			if strings.HasPrefix(name, prefix) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		if _, ok := desired[name]; ok {
+			continue
+		}
+		at := strings.Index(name, "@")
+		if at < 0 {
+			continue
+		}
+		instance := strings.TrimSuffix(name[at+1:], ".service")
+		if instance == "" || !inbounds.IsSafeName(instance) {
+			continue
+		}
+		orphaned = append(orphaned, name)
+	}
+	sort.Strings(orphaned)
+	return orphaned
+}
+
+func desiredRuntimeUnits(settings Settings, inbounds []Inbound, warp WarpConfig) map[string]struct{} {
+	desired := map[string]struct{}{}
+	for _, runtime := range NewManagedRuntimeCatalogFor(settings, inbounds, warp).Runtimes() {
+		if runtime.Unit != "" {
+			desired[runtime.Unit] = struct{}{}
+		}
+	}
+	return desired
+}
+
+func mergeOrphanedUnits(existing []string, extra []string) []string {
+	if len(extra) == 0 {
+		return existing
+	}
+	seen := make(map[string]struct{}, len(existing)+len(extra))
+	out := make([]string, 0, len(existing)+len(extra))
+	for _, unit := range existing {
+		if unit == "" {
+			continue
+		}
+		if _, ok := seen[unit]; ok {
+			continue
+		}
+		seen[unit] = struct{}{}
+		out = append(out, unit)
+	}
+	for _, unit := range extra {
+		if unit == "" {
+			continue
+		}
+		if _, ok := seen[unit]; ok {
+			continue
+		}
+		seen[unit] = struct{}{}
+		out = append(out, unit)
+	}
+	return out
+}
+
 func (p LiveConfigPromotion) Promote(stagedPaths []string) ([]string, []string, []livePromotionRecord, error) {
 	liveFiles := []string{}
 	backupFiles := []string{}
