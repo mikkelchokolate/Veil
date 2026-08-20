@@ -62,45 +62,33 @@ body::after {
 	color: var(--primary);
 }
 
-/* Square cream scrollbar from the original panel chrome. */
-* {
-	scrollbar-width: thin;
-	scrollbar-color: color-mix(in srgb, var(--primary) 42%, var(--surface))
-		color-mix(in srgb, var(--canvas) 92%, transparent);
-}
-
+/* Same scrollbar as the pre-SPA panel on main (internal/panel/renderer.go).
+   Do not set scrollbar-width: Chromium then ignores ::-webkit-scrollbar. */
 ::-webkit-scrollbar {
-	width: 11px;
-	height: 11px;
+	width: 8px;
+	height: 8px;
 }
 
 ::-webkit-scrollbar-track {
+	background: var(--canvas);
 	border-left: 1px solid var(--border);
-	background: rgb(4 10 10 / 88%);
+	border-top: 1px solid var(--border);
 }
 
 ::-webkit-scrollbar-thumb {
-	min-height: 44px;
-	border: 3px solid var(--canvas);
+	background: var(--border);
 	border-radius: 0;
-	background: linear-gradient(
-		180deg,
-		color-mix(in srgb, var(--primary) 48%, var(--surface)),
-		color-mix(in srgb, var(--primary) 24%, var(--surface))
-	);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-	background: color-mix(in srgb, var(--primary) 72%, var(--surface));
+	background: var(--primary);
 }
 
-::-webkit-scrollbar-button {
-	display: none;
-}
-
-::-webkit-scrollbar-corner {
-	border: 0;
-	background: var(--canvas);
+@-moz-document url-prefix() {
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: var(--border) var(--canvas);
+	}
 }
 
 /* Creation and editing should feel like a deliberate workspace, not another
