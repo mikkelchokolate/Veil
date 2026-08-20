@@ -201,7 +201,7 @@ export function ClientDetailPage() {
 				const enabledBindings = (c.bindings ?? []).filter((b) => b.enabled);
 				const quotaUnsupported = enabledBindings.some((b) => {
 					const ib = inboundList.find((item) => item.name === b.inboundId);
-					return !ib || ib.protocol !== "hysteria2" || ib.enabled === false;
+					return ib?.protocol !== "hysteria2" || ib.enabled === false;
 				});
 				if (quotaUnsupported) {
 					throw new ApiError(400, t("clientDetail.quotaHy2Only"));
@@ -542,9 +542,7 @@ export function ClientDetailPage() {
 									inputMode="numeric"
 									{...form.register("quotaBytes")}
 								/>
-								<FormDescription>
-									{t("clientDetail.quotaHint")}
-								</FormDescription>
+								<FormDescription>{t("clientDetail.quotaHint")}</FormDescription>
 								<FormMessage>
 									{form.formState.errors.quotaBytes?.message}
 								</FormMessage>

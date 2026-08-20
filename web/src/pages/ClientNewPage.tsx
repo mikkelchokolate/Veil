@@ -111,7 +111,7 @@ export function ClientNewPage() {
 				quotaBytes &&
 				bindings.some((b) => {
 					const ib = inboundList.find((item) => item.name === b.inboundId);
-					return !ib || ib.protocol !== "hysteria2" || ib.enabled === false;
+					return ib?.protocol !== "hysteria2" || ib.enabled === false;
 				})
 			) {
 				throw new ApiError(400, t("clientNew.quotaHy2Only"));
