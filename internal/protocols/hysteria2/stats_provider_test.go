@@ -39,6 +39,30 @@ func TestStatsProviderRejectsCounterOverflow(t *testing.T) {
 	}
 }
 
+func TestStatsProviderMergesAliasedIdentitiesOntoOneBinding(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"legacy_user":{"tx":100,"rx":200},"v_abc":{"tx":10,"rx":20}}`))
+	}))
+	defer server.Close()
+	provider := NewStatsProvider("test", server.URL+"/traffic", map[string]string{
+		"legacy_user": "binding-1",
+		"v_abc":       "binding-1",
+	})
+	batch, err := provider.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(batch.Readings) != 1 || batch.Readings[0].BindingID != "binding-1" {
+		t.Fatalf("readings=%+v", batch.Readings)
+	}
+	if batch.Readings[0].UploadBytes != 110 || batch.Readings[0].DownloadBytes != 220 {
+		t.Fatalf("merged counters=%+v, want 110/220", batch.Readings[0])
+	}
+	if len(batch.UnknownIdentities) != 0 {
+		t.Fatalf("unknown=%v", batch.UnknownIdentities)
+	}
+}
+
 func TestStatsProviderReturnsUnknownIdentityAlongsideValidReading(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"alice":{"tx":10,"rx":20},"unknown":{"tx":1,"rx":1}}`))

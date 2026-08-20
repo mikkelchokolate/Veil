@@ -130,7 +130,7 @@ func (p *StatsProvider) ReadContext(ctx context.Context) (client.ProviderBatch, 
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return client.ProviderBatch{}, fmt.Errorf("decode hysteria2 traffic response: %w", err)
 	}
-	out := make([]client.ProviderReading, 0, len(payload))
+	merged := make(map[string]trafficStats, len(payload))
 	var unknown []string
 	for runtimeIdentity, counters := range payload {
 		bindingID, ok := p.bindings[runtimeIdentity]
@@ -140,6 +140,21 @@ func (p *StatsProvider) ReadContext(ctx context.Context) (client.ProviderBatch, 
 		}
 		if counters.Tx > math.MaxInt64 || counters.Rx > math.MaxInt64 {
 			return client.ProviderBatch{}, fmt.Errorf("hysteria2 traffic counter for identity %q exceeds int64 range", runtimeIdentity)
+		}
+		prev := merged[bindingID]
+		if counters.Tx > math.MaxUint64-prev.Tx || counters.Rx > math.MaxUint64-prev.Rx {
+			return client.ProviderBatch{}, fmt.Errorf("hysteria2 traffic counter for identity %q overflows when merged", runtimeIdentity)
+		}
+		// Leftover pre-migration usernames and v_* identities can both be live
+		// for one binding; they are separate Hysteria users, so sum.
+		prev.Tx += counters.Tx
+		prev.Rx += counters.Rx
+		merged[bindingID] = prev
+	}
+	out := make([]client.ProviderReading, 0, len(merged))
+	for bindingID, counters := range merged {
+		if counters.Tx > math.MaxInt64 || counters.Rx > math.MaxInt64 {
+			return client.ProviderBatch{}, fmt.Errorf("hysteria2 traffic counter for binding %q exceeds int64 range", bindingID)
 		}
 		out = append(out, client.ProviderReading{
 			BindingID: bindingID, UploadBytes: int64(counters.Tx), DownloadBytes: int64(counters.Rx),
