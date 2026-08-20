@@ -148,7 +148,7 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 			{error ? <p className="form-error">{error}</p> : null}
 
 			{isAdmin ? (
-				<div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+				<div className="h-scroll" style={{ gap: 8, marginBottom: 16 }}>
 					<input
 						className="input"
 						style={{ maxWidth: 240 }}

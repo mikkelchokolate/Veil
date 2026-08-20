@@ -383,7 +383,7 @@ export function ClientDetailPage() {
 	return (
 		<>
 			<div className="card">
-				<div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+				<div className="h-scroll" style={{ gap: 12 }}>
 					<h2 style={{ margin: 0, flex: 1 }}>{c.name}</h2>
 					{isAdmin ? (
 						<>
@@ -659,7 +659,7 @@ export function ClientDetailPage() {
 					)}
 
 					{isAdmin && attachable.length > 0 ? (
-						<div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+						<div className="h-scroll" style={{ gap: 8, marginTop: 12 }}>
 							<Select
 								style={{ maxWidth: 240 }}
 								value={attachInbound}

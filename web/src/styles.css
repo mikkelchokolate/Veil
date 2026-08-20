@@ -24,6 +24,7 @@
 html {
 	background-color: var(--canvas);
 	scrollbar-gutter: stable;
+	overflow-x: hidden;
 }
 
 body {
@@ -138,11 +139,39 @@ a {
 	font-size: 18px;
 	margin: 0;
 	font-weight: 600;
+	min-width: 0;
+}
+
+.top-bar-actions {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	flex: 0 0 auto;
 }
 
 .page-content {
 	padding: 24px;
 	flex: 1;
+	min-width: 0;
+}
+
+.h-scroll {
+	display: flex;
+	flex-wrap: nowrap;
+	align-items: center;
+	min-width: 0;
+	max-width: 100%;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	-webkit-overflow-scrolling: touch;
+}
+
+.h-scroll > * {
+	flex: 0 0 auto;
+}
+
+.h-scroll > h2 {
+	white-space: nowrap;
 }
 
 /* ---- components ---- */
@@ -355,6 +384,10 @@ textarea.input {
 }
 
 @media (max-width: 900px) {
+	.app-shell {
+		flex-direction: column;
+		overflow-x: clip;
+	}
 	.sidebar {
 		position: static;
 		width: 100%;
@@ -363,26 +396,88 @@ textarea.input {
 		border-right: 0;
 		border-bottom: 1px solid var(--border);
 	}
-	.app-shell {
-		flex-direction: column;
-	}
-	.nav-menu {
+	.app-shell .nav-menu {
 		flex-direction: row;
 		overflow-x: auto;
+		overscroll-behavior-x: contain;
+		-webkit-overflow-scrolling: touch;
 	}
-	.nav-item {
+	.app-shell .nav-menu li {
+		width: auto;
 		flex: 0 0 auto;
+	}
+	.app-shell .nav-item {
+		flex: 0 0 auto;
+		width: auto;
 		padding: 12px 16px;
 		white-space: nowrap;
 		border-left: 0;
 		border-bottom: 3px solid transparent;
+		box-shadow: none;
 	}
-	.nav-item.active {
+	.app-shell .nav-item.active {
+		background: transparent;
 		border-left-color: transparent;
-		border-bottom-color: var(--accent);
+		border-bottom-color: var(--primary);
+		box-shadow: none;
 	}
 	.content-wrapper {
 		margin-left: 0;
 		width: 100%;
+		min-width: 0;
+	}
+	.top-bar {
+		min-width: 0;
+	}
+	.top-bar h1 {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.top-bar-actions {
+		min-width: 0;
+		flex: 1 1 auto;
+		overflow-x: auto;
+		overscroll-behavior-x: contain;
+		-webkit-overflow-scrolling: touch;
+	}
+	.page-content,
+	.card {
+		min-width: 0;
+		max-width: 100%;
+	}
+	.input,
+	select.input,
+	textarea.input,
+	input,
+	select,
+	textarea {
+		font-size: 16px;
+	}
+	[role="tablist"] {
+		display: flex;
+		flex-wrap: nowrap;
+		justify-content: flex-start;
+		width: 100%;
+		max-width: 100%;
+		overflow-x: auto;
+		overscroll-behavior-x: contain;
+		-webkit-overflow-scrolling: touch;
+	}
+	[role="tab"] {
+		flex: 0 0 auto;
+	}
+	.card > div:has(> h2) {
+		min-width: 0;
+		width: 100%;
+		max-width: 100%;
+		overflow-x: auto;
+		overscroll-behavior-x: contain;
+		-webkit-overflow-scrolling: touch;
+	}
+	.mono,
+	code {
+		overflow-wrap: anywhere;
+		word-break: break-word;
 	}
 }

@@ -90,7 +90,7 @@ body::after {
 /* Creation and editing should feel like a deliberate workspace, not another
    block pushed into an already busy list. */
 .creation-dialog {
-	width: min(680px, calc(100vw - 32px));
+	width: min(680px, calc(100% - 32px));
 	max-width: 680px;
 	max-height: min(88dvh, 920px);
 	overflow-x: hidden;
@@ -119,12 +119,12 @@ body::after {
 }
 
 .creation-dialog-wide {
-	width: min(920px, calc(100vw - 32px));
+	width: min(920px, calc(100% - 32px));
 	max-width: 920px;
 }
 
 .creation-dialog-client {
-	width: min(720px, calc(100vw - 32px));
+	width: min(720px, calc(100% - 32px));
 	max-width: 720px;
 }
 
@@ -135,6 +135,7 @@ body::after {
 
 .creation-dialog-actions {
 	display: flex;
+	flex-wrap: wrap;
 	justify-content: flex-end;
 	gap: 8px;
 	margin-top: 8px;
@@ -225,9 +226,14 @@ a:hover {
 
 .nav-item.active {
 	border-left: 0;
-	background: linear-gradient(90deg, rgb(255 230 203 / 8%), transparent 78%);
-	box-shadow: inset 3px 0 0 var(--primary);
 	color: var(--primary);
+}
+
+@media (min-width: 901px) {
+	.nav-item.active {
+		background: linear-gradient(90deg, rgb(255 230 203 / 8%), transparent 78%);
+		box-shadow: inset 3px 0 0 var(--primary);
+	}
 }
 
 .nav-item.active::before {
@@ -515,6 +521,21 @@ code {
 	}
 }
 
+@media (max-width: 900px) {
+	.app-shell .nav-item.active {
+		background: transparent;
+		box-shadow: none;
+		border-left: 0;
+		border-bottom-color: var(--primary);
+	}
+
+	.creation-dialog,
+	.creation-dialog-wide,
+	.creation-dialog-client {
+		width: min(680px, calc(100% - 16px));
+	}
+}
+
 .creation-dialog h2,
 .creation-dialog h3,
 .creation-dialog [role="heading"] {
@@ -542,7 +563,7 @@ code {
 	.creation-dialog,
 	.creation-dialog-wide,
 	.creation-dialog-client {
-		width: calc(100vw - 16px);
+		width: calc(100% - 16px);
 		max-height: calc(100dvh - 16px);
 	}
 

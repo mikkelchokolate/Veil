@@ -187,7 +187,7 @@ export function BackupsPage() {
 	return (
 		<>
 			<div className="card">
-				<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+				<div className="h-scroll" style={{ gap: 8 }}>
 					<h2 style={{ margin: 0, flex: 1 }}>{t("backups.title")}</h2>
 					{isAdmin ? (
 						<>

@@ -47,7 +47,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
 							</>
 						) : null}
 					</h1>
-					<div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+					<div className="top-bar-actions">
 						<ApplyStatusIndicator />
 						<span className="muted" style={{ fontSize: 13 }}>
 							{session?.username}

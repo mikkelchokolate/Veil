@@ -294,7 +294,7 @@ export function ApplyJobDetailPage() {
 
 			{j ? (
 				<div className="card">
-					<div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+					<div className="h-scroll" style={{ gap: 12 }}>
 						<h2 style={{ margin: 0, fontSize: 15, flex: 1 }}>
 							{t("applyJob.diagnosticsTitle")}
 						</h2>

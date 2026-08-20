@@ -546,10 +546,9 @@ export function ClientsPage() {
 				)}
 
 				<div
+					className="h-scroll"
 					style={{
-						display: "flex",
 						gap: 12,
-						alignItems: "center",
 						marginTop: 16,
 					}}
 				>
