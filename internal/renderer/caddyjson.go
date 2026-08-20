@@ -166,20 +166,21 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 			routes = append(routes, panelRoutes(owner.PanelDomain, owner.BackendPort, owner.WebBasePath, false)...)
 		}
 		proxyRoute := map[string]any{"handle": handlers}
-		// Naive-only binds (no shared panel routes) need a host matcher so
-		// Caddy discovers the inbound domain for certificate automation
-		// (audit #122). The unmatched file_server keeps probe resistance for
-		// other Host values. Shared Panel/Naive must keep forward_proxy
-		// unmatched so CONNECT sees the target host.
+		// HTTP CONNECT sets Host to the destination (example.com), not the
+		// inbound domain. Shared Panel/Naive already keeps forward_proxy
+		// unmatched for that reason. Naive-only binds still need a host
+		// matcher so Caddy auto-HTTPS discovers the inbound domain
+		// (audit #122), but that matcher must sit on a file_server route —
+		// putting it on forward_proxy drops every real client CONNECT.
 		domain := strings.TrimSpace(owner.Domain)
 		if domain != "" && owner.PanelDomain == "" {
-			proxyRoute["match"] = []map[string]any{{"host": []string{domain}}}
-			routes = append(routes, proxyRoute, map[string]any{
+			routes = append(routes, map[string]any{
+				"match": []map[string]any{{"host": []string{domain}}},
 				"handle": []map[string]any{{
 					"handler": "file_server",
 					"root":    fallbackRoot,
 				}},
-			})
+			}, proxyRoute)
 		} else {
 			routes = append(routes, proxyRoute)
 		}

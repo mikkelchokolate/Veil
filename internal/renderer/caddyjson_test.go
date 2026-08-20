@@ -63,9 +63,33 @@ func TestRenderCaddyJSONNaiveForwardProxyOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := string(data)
-	if !containsInOrder(s, `"forward_proxy"`, `"file_server"`) {
-		t.Error("forward_proxy must appear before file_server")
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	server := cfg["apps"].(map[string]any)["http"].(map[string]any)["servers"].(map[string]any)["tcp-0.0.0.0-8443"].(map[string]any)
+	var seenHostMatcher, seenUnmatchedProxy bool
+	for _, rawRoute := range server["routes"].([]any) {
+		route := rawRoute.(map[string]any)
+		handlers := route["handle"].([]any)
+		names := make([]string, 0, len(handlers))
+		for _, raw := range handlers {
+			names = append(names, raw.(map[string]any)["handler"].(string))
+		}
+		if _, matched := route["match"]; matched {
+			seenHostMatcher = true
+			if names[0] == "forward_proxy" {
+				t.Fatalf("host-matched forward_proxy drops CONNECT: %+v", route)
+			}
+			continue
+		}
+		seenUnmatchedProxy = true
+		if len(names) < 2 || names[0] != "forward_proxy" || names[1] != "file_server" {
+			t.Fatalf("unmatched proxy handlers = %v, want forward_proxy then file_server", names)
+		}
+	}
+	if !seenHostMatcher || !seenUnmatchedProxy {
+		t.Fatalf("expected cert-discovery host matcher and unmatched forward_proxy, got %s", data)
 	}
 }
 
