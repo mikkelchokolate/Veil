@@ -64,7 +64,7 @@ func (w Workflow) RunLocked(req model.ApplyRequest) (model.ApplyResponse, int, e
 	if req.ApplyServices && !req.ApplyLive {
 		return model.ApplyResponse{Applied: false, Plan: plan}, http.StatusBadRequest, nil
 	}
-	written, validations, renderedPaths, err := s.WriteApplyStageLocked(plan)
+	written, validations, _, err := s.WriteApplyStageLocked(plan)
 	if err != nil {
 		return model.ApplyResponse{}, http.StatusInternalServerError, err
 	}
@@ -76,7 +76,7 @@ func (w Workflow) RunLocked(req model.ApplyRequest) (model.ApplyResponse, int, e
 			}
 			return response, http.StatusBadRequest, nil
 		}
-		liveFiles, backupFiles, promotionRecords, err := s.PromoteStagedConfigsLocked(renderedPaths)
+		liveFiles, backupFiles, promotionRecords, err := s.PromoteStagedConfigsLocked(written)
 		if err != nil {
 			response.MutationStarted = true
 			response.Ambiguous = true

@@ -17,6 +17,7 @@ type fakeState struct {
 	validations []model.ConfigValidationResult
 	rendered    []string
 	writeErr    error
+	promoted    []string
 
 	liveFiles   []string
 	backupFiles []string
@@ -37,7 +38,8 @@ func (s *fakeState) WriteApplyStageLocked(model.ApplyPlanResponse) ([]string, []
 	s.wrote = true
 	return s.written, s.validations, s.rendered, s.writeErr
 }
-func (s *fakeState) PromoteStagedConfigsLocked([]string) ([]string, []string, []PromotionRecord, error) {
+func (s *fakeState) PromoteStagedConfigsLocked(paths []string) ([]string, []string, []PromotionRecord, error) {
+	s.promoted = append([]string(nil), paths...)
 	return s.liveFiles, s.backupFiles, s.promotions, s.promoteErr
 }
 func (s *fakeState) ReloadPromotedServicesLocked([]string) []model.ServiceActionResult {
@@ -116,6 +118,34 @@ func TestWorkflowSkippedValidationDoesNotBlockLiveApply(t *testing.T) {
 	}
 	if !resp.LiveApplied {
 		t.Fatalf("expected live applied, got %+v", resp)
+	}
+}
+
+func TestWorkflowPromotesWrittenFilesIncludingRoutingDat(t *testing.T) {
+	written := []string{
+		"/stage/generated/veil/apply-plan.json",
+		"/stage/generated/hysteria2/edge.yaml",
+		"/stage/generated/rules/geosite.dat",
+	}
+	state := &fakeState{
+		plan:      model.ApplyPlanResponse{Valid: true},
+		written:   written,
+		rendered:  []string{"/stage/generated/hysteria2/edge.yaml"},
+		liveFiles: []string{"/live/hysteria2/edge.yaml"},
+	}
+	_, status, err := NewWorkflow(state, nil).RunLocked(model.ApplyRequest{Confirm: true, ApplyLive: true})
+	if err != nil || status != http.StatusOK {
+		t.Fatalf("status=%d err=%v", status, err)
+	}
+	if len(state.promoted) != len(written) {
+		t.Fatalf("promoted=%q, want written files including geosite.dat", state.promoted)
+	}
+	got := map[string]bool{}
+	for _, path := range state.promoted {
+		got[path] = true
+	}
+	if !got["/stage/generated/rules/geosite.dat"] {
+		t.Fatalf("geosite.dat was not promoted: %q", state.promoted)
 	}
 }
 
