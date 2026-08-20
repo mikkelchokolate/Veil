@@ -102,6 +102,10 @@ func RenderWarpSingBox(cfg WarpSingBoxConfig) (string, error) {
 				"type": "direct",
 				"tag":  "direct",
 			},
+			{
+				"type": "direct",
+				"tag":  "proxy",
+			},
 		},
 		"route": renderWarpRoute(cfg.RoutingRules),
 	}

@@ -33,7 +33,8 @@ type Hysteria2Config struct {
 	TrafficStatsListen string
 	TrafficStatsSecret string
 	// RoutingRules split Hysteria2 traffic when Upstream (WARP) is set.
-	// Direct matches leave the server locally; everything else uses Upstream.
+	// direct leaves locally (bypass proxy and WARP). warp uses Upstream.
+	// proxy uses the protocol's own exit, not WARP.
 	RoutingRules []Hysteria2RoutingRule
 	GeoIPPath    string
 	GeoSitePath  string
@@ -133,7 +134,10 @@ func RenderHysteria2(cfg Hysteria2Config) (string, error) {
 	if cfg.Upstream != "" {
 		acl := renderHysteria2ACL(cfg)
 		if len(acl) > 0 {
-			doc.Outbounds = append(doc.Outbounds, hysteria2OutboundYAML{Name: "direct", Type: "direct"})
+			doc.Outbounds = append(doc.Outbounds,
+				hysteria2OutboundYAML{Name: "direct", Type: "direct"},
+				hysteria2OutboundYAML{Name: "proxy", Type: "direct"},
+			)
 		}
 		socks := hysteria2OutboundYAML{Name: "veil-upstream", Type: "socks5"}
 		socks.Socks5 = &struct {
@@ -208,6 +212,10 @@ func hysteria2ACLOutbound(outbound string) string {
 	switch strings.ToLower(strings.TrimSpace(outbound)) {
 	case "direct":
 		return "direct"
+	case "proxy":
+		return "proxy"
+	case "warp":
+		return "veil-upstream"
 	default:
 		return "veil-upstream"
 	}

@@ -5,12 +5,20 @@ import (
 	"testing"
 )
 
-func TestRenderWarpRoutingRulesMapsProxyToWarp(t *testing.T) {
+func TestRenderWarpRoutingRulesKeepsProxyOffWarp(t *testing.T) {
 	rules := RenderWarpRoutingRules([]RoutingRule{
 		{Match: "all", Outbound: "proxy", Enabled: true},
+		{Match: "geosite:openai", Outbound: "warp", Enabled: true},
+		{Match: "geoip:private", Outbound: "direct", Enabled: true},
 	})
-	if len(rules) != 1 || rules[0].Outbound != "warp" {
+	if len(rules) != 3 {
 		t.Fatalf("rules = %+v", rules)
+	}
+	if rules[0].Outbound != "proxy" {
+		t.Fatalf("proxy must not be rewritten to warp: %+v", rules[0])
+	}
+	if rules[1].Outbound != "warp" || rules[2].Outbound != "direct" {
+		t.Fatalf("warp/direct tags = %+v", rules)
 	}
 }
 

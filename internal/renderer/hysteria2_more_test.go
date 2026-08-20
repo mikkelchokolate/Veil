@@ -76,7 +76,7 @@ func TestRenderHysteria2Upstream(t *testing.T) {
 	}
 }
 
-func TestRenderHysteria2ACLSplits3xUIDirectRules(t *testing.T) {
+func TestRenderHysteria2ACLSplitsCommaSeparatedDirectRules(t *testing.T) {
 	cfg, err := RenderHysteria2(Hysteria2Config{
 		ListenPort:    443,
 		Password:      "secret",
@@ -106,5 +106,37 @@ func TestRenderHysteria2ACLSplits3xUIDirectRules(t *testing.T) {
 	// geosite.dat is absent in this test, so geosite() must not crash hysteria2.
 	if strings.Contains(cfg, "geosite:category-gov-ru") {
 		t.Fatalf("geosite ACL requires geosite.dat:\n%s", cfg)
+	}
+}
+
+func TestRenderHysteria2ACLKeepsProxyOffWarp(t *testing.T) {
+	cfg, err := RenderHysteria2(Hysteria2Config{
+		ListenPort:    443,
+		Password:      "secret",
+		MasqueradeURL: "https://www.bing.com/",
+		Upstream:      "127.0.0.1:40000",
+		RoutingRules: []Hysteria2RoutingRule{
+			{Match: `regexp:.*\.ru$`, Outbound: "direct"},
+			{Match: "domain:openai.com", Outbound: "warp"},
+			{Match: "all", Outbound: "proxy"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"name: direct",
+		"name: proxy",
+		"name: veil-upstream",
+		"direct(regex:.*\\.ru$)",
+		"veil-upstream(suffix:openai.com)",
+		"proxy(all)",
+	} {
+		if !strings.Contains(cfg, want) {
+			t.Fatalf("missing %q in:\n%s", want, cfg)
+		}
+	}
+	if strings.Contains(cfg, "veil-upstream(all)") {
+		t.Fatalf("proxy must not fall through to WARP:\n%s", cfg)
 	}
 }

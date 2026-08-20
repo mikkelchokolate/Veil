@@ -165,12 +165,12 @@ export const ru: Record<string, string> = {
 	"routing.name": "Имя",
 	"routing.match": "Совпадение",
 	"routing.matchHint":
-		"Как в 3x-ui, через запятую. Пример: geosite:category-gov-ru, regexp:.*\\.ru$, regexp:.*\\.su$, geoip:private",
+		"Через запятую. Пример: geosite:category-gov-ru, regexp:.*\\.ru$, regexp:.*\\.su$, geoip:private",
 	"routing.outbound": "Исходящий",
 	"routing.outboundHint":
-		"direct обходит WARP; proxy/warp отправляет остальное в WARP.",
+		"direct обходит полный прокси и WARP. warp отправляет трафик через WARP. proxy отправляет трафик через прокси, не через WARP.",
 	"routing.warpRequired":
-		"WARP выключен, поэтому эти правила пока не меняют трафик. Hysteria2 и так выходит напрямую. Включите WARP: прямые совпадения останутся локальными, остальное пойдёт через Cloudflare.",
+		"WARP выключен, поэтому правила warp пока не действуют. direct по-прежнему выходит локально. proxy использует собственный выход inbound, не WARP.",
 	"routing.enabled": "Включено",
 	"routing.saving": "Сохранение…",
 	"routing.saveFailed": "Не удалось сохранить",

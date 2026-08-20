@@ -172,7 +172,7 @@ func TestRenderWarpSingBoxConfigAlwaysRoutesThroughWarpByDefault(t *testing.T) {
 	}
 }
 
-func TestRenderWarpSingBoxConfigParses3xUICommaSeparatedMatch(t *testing.T) {
+func TestRenderWarpSingBoxConfigParsesCommaSeparatedMatch(t *testing.T) {
 	body, err := RenderWarpSingBox(WarpSingBoxConfig{
 		Endpoint: "engage.cloudflareclient.com:2408", PrivateKey: "k", LocalAddress: "172.16.0.2/32", PeerPublicKey: "p", SocksPort: 40000,
 		RoutingRules: []WarpRoutingRule{{
@@ -191,10 +191,39 @@ func TestRenderWarpSingBoxConfigParses3xUICommaSeparatedMatch(t *testing.T) {
 		`"outbound": "direct"`,
 	} {
 		if !strings.Contains(body, want) {
-			t.Fatalf("3x-ui match missing %q:\n%s", want, body)
+			t.Fatalf("comma-separated match missing %q:\n%s", want, body)
 		}
 	}
 	if strings.Contains(body, "regexp:") || strings.Contains(body, "category-gov-ru,regexp") {
 		t.Fatalf("comma-separated match was not split:\n%s", body)
+	}
+}
+
+func TestRenderWarpSingBoxConfigKeepsProxyOffWarp(t *testing.T) {
+	body, err := RenderWarpSingBox(WarpSingBoxConfig{
+		Endpoint: "engage.cloudflareclient.com:2408", PrivateKey: "k", LocalAddress: "172.16.0.2/32", PeerPublicKey: "p", SocksPort: 40000,
+		RoutingRules: []WarpRoutingRule{
+			{Match: "geosite:category-gov-ru", Outbound: "direct"},
+			{Match: "geosite:openai", Outbound: "warp"},
+			{Match: "all", Outbound: "proxy"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	for _, want := range []string{
+		`"tag": "direct"`,
+		`"tag": "proxy"`,
+		`"tag": "warp"`,
+		`"outbound": "direct"`,
+		`"outbound": "warp"`,
+		`"final": "proxy"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("missing %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, `"final": "warp"`) {
+		t.Fatalf("all → proxy must not default to warp:\n%s", body)
 	}
 }

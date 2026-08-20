@@ -4611,7 +4611,7 @@ components:
           examples:
           - direct
           - warp
-          - block
+          - proxy
         enabled:
           type: boolean
     RoutingSourceFile:

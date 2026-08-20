@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Matcher is one 3x-ui/Xray-style match atom from a routing rule.
+// Matcher is one match atom from a routing rule.
 type Matcher struct {
 	Kind  MatcherKind
 	Value string
@@ -40,7 +40,7 @@ func validGeoCode(code string) bool {
 	return true
 }
 
-// ParseMatch splits a 3x-ui-style match field into OR-ed matchers.
+// ParseMatch splits a match field into OR-ed matchers.
 // Comma-separated atoms are supported: geosite:category-gov-ru,regexp:.*\.ru$.
 func ParseMatch(raw string) ([]Matcher, error) {
 	raw = strings.TrimSpace(raw)
