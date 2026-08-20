@@ -131,6 +131,10 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSONRequest(w, r, &req) {
 		return
 	}
+	if !req.Confirm {
+		writeError(w, "confirm=true is required to write staged apply files", http.StatusBadRequest)
+		return
+	}
 	if applyRequiresServiceActionLock(req) {
 		if !s.beginServiceAction(w) {
 			return
@@ -323,8 +327,10 @@ func (s *managementState) applyStateViewLocked() applyStateResponse {
 	}
 	if len(jobs) > 0 {
 		latest := jobs[0]
-		if latest.Status == apply.StatusFailed || latest.Status == apply.StatusRolledBack || latest.Status == apply.StatusRollbackFailed {
-			resp.LastError = &applyErrorView{Code: latest.ErrorCode, Message: latest.ErrorMessage}
+		if resp.State == apply.StateFailed || resp.State == apply.StateRolledBack {
+			if latest.Status == apply.StatusFailed || latest.Status == apply.StatusRolledBack || latest.Status == apply.StatusRollbackFailed {
+				resp.LastError = &applyErrorView{Code: latest.ErrorCode, Message: latest.ErrorMessage}
+			}
 		}
 	}
 	return resp
@@ -343,7 +349,9 @@ func deriveSystemState(rev apply.Revisions, latest *apply.Job) string {
 		case apply.StatusRolledBack:
 			return apply.StateRolledBack
 		case apply.StatusFailed, apply.StatusRollbackFailed:
-			return apply.StateFailed
+			if rev.Desired > rev.Applied {
+				return apply.StateFailed
+			}
 		}
 	}
 	if rev.Desired > rev.Applied {
