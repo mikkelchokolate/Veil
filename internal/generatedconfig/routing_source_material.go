@@ -211,8 +211,7 @@ func (m RoutingSourceMaterial) Fetch(file RoutingSourceFile) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	const maxRoutingPayload = 64 << 20
-	if len(body) > maxRoutingPayload {
+	if len(body) > routeDatSizeCap {
 		return nil, fmt.Errorf("routing source %q is too large", file.Name)
 	}
 	checksumBody, err := download(ctx, file.SHA256URL)
