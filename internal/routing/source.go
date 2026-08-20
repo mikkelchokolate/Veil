@@ -25,7 +25,7 @@ func rulesNeedRouteDat(rules []RoutingRule) bool {
 		}
 		for _, matcher := range matchers {
 			switch matcher.Kind {
-			case MatchGeoIP, MatchGeoSite, MatchPrivateIP:
+			case MatchGeoIP, MatchGeoSite:
 				return true
 			}
 		}

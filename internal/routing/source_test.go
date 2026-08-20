@@ -37,3 +37,12 @@ func TestEnsureDatSourceSkipsWhenNoGeoMatchers(t *testing.T) {
 		t.Fatalf("unexpected source: %+v", got)
 	}
 }
+
+func TestEnsureDatSourceSkipsPrivateIPOnly(t *testing.T) {
+	got := EnsureDatSource(RoutingSource{}, []RoutingRule{{
+		Name: "default-direct", Match: "geoip:private", Outbound: "direct", Enabled: true,
+	}})
+	if len(got.Files) != 0 {
+		t.Fatalf("geoip:private must not pull geosite.dat: %+v", got)
+	}
+}
