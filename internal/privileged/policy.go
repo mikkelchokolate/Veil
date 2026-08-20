@@ -252,7 +252,7 @@ func (p Policy) managedArtifactPath(id string) (ArtifactPath, bool) {
 	if clean != id || strings.Contains(clean, `\`) {
 		return ArtifactPath{}, false
 	}
-	if clean == "sing-box/warp.json" {
+	if clean == "sing-box/warp.json" || clean == "rules/geoip.dat" || clean == "rules/geosite.dat" {
 		return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
 	}
 	return managedProtocolArtifactID(clean, p.AllowedArtifactNames)

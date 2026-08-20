@@ -125,12 +125,14 @@ func TestPolicyResolvesManagedDynamicArtifactIDs(t *testing.T) {
 			"olcrtc/rtc-edge.yaml",
 			"mieru/server_config.json",
 			"sing-box/warp.json",
+			"rules/geoip.dat",
+			"rules/geosite.dat",
 		},
 	})
 	if err != nil {
 		t.Fatalf("resolve dynamic artifacts: %v", err)
 	}
-	if len(resolved.Artifacts) != 5 {
+	if len(resolved.Artifacts) != 7 {
 		t.Fatalf("resolved artifacts=%+v", resolved.Artifacts)
 	}
 }

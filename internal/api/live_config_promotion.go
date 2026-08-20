@@ -399,7 +399,19 @@ func isPromotableGeneratedConfig(rel string) bool {
 			return true
 		}
 	}
-	return rel == generatedconfig.WarpConfigSubpath
+	if rel == generatedconfig.WarpConfigSubpath {
+		return true
+	}
+	return isPromotableRoutingDat(rel)
+}
+
+func isPromotableRoutingDat(rel string) bool {
+	switch rel {
+	case "rules/geoip.dat", "rules/geosite.dat":
+		return true
+	default:
+		return false
+	}
 }
 
 func isPromotableDynamicProtocolArtifact(plugin protocols.ProtocolPlugin, sub string, rel string) bool {

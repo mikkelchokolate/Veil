@@ -38,6 +38,12 @@ func TestLivePathForStagedConfig(t *testing.T) {
 			wantPath:   "/tmp/veil-test/live/sing-box/warp.json",
 			wantOK:     true,
 		},
+		{
+			name:       "routing geosite.dat",
+			stagedPath: "/tmp/veil-test/generated/rules/geosite.dat",
+			wantPath:   "/tmp/veil-test/live/rules/geosite.dat",
+			wantOK:     true,
+		},
 		// Unknown generated paths (valid prefix but not a known config)
 		{
 			name:       "legacy caddy Caddyfile",

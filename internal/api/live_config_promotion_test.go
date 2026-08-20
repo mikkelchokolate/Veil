@@ -179,6 +179,20 @@ func TestLivePathForStagedConfigUsesPluginAndWarpArtifacts(t *testing.T) {
 			ok:     true,
 		},
 		{
+			staged: filepath.Join(root, "generated", "rules", "geoip.dat"),
+			live:   filepath.Join(root, "live", "rules", "geoip.dat"),
+			ok:     true,
+		},
+		{
+			staged: filepath.Join(root, "generated", "rules", "geosite.dat"),
+			live:   filepath.Join(root, "live", "rules", "geosite.dat"),
+			ok:     true,
+		},
+		{
+			staged: filepath.Join(root, "generated", "rules", "other.dat"),
+			ok:     false,
+		},
+		{
 			staged: filepath.Join(root, "generated", "hysteria2", "edge.txt"),
 			ok:     false,
 		},
