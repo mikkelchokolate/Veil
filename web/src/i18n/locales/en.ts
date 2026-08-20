@@ -53,6 +53,23 @@ export const en: Record<string, string> = {
 	"overview.system": "System",
 	"overview.memory": "Memory",
 	"overview.uptime": "Uptime",
+	"overview.version": "Version",
+	"overview.runtime": "Runtime",
+	"overview.update": "Update panel",
+	"overview.updating": "Updating…",
+	"overview.updateConfirmTitle": "Update the panel?",
+	"overview.updateConfirmDescription":
+		"This downloads the latest release, replaces the panel binary, and restarts the service. The page reloads when the panel is back.",
+	"overview.updateConfirmAction": "Start update",
+	"overview.updateStarting":
+		"Starting self-update… Downloading the latest release, verifying checksums, and installing the binary.",
+	"overview.updateFailed": "Update failed: {details}",
+	"overview.updateStaged":
+		"Update installed. Waiting for the panel service to restart…",
+	"overview.waitingRestart": "Waiting for restart… ({attempt}/{max})",
+	"overview.restartSlow":
+		"Restart is taking longer than expected. Refresh the page in a few seconds.",
+	"overview.versionUnavailable": "Unable to load panel version.",
 
 	"clients.title": "Clients",
 	"clients.searchPlaceholder": "Search name or email",

@@ -51,6 +51,23 @@ export const ru: Record<string, string> = {
 	"overview.system": "Система",
 	"overview.memory": "Память",
 	"overview.uptime": "Аптайм",
+	"overview.version": "Версия",
+	"overview.runtime": "Среда выполнения",
+	"overview.update": "Обновить панель",
+	"overview.updating": "Обновление…",
+	"overview.updateConfirmTitle": "Обновить панель?",
+	"overview.updateConfirmDescription":
+		"Будет загружен последний выпуск, заменён бинарный файл панели и перезапущен сервис. Страница обновится, когда панель снова станет доступна.",
+	"overview.updateConfirmAction": "Начать обновление",
+	"overview.updateStarting":
+		"Запуск самообновления… Загружается последний выпуск, проверяются контрольные суммы и устанавливается бинарный файл.",
+	"overview.updateFailed": "Обновление не выполнено: {details}",
+	"overview.updateStaged":
+		"Обновление установлено. Ожидаем перезапуск сервиса панели…",
+	"overview.waitingRestart": "Ожидаем перезапуск… ({attempt}/{max})",
+	"overview.restartSlow":
+		"Перезапуск занимает больше времени, чем ожидалось. Обновите страницу через несколько секунд.",
+	"overview.versionUnavailable": "Не удалось загрузить версию панели.",
 
 	"applyState.synced": "Синхронизировано",
 	"applyState.pending": "Ожидает",

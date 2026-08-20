@@ -34,6 +34,40 @@ describe("apiFetch request policy", () => {
 		}
 	});
 
+	it("honors a per-request timeout and does not forward it to fetch", async () => {
+		vi.useFakeTimers();
+		const fetchMock = vi.fn((_url: string, options?: RequestInit) => {
+			expect(options && "timeoutMs" in options).toBe(false);
+			expect(options && "attempts" in options).toBe(false);
+			if (!options?.signal) {
+				return Promise.reject(new Error("request had no timeout signal"));
+			}
+			return new Promise<Response>((_resolve, reject) => {
+				options.signal?.addEventListener("abort", () => {
+					reject(new DOMException("aborted", "AbortError"));
+				});
+			});
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		const pending = fetcher.apiFetch("/api/slow", { timeoutMs: 1_000 });
+		const outcome = pending.then(
+			() => undefined,
+			(error: unknown) => error,
+		);
+		await vi.advanceTimersByTimeAsync(1_000);
+		const TimeoutError = (fetcher as FetcherExports).TimeoutError;
+		expect(await outcome).toBeInstanceOf(TimeoutError as new () => Error);
+	});
+
+	it("lets a GET opt out of the default retry budget", async () => {
+		const fetchMock = vi.fn().mockRejectedValue(new TypeError("network"));
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(
+			fetcher.apiFetch("/api/once", { attempts: 1 }),
+		).rejects.toThrow("network");
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
 	it("applies a bounded default timeout with a typed timeout error", async () => {
 		vi.useFakeTimers();
 		vi.stubGlobal(

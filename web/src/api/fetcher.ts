@@ -128,11 +128,28 @@ function assertSameOriginRedirect(response: Response) {
 	}
 }
 
+export type ApiFetchOptions = RequestInit & {
+	timeoutMs?: number;
+	attempts?: number;
+};
+
+const defaultTimeoutMs = 15_000;
+
+function requestInitFrom(options?: ApiFetchOptions): RequestInit {
+	if (!options) return {};
+	const init: RequestInit = { ...options };
+	delete (init as ApiFetchOptions).timeoutMs;
+	delete (init as ApiFetchOptions).attempts;
+	return init;
+}
+
 export async function apiFetch<T>(
 	path: string,
-	options?: RequestInit,
+	options?: ApiFetchOptions,
 ): Promise<T> {
 	const method = (options?.method ?? "GET").toUpperCase();
+	const timeoutMs = options?.timeoutMs ?? defaultTimeoutMs;
+	const attempts = options?.attempts ?? (isSafeMethod(method) ? 3 : 1);
 	const headers = new Headers(options?.headers ?? {});
 	if (!headers.has("Accept")) headers.set("Accept", "application/json");
 	if (options?.body !== undefined && !headers.has("Content-Type")) {
@@ -142,16 +159,15 @@ export async function apiFetch<T>(
 		headers.set("X-CSRF-Token", csrfToken);
 	const requestOptions: RequestInit = {
 		credentials: "same-origin",
-		...options,
+		...requestInitFrom(options),
 		method,
 		headers,
 	};
-	const attempts = isSafeMethod(method) ? 3 : 1;
 	let response: Response | undefined;
 	let lastError: unknown;
 	for (let attempt = 0; attempt < attempts; attempt += 1) {
 		try {
-			response = await requestOnce(apiUrl(path), requestOptions, 15_000);
+			response = await requestOnce(apiUrl(path), requestOptions, timeoutMs);
 			if (!retryableStatus(response.status) || attempt === attempts - 1) break;
 			await response.body?.cancel();
 		} catch (error) {
