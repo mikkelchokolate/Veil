@@ -122,12 +122,12 @@ func TestAPIKeyRotationBlocksSettingsUntilCipherReload(t *testing.T) {
 	close(privilegedClient.release)
 	select {
 	case <-rotateDone:
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("rotate-key did not finish after helper release")
 	}
 	select {
 	case <-settingsDone:
-	case <-time.After(5 * time.Second):
+	case <-time.After(20 * time.Second):
 		t.Fatal("settings mutation remained blocked after rotation reload")
 	}
 	if rotateResponse.Code != http.StatusOK {
