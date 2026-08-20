@@ -245,17 +245,17 @@ func (s *managementState) buildTrafficProvidersLocked() []client.TrafficProvider
 		log.Printf("traffic: list bindings for provider: %v", err)
 		return nil
 	}
+	allClients, err := s.clientRepo.AllClients()
+	if err != nil {
+		log.Printf("traffic: list clients for provider: %v", err)
+		return nil
+	}
 	providers := []client.TrafficProvider{}
 	for _, inbound := range s.inbounds {
 		if inbound.Protocol != "hysteria2" || !inbound.Enabled {
 			continue
 		}
-		bindings := make(map[string]string)
-		for _, binding := range allBindings {
-			if binding.InboundID == inbound.Name && binding.Enabled && binding.RuntimeIdentity != "" {
-				bindings[binding.RuntimeIdentity] = binding.ID
-			}
-		}
+		bindings := hysteria2TrafficIdentityMap(inbound.Name, inbound.Profiles, allBindings, allClients)
 		endpoint := fmt.Sprintf("http://127.0.0.1:%d/traffic", inbound.Port)
 		secret := hysteria2.TrafficStatsSecret(s.settings, inbound)
 		provider := hysteria2.NewAuthenticatedStatsProvider("hysteria2:"+inbound.Name, endpoint, secret, bindings)

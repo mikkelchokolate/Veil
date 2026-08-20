@@ -162,6 +162,10 @@ export const ru: Record<string, string> = {
 
 	"traffic.title": "Телеметрия трафика",
 	"traffic.telemetryState": "Состояние телеметрии",
+	"traffic.state.healthy": "исправно",
+	"traffic.state.degraded": "деградировано",
+	"traffic.state.unsupported": "не поддерживается",
+	"traffic.providerError": "{provider}: {details}",
 	"traffic.summaryUnavailable": "Сводка трафика недоступна",
 	"traffic.noTrafficSource":
 		"Источник трафика пока не передаёт счётчики. Приведённые ниже цифры не являются реальной телеметрией — настройте провайдера трафика во время выполнения, чтобы начать сбор.",

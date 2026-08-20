@@ -23,9 +23,16 @@ import {
 import { useI18n } from "../i18n/I18nContext";
 import { fmtBytes } from "../lib/bytes";
 
+interface TrafficProviderHealth {
+	key: string;
+	state: string;
+	lastError?: string;
+}
+
 interface TrafficSummary {
 	state: string;
 	providerCount?: number;
+	providers?: TrafficProviderHealth[];
 	uploadBytes?: number;
 	downloadBytes?: number;
 	usedBytes?: number;
@@ -58,7 +65,12 @@ export function TrafficPage() {
 	});
 
 	const state = summary.data?.state;
+	const stateKey = state ? `traffic.state.${state}` : "";
+	const stateLabel = state ? t(stateKey) : "";
 	const hasTelemetry = (summary.data?.providerCount ?? 0) > 0;
+	const degradedProviders = (summary.data?.providers ?? []).filter(
+		(provider) => provider.state === "degraded",
+	);
 	const chartRef = useRef<HTMLDivElement>(null);
 	const chartInstance = useRef<echarts.ECharts | null>(null);
 
@@ -145,9 +157,17 @@ export function TrafficPage() {
 						<p>
 							<strong>{t("traffic.telemetryState")}:</strong>{" "}
 							<Badge variant={state === "healthy" ? "success" : "warning"}>
-								{state}
+								{stateLabel === stateKey ? state : stateLabel}
 							</Badge>
 						</p>
+						{degradedProviders.map((provider) => (
+							<FormMessage key={provider.key}>
+								{t("traffic.providerError", {
+									provider: provider.key,
+									details: provider.lastError ?? provider.state,
+								})}
+							</FormMessage>
+						))}
 						{!hasTelemetry ? (
 							<p className="muted">{t("traffic.noTrafficSource")}</p>
 						) : (

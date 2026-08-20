@@ -230,6 +230,10 @@ export const en: Record<string, string> = {
 
 	"traffic.title": "Traffic telemetry",
 	"traffic.telemetryState": "Telemetry state",
+	"traffic.state.healthy": "healthy",
+	"traffic.state.degraded": "degraded",
+	"traffic.state.unsupported": "unsupported",
+	"traffic.providerError": "{provider}: {details}",
 	"traffic.summaryUnavailable": "Traffic summary unavailable",
 	"traffic.noTrafficSource":
 		"No traffic source is feeding counters yet. Usage figures below are not real telemetry — configure a runtime traffic provider to begin collecting.",

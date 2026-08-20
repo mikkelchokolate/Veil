@@ -125,6 +125,75 @@ func TestTrafficProvidersScopeRuntimeIdentityMappingsPerInbound(t *testing.T) {
 	}
 }
 
+func TestTrafficLegacyHysteriaUsernameIsAttributedToMigratedBinding(t *testing.T) {
+	const publicPort = 25445
+	var counters atomic.Int64
+	counters.Store(100)
+	listener, err := net.Listen("tcp", runtimeports.Hysteria2TrafficStatsAddress(publicPort))
+	if err != nil {
+		t.Fatalf("listen on isolated Hysteria stats endpoint: %v", err)
+	}
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		value := counters.Load()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"legacy_user":{"tx":` + strconv.FormatInt(value, 10) + `,"rx":` + strconv.FormatInt(value, 10) + `}}`))
+	}))
+	server.Listener = listener
+	server.Start()
+	defer server.Close()
+
+	state := newClientLifecycleTestState(t)
+	if state.clientMigrator == nil {
+		t.Fatal("client migrator was not initialized")
+	}
+	migrated, err := state.clientMigrator.MigrateInboundProfiles("hy-legacy", "hysteria2", []client.LegacyProfile{
+		{Name: "legacy_user", Username: "legacy_user", Password: "secret", Enabled: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if migrated.ClientsCreated != 1 || migrated.BindingsCreated != 1 {
+		t.Fatalf("migration result = %+v, want one client and binding", migrated)
+	}
+	wantID := client.StableClientID("hy-legacy", "legacy_user")
+	if _, err := state.db.Exec(`UPDATE clients SET name=? WHERE id=?`, "phone", wantID); err != nil {
+		t.Fatal(err)
+	}
+	bindings, err := state.clientRepo.BindingsForClient(wantID)
+	if err != nil || len(bindings) != 1 {
+		t.Fatalf("migrated bindings = %+v err=%v", bindings, err)
+	}
+	binding := bindings[0]
+
+	state.mu.Lock()
+	state.inbounds = []Inbound{{
+		Name: "hy-legacy", Protocol: "hysteria2", Transport: "udp", Port: publicPort, Enabled: true,
+		Profiles: []ClientProfile{{Name: "legacy_user", Username: "legacy_user", Enabled: true}},
+	}}
+	state.registerTrafficProvidersLocked()
+	state.mu.Unlock()
+
+	if err := state.trafficCollector.CollectOnce(); err != nil {
+		t.Fatalf("baseline collection: %v", err)
+	}
+	counters.Store(175)
+	if err := state.trafficCollector.CollectOnce(); err != nil {
+		t.Fatalf("delta collection: %v", err)
+	}
+	up, down, err := state.trafficStore.TotalsForClient(wantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up != 75 || down != 75 {
+		t.Errorf("legacy username totals = %d/%d, want 75/75 for binding %s", up, down, binding.ID)
+	}
+	for _, status := range state.trafficCollector.ProviderHealth() {
+		if status.Key == "hysteria2:hy-legacy" && status.State != "healthy" {
+			t.Errorf("provider health = %+v, want healthy after aliasing leftover username", status)
+		}
+	}
+}
+
 func TestTrafficCollectorFailureIsVisibleInAPIAndMetrics(t *testing.T) {
 	router, state := newApplyTrackedRouterWithState(t)
 	t.Cleanup(func() { _ = state.Close() })
