@@ -12,9 +12,12 @@ import (
 	"time"
 )
 
-const maxRouteDatSize = 50 * 1024 * 1024 // 50 MB
+// runetfreedom geosite.dat is currently ~74MiB; keep headroom for growth.
+const maxRouteDatSize = 128 * 1024 * 1024
 
-var routeDatHTTPClient = &http.Client{Timeout: 30 * time.Second}
+var routeDatSizeCap = maxRouteDatSize
+
+var routeDatHTTPClient = &http.Client{Timeout: 120 * time.Second}
 var secureRouteDatHTTPClient = newSecureRouteDatHTTPClient()
 
 func DownloadRouteDat(url string) ([]byte, error) {
@@ -79,7 +82,7 @@ func downloadRouteDatContextUnchecked(ctx context.Context, url string) ([]byte, 
 			resp.Body.Close()
 			return nil, decision.Err
 		}
-		limit := NewRouteDatBodyLimit(maxRouteDatSize)
+		limit := NewRouteDatBodyLimit(routeDatSizeCap)
 		lr := io.LimitReader(resp.Body, int64(limit.Limit())+1)
 		body, readErr := io.ReadAll(lr)
 		closeErr := resp.Body.Close()
@@ -129,7 +132,7 @@ func newSecureRouteDatHTTPClient() *http.Client {
 		return nil, fmt.Errorf("route data host %q resolves only to non-public addresses", host)
 	}
 	return &http.Client{
-		Timeout:   30 * time.Second,
+		Timeout:   120 * time.Second,
 		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if req.URL.Scheme != "https" || req.URL.Hostname() == "" || req.URL.User != nil || strings.Contains(req.URL.Host, "@") || !routingSourceHostAllowed(req.URL.Hostname()) {
