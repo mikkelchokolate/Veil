@@ -53,6 +53,13 @@ func TestParseMatchKnownAtoms(t *testing.T) {
 	}
 }
 
+func TestParseMatchRejectsBrokenRegexp(t *testing.T) {
+	_, err := ParseMatch(`regexp:[`)
+	if err == nil || !errors.Is(err, ErrRoutingMatchInvalid) {
+		t.Fatalf("expected invalid regexp, got %v", err)
+	}
+}
+
 func TestParseMatchRejectsInvalidGeoCode(t *testing.T) {
 	_, err := ParseMatch("geosite:category-gov-ru,regexp:")
 	if err == nil || !errors.Is(err, ErrRoutingMatchInvalid) {

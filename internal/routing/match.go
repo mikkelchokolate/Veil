@@ -3,6 +3,7 @@ package routing
 import (
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 )
 
@@ -112,6 +113,9 @@ func parseMatchAtom(part string) (Matcher, error) {
 	case "regexp", "regex":
 		if value == "" {
 			return Matcher{}, fmt.Errorf("%w: empty regexp", ErrRoutingMatchInvalid)
+		}
+		if _, err := regexp.Compile(value); err != nil {
+			return Matcher{}, fmt.Errorf("%w: regexp %q", ErrRoutingMatchInvalid, value)
 		}
 		return Matcher{Kind: MatchDomainRegex, Value: value}, nil
 	case "full":

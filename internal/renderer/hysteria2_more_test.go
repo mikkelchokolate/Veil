@@ -1,6 +1,8 @@
 package renderer
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -106,6 +108,44 @@ func TestRenderHysteria2ACLSplitsCommaSeparatedDirectRules(t *testing.T) {
 	// geosite.dat is absent in this test, so geosite() must not crash hysteria2.
 	if strings.Contains(cfg, "geosite:category-gov-ru") {
 		t.Fatalf("geosite ACL requires geosite.dat:\n%s", cfg)
+	}
+}
+
+func TestRenderHysteria2ACLIncludesGeositeWhenDatExists(t *testing.T) {
+	dir := t.TempDir()
+	geoip := filepath.Join(dir, "geoip.dat")
+	geosite := filepath.Join(dir, "geosite.dat")
+	if err := os.WriteFile(geoip, []byte("geoip"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(geosite, []byte("geosite"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := RenderHysteria2(Hysteria2Config{
+		ListenPort:    443,
+		Password:      "secret",
+		MasqueradeURL: "https://www.bing.com/",
+		Upstream:      "127.0.0.1:40000",
+		GeoIPPath:     geoip,
+		GeoSitePath:   geosite,
+		RoutingRules: []Hysteria2RoutingRule{{
+			Match:    `geosite:category-gov-ru,regexp:.*\.ru$,regexp:.*\.su$`,
+			Outbound: "direct",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"direct(geosite:category-gov-ru)",
+		"direct(regex:.*\\.ru$)",
+		"direct(regex:.*\\.su$)",
+		"veil-upstream(all)",
+		"geosite: " + geosite,
+	} {
+		if !strings.Contains(cfg, want) {
+			t.Fatalf("missing %q in:\n%s", want, cfg)
+		}
 	}
 }
 

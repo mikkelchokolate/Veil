@@ -33,6 +33,10 @@ func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Requ
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
+			if err := s.ensureRoutingDatSourceLocked(); err != nil {
+				writeError(w, err.Error(), http.StatusInternalServerError)
+				return nil
+			}
 			actor, _ := r.Context().Value(contextKeyUsername).(string)
 			outcome := s.autoApplyResultLocked(r, actor)
 			s.writeMutationResponse(w, http.StatusCreated, created, outcome)
@@ -69,6 +73,10 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
+			if err := s.ensureRoutingDatSourceLocked(); err != nil {
+				writeError(w, err.Error(), http.StatusInternalServerError)
+				return nil
+			}
 			actor, _ := r.Context().Value(contextKeyUsername).(string)
 			outcome := s.autoApplyResultLocked(r, actor)
 			s.writeMutationResponse(w, http.StatusOK, updated, outcome)
@@ -102,6 +110,24 @@ func writeRoutingRuleManagementError(w http.ResponseWriter, err error) {
 	default:
 		writeError(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func (s *managementState) ensureRoutingDatSourceLocked() error {
+	next := routing.EnsureDatSource(s.routingSource, s.rules)
+	if len(next.Files) == len(s.routingSource.Files) {
+		same := true
+		for i := range next.Files {
+			if i >= len(s.routingSource.Files) || next.Files[i].Name != s.routingSource.Files[i].Name {
+				same = false
+				break
+			}
+		}
+		if same {
+			return nil
+		}
+	}
+	s.routingSource = next
+	return s.saveLocked()
 }
 
 func (s *managementState) handleRoutingPresets(w http.ResponseWriter, r *http.Request) {

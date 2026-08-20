@@ -18,6 +18,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/routing"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
@@ -79,7 +80,7 @@ func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
 		Settings:      s.settings,
 		Inbounds:      s.inbounds,
 		Rules:         s.rules,
-		RoutingSource: s.routingSource,
+		RoutingSource: routing.EnsureDatSource(s.routingSource, s.rules),
 		Warp:          s.warp,
 	}).BuildPlan()
 	if validation, ok := s.enforceValidationLocked(ctx.operationContext(), s.settings, s.inbounds, s.warp); !ok {
@@ -111,7 +112,7 @@ func (ctx ManagementApplyContext) writeApplyStageLocked(plan ApplyPlanResponse) 
 		Plan:          plan,
 		Snapshot:      snapshot,
 		Rendered:      rendered,
-		RoutingSource: s.routingSource,
+		RoutingSource: routing.EnsureDatSource(s.routingSource, s.rules),
 		Validate:      stagedConfigValidator,
 	})
 }
