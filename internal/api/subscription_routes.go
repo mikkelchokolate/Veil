@@ -155,7 +155,7 @@ func (s *managementState) handlePublicSubscription(w http.ResponseWriter, r *htt
 	w.Header().Set("X-Veil-Quota-Period-Generation", strconv.FormatInt(quotaPeriodGeneration, 10))
 	var trafficGeneration int64
 	if s.db != nil {
-		_ = s.db.QueryRow(`SELECT COALESCE(MAX(bucket_start),0) FROM traffic_buckets WHERE client_id=?`, cl.Client.ID).Scan(&trafficGeneration)
+		_ = s.db.QueryRow(`SELECT COALESCE(MAX(bucket_start),0) FROM traffic_samples WHERE client_id=?`, cl.Client.ID).Scan(&trafficGeneration)
 	}
 	w.Header().Set("X-Veil-Traffic-Observation-Generation", strconv.FormatInt(trafficGeneration, 10))
 	s.writeSubscription(w, r, cl, links)
