@@ -5,7 +5,7 @@ import {
 	createRouter,
 	RouterProvider,
 } from "@tanstack/react-router";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AuthProvider } from "../auth/AuthContext";
 import { I18nProvider } from "../i18n/I18nContext";
 import { ApplyPage } from "../pages/ApplyPage";
@@ -111,5 +111,41 @@ describe("ApplyPage", () => {
 		renderApply();
 		expect(await screen.findByText("applying")).toBeInTheDocument();
 		expect(screen.queryByText("apply.status.applying")).not.toBeInTheDocument();
+	});
+
+	it("offers retry on rollback_failed and shows a retry error", async () => {
+		server.use(
+			http.get("/api/apply/state", () =>
+				HttpResponse.json({
+					desiredRevision: 2,
+					appliedRevision: 1,
+					state: "failed",
+				}),
+			),
+			http.get("/api/apply/jobs", () =>
+				HttpResponse.json({
+					items: [
+						{
+							id: "j-rf",
+							desiredRevision: 2,
+							baseRevision: 1,
+							status: "rollback_failed",
+							trigger: "manual",
+							createdAt: 1700000000,
+							errorMessage: "rollback aborted",
+						},
+					],
+				}),
+			),
+			http.post("/api/apply/jobs/j-rf/retry", () =>
+				HttpResponse.json(
+					{ error: { message: "helper unavailable" } },
+					{ status: 503 },
+				),
+			),
+		);
+		renderApply();
+		fireEvent.click(await screen.findByRole("button", { name: /^retry$/i }));
+		expect(await screen.findByText(/helper unavailable/i)).toBeInTheDocument();
 	});
 });

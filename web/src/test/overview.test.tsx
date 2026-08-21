@@ -182,6 +182,29 @@ describe("OverviewPage version", () => {
 		expect(panelUpdateMocks.reloadPanel).not.toHaveBeenCalled();
 	});
 
+	it("does not hide a failed client count or system vitals as a dash", async () => {
+		overviewApis();
+		server.use(
+			http.get("/api/apply/state", () =>
+				HttpResponse.json({ error: { message: "down" } }, { status: 500 }),
+			),
+			http.get("/api/v1/clients", () =>
+				HttpResponse.json({ error: { message: "down" } }, { status: 500 }),
+			),
+			http.get("/api/system", () =>
+				HttpResponse.json({ error: { message: "down" } }, { status: 500 }),
+			),
+		);
+		renderOverview();
+		expect(
+			await screen.findByText(/could not load client count/i),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText(/could not load system vitals/i),
+		).toBeInTheDocument();
+		expect(screen.getByText(/apply state unavailable/i)).toBeInTheDocument();
+	});
+
 	it("asks the operator to refresh if restart polling times out", async () => {
 		overviewApis();
 		panelUpdateMocks.waitForPanelVersion.mockRejectedValue(

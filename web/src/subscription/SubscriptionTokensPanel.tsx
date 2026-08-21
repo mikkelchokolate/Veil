@@ -103,8 +103,9 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 					method: "POST",
 				},
 			),
-		onSuccess: () => {
+		onSuccess: (res) => {
 			setError(null);
+			setIssued(res);
 			void qc.invalidateQueries({ queryKey: ["clients", clientId, "tokens"] });
 		},
 		onError: (err) =>

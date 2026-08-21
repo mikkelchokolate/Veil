@@ -203,7 +203,9 @@ export function OverviewPage() {
 				<h2>{t("overview.title")}</h2>
 				<p>
 					<strong>{t("overview.applyState")}:</strong>{" "}
-					{apply.data ? (
+					{apply.isError ? (
+						<span className="form-error">{t("applyState.unavailable")}</span>
+					) : apply.data ? (
 						<Badge variant={drift ? "warning" : "success"}>
 							{apply.data.state}
 						</Badge>

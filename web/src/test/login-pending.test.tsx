@@ -1,11 +1,30 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { AuthProvider } from "../auth/AuthContext";
+import { apiFetch } from "../api/fetcher";
+import { AuthProvider, useAuth } from "../auth/AuthContext";
 import { LoginView } from "../auth/LoginView";
 import { I18nProvider } from "../i18n/I18nContext";
 import { captureLoginFields } from "../pendingLogin";
 import { HttpResponse, http, server } from "./server";
+
+function SessionProbe() {
+	const { session } = useAuth();
+	return <output data-testid="session-probe">{JSON.stringify(session)}</output>;
+}
+
+function FetchClientsButton() {
+	return (
+		<button
+			type="button"
+			onClick={() => {
+				void apiFetch("/api/v1/clients").catch(() => undefined);
+			}}
+		>
+			fetch-clients
+		</button>
+	);
+}
 
 function renderLogin() {
 	const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -14,6 +33,7 @@ function renderLogin() {
 			<AuthProvider>
 				<I18nProvider>
 					<LoginView />
+					<SessionProbe />
 				</I18nProvider>
 			</AuthProvider>
 		</QueryClientProvider>,
@@ -88,5 +108,79 @@ describe("static login handoff", () => {
 		const alert = await screen.findByRole("alert");
 		expect(alert).toHaveTextContent(/could not sign in|не удалось войти/i);
 		expect(alert).not.toHaveTextContent(/invalid username or password/i);
+	});
+
+	it("keeps the login CSRF token when status is briefly unavailable", async () => {
+		const user = userEvent.setup();
+		server.use(
+			http.get("/api/auth/status", () =>
+				HttpResponse.json({ error: { message: "internal" } }, { status: 500 }),
+			),
+			http.post("/api/auth/login", () =>
+				HttpResponse.json({
+					csrfToken: "csrf-after-login",
+					username: "admin",
+					role: "admin",
+					locale: "en",
+					success: true,
+				}),
+			),
+		);
+		renderLogin();
+		await user.type(screen.getByLabelText("Username"), "admin");
+		await user.type(screen.getByLabelText("Password"), "s3cret-pass");
+		await user.click(screen.getByRole("button", { name: /^sign in$/i }));
+		await waitFor(() =>
+			expect(screen.getByTestId("session-probe")).toHaveTextContent(
+				'"authenticated":true',
+			),
+		);
+		expect(screen.getByTestId("session-probe")).toHaveTextContent(
+			'"csrfToken":"csrf-after-login"',
+		);
+	});
+
+	it("returns to Sign in when a later API call is 401", async () => {
+		const user = userEvent.setup();
+		server.use(
+			http.get("/api/auth/status", () =>
+				HttpResponse.json({
+					authenticated: true,
+					username: "admin",
+					role: "admin",
+					csrfToken: "csrf",
+				}),
+			),
+			http.get("/api/v1/clients", () =>
+				HttpResponse.json(
+					{ error: { message: "unauthorized" } },
+					{ status: 401 },
+				),
+			),
+		);
+		const qc = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={qc}>
+				<AuthProvider>
+					<I18nProvider>
+						<SessionProbe />
+						<FetchClientsButton />
+					</I18nProvider>
+				</AuthProvider>
+			</QueryClientProvider>,
+		);
+		await waitFor(() =>
+			expect(screen.getByTestId("session-probe")).toHaveTextContent(
+				'"authenticated":true',
+			),
+		);
+		await user.click(screen.getByRole("button", { name: "fetch-clients" }));
+		await waitFor(() =>
+			expect(screen.getByTestId("session-probe")).toHaveTextContent(
+				'"authenticated":false',
+			),
+		);
 	});
 });

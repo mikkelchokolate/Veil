@@ -1,7 +1,18 @@
 let csrfToken: string | null = null;
+let unauthorizedHandler: (() => void) | null = null;
 
 export function setCsrfToken(token: string | null) {
 	csrfToken = token;
+}
+
+/** Gate registers this so a 401 on any Panel API except login returns the operator to Sign in. */
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+	unauthorizedHandler = handler;
+}
+
+function notifyUnauthorized(path: string, status: number) {
+	if (status !== 401 || path === "/api/auth/login") return;
+	unauthorizedHandler?.();
 }
 
 export interface ApiValidationIssue {
@@ -196,6 +207,7 @@ export async function apiFetch<T>(
 		}
 	}
 	if (!response.ok) {
+		notifyUnauthorized(path, response.status);
 		const maybe = body as
 			| {
 					error?: string | { message?: string; code?: string };

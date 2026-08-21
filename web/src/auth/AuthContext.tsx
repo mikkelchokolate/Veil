@@ -8,7 +8,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { apiFetch, setCsrfToken } from "../api/fetcher";
+import { apiFetch, setCsrfToken, setUnauthorizedHandler } from "../api/fetcher";
 import type { UserRole } from "../api/generated/models";
 
 export interface Session {
@@ -60,6 +60,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		void refresh();
 	}, [refresh]);
+
+	useEffect(() => {
+		setUnauthorizedHandler(() => {
+			setSession({ authenticated: false });
+			setCsrfToken(null);
+		});
+		return () => setUnauthorizedHandler(null);
+	}, []);
 
 	useEffect(() => {
 		const onRefresh = () => void refresh();

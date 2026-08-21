@@ -95,4 +95,26 @@ describe("CSP-safe meters and traffic chart", () => {
 		expect(chart).not.toBeNull();
 		expect(chart).not.toHaveAttribute("style");
 	});
+
+	it("does not treat a failed usage breakdown as empty", async () => {
+		server.use(
+			http.get("/api/v1/traffic/summary", () =>
+				HttpResponse.json({
+					state: "healthy",
+					providerCount: 1,
+					uploadBytes: 10,
+					downloadBytes: 20,
+					usedBytes: 30,
+				}),
+			),
+			http.get("/api/v1/traffic/top", () =>
+				HttpResponse.json({ error: { message: "down" } }, { status: 500 }),
+			),
+		);
+		renderTraffic();
+		expect(
+			await screen.findByText(/could not load usage breakdown/i),
+		).toBeInTheDocument();
+		expect(screen.queryByText(/no usage recorded/i)).not.toBeInTheDocument();
+	});
 });

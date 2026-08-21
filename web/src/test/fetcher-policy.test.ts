@@ -17,6 +17,7 @@ function jsonResponse(body: unknown, init: Partial<Response> = {}): Response {
 
 describe("apiFetch request policy", () => {
 	afterEach(() => {
+		fetcher.setUnauthorizedHandler(null);
 		vi.unstubAllGlobals();
 		vi.useRealTimers();
 		vi.restoreAllMocks();
@@ -194,5 +195,32 @@ describe("apiFetch request policy", () => {
 		expect(apiError.issues).toHaveLength(1);
 		expect(apiError.issues?.[0]?.field).toBe("port");
 		expect(apiError.issues?.[0]?.message).toContain("between 1 and 65535");
+	});
+
+	it("notifies the session handler on 401 except for login", async () => {
+		const handler = vi.fn();
+		fetcher.setUnauthorizedHandler(handler);
+		vi.stubGlobal(
+			"fetch",
+			vi
+				.fn()
+				.mockResolvedValue(
+					jsonResponse(
+						{ error: { message: "unauthorized" } },
+						{ ok: false, status: 401, statusText: "Unauthorized" },
+					),
+				),
+		);
+		await expect(fetcher.apiFetch("/api/v1/clients")).rejects.toBeInstanceOf(
+			fetcher.ApiError,
+		);
+		expect(handler).toHaveBeenCalledTimes(1);
+		await expect(
+			fetcher.apiFetch("/api/auth/login", {
+				method: "POST",
+				body: JSON.stringify({ username: "a", password: "b" }),
+			}),
+		).rejects.toBeInstanceOf(fetcher.ApiError);
+		expect(handler).toHaveBeenCalledTimes(1);
 	});
 });

@@ -292,7 +292,9 @@ export function ApplyJobDetailPage() {
 								{j.errorMessage}
 							</FormMessage>
 						) : null}
-						{isAdmin && j.status === "failed" ? (
+						{isAdmin &&
+						(j.status === "failed" ||
+							(j.status as string) === "rollback_failed") ? (
 							<Button
 								variant="primary"
 								disabled={retry.isPending}
