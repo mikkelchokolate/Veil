@@ -114,6 +114,13 @@ export function RoutingPage() {
 						{t("routing.warpRequired")}
 					</p>
 				) : null}
+				{del.isError ? (
+					<FormMessage>
+						{del.error instanceof ApiError
+							? del.error.message
+							: t("routing.deleteFailed")}
+					</FormMessage>
+				) : null}
 			</div>
 
 			<Dialog

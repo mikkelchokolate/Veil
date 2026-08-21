@@ -184,7 +184,13 @@ export function ApplyPage() {
 										<TableCell className="muted">{j.trigger}</TableCell>
 										<TableCell>
 											<Badge variant={STATUS_VARIANT[j.status] ?? "default"}>
-												{t(`apply.status.${j.status}`)}
+												{(() => {
+													const key = `apply.status.${j.status}`;
+													const label = t(key);
+													return label === key
+														? j.status.replaceAll("_", " ")
+														: label;
+												})()}
 											</Badge>
 										</TableCell>
 										<TableCell className="muted">
@@ -202,7 +208,8 @@ export function ApplyPage() {
 										</TableCell>
 										{isAdmin ? (
 											<TableCell>
-												{j.status === "failed" ? (
+												{j.status === "failed" ||
+												j.status === "rollback_failed" ? (
 													<Button
 														size="sm"
 														disabled={retry.isPending}
@@ -219,6 +226,13 @@ export function ApplyPage() {
 						</TableBody>
 					</Table>
 				)}
+				{retry.isError ? (
+					<FormMessage>
+						{retry.error instanceof ApiError
+							? retry.error.message
+							: t("apply.retryFailed")}
+					</FormMessage>
+				) : null}
 			</div>
 		</>
 	);

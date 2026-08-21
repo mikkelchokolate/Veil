@@ -206,56 +206,44 @@ export function InboundsPage() {
 
 	function toBody(f: InboundForm, keepName?: string) {
 		const port = f.port === "" ? undefined : Number.parseInt(f.port, 10);
-		const body: Record<string, unknown> = {
-			name: keepName ?? f.name,
-			protocol: f.protocol,
-			transport: f.transport,
-			enabled: f.enabled,
-			// Dual-copy contract: hysteria2Insecure lives in protocolFields
-			// (schema field), so mirror the flat value into the copy the
-			// server receives — otherwise a flat-only write is lost and a
-			// stale flat value wins server-side precedence (audit #67/#119).
-			protocolFields: {
-				...f.protocolFields,
-				hysteria2Insecure: Object.hasOwn(
-					f.protocolFields ?? {},
-					"hysteria2Insecure",
-				)
-					? Boolean(f.protocolFields.hysteria2Insecure)
-					: f.hysteria2Insecure,
-			},
-			password: f.password || f.originalRecord?.password || undefined,
-			profiles: f.profiles.length
-				? f.profiles
-				: f.originalRecord?.profiles || undefined,
-			naiveUsername:
-				f.naiveUsername || f.originalRecord?.naiveUsername || undefined,
-			naivePassword:
-				f.naivePassword || f.originalRecord?.naivePassword || undefined,
-			hysteria2Password:
-				f.hysteria2Password || f.originalRecord?.hysteria2Password || undefined,
+		const protocolFields: Record<string, unknown> = {
+			...f.protocolFields,
 			hysteria2Insecure: Object.hasOwn(
 				f.protocolFields ?? {},
 				"hysteria2Insecure",
 			)
 				? Boolean(f.protocolFields.hysteria2Insecure)
 				: f.hysteria2Insecure,
-			olcrtcAuth: f.olcrtcAuth || f.originalRecord?.olcrtcAuth || undefined,
-			olcrtcTransport:
-				f.olcrtcTransport || f.originalRecord?.olcrtcTransport || undefined,
+		};
+		const pick = (key: string, flat: string): unknown => {
+			if (Object.hasOwn(protocolFields, key)) return protocolFields[key];
+			if (flat !== "") return flat;
+			return (f.originalRecord as Record<string, unknown> | undefined)?.[key];
+		};
+		const body: Record<string, unknown> = {
+			name: keepName ?? f.name,
+			protocol: f.protocol,
+			transport: f.transport,
+			enabled: f.enabled,
+			protocolFields,
+			password: f.password || f.originalRecord?.password || undefined,
+			profiles: f.profiles.length
+				? f.profiles
+				: f.originalRecord?.profiles || undefined,
+			naiveUsername: pick("naiveUsername", f.naiveUsername),
+			naivePassword:
+				f.naivePassword || f.originalRecord?.naivePassword || undefined,
+			hysteria2Password:
+				f.hysteria2Password || f.originalRecord?.hysteria2Password || undefined,
+			hysteria2Insecure: protocolFields.hysteria2Insecure,
+			olcrtcAuth: pick("olcrtcAuth", f.olcrtcAuth) || undefined,
+			olcrtcTransport: pick("olcrtcTransport", f.olcrtcTransport) || undefined,
 		};
 		if (port != null) body.port = port;
-		body.masqueradeURL =
-			f.masqueradeURL || f.originalRecord?.masqueradeURL || undefined;
-		body.fallbackRoot =
-			f.fallbackRoot || f.originalRecord?.fallbackRoot || undefined;
-		// Clearing the room must be possible: an explicit "" wins over the
-		// stale echo (audit #139). Undefined is only used when the field was
-		// never touched and the record has no value.
-		body.olcrtcRoomID =
-			f.olcrtcRoomID !== ""
-				? f.olcrtcRoomID || f.originalRecord?.olcrtcRoomID || undefined
-				: "";
+		body.masqueradeURL = pick("masqueradeURL", f.masqueradeURL);
+		body.fallbackRoot = pick("fallbackRoot", f.fallbackRoot);
+		const room = pick("olcrtcRoomID", f.olcrtcRoomID);
+		body.olcrtcRoomID = room ?? "";
 		return body;
 	}
 
@@ -323,7 +311,15 @@ export function InboundsPage() {
 	});
 
 	function startCreate() {
-		setForm(EMPTY);
+		const proto = EMPTY.protocol;
+		const schema =
+			protocolCatalog.data?.find((p) => p.protocol === proto)
+				?.inboundFieldSchema ?? [];
+		const protocolFields: Record<string, unknown> = {};
+		for (const field of schema) {
+			if (field.default != null) protocolFields[field.key] = field.default;
+		}
+		setForm({ ...EMPTY, protocolFields });
 		setCreating(true);
 		setEditing(null);
 	}
@@ -391,9 +387,21 @@ export function InboundsPage() {
 							value={form.protocol}
 							onChange={(e) => {
 								const nextProtocol = e.target.value;
-								const nextTransports =
-									protocolCatalog.data?.find((p) => p.protocol === nextProtocol)
-										?.transports ?? [];
+								const nextMeta = protocolCatalog.data?.find(
+									(p) => p.protocol === nextProtocol,
+								);
+								const nextTransports = nextMeta?.transports ?? [];
+								const protocolFields: Record<string, unknown> = {
+									...form.protocolFields,
+								};
+								for (const field of nextMeta?.inboundFieldSchema ?? []) {
+									if (
+										field.default != null &&
+										protocolFields[field.key] == null
+									) {
+										protocolFields[field.key] = field.default;
+									}
+								}
 								// Reset transport to the first transport the new
 								// protocol supports (e.g. naiveproxy is tcp-only);
 								// keeping the previous protocol's transport makes
@@ -404,6 +412,7 @@ export function InboundsPage() {
 									transport: nextTransports.includes(form.transport)
 										? form.transport
 										: (nextTransports[0] ?? ""),
+									protocolFields,
 								});
 							}}
 						>

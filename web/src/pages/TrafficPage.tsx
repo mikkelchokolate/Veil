@@ -202,6 +202,8 @@ export function TrafficPage() {
 					<h2>{t("traffic.usageBreakdown")}</h2>
 					{top.isLoading ? (
 						<p className="muted">{t("common.loading")}</p>
+					) : top.isError ? (
+						<FormMessage>{t("traffic.topUnavailable")}</FormMessage>
 					) : (top.data?.items ?? []).length === 0 ? (
 						<p className="muted">{t("traffic.noUsageRecorded")}</p>
 					) : (

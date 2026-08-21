@@ -70,6 +70,7 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 	const [label, setLabel] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [copied, setCopied] = useState<string | null>(null);
+	const [issued, setIssued] = useState<IssuedToken | null>(null);
 
 	const tokens = useQuery<{ items: SubscriptionToken[] }>({
 		queryKey: ["clients", clientId, "tokens"],
@@ -82,9 +83,10 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 				method: "POST",
 				body: JSON.stringify({ label }),
 			}),
-		onSuccess: () => {
+		onSuccess: (res) => {
 			setLabel("");
 			setError(null);
+			setIssued(res);
 			void qc.invalidateQueries({ queryKey: ["clients", clientId, "tokens"] });
 		},
 		onError: (err) =>
@@ -147,6 +149,21 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 
 			{error ? <p className="form-error">{error}</p> : null}
 
+			{issued?.url || issued?.plaintext ? (
+				<div className="form-stack" data-testid="issued-subscription-token">
+					<p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+						{t("subTokens.oneTime")}
+					</p>
+					{issued.url ? (
+						<TokenLink
+							url={issued.url}
+							copied={copied === absoluteSubURL(issued.url)}
+							onCopy={(text) => void copy(text)}
+						/>
+					) : null}
+				</div>
+			) : null}
+
 			{isAdmin ? (
 				<div className="h-scroll" style={{ gap: 8, marginBottom: 16 }}>
 					<input
@@ -169,6 +186,12 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 
 			{tokens.isLoading ? (
 				<p className="muted">{t("common.loading")}</p>
+			) : tokens.isError ? (
+				<p className="form-error">
+					{tokens.error instanceof ApiError
+						? tokens.error.message
+						: t("subTokens.error.load")}
+				</p>
 			) : items.length === 0 ? (
 				<p className="muted">{t("subTokens.empty")}</p>
 			) : (

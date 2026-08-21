@@ -219,7 +219,11 @@ export function OverviewPage() {
 				) : null}
 				<p>
 					<strong>{t("overview.clients")}:</strong>{" "}
-					{clients.data?.total != null ? (
+					{clients.isError ? (
+						<span className="form-error">
+							{t("overview.clientsUnavailable")}
+						</span>
+					) : clients.data?.total != null ? (
 						clients.data.total
 					) : (
 						<span className="muted">—</span>
@@ -234,7 +238,12 @@ export function OverviewPage() {
 
 			<PanelVersionCard />
 
-			{sys.data ? (
+			{sys.isError ? (
+				<div className="card">
+					<h2>{t("overview.system")}</h2>
+					<FormMessage>{t("overview.systemUnavailable")}</FormMessage>
+				</div>
+			) : sys.data ? (
 				<div className="card">
 					<h2>{t("overview.system")}</h2>
 					<p>

@@ -122,4 +122,22 @@ describe("BackupsPage", () => {
 		expect(await screen.findByText("succeeded")).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
 	});
+
+	it("does not treat a failed backup list as empty", async () => {
+		fetcherMocks.apiFetch.mockRejectedValue(new Error("down"));
+		const queryClient = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={queryClient}>
+				<I18nProvider>
+					<BackupsPage />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+		expect(
+			await screen.findByText(/failed to load backups/i),
+		).toBeInTheDocument();
+		expect(screen.queryByText(/no backups yet/i)).not.toBeInTheDocument();
+	});
 });

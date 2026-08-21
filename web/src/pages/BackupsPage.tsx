@@ -184,6 +184,15 @@ export function BackupsPage() {
 		}
 	}
 
+	if (!isAdmin) {
+		return (
+			<div className="card">
+				<h2>{t("backups.title")}</h2>
+				<p className="muted">{t("backups.adminRequired")}</p>
+			</div>
+		);
+	}
+
 	return (
 		<>
 			<div className="card">
@@ -242,6 +251,12 @@ export function BackupsPage() {
 			<div className="card">
 				{backups.isLoading ? (
 					<p className="muted">{t("common.loading")}</p>
+				) : backups.isError ? (
+					<FormMessage>
+						{backups.error instanceof ApiError
+							? backups.error.message
+							: t("backups.error.load")}
+					</FormMessage>
 				) : (
 					<Table>
 						<TableHeader>

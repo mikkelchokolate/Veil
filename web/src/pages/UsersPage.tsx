@@ -178,6 +178,12 @@ export function UsersPage() {
 				{error ? <FormMessage>{error}</FormMessage> : null}
 				{users.isLoading ? (
 					<p className="muted">{t("common.loading")}</p>
+				) : users.isError ? (
+					<FormMessage>
+						{users.error instanceof ApiError
+							? users.error.message
+							: t("users.error.load")}
+					</FormMessage>
 				) : (
 					<Table>
 						<TableHeader>
@@ -351,6 +357,12 @@ export function UsersPage() {
 				<h2>{t("users.activeSessions")}</h2>
 				{sessions.isLoading ? (
 					<p className="muted">{t("common.loading")}</p>
+				) : sessions.isError ? (
+					<FormMessage>
+						{sessions.error instanceof ApiError
+							? sessions.error.message
+							: t("users.error.loadSessions")}
+					</FormMessage>
 				) : (sessions.data ?? []).length === 0 ? (
 					<p className="muted">{t("users.noActiveSessions")}</p>
 				) : (

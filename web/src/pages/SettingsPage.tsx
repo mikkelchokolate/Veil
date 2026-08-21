@@ -288,6 +288,22 @@ export function SettingsPage() {
 			setEditing(false);
 			return;
 		}
+		const webBaseOnly =
+			(form.webBasePath ?? "") === "" &&
+			(form.webBasePath ?? "") !==
+				String(original.webBasePath ?? originalPf.webBasePath ?? "") &&
+			ALL_FIELDS.every((f) => {
+				if (f.key === "webBasePath") return true;
+				const originalValue = String(
+					original[f.key] ?? originalPf[f.key] ?? "",
+				);
+				return form[f.key] === originalValue;
+			});
+		if (webBaseOnly) {
+			setEditing(false);
+			setError(t("settings.webBasePathRequired"));
+			return;
+		}
 		save.mutate(base);
 	}
 

@@ -19,6 +19,7 @@ export class ApiError extends Error {
 	code: string | undefined;
 	details: unknown;
 	issues: ApiValidationIssue[] | undefined;
+	body: unknown;
 
 	constructor(
 		status: number,
@@ -26,6 +27,7 @@ export class ApiError extends Error {
 		code?: string,
 		details?: unknown,
 		issues?: ApiValidationIssue[],
+		body?: unknown,
 	) {
 		super(message);
 		this.name = "ApiError";
@@ -33,6 +35,7 @@ export class ApiError extends Error {
 		this.code = code;
 		this.details = details;
 		this.issues = issues;
+		this.body = body;
 	}
 }
 
@@ -212,6 +215,7 @@ export async function apiFetch<T>(
 			typeof maybe?.error === "object" ? maybe.error.code : maybe?.code,
 			maybe?.details,
 			maybe?.issues,
+			body,
 		);
 	}
 	return body as T;

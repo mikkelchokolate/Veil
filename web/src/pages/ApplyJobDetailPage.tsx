@@ -163,8 +163,25 @@ export function ApplyJobDetailPage() {
 
 	const plan = useQuery<ApplyPlan>({
 		queryKey: ["apply", "plan"],
-		queryFn: () =>
-			apiFetch("/api/apply/plan", { method: "POST", body: JSON.stringify({}) }),
+		queryFn: async () => {
+			try {
+				return await apiFetch<ApplyPlan>("/api/apply/plan", {
+					method: "POST",
+					body: JSON.stringify({}),
+				});
+			} catch (err) {
+				if (
+					err instanceof ApiError &&
+					(err.status === 400 || err.status === 422) &&
+					err.body &&
+					typeof err.body === "object" &&
+					"valid" in (err.body as object)
+				) {
+					return err.body as ApplyPlan;
+				}
+				throw err;
+			}
+		},
 		enabled: showPlan,
 	});
 
@@ -195,7 +212,15 @@ export function ApplyJobDetailPage() {
 		failed: t("applyJob.status.failed"),
 		running: t("applyJob.status.running"),
 		pending: t("applyJob.status.pending"),
+		planning: t("applyJob.status.planning"),
+		validating: t("applyJob.status.validating"),
+		applying: t("applyJob.status.applying"),
+		health_check: t("applyJob.status.health_check"),
+		staged: t("applyJob.status.staged"),
+		recovery_pending: t("applyJob.status.recovery_pending"),
+		rolling_back: t("applyJob.status.rolling_back"),
 		rolled_back: t("applyJob.status.rolled_back"),
+		rollback_failed: t("applyJob.status.rollback_failed"),
 	};
 
 	return (
@@ -220,7 +245,7 @@ export function ApplyJobDetailPage() {
 						<p>
 							<strong>{t("common.status")}:</strong>{" "}
 							<Badge variant={STATUS_VARIANT[j.status] ?? "default"}>
-								{statusMap[j.status] ?? j.status}
+								{statusMap[j.status] ?? j.status.replaceAll("_", " ")}
 							</Badge>
 						</p>
 						<p>
@@ -514,6 +539,8 @@ export function ApplyJobDetailPage() {
 				<h2 style={{ fontSize: 15 }}>{t("applyJob.historyTitle")}</h2>
 				{history.isLoading ? (
 					<p className="muted">{t("common.loading")}</p>
+				) : history.isError ? (
+					<FormMessage>{t("applyJob.error.loadHistory")}</FormMessage>
 				) : historyItems.length === 0 ? (
 					<p className="muted">{t("applyJob.historyEmpty")}</p>
 				) : (

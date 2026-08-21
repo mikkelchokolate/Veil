@@ -92,14 +92,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 	const login = useCallback(
 		async (username: string, password: string) => {
-			const data = await apiFetch<{ csrfToken?: string }>("/api/auth/login", {
+			const data = await apiFetch<{
+				csrfToken?: string;
+				username?: string;
+				role?: UserRole;
+				locale?: string;
+			}>("/api/auth/login", {
 				method: "POST",
 				body: JSON.stringify({ username, password }),
 			});
 			if (data?.csrfToken) {
 				setCsrfToken(data.csrfToken);
 			}
-			await refresh();
+			try {
+				const status = await apiFetch<Session>("/api/auth/status");
+				if (status.authenticated) {
+					setSession(status);
+					setCsrfToken(status.csrfToken ?? data.csrfToken ?? null);
+				} else {
+					setSession({
+						authenticated: true,
+						username: data.username ?? username,
+						role: data.role,
+						locale: data.locale,
+						csrfToken: data.csrfToken,
+					});
+				}
+			} catch {
+				// Login already issued the session cookie; do not wipe CSRF if
+				// status is briefly unavailable.
+				setSession({
+					authenticated: true,
+					username: data.username ?? username,
+					role: data.role,
+					locale: data.locale,
+					csrfToken: data.csrfToken,
+				});
+			} finally {
+				setLoading(false);
+			}
 			try {
 				localStorage.setItem("veil_spa", "1");
 			} catch {
@@ -107,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			}
 			broadcastRefresh();
 		},
-		[refresh, broadcastRefresh],
+		[broadcastRefresh],
 	);
 
 	const logout = useCallback(async () => {

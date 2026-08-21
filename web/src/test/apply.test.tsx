@@ -83,4 +83,33 @@ describe("ApplyPage", () => {
 		);
 		expect(screen.getByText("failed")).toBeInTheDocument();
 	});
+
+	it("labels an applying job instead of showing a raw i18n key", async () => {
+		server.use(
+			http.get("/api/apply/state", () =>
+				HttpResponse.json({
+					desiredRevision: 2,
+					appliedRevision: 1,
+					state: "applying",
+				}),
+			),
+			http.get("/api/apply/jobs", () =>
+				HttpResponse.json({
+					items: [
+						{
+							id: "j2",
+							desiredRevision: 2,
+							baseRevision: 1,
+							status: "applying",
+							trigger: "manual",
+							createdAt: 1700000000,
+						},
+					],
+				}),
+			),
+		);
+		renderApply();
+		expect(await screen.findByText("applying")).toBeInTheDocument();
+		expect(screen.queryByText("apply.status.applying")).not.toBeInTheDocument();
+	});
 });
