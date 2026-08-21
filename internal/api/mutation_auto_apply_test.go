@@ -14,12 +14,12 @@ func setupAutoApplyTestHooks(t *testing.T) (restore func(), calls *[][]string) {
 	origValidator := stagedConfigValidator
 	origRunner := serviceActionRunner
 	origAutoApply := autoApplyAfterMutation
-	origFirewall := firewallApplierInstance
+	origFirewall := currentFirewallApplier()
 	restore = func() {
 		stagedConfigValidator = origValidator
 		serviceActionRunner = origRunner
 		autoApplyAfterMutation = origAutoApply
-		firewallApplierInstance = origFirewall
+		swapFirewallApplier(origFirewall)
 	}
 
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
@@ -37,7 +37,7 @@ func setupAutoApplyTestHooks(t *testing.T) (restore func(), calls *[][]string) {
 		*calls = captured
 		return ServiceActionResult{Command: command, Success: true}
 	}
-	firewallApplierInstance = &fakeFirewallApplier{}
+	swapFirewallApplier(&fakeFirewallApplier{})
 	return restore, calls
 }
 

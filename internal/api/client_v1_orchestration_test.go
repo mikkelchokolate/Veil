@@ -351,16 +351,16 @@ func newApplyTrackedRouterWithState(t *testing.T) (http.Handler, *managementStat
 	origRunner := serviceActionRunner
 	origHealth := serviceHealthChecker
 	origAutoApply := autoApplyAfterMutation
-	origFirewall := firewallApplierInstance
+	origFirewall := currentFirewallApplier()
 	t.Cleanup(func() {
 		stagedConfigValidator = origValidator
 		serviceActionRunner = origRunner
 		serviceHealthChecker = origHealth
 		autoApplyAfterMutation = origAutoApply
-		firewallApplierInstance = origFirewall
+		swapFirewallApplier(origFirewall)
 	})
 	// See newApplyTrackedRouter: unit tests never touch the host firewall.
-	firewallApplierInstance = &fakeFirewallApplier{}
+	swapFirewallApplier(&fakeFirewallApplier{})
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		out := make([]ConfigValidationResult, 0, len(paths))
 		for _, p := range paths {

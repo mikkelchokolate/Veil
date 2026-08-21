@@ -10,11 +10,11 @@ import (
 
 func newClientLifecycleTestState(t *testing.T) *managementState {
 	t.Helper()
-	originalFirewall := firewallApplierInstance
+	originalFirewall := currentFirewallApplier()
 	originalRunner := serviceActionRunner
 	originalHealth := serviceHealthChecker
 	originalValidator := stagedConfigValidator
-	firewallApplierInstance = &fakeFirewallApplier{}
+	swapFirewallApplier(&fakeFirewallApplier{})
 	serviceActionRunner = func(command []string) ServiceActionResult {
 		return ServiceActionResult{Name: command[len(command)-1], Command: append([]string(nil), command...), Success: true}
 	}
@@ -29,7 +29,7 @@ func newClientLifecycleTestState(t *testing.T) *managementState {
 		return results
 	}
 	t.Cleanup(func() {
-		firewallApplierInstance = originalFirewall
+		swapFirewallApplier(originalFirewall)
 		serviceActionRunner = originalRunner
 		serviceHealthChecker = originalHealth
 		stagedConfigValidator = originalValidator

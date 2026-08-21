@@ -91,9 +91,9 @@ func TestSyncFirewallLockedOpensPanelPortByDefault(t *testing.T) {
 	state.settings.PanelAccess = "direct"
 
 	fake := &fakeFirewallApplier{}
-	old := firewallApplierInstance
-	firewallApplierInstance = fake
-	t.Cleanup(func() { firewallApplierInstance = old })
+	old := currentFirewallApplier()
+	swapFirewallApplier(fake)
+	t.Cleanup(func() { swapFirewallApplier(old) })
 
 	ctx := NewManagementApplyContext(state)
 	results := ctx.syncFirewall()
@@ -130,9 +130,9 @@ func TestSyncFirewallLockedDisabledBySetting(t *testing.T) {
 	state.settings.FirewallManagement = &disabled
 
 	fake := &fakeFirewallApplier{}
-	old := firewallApplierInstance
-	firewallApplierInstance = fake
-	t.Cleanup(func() { firewallApplierInstance = old })
+	old := currentFirewallApplier()
+	swapFirewallApplier(fake)
+	t.Cleanup(func() { swapFirewallApplier(old) })
 
 	ctx := NewManagementApplyContext(state)
 	results := ctx.syncFirewall()
@@ -151,9 +151,9 @@ func TestSyncFirewallLockedReportsNonFatalErrors(t *testing.T) {
 	state.settings.PanelAccess = "direct"
 
 	fake := &fakeFirewallApplier{enableErr: errors.New("ufw not found")}
-	old := firewallApplierInstance
-	firewallApplierInstance = fake
-	t.Cleanup(func() { firewallApplierInstance = old })
+	old := currentFirewallApplier()
+	swapFirewallApplier(fake)
+	t.Cleanup(func() { swapFirewallApplier(old) })
 
 	ctx := NewManagementApplyContext(state)
 	results := ctx.syncFirewall()

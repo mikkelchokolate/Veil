@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
 	veilapply "github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/caddyadmin"
@@ -35,7 +36,24 @@ type firewallApplier interface {
 	ApplyRules(rules []firewall.Rule) error
 }
 
-var firewallApplierInstance firewallApplier = firewall.NewUFWApplier()
+var (
+	firewallApplierMu       sync.RWMutex
+	firewallApplierInstance firewallApplier = firewall.NewUFWApplier()
+)
+
+func currentFirewallApplier() firewallApplier {
+	firewallApplierMu.RLock()
+	defer firewallApplierMu.RUnlock()
+	return firewallApplierInstance
+}
+
+func swapFirewallApplier(next firewallApplier) firewallApplier {
+	firewallApplierMu.Lock()
+	defer firewallApplierMu.Unlock()
+	prev := firewallApplierInstance
+	firewallApplierInstance = next
+	return prev
+}
 
 type ManagementApplyContext struct {
 	state *managementState
@@ -640,11 +658,12 @@ func (ctx ManagementApplyContext) syncFirewall() []ServiceActionResult {
 			return []ServiceActionResult{result}
 		}
 	} else {
-		if err := firewallApplierInstance.EnsureActive(); err != nil {
+		applier := currentFirewallApplier()
+		if err := applier.EnsureActive(); err != nil {
 			result.Error = err.Error()
 			return []ServiceActionResult{result}
 		}
-		if err := firewallApplierInstance.ApplyRules(rules); err != nil {
+		if err := applier.ApplyRules(rules); err != nil {
 			result.Error = err.Error()
 			return []ServiceActionResult{result}
 		}

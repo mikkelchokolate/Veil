@@ -14,12 +14,12 @@ func TestInboundCreateTriggersAutoApply(t *testing.T) {
 	origValidator := stagedConfigValidator
 	origRunner := serviceActionRunner
 	origAutoApply := autoApplyAfterMutation
-	origFirewall := firewallApplierInstance
+	origFirewall := currentFirewallApplier()
 	defer func() {
 		stagedConfigValidator = origValidator
 		serviceActionRunner = origRunner
 		autoApplyAfterMutation = origAutoApply
-		firewallApplierInstance = origFirewall
+		swapFirewallApplier(origFirewall)
 	}()
 
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
@@ -35,7 +35,7 @@ func TestInboundCreateTriggersAutoApply(t *testing.T) {
 		calls = append(calls, append([]string(nil), command...))
 		return ServiceActionResult{Command: command, Success: true}
 	}
-	firewallApplierInstance = &fakeFirewallApplier{}
+	swapFirewallApplier(&fakeFirewallApplier{})
 
 	applyRoot := t.TempDir()
 	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
@@ -67,12 +67,12 @@ func TestInboundUpdateTriggersAutoApply(t *testing.T) {
 	origValidator := stagedConfigValidator
 	origRunner := serviceActionRunner
 	origAutoApply := autoApplyAfterMutation
-	origFirewall := firewallApplierInstance
+	origFirewall := currentFirewallApplier()
 	defer func() {
 		stagedConfigValidator = origValidator
 		serviceActionRunner = origRunner
 		autoApplyAfterMutation = origAutoApply
-		firewallApplierInstance = origFirewall
+		swapFirewallApplier(origFirewall)
 	}()
 
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
@@ -88,7 +88,7 @@ func TestInboundUpdateTriggersAutoApply(t *testing.T) {
 		calls = append(calls, append([]string(nil), command...))
 		return ServiceActionResult{Command: command, Success: true}
 	}
-	firewallApplierInstance = &fakeFirewallApplier{}
+	swapFirewallApplier(&fakeFirewallApplier{})
 
 	applyRoot := t.TempDir()
 	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
@@ -122,12 +122,12 @@ func TestInboundDeleteTriggersAutoApply(t *testing.T) {
 	origValidator := stagedConfigValidator
 	origRunner := serviceActionRunner
 	origAutoApply := autoApplyAfterMutation
-	origFirewall := firewallApplierInstance
+	origFirewall := currentFirewallApplier()
 	defer func() {
 		stagedConfigValidator = origValidator
 		serviceActionRunner = origRunner
 		autoApplyAfterMutation = origAutoApply
-		firewallApplierInstance = origFirewall
+		swapFirewallApplier(origFirewall)
 	}()
 
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
@@ -143,7 +143,7 @@ func TestInboundDeleteTriggersAutoApply(t *testing.T) {
 		calls = append(calls, append([]string(nil), command...))
 		return ServiceActionResult{Command: command, Success: true}
 	}
-	firewallApplierInstance = &fakeFirewallApplier{}
+	swapFirewallApplier(&fakeFirewallApplier{})
 
 	applyRoot := t.TempDir()
 	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})

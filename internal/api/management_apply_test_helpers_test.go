@@ -7,12 +7,12 @@ func stubManagementApplySideEffects(t *testing.T) {
 	originalValidator := stagedConfigValidator
 	originalRunner := serviceActionRunner
 	originalHealth := serviceHealthChecker
-	originalFirewall := firewallApplierInstance
+	originalFirewall := currentFirewallApplier()
 	t.Cleanup(func() {
 		stagedConfigValidator = originalValidator
 		serviceActionRunner = originalRunner
 		serviceHealthChecker = originalHealth
-		firewallApplierInstance = originalFirewall
+		swapFirewallApplier(originalFirewall)
 	})
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
 		results := make([]ConfigValidationResult, 0, len(paths))
@@ -27,5 +27,5 @@ func stubManagementApplySideEffects(t *testing.T) {
 	serviceHealthChecker = func(name string) ServiceHealthResult {
 		return ServiceHealthResult{Name: name, Healthy: true}
 	}
-	firewallApplierInstance = &fakeFirewallApplier{}
+	swapFirewallApplier(&fakeFirewallApplier{})
 }
