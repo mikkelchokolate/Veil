@@ -81,29 +81,11 @@ export function ClientTrafficPanel({ clientId }: { clientId: string }) {
 							? ` · ${t("clientTraffic.remaining", { n: fmtBytes(data.remainingBytes) })}`
 							: ""}
 					</p>
-					<div
-						style={{
-							height: 8,
-							borderRadius: 4,
-							border: "1px solid var(--border)",
-							overflow: "hidden",
-							maxWidth: 360,
-						}}
-						role="progressbar"
-						aria-valuenow={pct ?? 0}
-						aria-valuemin={0}
-						aria-valuemax={100}
-					>
-						<div
-							style={{
-								height: "100%",
-								width: `${pct ?? 0}%`,
-								background: data.depleted
-									? "var(--accent-danger)"
-									: "var(--accent)",
-							}}
-						/>
-					</div>
+					<progress
+						className={`meter-bar${data.depleted ? " is-danger" : ""}`}
+						max={100}
+						value={pct ?? 0}
+					/>
 					{data.depleted ? (
 						<p className="badge badge-danger" style={{ marginTop: 8 }}>
 							{t("clientTraffic.depleted")}

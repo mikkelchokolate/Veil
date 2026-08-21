@@ -27,37 +27,16 @@ function Meter({
 	detail: string;
 }) {
 	return (
-		<div style={{ marginBottom: 16 }}>
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					marginBottom: 4,
-				}}
-			>
+		<div className="meter">
+			<div className="meter-head">
 				<strong>{label}</strong>
 				<span className="muted">{detail}</span>
 			</div>
-			<div
-				style={{
-					height: 8,
-					borderRadius: 4,
-					border: "1px solid var(--border)",
-					overflow: "hidden",
-				}}
-				role="progressbar"
-				aria-valuenow={value}
-				aria-valuemin={0}
-				aria-valuemax={100}
-			>
-				<div
-					style={{
-						height: "100%",
-						width: `${value}%`,
-						background: value > 85 ? "var(--accent-danger)" : "var(--accent)",
-					}}
-				/>
-			</div>
+			<progress
+				className={`meter-bar${value > 85 ? " is-danger" : ""}`}
+				max={100}
+				value={value}
+			/>
 		</div>
 	);
 }

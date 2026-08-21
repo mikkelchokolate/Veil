@@ -366,6 +366,52 @@ textarea.input {
 	margin-top: 8px;
 }
 
+.meter {
+	margin-bottom: 16px;
+}
+
+.meter-head {
+	display: flex;
+	justify-content: space-between;
+	margin-bottom: 4px;
+}
+
+progress.meter-bar {
+	display: block;
+	width: 100%;
+	max-width: 360px;
+	height: 8px;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	background: transparent;
+	overflow: hidden;
+}
+
+progress.meter-bar::-webkit-progress-bar {
+	background: transparent;
+}
+
+progress.meter-bar::-webkit-progress-value {
+	background: var(--accent);
+}
+
+progress.meter-bar.is-danger::-webkit-progress-value {
+	background: var(--accent-danger);
+}
+
+progress.meter-bar::-moz-progress-bar {
+	background: var(--accent);
+}
+
+progress.meter-bar.is-danger::-moz-progress-bar {
+	background: var(--accent-danger);
+}
+
+.traffic-chart {
+	width: 100%;
+	height: 320px;
+}
+
 .auth-card .subtitle {
 	color: var(--text-muted);
 	font-size: 14px;

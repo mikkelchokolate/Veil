@@ -74,11 +74,14 @@ export function TrafficPage() {
 	const chartRef = useRef<HTMLDivElement>(null);
 	const chartInstance = useRef<echarts.ECharts | null>(null);
 
-	// Initialize chart when collecting.
+	// Initialize chart when collecting. Skip a 0×0 box (jsdom, or CSP
+	// hiding the box) — echarts throws if it cannot read clientWidth.
 	useEffect(() => {
 		if (!hasTelemetry || !chartRef.current) return;
+		const el = chartRef.current;
+		if (el.clientWidth === 0 || el.clientHeight === 0) return;
 		if (!chartInstance.current) {
-			chartInstance.current = echarts.init(chartRef.current);
+			chartInstance.current = echarts.init(el);
 		}
 		const uploadLabel = t("traffic.upload");
 		const downloadLabel = t("traffic.download");
@@ -139,7 +142,11 @@ export function TrafficPage() {
 	// Cleanup on unmount.
 	useEffect(() => {
 		return () => {
-			chartInstance.current?.dispose();
+			try {
+				chartInstance.current?.dispose();
+			} catch {
+				/* painter may already be torn down */
+			}
 			chartInstance.current = null;
 		};
 	}, []);
@@ -199,7 +206,7 @@ export function TrafficPage() {
 						<p className="muted">{t("traffic.noUsageRecorded")}</p>
 					) : (
 						<>
-							<div ref={chartRef} style={{ width: "100%", height: 320 }} />
+							<div ref={chartRef} className="traffic-chart" />
 							<div style={{ marginTop: 16 }}>
 								<Table>
 									<TableHeader>

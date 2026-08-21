@@ -1,7 +1,15 @@
 import { type FormEvent, useEffect, useState } from "react";
+import { ApiError } from "../api/fetcher";
 import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nContext";
 import { takePendingLogin } from "../pendingLogin";
+
+function loginFailureMessage(err: unknown, t: (key: string) => string): string {
+	if (err instanceof ApiError && (err.status === 401 || err.status === 400)) {
+		return t("auth.login.invalid");
+	}
+	return t("auth.login.failed");
+}
 
 export function LoginView() {
 	const { login } = useAuth();
@@ -17,8 +25,8 @@ export function LoginView() {
 		setBusy(true);
 		try {
 			await login(user, pass);
-		} catch {
-			setError(t("auth.login.invalid"));
+		} catch (err) {
+			setError(loginFailureMessage(err, t));
 		} finally {
 			setBusy(false);
 		}
@@ -35,8 +43,8 @@ export function LoginView() {
 		setBusy(true);
 		setError(null);
 		void login(pending.username, pending.password)
-			.catch(() => {
-				if (!cancelled) setError(t("auth.login.invalid"));
+			.catch((err) => {
+				if (!cancelled) setError(loginFailureMessage(err, t));
 			})
 			.finally(() => {
 				if (!cancelled) setBusy(false);

@@ -8,6 +8,7 @@ import type {
 	ClientCreateResponse,
 	IssuedCredential,
 } from "../api/generated/models";
+import { useAuth, useIsAdmin } from "../auth/AuthContext";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import {
@@ -23,6 +24,7 @@ import { Input, Textarea } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { useI18n } from "../i18n/I18nContext";
 import { decimalWithinSafeInteger, parseQuotaDecimal } from "../lib/bytes";
+import { dateInputToUnix } from "../lib/localDate";
 
 interface InboundOption {
 	name: string;
@@ -45,6 +47,8 @@ const ISSUED_CRED_TIMEOUT_MS = 5 * 60 * 1000;
  * cleared on close, navigation, unmount, and after a timeout. */
 export function ClientNewPage() {
 	const { t } = useI18n();
+	const { loading } = useAuth();
+	const isAdmin = useIsAdmin();
 	const navigate = useNavigate();
 	const qc = useQueryClient();
 
@@ -116,8 +120,10 @@ export function ClientNewPage() {
 			) {
 				throw new ApiError(400, t("clientNew.quotaHy2Only"));
 			}
-			if (expiresAt)
-				body.expiresAt = Math.floor(new Date(expiresAt).getTime() / 1000);
+			if (expiresAt) {
+				const expires = dateInputToUnix(expiresAt);
+				if (!Number.isNaN(expires)) body.expiresAt = expires;
+			}
 			if (bindings.length > 0) {
 				body.bindings = bindings.map((b) => ({
 					inboundId: b.inboundId,
@@ -166,6 +172,22 @@ export function ClientNewPage() {
 		t("clientNew.stepAccess"),
 		t("clientNew.stepReview"),
 	];
+
+	if (loading) {
+		return (
+			<div className="card">
+				<p className="muted">{t("common.loading")}</p>
+			</div>
+		);
+	}
+	if (!isAdmin) {
+		return (
+			<div className="card">
+				<h2>{t("clientNew.title")}</h2>
+				<p className="muted">{t("clients.adminRequired")}</p>
+			</div>
+		);
+	}
 
 	return (
 		<Dialog

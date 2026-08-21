@@ -47,6 +47,7 @@ import {
 	fmtBytes,
 	parseQuotaDecimal,
 } from "../lib/bytes";
+import { dateInputToUnix, unixToDateInput } from "../lib/localDate";
 import { ClientConnectionLinks } from "../subscription/ClientConnectionLinks";
 import { ClientTrafficPanel } from "../subscription/ClientTrafficPanel";
 import { SubscriptionTokensPanel } from "../subscription/SubscriptionTokensPanel";
@@ -152,6 +153,13 @@ export function ClientDetailPage() {
 		}
 	}
 
+	function mutationFailed(err: unknown, fallbackKey: string) {
+		setError(err instanceof ApiError ? err.message : t(fallbackKey));
+		if (err instanceof ApiError && err.status === 409) {
+			invalidate();
+		}
+	}
+
 	// S3: edit form (RHF + Zod), populated from the loaded client.
 	const form = useForm<EditValues>({
 		resolver: zodResolver(buildEditSchema(t)),
@@ -174,9 +182,7 @@ export function ClientDetailPage() {
 			enabled: c.enabled ?? true,
 			// Bytes as a decimal string; never through Number() lossy input paths.
 			quotaBytes: c.quotaBytes != null ? String(c.quotaBytes) : "",
-			expiresAt: c.expiresAt
-				? new Date(c.expiresAt * 1000).toISOString().slice(0, 10)
-				: "",
+			expiresAt: c.expiresAt ? unixToDateInput(c.expiresAt) : "",
 			notes,
 		});
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -207,9 +213,9 @@ export function ClientDetailPage() {
 					throw new ApiError(400, t("clientDetail.quotaHy2Only"));
 				}
 			}
-			const expires = v.expiresAt
-				? Math.floor(new Date(v.expiresAt).getTime() / 1000)
-				: undefined;
+			const expires = v.expiresAt ? dateInputToUnix(v.expiresAt) : undefined;
+			const expiresUnix =
+				expires != null && !Number.isNaN(expires) ? expires : null;
 			const res = await patchApiV1ClientsId(clientId, {
 				version: c.version ?? 0,
 				...(form.getFieldState("name").isDirty ? { name: v.name } : {}),
@@ -223,7 +229,7 @@ export function ClientDetailPage() {
 					? { quotaBytes: quota ?? null }
 					: {}),
 				...(form.getFieldState("expiresAt").isDirty
-					? { expiresAt: expires ?? null }
+					? { expiresAt: expiresUnix }
 					: {}),
 				...(form.getFieldState("notes").isDirty
 					? { notes: v.notes || null }
@@ -236,10 +242,7 @@ export function ClientDetailPage() {
 			recordFeedback(data);
 			invalidate();
 		},
-		onError: (err) =>
-			setError(
-				err instanceof ApiError ? err.message : t("clientDetail.error.save"),
-			),
+		onError: (err) => mutationFailed(err, "clientDetail.error.save"),
 	});
 
 	const enableToggle = useMutation({
@@ -257,10 +260,7 @@ export function ClientDetailPage() {
 			recordFeedback(data);
 			invalidate();
 		},
-		onError: (err) =>
-			setError(
-				err instanceof ApiError ? err.message : t("clientDetail.error.update"),
-			),
+		onError: (err) => mutationFailed(err, "clientDetail.error.update"),
 	});
 
 	const remove = useMutation({
@@ -272,10 +272,7 @@ export function ClientDetailPage() {
 			void qc.invalidateQueries({ queryKey: ["clients"] });
 			void navigate({ to: "/clients" });
 		},
-		onError: (err) =>
-			setError(
-				err instanceof ApiError ? err.message : t("clientDetail.error.delete"),
-			),
+		onError: (err) => mutationFailed(err, "clientDetail.error.delete"),
 	});
 
 	const rotate = useMutation({
@@ -299,10 +296,7 @@ export function ClientDetailPage() {
 			recordFeedback(res);
 			invalidate();
 		},
-		onError: (err) =>
-			setError(
-				err instanceof ApiError ? err.message : t("clientDetail.error.rotate"),
-			),
+		onError: (err) => mutationFailed(err, "clientDetail.error.rotate"),
 	});
 
 	const toggleBinding = useMutation({
@@ -318,10 +312,7 @@ export function ClientDetailPage() {
 			recordFeedback(data);
 			invalidate();
 		},
-		onError: (err) =>
-			setError(
-				err instanceof ApiError ? err.message : t("clientDetail.error.update"),
-			),
+		onError: (err) => mutationFailed(err, "clientDetail.error.update"),
 	});
 
 	const attach = useMutation({
@@ -335,10 +326,7 @@ export function ClientDetailPage() {
 			recordFeedback(data);
 			invalidate();
 		},
-		onError: (err) =>
-			setError(
-				err instanceof ApiError ? err.message : t("clientDetail.error.attach"),
-			),
+		onError: (err) => mutationFailed(err, "clientDetail.error.attach"),
 	});
 
 	const detach = useMutation({
@@ -354,10 +342,7 @@ export function ClientDetailPage() {
 			recordFeedback(data);
 			invalidate();
 		},
-		onError: (err) =>
-			setError(
-				err instanceof ApiError ? err.message : t("clientDetail.error.detach"),
-			),
+		onError: (err) => mutationFailed(err, "clientDetail.error.detach"),
 	});
 
 	if (client.isLoading) {

@@ -85,6 +85,7 @@ export const ru: Record<string, string> = {
 	"auth.login.signIn": "Войти",
 	"auth.login.signingIn": "Вход…",
 	"auth.login.invalid": "Неверное имя пользователя или пароль.",
+	"auth.login.failed": "Не удалось войти. Попробуйте ещё раз.",
 	"auth.setup.title": "Добро пожаловать в Veil",
 	"auth.setup.subtitle": "Создайте начальную учётную запись администратора",
 	"auth.setup.confirm": "Подтвердите пароль",
@@ -386,6 +387,7 @@ export const ru: Record<string, string> = {
 
 	"clients.title": "Клиенты",
 	"clients.newClient": "Новый клиент",
+	"clients.adminRequired": "Создание клиентов требует роли администратора.",
 	"clients.searchPlaceholder": "Поиск по имени или email",
 	"clients.searchAriaLabel": "Поиск клиентов",
 	"clients.filterStatusAriaLabel": "Фильтр по статусу",
