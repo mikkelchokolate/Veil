@@ -77,6 +77,20 @@ function categoryScores(report) {
 	};
 }
 
+function failedAudits(report) {
+	const failed = [];
+	for (const [id, cat] of Object.entries(report.categories)) {
+		for (const ref of cat.auditRefs || []) {
+			if (!ref.weight) continue;
+			const audit = report.audits[ref.id];
+			if (audit && audit.score !== null && audit.score < 1) {
+				failed.push(`${id}:${ref.id}`);
+			}
+		}
+	}
+	return failed;
+}
+
 test.describe("Lighthouse first-load", () => {
 	test.describe.configure({ timeout: 240_000 });
 	test("scores 100 in Performance, Accessibility, Best Practices, and SEO twice", () => {
@@ -91,19 +105,23 @@ test.describe("Lighthouse first-load", () => {
 		fs.mkdirSync(outDir, { recursive: true });
 		const run1 = path.join(outDir, "lighthouse-run-1.json");
 		const run2 = path.join(outDir, "lighthouse-run-2.json");
-		const first = categoryScores(runLighthouse(`${url}/`, run1));
-		const second = categoryScores(runLighthouse(`${url}/`, run2));
-		expect(first, `run 1 ${JSON.stringify(first)}`).toEqual({
+		const report1 = runLighthouse(`${url}/`, run1);
+		const report2 = runLighthouse(`${url}/`, run2);
+		const first = categoryScores(report1);
+		const second = categoryScores(report2);
+		const want = {
 			performance: 100,
 			accessibility: 100,
 			"best-practices": 100,
 			seo: 100,
-		});
-		expect(second, `run 2 ${JSON.stringify(second)}`).toEqual({
-			performance: 100,
-			accessibility: 100,
-			"best-practices": 100,
-			seo: 100,
-		});
+		};
+		expect(
+			first,
+			`run 1 ${JSON.stringify(first)} failed=${failedAudits(report1).join(",")}`,
+		).toEqual(want);
+		expect(
+			second,
+			`run 2 ${JSON.stringify(second)} failed=${failedAudits(report2).join(",")}`,
+		).toEqual(want);
 	});
 });

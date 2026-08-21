@@ -11,6 +11,7 @@ describe("first-load boot entry", () => {
 		expect(html).toContain('src="./src/boot.ts"');
 		expect(html).not.toContain('src="./src/main.tsx"');
 		expect(boot).toMatch(/import\("\.\/main"\)/);
+		expect(boot).toContain("__VEIL_BOOT");
 		expect(boot.indexOf("./styles.css")).toBeGreaterThan(-1);
 		expect(boot.indexOf("./styles.css")).toBeLessThan(
 			boot.indexOf("./legacy-theme.css"),

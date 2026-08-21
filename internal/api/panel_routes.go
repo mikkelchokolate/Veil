@@ -44,6 +44,7 @@ func (routes *PanelRoutes) Register(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("/", routes.handlePanel)
 	mux.HandleFunc("/favicon.ico", routes.handleFavicon)
+	mux.HandleFunc("/favicon.svg", routes.handleFavicon)
 	mux.HandleFunc("/healthz", routes.handleHealth)
 	mux.HandleFunc("/api/version", routes.handleVersion)
 	mux.HandleFunc("/api/version/update", routes.handleUpdateVersion)

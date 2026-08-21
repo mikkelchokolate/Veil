@@ -46,6 +46,13 @@ func TestPanelFavicon(t *testing.T) {
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST status=%d", rec.Code)
 	}
+
+	svg := httptest.NewRequest(http.MethodGet, "/favicon.svg", nil)
+	rec = httptest.NewRecorder()
+	routes.handleFavicon(rec, svg)
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "image/svg+xml" {
+		t.Fatalf("GET /favicon.svg status=%d ct=%q", rec.Code, rec.Header().Get("Content-Type"))
+	}
 }
 
 func TestPanelHealthReportsUnhealthyWhenStatePathMissing(t *testing.T) {
