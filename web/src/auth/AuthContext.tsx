@@ -104,30 +104,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			if (data?.csrfToken) {
 				setCsrfToken(data.csrfToken);
 			}
+			const fromLogin = (): Session => {
+				const session: Session = {
+					authenticated: true,
+					username: data.username ?? username,
+				};
+				if (data.role) session.role = data.role;
+				if (data.locale) session.locale = data.locale;
+				if (data.csrfToken) session.csrfToken = data.csrfToken;
+				return session;
+			};
 			try {
 				const status = await apiFetch<Session>("/api/auth/status");
 				if (status.authenticated) {
 					setSession(status);
 					setCsrfToken(status.csrfToken ?? data.csrfToken ?? null);
 				} else {
-					setSession({
-						authenticated: true,
-						username: data.username ?? username,
-						role: data.role,
-						locale: data.locale,
-						csrfToken: data.csrfToken,
-					});
+					setSession(fromLogin());
 				}
 			} catch {
 				// Login already issued the session cookie; do not wipe CSRF if
 				// status is briefly unavailable.
-				setSession({
-					authenticated: true,
-					username: data.username ?? username,
-					role: data.role,
-					locale: data.locale,
-					csrfToken: data.csrfToken,
-				});
+				setSession(fromLogin());
 			} finally {
 				setLoading(false);
 			}

@@ -209,7 +209,7 @@ export function ApplyPage() {
 										{isAdmin ? (
 											<TableCell>
 												{j.status === "failed" ||
-												j.status === "rollback_failed" ? (
+												(j.status as string) === "rollback_failed" ? (
 													<Button
 														size="sm"
 														disabled={retry.isPending}
