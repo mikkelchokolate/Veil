@@ -79,7 +79,7 @@ func (h *spaHandler) matches(p string) bool {
 	if p == "/" {
 		return true
 	}
-	for _, prefix := range []string{"/api/", "/s/", "/assets/", "/metrics", "/healthz", "/favicon.ico", "/favicon.svg"} {
+	for _, prefix := range []string{"/api/", "/s/", "/assets/", "/metrics", "/healthz", "/favicon.ico", "/favicon.svg", "/robots.txt"} {
 		if strings.HasPrefix(p, prefix) {
 			return false
 		}

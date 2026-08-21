@@ -55,6 +55,19 @@ func TestPanelFavicon(t *testing.T) {
 	}
 }
 
+func TestPanelRobotsTxt(t *testing.T) {
+	routes := PanelRoutes{Info: ServerInfo{Version: "test"}}
+	get := httptest.NewRequest(http.MethodGet, "/robots.txt", nil)
+	rec := httptest.NewRecorder()
+	routes.handleRobots(rec, get)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Allow: /") {
+		t.Fatalf("body=%q", rec.Body.String())
+	}
+}
+
 func TestPanelHealthReportsUnhealthyWhenStatePathMissing(t *testing.T) {
 	routes := PanelRoutes{Info: ServerInfo{Version: "test", StatePath: "/nonexistent/path/state.json"}}
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)

@@ -100,6 +100,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 				setCsrfToken(data.csrfToken);
 			}
 			await refresh();
+			try {
+				localStorage.setItem("veil_spa", "1");
+			} catch {
+				/* storage may be disabled */
+			}
 			broadcastRefresh();
 		},
 		[refresh, broadcastRefresh],
@@ -111,6 +116,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		} finally {
 			setSession({ authenticated: false });
 			setCsrfToken(null);
+			try {
+				localStorage.removeItem("veil_spa");
+			} catch {
+				/* storage may be disabled */
+			}
 			broadcastRefresh();
 		}
 	}, [broadcastRefresh]);

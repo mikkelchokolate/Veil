@@ -39,15 +39,17 @@ function routePath(): string {
 
 // HttpOnly session cookies are invisible to JS. Reload of an authenticated
 // route (or `/` with a live session) must still boot the SPA.
-if (routePath() !== "/") {
+function hasSpaMarker(): boolean {
+	try {
+		return localStorage.getItem("veil_spa") === "1";
+	} catch {
+		return false;
+	}
+}
+
+// Reload of a deep link, or of `/` after login (non-HttpOnly marker cookie).
+if (routePath() !== "/" || hasSpaMarker()) {
 	boot();
-} else {
-	void fetch(`${panelPrefix()}/api/auth/status`, { credentials: "same-origin" })
-		.then((response) => (response.ok ? response.json() : null))
-		.then((body: { authenticated?: boolean } | null) => {
-			if (body?.authenticated) boot();
-		})
-		.catch(() => undefined);
 }
 
 document.addEventListener("pointerdown", boot, { once: true, capture: true });

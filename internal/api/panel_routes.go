@@ -45,12 +45,25 @@ func (routes *PanelRoutes) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/", routes.handlePanel)
 	mux.HandleFunc("/favicon.ico", routes.handleFavicon)
 	mux.HandleFunc("/favicon.svg", routes.handleFavicon)
+	mux.HandleFunc("/robots.txt", routes.handleRobots)
 	mux.HandleFunc("/healthz", routes.handleHealth)
 	mux.HandleFunc("/api/version", routes.handleVersion)
 	mux.HandleFunc("/api/version/update", routes.handleUpdateVersion)
 	mux.HandleFunc("/api/version/update/jobs/", routes.handlePanelUpdateJob)
 	if routes.State != nil && routes.State.db != nil {
 		routes.State.reconcilePanelUpdateJobs(routes.Info.Version)
+	}
+}
+
+func (routes PanelRoutes) handleRobots(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		methodNotAllowed(w, http.MethodGet, http.MethodHead)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	if r.Method == http.MethodGet {
+		_, _ = w.Write([]byte("User-agent: *\nAllow: /\n"))
 	}
 }
 
