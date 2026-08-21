@@ -13,12 +13,29 @@ function lighthouseBin() {
 }
 
 function chromePath() {
-	if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
+	const candidates = [];
+	if (process.env.CHROME_PATH) candidates.push(process.env.CHROME_PATH);
 	try {
-		return require("playwright-core").chromium.executablePath();
+		candidates.push(require("playwright-core").chromium.executablePath());
 	} catch {
-		return require("@playwright/test").chromium.executablePath();
+		try {
+			candidates.push(require("@playwright/test").chromium.executablePath());
+		} catch {
+			/* fall through to the Playwright browser cache */
+		}
 	}
+	const cache = process.env.PLAYWRIGHT_BROWSERS_PATH
+		? process.env.PLAYWRIGHT_BROWSERS_PATH
+		: path.join(os.homedir(), ".cache", "ms-playwright");
+	if (fs.existsSync(cache)) {
+		for (const dir of fs.readdirSync(cache)) {
+			candidates.push(path.join(cache, dir, "chrome-linux64", "chrome"));
+		}
+	}
+	for (const candidate of candidates) {
+		if (candidate && fs.existsSync(candidate)) return candidate;
+	}
+	throw new Error(`no Chrome executable found (tried ${candidates.join(", ")})`);
 }
 
 function runLighthouse(url, outFile) {
