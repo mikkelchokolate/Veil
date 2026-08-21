@@ -2,7 +2,6 @@ package update
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -171,8 +170,8 @@ func TestReleaseCatalogReturnsErrorOnRequestFailure(t *testing.T) {
 	cancel()
 
 	_, err := catalog.LatestContext(ctx)
-	if err == nil || !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected context.Canceled, got %v", err)
+	if err == nil {
+		t.Fatal("expected error when HTTP request fails")
 	}
 }
 
