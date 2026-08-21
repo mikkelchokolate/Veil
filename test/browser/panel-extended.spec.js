@@ -12,6 +12,7 @@
 //     deep link (gated on VEIL_BROWSER_BASE_URL_PATHED; CI runs a second
 //     panel instance with --web-base-path for this)
 const { test, expect } = require('@playwright/test');
+const { waitForSpa } = require('./spa-boot');
 
 const adminUsername = process.env.VEIL_BROWSER_USERNAME || 'browser-admin';
 const adminPassword = process.env.VEIL_BROWSER_PASSWORD || 'Browser-E2E-Password-123!';
@@ -21,6 +22,7 @@ const tokenHeaders = { 'X-Veil-Token': apiToken, 'Content-Type': 'application/js
 async function login(page, username, password) {
   await page.goto('/');
   await expect(page.locator('#login-username')).toBeVisible({ timeout: 15_000 });
+  await waitForSpa(page);
   await page.locator('#login-username').fill(username);
   await page.locator('#login-password').fill(password);
   await page.getByRole('button', { name: /^sign in$/i }).click();
@@ -468,6 +470,7 @@ test.describe('Veil Panel — extended critical flows', () => {
     await expect(page.locator('#login-username')).toBeVisible({ timeout: 15_000 });
 
     // Full auth flow under the prefix.
+    await waitForSpa(page);
     await page.locator('#login-username').fill(adminUsername);
     await page.locator('#login-password').fill(adminPassword);
     await page.getByRole('button', { name: /^sign in$/i }).click();

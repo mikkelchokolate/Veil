@@ -1,6 +1,7 @@
 package api
 
 import (
+	"compress/gzip"
 	"io/fs"
 	"net/http"
 	"path"
@@ -69,10 +70,7 @@ func (h *spaHandler) serveIndex(w http.ResponseWriter, r *http.Request) {
 	html = strings.Replace(html, `<base href="/" />`, `<base href="`+base+`" />`, 1)
 	setSPAHeaders(w, "no-store")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if r.Method == http.MethodHead {
-		return
-	}
-	_, _ = w.Write([]byte(html))
+	writeSPABody(w, r, []byte(html), true)
 }
 
 // matches reports whether a request path should render the SPA shell. API,
@@ -98,17 +96,50 @@ func serveSPAFile(w http.ResponseWriter, r *http.Request, dist fs.FS, name, cach
 	}
 	setSPAHeaders(w, cache)
 	base := path.Base(name)
+	compress := false
 	switch {
 	case strings.HasSuffix(base, ".js"), strings.HasSuffix(base, ".mjs"):
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		compress = true
 	case strings.HasSuffix(base, ".css"):
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		compress = true
 	case strings.HasSuffix(base, ".svg"):
 		w.Header().Set("Content-Type", "image/svg+xml")
+		compress = true
+	case strings.HasSuffix(base, ".html"):
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		compress = true
 	case strings.HasSuffix(base, ".woff2"):
 		w.Header().Set("Content-Type", "font/woff2")
+	case strings.HasSuffix(base, ".jpg"), strings.HasSuffix(base, ".jpeg"):
+		w.Header().Set("Content-Type", "image/jpeg")
+	case strings.HasSuffix(base, ".png"):
+		w.Header().Set("Content-Type", "image/png")
+	case strings.HasSuffix(base, ".webp"):
+		w.Header().Set("Content-Type", "image/webp")
 	case strings.HasSuffix(base, ".map"):
 		w.Header().Set("Content-Type", "application/json")
+		compress = true
+	}
+	writeSPABody(w, r, data, compress)
+}
+
+func acceptsGzip(r *http.Request) bool {
+	return strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
+}
+
+func writeSPABody(w http.ResponseWriter, r *http.Request, data []byte, compress bool) {
+	if r.Method == http.MethodHead {
+		return
+	}
+	if compress && acceptsGzip(r) {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Add("Vary", "Accept-Encoding")
+		gz := gzip.NewWriter(w)
+		_, _ = gz.Write(data)
+		_ = gz.Close()
+		return
 	}
 	_, _ = w.Write(data)
 }

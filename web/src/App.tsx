@@ -1,10 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
+import { lazy, Suspense } from "react";
 import { apiFetch } from "./api/fetcher";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { LoginView } from "./auth/LoginView";
 import { SetupView } from "./auth/SetupView";
 import { I18nProvider, useI18n } from "./i18n/I18nContext";
-import { RouterView } from "./router";
+
+const RouterView = lazy(async () => {
+	const mod = await import("./router");
+	return { default: mod.RouterView };
+});
 
 interface SetupStatus {
 	required: boolean;
@@ -35,7 +40,7 @@ function BusySpinner() {
 
 function Gate() {
 	const setup = useSetupStatus();
-	const { session, loading } = useAuth();
+	const { session } = useAuth();
 
 	// I18nProvider wraps every branch (login/setup views also use t()). The key
 	// remounts the provider when the authenticated locale becomes known or the
@@ -45,14 +50,14 @@ function Gate() {
 			key={session?.locale ?? "anon"}
 			initialLocale={(session?.locale as "en" | "ru" | undefined) ?? "en"}
 		>
-			{setup.isLoading || loading ? (
-				<BusySpinner />
-			) : setup.data?.required && setup.data.allowed ? (
+			{setup.data?.required && setup.data.allowed ? (
 				<SetupView />
-			) : !session?.authenticated ? (
-				<LoginView />
+			) : session?.authenticated ? (
+				<Suspense fallback={<BusySpinner />}>
+					<RouterView />
+				</Suspense>
 			) : (
-				<RouterView />
+				<LoginView />
 			)}
 		</I18nProvider>
 	);

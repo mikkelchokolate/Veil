@@ -1,6 +1,7 @@
 // S8: Playwright suite for the React SPA. Replaces the legacy hash-route SPA
 // suite. Uses the cookie session + CSRF flow the React frontend actually uses.
 const { test, expect } = require('@playwright/test');
+const { waitForSpa } = require('./spa-boot');
 
 const adminUsername = process.env.VEIL_BROWSER_USERNAME || 'browser-admin';
 const adminPassword = process.env.VEIL_BROWSER_PASSWORD || 'Browser-E2E-Password-123!';
@@ -9,6 +10,7 @@ async function login(page, username, password) {
   await page.goto('/');
   // The React SPA shows a sign-in form when unauthenticated.
   await expect(page.locator('#login-username')).toBeVisible({ timeout: 15_000 });
+  await waitForSpa(page);
   await page.locator('#login-username').fill(username);
   await page.locator('#login-password').fill(password);
   await page.getByRole('button', { name: /^sign in$/i }).click();
@@ -38,6 +40,7 @@ test.describe('Veil Panel — React SPA', () => {
 
   test('rejects invalid credentials', async ({ page }) => {
     await page.goto('/');
+    await waitForSpa(page);
     await page.locator('#login-username').fill('nobody');
     await page.locator('#login-password').fill('wrong-password');
     await page.getByRole('button', { name: /^sign in$/i }).click();

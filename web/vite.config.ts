@@ -67,6 +67,7 @@ export default defineConfig({
 	build: {
 		outDir: "dist",
 		sourcemap: false,
+		modulePreload: false,
 		rolldownOptions: {
 			output: {
 				codeSplitting: {
@@ -83,9 +84,14 @@ export default defineConfig({
 						},
 						{
 							name: "react",
+							// Only the react / react-dom packages. A substring
+							// match on "react-dom" also swallows every pnpm folder
+							// whose peer fingerprint contains `_react-dom@`
+							// (@radix-ui, lucide, …) and dumps them onto first load.
 							test: (id: string) =>
-								id.includes("node_modules") &&
-								(id.includes("react-dom") || id.includes("/react/")),
+								/(?:^|[\\/])node_modules[\\/](?:\.pnpm[\\/](?:react-dom|react)@[^\\/]+[\\/]node_modules[\\/])?(?:react-dom|react)[\\/]/.test(
+									id,
+								),
 							priority: 20,
 						},
 						{

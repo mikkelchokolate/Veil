@@ -107,12 +107,7 @@ export function SetupView() {
 						{error}
 					</div>
 				) : null}
-				<button
-					className="btn btn-primary"
-					type="submit"
-					disabled={busy}
-					style={{ width: "100%", marginTop: 8 }}
-				>
+				<button className="btn btn-primary" type="submit" disabled={busy}>
 					{busy ? t("auth.setup.creating") : t("auth.setup.create")}
 				</button>
 			</form>

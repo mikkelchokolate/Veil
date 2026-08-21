@@ -27,6 +27,46 @@ func TestSPAServesIndexWithBasePath(t *testing.T) {
 	}
 }
 
+func TestSPAIndexGzipWhenRequested(t *testing.T) {
+	h, err := newSPAHandler("/")
+	if err != nil {
+		t.Skipf("SPA bundle not embedded (run web build): %v", err)
+	}
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	rec := httptest.NewRecorder()
+	h.serveIndex(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if rec.Header().Get("Content-Encoding") != "gzip" {
+		t.Fatalf("expected gzip encoding, got %q", rec.Header().Get("Content-Encoding"))
+	}
+	body := rec.Body.Bytes()
+	if len(body) < 2 || body[0] != 0x1f || body[1] != 0x8b {
+		t.Fatalf("response is not gzip: %x", body[:min(8, len(body))])
+	}
+}
+
+func TestSPAIndexUncompressedWithoutAcceptGzip(t *testing.T) {
+	h, err := newSPAHandler("/")
+	if err != nil {
+		t.Skipf("SPA bundle not embedded (run web build): %v", err)
+	}
+	req := httptest.NewRequest("GET", "/", nil)
+	rec := httptest.NewRecorder()
+	h.serveIndex(rec, req)
+	if rec.Header().Get("Content-Encoding") != "" {
+		t.Fatalf("did not request gzip, got encoding %q", rec.Header().Get("Content-Encoding"))
+	}
+	if !strings.Contains(rec.Body.String(), "<title>Veil</title>") {
+		t.Fatal("uncompressed index missing title")
+	}
+	if !strings.Contains(rec.Body.String(), `name="description"`) {
+		t.Fatal("index missing meta description")
+	}
+}
+
 // TestSPAClientRouteFallback serves the shell for client-side routes.
 func TestSPAClientRouteFallback(t *testing.T) {
 	h, err := newSPAHandler("/")

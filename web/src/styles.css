@@ -361,6 +361,11 @@ textarea.input {
 	font-size: 22px;
 }
 
+.auth-card .btn-primary {
+	width: 100%;
+	margin-top: 8px;
+}
+
 .auth-card .subtitle {
 	color: var(--text-muted);
 	font-size: 14px;

@@ -2,8 +2,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
-import "./styles.css";
-import "./legacy-theme.css";
 
 const queryClient = new QueryClient({
 	defaultOptions: {
@@ -14,6 +12,12 @@ const queryClient = new QueryClient({
 		},
 	},
 });
+
+declare global {
+	interface Window {
+		__VEIL_READY?: boolean;
+	}
+}
 
 const rootEl = document.getElementById("root");
 if (!rootEl) {
@@ -27,3 +31,5 @@ createRoot(rootEl).render(
 		</QueryClientProvider>
 	</StrictMode>,
 );
+
+window.__VEIL_READY = true;

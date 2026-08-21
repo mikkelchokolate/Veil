@@ -56,12 +56,7 @@ export function LoginView() {
 						{error}
 					</div>
 				) : null}
-				<button
-					className="btn btn-primary"
-					type="submit"
-					disabled={busy}
-					style={{ width: "100%", marginTop: 8 }}
-				>
+				<button className="btn btn-primary" type="submit" disabled={busy}>
 					{busy ? t("auth.login.signingIn") : t("auth.login.signIn")}
 				</button>
 			</form>
