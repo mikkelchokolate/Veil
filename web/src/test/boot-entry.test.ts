@@ -13,6 +13,9 @@ describe("first-load boot entry", () => {
 		expect(boot).toMatch(/import\("\.\/main"\)/);
 		expect(boot).toContain("__VEIL_BOOT");
 		expect(boot).toContain("veil_spa");
+		expect(boot).toContain("captureLoginFields");
+		expect(boot).not.toMatch(/addEventListener\("focusin"/);
+		expect(boot).not.toMatch(/addEventListener\("keydown"/);
 		expect(boot).not.toContain("/api/auth/status");
 		expect(boot.indexOf("./styles.css")).toBeGreaterThan(-1);
 		expect(boot.indexOf("./styles.css")).toBeLessThan(

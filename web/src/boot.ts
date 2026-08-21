@@ -1,3 +1,4 @@
+import { captureLoginFields } from "./pendingLogin";
 import "./styles.css";
 import "./legacy-theme.css";
 
@@ -16,12 +17,23 @@ let started = false;
 function boot() {
 	if (started) return;
 	started = true;
+	captureLoginFields(false);
 	void import("./main").then(() => {
 		window.__VEIL_READY = true;
 	});
 }
 
 window.__VEIL_BOOT = boot;
+
+function inStaticLogin(event: Event): boolean {
+	const target = event.target;
+	return target instanceof Element && Boolean(target.closest(".auth-card"));
+}
+
+function bootFromPageIntent(event: Event): void {
+	if (started || inStaticLogin(event)) return;
+	boot();
+}
 
 function panelPrefix(): string {
 	const href = document.querySelector("base")?.getAttribute("href") ?? "/";
@@ -52,15 +64,17 @@ if (routePath() !== "/" || hasSpaMarker()) {
 	boot();
 }
 
-document.addEventListener("pointerdown", boot, { once: true, capture: true });
-document.addEventListener("click", boot, { once: true, capture: true });
-document.addEventListener("focusin", boot, { once: true, capture: true });
-document.addEventListener("keydown", boot, { once: true, capture: true });
+// Do not boot on focus/keydown inside the static login card: Playwright fill()
+// and the first keystroke would remount LoginView before credentials exist.
+document.addEventListener("pointerdown", bootFromPageIntent, { capture: true });
+document.addEventListener("click", bootFromPageIntent, { capture: true });
 document.addEventListener(
 	"submit",
 	(event) => {
+		if (window.__VEIL_READY) return;
 		event.preventDefault();
+		captureLoginFields(true);
 		boot();
 	},
-	{ once: true, capture: true },
+	{ capture: true },
 );

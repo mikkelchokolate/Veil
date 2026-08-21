@@ -47,6 +47,17 @@ test.describe('Veil Panel — React SPA', () => {
     await expect(page.locator('[role="alert"]')).toBeVisible({ timeout: 10_000 });
   });
 
+  test('first Sign in from the static form authenticates', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#login-username')).toBeVisible({ timeout: 15_000 });
+    await page.locator('#login-username').fill(adminUsername);
+    await page.locator('#login-password').fill(adminPassword);
+    await page.getByRole('button', { name: /^sign in$/i }).click();
+    await expect(page.getByRole('link', { name: /clients/i }).first()).toBeVisible({
+      timeout: 20_000,
+    });
+  });
+
   test('admin can sign in and reach the clients page', async ({ page }) => {
     await login(page, adminUsername, adminPassword);
     await page.getByRole('link', { name: /clients/i }).first().click();

@@ -14,6 +14,14 @@ module.exports = defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
+    ...(process.env.CHROME_PATH
+      ? {
+          launchOptions: {
+            executablePath: process.env.CHROME_PATH,
+            args: ['--no-sandbox', '--disable-dev-shm-usage'],
+          },
+        }
+      : {}),
   },
   projects: [
     {

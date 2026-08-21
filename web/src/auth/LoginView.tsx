@@ -1,27 +1,50 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nContext";
+import { takePendingLogin } from "../pendingLogin";
 
 export function LoginView() {
 	const { login } = useAuth();
 	const { t } = useI18n();
-	const [username, setUsername] = useState("");
-	const [password, setPassword] = useState("");
+	const [pending] = useState(takePendingLogin);
+	const [username, setUsername] = useState(pending.username);
+	const [password, setPassword] = useState(pending.password);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 
-	async function onSubmit(e: FormEvent) {
-		e.preventDefault();
+	async function submit(user: string, pass: string) {
 		setError(null);
 		setBusy(true);
 		try {
-			await login(username, password);
+			await login(user, pass);
 		} catch {
 			setError(t("auth.login.invalid"));
 		} finally {
 			setBusy(false);
 		}
 	}
+
+	async function onSubmit(e: FormEvent) {
+		e.preventDefault();
+		await submit(username, password);
+	}
+
+	useEffect(() => {
+		if (!pending.submit || !pending.username || !pending.password) return;
+		let cancelled = false;
+		setBusy(true);
+		setError(null);
+		void login(pending.username, pending.password)
+			.catch(() => {
+				if (!cancelled) setError(t("auth.login.invalid"));
+			})
+			.finally(() => {
+				if (!cancelled) setBusy(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [pending, login, t]);
 
 	return (
 		<div className="center-screen">

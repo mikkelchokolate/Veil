@@ -95,10 +95,13 @@ test.describe("Lighthouse first-load", () => {
 	test.describe.configure({ timeout: 240_000 });
 	test("scores 100 in Performance, Accessibility, Best Practices, and SEO twice", () => {
 		const url = (
-			process.env.VEIL_LH_URL ||
-			process.env.VEIL_BROWSER_BASE_URL ||
-			"http://127.0.0.1:4173"
+			process.env.VEIL_LH_URL || process.env.VEIL_BROWSER_BASE_URL || ""
 		).replace(/\/+$/, "");
+		if (!url) {
+			throw new Error(
+				"VEIL_LH_URL or VEIL_BROWSER_BASE_URL must point at veil serve (not a stub static server)",
+			);
+		}
 		const outDir =
 			process.env.VEIL_LH_OUT_DIR ||
 			fs.mkdtempSync(path.join(os.tmpdir(), "veil-lh-"));
