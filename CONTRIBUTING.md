@@ -5,8 +5,8 @@ workflow, quality gates, and conventions the project expects.
 
 ## Requirements
 
-- **Go 1.26+** (see `go.mod` — currently `go 1.26.5`).
-- **Node.js 26.5.0** (repository pin) for the React Panel build and Playwright/browser suites; Node.js 20 is not supported by the project CI contract.
+- **Go 1.27+** (see `go.mod` — currently `go 1.27.0`).
+- **Node.js 26.7.0** (repository pin) for the React Panel build and Playwright/browser suites; Node.js 20 is not supported by the project CI contract.
 - **A Linux host with systemd** for the integration and end-to-end suites;
   bare-metal root/systemd access for the full `make e2e` path.
 

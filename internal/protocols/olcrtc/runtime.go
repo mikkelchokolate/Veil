@@ -52,7 +52,7 @@ func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.Ma
 // lockstep with the wire format consumed by current olcRTC clients: the current
 // OLC2 record layer has no compatibility fallback to the legacy pre-OLC2 wire.
 func (Plugin) RuntimeInstall(string) runtimeinstall.Runtime {
-	const sourceCommit = "48cae636f88e16863c99d4147bbc327a856cdf00"
+	const sourceCommit = "f616f57bb3a90740f1755922ffeaa7acc5cfe4ed"
 	return runtimeinstall.Runtime{
 		Name:           "olcrtc",
 		Binary:         "olcrtc",
@@ -63,7 +63,7 @@ func (Plugin) RuntimeInstall(string) runtimeinstall.Runtime {
 		Integrity:      "go-module-sum",
 		VersionArgs:    []string{"__go_buildinfo__"},
 		VersionCommand: "go version -m olcrtc",
-		VersionPattern: `48cae636f88e`,
+		VersionPattern: `f616f57bb3a9`,
 		Description:    "olcrtc is built from source with \"go install\"",
 	}
 }

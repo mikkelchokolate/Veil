@@ -55,11 +55,11 @@ func (Plugin) RuntimeInstall(arch string) runtimeinstall.Runtime {
 		Binary:         "hysteria",
 		Method:         runtimeinstall.MethodRawBinary,
 		Repo:           "apernet/hysteria",
-		Version:        "app/v2.10.0",
+		Version:        "app/v2.12.1",
 		Integrity:      "upstream-checksum",
 		VersionArgs:    []string{"version"},
 		VersionCommand: "hysteria version",
-		VersionPattern: `(?i)2\.10\.0`,
+		VersionPattern: `(?i)2\.12\.1`,
 		Description:    "hysteria is downloaded from its upstream GitHub release",
 		AssetMatch: func(name string) bool {
 			return name == "hysteria-linux-"+arch

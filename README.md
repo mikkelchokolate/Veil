@@ -324,7 +324,7 @@ Before opening or updating a pull request, run `make ci-pr` — it validates the
 
 See [docs/development/ci.md](docs/development/ci.md) for the full local-CI guide.
 
-A Playwright browser suite (`test/browser/`) exercises the Panel UI end to end. The frontend and browser suites use the repository-pinned Node.js v26.5.0 (not Node.js 20) and are separate from the Go test suites:
+A Playwright browser suite (`test/browser/`) exercises the Panel UI end to end. The frontend and browser suites use the repository-pinned Node.js v26.7.0 (not Node.js 20) and are separate from the Go test suites:
 
 ```bash
 cd test/browser && npm install && npm test

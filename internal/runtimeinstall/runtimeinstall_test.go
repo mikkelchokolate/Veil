@@ -58,7 +58,7 @@ func TestCatalogAssetMatchersMatchUpstreamNames(t *testing.T) {
 		byBinary[r.Binary] = r
 	}
 	sb := byBinary["sing-box"]
-	if sb.AssetMatch == nil || !sb.AssetMatch("sing-box-1.13.14-linux-amd64.tar.gz") {
+	if sb.AssetMatch == nil || !sb.AssetMatch("sing-box-1.13.19-linux-amd64.tar.gz") {
 		t.Fatalf("sing-box asset matcher did not match expected upstream name")
 	}
 }
@@ -110,14 +110,14 @@ func TestInstallCaddyNaiveInvokesBuilder(t *testing.T) {
 func TestSingBoxMatcherRejectsMuslAndGlibcVariants(t *testing.T) {
 	sb := warpRuntime(t)
 	for _, name := range []string{
-		"sing-box-1.13.14-linux-amd64-musl.tar.gz",
-		"sing-box-1.13.14-linux-amd64-glibc.tar.gz",
+		"sing-box-1.13.19-linux-amd64-musl.tar.gz",
+		"sing-box-1.13.19-linux-amd64-glibc.tar.gz",
 	} {
 		if sb.AssetMatch(name) {
 			t.Fatalf("sing-box matcher should reject variant %q", name)
 		}
 	}
-	if !sb.AssetMatch("sing-box-1.13.14-linux-amd64.tar.gz") {
+	if !sb.AssetMatch("sing-box-1.13.19-linux-amd64.tar.gz") {
 		t.Fatalf("sing-box matcher should accept the plain asset")
 	}
 }
@@ -413,14 +413,14 @@ func TestInstallAllInstallsCatalogRuntimes(t *testing.T) {
 	opts := Options{
 		BinDir:             binDir,
 		Arch:               "amd64",
-		RunVersion:         fixedRuntimeVersion("sing-box version 1.13.14"),
+		RunVersion:         fixedRuntimeVersion("sing-box version 1.13.19"),
 		VerifyPinnedSHA256: func([]byte, string) error { return nil },
 		FetchRelease: func(ctx context.Context, repo string) (*Release, error) {
 			if repo != "SagerNet/sing-box" {
 				return nil, fmt.Errorf("unexpected repo %s", repo)
 			}
-			return &Release{TagName: "v1.13.14", Assets: []Asset{
-				{Name: "sing-box-1.13.14-linux-amd64.tar.gz", BrowserDownloadURL: "https://example/sb"},
+			return &Release{TagName: "v1.13.19", Assets: []Asset{
+				{Name: "sing-box-1.13.19-linux-amd64.tar.gz", BrowserDownloadURL: "https://example/sb"},
 			}}, nil
 		},
 		Download: func(ctx context.Context, url string) ([]byte, error) {

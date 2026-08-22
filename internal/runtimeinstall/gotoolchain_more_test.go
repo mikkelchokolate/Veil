@@ -280,7 +280,7 @@ func buildFakeGoTarball(t *testing.T) []byte {
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
 	files := map[string][]byte{
-		"go/bin/go":    []byte("#!/bin/sh\necho go version go1.26.4 linux/amd64\n"),
+		"go/bin/go":    []byte("#!/bin/sh\necho go version go1.27.0 linux/amd64\n"),
 		"go/README.md": []byte("go"),
 	}
 	for name, content := range files {
@@ -685,7 +685,7 @@ func TestGoToolchainEnsureRootDirEntrySkipped(t *testing.T) {
 		data []byte
 	}{
 		{hdr: tar.Header{Name: "go/", Mode: 0o755, Typeflag: tar.TypeDir}},
-		{hdr: tar.Header{Name: "go/bin/go", Mode: 0o755, Typeflag: tar.TypeReg}, data: []byte("#!/bin/sh\necho go version go1.26.4 linux/amd64\n")},
+		{hdr: tar.Header{Name: "go/bin/go", Mode: 0o755, Typeflag: tar.TypeReg}, data: []byte("#!/bin/sh\necho go version go1.27.0 linux/amd64\n")},
 	})
 	sum := sha256.Sum256(tarball)
 	defaultGoSHA256[key] = hex.EncodeToString(sum[:])

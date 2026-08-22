@@ -4,6 +4,17 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+### Changed
+
+- Protocol runtime pins now track current supported upstreams: Hysteria2
+  `app/v2.12.1`, Mieru/mita `v3.36.0`, WARP/sing-box `v1.13.19`, and olcRTC
+  `f616f57bb3a9`. NaiveProxy remains on Caddy `v2.11.4` with the klzgrad
+  forwardproxy fork (already latest). `veil runtime install` and CI install
+  the same checksum-verified artifacts.
+- Panel toolchain and libraries: Go `1.27.0`, Node.js `26.7.0`, pnpm
+  `11.22.0`, Playwright `1.62.1`, and current Go modules plus the Panel SPA
+  `web/` and `test/browser` dependency trees.
+
 ### Added
 
 - Hysteria2 Inbounds can now serve a real ACME certificate for a domain that

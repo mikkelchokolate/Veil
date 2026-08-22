@@ -33,11 +33,11 @@ func (Plugin) RuntimeInstall(arch string) runtimeinstall.Runtime {
 		Binary:         "mita",
 		Method:         runtimeinstall.MethodArchive,
 		Repo:           "enfein/mieru",
-		Version:        "v3.34.1",
+		Version:        "v3.36.0",
 		Integrity:      "upstream-checksum",
 		VersionArgs:    []string{"version"},
 		VersionCommand: "mita version",
-		VersionPattern: `(?i)3\.34\.1`,
+		VersionPattern: `(?i)3\.36\.0`,
 		Description:    "mita is downloaded from its upstream GitHub release",
 		AssetMatch: func(name string) bool {
 			return startsWith(name, "mita_") && endsWith(name, "_linux_"+arch+".tar.gz")

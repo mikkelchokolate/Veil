@@ -178,7 +178,7 @@ The project uses the Go module path `github.com/mikkelchokolate/Veil`, which is 
 
 ### Build Steps
 
-1. **Install Go:** Ensure you have Go 1.26 or newer installed (see `go.mod`):
+1. **Install Go:** Ensure you have Go 1.27 or newer installed (see `go.mod`):
    ```bash
    go version
    ```

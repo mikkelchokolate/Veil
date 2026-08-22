@@ -23,11 +23,11 @@ func fakeProtocolRuntimeVersion(_ context.Context, path string, _ []string) (str
 	case strings.Contains(string(body), "demo"):
 		return "demo v1", nil
 	case strings.Contains(string(body), "hysteria"):
-		return "hysteria 2.10.0", nil
+		return "hysteria 2.12.1", nil
 	case strings.Contains(string(body), "mita"):
-		return "mita 3.34.1", nil
+		return "mita 3.36.0", nil
 	case strings.Contains(string(body), "sing-box"):
-		return "sing-box 1.13.14", nil
+		return "sing-box 1.13.19", nil
 	case strings.Contains(string(body), "caddy"):
 		return "caddy 2.11.4", nil
 	default:
@@ -36,5 +36,5 @@ func fakeProtocolRuntimeVersion(_ context.Context, path string, _ []string) (str
 }
 
 func fakeOlcrtcBuildInfo(string) (string, error) {
-	return "github.com/openlibrecommunity/olcrtc@v0.0.0-20260814163019-48cae636f88e", nil
+	return "github.com/openlibrecommunity/olcrtc@v0.0.2-0.20260818184357-f616f57bb3a9", nil
 }

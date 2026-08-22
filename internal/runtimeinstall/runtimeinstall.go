@@ -103,10 +103,10 @@ type Runtime struct {
 // RuntimeProvider.RuntimeInstall, so they are not duplicated here.
 func Catalog(arch string) []Runtime {
 	singBoxDigests := map[string]string{
-		"amd64": "f48703461a15476951ac4967cdad339d986f4b8096b4eb3ff0829a500502d697",
-		"arm64": "4742df6a4314e8ecc41736849fca6d73b8f9e91b6e8b06ee794ff17ba180579e",
+		"amd64": "ef88a9e577d474210867bd708933d042e9b70106529df2656182c9db90106aa1",
+		"arm64": "7fe3597a95a3c5ad67477b1d7653b9ce097e0be7c676758eba1fcf558f353d57",
 	}
-	const singBoxVersion = "v1.13.14"
+	const singBoxVersion = "v1.13.19"
 	return []Runtime{
 		{
 			Name:           "warp",
@@ -118,10 +118,10 @@ func Catalog(arch string) []Runtime {
 			PinnedSHA256:   singBoxDigests[arch],
 			VersionArgs:    []string{"version"},
 			VersionCommand: "sing-box version",
-			VersionPattern: `(?i)1\.13\.14`,
+			VersionPattern: `(?i)1\.13\.19`,
 			Description:    "sing-box is downloaded from its pinned upstream GitHub release",
 			AssetMatch: func(name string) bool {
-				return name == "sing-box-1.13.14-linux-"+arch+".tar.gz"
+				return name == "sing-box-1.13.19-linux-"+arch+".tar.gz"
 			},
 		},
 	}

@@ -879,7 +879,7 @@ exit 0
 func TestCatalogArm64(t *testing.T) {
 	runtimes := Catalog("arm64")
 	for _, r := range runtimes {
-		if r.Name == "warp" && !r.AssetMatch("sing-box-1.13.14-linux-arm64.tar.gz") {
+		if r.Name == "warp" && !r.AssetMatch("sing-box-1.13.19-linux-arm64.tar.gz") {
 			t.Error("warp arm64 matcher failed")
 		}
 	}

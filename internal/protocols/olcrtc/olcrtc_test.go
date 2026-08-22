@@ -276,7 +276,7 @@ func TestRuntimeDescriptorsWithoutMatchingInbound(t *testing.T) {
 func TestRuntimeInstall(t *testing.T) {
 	p := New()
 	got := p.RuntimeInstall("amd64")
-	const sourceCommit = "48cae636f88e16863c99d4147bbc327a856cdf00"
+	const sourceCommit = "f616f57bb3a90740f1755922ffeaa7acc5cfe4ed"
 	want := runtimeinstall.Runtime{
 		Name:           "olcrtc",
 		Binary:         "olcrtc",
@@ -287,7 +287,7 @@ func TestRuntimeInstall(t *testing.T) {
 		Integrity:      "go-module-sum",
 		VersionArgs:    []string{"__go_buildinfo__"},
 		VersionCommand: "go version -m olcrtc",
-		VersionPattern: `48cae636f88e`,
+		VersionPattern: `f616f57bb3a9`,
 		Description:    "olcrtc is built from source with \"go install\"",
 	}
 	if !reflect.DeepEqual(got, want) {
