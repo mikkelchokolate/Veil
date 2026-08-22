@@ -23,6 +23,7 @@ type recordingPrivilegedClient struct {
 	promoteResult         privileged.PromoteResult
 	statusRequests        []privileged.ServiceStatusRequest
 	statusActiveState     string
+	statusActiveStates    []string
 	journals              []privileged.JournalRequest
 	journalLines          []string
 	backups               []privileged.BackupRequest
@@ -103,6 +104,28 @@ func TestPrivilegedApplyHealthChecksUseHelperStatus(t *testing.T) {
 	}
 }
 
+func TestPrivilegedApplyHealthChecksWaitForActivatingService(t *testing.T) {
+	oldInterval, oldTimeout := serviceHealthPollInterval, serviceHealthPollTimeout
+	serviceHealthPollInterval = time.Millisecond
+	serviceHealthPollTimeout = time.Second
+	t.Cleanup(func() {
+		serviceHealthPollInterval = oldInterval
+		serviceHealthPollTimeout = oldTimeout
+	})
+
+	client := &recordingPrivilegedClient{statusActiveStates: []string{"activating", "active"}}
+	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client})
+	results := NewManagementApplyContext(state).checkServiceHealth([]ServiceActionResult{{
+		Name: "veil-hysteria2@edge.service", Command: []string{"systemctl", "restart", "veil-hysteria2@edge.service"}, Success: true,
+	}})
+	if len(client.statusRequests) != 3 {
+		t.Fatalf("status requests = %d, want 3", len(client.statusRequests))
+	}
+	if len(results) != 1 || !results[0].Healthy || results[0].Output != "active/running" {
+		t.Fatalf("health results=%+v", results)
+	}
+}
+
 func TestPrivilegedApplyHealthChecksIgnoreStoppedOrphans(t *testing.T) {
 	client := &recordingPrivilegedClient{}
 	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client})
@@ -111,9 +134,10 @@ func TestPrivilegedApplyHealthChecksIgnoreStoppedOrphans(t *testing.T) {
 		{Name: "veil-hysteria2@old.service", Command: []string{"systemctl", "stop", "veil-hysteria2@old.service"}, Success: true},
 		{Name: "veil-hysteria2@old.service", Command: []string{"systemctl", "disable", "veil-hysteria2@old.service"}, Success: true},
 	})
-	if !reflect.DeepEqual(client.statusRequests, []privileged.ServiceStatusRequest{{
-		Units: []string{"veil-hysteria2@new.service"},
-	}}) {
+	if !reflect.DeepEqual(client.statusRequests, []privileged.ServiceStatusRequest{
+		{Units: []string{"veil-hysteria2@new.service"}},
+		{Units: []string{"veil-hysteria2@new.service"}},
+	}) {
 		t.Fatalf("status requests=%+v", client.statusRequests)
 	}
 	if len(results) != 1 || results[0].Name != "veil-hysteria2@new.service" || !results[0].Healthy {
@@ -132,6 +156,13 @@ func (c *recordingPrivilegedClient) ServiceStatus(_ context.Context, request pri
 		return privileged.ServiceStatusResult{}, c.err
 	}
 	activeState := c.statusActiveState
+	if len(c.statusActiveStates) > 0 {
+		index := len(c.statusRequests) - 1
+		if index >= len(c.statusActiveStates) {
+			index = len(c.statusActiveStates) - 1
+		}
+		activeState = c.statusActiveStates[index]
+	}
 	if activeState == "" {
 		activeState = "active"
 	}

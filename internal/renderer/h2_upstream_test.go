@@ -15,7 +15,7 @@ func TestRenderH2UsesOutboundsListForUpstream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderHysteria2 returned error: %v", err)
 	}
-	for _, want := range []string{"outbounds:", "- name: veil-upstream", "addr: 127.0.0.1:40001"} {
+	for _, want := range []string{"outbounds:", "- name: warp", "addr: 127.0.0.1:40001"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("rendered config missing %q:\n%s", want, body)
 		}

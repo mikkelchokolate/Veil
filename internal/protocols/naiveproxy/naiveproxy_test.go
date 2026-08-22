@@ -162,10 +162,11 @@ func TestRenderConfigWithWarp(t *testing.T) {
 	if !ok || len(artifacts) != 1 {
 		t.Fatalf("RenderConfig ok=%v len=%d, want true/1", ok, len(artifacts))
 	}
-	// WARP upstream is applied to the forward_proxy handler in Task 15; for now
-	// just verify the consolidated JSON config is emitted.
 	if artifacts[0].Path != filepath.Join("/tmp/veil", "generated", "caddy", "config.json") {
 		t.Errorf("unexpected path %q", artifacts[0].Path)
+	}
+	if !strings.Contains(artifacts[0].Body, `"upstream": "socks5://127.0.0.1:40001"`) {
+		t.Fatalf("WARP upstream is missing from Caddy JSON: %s", artifacts[0].Body)
 	}
 }
 

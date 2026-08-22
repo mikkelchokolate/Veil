@@ -8,12 +8,15 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/webbasepath"
 )
 
 type Options struct {
-	Listen    string
-	AuthToken string
-	JSON      bool
+	Listen      string
+	AuthToken   string
+	WebBasePath string
+	JSON        bool
 }
 
 type Response struct {
@@ -53,12 +56,16 @@ func NewQuery(opts Options, out io.Writer, resolveAuth AuthTokenResolver) Query 
 func (q Query) Run(ctx context.Context) error {
 	addr := ResolveListen(q.opts.Listen)
 	candidates := CandidateAddrs(addr)
+	basePath, err := webbasepath.Normalize(q.opts.WebBasePath)
+	if err != nil {
+		return fmt.Errorf("invalid web base path: %w", err)
+	}
 	token, _ := q.resolveAuth(q.opts.AuthToken)
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	var lastErr error
 	for _, candidate := range candidates {
-		status, err := Fetch(ctx, candidate+"/api/status", token)
+		status, err := Fetch(ctx, strings.TrimRight(candidate, "/")+basePath+"api/status", token)
 		if err == nil {
 			return q.Render(status)
 		}

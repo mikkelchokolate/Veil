@@ -52,7 +52,12 @@ func (s *managementState) handleClientLinksSubscription(w http.ResponseWriter, r
 	format := query.Get("format")
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	response, err := protocols.BuildClientLinks(s.settings, s.inbounds)
+	inbounds, err := s.inboundsWithRuntimeCredentialsLocked()
+	if err != nil {
+		writeError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	response, err := protocols.BuildClientLinks(s.settings, inbounds)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return

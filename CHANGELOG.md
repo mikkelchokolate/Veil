@@ -4,6 +4,24 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.7.1] - 2026-08-22
+
+### Fixed
+
+- Normalized runtime credentials are now used consistently by global client
+  links and subscriptions, so NaiveProxy links authenticate correctly.
+- NaiveProxy now uses the configured WARP SOCKS outbound, while routing rules
+  marked `direct` continue to use the server's original network path.
+- Hysteria2 WARP ACL output now uses a valid outbound identifier.
+- Durable apply now reports failed revisions as errors, waits for newly started
+  services to become stable, and removes obsolete managed systemd wants.
+- `veil config validate` can validate encrypted olcRTC state snapshots with an
+  explicit `--key-path` without creating or replacing encryption keys.
+- `veil status` now honors `--web-base-path` and `VEIL_WEB_BASE_PATH`, allowing
+  it to query Panels mounted below a secret path.
+- Runtime provenance is now covered by the endpoint authorization policy
+  instead of being rejected as an unknown API operation.
+
 ## [v0.7.0] - 2026-08-22
 
 Architecture rework of the Veil management plane: durable apply, normalized

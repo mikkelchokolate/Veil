@@ -6,7 +6,71 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
+
+func TestConfigValidateDecryptsEncryptedOlcRTCKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath := filepath.Join(tmpDir, "state.json")
+	keyPath := filepath.Join(tmpDir, "state.key")
+	key := [secrets.KeySize]byte{1, 2, 3, 4}
+	if err := os.WriteFile(keyPath, key[:], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := secrets.NewCipher(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := model.ManagementSnapshot{
+		SchemaVersion: managementstate.CurrentSchemaVersion,
+		Settings:      model.Settings{PanelListen: "127.0.0.1:2096", Mode: "server"},
+		Inbounds: []model.Inbound{{
+			Name: "olcrtc", Protocol: "olcrtc", Transport: "udp", Port: 443,
+			Enabled: true, Password: strings.Repeat("ab", 32), OlcrtcAuth: "jitsi",
+			OlcrtcTransport: "datachannel", OlcrtcRoomID: "https://meet.example.com/room",
+		}},
+	}
+	if err := managementstate.NewStore(statePath, cipher).Save(snapshot); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"config", "validate", "--state", statePath, "--key-path", keyPath})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "Valid.") {
+		t.Fatalf("expected Valid., got: %s", out.String())
+	}
+}
+
+func TestConfigValidateEncryptedStateRequiresExistingKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath := filepath.Join(tmpDir, "state.json")
+	missingKeyPath := filepath.Join(tmpDir, "missing.key")
+	if err := os.WriteFile(statePath, []byte(`{"settings":{"panelListen":"127.0.0.1:2096","mode":"server","naivePassword":"ve1:ciphertext"},"inbounds":[],"routingRules":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"config", "validate", "--state", statePath, "--key-path", missingKeyPath})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "read state encryption key") {
+		t.Fatalf("expected missing key error, got %v", err)
+	}
+	if _, statErr := os.Stat(missingKeyPath); !os.IsNotExist(statErr) {
+		t.Fatalf("validation created a missing key: %v", statErr)
+	}
+}
 
 func TestConfigValidateValidState(t *testing.T) {
 	tmpDir := t.TempDir()

@@ -28,6 +28,7 @@ type CaddyBindOwner struct {
 	WebBasePath  string           // Normalized panel web base path; used only for Panel owner (or merged naive owner)
 	NaiveUsers   []CaddyNaiveUser // Only for naive owner
 	FallbackRoot string           // Only for naive owner
+	Upstream     string           // Optional SOCKS5 egress for naive forward_proxy
 }
 
 // CaddyNaiveUser is a minimal credential pair for the forward_proxy handler.

@@ -139,7 +139,7 @@ func RenderHysteria2(cfg Hysteria2Config) (string, error) {
 				hysteria2OutboundYAML{Name: "proxy", Type: "direct"},
 			)
 		}
-		socks := hysteria2OutboundYAML{Name: "veil-upstream", Type: "socks5"}
+		socks := hysteria2OutboundYAML{Name: "warp", Type: "socks5"}
 		socks.Socks5 = &struct {
 			Addr string `yaml:"addr"`
 		}{Addr: cfg.Upstream}
@@ -181,7 +181,7 @@ func renderHysteria2ACL(cfg Hysteria2Config) []string {
 	hasGeoIP := usableRoutingDat(cfg.GeoIPPath) != ""
 	hasGeoSite := usableRoutingDat(cfg.GeoSitePath) != ""
 	lines := []string{}
-	final := "veil-upstream"
+	final := "warp"
 	for _, rule := range cfg.RoutingRules {
 		if rule.Match == "" || rule.Outbound == "" {
 			continue
@@ -215,9 +215,9 @@ func hysteria2ACLOutbound(outbound string) string {
 	case "proxy":
 		return "proxy"
 	case "warp":
-		return "veil-upstream"
+		return "warp"
 	default:
-		return "veil-upstream"
+		return "warp"
 	}
 }
 

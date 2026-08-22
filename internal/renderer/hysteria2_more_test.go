@@ -65,7 +65,7 @@ func TestRenderHysteria2Upstream(t *testing.T) {
 	}
 	for _, want := range []string{
 		"outbounds:",
-		"- name: veil-upstream",
+		"- name: warp",
 		"type: socks5",
 		"addr: 127.0.0.1:1080",
 	} {
@@ -95,11 +95,11 @@ func TestRenderHysteria2ACLSplitsCommaSeparatedDirectRules(t *testing.T) {
 	for _, want := range []string{
 		"name: direct",
 		"type: direct",
-		"name: veil-upstream",
+		"name: warp",
 		"acl:",
 		"direct(regex:.*\\.ru$)",
 		"direct(regex:.*\\.su$)",
-		"veil-upstream(all)",
+		"warp(all)",
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Fatalf("missing %q in:\n%s", want, cfg)
@@ -140,7 +140,7 @@ func TestRenderHysteria2ACLIncludesGeositeWhenDatExists(t *testing.T) {
 		"direct(geosite:category-gov-ru)",
 		"direct(regex:.*\\.ru$)",
 		"direct(regex:.*\\.su$)",
-		"veil-upstream(all)",
+		"warp(all)",
 		"geosite: " + geosite,
 	} {
 		if !strings.Contains(cfg, want) {
@@ -167,16 +167,16 @@ func TestRenderHysteria2ACLKeepsProxyOffWarp(t *testing.T) {
 	for _, want := range []string{
 		"name: direct",
 		"name: proxy",
-		"name: veil-upstream",
+		"name: warp",
 		"direct(regex:.*\\.ru$)",
-		"veil-upstream(suffix:openai.com)",
+		"warp(suffix:openai.com)",
 		"proxy(all)",
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Fatalf("missing %q in:\n%s", want, cfg)
 		}
 	}
-	if strings.Contains(cfg, "veil-upstream(all)") {
+	if strings.Contains(cfg, "warp(all)") {
 		t.Fatalf("proxy must not fall through to WARP:\n%s", cfg)
 	}
 }

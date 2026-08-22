@@ -65,6 +65,7 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodGet, "/api/processes", capabilityViewer},
 	{http.MethodGet, "/api/disk", capabilityViewer},
 	{http.MethodGet, "/api/runtime/observation", capabilityViewer},
+	{http.MethodGet, "/api/runtime/provenance", capabilityViewer},
 	{http.MethodGet, "/api/v1/clients", capabilityViewer},
 	{http.MethodGet, "/api/v1/clients/{id}", capabilityViewer},
 	{http.MethodGet, "/api/v1/clients/{id}/bindings", capabilityViewer},

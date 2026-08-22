@@ -1,10 +1,10 @@
 package naiveproxy
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
 
+	"github.com/mikkelchokolate/Veil/internal/clientaccess"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
@@ -25,22 +25,20 @@ func BuildLinks(settings model.Settings, inbound model.Inbound) ([]model.ClientL
 	}
 	port := NaivePublicPort(settings, inbound)
 	transport := NaiveTransport(inbound)
-	var creds []model.ClientProfile
-	for _, profile := range inbound.Profiles {
-		if profile.Enabled {
-			creds = append(creds, profile)
-		}
+	resolved, err := clientaccess.BuildClientCredentials(inbound)
+	if err != nil {
+		return nil, err
 	}
-	if len(creds) == 0 {
+	if len(resolved) == 0 {
 		username := naiveUsername(settings, inbound)
 		password := naivePassword(settings, inbound)
 		if username == "" || password == "" {
-			return nil, errors.New("no profiles")
+			return nil, fmt.Errorf("no profiles")
 		}
-		creds = []model.ClientProfile{{Name: inbound.Name, Username: username, Password: password, Enabled: true}}
+		resolved = []clientaccess.ClientCredential{{Name: inbound.Name, Username: username, Password: password}}
 	}
 	var links []model.ClientLink
-	for _, profile := range creds {
+	for _, profile := range resolved {
 		name := inbound.Name
 		if profile.Name != "" && profile.Name != inbound.Name {
 			name = inbound.Name + "/" + profile.Name

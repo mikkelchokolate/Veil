@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	veilapply "github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/caddyadmin"
@@ -39,6 +40,11 @@ type firewallApplier interface {
 var (
 	firewallApplierMu       sync.RWMutex
 	firewallApplierInstance firewallApplier = firewall.NewUFWApplier()
+)
+
+var (
+	serviceHealthPollInterval = 250 * time.Millisecond
+	serviceHealthPollTimeout  = 15 * time.Second
 )
 
 func currentFirewallApplier() firewallApplier {
@@ -794,25 +800,59 @@ func (ctx ManagementApplyContext) checkServiceHealth(actions []ServiceActionResu
 	if len(units) == 0 {
 		return nil
 	}
-	statuses, err := ctx.state.privileged.ServiceStatus(ctx.operationContext(), privileged.ServiceStatusRequest{Units: units})
-	if err != nil {
-		return []ServiceHealthResult{{
-			Name: "managed-services", Command: []string{"helper", "service-status"},
-			Healthy: false, Error: err.Error(),
-		}}
-	}
-	byUnit := make(map[string]privileged.ServiceStatus, len(statuses.Services))
-	for _, status := range statuses.Services {
-		byUnit[status.Unit] = status
-	}
-	results := make([]ServiceHealthResult, 0, len(units))
+	operationContext := ctx.operationContext()
+	deadline := time.Now().Add(serviceHealthPollTimeout)
+	requireStableActive := false
 	for _, unit := range units {
-		status := byUnit[unit]
-		healthy := status.ActiveState == "active" && status.Error == ""
-		results = append(results, ServiceHealthResult{
-			Name: unit, Command: []string{"helper", "service-status", unit},
-			Healthy: healthy, Output: status.ActiveState + "/" + status.SubState, Error: status.Error,
-		})
+		requireStableActive = requireStableActive || strings.HasPrefix(unit, "veil-hysteria2@")
 	}
-	return results
+	stableActiveObserved := false
+	for {
+		statuses, err := ctx.state.privileged.ServiceStatus(operationContext, privileged.ServiceStatusRequest{Units: units})
+		if err != nil {
+			return []ServiceHealthResult{{
+				Name: "managed-services", Command: []string{"helper", "service-status"},
+				Healthy: false, Error: err.Error(),
+			}}
+		}
+		byUnit := make(map[string]privileged.ServiceStatus, len(statuses.Services))
+		for _, status := range statuses.Services {
+			byUnit[status.Unit] = status
+		}
+		results := make([]ServiceHealthResult, 0, len(units))
+		allHealthy := true
+		retryable := false
+		for _, unit := range units {
+			status := byUnit[unit]
+			healthy := status.ActiveState == "active" && status.Error == ""
+			allHealthy = allHealthy && healthy
+			retryable = retryable || (status.ActiveState == "activating" && status.Error == "")
+			results = append(results, ServiceHealthResult{
+				Name: unit, Command: []string{"helper", "service-status", unit},
+				Healthy: healthy, Output: status.ActiveState + "/" + status.SubState, Error: status.Error,
+			})
+		}
+		if allHealthy && (!requireStableActive || stableActiveObserved) {
+			return results
+		}
+		if allHealthy {
+			stableActiveObserved = true
+			retryable = true
+		} else {
+			stableActiveObserved = false
+		}
+		if !retryable || !time.Now().Before(deadline) {
+			return results
+		}
+		timer := time.NewTimer(serviceHealthPollInterval)
+		select {
+		case <-operationContext.Done():
+			timer.Stop()
+			return []ServiceHealthResult{{
+				Name: "managed-services", Command: []string{"helper", "service-status"},
+				Healthy: false, Error: operationContext.Err().Error(),
+			}}
+		case <-timer.C:
+		}
+	}
 }

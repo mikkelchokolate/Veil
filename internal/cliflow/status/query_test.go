@@ -103,6 +103,34 @@ func TestQueryRunSuccessOnFirstCandidate(t *testing.T) {
 	}
 }
 
+func TestQueryRunUsesWebBasePath(t *testing.T) {
+	status := &Response{Version: "0.4.0", Mode: "server"}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/panel-secret/api/status" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(status)
+	}))
+	defer server.Close()
+
+	old := HTTPClient
+	HTTPClient = func(string) *http.Client { return server.Client() }
+	t.Cleanup(func() { HTTPClient = old })
+
+	q := NewQuery(Options{Listen: server.URL, WebBasePath: "panel-secret"}, io.Discard, nil)
+	if err := q.Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+}
+
+func TestQueryRunRejectsUnsafeWebBasePath(t *testing.T) {
+	q := NewQuery(Options{Listen: "127.0.0.1:1", WebBasePath: "../admin"}, io.Discard, nil)
+	if err := q.Run(context.Background()); err == nil || !strings.Contains(err.Error(), "invalid web base path") {
+		t.Fatalf("Run error = %v", err)
+	}
+}
+
 func TestQueryRunSuccessOnSecondCandidate(t *testing.T) {
 	status := &Response{Version: "0.4.0", Mode: "server"}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

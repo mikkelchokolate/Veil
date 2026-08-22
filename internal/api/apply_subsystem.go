@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -413,6 +414,13 @@ func (s *managementState) executeApplyRevision(revision uint64) (apply.Result, e
 func (s *managementState) executeApplyRevisionContext(operationContext context.Context, revision uint64) (apply.Result, error) {
 	_, _, result, err := s.executeApplyRevisionRequestContext(operationContext, revision,
 		ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
+	if err == nil && !result.Success {
+		message := result.ErrorMessage
+		if message == "" {
+			message = "apply workflow reported an unsuccessful result"
+		}
+		err = errors.New(message)
+	}
 	return result, err
 }
 
@@ -505,6 +513,7 @@ func (s *managementState) newApplyExecutionStateLocked(snapshot managementSnapsh
 		statePath:                      s.statePath,
 		applyRoot:                      s.applyRoot,
 		liveRoot:                       s.liveRoot,
+		systemdWantsDir:                s.systemdWantsDir,
 		keyPath:                        s.keyPath,
 		cipher:                         s.cipher,
 		setup:                          snapshot.Setup,

@@ -91,6 +91,7 @@ func productionAuthorizationMatrix() []routeAuthorizationExpectation {
 		{http.MethodGet, "/api/processes", false, true, "viewer metadata"},
 		{http.MethodGet, "/api/disk", false, true, "viewer metadata"},
 		{http.MethodGet, "/api/runtime/observation", false, true, "viewer metadata"},
+		{http.MethodGet, "/api/runtime/provenance", false, true, "viewer metadata"},
 		{http.MethodGet, "/api/logs", false, false, "admin secret material"},
 		{http.MethodPost, "/api/tools/dns-lookup", false, true, "viewer diagnostic"},
 		{http.MethodPost, "/api/tools/ping", false, true, "viewer diagnostic"},

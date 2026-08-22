@@ -10,6 +10,14 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/testutil/testdb"
 )
 
+func TestApplyExecutionStatePreservesSystemdWantsDirectory(t *testing.T) {
+	state := &managementState{systemdWantsDir: "/custom/systemd/wants"}
+	execution := state.newApplyExecutionStateLocked(managementSnapshot{})
+	if execution.systemdWantsDir != state.systemdWantsDir {
+		t.Fatalf("systemd wants dir = %q, want %q", execution.systemdWantsDir, state.systemdWantsDir)
+	}
+}
+
 // TestPinStateToRevisionSwapsAndRestores verifies (A3) that the executor pins
 // the renderer to the immutable snapshot recorded for a revision and restores
 // live state afterwards — so a job for an older revision never renders newer

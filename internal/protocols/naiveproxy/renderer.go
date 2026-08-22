@@ -2,6 +2,7 @@ package naiveproxy
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
 	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
@@ -21,6 +22,18 @@ func (Plugin) RenderConfig(input generatedconfig.ProtocolRenderInput) ([]generat
 	plan, _, _, err := caddyassembly.BuildFinalRenderPlan(input.Settings, input.Inbounds)
 	if err != nil {
 		return nil, false, err
+	}
+	if input.Warp.Enabled {
+		socksPort := input.Warp.SocksPort
+		if socksPort == 0 {
+			socksPort = 40000
+		}
+		for key, owner := range plan.Servers {
+			if owner.Kind == caddyassembly.CaddyOwnerNaive {
+				owner.Upstream = "socks5://127.0.0.1:" + strconv.Itoa(socksPort)
+				plan.Servers[key] = owner
+			}
+		}
 	}
 
 	caps, err := caddycapabilities.Probe("")

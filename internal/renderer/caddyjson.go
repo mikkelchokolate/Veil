@@ -145,15 +145,19 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 		if err != nil {
 			return nil, err
 		}
+		forwardProxy := map[string]any{
+			"handler":          "forward_proxy",
+			"hosts":            []string{strings.TrimSpace(owner.Domain)},
+			"auth_credentials": authCreds,
+			"hide_ip":          true,
+			"hide_via":         true,
+			"probe_resistance": map[string]any{},
+		}
+		if owner.Upstream != "" {
+			forwardProxy["upstream"] = owner.Upstream
+		}
 		handlers := []map[string]any{
-			{
-				"handler":          "forward_proxy",
-				"hosts":            []string{strings.TrimSpace(owner.Domain)},
-				"auth_credentials": authCreds,
-				"hide_ip":          true,
-				"hide_via":         true,
-				"probe_resistance": map[string]any{},
-			},
+			forwardProxy,
 			{
 				"handler": "file_server",
 				"root":    fallbackRoot,
