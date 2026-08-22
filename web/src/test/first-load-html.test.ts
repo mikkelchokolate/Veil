@@ -13,6 +13,7 @@ describe("shipped first-load document", () => {
 		expect(html).toContain("<title>Veil</title>");
 		expect(html).toContain('name="viewport"');
 		expect(html).toContain('name="description"');
+		expect(html).toContain('<main class="center-screen">');
 		expect(html).toContain('id="login-username"');
 		expect(html).toContain('id="login-password"');
 		expect(html).toContain('rel="icon"');

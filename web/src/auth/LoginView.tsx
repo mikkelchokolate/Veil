@@ -56,7 +56,7 @@ export function LoginView() {
 	}, [pending, login]);
 
 	return (
-		<div className="center-screen">
+		<main className="center-screen">
 			<form className="auth-card" onSubmit={onSubmit}>
 				<h1>Veil</h1>
 				<div className="subtitle">{t("auth.login.subtitle")}</div>
@@ -92,6 +92,6 @@ export function LoginView() {
 					{busy ? t("auth.login.signingIn") : t("auth.login.signIn")}
 				</button>
 			</form>
-		</div>
+		</main>
 	);
 }

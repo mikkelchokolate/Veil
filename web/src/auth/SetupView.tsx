@@ -51,7 +51,7 @@ export function SetupView() {
 	}
 
 	return (
-		<div className="center-screen">
+		<main className="center-screen">
 			<form className="auth-card" onSubmit={onSubmit}>
 				<h1>{t("auth.setup.title")}</h1>
 				<div className="subtitle">{t("auth.setup.subtitle")}</div>
@@ -119,6 +119,6 @@ export function SetupView() {
 					{busy ? t("auth.setup.creating") : t("auth.setup.create")}
 				</button>
 			</form>
-		</div>
+		</main>
 	);
 }
