@@ -140,4 +140,55 @@ describe("BackupsPage", () => {
 		).toBeInTheDocument();
 		expect(screen.queryByText(/no backups yet/i)).not.toBeInTheDocument();
 	});
+
+	it("does not leave a restore job looking queued when status polling fails", async () => {
+		fetcherMocks.apiFetch.mockImplementation(
+			(path: string, init?: RequestInit) => {
+				if (path === "/api/backups") {
+					return Promise.resolve([
+						{
+							name: "veil-backup.enc",
+							size: 42,
+							createdAt: "2026-08-17T03:39:09Z",
+							encrypted: true,
+						},
+					]);
+				}
+				if (
+					path === "/api/backups/veil-backup.enc/restore" &&
+					init?.method === "POST"
+				) {
+					return Promise.resolve({
+						id: "job-1",
+						archive: "veil-backup.enc",
+						status: "queued",
+					});
+				}
+				if (path === "/api/backup-restore-jobs/job-1") {
+					return Promise.reject(new Error("job down"));
+				}
+				return Promise.resolve({});
+			},
+		);
+
+		const queryClient = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={queryClient}>
+				<I18nProvider>
+					<BackupsPage />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+
+		fireEvent.click(await screen.findByRole("button", { name: "Restore" }));
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Confirm restore" }),
+		);
+
+		expect(
+			await screen.findByText(/failed to load restore job status/i),
+		).toBeInTheDocument();
+	});
 });

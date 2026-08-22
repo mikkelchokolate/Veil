@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { lazy, Suspense } from "react";
-import { apiFetch } from "./api/fetcher";
+import { ApiError, apiFetch } from "./api/fetcher";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { LoginView } from "./auth/LoginView";
 import { SetupView } from "./auth/SetupView";
@@ -38,6 +38,19 @@ function BusySpinner() {
 	);
 }
 
+function SetupStatusError({ error }: { error: unknown }) {
+	const { t } = useI18n();
+	return (
+		<div className="center-screen">
+			<p className="form-error" role="alert">
+				{error instanceof ApiError
+					? error.message
+					: t("auth.setup.unavailable")}
+			</p>
+		</div>
+	);
+}
+
 function Gate() {
 	const setup = useSetupStatus();
 	const { session } = useAuth();
@@ -52,6 +65,8 @@ function Gate() {
 		>
 			{setup.data?.required && setup.data.allowed ? (
 				<SetupView />
+			) : setup.isError ? (
+				<SetupStatusError error={setup.error} />
 			) : session?.authenticated ? (
 				<Suspense fallback={<BusySpinner />}>
 					<RouterView />

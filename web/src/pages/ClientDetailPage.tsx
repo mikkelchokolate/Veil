@@ -572,6 +572,13 @@ export function ClientDetailPage() {
 			{tab === "access" ? (
 				<div className="card">
 					<h2>{t("clientDetail.bindingsTitle")}</h2>
+					{inbounds.isError ? (
+						<FormMessage>
+							{inbounds.error instanceof ApiError
+								? inbounds.error.message
+								: t("clientDetail.inboundsUnavailable")}
+						</FormMessage>
+					) : null}
 					{(c.bindings ?? []).length === 0 ? (
 						<p className="muted">{t("clientDetail.noBindings")}</p>
 					) : (

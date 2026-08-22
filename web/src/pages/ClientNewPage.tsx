@@ -277,7 +277,15 @@ export function ClientNewPage() {
 							style={{ border: "none", padding: 0 }}
 						>
 							<legend>{t("clientNew.bindingsLegend")}</legend>
-							{inboundList.length === 0 ? (
+							{inbounds.isLoading ? (
+								<p className="muted">{t("common.loading")}</p>
+							) : inbounds.isError ? (
+								<FormMessage>
+									{inbounds.error instanceof ApiError
+										? inbounds.error.message
+										: t("clientNew.inboundsUnavailable")}
+								</FormMessage>
+							) : inboundList.length === 0 ? (
 								<p className="muted">{t("clientNew.noInbounds")}</p>
 							) : (
 								inboundList.map((ib) => {

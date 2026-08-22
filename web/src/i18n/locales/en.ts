@@ -177,6 +177,7 @@ export const en: Record<string, string> = {
 	"auth.setup.backupRequired":
 		"Backup and recovery acknowledgement is required.",
 	"auth.setup.failed": "Setup failed.",
+	"auth.setup.unavailable": "Could not load setup status.",
 	"auth.setup.creating": "Creating…",
 	"auth.setup.create": "Create administrator",
 
@@ -402,6 +403,7 @@ export const en: Record<string, string> = {
 	"backups.deleting": "Deleting…",
 	"backups.notice.deleted": "Backup deleted.",
 	"backups.error.delete": "Failed to delete backup",
+	"backups.error.restoreJob": "Failed to load restore job status.",
 
 	"clientTraffic.title": "Traffic usage",
 	"clientTraffic.upload": "Upload",
@@ -484,6 +486,7 @@ export const en: Record<string, string> = {
 	"clientDetail.saveChanges": "Save changes",
 	"clientDetail.bindingsTitle": "Bindings & credentials",
 	"clientDetail.noBindings": "No bindings.",
+	"clientDetail.inboundsUnavailable": "Could not load inbounds.",
 	"clientDetail.rotateCredential": "Rotate credential",
 	"clientDetail.detach": "Detach",
 	"clientDetail.credential": "credential",
@@ -602,6 +605,7 @@ export const en: Record<string, string> = {
 	"clientNew.expiryLabel": "Expiry date (optional)",
 	"clientNew.bindingsLegend": "Bind to inbounds",
 	"clientNew.noInbounds": "No inbounds available.",
+	"clientNew.inboundsUnavailable": "Could not load inbounds.",
 	"clientNew.credentialPlaceholder": "Credential (blank = server generates)",
 	"clientNew.clientCreated": "Client created",
 	"clientNew.oneTimeCredentialsTitle": "One-time credentials",

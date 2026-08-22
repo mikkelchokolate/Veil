@@ -234,6 +234,13 @@ export function BackupsPage() {
 						</Badge>{" "}
 						<span className="mono">{job.archive}</span>
 					</p>
+					{jobQuery.isError ? (
+						<FormMessage>
+							{jobQuery.error instanceof ApiError
+								? jobQuery.error.message
+								: t("backups.error.restoreJob")}
+						</FormMessage>
+					) : null}
 					{job.error ? <FormMessage>{job.error}</FormMessage> : null}
 					{job.status === "succeeded" || job.status === "failed" ? (
 						<Button

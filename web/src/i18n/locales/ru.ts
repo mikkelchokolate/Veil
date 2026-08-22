@@ -97,6 +97,8 @@ export const ru: Record<string, string> = {
 	"auth.setup.backupRequired":
 		"Нужно подтвердить обязательство по резервному копированию.",
 	"auth.setup.failed": "Ошибка настройки.",
+	"auth.setup.unavailable":
+		"Не удалось загрузить статус первоначальной настройки.",
 	"auth.setup.creating": "Создание…",
 	"auth.setup.create": "Создать администратора",
 
@@ -357,6 +359,8 @@ export const ru: Record<string, string> = {
 	"backups.deleting": "Удаление…",
 	"backups.notice.deleted": "Бэкап удалён.",
 	"backups.error.delete": "Не удалось удалить бэкап",
+	"backups.error.restoreJob":
+		"Не удалось загрузить статус задания восстановления.",
 
 	"clientTraffic.title": "Использование трафика",
 	"clientTraffic.upload": "Исходящий",
@@ -486,6 +490,7 @@ export const ru: Record<string, string> = {
 	"clientDetail.saveChanges": "Сохранить изменения",
 	"clientDetail.bindingsTitle": "Привязки и учётные данные",
 	"clientDetail.noBindings": "Привязок нет.",
+	"clientDetail.inboundsUnavailable": "Не удалось загрузить инбаунды.",
 	"clientDetail.rotateCredential": "Ротировать учётные данные",
 	"clientDetail.detach": "Отвязать",
 	"clientDetail.credential": "учётные данные",
@@ -607,6 +612,7 @@ export const ru: Record<string, string> = {
 	"clientNew.expiryLabel": "Дата окончания (необязательно)",
 	"clientNew.bindingsLegend": "Привязать к инбаундам",
 	"clientNew.noInbounds": "Нет доступных инбаундов.",
+	"clientNew.inboundsUnavailable": "Не удалось загрузить инбаунды.",
 	"clientNew.credentialPlaceholder": "Креды (пусто = сервер сгенерирует)",
 	"clientNew.clientCreated": "Клиент создан",
 	"clientNew.oneTimeCredentialsTitle": "Одноразовые креды",
