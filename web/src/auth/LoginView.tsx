@@ -20,6 +20,8 @@ export function LoginView() {
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const autoSubmitted = useRef(false);
+	const tRef = useRef(t);
+	tRef.current = t;
 
 	async function submit(user: string, pass: string) {
 		setError(null);
@@ -42,20 +44,16 @@ export function LoginView() {
 		if (!pending.submit || !pending.username || !pending.password) return;
 		if (autoSubmitted.current) return;
 		autoSubmitted.current = true;
-		let cancelled = false;
 		setBusy(true);
 		setError(null);
 		void login(pending.username, pending.password)
 			.catch((err) => {
-				if (!cancelled) setError(loginFailureMessage(err, t));
+				setError(loginFailureMessage(err, tRef.current));
 			})
 			.finally(() => {
-				if (!cancelled) setBusy(false);
+				setBusy(false);
 			});
-		return () => {
-			cancelled = true;
-		};
-	}, [pending, login, t]);
+	}, [pending, login]);
 
 	return (
 		<div className="center-screen">

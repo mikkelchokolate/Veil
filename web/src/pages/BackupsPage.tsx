@@ -86,12 +86,25 @@ export function BackupsPage() {
 				throw err;
 			}
 		},
-		enabled:
-			!!activeJob &&
-			(activeJob.status === "queued" || activeJob.status === "running"),
-		refetchInterval: 1500,
+		enabled: !!activeJob,
+		refetchInterval: (query) => {
+			const status = query.state.data?.status ?? activeJob?.status;
+			return status === "queued" || status === "running" ? 1500 : false;
+		},
 	});
 	const job = jobQuery.data ?? activeJob;
+	const jobStatusKey = job ? `backups.status.${job.status}` : "";
+	const jobStatusLabel =
+		job && t(jobStatusKey) === jobStatusKey
+			? job.status.replaceAll("_", " ")
+			: job
+				? t(jobStatusKey)
+				: "";
+	const jobSettled =
+		job?.status === "succeeded" ||
+		job?.status === "failed" ||
+		job?.status === "degraded" ||
+		job?.status === "pending";
 
 	const create = useMutation({
 		mutationFn: () =>
@@ -241,12 +254,12 @@ export function BackupsPage() {
 							variant={
 								job.status === "succeeded"
 									? "success"
-									: job.status === "failed"
+									: job.status === "failed" || job.status === "degraded"
 										? "danger"
 										: "warning"
 							}
 						>
-							{t(`backups.status.${job.status}`)}
+							{jobStatusLabel}
 						</Badge>{" "}
 						<span className="mono">{job.archive}</span>
 					</p>
@@ -258,7 +271,7 @@ export function BackupsPage() {
 						</FormMessage>
 					) : null}
 					{job.error ? <FormMessage>{job.error}</FormMessage> : null}
-					{job.status === "succeeded" || job.status === "failed" ? (
+					{jobSettled ? (
 						<Button
 							onClick={() => {
 								setActiveJob(null);

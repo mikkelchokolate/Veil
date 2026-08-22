@@ -185,7 +185,7 @@ describe("static login handoff", () => {
 		);
 	});
 
-	it("does not re-POST captured credentials when the translator identity changes", async () => {
+	it("keeps the Sign in error when I18nProvider recreates t() during a failing pending login", async () => {
 		const user = userEvent.setup();
 		window.__VEIL_PENDING_LOGIN = {
 			username: "admin",
@@ -193,23 +193,33 @@ describe("static login handoff", () => {
 			submit: true,
 		};
 		let posts = 0;
+		let release!: () => void;
+		const held = new Promise<void>((resolve) => {
+			release = resolve;
+		});
 		server.use(
 			http.get("/api/auth/status", () =>
 				HttpResponse.json({ authenticated: false }),
 			),
-			http.post("/api/auth/login", () => {
+			http.post("/api/auth/login", async () => {
 				posts += 1;
-				return HttpResponse.json({ csrfToken: "csrf" });
+				await held;
+				return HttpResponse.json(
+					{ error: { message: "unauthorized" } },
+					{ status: 401 },
+				);
 			}),
 		);
-		function Tick() {
+		function Harness() {
 			const [, setN] = useState(0);
 			return (
 				<>
 					<button type="button" onClick={() => setN((n) => n + 1)}>
-						tick
+						recreate-i18n
 					</button>
-					<LoginView />
+					<I18nProvider>
+						<LoginView />
+					</I18nProvider>
 				</>
 			);
 		}
@@ -219,15 +229,20 @@ describe("static login handoff", () => {
 		render(
 			<QueryClientProvider client={qc}>
 				<AuthProvider>
-					<I18nProvider>
-						<Tick />
-					</I18nProvider>
+					<Harness />
 				</AuthProvider>
 			</QueryClientProvider>,
 		);
-		await waitFor(() => expect(posts).toBe(1));
-		await user.click(screen.getByRole("button", { name: "tick" }));
-		await waitFor(() => expect(posts).toBe(1));
+		expect(
+			await screen.findByRole("button", { name: /signing in/i }),
+		).toBeDisabled();
+		await user.click(screen.getByRole("button", { name: "recreate-i18n" }));
+		release();
+		const alert = await screen.findByRole("alert");
+		expect(alert).toHaveTextContent(/invalid username or password/i);
+		const signIn = await screen.findByRole("button", { name: /^sign in$/i });
+		expect(signIn).toBeEnabled();
+		expect(posts).toBe(1);
 		delete window.__VEIL_PENDING_LOGIN;
 	});
 });

@@ -335,6 +335,8 @@ export const ru: Record<string, string> = {
 	"backups.status.running": "выполняется",
 	"backups.status.succeeded": "успешно",
 	"backups.status.failed": "ошибка",
+	"backups.status.degraded": "деградировало",
+	"backups.status.pending": "ожидание",
 	"backups.empty": "Бэкапов пока нет.",
 	"backups.adminRequired": "Бэкапы требуют роли администратора.",
 	"backups.error.load": "Не удалось загрузить бэкапы",

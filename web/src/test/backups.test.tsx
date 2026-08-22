@@ -260,4 +260,65 @@ describe("BackupsPage", () => {
 			screen.queryByText(/failed to load restore job status/i),
 		).not.toBeInTheDocument();
 	});
+
+	it("dismisses a degraded restore job returned as HTTP 500 JSON", async () => {
+		fetcherMocks.apiFetch.mockImplementation(
+			(path: string, init?: RequestInit) => {
+				if (path === "/api/backups") {
+					return Promise.resolve([
+						{
+							name: "veil-backup.enc",
+							size: 42,
+							createdAt: "2026-08-17T03:39:09Z",
+							encrypted: true,
+						},
+					]);
+				}
+				if (
+					path === "/api/backups/veil-backup.enc/restore" &&
+					init?.method === "POST"
+				) {
+					return Promise.resolve({
+						id: "job-1",
+						archive: "veil-backup.enc",
+						status: "queued",
+					});
+				}
+				if (path === "/api/backup-restore-jobs/job-1") {
+					const err = new ApiError(500, "revalidation failed");
+					err.body = {
+						id: "job-1",
+						archive: "veil-backup.enc",
+						status: "degraded",
+						error: "revalidation failed",
+					};
+					return Promise.reject(err);
+				}
+				return Promise.resolve({});
+			},
+		);
+
+		const queryClient = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={queryClient}>
+				<I18nProvider>
+					<BackupsPage />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+
+		fireEvent.click(await screen.findByRole("button", { name: "Restore" }));
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Confirm restore" }),
+		);
+
+		expect(await screen.findByText(/^degraded$/i)).toBeInTheDocument();
+		expect(
+			screen.queryByText("backups.status.degraded"),
+		).not.toBeInTheDocument();
+		expect(await screen.findByText("revalidation failed")).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
+	});
 });

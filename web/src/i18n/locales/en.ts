@@ -381,6 +381,8 @@ export const en: Record<string, string> = {
 	"backups.status.running": "running",
 	"backups.status.succeeded": "succeeded",
 	"backups.status.failed": "failed",
+	"backups.status.degraded": "degraded",
+	"backups.status.pending": "pending",
 	"backups.empty": "No backups yet.",
 	"backups.adminRequired": "Backups require the admin role.",
 	"backups.error.load": "Failed to load backups",
