@@ -81,9 +81,9 @@ identity="https://github.com/${OFFICIAL_REPO}/.github/workflows/release.yml@refs
 
 (
   cd "$work"
-  count="$(awk -v asset="$asset" '$2 == asset { count++ } END { print count+0 }' checksums.txt)"
+  count="$(awk -v asset="$asset" '($2 == asset || $2 == "./" asset) { count++ } END { print count+0 }' checksums.txt)"
   [ "$count" -eq 1 ] || { echo "Expected exactly one checksum for $asset, got $count" >&2; exit 1; }
-  awk -v asset="$asset" '$2 == asset { print }' checksums.txt | sha256sum -c - >/dev/null
+  awk -v asset="$asset" '($2 == asset || $2 == "./" asset) { print }' checksums.txt | sha256sum -c - >/dev/null
 )
 
 ASSET="$asset" WORK="$work" REPOSITORY="$OFFICIAL_REPO" RELEASE_TAG="$tag" WORKFLOW_IDENTITY="$identity" python3 - <<'PY'
@@ -113,7 +113,9 @@ for name in (os.environ["ASSET"], "checksums.txt", "install-privileged.sh"):
         raise SystemExit("provenance subject digest mismatch for " + name)
 PY
 
-tar -xzf "$work/$asset" -C "$work" veil
+# Root would otherwise preserve the release runner's numeric uid from the
+# archive, and the verified handoff correctly rejects that foreign-owned inode.
+tar -xzf "$work/$asset" --no-same-owner -C "$work" veil
 if [ ! -f "$work/veil" ] || [ -L "$work/veil" ]; then
   echo "Verified archive did not contain a regular veil binary" >&2
   exit 1

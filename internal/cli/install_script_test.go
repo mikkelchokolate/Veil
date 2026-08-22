@@ -29,6 +29,7 @@ func TestCurlInstallScriptDownloadsVerifiedReleaseBinary(t *testing.T) {
 		"checksums.txt",
 		"sha256sum -c",
 		"tar -xzf",
+		"--no-same-owner",
 		"/usr/local/bin",
 		`"${RUN_BIN}" install`,
 		"run_veil_install",
@@ -249,12 +250,16 @@ func TestReleaseWorkflowBuildsChecksummedLinuxArchives(t *testing.T) {
 		"linux/amd64",
 		"linux/arm64",
 		"sha256sum",
+		"sha256sum veil_linux_amd64.tar.gz veil_linux_arm64.tar.gz",
 		"checksums.txt",
 		"gh release create",
 	} {
 		if !strings.Contains(workflow, want) {
 			t.Fatalf("release workflow missing %q:\n%s", want, workflow)
 		}
+	}
+	if strings.Contains(workflow, "sha256sum ./veil_linux_") {
+		t.Fatal("release checksums must use asset basenames, not ./-prefixed paths")
 	}
 }
 
@@ -474,13 +479,29 @@ func TestCurlInstallScriptChecksumRequiresExactlyOneMatch(t *testing.T) {
 	}
 	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{
-		`count=$(awk -v asset="${asset}" '$2 == asset { count++ } END { print count+0 }' checksums.txt)`,
+		`count=$(awk -v asset="${asset}" '($2 == asset || $2 == "./" asset) { count++ } END { print count+0 }' checksums.txt)`,
 		`if [[ "${count}" -ne 1 ]]; then`,
 		`expected exactly one checksum for ${asset} in checksums.txt, got ${count}`,
-		`awk -v asset="${asset}" '$2 == asset { print }' checksums.txt | sha256sum -c -`,
+		`awk -v asset="${asset}" '($2 == asset || $2 == "./" asset) { print }' checksums.txt | sha256sum -c -`,
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh missing checksum uniqueness guard %q:\n%s", want, script)
+		}
+	}
+}
+
+func TestBootstrapChecksumAcceptsCanonicalAndDotSlashAssetNames(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	for _, want := range []string{
+		`count="$(awk -v asset="$asset" '($2 == asset || $2 == "./" asset) { count++ } END { print count+0 }' checksums.txt)"`,
+		`awk -v asset="$asset" '($2 == asset || $2 == "./" asset) { print }' checksums.txt | sha256sum -c - >/dev/null`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("bootstrap missing compatible checksum match %q:\n%s", want, script)
 		}
 	}
 }

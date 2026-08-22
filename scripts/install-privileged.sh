@@ -433,15 +433,15 @@ PY
 # Trust checksums only after independent cosign identity and SLSA provenance verification.
 (
   cd "${tmpdir}"
-  count=$(awk -v asset="${asset}" '$2 == asset { count++ } END { print count+0 }' checksums.txt)
+  count=$(awk -v asset="${asset}" '($2 == asset || $2 == "./" asset) { count++ } END { print count+0 }' checksums.txt)
   if [[ "${count}" -ne 1 ]]; then
     echo "expected exactly one checksum for ${asset} in checksums.txt, got ${count}" >&2
     exit 1
   fi
-  awk -v asset="${asset}" '$2 == asset { print }' checksums.txt | sha256sum -c -
+  awk -v asset="${asset}" '($2 == asset || $2 == "./" asset) { print }' checksums.txt | sha256sum -c -
 )
 
-tar -xzf "${archive}" -C "${tmpdir}" veil
+tar -xzf "${archive}" --no-same-owner -C "${tmpdir}" veil
 if [[ ! -f "${tmpdir}/veil" || -L "${tmpdir}/veil" ]]; then
   echo "Downloaded archive did not contain a regular veil binary" >&2
   exit 1

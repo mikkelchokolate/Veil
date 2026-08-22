@@ -47,7 +47,7 @@ func TestPipedBootstrapVerifiesEveryPrivilegedPayloadBeforeSudo(t *testing.T) {
 		"COSIGN_AMD64_SHA256=", "sha256sum -c -", "install-privileged.sh.bundle",
 		"checksums.txt.bundle", "veil.provenance.json.bundle",
 		"cosign\" verify-blob", "provenance subject digest mismatch",
-		"tar -xzf", "archive_digest=", "binary_digest=", "installer_digest=",
+		"tar -xzf", "--no-same-owner", "archive_digest=", "binary_digest=", "installer_digest=",
 	} {
 		at := strings.Index(script, marker)
 		if at < 0 || at > sudoAt {
