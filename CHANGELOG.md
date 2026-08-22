@@ -41,6 +41,9 @@ Clients, React Panel, backup/restore, protocol plugins, and isolated CI.
 
 ### Fixed
 
+- Tagged GitHub releases now build the Panel SPA (`web/dist`) before `go vet`
+  and `go build`, so the published binary embeds the UI. The previous release
+  path compiled the Go module without `make web` and failed `//go:embed all:dist`.
 - The privileged helper (`veil-helper.service`) can now write to `/etc/ufw`,
   so firewall synchronization from the Panel (`/api/apply`) works in
   production. Previously the helper ran as root but was confined by

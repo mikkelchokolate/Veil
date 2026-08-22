@@ -26,6 +26,23 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          {
+            echo "node_version=${CI_NODE_VERSION}"
+            echo "pnpm_version=${CI_PNPM_VERSION}"
+          } >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: ${{ steps.versions.outputs.pnpm_version }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ steps.versions.outputs.node_version }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build frontend dist
+        run: bash scripts/ci/prepare-frontend-dist.sh
       - name: Verify go.mod is tidy
         run: |
           go mod tidy
@@ -107,6 +124,23 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          {
+            echo "node_version=${CI_NODE_VERSION}"
+            echo "pnpm_version=${CI_PNPM_VERSION}"
+          } >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: ${{ steps.versions.outputs.pnpm_version }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ steps.versions.outputs.node_version }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build frontend dist
+        run: bash scripts/ci/prepare-frontend-dist.sh
       - name: Build Veil browser-test binary
         run: |
           mkdir -p dist
@@ -179,6 +213,23 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          {
+            echo "node_version=${CI_NODE_VERSION}"
+            echo "pnpm_version=${CI_PNPM_VERSION}"
+          } >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: ${{ steps.versions.outputs.pnpm_version }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ steps.versions.outputs.node_version }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build frontend dist
+        run: bash scripts/ci/prepare-frontend-dist.sh
       - name: Build package payload
         run: |
           mkdir -p dist
@@ -213,6 +264,23 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          {
+            echo "node_version=${CI_NODE_VERSION}"
+            echo "pnpm_version=${CI_PNPM_VERSION}"
+          } >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: ${{ steps.versions.outputs.pnpm_version }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ steps.versions.outputs.node_version }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build frontend dist
+        run: bash scripts/ci/prepare-frontend-dist.sh
       - name: Build archive
         env:
           GOOS: ${{ matrix.goos }}
