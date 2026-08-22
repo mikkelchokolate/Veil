@@ -1,8 +1,8 @@
 # Panel Operations
 
 This guide covers configuration validation and safe apply previews in the Veil
-Panel. Exposure hardening is documented separately in
-[HARDENING.md](HARDENING.md).
+Panel. CLI commands are listed by `veil help`. Exposure hardening is documented
+separately in [HARDENING.md](HARDENING.md).
 
 ## Live configuration validation
 

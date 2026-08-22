@@ -94,48 +94,39 @@ TCP and UDP can use the same numeric port at the same time. For example, `mieru 
 
 Passwords are auto-generated when omitted. You can replace them in the Panel.
 
-### Hysteria2 TLS certificates
+## Commands
 
-Hysteria2 speaks QUIC and needs a TLS certificate for its SNI. When you assign a
-domain to a Hysteria2 Inbound, Veil obtains a real ACME certificate for it
-instead of a self-signed one, so clients connect without `insecure`:
+`veil help` prints the full catalog. `veil help <command>` shows flags for one command.
 
-- **Domain already used by the Panel or a NaiveProxy Inbound** — the Hysteria2
-  Inbound reuses the certificate Caddy already manages for that domain
-  (`tls-alpn-01`). No extra port is needed.
-- **A Hysteria2-only domain** (any domain that resolves to the host) — Veil
-  switches it to the HTTP-01 challenge and adds a dedicated ACME challenge
-  listener on TCP `:80`, then syncs the issued certificate to the Inbound.
-  Requires TCP `:80` free (or already served by Caddy) and DNS pointing to the
-  host. If `:80` is unavailable the apply still succeeds with a warning, and
-  the Inbound runs on a self-signed certificate until `:80` is freed.
-- **No domain** — the Inbound uses a self-signed certificate and clients use
-  `insecure` (previous behavior, unchanged).
-
-## What you get
-
-After panel-only install, Veil runs:
-
-| Service | What |
+| Command | Purpose |
 |---|---|
-| `veil.service` | Web Panel + API (runs as the locked `veil` user) |
-| `veil-helper.socket` + `veil-helper.service` | Root privileged helper for host mutations the unprivileged Panel cannot perform |
+| `veil help` | Show every command, including nested subcommands. |
+| `veil install` | Install and configure Panel access, credentials, and runtimes. |
+| `veil serve` | Run the HTTP API and Web Panel. |
+| `veil status` | Show managed service status (`--json` for machine output). |
+| `veil doctor` | Run host readiness checks (required/optional commands). |
+| `veil admin reset` | Reset the administrator with new random credentials. |
+| `veil admin set` | Set or update a user (`--username`, `--password`, `--role admin\|viewer`). |
+| `veil admin show` | List registered users and roles. |
+| `veil admin rotate-key` | Rotate the AES state key and re-encrypt state. |
+| `veil config validate` | Validate a Management state file without starting a server. |
+| `veil runtime install` | Download/verify protocol runtime binaries (`--only`, `--bin-dir`). |
+| `veil backup create` | Create an encrypted archive of Panel state and the encryption key. |
+| `veil backup list` | List managed backup archives. |
+| `veil backup verify` | Decrypt and verify a backup without writing state. |
+| `veil backup restore` | Restore state and key from a backup. |
+| `veil backup prune` | Apply daily/weekly/monthly retention (`--dry-run` to preview). |
+| `veil backup schedule enable` | Store the passphrase and enable the daily backup timer. |
+| `veil backup schedule disable` | Disable the daily backup timer. |
+| `veil repair` | Repair managed generated files without arbitrary side effects. |
+| `veil rollback list` | List configuration-file backups. |
+| `veil rollback restore` | Restore files from a configuration backup. |
+| `veil rollback cleanup` | Remove a configuration backup after a successful restore. |
+| `veil update` | Download and install the latest Veil release (`--yes --staged`). |
+| `veil uninstall` | Remove the Panel, services, configuration, and state. |
+| `veil version` | Print the Veil version (`--check` to compare with the latest release). |
 
-Enabling scheduled backups adds `veil-backup.timer` + `veil-backup.service`
-(daily encrypted archives with retention).
-
-When you add and apply Inbounds, Veil can also manage:
-
-| Service | What |
-|---|---|
-| `veil-caddy@.service` | NaiveProxy via Caddy |
-| `veil-hysteria2@.service` | Hysteria2 |
-| `veil-olcrtc@.service` | olcRTC |
-| `veil-mieru.service` | Mieru |
-
-All secrets are stored encrypted at rest.
-
-## Manage
+Everyday examples:
 
 ```bash
 veil status
@@ -145,49 +136,14 @@ veil uninstall --yes              # also removes config/state; reinstall starts 
 veil uninstall --yes --keep-data  # preserve credentials and config across a reinstall
 ```
 
-All CLI commands:
-
-| Command | Purpose |
-|---|---|
-| `veil install` | Install and configure Panel access, credentials, and runtimes. |
-| `veil serve` | Run the HTTP API and Web Panel. |
-| `veil status` | Show managed service status (`--json` for machine output). |
-| `veil doctor` | Run host readiness checks (required/optional commands). |
-| `veil admin` | Manage admin accounts (`reset`, `set`, `show`, `rotate-key`). |
-| `veil config validate` | Validate a Management state file without starting a server. |
-| `veil runtime install` | Download/verify protocol runtime binaries (`--only`, `--bin-dir`). |
-| `veil backup` | Encrypted backup lifecycle (`create`, `list`, `verify`, `restore`, `prune`, `schedule`). |
-| `veil repair` | Repair managed generated files without arbitrary side effects. |
-| `veil rollback` | List/restore/cleanup configuration backups. |
-| `veil update` | Download and install the latest Veil release. |
-| `veil uninstall` | Remove the Panel, services, configuration, and state. |
-| `veil version` | Print the Veil version (`--check` to compare with the latest release). |
-
-### Panel UX controls
-
-The Panel includes operator-focused controls for production use:
-
-- **Client exports** - copy client links, download JSON/subscription exports, and render QR codes locally through Veil.
-- **Users and sessions** - create admin/viewer users, inspect durable browser sessions, and revoke stale sessions.
-- **English and Russian UI** - choose a language during setup, from the Panel header, or per user; authenticated preferences survive logout and restart.
-- **API token rotation helper** - generate a replacement token in the UI, then update `VEIL_API_TOKEN` or `--auth-token` and restart the Panel.
-- **Live validation and safe apply preview** - inspect field-level port, DNS, runtime, and unit checks plus structured generated/live file operations, rollback availability, and interruption risk before applying.
-- **Viewer role** - read-only users can inspect status, diagnostics, logs, client exports, and previews while mutation controls require admin.
-- **Accessible operation** - skip navigation, keyboard-contained dialogs, live status announcements, reduced-motion support, and responsive layouts are included.
-
-### Backup, rollback, and audit
+**Privilege separation:** the Panel runs as the locked `veil` user with no
+capabilities. Root-only host mutations go through the allowlisted
+`veil-helper.socket`.
 
 The Panel records authentication, user, configuration, apply, and service
-actions in a structured, redacted, rotated JSONL log. With the default state
-path it is stored at `/var/lib/veil/audit/panel.jsonl`; administrators can read
-the bounded history through `GET /api/audit`.
-
-Encrypted disaster-recovery archives include Management state, its encryption
-key, a consistent `veil.db` snapshot, and a checksum manifest. Native packages
-ship a daily systemd timer with daily/weekly/monthly retention. The Panel can create, verify,
-download, prune, and restore managed archives without sending the backup
-passphrase to the browser. The configured backup and audit directories must be
-writable by the process performing each operation.
+actions in a structured, redacted, rotated JSONL audit log. With the default
+state path it is stored at `/var/lib/veil/audit/panel.jsonl`. Encrypted backup
+directories must be writable by the process performing each operation.
 
 ```bash
 sudo veil backup create --passphrase-file /root/veil-backup-passphrase \
@@ -207,125 +163,13 @@ veil rollback restore <backup-id> --backup-dir /var/lib/veil/backups --yes
 veil rollback cleanup <backup-id> --backup-dir /var/lib/veil/backups --yes
 ```
 
-See the [disaster recovery guide](docs/disaster-recovery.md) for cross-host
-restore, safety copies, key rotation, and recovery-drill procedures.
+## More documentation
 
-## Security
-
-- **Fail-closed public exposure** - direct listeners require TLS, `VEIL_API_TOKEN`/`--auth-token`, user/session auth, and authenticated metrics; Caddy exposure requires user/session auth and authenticated metrics
-- **API token** - accepted as `X-Veil-Token` or `Authorization: Bearer`
-- **Session auth** - `/api/auth/login` issues an HTTP-only session cookie; mutating cookie requests require CSRF and admin role. Hashed session state survives Panel restarts, expires after 30 minutes idle or 24 hours absolute, and is revoked when user authority changes
-- **Locale preference** - authenticated users, including viewers, may update only their own `en`/`ru` preference through `POST /api/auth/locale`; static API tokens cannot call it
-- **Audit history** - security-sensitive Panel actions are redacted and rotated; raw passwords, cookies, tokens, and CSRF values are never written
-- **Metrics policy** - `/metrics` has a separate `--metrics-access` / `VEIL_METRICS_ACCESS` policy and cannot be public on a public Panel listener
-- **Privilege separation** - the Panel runs as the locked `veil` user with no capabilities; root-only operations use the allowlisted, peer-credential-checked `veil-helper.socket`
-- **Direct public listen** — in `direct` mode Veil issues a trusted Let's Encrypt **IP certificate** (SAN = public IP, `shortlived` 3-day profile, auto-renewed via `acme.sh`) so the Panel serves valid HTTPS by IP without a domain
-- **Hysteria2 Inbound TLS** — a Hysteria2 Inbound assigned a domain uses a real ACME certificate: it reuses the Caddy-managed cert when the domain is the Panel's or a NaiveProxy Inbound's, and gets a dedicated HTTP-01 challenge on TCP `:80` for a Hysteria2-only domain
-- **Encryption** — secrets encrypted with AES-256-GCM (`/etc/veil/state.key`)
-- **TLS 1.2+** — when HTTPS is enabled
-- **Rate limiting** — protects expensive endpoints
-- **Input validation** — all API inputs validated
-
-See the [hardening guide](docs/HARDENING.md) for deployment hardening, supply-chain verification (signed releases, SBOM), and systemd hardening.
-
-### Safe exposure modes
-
-| Mode | Listener | Required auth | Notes |
-|---|---|---|---|
-| Local + SSH tunnel | `127.0.0.1:<panel-port>` | Session user recommended; token optional | Recommended and safest. Use `ssh -L <panel-port>:127.0.0.1:<panel-port> host`. |
-| Caddy Panel access | Veil on loopback, Caddy on `443` | Session user; token for API clients | Recommended public mode. Caddy terminates HTTPS, routes a random Web base path, and forces authenticated metrics. |
-| Direct public listen | `0.0.0.0:<panel-port>` or public IP | Session user and API token | `veil serve` refuses to start without TLS, both auth layers, and authenticated metrics. In `direct` mode Veil issues a trusted Let's Encrypt IP certificate for the public IP. |
-
-## Documentation
-
-- [Installation guide](docs/install.md) — setup options, access modes, and compiling from source
-- [Troubleshooting guide](docs/troubleshooting.md) — diagnostics, logs, and state rollback
-- [Hardening guide](docs/HARDENING.md) — secure deployment and operations
-- [Panel operations guide](docs/operations.md) - live validation guarantees, race boundaries, and structured apply previews
-- [Known limitations](docs/known-limitations.md) — multi-inbound behavior and platform limits
-- [API reference (OpenAPI)](docs/openapi.yaml) — the Panel HTTP management API
-- [Generated Go SDK](sdk/go) — typed client generated from the OpenAPI contract
-- [Security policy](SECURITY.md) — vulnerability reporting
-- [Changelog](CHANGELOG.md) — release history
-- [Context](CONTEXT.md) — domain language and architecture
-- [Disaster recovery guide](docs/disaster-recovery.md) - encrypted backups, retention, restore, and key rotation
-
-## Native packages
-
-Prebuilt `.deb`, `.rpm`, and `.apk` packages are attached to each [release](https://github.com/mikkelchokolate/Veil/releases) for linux amd64/arm64. They install the `veil` binary, create the locked `veil` account, migrate scoped permissions with safety copies, and ship the hardened Panel, `veil-helper.socket`, backup, and runtime units. Run `veil install` afterward to configure Panel access and credentials. Build locally with `make package` (requires [nfpm](https://nfpm.goreleaser.com)).
-
-### Verify a release
-
-Each release ships checksums, an SPDX SBOM, keyless cosign bundles, and GitHub provenance attestations. Before installing manually:
-
-```bash
-cosign verify-blob \
-  --bundle checksums.txt.bundle \
-  --certificate-identity-regexp 'https://github.com/mikkelchokolate/Veil/.*' \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  checksums.txt
-
-sha256sum -c checksums.txt
-gh attestation verify dist/veil_linux_amd64.tar.gz \
-  --repo mikkelchokolate/Veil
-```
-
-Maintainers can run `make verify-release` before tagging to execute tests, e2e checks, shell validation, build validation, and OpenAPI lint.
-
-## Docker
-
-### Docker Compose (Recommended)
-
-Copy `.env.example` to `.env` and set a secure `VEIL_API_TOKEN`.
-
-- **Local Development / Private Exposure (Default):**
-  The default `docker-compose.yml` binds the panel only to loopback (`127.0.0.1:2096`), keeping the control plane private:
-  ```bash
-  docker compose up -d
-  ```
-
-- **Production Exposure:**
-  If exposing the panel publicly (e.g. via direct binding or reverse proxy), initialize a Panel admin user first, populate `VEIL_API_TOKEN` with a strong token, and configure TLS/HTTPS. The CLI server refuses to start on non-loopback listeners unless both token auth and user/session auth are configured.
-
-### Single Container Run
-
-To run a single container locally on the host network:
-```bash
-docker run -d --name veil --network host \
-  -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
-  ghcr.io/mikkelchokolate/veil:latest serve
-```
-
-For direct public container exposure, create the first admin account in the mounted state before starting the public listener:
-
-```bash
-docker run --rm \
-  -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
-  ghcr.io/mikkelchokolate/veil:latest admin reset
-
-docker run -d --name veil -p 2096:2096 \
-  -v veil-state:/var/lib/veil -v veil-etc:/etc/veil \
-  -e VEIL_API_TOKEN='use-a-long-random-token' \
-  ghcr.io/mikkelchokolate/veil:latest serve --listen 0.0.0.0:2096
-```
-
-## Testing
-
-```bash
-make test    # unit + in-process integration tests
-make e2e     # end-to-end tests: real veil binary launched over a socket
-```
-
-The end-to-end suite (`test/e2e/`, guarded by the `e2e` build tag) compiles the `veil` binary, runs `veil serve` as a subprocess bound to a real port, and drives it over HTTP — covering the readiness lifecycle, API auth gating, graceful shutdown, state persistence across restarts, the full inbound-to-apply flow, and the CLI subcommands. It requires a Linux systemd host with root access; do not run it against a live production install.
-
-Before pushing, run `make ci` — it executes the same scripts as GitHub Actions inside a local microVM on a clean Ubuntu 24.04 user-space.
-
-Before opening or updating a pull request, run `make ci-pr` — it validates the temporary merge of your branch with `origin/main` without touching your working copy.
-
-See [docs/development/ci.md](docs/development/ci.md) for the full local-CI guide.
-
-A Playwright browser suite (`test/browser/`) exercises the Panel UI end to end. The frontend and browser suites use the repository-pinned Node.js v26.7.0 (not Node.js 20) and are separate from the Go test suites:
-
-```bash
-cd test/browser && npm install && npm test
-```
+- [Installation](docs/install.md) — access modes, flags, and compiling from source
+- [Troubleshooting](docs/troubleshooting.md) — diagnostics, logs, and rollback
+- [Panel operations](docs/operations.md) — live validation and apply previews
+- [Hardening](docs/HARDENING.md) — deployment hardening and signed releases
+- [Disaster recovery](docs/disaster-recovery.md) — encrypted backups and restore
+- [Known limitations](docs/known-limitations.md)
+- [Changelog](CHANGELOG.md)
+- [Security policy](SECURITY.md)

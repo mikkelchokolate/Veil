@@ -69,6 +69,7 @@ func NewRootCommandWithOptions(version string, options RootOptions) *cobra.Comma
 	cmd.AddCommand(newBackupCommand(version))
 	cmd.AddCommand(newHelperCommand(version))
 	cmd.AddCommand(newRuntimeCommand())
+	attachOperatorHelp(cmd)
 	return cmd
 }
 

@@ -16,6 +16,9 @@ The easiest way to install Veil is using the official quick-start script. This s
 curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sh
 ```
 
+After install, `veil help` lists every command. `veil help <command>` shows
+flags for one command.
+
 The piped `install.sh` is an unprivileged bootstrap. It verifies the pinned
 verifier, `install-privileged.sh`, the Veil archive, signed checksums, and signed
 provenance before invoking `sudo` itself.

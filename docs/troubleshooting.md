@@ -6,7 +6,7 @@ This guide provides steps to diagnose, debug, and recover your Veil installation
 
 ## 1. Verifying Status and Health
 
-Veil provides built-in tools to inspect the daemon, services, and system configuration directly from the CLI.
+`veil help` lists every CLI command. Veil also provides built-in tools to inspect the daemon, services, and system configuration:
 
 ### Inspect Service Status
 Use `veil status` to retrieve a list of managed systemd units (panel, naiveproxy, hysteria2, olcrtc, mieru, warp) and their active states:

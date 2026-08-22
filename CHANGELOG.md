@@ -4,6 +4,11 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.7.0] - 2026-08-22
+
+Architecture rework of the Veil management plane: durable apply, normalized
+Clients, React Panel, backup/restore, protocol plugins, and isolated CI.
+
 ### Changed
 
 - Protocol runtime pins now track current supported upstreams: Hysteria2
@@ -14,9 +19,14 @@ All notable changes to Veil will be documented in this file.
 - Panel toolchain and libraries: Go `1.27.0`, Node.js `26.7.0`, pnpm
   `11.22.0`, Playwright `1.62.1`, and current Go modules plus the Panel SPA
   `web/` and `test/browser` dependency trees.
+- README is now operator-focused: Panel GIF, Quick Start, Inbounds, and the
+  complete CLI catalog. Development, Docker, and CI detail lives in `docs/`.
 
 ### Added
 
+- `veil help` prints the operator command catalog, including nested
+  subcommands (`veil help admin`, `veil backup schedule`, and the rest of the
+  tree). `veil help <command>` still shows flags for that command.
 - Hysteria2 Inbounds can now serve a real ACME certificate for a domain that
   is not the Panel or a NaiveProxy Inbound. A Hysteria2-only domain switches
   from `tls-alpn-01` to the HTTP-01 challenge and gets a dedicated ACME
