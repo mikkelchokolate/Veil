@@ -20,7 +20,7 @@ import (
 )
 
 func TestTLSEndpointRejectsNonGet(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/tls", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -44,7 +44,7 @@ func TestTLSEndpointReturnsCertInfoWhenConfigured(t *testing.T) {
 
 	t.Setenv("VEIL_TLS_CERT", certPath)
 
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/tls", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -69,7 +69,7 @@ func TestTLSEndpointReturnsCertInfoWhenConfigured(t *testing.T) {
 }
 
 func TestTLSEndpointReturnsErrorWhenNoCertConfigured(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/tls", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

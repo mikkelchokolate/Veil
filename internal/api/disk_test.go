@@ -8,7 +8,7 @@ import (
 )
 
 func TestDiskEndpointRejectsNonGet(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/disk", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -18,7 +18,7 @@ func TestDiskEndpointRejectsNonGet(t *testing.T) {
 }
 
 func TestDiskEndpointReturnsJSON(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/disk", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

@@ -228,11 +228,27 @@ func naiveFallbackRoot(inbound model.Inbound, settings model.Settings) string {
 
 func naiveUsers(inbound model.Inbound, settings model.Settings) []CaddyNaiveUser {
 	var users []CaddyNaiveUser
+	runtimeUsers := make(map[string]CaddyNaiveUser, len(inbound.RuntimeCredentials))
+	for _, credential := range inbound.RuntimeCredentials {
+		username := strings.TrimSpace(credential.Username)
+		password := strings.TrimSpace(credential.Password)
+		if username != "" && password != "" {
+			runtimeUsers[username] = CaddyNaiveUser{Username: username, Password: password}
+		}
+	}
 	for _, p := range inbound.Profiles {
 		if !p.Enabled || strings.TrimSpace(p.Username) == "" || strings.TrimSpace(p.Password) == "" {
 			continue
 		}
-		users = append(users, CaddyNaiveUser{Username: p.Username, Password: p.Password})
+		if _, replaced := runtimeUsers[p.Username]; !replaced {
+			users = append(users, CaddyNaiveUser{Username: p.Username, Password: p.Password})
+		}
+	}
+	for _, credential := range inbound.RuntimeCredentials {
+		if user, ok := runtimeUsers[strings.TrimSpace(credential.Username)]; ok {
+			users = append(users, user)
+			delete(runtimeUsers, user.Username)
+		}
 	}
 	if len(users) > 0 {
 		return users

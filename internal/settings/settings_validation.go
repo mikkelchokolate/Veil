@@ -1,8 +1,10 @@
 package settings
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"path/filepath"
 	"reflect"
@@ -100,6 +102,24 @@ func (v SettingsValidation) normalizeProtocolFields(settings *Settings, current 
 	if settings.ProtocolFields == nil {
 		settings.ProtocolFields = map[string]any{}
 	}
+	// Drop keys that no registered settings-scoped schema declares. The
+	// redaction sentinel must never be persisted verbatim under an unknown
+	// key, and unknown keys are never consumed by renderers.
+	schemaKeys := map[string]schema.FieldSchema{}
+	for _, f := range v.fieldSchemas {
+		if f.Scope == "" || f.Scope == "settings" {
+			schemaKeys[f.Key] = f
+		}
+	}
+	for key := range settings.ProtocolFields {
+		if _, ok := schemaKeys[key]; !ok {
+			// Log legacy keys so a future version can migrate instead of
+			// silently erasing data written by older releases. Never log the
+			// value: the key may be a password sentinel.
+			slog.Debug("settings: dropping unknown protocol field", "field", key)
+			delete(settings.ProtocolFields, key)
+		}
+	}
 	for _, f := range v.fieldSchemas {
 		if f.Scope != "" && f.Scope != "settings" {
 			continue
@@ -115,7 +135,20 @@ func (v SettingsValidation) normalizeProtocolFields(settings *Settings, current 
 			}
 		}
 		if f.Type == schema.FieldPassword {
-			if s, ok := val.(string); ok && s == RedactedSecret {
+			if val == nil {
+				// Distinguish "key absent" (fine: nothing to set) from an
+				// explicit JSON null (invalid: would persist nil and drop
+				// the secret from rendered configs).
+				if _, present := settings.ProtocolFields[f.Key]; present {
+					return fmt.Errorf("protocolFields.%s must be a string", f.Key)
+				}
+				continue
+			}
+			s, isString := val.(string)
+			if !isString {
+				return fmt.Errorf("protocolFields.%s must be a string", f.Key)
+			}
+			if s == RedactedSecret {
 				if cv, ok := current.ProtocolFields[f.Key].(string); ok && cv != "" && cv != RedactedSecret {
 					val = cv
 				} else if cv, ok := flatFieldValue(current, f.Key); ok {
@@ -129,12 +162,44 @@ func (v SettingsValidation) normalizeProtocolFields(settings *Settings, current 
 				}
 			}
 		}
+		if f.Type == schema.FieldSelect && len(f.Options) > 0 && provided {
+			// Validate only values the client actually submitted. Values
+			// inherited from current or defaults may predate the declared
+			// options (live states written by older releases); rejecting
+			// them would turn every PUT into a permanent 400 with no
+			// migration path.
+			s, isString := val.(string)
+			if !isString {
+				return fmt.Errorf("protocolFields.%s must be a string", f.Key)
+			}
+			if s == "" {
+				continue
+			}
+			valid := false
+			for _, option := range f.Options {
+				if option.Value == s {
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				return fmt.Errorf("protocolFields.%s must be one of %s", f.Key, selectOptionValues(f.Options))
+			}
+		}
 		if val != nil {
 			settings.ProtocolFields[f.Key] = val
 			setFlatFieldValue(settings, f.Key, val)
 		}
 	}
 	return nil
+}
+
+func selectOptionValues(options []schema.FieldOption) string {
+	values := make([]string, 0, len(options))
+	for _, option := range options {
+		values = append(values, strconv.Quote(option.Value))
+	}
+	return strings.Join(values, ", ")
 }
 
 func protocolFieldUpdateValue(settings *Settings, f schema.FieldSchema) (any, bool) {
@@ -163,9 +228,18 @@ func flatFieldValue(settings Settings, key string) (any, bool) {
 			return s, true
 		}
 	case reflect.Bool:
-		return field.Bool(), true
+		// A zero flat bool means "not provided" (the client did not send the
+		// flat copy, e.g. the legacy panel which only submits protocolFields).
+		// Treating false as absent lets the protocolFields copy win; a client
+		// that explicitly sends false with an empty protocolFields entry
+		// still lands on false through the protocolFields branch.
+		if b := field.Bool(); b {
+			return b, true
+		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return int(field.Int()), true
+		if i := int(field.Int()); i != 0 {
+			return i, true
+		}
 	}
 	return nil, false
 }
@@ -185,8 +259,19 @@ func setFlatFieldValue(settings *Settings, key string, val any) {
 			field.SetBool(b)
 		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if i, ok := val.(int); ok {
-			field.SetInt(int64(i))
+		// JSON numbers decode into float64 (or json.Number with UseNumber),
+		// so accept both forms, not just int.
+		switch n := val.(type) {
+		case int:
+			field.SetInt(int64(n))
+		case int64:
+			field.SetInt(n)
+		case float64:
+			field.SetInt(int64(n))
+		case json.Number:
+			if i, err := n.Int64(); err == nil {
+				field.SetInt(i)
+			}
 		}
 	}
 }
@@ -200,11 +285,28 @@ func StructFieldName(key string) string {
 
 func normalizeFallbackRoot(root *string) error {
 	*root = filepath.Clean(*root)
-	if !strings.HasPrefix(filepath.ToSlash(*root), "/var/lib/veil") {
+	slash := filepath.ToSlash(*root)
+	if !strings.HasPrefix(slash, "/var/lib/veil/") {
+		// Exactly /var/lib/veil and unrelated paths are invalid: serving the
+		// state directory itself would expose state.json, audit/ and backups/
+		// to anonymous naive-port visitors (audit #77 F1). The prefix check
+		// uses a trailing slash so /var/lib/veilfoo is rejected too (F4).
+		if slash == "/var/lib/veil" {
+			return errors.New("fallbackRoot must be a subdirectory of /var/lib/veil, not the state directory itself")
+		}
+		if strings.HasPrefix(slash, "/") {
+			return errors.New("fallbackRoot must be within /var/lib/veil")
+		}
 		*root = filepath.Clean("/var/lib/veil/" + *root)
 	}
-	if !strings.HasPrefix(filepath.ToSlash(*root), "/var/lib/veil") {
+	// Re-check the boundary after the relative prepend: a "../www" input
+	// cleans to /var/lib/www, which escapes /var/lib/veil even though the
+	// pre-check saw a relative path (code-review P2, audit #77 F4).
+	if !strings.HasPrefix(filepath.ToSlash(*root), "/var/lib/veil/") {
 		return errors.New("fallbackRoot must be within /var/lib/veil")
+	}
+	if filepath.ToSlash(*root) == "/var/lib/veil" {
+		return errors.New("fallbackRoot must be a subdirectory of /var/lib/veil, not the state directory itself")
 	}
 	*root = filepath.ToSlash(*root)
 	return nil

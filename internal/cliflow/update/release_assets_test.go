@@ -14,10 +14,7 @@ func TestReleaseAssetsDownloadsVerifiedArchive(t *testing.T) {
 	checksums := []byte(fmt.Sprintf("%s  %s\n", hex.EncodeToString(hash[:]), assetName))
 	var downloaded []string
 
-	assets := NewReleaseAssets(&Release{TagName: "v1.2.4", Assets: []Asset{
-		{Name: assetName, BrowserDownloadURL: "https://example.com/archive"},
-		{Name: "checksums.txt", BrowserDownloadURL: "https://example.com/checksums"},
-	}}, func(url string) ([]byte, error) {
+	assets := newTestReleaseAssets(assetName, func(url string) ([]byte, error) {
 		downloaded = append(downloaded, url)
 		switch url {
 		case "https://example.com/archive":
@@ -25,8 +22,7 @@ func TestReleaseAssetsDownloadsVerifiedArchive(t *testing.T) {
 		case "https://example.com/checksums":
 			return checksums, nil
 		default:
-			t.Fatalf("unexpected URL %s", url)
-			return nil, nil
+			return []byte("test-evidence"), nil
 		}
 	})
 
@@ -37,7 +33,8 @@ func TestReleaseAssetsDownloadsVerifiedArchive(t *testing.T) {
 	if got.Name != assetName || string(got.Body) != string(archive) || string(got.Checksums) != string(checksums) {
 		t.Fatalf("archive = %+v", got)
 	}
-	if fmt.Sprint(downloaded) != "[https://example.com/archive https://example.com/checksums]" {
+	wantDownloads := "[https://example.com/archive https://example.com/checksums https://example.com/checksums.bundle https://example.com/provenance https://example.com/provenance.bundle]"
+	if fmt.Sprint(downloaded) != wantDownloads {
 		t.Fatalf("downloaded = %v", downloaded)
 	}
 }

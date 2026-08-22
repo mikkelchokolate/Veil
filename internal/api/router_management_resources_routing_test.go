@@ -11,7 +11,7 @@ import (
 )
 
 func TestManagementAPIRoutingRulesRejectOversizedJSONBodies(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	oversizedMatch := "geosite:" + strings.Repeat("a", 1024*1024+1)
 
 	for _, tc := range []struct {
@@ -48,7 +48,7 @@ func TestManagementAPIRoutingRulesRejectOversizedJSONBodies(t *testing.T) {
 
 func TestManagementAPIUpdatesAndDeletesRoutingRuleByName(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	create := httptest.NewRecorder()
 	r.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"non-ru","match":"geosite:geolocation-!ru","outbound":"warp","enabled":false}`)))
@@ -69,7 +69,7 @@ func TestManagementAPIUpdatesAndDeletesRoutingRuleByName(t *testing.T) {
 		t.Fatalf("unexpected updated rule: %+v", updated)
 	}
 
-	restarted, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	restarted, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	readAfterUpdate := httptest.NewRecorder()
 	restarted.ServeHTTP(readAfterUpdate, httptest.NewRequest(http.MethodGet, "/api/routing/rules", nil))
 	if !strings.Contains(readAfterUpdate.Body.String(), "geosite:openai") {
@@ -78,8 +78,9 @@ func TestManagementAPIUpdatesAndDeletesRoutingRuleByName(t *testing.T) {
 
 	deleteRecorder := httptest.NewRecorder()
 	restarted.ServeHTTP(deleteRecorder, httptest.NewRequest(http.MethodDelete, "/api/routing/rules/non-ru", nil))
-	if deleteRecorder.Code != http.StatusNoContent {
-		t.Fatalf("delete routing rule expected 204, got %d: %s", deleteRecorder.Code, deleteRecorder.Body.String())
+	// DELETE returns 200 with the apply outcome (revision+job), not 204.
+	if deleteRecorder.Code != http.StatusOK {
+		t.Fatalf("delete routing rule expected 200, got %d: %s", deleteRecorder.Code, deleteRecorder.Body.String())
 	}
 
 	readAfterDelete := httptest.NewRecorder()
@@ -90,7 +91,7 @@ func TestManagementAPIUpdatesAndDeletesRoutingRuleByName(t *testing.T) {
 }
 
 func TestManagementAPIRejectsDuplicateRoutingRuleName(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	first := httptest.NewRecorder()
 	r.ServeHTTP(first, httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"ru-sites","match":"geosite:ru","outbound":"direct","enabled":true}`)))
 	if first.Code != http.StatusCreated {
@@ -106,7 +107,7 @@ func TestManagementAPIRejectsDuplicateRoutingRuleName(t *testing.T) {
 
 func TestManagementAPIGetsRoutingRuleByName(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	create := httptest.NewRecorder()
 	r.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"ru-sites","match":"geosite:ru","outbound":"direct","enabled":true}`)))
@@ -130,7 +131,7 @@ func TestManagementAPIGetsRoutingRuleByName(t *testing.T) {
 }
 
 func TestManagementAPIGetRoutingRuleByNameReturnsNotFoundForMissing(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/routing/rules/nonexistent", nil))
@@ -141,7 +142,7 @@ func TestManagementAPIGetRoutingRuleByNameReturnsNotFoundForMissing(t *testing.T
 }
 
 func TestManagementAPIExposesRoutingPresetProfiles(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/routing/presets", nil))
@@ -158,7 +159,7 @@ func TestManagementAPIExposesRoutingPresetProfiles(t *testing.T) {
 
 func TestManagementAPIAppliesRoutingPresetAndPersistsRules(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/routing/presets/all-except-Russia", nil))
@@ -172,7 +173,7 @@ func TestManagementAPIAppliesRoutingPresetAndPersistsRules(t *testing.T) {
 		}
 	}
 
-	restarted, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	restarted, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	read := httptest.NewRecorder()
 	restarted.ServeHTTP(read, httptest.NewRequest(http.MethodGet, "/api/routing/rules", nil))
 	if !strings.Contains(read.Body.String(), "preset-all-except-russia") || !strings.Contains(read.Body.String(), "geosite:category-ru") {
@@ -185,7 +186,7 @@ func TestManagementAPIRollsBackRoutingPresetOnSaveFailure(t *testing.T) {
 	// Valid state path for startup; we break saves afterwards by replacing the
 	// state file's parent with a non-directory.
 	statePath := filepath.Join(dir, "state", "state.json")
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	// Baseline: no preset active.
 	get := httptest.NewRecorder()
@@ -216,7 +217,7 @@ func TestManagementAPIRollsBackRoutingPresetOnSaveFailure(t *testing.T) {
 }
 
 func TestManagementAPIRejectsUnknownRoutingPreset(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/routing/presets/not-real", nil))

@@ -166,9 +166,17 @@ func TestHandleSettingsRejectsFallbackRootPathTraversal(t *testing.T) {
 	}{
 		{"PUT /var/lib/veil/www → 200", "/var/lib/veil/www", http.StatusOK, true},
 		{"PUT /var/lib/veil/custom/path → 200", "/var/lib/veil/custom/path", http.StatusOK, true},
-		{"PUT /etc/passwd → 200 (normalized into /var/lib/veil)", "/etc/passwd", http.StatusOK, true},
-		{"PUT /var/lib/veil/../../../etc → 200 (normalized)", "/var/lib/veil/../../../etc", http.StatusOK, true},
-		{"PUT traversal attempt → 200 (contained by prepend)", "/var/lib/veil/../../../../etc", http.StatusOK, true},
+		// Absolute paths outside /var/lib/veil are rejected (no silent
+		// containment-by-prepend), matching the strict renderer boundary
+		// (audit #77 F4). Serving the state dir itself is rejected too (F1).
+		{"PUT /etc/passwd → 400", "/etc/passwd", http.StatusBadRequest, false},
+		{"PUT /var/lib/veil/../../../etc → 400", "/var/lib/veil/../../../etc", http.StatusBadRequest, false},
+		{"PUT traversal attempt → 400", "/var/lib/veil/../../../../etc", http.StatusBadRequest, false},
+		{"PUT /var/lib/veil → 400 (state dir itself)", "/var/lib/veil", http.StatusBadRequest, false},
+		// Relative traversal must not escape the veil root after prepend
+		// (code-review P2: "../www" cleans to /var/lib/www).
+		{"PUT ../www → 400 (relative escape)", "../www", http.StatusBadRequest, false},
+		{"PUT ../www-again → 400", "../www2", http.StatusBadRequest, false},
 		{"PUT empty → 200", "", http.StatusOK, false},
 		{"PUT relative/path → 200", "relative/path", http.StatusOK, true},
 	}

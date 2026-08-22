@@ -7,13 +7,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/storage"
+	"github.com/mikkelchokolate/Veil/internal/testutil/testdb"
 )
 
 func TestAdminSetRejectsMissingPassword(t *testing.T) {
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	cmd.SetOut(os.Stdout)
 	cmd.SetErr(os.Stderr)
 	cmd.SetArgs([]string{
@@ -25,6 +28,61 @@ func TestAdminSetRejectsMissingPassword(t *testing.T) {
 	err := cmd.Execute()
 	if err == nil || !strings.Contains(err.Error(), "--password is required") {
 		t.Fatalf("expected missing password error, got %v", err)
+	}
+}
+
+func TestAdminSetCommitsDesiredRevisionAndStateDigest(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state.json")
+	keyPath := filepath.Join(root, "state.key")
+	key, err := secrets.LoadOrCreateKey(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := secrets.NewCipher(*key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := managementstate.NewStore(statePath, cipher).Save(model.ManagementSnapshot{
+		Users: []model.User{{Username: "admin", PasswordHash: "old", Role: "admin"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	databasePath := filepath.Join(root, "veil.db")
+	db := testdb.CloneTo(t, databasePath)
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := newFastRootCommand("test")
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"admin", "set", "--state", statePath, "--key-path", keyPath, "--password", "a-new-long-password"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	stateBody, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err = storage.OpenExisting(databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	revisions, err := apply.NewRevisionStore(db).Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revisions.Desired != 1 {
+		t.Fatalf("desired revision=%d want=1", revisions.Desired)
+	}
+	digest, err := apply.NewSnapshotStore(db).StateDigest(revisions.Desired)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if digest != managementstate.EncodedStateSHA256(stateBody) {
+		t.Fatalf("snapshot digest=%q", digest)
 	}
 }
 
@@ -46,7 +104,7 @@ func TestAdminShowReportsNoUsers(t *testing.T) {
 		t.Fatalf("save empty state: %v", err)
 	}
 
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -61,7 +119,7 @@ func TestAdminShowReportsNoUsers(t *testing.T) {
 }
 
 func TestAdminRotateKeyRejectsMissingKeyFile(t *testing.T) {
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	cmd.SetOut(os.Stdout)
 	cmd.SetErr(os.Stderr)
 	cmd.SetArgs([]string{
@@ -84,7 +142,7 @@ func TestAdminRotateKeyRejectsWrongKeyLength(t *testing.T) {
 		t.Fatalf("write key: %v", err)
 	}
 
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	cmd.SetOut(os.Stdout)
 	cmd.SetErr(os.Stderr)
 	cmd.SetArgs([]string{
@@ -107,7 +165,7 @@ func TestAdminRotateKeyRejectsMissingState(t *testing.T) {
 		t.Fatalf("write key: %v", err)
 	}
 
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	cmd.SetOut(os.Stdout)
 	cmd.SetErr(os.Stderr)
 	cmd.SetArgs([]string{
@@ -145,7 +203,7 @@ func TestAdminSetUpdatesFirstAdminWhenUsernameOmitted(t *testing.T) {
 		t.Fatalf("save state: %v", err)
 	}
 
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -191,7 +249,7 @@ func TestAdminSetCreatesUserWhenUsernameNotFound(t *testing.T) {
 		t.Fatalf("save state: %v", err)
 	}
 
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)

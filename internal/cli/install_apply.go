@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/acmeip"
 	installflow "github.com/mikkelchokolate/Veil/internal/cliflow/install"
@@ -19,6 +20,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/statecommit"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -135,8 +137,15 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		// Direct mode needs a domain for client links. If the existing state
 		// was created before auto-fill was implemented, backfill it now.
 		if resolvedIP != nil && snapshot.Settings.Domain == "" {
-			snapshot.Settings.Domain = resolvedIP.String()
-			if err := store.Save(snapshot); err != nil {
+			if _, err := statecommit.Update(statecommit.UpdateOptions{
+				StatePath: resolvedStatePath, KeyPath: resolvedKeyPath,
+			}, func(current *model.ManagementSnapshot) error {
+				if current.Settings.Domain == "" {
+					current.Settings.Domain = resolvedIP.String()
+				}
+				snapshot = *current
+				return nil
+			}); err != nil {
 				return fmt.Errorf("update existing panel state domain: %w", err)
 			}
 		}
@@ -164,9 +173,9 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 				},
 			},
 		}
+		managementstate.CompleteSetupForAdmins(&initialSnapshot, time.Now())
 
-		store := managementstate.NewStore(resolvedStatePath, cipher)
-		if err := store.Save(initialSnapshot); err != nil {
+		if _, err := statecommit.Save(initialSnapshot, statecommit.Options{StatePath: resolvedStatePath, Cipher: cipher}); err != nil {
 			return fmt.Errorf("write initial state.json: %w", err)
 		}
 	}
@@ -181,7 +190,17 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		}
 	}
 
-	// 3. Apply profile configurations (veil.env, caddyfile, systemd unit files, etc.)
+	// 3. Create the veil service account before writing/chowning secrets.
+	// installer.Apply chowns generated files to the veil user; that lookup
+	// fails on a fresh host if useradd has not run yet.
+	if shouldPrepareInstallHost(systemdDir) {
+		if err := installPrepareHostFunc(hostaccess.Paths{EtcDir: opts.EtcDir, VarDir: opts.VarDir}); err != nil {
+			_ = writeAuditInstall(opts.AuditLog, "", false, err.Error(), nil)
+			return fmt.Errorf("prepare panel service account and permissions: %w", err)
+		}
+	}
+
+	// 4. Apply profile configurations (veil.env, caddyfile, systemd unit files, etc.)
 	result, err := installApplyFunc(profile, installer.ApplyPaths{
 		EtcDir:      opts.EtcDir,
 		VarDir:      opts.VarDir,
@@ -195,7 +214,7 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		return err
 	}
 
-	// 3a. Ensure the firewall is active and open ports required by the panel.
+	// 4a. Ensure the firewall is active and open ports required by the panel.
 	installPlan, planErr := buildInstallPlan(profile, opts)
 	if planErr == nil && len(installPlan.FirewallActions) > 0 {
 		if err := installFirewallApplyFunc(installPlan.FirewallActions); err != nil {
@@ -205,10 +224,6 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	}
 
 	if shouldPrepareInstallHost(systemdDir) {
-		if err := installPrepareHostFunc(hostaccess.Paths{EtcDir: opts.EtcDir, VarDir: opts.VarDir}); err != nil {
-			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
-			return fmt.Errorf("prepare panel service account and permissions: %w", err)
-		}
 		if err := installSystemdRunFunc(service.SystemdApplyPlan(installer.PanelSystemdUnits(profile))); err != nil {
 			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
 			return err

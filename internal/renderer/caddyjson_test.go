@@ -63,9 +63,33 @@ func TestRenderCaddyJSONNaiveForwardProxyOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := string(data)
-	if !containsInOrder(s, `"forward_proxy"`, `"file_server"`) {
-		t.Error("forward_proxy must appear before file_server")
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	server := cfg["apps"].(map[string]any)["http"].(map[string]any)["servers"].(map[string]any)["tcp-0.0.0.0-8443"].(map[string]any)
+	var seenHostMatcher, seenUnmatchedProxy bool
+	for _, rawRoute := range server["routes"].([]any) {
+		route := rawRoute.(map[string]any)
+		handlers := route["handle"].([]any)
+		names := make([]string, 0, len(handlers))
+		for _, raw := range handlers {
+			names = append(names, raw.(map[string]any)["handler"].(string))
+		}
+		if _, matched := route["match"]; matched {
+			seenHostMatcher = true
+			if names[0] == "forward_proxy" {
+				t.Fatalf("host-matched forward_proxy drops CONNECT: %+v", route)
+			}
+			continue
+		}
+		seenUnmatchedProxy = true
+		if len(names) < 2 || names[0] != "forward_proxy" || names[1] != "file_server" {
+			t.Fatalf("unmatched proxy handlers = %v, want forward_proxy then file_server", names)
+		}
+	}
+	if !seenHostMatcher || !seenUnmatchedProxy {
+		t.Fatalf("expected cert-discovery host matcher and unmatched forward_proxy, got %s", data)
 	}
 }
 
@@ -98,12 +122,31 @@ func TestRenderCaddyJSONSharedPanelNaiveDoesNotBlockForwardProxy(t *testing.T) {
 	}
 	server := cfg["apps"].(map[string]any)["http"].(map[string]any)["servers"].(map[string]any)["tcp-0.0.0.0-443"].(map[string]any)
 	seenForwardProxy := false
+	seenSubscription := false
 	for _, rawRoute := range server["routes"].([]any) {
 		route := rawRoute.(map[string]any)
+		if matches, ok := route["match"].([]any); ok {
+			for _, rawMatch := range matches {
+				paths, _ := rawMatch.(map[string]any)["path"].([]any)
+				for _, path := range paths {
+					if path == "/s/*" {
+						seenSubscription = true
+					}
+				}
+			}
+		}
 		for _, rawHandler := range route["handle"].([]any) {
-			handler := rawHandler.(map[string]any)["handler"]
+			handlerMap := rawHandler.(map[string]any)
+			handler := handlerMap["handler"]
 			if handler == "forward_proxy" {
 				seenForwardProxy = true
+				if _, matched := route["match"]; matched {
+					t.Fatalf("forward_proxy route must see CONNECT target hosts: %+v", route)
+				}
+				hosts, ok := handlerMap["hosts"].([]any)
+				if !ok || len(hosts) != 1 || hosts[0] != "vpn.example.com" {
+					t.Fatalf("forward_proxy handler hosts = %+v", handlerMap["hosts"])
+				}
 			}
 			if handler == "static_response" && !seenForwardProxy {
 				if match, ok := route["match"].([]any); !ok || len(match) == 0 {
@@ -114,6 +157,9 @@ func TestRenderCaddyJSONSharedPanelNaiveDoesNotBlockForwardProxy(t *testing.T) {
 	}
 	if !seenForwardProxy {
 		t.Fatalf("shared Panel/Naive server has no forward_proxy route: %+v", server)
+	}
+	if !seenSubscription {
+		t.Fatalf("shared Panel/Naive server has no public subscription route: %+v", server)
 	}
 }
 
@@ -147,12 +193,6 @@ func TestRenderCaddyJSONEnablesTLSOnNonStandardNaivePort(t *testing.T) {
 	if !ok || len(policies) != 1 {
 		t.Fatalf("non-standard Naive port must explicitly enable TLS, server=%+v", server)
 	}
-}
-
-func containsInOrder(s, a, b string) bool {
-	ia := strings.Index(s, a)
-	ib := strings.Index(s, b)
-	return ia >= 0 && ib > ia
 }
 
 func TestRenderCaddyJSONPanelOnly(t *testing.T) {
@@ -333,6 +373,10 @@ func TestRenderCaddyJSONNaiveFallbackRootRejectsOutsideVeil(t *testing.T) {
 		"/var/lib/veil-evil",
 		"/var/lib/veil2/sub",
 		"/var/lib",
+		// Serving the state directory itself would expose state.json, audit/
+		// and backups/ to anonymous naive-port visitors (audit #77 F1).
+		"/var/lib/veil",
+		"/var/lib/veil/",
 	}
 	for _, root := range cases {
 		t.Run(root, func(t *testing.T) {
@@ -363,8 +407,6 @@ func TestRenderCaddyJSONNaiveFallbackRootAcceptsWithinVeil(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"/var/lib/veil", "/var/lib/veil"},
-		{"/var/lib/veil/", "/var/lib/veil"},
 		{"/var/lib/veil/custom", "/var/lib/veil/custom"},
 		{"/var/lib/veil/www", "/var/lib/veil/www"},
 	}

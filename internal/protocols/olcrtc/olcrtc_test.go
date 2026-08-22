@@ -31,7 +31,7 @@ func TestPluginMetadata(t *testing.T) {
 		t.Errorf("FirewallService() = %q, want %q", got, want)
 	}
 	if got, want := p.MaxEnabled(), 0; got != want {
-		t.Errorf("MaxEnabled() = %d, want %d", got, want)
+		t.Errorf("MaxEnabled() = %d, want 0", got)
 	}
 }
 
@@ -276,12 +276,19 @@ func TestRuntimeDescriptorsWithoutMatchingInbound(t *testing.T) {
 func TestRuntimeInstall(t *testing.T) {
 	p := New()
 	got := p.RuntimeInstall("amd64")
+	const sourceCommit = "f616f57bb3a90740f1755922ffeaa7acc5cfe4ed"
 	want := runtimeinstall.Runtime{
-		Name:          "olcrtc",
-		Binary:        "olcrtc",
-		Method:        runtimeinstall.MethodGoInstall,
-		SourcePackage: "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@latest",
-		Description:   "olcrtc is built from source with \"go install\"",
+		Name:           "olcrtc",
+		Binary:         "olcrtc",
+		Method:         runtimeinstall.MethodGoInstall,
+		SourcePackage:  "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@" + sourceCommit,
+		Version:        sourceCommit,
+		SourceCommit:   sourceCommit,
+		Integrity:      "go-module-sum",
+		VersionArgs:    []string{"__go_buildinfo__"},
+		VersionCommand: "go version -m olcrtc",
+		VersionPattern: `f616f57bb3a9`,
+		Description:    "olcrtc is built from source with \"go install\"",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("RuntimeInstall mismatch:\ngot  %+v\nwant %+v", got, want)
@@ -295,9 +302,6 @@ func TestValidator(t *testing.T) {
 
 	if err := p.ValidateSettings(settings, inbound); err != nil {
 		t.Errorf("ValidateSettings returned error: %v", err)
-	}
-	if issues := p.ValidateInbound(settings, inbound); len(issues) != 0 {
-		t.Errorf("ValidateInbound returned issues: %v", issues)
 	}
 	if p.NeedsDomain(settings, inbound) {
 		t.Error("NeedsDomain should be false")
@@ -316,10 +320,10 @@ func TestValidator(t *testing.T) {
 func TestInboundFieldSchema(t *testing.T) {
 	p := New()
 	fields := p.InboundFieldSchema()
-	if len(fields) != 3 {
-		t.Fatalf("expected 3 inbound fields, got %d", len(fields))
+	if len(fields) != 4 {
+		t.Fatalf("expected 4 inbound fields, got %d", len(fields))
 	}
-	wantKeys := []string{"olcrtcAuth", "olcrtcTransport", "olcrtcRoomID"}
+	wantKeys := []string{"password", "olcrtcAuth", "olcrtcTransport", "olcrtcRoomID"}
 	for i, key := range wantKeys {
 		if fields[i].Key != key {
 			t.Errorf("field[%d].Key = %q, want %q", i, fields[i].Key, key)
@@ -328,20 +332,26 @@ func TestInboundFieldSchema(t *testing.T) {
 			t.Errorf("field[%d].Scope = %q, want inbound", i, fields[i].Scope)
 		}
 	}
-	if fields[0].Type != schema.FieldSelect {
-		t.Errorf("olcrtcAuth type = %q, want select", fields[0].Type)
+	if fields[0].Type != schema.FieldPassword {
+		t.Errorf("password type = %q, want password", fields[0].Type)
 	}
-	if fields[0].Default != "jitsi" {
-		t.Errorf("olcrtcAuth default = %v, want jitsi", fields[0].Default)
+	if fields[0].GenerateAction != "hex64" {
+		t.Errorf("password generateAction = %q, want hex64", fields[0].GenerateAction)
 	}
-	if len(fields[0].Options) != 3 {
-		t.Errorf("olcrtcAuth options = %d, want 3", len(fields[0].Options))
+	if fields[1].Type != schema.FieldSelect {
+		t.Errorf("olcrtcAuth type = %q, want select", fields[1].Type)
 	}
-	if fields[2].GenerateAction != "room" {
-		t.Errorf("olcrtcRoomID generateAction = %q, want room", fields[2].GenerateAction)
+	if fields[1].Default != "jitsi" {
+		t.Errorf("olcrtcAuth default = %v, want jitsi", fields[1].Default)
 	}
-	if fields[2].GenerateActionField != "olcrtcAuth" {
-		t.Errorf("olcrtcRoomID generateActionField = %q, want olcrtcAuth", fields[2].GenerateActionField)
+	if len(fields[1].Options) != 3 {
+		t.Errorf("olcrtcAuth options = %d, want 3", len(fields[1].Options))
+	}
+	if fields[3].GenerateAction != "room" {
+		t.Errorf("olcrtcRoomID generateAction = %q, want room", fields[3].GenerateAction)
+	}
+	if fields[3].GenerateActionField != "olcrtcAuth" {
+		t.Errorf("olcrtcRoomID generateActionField = %q, want olcrtcAuth", fields[3].GenerateActionField)
 	}
 }
 
@@ -433,17 +443,20 @@ func TestAutofillPreservesExistingValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Autofill error: %v", err)
 	}
-	if out.OlcrtcAuth != "telemost" {
-		t.Errorf("OlcrtcAuth = %q, want telemost", out.OlcrtcAuth)
+	// The SPA edits dynamic fields while echoing the stale flat value;
+	// protocolFields must win so a provider/transport switch is honored
+	// (audit #133 F1). Previously flat-wins silently ignored the switch.
+	if out.OlcrtcAuth != "wbstream" {
+		t.Errorf("OlcrtcAuth = %q, want wbstream (protocolFields-first)", out.OlcrtcAuth)
 	}
-	if out.OlcrtcTransport != "vp8channel" {
-		t.Errorf("OlcrtcTransport = %q, want vp8channel", out.OlcrtcTransport)
+	if out.OlcrtcTransport != "seichannel" {
+		t.Errorf("OlcrtcTransport = %q, want seichannel (protocolFields-first)", out.OlcrtcTransport)
 	}
 	if out.Password != key {
 		t.Errorf("Password changed to %q, want %q", out.Password, key)
 	}
-	if out.OlcrtcRoomID != "manual-room" {
-		t.Errorf("OlcrtcRoomID = %q, want manual-room", out.OlcrtcRoomID)
+	if out.OlcrtcRoomID != "pf-room" {
+		t.Errorf("OlcrtcRoomID = %q, want pf-room (protocolFields-first)", out.OlcrtcRoomID)
 	}
 }
 
@@ -689,7 +702,7 @@ func TestProtocolString(t *testing.T) {
 	}
 }
 
-func TestRenderConfigGeneratesKeyWhenMissing(t *testing.T) {
+func TestRenderConfigRejectsMissingPersistedKey(t *testing.T) {
 	p := New()
 	input := generatedconfig.ProtocolRenderInput{
 		Settings: model.Settings{},
@@ -697,14 +710,11 @@ func TestRenderConfigGeneratesKeyWhenMissing(t *testing.T) {
 		Inbounds: []model.Inbound{{Name: "beta", Protocol: "olcrtc"}},
 	}
 	arts, ok, err := p.RenderConfig(input)
-	if err != nil {
-		t.Fatalf("RenderConfig error: %v", err)
+	if err == nil {
+		t.Fatalf("RenderConfig accepted missing persisted key: ok=%v artifacts=%d", ok, len(arts))
 	}
-	if !ok || len(arts) != 1 {
-		t.Fatalf("expected one artifact, ok=%v, len=%d", ok, len(arts))
-	}
-	if !strings.Contains(arts[0].Body, "crypto:") {
-		t.Errorf("rendered body missing crypto section:\n%s", arts[0].Body)
+	if !strings.Contains(strings.ToLower(err.Error()), "key") {
+		t.Fatalf("RenderConfig missing-key error = %q, want explicit key error", err)
 	}
 }
 
@@ -735,7 +745,7 @@ func TestIsOlcrtcKey(t *testing.T) {
 		{strings.Repeat("a", 64), true},
 		{strings.Repeat("0", 64), true},
 		{"abc", false},
-		{strings.Repeat("A", 64), false},
+		{strings.Repeat("A", 64), true},
 		{strings.Repeat("a", 63) + "g", false},
 	}
 	for _, tc := range cases {

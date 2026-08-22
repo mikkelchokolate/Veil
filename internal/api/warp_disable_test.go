@@ -21,27 +21,33 @@ func TestPromoteRemovesWarpConfigAndStopsUnitWhenWarpDisabledAndActive(t *testin
 		// active, modelling a running veil-warp.service.
 		promoteResult: privileged.PromoteResult{
 			BackupID:         "20260608T120000.000000000Z",
-			RemovedArtifacts: []string{"sing-box/warp.json"},
+			RemovedArtifacts: []string{"sing-box/warp.json", "caddy/config.json"},
 		},
 	}
 	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: t.TempDir(), Privileged: client})
 	state.warp = WarpConfig{Enabled: false}
 	ctx := NewManagementApplyContext(state)
 
-	if _, _, _, err := ctx.promoteStagedConfigsLocked(nil); err != nil {
+	if _, _, _, err := ctx.promoteStagedConfigs(nil); err != nil {
 		t.Fatalf("promote staged configs: %v", err)
 	}
 	if len(client.promotions) != 1 {
 		t.Fatalf("promotions = %+v", client.promotions)
 	}
-	if !reflect.DeepEqual(client.promotions[0].RemoveArtifactIDs, []string{"sing-box/warp.json"}) {
-		t.Fatalf("remove artifact ids = %+v, want [sing-box/warp.json]", client.promotions[0].RemoveArtifactIDs)
+	if !reflect.DeepEqual(client.promotions[0].RemoveArtifactIDs, []string{"sing-box/warp.json", "caddy/config.json"}) {
+		t.Fatalf("remove artifact ids = %+v, want [sing-box/warp.json caddy/config.json] (recording client reports caddy active; no naive inbounds remain)", client.promotions[0].RemoveArtifactIDs)
 	}
 
-	ctx.reloadPromotedServicesLocked(nil)
+	ctx.reloadPromotedServices(nil)
 	wantActions := []privileged.ServiceActionRequest{
 		{Unit: "veil-warp.service", Action: privileged.ServiceActionStop},
 		{Unit: "veil-warp.service", Action: privileged.ServiceActionDisable},
+		// The recording client also reports veil-caddy.service active; with no
+		// naive inbounds and no panel-via-caddy the Caddy config is torn down
+		// too (audit #123: stale auth_credentials must not outlive the last
+		// naive inbound).
+		{Unit: "veil-caddy.service", Action: privileged.ServiceActionStop},
+		{Unit: "veil-caddy.service", Action: privileged.ServiceActionDisable},
 	}
 	if !reflect.DeepEqual(client.serviceActions, wantActions) {
 		t.Fatalf("service actions = %+v, want %+v", client.serviceActions, wantActions)
@@ -55,7 +61,7 @@ func TestReloadEnablesWarpUnitForBootPersistenceWhenWarpEnabled(t *testing.T) {
 	ctx := NewManagementApplyContext(state)
 
 	warpLive := filepath.Join(state.liveRoot, "sing-box", "warp.json")
-	ctx.reloadPromotedServicesLocked([]string{warpLive})
+	ctx.reloadPromotedServices([]string{warpLive})
 
 	wantWarp := []privileged.ServiceActionRequest{
 		{Unit: "veil-warp.service", Action: privileged.ServiceActionEnable},
@@ -81,7 +87,7 @@ func TestPromoteDoesNotTouchWarpWhenDisabledAndUnitInactive(t *testing.T) {
 	state.warp = WarpConfig{Enabled: false, PrivateKey: "provisioned-key"}
 	ctx := NewManagementApplyContext(state)
 
-	if _, _, _, err := ctx.promoteStagedConfigsLocked(nil); err != nil {
+	if _, _, _, err := ctx.promoteStagedConfigs(nil); err != nil {
 		t.Fatalf("promote staged configs: %v", err)
 	}
 	for _, prom := range client.promotions {
@@ -91,7 +97,7 @@ func TestPromoteDoesNotTouchWarpWhenDisabledAndUnitInactive(t *testing.T) {
 			}
 		}
 	}
-	ctx.reloadPromotedServicesLocked(nil)
+	ctx.reloadPromotedServices(nil)
 	for _, action := range client.serviceActions {
 		if action.Unit == "veil-warp.service" {
 			t.Fatalf("inactive WARP unit must not receive service actions: %+v", client.serviceActions)
@@ -107,7 +113,7 @@ func TestPromoteDoesNotRemoveWarpConfigWhenWarpEnabled(t *testing.T) {
 	state.warp = WarpConfig{Enabled: true}
 	ctx := NewManagementApplyContext(state)
 
-	if _, _, _, err := ctx.promoteStagedConfigsLocked(nil); err != nil {
+	if _, _, _, err := ctx.promoteStagedConfigs(nil); err != nil {
 		t.Fatalf("promote staged configs: %v", err)
 	}
 	for _, prom := range client.promotions {

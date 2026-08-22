@@ -28,3 +28,14 @@ func (w *HTTPStatusRecorder) Write(b []byte) (int, error) {
 }
 
 func (w *HTTPStatusRecorder) StatusCode() int { return w.statusCode }
+
+// Unwrap exposes the wrapped writer so http.ResponseController can reach the
+// underlying http.Flusher/Hijacker through middleware layers.
+func (w *HTTPStatusRecorder) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+// Flush forwards to the wrapped writer when it supports streaming (SSE).
+func (w *HTTPStatusRecorder) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}

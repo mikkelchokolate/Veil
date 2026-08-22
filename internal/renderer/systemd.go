@@ -1,6 +1,9 @@
 package renderer
 
-import "path"
+import (
+	"path"
+	"strings"
+)
 
 const (
 	UnitVeil          = "veil.service"
@@ -38,6 +41,13 @@ type SystemdConfig struct {
 	OlcrtcBinary   string
 	EtcDir         string
 }
+
+var systemdHardeningBlockOlcrtc = strings.Replace(
+	systemdHardeningBlock,
+	"RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+	"RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK",
+	1,
+)
 
 func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 	if cfg.VeilBinary == "" {
@@ -169,6 +179,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+SupplementaryGroups=veil
 # Caddy stores its cert/key material and local CA root here. The hardening
 # below drops CAP_DAC_OVERRIDE and /var/lib/veil is owned by the veil user, so
 # Caddy (root) cannot write there; give it a dedicated state dir it owns
@@ -226,7 +237,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlock + `ReadWritePaths=/etc/veil /var/lib/veil
+` + systemdHardeningBlockOlcrtc + `ReadWritePaths=/etc/veil /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
@@ -282,6 +293,7 @@ RuntimeDirectory=veil-mieru
 StateDirectory=mita
 ExecStart=` + cfg.MieruBinary + ` run
 ExecStartPost=/bin/sh -c 'i=0; while [ $$i -lt 50 ]; do if [ -S /run/veil-mieru/mita.sock ]; then ` + cfg.MieruBinary + ` apply config ` + mieruConfig + ` && ` + cfg.MieruBinary + ` start && exit 0; fi; i=$$((i+1)); sleep 0.2; done; echo "mita activation timed out" >&2; exit 1'
+ExecStop=` + cfg.MieruBinary + ` stop
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
@@ -301,6 +313,7 @@ After=local-fs.target
 
 [Service]
 Type=oneshot
+EnvironmentFile=-` + path.Join(cfg.EtcDir, "veil.env") + `
 ExecStart=` + cfg.VeilBinary + ` backup create --state /var/lib/veil/state.json --key-path ` + path.Join(cfg.EtcDir, "state.key") + ` --passphrase-file ` + path.Join(cfg.EtcDir, "backup.passphrase") + ` --output-dir /var/lib/veil/backups --prune --daily 7 --weekly 4 --monthly 12
 User=root
 Group=root
@@ -320,7 +333,7 @@ LockPersonality=true
 RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
-ReadWritePaths=/var/lib/veil/backups
+ReadWritePaths=/var/lib/veil
 `,
 		UnitBackupTimer: `[Unit]
 Description=Daily Veil encrypted state backup

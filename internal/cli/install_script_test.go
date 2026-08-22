@@ -18,19 +18,20 @@ func checkBash(t *testing.T) {
 }
 
 func TestCurlInstallScriptDownloadsVerifiedReleaseBinary(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
 	script := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{
-		`REPO="${VEIL_REPO:-mikkelchokolate/Veil}"`,
-		"releases/latest/download",
+		`OFFICIAL_REPO="mikkelchokolate/Veil"`,
+		`REPO="${OFFICIAL_REPO}"`,
 		"checksums.txt",
 		"sha256sum -c",
 		"tar -xzf",
 		"/usr/local/bin",
-		"exec \"${RUN_BIN}\" install",
+		`"${RUN_BIN}" install`,
+		"run_veil_install",
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh missing %q:\n%s", want, script)
@@ -40,7 +41,7 @@ func TestCurlInstallScriptDownloadsVerifiedReleaseBinary(t *testing.T) {
 
 func TestCurlInstallScriptRejectsMissingOptionValueBeforeSideEffects(t *testing.T) {
 	checkBash(t)
-	cmd := exec.Command("bash", "../../scripts/install.sh", "--domain")
+	cmd := exec.Command("bash", "../../scripts/install-privileged.sh", "--domain")
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected install.sh --domain to fail")
@@ -65,7 +66,7 @@ func TestCurlUninstallScriptRejectsMissingOptionValueBeforeSideEffects(t *testin
 }
 
 func TestCurlInstallScriptHidesLegacyStackAndPortOptions(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,22 +81,22 @@ func TestCurlInstallScriptHidesLegacyStackAndPortOptions(t *testing.T) {
 	}
 }
 
-func TestCurlInstallScriptUsageShowsSudoForSystemdInstall(t *testing.T) {
+func TestCurlInstallScriptNeverPipesIntoSudo(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/install.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
 	script := strings.ReplaceAll(string(body), "\r\n", "\n")
-	if !strings.Contains(script, "| sudo bash") {
-		t.Fatalf("install.sh usage should show sudo for systemd install:\n%s", script)
+	if strings.Contains(script, "| sudo sh") || strings.Contains(script, "| sudo bash") {
+		t.Fatalf("unprivileged bootstrap must never pipe remote bytes into sudo:\n%s", script)
 	}
-	if strings.Contains(script, "| bash\n") || strings.Contains(script, "| bash -s --") {
-		t.Fatalf("install.sh usage should not show non-root bash install examples:\n%s", script)
+	if !strings.Contains(script, "sudo env") {
+		t.Fatalf("verified bootstrap must perform its own final sudo handoff:\n%s", script)
 	}
 }
 
 func TestCurlInstallScriptRunsInteractiveInstallFromTTY(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +109,7 @@ func TestCurlInstallScriptRunsInteractiveInstallFromTTY(t *testing.T) {
 }
 
 func TestCurlInstallScriptDryRunDoesNotForceInteractivePrompt(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +123,7 @@ func TestCurlInstallScriptDryRunDoesNotForceInteractivePrompt(t *testing.T) {
 }
 
 func TestCurlInstallScriptDoesNotForcePanelAccessInInteractiveMode(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,19 +139,20 @@ func TestCurlInstallScriptDoesNotForcePanelAccessInInteractiveMode(t *testing.T)
 }
 
 func TestCurlInstallScriptResolvesRunBinaryAfterInstallDirFlag(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
 	script := strings.ReplaceAll(string(body), "\r\n", "\n")
-	marker := "done\n\nRUN_BIN=\"${INSTALL_DIR}/veil\"\n\nrequire_cmd curl"
-	if !strings.Contains(script, marker) {
-		t.Fatalf("install.sh should resolve RUN_BIN after parsing --install-dir before idempotency path:\n%s", script)
+	verifyAt := strings.LastIndex(script, "verify_installer_bytes")
+	runAt := strings.Index(script, `RUN_BIN="${INSTALL_DIR}/veil"`)
+	if verifyAt < 0 || runAt < 0 || runAt < verifyAt {
+		t.Fatalf("privileged installer should resolve RUN_BIN after option parsing and self-verification:\n%s", script)
 	}
 }
 
 func TestCurlInstallScriptDryRunDoesNotExecTempBinaryBeforeCleanup(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,12 +165,12 @@ func TestCurlInstallScriptDryRunDoesNotExecTempBinaryBeforeCleanup(t *testing.T)
 }
 
 func TestCurlInstallScriptDryRunUsesTempBinaryWithoutInstalling(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
 	script := strings.ReplaceAll(string(body), "\r\n", "\n")
-	for _, want := range []string{`RUN_BIN="${tmpdir}/veil"`, `if [[ -n "${DRY_RUN}" ]]; then`, `RUN_BIN="${INSTALL_DIR}/veil"`, `exec "${RUN_BIN}" install`} {
+	for _, want := range []string{`RUN_BIN="${tmpdir}/veil"`, `if [[ -n "${DRY_RUN}" ]]; then`, `RUN_BIN="${INSTALL_DIR}/veil"`, `run_veil_install`} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh dry-run should execute downloaded temp binary without installing; missing %q:\n%s", want, script)
 		}
@@ -182,7 +184,7 @@ func TestCurlInstallScriptDryRunUsesTempBinaryWithoutInstalling(t *testing.T) {
 }
 
 func TestCurlInstallScriptRequiresRootForPanelServiceInstall(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,8 +273,9 @@ func TestReleaseWorkflowEnforcesQualityGatesBeforePublish(t *testing.T) {
 		"staticcheck",
 		"govulncheck ./...",
 		"shellcheck scripts/*.sh",
-		"bash -n scripts/install.sh scripts/uninstall.sh",
-		"bash scripts/install.sh --help >/dev/null",
+		"sh -n scripts/install.sh",
+		"bash -n scripts/install-privileged.sh scripts/uninstall.sh",
+		"bash scripts/install-privileged.sh --help >/dev/null",
 		"bash scripts/uninstall.sh --help >/dev/null",
 		"git diff --check",
 		"needs: [quality, release, docker-publish]",
@@ -284,29 +287,99 @@ func TestReleaseWorkflowEnforcesQualityGatesBeforePublish(t *testing.T) {
 }
 
 func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
-	body, err := os.ReadFile("../../.github/workflows/ci.yml")
-	if err != nil {
-		t.Fatal(err)
+	// The gate commands live in the shared CI scripts (single source of truth
+	// for local VMs and GitHub Actions). ci.yml must route each job to its
+	// script, and the scripts must contain the gates.
+	read := func(path string) string {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.ReplaceAll(string(body), "\r\n", "\n")
 	}
-	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
+	workflow := read("../../.github/workflows/ci.yml")
+	for _, want := range []string{
+		"scripts/ci/frontend.sh",
+		"scripts/ci/test.sh",
+		"scripts/ci/lint.sh",
+		"scripts/ci/privilege-boundary.sh",
+		"scripts/ci/e2e.sh",
+		"scripts/ci/browser-e2e.sh",
+		"scripts/ci/package-smoke.sh",
+		"scripts/ci/image-build.sh",
+		"ci-frontend-dist-${{ github.sha }}",
+		"actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+		"needs: frontend",
+	} {
+		if !strings.Contains(workflow, want) {
+			t.Fatalf("ci.yml does not route to shared CI script %q:\n%s", want, workflow)
+		}
+	}
+
+	testScript := read("../../scripts/ci/test.sh")
 	for _, want := range []string{
 		"go test ./sdk/go -race -count=1",
 		"go list ./... | grep -v '/sdk/go$'",
-		"go test ${packages} -race -count=1 -coverprofile=coverage.out",
+		"${CI_SCRIPTS_DIR}/prepare-frontend-dist.sh",
+		"${CI_SCRIPTS_DIR}/api-shards.sh",
+		"coverage.out",
 		"go vet ./...",
 		"make build",
 		"gofmt -l",
+	} {
+		if !strings.Contains(testScript, want) {
+			t.Fatalf("scripts/ci/test.sh missing required gate %q", want)
+		}
+	}
+
+	frontendScript := read("../../scripts/ci/frontend.sh")
+	for _, want := range []string{"frontend_dist_artifact_dir", "source.sha", "git -C \"${CI_ROOT}\" rev-parse HEAD"} {
+		if !strings.Contains(frontendScript, want) {
+			t.Fatalf("scripts/ci/frontend.sh missing source-keyed artifact gate %q", want)
+		}
+	}
+	prepareFrontendScript := read("../../scripts/ci/prepare-frontend-dist.sh")
+	for _, want := range []string{"CI_FRONTEND_DIST_ARTIFACT_DIR", "git rev-parse HEAD", "source.sha", "frontend-install-build"} {
+		if !strings.Contains(prepareFrontendScript, want) {
+			t.Fatalf("prepare-frontend-dist.sh missing artifact gate %q", want)
+		}
+	}
+
+	apiShardScript := read("../../scripts/ci/api-shards.sh")
+	for _, want := range []string{
+		"CI_API_SHARDS",
+		"CI_API_SERIAL_ROOTS",
+		"${CI_API_SERIAL_ROOTS:-TestRollbackPreservesRuntimeIdentityAndProtocolConfigBytes}",
+		"go test \"${package}\" -race -count=1 -timeout \"${CI_API_SHARD_TIMEOUT}\"",
+		"-coverprofile=\"${shard_dir}/coverage-${i}.out\"",
+		"coverage-serial.out",
+		"serial.regex",
+		"verify-test-shards.py",
+		"merge-coverprofiles.py",
+	} {
+		if !strings.Contains(apiShardScript, want) {
+			t.Fatalf("scripts/ci/api-shards.sh missing required gate %q", want)
+		}
+	}
+
+	lintScript := read("../../scripts/ci/lint.sh")
+	for _, want := range []string{
 		"staticcheck",
 		"govulncheck ./...",
 		"shellcheck scripts/*.sh",
-		"bash -n scripts/install.sh scripts/uninstall.sh",
-		"bash scripts/install.sh --help >/dev/null",
+		"sh -n scripts/install.sh",
+		"bash -n scripts/install-privileged.sh scripts/uninstall.sh",
+		"bash scripts/install-privileged.sh --help >/dev/null",
 		"bash scripts/uninstall.sh --help >/dev/null",
-		"git diff --check",
 	} {
-		if !strings.Contains(workflow, want) {
-			t.Fatalf("ci.yml missing required gate %q:\n%s", want, workflow)
+		if !strings.Contains(lintScript, want) {
+			t.Fatalf("scripts/ci/lint.sh missing required gate %q", want)
 		}
+	}
+
+	fastScript := read("../../scripts/ci/fast.sh")
+	if !strings.Contains(fastScript, "git diff --check") {
+		t.Fatalf("scripts/ci/fast.sh missing required gate %q", "git diff --check")
 	}
 }
 
@@ -334,7 +407,7 @@ func TestReadmeDocumentsBackupRollbackAuditWorkflow(t *testing.T) {
 }
 
 func TestCurlInstallScriptSkipsWhenBinaryExists(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,7 +430,7 @@ func TestCurlInstallScriptSkipsWhenBinaryExists(t *testing.T) {
 }
 
 func TestCurlInstallScriptForceReinstalls(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +446,7 @@ func TestCurlInstallScriptForceReinstalls(t *testing.T) {
 }
 
 func TestCurlInstallScriptUpgradesExistingOlderBinary(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -395,7 +468,7 @@ func TestCurlInstallScriptUpgradesExistingOlderBinary(t *testing.T) {
 }
 
 func TestCurlInstallScriptChecksumRequiresExactlyOneMatch(t *testing.T) {
-	body, err := os.ReadFile("../../scripts/install.sh")
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {
 		t.Fatal(err)
 	}

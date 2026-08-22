@@ -48,3 +48,29 @@ func TestInboundValidationUpdateRequiresSafeName(t *testing.T) {
 		}
 	}
 }
+
+// TestInboundValidationRejectsPortsAbove65535 locks in audit #21/#98: only
+// ports in [1, 65535] are valid; larger values used to sail into the renderer
+// as "listen: :70000".
+func TestInboundValidationRejectsPortsAbove65535(t *testing.T) {
+	validator := NewInboundValidation()
+	for _, inbound := range []Inbound{
+		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 65536},
+		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 70000},
+		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: -1},
+		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 0},
+	} {
+		if err := validator.ValidateCreate(inbound); err != ErrInboundInvalid {
+			t.Fatalf("ValidateCreate(Port=%d) = %v, want ErrInboundInvalid", inbound.Port, err)
+		}
+		if err := validator.ValidateUpdate(inbound); err != ErrInboundInvalid {
+			t.Fatalf("ValidateUpdate(Port=%d) = %v, want ErrInboundInvalid", inbound.Port, err)
+		}
+	}
+	if err := validator.ValidateCreate(Inbound{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 65535}); err != nil {
+		t.Fatalf("ValidateCreate(Port=65535) = %v, want valid", err)
+	}
+	if err := validator.ValidateCreate(Inbound{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 1}); err != nil {
+		t.Fatalf("ValidateCreate(Port=1) = %v, want valid", err)
+	}
+}

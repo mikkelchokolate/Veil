@@ -9,8 +9,17 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/testutil/testdb"
 	"golang.org/x/crypto/pbkdf2"
 )
+
+func createArchiveTestDatabase(t *testing.T, dir string) {
+	t.Helper()
+	db := testdb.CloneTo(t, filepath.Join(dir, "veil.db"))
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestCreateAndRestoreBackupUnencrypted(t *testing.T) {
 	dir := t.TempDir()
@@ -28,6 +37,7 @@ func TestCreateAndRestoreBackupUnencrypted(t *testing.T) {
 		t.Fatalf("failed to write key: %v", err)
 	}
 
+	createArchiveTestDatabase(t, dir)
 	// Create backup
 	backupData, err := CreateBackup(statePath, keyPath, "")
 	if err != nil {
@@ -78,9 +88,10 @@ func TestCreateAndRestoreBackupEncrypted(t *testing.T) {
 	}
 
 	passphrase := "my-secure-passphrase"
+	createArchiveTestDatabase(t, dir)
 
-	// Create encrypted backup
-	backupData, err := CreateBackup(statePath, keyPath, passphrase)
+	crypto := fastTestCryptoOptions()
+	backupData, err := CreateBackupWithOptions(statePath, keyPath, passphrase, ArchiveOptions{Crypto: crypto})
 	if err != nil {
 		t.Fatalf("CreateBackup failed: %v", err)
 	}
@@ -89,19 +100,19 @@ func TestCreateAndRestoreBackupEncrypted(t *testing.T) {
 	newStatePath := filepath.Join(dir, "new_state.json")
 	newKeyPath := filepath.Join(dir, "new_state.key")
 
-	err = RestoreBackup(backupData, newStatePath, newKeyPath, "")
+	_, err = RestoreBackupWithOptions(backupData, newStatePath, newKeyPath, "", RestoreOptions{Crypto: crypto})
 	if err == nil {
 		t.Fatal("expected error when restoring encrypted backup with empty passphrase")
 	}
 
 	// Try to restore with wrong passphrase
-	err = RestoreBackup(backupData, newStatePath, newKeyPath, "wrong-passphrase")
+	_, err = RestoreBackupWithOptions(backupData, newStatePath, newKeyPath, "wrong-passphrase", RestoreOptions{Crypto: crypto})
 	if err == nil {
 		t.Fatal("expected error when restoring encrypted backup with wrong passphrase")
 	}
 
 	// Restore with correct passphrase
-	err = RestoreBackup(backupData, newStatePath, newKeyPath, passphrase)
+	_, err = RestoreBackupWithOptions(backupData, newStatePath, newKeyPath, passphrase, RestoreOptions{Crypto: crypto})
 	if err != nil {
 		t.Fatalf("RestoreBackup failed with correct passphrase: %v", err)
 	}
@@ -140,6 +151,7 @@ func TestRestoreUnencryptedBackupWithPassphraseErrors(t *testing.T) {
 		t.Fatalf("failed to write key: %v", err)
 	}
 
+	createArchiveTestDatabase(t, dir)
 	// Unencrypted backup
 	backupData, err := CreateBackup(statePath, keyPath, "")
 	if err != nil {

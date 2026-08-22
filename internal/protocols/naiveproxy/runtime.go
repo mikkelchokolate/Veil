@@ -53,9 +53,14 @@ func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.Ma
 // RuntimeInstall returns the Caddy-with-naive runtime descriptor.
 func (Plugin) RuntimeInstall(string) runtimeinstall.Runtime {
 	return runtimeinstall.Runtime{
-		Name:        "naiveproxy",
-		Binary:      "caddy",
-		Method:      runtimeinstall.MethodCaddyNaive,
-		Description: "caddy is built from source with the naive forwardproxy fork",
+		Name:           "naiveproxy",
+		Binary:         "caddy",
+		Method:         runtimeinstall.MethodCaddyNaive,
+		Version:        "v2.11.4",
+		Integrity:      "reproducible-go-build",
+		VersionArgs:    []string{"version"},
+		VersionCommand: "caddy version",
+		VersionPattern: `(?i)2\.11\.4`,
+		Description:    "caddy is built from source with the naive forwardproxy fork",
 	}
 }

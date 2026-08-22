@@ -4,19 +4,71 @@ on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
   schedule:
-    - cron: '28 3 * * 1'
+    - cron: '28 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
+  actions: read
   contents: read
+  packages: read
+  pull-requests: read
   security-events: write
 
 jobs:
   analyze:
-    runs-on: ubuntu-latest
+    name: analyze (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: go
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+          - language: actions
+            build-mode: none
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        if: matrix.language == 'go'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          languages: go
-      - uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+          go-version-file: go.mod
+          cache: true
+
+      - name: Prepare embedded web assets
+        if: matrix.language == 'go'
+        run: |
+          if [ ! -f web/dist/index.html ]; then
+            mkdir -p web/dist
+            printf '%s\n' '<!doctype html><title>CodeQL analysis stub</title>' > web/dist/index.html
+          fi
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config-file: ./.github/codeql/codeql-config.yml
+          dependency-caching: true
+
+      - name: Build Go database
+        if: matrix.language == 'go'
+        run: go build ./...
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        with:
+          # Preserve Go's base-branch category so PR alert diffing can close
+          # existing findings; new interpreted-language scans stay distinct.
+          category: "${{ matrix.language == 'go' && '.github/workflows/codeql.yml:analyze' || format('/language:{0}', matrix.language) }}"

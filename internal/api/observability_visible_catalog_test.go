@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -77,15 +76,31 @@ func TestServiceActionUsesActiveStateServiceScope(t *testing.T) {
 	client := &recordingPrivilegedClient{}
 	state := newObservabilityTestState(t, client)
 	state.inbounds = []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
+	state.mu.Lock()
+	snapshot, err := state.snapshotLocked()
+	state.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := state.applySnapshots.Save(0, payload); err != nil {
+		t.Fatal(err)
+	}
 
 	ok := httptest.NewRecorder()
 	state.handleServiceActionRoute(ok, httptest.NewRequest(http.MethodPost, "/api/services/hysteria2-edge/restart", strings.NewReader(`{"confirm":true}`)))
 	if ok.Code != http.StatusOK {
 		t.Fatalf("active restart status=%d body=%s", ok.Code, ok.Body.String())
 	}
-	want := []privileged.ServiceActionRequest{{Unit: "veil-hysteria2@edge.service", Action: privileged.ServiceAction("restart")}}
-	if !reflect.DeepEqual(client.serviceActions, want) {
+	if len(client.serviceActions) != 1 {
 		t.Fatalf("service actions=%+v", client.serviceActions)
+	}
+	action := client.serviceActions[0]
+	if action.Unit != "veil-hysteria2@edge.service" || action.Action != privileged.ServiceAction("restart") || action.Fence.Owner == "" || action.Fence.Generation == 0 {
+		t.Fatalf("service action lacks expected target/action/fence: %+v", action)
 	}
 
 	blocked := httptest.NewRecorder()
@@ -93,7 +108,7 @@ func TestServiceActionUsesActiveStateServiceScope(t *testing.T) {
 	if blocked.Code != http.StatusBadRequest {
 		t.Fatalf("broad fallback restart status=%d body=%s", blocked.Code, blocked.Body.String())
 	}
-	if !reflect.DeepEqual(client.serviceActions, want) {
+	if len(client.serviceActions) != 1 || client.serviceActions[0] != action {
 		t.Fatalf("broad fallback restart should not call privileged helper, got %+v", client.serviceActions)
 	}
 }

@@ -7,9 +7,10 @@ import (
 )
 
 var (
-	ErrRuleInvalid       = errors.New("routing rule invalid")
-	ErrRuleNotFound      = errors.New("routing rule not found")
-	ErrRuleDuplicateName = errors.New("routing rule name already exists")
+	ErrRuleInvalid         = errors.New("routing rule invalid")
+	ErrRuleNotFound        = errors.New("routing rule not found")
+	ErrRuleDuplicateName   = errors.New("routing rule name already exists")
+	ErrRoutingMatchInvalid = errors.New("routing match is invalid")
 )
 
 var (

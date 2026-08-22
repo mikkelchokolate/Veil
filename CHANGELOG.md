@@ -4,8 +4,29 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.7.0] - 2026-08-22
+
+Architecture rework of the Veil management plane: durable apply, normalized
+Clients, React Panel, backup/restore, protocol plugins, and isolated CI.
+
+### Changed
+
+- Protocol runtime pins now track current supported upstreams: Hysteria2
+  `app/v2.12.1`, Mieru/mita `v3.36.0`, WARP/sing-box `v1.13.19`, and olcRTC
+  `f616f57bb3a9`. NaiveProxy remains on Caddy `v2.11.4` with the klzgrad
+  forwardproxy fork (already latest). `veil runtime install` and CI install
+  the same checksum-verified artifacts.
+- Panel toolchain and libraries: Go `1.27.0`, Node.js `26.7.0`, pnpm
+  `11.22.0`, Playwright `1.62.1`, and current Go modules plus the Panel SPA
+  `web/` and `test/browser` dependency trees.
+- README is now operator-focused: Panel GIF, Quick Start, Inbounds, and the
+  complete CLI catalog. Development, Docker, and CI detail lives in `docs/`.
+
 ### Added
 
+- `veil help` prints the operator command catalog, including nested
+  subcommands (`veil help admin`, `veil backup schedule`, and the rest of the
+  tree). `veil help <command>` still shows flags for that command.
 - Hysteria2 Inbounds can now serve a real ACME certificate for a domain that
   is not the Panel or a NaiveProxy Inbound. A Hysteria2-only domain switches
   from `tls-alpn-01` to the HTTP-01 challenge and gets a dedicated ACME
@@ -31,6 +52,9 @@ All notable changes to Veil will be documented in this file.
   installed those runtime binaries, so every protocol (NaiveProxy, Hysteria2,
   Mieru, olcRTC, and WARP) failed to launch. `veil install` now provisions the
   runtimes automatically after the Panel is installed. (#20)
+- Room generation is now served under `POST /api/protocols/{protocol}/room`
+  (was `/api/{protocol}/room`) so OpenAPI paths resolve unambiguously; the
+  legacy server-rendered panel uses the same endpoint.
 
 ### Added
 

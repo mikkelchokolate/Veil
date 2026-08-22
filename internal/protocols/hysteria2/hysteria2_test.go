@@ -91,6 +91,7 @@ func TestRenderConfigWithInbound(t *testing.T) {
 		"url: https://example.com",
 		"cert: " + paths.PanelCertPath(),
 		"key: " + paths.PanelKeyPath(),
+		"speedTest: true",
 	} {
 		if !strings.Contains(artifacts[0].Body, want) {
 			t.Errorf("rendered config missing %q:\n%s", want, artifacts[0].Body)
@@ -663,13 +664,15 @@ func TestHasCredential(t *testing.T) {
 func TestInboundFieldSchema(t *testing.T) {
 	p := New()
 	fields := p.InboundFieldSchema()
-	if len(fields) != 3 {
-		t.Fatalf("expected 3 fields, got %d", len(fields))
+	if len(fields) != 5 {
+		t.Fatalf("expected 5 fields, got %d", len(fields))
 	}
 	keys := map[string]schema.FieldType{
-		"hysteria2Password": schema.FieldPassword,
-		"masqueradeURL":     schema.FieldText,
-		"hysteria2Insecure": schema.FieldCheckbox,
+		model.InboundDomainField: schema.FieldText,
+		model.InboundEmailField:  schema.FieldText,
+		"hysteria2Password":      schema.FieldPassword,
+		"masqueradeURL":          schema.FieldText,
+		"hysteria2Insecure":      schema.FieldCheckbox,
 	}
 	for _, f := range fields {
 		wantType, ok := keys[f.Key]
@@ -683,6 +686,9 @@ func TestInboundFieldSchema(t *testing.T) {
 		if f.Scope != "inbound" {
 			t.Errorf("field %q scope = %q, want inbound", f.Key, f.Scope)
 		}
+	}
+	if fields[0].Key != model.InboundDomainField || !fields[0].Required {
+		t.Errorf("field[0] = %+v, want required %q", fields[0], model.InboundDomainField)
 	}
 }
 

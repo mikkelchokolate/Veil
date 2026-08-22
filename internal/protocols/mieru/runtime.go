@@ -29,11 +29,16 @@ func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.Ma
 // RuntimeInstall returns the Mieru runtime descriptor.
 func (Plugin) RuntimeInstall(arch string) runtimeinstall.Runtime {
 	return runtimeinstall.Runtime{
-		Name:        "mieru",
-		Binary:      "mita",
-		Method:      runtimeinstall.MethodArchive,
-		Repo:        "enfein/mieru",
-		Description: "mita is downloaded from its upstream GitHub release",
+		Name:           "mieru",
+		Binary:         "mita",
+		Method:         runtimeinstall.MethodArchive,
+		Repo:           "enfein/mieru",
+		Version:        "v3.36.0",
+		Integrity:      "upstream-checksum",
+		VersionArgs:    []string{"version"},
+		VersionCommand: "mita version",
+		VersionPattern: `(?i)3\.36\.0`,
+		Description:    "mita is downloaded from its upstream GitHub release",
 		AssetMatch: func(name string) bool {
 			return startsWith(name, "mita_") && endsWith(name, "_linux_"+arch+".tar.gz")
 		},

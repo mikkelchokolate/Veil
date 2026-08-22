@@ -38,18 +38,18 @@ func TestSyncFirewallLocked(t *testing.T) {
 	state.settings.FirewallManagement = boolPtr(true)
 	state.inbounds = []Inbound{{Name: "h", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
 
-	old := firewallApplierInstance
-	firewallApplierInstance = &recordingFirewallApplier{}
-	t.Cleanup(func() { firewallApplierInstance = old })
+	old := currentFirewallApplier()
+	swapFirewallApplier(&recordingFirewallApplier{})
+	t.Cleanup(func() { swapFirewallApplier(old) })
 
 	ctx := NewManagementApplyContext(state)
-	results := ctx.syncFirewallLocked()
+	results := ctx.syncFirewall()
 	if len(results) != 1 || !results[0].Success {
 		t.Fatalf("expected firewall success, got %+v", results)
 	}
 
-	firewallApplierInstance = &recordingFirewallApplier{ensureErr: errors.New("ufw not found")}
-	results = ctx.syncFirewallLocked()
+	swapFirewallApplier(&recordingFirewallApplier{ensureErr: errors.New("ufw not found")})
+	results = ctx.syncFirewall()
 	if len(results) != 1 || results[0].Success {
 		t.Fatalf("expected firewall failure, got %+v", results)
 	}

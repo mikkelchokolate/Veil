@@ -50,6 +50,10 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 		BackupRoot:           state.backupDir,
 		VeilVersion:          state.version,
 	})
+	caddyLoader := caddyAdminLoader
+	production.CaddyLoad = func(_ context.Context, request privileged.CaddyLoadRequest) error {
+		return caddyLoader(request.Config)
+	}
 	production.ServiceAction = func(_ context.Context, request privileged.ServiceActionRequest) error {
 		action := string(request.Action)
 		if request.Action == privileged.ServiceActionReload {

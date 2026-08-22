@@ -8,7 +8,36 @@ import (
 	"net"
 	"path/filepath"
 	"testing"
+	"time"
 )
+
+func TestSocketClientUsesOperationSpecificTimeouts(t *testing.T) {
+	responseAfter := func(delay time.Duration, result string) string {
+		return socketTestServer(t, func(request *RequestEnvelope) ResponseEnvelope {
+			time.Sleep(delay)
+			return ResponseEnvelope{Version: ProtocolVersion, RequestID: request.RequestID, OK: true, Result: []byte(result)}
+		})
+	}
+
+	shortClient := NewSocketClient(responseAfter(30*time.Millisecond, `{"services":[]}`))
+	shortClient.timeout = 10 * time.Millisecond
+	if _, err := shortClient.ServiceStatus(context.Background(), ServiceStatusRequest{Units: []string{"veil.service"}}); err == nil {
+		t.Fatal("short status operation unexpectedly exceeded its client deadline")
+	}
+
+	longClient := NewSocketClient(responseAfter(30*time.Millisecond, `{}`))
+	longClient.timeout = 10 * time.Millisecond
+	if _, err := longClient.Backup(context.Background(), BackupRequest{Action: BackupActionRestore, ArchiveName: "backup.enc"}); err != nil {
+		t.Fatalf("restore inherited short helper deadline: %v", err)
+	}
+
+	boundedClient := NewSocketClient(responseAfter(30*time.Millisecond, `{}`))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	if _, err := boundedClient.Backup(ctx, BackupRequest{Action: BackupActionRestore, ArchiveName: "backup.enc"}); err == nil {
+		t.Fatal("restore ignored earlier request context deadline")
+	}
+}
 
 func TestSocketClientCallsAllOperations(t *testing.T) {
 	handler := func(request *RequestEnvelope) ResponseEnvelope {
@@ -35,6 +64,9 @@ func TestSocketClientCallsAllOperations(t *testing.T) {
 	}
 	if err := client.RotateKey(ctx, RotateKeyRequest{}); err != nil {
 		t.Fatalf("rotate key: %v", err)
+	}
+	if err := client.RecoverKeyRotation(ctx, RecoverKeyRotationRequest{}); err != nil {
+		t.Fatalf("recover key rotation: %v", err)
 	}
 	if _, err := client.FirewallApply(ctx, FirewallRequest{RuleIDs: []string{"allow-mieru-tcp"}}); err != nil {
 		t.Fatalf("firewall apply: %v", err)
@@ -156,6 +188,7 @@ func TestOperationForBackupActionMapsAllActions(t *testing.T) {
 		BackupActionRead:    OperationBackupRead,
 		BackupActionPrune:   OperationBackupPrune,
 		BackupActionRestore: OperationBackupRestore,
+		BackupActionDelete:  OperationBackupDelete,
 	}
 	for action, want := range cases {
 		got, err := operationForBackupAction(action)

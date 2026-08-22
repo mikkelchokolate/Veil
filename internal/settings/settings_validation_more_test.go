@@ -209,3 +209,120 @@ func TestSettingsValidationCaddyRequiresWebBasePathEvenFromCurrent(t *testing.T)
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// TestSettingsValidationDropsUnknownProtocolKeys guards against persisting the
+// redaction sentinel (or any value) under keys no settings-scoped schema
+// declares: unknown keys are never consumed by renderers and must not
+// accumulate in state.
+func TestSettingsValidationDropsUnknownProtocolKeys(t *testing.T) {
+	settings := Settings{
+		PanelListen: "127.0.0.1:2096",
+		Mode:        "server",
+		ProtocolFields: map[string]any{
+			"bogusKey":      RedactedSecret,
+			"naiveUsername": "veil",
+		},
+	}
+	err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{})
+	if err != nil {
+		t.Fatalf("NormalizeAndValidate: %v", err)
+	}
+	if _, ok := settings.ProtocolFields["bogusKey"]; ok {
+		t.Fatalf("unknown key was persisted: %+v", settings.ProtocolFields)
+	}
+	if settings.ProtocolFields["naiveUsername"] != "veil" {
+		t.Fatalf("known key was dropped: %+v", settings.ProtocolFields)
+	}
+}
+
+// TestSettingsValidationRejectsNonStringPasswordValue guards the FieldPassword
+// guard: a non-string value (e.g. an object) must be rejected outright instead
+// of being persisted and silently dropped by renderers.
+func TestSettingsValidationRejectsNonStringPasswordValue(t *testing.T) {
+	settings := Settings{
+		PanelListen: "127.0.0.1:2096",
+		Mode:        "server",
+		ProtocolFields: map[string]any{
+			"naivePassword": map[string]any{"x": 1},
+		},
+	}
+	err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{})
+	if err == nil || !strings.Contains(err.Error(), "naivePassword must be a string") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// TestSettingsValidationRejectsNullPasswordValue covers the explicit JSON null
+// case: a key present with a nil value must be rejected, not silently
+// persisted (it would drop the secret from rendered configs).
+func TestSettingsValidationRejectsNullPasswordValue(t *testing.T) {
+	settings := Settings{
+		PanelListen:    "127.0.0.1:2096",
+		Mode:           "server",
+		ProtocolFields: map[string]any{"naivePassword": nil},
+	}
+	err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{})
+	if err == nil || !strings.Contains(err.Error(), "naivePassword must be a string") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// TestSettingsValidationRejectsUnknownSelectValue guards FieldSelect fields:
+// a value outside the declared options must be rejected at save time instead
+// of being caught later at apply/live validation.
+func TestSettingsValidationRejectsUnknownSelectValue(t *testing.T) {
+	settings := Settings{
+		PanelListen: "127.0.0.1:2096",
+		Mode:        "server",
+		ProtocolFields: map[string]any{
+			"olcrtcAuth": "datachanne", // typo, not a real provider
+		},
+	}
+	err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{})
+	if err == nil || !strings.Contains(err.Error(), "olcrtcAuth must be one of") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// TestSettingsValidationAcceptsKnownSelectValue ensures valid select values
+// still pass through untouched.
+func TestSettingsValidationAcceptsKnownSelectValue(t *testing.T) {
+	settings := Settings{
+		PanelListen: "127.0.0.1:2096",
+		Mode:        "server",
+		ProtocolFields: map[string]any{
+			"olcrtcAuth":      "telemost",
+			"olcrtcTransport": "vp8channel",
+		},
+	}
+	err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{})
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// TestSettingsValidationAcceptsZeroFlatBoolViaProtocolFields covers the
+// flat-vs-protocolFields precedence fix: a zero flat bool (client that does
+// not send the flat copy, e.g. the legacy panel) must not override a
+// protocolFields value.
+func TestSettingsValidationAcceptsZeroFlatBoolViaProtocolFields(t *testing.T) {
+	settings := Settings{
+		PanelListen: "127.0.0.1:2096",
+		Mode:        "server",
+		// hysteria2Insecure flat is absent -> decodes to false, but the
+		// protocolFields copy carries the real value.
+		ProtocolFields: map[string]any{
+			"hysteria2Insecure": true,
+		},
+	}
+	err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{})
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if settings.Hysteria2Insecure != true {
+		t.Fatalf("flat false overrode protocolFields true: %+v", settings)
+	}
+	if settings.ProtocolFields["hysteria2Insecure"] != true {
+		t.Fatalf("protocolFields hysteria2Insecure = %v, want true", settings.ProtocolFields["hysteria2Insecure"])
+	}
+}

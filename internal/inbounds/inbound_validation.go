@@ -13,7 +13,7 @@ func IsSafeName(name string) bool {
 }
 
 func (InboundValidation) ValidateCreate(inbound Inbound) error {
-	if inbound.Name == "" || inbound.Protocol == "" || inbound.Transport == "" || inbound.Port <= 0 {
+	if inbound.Name == "" || inbound.Protocol == "" || inbound.Transport == "" || !validPort(inbound.Port) {
 		return ErrInboundInvalid
 	}
 	if !IsSafeName(inbound.Name) {
@@ -26,7 +26,7 @@ func (InboundValidation) ValidateCreate(inbound Inbound) error {
 }
 
 func (InboundValidation) ValidateUpdate(inbound Inbound) error {
-	if inbound.Name == "" || inbound.Protocol == "" || inbound.Transport == "" || inbound.Port <= 0 {
+	if inbound.Name == "" || inbound.Protocol == "" || inbound.Transport == "" || !validPort(inbound.Port) {
 		return ErrInboundInvalid
 	}
 	if !IsSafeName(inbound.Name) {
@@ -36,6 +36,13 @@ func (InboundValidation) ValidateUpdate(inbound Inbound) error {
 		return ErrInboundUnsupportedProtocolTransport
 	}
 	return nil
+}
+
+// validPort reports whether a TCP/UDP port is in the valid range [1, 65535].
+// The previous check only rejected ports <= 0, so values like 70000 sailed
+// through validation into the renderer as "listen: :70000" (audit #21/#98).
+func validPort(port int) bool {
+	return port >= 1 && port <= 65535
 }
 
 func validateInboundForCreate(inbound Inbound) error {

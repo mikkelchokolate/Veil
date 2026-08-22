@@ -4,10 +4,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/clientaddr"
 )
 
 func TestRateLimitIPFromXForwardedFor(t *testing.T) {
 	limiter := NewRateLimiter(60, 1)
+	resolver, _ := clientaddr.New([]string{"10.0.0.0/8"})
+	limiter.SetClientAddressResolver(resolver)
 	t.Cleanup(func() { limiter.Stop() })
 
 	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -47,6 +51,8 @@ func TestRateLimitIPFromXForwardedFor(t *testing.T) {
 
 func TestRateLimitIPFromXForwardedForChain(t *testing.T) {
 	limiter := NewRateLimiter(60, 1)
+	resolver, _ := clientaddr.New([]string{"10.0.0.0/8"})
+	limiter.SetClientAddressResolver(resolver)
 	t.Cleanup(func() { limiter.Stop() })
 
 	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

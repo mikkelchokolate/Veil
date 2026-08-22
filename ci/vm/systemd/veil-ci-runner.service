@@ -1,0 +1,12 @@
+[Unit]
+Description=Veil CI systemd lifecycle runner
+After=dbus.service systemd-journald.service
+ConditionPathExists=/exchange/systemd-run-request
+
+[Service]
+Type=simple
+ExecStart=/opt/ci/systemd/run-job.sh
+TimeoutStartSec=infinity
+
+[Install]
+WantedBy=multi-user.target

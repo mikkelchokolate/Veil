@@ -179,6 +179,20 @@ func TestLivePathForStagedConfigUsesPluginAndWarpArtifacts(t *testing.T) {
 			ok:     true,
 		},
 		{
+			staged: filepath.Join(root, "generated", "rules", "geoip.dat"),
+			live:   filepath.Join(root, "live", "rules", "geoip.dat"),
+			ok:     true,
+		},
+		{
+			staged: filepath.Join(root, "generated", "rules", "geosite.dat"),
+			live:   filepath.Join(root, "live", "rules", "geosite.dat"),
+			ok:     true,
+		},
+		{
+			staged: filepath.Join(root, "generated", "rules", "other.dat"),
+			ok:     false,
+		},
+		{
 			staged: filepath.Join(root, "generated", "hysteria2", "edge.txt"),
 			ok:     false,
 		},
@@ -204,6 +218,39 @@ func TestLivePathForStagedConfigUsesPluginAndWarpArtifacts(t *testing.T) {
 		if ok != tc.ok || got != tc.live {
 			t.Fatalf("livePathForStagedConfig(%q) = (%q, %v), want (%q, %v)", tc.staged, got, ok, tc.live, tc.ok)
 		}
+	}
+}
+
+func TestScanEnabledOrphanTemplateUnitsSkipsDesiredAndUnsafe(t *testing.T) {
+	wants := t.TempDir()
+	for _, name := range []string{
+		"veil-hysteria2@keep.service",
+		"veil-hysteria2@hy2-auto.service",
+		"veil-olcrtc@old.service",
+		"veil-hysteria2@bad.name.service",
+		"veil.service",
+		"unrelated.service",
+	} {
+		path := filepath.Join(wants, name)
+		if err := os.WriteFile(path, []byte(""), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	got := scanEnabledOrphanTemplateUnits(wants, map[string]struct{}{
+		"veil-hysteria2@keep.service": {},
+	})
+	want := []string{"veil-hysteria2@hy2-auto.service", "veil-olcrtc@old.service"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("orphans = %v, want %v", got, want)
+	}
+}
+
+func TestScanEnabledOrphanTemplateUnitsEmptyDirIsNoop(t *testing.T) {
+	if got := scanEnabledOrphanTemplateUnits("", map[string]struct{}{"veil-hysteria2@x.service": {}}); got != nil {
+		t.Fatalf("empty wants dir = %v", got)
+	}
+	if got := scanEnabledOrphanTemplateUnits(filepath.Join(t.TempDir(), "missing"), nil); got != nil {
+		t.Fatalf("missing wants dir = %v", got)
 	}
 }
 

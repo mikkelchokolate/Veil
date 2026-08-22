@@ -12,7 +12,7 @@ func TestViewerMayRunReadOnlyDiagnosticsButNotMutations(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 	handler := authMiddleware(state, "", next)
-	session := globalSessions.NewSession("viewer", "viewer")
+	session := mustCreateSession(t, globalSessions, "viewer", "viewer")
 	defer globalSessions.Delete(session.Token)
 
 	for _, path := range []string{
@@ -53,7 +53,7 @@ func TestViewerDiagnosticPostStillRequiresCSRF(t *testing.T) {
 	handler := authMiddleware(state, "", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
-	session := globalSessions.NewSession("viewer", "viewer")
+	session := mustCreateSession(t, globalSessions, "viewer", "viewer")
 	defer globalSessions.Delete(session.Token)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/tools/ping", nil)

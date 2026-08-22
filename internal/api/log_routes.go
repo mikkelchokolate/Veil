@@ -57,7 +57,8 @@ func (routes LogRoutes) handleLogs(w http.ResponseWriter, r *http.Request) {
 		writePrivilegedError(w, err)
 		return
 	}
-	writeJSON(w, service.LogResult{Unit: resolvedUnit, Output: strings.Join(journal.Lines, "\n")})
+	output := sanitizeServiceLogOutput(strings.Join(journal.Lines, "\n"))
+	writeJSON(w, service.LogResult{Unit: resolvedUnit, Output: output})
 }
 
 func (routes LogRoutes) resolveLogUnit(unit string) (string, bool) {

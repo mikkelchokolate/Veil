@@ -2,6 +2,7 @@ package audit
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"time"
@@ -42,17 +43,7 @@ func AppendAuditEvent(path string, event AuditEvent) error {
 		return err
 	}
 
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	if _, err := f.Write(append(data, '\n')); err != nil {
-		return err
-	}
-
-	return nil
+	return appendJSONLine(path, data)
 }
 
 type UserAuditEvent struct {
@@ -83,15 +74,19 @@ func LogUserAction(path string, event UserAuditEvent) error {
 		return err
 	}
 
+	return appendJSONLine(path, data)
+}
+
+func appendJSONLine(path string, data []byte) (resultErr error) {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-
+	defer func() {
+		resultErr = errors.Join(resultErr, f.Close())
+	}()
 	if _, err := f.Write(append(data, '\n')); err != nil {
 		return err
 	}
-
-	return nil
+	return f.Sync()
 }

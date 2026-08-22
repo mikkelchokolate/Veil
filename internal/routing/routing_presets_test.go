@@ -7,8 +7,9 @@ import (
 
 func TestRouteDatSource(t *testing.T) {
 	source := routeDatSource()
-	if source.Repository != routingRulesRepository {
-		t.Fatalf("repository = %q, want %q", source.Repository, routingRulesRepository)
+	wantRepository := routingRulesRepository + "/releases/tag/" + routingRulesRelease
+	if source.Repository != wantRepository {
+		t.Fatalf("repository = %q, want %q", source.Repository, wantRepository)
 	}
 	if len(source.Files) != 2 {
 		t.Fatalf("expected 2 files, got %d", len(source.Files))
@@ -22,6 +23,9 @@ func TestRouteDatSource(t *testing.T) {
 		}
 		if file.SHA256URL == "" {
 			t.Fatalf("file SHA256URL must not be empty: %+v", file)
+		}
+		if file.PinnedSHA256 == "" {
+			t.Fatalf("file pinned SHA-256 must not be empty: %+v", file)
 		}
 	}
 }

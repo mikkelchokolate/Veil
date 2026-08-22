@@ -60,6 +60,9 @@ contents:
   - src: packaging/systemd/veil-warp.service
     dst: /lib/systemd/system/veil-warp.service
     type: config
+  - src: packaging/sysctl/99-veil-quic.conf
+    dst: /etc/sysctl.d/99-veil-quic.conf
+    type: config
   - dst: /etc/veil
     type: dir
     file_info:

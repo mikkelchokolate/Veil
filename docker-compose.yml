@@ -1,8 +1,6 @@
 # Veil docker-compose example
 # docker compose up -d
 
-version: "3.8"
-
 services:
   veil:
     image: ghcr.io/mikkelchokolate/veil:dev

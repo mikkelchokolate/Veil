@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,15 +27,15 @@ var (
 	findBestGoFn  = findBestGo
 )
 
-const defaultGoVersion = "1.26.4"
+const defaultGoVersion = "1.27.0"
 
 var defaultGoSHA256 = map[string]string{
-	"linux-amd64": "1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733ad7f",
-	"linux-arm64": "ef758ae7c6cf9267c9c0ef080b8965f453d89ab2d25d9eb22de4405925238768",
+	"linux-amd64": "675c26c449cbb18fc24b74650de1eabbae6e16f64326fd85a283fb3b58280685",
+	"linux-arm64": "51798d2c42d0e1c6ed7fd9f48728b4193abac9e8aad6dbac2fe96a81f5909bda",
 }
 
-// goVersionRE extracts "1.26.4" from strings like "go version go1.26.4 linux/amd64"
-// or a plain "1.26.4" version argument.
+// goVersionRE extracts "1.27.0" from strings like "go version go1.27.0 linux/amd64"
+// or a plain "1.27.0" version argument.
 var goVersionRE = regexp.MustCompile(`(?:^|[^0-9.])(\d+)\.(\d+)(?:\.(\d+))?`)
 
 type goVersion struct {
@@ -243,15 +244,15 @@ func (gt *GoToolchain) downloadAndExtract(ctx context.Context, goDir string) err
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
 	hasher := sha256.New()
 	tee := io.TeeReader(resp.Body, hasher)
 	if _, err := io.Copy(f, tee); err != nil {
-		f.Close()
-		return fmt.Errorf("download Go: %w", err)
+		return errors.Join(fmt.Errorf("download Go: %w", err), f.Close())
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close Go download: %w", err)
+	}
 
 	if hex.EncodeToString(hasher.Sum(nil)) != wantHash {
 		return fmt.Errorf("go download checksum mismatch")
@@ -301,10 +302,11 @@ func (gt *GoToolchain) downloadAndExtract(ctx context.Context, goDir string) err
 				return err
 			}
 			if _, err := io.Copy(out, io.LimitReader(tr, hdr.Size)); err != nil {
-				out.Close()
+				return errors.Join(err, out.Close())
+			}
+			if err := out.Close(); err != nil {
 				return err
 			}
-			out.Close()
 		}
 	}
 	return nil

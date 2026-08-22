@@ -29,3 +29,23 @@ updates:
       github-actions-updates:
         patterns:
           - "*"
+
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    groups:
+      web-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: npm
+    directory: /test/browser
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    groups:
+      browser-test-dependencies:
+        patterns:
+          - "*"

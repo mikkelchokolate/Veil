@@ -17,6 +17,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/storage"
 )
 
 func TestCreateBackupWithOptionsErrors(t *testing.T) {
@@ -286,6 +287,60 @@ func TestRestoreBackupWithOptionsStagingErrors(t *testing.T) {
 
 		if _, err := RestoreBackupWithOptions(data, targetState, targetKey, "", RestoreOptions{}); err == nil {
 			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("database commit fails rolls back all three originals", func(t *testing.T) {
+		sourceState, sourceKey := writeValidBackupSource(t)
+		v2Data, err := CreateBackupWithOptions(sourceState, sourceKey, "", ArchiveOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		targetDir := t.TempDir()
+		targetState := filepath.Join(targetDir, "state.json")
+		targetKey := filepath.Join(targetDir, "state.key")
+		targetDB := filepath.Join(targetDir, "veil.db")
+		originals := map[string][]byte{targetState: []byte("old-state"), targetKey: []byte("old-key")}
+		for path, body := range originals {
+			if err := os.WriteFile(path, body, 0o640); err != nil {
+				t.Fatal(err)
+			}
+		}
+		oldDB, err := storage.Open(targetDB)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := oldDB.Exec(`INSERT INTO migration_markers(key, version, applied_at, details) VALUES ('old-marker', 1, 0, '{}')`); err != nil {
+			t.Fatal(err)
+		}
+		if err := oldDB.Close(); err != nil {
+			t.Fatal(err)
+		}
+		originalRename := restoreRename
+		defer func() { restoreRename = originalRename }()
+		restoreRename = func(oldpath, newpath string) error {
+			if newpath == targetDB && strings.Contains(filepath.Base(oldpath), ".veil-restore-") {
+				return errors.New("injected database commit failure")
+			}
+			return originalRename(oldpath, newpath)
+		}
+		if _, err := RestoreBackupWithOptions(v2Data, targetState, targetKey, "", RestoreOptions{DatabasePath: targetDB}); err == nil {
+			t.Fatal("expected error")
+		}
+		for path, want := range originals {
+			got, err := os.ReadFile(path)
+			if err != nil || !bytes.Equal(got, want) {
+				t.Fatalf("rollback %s = %q err=%v, want %q", path, got, err, want)
+			}
+		}
+		reopened, err := storage.Open(targetDB)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer reopened.Close()
+		var count int
+		if err := reopened.QueryRow(`SELECT COUNT(*) FROM migration_markers WHERE key = 'old-marker'`).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("database rollback marker count=%d err=%v", count, err)
 		}
 	})
 }

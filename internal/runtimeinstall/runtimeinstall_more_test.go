@@ -181,10 +181,12 @@ func TestInstallUnsupportedMethod(t *testing.T) {
 func hysteriaRuntime(t *testing.T) Runtime {
 	t.Helper()
 	return Runtime{
-		Name:   "hysteria2",
-		Binary: "hysteria",
-		Method: MethodRawBinary,
-		Repo:   "apernet/hysteria",
+		Name:    "hysteria2",
+		Binary:  "hysteria",
+		Method:  MethodRawBinary,
+		Repo:    "apernet/hysteria",
+		Version: "v1", Integrity: "upstream-checksum",
+		VersionArgs: []string{"version"}, VersionCommand: "hysteria version", VersionPattern: `v1`,
 		AssetMatch: func(name string) bool {
 			return name == "hysteria-linux-amd64"
 		},
@@ -197,10 +199,12 @@ func hysteriaRuntime(t *testing.T) Runtime {
 func mieruRuntime(t *testing.T) Runtime {
 	t.Helper()
 	return Runtime{
-		Name:   "mieru",
-		Binary: "mita",
-		Method: MethodArchive,
-		Repo:   "enfein/mieru",
+		Name:    "mieru",
+		Binary:  "mita",
+		Method:  MethodArchive,
+		Repo:    "enfein/mieru",
+		Version: "v1", Integrity: "upstream-checksum",
+		VersionArgs: []string{"version"}, VersionCommand: "mita version", VersionPattern: `v1`,
 		AssetMatch: func(name string) bool {
 			return strings.HasPrefix(name, "mita_") && strings.HasSuffix(name, "_linux_amd64.tar.gz")
 		},
@@ -213,9 +217,11 @@ func mieruRuntime(t *testing.T) Runtime {
 func caddyRuntime(t *testing.T) Runtime {
 	t.Helper()
 	return Runtime{
-		Name:   "naiveproxy",
-		Binary: "caddy",
-		Method: MethodCaddyNaive,
+		Name:    "naiveproxy",
+		Binary:  "caddy",
+		Method:  MethodCaddyNaive,
+		Version: "v2.11.4", Integrity: "reproducible-go-build",
+		VersionArgs: []string{"version"}, VersionCommand: "caddy version", VersionPattern: `2\.11\.4`,
 	}
 }
 
@@ -225,7 +231,9 @@ func olcrtcRuntime(t *testing.T) Runtime {
 		Name:          "olcrtc",
 		Binary:        "olcrtc",
 		Method:        MethodGoInstall,
-		SourcePackage: "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@latest",
+		SourcePackage: "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@v0.0.0",
+		Version:       "v0.0.0", Integrity: "go-module-sum",
+		VersionArgs: []string{"--version"}, VersionCommand: "olcrtc --version", VersionPattern: `0\.0\.0`,
 	}
 }
 
@@ -361,7 +369,7 @@ func TestInstallFromReleaseChecksumDownloadError(t *testing.T) {
 	}
 }
 
-func TestInstallFromReleaseSkipsMissingChecksumAsset(t *testing.T) {
+func TestInstallFromReleaseRejectsMissingChecksumAsset(t *testing.T) {
 	dir := t.TempDir()
 	opts := Options{
 		BinDir: dir,
@@ -376,13 +384,18 @@ func TestInstallFromReleaseSkipsMissingChecksumAsset(t *testing.T) {
 		},
 	}
 	result := Install(context.Background(), opts, hysteriaRuntime(t))
-	if result.Err != nil {
-		t.Fatalf("Install: %v", result.Err)
+	if result.Err == nil || !strings.Contains(result.Err.Error(), "missing the mandatory checksum") {
+		t.Fatalf("expected mandatory checksum rejection, got %v", result.Err)
 	}
 }
 
 func TestInstallFromReleaseExtractError(t *testing.T) {
 	dir := t.TempDir()
+	invalidArchive := []byte("not-a-tar-gz")
+	runtime := mieruRuntime(t)
+	runtime.Integrity = "pinned-sha256"
+	runtime.PinnedSHA256 = sha256Hex(invalidArchive)
+	runtime.ChecksumMatch = nil
 	opts := Options{
 		BinDir: dir,
 		Arch:   "amd64",
@@ -392,10 +405,10 @@ func TestInstallFromReleaseExtractError(t *testing.T) {
 			}}, nil
 		},
 		Download: func(ctx context.Context, url string) ([]byte, error) {
-			return []byte("not-a-tar-gz"), nil
+			return invalidArchive, nil
 		},
 	}
-	result := Install(context.Background(), opts, mieruRuntime(t))
+	result := Install(context.Background(), opts, runtime)
 	if result.Err == nil {
 		t.Fatal("expected extract error")
 	}
@@ -866,7 +879,7 @@ exit 0
 func TestCatalogArm64(t *testing.T) {
 	runtimes := Catalog("arm64")
 	for _, r := range runtimes {
-		if r.Name == "warp" && !r.AssetMatch("sing-box-1.13.13-linux-arm64.tar.gz") {
+		if r.Name == "warp" && !r.AssetMatch("sing-box-1.13.19-linux-arm64.tar.gz") {
 			t.Error("warp arm64 matcher failed")
 		}
 	}

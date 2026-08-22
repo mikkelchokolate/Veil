@@ -21,6 +21,10 @@ func (s *managementState) handleEffectiveAuthStatus(w http.ResponseWriter, r *ht
 		})
 		return
 	}
+	if err := s.sessionRegistry().Healthy(); err != nil {
+		writeError(w, "session storage unavailable", http.StatusInternalServerError)
+		return
+	}
 	if cookie, err := r.Cookie("veil_session"); err == nil {
 		if _, ok := s.sessionRegistry().Get(cookie.Value); ok {
 			s.handlePersistentAuthStatus(w, r)

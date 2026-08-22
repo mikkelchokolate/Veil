@@ -15,14 +15,25 @@ import (
 	"os/user"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/releaseverify"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/testutil/testdb"
 )
+
+func createBackupTestDatabase(t *testing.T, root string) {
+	t.Helper()
+	db := testdb.CloneTo(t, filepath.Join(root, "veil.db"))
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestProductionExecutorPromotesResolvedArtifactsWithSafetyCopy(t *testing.T) {
 	root := t.TempDir()
@@ -262,18 +273,30 @@ func TestProductionExecutorRestoresPromotionByOpaqueBackupID(t *testing.T) {
 
 func TestProductionExecutorUsesOnlyFixedCommandMappings(t *testing.T) {
 	var commands [][]string
+	var showCalls int
+	ufw := &transactionalUFWModel{enabled: true, rules: map[string]string{"2096/tcp": "Veil panel"}}
 	run := func(_ context.Context, command []string, _ time.Duration) (string, error) {
 		commands = append(commands, append([]string(nil), command...))
+		if len(command) > 0 && command[0] == "env" {
+			return ufw.runner(context.Background(), command, 0)
+		}
 		if len(command) > 1 && command[0] == "systemctl" && command[1] == "show" {
-			return "LoadState=loaded\nActiveState=active\nSubState=running\n", nil
+			showCalls++
+			return fmt.Sprintf("LoadState=loaded\nActiveState=active\nSubState=running\nMainPID=%d\nExecMainStartTimestampMonotonic=%d\n", os.Getpid(), showCalls), nil
 		}
 		if len(command) > 0 && command[0] == "journalctl" {
 			return "line one\nline two\n", nil
 		}
 		return "", nil
 	}
+	executablePath, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
 	executor := NewProductionExecutor(ProductionConfig{
-		RunCommand: run,
+		RunCommand:          run,
+		BinaryPath:          executablePath,
+		PromotionBackupRoot: t.TempDir(),
 		FirewallCommands: map[string][]string{
 			"allow-panel": {"ufw", "allow", "2096/tcp", "comment", "Veil panel"},
 		},
@@ -294,49 +317,53 @@ func TestProductionExecutorUsesOnlyFixedCommandMappings(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(firewall.AppliedRuleIDs, []string{"allow-panel"}) {
 		t.Fatalf("firewall: %+v err=%v", firewall, err)
 	}
-	if err := executor.RestartPanel(context.Background()); err != nil {
+	restartCtx := ContextWithRestartPanelRequest(context.Background(), RestartPanelRequest{Fence: FenceToken{Owner: "test", Generation: 1, OperationID: "restart-op", LeaseExpiresAt: time.Now().Add(time.Minute).Unix()}})
+	if err := executor.RestartPanel(restartCtx); err != nil {
 		t.Fatalf("restart Panel: %v", err)
 	}
 
-	want := [][]string{
+	wantNonFirewall := [][]string{
 		{"systemctl", "restart", "veil.service"},
-		{"systemctl", "show", "veil.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--no-page"},
+		{"systemctl", "show", "veil.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--property=MainPID", "--property=ExecMainStartTimestampMonotonic", "--no-page"},
 		{"journalctl", "-u", "veil.service", "--no-pager", "-n", "25", "-o", "short-iso"},
-		{"ufw", "allow", "2096/tcp", "comment", "Veil panel"},
-		{"ufw", "reload"},
+		{"systemctl", "show", "veil.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--property=MainPID", "--property=ExecMainStartTimestampMonotonic", "--no-page"},
 		{"systemctl", "restart", "veil.service"},
+		{"systemctl", "show", "veil.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--property=MainPID", "--property=ExecMainStartTimestampMonotonic", "--no-page"},
 	}
-	if !reflect.DeepEqual(commands, want) {
-		t.Fatalf("commands:\nwant=%v\ngot=%v", want, commands)
+	var nonFirewall [][]string
+	for _, command := range commands {
+		if len(command) == 0 || command[0] != "env" {
+			nonFirewall = append(nonFirewall, command)
+		}
+	}
+	if !reflect.DeepEqual(nonFirewall, wantNonFirewall) {
+		t.Fatalf("non-firewall commands:\nwant=%v\ngot=%v", wantNonFirewall, nonFirewall)
 	}
 }
 
 func TestProductionExecutorFirewallReloadsAfterApplyingRules(t *testing.T) {
-	var commands [][]string
+	model := &transactionalUFWModel{enabled: true, rules: map[string]string{"2096/tcp": "Veil Panel"}}
 	run := func(_ context.Context, command []string, _ time.Duration) (string, error) {
-		commands = append(commands, append([]string(nil), command...))
-		if len(command) >= 2 && command[0] == "ufw" && command[1] == "status" {
-			return "Status: active", nil
-		}
-		return "Rules updated", nil
+		return model.runner(context.Background(), command, 0)
 	}
-	executor := NewProductionExecutor(ProductionConfig{RunCommand: run})
+	executor := NewProductionExecutor(ProductionConfig{RunCommand: run, PromotionBackupRoot: t.TempDir()})
 
-	firewall, err := executor.Firewall(context.Background(), ResolvedFirewall{Rules: []FirewallRule{{Command: "ufw", Args: []string{"allow", "23456/udp", "comment", "Veil Hysteria2"}}}})
+	firewall, err := executor.Firewall(context.Background(), ResolvedFirewall{Rules: []FirewallRule{
+		{Command: "ufw", Args: []string{"allow", "2096/tcp", "comment", "Veil Panel"}},
+		{Command: "ufw", Args: []string{"allow", "23456/udp", "comment", "Veil Hysteria2"}},
+	}})
 	if err != nil {
 		t.Fatalf("firewall: %v", err)
 	}
-	if !reflect.DeepEqual(firewall.AppliedRuleIDs, []string{"23456/udp"}) {
+	if !reflect.DeepEqual(firewall.AppliedRuleIDs, []string{"dynamic:2096/tcp", "dynamic:23456/udp"}) {
 		t.Fatalf("unexpected applied ids: %+v", firewall)
 	}
-
-	want := [][]string{
-		{"ufw", "status"},
-		{"ufw", "allow", "23456/udp", "comment", "Veil Hysteria2"},
-		{"ufw", "reload"},
+	foundReload := false
+	for _, mutation := range model.mutations {
+		foundReload = foundReload || mutation == "reload"
 	}
-	if !reflect.DeepEqual(commands, want) {
-		t.Fatalf("commands:\nwant=%v\ngot=%v", want, commands)
+	if !foundReload {
+		t.Fatalf("active UFW was not reloaded: %v", model.mutations)
 	}
 }
 
@@ -504,13 +531,18 @@ func TestProductionExecutorVerifiesAndInstallsStagedUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	executor := NewProductionExecutor(ProductionConfig{BinaryPath: currentPath})
-	result, err := executor.Update(context.Background(), ResolvedUpdate{
+	request := ResolvedUpdate{
 		ArtifactID:    "veil-update",
 		Version:       "v0.6.0",
 		Path:          archivePath,
 		ChecksumsPath: checksumsPath,
+	}
+	writePrivilegedTestUpdateEvidence(t, filepath.Dir(archivePath), &request)
+	executor := NewProductionExecutor(ProductionConfig{
+		BinaryPath:      currentPath,
+		ReleaseVerifier: func(releaseverify.Evidence) error { return nil },
 	})
+	result, err := executor.Update(context.Background(), request)
 	if err != nil {
 		t.Fatalf("install staged update: %v", err)
 	}
@@ -541,13 +573,18 @@ func TestProductionExecutorRejectsStagedUpdateChecksumMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	executor := NewProductionExecutor(ProductionConfig{BinaryPath: currentPath})
-	if _, err := executor.Update(context.Background(), ResolvedUpdate{
+	request := ResolvedUpdate{
 		ArtifactID:    "veil-update",
 		Version:       "v0.6.0",
 		Path:          archivePath,
 		ChecksumsPath: checksumsPath,
-	}); err == nil {
+	}
+	writePrivilegedTestUpdateEvidence(t, filepath.Dir(archivePath), &request)
+	executor := NewProductionExecutor(ProductionConfig{
+		BinaryPath:      currentPath,
+		ReleaseVerifier: func(releaseverify.Evidence) error { return nil },
+	})
+	if _, err := executor.Update(context.Background(), request); err == nil {
 		t.Fatal("expected checksum mismatch")
 	}
 	body, err := os.ReadFile(currentPath)
@@ -556,6 +593,21 @@ func TestProductionExecutorRejectsStagedUpdateChecksumMismatch(t *testing.T) {
 	}
 	if string(body) != "old-binary" {
 		t.Fatalf("binary changed after rejected update: %q", body)
+	}
+}
+
+func writePrivilegedTestUpdateEvidence(t *testing.T, directory string, request *ResolvedUpdate) {
+	t.Helper()
+	for name, target := range map[string]*string{
+		"checksums.txt.bundle":        &request.ChecksumsBundlePath,
+		"veil.provenance.json":        &request.ProvenancePath,
+		"veil.provenance.json.bundle": &request.ProvenanceBundlePath,
+	} {
+		path := filepath.Join(directory, name)
+		if err := os.WriteFile(path, []byte("signed-test-evidence"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		*target = path
 	}
 }
 
@@ -737,44 +789,32 @@ func TestIsUFWDuplicateRule(t *testing.T) {
 }
 
 func TestRunFirewallRules(t *testing.T) {
-	t.Run("active ufw applies rule", func(t *testing.T) {
-		run := func(_ context.Context, command []string, _ time.Duration) (string, error) {
-			if len(command) >= 2 && command[0] == "ufw" && command[1] == "status" {
-				return "Status: active", nil
-			}
-			return "Rules updated", nil
-		}
-		result, err := runFirewallRules(context.Background(), run, ResolvedFirewall{Rules: []FirewallRule{{Command: "ufw", Args: []string{"allow", "443/tcp"}}}})
+	t.Run("active ufw atomically reconciles complete managed set", func(t *testing.T) {
+		model := &transactionalUFWModel{enabled: true, rules: map[string]string{"22/tcp": "OpenSSH"}}
+		result, err := runFirewallRules(context.Background(), model.runner, transactionalFirewallRequest())
 		if err != nil {
 			t.Fatalf("firewall rules: %v", err)
 		}
-		if !reflect.DeepEqual(result.AppliedRuleIDs, []string{"443/tcp"}) {
+		if !reflect.DeepEqual(result.AppliedRuleIDs, []string{"management-ssh", "panel-https"}) {
 			t.Fatalf("unexpected applied ids: %+v", result)
 		}
 	})
-	t.Run("inactive ufw enables and tolerates duplicate", func(t *testing.T) {
-		run := func(_ context.Context, command []string, _ time.Duration) (string, error) {
-			if len(command) >= 2 && command[0] == "ufw" && command[1] == "status" {
-				return "Status: inactive", nil
-			}
-			if len(command) >= 2 && command[0] == "ufw" && command[1] == "allow" {
-				return "Skipping adding existing rule", fmt.Errorf("exit status 1")
-			}
-			return "", nil
-		}
-		result, err := runFirewallRules(context.Background(), run, ResolvedFirewall{Rules: []FirewallRule{{Command: "ufw", Args: []string{"allow", "22/tcp"}}}})
+	t.Run("inactive ufw stages management access before enable", func(t *testing.T) {
+		model := &transactionalUFWModel{rules: map[string]string{}}
+		result, err := runFirewallRules(context.Background(), model.runner, transactionalFirewallRequest())
 		if err != nil {
 			t.Fatalf("firewall rules: %v", err)
 		}
-		if !reflect.DeepEqual(result.AppliedRuleIDs, []string{"22/tcp"}) {
-			t.Fatalf("unexpected applied ids: %+v", result)
+		if !reflect.DeepEqual(result.AppliedRuleIDs, []string{"management-ssh", "panel-https"}) || !model.enabled {
+			t.Fatalf("unexpected result/state: %+v enabled=%v", result, model.enabled)
+		}
+		if len(model.mutations) == 0 || model.mutations[0] == "enable" {
+			t.Fatalf("management access was not staged before enable: %v", model.mutations)
 		}
 	})
 	t.Run("status failure", func(t *testing.T) {
-		run := func(_ context.Context, command []string, _ time.Duration) (string, error) {
-			return "", errors.New("boom")
-		}
-		_, err := runFirewallRules(context.Background(), run, ResolvedFirewall{Rules: []FirewallRule{{Command: "ufw", Args: []string{"allow", "80/tcp"}}}})
+		model := &transactionalUFWModel{rules: map[string]string{}, failAt: 1}
+		_, err := runFirewallRules(context.Background(), model.runner, transactionalFirewallRequest())
 		if err == nil {
 			t.Fatal("expected status failure")
 		}
@@ -815,12 +855,14 @@ func TestRunProductionBackupAllActions(t *testing.T) {
 	if err := os.WriteFile(passphrasePath, []byte("a-very-long-passphrase-32"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	createBackupTestDatabase(t, root)
 
 	config := ProductionConfig{
 		StatePath:            statePath,
 		KeyPath:              keyPath,
 		BackupPassphrasePath: passphrasePath,
 		BackupRoot:           backupRoot,
+		BackupMaxBytes:       8 * 1024 * 1024,
 		VeilVersion:          "v0.0.1",
 		Now:                  func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) },
 	}
@@ -879,6 +921,111 @@ func TestRunProductionBackupAllActions(t *testing.T) {
 	}
 	if len(pruned.Kept) != 1 || len(pruned.Pruned) != 0 {
 		t.Fatalf("unexpected prune result: kept=%v pruned=%v", pruned.Kept, pruned.Pruned)
+	}
+}
+
+func TestRunProductionBackupConcurrentCreatesDoNotReplace(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state.json")
+	keyPath := filepath.Join(root, "state.key")
+	passphrasePath := filepath.Join(root, "backup.passphrase")
+	backupRoot := filepath.Join(root, "backups")
+	if err := os.MkdirAll(backupRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var key [32]byte
+	if _, err := rand.Read(key[:]); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, key[:], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := secrets.NewCipher(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := managementstate.NewStore(statePath, cipher).Save(model.ManagementSnapshot{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(passphrasePath, []byte("a-very-long-passphrase-32"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	createBackupTestDatabase(t, root)
+	fixedNow := time.Date(2026, 6, 5, 12, 0, 0, 123456789, time.UTC)
+	config := ProductionConfig{
+		StatePath: statePath, KeyPath: keyPath, BackupPassphrasePath: passphrasePath,
+		BackupRoot: backupRoot, BackupMaxBytes: 8 * 1024 * 1024, VeilVersion: "v0.0.1", Now: func() time.Time { return fixedNow },
+	}
+	request := ResolvedBackup{
+		Action: BackupActionCreate, BackupRoot: backupRoot, StateRoot: root,
+		StatePath: statePath, KeyPath: keyPath, BackupPassphrasePath: passphrasePath,
+	}
+
+	start := make(chan struct{})
+	results := make([]BackupResult, 2)
+	errs := make([]error, 2)
+	var wg sync.WaitGroup
+	for i := range results {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			<-start
+			results[index], errs[index] = runProductionBackup(context.Background(), config, request)
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent create %d: %v", i, err)
+		}
+	}
+	if results[0].ArchiveName == results[1].ArchiveName {
+		t.Fatalf("concurrent creates returned the same archive name %q", results[0].ArchiveName)
+	}
+	entries, err := os.ReadDir(backupRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("backup directory contains %d archives, want 2", len(entries))
+	}
+	listed, err := runProductionBackup(context.Background(), config, ResolvedBackup{Action: BackupActionList, BackupRoot: backupRoot})
+	if err != nil {
+		t.Fatalf("list concurrent archives: %v", err)
+	}
+	if len(listed.Archives) != 2 {
+		t.Fatalf("retention/list parser sees %d archives, want 2", len(listed.Archives))
+	}
+	for _, result := range results {
+		if _, err := runProductionBackup(context.Background(), config, ResolvedBackup{
+			Action: BackupActionVerify, ArchiveName: result.ArchiveName,
+			ArchivePath:          filepath.Join(backupRoot, result.ArchiveName),
+			BackupPassphrasePath: passphrasePath,
+		}); err != nil {
+			t.Fatalf("verify surviving archive %q: %v", result.ArchiveName, err)
+		}
+	}
+
+	explicit := request
+	explicit.ArchiveName = "veil_backup_20260605_120000.tar.gz.enc"
+	if _, err := runProductionBackup(context.Background(), config, explicit); err != nil {
+		t.Fatalf("create explicit-name archive: %v", err)
+	}
+	explicitPath := filepath.Join(backupRoot, explicit.ArchiveName)
+	beforeReplaceAttempt, err := os.ReadFile(explicitPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runProductionBackup(context.Background(), config, explicit); err == nil {
+		t.Fatal("second create with the same explicit archive name replaced the first")
+	}
+	afterReplaceAttempt, err := os.ReadFile(explicitPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(beforeReplaceAttempt, afterReplaceAttempt) {
+		t.Fatal("existing archive changed after no-replace publication failure")
 	}
 }
 
@@ -1024,12 +1171,14 @@ func TestRunProductionBackupCreateUsesDefaultArchiveName(t *testing.T) {
 	if err := os.WriteFile(passphrasePath, []byte("a-very-long-passphrase-32"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	createBackupTestDatabase(t, root)
 
 	config := ProductionConfig{
 		StatePath:            statePath,
 		KeyPath:              keyPath,
 		BackupPassphrasePath: passphrasePath,
 		BackupRoot:           backupRoot,
+		BackupMaxBytes:       8 * 1024 * 1024,
 		VeilVersion:          "v0.0.1",
 		Now:                  func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) },
 	}

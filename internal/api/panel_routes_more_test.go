@@ -9,6 +9,14 @@ import (
 	"testing"
 )
 
+func TestPanelRegisterRetainsSPAHandler(t *testing.T) {
+	routes := PanelRoutes{Info: ServerInfo{Version: "test"}, BasePath: "/"}
+	routes.Register(http.NewServeMux())
+	if routes.spa == nil {
+		t.Fatal("expected Register to retain the SPA handler")
+	}
+}
+
 func TestPanelFavicon(t *testing.T) {
 	routes := PanelRoutes{Info: ServerInfo{Version: "test"}}
 
@@ -37,6 +45,26 @@ func TestPanelFavicon(t *testing.T) {
 	routes.handleFavicon(rec, post)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST status=%d", rec.Code)
+	}
+
+	svg := httptest.NewRequest(http.MethodGet, "/favicon.svg", nil)
+	rec = httptest.NewRecorder()
+	routes.handleFavicon(rec, svg)
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "image/svg+xml" {
+		t.Fatalf("GET /favicon.svg status=%d ct=%q", rec.Code, rec.Header().Get("Content-Type"))
+	}
+}
+
+func TestPanelRobotsTxt(t *testing.T) {
+	routes := PanelRoutes{Info: ServerInfo{Version: "test"}}
+	get := httptest.NewRequest(http.MethodGet, "/robots.txt", nil)
+	rec := httptest.NewRecorder()
+	routes.handleRobots(rec, get)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Allow: /") {
+		t.Fatalf("body=%q", rec.Body.String())
 	}
 }
 

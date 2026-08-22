@@ -130,6 +130,7 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 	switch owner.Kind {
 	case caddyassembly.CaddyOwnerPanel:
 		server["routes"] = panelRoutes(owner.Domain, owner.BackendPort, owner.WebBasePath, true)
+		server["errors"] = panelErrorRoutes()
 	case caddyassembly.CaddyOwnerNaive:
 		authCreds := make([]string, 0, len(owner.NaiveUsers))
 		for _, user := range owner.NaiveUsers {
@@ -147,6 +148,7 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 		handlers := []map[string]any{
 			{
 				"handler":          "forward_proxy",
+				"hosts":            []string{strings.TrimSpace(owner.Domain)},
 				"auth_credentials": authCreds,
 				"hide_ip":          true,
 				"hide_via":         true,
@@ -163,7 +165,25 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 			// forward_proxy. The panel-only catch-all 404 would intercept CONNECT.
 			routes = append(routes, panelRoutes(owner.PanelDomain, owner.BackendPort, owner.WebBasePath, false)...)
 		}
-		routes = append(routes, map[string]any{"handle": handlers})
+		proxyRoute := map[string]any{"handle": handlers}
+		// HTTP CONNECT sets Host to the destination (example.com), not the
+		// inbound domain. Shared Panel/Naive already keeps forward_proxy
+		// unmatched for that reason. Naive-only binds still need a host
+		// matcher so Caddy auto-HTTPS discovers the inbound domain
+		// (audit #122), but that matcher must sit on a file_server route —
+		// putting it on forward_proxy drops every real client CONNECT.
+		domain := strings.TrimSpace(owner.Domain)
+		if domain != "" && owner.PanelDomain == "" {
+			routes = append(routes, map[string]any{
+				"match": []map[string]any{{"host": []string{domain}}},
+				"handle": []map[string]any{{
+					"handler": "file_server",
+					"root":    fallbackRoot,
+				}},
+			}, proxyRoute)
+		} else {
+			routes = append(routes, proxyRoute)
+		}
 		server["routes"] = routes
 	}
 	return server, nil
@@ -179,8 +199,10 @@ func protocolsForTransport(transport string) ([]string, error) {
 }
 
 // resolveNaiveFallbackRoot validates and normalizes the naive fallback root.
-// It must be either exactly /var/lib/veil or a subdirectory of it.
-// Relative paths are resolved against /var/lib/veil.
+// It must be a strict subdirectory of /var/lib/veil: serving exactly
+// /var/lib/veil would expose state.json, audit/ and backups/ to anonymous
+// naive-port visitors (audit #77 F1). Relative paths are resolved against
+// /var/lib/veil.
 func resolveNaiveFallbackRoot(input string) (string, error) {
 	if input == "" {
 		return "/var/lib/veil/www", nil
@@ -189,8 +211,8 @@ func resolveNaiveFallbackRoot(input string) (string, error) {
 	if !strings.HasPrefix(root, "/") {
 		root = filepath.ToSlash(filepath.Clean("/var/lib/veil/" + root))
 	}
-	if root != "/var/lib/veil" && !strings.HasPrefix(root, "/var/lib/veil/") {
-		return "", fmt.Errorf("fallback root must be within /var/lib/veil: %s", root)
+	if root == "/var/lib/veil" || !strings.HasPrefix(root, "/var/lib/veil/") {
+		return "", fmt.Errorf("fallback root must be a subdirectory of /var/lib/veil: %s", root)
 	}
 	return root, nil
 }
@@ -203,7 +225,44 @@ func renderAcmeChallengeServer(key bindregistry.BindKey, owner caddyassembly.Acm
 	}
 }
 
+func panelErrorRoutes() map[string]any {
+	const body = `{"error":{"code":"gateway_error","message":"panel backend unavailable"}}`
+	return map[string]any{
+		"routes": []map[string]any{{
+			"handle": []map[string]any{{
+				"handler":     "static_response",
+				"status_code": "{http.error.status_code}",
+				"body":        body,
+				"headers": map[string]any{
+					"Content-Type":  []string{"application/json; charset=utf-8"},
+					"Cache-Control": []string{"no-store"},
+				},
+			}},
+		}},
+	}
+}
+
+func panelSubscriptionRoute(domain string, backendPort int) map[string]any {
+	match := map[string]any{"path": []string{"/s/*"}}
+	if domain != "" {
+		match["host"] = []string{domain}
+	}
+	return map[string]any{
+		"match": []map[string]any{match},
+		"handle": []map[string]any{{
+			"handler":   "reverse_proxy",
+			"upstreams": []map[string]any{{"dial": "127.0.0.1:" + portString(backendPort)}},
+		}},
+		"terminal": true,
+	}
+}
+
 func panelRoutes(domain string, backendPort int, webBasePath string, includeFallback bool) []map[string]any {
+	routes := panelBaseRoutes(domain, backendPort, webBasePath, includeFallback)
+	return append([]map[string]any{panelSubscriptionRoute(domain, backendPort)}, routes...)
+}
+
+func panelBaseRoutes(domain string, backendPort int, webBasePath string, includeFallback bool) []map[string]any {
 	proxy := map[string]any{
 		"handler":   "reverse_proxy",
 		"upstreams": []map[string]any{{"dial": "127.0.0.1:" + portString(backendPort)}},

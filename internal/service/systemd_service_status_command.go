@@ -19,6 +19,8 @@ func (c SystemdServiceStatusCommand) Args() []string {
 		"--property=LoadState",
 		"--property=ActiveState",
 		"--property=SubState",
+		"--property=MainPID",
+		"--property=ExecMainStartTimestampMonotonic",
 		"--no-page",
 	}
 }

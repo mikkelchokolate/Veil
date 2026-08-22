@@ -46,6 +46,10 @@ func RenderMieru(cfg MieruConfig) (string, error) {
 	out := mieruServerConfigJSON{LoggingLevel: "INFO"}
 	seenBindings := make(map[mieruPortBindingJSON]struct{}, len(cfg.PortBindings))
 	for _, binding := range cfg.PortBindings {
+		// Keep this aligned with pinned mita v3.36.0 FlatPortBindings, which
+		// accepts every valid TCP/UDP port from 1 through 65535. Veil's Mieru
+		// systemd unit carries CAP_NET_BIND_SERVICE, so privileged ports are
+		// usable when the operator intentionally selects them.
 		if binding.Port <= 0 {
 			return "", errors.New("mieru port is required")
 		}

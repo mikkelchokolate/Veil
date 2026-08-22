@@ -109,6 +109,22 @@ func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsPanelCredentials(
 	if _, err := os.Stat(filepath.Join(tempVar, "state.json")); err != nil {
 		t.Fatalf("state.json missing: %v", err)
 	}
+
+	key, err := secrets.LoadOrCreateKey(filepath.Join(tempEtc, "state.key"))
+	if err != nil {
+		t.Fatalf("load key: %v", err)
+	}
+	cipher, err := secrets.NewCipher(*key)
+	if err != nil {
+		t.Fatalf("cipher: %v", err)
+	}
+	snapshot, ok, err := managementstate.NewStore(filepath.Join(tempVar, "state.json"), cipher).Load()
+	if err != nil || !ok {
+		t.Fatalf("load state: ok=%v err=%v", ok, err)
+	}
+	if !snapshot.Setup.Completed || len(snapshot.Users) != 1 || snapshot.Users[0].Role != "admin" {
+		t.Fatalf("fresh install must persist completed setup with admin, got setup=%+v users=%+v", snapshot.Setup, snapshot.Users)
+	}
 }
 
 func TestApplyRURecommendedInstallFailsWhenExistingStateUnreadable(t *testing.T) {
@@ -188,6 +204,48 @@ func TestShouldPrepareInstallHostOnlyForCanonicalPaths(t *testing.T) {
 	}
 	if shouldPrepareInstallHost(t.TempDir()) {
 		t.Fatal("staging install must not mutate current-host accounts or ownership")
+	}
+}
+
+func TestApplyRURecommendedInstallPreparesHostBeforeApply(t *testing.T) {
+	withMockedInstallRuntimes(t)
+	oldApply := installApplyFunc
+	oldSystemd := installSystemdRunFunc
+	oldExecutable := installExecutableFunc
+	oldPrepareHost := installPrepareHostFunc
+	var order []string
+	installExecutableFunc = func() (string, error) { return "/opt/veil/bin/veil", nil }
+	installPrepareHostFunc = func(hostaccess.Paths) error {
+		order = append(order, "prepare")
+		return nil
+	}
+	installApplyFunc = func(installer.RURecommendedProfile, installer.ApplyPaths) (installer.ApplyResult, error) {
+		order = append(order, "apply")
+		return installer.ApplyResult{WrittenFiles: []string{"/etc/veil/veil.env"}}, nil
+	}
+	installSystemdRunFunc = func([]service.SystemdAction) error {
+		order = append(order, "systemd")
+		return nil
+	}
+	t.Cleanup(func() {
+		installApplyFunc = oldApply
+		installSystemdRunFunc = oldSystemd
+		installExecutableFunc = oldExecutable
+		installPrepareHostFunc = oldPrepareHost
+	})
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	if err := applyRURecommendedInstall(cmd, installer.RURecommendedProfile{
+		Domain: "example.com", Username: "veil", Password: "test-password", WebBasePath: "/panel/",
+	}, ruRecommendedInstallOptions{EtcDir: t.TempDir(), VarDir: t.TempDir()}); err != nil {
+		t.Fatalf("applyRURecommendedInstall: %v", err)
+	}
+	want := []string{"prepare", "apply", "systemd"}
+	if strings.Join(order, ",") != strings.Join(want, ",") {
+		t.Fatalf("install step order = %v, want %v", order, want)
 	}
 }
 

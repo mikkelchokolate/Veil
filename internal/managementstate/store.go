@@ -57,7 +57,18 @@ func (s Store) Save(snapshot model.ManagementSnapshot) error {
 	if err != nil {
 		return err
 	}
+	return s.SaveEncoded(body)
+}
 
+// SaveEncoded atomically publishes an already encoded Management snapshot.
+// It preserves the ownership and permissions of an existing state file.
+func (s Store) SaveEncoded(body []byte) error {
+	if s.path == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
+		return err
+	}
 	// Preserve ownership and permissions of an existing state file so that
 	// CLI commands (e.g. `veil admin reset`) do not lock out the veil user.
 	var prev *fileInfo
@@ -66,6 +77,21 @@ func (s Store) Save(snapshot model.ManagementSnapshot) error {
 	}
 
 	return writeStoreFileAtomic(s.path, body, prev)
+}
+
+// RestoreEncoded restores the exact bytes that existed before a failed state
+// publication. When existed is false it removes the newly-created state file.
+func (s Store) RestoreEncoded(body []byte, existed bool) error {
+	if s.path == "" {
+		return nil
+	}
+	if existed {
+		return s.SaveEncoded(body)
+	}
+	if err := os.Remove(s.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return syncStoreDirectory(filepath.Dir(s.path))
 }
 
 type fileInfo struct {

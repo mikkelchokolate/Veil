@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 // disk under the apply root.
 func TestFullInboundToApplyFlow(t *testing.T) {
 	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
+	inboundPort := freePort(t)
 
 	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com"}`)
 	if resp.StatusCode != http.StatusOK {
@@ -23,13 +25,13 @@ func TestFullInboundToApplyFlow(t *testing.T) {
 	}
 	drain(resp)
 
-	resp = srv.do(http.MethodPost, "/api/inbounds", `{"name":"mieru-tcp","protocol":"mieru","transport":"tcp","port":8443,"enabled":true,"profiles":[{"name":"alice","password":"alice-pass","enabled":true}]}`)
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"mieru-tcp","protocol":"mieru","transport":"tcp","port":%d,"enabled":true,"profiles":[{"name":"alice","password":"alice-pass","enabled":true}]}`, inboundPort))
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("inbound 1 expected 201, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}
 	drain(resp)
 
-	resp = srv.do(http.MethodPost, "/api/inbounds", `{"name":"mieru-udp","protocol":"mieru","transport":"udp","port":8443,"enabled":true,"password":"udp-pass"}`)
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"mieru-udp","protocol":"mieru","transport":"udp","port":%d,"enabled":true,"password":"udp-pass"}`, inboundPort))
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("inbound 2 expected 201, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}
@@ -81,17 +83,18 @@ func TestFullInboundToApplyFlow(t *testing.T) {
 // a broken config.
 func TestRejectsDuplicateMieruUsernamesEndToEnd(t *testing.T) {
 	srv := startServer(t, serverOptions{token: "tok"})
+	inboundPort := freePort(t)
 
 	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev"}`)
 	drain(resp)
 
 	// Two Mieru inbounds whose sole client profile shares the same name.
-	resp = srv.do(http.MethodPost, "/api/inbounds", `{"name":"dup","protocol":"mieru","transport":"tcp","port":8443,"enabled":true,"password":"pw1"}`)
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"dup","protocol":"mieru","transport":"tcp","port":%d,"enabled":true,"password":"pw1"}`, inboundPort))
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("inbound 1 expected 201, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}
 	drain(resp)
-	resp = srv.do(http.MethodPost, "/api/inbounds", `{"name":"dup","protocol":"mieru","transport":"udp","port":8443,"enabled":true,"password":"pw2"}`)
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"dup","protocol":"mieru","transport":"udp","port":%d,"enabled":true,"password":"pw2"}`, inboundPort))
 	// The catalog may reject the duplicate name at creation, or the conflict
 	// may surface at plan/apply time. Either is an acceptable safeguard; what
 	// matters is that it never silently succeeds end-to-end.

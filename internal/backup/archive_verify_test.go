@@ -12,6 +12,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/storage"
 )
 
 func TestVerifyBackupReportsManifestAndCompatibility(t *testing.T) {
@@ -29,13 +30,13 @@ func TestVerifyBackupReportsManifestAndCompatibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !report.Encrypted || report.Legacy || report.FormatVersion != 1 ||
+	if !report.Encrypted || report.Legacy || report.FormatVersion != CurrentArchiveFormatVersion ||
 		report.EncryptionVersion != 2 || report.VeilVersion != "0.6.0" ||
 		report.StateSchemaVersion != managementstate.CurrentSchemaVersion ||
 		!report.CreatedAt.Equal(createdAt) {
 		t.Fatalf("verification report = %+v", report)
 	}
-	if len(report.Files) != 2 || report.Files[0].SHA256 == "" || report.Files[1].SHA256 == "" {
+	if len(report.Files) != 3 || report.Files[0].SHA256 == "" || report.Files[1].SHA256 == "" || report.Files[2].SHA256 == "" {
 		t.Fatalf("verified files = %+v", report.Files)
 	}
 }
@@ -80,6 +81,13 @@ func TestVerifyBackupRejectsFutureStateSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(keyPath, bytes.Repeat([]byte{0x42}, secrets.KeySize), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	db, err := storage.Open(filepath.Join(dir, "veil.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
 	data, err := CreateBackupWithOptions(statePath, keyPath, "", ArchiveOptions{
@@ -173,6 +181,124 @@ func TestRestoreBackupPreservesPreviousStateAndKey(t *testing.T) {
 	}
 }
 
+func TestArchiveV2RestoreRequiresIdleSQLiteBoundary(t *testing.T) {
+	statePath, keyPath := writeValidBackupSource(t)
+	data, err := CreateBackupWithOptions(statePath, keyPath, "", ArchiveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetDir := t.TempDir()
+	targetState, targetKey := filepath.Join(targetDir, "state.json"), filepath.Join(targetDir, "state.key")
+	if err := os.WriteFile(targetState, []byte(`{"schemaVersion":3}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(targetKey, bytes.Repeat([]byte{1}, secrets.KeySize), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	targetDB := filepath.Join(targetDir, "veil.db")
+	db, err := storage.Open(targetDB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`INSERT INTO migration_markers(key, version, applied_at, details) VALUES ('busy', 1, 0, '{}')`); err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, err := RestoreBackupWithOptions(data, targetState, targetKey, "", RestoreOptions{DatabasePath: targetDB}); err == nil {
+		t.Fatal("restore succeeded while target database had an active writer")
+	}
+}
+
+func TestArchiveV2RestoresNormalizedSQLiteDomain(t *testing.T) {
+	statePath, keyPath := writeValidBackupSource(t)
+	stateBody, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dbPath := filepath.Join(filepath.Dir(statePath), "veil.db")
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statements := []string{
+		`INSERT OR REPLACE INTO revisions(id,desired_revision,applied_revision) VALUES(1,7,6)`,
+		`UPDATE runtime_verification SET historical_applied_revision=6,verified_revision=6,status='verified' WHERE id=1`,
+		`INSERT INTO clients(id,name,enabled,quota_reset_policy,created_at,updated_at) VALUES('client-1','alice',1,'never',1,1)`,
+		`INSERT INTO client_bindings(id,client_id,inbound_id,enabled,created_at,updated_at) VALUES('binding-1','client-1','hy2',1,1,1)`,
+		`INSERT INTO client_credentials(id,binding_id,kind,encrypted_value,created_at) VALUES('credential-1','binding-1','password',X'0102030405060708090a0b0c0d',1)`,
+		`INSERT INTO subscription_tokens(id,client_id,token_hash,token_prefix,created_at) VALUES('token-1','client-1',X'0303030303030303030303030303030303030303030303030303030303030303','tok',1)`,
+		`INSERT INTO traffic_counters(client_id,binding_id,upload_bytes,download_bytes,updated_at) VALUES('client-1','binding-1',11,22,1)`,
+		`INSERT INTO revision_snapshots(revision,payload,created_at,state_sha256) VALUES(6,'{"clients":["client-1"]}',1,'` + backupChecksum(stateBody) + `')`,
+		`INSERT INTO revision_snapshots(revision,payload,created_at,state_sha256) VALUES(7,'{"clients":["client-1"]}',1,'` + backupChecksum(stateBody) + `')`,
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := CreateBackupWithOptions(statePath, keyPath, "", ArchiveOptions{DatabasePath: dbPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := VerifyBackup(data, "")
+	if err != nil || report.FormatVersion != 2 || len(report.Files) != 3 {
+		t.Fatalf("v2 report: %+v err=%v", report, err)
+	}
+	db, err = storage.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"client_credentials", "subscription_tokens", "traffic_counters", "revision_snapshots", "client_bindings", "clients"} {
+		if _, err := db.Exec(`DELETE FROM ` + table); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`UPDATE revisions SET desired_revision=0, applied_revision=0 WHERE id=1`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	result, err := RestoreBackupWithOptions(data, statePath, keyPath, "", RestoreOptions{DatabasePath: dbPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.SafetyDatabasePath == "" {
+		t.Fatal("missing veil.db safety copy")
+	}
+	db, err = storage.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, table := range []string{"clients", "client_bindings", "client_credentials", "subscription_tokens", "traffic_counters"} {
+		var count int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("%s count=%d err=%v", table, count, err)
+		}
+	}
+	var snapshotCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM revision_snapshots`).Scan(&snapshotCount); err != nil || snapshotCount != 2 {
+		t.Fatalf("revision snapshot count=%d err=%v", snapshotCount, err)
+	}
+	var desired, applied, historical, verified int
+	var runtimeStatus string
+	if err := db.QueryRow(`SELECT desired_revision, applied_revision FROM revisions WHERE id=1`).Scan(&desired, &applied); err != nil || desired != 7 || applied != 0 {
+		t.Fatalf("revisions=%d/%d err=%v", desired, applied, err)
+	}
+	if err := db.QueryRow(`SELECT historical_applied_revision,verified_revision,status FROM runtime_verification WHERE id=1`).Scan(&historical, &verified, &runtimeStatus); err != nil || historical != 6 || verified != 0 || runtimeStatus != "unknown" {
+		t.Fatalf("runtime verification=%d/%d/%s err=%v", historical, verified, runtimeStatus, err)
+	}
+}
+
 func writeValidBackupSource(t *testing.T) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -195,6 +321,13 @@ func writeValidBackupSource(t *testing.T) (string, string) {
 		},
 	}
 	if err := managementstate.NewStore(statePath, cipher).Save(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	db, err := storage.Open(filepath.Join(dir, "veil.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
 	return statePath, keyPath

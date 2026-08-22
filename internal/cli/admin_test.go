@@ -11,7 +11,7 @@ func TestAdminCommandReset(t *testing.T) {
 	tempEtc := t.TempDir()
 	tempVar := t.TempDir()
 
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -49,7 +49,7 @@ func TestAdminCommandSetAndShow(t *testing.T) {
 	keyPath := filepath.Join(tempEtc, "state.key")
 
 	// 1. Set credentials
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -72,7 +72,7 @@ func TestAdminCommandSetAndShow(t *testing.T) {
 	}
 
 	// 2. Show users list
-	cmdShow := NewRootCommand("test")
+	cmdShow := newFastRootCommand("test")
 	var outShow bytes.Buffer
 	cmdShow.SetOut(&outShow)
 	cmdShow.SetErr(&outShow)

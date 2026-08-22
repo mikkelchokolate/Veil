@@ -3,7 +3,6 @@ package managementstate
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 )
 
 func writeStoreFileAtomic(path string, body []byte, previous *fileInfo) error {
@@ -46,18 +45,14 @@ func writeStoreFileAtomicWithSync(path string, body []byte, previous *fileInfo, 
 		return err
 	}
 	committed = true
-	bestEffortSyncStoreDirectory(dir)
-	return nil
+	return syncStoreDirectory(dir)
 }
 
-func bestEffortSyncStoreDirectory(path string) {
-	if runtime.GOOS == "windows" {
-		return
-	}
+func syncStoreDirectory(path string) error {
 	dir, err := os.Open(path)
 	if err != nil {
-		return
+		return err
 	}
 	defer dir.Close()
-	_ = dir.Sync()
+	return dir.Sync()
 }

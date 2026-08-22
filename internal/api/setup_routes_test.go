@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestSetupStatusReportsLocalFirstRun(t *testing.T) {
@@ -94,7 +95,7 @@ func TestSetupCompleteValidatesPasswordAndBackupAcknowledgement(t *testing.T) {
 
 func TestRouterAllowsUnauthenticatedLocalSetupOnly(t *testing.T) {
 	dir := t.TempDir()
-	router, _ := NewRouter(ServerInfo{
+	router, _ := newTestRouter(ServerInfo{
 		Version:      "test",
 		Mode:         "server",
 		StatePath:    filepath.Join(dir, "state.json"),
@@ -120,9 +121,12 @@ func TestRouterAllowsUnauthenticatedLocalSetupOnly(t *testing.T) {
 	}
 }
 
-func TestPanelRendersSetupBeforeDashboard(t *testing.T) {
+// First-run setup is now client-side in the SPA: "/" serves the React shell,
+// which detects setup-required via /api/setup/status and renders the setup
+// flow (B2/B11). The legacy server-rendered setup HTML was superseded.
+func TestPanelServesSPAForFirstRunSetup(t *testing.T) {
 	dir := t.TempDir()
-	router, _ := NewRouter(ServerInfo{
+	router, _ := newTestRouter(ServerInfo{
 		Version:      "test",
 		Mode:         "server",
 		StatePath:    filepath.Join(dir, "state.json"),
@@ -136,17 +140,18 @@ func TestPanelRendersSetupBeforeDashboard(t *testing.T) {
 
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `id="setup-form"`) {
-		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `id="root"`) {
+		t.Fatalf("expected SPA shell for first-run setup, status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 
 func newTestSetupState(t *testing.T, allowed bool) *managementState {
 	t.Helper()
 	return &managementState{
-		statePath:    filepath.Join(t.TempDir(), "state.json"),
-		applyRoot:    t.TempDir(),
-		setupAllowed: allowed,
+		statePath:      filepath.Join(t.TempDir(), "state.json"),
+		applyRoot:      t.TempDir(),
+		setupAllowed:   allowed,
+		passwordHasher: bcryptPasswordHasher{cost: bcrypt.MinCost},
 		settings: Settings{
 			PanelListen: "127.0.0.1:2096",
 			PanelAccess: "local",

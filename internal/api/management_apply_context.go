@@ -2,13 +2,16 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
+	veilapply "github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/caddyadmin"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
@@ -16,6 +19,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/routing"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
@@ -32,14 +36,59 @@ type firewallApplier interface {
 	ApplyRules(rules []firewall.Rule) error
 }
 
-var firewallApplierInstance firewallApplier = firewall.NewUFWApplier()
+var (
+	firewallApplierMu       sync.RWMutex
+	firewallApplierInstance firewallApplier = firewall.NewUFWApplier()
+)
+
+func currentFirewallApplier() firewallApplier {
+	firewallApplierMu.RLock()
+	defer firewallApplierMu.RUnlock()
+	return firewallApplierInstance
+}
+
+func swapFirewallApplier(next firewallApplier) firewallApplier {
+	firewallApplierMu.Lock()
+	defer firewallApplierMu.Unlock()
+	prev := firewallApplierInstance
+	firewallApplierInstance = next
+	return prev
+}
 
 type ManagementApplyContext struct {
 	state *managementState
+	ctx   context.Context
+}
+
+func (ctx ManagementApplyContext) fenceToken() privileged.FenceToken {
+	fence, ok := veilapply.FenceFromContext(ctx.operationContext())
+	if !ok {
+		return privileged.FenceToken{}
+	}
+	return privileged.FenceToken{Owner: fence.Owner, Generation: fence.Generation,
+		LeaseExpiresAt: fence.LeaseExpiresAt, OperationID: fence.OperationID}
 }
 
 func NewManagementApplyContext(state *managementState) ManagementApplyContext {
-	return ManagementApplyContext{state: state}
+	return ManagementApplyContext{state: state, ctx: state.lifecycleContext()}
+}
+
+func NewManagementApplyContextWithContext(state *managementState, operationContext context.Context) ManagementApplyContext {
+	if operationContext == nil {
+		operationContext = state.lifecycleContext()
+	}
+	return ManagementApplyContext{state: state, ctx: operationContext}
+}
+
+func (ctx ManagementApplyContext) operationContext() context.Context {
+	if ctx.ctx != nil {
+		return ctx.ctx
+	}
+	return context.TODO()
+}
+
+func (ctx ManagementApplyContext) advancePublicationPhaseLocked(phase string) error {
+	return veilapply.AdvanceRuntimePublication(ctx.operationContext(), phase, veilapply.PublicationDetails{})
 }
 
 func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
@@ -49,10 +98,10 @@ func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
 		Settings:      s.settings,
 		Inbounds:      s.inbounds,
 		Rules:         s.rules,
-		RoutingSource: s.routingSource,
+		RoutingSource: routing.EnsureDatSource(s.routingSource, s.rules),
 		Warp:          s.warp,
 	}).BuildPlan()
-	if validation, ok := s.enforceValidationLocked(context.Background(), s.settings, s.inbounds, s.warp); !ok {
+	if validation, ok := s.enforceValidationLocked(ctx.operationContext(), s.settings, s.inbounds, s.warp); !ok {
 		plan.Valid = false
 		plan.Issues = append(plan.Issues, validation.Issues...)
 		for _, issue := range validation.Issues {
@@ -70,18 +119,23 @@ func (ctx ManagementApplyContext) writeApplyStageLocked(plan ApplyPlanResponse) 
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	snapshot, err := s.snapshotLocked()
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	return WriteApplyStage(ApplyStageInput{
+		Context:       ctx.operationContext(),
 		ApplyRoot:     s.applyRoot,
 		Cipher:        s.cipher,
 		Plan:          plan,
-		Snapshot:      s.snapshotLocked(),
+		Snapshot:      snapshot,
 		Rendered:      rendered,
-		RoutingSource: s.routingSource,
+		RoutingSource: routing.EnsureDatSource(s.routingSource, s.rules),
 		Validate:      stagedConfigValidator,
 	})
 }
 
-func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []string) ([]string, []string, []livePromotionRecord, error) {
+func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]string, []string, []livePromotionRecord, error) {
 	generatedRoot := filepath.Join(ctx.state.applyRoot, "generated")
 	artifactIDs := make([]string, 0, len(stagedPaths))
 	for _, stagedPath := range stagedPaths {
@@ -121,17 +175,50 @@ func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []strin
 		!slices.Contains(removeIDs, generatedconfig.WarpConfigSubpath) {
 		removeIDs = append(removeIDs, generatedconfig.WarpConfigSubpath)
 	}
+	// Same teardown contract for Caddy: when no naive inbound and no
+	// panel-via-caddy remain, the live caddy/config.json must go or the
+	// orphan scan will never touch it (config.json is excluded as a shared
+	// singleton artifact) and veil-caddy.service would keep serving the
+	// STALE auth_credentials forever (audit #123). Removing the artifact
+	// stops and disables the unit via UnitForArtifactID.
+	if !caddyRequired(ctx.state.settings, ctx.state.inbounds) && ctx.caddyUnitActiveLocked() &&
+		!slices.Contains(removeIDs, generatedconfig.CaddyJSONConfigSubpath) {
+		removeIDs = append(removeIDs, generatedconfig.CaddyJSONConfigSubpath)
+	}
+	desiredUnits := desiredRuntimeUnits(ctx.state.settings, ctx.state.inbounds, ctx.state.warp)
+	wantsOrphans := scanEnabledOrphanTemplateUnits(ctx.state.systemdWantsDir, desiredUnits)
 	if len(artifactIDs) == 0 && len(removeIDs) == 0 {
+		// No files to promote, but leftover enabled template units still need
+		// stop/disable on the subsequent service reload.
+		ctx.state.orphanedUnits = wantsOrphans
 		return nil, nil, nil, nil
 	}
 	if ctx.state.privileged == nil {
 		return nil, nil, nil, fmt.Errorf("privileged helper is unavailable")
 	}
-	result, err := ctx.state.privileged.Promote(context.Background(), privileged.PromoteRequest{
-		ArtifactIDs: artifactIDs, RemoveArtifactIDs: removeIDs,
+	publicationArtifacts := append(append([]string(nil), artifactIDs...), removeIDs...)
+	expectedManifest, previousManifest, err := publicationArtifactDigests(generatedRoot, ctx.state.liveRoot, artifactIDs, removeIDs)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("build publication manifest: %w", err)
+	}
+	if err := veilapply.MarkRuntimeMutationStarting(ctx.operationContext(), veilapply.PublicationDetails{
+		ExpectedLiveManifestSHA256: expectedManifest,
+		PreviousLiveManifestSHA256: previousManifest,
+		Artifacts:                  publicationArtifacts,
+		ServicePhase:               "pending",
+		FirewallPhase:              "pending",
+		LiveRoot:                   ctx.state.liveRoot,
+	}); err != nil {
+		return nil, nil, nil, fmt.Errorf("persist publication phase before promotion: %w", err)
+	}
+	result, err := ctx.state.privileged.Promote(ctx.operationContext(), privileged.PromoteRequest{
+		ArtifactIDs: artifactIDs, RemoveArtifactIDs: removeIDs, Fence: ctx.fenceToken(),
 	})
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	if err := veilapply.AdvanceRuntimePublication(ctx.operationContext(), veilapply.PublicationPhaseArtifactsCommitted, veilapply.PublicationDetails{}); err != nil {
+		return nil, nil, nil, fmt.Errorf("persist committed artifact publication phase: %w", err)
 	}
 	liveFiles := livePathsForArtifactIDs(ctx.state.liveRoot, result.WrittenArtifacts)
 	records := make([]livePromotionRecord, 0, len(result.WrittenArtifacts)+len(result.RemovedArtifacts))
@@ -149,11 +236,11 @@ func (ctx ManagementApplyContext) promoteStagedConfigsLocked(stagedPaths []strin
 			orphanedUnits = append(orphanedUnits, unit)
 		}
 	}
-	ctx.state.orphanedUnits = orphanedUnits
+	ctx.state.orphanedUnits = mergeOrphanedUnits(orphanedUnits, wantsOrphans)
 	return liveFiles, backupFiles, records, nil
 }
 
-func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []string) []ServiceActionResult {
+func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []ServiceActionResult {
 	results := []ServiceActionResult{}
 
 	// Retire legacy per-inbound Caddy instances before touching the singleton.
@@ -208,7 +295,13 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 			}
 			configBytes, err := os.ReadFile(caddyLivePath)
 			if err == nil {
-				err = caddyAdminLoader(configBytes)
+				if loader, ok := ctx.state.privileged.(privileged.CaddyLoader); ok {
+					err = loader.CaddyLoad(ctx.operationContext(), privileged.CaddyLoadRequest{Config: configBytes, Fence: ctx.fenceToken()})
+				} else if ctx.state.privilegedLocal {
+					err = caddyAdminLoader(configBytes)
+				} else {
+					err = errors.New("privileged Caddy loader is unavailable")
+				}
 			}
 			if err == nil {
 				adminResult.Success = true
@@ -271,6 +364,20 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 		if !result.Success {
 			return results
 		}
+		// Enable protocol units for boot persistence. The installer only
+		// enables veil.service, veil-helper.socket and (optionally)
+		// veil-caddy.service; per-instance protocol units (hysteria2/olcrtc)
+		// and the mieru singleton are otherwise dead after a reboot with no
+		// Veil-side signal (audit #117/#137). WARP is handled above; caddy and
+		// the panel unit are handled by the installer.
+		if runtime.Unit != renderer.UnitVeil && runtime.Unit != unitCaddy && runtime.Unit != renderer.UnitWarp {
+			enable := ctx.runPrivilegedServiceAction(runtime.Unit, privileged.ServiceActionEnable)
+			results = append(results, enable)
+			// A failed enable must not abort the rest of the reload: the
+			// remaining restarts and the orphan stop/disable phase still
+			// need to run (code-review P3). The failed result is already
+			// recorded for the caller.
+		}
 	}
 
 	// Stop and disable units whose configs were removed after the new
@@ -292,20 +399,15 @@ func (ctx ManagementApplyContext) reloadPromotedServicesLocked(liveFiles []strin
 	}
 	ctx.state.orphanedUnits = nil
 
-	// Synchronize firewall rules for the panel and enabled inbounds. This is
-	// intentionally non-fatal: a firewall misconfiguration should not roll back
-	// an otherwise successful apply.
-	results = append(results, ctx.syncFirewallLocked()...)
-
 	return results
 }
 
-func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {
+func (ctx ManagementApplyContext) rollbackPromotedConfigs(records []livePromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {
 	if len(records) == 0 || records[0].BackupID == "" || ctx.state.privileged == nil {
 		return nil, nil
 	}
-	result, err := ctx.state.privileged.Promote(context.Background(), privileged.PromoteRequest{
-		RestoreBackupID: records[0].BackupID,
+	result, err := ctx.state.privileged.Promote(ctx.operationContext(), privileged.PromoteRequest{
+		RestoreBackupID: records[0].BackupID, Fence: ctx.fenceToken(),
 	})
 	if err != nil {
 		return nil, []ServiceActionResult{{
@@ -317,7 +419,7 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigsLocked(records []livePr
 	// The units removed during the failed apply are about to be restored; do not
 	// stop/disable them again while reloading services for the restored state.
 	ctx.state.orphanedUnits = nil
-	rollbackActions := ctx.reloadPromotedServicesLocked(rollbackFiles)
+	rollbackActions := ctx.reloadPromotedServices(rollbackFiles)
 
 	liveFilesMap := make(map[string]bool)
 	for _, lf := range liveFiles {
@@ -458,9 +560,10 @@ func (ctx ManagementApplyContext) syncCaddyCertForHysteria2(domain string) Servi
 		result.Error = "privileged helper is unavailable"
 		return result
 	}
-	syncResult, err := ctx.state.privileged.SyncCaddyCert(context.Background(), privileged.SyncCaddyCertRequest{
+	syncResult, err := ctx.state.privileged.SyncCaddyCert(ctx.operationContext(), privileged.SyncCaddyCertRequest{
 		Domain: domain,
 		OutDir: "/etc/veil/certs",
+		Fence:  ctx.fenceToken(),
 	})
 	if err != nil {
 		result.Error = err.Error()
@@ -474,7 +577,61 @@ func (ctx ManagementApplyContext) syncCaddyCertForHysteria2(domain string) Servi
 	return result
 }
 
-func (ctx ManagementApplyContext) syncFirewallLocked() []ServiceActionResult {
+func (ctx ManagementApplyContext) PrepareFirewallLocked() (string, error) {
+	if ctx.state.settings.FirewallManagement != nil && !*ctx.state.settings.FirewallManagement {
+		return "", nil
+	}
+	if ctx.state.privileged == nil || ctx.state.privilegedLocal {
+		results := ctx.syncFirewall()
+		for _, result := range results {
+			if !result.Success {
+				return "", errors.New(result.Error)
+			}
+		}
+		return "", nil
+	}
+	responses := firewall.BuildRuleResponses(ctx.state.settings, ctx.state.inbounds)
+	rules := firewall.UFWRulesFromResponses(responses)
+	if len(rules) == 0 {
+		return "", nil
+	}
+	reqRules := make([]privileged.FirewallRule, len(rules))
+	for index, rule := range rules {
+		reqRules[index] = privileged.FirewallRule{Command: rule.Command, Args: rule.Args}
+	}
+	result, err := ctx.state.privileged.FirewallApply(ctx.operationContext(), privileged.FirewallRequest{
+		Rules: reqRules, Action: privileged.FirewallActionPrepare, Fence: ctx.fenceToken(),
+	})
+	if err != nil {
+		return "", err
+	}
+	if !result.Prepared || result.TransactionID == "" {
+		return "", errors.New("privileged helper did not prepare firewall transaction")
+	}
+	return result.TransactionID, nil
+}
+
+func (ctx ManagementApplyContext) CommitFirewallLocked(transactionID string) error {
+	if transactionID == "" || ctx.state.privileged == nil || ctx.state.privilegedLocal {
+		return nil
+	}
+	_, err := ctx.state.privileged.FirewallApply(ctx.operationContext(), privileged.FirewallRequest{
+		Action: privileged.FirewallActionCommit, TransactionID: transactionID, Fence: ctx.fenceToken(),
+	})
+	return err
+}
+
+func (ctx ManagementApplyContext) RollbackFirewallLocked(transactionID string) error {
+	if transactionID == "" || ctx.state.privileged == nil || ctx.state.privilegedLocal {
+		return nil
+	}
+	_, err := ctx.state.privileged.FirewallApply(ctx.operationContext(), privileged.FirewallRequest{
+		Action: privileged.FirewallActionRollback, TransactionID: transactionID, Fence: ctx.fenceToken(),
+	})
+	return err
+}
+
+func (ctx ManagementApplyContext) syncFirewall() []ServiceActionResult {
 	// Firewall management is enabled by default. A nil pointer means the setting
 	// is absent from an older state file, which we treat as enabled.
 	if ctx.state.settings.FirewallManagement != nil && !*ctx.state.settings.FirewallManagement {
@@ -496,16 +653,17 @@ func (ctx ManagementApplyContext) syncFirewallLocked() []ServiceActionResult {
 		for i, r := range rules {
 			reqRules[i] = privileged.FirewallRule{Command: r.Command, Args: r.Args}
 		}
-		if _, err := ctx.state.privileged.FirewallApply(context.Background(), privileged.FirewallRequest{Rules: reqRules}); err != nil {
+		if _, err := ctx.state.privileged.FirewallApply(ctx.operationContext(), privileged.FirewallRequest{Rules: reqRules, Fence: ctx.fenceToken()}); err != nil {
 			result.Error = err.Error()
 			return []ServiceActionResult{result}
 		}
 	} else {
-		if err := firewallApplierInstance.EnsureActive(); err != nil {
+		applier := currentFirewallApplier()
+		if err := applier.EnsureActive(); err != nil {
 			result.Error = err.Error()
 			return []ServiceActionResult{result}
 		}
-		if err := firewallApplierInstance.ApplyRules(rules); err != nil {
+		if err := applier.ApplyRules(rules); err != nil {
 			result.Error = err.Error()
 			return []ServiceActionResult{result}
 		}
@@ -522,8 +680,8 @@ func (ctx ManagementApplyContext) runPrivilegedServiceAction(unit string, action
 		result.Error = "privileged helper is unavailable"
 		return result
 	}
-	if err := ctx.state.privileged.ServiceAction(context.Background(), privileged.ServiceActionRequest{
-		Unit: unit, Action: action,
+	if err := ctx.state.privileged.ServiceAction(ctx.operationContext(), privileged.ServiceActionRequest{
+		Unit: unit, Action: action, Fence: ctx.fenceToken(),
 	}); err != nil {
 		result.Error = err.Error()
 		return result
@@ -538,7 +696,7 @@ func (ctx ManagementApplyContext) warpUnitActiveLocked() bool {
 	if ctx.state.privileged == nil {
 		return false
 	}
-	statuses, err := ctx.state.privileged.ServiceStatus(context.Background(), privileged.ServiceStatusRequest{
+	statuses, err := ctx.state.privileged.ServiceStatus(ctx.operationContext(), privileged.ServiceStatusRequest{
 		Units: []string{renderer.UnitWarp},
 	})
 	if err != nil {
@@ -546,6 +704,26 @@ func (ctx ManagementApplyContext) warpUnitActiveLocked() bool {
 	}
 	for _, status := range statuses.Services {
 		if status.Unit == renderer.UnitWarp && status.ActiveState == "active" {
+			return true
+		}
+	}
+	return false
+}
+
+// caddyUnitActiveLocked reports whether veil-caddy.service is currently
+// active, used to gate Caddy config teardown on desired state.
+func (ctx ManagementApplyContext) caddyUnitActiveLocked() bool {
+	if ctx.state.privileged == nil {
+		return false
+	}
+	statuses, err := ctx.state.privileged.ServiceStatus(ctx.operationContext(), privileged.ServiceStatusRequest{
+		Units: []string{unitCaddy},
+	})
+	if err != nil {
+		return false
+	}
+	for _, status := range statuses.Services {
+		if status.Unit == unitCaddy && status.ActiveState == "active" {
 			return true
 		}
 	}
@@ -602,7 +780,7 @@ func serviceActionRequiresActiveUnit(action ServiceActionResult) bool {
 	return len(action.Command) >= 3 && action.Command[0] == "caddy" && action.Command[1] == "admin" && action.Command[2] == "load"
 }
 
-func (ctx ManagementApplyContext) checkServiceHealthLocked(actions []ServiceActionResult) []ServiceHealthResult {
+func (ctx ManagementApplyContext) checkServiceHealth(actions []ServiceActionResult) []ServiceHealthResult {
 	healthActions := filterHealthCheckableActions(actions)
 	if ctx.state.privilegedLocal {
 		return service.NewServiceHealthCollection(func(name string) ServiceHealthResult {
@@ -616,7 +794,7 @@ func (ctx ManagementApplyContext) checkServiceHealthLocked(actions []ServiceActi
 	if len(units) == 0 {
 		return nil
 	}
-	statuses, err := ctx.state.privileged.ServiceStatus(context.Background(), privileged.ServiceStatusRequest{Units: units})
+	statuses, err := ctx.state.privileged.ServiceStatus(ctx.operationContext(), privileged.ServiceStatusRequest{Units: units})
 	if err != nil {
 		return []ServiceHealthResult{{
 			Name: "managed-services", Command: []string{"helper", "service-status"},

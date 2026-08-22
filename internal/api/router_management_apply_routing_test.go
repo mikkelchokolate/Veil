@@ -1,6 +1,9 @@
 package api
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,11 +12,35 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 )
+
+func pinRoutingTestBodies(source RoutingSource, bodies map[string]string) RoutingSource {
+	source.Files = append([]generatedconfig.RoutingSourceFile(nil), source.Files...)
+	for index := range source.Files {
+		body, ok := bodies[source.Files[index].Name]
+		if !ok {
+			continue
+		}
+		digest := sha256.Sum256([]byte(body))
+		source.Files[index].PinnedSHA256 = hex.EncodeToString(digest[:])
+		source.Files[index].SignatureURL = ""
+		source.Files[index].CertificateIdentity = ""
+		source.Files[index].CertificateOIDCIssuer = ""
+	}
+	return source
+}
 
 func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
 	oldDownloader := routeDatDownloader
-	routeDatDownloader = func(url string) ([]byte, error) {
+	oldVerifier := routeDatSignatureVerifier
+	oldTransform := routeDatSourceTransform
+	routeDatSourceTransform = func(source RoutingSource) RoutingSource {
+		return pinRoutingTestBodies(source, map[string]string{"geoip.dat": "fake geoip dat", "geosite.dat": "fake geosite dat"})
+	}
+	routeDatSignatureVerifier = func(context.Context, generatedconfig.RoutingSourceFile, []byte, []byte) error { return nil }
+	routeDatDownloader = func(_ context.Context, url string) ([]byte, error) {
 		if strings.HasSuffix(url, "/geoip.dat") {
 			return []byte("fake geoip dat"), nil
 		}
@@ -26,12 +53,19 @@ func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
 		if strings.HasSuffix(url, "/geosite.dat.sha256sum") {
 			return []byte(testSHA256Line("fake geosite dat", "geosite.dat")), nil
 		}
+		if strings.HasSuffix(url, ".bundle") {
+			return []byte(`{"fake":"sigstore bundle"}`), nil
+		}
 		return nil, fmt.Errorf("unexpected routing dat URL: %s", url)
 	}
-	t.Cleanup(func() { routeDatDownloader = oldDownloader })
+	t.Cleanup(func() {
+		routeDatDownloader = oldDownloader
+		routeDatSignatureVerifier = oldVerifier
+		routeDatSourceTransform = oldTransform
+	})
 
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	warp := httptest.NewRecorder()
 	r.ServeHTTP(warp, httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)))
 	if warp.Code != http.StatusOK {
@@ -79,7 +113,13 @@ func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
 
 func TestManagementApplyRejectsRoutingDatChecksumMismatch(t *testing.T) {
 	oldDownloader := routeDatDownloader
-	routeDatDownloader = func(url string) ([]byte, error) {
+	oldVerifier := routeDatSignatureVerifier
+	oldTransform := routeDatSourceTransform
+	routeDatSourceTransform = func(source RoutingSource) RoutingSource {
+		return pinRoutingTestBodies(source, map[string]string{"geoip.dat": "expected geoip dat", "geosite.dat": "fake geosite dat"})
+	}
+	routeDatSignatureVerifier = func(context.Context, generatedconfig.RoutingSourceFile, []byte, []byte) error { return nil }
+	routeDatDownloader = func(_ context.Context, url string) ([]byte, error) {
 		if strings.HasSuffix(url, "/geoip.dat") {
 			return []byte("tampered geoip dat"), nil
 		}
@@ -92,12 +132,19 @@ func TestManagementApplyRejectsRoutingDatChecksumMismatch(t *testing.T) {
 		if strings.HasSuffix(url, "/geosite.dat.sha256sum") {
 			return []byte(testSHA256Line("fake geosite dat", "geosite.dat")), nil
 		}
+		if strings.HasSuffix(url, ".bundle") {
+			return []byte(`{"fake":"sigstore bundle"}`), nil
+		}
 		return nil, fmt.Errorf("unexpected routing dat URL: %s", url)
 	}
-	t.Cleanup(func() { routeDatDownloader = oldDownloader })
+	t.Cleanup(func() {
+		routeDatDownloader = oldDownloader
+		routeDatSignatureVerifier = oldVerifier
+		routeDatSourceTransform = oldTransform
+	})
 
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	warp := httptest.NewRecorder()
 	r.ServeHTTP(warp, httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)))
 	if warp.Code != http.StatusOK {
@@ -111,8 +158,8 @@ func TestManagementApplyRejectsRoutingDatChecksumMismatch(t *testing.T) {
 
 	apply := httptest.NewRecorder()
 	r.ServeHTTP(apply, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
-	if apply.Code != http.StatusInternalServerError || !strings.Contains(apply.Body.String(), "checksum mismatch") {
-		t.Fatalf("apply expected checksum mismatch 500, got %d: %s", apply.Code, apply.Body.String())
+	if apply.Code != http.StatusInternalServerError || responseErrorMessage(t, apply.Body.Bytes()) != "internal server error" || strings.Contains(apply.Body.String(), "checksum mismatch") {
+		t.Fatalf("apply expected non-leaking 500, got %d: %s", apply.Code, apply.Body.String())
 	}
 	if _, err := os.Stat(filepath.Join(applyRoot, "generated", "rules", "geoip.dat")); !os.IsNotExist(err) {
 		t.Fatalf("geoip.dat should not be staged after checksum mismatch, stat err: %v", err)
@@ -129,7 +176,7 @@ func TestManagementApplyPlanRejectsRoutingRuleUsingDisabledWarpOutbound(t *testi
 	}`), 0o600); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
@@ -156,7 +203,7 @@ func TestManagementApplyPlanRejectsUnknownRoutingOutbound(t *testing.T) {
 	}`), 0o600); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))

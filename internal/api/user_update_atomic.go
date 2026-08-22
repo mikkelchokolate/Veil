@@ -10,7 +10,6 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/panel"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // handleAtomicUserUpdate keeps password preservation, role/locale changes, and
@@ -47,7 +46,7 @@ func (s *managementState) handleAtomicUserUpdate(w http.ResponseWriter, r *http.
 
 	passwordHash := ""
 	if req.Password != "" {
-		hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		hashed, err := s.hashPassword([]byte(req.Password))
 		if err != nil {
 			writeError(w, "failed to hash password", http.StatusInternalServerError)
 			return
@@ -110,6 +109,7 @@ func (s *managementState) handleAtomicUserUpdate(w http.ResponseWriter, r *http.
 		}
 		return
 	}
+	s.catchUpAfterPanelMutation()
 
 	writeJSON(w, map[string]any{
 		"username": updated.Username,

@@ -36,7 +36,7 @@ func TestMakefileDefinesReleaseCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 	makefile := string(body)
-	for _, want := range []string{"release-check:", "go vet ./...", "go test ./... -count=1", "make build", "bash -n scripts/install.sh scripts/uninstall.sh", "bash scripts/install.sh --help >/dev/null", "bash scripts/uninstall.sh --help >/dev/null", "git diff --check", "git status --short"} {
+	for _, want := range []string{"release-check:", "go vet ./...", "go test ./... -count=1", "make build", "sh -n scripts/install.sh", "bash -n scripts/install-privileged.sh scripts/uninstall.sh", "bash scripts/install-privileged.sh --help >/dev/null", "bash scripts/uninstall.sh --help >/dev/null", "git diff --check", "git status --short"} {
 		if !strings.Contains(makefile, want) {
 			t.Fatalf("Makefile missing %q:\n%s", want, makefile)
 		}
@@ -49,10 +49,17 @@ func TestCiWorkflowRunsE2ESuite(t *testing.T) {
 		t.Fatal(err)
 	}
 	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
-	for _, want := range []string{"e2e:", "go test -tags e2e ./test/e2e/..."} {
+	for _, want := range []string{"e2e:", "scripts/ci/e2e.sh"} {
 		if !strings.Contains(workflow, want) {
 			t.Fatalf("ci.yml missing required e2e gate %q:\n%s", want, workflow)
 		}
+	}
+	e2eScript, err := os.ReadFile("../../scripts/ci/e2e.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(e2eScript), "go test -tags e2e ./test/e2e/...") {
+		t.Fatalf("scripts/ci/e2e.sh missing required e2e gate %q", "go test -tags e2e ./test/e2e/...")
 	}
 }
 

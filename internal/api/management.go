@@ -1,13 +1,18 @@
 package api
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/applyhistory"
 	"github.com/mikkelchokolate/Veil/internal/audit"
+	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
@@ -52,6 +57,11 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/apply/plan", s.handleApplyPlan)
 	mux.HandleFunc("/api/apply/history", s.handleApplyHistory)
 	mux.HandleFunc("/api/apply", s.handleApply)
+	s.registerApplyRoutes(mux)
+	s.registerClientV1Routes(mux)
+	s.registerSubscriptionRoutes(mux)
+	s.registerTrafficRoutes(mux)
+	s.registerEventsRoutes(mux)
 	mux.HandleFunc("/api/auth/login", s.handleLoginWithRevalidation)
 	mux.HandleFunc("/api/auth/logout", s.handleLogoutWithSettingsSnapshot)
 	mux.HandleFunc("/api/auth/status", s.handleEffectiveAuthStatus)
@@ -78,7 +88,7 @@ func (s *managementState) registerProtocolRoomRoutes(mux *http.ServeMux) {
 			continue
 		}
 		protocol := p.Protocol()
-		mux.HandleFunc("/api/"+protocol+"/room", s.handleProtocolRoom(protocol))
+		mux.HandleFunc("/api/protocols/"+protocol+"/room", s.handleProtocolRoom(protocol))
 	}
 }
 
@@ -108,25 +118,118 @@ func (s *managementState) applyHistoryLocked() applyhistory.ApplyHistory {
 
 func (s *managementState) livePathForStagedConfig(stagedPath string) (string, bool) {
 	context := NewManagementApplyContext(s)
-	return NewLiveConfigPromotion(s.applyRoot, context.reloadPromotedServicesLocked).LivePathForStagedConfig(stagedPath)
+	return NewLiveConfigPromotion(s.applyRoot, context.reloadPromotedServices).LivePathForStagedConfig(stagedPath)
 }
 
 func (s *managementState) renderManagementConfigsLocked() (map[string]string, error) {
-	return s.managementConfigRendererLocked().Render()
-}
-
-func (s *managementState) managementConfigRendererLocked() ManagementConfigRenderer {
+	inbounds, err := s.inboundsWithRuntimeCredentialsLocked()
+	if err != nil {
+		return nil, err
+	}
 	return NewManagementConfigRenderer(ManagementConfigInput{
-		ApplyRoot: s.applyRoot,
-		LiveRoot:  s.liveRoot,
-		Settings:  s.settings,
-		Inbounds:  s.inbounds,
-		Rules:     s.rules,
-		Warp:      s.warp,
-	})
+		ApplyRoot: s.applyRoot, LiveRoot: s.liveRoot, Settings: s.settings,
+		Inbounds: inbounds, Rules: s.rules, Warp: s.warp,
+	}).Render()
 }
 
-func (s *managementState) snapshotLocked() managementSnapshot {
+// inboundsWithRuntimeCredentialsLocked returns the configured inbounds with
+// per-client credentials resolved from the normalized Client+Binding+Credential
+// store attached as runtime-only data, so the rendered live config includes
+// normalized clients (not just legacy inbound-embedded profiles). Failures to
+// resolve credentials are non-fatal: the inbound renders without them.
+func (s *managementState) inboundsWithRuntimeCredentialsLocked() ([]Inbound, error) {
+	if s.renderClients != nil || s.renderBindings != nil || s.renderCredentials != nil {
+		return s.inboundsWithPinnedCredentialsLocked()
+	}
+	if s.clientService == nil {
+		return s.inbounds, nil
+	}
+	out := make([]Inbound, len(s.inbounds))
+	copy(out, s.inbounds)
+	for i := range out {
+		creds, err := s.clientService.CredentialsForInbound(out[i].Name)
+		if err != nil {
+			return nil, fmt.Errorf("resolve runtime credentials for inbound %s: %w", out[i].Name, err)
+		}
+		if len(creds) == 0 {
+			continue
+		}
+		rc := make([]RuntimeCredential, 0, len(creds))
+		for _, current := range creds {
+			rc = append(rc, RuntimeCredential{Name: current.Name, Username: current.Username, Password: current.Password})
+		}
+		out[i].RuntimeCredentials = rc
+	}
+	return out, nil
+}
+
+// inboundsWithPinnedCredentialsLocked resolves runtime credentials from the
+// pinned immutable snapshot (renderClients/renderBindings/renderCredentials)
+// instead of live SQLite state. Used only during a pinned apply render.
+func (s *managementState) inboundsWithPinnedCredentialsLocked() ([]Inbound, error) {
+	out := make([]Inbound, len(s.inbounds))
+	copy(out, s.inbounds)
+	// Build lookup by binding and the exact protocol-required kind. A binding
+	// can legitimately have several credential kinds, so binding ID alone is
+	// not a safe key.
+	clientByID := make(map[string]model.ClientSnapshot, len(s.renderClients))
+	for _, c := range s.renderClients {
+		clientByID[c.ID] = c
+	}
+	type credentialKey struct{ bindingID, kind string }
+	credByBinding := make(map[credentialKey]model.CredentialSnapshot, len(s.renderCredentials))
+	for _, cr := range s.renderCredentials {
+		key := credentialKey{bindingID: cr.BindingID, kind: cr.Kind}
+		if current, exists := credByBinding[key]; !exists || cr.CredentialVersion > current.CredentialVersion {
+			credByBinding[key] = cr
+		}
+	}
+	// Group enabled bindings by inbound.
+	bindingsByInbound := make(map[string][]model.BindingSnapshot)
+	for _, b := range s.renderBindings {
+		if !b.Enabled {
+			continue
+		}
+		bindingsByInbound[b.InboundID] = append(bindingsByInbound[b.InboundID], b)
+	}
+	for i := range out {
+		bindings := bindingsByInbound[out[i].Name]
+		if len(bindings) == 0 {
+			continue
+		}
+		rc := make([]RuntimeCredential, 0, len(bindings))
+		for _, b := range bindings {
+			c, ok := clientByID[b.ClientID]
+			if !ok || !c.Enabled || c.Depleted || (c.ExpiresAt != nil && *c.ExpiresAt <= s.renderEffectiveAt) {
+				continue
+			}
+			cred, ok := credByBinding[credentialKey{bindingID: b.ID, kind: "password"}]
+			if !ok {
+				return nil, fmt.Errorf("enabled binding %s has no active credential", b.ID)
+			}
+			// Decrypt the pinned credential for rendering.
+			ciphertext := string(cred.EncryptedValue)
+			if !strings.HasPrefix(ciphertext, "ve1:") {
+				return nil, fmt.Errorf("pinned credential %s ciphertext is invalid", cred.ID)
+			}
+			plaintext, err := s.cipher.Decrypt(ciphertext)
+			if err != nil {
+				return nil, fmt.Errorf("decrypt pinned credential %s: %w", cred.ID, err)
+			}
+			runtimeIdentity := b.RuntimeIdentity
+			if runtimeIdentity == "" {
+				runtimeIdentity = client.GenerateRuntimeIdentity(b.ID)
+			}
+			rc = append(rc, RuntimeCredential{Name: c.Name, Username: runtimeIdentity, Password: plaintext})
+		}
+		if len(rc) > 0 {
+			out[i].RuntimeCredentials = rc
+		}
+	}
+	return out, nil
+}
+
+func (s *managementState) snapshotLocked() (managementSnapshot, error) {
 	return NewManagementStateLifecycle(s).SnapshotLocked()
 }
 
@@ -150,7 +253,63 @@ func (s *managementState) Reload() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return NewManagementStateLifecycle(s).ReloadLocked()
+	err := NewManagementStateLifecycle(s).ReloadLocked()
+	if err != nil {
+		s.startupStateLoadFailed = true
+		s.startupStateLoadErr = err
+		s.allowDevAnonymous = false
+		return err
+	}
+	s.startupStateLoadFailed = false
+	s.startupStateLoadErr = nil
+	return nil
+}
+
+// Close stops and joins every normalized-domain background worker before
+// closing the SQLite store. RunLifecycle calls it after HTTP draining, while
+// backup restore uses the same detach/stop/close primitives around its DB swap.
+func (s *managementState) Close() error {
+	if s.lifecycleCancel != nil {
+		s.lifecycleCancel()
+	}
+	s.updateWG.Wait()
+	if s.applyRunner != nil {
+		s.applyRunner.Close()
+	}
+	s.clientRequestMu.Lock()
+	defer s.clientRequestMu.Unlock()
+	s.mu.Lock()
+	s.clientSubsystemStopping = true
+	workers := detachClientBackgroundWorkers(s)
+	hub := s.sse
+	s.sse = nil
+	limiter := s.httpRateLimiter
+	s.httpRateLimiter = nil
+	idempotency := s.idempotency
+	s.idempotency = nil
+	s.mu.Unlock()
+
+	if hub != nil {
+		hub.Close()
+	}
+	if limiter != nil {
+		_ = limiter.Close()
+	}
+	if idempotency != nil {
+		_ = idempotency.Close()
+	}
+	stopClientBackgroundWorkers(workers)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return closeClientDatabase(s)
+}
+
+func (s *managementState) lifecycleContext() context.Context {
+	if s.lifecycleCtx != nil {
+		return s.lifecycleCtx
+	}
+	return context.TODO()
 }
 
 func (s *managementState) saveLocked() error {

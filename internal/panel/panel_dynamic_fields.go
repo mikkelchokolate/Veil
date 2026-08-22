@@ -198,11 +198,18 @@ func panelDynamicFieldsJS() string {
       if (!el) return;
       if (action === 'password') {
         el.value = randomPassword();
+      } else if (action === 'hex64') {
+        // 32 random bytes -> 64 lowercase hex chars (mirrors the React SPA
+        // generateFieldValue). olcRTC encryption keys use this shape; the
+        // legacy panel previously had no handler for it (audit #38/#48).
+        const bytes = new Uint8Array(32);
+        crypto.getRandomValues(bytes);
+        el.value = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
       } else if (action === 'room') {
         const authEl = actionField ? document.getElementById(protocolFieldElementId(actionField)) : null;
         const provider = authEl ? authEl.value : '';
         try {
-          const resp = await fetch('/api/' + encodeURIComponent(protocol) + '/room', {
+          const resp = await fetch('/api/protocols/' + encodeURIComponent(protocol) + '/room', {
             method: 'POST',
             headers: requestHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ provider })

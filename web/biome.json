@@ -1,0 +1,16 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.5.10/schema.json",
+	"vcs": { "enabled": false, "clientKind": "git", "useIgnoreFile": false },
+	"files": {
+		"includes": [
+			"**",
+			"!dist",
+			"!node_modules",
+			"!src/api/generated",
+			"!src/routeTree.gen.ts",
+			"!public/mockServiceWorker.js"
+		]
+	},
+	"formatter": { "indentStyle": "tab" },
+	"linter": { "enabled": true }
+}

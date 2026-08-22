@@ -8,7 +8,7 @@ import (
 )
 
 func TestFreshManagementPanelStartsWithoutDefaultInbounds(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/inbounds", nil))
 	if w.Code != http.StatusOK {

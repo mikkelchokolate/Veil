@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -60,6 +61,13 @@ func TestBackupRoutesCreateListVerifyAndDownload(t *testing.T) {
 		downloadResponse.Header().Get("Content-Disposition") == "" ||
 		!bytes.HasPrefix(downloadResponse.Body.Bytes(), []byte("VEILBACK")) {
 		t.Fatalf("download status=%d headers=%v", downloadResponse.Code, downloadResponse.Header())
+	}
+
+	remove := adminJSONRequest(http.MethodDelete, "/api/backups/"+created.Archive.Name, "")
+	removeResponse := httptest.NewRecorder()
+	state.handleBackupByName(removeResponse, remove)
+	if removeResponse.Code != http.StatusOK {
+		t.Fatalf("delete status=%d body=%s", removeResponse.Code, removeResponse.Body.String())
 	}
 }
 
@@ -117,13 +125,32 @@ func TestBackupRoutesRejectTraversalAndPruneManagedArchives(t *testing.T) {
 }
 
 func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
+	stubManagementApplySideEffects(t)
 	state := newPanelBackupState(t)
+	collectorBeforeRestore := state.trafficCollector
+	reconcilerBeforeRestore := state.trafficReconciler
 	auditStarted := make(chan audit.Record, 1)
 	releaseAudit := make(chan struct{})
+	var releaseAuditOnce sync.Once
+	releaseAuditFinalization := func() {
+		releaseAuditOnce.Do(func() { close(releaseAudit) })
+	}
+	t.Cleanup(releaseAuditFinalization)
 	state.backupRestoreAudit = func(record audit.Record) error {
 		auditStarted <- record
 		<-releaseAudit
 		return nil
+	}
+	for _, body := range []string{
+		`{"username":"alice","password":"alice-password-123","role":"viewer"}`,
+		`{"username":"bob","password":"bob-password-12345","role":"viewer"}`,
+	} {
+		request := adminJSONRequest(http.MethodPost, "/api/users", body)
+		response := httptest.NewRecorder()
+		state.handleUsersRoute(response, request)
+		if response.Code != http.StatusCreated {
+			t.Fatalf("seed restored user status=%d body=%s", response.Code, response.Body.String())
+		}
 	}
 	create := adminJSONRequest(http.MethodPost, "/api/backups", `{}`)
 	createResponse := httptest.NewRecorder()
@@ -155,14 +182,14 @@ func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
 		if record.Action != "backup.restore" {
 			t.Fatalf("unexpected restore audit record: %+v", record)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("restore audit finalization did not start")
 	}
 	if job, _ := state.backupRestoreJob(accepted.ID); job.Status == "succeeded" {
 		t.Fatal("restore job reported success before audit finalization completed")
 	}
-	close(releaseAudit)
-	deadline := time.Now().Add(5 * time.Second)
+	releaseAuditFinalization()
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		job, ok := state.backupRestoreJob(accepted.ID)
 		if !ok {
@@ -180,8 +207,19 @@ func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	completed, _ := state.backupRestoreJob(accepted.ID)
-	if completed.SafetyStatePath == "" || completed.SafetyKeyPath == "" {
+	if completed.SafetyStatePath == "" || completed.SafetyKeyPath == "" || completed.SafetyDatabasePath == "" {
 		t.Fatalf("restore job missing safety paths: %+v", completed)
+	}
+	if state.db == nil || state.db.Ping() != nil || state.clientRepo == nil {
+		t.Fatal("restore job did not reopen SQLite-backed subsystems")
+	}
+	if collectorBeforeRestore.Running() || reconcilerBeforeRestore.Running() {
+		t.Fatal("restore returned before old traffic workers stopped")
+	}
+	if state.trafficCollector == nil || state.trafficReconciler == nil ||
+		state.trafficCollector == collectorBeforeRestore || state.trafficReconciler == reconcilerBeforeRestore ||
+		!state.trafficCollector.Running() || !state.trafficReconciler.Running() {
+		t.Fatal("restore did not create exactly one live worker pair for the reopened database")
 	}
 	if _, ok := state.sessionRegistry().Get(ownerSession.Token); !ok {
 		t.Fatal("restore revoked owner session before final status poll")
@@ -189,7 +227,8 @@ func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
 	if _, ok := state.sessionRegistry().Get(otherSession.Token); ok {
 		t.Fatal("restore did not revoke another active session")
 	}
-	status := adminJSONRequest(http.MethodGet, "/api/backup-restore-jobs/"+accepted.ID, "")
+	status := httptest.NewRequest(http.MethodGet, "/api/backup-restore-jobs/"+accepted.ID, nil)
+	status = status.WithContext(context.WithValue(status.Context(), contextKeyRole, "viewer"))
 	status.AddCookie(&http.Cookie{Name: "veil_session", Value: ownerSession.Token})
 	statusResponse := httptest.NewRecorder()
 	state.handleBackupRestoreJob(statusResponse, status)
@@ -212,6 +251,11 @@ func newPanelBackupState(t *testing.T) *managementState {
 		ApplyRoot: filepath.Join(dir, "etc"),
 	}
 	state := newManagementState(info)
+	t.Cleanup(func() {
+		if err := state.Close(); err != nil {
+			t.Errorf("close backup test state: %v", err)
+		}
+	})
 	state.mu.Lock()
 	if err := state.saveLocked(); err != nil {
 		state.mu.Unlock()

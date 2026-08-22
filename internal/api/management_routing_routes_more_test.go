@@ -21,7 +21,7 @@ func TestWriteRoutingRuleManagementError(t *testing.T) {
 		{routing.ErrRoutingRuleInvalid, http.StatusBadRequest, "name, match, and outbound"},
 		{routing.ErrRoutingRuleDuplicateName, http.StatusConflict, "routing rule name already exists"},
 		{routing.ErrRoutingRuleNotFound, http.StatusNotFound, "404"},
-		{errors.New("custom failure"), http.StatusInternalServerError, "custom failure"},
+		{errors.New("custom failure"), http.StatusInternalServerError, "internal server error"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.err.Error(), func(t *testing.T) {

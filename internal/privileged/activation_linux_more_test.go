@@ -25,7 +25,9 @@ func TestServeSystemdAdoptsListenerAndHandlesRequest(t *testing.T) {
 	listener.SetUnlinkOnClose(false)
 
 	called := false
+	listenerReady := make(chan struct{})
 	newSystemdUnixListener = func() (*net.UnixListener, error) {
+		close(listenerReady)
 		return listener, nil
 	}
 
@@ -43,29 +45,26 @@ func TestServeSystemdAdoptsListenerAndHandlesRequest(t *testing.T) {
 		done <- server.ServeSystemd(ctx, uint32(os.Getuid()), false)
 	}()
 
-	// Wait for the server goroutine to start accepting.
-	deadline := time.Now().Add(time.Second)
-	for {
-		conn, err := net.DialTimeout("unix", path, 50*time.Millisecond)
-		if err == nil {
-			_ = json.NewEncoder(conn).Encode(RequestEnvelope{
-				Version:      ProtocolVersion,
-				RequestID:    "systemd-req",
-				Operation:    OperationRestartPanel,
-				RestartPanel: &RestartPanelRequest{},
-			})
-			var response ResponseEnvelope
-			_ = json.NewDecoder(conn).Decode(&response)
-			_ = conn.Close()
-			if !response.OK {
-				t.Fatalf("expected ok response, got %+v", response)
-			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("server did not accept connections")
-		}
-		time.Sleep(10 * time.Millisecond)
+	select {
+	case <-listenerReady:
+	case <-time.After(time.Second):
+		t.Fatal("server did not initialize systemd listener")
+	}
+	conn, err := net.DialTimeout("unix", path, time.Second)
+	if err != nil {
+		t.Fatalf("dial activated listener: %v", err)
+	}
+	_ = json.NewEncoder(conn).Encode(RequestEnvelope{
+		Version:      ProtocolVersion,
+		RequestID:    "systemd-req",
+		Operation:    OperationRestartPanel,
+		RestartPanel: &RestartPanelRequest{},
+	})
+	var response ResponseEnvelope
+	_ = json.NewDecoder(conn).Decode(&response)
+	_ = conn.Close()
+	if !response.OK {
+		t.Fatalf("expected ok response, got %+v", response)
 	}
 
 	if !called {

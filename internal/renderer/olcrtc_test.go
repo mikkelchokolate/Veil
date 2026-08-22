@@ -23,11 +23,28 @@ func TestRenderOlcrtcProducesValidServerYAML(t *testing.T) {
 		"key: abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
 		"transport: datachannel",
 		"dns: 1.1.1.1:53",
-		"data: data",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("output missing %q:\n%s", want, body)
 		}
+	}
+	if strings.Contains(body, "data:") {
+		t.Fatalf("default config must use olcRTC's embedded dictionaries:\n%s", body)
+	}
+}
+
+func TestRenderOlcrtcKeepsExplicitDictionaryPath(t *testing.T) {
+	body, err := RenderOlcrtc(OlcrtcConfig{
+		Auth:   "jitsi",
+		RoomID: "https://meet.example.com/myroom",
+		Data:   "/var/lib/veil/olcrtc/custom",
+		Key:    "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+	})
+	if err != nil {
+		t.Fatalf("RenderOlcrtc: %v", err)
+	}
+	if !strings.Contains(body, "data: /var/lib/veil/olcrtc/custom") {
+		t.Fatalf("explicit dictionary path missing:\n%s", body)
 	}
 }
 

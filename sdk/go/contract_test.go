@@ -7,7 +7,7 @@ import (
 )
 
 func TestGeneratedClientCoversAdminAndPreviewRoutes(t *testing.T) {
-	rotate, err := NewPostApiAdminRotateKeyRequest("https://veil.example/base/", EmptyObject{})
+	rotate, err := NewPostApiAdminRotateKeyRequest("https://veil.example/base/", nil, EmptyObject{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -16,6 +16,7 @@ func TestGeneratedClientCoversAdminAndPreviewRoutes(t *testing.T) {
 	}
 	preview, err := NewPostApiProfilesRuRecommendedPreviewRequest(
 		"https://veil.example/base/",
+		nil,
 		RURecommendedPreviewRequest{Domain: "vpn.example.com", Email: "admin@example.com"},
 	)
 	if err != nil {
@@ -29,6 +30,7 @@ func TestGeneratedClientCoversAdminAndPreviewRoutes(t *testing.T) {
 func TestGeneratedClientCoversSessionLocaleRoute(t *testing.T) {
 	request, err := NewPostApiAuthLocaleRequest(
 		"https://veil.example/base/",
+		nil,
 		LocaleUpdateRequest{Locale: "ru"},
 	)
 	if err != nil {

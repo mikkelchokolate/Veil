@@ -1,18 +1,68 @@
 package api
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
+
+var ErrSessionNotFound = errors.New("session not found")
+
+func validateSessionIdentity(username, role, userAgent, remoteAddr string) error {
+	username = strings.TrimSpace(username)
+	if username == "" || len(username) > 128 || !utf8.ValidString(username) {
+		return errors.New("invalid session username")
+	}
+	if role != "admin" && role != "viewer" {
+		return errors.New("invalid session role")
+	}
+	if len(userAgent) > 1024 || !utf8.ValidString(userAgent) || strings.ContainsAny(userAgent, "\r\n\x00") {
+		return errors.New("invalid session user agent")
+	}
+	if len(remoteAddr) > 255 || !utf8.ValidString(remoteAddr) {
+		return errors.New("invalid session remote address")
+	}
+	if remoteAddr != "" {
+		host := remoteAddr
+		if splitHost, _, err := net.SplitHostPort(remoteAddr); err == nil {
+			host = splitHost
+		}
+		if net.ParseIP(strings.Trim(host, "[]")) == nil {
+			return errors.New("invalid session remote address")
+		}
+	}
+	return nil
+}
+
+func validateStoredSession(session storedSession) error {
+	if err := validateSessionIdentity(session.Username, session.Role, session.UserAgent, session.RemoteAddr); err != nil {
+		return err
+	}
+	for _, hash := range []string{session.TokenHash, session.CSRFHash} {
+		decoded, err := hex.DecodeString(hash)
+		if err != nil || len(decoded) != sha256.Size {
+			return errors.New("invalid session hash")
+		}
+	}
+	if session.ID == "" || len(session.ID) > 64 || session.CreatedAt.IsZero() || session.LastSeenAt.Before(session.CreatedAt) ||
+		session.IdleExpiresAt.Before(session.LastSeenAt) || session.ExpiresAt.Before(session.IdleExpiresAt) {
+		return errors.New("invalid session timestamps")
+	}
+	return nil
+}
 
 const (
 	defaultSessionIdleTimeout     = 30 * time.Minute
@@ -72,6 +122,16 @@ type sessionStoreFile struct {
 	Sessions []storedSession `json:"sessions"`
 }
 
+type sessionJournalRecord struct {
+	Operation   string          `json:"operation"`
+	TokenHash   string          `json:"tokenHash,omitempty"`
+	Session     *storedSession  `json:"session,omitempty"`
+	TokenHashes []string        `json:"tokenHashes,omitempty"`
+	Sessions    []storedSession `json:"sessions,omitempty"`
+}
+
+const maxActiveSessions = 1024
+
 type SessionRegistry struct {
 	mu              sync.Mutex
 	path            string
@@ -80,6 +140,8 @@ type SessionRegistry struct {
 	now             func() time.Time
 	idleTimeout     time.Duration
 	absoluteTimeout time.Duration
+	persistInterval time.Duration
+	storageErr      error
 }
 
 var globalSessions = mustNewSessionRegistry("")
@@ -92,9 +154,15 @@ func NewSessionRegistry(path string) (*SessionRegistry, error) {
 		now:             time.Now,
 		idleTimeout:     defaultSessionIdleTimeout,
 		absoluteTimeout: defaultSessionAbsoluteTimeout,
+		persistInterval: 5 * time.Minute,
 	}
 	if err := registry.load(); err != nil {
 		return nil, err
+	}
+	if evicted := registry.enforceSessionBoundLocked(); len(evicted) > 0 {
+		if err := registry.saveLocked(); err != nil {
+			return nil, err
+		}
 	}
 	return registry, nil
 }
@@ -107,7 +175,34 @@ func mustNewSessionRegistry(path string) *SessionRegistry {
 	return registry
 }
 
+type evictedSession struct {
+	hash   string
+	record storedSession
+	csrf   string
+}
+
+func (r *SessionRegistry) enforceSessionBoundLocked() []evictedSession {
+	var evicted []evictedSession
+	for len(r.sessions) > maxActiveSessions {
+		oldestHash := ""
+		var oldest storedSession
+		for tokenHash, session := range r.sessions {
+			if oldestHash == "" || session.CreatedAt.Before(oldest.CreatedAt) ||
+				(session.CreatedAt.Equal(oldest.CreatedAt) && tokenHash < oldestHash) {
+				oldestHash, oldest = tokenHash, session
+			}
+		}
+		evicted = append(evicted, evictedSession{hash: oldestHash, record: oldest, csrf: r.rawCSRF[oldestHash]})
+		delete(r.sessions, oldestHash)
+		delete(r.rawCSRF, oldestHash)
+	}
+	return evicted
+}
+
 func (r *SessionRegistry) Create(input SessionCreateInput) (Session, error) {
+	if err := validateSessionIdentity(input.Username, input.Role, input.UserAgent, input.RemoteAddr); err != nil {
+		return Session{}, err
+	}
 	token, err := generateRandomHex(32)
 	if err != nil {
 		return Session{}, err
@@ -136,38 +231,66 @@ func (r *SessionRegistry) Create(input SessionCreateInput) (Session, error) {
 	defer r.mu.Unlock()
 	r.sessions[record.TokenHash] = record
 	r.rawCSRF[record.TokenHash] = csrf
-	if err := r.saveLocked(); err != nil {
+	evicted := r.enforceSessionBoundLocked()
+	var persistErr error
+	if len(evicted) > 0 {
+		persistErr = r.saveLocked()
+	} else {
+		persistErr = r.persistUpsertLocked(record)
+	}
+	if persistErr != nil {
 		delete(r.sessions, record.TokenHash)
 		delete(r.rawCSRF, record.TokenHash)
-		return Session{}, err
+		for _, previous := range evicted {
+			r.sessions[previous.hash] = previous.record
+			if previous.csrf != "" {
+				r.rawCSRF[previous.hash] = previous.csrf
+			}
+		}
+		return Session{}, persistErr
 	}
 	return publicSession(record, token, csrf), nil
 }
 
-func (r *SessionRegistry) NewSession(username, role string) Session {
-	session, _ := r.Create(SessionCreateInput{Username: username, Role: role})
-	return session
+func (r *SessionRegistry) NewSession(username, role string) (Session, error) {
+	return r.Create(SessionCreateInput{Username: username, Role: role})
 }
 
 func (r *SessionRegistry) Get(token string) (Session, bool) {
 	tokenHash := hashSessionSecret(token)
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if err := r.storageHealthyLocked(); err != nil {
+		return Session{}, false
+	}
 	record, ok := r.sessions[tokenHash]
 	if !ok {
 		return Session{}, false
 	}
 	now := r.now().UTC()
+	if now.Before(record.LastSeenAt) {
+		now = record.LastSeenAt
+	}
 	if sessionExpired(record, now) {
 		delete(r.sessions, tokenHash)
 		delete(r.rawCSRF, tokenHash)
-		_ = r.saveLocked()
+		_ = r.persistDeleteLocked(tokenHash)
 		return Session{}, false
 	}
-	record.LastSeenAt = now
-	record.IdleExpiresAt = minTime(now.Add(r.idleTimeout), record.ExpiresAt)
-	r.sessions[tokenHash] = record
-	_ = r.saveLocked()
+	interval := r.persistInterval
+	if interval <= 0 {
+		interval = 5 * time.Minute
+	}
+	if now.Sub(record.LastSeenAt) >= interval {
+		previous := record
+		record.LastSeenAt = now
+		record.IdleExpiresAt = minTime(now.Add(r.idleTimeout), record.ExpiresAt)
+		r.sessions[tokenHash] = record
+		if err := r.persistUpsertLocked(record); err != nil {
+			r.sessions[tokenHash] = previous
+			return Session{}, false
+		}
+	}
 	return publicSession(record, token, r.rawCSRF[tokenHash]), true
 }
 
@@ -189,7 +312,7 @@ func (r *SessionRegistry) EnsureCSRF(token string) (string, bool, error) {
 	record.CSRFHash = hashSessionSecret(csrf)
 	r.sessions[tokenHash] = record
 	r.rawCSRF[tokenHash] = csrf
-	if err := r.saveLocked(); err != nil {
+	if err := r.persistUpsertLocked(record); err != nil {
 		delete(r.rawCSRF, tokenHash)
 		return "", false, err
 	}
@@ -210,13 +333,25 @@ func (r *SessionRegistry) ValidateCSRF(token, provided string) bool {
 	return subtle.ConstantTimeCompare([]byte(got), []byte(record.CSRFHash)) == 1
 }
 
-func (r *SessionRegistry) Delete(token string) {
+func (r *SessionRegistry) Delete(token string) error {
 	tokenHash := hashSessionSecret(token)
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	record, existed := r.sessions[tokenHash]
+	csrf := r.rawCSRF[tokenHash]
 	delete(r.sessions, tokenHash)
 	delete(r.rawCSRF, tokenHash)
-	_ = r.saveLocked()
+	if !existed {
+		return nil
+	}
+	if err := r.persistDeleteLocked(tokenHash); err != nil {
+		r.sessions[tokenHash] = record
+		if csrf != "" {
+			r.rawCSRF[tokenHash] = csrf
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *SessionRegistry) List(currentToken string) []SessionInfo {
@@ -225,12 +360,11 @@ func (r *SessionRegistry) List(currentToken string) []SessionInfo {
 	defer r.mu.Unlock()
 	now := r.now().UTC()
 	list := make([]SessionInfo, 0, len(r.sessions))
-	changed := false
 	for tokenHash, session := range r.sessions {
 		if sessionExpired(session, now) {
 			delete(r.sessions, tokenHash)
 			delete(r.rawCSRF, tokenHash)
-			changed = true
+			_ = r.persistDeleteLocked(tokenHash)
 			continue
 		}
 		list = append(list, SessionInfo{
@@ -246,9 +380,7 @@ func (r *SessionRegistry) List(currentToken string) []SessionInfo {
 			Current:       tokenHash == currentHash,
 		})
 	}
-	if changed {
-		_ = r.saveLocked()
-	}
+
 	sort.Slice(list, func(i, j int) bool {
 		if list[i].Current != list[j].Current {
 			return list[i].Current
@@ -261,54 +393,78 @@ func (r *SessionRegistry) List(currentToken string) []SessionInfo {
 	return list
 }
 
-func (r *SessionRegistry) DeleteByID(id string) bool {
+func (r *SessionRegistry) DeleteByID(id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for tokenHash, session := range r.sessions {
 		if session.ID == id {
+			csrf := r.rawCSRF[tokenHash]
 			delete(r.sessions, tokenHash)
 			delete(r.rawCSRF, tokenHash)
-			_ = r.saveLocked()
-			return true
+			if err := r.persistDeleteLocked(tokenHash); err != nil {
+				r.sessions[tokenHash] = session
+				if csrf != "" {
+					r.rawCSRF[tokenHash] = csrf
+				}
+				return err
+			}
+			return nil
 		}
 	}
-	return false
+	return ErrSessionNotFound
 }
 
 func (r *SessionRegistry) DeleteByUsername(username string) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	deleted := 0
+	var hashes []string
 	for tokenHash, session := range r.sessions {
 		if session.Username == username {
-			delete(r.sessions, tokenHash)
-			delete(r.rawCSRF, tokenHash)
-			deleted++
+			hashes = append(hashes, tokenHash)
 		}
 	}
-	if deleted == 0 {
-		return 0, nil
+	if err := r.deleteManyLocked(hashes); err != nil {
+		return 0, err
 	}
-	return deleted, r.saveLocked()
+	return len(hashes), nil
 }
 
 func (r *SessionRegistry) DeleteAllExcept(currentToken string) (int, error) {
 	currentHash := hashSessionSecret(currentToken)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	deleted := 0
+	var hashes []string
 	for tokenHash := range r.sessions {
-		if tokenHash == currentHash {
-			continue
+		if tokenHash != currentHash {
+			hashes = append(hashes, tokenHash)
 		}
+	}
+	if err := r.deleteManyLocked(hashes); err != nil {
+		return 0, err
+	}
+	return len(hashes), nil
+}
+
+func (r *SessionRegistry) deleteManyLocked(hashes []string) error {
+	removed := make(map[string]evictedSession, len(hashes))
+	for _, tokenHash := range hashes {
+		removed[tokenHash] = evictedSession{record: r.sessions[tokenHash], csrf: r.rawCSRF[tokenHash]}
 		delete(r.sessions, tokenHash)
 		delete(r.rawCSRF, tokenHash)
-		deleted++
 	}
-	if deleted == 0 {
-		return 0, nil
+	if len(hashes) == 0 || r.path == "" {
+		return nil
 	}
-	return deleted, r.saveLocked()
+	if err := r.appendJournalLocked(sessionJournalRecord{Operation: "delete_many", TokenHashes: hashes}); err != nil {
+		for tokenHash, previous := range removed {
+			r.sessions[tokenHash] = previous.record
+			if previous.csrf != "" {
+				r.rawCSRF[tokenHash] = previous.csrf
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *SessionRegistry) load() error {
@@ -316,25 +472,216 @@ func (r *SessionRegistry) load() error {
 		return nil
 	}
 	body, err := os.ReadFile(r.path)
+	if err == nil {
+		var file sessionStoreFile
+		if err := json.Unmarshal(body, &file); err != nil {
+			return err
+		}
+		if file.Version != 1 {
+			return fmt.Errorf("unsupported session snapshot version %d", file.Version)
+		}
+		now := r.now().UTC()
+		for _, session := range file.Sessions {
+			if sessionExpired(session, now) {
+				continue
+			}
+			if err := validateStoredSession(session); err != nil {
+				return err
+			}
+			if session.ID == "" {
+				session.ID = session.TokenHash[:minInt(16, len(session.TokenHash))]
+			}
+			r.sessions[session.TokenHash] = session
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return r.loadJournalLocked()
+}
+
+func (r *SessionRegistry) RevalidateToken(token string, restoredRoles map[string]string) (bool, error) {
+	tokenHash := hashSessionSecret(token)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	record, ok := r.sessions[tokenHash]
+	if !ok {
+		return false, nil
+	}
+	role, exists := restoredRoles[record.Username]
+	if !exists {
+		if err := r.persistDeleteLocked(tokenHash); err != nil {
+			return false, err
+		}
+		delete(r.sessions, tokenHash)
+		delete(r.rawCSRF, tokenHash)
+		return false, nil
+	}
+	if record.Role != role {
+		previous := record
+		record.Role = role
+		r.sessions[tokenHash] = record
+		if err := r.persistUpsertLocked(record); err != nil {
+			r.sessions[tokenHash] = previous
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+func (r *SessionRegistry) Healthy() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.storageHealthyLocked()
+}
+
+func (r *SessionRegistry) journalPath() string {
+	if r.path == "" {
+		return ""
+	}
+	return r.path + ".journal"
+}
+
+func (r *SessionRegistry) storageHealthyLocked() error {
+	if r.storageErr != nil {
+		if err := r.compactJournalLocked(); err == nil {
+			r.storageErr = nil
+		} else {
+			r.storageErr = err
+			return err
+		}
+	}
+	if r.path == "" {
+		return nil
+	}
+	info, err := os.Stat(r.path)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("session snapshot is not a regular file")
+	}
+	return nil
+}
+
+func (r *SessionRegistry) persistUpsertLocked(record storedSession) error {
+	if r.path == "" {
+		return nil
+	}
+	if _, err := os.Stat(r.path); errors.Is(err, os.ErrNotExist) {
+		return r.saveLocked()
+	} else if err != nil {
+		return err
+	}
+	copy := record
+	return r.appendJournalLocked(sessionJournalRecord{Operation: "upsert", TokenHash: record.TokenHash, Session: &copy})
+}
+
+func (r *SessionRegistry) persistDeleteLocked(tokenHash string) error {
+	if r.path == "" {
+		return nil
+	}
+	if err := r.storageHealthyLocked(); err != nil {
+		return err
+	}
+	return r.appendJournalLocked(sessionJournalRecord{Operation: "delete", TokenHash: tokenHash})
+}
+
+func (r *SessionRegistry) appendJournalLocked(record sessionJournalRecord) error {
+	body, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	body = append(body, '\n')
+	if err := os.MkdirAll(filepath.Dir(r.path), 0o700); err != nil {
+		return err
+	}
+	file, err := os.OpenFile(r.journalPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(body); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	if err := syncSessionDirectory(r.path); err != nil {
+		return err
+	}
+	if info, err := os.Stat(r.journalPath()); err == nil && info.Size() > 1024*1024 {
+		if compactErr := r.compactJournalLocked(); compactErr != nil {
+			r.storageErr = compactErr
+		}
+	}
+	return nil
+}
+
+func (r *SessionRegistry) compactJournalLocked() error {
+	record := sessionJournalRecord{Operation: "replace_all", Sessions: make([]storedSession, 0, len(r.sessions))}
+	for _, session := range r.sessions {
+		record.Sessions = append(record.Sessions, session)
+	}
+	body, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	return writeSessionFile(r.journalPath(), append(body, '\n'))
+}
+
+func (r *SessionRegistry) loadJournalLocked() error {
+	if r.path == "" {
+		return nil
+	}
+	body, err := os.ReadFile(r.journalPath())
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	var file sessionStoreFile
-	if err := json.Unmarshal(body, &file); err != nil {
-		return err
-	}
-	now := r.now().UTC()
-	for _, session := range file.Sessions {
-		if session.TokenHash == "" || sessionExpired(session, now) {
+	complete := len(body) == 0 || body[len(body)-1] == '\n'
+	lines := bytes.Split(body, []byte{'\n'})
+	for index, line := range lines {
+		if len(line) == 0 {
 			continue
 		}
-		if session.ID == "" {
-			session.ID = session.TokenHash[:minInt(16, len(session.TokenHash))]
+		var record sessionJournalRecord
+		if err := json.Unmarshal(line, &record); err != nil {
+			if !complete && index == len(lines)-1 {
+				break
+			}
+			return err
 		}
-		r.sessions[session.TokenHash] = session
+		switch record.Operation {
+		case "upsert":
+			if record.Session == nil || record.TokenHash == "" || record.Session.TokenHash != record.TokenHash || validateStoredSession(*record.Session) != nil {
+				return errors.New("invalid session journal upsert")
+			}
+			r.sessions[record.TokenHash] = *record.Session
+		case "delete":
+			delete(r.sessions, record.TokenHash)
+			delete(r.rawCSRF, record.TokenHash)
+		case "delete_many":
+			for _, tokenHash := range record.TokenHashes {
+				delete(r.sessions, tokenHash)
+				delete(r.rawCSRF, tokenHash)
+			}
+		case "replace_all":
+			r.sessions = make(map[string]storedSession, len(record.Sessions))
+			for _, session := range record.Sessions {
+				if validateStoredSession(session) != nil {
+					return errors.New("invalid session journal checkpoint")
+				}
+				r.sessions[session.TokenHash] = session
+			}
+		default:
+			return errors.New("invalid session journal operation")
+		}
 	}
 	return nil
 }
@@ -355,7 +702,13 @@ func (r *SessionRegistry) saveLocked() error {
 		return err
 	}
 	body = append(body, '\n')
-	return writeSessionFile(r.path, body)
+	if err := writeSessionFile(r.path, body); err != nil {
+		return err
+	}
+	if err := os.Remove(r.journalPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return syncSessionDirectory(r.path)
 }
 
 func writeSessionFile(path string, body []byte) error {
@@ -397,7 +750,16 @@ func writeSessionFile(path string, body []byte) error {
 		_ = os.Remove(tmpPath)
 		return err
 	}
-	return nil
+	return syncSessionDirectory(path)
+}
+
+func syncSessionDirectory(path string) error {
+	directory, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return directory.Sync()
 }
 
 func publicSession(record storedSession, token, csrf string) Session {

@@ -86,8 +86,14 @@ func TestRenderSystemdUnits(t *testing.T) {
 	if !strings.Contains(units["veil-caddy.service"], "/etc/veil/generated/caddy/config.json") {
 		t.Fatalf("bad caddy unit:\n%s", units["veil-caddy.service"])
 	}
+	if !strings.Contains(units["veil-caddy.service"], "SupplementaryGroups=veil") {
+		t.Fatalf("caddy unit must traverse veil-owned 0750 config directories without CAP_DAC_OVERRIDE:\n%s", units["veil-caddy.service"])
+	}
 	if !strings.Contains(units["veil-hysteria2@.service"], "/etc/veil/generated/hysteria2/%i.yaml") {
 		t.Fatalf("bad hysteria2 unit:\n%s", units["veil-hysteria2@.service"])
+	}
+	if !strings.Contains(units["veil-mieru.service"], "ExecStop=/usr/local/bin/mita stop") {
+		t.Fatalf("mieru unit must stop mita gracefully on teardown:\n%s", units["veil-mieru.service"])
 	}
 	if !strings.Contains(units["veil-olcrtc@.service"], "/etc/veil/generated/olcrtc/%i.yaml") {
 		t.Fatalf("bad olcrtc unit:\n%s", units["veil-olcrtc@.service"])

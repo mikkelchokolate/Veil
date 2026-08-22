@@ -15,9 +15,10 @@ func TestRenderSystemdUnitsIncludesHardenedEncryptedBackupTimer(t *testing.T) {
 		"--passphrase-file /etc/veil/backup.passphrase",
 		"--output-dir /var/lib/veil/backups",
 		"--prune",
+		"EnvironmentFile=-/etc/veil/veil.env",
 		"NoNewPrivileges=true",
 		"ProtectSystem=strict",
-		"ReadWritePaths=/var/lib/veil/backups",
+		"ReadWritePaths=/var/lib/veil",
 	} {
 		if !strings.Contains(service, want) {
 			t.Fatalf("backup service missing %q:\n%s", want, service)

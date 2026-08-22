@@ -8,6 +8,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/mikkelchokolate/Veil/internal/service"
+	"github.com/spf13/cobra"
 )
 
 func TestInstallPanelCaddyAccessPrintsPanelURLWithoutProxyStack(t *testing.T) {
@@ -62,6 +63,7 @@ func TestInstallPanelCaddyAccessUsesResolvedCaddyBinaryInSystemdUnit(t *testing.
 	oldLookPath := commandLookPath
 	oldSystemd := installSystemdRunFunc
 	oldExecutable := installExecutableFunc
+	oldInstallRuntimes := installRuntimesFunc
 	var gotPaths installer.ApplyPaths
 	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
 		gotPaths = paths
@@ -75,11 +77,13 @@ func TestInstallPanelCaddyAccessUsesResolvedCaddyBinaryInSystemdUnit(t *testing.
 	}
 	installSystemdRunFunc = func([]service.SystemdAction) error { return nil }
 	installExecutableFunc = func() (string, error) { return "/usr/local/bin/veil", nil }
+	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) {}
 	defer func() {
 		installApplyFunc = oldApply
 		commandLookPath = oldLookPath
 		installSystemdRunFunc = oldSystemd
 		installExecutableFunc = oldExecutable
+		installRuntimesFunc = oldInstallRuntimes
 	}()
 
 	cmd := NewRootCommand("test")

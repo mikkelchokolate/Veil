@@ -52,6 +52,7 @@ run_deb_smoke() {
       for unit in veil.service veil-helper.service veil-helper.socket veil-backup.service veil-backup.timer veil-caddy.service veil-hysteria2@.service veil-mieru.service veil-olcrtc@.service veil-warp.service; do
         test -f "/lib/systemd/system/$unit"
       done
+      test -f /etc/sysctl.d/99-veil-quic.conf
       id veil
       /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
 
@@ -94,6 +95,7 @@ run_rpm_smoke() {
       dnf install -y /packages/old/*.rpm
       test -x /usr/local/bin/veil
       test -f /lib/systemd/system/veil.service
+      test -f /etc/sysctl.d/99-veil-quic.conf
       id veil
       /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
 
@@ -124,6 +126,7 @@ run_apk_smoke() {
       apk add --allow-untrusted /packages/old/*.apk
       test -x /usr/local/bin/veil
       test -f /lib/systemd/system/veil.service
+      test -f /etc/sysctl.d/99-veil-quic.conf
       id veil
       /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
 

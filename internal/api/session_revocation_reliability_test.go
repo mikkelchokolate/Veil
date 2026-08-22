@@ -10,6 +10,13 @@ import (
 	"testing"
 )
 
+func sessionPresentInMemory(registry *SessionRegistry, token string) bool {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	_, ok := registry.sessions[hashSessionSecret(token)]
+	return ok
+}
+
 func sessionRegistryWithFailingPersistence(t *testing.T) (*SessionRegistry, Session) {
 	t.Helper()
 	registry, err := NewSessionRegistry("")
@@ -34,7 +41,7 @@ func TestDeleteTokenPersistedRollsBackOnSaveFailure(t *testing.T) {
 	if !deleted || err == nil {
 		t.Fatalf("DeleteTokenPersisted deleted=%v err=%v", deleted, err)
 	}
-	if _, ok := registry.Get(session.Token); !ok {
+	if !sessionPresentInMemory(registry, session.Token) {
 		t.Fatal("failed persistent logout removed the in-memory session")
 	}
 }
@@ -45,7 +52,7 @@ func TestDeleteByIDPersistedRollsBackOnSaveFailure(t *testing.T) {
 	if !deleted || err == nil {
 		t.Fatalf("DeleteByIDPersisted deleted=%v err=%v", deleted, err)
 	}
-	if _, ok := registry.Get(session.Token); !ok {
+	if !sessionPresentInMemory(registry, session.Token) {
 		t.Fatal("failed persistent revocation removed the in-memory session")
 	}
 }
@@ -62,10 +69,10 @@ func TestLogoutReportsPersistenceFailureAndKeepsCookieSession(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "failed to persist logout") {
+	if responseErrorMessage(t, rec.Body.Bytes()) != "internal server error" {
 		t.Fatalf("unexpected body: %s", rec.Body.String())
 	}
-	if _, ok := registry.Get(session.Token); !ok {
+	if !sessionPresentInMemory(registry, session.Token) {
 		t.Fatal("failed logout removed the active session")
 	}
 	if cookies := rec.Result().Cookies(); len(cookies) != 0 {
@@ -86,7 +93,7 @@ func TestSessionRevokeReportsPersistenceFailureAndKeepsSession(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if _, ok := registry.Get(session.Token); !ok {
+	if !sessionPresentInMemory(registry, session.Token) {
 		t.Fatal("failed revocation removed the active session")
 	}
 }

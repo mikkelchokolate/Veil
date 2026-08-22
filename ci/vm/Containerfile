@@ -1,0 +1,247 @@
+# ci/vm/Containerfile — CI image chain for Veil local CI.
+#
+#   ubuntu:24.04@<pinned> -> base -> { browser, system }
+#
+# All tool/runtime versions come from scripts/ci/versions.sh via build args
+# (wired by scripts/ci/vm-build.sh — never restate a version here).
+# Every downloaded artifact is SHA256-verified BEFORE unpacking/execution.
+
+# syntax=docker/dockerfile:1
+
+# Parser-safe default is mirrored from scripts/ci/versions.sh and checked by
+# verify_versions.py; vm-build.sh still passes the same value explicitly.
+ARG UBUNTU_BASE=ubuntu:24.04@sha256:52df9b1ee71626e0088f7d400d5c6b5f7bb916f8f0c82b474289a4ece6cf3faf
+# hadolint ignore=DL3006
+FROM ${UBUNTU_BASE} AS toolchain
+
+# All RUN steps use bash (pipefail); ubuntu:24.04 ships bash in the base image.
+SHELL ["/bin/bash", "-c"]
+
+ARG CI_GO_VERSION
+ARG CI_GO_TARBALL_SHA256
+ARG CI_GO_GODEBUG
+ARG CI_GO_GOPROXY
+ARG CI_NODE_VERSION
+ARG CI_NODE_TARBALL_SHA256
+ARG CI_NPM_VERSION
+ARG CI_PNPM_VERSION
+ARG CI_STATICCHECK_VERSION
+ARG CI_GOVULNCHECK_VERSION
+ARG CI_NFPM_VERSION
+ARG CI_REDOCLY_VERSION
+ARG CI_CADDY_VERSION
+ARG CI_FORWARDPROXY_VERSION
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=UTC \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    GODEBUG=${CI_GO_GODEBUG} \
+    GOPROXY=${CI_GO_GOPROXY} \
+    PATH=/usr/local/go/bin:/usr/local/node/bin:/root/go/bin:/home/ci/go/bin:$PATH
+
+# --- System packages (list locked in packages.lock [target:base]) ------------
+COPY packages.lock /tmp/packages.lock
+RUN set -euo pipefail; \
+    printf 'path-include=/usr/share/man/man1/*\npath-include=/usr/share/man/*/man1/*\n' >/etc/dpkg/dpkg.cfg.d/zz-veil-man1; \
+    apt-get update; \
+    awk '/^\[target:base\]/{f=1;next} /^\[/{f=0} f && !/^#/ && NF {print $1}' /tmp/packages.lock \
+      | xargs apt-get install -y --no-install-recommends; \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
+
+# --- Go toolchain (checksum-verified) -----------------------------------------
+RUN set -euo pipefail; \
+    curl --fail --location "https://dl.google.com/go/go${CI_GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tgz; \
+    echo "${CI_GO_TARBALL_SHA256}  /tmp/go.tgz" | sha256sum --check -; \
+    tar -C /usr/local -xzf /tmp/go.tgz; \
+    rm -f /tmp/go.tgz
+
+# --- Node + pnpm (checksum-verified) -------------------------------------------
+RUN set -euo pipefail; \
+    curl --fail --location "https://nodejs.org/dist/v${CI_NODE_VERSION}/node-v${CI_NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz; \
+    echo "${CI_NODE_TARBALL_SHA256}  /tmp/node.tar.xz" | sha256sum --check -; \
+    mkdir -p /usr/local/node; \
+    tar -C /usr/local/node --strip-components=1 -xJf /tmp/node.tar.xz; \
+    rm -f /tmp/node.tar.xz; \
+    npm_config_update_notifier=false npm install --global --ignore-scripts --no-audit --no-fund \
+      "npm@${CI_NPM_VERSION}" "pnpm@${CI_PNPM_VERSION}" "@redocly/cli@${CI_REDOCLY_VERSION}"; \
+    npm --version; \
+    pnpm --version; \
+    rm -rf /root/.npm
+
+# --- Go CI tools (version-pinned; module proxy fetch with retry for
+# transient network failures) ---------------------------------------------------
+RUN --mount=type=cache,target=/root/go/pkg \
+    --mount=type=cache,target=/root/.cache/go-build \
+    set -euo pipefail; \
+    for attempt in 1 2 3; do \
+      GOBIN=/usr/local/bin go install "honnef.co/go/tools/cmd/staticcheck@${CI_STATICCHECK_VERSION}" && \
+      GOBIN=/usr/local/bin go install "golang.org/x/vuln/cmd/govulncheck@${CI_GOVULNCHECK_VERSION}" && \
+      GOBIN=/usr/local/bin go install "github.com/goreleaser/nfpm/v2/cmd/nfpm@${CI_NFPM_VERSION}" && break; \
+      echo "[image] go tool install attempt ${attempt} failed — retrying"; sleep 10; \
+    done; \
+    staticcheck -version >/dev/null; \
+    govulncheck -version >/dev/null 2>&1 || govulncheck -h >/dev/null 2>&1; \
+    nfpm -v >/dev/null
+
+# --- CI user + in-guest helpers --------------------------------------------------
+# ubuntu:24.04 ships a default `ubuntu` user at UID/GID 1000 — replace it with
+# the canonical CI user (spec: ci, UID 1000, GID 1000).
+RUN set -euo pipefail; \
+    userdel -r ubuntu 2>/dev/null || true; \
+    groupdel ubuntu 2>/dev/null || true; \
+    groupadd -g 1000 ci; \
+    useradd -m -u 1000 -g 1000 -s /bin/bash ci; \
+    mkdir -p /workspace /opt/ci /opt/veil-runtime /exchange; \
+    chown -R ci:ci /workspace; \
+    echo 'ci ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ci; \
+    chmod 440 /etc/sudoers.d/ci
+
+COPY entrypoint.sh guest-run.sh prepare-workspace.sh /opt/ci/
+RUN chmod +x /opt/ci/*.sh
+
+# ==============================================================================
+# runtimebuild — pinned protocol runtimes, built/downloaded ONCE and copied
+# into the targets that need them. The stage itself is discarded.
+# Stage order matters: the legacy builder requires COPY --from sources to be
+# defined before the stage that copies from them, so this sits between the
+# toolchain and base stages.
+FROM toolchain AS runtimebuild
+
+ARG CI_HYSTERIA_TAG
+ARG CI_HYSTERIA_ASSET
+ARG CI_HYSTERIA_SHA256
+ARG CI_MITA_TAG
+ARG CI_MITA_ASSET
+ARG CI_MITA_SHA256
+ARG CI_MIERU_CLIENT_TAG
+ARG CI_MIERU_CLIENT_ASSET
+ARG CI_MIERU_CLIENT_SHA256
+ARG CI_NAIVE_CLIENT_TAG
+ARG CI_NAIVE_CLIENT_ASSET
+ARG CI_NAIVE_CLIENT_SHA256
+ARG CI_SINGBOX_TAG
+ARG CI_SINGBOX_ASSET
+ARG CI_SINGBOX_SHA256
+
+# --- Pinned protocol runtimes (checksum-verified BEFORE unpack) -----------------
+RUN set -euo pipefail; \
+    cd /tmp; \
+    curl --fail --location "https://github.com/apernet/hysteria/releases/download/${CI_HYSTERIA_TAG}/${CI_HYSTERIA_ASSET}" -o hysteria; \
+    echo "${CI_HYSTERIA_SHA256}  hysteria" | sha256sum --check -; \
+    install -m 0755 hysteria /opt/veil-runtime/hysteria; \
+    curl --fail --location "https://github.com/enfein/mieru/releases/download/${CI_MITA_TAG}/${CI_MITA_ASSET}" -o mita.tar.gz; \
+    echo "${CI_MITA_SHA256}  mita.tar.gz" | sha256sum --check -; \
+    tar -xzf mita.tar.gz; \
+    install -m 0755 "$(find /tmp -maxdepth 2 -type f -name mita | head -n1)" /opt/veil-runtime/mita; \
+    curl --fail --location "https://github.com/enfein/mieru/releases/download/${CI_MIERU_CLIENT_TAG}/${CI_MIERU_CLIENT_ASSET}" -o mieru.tar.gz; \
+    echo "${CI_MIERU_CLIENT_SHA256}  mieru.tar.gz" | sha256sum --check -; \
+    mkdir -p /tmp/mieru-client && tar -xzf mieru.tar.gz -C /tmp/mieru-client; \
+    install -m 0755 "$(find /tmp/mieru-client -type f -name mieru | head -n1)" /opt/veil-runtime/mieru; \
+    curl --fail --location "https://github.com/klzgrad/naiveproxy/releases/download/${CI_NAIVE_CLIENT_TAG}/${CI_NAIVE_CLIENT_ASSET}" -o naive.tar.xz; \
+    echo "${CI_NAIVE_CLIENT_SHA256}  naive.tar.xz" | sha256sum --check -; \
+    mkdir -p /tmp/naive-client && tar -xJf naive.tar.xz -C /tmp/naive-client; \
+    install -m 0755 "$(find /tmp/naive-client -type f -name naive | head -n1)" /opt/veil-runtime/naive; \
+    curl --fail --location "https://github.com/SagerNet/sing-box/releases/download/${CI_SINGBOX_TAG}/${CI_SINGBOX_ASSET}" -o singbox.tar.gz; \
+    echo "${CI_SINGBOX_SHA256}  singbox.tar.gz" | sha256sum --check -; \
+    mkdir -p /tmp/singbox && tar -xzf singbox.tar.gz -C /tmp/singbox; \
+    install -m 0755 "$(find /tmp/singbox -type f -name sing-box | head -n1)" /opt/veil-runtime/sing-box; \
+    rm -rf /tmp/*
+
+# Caddy with the naive forward_proxy module — source-built with the exact same
+# pins as the product installer (internal/runtimeinstall/runtimeinstall.go).
+# vm-build.sh supplies both versions from scripts/ci/versions.sh.
+RUN --mount=type=cache,target=/root/go/pkg \
+    --mount=type=cache,target=/root/.cache/go-build \
+    set -euo pipefail; \
+    mkdir -p /tmp/caddy-build && cd /tmp/caddy-build; \
+    printf 'package main\n\nimport (\n\tcaddycmd "github.com/caddyserver/caddy/v2/cmd"\n\t_ "github.com/caddyserver/caddy/v2/modules/standard"\n\t_ "github.com/caddyserver/forwardproxy"\n)\n\nfunc main() {\n\tcaddycmd.Main()\n}\n' > main.go; \
+    go mod init caddy >/dev/null; \
+    go mod edit -require "github.com/caddyserver/caddy/v2@${CI_CADDY_VERSION}"; \
+    go mod edit -replace "github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@${CI_FORWARDPROXY_VERSION}"; \
+    go mod tidy; \
+    CGO_ENABLED=0 go build -o /opt/veil-runtime/caddy -ldflags='-s -w' -trimpath .; \
+    /opt/veil-runtime/caddy list-modules | grep -Fx http.handlers.forward_proxy; \
+    rm -rf /tmp/caddy-build
+
+# ==============================================================================
+# base — canonical CI target for frontend/test/lint jobs.
+# Caddy with the naive forward_proxy module is part of EVERY CI target:
+# GitHub ubuntu-24.04 runners ship a preinstalled caddy on PATH and the unit
+# tests probe `caddy list-modules` unconditionally, so base/browser/system all
+# need it for parity. browser and system inherit this layer via FROM base.
+FROM toolchain AS base
+
+COPY --from=runtimebuild /opt/veil-runtime/caddy /opt/veil-runtime/caddy
+
+ENTRYPOINT ["/opt/ci/entrypoint.sh"]
+
+# ==============================================================================
+FROM base AS browser
+
+ARG CI_PLAYWRIGHT_VERSION
+
+COPY packages.lock /tmp/packages.lock
+RUN set -euo pipefail; \
+    apt-get update; \
+    awk '/^\[target:browser\]/{f=1;next} /^\[/{f=0} f && !/^#/ && NF {print $1}' /tmp/packages.lock \
+      | xargs apt-get install -y --no-install-recommends; \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
+
+# Chromium for Playwright, system-wide browser path so both root and ci use it.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
+    PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000
+RUN set -euo pipefail; \
+    mkdir -p /opt/ms-playwright /tmp/playwright-installer; \
+    cd /tmp/playwright-installer; \
+    npm init --yes >/dev/null; \
+    npm install --ignore-scripts --no-audit --no-fund "playwright@${CI_PLAYWRIGHT_VERSION}"; \
+    ./node_modules/.bin/playwright install chromium; \
+    chmod -R a+rX /opt/ms-playwright; \
+    rm -rf /root/.npm /tmp/playwright-installer
+
+# ==============================================================================
+FROM base AS system
+
+ARG CI_DOCKER_CLI_VERSION
+ARG CI_DOCKER_CLI_SHA256
+ARG CI_DOCKER_BUILDX_VERSION
+ARG CI_DOCKER_BUILDX_SHA256
+
+COPY packages.lock /tmp/packages.lock
+RUN set -euo pipefail; \
+    apt-get update; \
+    awk '/^\[target:system\]/{f=1;next} /^\[/{f=0} f && !/^#/ && NF {print $1}' /tmp/packages.lock \
+      | xargs apt-get install -y --no-install-recommends; \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
+
+# Docker CLI + Buildx plugin (talks to the host daemon via mounted socket for
+# package-smoke / image-build); no daemon inside the image.
+RUN set -euo pipefail; \
+    curl --fail --location "https://download.docker.com/linux/static/stable/x86_64/docker-${CI_DOCKER_CLI_VERSION}.tgz" -o /tmp/docker.tgz; \
+    echo "${CI_DOCKER_CLI_SHA256}  /tmp/docker.tgz" | sha256sum --check -; \
+    tar -C /usr/local/bin --strip-components=1 -xzf /tmp/docker.tgz docker/docker; \
+    rm -f /tmp/docker.tgz; \
+    install -d -m 0755 /usr/local/lib/docker/cli-plugins; \
+    curl --fail --location \
+      "https://github.com/docker/buildx/releases/download/v${CI_DOCKER_BUILDX_VERSION}/buildx-v${CI_DOCKER_BUILDX_VERSION}.linux-amd64" \
+      -o /usr/local/lib/docker/cli-plugins/docker-buildx; \
+    echo "${CI_DOCKER_BUILDX_SHA256}  /usr/local/lib/docker/cli-plugins/docker-buildx" | sha256sum --check -; \
+    chmod 0755 /usr/local/lib/docker/cli-plugins/docker-buildx; \
+    docker buildx version | grep -F "v${CI_DOCKER_BUILDX_VERSION}"
+
+# Full pinned runtime set for protocol E2E / privilege-boundary / package-smoke.
+# caddy itself comes from the base layer; this adds the rest alongside it.
+COPY --from=runtimebuild /opt/veil-runtime/ /opt/veil-runtime/
+
+# systemd test units used by the Gate-5 PoC and privilege-boundary job.
+COPY systemd/ /opt/ci/systemd/
+
+# systemd as PID 1 when the system-image workload is executed by vm-run.sh.
+# Mask pointless guest units and enable the one-shot CI lifecycle runner.
+RUN set -euo pipefail; \
+    chmod 0755 /opt/ci/systemd/run-job.sh; \
+    install -m 0644 /opt/ci/systemd/veil-ci-runner.service /usr/lib/systemd/system/veil-ci-runner.service; \
+    systemctl enable veil-ci-runner.service >/dev/null; \
+    systemctl mask systemd-firstboot.service systemd-machine-id-commit.service \
+      systemd-networkd-wait-online.service >/dev/null 2>&1 || true

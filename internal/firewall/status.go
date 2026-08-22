@@ -7,6 +7,8 @@ import (
 	veilruntime "github.com/mikkelchokolate/Veil/internal/runtime"
 )
 
+var stableUFWEnv = []string{"LC_ALL=C", "LANG=C"}
+
 type RuntimeCommandRunner interface {
 	Run(veilruntime.RuntimeCommandInput) veilruntime.RuntimeCommandOutput
 }
@@ -23,7 +25,7 @@ func NewStatusReader(runner RuntimeCommandRunner) StatusReader {
 }
 
 func (r StatusReader) Active() (bool, error) {
-	out := r.runner.Run(veilruntime.RuntimeCommandInput{Command: []string{"ufw", "status"}, Timeout: 5 * time.Second})
+	out := r.runner.Run(veilruntime.RuntimeCommandInput{Command: []string{"ufw", "status"}, Timeout: 5 * time.Second, Env: stableUFWEnv})
 	if out.Err != nil || out.NotFound || out.TimedOut {
 		return false, nil
 	}

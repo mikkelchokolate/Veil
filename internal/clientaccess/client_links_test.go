@@ -12,7 +12,7 @@ func TestBuildClientLinksBuildsProtocolLinksOutsideHTTPAdapter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildClientLinks: %v", err)
 	}
-	if response.Count != 1 || len(response.Links) != 1 || !strings.HasPrefix(response.Links[0].URI, "naive+https://") {
+	if response.Count != 1 || len(response.Links) != 1 || !strings.HasPrefix(response.Links[0].URI, "https://") {
 		t.Fatalf("response = %+v", response)
 	}
 }
@@ -61,10 +61,10 @@ func TestBuildClientLinksUsesClientProfilesWhenPresent(t *testing.T) {
 	for _, link := range links.Links {
 		byName[link.Name] = link
 	}
-	if byName["naive/alice"].URI != "naive+https://alice:alice-pass@vpn.example.com:443" {
+	if byName["naive/alice"].URI != "https://alice:alice-pass@vpn.example.com" {
 		t.Fatalf("naive alice URI = %q", byName["naive/alice"].URI)
 	}
-	if byName["naive/bob"].URI != "naive+https://bob:bob-pass@vpn.example.com:443" {
+	if byName["naive/bob"].URI != "https://bob:bob-pass@vpn.example.com" {
 		t.Fatalf("naive bob URI = %q", byName["naive/bob"].URI)
 	}
 	if !strings.HasPrefix(byName["hy2/carol"].URI, "hysteria2://carol:carol-pass@vpn.example.com:443/") {
@@ -95,10 +95,10 @@ func TestBuildClientLinksUsesPerInboundPasswordAndGlobalFallback(t *testing.T) {
 	for _, link := range links.Links {
 		byName[link.Name] = link
 	}
-	if byName["naive"].URI != "naive+https://veil:global-naive@vpn.example.com:443" {
+	if byName["naive"].URI != "https://veil:global-naive@vpn.example.com" {
 		t.Fatalf("naive fallback URI = %q", byName["naive"].URI)
 	}
-	if byName["naive-vip"].URI != "naive+https://veil:vip-naive@vpn.example.com:8443" {
+	if byName["naive-vip"].URI != "https://veil:vip-naive@vpn.example.com:8443" {
 		t.Fatalf("naive per-inbound URI = %q", byName["naive-vip"].URI)
 	}
 	if !strings.HasPrefix(byName["hy2"].URI, "hysteria2://global-hy2@vpn.example.com:443/") {

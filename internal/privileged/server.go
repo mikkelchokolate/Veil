@@ -123,7 +123,7 @@ func (s *Server) dispatch(ctx context.Context, request RequestEnvelope) (any, er
 		return s.client.ServiceStatus(ctx, *request.ServiceStatus)
 	case OperationJournal:
 		return s.client.Journal(ctx, *request.Journal)
-	case OperationBackupCreate, OperationBackupList, OperationBackupVerify, OperationBackupRead, OperationBackupPrune, OperationBackupRestore:
+	case OperationBackupCreate, OperationBackupList, OperationBackupVerify, OperationBackupRead, OperationBackupPrune, OperationBackupRestore, OperationBackupDelete:
 		expected := backupActionForOperation(request.Operation)
 		if request.Backup.Action != expected {
 			return nil, newError(ErrorInvalidRequest, "backup action does not match operation")
@@ -131,6 +131,11 @@ func (s *Server) dispatch(ctx context.Context, request RequestEnvelope) (any, er
 		return s.client.Backup(ctx, *request.Backup)
 	case OperationRotateKey:
 		if err := s.client.RotateKey(ctx, *request.RotateKey); err != nil {
+			return nil, err
+		}
+		return struct{}{}, nil
+	case OperationRecoverKeyRotation:
+		if err := s.client.RecoverKeyRotation(ctx, *request.RecoverKeyRotation); err != nil {
 			return nil, err
 		}
 		return struct{}{}, nil
@@ -145,6 +150,15 @@ func (s *Server) dispatch(ctx context.Context, request RequestEnvelope) (any, er
 		return struct{}{}, nil
 	case OperationSyncCaddyCert:
 		return s.client.SyncCaddyCert(ctx, *request.SyncCaddyCert)
+	case OperationCaddyLoad:
+		loader, ok := s.client.(CaddyLoader)
+		if !ok {
+			return nil, newError(ErrorOperationFailed, "Caddy loader is unavailable")
+		}
+		if err := loader.CaddyLoad(ctx, *request.CaddyLoad); err != nil {
+			return nil, err
+		}
+		return struct{}{}, nil
 	default:
 		return nil, newError(ErrorInvalidRequest, "unsupported operation")
 	}
@@ -164,6 +178,8 @@ func backupActionForOperation(operation Operation) BackupAction {
 		return BackupActionPrune
 	case OperationBackupRestore:
 		return BackupActionRestore
+	case OperationBackupDelete:
+		return BackupActionDelete
 	default:
 		return ""
 	}

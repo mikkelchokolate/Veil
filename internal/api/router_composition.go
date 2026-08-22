@@ -1,6 +1,7 @@
 package api
 
 import (
+	"io"
 	"net/http"
 
 	"github.com/mikkelchokolate/Veil/internal/observability"
@@ -27,30 +28,68 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	info.WebBasePath = basePath
 
 	mux := http.NewServeMux()
-	state := newManagementState(info)
+	state := newManagementStateProduction(info)
 	metrics := observability.NewMetricsCollector()
-	mux.HandleFunc("/metrics", metrics.ServeHTTP)
+	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		metrics.ServeHTTP(w, r)
+		if r.Method == http.MethodGet && state.trafficCollector != nil {
+			_, _ = io.WriteString(w, state.trafficCollector.PrometheusMetrics())
+		}
+	})
 	RuntimeRoutes{}.Register(mux)
 	mux.HandleFunc("/api/services/", state.handleServiceActionRoute)
 	state.register(mux)
-	PanelRoutes{Info: info, BasePath: basePath, State: state}.Register(mux)
+	panelRoutes := PanelRoutes{Info: info, BasePath: basePath, State: state}
+	panelRoutes.Register(mux)
 	DiagnosticToolRoutes{}.Register(mux)
 	StatusRoutes{Info: info, State: state}.Register(mux)
+	HealthRoutes{State: state}.Register(mux)
 	ProfilePreviewRoutes{}.Register(mux)
 	LogRoutes{State: state}.Register(mux)
 
-	var handler http.Handler = mux
-	if basePath != "/" {
-		handler = stripBasePathMiddleware(basePath, mux)
+	state.idempotency = newIdempotencyStore(state.db)
+	if err := state.idempotency.setReplayCipher(state.cipher); err != nil {
+		_ = state.idempotency.Close()
 	}
-	rateLimited := rateLimitMiddleware(metrics, handler)
+	restoreGuarded := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if info.RequirePrivilegedHelper {
+			switch r.URL.Path {
+			case "/api/tls", "/api/network", "/api/connections", "/api/processes", "/api/disk", "/api/runtime/observation":
+				writeError(w, "diagnostic requires bounded root-helper support", http.StatusServiceUnavailable)
+				return
+			}
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+			state.mu.Lock()
+			restoring := state.clientSubsystemStopping
+			state.mu.Unlock()
+			if restoring {
+				w.Header().Set("Retry-After", "5")
+				writeError(w, "management mutation is locked while restore is in progress", http.StatusLocked)
+				return
+			}
+		}
+		mux.ServeHTTP(w, r)
+	})
+	idempotent := state.idempotency.Middleware(restoreGuarded)
+	gated := clientRequestGateMiddleware(state, idempotent)
+	rateLimited, limiter := newRateLimitMiddleware(metrics, info.TrustedProxyCIDRs, gated)
+	state.httpRateLimiter = limiter
 	authenticated := authMiddlewareWithOptions(state, authMiddlewareOptions{
 		Token:             info.AuthToken,
 		ProtectHealthz:    info.PublicListen,
-		ProtectMetrics:    info.MetricsAuthRequired,
+		ProtectMetrics:    info.MetricsAuthRequired || info.PublicListen,
 		AllowDevAnonymous: !info.PublicListen,
 		AllowSetup:        info.SetupAllowed,
 	}, rateLimited)
-	secured := securityHeadersMiddleware(authenticated)
-	return metrics.MetricsMiddleware(secured), state
+	// Strip WebBasePath before auth. capabilityForEndpoint treats anything
+	// outside /api and /s as a public SPA route; classifying /<base>/api/*
+	// before the strip made the whole management API anonymous.
+	var handler http.Handler = authenticated
+	if basePath != "/" {
+		handler = stripBasePathMiddleware(basePath, authenticated)
+	}
+	secured := securityHeadersMiddleware(handler)
+	healthAware := auditHealthMiddleware(state, metrics.MetricsMiddleware(secured))
+	return requestIDMiddleware(degradedStateMiddleware(state, healthAware)), state
 }

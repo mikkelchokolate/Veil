@@ -1,13 +1,14 @@
 package observability
 
 import (
-	"net"
+	"encoding/json"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/clientaddr"
 )
 
 // EndpointLimit defines a custom rate limit for a specific path prefix.
@@ -33,6 +34,9 @@ type RateLimiter struct {
 	endpointLimits map[string]EndpointLimit
 	mu             sync.RWMutex
 	stopCh         chan struct{}
+	doneCh         chan struct{}
+	stopOnce       sync.Once
+	resolver       clientaddr.Resolver
 	onRateLimited  func() // called when a request is rate-limited
 }
 
@@ -44,6 +48,7 @@ func NewRateLimiter(ratePerMinute, burst int) *RateLimiter {
 		rate:   float64(ratePerMinute) / 60.0,
 		burst:  burst,
 		stopCh: make(chan struct{}),
+		doneCh: make(chan struct{}),
 	}
 	rl.engine = newRateLimiterEngineWithBuckets(&rl.buckets)
 	go rl.cleanupLoop()
@@ -60,7 +65,19 @@ func (rl *RateLimiter) SetEndpointLimits(limits map[string]EndpointLimit) {
 
 // Stop shuts down the background cleanup goroutine.
 func (rl *RateLimiter) Stop() {
-	close(rl.stopCh)
+	rl.stopOnce.Do(func() { close(rl.stopCh) })
+}
+
+func (rl *RateLimiter) Close() error {
+	rl.Stop()
+	<-rl.doneCh
+	return nil
+}
+
+func (rl *RateLimiter) SetClientAddressResolver(resolver clientaddr.Resolver) {
+	rl.mu.Lock()
+	rl.resolver = resolver
+	rl.mu.Unlock()
 }
 
 func (rl *RateLimiter) SetOnRateLimited(callback func()) {
@@ -78,11 +95,18 @@ func (rl *RateLimiter) allow(key string, rate float64, burst int) (bool, time.Du
 // except for explicitly rate-limited expensive read endpoints.
 func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := extractClientIP(r)
-
 		rl.mu.RLock()
+		resolver := rl.resolver
 		limits := rl.endpointLimits
 		rl.mu.RUnlock()
+		ip, err := resolver.Resolve(r)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"message": "invalid forwarded client address"})
+			return
+		}
+		r = clientaddr.WithContext(r, ip)
 
 		decision := NewRateLimitDecisionModule(int(rl.rate*60), rl.burst, limits).Decide(r.Method, r.URL.Path, ip)
 		if !decision.Limited {
@@ -104,20 +128,15 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 }
 
 func extractClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if idx := strings.IndexByte(xff, ','); idx >= 0 {
-			return strings.TrimSpace(xff[:idx])
-		}
-		return strings.TrimSpace(xff)
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	address, err := (clientaddr.Resolver{}).Resolve(r)
 	if err != nil {
 		return r.RemoteAddr
 	}
-	return host
+	return address
 }
 
 func (rl *RateLimiter) cleanupLoop() {
+	defer close(rl.doneCh)
 	ticker := time.NewTicker(time.Duration(cleanupInterval.Load()))
 	defer ticker.Stop()
 	for {

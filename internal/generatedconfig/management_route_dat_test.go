@@ -338,19 +338,18 @@ func TestDownloadRouteDatUsesHttpClientWithTimeout(t *testing.T) {
 }
 
 func TestDownloadRouteDatRejectsOversizedBody(t *testing.T) {
+	previous := routeDatSizeCap
+	routeDatSizeCap = 4
+	t.Cleanup(func() { routeDatSizeCap = previous })
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		// Write content exceeding the 50 MB limit
-		chunk := make([]byte, 1024*1024) // 1 MB chunks
-		for i := 0; i < 51; i++ {        // 51 MB total > 50 MB limit
-			_, _ = w.Write(chunk)
-		}
+		_, _ = w.Write([]byte("12345"))
 	}))
 	defer server.Close()
 
 	_, err := downloadRouteDat(server.URL)
 	if err == nil {
-		t.Fatal("expected error for oversized body (>50MB), got nil")
+		t.Fatal("expected error for oversized body, got nil")
 	}
 	if !strings.Contains(err.Error(), "exceeds maximum size") && !strings.Contains(err.Error(), "too large") {
 		t.Fatalf("expected error to mention size limit, got: %v", err)

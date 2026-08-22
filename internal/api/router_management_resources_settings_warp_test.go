@@ -15,7 +15,7 @@ import (
 )
 
 func TestManagementAPIExposesSettingsInboundsRoutingAndWarp(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 
 	cases := []struct {
 		path string
@@ -42,7 +42,7 @@ func TestManagementAPIExposesSettingsInboundsRoutingAndWarp(t *testing.T) {
 }
 
 func TestManagementAPIUpdatesWarpConfig(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"enabled":true,"licenseKey":"","endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/warp", body)
 	w := httptest.NewRecorder()
@@ -65,7 +65,7 @@ func TestManagementAPIUpdatesWarpConfig(t *testing.T) {
 }
 
 func TestManagementAPIWarpPutRejectsOversizedJSONBody(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408","privateKey":"` + strings.Repeat("a", 1024*1024+1) + `"}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/warp", body)
 	w := httptest.NewRecorder()
@@ -78,7 +78,7 @@ func TestManagementAPIWarpPutRejectsOversizedJSONBody(t *testing.T) {
 }
 
 func TestManagementAPIWarpPutRejectsUnknownJSONFields(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408","typo":true}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/warp", body)
 	w := httptest.NewRecorder()
@@ -88,9 +88,7 @@ func TestManagementAPIWarpPutRejectsUnknownJSONFields(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for unknown JSON field, got %d: %s", w.Code, w.Body.String())
 	}
-	var errResp struct{ Message string }
-	_ = json.Unmarshal(w.Body.Bytes(), &errResp)
-	if !strings.Contains(errResp.Message, `unknown field "typo"`) {
+	if message := responseErrorMessage(t, w.Body.Bytes()); !strings.Contains(message, `unknown field "typo"`) {
 		t.Fatalf("expected unknown field diagnostic, got %q", w.Body.String())
 	}
 }
@@ -99,7 +97,7 @@ func TestManagementAPIWarpPutPreservesRedactedSecrets(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state.json")
 	keyPath := filepath.Join(dir, "state.key")
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: keyPath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: keyPath})
 
 	create := httptest.NewRecorder()
 	r.ServeHTTP(create, httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true,"licenseKey":"warp-license","endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)))
@@ -120,7 +118,7 @@ func TestManagementAPIWarpPutPreservesRedactedSecrets(t *testing.T) {
 }
 
 func TestManagementAPISettingsPutRejectsOversizedJSONBody(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"` + strings.Repeat("a", 1024*1024+1) + `"}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/settings", body)
 	w := httptest.NewRecorder()
@@ -133,7 +131,7 @@ func TestManagementAPISettingsPutRejectsOversizedJSONBody(t *testing.T) {
 }
 
 func TestManagementAPISettingsResponsesRedactSecrets(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret","hysteria2Password":"hy2-secret"}`)
 	put := httptest.NewRecorder()
 
@@ -159,7 +157,7 @@ func TestManagementAPISettingsPutPreservesRedactedSecrets(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state.json")
 	keyPath := filepath.Join(dir, "state.key")
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: keyPath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: keyPath})
 
 	create := httptest.NewRecorder()
 	r.ServeHTTP(create, httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","email":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret","hysteria2Password":"hy2-secret"}`)))
@@ -180,16 +178,14 @@ func TestManagementAPISettingsPutPreservesRedactedSecrets(t *testing.T) {
 }
 
 func TestManagementAPISettingsPutRejectsRemovedStackField(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","stack":"both"}`)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/settings", body))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for removed stack field, got %d: %s", w.Code, w.Body.String())
 	}
-	var errResp2 struct{ Message string }
-	_ = json.Unmarshal(w.Body.Bytes(), &errResp2)
-	if !strings.Contains(errResp2.Message, `json: unknown field "stack"`) {
+	if message := responseErrorMessage(t, w.Body.Bytes()); !strings.Contains(message, `json: unknown field "stack"`) {
 		t.Fatalf("expected unknown stack field error, got: %s", w.Body.String())
 	}
 }
@@ -208,7 +204,7 @@ func TestManagementAPIPersistsInboundsAndWarpAcrossRouterRestart(t *testing.T) {
 	}
 
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	createInbound := httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hy2-alt","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true}`))
 	createInboundRecorder := httptest.NewRecorder()
@@ -224,7 +220,7 @@ func TestManagementAPIPersistsInboundsAndWarpAcrossRouterRestart(t *testing.T) {
 		t.Fatalf("update warp expected 200, got %d: %s", updateWarpRecorder.Code, updateWarpRecorder.Body.String())
 	}
 
-	restarted, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	restarted, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	inboundsReq := httptest.NewRequest(http.MethodGet, "/api/inbounds", nil)
 	inboundsRecorder := httptest.NewRecorder()
 	restarted.ServeHTTP(inboundsRecorder, inboundsReq)
@@ -248,7 +244,7 @@ func TestManagementAPIPersistsInboundsAndWarpAcrossRouterRestart(t *testing.T) {
 
 func TestManagementAPIUpdatesSettingsAndCreatesRoutingRule(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	settingsReq := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:3000","mode":"server"}`))
 	settingsRecorder := httptest.NewRecorder()
@@ -264,7 +260,7 @@ func TestManagementAPIUpdatesSettingsAndCreatesRoutingRule(t *testing.T) {
 		t.Fatalf("create routing rule expected 201, got %d: %s", routingRecorder.Code, routingRecorder.Body.String())
 	}
 
-	restarted, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
+	restarted, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 	settingsRead := httptest.NewRecorder()
 	restarted.ServeHTTP(settingsRead, httptest.NewRequest(http.MethodGet, "/api/settings", nil))
 	if strings.Contains(settingsRead.Body.String(), `"stack"`) || !strings.Contains(settingsRead.Body.String(), `"panelListen":"127.0.0.1:3000"`) {

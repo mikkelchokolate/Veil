@@ -50,7 +50,7 @@ func TestReloadPromotedServicesSyncsCaddyCertBeforeHysteria2(t *testing.T) {
 	}
 
 	ctx := NewManagementApplyContext(state)
-	results := ctx.reloadPromotedServicesLocked([]string{hyPath, caddyPath})
+	results := ctx.reloadPromotedServices([]string{hyPath, caddyPath})
 
 	if len(client.syncCaddyCertRequests) != 1 {
 		t.Fatalf("expected 1 sync request, got %+v", client.syncCaddyCertRequests)
@@ -102,7 +102,7 @@ func TestReloadPromotedServicesSkipsCertSyncWithoutHysteria2Domain(t *testing.T)
 	}
 
 	ctx := NewManagementApplyContext(state)
-	_ = ctx.reloadPromotedServicesLocked([]string{hyPath})
+	_ = ctx.reloadPromotedServices([]string{hyPath})
 
 	if len(client.syncCaddyCertRequests) != 0 {
 		t.Fatalf("expected no sync requests without hysteria2 domain, got %+v", client.syncCaddyCertRequests)

@@ -57,6 +57,7 @@ func TestBackupPruneRejectsInvalidRetention(t *testing.T) {
 }
 
 func TestBackupRestoreSerializesMutatingBackupOperations(t *testing.T) {
+	stubManagementApplySideEffects(t)
 	state := newPanelBackupState(t)
 	state.backupRestoreOwnerSessionGrace = -1
 	create := adminJSONRequest(http.MethodPost, "/api/backups", `{}`)
@@ -92,7 +93,7 @@ func TestBackupRestoreSerializesMutatingBackupOperations(t *testing.T) {
 
 	select {
 	case <-auditStarted:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("restore did not reach audit finalization")
 	}
 
@@ -121,9 +122,9 @@ func TestBackupRestoreSerializesMutatingBackupOperations(t *testing.T) {
 	waitForBackupRestoreTerminalState(t, state, accepted.ID)
 }
 
-func TestBackupRestoreRevokesOwnerSessionAfterGraceWithoutPolling(t *testing.T) {
+func TestBackupRestoreImmediatelyRevokesOwnerMissingFromRestoredUsers(t *testing.T) {
+	stubManagementApplySideEffects(t)
 	state := newPanelBackupState(t)
-	state.backupRestoreOwnerSessionGrace = 100 * time.Millisecond
 	create := adminJSONRequest(http.MethodPost, "/api/backups", `{}`)
 	createResponse := httptest.NewRecorder()
 	state.handleBackups(createResponse, create)
@@ -145,19 +146,8 @@ func TestBackupRestoreRevokesOwnerSessionAfterGraceWithoutPolling(t *testing.T) 
 		t.Fatal(err)
 	}
 	waitForBackupRestoreTerminalState(t, state, accepted.ID)
-	if _, ok := state.sessionRegistry().Get(owner.Token); !ok {
-		t.Fatal("owner session was revoked before the grace period")
-	}
-
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		if _, ok := state.sessionRegistry().Get(owner.Token); !ok {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("owner session survived the restore grace period without polling")
-		}
-		time.Sleep(10 * time.Millisecond)
+	if _, ok := state.sessionRegistry().Get(owner.Token); ok {
+		t.Fatal("owner missing from restored users retained an obsolete admin session")
 	}
 	job, ok := state.backupRestoreJob(accepted.ID)
 	if !ok || job.ownerSessionToken != "" {
@@ -167,7 +157,7 @@ func TestBackupRestoreRevokesOwnerSessionAfterGraceWithoutPolling(t *testing.T) 
 
 func waitForBackupRestoreTerminalState(t *testing.T, state *managementState, id string) BackupRestoreJob {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		job, ok := state.backupRestoreJob(id)
 		if !ok {

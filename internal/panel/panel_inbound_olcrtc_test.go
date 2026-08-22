@@ -15,11 +15,15 @@ import (
 func TestInboundOlcrtcFormUsesRealProvidersAndGenerateButton(t *testing.T) {
 	js := panelDynamicFieldsJS()
 	for _, want := range []string{
-		`'/api/' + encodeURIComponent(protocol) + '/room'`,
+		`'/api/protocols/' + encodeURIComponent(protocol) + '/room'`,
 		`veilRenderDynamicProtocolFields`,
 		`veilGenerateProtocolField`,
 		`generateActionField`,
 		`updateRoomGenerateButton`,
+		// hex64 generation must exist in the legacy panel too (audit #38/#48):
+		// olcRTC encryption keys are generated client-side in the SPA, and the
+		// legacy panel previously had no handler for this action.
+		`action === 'hex64'`,
 	} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("olcRTC dynamic fields missing %q", want)

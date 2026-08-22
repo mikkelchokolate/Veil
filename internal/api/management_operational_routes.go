@@ -1,8 +1,11 @@
 package api
 
 import (
+	"context"
+	"log"
 	"net/http"
 
+	"github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/clientaccess"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
@@ -19,7 +22,15 @@ func (s *managementState) handleClientLinks(w http.ResponseWriter, r *http.Reque
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	response, err := protocols.BuildClientLinks(s.settings, s.inbounds)
+	// Attach normalized Client+Binding credentials so admin links include
+	// normalized clients, matching what the live config actually renders
+	// (audit #65/#68: links and server config diverged).
+	inbounds, err := s.inboundsWithRuntimeCredentialsLocked()
+	if err != nil {
+		writeError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	response, err := protocols.BuildClientLinks(s.settings, inbounds)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -62,7 +73,11 @@ func (s *managementState) handleFirewall(w http.ResponseWriter, r *http.Request)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	active, _ := firewallStatusReader()
+	active, err := firewallStatusReader()
+	if err != nil {
+		writeError(w, "firewall status unavailable", http.StatusServiceUnavailable)
+		return
+	}
 	rules := firewall.BuildRuleResponses(s.settings, s.inbounds)
 	if r.Method == http.MethodGet {
 		writeJSON(w, map[string]any{
@@ -81,7 +96,7 @@ func (s *managementState) handleApplyPlan(w http.ResponseWriter, r *http.Request
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	plan := NewManagementApplyContext(s).buildApplyPlanLocked()
+	plan := NewManagementApplyContextWithContext(s, r.Context()).buildApplyPlanLocked()
 	status := http.StatusOK
 	if !plan.Valid {
 		status = http.StatusBadRequest
@@ -116,14 +131,61 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSONRequest(w, r, &req) {
 		return
 	}
+	if !req.Confirm {
+		writeError(w, "confirm=true is required to write staged apply files", http.StatusBadRequest)
+		return
+	}
 	if applyRequiresServiceActionLock(req) {
 		if !s.beginServiceAction(w) {
 			return
 		}
 		defer s.serviceActionMu.Unlock()
 	}
+	if s.applyTrackingEnabled() {
+		desiredRevision, err := s.ensureRunnableRevision()
+		if err != nil {
+			log.Printf("failed to read desired revision: %v", err)
+			writeError(w, "failed to read desired revision", http.StatusServiceUnavailable)
+			return
+		}
+		var response ApplyResponse
+		status := http.StatusInternalServerError
+		var workflowErr error
+		_, runErr := s.applyRunner.RunOperationContext(r.Context(), desiredRevision, "manual", actorFromRequest(r),
+			apply.ContextExecutorFunc(func(ctx context.Context, revision uint64) (apply.Result, error) {
+				var result apply.Result
+				response, status, result, workflowErr = s.executeApplyRevisionRequestContext(ctx, revision, req)
+				return result, workflowErr
+			}))
+		if status == http.StatusBadRequest && len(response.Plan.Issues) > 0 {
+			status = http.StatusUnprocessableEntity
+		}
+		s.logUserAction(r, "apply_configuration", "system", runErr == nil && status == http.StatusOK, "")
+		if runErr != nil {
+			log.Printf("apply runner rejected revision %d: %v", desiredRevision, runErr)
+		}
+		if workflowErr != nil {
+			log.Printf("apply workflow failed for revision %d: %v", desiredRevision, workflowErr)
+			writeError(w, workflowErr.Error(), status)
+			return
+		}
+		if status != http.StatusOK {
+			if status == http.StatusInternalServerError && runErr != nil {
+				writeError(w, runErr.Error(), http.StatusServiceUnavailable)
+				return
+			}
+			writeJSONStatus(w, status, response)
+			return
+		}
+		if runErr != nil {
+			writeError(w, runErr.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		writeJSON(w, response)
+		return
+	}
 	s.mu.Lock()
-	response, status, err := NewApplyWorkflow(NewManagementApplyContext(s)).RunLocked(req)
+	response, status, err := NewApplyWorkflow(NewManagementApplyContextWithContext(s, r.Context())).RunLocked(req)
 	s.mu.Unlock()
 	if status == http.StatusBadRequest && len(response.Plan.Issues) > 0 {
 		status = http.StatusUnprocessableEntity
@@ -153,7 +215,11 @@ func (s *managementState) autoApplyLocked(r *http.Request) (ApplyResponse, bool)
 		return ApplyResponse{}, false
 	}
 	defer s.serviceActionMu.Unlock()
-	response, status, err := NewApplyWorkflow(NewManagementApplyContext(s)).RunLocked(ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
+	operationContext := s.lifecycleContext()
+	if r != nil {
+		operationContext = r.Context()
+	}
+	response, status, err := NewApplyWorkflow(NewManagementApplyContextWithContext(s, operationContext)).RunLocked(ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
 	success := err == nil && status == http.StatusOK
 	details := ""
 	if err != nil {
@@ -163,4 +229,149 @@ func (s *managementState) autoApplyLocked(r *http.Request) (ApplyResponse, bool)
 	}
 	s.logUserAction(r, "auto_apply_configuration", "system", success, details)
 	return response, success
+}
+
+// autoApplyResultLocked is the rich variant of autoApplyLocked that records a
+// durable apply job and returns revision + job information for the HTTP
+// response. When revision tracking is disabled (no StatePath) it falls back to
+// the legacy synchronous auto-apply and reports only success. Caller holds s.mu.
+func (s *managementState) autoApplyResultLocked(r *http.Request, actor string) autoApplyOutcome {
+	outcome := autoApplyOutcome{}
+	if !autoApplyAfterMutation {
+		return outcome
+	}
+	if !s.applyTrackingEnabled() {
+		_, ok := s.autoApplyLocked(r)
+		outcome.legacy = true
+		outcome.success = ok
+		return outcome
+	}
+	revisions := s.applyRevisions
+	runner := s.applyRunner
+	rev, err := revisions.Get()
+	if err != nil {
+		s.logUserAction(r, "auto_apply_configuration", "system", false, "read revisions: "+err.Error())
+		outcome.success = false
+		return outcome
+	}
+	outcome.revision = rev
+	var job apply.Job
+	var runErr error
+	operationContext := s.lifecycleContext()
+	if r != nil {
+		operationContext = r.Context()
+	}
+	func() {
+		s.mu.Unlock()
+		defer s.mu.Lock()
+		job, runErr = runner.RunLatest(operationContext, "mutation", actor)
+	}()
+	if job.ID != "" {
+		outcome.job = &job
+	}
+	outcome.success = runErr == nil && (job.ID == "" || job.Status == apply.StatusSucceeded)
+	s.registerTrafficProvidersLocked()
+	if after, err := revisions.Get(); err == nil {
+		outcome.revision = after
+	}
+	details := ""
+	if !outcome.success {
+		details = job.ErrorMessage
+	}
+	s.logUserAction(r, "auto_apply_configuration", "system", outcome.success, details)
+	return outcome
+}
+
+// autoApplyOutcome carries the apply result surfaced to the HTTP client.
+type autoApplyOutcome struct {
+	revision apply.Revisions
+	job      *apply.Job
+	success  bool
+	legacy   bool // true when the legacy (untracked) synchronous path was used
+}
+
+// applyStateView derives the public system state (synced/pending/applying/...)
+// from revisions and the latest job.
+func (s *managementState) applyStateViewLocked() applyStateResponse {
+	resp := applyStateResponse{State: apply.StateSynced}
+	if !s.applyTrackingEnabled() {
+		return resp
+	}
+	rev, err := s.applyRevisions.Get()
+	if err != nil {
+		resp.State = apply.StateDegraded
+		resp.LastError = &applyErrorView{Code: "database_unavailable", Message: "apply state is unavailable"}
+		return resp
+	}
+	resp.DesiredRevision = rev.Desired
+	resp.AppliedRevision = rev.Applied
+	resp.State = deriveSystemState(rev, nil)
+	jobs, err := s.applyJobs.List(1)
+	if err != nil {
+		resp.State = apply.StateDegraded
+		resp.LastError = &applyErrorView{Code: "database_unavailable", Message: "apply jobs are unavailable"}
+		return resp
+	}
+	if len(jobs) > 0 {
+		latest := jobs[0]
+		resp.State = deriveSystemState(rev, &latest)
+		if latest.Active() {
+			resp.ActiveJobID = latest.ID
+		}
+	}
+	if lastOK, ok, _ := s.applyJobs.LatestWithStatus(apply.StatusSucceeded); ok {
+		resp.LastSuccessfulJobID = lastOK.ID
+	}
+	if lastFail, ok, _ := s.applyJobs.LatestFailed(); ok {
+		resp.LastFailedJobID = lastFail.ID
+	}
+	if len(jobs) > 0 {
+		latest := jobs[0]
+		if resp.State == apply.StateFailed || resp.State == apply.StateRolledBack {
+			if latest.Status == apply.StatusFailed || latest.Status == apply.StatusRolledBack || latest.Status == apply.StatusRollbackFailed {
+				resp.LastError = &applyErrorView{Code: latest.ErrorCode, Message: latest.ErrorMessage}
+			}
+		}
+	}
+	return resp
+}
+
+// deriveSystemState maps revisions + latest job to the public system state.
+func deriveSystemState(rev apply.Revisions, latest *apply.Job) string {
+	if latest != nil {
+		switch latest.Status {
+		case apply.StatusPending, apply.StatusPlanning, apply.StatusValidating:
+			return apply.StatePending
+		case apply.StatusApplying, apply.StatusHealthCheck:
+			return apply.StateApplying
+		case apply.StatusRollingBack:
+			return apply.StateRollingBack
+		case apply.StatusRolledBack:
+			return apply.StateRolledBack
+		case apply.StatusFailed, apply.StatusRollbackFailed:
+			if rev.Desired > rev.Applied {
+				return apply.StateFailed
+			}
+		}
+	}
+	if rev.Desired > rev.Applied {
+		return apply.StatePending
+	}
+	return apply.StateSynced
+}
+
+// applyStateResponse is the JSON shape returned by GET /api/apply/state.
+type applyStateResponse struct {
+	DesiredRevision     uint64          `json:"desiredRevision"`
+	AppliedRevision     uint64          `json:"appliedRevision"`
+	State               string          `json:"state"`
+	ActiveJobID         string          `json:"activeJobId,omitempty"`
+	LastSuccessfulJobID string          `json:"lastSuccessfulJobId,omitempty"`
+	LastFailedJobID     string          `json:"lastFailedJobId,omitempty"`
+	LastError           *applyErrorView `json:"lastError,omitempty"`
+}
+
+type applyErrorView struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }

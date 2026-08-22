@@ -1,27 +1,70 @@
 package api
 
 import (
-	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
 	"net/http"
 	"os"
-	"time"
+	"regexp"
 
 	"github.com/mikkelchokolate/Veil/internal/panel"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
+var (
+	legacyStyleTag      = regexp.MustCompile(`<style(\s|>)`)
+	legacyScriptTag     = regexp.MustCompile(`<script(\s|>)`)
+	legacyRemoteFontTag = regexp.MustCompile(`<link[^>]+(?:fonts\.googleapis\.com|fonts\.gstatic\.com)[^>]*>`)
+)
+
+func secureLegacyPanelHTML(body string) (string, string, error) {
+	nonceBytes := make([]byte, 18)
+	if _, err := rand.Read(nonceBytes); err != nil {
+		return "", "", err
+	}
+	nonce := base64.RawURLEncoding.EncodeToString(nonceBytes)
+	secured := legacyRemoteFontTag.ReplaceAllString(body, "")
+	secured = legacyStyleTag.ReplaceAllString(secured, `<style nonce="`+nonce+`"$1`)
+	secured = legacyScriptTag.ReplaceAllString(secured, `<script nonce="`+nonce+`"$1`)
+	return secured, fmt.Sprintf("default-src 'self'; img-src 'self' data: blob:; script-src 'self' 'nonce-%s'; style-src 'self' 'nonce-%s'; font-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'", nonce, nonce), nil
+}
+
 type PanelRoutes struct {
 	Info     ServerInfo
 	BasePath string
 	State    *managementState
+	spa      *spaHandler
 }
 
-func (routes PanelRoutes) Register(mux *http.ServeMux) {
+func (routes *PanelRoutes) Register(mux *http.ServeMux) {
+	if spa, err := newSPAHandler(routes.BasePath); err == nil {
+		routes.spa = spa
+		spa.Register(mux)
+	}
 	mux.HandleFunc("/", routes.handlePanel)
 	mux.HandleFunc("/favicon.ico", routes.handleFavicon)
+	mux.HandleFunc("/favicon.svg", routes.handleFavicon)
+	mux.HandleFunc("/robots.txt", routes.handleRobots)
 	mux.HandleFunc("/healthz", routes.handleHealth)
 	mux.HandleFunc("/api/version", routes.handleVersion)
 	mux.HandleFunc("/api/version/update", routes.handleUpdateVersion)
+	mux.HandleFunc("/api/version/update/jobs/", routes.handlePanelUpdateJob)
+	if routes.State != nil && routes.State.db != nil {
+		routes.State.reconcilePanelUpdateJobs(routes.Info.Version)
+	}
+}
+
+func (routes PanelRoutes) handleRobots(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		methodNotAllowed(w, http.MethodGet, http.MethodHead)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	if r.Method == http.MethodGet {
+		_, _ = w.Write([]byte("User-agent: *\nAllow: /\n"))
+	}
 }
 
 func (routes PanelRoutes) handleFavicon(w http.ResponseWriter, r *http.Request) {
@@ -37,25 +80,68 @@ func (routes PanelRoutes) handleFavicon(w http.ResponseWriter, r *http.Request) 
 }
 
 func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		writeNotFound(w)
-		return
-	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		methodNotAllowed(w, http.MethodGet, http.MethodHead)
 		return
 	}
+
+	// SPA client-side routes (e.g. /clients, /apply) render the shell via the
+	// history-API fallback. API/asset/subscription/metrics paths are handled by
+	// their own mux registrations and never reach here.
+	if r.URL.Path != "/" {
+		if routes.spa != nil && routes.spa.matches(r.URL.Path) {
+			routes.spa.serveIndex(w, r)
+			return
+		}
+		writeNotFound(w)
+		return
+	}
+
+	// Fail-closed guard (preserved): on a public listener with no users yet the
+	// panel must NOT render any HTML — first-run admin setup is CLI-only there.
+	if routes.State != nil {
+		routes.State.mu.Lock()
+		noUsers := len(routes.State.users) == 0
+		routes.State.mu.Unlock()
+		if routes.Info.PublicListen && noUsers {
+			writeError(w, "first-run admin setup is required before public Panel access; run `veil admin reset` or `veil admin set --username admin --password <password>`", http.StatusServiceUnavailable)
+			return
+		}
+	}
+
+	// The new React SPA is the primary UI (B11): served at "/", it handles
+	// login, first-run setup, and RBAC client-side against the API.
+	if routes.spa != nil {
+		routes.spa.serveIndex(w, r)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
 	w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
 	w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 	w.Header().Set("Origin-Agent-Cluster", "?1")
+	writeLegacyHTML := func(body string) bool {
+		secured, csp, err := secureLegacyPanelHTML(body)
+		if err != nil {
+			writeError(w, "panel security policy unavailable", http.StatusInternalServerError)
+			return false
+		}
+		w.Header().Set("Content-Security-Policy", csp)
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(secured))
+		}
+		return true
+	}
+	if r.Method == http.MethodHead {
+		writeLegacyHTML("")
+		return
+	}
 	if r.Method == http.MethodGet {
 		// Check session; if no valid session, show login page.
 		csrfToken := ""
@@ -76,7 +162,7 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 				setupRequired := routes.State.setupAllowed && !routes.State.setup.Completed && noUsers
 				routes.State.mu.Unlock()
 				if setupRequired {
-					_, _ = w.Write([]byte(panel.ReliableSetupHTML(routes.BasePath, locale)))
+					writeLegacyHTML(panel.ReliableSetupHTML(routes.BasePath, locale))
 					return
 				}
 				if routes.Info.PublicListen && noUsers {
@@ -84,12 +170,12 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				if !noUsers {
-					_, _ = w.Write([]byte(panel.ReliableLoginHTML(routes.BasePath, locale)))
+					writeLegacyHTML(panel.ReliableLoginHTML(routes.BasePath, locale))
 					return
 				}
 			}
 		}
-		_, _ = w.Write([]byte(panelHTMLForCatalog(routes.BasePath, csrfToken, locale, NewVisibleManagedRuntimeCatalogForState(routes.State))))
+		writeLegacyHTML(panelHTMLForCatalog(routes.BasePath, csrfToken, locale, NewVisibleManagedRuntimeCatalogForState(routes.State)))
 	}
 }
 
@@ -107,7 +193,7 @@ func (routes PanelRoutes) handleHealth(w http.ResponseWriter, r *http.Request) {
 			if _, err := os.Stat(routes.Info.StatePath); err != nil {
 				writeJSONStatus(w, http.StatusServiceUnavailable, map[string]string{
 					"status": "unhealthy",
-					"error":  err.Error(),
+					"error":  "management state unavailable",
 				})
 				return
 			}
@@ -167,11 +253,14 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		writeError(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	result, err := routes.State.privileged.StageUpdate(r.Context(), privileged.UpdateRequest{
-		ArtifactID: "veil-update",
-		Version:    version,
-	})
+	updateJob, err := routes.State.createPanelUpdateJob(version)
 	if err != nil {
+		writeError(w, "create durable update job", http.StatusInternalServerError)
+		return
+	}
+	result, applyJob, err := routes.State.installPanelUpdate(r.Context(), version)
+	if err != nil {
+		routes.State.updatePanelUpdateJob(updateJob.ID, "failed", applyJob.ID, "", err)
 		writePrivilegedError(w, err)
 		return
 	}
@@ -181,30 +270,25 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		})
 		return
 	}
-
-	state := routes.State
-	privilegedClient := routes.State.privileged
+	routes.State.updatePanelUpdateJob(updateJob.ID, "restart_pending", applyJob.ID, "", nil)
 	releaseLocks = false
+	routes.State.updateWG.Add(1)
 	go func() {
-		defer state.endPanelUpdate()
-		time.Sleep(100 * time.Millisecond)
-		_ = privilegedClient.RestartPanel(context.Background())
+		defer routes.State.updateWG.Done()
+		routes.State.restartPanelForUpdate(updateJob.ID)
 	}()
 
-	writeJSON(w, map[string]any{
-		"success":   true,
+	writeJSONStatus(w, http.StatusAccepted, map[string]any{
+		"jobId":     updateJob.ID,
+		"status":    "restart_pending",
 		"staged":    result.Staged,
 		"installed": result.Installed,
 		"version":   result.Version,
-		"message":   "Update staged successfully. Restarting panel service...",
+		"message":   "Update installed; durable restart verification is pending.",
 	})
 }
 
 func writePrivilegedHelperUnavailable(w http.ResponseWriter) {
-	writeJSONStatus(w, http.StatusServiceUnavailable, map[string]any{
-		"error": map[string]string{
-			"code":    string(privileged.ErrorOperationFailed),
-			"message": "privileged helper is unavailable; repair the native install with `sudo /usr/local/bin/veil repair --yes`, then run `sudo systemctl enable --now veil-helper.socket` and `sudo systemctl restart veil.service`. If you are upgrading from a pre-helper release, rerun the curl installer with `install.sh --force`.",
-		},
-	})
+	const message = "privileged helper is unavailable; repair the native install with `sudo /usr/local/bin/veil repair --yes`, then run `sudo systemctl enable --now veil-helper.socket` and `sudo systemctl restart veil.service`. If you are upgrading from a pre-helper release, rerun the curl installer with `install.sh --force`."
+	writeErrorEnvelope(w, string(privileged.ErrorOperationFailed), message, http.StatusServiceUnavailable)
 }

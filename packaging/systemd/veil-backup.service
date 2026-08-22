@@ -6,6 +6,7 @@ After=local-fs.target
 
 [Service]
 Type=oneshot
+EnvironmentFile=-/etc/veil/veil.env
 ExecStart=/usr/local/bin/veil backup create --state /var/lib/veil/state.json --key-path /etc/veil/state.key --passphrase-file /etc/veil/backup.passphrase --output-dir /var/lib/veil/backups --prune --daily 7 --weekly 4 --monthly 12
 User=root
 Group=root
@@ -25,4 +26,4 @@ LockPersonality=true
 RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
-ReadWritePaths=/var/lib/veil/backups
+ReadWritePaths=/var/lib/veil

@@ -15,6 +15,7 @@ RuntimeDirectory=veil-mieru
 StateDirectory=mita
 ExecStart=/usr/local/bin/mita run
 ExecStartPost=/bin/sh -c 'i=0; while [ $$i -lt 50 ]; do if [ -S /run/veil-mieru/mita.sock ]; then /usr/local/bin/mita apply config /etc/veil/generated/mieru/server_config.json && /usr/local/bin/mita start && exit 0; fi; i=$$((i+1)); sleep 0.2; done; echo "mita activation timed out" >&2; exit 1'
+ExecStop=/usr/local/bin/mita stop
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

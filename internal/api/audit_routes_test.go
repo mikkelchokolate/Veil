@@ -17,9 +17,11 @@ func TestLoginRecordsSuccessAndFailureAuditEvents(t *testing.T) {
 	recorder := audit.NewRecorder(filepath.Join(t.TempDir(), "panel.jsonl"), audit.RecorderOptions{})
 	passwordHash, _ := bcrypt.GenerateFromPassword([]byte("correct-password"), bcrypt.MinCost)
 	registry, _ := NewSessionRegistry("")
+	now := time.Now()
 	state := &managementState{
-		audit:    recorder,
-		sessions: registry,
+		audit:           recorder,
+		sessions:        registry,
+		loginBackoffNow: func() time.Time { return now },
 		users: []User{{
 			Username:     "alice",
 			PasswordHash: string(passwordHash),
@@ -27,7 +29,7 @@ func TestLoginRecordsSuccessAndFailureAuditEvents(t *testing.T) {
 		}},
 	}
 
-	for _, password := range []string{"wrong-password", "correct-password"} {
+	for index, password := range []string{"wrong-password", "correct-password"} {
 		request := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(
 			`{"username":"alice","password":"`+password+`"}`,
 		))
@@ -35,6 +37,9 @@ func TestLoginRecordsSuccessAndFailureAuditEvents(t *testing.T) {
 		request.RemoteAddr = "192.0.2.10:1234"
 		response := httptest.NewRecorder()
 		state.handleLogin(response, request)
+		if index == 0 {
+			now = now.Add(2 * time.Second)
+		}
 	}
 
 	records, err := recorder.List(10, time.Time{})

@@ -27,6 +27,10 @@ func NewRuntimeCommandExecutor() RuntimeCommandExecutor {
 	return veilruntime.NewRuntimeCommandExecutor()
 }
 
+// BuildClientCredentials resolves the effective client credentials for an
+// inbound, including normalized Client+Binding credentials attached as
+// runtime-only data. The merge lives in clientaccess.BuildClientCredentials
+// so links, subscriptions, live validation and renderers all agree.
 func BuildClientCredentials(inbound Inbound) ([]clientaccess.ClientCredential, error) {
 	return clientaccess.BuildClientCredentials(inbound)
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/testutil/testdb"
 )
 
 func TestAdminRotateKeySuccessInPlace(t *testing.T) {
@@ -42,9 +43,10 @@ func TestAdminRotateKeySuccessInPlace(t *testing.T) {
 	if err := store.Save(snapshot); err != nil {
 		t.Fatalf("failed to save state: %v", err)
 	}
+	createAdminRotateDatabase(t, tempVar)
 
 	// Run rotate-key command
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -121,9 +123,10 @@ func TestAdminRotateKeyToNewPath(t *testing.T) {
 	if err := store.Save(snapshot); err != nil {
 		t.Fatalf("failed to save state: %v", err)
 	}
+	createAdminRotateDatabase(t, tempVar)
 
 	// Run rotate-key to a new path
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -199,6 +202,7 @@ func TestAdminRotateKeyRollbackOnFailure(t *testing.T) {
 	if err := store.Save(snapshot); err != nil {
 		t.Fatalf("failed to save state: %v", err)
 	}
+	createAdminRotateDatabase(t, tempVar)
 
 	// Lock the state file to simulate failure during rename
 	unlock, err := lockStateFileForRenameFailure(statePath)
@@ -208,7 +212,7 @@ func TestAdminRotateKeyRollbackOnFailure(t *testing.T) {
 	defer unlock()
 
 	// Run rotate-key command
-	cmd := NewRootCommand("test")
+	cmd := newFastRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -241,5 +245,13 @@ func TestAdminRotateKeyRollbackOnFailure(t *testing.T) {
 		if entry.Name() != "state.key" {
 			t.Errorf("unexpected file in etc directory: %s", entry.Name())
 		}
+	}
+}
+
+func createAdminRotateDatabase(t *testing.T, root string) {
+	t.Helper()
+	db := testdb.CloneTo(t, filepath.Join(root, "veil.db"))
+	if err := db.Close(); err != nil {
+		t.Fatalf("close rotation database: %v", err)
 	}
 }

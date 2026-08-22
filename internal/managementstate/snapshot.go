@@ -3,6 +3,7 @@ package managementstate
 import "github.com/mikkelchokolate/Veil/internal/model"
 
 type SnapshotInput struct {
+	EffectiveAt   int64
 	Setup         model.SetupState
 	Settings      model.Settings
 	Inbounds      []model.Inbound
@@ -11,6 +12,10 @@ type SnapshotInput struct {
 	RoutingSource model.RoutingSource
 	Warp          model.WarpConfig
 	Users         []model.User
+	// A3: normalized client state that affects runtime rendering.
+	Clients     []model.ClientSnapshot
+	Bindings    []model.BindingSnapshot
+	Credentials []model.CredentialSnapshot
 }
 
 type SnapshotTarget struct {
@@ -26,6 +31,7 @@ type SnapshotTarget struct {
 
 func BuildSnapshot(input SnapshotInput) model.ManagementSnapshot {
 	return model.ManagementSnapshot{
+		EffectiveAt:   input.EffectiveAt,
 		Setup:         input.Setup,
 		Settings:      cloneSettings(input.Settings),
 		Inbounds:      cloneInbounds(input.Inbounds),
@@ -34,6 +40,9 @@ func BuildSnapshot(input SnapshotInput) model.ManagementSnapshot {
 		RoutingSource: cloneRoutingSource(input.RoutingSource),
 		Warp:          cloneWarp(input.Warp),
 		Users:         cloneUsers(input.Users),
+		Clients:       append([]model.ClientSnapshot(nil), input.Clients...),
+		Bindings:      append([]model.BindingSnapshot(nil), input.Bindings...),
+		Credentials:   append([]model.CredentialSnapshot(nil), input.Credentials...),
 	}
 }
 

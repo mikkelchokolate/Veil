@@ -5,11 +5,13 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols/schema"
+	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
 // InboundFieldSchema returns the dynamic fields for an olcRTC inbound form.
 func (Plugin) InboundFieldSchema() []schema.FieldSchema {
 	return []schema.FieldSchema{
+		{Key: "password", Label: "Encryption key", Type: schema.FieldPassword, GenerateAction: "hex64", Scope: "inbound"},
 		{
 			Key:     "olcrtcAuth",
 			Label:   "olcRTC Auth Provider",
@@ -78,19 +80,28 @@ func (Plugin) Autofill(inbound model.Inbound) (model.Inbound, error) {
 	if inbound.ProtocolFields == nil {
 		inbound.ProtocolFields = map[string]any{}
 	}
-	if inbound.OlcrtcAuth == "" {
-		if v, ok := inbound.ProtocolFields["olcrtcAuth"].(string); ok && v != "" {
-			inbound.OlcrtcAuth = v
-		} else {
-			inbound.OlcrtcAuth = "jitsi"
+	// Dynamic Panel fields are submitted through ProtocolFields. A non-empty
+	// value wins over the flat field: on update the panel echoes the flat
+	// password as "[REDACTED]" (restored to the stored value by the API layer),
+	// and the key the user actually edited lives in ProtocolFields. Preserve an
+	// explicitly generated/provided encryption key instead of replacing it.
+	if inbound.ProtocolFields != nil {
+		if password, ok := inbound.ProtocolFields["password"].(string); ok && password != "" && password != veilsettings.RedactedSecret {
+			inbound.Password = password
 		}
 	}
-	if inbound.OlcrtcTransport == "" {
-		if v, ok := inbound.ProtocolFields["olcrtcTransport"].(string); ok && v != "" {
-			inbound.OlcrtcTransport = v
-		} else {
-			inbound.OlcrtcTransport = "datachannel"
-		}
+	// Auth and transport resolve protocolFields-first: the SPA edits dynamic
+	// fields while echoing the stale flat value, so a flat-first read here
+	// would generate a room for the OLD provider (audit #133 F1).
+	if v, ok := inbound.ProtocolFields["olcrtcAuth"].(string); ok && v != "" {
+		inbound.OlcrtcAuth = v
+	} else if inbound.OlcrtcAuth == "" {
+		inbound.OlcrtcAuth = "jitsi"
+	}
+	if v, ok := inbound.ProtocolFields["olcrtcTransport"].(string); ok && v != "" {
+		inbound.OlcrtcTransport = v
+	} else if inbound.OlcrtcTransport == "" {
+		inbound.OlcrtcTransport = "datachannel"
 	}
 	if inbound.ProtocolFields["olcrtcAuth"] == nil || inbound.ProtocolFields["olcrtcAuth"] == "" {
 		inbound.ProtocolFields["olcrtcAuth"] = inbound.OlcrtcAuth
@@ -98,12 +109,21 @@ func (Plugin) Autofill(inbound model.Inbound) (model.Inbound, error) {
 	if inbound.ProtocolFields["olcrtcTransport"] == nil || inbound.ProtocolFields["olcrtcTransport"] == "" {
 		inbound.ProtocolFields["olcrtcTransport"] = inbound.OlcrtcTransport
 	}
-	if inbound.OlcrtcRoomID == "" && ProviderSupportsAutoRoom(inbound.OlcrtcAuth) {
+	// Auto-generate a room only when the user never touched the field (no
+	// protocolFields key at all). An explicit "" in protocolFields means the
+	// operator cleared it, and regenerating would silently undo the clear
+	// (audit #133/#139).
+	if _, touched := inbound.ProtocolFields["olcrtcRoomID"]; !touched && inbound.OlcrtcRoomID == "" && ProviderSupportsAutoRoom(inbound.OlcrtcAuth) {
 		room, err := GenerateRoom(inbound.OlcrtcAuth)
 		if err != nil {
 			return inbound, err
 		}
 		inbound.OlcrtcRoomID = room
+	}
+	// Room resolves protocolFields-first like auth/transport: the SPA edits
+	// the dynamic field while echoing a stale flat room.
+	if v, ok := inbound.ProtocolFields["olcrtcRoomID"].(string); ok && v != "" {
+		inbound.OlcrtcRoomID = v
 	}
 	if inbound.ProtocolFields["olcrtcRoomID"] == nil || inbound.ProtocolFields["olcrtcRoomID"] == "" {
 		inbound.ProtocolFields["olcrtcRoomID"] = inbound.OlcrtcRoomID
@@ -123,7 +143,7 @@ func isOlcrtcKey(s string) bool {
 		return false
 	}
 	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
 			return false
 		}
 	}

@@ -23,6 +23,7 @@ func TestRepairApplyRequiresYes(t *testing.T) {
 }
 
 func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
+	withMockedInstallRuntimes(t)
 	dir := t.TempDir()
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
@@ -66,6 +67,7 @@ func TestInstallRURecommendedApplyWritesFilesWhenConfirmed(t *testing.T) {
 }
 
 func TestInstallApplyWithAuditLogWritesSuccessEvent(t *testing.T) {
+	withMockedInstallRuntimes(t)
 	dir := t.TempDir()
 	auditPath := filepath.Join(dir, "audit.jsonl")
 
@@ -115,6 +117,7 @@ func TestInstallApplyWithAuditLogWritesSuccessEvent(t *testing.T) {
 }
 
 func TestInstallApplyNoAuditFlagBackwardCompatible(t *testing.T) {
+	withMockedInstallRuntimes(t)
 	dir := t.TempDir()
 
 	cmd := NewRootCommand("test")
@@ -143,6 +146,7 @@ func TestInstallApplyNoAuditFlagBackwardCompatible(t *testing.T) {
 }
 
 func TestInstallDefaultsBackupDirWhenNotSet(t *testing.T) {
+	withMockedInstallRuntimes(t)
 	var capturedPaths installer.ApplyPaths
 	oldApply := installApplyFunc
 	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
@@ -183,6 +187,7 @@ func TestInstallDefaultsBackupDirWhenNotSet(t *testing.T) {
 }
 
 func TestInstallExplicitEmptyBackupDirSkipsBackup(t *testing.T) {
+	withMockedInstallRuntimes(t)
 	var capturedPaths installer.ApplyPaths
 	oldApply := installApplyFunc
 	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {

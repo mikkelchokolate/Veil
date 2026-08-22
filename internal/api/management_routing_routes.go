@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
@@ -32,8 +33,13 @@ func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Requ
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
-			s.autoApplyLocked(r)
-			writeJSONStatus(w, http.StatusCreated, created)
+			if err := s.ensureRoutingDatSourceLocked(); err != nil {
+				writeError(w, err.Error(), http.StatusInternalServerError)
+				return nil
+			}
+			actor, _ := r.Context().Value(contextKeyUsername).(string)
+			outcome := s.autoApplyResultLocked(r, actor)
+			s.writeMutationResponse(w, http.StatusCreated, created, outcome)
 		default:
 			methodNotAllowed(w, http.MethodGet, http.MethodPost)
 		}
@@ -67,8 +73,13 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
-			s.autoApplyLocked(r)
-			writeJSON(w, updated)
+			if err := s.ensureRoutingDatSourceLocked(); err != nil {
+				writeError(w, err.Error(), http.StatusInternalServerError)
+				return nil
+			}
+			actor, _ := r.Context().Value(contextKeyUsername).(string)
+			outcome := s.autoApplyResultLocked(r, actor)
+			s.writeMutationResponse(w, http.StatusOK, updated, outcome)
 		case http.MethodDelete:
 			err := mutation.DeleteRoutingRule(name)
 			s.logUserAction(r, "delete_routing_rule", name, err == nil, "")
@@ -76,8 +87,9 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
-			s.autoApplyLocked(r)
-			w.WriteHeader(http.StatusNoContent)
+			actor, _ := r.Context().Value(contextKeyUsername).(string)
+			outcome := s.autoApplyResultLocked(r, actor)
+			s.writeMutationResponse(w, http.StatusOK, map[string]string{"name": name}, outcome)
 		default:
 			methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
 		}
@@ -86,16 +98,36 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 }
 
 func writeRoutingRuleManagementError(w http.ResponseWriter, err error) {
-	switch err {
-	case routing.ErrRoutingRuleInvalid:
+	switch {
+	case errors.Is(err, routing.ErrRoutingMatchInvalid):
+		writeError(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, routing.ErrRoutingRuleInvalid):
 		writeError(w, "name, match, and outbound are required", http.StatusBadRequest)
-	case routing.ErrRoutingRuleDuplicateName:
+	case errors.Is(err, routing.ErrRoutingRuleDuplicateName):
 		writeError(w, "routing rule name already exists", http.StatusConflict)
-	case routing.ErrRoutingRuleNotFound:
+	case errors.Is(err, routing.ErrRoutingRuleNotFound):
 		writeNotFound(w)
 	default:
 		writeError(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func (s *managementState) ensureRoutingDatSourceLocked() error {
+	next := routing.EnsureDatSource(s.routingSource, s.rules)
+	if len(next.Files) == len(s.routingSource.Files) {
+		same := true
+		for i := range next.Files {
+			if i >= len(s.routingSource.Files) || next.Files[i].Name != s.routingSource.Files[i].Name {
+				same = false
+				break
+			}
+		}
+		if same {
+			return nil
+		}
+	}
+	s.routingSource = next
+	return s.saveLocked()
 }
 
 func (s *managementState) handleRoutingPresets(w http.ResponseWriter, r *http.Request) {
@@ -155,7 +187,12 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 	_ = s.withMutation(func(mutation managementstate.Mutation) error {
 		switch r.Method {
 		case http.MethodGet:
-			writeJSON(w, mutation.Warp())
+			warp := mutation.Warp()
+			if role, _ := r.Context().Value(contextKeyRole).(string); role == "viewer" {
+				writeJSON(w, newViewerWarpMetadata(warp))
+			} else {
+				writeJSON(w, warp)
+			}
 		case http.MethodPut:
 			var warp WarpConfig
 			if !decodeJSONRequest(w, r, &warp) {
@@ -224,8 +261,9 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 				writeError(w, err.Error(), http.StatusInternalServerError)
 				return nil
 			}
-			s.autoApplyLocked(r)
-			writeJSON(w, updated)
+			actor, _ := r.Context().Value(contextKeyUsername).(string)
+			outcome := s.autoApplyResultLocked(r, actor)
+			s.writeMutationResponse(w, http.StatusOK, updated, outcome)
 		default:
 			methodNotAllowed(w, http.MethodGet, http.MethodPut)
 		}

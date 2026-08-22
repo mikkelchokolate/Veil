@@ -18,12 +18,13 @@ func newValidWorkflowDeps(t *testing.T) (WorkflowDependencies, []byte) {
 	hash := sha256.Sum256(archive)
 	assetName := AssetName()
 	checksums := []byte(fmt.Sprintf("%s  %s\n", hex.EncodeToString(hash[:]), assetName))
-	release := &Release{TagName: "v1.2.4", Assets: []Asset{
+	release := &Release{TagName: "v1.2.4", Assets: append([]Asset{
 		{Name: assetName, BrowserDownloadURL: "https://example.com/archive"},
 		{Name: "checksums.txt", BrowserDownloadURL: "https://example.com/checksums"},
-	}}
+	}, testReleaseEvidenceAssets()...)}
 	return WorkflowDependencies{
-		FetchRelease: func() (*Release, error) { return release, nil },
+		FetchRelease:          func() (*Release, error) { return release, nil },
+		VerifyReleaseEvidence: acceptTestReleaseEvidence,
 		DownloadAsset: func(url string) ([]byte, error) {
 			if strings.Contains(url, "checksums") {
 				return checksums, nil
@@ -138,11 +139,15 @@ func TestRunWorkflowFallsBackToDefaultExecutable(t *testing.T) {
 	var out bytes.Buffer
 	deps, _ := newValidWorkflowDeps(t)
 	deps.Executable = func() (string, error) { return "", errors.New("cannot find executable") }
+	// The default-path fallback must run against an isolated path: a unit test
+	// must never write to the production /usr/local/bin location.
+	fallback := filepath.Join(t.TempDir(), "veil")
+	deps.DefaultExecutablePath = fallback
 	err := RunWorkflow(WorkflowOptions{CurrentVersion: "v1.2.3", Yes: true}, &out, deps)
 	if err != nil {
 		t.Fatalf("RunWorkflow: %v", err)
 	}
-	if !strings.Contains(out.String(), "/usr/local/bin/veil") {
+	if !strings.Contains(out.String(), fallback) {
 		t.Fatalf("output = %q", out.String())
 	}
 }

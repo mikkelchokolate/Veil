@@ -7,11 +7,14 @@ import (
 )
 
 type RuntimeStatus struct {
-	Unit        string
-	LoadState   string
-	ActiveState string
-	SubState    string
-	Error       string
+	Unit                   string
+	LoadState              string
+	ActiveState            string
+	SubState               string
+	MainPID                int
+	ExecMainStartMonotonic uint64
+	ExecutableDigest       string
+	Error                  string
 }
 
 type ServiceRuntimeStatus = RuntimeStatus

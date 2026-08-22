@@ -137,6 +137,14 @@ func testRequiredMieruDataPath(t *testing.T, transport string) {
 	if err := json.Unmarshal([]byte(clientConfigJSON), &clientMap); err != nil {
 		t.Fatal(err)
 	}
+	// Regression guard (audit series #51/#101): the delivered client config
+	// must be importable as-is — upstream mieru rejects socks5Port < 1 with
+	// "socks5 port number 0 is invalid". The renderer now emits a valid
+	// deterministic port, so assert it before the runtime override below.
+	socksPortValue, ok := clientMap["socks5Port"].(float64)
+	if !ok || int(socksPortValue) < 1 {
+		t.Fatalf("delivered Mieru client config has invalid socks5Port: %v (config must be importable without patching)", clientMap["socks5Port"])
+	}
 	socksPort := freePort(t)
 	clientMap["socks5Port"] = socksPort
 	clientMap["socks5ListenLAN"] = false
@@ -207,7 +215,10 @@ func applyPanelConfiguration(t *testing.T, srv *testServer) {
 
 	resp = srv.do(http.MethodPost, "/api/apply", `{"confirm":true}`)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("apply expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
+		applyResponse := readJSON(t, resp)
+		stateResponse := readJSON(t, srv.do(http.MethodGet, "/api/apply/state", ""))
+		jobsResponse := readJSON(t, srv.do(http.MethodGet, "/api/apply/jobs", ""))
+		t.Fatalf("apply expected 200, got %d: %v\napply state: %v\napply jobs: %v\nserver log:\n%s", resp.StatusCode, applyResponse, stateResponse, jobsResponse, srv.logBuf.String())
 	}
 	drain(resp)
 }
@@ -458,6 +469,21 @@ func configureNaiveCaddyJSONForLocalTLS(input []byte, listenAddr, adminAddr, cer
 	if forwardProxy == nil {
 		return nil, fmt.Errorf("generated NaiveProxy server has no forward_proxy handler")
 	}
+	// The renderer (audit #12/#101) scopes the forward_proxy route with a
+	// host matcher so Caddy provisions a certificate for the inbound domain.
+	// The local e2e run connects with SNI/Host localhost and tunnels to the
+	// synthetic backend host, so point the matcher at that host; otherwise
+	// the route falls through to the file_server and CONNECT returns 404.
+	matcher := caddyRouteMatcher(naiveServer, "forward_proxy")
+	if matcher != nil {
+		if hostRaw, ok := matcher["host"]; ok {
+			if hosts, ok := hostRaw.([]any); ok {
+				for i := range hosts {
+					hosts[i] = allowedBackendHost
+				}
+			}
+		}
+	}
 	// The module's secure default ACL denies loopback networks. Allow only the
 	// synthetic test hostname so the real proxy can reach the local HTTP backend
 	// without weakening production renderer defaults.
@@ -491,6 +517,31 @@ func caddyServerHandler(server map[string]any, handlerName string) map[string]an
 			handler, _ := rawHandler.(map[string]any)
 			if handler["handler"] == handlerName {
 				return handler
+			}
+		}
+	}
+	return nil
+}
+
+// caddyRouteMatcher returns the first matcher object of the route that
+// contains the named handler (used to repoint the forward_proxy host matcher
+// in e2e). The renderer emits "match": [{"host": [...]}] — an ARRAY of
+// matcher sets — so the element access must unwrap the slice (code-review P1:
+// a map assertion silently returned nil and the repoint never applied).
+func caddyRouteMatcher(server map[string]any, handlerName string) map[string]any {
+	routes, _ := server["routes"].([]any)
+	for _, rawRoute := range routes {
+		route, _ := rawRoute.(map[string]any)
+		handlers, _ := route["handle"].([]any)
+		for _, rawHandler := range handlers {
+			handler, _ := rawHandler.(map[string]any)
+			if handler["handler"] == handlerName {
+				matches, _ := route["match"].([]any)
+				if len(matches) > 0 {
+					first, _ := matches[0].(map[string]any)
+					return first
+				}
+				return nil
 			}
 		}
 	}

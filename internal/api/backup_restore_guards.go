@@ -71,16 +71,17 @@ func (s *managementState) scheduleBackupRestoreOwnerSessionRevocation(jobID, tok
 	if token == "" || s.sessions == nil {
 		return
 	}
-	grace := s.backupRestoreOwnerSessionGrace
-	if grace == 0 {
-		grace = defaultBackupRestoreOwnerSessionGrace
+	s.mu.Lock()
+	roles := make(map[string]string, len(s.users))
+	for _, user := range s.users {
+		roles[user.Username] = user.Role
 	}
-	if grace < 0 {
+	s.mu.Unlock()
+	valid, err := s.sessionRegistry().RevalidateToken(token, roles)
+	if err != nil || valid {
 		return
 	}
-	time.AfterFunc(grace, func() {
-		s.revokeBackupRestoreOwnerSession(jobID, token)
-	})
+	s.revokeBackupRestoreOwnerSession(jobID, token)
 }
 
 func (s *managementState) revokeBackupRestoreOwnerSession(jobID, token string) {

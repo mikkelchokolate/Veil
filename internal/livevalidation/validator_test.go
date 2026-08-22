@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -258,7 +259,10 @@ func TestValidatorAllowsOlcrtcWithoutDomain(t *testing.T) {
 			Transport: "udp",
 			Port:      3478,
 			Enabled:   true,
-			Password:  "relay-secret",
+			Password:  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			// A room is required for every provider (audit #83/#87); supply one
+			// so this test keeps focusing on the domain question.
+			OlcrtcRoomID: "https://meet.example/room",
 		}},
 	})
 
@@ -339,4 +343,198 @@ func issueSeverity(response Response, code string) string {
 		}
 	}
 	return ""
+}
+
+func TestValidatorRejectsDuplicateMieruUsernamesAcrossInbounds(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-mieru.service": true}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{},
+		Inbounds: []model.Inbound{
+			{
+				Name: "a", Protocol: "mieru", Transport: "tcp", Port: 9443, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "alice", Username: "alice", Password: "pw1", Enabled: true}},
+			},
+			{
+				Name: "b", Protocol: "mieru", Transport: "tcp", Port: 9444, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "alice-dup", Username: "alice", Password: "pw2", Enabled: true}},
+			},
+		},
+	})
+
+	if count := countIssueCode(response, "mieru_duplicate_username"); count != 1 {
+		t.Fatalf("expected 1 duplicate username issue, got %d: %+v", count, response.Issues)
+	}
+	if response.Valid {
+		t.Fatalf("duplicate usernames must make the config invalid")
+	}
+}
+
+func TestValidatorAllowsDistinctMieruUsernames(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-mieru.service": true}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{},
+		Inbounds: []model.Inbound{
+			{
+				Name: "a", Protocol: "mieru", Transport: "tcp", Port: 9443, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "alice", Username: "alice", Password: "pw1", Enabled: true}},
+			},
+			{
+				Name: "b", Protocol: "mieru", Transport: "tcp", Port: 9444, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "bob", Username: "bob", Password: "pw2", Enabled: true}},
+			},
+		},
+	})
+
+	if count := countIssueCode(response, "mieru_duplicate_username"); count != 0 {
+		t.Fatalf("distinct usernames must not report duplicates: %+v", response.Issues)
+	}
+}
+
+func TestValidatorDuplicateMieruUsernameFallsBackToInboundName(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-mieru.service": true}}
+
+	// Two mieru inbounds without profiles fall back to inbound.Name as the
+	// username; the generated config would reject the duplicate at render.
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{},
+		Inbounds: []model.Inbound{
+			{Name: "edge", Protocol: "mieru", Transport: "tcp", Port: 9443, Enabled: true, Password: "pw1"},
+			{Name: "edge", Protocol: "mieru", Transport: "tcp", Port: 9444, Enabled: true, Password: "pw2"},
+		},
+	})
+
+	if count := countIssueCode(response, "mieru_duplicate_username"); count != 1 {
+		t.Fatalf("expected duplicate from inbound-name fallback, got %d: %+v", count, response.Issues)
+	}
+}
+
+func TestValidatorRejectsOversizedMieruUsername(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-mieru.service": true}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{},
+		Inbounds: []model.Inbound{
+			{
+				Name: "a", Protocol: "mieru", Transport: "tcp", Port: 9443, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "alice", Username: strings.Repeat("x", 65), Password: "pw1", Enabled: true}},
+			},
+		},
+	})
+
+	if count := countIssueCode(response, "mieru_username_too_long"); count != 1 {
+		t.Fatalf("expected 1 username-too-long issue, got %d: %+v", count, response.Issues)
+	}
+	if response.Valid {
+		t.Fatalf("oversized username must make the config invalid")
+	}
+}
+
+func TestValidatorAcceptsBoundaryMieruUsernameAndRejectsOversizedPassword(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-mieru.service": true}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{},
+		Inbounds: []model.Inbound{
+			{
+				Name: "a", Protocol: "mieru", Transport: "tcp", Port: 9443, Enabled: true,
+				// 64-byte username is the upstream cap: must pass.
+				Profiles: []model.ClientProfile{{Name: "alice", Username: strings.Repeat("y", 64), Password: strings.Repeat("z", 65), Enabled: true}},
+			},
+		},
+	})
+
+	if count := countIssueCode(response, "mieru_username_too_long"); count != 0 {
+		t.Fatalf("64-byte username must be accepted: %+v", response.Issues)
+	}
+	if count := countIssueCode(response, "mieru_password_too_long"); count != 1 {
+		t.Fatalf("expected 1 password-too-long issue, got %d: %+v", count, response.Issues)
+	}
+}
+
+// TestValidatorAllowsSameHysteria2UsernameAcrossInbounds locks in the code
+// review of 7556d840: each hysteria2 inbound renders its OWN userpass map and
+// process, so the same username on two different inbounds is perfectly valid.
+func TestValidatorAllowsSameHysteria2UsernameAcrossInbounds(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-hysteria2@a.service": true, "veil-hysteria2@b.service": true}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{Domain: "hy.example.com"},
+		Inbounds: []model.Inbound{
+			{
+				Name: "a", Protocol: "hysteria2", Transport: "udp", Port: 9443, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "alice", Username: "alice", Password: "pw1", Enabled: true}},
+			},
+			{
+				Name: "b", Protocol: "hysteria2", Transport: "udp", Port: 9444, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "alice2", Username: "alice", Password: "pw2", Enabled: true}},
+			},
+		},
+	})
+
+	if count := countIssueCode(response, "hysteria2_duplicate_username"); count != 0 {
+		t.Fatalf("same username on different inbounds must be valid: %+v", response.Issues)
+	}
+	if !response.Valid {
+		t.Fatalf("config with same hysteria2 username on separate inbounds must be valid: %+v", response.Issues)
+	}
+}
+
+// TestValidatorRejectsDuplicateHysteria2UsernameWithinInbound is the case that
+// actually breaks rendering: two profiles with the same username inside ONE
+// inbound overwrite each other in the single userpass map.
+func TestValidatorRejectsDuplicateHysteria2UsernameWithinInbound(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-hysteria2@a.service": true}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{Domain: "hy.example.com"},
+		Inbounds: []model.Inbound{
+			{
+				Name: "a", Protocol: "hysteria2", Transport: "udp", Port: 9443, Enabled: true,
+				Profiles: []model.ClientProfile{
+					{Name: "alice1", Username: "alice", Password: "pw1", Enabled: true},
+					{Name: "alice2", Username: "alice", Password: "pw2", Enabled: true},
+				},
+			},
+		},
+	})
+
+	if count := countIssueCode(response, "hysteria2_duplicate_username"); count != 1 {
+		t.Fatalf("expected 1 duplicate hysteria2 username issue, got %d: %+v", count, response.Issues)
+	}
+	if response.Valid {
+		t.Fatalf("duplicate hysteria2 usernames within one inbound must make the config invalid")
+	}
+}
+
+// TestValidatorAllowsDistinctHysteria2Usernames is the positive control.
+func TestValidatorAllowsDistinctHysteria2Usernames(t *testing.T) {
+	validator := testValidator()
+	validator.Units = fakeUnitInspector{found: map[string]bool{"veil-hysteria2@a.service": true, "veil-hysteria2@b.service": true}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{Domain: "hy.example.com"},
+		Inbounds: []model.Inbound{
+			{
+				Name: "a", Protocol: "hysteria2", Transport: "udp", Port: 9443, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "alice", Username: "alice", Password: "pw1", Enabled: true}},
+			},
+			{
+				Name: "b", Protocol: "hysteria2", Transport: "udp", Port: 9444, Enabled: true,
+				Profiles: []model.ClientProfile{{Name: "bob", Username: "bob", Password: "pw2", Enabled: true}},
+			},
+		},
+	})
+
+	if count := countIssueCode(response, "hysteria2_duplicate_username"); count != 0 {
+		t.Fatalf("distinct hysteria2 usernames must not report duplicates: %+v", response.Issues)
+	}
 }

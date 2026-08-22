@@ -2,8 +2,12 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"mime"
@@ -11,7 +15,9 @@ import (
 	"net/url"
 	"runtime"
 	"strings"
+	"sync/atomic"
 
+	"github.com/mikkelchokolate/Veil/internal/clientaddr"
 	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"github.com/mikkelchokolate/Veil/internal/observability"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
@@ -30,6 +36,7 @@ type ServerInfo struct {
 	StatePath               string
 	ApplyRoot               string
 	LiveRoot                string
+	SystemdWantsDir         string
 	KeyPath                 string
 	PanelListen             string
 	PanelAccess             string
@@ -41,16 +48,67 @@ type ServerInfo struct {
 	Privileged              privileged.Client
 	RequirePrivilegedHelper bool
 	UpdateStager            func(context.Context) (string, error)
+	TrustedProxyCIDRs       []string
+	PasswordHasher          PasswordHasher
+	DatabaseOpener          func(string) (*sql.DB, error)
 }
 
 func NewRouter(info ServerInfo) (http.Handler, Reloader) {
 	return NewRouterComposition(info).Build()
 }
 
+type clientRequestIDContextKey struct{}
+
+var requestIDFallbackCounter atomic.Uint64
+
+func requestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		clientRequestID := strings.TrimSpace(r.Header.Get("X-Request-ID"))
+		if len(clientRequestID) > 128 {
+			clientRequestID = clientRequestID[:128]
+		}
+		for _, char := range clientRequestID {
+			if char < 0x20 || char > 0x7e {
+				clientRequestID = ""
+				break
+			}
+		}
+		requestID := newServerRequestID()
+		request := r.Clone(context.WithValue(r.Context(), clientRequestIDContextKey{}, clientRequestID))
+		request.Header = r.Header.Clone()
+		request.Header.Set("X-Request-ID", requestID)
+		w.Header().Set("X-Request-ID", requestID)
+		next.ServeHTTP(w, request)
+	})
+}
+
+func newServerRequestID() string {
+	var random [16]byte
+	if _, err := rand.Read(random[:]); err == nil {
+		return hex.EncodeToString(random[:])
+	}
+	return fmt.Sprintf("fallback-%016x", requestIDFallbackCounter.Add(1))
+}
+
+func clientProvidedRequestID(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	value, _ := r.Context().Value(clientRequestIDContextKey{}).(string)
+	return value
+}
+
 // stripBasePathMiddleware removes the base path prefix from request URL before routing.
 func stripBasePathMiddleware(prefix string, next http.Handler) http.Handler {
 	mountPath := strings.TrimSuffix(prefix, "/")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The public token-based subscription endpoint (/s/{token}) must stay
+		// reachable even when the panel is mounted under a secret base path:
+		// the unguessable token is the capability, not the panel path.
+		if strings.HasPrefix(r.URL.Path, "/s/") {
+			next.ServeHTTP(w, r)
+			return
+		}
 		// Match either the mount itself or a child path. A raw HasPrefix check would
 		// incorrectly accept /secretary when the configured mount is /secret.
 		if r.URL.Path != mountPath && !strings.HasPrefix(r.URL.Path, mountPath+"/") {
@@ -71,10 +129,17 @@ func stripBasePathMiddleware(prefix string, next http.Handler) http.Handler {
 	})
 }
 
-func rateLimitMiddleware(metrics *observability.MetricsCollector, next http.Handler) http.Handler {
+func newRateLimitMiddleware(metrics *observability.MetricsCollector, trustedProxyCIDRs []string, next http.Handler) (http.Handler, *observability.RateLimiter) {
+	resolver, err := clientaddr.New(trustedProxyCIDRs)
+	if err != nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeError(w, "invalid trusted proxy configuration", http.StatusInternalServerError)
+		}), nil
+	}
 	limiter := observability.DefaultRateLimitPolicy().NewLimiter()
+	limiter.SetClientAddressResolver(resolver)
 	limiter.SetOnRateLimited(func() { metrics.TrackRateLimitHit() })
-	return limiter.Middleware(next)
+	return limiter.Middleware(next), limiter
 }
 
 const maxJSONBodyBytes int64 = 1024 * 1024
@@ -150,13 +215,52 @@ func writeJSONStatus(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, msg string, code int) {
 	code = canonicalRequestErrorStatus(msg, code)
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(code)
-	if err := json.NewEncoder(w).Encode(map[string]string{"message": msg}); err != nil {
+	errorCode := apiErrorCode(code)
+	if code >= http.StatusInternalServerError {
+		msg = "internal server error"
+	}
+	writeErrorEnvelope(w, errorCode, msg, code)
+}
+
+func writeErrorEnvelope(w http.ResponseWriter, errorCode, message string, status int) {
+	setJSONHeaders(w)
+	requestID := w.Header().Get("X-Request-ID")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]string{
+			"code":      errorCode,
+			"message":   message,
+			"requestId": requestID,
+		},
+	}); err != nil {
 		log.Printf("writeError: encode error: %v", err)
+	}
+}
+
+func apiErrorCode(status int) string {
+	switch status {
+	case http.StatusBadRequest, http.StatusUnsupportedMediaType, http.StatusRequestEntityTooLarge:
+		return "invalid_request"
+	case http.StatusUnauthorized:
+		return "unauthorized"
+	case http.StatusForbidden:
+		return "forbidden"
+	case http.StatusNotFound:
+		return "not_found"
+	case http.StatusConflict:
+		return "conflict"
+	case http.StatusMethodNotAllowed:
+		return "method_not_allowed"
+	case http.StatusRequestTimeout:
+		return "request_timeout"
+	case http.StatusUnprocessableEntity:
+		return "validation_failed"
+	case http.StatusTooManyRequests:
+		return "rate_limited"
+	case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return "dependency_unavailable"
+	default:
+		return "internal_error"
 	}
 }
 
@@ -200,12 +304,10 @@ func writePrivilegedError(w http.ResponseWriter, err error) {
 	if strings.Contains(strings.ToLower(message), "backup passphrase") {
 		status = http.StatusServiceUnavailable
 	}
-	writeJSONStatus(w, status, map[string]any{
-		"error": map[string]string{
-			"code":    string(code),
-			"message": message,
-		},
-	})
+	if status >= http.StatusInternalServerError && message != "privileged helper is unavailable" {
+		message = "privileged operation failed"
+	}
+	writeErrorEnvelope(w, string(code), message, status)
 }
 
 func privilegedHelperSocketUnavailable(err error) bool {

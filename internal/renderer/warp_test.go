@@ -128,8 +128,8 @@ func TestRenderWarpSingBoxConfigDomainMatchType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
-	if !strings.Contains(body, `"domain": "example.com"`) {
-		t.Fatalf("expected domain match rule, got:\n%s", body)
+	if !strings.Contains(body, `"domain_suffix": "example.com"`) {
+		t.Fatalf("expected domain suffix match rule, got:\n%s", body)
 	}
 }
 
@@ -169,5 +169,61 @@ func TestRenderWarpSingBoxConfigAlwaysRoutesThroughWarpByDefault(t *testing.T) {
 		if !strings.Contains(body, `"final": "warp"`) {
 			t.Fatalf("empty rules must still route through WARP:\n%s", body)
 		}
+	}
+}
+
+func TestRenderWarpSingBoxConfigParsesCommaSeparatedMatch(t *testing.T) {
+	body, err := RenderWarpSingBox(WarpSingBoxConfig{
+		Endpoint: "engage.cloudflareclient.com:2408", PrivateKey: "k", LocalAddress: "172.16.0.2/32", PeerPublicKey: "p", SocksPort: 40000,
+		RoutingRules: []WarpRoutingRule{{
+			Match:    `geosite:category-gov-ru,regexp:.*\.ru$,regexp:.*\.su$`,
+			Outbound: "direct",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	for _, want := range []string{
+		`"rule_set": "geosite-category-gov-ru"`,
+		`SagerNet/sing-geosite/rule-set/geosite-category-gov-ru.srs`,
+		`"domain_regex": ".*\\.ru$"`,
+		`"domain_regex": ".*\\.su$"`,
+		`"outbound": "direct"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("comma-separated match missing %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "regexp:") || strings.Contains(body, "category-gov-ru,regexp") {
+		t.Fatalf("comma-separated match was not split:\n%s", body)
+	}
+}
+
+func TestRenderWarpSingBoxConfigKeepsProxyOffWarp(t *testing.T) {
+	body, err := RenderWarpSingBox(WarpSingBoxConfig{
+		Endpoint: "engage.cloudflareclient.com:2408", PrivateKey: "k", LocalAddress: "172.16.0.2/32", PeerPublicKey: "p", SocksPort: 40000,
+		RoutingRules: []WarpRoutingRule{
+			{Match: "geosite:category-gov-ru", Outbound: "direct"},
+			{Match: "geosite:openai", Outbound: "warp"},
+			{Match: "all", Outbound: "proxy"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	for _, want := range []string{
+		`"tag": "direct"`,
+		`"tag": "proxy"`,
+		`"tag": "warp"`,
+		`"outbound": "direct"`,
+		`"outbound": "warp"`,
+		`"final": "proxy"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("missing %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, `"final": "warp"`) {
+		t.Fatalf("all → proxy must not default to warp:\n%s", body)
 	}
 }

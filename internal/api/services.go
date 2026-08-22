@@ -1,9 +1,13 @@
 package api
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
+	veilapply "github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
@@ -62,9 +66,76 @@ func (s *managementState) handleServiceAction(w http.ResponseWriter, r *http.Req
 		})
 		return
 	}
-	err := s.privileged.ServiceAction(r.Context(), privileged.ServiceActionRequest{
-		Unit: runtime.Unit, Action: privileged.ServiceAction(action),
-	})
+	if !s.applyTrackingEnabled() {
+		if s.requireApplyTracking {
+			writeError(w, "durable apply tracking is required for service mutations", http.StatusServiceUnavailable)
+			return
+		}
+		// Unpersisted development/test states do not represent a production
+		// runtime. Preserve their local adapter behavior without weakening the
+		// persisted production path above.
+		err := s.privileged.ServiceAction(r.Context(), privileged.ServiceActionRequest{
+			Unit: runtime.Unit, Action: privileged.ServiceAction(action),
+		})
+		resp.Success = err == nil
+		if err != nil {
+			resp.Error = err.Error()
+			writePrivilegedError(w, err)
+			return
+		}
+		writeJSON(w, resp)
+		return
+	}
+	revision, err := s.ensureRunnableRevision()
+	if err != nil {
+		writeError(w, "service operation fence unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	_, err = s.applyRunner.RunOperationContext(r.Context(), revision, "service:"+action, actorFromRequest(r),
+		veilapply.ContextExecutorFunc(func(ctx context.Context, pinnedRevision uint64) (veilapply.Result, error) {
+			result, err := s.convergeRevisionForSideEffect(ctx, pinnedRevision)
+			if err != nil {
+				return result, err
+			}
+			fence, ok := veilapply.FenceFromContext(ctx)
+			if !ok || fence.Owner == "" || fence.Generation == 0 {
+				return veilapply.Result{Success: false, ErrorCode: "FENCE_REQUIRED"}, veilapply.ErrApplyLeaseLost
+			}
+			if err := veilapply.MarkSideEffectStarting(ctx, veilapply.PublicationDetails{
+				Artifacts: []string{runtime.Unit}, ServicePhase: action,
+			}); err != nil {
+				return veilapply.Result{Success: false, ErrorCode: "PUBLICATION_INTENT"}, err
+			}
+			actionErr := s.privileged.ServiceAction(ctx, privileged.ServiceActionRequest{
+				Unit: runtime.Unit, Action: privileged.ServiceAction(action),
+				Fence: privileged.FenceToken{Owner: fence.Owner, Generation: fence.Generation,
+					LeaseExpiresAt: fence.LeaseExpiresAt, OperationID: fence.OperationID},
+			})
+			if actionErr == nil {
+				statusResult, statusErr := s.privileged.ServiceStatus(ctx, privileged.ServiceStatusRequest{Units: []string{runtime.Unit}})
+				if statusErr != nil {
+					actionErr = statusErr
+				} else if len(statusResult.Services) != 1 {
+					actionErr = errors.New("service status evidence is incomplete")
+				} else {
+					active := statusResult.Services[0].ActiveState == "active"
+					wantActive := action != string(privileged.ServiceActionStop)
+					if active != wantActive {
+						actionErr = fmt.Errorf("service state %q does not match requested action %q", statusResult.Services[0].ActiveState, action)
+					}
+				}
+			}
+			if actionErr == nil {
+				actionErr = completeSideEffectPublication(ctx, veilapply.PublicationDetails{Artifacts: []string{runtime.Unit}, ServicePhase: action})
+			}
+			operation := veilapply.OperationResult{Type: "service", Target: runtime.Unit, Success: actionErr == nil}
+			if actionErr != nil {
+				operation.Detail = actionErr.Error()
+			}
+			result.Success = actionErr == nil
+			result.Operations = append(result.Operations, operation)
+			return result, actionErr
+		}))
 	resp.Success = err == nil
 	if err != nil {
 		resp.Error = err.Error()

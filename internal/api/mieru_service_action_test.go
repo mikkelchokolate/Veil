@@ -14,7 +14,7 @@ func TestServiceActionRouteAllowsMieruRestart(t *testing.T) {
 	}
 	t.Cleanup(func() { serviceActionRunner = oldRunner })
 
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/services/mieru/restart", strings.NewReader(`{"confirm":true}`)))
 	if w.Code != http.StatusOK {

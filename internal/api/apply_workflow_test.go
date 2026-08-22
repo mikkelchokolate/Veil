@@ -19,16 +19,16 @@ func (f *fakeApplyWorkflowState) writeApplyStageLocked(plan ApplyPlanResponse) (
 	return []string{"staged"}, []ConfigValidationResult{{Name: "caddy", Valid: true}}, []string{"rendered"}, nil
 }
 
-func (f *fakeApplyWorkflowState) promoteStagedConfigsLocked(paths []string) ([]string, []string, []livePromotionRecord, error) {
+func (f *fakeApplyWorkflowState) promoteStagedConfigs(paths []string) ([]string, []string, []livePromotionRecord, error) {
 	f.promoted = true
 	return []string{"live"}, nil, []livePromotionRecord{{LivePath: "live"}}, nil
 }
 
-func (f *fakeApplyWorkflowState) reloadPromotedServicesLocked(files []string) []ServiceActionResult {
+func (f *fakeApplyWorkflowState) reloadPromotedServices(files []string) []ServiceActionResult {
 	return nil
 }
 
-func (f *fakeApplyWorkflowState) rollbackPromotedConfigsLocked(records []livePromotionRecord, files []string) ([]string, []ServiceActionResult) {
+func (f *fakeApplyWorkflowState) rollbackPromotedConfigs(records []livePromotionRecord, files []string) ([]string, []ServiceActionResult) {
 	return nil, nil
 }
 
@@ -45,7 +45,7 @@ func TestApplyWorkflowRunsAgainstStateAdapter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunLocked: %v", err)
 	}
-	if status != http.StatusOK || !response.Applied || !response.LiveApplied {
+	if status != http.StatusOK || response.Applied || !response.LiveApplied {
 		t.Fatalf("unexpected response/status: status=%d response=%+v", status, response)
 	}
 	if !state.written || !state.promoted {

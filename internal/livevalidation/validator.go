@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/clientaccess"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/service"
@@ -39,6 +40,7 @@ func (v Validator) Validate(ctx context.Context, request Request) Response {
 			needsDNS = true
 		}
 	}
+	response.Issues = append(response.Issues, crossInboundIssues(request.Settings, request.Inbounds, request.RuntimeIdentities)...)
 
 	if needsDNS && v.DNS != nil {
 		checked := map[string]struct{}{}
@@ -260,6 +262,169 @@ func protocolInboundIssues(settings model.Settings, inbound model.Inbound) []mod
 		return nil
 	}
 	return validator.ValidateInbound(settings, inbound)
+}
+
+// crossInboundIssues collects checks that span multiple inbounds and therefore
+// cannot be expressed through the per-inbound ValidateInbound interface. The
+// generated mieru config rejects duplicate usernames across all enabled mieru
+// inbounds at render time; surface the same failure during live validation so
+// the panel refuses to apply instead of failing mid-apply.
+func crossInboundIssues(settings model.Settings, inbounds []model.Inbound, runtimeIdentities map[string][]string) []model.ValidationIssue {
+	var issues []model.ValidationIssue
+	seen := map[string]string{}
+	for _, inbound := range inbounds {
+		if !inbound.Enabled {
+			continue
+		}
+		if inbound.Protocol == "mieru" {
+			issues = append(issues, mieruCrossInboundIssues(inbound, runtimeIdentities, seen)...)
+			continue
+		}
+		if inbound.Protocol == "hysteria2" {
+			// hysteria2 renders one config/process per inbound, so duplicates
+			// are only invalid within a single inbound's userpass map.
+			issues = append(issues, hysteria2DuplicateUsernamesInInbound(inbound)...)
+			continue
+		}
+	}
+	return issues
+}
+
+// mieruCrossInboundIssues checks duplicate usernames and the 64-byte cap for
+// mieru, whose generated config aggregates all users into one global list.
+func mieruCrossInboundIssues(inbound model.Inbound, runtimeIdentities map[string][]string, seen map[string]string) []model.ValidationIssue {
+	var issues []model.ValidationIssue
+	// Runtime identities are merged into the legacy profiles by
+	// BuildClientCredentials (runtime replaces the profile with the same
+	// username), so a collision between a runtime identity and a legacy
+	// profile of the SAME inbound is the intended merge, not a duplicate.
+	runtimeNames := map[string]bool{}
+	for _, identity := range runtimeIdentities[inbound.Name] {
+		runtimeNames[identity] = true
+	}
+	// Normalized client identities are aggregated into the same global
+	// user list as legacy profiles, so they join the duplicate and
+	// length checks too.
+	for _, identity := range runtimeIdentities[inbound.Name] {
+		if len(identity) > 64 {
+			issues = append(issues, model.ValidationIssue{
+				Code:        "mieru_username_too_long",
+				Severity:    SeverityError,
+				Field:       "profiles",
+				InboundID:   inbound.Name,
+				Message:     fmt.Sprintf("mieru username %q exceeds the 64-byte limit", identity),
+				Remediation: "Use a username of at most 64 bytes.",
+				Source:      "mieru",
+			})
+			continue
+		}
+		if previous, ok := seen[identity]; ok {
+			issues = append(issues, mieruDuplicateUsernameIssue(identity, previous, inbound))
+			continue
+		}
+		seen[identity] = inbound.Name
+	}
+	credentials, err := clientaccess.BuildClientCredentials(inbound)
+	if err != nil {
+		return issues
+	}
+	if len(credentials) == 0 {
+		name := inbound.Name
+		if previous, ok := seen[name]; ok {
+			issues = append(issues, mieruDuplicateUsernameIssue(name, previous, inbound))
+			return issues
+		}
+		seen[name] = inbound.Name
+		return issues
+	}
+	for _, credential := range credentials {
+		// Upstream mieru caps user names and passwords at 64 bytes
+		// (audit #53/#103): longer values are rejected at apply time.
+		// Fail during live validation instead, with a clear issue.
+		if len(credential.Username) > 64 {
+			issues = append(issues, model.ValidationIssue{
+				Code:        "mieru_username_too_long",
+				Severity:    SeverityError,
+				Field:       "profiles",
+				InboundID:   inbound.Name,
+				Message:     fmt.Sprintf("mieru username %q exceeds the 64-byte limit", credential.Username),
+				Remediation: "Use a username of at most 64 bytes.",
+				Source:      "mieru",
+			})
+			continue
+		}
+		if len(credential.Password) > 64 {
+			issues = append(issues, model.ValidationIssue{
+				Code:        "mieru_password_too_long",
+				Severity:    SeverityError,
+				Field:       "profiles",
+				InboundID:   inbound.Name,
+				Message:     fmt.Sprintf("mieru password for username %q exceeds the 64-byte limit", credential.Username),
+				Remediation: "Use a password of at most 64 bytes.",
+				Source:      "mieru",
+			})
+			continue
+		}
+		if previous, ok := seen[credential.Username]; ok {
+			// Only a runtime-identity collision is the intended merge; a
+			// duplicate between two legacy profiles of the same inbound is
+			// still rejected, matching the renderer's global user list
+			// (code-review round 2 P2).
+			if previous == inbound.Name && runtimeNames[credential.Username] {
+				continue
+			}
+			issues = append(issues, mieruDuplicateUsernameIssue(credential.Username, previous, inbound))
+			continue
+		}
+		seen[credential.Username] = inbound.Name
+	}
+	return issues
+}
+
+// hysteria2DuplicateUsernamesInInbound checks for duplicate usernames WITHIN
+// a single hysteria2 inbound. Each inbound renders its own userpass map in its
+// own config file and process (hysteria2/<name>.yaml, veil-hysteria2@<name>
+// unit), so the same username across different inbounds is valid — only a
+// duplicate inside one map would silently overwrite the first user (code
+// review of 7556d840; audit #21 scoped to the single config).
+func hysteria2DuplicateUsernamesInInbound(inbound model.Inbound) []model.ValidationIssue {
+	var issues []model.ValidationIssue
+	credentials, err := clientaccess.BuildClientCredentials(inbound)
+	if err != nil {
+		return issues
+	}
+	if len(credentials) == 0 {
+		return issues
+	}
+	seen := map[string]string{}
+	for _, credential := range credentials {
+		if previous, ok := seen[credential.Username]; ok {
+			issues = append(issues, model.ValidationIssue{
+				Code:        "hysteria2_duplicate_username",
+				Severity:    SeverityError,
+				Field:       "profiles",
+				InboundID:   inbound.Name,
+				Message:     fmt.Sprintf("hysteria2 username %q is used twice in inbound %q (profile %q and %q)", credential.Username, inbound.Name, previous, credential.Username),
+				Remediation: "Use a distinct username for each hysteria2 client profile in the same inbound.",
+				Source:      "hysteria2",
+			})
+			continue
+		}
+		seen[credential.Username] = credential.Username
+	}
+	return issues
+}
+
+func mieruDuplicateUsernameIssue(username, previousInbound string, inbound model.Inbound) model.ValidationIssue {
+	return model.ValidationIssue{
+		Code:        "mieru_duplicate_username",
+		Severity:    SeverityError,
+		Field:       "profiles",
+		InboundID:   inbound.Name,
+		Message:     fmt.Sprintf("mieru username %q is already used by inbound %q", username, previousInbound),
+		Remediation: "Use a distinct username for each mieru client profile.",
+		Source:      "mieru",
+	}
 }
 
 func protocolNeedsDomain(settings model.Settings, inbound model.Inbound) bool {

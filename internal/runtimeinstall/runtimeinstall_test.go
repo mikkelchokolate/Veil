@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -57,7 +58,7 @@ func TestCatalogAssetMatchersMatchUpstreamNames(t *testing.T) {
 		byBinary[r.Binary] = r
 	}
 	sb := byBinary["sing-box"]
-	if sb.AssetMatch == nil || !sb.AssetMatch("sing-box-1.13.13-linux-amd64.tar.gz") {
+	if sb.AssetMatch == nil || !sb.AssetMatch("sing-box-1.13.19-linux-amd64.tar.gz") {
 		t.Fatalf("sing-box asset matcher did not match expected upstream name")
 	}
 }
@@ -73,8 +74,9 @@ func TestInstallCaddyNaiveInvokesBuilder(t *testing.T) {
 
 	var gotOutPath string
 	opts := Options{
-		BinDir: binDir,
-		Arch:   "amd64",
+		BinDir:     binDir,
+		Arch:       "amd64",
+		RunVersion: fixedRuntimeVersion("caddy v2.11.4"),
 		BuildCaddy: func(ctx context.Context, outPath string) error {
 			gotOutPath = outPath
 			// Source builds inherit the caller's umask. Simulate a hardened root
@@ -89,8 +91,8 @@ func TestInstallCaddyNaiveInvokesBuilder(t *testing.T) {
 		t.Fatalf("Install: %v", result.Err)
 	}
 	wantPath := filepath.Join(binDir, "caddy")
-	if gotOutPath != wantPath {
-		t.Fatalf("BuildCaddy outPath = %q, want %q", gotOutPath, wantPath)
+	if filepath.Base(gotOutPath) != "caddy" || !strings.HasPrefix(filepath.Clean(gotOutPath), filepath.Clean(binDir)+string(filepath.Separator)) {
+		t.Fatalf("BuildCaddy outPath = %q, want staged caddy beneath %q", gotOutPath, binDir)
 	}
 	body, _ := os.ReadFile(wantPath)
 	if string(body) != "caddy-with-forwardproxy" {
@@ -108,14 +110,14 @@ func TestInstallCaddyNaiveInvokesBuilder(t *testing.T) {
 func TestSingBoxMatcherRejectsMuslAndGlibcVariants(t *testing.T) {
 	sb := warpRuntime(t)
 	for _, name := range []string{
-		"sing-box-1.13.13-linux-amd64-musl.tar.gz",
-		"sing-box-1.13.13-linux-amd64-glibc.tar.gz",
+		"sing-box-1.13.19-linux-amd64-musl.tar.gz",
+		"sing-box-1.13.19-linux-amd64-glibc.tar.gz",
 	} {
 		if sb.AssetMatch(name) {
 			t.Fatalf("sing-box matcher should reject variant %q", name)
 		}
 	}
-	if !sb.AssetMatch("sing-box-1.13.13-linux-amd64.tar.gz") {
+	if !sb.AssetMatch("sing-box-1.13.19-linux-amd64.tar.gz") {
 		t.Fatalf("sing-box matcher should accept the plain asset")
 	}
 }
@@ -221,10 +223,11 @@ func TestInstallArchiveRuntimeWritesExecutableBinary(t *testing.T) {
 	mieru := mieruRuntime(t)
 
 	opts := Options{
-		BinDir: binDir,
-		Arch:   "amd64",
+		BinDir:     binDir,
+		Arch:       "amd64",
+		RunVersion: fixedRuntimeVersion("mita v1"),
 		FetchRelease: func(ctx context.Context, repo string) (*Release, error) {
-			return &Release{TagName: "v3.34.0", Assets: []Asset{
+			return &Release{TagName: "v1", Assets: []Asset{
 				{Name: "mita_3.34.0_linux_amd64.tar.gz", BrowserDownloadURL: "https://example/mita.tar.gz"},
 				{Name: "mita_3.34.0_linux_amd64.tar.gz.sha256.txt", BrowserDownloadURL: "https://example/mita.sha256"},
 			}}, nil
@@ -267,10 +270,11 @@ func TestInstallRawBinaryRuntimeVerifiesChecksum(t *testing.T) {
 	hysteria := hysteriaRuntime(t)
 
 	opts := Options{
-		BinDir: binDir,
-		Arch:   "amd64",
+		BinDir:     binDir,
+		Arch:       "amd64",
+		RunVersion: fixedRuntimeVersion("hysteria v1"),
 		FetchRelease: func(ctx context.Context, repo string) (*Release, error) {
-			return &Release{TagName: "app/v2.9.2", Assets: []Asset{
+			return &Release{TagName: "v1", Assets: []Asset{
 				{Name: "hysteria-linux-amd64", BrowserDownloadURL: "https://example/hy"},
 				{Name: "hashes.txt", BrowserDownloadURL: "https://example/hashes"},
 			}}, nil
@@ -303,10 +307,11 @@ func TestInstallRawBinaryFailsOnChecksumMismatch(t *testing.T) {
 	hysteria := hysteriaRuntime(t)
 
 	opts := Options{
-		BinDir: binDir,
-		Arch:   "amd64",
+		BinDir:     binDir,
+		Arch:       "amd64",
+		RunVersion: fixedRuntimeVersion("hysteria v1"),
 		FetchRelease: func(ctx context.Context, repo string) (*Release, error) {
-			return &Release{TagName: "app/v2.9.2", Assets: []Asset{
+			return &Release{TagName: "v1", Assets: []Asset{
 				{Name: "hysteria-linux-amd64", BrowserDownloadURL: "https://example/hy"},
 				{Name: "hashes.txt", BrowserDownloadURL: "https://example/hashes"},
 			}}, nil
@@ -339,8 +344,9 @@ func TestInstallGoInstallRuntimeInvokesBuilder(t *testing.T) {
 
 	var gotPackage, gotBinDir string
 	opts := Options{
-		BinDir: binDir,
-		Arch:   "amd64",
+		BinDir:     binDir,
+		Arch:       "amd64",
+		RunVersion: fixedRuntimeVersion("olcrtc v0.0.0"),
 		GoInstall: func(ctx context.Context, binDirArg, sourcePackage string) error {
 			gotBinDir = binDirArg
 			gotPackage = sourcePackage
@@ -352,10 +358,10 @@ func TestInstallGoInstallRuntimeInvokesBuilder(t *testing.T) {
 	if result.Err != nil {
 		t.Fatalf("Install: %v", result.Err)
 	}
-	if gotBinDir != binDir {
-		t.Fatalf("go install bin dir = %q", gotBinDir)
+	if !strings.HasPrefix(filepath.Clean(gotBinDir), filepath.Clean(binDir)+string(filepath.Separator)) {
+		t.Fatalf("go install bin dir = %q, want staging beneath %q", gotBinDir, binDir)
 	}
-	if gotPackage != "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@latest" {
+	if gotPackage != "github.com/openlibrecommunity/olcrtc/cmd/olcrtc@v0.0.0" {
 		t.Fatalf("go install package = %q", gotPackage)
 	}
 	info, err := os.Stat(filepath.Join(binDir, "olcrtc"))
@@ -371,8 +377,9 @@ func TestInstallAllContinuesPastFailures(t *testing.T) {
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "bin")
 	opts := Options{
-		BinDir: binDir,
-		Arch:   "amd64",
+		BinDir:     binDir,
+		Arch:       "amd64",
+		RunVersion: fixedRuntimeVersion("olcrtc v0.0.0"),
 		FetchRelease: func(ctx context.Context, repo string) (*Release, error) {
 			return nil, fmt.Errorf("release unavailable")
 		},
@@ -404,14 +411,16 @@ func TestInstallAllInstallsCatalogRuntimes(t *testing.T) {
 	binDir := filepath.Join(dir, "bin")
 	archive := makeTarGz(t, map[string][]byte{"sing-box": []byte("sing-box-bin")})
 	opts := Options{
-		BinDir: binDir,
-		Arch:   "amd64",
+		BinDir:             binDir,
+		Arch:               "amd64",
+		RunVersion:         fixedRuntimeVersion("sing-box version 1.13.19"),
+		VerifyPinnedSHA256: func([]byte, string) error { return nil },
 		FetchRelease: func(ctx context.Context, repo string) (*Release, error) {
 			if repo != "SagerNet/sing-box" {
 				return nil, fmt.Errorf("unexpected repo %s", repo)
 			}
-			return &Release{TagName: "v1.0.0", Assets: []Asset{
-				{Name: "sing-box-1.0.0-linux-amd64.tar.gz", BrowserDownloadURL: "https://example/sb"},
+			return &Release{TagName: "v1.13.19", Assets: []Asset{
+				{Name: "sing-box-1.13.19-linux-amd64.tar.gz", BrowserDownloadURL: "https://example/sb"},
 			}}, nil
 		},
 		Download: func(ctx context.Context, url string) ([]byte, error) {

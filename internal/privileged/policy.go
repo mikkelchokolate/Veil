@@ -1,6 +1,7 @@
 package privileged
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -56,18 +57,25 @@ type Policy struct {
 	// known set. Static per-protocol artifacts and update artifacts are not
 	// constrained by this set. A nil or empty map means no extra restriction.
 	AllowedArtifactNames map[string]struct{}
+	FencePath            string
+	RequireFence         bool
 }
 
 type ResolvedArtifact struct {
 	ID          string
 	Source      string
 	Destination string
+	// SymlinkTarget is internal transaction metadata used only to restore a
+	// removed symlink without ever reading/copying its target contents.
+	SymlinkTarget string
 }
 
 type ResolvedPromotion struct {
-	Artifacts       []ResolvedArtifact
-	RemoveArtifacts []ResolvedArtifact
-	RestoreBackupID string
+	Artifacts           []ResolvedArtifact
+	RemoveArtifacts     []ResolvedArtifact
+	RestoreBackupID     string
+	FenceGeneration     uint64
+	ValidateDestination func(string, string) bool
 }
 
 type ResolvedJournal struct {
@@ -83,24 +91,36 @@ type ResolvedBackup struct {
 	StateRoot            string
 	StatePath            string
 	KeyPath              string
+	DatabasePath         string
 	BackupPassphrasePath string
 	Daily                int
 	Weekly               int
 	Monthly              int
 	CheckOnly            bool
 	AllowVersionMismatch bool
+	Offset               int64
+	Limit                int64
+	TransactionID        string
+	FenceGeneration      uint64
 }
 
 type ResolvedFirewall struct {
-	RuleIDs []string
-	Rules   []FirewallRule
+	RuleIDs       []string
+	Rules         []FirewallRule
+	Action        FirewallAction
+	TransactionID string
+	Fence         FenceToken
 }
 
 type ResolvedUpdate struct {
-	ArtifactID    string
-	Version       string
-	Path          string
-	ChecksumsPath string
+	ArtifactID           string
+	Version              string
+	Path                 string
+	ChecksumsPath        string
+	ChecksumsBundlePath  string
+	ProvenancePath       string
+	ProvenanceBundlePath string
+	Fence                FenceToken
 }
 
 func (p Policy) ValidateServiceAction(request ServiceActionRequest) error {
@@ -147,7 +167,8 @@ func (p Policy) ResolvePromotion(request PromoteRequest) (ResolvedPromotion, err
 			!opaquePromotionIDPattern.MatchString(request.RestoreBackupID) {
 			return ResolvedPromotion{}, newError(ErrorInvalidRequest, "invalid promotion restore request")
 		}
-		return ResolvedPromotion{RestoreBackupID: request.RestoreBackupID}, nil
+		return ResolvedPromotion{RestoreBackupID: request.RestoreBackupID, FenceGeneration: request.Fence.Generation,
+			ValidateDestination: p.promotionDestinationAllowed}, nil
 	}
 	artifacts, err := p.resolveArtifacts(request.ArtifactIDs, false)
 	if err != nil {
@@ -160,7 +181,13 @@ func (p Policy) ResolvePromotion(request PromoteRequest) (ResolvedPromotion, err
 	if len(artifacts) == 0 && len(removeArtifacts) == 0 {
 		return ResolvedPromotion{}, newError(ErrorInvalidRequest, "at least one artifact is required")
 	}
-	return ResolvedPromotion{Artifacts: artifacts, RemoveArtifacts: removeArtifacts}, nil
+	return ResolvedPromotion{Artifacts: artifacts, RemoveArtifacts: removeArtifacts, FenceGeneration: request.Fence.Generation,
+		ValidateDestination: p.promotionDestinationAllowed}, nil
+}
+
+func (p Policy) promotionDestinationAllowed(id, destination string) bool {
+	artifact, ok := p.managedArtifactPath(id)
+	return ok && filepath.Clean(artifact.Generated) == filepath.Clean(destination)
 }
 
 func (p Policy) resolveArtifacts(ids []string, allowLegacyCaddyRemoval bool) ([]ResolvedArtifact, error) {
@@ -215,6 +242,7 @@ var (
 	opaquePromotionIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 	artifactNamePattern      = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 	updateVersionPattern     = regexp.MustCompile(`^v?[0-9][A-Za-z0-9._+-]*$`)
+	updateDigestPattern      = regexp.MustCompile(`^[a-f0-9]{64}$`)
 	dnsLabelPattern          = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
 	caddyCertRoot            = "/etc/veil/certs"
 )
@@ -224,7 +252,7 @@ func (p Policy) managedArtifactPath(id string) (ArtifactPath, bool) {
 	if clean != id || strings.Contains(clean, `\`) {
 		return ArtifactPath{}, false
 	}
-	if clean == "sing-box/warp.json" {
+	if clean == "sing-box/warp.json" || clean == "rules/geoip.dat" || clean == "rules/geosite.dat" {
 		return ArtifactPath{Staged: filepath.FromSlash(clean), Generated: filepath.FromSlash(clean)}, true
 	}
 	return managedProtocolArtifactID(clean, p.AllowedArtifactNames)
@@ -295,7 +323,7 @@ func protocolHasTemplateRuntime(plugin protocols.ProtocolPlugin) bool {
 
 func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 	switch request.Action {
-	case BackupActionCreate, BackupActionList, BackupActionVerify, BackupActionRead, BackupActionPrune, BackupActionRestore:
+	case BackupActionCreate, BackupActionList, BackupActionVerify, BackupActionRead, BackupActionPrune, BackupActionRestore, BackupActionDelete:
 	default:
 		return ResolvedBackup{}, newError(ErrorInvalidRequest, "unsupported backup action")
 	}
@@ -311,6 +339,10 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 		Monthly:              request.Monthly,
 		CheckOnly:            request.CheckOnly,
 		AllowVersionMismatch: request.AllowVersionMismatch,
+		FenceGeneration:      request.Fence.Generation,
+		Offset:               request.Offset,
+		Limit:                request.Limit,
+		TransactionID:        request.TransactionID,
 	}
 	if resolved.StatePath == "" {
 		resolved.StatePath = filepath.Join(p.StateRoot, "state.json")
@@ -318,10 +350,11 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 	if resolved.KeyPath == "" {
 		resolved.KeyPath = filepath.Join(p.StateRoot, "state.key")
 	}
+	resolved.DatabasePath = filepath.Join(p.StateRoot, "veil.db")
 	if resolved.BackupPassphrasePath == "" {
 		resolved.BackupPassphrasePath = filepath.Join(p.StateRoot, "backup.passphrase")
 	}
-	requiresArchive := request.Action == BackupActionVerify || request.Action == BackupActionRead || request.Action == BackupActionRestore
+	requiresArchive := request.Action == BackupActionVerify || request.Action == BackupActionRead || request.Action == BackupActionRestore || request.Action == BackupActionDelete
 	if request.ArchiveName == "" {
 		if requiresArchive {
 			return ResolvedBackup{}, newError(ErrorInvalidRequest, "archiveName is required")
@@ -345,13 +378,26 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 var ufwAllowRulePattern = regexp.MustCompile(`^([1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])/(tcp|udp)$`)
 
 func (p Policy) ResolveFirewall(request FirewallRequest) (ResolvedFirewall, error) {
+	action := request.Action
+	if action == "" {
+		action = FirewallActionApply
+	}
+	if action == FirewallActionCommit || action == FirewallActionRollback {
+		if request.TransactionID == "" || strings.ContainsAny(request.TransactionID, "/\\") {
+			return ResolvedFirewall{}, newError(ErrorInvalidRequest, "valid firewall transactionId is required")
+		}
+		return ResolvedFirewall{Action: action, TransactionID: request.TransactionID, Fence: request.Fence}, nil
+	}
+	if action != FirewallActionApply && action != FirewallActionPrepare {
+		return ResolvedFirewall{}, newError(ErrorInvalidRequest, "invalid firewall action")
+	}
 	if len(request.Rules) > 0 {
 		for _, rule := range request.Rules {
 			if err := validateUFWRule(rule); err != nil {
 				return ResolvedFirewall{}, newError(ErrorInvalidRequest, err.Error())
 			}
 		}
-		return ResolvedFirewall{Rules: request.Rules}, nil
+		return ResolvedFirewall{RuleIDs: append([]string(nil), request.RuleIDs...), Rules: request.Rules, Action: action, Fence: request.Fence}, nil
 	}
 	if len(request.RuleIDs) == 0 {
 		return ResolvedFirewall{}, newError(ErrorInvalidRequest, "at least one firewall rule is required")
@@ -363,7 +409,7 @@ func (p Policy) ResolveFirewall(request FirewallRequest) (ResolvedFirewall, erro
 		}
 		rules = append(rules, id)
 	}
-	return ResolvedFirewall{RuleIDs: rules}, nil
+	return ResolvedFirewall{RuleIDs: rules, Action: action, Fence: request.Fence}, nil
 }
 
 func isUFWCommentClause(args []string, idx int) bool {
@@ -418,16 +464,55 @@ func (p Policy) ResolveUpdate(request UpdateRequest) (ResolvedUpdate, error) {
 	if request.Version == "" || len(request.Version) > 64 || !updateVersionPattern.MatchString(request.Version) {
 		return ResolvedUpdate{}, newError(ErrorInvalidRequest, "invalid update version")
 	}
-	path, err := resolveBelow(p.UpdateRoot, relative)
+	root := p.UpdateRoot
+	manifestPath := filepath.Join(root, "update-manifest.json")
+	if body, readErr := readBoundedRegularFile(manifestPath, maxReleaseEvidenceBytes); readErr == nil {
+		var manifest struct {
+			Version   string `json:"version"`
+			Digest    string `json:"digest"`
+			Directory string `json:"directory"`
+		}
+		if err := json.Unmarshal(body, &manifest); err != nil {
+			return ResolvedUpdate{}, fmt.Errorf("decode update manifest: %w", err)
+		}
+		if manifest.Version != request.Version || !updateDigestPattern.MatchString(manifest.Digest) {
+			return ResolvedUpdate{}, errors.New("update manifest version or digest mismatch")
+		}
+		manifestRelative := filepath.Clean(filepath.FromSlash(manifest.Directory))
+		expectedRelative := filepath.Join("versions", request.Version, manifest.Digest)
+		if manifestRelative != expectedRelative || filepath.IsAbs(manifestRelative) || !filepath.IsLocal(manifestRelative) {
+			return ResolvedUpdate{}, errors.New("invalid update manifest directory")
+		}
+		root = filepath.Join(root, manifestRelative)
+	} else if !errors.Is(readErr, os.ErrNotExist) {
+		return ResolvedUpdate{}, fmt.Errorf("read update manifest: %w", readErr)
+	} else if p.RequireFence {
+		return ResolvedUpdate{}, errors.New("transactional update manifest is required")
+	}
+	path, err := resolveBelow(root, relative)
 	if err != nil {
 		return ResolvedUpdate{}, err
 	}
-	checksumsPath, err := resolveBelow(p.UpdateRoot, "checksums.txt")
+	checksumsPath, err := resolveBelow(root, "checksums.txt")
+	if err != nil {
+		return ResolvedUpdate{}, err
+	}
+	checksumsBundlePath, err := resolveBelow(root, "checksums.txt.bundle")
+	if err != nil {
+		return ResolvedUpdate{}, err
+	}
+	provenancePath, err := resolveBelow(root, "veil.provenance.json")
+	if err != nil {
+		return ResolvedUpdate{}, err
+	}
+	provenanceBundlePath, err := resolveBelow(root, "veil.provenance.json.bundle")
 	if err != nil {
 		return ResolvedUpdate{}, err
 	}
 	return ResolvedUpdate{
 		ArtifactID: request.ArtifactID, Version: request.Version, Path: path, ChecksumsPath: checksumsPath,
+		ChecksumsBundlePath: checksumsBundlePath, ProvenancePath: provenancePath, ProvenanceBundlePath: provenanceBundlePath,
+		Fence: request.Fence,
 	}, nil
 }
 
@@ -449,8 +534,8 @@ func resolveBelow(root, relative string) (string, error) {
 	if strings.TrimSpace(root) == "" || strings.TrimSpace(relative) == "" {
 		return "", newError(ErrorInvalidRequest, "managed root and relative path are required")
 	}
-	if filepath.IsAbs(relative) {
-		return "", newError(ErrorForbiddenOperation, "absolute managed paths are forbidden")
+	if !filepath.IsLocal(relative) {
+		return "", newError(ErrorForbiddenOperation, "non-local managed paths are forbidden")
 	}
 	cleanRelative := filepath.Clean(relative)
 	if cleanRelative == "." || cleanRelative == ".." || strings.HasPrefix(cleanRelative, ".."+string(filepath.Separator)) {

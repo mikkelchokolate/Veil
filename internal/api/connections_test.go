@@ -12,7 +12,7 @@ import (
 )
 
 func TestConnectionsEndpointRejectsNonGet(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/connections", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -25,7 +25,7 @@ func TestConnectionsEndpointReturnsJSON(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/connections", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -41,7 +41,7 @@ func TestConnectionsEndpointHasListeners(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/connections", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -58,7 +58,7 @@ func TestConnectionsEndpointFieldsPresent(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/connections", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -82,7 +82,7 @@ func TestConnectionsEndpointNoNegativePorts(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/connections", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

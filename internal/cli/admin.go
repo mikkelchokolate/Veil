@@ -4,18 +4,17 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"os"
-	"syscall"
+	"time"
 
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/statecommit"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/bcrypt"
 )
 
-func newAdminCommand() *cobra.Command {
+func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 	var statePath string
 	var keyPath string
 
@@ -32,26 +31,6 @@ func newAdminCommand() *cobra.Command {
 			resolvedState, _ := env.StatePath(statePath)
 			resolvedKey, _ := env.KeyPath(keyPath)
 
-			key, err := secrets.LoadOrCreateKey(resolvedKey)
-			if err != nil {
-				return fmt.Errorf("load key: %w", err)
-			}
-			cipher, err := secrets.NewCipher(*key)
-			if err != nil {
-				return fmt.Errorf("new cipher: %w", err)
-			}
-
-			store := managementstate.NewStore(resolvedState, cipher)
-			snapshot, ok, err := store.Load()
-			if err != nil {
-				return fmt.Errorf("load state: %w", err)
-			}
-			if !ok {
-				snapshot = model.ManagementSnapshot{
-					Settings: managementstate.BuildDefaultState(managementstate.DefaultInput{}).Settings,
-				}
-			}
-
 			suffix, err := generateRandomHex(4)
 			if err != nil {
 				return err
@@ -62,20 +41,23 @@ func newAdminCommand() *cobra.Command {
 			}
 			username := "admin_" + suffix
 
-			hashed, err := bcrypt.GenerateFromPassword([]byte(pass), 10)
+			hashed, err := hasher.Hash([]byte(pass))
 			if err != nil {
 				return fmt.Errorf("hash password: %w", err)
 			}
 
-			snapshot.Users = []model.User{
-				{
-					Username:     username,
-					PasswordHash: string(hashed),
-					Role:         "admin",
-				},
-			}
-
-			if err := store.Save(snapshot); err != nil {
+			if _, err := statecommit.Update(statecommit.UpdateOptions{
+				StatePath: resolvedState, KeyPath: resolvedKey, AllowCreate: true,
+			}, func(snapshot *model.ManagementSnapshot) error {
+				if snapshot.Settings.Mode == "" {
+					snapshot.Settings = managementstate.BuildDefaultState(managementstate.DefaultInput{}).Settings
+				}
+				snapshot.Users = []model.User{{
+					Username: username, PasswordHash: string(hashed), Role: "admin",
+				}}
+				managementstate.CompleteSetupForAdmins(snapshot, time.Now())
+				return nil
+			}); err != nil {
 				return fmt.Errorf("save state: %w", err)
 			}
 
@@ -102,71 +84,47 @@ func newAdminCommand() *cobra.Command {
 			resolvedState, _ := env.StatePath(statePath)
 			resolvedKey, _ := env.KeyPath(keyPath)
 
-			key, err := secrets.LoadOrCreateKey(resolvedKey)
-			if err != nil {
-				return fmt.Errorf("load key: %w", err)
-			}
-			cipher, err := secrets.NewCipher(*key)
-			if err != nil {
-				return fmt.Errorf("new cipher: %w", err)
-			}
-
-			store := managementstate.NewStore(resolvedState, cipher)
-			snapshot, ok, err := store.Load()
-			if err != nil {
-				return fmt.Errorf("load state: %w", err)
-			}
-			if !ok {
-				snapshot = model.ManagementSnapshot{
-					Settings: managementstate.BuildDefaultState(managementstate.DefaultInput{}).Settings,
-				}
-			}
-
-			hashed, err := bcrypt.GenerateFromPassword([]byte(customPassword), 10)
+			hashed, err := hasher.Hash([]byte(customPassword))
 			if err != nil {
 				return fmt.Errorf("hash password: %w", err)
-			}
-
-			// If username is not explicitly provided, update the first admin
-			username := customUsername
-			if username == "" {
-				for _, u := range snapshot.Users {
-					if u.Role == "admin" {
-						username = u.Username
-						break
-					}
-				}
-				if username == "" {
-					username = "admin"
-				}
-			}
-
-			foundIndex := -1
-			for i, u := range snapshot.Users {
-				if u.Username == username {
-					foundIndex = i
-					break
-				}
 			}
 
 			targetRole := customRole
 			if targetRole == "" {
 				targetRole = "admin"
 			}
-
-			updatedUser := model.User{
-				Username:     username,
-				PasswordHash: string(hashed),
-				Role:         targetRole,
-			}
-
-			if foundIndex >= 0 {
-				snapshot.Users[foundIndex] = updatedUser
-			} else {
+			username := customUsername
+			if _, err := statecommit.Update(statecommit.UpdateOptions{
+				StatePath: resolvedState, KeyPath: resolvedKey, AllowCreate: true,
+			}, func(snapshot *model.ManagementSnapshot) error {
+				if snapshot.Settings.Mode == "" {
+					snapshot.Settings = managementstate.BuildDefaultState(managementstate.DefaultInput{}).Settings
+				}
+				if username == "" {
+					for _, user := range snapshot.Users {
+						if user.Role == "admin" {
+							username = user.Username
+							break
+						}
+					}
+					if username == "" {
+						username = "admin"
+					}
+				}
+				updatedUser := model.User{
+					Username: username, PasswordHash: string(hashed), Role: targetRole,
+				}
+				for index := range snapshot.Users {
+					if snapshot.Users[index].Username == username {
+						snapshot.Users[index] = updatedUser
+						managementstate.CompleteSetupForAdmins(snapshot, time.Now())
+						return nil
+					}
+				}
 				snapshot.Users = append(snapshot.Users, updatedUser)
-			}
-
-			if err := store.Save(snapshot); err != nil {
+				managementstate.CompleteSetupForAdmins(snapshot, time.Now())
+				return nil
+			}); err != nil {
 				return fmt.Errorf("save state: %w", err)
 			}
 
@@ -230,109 +188,13 @@ func newAdminCommand() *cobra.Command {
 				targetKeyPath = resolvedKey
 			}
 
-			// Read old key bytes
-			oldKeyBytes, err := os.ReadFile(resolvedKey)
-			if err != nil {
-				return fmt.Errorf("read old key file: %w", err)
+			if _, err := statecommit.RotateKey(statecommit.RotateKeyOptions{
+				StatePath:     resolvedState,
+				KeyPath:       resolvedKey,
+				TargetKeyPath: targetKeyPath,
+			}); err != nil {
+				return fmt.Errorf("rotate state key: %w", err)
 			}
-			if len(oldKeyBytes) != secrets.KeySize {
-				return fmt.Errorf("old key file has wrong length: %d bytes (expected %d)", len(oldKeyBytes), secrets.KeySize)
-			}
-			var oldKey [secrets.KeySize]byte
-			copy(oldKey[:], oldKeyBytes)
-
-			// Load snapshot with old key
-			oldCipher, err := secrets.NewCipher(oldKey)
-			if err != nil {
-				return fmt.Errorf("init cipher with old key: %w", err)
-			}
-			store := managementstate.NewStore(resolvedState, oldCipher)
-			snapshot, ok, err := store.Load()
-			if err != nil {
-				return fmt.Errorf("load state snapshot: %w", err)
-			}
-			if !ok {
-				return fmt.Errorf("no state found at %s to rotate", resolvedState)
-			}
-
-			// Generate new key bytes
-			var newKey [secrets.KeySize]byte
-			if _, err := rand.Read(newKey[:]); err != nil {
-				return fmt.Errorf("generate new key: %w", err)
-			}
-
-			// Prepare new cipher and marshal the snapshot using the new key
-			newCipher, err := secrets.NewCipher(newKey)
-			if err != nil {
-				return fmt.Errorf("init cipher with new key: %w", err)
-			}
-			newStore := managementstate.NewStore(resolvedState, newCipher)
-			encryptedBytes, err := newStore.Marshal(snapshot)
-			if err != nil {
-				return fmt.Errorf("encrypt state snapshot: %w", err)
-			}
-
-			// Capture ownership/permissions of existing files so the rotated files
-			// keep the same access rights (e.g. root:veil 640).
-			statePerm := captureFilePermissions(resolvedState)
-			keyPerm := captureFilePermissions(targetKeyPath)
-
-			// Write new state to temporary file
-			tempStatePath := resolvedState + ".tmp"
-			if err := os.WriteFile(tempStatePath, encryptedBytes, 0o600); err != nil {
-				return fmt.Errorf("write temporary state file: %w", err)
-			}
-
-			// Write new key to temporary file
-			tempKeyPath := targetKeyPath + ".tmp"
-			if err := os.WriteFile(tempKeyPath, newKey[:], 0o600); err != nil {
-				os.Remove(tempStatePath)
-				return fmt.Errorf("write temporary key file: %w", err)
-			}
-
-			// Rename the old key to a backup name (e.g., key.bak) if targetKeyPath exists
-			backupKeyPath := targetKeyPath + ".bak"
-			hasBackup := false
-			if _, statErr := os.Stat(targetKeyPath); statErr == nil {
-				if err := os.Rename(targetKeyPath, backupKeyPath); err != nil {
-					os.Remove(tempStatePath)
-					os.Remove(tempKeyPath)
-					return fmt.Errorf("backup old key file: %w", err)
-				}
-				hasBackup = true
-			}
-
-			// Rename the new key to the target name
-			if err := os.Rename(tempKeyPath, targetKeyPath); err != nil {
-				if hasBackup {
-					_ = os.Rename(backupKeyPath, targetKeyPath)
-				}
-				os.Remove(tempStatePath)
-				os.Remove(tempKeyPath)
-				return fmt.Errorf("rename key file: %w", err)
-			}
-
-			// Rename the state file
-			if err := os.Rename(tempStatePath, resolvedState); err != nil {
-				if hasBackup {
-					if rbErr := os.Rename(backupKeyPath, targetKeyPath); rbErr != nil {
-						return fmt.Errorf("critical failure: state rename failed (%v) and key rollback failed: %w", err, rbErr)
-					}
-				} else {
-					os.Remove(targetKeyPath)
-				}
-				os.Remove(tempStatePath)
-				return fmt.Errorf("rename state file (rolled back key): %w", err)
-			}
-
-			// Delete backup files on success
-			if hasBackup {
-				_ = os.Remove(backupKeyPath)
-			}
-
-			// Restore ownership/permissions on the rotated files.
-			statePerm.apply(resolvedState)
-			keyPerm.apply(targetKeyPath)
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Key successfully rotated.\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "New key written to: %s\n", targetKeyPath)
@@ -357,37 +219,4 @@ func generateRandomHex(n int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(bytes), nil
-}
-
-// filePermissions captures ownership and mode of an existing file so that a
-// replacement file can inherit them. Missing files are represented by a zero
-// value that does nothing when applied.
-type filePermissions struct {
-	uid  int
-	gid  int
-	mode os.FileMode
-	ok   bool
-}
-
-func captureFilePermissions(path string) filePermissions {
-	fi, err := os.Stat(path)
-	if err != nil {
-		return filePermissions{}
-	}
-	p := filePermissions{mode: fi.Mode().Perm(), ok: true}
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
-		p.uid = int(st.Uid)
-		p.gid = int(st.Gid)
-	}
-	return p
-}
-
-func (p filePermissions) apply(path string) {
-	if !p.ok {
-		return
-	}
-	_ = os.Chmod(path, p.mode)
-	if p.uid >= 0 && p.gid >= 0 {
-		_ = os.Chown(path, p.uid, p.gid)
-	}
 }

@@ -9,7 +9,10 @@ import (
 // ValidateSettings is a no-op for Mieru global settings.
 func (Plugin) ValidateSettings(model.Settings, model.Inbound) error { return nil }
 
-// ValidateInbound is a no-op for Mieru-specific inbound checks.
+// ValidateInbound is a no-op for Mieru-specific inbound checks. The common
+// inbound validator owns the generic 1..65535 port constraint. Pinned mita
+// v3.36.0 accepts that full range in FlatPortBindings, including privileged
+// ports; Veil's systemd unit grants CAP_NET_BIND_SERVICE for those ports.
 func (Plugin) ValidateInbound(model.Settings, model.Inbound) []model.ValidationIssue { return nil }
 
 // NeedsDomain reports that Mieru does not require a public domain.

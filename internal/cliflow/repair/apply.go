@@ -7,6 +7,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/backup"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
@@ -40,6 +41,10 @@ func ApplyPlan(plan installer.RepairPlan, opts Options, out io.Writer, deps Appl
 	if err != nil {
 		_ = writeAuditRepair(opts.AuditLog, backupID, false, err.Error(), nil)
 		return err
+	}
+	if err := hostenv.ApplyQUICUDPBuffers(); err != nil {
+		_ = writeAuditRepair(opts.AuditLog, backupID, false, err.Error(), result.WrittenFiles)
+		return fmt.Errorf("tune QUIC UDP buffers: %w", err)
 	}
 	if actions := service.SystemdApplyPlan(SystemdUnitsFromRepairPlan(plan)); len(actions) > 0 {
 		if deps.RunSystemd == nil {

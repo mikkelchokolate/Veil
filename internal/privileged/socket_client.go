@@ -12,15 +12,22 @@ import (
 )
 
 type SocketClient struct {
-	path    string
-	timeout time.Duration
+	path          string
+	timeout       time.Duration
+	mutationLimit time.Duration
+	backupLimit   time.Duration
 }
 
 // randRead is a test hook so the request-id fallback path can be exercised.
 var randRead = rand.Read
 
 func NewSocketClient(path string) *SocketClient {
-	return &SocketClient{path: path, timeout: 30 * time.Second}
+	return &SocketClient{
+		path:          path,
+		timeout:       30 * time.Second,
+		mutationLimit: 15 * time.Minute,
+		backupLimit:   2 * time.Hour,
+	}
 }
 
 func (c *SocketClient) Promote(ctx context.Context, request PromoteRequest) (PromoteResult, error) {
@@ -59,6 +66,10 @@ func (c *SocketClient) RotateKey(ctx context.Context, request RotateKeyRequest) 
 	return c.call(ctx, RequestEnvelope{Operation: OperationRotateKey, RotateKey: &request}, nil)
 }
 
+func (c *SocketClient) RecoverKeyRotation(ctx context.Context, request RecoverKeyRotationRequest) error {
+	return c.call(ctx, RequestEnvelope{Operation: OperationRecoverKeyRotation, RecoverKeyRotation: &request}, nil)
+}
+
 func (c *SocketClient) FirewallApply(ctx context.Context, request FirewallRequest) (FirewallResult, error) {
 	var result FirewallResult
 	err := c.call(ctx, RequestEnvelope{Operation: OperationFirewallApply, Firewall: &request}, &result)
@@ -72,7 +83,7 @@ func (c *SocketClient) StageUpdate(ctx context.Context, request UpdateRequest) (
 }
 
 func (c *SocketClient) RestartPanel(ctx context.Context) error {
-	request := RestartPanelRequest{}
+	request, _ := RestartPanelRequestFromContext(ctx)
 	return c.call(ctx, RequestEnvelope{Operation: OperationRestartPanel, RestartPanel: &request}, nil)
 }
 
@@ -80,6 +91,10 @@ func (c *SocketClient) SyncCaddyCert(ctx context.Context, request SyncCaddyCertR
 	var result SyncCaddyCertResult
 	err := c.call(ctx, RequestEnvelope{Operation: OperationSyncCaddyCert, SyncCaddyCert: &request}, &result)
 	return result, err
+}
+
+func (c *SocketClient) CaddyLoad(ctx context.Context, request CaddyLoadRequest) error {
+	return c.call(ctx, RequestEnvelope{Operation: OperationCaddyLoad, CaddyLoad: &request}, nil)
 }
 
 func (c *SocketClient) call(ctx context.Context, request RequestEnvelope, result any) error {
@@ -93,7 +108,7 @@ func (c *SocketClient) call(ctx context.Context, request RequestEnvelope, result
 		return wrapOperationError(err)
 	}
 	defer conn.Close()
-	deadline := time.Now().Add(c.timeout)
+	deadline := time.Now().Add(c.operationTimeout(request.Operation))
 	if contextDeadline, ok := ctx.Deadline(); ok && contextDeadline.Before(deadline) {
 		deadline = contextDeadline
 	}
@@ -128,6 +143,18 @@ func (c *SocketClient) call(ctx context.Context, request RequestEnvelope, result
 	return nil
 }
 
+func (c *SocketClient) operationTimeout(operation Operation) time.Duration {
+	switch operation {
+	case OperationBackupCreate, OperationBackupList, OperationBackupVerify,
+		OperationBackupRead, OperationBackupPrune, OperationBackupRestore, OperationBackupDelete:
+		return c.backupLimit
+	case OperationPromote, OperationStageUpdate, OperationRotateKey, OperationRecoverKeyRotation:
+		return c.mutationLimit
+	default:
+		return c.timeout
+	}
+}
+
 func operationForBackupAction(action BackupAction) (Operation, error) {
 	switch action {
 	case BackupActionCreate:
@@ -142,6 +169,8 @@ func operationForBackupAction(action BackupAction) (Operation, error) {
 		return OperationBackupPrune, nil
 	case BackupActionRestore:
 		return OperationBackupRestore, nil
+	case BackupActionDelete:
+		return OperationBackupDelete, nil
 	default:
 		return "", newError(ErrorInvalidRequest, "unsupported backup action")
 	}

@@ -15,7 +15,7 @@ func BuildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 		return ClientLinksResponse{}, err
 	}
 	response := NewClientLinksResponseMetadata(settings).Build()
-	links, err := NewClientAccessProtocolRegistry().BuildAllLinks(settings, inbounds)
+	links, err := NewClientAccessProtocolRegistry().BuildAllLinks(settings, clientLinkEffectiveInbounds(inbounds))
 	if err != nil {
 		return ClientLinksResponse{}, err
 	}
@@ -23,21 +23,65 @@ func BuildClientLinks(settings Settings, inbounds []Inbound) (ClientLinksRespons
 	return NewClientLinksResponseFinalizer().Finalize(response)
 }
 
+// clientLinkEffectiveInbounds materializes protocol-specific dynamic password
+// fields onto a copy for legacy client-access paths that still consume the flat
+// Password field. The persisted desired state is never mutated.
+func clientLinkEffectiveInbounds(inbounds []Inbound) []Inbound {
+	out := append([]Inbound(nil), inbounds...)
+	for i := range out {
+		switch out[i].Protocol {
+		case "olcrtc", "mieru":
+			if password := protocolString(out[i].ProtocolFields, "password", ""); password != "" {
+				out[i].Password = password
+			}
+		}
+	}
+	return out
+}
+
 func NaiveClientURI(domain string, port int, username string, password string) string {
+	return naiveClientURITransport(domain, port, username, password, "https", 443)
+}
+
+// naiveClientURITransport renders the upstream naiveproxy share URI. The
+// client (klzgrad/naiveproxy) accepts https:// (TCP/HTTP2) and quic://
+// (HTTP/3/UDP); the port is omitted when it equals the scheme default.
+// Userinfo is percent-encoded via url.UserPassword.
+func naiveClientURITransport(domain string, port int, username, password, scheme string, defaultPort int) string {
 	userinfo := url.UserPassword(username, password).String()
-	return fmt.Sprintf("naive+https://%s@%s:%d", userinfo, domain, port)
+	host := domain
+	if port != defaultPort {
+		host = fmt.Sprintf("%s:%d", domain, port)
+	}
+	return fmt.Sprintf("%s://%s@%s", scheme, userinfo, host)
 }
 
 func Hysteria2ClientURI(domain string, port int, password string, name string, insecure bool) string {
 	query := url.Values{}
 	query.Set("sni", domain)
 	if insecure {
-		// Allow clients to skip verification when the server is using a
-		// self-signed certificate instead of a publicly-trusted one.
 		query.Set("insecure", "1")
 	}
 	fragment := url.QueryEscape(name)
-	return fmt.Sprintf("hysteria2://%s@%s:%d/?%s#%s", url.QueryEscape(password), domain, port, query.Encode(), fragment)
+	return fmt.Sprintf("hysteria2://%s@%s:%d/?%s#%s", escapeUserInfoComponent(password), domain, port, query.Encode(), fragment)
+}
+
+func escapeUserInfoComponent(value string) string {
+	const hexDigits = "0123456789ABCDEF"
+	var b strings.Builder
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9',
+			c == '-', c == '.', c == '_', c == '~':
+			b.WriteByte(c)
+		default:
+			b.WriteByte('%')
+			b.WriteByte(hexDigits[c>>4])
+			b.WriteByte(hexDigits[c&0x0f])
+		}
+	}
+	return b.String()
 }
 
 func Hysteria2UserPassClientURI(domain string, port int, username string, password string, name string, insecure bool) string {
@@ -51,9 +95,6 @@ func Hysteria2UserPassClientURI(domain string, port int, username string, passwo
 	return fmt.Sprintf("hysteria2://%s@%s:%d/?%s#%s", userinfo, domain, port, query.Encode(), fragment)
 }
 
-// MieruClientURI builds mieru's "simple" share URI (mierus://), which the mieru
-// client imports via `mieru import config`. Example:
-// mierus://user:pass@host?port=3453&profile=name&protocol=UDP
 func MieruClientURI(domain string, port int, username, password, profile, transport string) string {
 	proto := strings.ToUpper(strings.TrimSpace(transport))
 	if proto != "UDP" {

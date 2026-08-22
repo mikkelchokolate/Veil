@@ -1,7 +1,7 @@
 package olcrtc
 
 import (
-	"encoding/hex"
+	"errors"
 
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -37,13 +37,12 @@ func (Plugin) ArtifactSpec() generatedconfig.ArtifactSpec {
 }
 
 func renderOlcrtc(settings model.Settings, inbound model.Inbound) (string, error) {
-	password := inbound.Password
+	password := olcrtcKey(inbound)
 	if password == "" {
-		bytes := make([]byte, 32)
-		if _, err := randRead(bytes); err != nil {
-			return "", err
-		}
-		password = hex.EncodeToString(bytes)
+		// Rendering must be deterministic. Credential generation belongs to the
+		// persisted create/autofill/room workflow; synthesizing a key here makes
+		// the server config diverge from client export on the very next render.
+		return "", errors.New("olcrtc encryption key is required before rendering")
 	}
 	return renderer.RenderOlcrtc(renderer.OlcrtcConfig{
 		Auth:      olcrtcAuth(settings, inbound),

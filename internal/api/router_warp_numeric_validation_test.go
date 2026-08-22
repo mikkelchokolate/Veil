@@ -19,7 +19,7 @@ func TestManagementAPIWarpPutRejectsInvalidNumericValues(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+			router, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 			recorder := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(tt.body))
 			router.ServeHTTP(recorder, request)

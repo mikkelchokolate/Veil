@@ -14,10 +14,12 @@ func TestInboundCreateTriggersAutoApply(t *testing.T) {
 	origValidator := stagedConfigValidator
 	origRunner := serviceActionRunner
 	origAutoApply := autoApplyAfterMutation
+	origFirewall := currentFirewallApplier()
 	defer func() {
 		stagedConfigValidator = origValidator
 		serviceActionRunner = origRunner
 		autoApplyAfterMutation = origAutoApply
+		swapFirewallApplier(origFirewall)
 	}()
 
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
@@ -33,9 +35,10 @@ func TestInboundCreateTriggersAutoApply(t *testing.T) {
 		calls = append(calls, append([]string(nil), command...))
 		return ServiceActionResult{Command: command, Success: true}
 	}
+	swapFirewallApplier(&fakeFirewallApplier{})
 
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"hy.example.com"}`)))
 	body := strings.NewReader(`{"name":"hy2-auto","protocol":"hysteria2","transport":"udp","port":9443,"enabled":true}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/inbounds", body)
@@ -64,10 +67,12 @@ func TestInboundUpdateTriggersAutoApply(t *testing.T) {
 	origValidator := stagedConfigValidator
 	origRunner := serviceActionRunner
 	origAutoApply := autoApplyAfterMutation
+	origFirewall := currentFirewallApplier()
 	defer func() {
 		stagedConfigValidator = origValidator
 		serviceActionRunner = origRunner
 		autoApplyAfterMutation = origAutoApply
+		swapFirewallApplier(origFirewall)
 	}()
 
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
@@ -83,9 +88,10 @@ func TestInboundUpdateTriggersAutoApply(t *testing.T) {
 		calls = append(calls, append([]string(nil), command...))
 		return ServiceActionResult{Command: command, Success: true}
 	}
+	swapFirewallApplier(&fakeFirewallApplier{})
 
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"hy.example.com"}`)))
 	// Create seed inbound first (auto-apply runs here too).
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hy2-update","protocol":"hysteria2","transport":"udp","port":9443,"enabled":true}`)))
@@ -116,10 +122,12 @@ func TestInboundDeleteTriggersAutoApply(t *testing.T) {
 	origValidator := stagedConfigValidator
 	origRunner := serviceActionRunner
 	origAutoApply := autoApplyAfterMutation
+	origFirewall := currentFirewallApplier()
 	defer func() {
 		stagedConfigValidator = origValidator
 		serviceActionRunner = origRunner
 		autoApplyAfterMutation = origAutoApply
+		swapFirewallApplier(origFirewall)
 	}()
 
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
@@ -135,9 +143,10 @@ func TestInboundDeleteTriggersAutoApply(t *testing.T) {
 		calls = append(calls, append([]string(nil), command...))
 		return ServiceActionResult{Command: command, Success: true}
 	}
+	swapFirewallApplier(&fakeFirewallApplier{})
 
 	applyRoot := t.TempDir()
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"hy.example.com"}`)))
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hy2-delete","protocol":"hysteria2","transport":"udp","port":9443,"enabled":true}`)))
 
@@ -152,8 +161,12 @@ func TestInboundDeleteTriggersAutoApply(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, del)
 
-	if w.Code != http.StatusNoContent {
-		t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 (delete envelope), got %d: %s", w.Code, w.Body.String())
+	}
+	// The delete mutation response must surface revision + apply info.
+	if !strings.Contains(w.Body.String(), `"revision"`) {
+		t.Fatalf("expected revision info in delete response: %s", w.Body.String())
 	}
 
 	// After delete the runtime should be stopped/disabled as an orphan.

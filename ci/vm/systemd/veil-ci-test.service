@@ -1,0 +1,7 @@
+[Unit]
+Description=Veil CI systemd proof-of-concept service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'echo veil-ci-test-service-alive > /run/veil-ci-test.marker'
+RemainAfterExit=yes

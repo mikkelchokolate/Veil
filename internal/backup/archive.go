@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -20,7 +21,12 @@ var magicHeader = []byte("VEILBACK")
 // backupRandRead is overridable in tests to inject failures during encryption.
 var backupRandRead = rand.Read
 
-// Test hooks for createTarball and encryptBackupTarball.
+type DeriveKeyFunc func(passphrase string, salt []byte, version byte) []byte
+
+type CryptoOptions struct {
+	DeriveKey DeriveKeyFunc
+}
+
 var (
 	createTarballStat        = os.Stat
 	createTarballFileHeader  = tar.FileInfoHeader
@@ -31,14 +37,15 @@ var (
 
 	encryptAESNewCipher = aes.NewCipher
 	encryptNewGCM       = cipher.NewGCM
-
-	// deriveKeyHook is overridable in tests to avoid expensive PBKDF2 iterations.
-	deriveKeyHook func(passphrase string, salt []byte, version byte) []byte
 )
 
 func deriveKey(passphrase string, salt []byte, version byte) []byte {
-	if deriveKeyHook != nil {
-		return deriveKeyHook(passphrase, salt, version)
+	return deriveKeyWithOptions(passphrase, salt, version, CryptoOptions{})
+}
+
+func deriveKeyWithOptions(passphrase string, salt []byte, version byte, options CryptoOptions) []byte {
+	if options.DeriveKey != nil {
+		return options.DeriveKey(passphrase, salt, version)
 	}
 	iterations := 600000 // OWASP recommendation for PBKDF2-HMAC-SHA256
 	if version == 1 {
@@ -93,13 +100,20 @@ func createTarball(statePath, keyPath string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// CreateBackup packages state.json and state.key into a tar.gz archive.
-// If a non-empty passphrase is provided, the archive is encrypted using PBKDF2 + AES-GCM.
+// CreateBackup creates the current archive format, inferring veil.db next to
+// state.json. Restore remains backward compatible with legacy two-file v1
+// archives.
 func CreateBackup(statePath, keyPath, passphrase string) ([]byte, error) {
-	return CreateBackupWithOptions(statePath, keyPath, passphrase, ArchiveOptions{})
+	return CreateBackupWithOptions(statePath, keyPath, passphrase, ArchiveOptions{
+		DatabasePath: filepath.Join(filepath.Dir(statePath), "veil.db"),
+	})
 }
 
 func encryptBackupTarball(tarball []byte, passphrase string) ([]byte, error) {
+	return encryptBackupTarballWithOptions(tarball, passphrase, CryptoOptions{})
+}
+
+func encryptBackupTarballWithOptions(tarball []byte, passphrase string, options CryptoOptions) ([]byte, error) {
 	if passphrase == "" {
 		return tarball, nil
 	}
@@ -114,7 +128,7 @@ func encryptBackupTarball(tarball []byte, passphrase string) ([]byte, error) {
 		return nil, fmt.Errorf("generate nonce: %w", err)
 	}
 
-	key := deriveKey(passphrase, salt, 2)
+	key := deriveKeyWithOptions(passphrase, salt, 2, options)
 	block, err := encryptAESNewCipher(key)
 	if err != nil {
 		return nil, err

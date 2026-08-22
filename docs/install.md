@@ -13,8 +13,15 @@ This guide describes how to install and configure Veil on your server, including
 The easiest way to install Veil is using the official quick-start script. This script automatically detects your OS architecture (amd64/arm64), downloads the latest binary, verifies its checksum, and sets up the panel.
 
 ```bash
-curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sudo bash
+curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sh
 ```
+
+After install, `veil help` lists every command. `veil help <command>` shows
+flags for one command.
+
+The piped `install.sh` is an unprivileged bootstrap. It verifies the pinned
+verifier, `install-privileged.sh`, the Veil archive, signed checksums, and signed
+provenance before invoking `sudo` itself.
 
 Interactive installs ask for the Panel exposure mode (`local`, `direct`, or
 `caddy`) and whether Veil should choose a random high Panel port or use a port
@@ -25,7 +32,7 @@ you enter manually. Choose `local` + random port for the safest default.
 You can customize the installer's behavior using options passed to the bash command:
 
 ```bash
-curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sudo bash -s -- [options]
+curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sh -s -- [options]
 ```
 
 | Option | Default | Description |
@@ -36,7 +43,7 @@ curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/inst
 | `--panel-port PORT` | prompted interactively; `2096` with `--yes` | Port the Panel will listen on. Use `0` to select a random high port. |
 | `--le-ip-cert` | `true` for `direct`, otherwise ignored | Obtain a trusted Let's Encrypt IP certificate in `direct` mode (short-lived; see Direct Mode). |
 | `--le-ip-cert-port PORT` | `80` | Port used for the Let's Encrypt HTTP-01 challenge listener. |
-| `--profile NAME` | `ru-recommended` | Initial routing rules profile preset. Choices: `default` or `ru-recommended`. |
+| `--profile NAME` | `ru-recommended` | Initial routing rules profile preset. The implemented value is `ru-recommended`. |
 | `--version TAG` | `latest` | Specify a targeted release tag to install (e.g. `v0.9.9`). |
 | `--force` | *(false)* | Force binary download and re-installation even if Veil is already present. |
 | `--yes` | *(false)* | Run the installation non-interactively (answers defaults). |
@@ -72,7 +79,7 @@ Exposes the Panel on the loopback interface (`127.0.0.1:<panel-port>`) with a se
   ```bash
   ssh -L <panel-port>:127.0.0.1:<panel-port> user@your-server-ip
   ```
-- **URL:** Open `https://127.0.0.1:<panel-port>/` in your browser.
+- **URL:** Open the address printed at the end of install (`https://127.0.0.1:<panel-port>/<web-base-path>/`). The secret Web base path is required; `/` 404s.
 - **Why:** Keeps the administration page completely hidden from public port scans and probes.
 
 ### Caddy Mode
@@ -93,7 +100,7 @@ certificate warning and prevents cached HSTS policies from causing redirect
 loops when accessing the panel by IP. The certificate's SAN is the public IP
 address (no `CN`).
 
-- **URL:** `https://your-server-ip:<panel-port>/`
+- **URL:** `https://your-server-ip:<panel-port>/<web-base-path>/` (the path is printed at the end of install). `/` without that prefix 404s.
 - **Requirements:** Port `80/tcp` must be free and reachable from the internet
   during install/repair so the Let's Encrypt HTTP-01 challenge can complete.
 - **Fallback:** If the IP certificate cannot be issued (for example, port 80 is
@@ -174,7 +181,7 @@ The project uses the Go module path `github.com/mikkelchokolate/Veil`, which is 
 
 ### Build Steps
 
-1. **Install Go:** Ensure you have Go 1.26 or newer installed (see `go.mod`):
+1. **Install Go:** Ensure you have Go 1.27 or newer installed (see `go.mod`):
    ```bash
    go version
    ```

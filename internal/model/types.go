@@ -39,6 +39,17 @@ type ClientProfile struct {
 	Enabled  bool   `json:"enabled"`
 }
 
+// RuntimeCredential carries per-client credential material resolved from the
+// normalized Client+Binding+Credential store for a single inbound. It is a
+// runtime-only carrier: it is never persisted or serialized (json:"-"), and is
+// merged into the access model at render time so normalized clients reach the
+// live config alongside legacy inbound-embedded profiles.
+type RuntimeCredential struct {
+	Name     string `json:"-"`
+	Username string `json:"-"`
+	Password string `json:"-"`
+}
+
 type Inbound struct {
 	Name              string          `json:"name"`
 	Protocol          string          `json:"protocol"`
@@ -59,6 +70,12 @@ type Inbound struct {
 	// ProtocolFields holds protocol-specific inbound fields populated by the
 	// dynamic Panel UI. Legacy flat fields above remain for backward compatibility.
 	ProtocolFields map[string]any `json:"protocolFields,omitempty"`
+
+	// RuntimeCredentials carries per-client credentials resolved from the
+	// normalized client store for this inbound at render time. Runtime-only;
+	// never persisted or serialized. The access model merges these so normalized
+	// clients are rendered into the live config.
+	RuntimeCredentials []RuntimeCredential `json:"-"`
 }
 
 type RoutingRule struct {
@@ -88,9 +105,13 @@ type RoutingSource struct {
 }
 
 type RoutingSourceFile struct {
-	Name      string `json:"name"`
-	URL       string `json:"url"`
-	SHA256URL string `json:"sha256Url,omitempty"`
+	Name                  string `json:"name"`
+	URL                   string `json:"url"`
+	SHA256URL             string `json:"sha256Url,omitempty"`
+	PinnedSHA256          string `json:"pinnedSha256,omitempty"`
+	SignatureURL          string `json:"signatureUrl,omitempty"`
+	CertificateIdentity   string `json:"certificateIdentity,omitempty"`
+	CertificateOIDCIssuer string `json:"certificateOidcIssuer,omitempty"`
 }
 
 type WarpConfig struct {
@@ -189,6 +210,20 @@ type ApplyResponse struct {
 	ServiceActions  []ServiceActionResult    `json:"serviceActions,omitempty"`
 	HealthChecks    []ServiceHealthResult    `json:"healthChecks,omitempty"`
 	RollbackActions []ServiceActionResult    `json:"rollbackActions,omitempty"`
+
+	// Runtime mutation evidence is intentionally not serialized in the public
+	// response. The durable Runner consumes it to decide whether finalization or
+	// recovery is safe; HTTP status and response flags are not convergence proof.
+	MutationStarted        bool `json:"mutationStarted,omitempty"`
+	ArtifactsChanged       bool `json:"artifactsChanged,omitempty"`
+	ServicesChanged        bool `json:"servicesChanged,omitempty"`
+	FirewallChanged        bool `json:"firewallChanged,omitempty"`
+	ArtifactsRestored      bool `json:"artifactsRestored,omitempty"`
+	ServicesRestored       bool `json:"servicesRestored,omitempty"`
+	FirewallRestored       bool `json:"firewallRestored,omitempty"`
+	PostRollbackHealthPass bool `json:"postRollbackHealthPass,omitempty"`
+	RollbackComplete       bool `json:"rollbackComplete,omitempty"`
+	Ambiguous              bool `json:"ambiguous,omitempty"`
 }
 
 type ApplyHistoryEntry struct {
@@ -250,7 +285,10 @@ type SetupState struct {
 }
 
 type ManagementSnapshot struct {
-	SchemaVersion int           `json:"schemaVersion,omitempty"`
+	SchemaVersion int `json:"schemaVersion,omitempty"`
+	// EffectiveAt is the deterministic policy-evaluation time for this
+	// immutable revision. Replays must not substitute the current wall clock.
+	EffectiveAt   int64         `json:"effectiveAt"`
 	Setup         SetupState    `json:"setup"`
 	Settings      Settings      `json:"settings"`
 	Inbounds      []Inbound     `json:"inbounds"`
@@ -259,4 +297,59 @@ type ManagementSnapshot struct {
 	RoutingSource RoutingSource `json:"routingSource,omitempty"`
 	Warp          WarpConfig    `json:"warp"`
 	Users         []User        `json:"users,omitempty"`
+	// A3: normalized client state that affects runtime rendering. Snapshot
+	// must freeze Clients, Bindings, and active credential references so an
+	// apply job for revision N renders exactly the configuration committed as
+	// revision N, never newer mutable state.
+	Clients     []ClientSnapshot     `json:"clients,omitempty"`
+	Bindings    []BindingSnapshot    `json:"bindings,omitempty"`
+	Credentials []CredentialSnapshot `json:"credentials,omitempty"`
+}
+
+// ClientSnapshot is the immutable per-revision view of a normalized client.
+type ClientSnapshot struct {
+	ID               string  `json:"id"`
+	Name             string  `json:"name"`
+	Email            *string `json:"email,omitempty"`
+	Enabled          bool    `json:"enabled"`
+	GroupID          *string `json:"groupId,omitempty"`
+	QuotaBytes       *int64  `json:"quotaBytes,omitempty"`
+	QuotaResetPolicy string  `json:"quotaResetPolicy"`
+	QuotaResetAt     *int64  `json:"quotaResetAt,omitempty"`
+	ExpiresAt        *int64  `json:"expiresAt,omitempty"`
+	DeviceLimit      *int    `json:"deviceLimit,omitempty"`
+	Notes            string  `json:"notes,omitempty"`
+	Depleted         bool    `json:"depleted"`
+	CreatedAt        int64   `json:"createdAt,omitempty"`
+	UpdatedAt        int64   `json:"updatedAt,omitempty"`
+	Version          int     `json:"version"`
+}
+
+// BindingSnapshot is the immutable per-revision view of a client->inbound
+// binding, including enabled state and protocol settings.
+type BindingSnapshot struct {
+	ID               string `json:"id"`
+	ClientID         string `json:"clientId"`
+	InboundID        string `json:"inboundId"`
+	RuntimeIdentity  string `json:"runtimeIdentity"`
+	Enabled          bool   `json:"enabled"`
+	ProtocolSettings string `json:"protocolSettings,omitempty"`
+	CreatedAt        int64  `json:"createdAt,omitempty"`
+	UpdatedAt        int64  `json:"updatedAt,omitempty"`
+	Version          int    `json:"version"`
+}
+
+// CredentialSnapshot is the immutable per-revision reference to the active
+// credential for a binding. It stores the encrypted material (never plaintext)
+// so a retry of revision N renders with exactly the credential that was active
+// at revision N, even if a newer revision rotated it.
+type CredentialSnapshot struct {
+	ID                string `json:"id"`
+	BindingID         string `json:"bindingId"`
+	Kind              string `json:"kind"`
+	EncryptedValue    []byte `json:"encryptedValue"`
+	KeyVersion        int    `json:"keyVersion"`
+	CredentialVersion int    `json:"credentialVersion"`
+	CreatedAt         int64  `json:"createdAt,omitempty"`
+	RotatedAt         *int64 `json:"rotatedAt,omitempty"`
 }

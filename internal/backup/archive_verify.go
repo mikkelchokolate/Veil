@@ -7,6 +7,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -20,16 +21,28 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/storage"
 )
 
 const (
-	CurrentArchiveFormatVersion = 1
-	maxBackupArchiveFileBytes   = 32 * 1024 * 1024
+	CurrentArchiveFormatVersion = 2
+	LegacyArchiveFormatVersion  = 1
 )
 
 type ArchiveOptions struct {
-	VeilVersion string
-	CreatedAt   time.Time
+	VeilVersion  string
+	CreatedAt    time.Time
+	DatabasePath string
+	// MaxBytes is the explicit policy limit for both the published encrypted
+	// archive and the total expanded members. Zero selects the production
+	// default.
+	MaxBytes int64
+	// Crypto is scoped to this operation. Production callers leave it empty;
+	// tests may provide a deterministic derivation without global state.
+	Crypto CryptoOptions
+	// afterStateCapture is a deterministic package-test hook. Production callers
+	// leave it nil.
+	afterStateCapture func()
 }
 
 type ArchiveFile struct {
@@ -39,11 +52,15 @@ type ArchiveFile struct {
 }
 
 type ArchiveManifest struct {
-	FormatVersion      int           `json:"formatVersion"`
-	CreatedAt          time.Time     `json:"createdAt"`
-	VeilVersion        string        `json:"veilVersion"`
-	StateSchemaVersion int           `json:"stateSchemaVersion"`
-	Files              []ArchiveFile `json:"files"`
+	FormatVersion      int       `json:"formatVersion"`
+	CreatedAt          time.Time `json:"createdAt"`
+	VeilVersion        string    `json:"veilVersion"`
+	StateSchemaVersion int       `json:"stateSchemaVersion"`
+	// Pointer preserves verification compatibility with archive-v2 manifests
+	// created before desiredRevision was recorded. New v2 archives always set
+	// it, including revision zero.
+	DesiredRevision *uint64       `json:"desiredRevision,omitempty"`
+	Files           []ArchiveFile `json:"files"`
 }
 
 type VerificationReport struct {
@@ -54,32 +71,41 @@ type VerificationReport struct {
 	CreatedAt          time.Time     `json:"createdAt,omitempty"`
 	VeilVersion        string        `json:"veilVersion,omitempty"`
 	StateSchemaVersion int           `json:"stateSchemaVersion"`
+	DesiredRevision    uint64        `json:"desiredRevision"`
 	Files              []ArchiveFile `json:"files"`
 }
 
 type RestoreOptions struct {
-	CheckOnly bool
-	Now       func() time.Time
+	CheckOnly         bool
+	Now               func() time.Time
+	DatabasePath      string
+	MaxBytes          int64
+	FencingGeneration uint64
+	// Crypto is scoped to this restore operation; empty selects production KDF.
+	Crypto CryptoOptions
 }
 
 type RestoreResult struct {
-	Verified        bool               `json:"verified"`
-	CheckOnly       bool               `json:"checkOnly"`
-	Verification    VerificationReport `json:"verification"`
-	SafetyStatePath string             `json:"safetyStatePath,omitempty"`
-	SafetyKeyPath   string             `json:"safetyKeyPath,omitempty"`
+	Verified           bool               `json:"verified"`
+	CheckOnly          bool               `json:"checkOnly"`
+	Verification       VerificationReport `json:"verification"`
+	SafetyStatePath    string             `json:"safetyStatePath,omitempty"`
+	SafetyKeyPath      string             `json:"safetyKeyPath,omitempty"`
+	SafetyDatabasePath string             `json:"safetyDatabasePath,omitempty"`
 }
 
 type archiveContents struct {
 	state    []byte
 	key      []byte
+	database []byte
 	manifest []byte
 }
 
 type verifiedBackup struct {
-	report VerificationReport
-	state  []byte
-	key    []byte
+	report   VerificationReport
+	state    []byte
+	key      []byte
+	database []byte
 }
 
 func CreateBackupWithOptions(statePath, keyPath, passphrase string, options ArchiveOptions) ([]byte, error) {
@@ -87,7 +113,7 @@ func CreateBackupWithOptions(statePath, keyPath, passphrase string, options Arch
 	if err != nil {
 		return nil, err
 	}
-	return encryptBackupTarball(tarball, passphrase)
+	return encryptBackupTarballWithOptions(tarball, passphrase, options.Crypto)
 }
 
 func createTarballWithManifest(statePath, keyPath string, options ArchiveOptions) ([]byte, error) {
@@ -98,6 +124,16 @@ func createTarballWithManifest(statePath, keyPath string, options ArchiveOptions
 	key, err := os.ReadFile(keyPath)
 	if err != nil {
 		return nil, fmt.Errorf("archive key: %w", err)
+	}
+	if options.DatabasePath == "" {
+		options.DatabasePath = filepath.Join(filepath.Dir(statePath), "veil.db")
+	}
+	if _, err := os.Stat(options.DatabasePath); err != nil {
+		return nil, fmt.Errorf("archive database: %w", err)
+	}
+	database, desiredRevision, err := consistentSQLiteSnapshot(options.DatabasePath, backupChecksum(state))
+	if err != nil {
+		return nil, fmt.Errorf("archive database: %w", err)
 	}
 	createdAt := options.CreatedAt
 	if createdAt.IsZero() {
@@ -114,20 +150,61 @@ func createTarballWithManifest(statePath, keyPath string, options ArchiveOptions
 		CreatedAt:          createdAt,
 		VeilVersion:        veilVersion,
 		StateSchemaVersion: rawStateSchemaVersion(state),
+		DesiredRevision:    &desiredRevision,
 		Files: []ArchiveFile{
 			{Name: "state.json", Size: int64(len(state)), SHA256: backupChecksum(state)},
 			{Name: "state.key", Size: int64(len(key)), SHA256: backupChecksum(key)},
+			{Name: "veil.db", Size: int64(len(database)), SHA256: backupChecksum(database)},
 		},
 	}
 	manifestBody, err := archiveManifestMarshal(manifest)
 	if err != nil {
 		return nil, fmt.Errorf("marshal backup manifest: %w", err)
 	}
-	return writeArchiveTarball(archiveContents{state: state, key: key, manifest: manifestBody})
+	return writeArchiveTarball(archiveContents{state: state, key: key, database: database, manifest: manifestBody})
+}
+
+func consistentSQLiteSnapshot(databasePath, stateDigest string) ([]byte, uint64, error) {
+	db, err := storage.OpenExisting(databasePath)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer db.Close()
+	tmp, err := os.CreateTemp(filepath.Dir(databasePath), ".veil-backup-db-*.sqlite")
+	if err != nil {
+		return nil, 0, err
+	}
+	tmpPath := tmp.Name()
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return nil, 0, err
+	}
+	_ = os.Remove(tmpPath) // VACUUM INTO requires a non-existent target.
+	defer os.Remove(tmpPath)
+	quoted := "'" + strings.ReplaceAll(tmpPath, "'", "''") + "'"
+	if _, err := db.Exec(`VACUUM INTO ` + quoted); err != nil {
+		return nil, 0, err
+	}
+	desiredRevision, err := validateSQLiteDesiredSnapshotPath(tmpPath, nil, stateDigest)
+	if err != nil {
+		return nil, 0, err
+	}
+	body, err := os.ReadFile(tmpPath)
+	if err != nil {
+		return nil, 0, err
+	}
+	if len(body) == 0 {
+		return nil, 0, errors.New("SQLite snapshot is empty")
+	}
+	return body, desiredRevision, nil
 }
 
 func VerifyBackup(data []byte, passphrase string) (VerificationReport, error) {
-	verified, err := inspectBackup(data, passphrase)
+	return VerifyBackupWithOptions(data, passphrase, CryptoOptions{})
+}
+
+func VerifyBackupWithOptions(data []byte, passphrase string, crypto CryptoOptions) (VerificationReport, error) {
+	verified, err := inspectBackupWithOptions(data, passphrase, crypto)
 	if err != nil {
 		return VerificationReport{}, err
 	}
@@ -135,7 +212,7 @@ func VerifyBackup(data []byte, passphrase string) (VerificationReport, error) {
 }
 
 func RestoreBackupWithOptions(data []byte, statePath, keyPath, passphrase string, options RestoreOptions) (RestoreResult, error) {
-	verified, err := inspectBackup(data, passphrase)
+	verified, err := inspectBackupWithOptions(data, passphrase, options.Crypto)
 	if err != nil {
 		return RestoreResult{}, err
 	}
@@ -146,6 +223,14 @@ func RestoreBackupWithOptions(data []byte, statePath, keyPath, passphrase string
 	}
 	if options.CheckOnly {
 		return result, nil
+	}
+	if len(verified.database) != 0 {
+		if options.DatabasePath == "" {
+			options.DatabasePath = filepath.Join(filepath.Dir(statePath), "veil.db")
+		}
+		if err := checkpointSQLiteRestoreBoundary(options.DatabasePath); err != nil {
+			return RestoreResult{}, fmt.Errorf("prepare database restore boundary: %w", err)
+		}
 	}
 	now := options.Now
 	if now == nil {
@@ -160,17 +245,52 @@ func RestoreBackupWithOptions(data []byte, statePath, keyPath, passphrase string
 	}
 	keyBackup, err := stageRestoreFile(keyPath, verified.key, keySafety)
 	if err != nil {
-		_ = stateBackup.rollback()
+		_ = stateBackup.cleanupStaged()
 		return RestoreResult{}, fmt.Errorf("stage key restore: %w", err)
 	}
-	if err := stateBackup.commit(); err != nil {
-		_ = keyBackup.cleanupStaged()
-		return RestoreResult{}, fmt.Errorf("replace state: %w", err)
+	staged := []*stagedRestoreFile{stateBackup, keyBackup}
+	var databaseBackup *stagedRestoreFile
+	databaseSafety := ""
+	if len(verified.database) != 0 {
+		if options.DatabasePath == "" {
+			options.DatabasePath = filepath.Join(filepath.Dir(statePath), "veil.db")
+		}
+		databaseSafety = options.DatabasePath + ".pre-restore-" + suffix
+		databaseBackup, err = stageRestoreFile(options.DatabasePath, verified.database, databaseSafety)
+		if err != nil {
+			_ = stateBackup.cleanupStaged()
+			_ = keyBackup.cleanupStaged()
+			return RestoreResult{}, fmt.Errorf("stage database restore: %w", err)
+		}
+		if err := prepareRestoredDatabaseRuntimeUnknown(databaseBackup.temp, options.FencingGeneration); err != nil {
+			_ = stateBackup.cleanupStaged()
+			_ = keyBackup.cleanupStaged()
+			_ = databaseBackup.cleanupStaged()
+			return RestoreResult{}, fmt.Errorf("mark restored runtime unverified: %w", err)
+		}
+		staged = append(staged, databaseBackup)
 	}
-	if err := keyBackup.commit(); err != nil {
-		_ = stateBackup.rollback()
-		_ = keyBackup.rollback()
-		return RestoreResult{}, fmt.Errorf("replace key: %w", err)
+	for i, file := range staged {
+		if err := file.commit(); err != nil {
+			for j := len(staged) - 1; j >= 0; j-- {
+				if j < i {
+					_ = staged[j].rollback()
+				} else {
+					_ = staged[j].cleanupStaged()
+				}
+			}
+			return RestoreResult{}, fmt.Errorf("replace backup member %d: %w", i, err)
+		}
+	}
+	if databaseBackup != nil {
+		for _, suffix := range []string{"-wal", "-shm"} {
+			if err := restoreRemove(options.DatabasePath + suffix); err != nil && !os.IsNotExist(err) {
+				for j := len(staged) - 1; j >= 0; j-- {
+					_ = staged[j].rollback()
+				}
+				return RestoreResult{}, fmt.Errorf("remove stale database sidecar %s: %w", suffix, err)
+			}
+		}
 	}
 	if stateBackup.hadOriginal {
 		result.SafetyStatePath = stateSafety
@@ -178,11 +298,18 @@ func RestoreBackupWithOptions(data []byte, statePath, keyPath, passphrase string
 	if keyBackup.hadOriginal {
 		result.SafetyKeyPath = keySafety
 	}
+	if databaseBackup != nil && databaseBackup.hadOriginal {
+		result.SafetyDatabasePath = databaseSafety
+	}
 	return result, nil
 }
 
 func inspectBackup(data []byte, passphrase string) (verifiedBackup, error) {
-	tarball, encrypted, encryptionVersion, err := decryptBackup(data, passphrase)
+	return inspectBackupWithOptions(data, passphrase, CryptoOptions{})
+}
+
+func inspectBackupWithOptions(data []byte, passphrase string, options CryptoOptions) (verifiedBackup, error) {
+	tarball, encrypted, encryptionVersion, err := decryptBackupWithOptions(data, passphrase, options)
 	if err != nil {
 		return verifiedBackup{}, err
 	}
@@ -223,8 +350,17 @@ func inspectBackup(data []byte, passphrase string) (verifiedBackup, error) {
 		if err := json.Unmarshal(contents.manifest, &manifest); err != nil {
 			return verifiedBackup{}, fmt.Errorf("decode backup manifest: %w", err)
 		}
-		if manifest.FormatVersion != CurrentArchiveFormatVersion {
+		if manifest.FormatVersion != LegacyArchiveFormatVersion && manifest.FormatVersion != CurrentArchiveFormatVersion {
 			return verifiedBackup{}, fmt.Errorf("unsupported archive manifest version: %d", manifest.FormatVersion)
+		}
+		if manifest.FormatVersion == CurrentArchiveFormatVersion {
+			if len(contents.database) == 0 {
+				return verifiedBackup{}, errors.New("invalid backup: missing veil.db")
+			}
+			report.Files = append(report.Files, ArchiveFile{Name: "veil.db", Size: int64(len(contents.database)), SHA256: backupChecksum(contents.database)})
+			if err := validateSQLiteSnapshot(contents.database, manifest.DesiredRevision, backupChecksum(contents.state)); err != nil {
+				return verifiedBackup{}, fmt.Errorf("validate backup database: %w", err)
+			}
 		}
 		if manifest.StateSchemaVersion != sourceSchema {
 			return verifiedBackup{}, fmt.Errorf(
@@ -239,12 +375,131 @@ func inspectBackup(data []byte, passphrase string) (verifiedBackup, error) {
 		report.FormatVersion = manifest.FormatVersion
 		report.CreatedAt = manifest.CreatedAt.UTC()
 		report.VeilVersion = manifest.VeilVersion
+		if manifest.DesiredRevision != nil {
+			report.DesiredRevision = *manifest.DesiredRevision
+		}
 		report.Files = manifest.Files
 	}
-	return verifiedBackup{report: report, state: contents.state, key: contents.key}, nil
+	return verifiedBackup{report: report, state: contents.state, key: contents.key, database: contents.database}, nil
+}
+
+func checkpointSQLiteRestoreBoundary(path string) error {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	db, err := storage.OpenExisting(path)
+	if err != nil {
+		return err
+	}
+	var busy, logFrames, checkpointed int
+	err = db.QueryRow(`PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logFrames, &checkpointed)
+	closeErr := db.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if busy != 0 {
+		return fmt.Errorf("veil.db is still in use (WAL frames=%d checkpointed=%d); stop writers before restore", logFrames, checkpointed)
+	}
+	return nil
+}
+
+func validateSQLiteSnapshot(body []byte, expectedDesiredRevision *uint64, expectedStateDigest string) error {
+	tmp, err := os.CreateTemp("", "veil-verify-db-*.sqlite")
+	if err != nil {
+		return err
+	}
+	path := tmp.Name()
+	defer os.Remove(path)
+	if _, err := tmp.Write(body); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	db, err := storage.OpenExisting(path)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var result string
+	if err := db.QueryRow(`PRAGMA quick_check`).Scan(&result); err != nil {
+		return err
+	}
+	if result != "ok" {
+		return fmt.Errorf("SQLite quick_check: %s", result)
+	}
+	_, err = validateSQLiteDesiredSnapshotDB(db, expectedDesiredRevision, expectedStateDigest)
+	return err
+}
+
+func validateSQLiteDesiredSnapshotPath(path string, expectedDesiredRevision *uint64, expectedStateDigest string) (uint64, error) {
+	db, err := storage.OpenExisting(path)
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+	return validateSQLiteDesiredSnapshotDB(db, expectedDesiredRevision, expectedStateDigest)
+}
+
+func validateSQLiteDesiredSnapshotDB(db interface {
+	QueryRow(query string, args ...any) *sql.Row
+}, expectedDesiredRevision *uint64, expectedStateDigest string) (uint64, error) {
+	var desiredRevision uint64
+	if err := db.QueryRow(`SELECT desired_revision FROM revisions WHERE id=1`).Scan(&desiredRevision); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			if expectedDesiredRevision != nil && *expectedDesiredRevision != 0 {
+				return 0, fmt.Errorf("captured desired revision mismatch: manifest=%d database=0", *expectedDesiredRevision)
+			}
+			return 0, nil
+		}
+		return 0, fmt.Errorf("read captured desired revision: %w", err)
+	}
+	if expectedDesiredRevision != nil && desiredRevision != *expectedDesiredRevision {
+		return 0, fmt.Errorf("captured desired revision mismatch: manifest=%d database=%d", *expectedDesiredRevision, desiredRevision)
+	}
+	if desiredRevision == 0 {
+		return desiredRevision, nil
+	}
+	var digestColumnCount int
+	if err := db.QueryRow(
+		`SELECT COUNT(1) FROM pragma_table_info('revision_snapshots') WHERE name='state_sha256'`,
+	).Scan(&digestColumnCount); err != nil {
+		return 0, fmt.Errorf("inspect immutable snapshot state digest schema: %w", err)
+	}
+	if digestColumnCount == 0 {
+		return 0, errors.New("immutable snapshots do not support state digest binding")
+	}
+	var stateDigest string
+	if err := db.QueryRow(`SELECT state_sha256 FROM revision_snapshots WHERE revision=?`, desiredRevision).Scan(&stateDigest); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, fmt.Errorf("immutable snapshot for desired revision %d is missing", desiredRevision)
+		}
+		return 0, fmt.Errorf("verify immutable snapshot for desired revision %d: %w", desiredRevision, err)
+	}
+	if len(stateDigest) != sha256.Size*2 {
+		return 0, fmt.Errorf("immutable snapshot state digest for desired revision %d is missing or invalid", desiredRevision)
+	}
+	if _, err := hex.DecodeString(stateDigest); err != nil {
+		return 0, fmt.Errorf("immutable snapshot state digest for desired revision %d is invalid", desiredRevision)
+	}
+	if expectedStateDigest != "" && !strings.EqualFold(stateDigest, expectedStateDigest) {
+		return 0, fmt.Errorf("state digest mismatch for desired revision %d: snapshot=%s archive=%s", desiredRevision, stateDigest, expectedStateDigest)
+	}
+	return desiredRevision, nil
 }
 
 func decryptBackup(data []byte, passphrase string) ([]byte, bool, int, error) {
+	return decryptBackupWithOptions(data, passphrase, CryptoOptions{})
+}
+
+func decryptBackupWithOptions(data []byte, passphrase string, options CryptoOptions) ([]byte, bool, int, error) {
 	if len(data) < len(magicHeader) || !bytes.Equal(data[:len(magicHeader)], magicHeader) {
 		if passphrase != "" {
 			return nil, false, 0, errors.New("passphrase provided but backup is not encrypted")
@@ -264,7 +519,7 @@ func decryptBackup(data []byte, passphrase string) ([]byte, bool, int, error) {
 	}
 	salt := data[len(magicHeader)+1 : len(magicHeader)+1+16]
 	nonce := data[len(magicHeader)+1+16 : headerLen]
-	key := deriveKey(passphrase, salt, byte(version))
+	key := deriveKeyWithOptions(passphrase, salt, byte(version), options)
 	block, err := decryptAESNewCipher(key)
 	if err != nil {
 		return nil, true, version, err
@@ -295,6 +550,13 @@ func writeArchiveTarball(contents archiveContents) ([]byte, error) {
 	}{
 		{name: "state.json", body: contents.state, mode: 0o600},
 		{name: "state.key", body: contents.key, mode: 0o600},
+	}
+	if len(contents.database) > 0 {
+		files = append(files, struct {
+			name string
+			body []byte
+			mode int64
+		}{name: "veil.db", body: contents.database, mode: 0o600})
 	}
 	if len(contents.manifest) > 0 {
 		files = append(files, struct {
@@ -327,6 +589,13 @@ func writeArchiveTarball(contents archiveContents) ([]byte, error) {
 }
 
 func readArchiveTarball(tarball []byte) (archiveContents, error) {
+	return readArchiveTarballWithMax(tarball, DefaultMaxBackupBytes)
+}
+
+func readArchiveTarballWithMax(tarball []byte, maxBytes int64) (archiveContents, error) {
+	if maxBytes <= 0 {
+		return archiveContents{}, errors.New("backup size policy must be positive")
+	}
 	gzipReader, err := gzip.NewReader(bytes.NewReader(tarball))
 	if err != nil {
 		return archiveContents{}, fmt.Errorf("initialize gzip reader: %w", err)
@@ -344,7 +613,7 @@ func readArchiveTarball(tarball []byte) (archiveContents, error) {
 			return archiveContents{}, fmt.Errorf("read tar archive: %w", err)
 		}
 		name := strings.TrimPrefix(filepath.ToSlash(header.Name), "./")
-		if name != "state.json" && name != "state.key" && name != "manifest.json" {
+		if name != "state.json" && name != "state.key" && name != "veil.db" && name != "manifest.json" {
 			return archiveContents{}, fmt.Errorf("invalid backup: unexpected archive entry %q", header.Name)
 		}
 		if seen[name] {
@@ -353,10 +622,10 @@ func readArchiveTarball(tarball []byte) (archiveContents, error) {
 		if header.Typeflag != tar.TypeReg && header.Typeflag != 0 {
 			return archiveContents{}, fmt.Errorf("invalid backup: %q is not a regular file", name)
 		}
-		if header.Size < 0 || header.Size > maxBackupArchiveFileBytes {
+		if header.Size < 0 || header.Size > maxBytes {
 			return archiveContents{}, fmt.Errorf("invalid backup: %q exceeds size limit", name)
 		}
-		body, err := io.ReadAll(io.LimitReader(reader, maxBackupArchiveFileBytes+1))
+		body, err := io.ReadAll(io.LimitReader(reader, maxBytes+1))
 		if err != nil {
 			return archiveContents{}, fmt.Errorf("read archive entry %q: %w", name, err)
 		}
@@ -369,6 +638,8 @@ func readArchiveTarball(tarball []byte) (archiveContents, error) {
 			contents.state = body
 		case "state.key":
 			contents.key = body
+		case "veil.db":
+			contents.database = body
 		case "manifest.json":
 			contents.manifest = body
 		}
@@ -485,7 +756,29 @@ func stageRestoreFile(target string, body []byte, safety string) (*stagedRestore
 		_ = restoreRemove(tempPath)
 		return nil, err
 	}
-	if err := restoreChmod(tempPath, 0o600); err != nil {
+	// Preserve the original file's mode and ownership: the restore may run as
+	// root (privileged helper) while the panel process runs unprivileged. A
+	// replacement written root-owned 0600 would leave the panel unable to
+	// re-read its own state/key after restore (the reload step then fails and
+	// the whole restore job is reported as failed despite state on disk being
+	// correct).
+	mode := os.FileMode(0o600)
+	var info os.FileInfo
+	if existing, statErr := os.Stat(target); statErr == nil {
+		info = existing
+		mode = existing.Mode().Perm()
+	}
+	if err := restoreChmod(tempPath, mode); err != nil {
+		_ = restoreRemove(tempPath)
+		return nil, err
+	}
+	if info != nil {
+		if err := restoreChownToMatch(tempPath, info); err != nil {
+			_ = restoreRemove(tempPath)
+			return nil, err
+		}
+	}
+	if err := syncRestoreParent(tempPath); err != nil {
 		_ = restoreRemove(tempPath)
 		return nil, err
 	}

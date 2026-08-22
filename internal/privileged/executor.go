@@ -2,29 +2,39 @@ package privileged
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/backup"
+	"github.com/mikkelchokolate/Veil/internal/caddyadmin"
 	"github.com/mikkelchokolate/Veil/internal/caddycert"
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
+	"github.com/mikkelchokolate/Veil/internal/releaseverify"
 	"github.com/mikkelchokolate/Veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/statecommit"
 )
 
 const (
-	maxBackupReadBytes    int64 = 64 * 1024 * 1024
-	maxUpdateArchiveBytes int64 = 64 * 1024 * 1024
-	maxChecksumsBytes     int64 = 1024 * 1024
+	maxBackupPassphraseBytes int64 = 64 * 1024
+	maxUpdateArchiveBytes    int64 = 64 * 1024 * 1024
+	maxChecksumsBytes        int64 = 1024 * 1024
+	maxReleaseEvidenceBytes  int64 = 8 * 1024 * 1024
 )
 
 // Test hooks for functions that touch global runtime state or external
@@ -66,34 +76,41 @@ func chmodNoFollow(path string, mode os.FileMode) error {
 }
 
 type Executor struct {
-	Promote       func(context.Context, ResolvedPromotion) (PromoteResult, error)
-	ServiceAction func(context.Context, ServiceActionRequest) error
-	ServiceStatus func(context.Context, ServiceStatusRequest) (ServiceStatusResult, error)
-	Journal       func(context.Context, ResolvedJournal) (JournalResult, error)
-	Backup        func(context.Context, ResolvedBackup) (BackupResult, error)
-	RotateKey     func(context.Context, RotateKeyRequest) error
-	Firewall      func(context.Context, ResolvedFirewall) (FirewallResult, error)
-	Update        func(context.Context, ResolvedUpdate) (UpdateResult, error)
-	RestartPanel  func(context.Context) error
-	SyncCaddyCert func(context.Context, SyncCaddyCertRequest) (SyncCaddyCertResult, error)
+	Promote            func(context.Context, ResolvedPromotion) (PromoteResult, error)
+	ServiceAction      func(context.Context, ServiceActionRequest) error
+	ServiceStatus      func(context.Context, ServiceStatusRequest) (ServiceStatusResult, error)
+	Journal            func(context.Context, ResolvedJournal) (JournalResult, error)
+	Backup             func(context.Context, ResolvedBackup) (BackupResult, error)
+	RotateKey          func(context.Context, RotateKeyRequest) error
+	RecoverKeyRotation func(context.Context) error
+	Firewall           func(context.Context, ResolvedFirewall) (FirewallResult, error)
+	Update             func(context.Context, ResolvedUpdate) (UpdateResult, error)
+	RestartPanel       func(context.Context) error
+	SyncCaddyCert      func(context.Context, SyncCaddyCertRequest) (SyncCaddyCertResult, error)
+	CaddyLoad          func(context.Context, CaddyLoadRequest) error
 }
 
 type CommandRunner func(context.Context, []string, time.Duration) (string, error)
 
 type ProductionConfig struct {
-	PromotionBackupRoot  string
-	StatePath            string
-	KeyPath              string
-	BackupPassphrasePath string
-	BackupRoot           string
-	VeilVersion          string
-	BinaryPath           string
-	FirewallCommands     map[string][]string
-	RunCommand           CommandRunner
-	BackupWorkflow       func(context.Context, ResolvedBackup) (BackupResult, error)
-	UpdateWorkflow       func(context.Context, ResolvedUpdate) (UpdateResult, error)
-	RotateKeyWorkflow    func(context.Context) error
-	Now                  func() time.Time
+	PromotionBackupRoot        string
+	StatePath                  string
+	KeyPath                    string
+	BackupPassphrasePath       string
+	BackupRoot                 string
+	BackupMaxBytes             int64
+	VeilVersion                string
+	BinaryPath                 string
+	FirewallCommands           map[string][]string
+	RunCommand                 CommandRunner
+	BackupWorkflow             func(context.Context, ResolvedBackup) (BackupResult, error)
+	UpdateWorkflow             func(context.Context, ResolvedUpdate) (UpdateResult, error)
+	RotateKeyWorkflow          func(context.Context) error
+	RecoverKeyRotationWorkflow func(context.Context) error
+	ReleaseVerifier            func(releaseverify.Evidence) error
+	CaddyAdminURL              string
+	HTTPClient                 *http.Client
+	Now                        func() time.Time
 }
 
 func DefaultProductionConfig(policy Policy, version string) ProductionConfig {
@@ -114,6 +131,9 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 	if config.RunCommand == nil {
 		config.RunCommand = runProductionCommand
 	}
+	if config.ReleaseVerifier == nil {
+		config.ReleaseVerifier = releaseverify.Verify
+	}
 	if config.BackupWorkflow == nil {
 		config.BackupWorkflow = func(ctx context.Context, request ResolvedBackup) (BackupResult, error) {
 			return runProductionBackup(ctx, config, request)
@@ -128,6 +148,31 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 		config.RotateKeyWorkflow = func(context.Context) error {
 			return rotateStateKey(config.StatePath, config.KeyPath, config.Now)
 		}
+	}
+	if config.RecoverKeyRotationWorkflow == nil {
+		config.RecoverKeyRotationWorkflow = func(context.Context) error {
+			databasePath := ""
+			if config.StatePath != "" {
+				databasePath = filepath.Join(filepath.Dir(config.StatePath), "veil.db")
+			}
+			if err := backup.RecoverInterruptedRestore(config.StatePath, config.KeyPath, databasePath); err != nil {
+				return fmt.Errorf("recover interrupted backup restore: %w", err)
+			}
+			return statecommit.RecoverKeyRotation(statecommit.RecoverKeyRotationOptions{StatePath: config.StatePath})
+		}
+	}
+	baseRecovery := config.RecoverKeyRotationWorkflow
+	config.RecoverKeyRotationWorkflow = func(ctx context.Context) error {
+		if err := recoverFirewallTransaction(ctx, config); err != nil {
+			return fmt.Errorf("recover interrupted firewall transaction: %w", err)
+		}
+		return baseRecovery(ctx)
+	}
+	if config.CaddyAdminURL == "" {
+		config.CaddyAdminURL = "http://127.0.0.1:2019/load"
+	}
+	if config.HTTPClient == nil {
+		config.HTTPClient = &http.Client{Timeout: 10 * time.Second}
 	}
 	return Executor{
 		Promote: func(_ context.Context, request ResolvedPromotion) (PromoteResult, error) {
@@ -174,11 +219,16 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 					continue
 				}
 				status := service.NewSystemdServiceStatusParser().Parse(unit, output)
+				executableDigest := ""
+				if status.MainPID > 0 {
+					if body, readErr := os.ReadFile(fmt.Sprintf("/proc/%d/exe", status.MainPID)); readErr == nil {
+						digest := sha256.Sum256(body)
+						executableDigest = hex.EncodeToString(digest[:])
+					}
+				}
 				result.Services = append(result.Services, ServiceStatus{
-					Unit:        status.Unit,
-					LoadState:   status.LoadState,
-					ActiveState: status.ActiveState,
-					SubState:    status.SubState,
+					Unit: status.Unit, LoadState: status.LoadState, ActiveState: status.ActiveState, SubState: status.SubState,
+					MainPID: status.MainPID, ExecMainStartMonotonic: status.ExecMainStartMonotonic, ExecutableDigest: executableDigest,
 				})
 			}
 			return result, nil
@@ -190,49 +240,99 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 			if err != nil {
 				return JournalResult{}, err
 			}
-			lines := []string{}
-			for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-				if line != "" {
-					lines = append(lines, line)
-				}
-			}
+			lines := boundedJournalLines(output, 256*1024, 16*1024)
 			return JournalResult{Unit: request.Unit, Lines: lines}, nil
 		},
 		Backup: config.BackupWorkflow,
 		RotateKey: func(ctx context.Context, _ RotateKeyRequest) error {
 			return config.RotateKeyWorkflow(ctx)
 		},
+		RecoverKeyRotation: config.RecoverKeyRotationWorkflow,
 		Firewall: func(ctx context.Context, request ResolvedFirewall) (FirewallResult, error) {
-			result := FirewallResult{}
-			for _, id := range request.RuleIDs {
-				command, ok := config.FirewallCommands[id]
-				if !ok || len(command) == 0 {
-					return FirewallResult{}, fmt.Errorf("firewall rule %q has no production command", id)
-				}
-				if _, err := config.RunCommand(ctx, append([]string(nil), command...), 30*time.Second); err != nil {
-					return FirewallResult{}, err
-				}
-				result.AppliedRuleIDs = append(result.AppliedRuleIDs, id)
+			resolved := ResolvedFirewall{
+				RuleIDs: append([]string(nil), request.RuleIDs...), Rules: append([]FirewallRule(nil), request.Rules...),
+				Action: request.Action, TransactionID: request.TransactionID,
 			}
-			rulesResult, err := runFirewallRules(ctx, config.RunCommand, ResolvedFirewall{Rules: request.Rules})
-			if err != nil {
-				return FirewallResult{}, err
-			}
-			result.AppliedRuleIDs = append(result.AppliedRuleIDs, rulesResult.AppliedRuleIDs...)
-			if len(result.AppliedRuleIDs) > 0 {
-				if _, err := config.RunCommand(ctx, []string{"ufw", "reload"}, 30*time.Second); err != nil {
-					return FirewallResult{}, fmt.Errorf("reload ufw: %w", err)
+			if len(resolved.RuleIDs) > 0 && len(resolved.Rules) == 0 {
+				for _, id := range resolved.RuleIDs {
+					command, ok := config.FirewallCommands[id]
+					if !ok || len(command) < 3 || command[0] != "ufw" {
+						return FirewallResult{}, fmt.Errorf("firewall rule %q has no validated production ufw command", id)
+					}
+					resolved.Rules = append(resolved.Rules, FirewallRule{Command: "ufw", Args: append([]string(nil), command[1:]...)})
 				}
 			}
-			return result, nil
+			if len(resolved.Rules) > 0 && len(resolved.RuleIDs) == 0 {
+				for _, rule := range resolved.Rules {
+					id := "dynamic"
+					if len(rule.Args) >= 2 {
+						id += ":" + rule.Args[1]
+					}
+					resolved.RuleIDs = append(resolved.RuleIDs, id)
+				}
+			}
+			return runFirewallTransaction(ctx, config, resolved)
 		},
 		Update: config.UpdateWorkflow,
 		RestartPanel: func(ctx context.Context) error {
-			_, err := config.RunCommand(ctx, []string{"systemctl", "restart", "veil.service"}, 30*time.Second)
-			return err
+			request, ok := RestartPanelRequestFromContext(ctx)
+			if !ok || request.Fence.OperationID == "" {
+				return errors.New("restart panel fencing context is missing")
+			}
+			statusCommand := service.NewSystemdServiceStatusCommand("veil.service")
+			statusArgs := append([]string{"systemctl"}, statusCommand.Args()...)
+			beforeOutput, err := config.RunCommand(ctx, statusArgs, 15*time.Second)
+			if err != nil {
+				return err
+			}
+			before := service.NewSystemdServiceStatusParser().Parse("veil.service", beforeOutput)
+			binaryPath := config.BinaryPath
+			if binaryPath == "" {
+				binaryPath, err = osExecutable()
+				if err != nil {
+					return err
+				}
+			}
+			binaryBody, err := os.ReadFile(binaryPath)
+			if err != nil {
+				return err
+			}
+			digestBytes := sha256.Sum256(binaryBody)
+			expectedDigest := hex.EncodeToString(digestBytes[:])
+			manifestPath := filepath.Join(filepath.Dir(binaryPath), ".veil-restart-evidence.json")
+			intent, _ := json.Marshal(map[string]any{
+				"version": 1, "transactionId": request.Fence.OperationID, "expectedExecutableDigest": expectedDigest,
+				"previousStartGeneration": before.ExecMainStartMonotonic, "commitPhase": "intent",
+			})
+			if err := atomicfile.Write(manifestPath, intent, 0o600, 0o700); err != nil {
+				return err
+			}
+			if _, err := config.RunCommand(ctx, []string{"systemctl", "restart", "veil.service"}, 30*time.Second); err != nil {
+				return err
+			}
+			afterOutput, err := config.RunCommand(ctx, statusArgs, 15*time.Second)
+			if err != nil {
+				return err
+			}
+			after := service.NewSystemdServiceStatusParser().Parse("veil.service", afterOutput)
+			if after.ActiveState != "active" || after.MainPID <= 0 || after.ExecMainStartMonotonic <= before.ExecMainStartMonotonic {
+				return errors.New("panel restart did not produce a new healthy service generation")
+			}
+			committed, _ := json.Marshal(map[string]any{
+				"version": 1, "transactionId": request.Fence.OperationID, "expectedExecutableDigest": expectedDigest,
+				"previousStartGeneration": before.ExecMainStartMonotonic, "newStartGeneration": after.ExecMainStartMonotonic,
+				"mainPid": after.MainPID, "serviceActive": true, "activationManifest": manifestPath, "commitPhase": "committed",
+			})
+			return atomicfile.Write(manifestPath, committed, 0o600, 0o700)
 		},
 		SyncCaddyCert: func(ctx context.Context, request SyncCaddyCertRequest) (SyncCaddyCertResult, error) {
 			return runSyncCaddyCert(ctx, request, config)
+		},
+		CaddyLoad: func(ctx context.Context, request CaddyLoadRequest) error {
+			endpoint := strings.TrimSuffix(config.CaddyAdminURL, "/load")
+			client := caddyadmin.NewClient(endpoint)
+			client.HTTPClient = config.HTTPClient
+			return client.LoadConfigContext(ctx, request.Config)
 		},
 	}
 }
@@ -246,6 +346,30 @@ func runProductionUpdate(config ProductionConfig, request ResolvedUpdate) (Updat
 	if err != nil {
 		return UpdateResult{}, fmt.Errorf("read staged checksums: %w", err)
 	}
+	checksumsBundle, err := readBoundedRegularFile(request.ChecksumsBundlePath, maxReleaseEvidenceBytes)
+	if err != nil {
+		return UpdateResult{}, fmt.Errorf("read staged checksum bundle: %w", err)
+	}
+	provenance, err := readBoundedRegularFile(request.ProvenancePath, maxReleaseEvidenceBytes)
+	if err != nil {
+		return UpdateResult{}, fmt.Errorf("read staged provenance: %w", err)
+	}
+	provenanceBundle, err := readBoundedRegularFile(request.ProvenanceBundlePath, maxReleaseEvidenceBytes)
+	if err != nil {
+		return UpdateResult{}, fmt.Errorf("read staged provenance bundle: %w", err)
+	}
+	if config.ReleaseVerifier == nil {
+		return UpdateResult{}, errors.New("release verifier is not configured")
+	}
+	if err := config.ReleaseVerifier(releaseverify.Evidence{
+		Repository:   updateflow.RepoOwner + "/" + updateflow.RepoName,
+		WorkflowPath: ".github/workflows/release.yml", ReleaseTag: request.Version,
+		ArchiveName: updateflow.AssetName(), Archive: archive,
+		ChecksumsName: "checksums.txt", Checksums: checksums, ChecksumsBundle: checksumsBundle,
+		Provenance: provenance, ProvenanceBundle: provenanceBundle,
+	}); err != nil {
+		return UpdateResult{}, fmt.Errorf("verify staged release provenance: %w", err)
+	}
 	if err := updateflow.VerifyAssetChecksum(archive, updateflow.AssetName(), string(checksums)); err != nil {
 		return UpdateResult{}, fmt.Errorf("verify staged update: %w", err)
 	}
@@ -256,16 +380,76 @@ func runProductionUpdate(config ProductionConfig, request ResolvedUpdate) (Updat
 			return UpdateResult{}, fmt.Errorf("resolve current executable: %w", err)
 		}
 	}
+	oldDigest := ""
+	if oldBody, readErr := os.ReadFile(binaryPath); readErr == nil {
+		digest := sha256.Sum256(oldBody)
+		oldDigest = hex.EncodeToString(digest[:])
+	} else if !errors.Is(readErr, os.ErrNotExist) {
+		return UpdateResult{}, readErr
+	}
+	expectedBinary, err := updateflow.ExtractVeilBinary(archive)
+	if err != nil {
+		return UpdateResult{}, err
+	}
+	expectedDigestBytes := sha256.Sum256(expectedBinary)
+	expectedDigest := hex.EncodeToString(expectedDigestBytes[:])
+	transactionID := request.Fence.OperationID
+	if transactionID == "" {
+		transactionBytes := make([]byte, 16)
+		if _, err := rand.Read(transactionBytes); err != nil {
+			return UpdateResult{}, err
+		}
+		transactionID = hex.EncodeToString(transactionBytes)
+	}
+	manifestPath := filepath.Join(filepath.Dir(binaryPath), ".veil-update-evidence.json")
+	intentBody, err := json.Marshal(map[string]any{
+		"version": 1, "transactionId": transactionID, "expectedBinaryDigest": expectedDigest,
+		"oldBinaryDigest": oldDigest, "targetVersion": request.Version, "commitPhase": "intent",
+	})
+	if err != nil {
+		return UpdateResult{}, err
+	}
+	if err := atomicfile.Write(manifestPath, intentBody, 0o600, 0o700); err != nil {
+		return UpdateResult{}, err
+	}
 	if _, err := updateflow.ReplaceBinaryFromArchive(binaryPath, archive, true); err != nil {
 		return UpdateResult{}, fmt.Errorf("install staged update: %w", err)
 	}
-	_ = os.Remove(request.Path)
-	_ = os.Remove(request.ChecksumsPath)
+	installedBody, err := os.ReadFile(binaryPath)
+	if err != nil {
+		return UpdateResult{}, err
+	}
+	installedDigestBytes := sha256.Sum256(installedBody)
+	installedDigest := hex.EncodeToString(installedDigestBytes[:])
+	info, err := os.Stat(binaryPath)
+	if err != nil {
+		return UpdateResult{}, err
+	}
+	inode := "unknown"
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+		inode = fmt.Sprintf("%d:%d:%d:%d", stat.Dev, stat.Ino, stat.Ctim.Sec, stat.Ctim.Nsec)
+	}
+	if installedDigest != expectedDigest {
+		return UpdateResult{}, errors.New("installed panel binary digest does not match verified archive")
+	}
+	evidenceBody, err := json.Marshal(map[string]any{
+		"version": 1, "transactionId": transactionID, "expectedBinaryDigest": installedDigest,
+		"oldBinaryDigest": oldDigest, "installedPathInode": inode, "targetVersion": request.Version,
+		"activationManifest": manifestPath, "commitPhase": "committed",
+	})
+	if err != nil {
+		return UpdateResult{}, err
+	}
+	if err := atomicfile.Write(manifestPath, evidenceBody, 0o600, 0o700); err != nil {
+		return UpdateResult{}, err
+	}
+	for _, path := range []string{request.Path, request.ChecksumsPath, request.ChecksumsBundlePath, request.ProvenancePath, request.ProvenanceBundlePath} {
+		_ = os.Remove(path)
+	}
 	return UpdateResult{
-		ArtifactID: request.ArtifactID,
-		Staged:     true,
-		Installed:  true,
-		Version:    request.Version,
+		ArtifactID: request.ArtifactID, Staged: true, Installed: true, Version: request.Version,
+		TransactionID: transactionID, ExpectedDigest: installedDigest, OldDigest: oldDigest,
+		InstalledInode: inode, ActivationManifest: manifestPath, CommitPhase: "committed",
 	}, nil
 }
 
@@ -335,32 +519,7 @@ func runProductionCommand(ctx context.Context, command []string, timeout time.Du
 }
 
 func runFirewallRules(ctx context.Context, runCommand CommandRunner, request ResolvedFirewall) (FirewallResult, error) {
-	result := FirewallResult{}
-	for _, id := range request.RuleIDs {
-		_ = id
-	}
-	if len(request.Rules) == 0 {
-		return result, nil
-	}
-	status, err := runCommand(ctx, []string{"ufw", "status"}, 15*time.Second)
-	if err != nil {
-		return FirewallResult{}, fmt.Errorf("read ufw status: %w", err)
-	}
-	if !strings.Contains(status, "Status: active") {
-		if _, err := runCommand(ctx, []string{"ufw", "--force", "enable"}, 15*time.Second); err != nil {
-			return FirewallResult{}, fmt.Errorf("enable ufw: %w", err)
-		}
-	}
-	for _, rule := range request.Rules {
-		output, err := runCommand(ctx, append([]string{"ufw"}, rule.Args...), 15*time.Second)
-		if err != nil && !isUFWDuplicateRule(output) {
-			return FirewallResult{}, fmt.Errorf("ufw %v: %w", rule.Args, err)
-		}
-		if len(rule.Args) >= 2 {
-			result.AppliedRuleIDs = append(result.AppliedRuleIDs, rule.Args[1])
-		}
-	}
-	return result, nil
+	return reconcileUFW(ctx, runCommand, request)
 }
 
 func isUFWDuplicateRule(output string) bool {
@@ -368,70 +527,38 @@ func isUFWDuplicateRule(output string) bool {
 }
 
 func promoteResolvedArtifacts(backupRoot string, now func() time.Time, request ResolvedPromotion) (PromoteResult, error) {
+	if err := recoverPromotionTransactionWithPolicy(backupRoot, request.ValidateDestination, request.FenceGeneration); err != nil {
+		return PromoteResult{}, fmt.Errorf("recover interrupted promotion: %w", err)
+	}
 	if request.RestoreBackupID != "" {
 		return restorePromotedArtifacts(backupRoot, request.RestoreBackupID)
 	}
-	result := PromoteResult{}
-	backupID := now().UTC().Format("20060102T150405.000000000Z")
-	manifest := promotionManifest{BackupID: backupID}
-	for _, artifact := range request.Artifacts {
-		body, err := readManagedConfigFile(artifact.Source)
-		if err != nil {
-			return PromoteResult{}, err
-		}
-		record, err := backupPromotionDestination(backupRoot, backupID, artifact)
-		if err != nil {
-			return PromoteResult{}, err
-		}
-		if err := atomicfile.Write(artifact.Destination, body, 0o600, 0o700); err != nil {
-			return PromoteResult{}, err
-		}
-		if err := ensureRuntimeArtifactOwnership(artifact.ID, artifact.Destination); err != nil {
-			return PromoteResult{}, err
-		}
-		result.WrittenArtifacts = append(result.WrittenArtifacts, artifact.ID)
-		manifest.Records = append(manifest.Records, record)
-		if record.BackupPath != "" {
-			result.BackupArtifacts = append(result.BackupArtifacts, record.BackupPath)
-		}
-	}
-	for _, artifact := range request.RemoveArtifacts {
-		record, err := backupPromotionDestination(backupRoot, backupID, artifact)
-		if err != nil {
-			return PromoteResult{}, err
-		}
-		if err := os.Remove(artifact.Destination); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return PromoteResult{}, err
-		}
-		result.RemovedArtifacts = append(result.RemovedArtifacts, artifact.ID)
-		manifest.Records = append(manifest.Records, record)
-		if record.BackupPath != "" {
-			result.BackupArtifacts = append(result.BackupArtifacts, record.BackupPath)
-		}
-	}
-	if len(result.WrittenArtifacts) > 0 || len(result.RemovedArtifacts) > 0 {
-		body, err := json.Marshal(manifest)
-		if err != nil {
-			return PromoteResult{}, err
-		}
-		if err := atomicfile.Write(filepath.Join(backupRoot, backupID, "manifest.json"), body, 0o600, 0o700); err != nil {
-			return PromoteResult{}, err
-		}
-		result.BackupID = backupID
-	}
-	return result, nil
+	return executePromotionTransactionFenced(backupRoot, now, "promotion", request.Artifacts, request.RemoveArtifacts,
+		request.FenceGeneration, request.ValidateDestination)
 }
 
 type promotionManifest struct {
-	BackupID string                    `json:"backupId"`
-	Records  []promotionManifestRecord `json:"records"`
+	Version       int                       `json:"version,omitempty"`
+	TransactionID string                    `json:"transactionId,omitempty"`
+	BackupID      string                    `json:"backupId"`
+	Kind          string                    `json:"kind,omitempty"`
+	Phase         string                    `json:"phase,omitempty"`
+	Records       []promotionManifestRecord `json:"records"`
 }
 
 type promotionManifestRecord struct {
-	ArtifactID  string `json:"artifactId"`
-	Destination string `json:"destination"`
-	BackupPath  string `json:"backupPath,omitempty"`
-	HadPrevious bool   `json:"hadPrevious"`
+	TransactionID string `json:"transactionId,omitempty"`
+	ArtifactID    string `json:"artifactId"`
+	Destination   string `json:"destination"`
+	BackupPath    string `json:"backupPath,omitempty"`
+	SafetyPath    string `json:"safetyPath,omitempty"`
+	HadPrevious   bool   `json:"hadPrevious"`
+	OldDigest     string `json:"oldDigest,omitempty"`
+	NewDigest     string `json:"newDigest,omitempty"`
+	Operation     string `json:"operation,omitempty"`
+	Phase         string `json:"phase,omitempty"`
+	WasSymlink    bool   `json:"wasSymlink,omitempty"`
+	OldLinkTarget string `json:"oldLinkTarget,omitempty"`
 }
 
 func backupPromotionDestination(root, backupID string, artifact ResolvedArtifact) (promotionManifestRecord, error) {
@@ -459,11 +586,16 @@ func backupPromotionDestination(root, backupID string, artifact ResolvedArtifact
 		return promotionManifestRecord{}, err
 	}
 	record.BackupPath = path
+	record.SafetyPath = path
 	record.HadPrevious = true
+	record.OldDigest = promotionDigest(body)
 	return record, nil
 }
 
 func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
+	if err := recoverPromotionTransaction(root); err != nil {
+		return PromoteResult{}, fmt.Errorf("recover interrupted promotion: %w", err)
+	}
 	body, err := os.ReadFile(filepath.Join(root, backupID, "manifest.json"))
 	if err != nil {
 		return PromoteResult{}, err
@@ -475,24 +607,55 @@ func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
 	if manifest.BackupID != backupID {
 		return PromoteResult{}, errors.New("promotion backup manifest mismatch")
 	}
-	result := PromoteResult{BackupID: backupID}
+	writes := make([]ResolvedArtifact, 0, len(manifest.Records))
+	removes := make([]ResolvedArtifact, 0, len(manifest.Records))
 	for _, record := range manifest.Records {
+		if record.ArtifactID == "" || record.Destination == "" {
+			return PromoteResult{}, errors.New("promotion backup manifest has an invalid record")
+		}
 		if record.HadPrevious {
-			previous, err := readManagedConfigFile(record.BackupPath)
+			if record.WasSymlink {
+				if record.OldLinkTarget == "" {
+					return PromoteResult{}, errors.New("promotion backup symlink metadata is invalid")
+				}
+				if record.OldDigest != "" && promotionDigest([]byte(record.OldLinkTarget)) != record.OldDigest {
+					return PromoteResult{}, fmt.Errorf("promotion backup symlink digest mismatch for %s", record.ArtifactID)
+				}
+				writes = append(writes, ResolvedArtifact{ID: record.ArtifactID, Destination: record.Destination, SymlinkTarget: record.OldLinkTarget})
+				continue
+			}
+			source := record.SafetyPath
+			if source == "" {
+				source = record.BackupPath
+			}
+			if source == "" || !pathWithin(root, source) {
+				return PromoteResult{}, errors.New("promotion backup manifest safety path is invalid")
+			}
+			previous, err := readManagedConfigFile(source)
 			if err != nil {
 				return PromoteResult{}, err
 			}
-			if err := atomicfile.Write(record.Destination, previous, 0o600, 0o700); err != nil {
-				return PromoteResult{}, err
+			if record.OldDigest != "" && promotionDigest(previous) != record.OldDigest {
+				return PromoteResult{}, fmt.Errorf("promotion backup digest mismatch for %s", record.ArtifactID)
 			}
-			if err := ensureRuntimeArtifactOwnership(record.ArtifactID, record.Destination); err != nil {
-				return PromoteResult{}, err
-			}
-		} else if err := os.Remove(record.Destination); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return PromoteResult{}, err
+			writes = append(writes, ResolvedArtifact{ID: record.ArtifactID, Source: source, Destination: record.Destination})
+		} else {
+			removes = append(removes, ResolvedArtifact{ID: record.ArtifactID, Destination: record.Destination})
 		}
+	}
+	result, err := executePromotionTransaction(root, time.Now, "rollback", writes, removes)
+	if err != nil {
+		return PromoteResult{}, err
+	}
+	result.BackupID = backupID
+	// Historical callers treat both restored and removed destinations as written
+	// rollback artifacts. Preserve that API while the transaction manifest keeps
+	// the exact operation kind.
+	result.WrittenArtifacts = result.WrittenArtifacts[:0]
+	for _, record := range manifest.Records {
 		result.WrittenArtifacts = append(result.WrittenArtifacts, record.ArtifactID)
 	}
+	result.RemovedArtifacts = nil
 	return result, nil
 }
 
@@ -565,6 +728,121 @@ func grantPanelReadAccessToCaddyArtifact(path string) error {
 	return nil
 }
 
+type backupReadSession struct {
+	file            *os.File
+	archiveName     string
+	size            int64
+	createdAt       string
+	contentDigest   string
+	inodeGeneration string
+	expiresAt       time.Time
+}
+
+var backupReadSessionRegistry = struct {
+	sync.Mutex
+	sessions map[string]*backupReadSession
+}{sessions: make(map[string]*backupReadSession)}
+
+func readBackupArchiveFromStableDescriptor(config ProductionConfig, request ResolvedBackup) (BackupResult, error) {
+	maxBytes, err := configuredBackupMaxBytes(config)
+	if err != nil {
+		return BackupResult{}, err
+	}
+	backupReadSessionRegistry.Lock()
+	defer backupReadSessionRegistry.Unlock()
+	now := time.Now().UTC()
+	if config.Now != nil {
+		now = config.Now().UTC()
+	}
+	for id, session := range backupReadSessionRegistry.sessions {
+		if !session.expiresAt.After(now) {
+			_ = session.file.Close()
+			delete(backupReadSessionRegistry.sessions, id)
+		}
+	}
+	transactionID := request.TransactionID
+	session := backupReadSessionRegistry.sessions[transactionID]
+	if transactionID == "" {
+		if request.Offset != 0 {
+			return BackupResult{}, errors.New("backup read transaction must start at offset zero")
+		}
+		file, openErr := openRegularNoFollow(request.ArchivePath)
+		if openErr != nil {
+			return BackupResult{}, openErr
+		}
+		info, statErr := file.Stat()
+		if statErr != nil {
+			_ = file.Close()
+			return BackupResult{}, statErr
+		}
+		if !info.Mode().IsRegular() || info.Size() > maxBytes {
+			_ = file.Close()
+			return BackupResult{}, errors.New("backup archive violates regular-file or size policy")
+		}
+		hash := sha256.New()
+		if _, copyErr := io.Copy(hash, file); copyErr != nil {
+			_ = file.Close()
+			return BackupResult{}, copyErr
+		}
+		identity := "unknown"
+		if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+			identity = fmt.Sprintf("%d:%d:%d:%d", stat.Dev, stat.Ino, stat.Ctim.Sec, stat.Ctim.Nsec)
+		}
+		idBytes := make([]byte, 16)
+		if _, randomErr := rand.Read(idBytes); randomErr != nil {
+			_ = file.Close()
+			return BackupResult{}, randomErr
+		}
+		transactionID = hex.EncodeToString(idBytes)
+		session = &backupReadSession{
+			file: file, archiveName: request.ArchiveName, size: info.Size(),
+			createdAt:     info.ModTime().UTC().Format(time.RFC3339),
+			contentDigest: hex.EncodeToString(hash.Sum(nil)), inodeGeneration: identity,
+			expiresAt: now.Add(5 * time.Minute),
+		}
+		backupReadSessionRegistry.sessions[transactionID] = session
+	} else if session == nil || session.archiveName != request.ArchiveName {
+		return BackupResult{}, errors.New("backup read transaction is unknown or mismatched")
+	}
+	if request.Offset < 0 || request.Offset > session.size {
+		return BackupResult{}, errors.New("backup read offset exceeds bound archive size")
+	}
+	limit := request.Limit
+	if limit == 0 {
+		limit = maxBackupReadChunkBytes
+	}
+	if limit < 0 || limit > maxBackupReadChunkBytes {
+		return BackupResult{}, errors.New("backup read limit is invalid")
+	}
+	remaining := session.size - request.Offset
+	if limit > remaining {
+		limit = remaining
+	}
+	data := make([]byte, int(limit))
+	if limit > 0 {
+		n, readErr := session.file.ReadAt(data, request.Offset)
+		if readErr != nil && readErr != io.EOF {
+			return BackupResult{}, readErr
+		}
+		if int64(n) != limit {
+			return BackupResult{}, io.ErrUnexpectedEOF
+		}
+	}
+	more := request.Offset+int64(len(data)) < session.size
+	session.expiresAt = now.Add(5 * time.Minute)
+	result := BackupResult{
+		ArchiveName: request.ArchiveName,
+		Archives:    []BackupArchive{{Name: request.ArchiveName, Size: session.size, CreatedAt: session.createdAt}},
+		Data:        data, More: more, TransactionID: transactionID, ContentDigest: session.contentDigest,
+		InodeGeneration: session.inodeGeneration, BoundSize: session.size,
+	}
+	if !more {
+		_ = session.file.Close()
+		delete(backupReadSessionRegistry.sessions, transactionID)
+	}
+	return result, nil
+}
+
 func runProductionBackup(_ context.Context, config ProductionConfig, request ResolvedBackup) (BackupResult, error) {
 	switch request.Action {
 	case BackupActionList:
@@ -580,19 +858,7 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 		}
 		return result, nil
 	case BackupActionRead:
-		file, err := os.Open(request.ArchivePath)
-		if err != nil {
-			return BackupResult{}, err
-		}
-		defer file.Close()
-		data, err := io.ReadAll(io.LimitReader(file, maxBackupReadBytes+1))
-		if err != nil {
-			return BackupResult{}, err
-		}
-		if int64(len(data)) > maxBackupReadBytes {
-			return BackupResult{}, errors.New("backup archive exceeds helper size limit")
-		}
-		return BackupResult{ArchiveName: request.ArchiveName, Data: data}, nil
+		return readBackupArchiveFromStableDescriptor(config, request)
 	case BackupActionPrune:
 		policy := backup.RetentionPolicy{Daily: request.Daily, Weekly: request.Weekly, Monthly: request.Monthly}
 		if request.Daily == 0 && request.Weekly == 0 && request.Monthly == 0 {
@@ -603,8 +869,16 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 			return BackupResult{}, err
 		}
 		return BackupResult{Pruned: pruned.Deleted, Kept: pruned.Kept}, nil
+	case BackupActionDelete:
+		if err := backup.DeleteArchive(request.BackupRoot, request.ArchiveName); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return BackupResult{}, newError(ErrorNotFound, "backup archive not found")
+			}
+			return BackupResult{}, err
+		}
+		return BackupResult{ArchiveName: request.ArchiveName, Pruned: []string{request.ArchiveName}}, nil
 	}
-	passphraseBody, err := os.ReadFile(request.BackupPassphrasePath)
+	passphraseBody, err := readBoundedRegularFile(request.BackupPassphrasePath, maxBackupPassphraseBytes)
 	if err != nil {
 		return BackupResult{}, fmt.Errorf("read backup passphrase: %w", err)
 	}
@@ -612,60 +886,162 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 	if len(passphrase) < 16 {
 		return BackupResult{}, errors.New("configured backup passphrase is too short")
 	}
+	maxBytes, err := configuredBackupMaxBytes(config)
+	if err != nil {
+		return BackupResult{}, err
+	}
 	switch request.Action {
 	case BackupActionCreate:
-		data, err := backup.CreateBackupWithOptions(request.StatePath, request.KeyPath, passphrase, backup.ArchiveOptions{
-			VeilVersion: config.VeilVersion,
-			CreatedAt:   config.Now().UTC(),
-		})
-		if err != nil {
-			return BackupResult{}, err
-		}
-		if _, err := backup.VerifyBackup(data, passphrase); err != nil {
-			return BackupResult{}, err
+		createdAt := config.Now().UTC()
+		databasePath := request.DatabasePath
+		if databasePath == "" {
+			databasePath = filepath.Join(filepath.Dir(request.StatePath), "veil.db")
 		}
 		name := request.ArchiveName
 		if name == "" {
-			name = "veil_backup_" + config.Now().UTC().Format("20060102_150405") + ".tar.gz.enc"
+			name, err = generatedBackupArchiveName(createdAt)
+			if err != nil {
+				return BackupResult{}, err
+			}
 		}
-		if err := atomicfile.Write(filepath.Join(request.BackupRoot, name), data, 0o600, 0o700); err != nil {
+		if err := os.MkdirAll(request.BackupRoot, 0o700); err != nil {
 			return BackupResult{}, err
 		}
-		return BackupResult{ArchiveName: name, Verified: true}, nil
+		pending, err := os.CreateTemp(request.BackupRoot, ".veil-backup-pending-*")
+		if err != nil {
+			return BackupResult{}, err
+		}
+		pendingPath := pending.Name()
+		if err := pending.Close(); err != nil {
+			_ = os.Remove(pendingPath)
+			return BackupResult{}, err
+		}
+		_ = os.Remove(pendingPath)
+		defer os.Remove(pendingPath)
+		if err := backup.CreateBackupFileWithOptions(pendingPath, request.StatePath, request.KeyPath, passphrase, backup.ArchiveOptions{
+			VeilVersion: config.VeilVersion, CreatedAt: createdAt,
+			DatabasePath: databasePath, MaxBytes: maxBytes,
+		}); err != nil {
+			return BackupResult{}, err
+		}
+		report, err := backup.VerifyBackupFile(pendingPath, passphrase, maxBytes)
+		if err != nil {
+			return BackupResult{}, err
+		}
+		archivePath := filepath.Join(request.BackupRoot, name)
+		// pendingPath and archivePath are in the same directory. Linking publishes
+		// the verified inode atomically and fails with EEXIST instead of replacing
+		// an archive created concurrently by the API, timer, or another helper.
+		if err := os.Link(pendingPath, archivePath); err != nil {
+			return BackupResult{}, err
+		}
+		if err := os.Remove(pendingPath); err != nil {
+			return BackupResult{}, err
+		}
+		if err := syncBackupDirectory(request.BackupRoot); err != nil {
+			return BackupResult{}, err
+		}
+		return BackupResult{ArchiveName: name, Verified: true, Verification: privilegedBackupVerification(report)}, nil
 	case BackupActionVerify:
-		data, err := os.ReadFile(request.ArchivePath)
+		if err := backup.PreflightVerifySpace(request.ArchivePath, maxBytes); err != nil {
+			return BackupResult{}, err
+		}
+		report, err := backup.VerifyBackupFile(request.ArchivePath, passphrase, maxBytes)
 		if err != nil {
 			return BackupResult{}, err
 		}
-		if _, err := backup.VerifyBackup(data, passphrase); err != nil {
-			return BackupResult{}, err
-		}
-		return BackupResult{ArchiveName: request.ArchiveName, Verified: true}, nil
+		return BackupResult{ArchiveName: request.ArchiveName, Verified: true, Verification: privilegedBackupVerification(report)}, nil
 	case BackupActionRestore:
-		data, err := os.ReadFile(request.ArchivePath)
-		if err != nil {
-			return BackupResult{}, err
+		databasePath := request.DatabasePath
+		if databasePath == "" {
+			databasePath = filepath.Join(filepath.Dir(request.StatePath), "veil.db")
 		}
-		restored, err := backup.RestoreBackupWithOptions(
-			data,
+		if request.CheckOnly {
+			if err := backup.PreflightVerifySpace(request.ArchivePath, maxBytes); err != nil {
+				return BackupResult{}, err
+			}
+		} else if err := backup.PreflightRestoreSpace(request.ArchivePath, request.StatePath, request.KeyPath, databasePath, maxBytes); err != nil {
+			return BackupResult{}, err
+		} else if _, err := backup.PruneRestoreSafetyFiles(request.StatePath, request.KeyPath, databasePath, 2); err != nil {
+			return BackupResult{}, fmt.Errorf("prune restore safety files: %w", err)
+		}
+		restored, err := backup.RestoreBackupFileWithOptions(
+			request.ArchivePath,
 			request.StatePath,
 			request.KeyPath,
 			passphrase,
-			backup.RestoreOptions{CheckOnly: request.CheckOnly},
+			backup.RestoreOptions{CheckOnly: request.CheckOnly, DatabasePath: databasePath, MaxBytes: maxBytes,
+				FencingGeneration: request.FenceGeneration},
 		)
 		if err != nil {
 			return BackupResult{}, err
 		}
+		phase, outcome := "completed", "restored"
+		if request.CheckOnly {
+			phase, outcome = "check_completed", "verified"
+		}
 		return BackupResult{
-			ArchiveName:     request.ArchiveName,
-			Verified:        true,
-			Restored:        !request.CheckOnly,
-			SafetyStatePath: restored.SafetyStatePath,
-			SafetyKeyPath:   restored.SafetyKeyPath,
+			ArchiveName:        request.ArchiveName,
+			Verified:           true,
+			Restored:           !request.CheckOnly,
+			Phase:              phase,
+			Outcome:            outcome,
+			Verification:       privilegedBackupVerification(restored.Verification),
+			SafetyStatePath:    restored.SafetyStatePath,
+			SafetyKeyPath:      restored.SafetyKeyPath,
+			SafetyDatabasePath: restored.SafetyDatabasePath,
 		}, nil
 	default:
 		return BackupResult{}, errors.New("unsupported backup operation")
 	}
+}
+
+func generatedBackupArchiveName(createdAt time.Time) (string, error) {
+	var suffix [16]byte
+	if _, err := rand.Read(suffix[:]); err != nil {
+		return "", fmt.Errorf("generate backup archive identifier: %w", err)
+	}
+	return fmt.Sprintf(
+		"veil_backup_%s_%s.tar.gz.enc",
+		createdAt.UTC().Format("20060102_150405_000000000"),
+		hex.EncodeToString(suffix[:]),
+	), nil
+}
+
+func configuredBackupMaxBytes(config ProductionConfig) (int64, error) {
+	if config.BackupMaxBytes != 0 {
+		if config.BackupMaxBytes < 0 {
+			return 0, errors.New("configured backup size policy must be positive")
+		}
+		return config.BackupMaxBytes, nil
+	}
+	return backup.ConfiguredMaxBackupBytes()
+}
+
+func privilegedBackupVerification(report backup.VerificationReport) *BackupVerificationReport {
+	files := make([]BackupVerificationFile, 0, len(report.Files))
+	for _, file := range report.Files {
+		files = append(files, BackupVerificationFile{Name: file.Name, Size: file.Size, SHA256: file.SHA256})
+	}
+	createdAt := ""
+	if !report.CreatedAt.IsZero() {
+		createdAt = report.CreatedAt.UTC().Format(time.RFC3339)
+	}
+	return &BackupVerificationReport{
+		FormatVersion: report.FormatVersion, EncryptionVersion: report.EncryptionVersion,
+		Encrypted: report.Encrypted, Legacy: report.Legacy, CreatedAt: createdAt,
+		VeilVersion: report.VeilVersion, StateSchemaVersion: report.StateSchemaVersion,
+		DesiredRevision: report.DesiredRevision, Files: files,
+	}
+}
+
+func syncBackupDirectory(path string) error {
+	directory, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return directory.Sync()
 }
 
 // runSyncCaddyCert copies a Caddy-managed ACME certificate for domain into

@@ -3,18 +3,28 @@ package atomicfile
 import (
 	"os"
 	"path/filepath"
-	"runtime"
+
+	"github.com/mikkelchokolate/Veil/internal/testguard"
 )
 
 // test hooks; replaced by tests to inject errors without changing logic.
 var (
-	createTemp = os.CreateTemp
-	chmod      = os.Chmod
-	syncFile   = func(f *os.File) error { return f.Sync() }
-	closeFile  = func(f *os.File) error { return f.Close() }
+	createTemp    = os.CreateTemp
+	chmod         = os.Chmod
+	syncFile      = func(f *os.File) error { return f.Sync() }
+	closeFile     = func(f *os.File) error { return f.Close() }
+	syncDirectory = func(path string) error {
+		dir, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer dir.Close()
+		return dir.Sync()
+	}
 )
 
 func Write(path string, body []byte, mode os.FileMode, dirMode os.FileMode) error {
+	testguard.CheckPath(path)
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return err
@@ -48,18 +58,5 @@ func Write(path string, body []byte, mode os.FileMode, dirMode os.FileMode) erro
 		return err
 	}
 	committed = true
-	bestEffortSyncDirectory(dir)
-	return nil
-}
-
-func bestEffortSyncDirectory(path string) {
-	if runtime.GOOS == "windows" {
-		return
-	}
-	dir, err := os.Open(path)
-	if err != nil {
-		return
-	}
-	defer dir.Close()
-	_ = dir.Sync()
+	return syncDirectory(dir)
 }

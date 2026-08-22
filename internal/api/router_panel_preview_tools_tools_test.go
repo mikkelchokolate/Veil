@@ -22,7 +22,7 @@ func TestSpeedtestEndpointRunsConfiguredRunner(t *testing.T) {
 	}
 	defer func() { speedtestRunner = old }()
 
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodPost, "/api/tools/speedtest", nil)
 	w := httptest.NewRecorder()
 
@@ -50,7 +50,7 @@ func TestSpeedtestEndpointReportsRunnerError(t *testing.T) {
 	}
 	defer func() { speedtestRunner = old }()
 
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	req := httptest.NewRequest(http.MethodPost, "/api/tools/speedtest", nil)
 	w := httptest.NewRecorder()
 
@@ -62,7 +62,7 @@ func TestSpeedtestEndpointReportsRunnerError(t *testing.T) {
 }
 
 func TestSpeedtestEndpointRejectsInvalidContentType(t *testing.T) {
-	handler, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: filepath.Join(t.TempDir(), "state.json")})
+	handler, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: filepath.Join(t.TempDir(), "state.json")})
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
@@ -81,7 +81,7 @@ func TestDNSLookupEndpoint(t *testing.T) {
 	defer func() { dnsLookuper = orig }()
 
 	t.Run("POST resolves hostname", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
+		r, _ := newTestRouter(ServerInfo{Version: "test"})
 		dnsLookuper = func(host string) ([]string, string, error) {
 			return []string{"93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946"}, "example.com.", nil
 		}
@@ -118,7 +118,7 @@ func TestDNSLookupEndpoint(t *testing.T) {
 	})
 
 	t.Run("POST returns error for NXDOMAIN", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
+		r, _ := newTestRouter(ServerInfo{Version: "test"})
 		dnsLookuper = func(host string) ([]string, string, error) {
 			return nil, "", errors.New("lookup none.such.invalid: no such host")
 		}
@@ -145,7 +145,7 @@ func TestDNSLookupEndpoint(t *testing.T) {
 	})
 
 	t.Run("POST rejects missing hostname", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
+		r, _ := newTestRouter(ServerInfo{Version: "test"})
 		body := strings.NewReader(`{}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/tools/dns-lookup", body)
 		req.Header.Set("Content-Type", "application/json")
@@ -158,7 +158,7 @@ func TestDNSLookupEndpoint(t *testing.T) {
 	})
 
 	t.Run("POST rejects empty hostname", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
+		r, _ := newTestRouter(ServerInfo{Version: "test"})
 		body := strings.NewReader(`{"hostname":""}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/tools/dns-lookup", body)
 		req.Header.Set("Content-Type", "application/json")
@@ -171,7 +171,7 @@ func TestDNSLookupEndpoint(t *testing.T) {
 	})
 
 	t.Run("GET returns method not allowed", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
+		r, _ := newTestRouter(ServerInfo{Version: "test"})
 		req := httptest.NewRequest(http.MethodGet, "/api/tools/dns-lookup", nil)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
@@ -186,7 +186,7 @@ func TestFirewallEndpoint(t *testing.T) {
 	orig := firewallStatusReader
 	defer func() { firewallStatusReader = orig }()
 
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 
 	// Configure settings with a panel port
 	settingsBody := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"server"}`)
@@ -286,7 +286,7 @@ func TestPingEndpoint(t *testing.T) {
 	defer func() { pingRunner = orig }()
 
 	t.Run("POST pings successfully", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
+		r, _ := newTestRouter(ServerInfo{Version: "test"})
 		pingRunner = func(host string, count int) PingResult {
 			return PingResult{
 				Host:        host,
@@ -327,7 +327,7 @@ func TestPingEndpoint(t *testing.T) {
 	})
 
 	t.Run("POST pings with packet loss", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
+		r, _ := newTestRouter(ServerInfo{Version: "test"})
 		pingRunner = func(host string, count int) PingResult {
 			return PingResult{
 				Host:        host,
@@ -359,7 +359,7 @@ func TestPingEndpoint(t *testing.T) {
 	})
 
 	t.Run("POST rejects missing host", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
+		r, _ := newTestRouter(ServerInfo{Version: "test"})
 		body := strings.NewReader(`{"count":3}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/tools/ping", body)
 		req.Header.Set("Content-Type", "application/json")
@@ -372,7 +372,7 @@ func TestPingEndpoint(t *testing.T) {
 	})
 
 	t.Run("POST rejects empty host", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
+		r, _ := newTestRouter(ServerInfo{Version: "test"})
 		body := strings.NewReader(`{"host":""}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/tools/ping", body)
 		req.Header.Set("Content-Type", "application/json")
@@ -385,7 +385,7 @@ func TestPingEndpoint(t *testing.T) {
 	})
 
 	t.Run("POST rejects count above 10", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
+		r, _ := newTestRouter(ServerInfo{Version: "test"})
 		body := strings.NewReader(`{"host":"8.8.8.8","count":20}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/tools/ping", body)
 		req.Header.Set("Content-Type", "application/json")
@@ -398,7 +398,7 @@ func TestPingEndpoint(t *testing.T) {
 	})
 
 	t.Run("GET returns method not allowed", func(t *testing.T) {
-		r, _ := NewRouter(ServerInfo{Version: "test"})
+		r, _ := newTestRouter(ServerInfo{Version: "test"})
 		req := httptest.NewRequest(http.MethodGet, "/api/tools/ping", nil)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 )
 
 type FileCopier struct{}
@@ -32,10 +33,16 @@ func (FileCopier) Copy(src, dst string, mode os.FileMode) error {
 	if err != nil {
 		return fmt.Errorf("create destination: %w", err)
 	}
-	defer dstFile.Close()
-
 	if _, err := fileCopierCopy(dstFile, srcFile); err != nil {
+		_ = dstFile.Close()
 		return fmt.Errorf("copy: %w", err)
 	}
-	return fileCopierSync(dstFile)
+	if err := fileCopierSync(dstFile); err != nil {
+		_ = dstFile.Close()
+		return err
+	}
+	if err := dstFile.Close(); err != nil {
+		return err
+	}
+	return syncDirectory(filepath.Dir(dst))
 }

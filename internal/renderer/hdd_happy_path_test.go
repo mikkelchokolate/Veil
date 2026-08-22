@@ -59,12 +59,30 @@ func TestRenderCaddyJSON_NaiveTCP443HappyPath(t *testing.T) {
 	}
 
 	routes := server["routes"].([]any)
-	if len(routes) != 1 {
-		t.Fatalf("expected exactly one route, got %d", len(routes))
+	// Host matcher stays on a file_server route so Caddy still discovers the
+	// inbound domain for certificates (audit #122). forward_proxy must be
+	// unmatched: CONNECT uses the destination as Host.
+	if len(routes) != 2 {
+		t.Fatalf("expected 2 routes (host-matched file_server + unmatched proxy), got %d", len(routes))
 	}
-	route := routes[0].(map[string]any)
-	if _, hasMatch := route["match"]; hasMatch {
-		t.Error("naive server route must not contain a host matcher")
+	certRoute := routes[0].(map[string]any)
+	matches, ok := certRoute["match"].([]any)
+	if !ok || len(matches) != 1 {
+		t.Fatalf("cert-discovery route must carry a host matcher: %v", certRoute)
+	}
+	hostMatch := matches[0].(map[string]any)
+	hosts, ok := hostMatch["host"].([]any)
+	if !ok || len(hosts) != 1 || hosts[0] != "vpn.example.com" {
+		t.Fatalf("host matcher = %v, want [vpn.example.com]", hostMatch)
+	}
+	certHandlers := certRoute["handle"].([]any)
+	if len(certHandlers) != 1 || certHandlers[0].(map[string]any)["handler"] != "file_server" {
+		t.Fatalf("cert-discovery handlers = %v, want file_server", certHandlers)
+	}
+
+	route := routes[1].(map[string]any)
+	if _, matched := route["match"]; matched {
+		t.Fatalf("forward_proxy route must be unmatched so CONNECT sees destination hosts: %v", route)
 	}
 
 	handlers := route["handle"].([]any)

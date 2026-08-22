@@ -7,6 +7,8 @@ import (
 	"net"
 	"strconv"
 	"strings"
+
+	"github.com/mikkelchokolate/Veil/internal/routing"
 )
 
 type WarpSingBoxConfig struct {
@@ -100,6 +102,10 @@ func RenderWarpSingBox(cfg WarpSingBoxConfig) (string, error) {
 				"type": "direct",
 				"tag":  "direct",
 			},
+			{
+				"type": "direct",
+				"tag":  "proxy",
+			},
 		},
 		"route": renderWarpRoute(cfg.RoutingRules),
 	}
@@ -123,34 +129,49 @@ func renderWarpRoute(rules []WarpRoutingRule) map[string]any {
 		if rule.Outbound == "" || rule.Match == "" {
 			continue
 		}
-		if rule.Match == "all" {
-			final = rule.Outbound
+		matchers, err := routing.ParseMatch(rule.Match)
+		if err != nil {
 			continue
 		}
-		item := map[string]any{"outbound": rule.Outbound}
-		switch {
-		case rule.Match == "geoip:private":
-			item["ip_is_private"] = true
-		case strings.HasPrefix(rule.Match, "geoip:"):
-			code := strings.TrimPrefix(rule.Match, "geoip:")
-			tag := "geoip-" + code
-			item["rule_set"] = tag
-			if !seen[tag] {
-				seen[tag] = true
-				ruleSets = append(ruleSets, geoRuleSet(tag, "geoip", code))
+		outbound := rule.Outbound
+		for _, matcher := range matchers {
+			if matcher.Kind == routing.MatchAll {
+				final = outbound
+				continue
 			}
-		case strings.HasPrefix(rule.Match, "geosite:"):
-			code := strings.TrimPrefix(rule.Match, "geosite:")
-			tag := "geosite-" + code
-			item["rule_set"] = tag
-			if !seen[tag] {
-				seen[tag] = true
-				ruleSets = append(ruleSets, geoRuleSet(tag, "geosite", code))
+			item := map[string]any{"outbound": outbound}
+			switch matcher.Kind {
+			case routing.MatchPrivateIP:
+				item["ip_is_private"] = true
+			case routing.MatchGeoIP:
+				tag := "geoip-" + matcher.Value
+				item["rule_set"] = tag
+				if !seen[tag] {
+					seen[tag] = true
+					ruleSets = append(ruleSets, geoRuleSet(tag, "geoip", matcher.Value))
+				}
+			case routing.MatchGeoSite:
+				tag := "geosite-" + matcher.Value
+				item["rule_set"] = tag
+				if !seen[tag] {
+					seen[tag] = true
+					ruleSets = append(ruleSets, geoRuleSet(tag, "geosite", matcher.Value))
+				}
+			case routing.MatchDomain:
+				item["domain"] = matcher.Value
+			case routing.MatchDomainSuffix:
+				item["domain_suffix"] = matcher.Value
+			case routing.MatchDomainKeyword:
+				item["domain_keyword"] = matcher.Value
+			case routing.MatchDomainRegex:
+				item["domain_regex"] = matcher.Value
+			case routing.MatchIPCIDR:
+				item["ip_cidr"] = []string{matcher.Value}
+			default:
+				continue
 			}
-		default:
-			item["domain"] = rule.Match
+			rendered = append(rendered, item)
 		}
-		rendered = append(rendered, item)
 	}
 	route := map[string]any{"final": final}
 	if len(rendered) > 0 {

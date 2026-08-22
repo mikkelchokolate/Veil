@@ -246,8 +246,18 @@ func TestServerDispatchesAllOperations(t *testing.T) {
 			}, wantOK: true,
 		},
 		{
+			name: "backup_delete", operation: OperationBackupDelete, payload: &BackupRequest{Action: BackupActionDelete, ArchiveName: "daily.enc"},
+			setup: func(e *Executor) {
+				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) { return BackupResult{}, nil }
+			}, wantOK: true,
+		},
+		{
 			name: "rotate_key", operation: OperationRotateKey, payload: &RotateKeyRequest{},
 			setup: func(e *Executor) { e.RotateKey = func(context.Context, RotateKeyRequest) error { return nil } }, wantOK: true,
+		},
+		{
+			name: "recover_key_rotation", operation: OperationRecoverKeyRotation, payload: &RecoverKeyRotationRequest{},
+			setup: func(e *Executor) { e.RecoverKeyRotation = func(context.Context) error { return nil } }, wantOK: true,
 		},
 		{
 			name: "firewall_apply", operation: OperationFirewallApply, payload: &FirewallRequest{RuleIDs: []string{"allow-mieru-tcp"}},
@@ -299,10 +309,12 @@ func TestServerDispatchesAllOperations(t *testing.T) {
 				request.ServiceStatus = tc.payload.(*ServiceStatusRequest)
 			case OperationJournal:
 				request.Journal = tc.payload.(*JournalRequest)
-			case OperationBackupCreate, OperationBackupList, OperationBackupVerify, OperationBackupRead, OperationBackupPrune, OperationBackupRestore:
+			case OperationBackupCreate, OperationBackupList, OperationBackupVerify, OperationBackupRead, OperationBackupPrune, OperationBackupRestore, OperationBackupDelete:
 				request.Backup = tc.payload.(*BackupRequest)
 			case OperationRotateKey:
 				request.RotateKey = tc.payload.(*RotateKeyRequest)
+			case OperationRecoverKeyRotation:
+				request.RecoverKeyRotation = tc.payload.(*RecoverKeyRotationRequest)
 			case OperationFirewallApply:
 				request.Firewall = tc.payload.(*FirewallRequest)
 			case OperationStageUpdate:
@@ -342,6 +354,7 @@ func TestBackupActionForOperation(t *testing.T) {
 		OperationBackupRead:    BackupActionRead,
 		OperationBackupPrune:   BackupActionPrune,
 		OperationBackupRestore: BackupActionRestore,
+		OperationBackupDelete:  BackupActionDelete,
 		OperationPromote:       "",
 	} {
 		if got := backupActionForOperation(op); got != want {

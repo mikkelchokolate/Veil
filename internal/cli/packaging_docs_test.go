@@ -77,9 +77,18 @@ func TestGitHubActionsArePinnedAndSecurityScanned(t *testing.T) {
 		t.Fatal(err)
 	}
 	ciWorkflow := strings.ReplaceAll(string(ci), "\r\n", "\n")
-	for _, want := range []string{"docker-build:", "Docker image build", "docker build", "veil:ci"} {
+	for _, want := range []string{"image-build:", "scripts/ci/image-build.sh"} {
 		if !strings.Contains(ciWorkflow, want) {
 			t.Fatalf("ci.yml missing Docker build verification %q", want)
+		}
+	}
+	imageBuild, err := os.ReadFile("../../scripts/ci/image-build.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"docker build", "veil:ci"} {
+		if !strings.Contains(string(imageBuild), want) {
+			t.Fatalf("scripts/ci/image-build.sh missing Docker build verification %q", want)
 		}
 	}
 
@@ -87,18 +96,18 @@ func TestGitHubActionsArePinnedAndSecurityScanned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"gomod", "docker", "github-actions"} {
+	for _, want := range []string{"gomod", "docker", "github-actions", "npm", "directory: /web", "directory: /test/browser"} {
 		if !strings.Contains(string(dependabot), want) {
 			t.Fatalf("dependabot.yml missing ecosystem %q", want)
 		}
 	}
 	dependabotConfig := strings.ReplaceAll(string(dependabot), "\r\n", "\n")
-	for _, want := range []string{"go-modules:", "container-images:", "github-actions-updates:"} {
+	for _, want := range []string{"go-modules:", "container-images:", "github-actions-updates:", "web-dependencies:", "browser-test-dependencies:"} {
 		if !strings.Contains(dependabotConfig, want) {
 			t.Fatalf("dependabot.yml missing grouped updates policy %q", want)
 		}
 	}
-	if got := strings.Count(dependabotConfig, "open-pull-requests-limit: 1"); got != 3 {
+	if got := strings.Count(dependabotConfig, "open-pull-requests-limit: 1"); got != 5 {
 		t.Fatalf("dependabot.yml should cap each ecosystem at one grouped PR, got %d limits", got)
 	}
 
@@ -321,9 +330,9 @@ func TestPrivilegeBoundaryDocumentation(t *testing.T) {
 			"`/run/veil/helper.sock`",
 		},
 		"../../docs/operations.md": {
-			"`PrivilegedErrorEnvelope`",
+			"`ErrorEnvelope`",
 			"`veil-helper.socket`",
-			"`text/plain`",
+			"application/json",
 		},
 		"../../docs/known-limitations.md": {
 			"bare-metal privileged helper",

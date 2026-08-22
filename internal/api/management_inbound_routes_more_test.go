@@ -39,7 +39,7 @@ func TestWriteInboundManagementError(t *testing.T) {
 		{inbounds.ErrInboundDuplicateTransportPort, http.StatusConflict, "transport/port already exists"},
 		{inbounds.ErrInboundUnsupportedProtocolTransport, http.StatusBadRequest, "unsupported inbound"},
 		{inbounds.ErrInboundNotFound, http.StatusNotFound, "404"},
-		{errors.New("custom failure"), http.StatusInternalServerError, "custom failure"},
+		{errors.New("custom failure"), http.StatusInternalServerError, "internal server error"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.err.Error(), func(t *testing.T) {
@@ -74,19 +74,6 @@ func TestHandleOlcrtcRoom(t *testing.T) {
 	state.handleProtocolRoom("olcrtc")(rec, get)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET status=%d", rec.Code)
-	}
-}
-
-func TestIsOlcrtcKey(t *testing.T) {
-	valid := strings.Repeat("a", 64)
-	if !isOlcrtcKey(valid) {
-		t.Fatal("expected valid key")
-	}
-	if isOlcrtcKey(strings.Repeat("g", 64)) {
-		t.Fatal("expected invalid hex")
-	}
-	if isOlcrtcKey(strings.Repeat("a", 63)) {
-		t.Fatal("expected invalid length")
 	}
 }
 

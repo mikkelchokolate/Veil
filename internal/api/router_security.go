@@ -51,28 +51,47 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		path := r.URL.Path
 		state.mu.Lock()
 		startupStateLoadFailed := state.startupStateLoadFailed
+		startupStateLoadErr := state.startupStateLoadErr
 		state.mu.Unlock()
 		if startupStateLoadFailed && strings.HasPrefix(path, "/api/") {
+			if privilegedHelperSocketUnavailable(startupStateLoadErr) {
+				writePrivilegedError(w, startupStateLoadErr)
+				return
+			}
 			writeError(w, "management state unavailable", http.StatusServiceUnavailable)
 			return
 		}
-
-		requiresAuth := strings.HasPrefix(path, "/api/")
-		if path == "/api/auth/login" ||
-			path == "/api/auth/logout" ||
-			path == "/api/auth/status" {
-			requiresAuth = false
-		}
-		if opts.AllowSetup && (path == "/api/setup/status" || path == "/api/setup/complete") {
-			requiresAuth = false
+		capability, known := capabilityForEndpoint(r.Method, path)
+		if !known {
+			writeError(w, "endpoint authorization policy is not defined", http.StatusNotFound)
+			return
 		}
 		if path == "/healthz" && opts.ProtectHealthz {
-			requiresAuth = true
+			capability = capabilityViewer
 		}
 		if path == "/metrics" && opts.ProtectMetrics {
-			requiresAuth = true
+			capability = capabilityViewer
 		}
-		if !requiresAuth {
+		if path == "/api/setup/complete" && !opts.AllowSetup {
+			capability = capabilityAdminMutation
+		}
+		if capability == capabilityPublic {
+			// Public endpoints short-circuit auth, but a mutating public
+			// request that arrives with a LIVE cookie session must still
+			// prove CSRF (audit #198: logout was revocable cross-site).
+			// Login has no session cookie yet; setup/complete runs before
+			// any session exists, so neither is affected.
+			if isMutatingRequest(r) {
+				if cookie, err := r.Cookie("veil_session"); err == nil {
+					if _, ok := state.sessionRegistry().Get(cookie.Value); ok {
+						providedCSRF := r.Header.Get("X-CSRF-Token")
+						if !state.sessionRegistry().ValidateCSRF(cookie.Value, providedCSRF) {
+							writeError(w, "invalid or missing CSRF token", http.StatusForbidden)
+							return
+						}
+					}
+				}
+			}
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -80,6 +99,7 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		var username string
 		var role string
 		var isCookieSession bool
+		var sessionToken string
 
 		hasStaticToken := false
 		if opts.Token != "" && validAuthToken(r, opts.Token) {
@@ -91,11 +111,33 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		if !hasStaticToken {
 			cookie, err := r.Cookie("veil_session")
 			if err == nil {
+				if healthErr := state.sessionRegistry().Healthy(); healthErr != nil {
+					writeError(w, "session storage unavailable", http.StatusServiceUnavailable)
+					return
+				}
+				sessionToken = cookie.Value
 				if sess, ok := state.sessionRegistry().Get(cookie.Value); ok {
 					username = sess.Username
 					role = sess.Role
 					isCookieSession = true
 				}
+			}
+		}
+
+		if isCookieSession {
+			state.mu.Lock()
+			matched := false
+			for _, user := range state.users {
+				if user.Username == username {
+					role = user.Role
+					matched = true
+					break
+				}
+			}
+			state.mu.Unlock()
+			if !matched {
+				state.sessionRegistry().Delete(sessionToken)
+				username, role, isCookieSession = "", "", false
 			}
 		}
 
@@ -115,8 +157,6 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 			return
 		}
 
-		// Cookie-session POST/PUT/DELETE requests always remain CSRF-protected,
-		// including read-only diagnostic POST actions available to viewers.
 		if isCookieSession && isMutatingRequest(r) {
 			providedCSRF := r.Header.Get("X-CSRF-Token")
 			if !state.sessionRegistry().ValidateCSRF(currentSessionToken(r), providedCSRF) {
@@ -124,12 +164,8 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 				return
 			}
 		}
-
-		// A small exact-path allowlist covers read-only operations that use POST
-		// only to carry structured input or trigger an in-memory preview. All
-		// actual state mutations still require admin.
-		if role != "admin" && isMutatingRequest(r) && !isSelfServiceMutation(r) && !isReadOnlyDiagnosticRequest(r) {
-			writeError(w, "forbidden: admin role required", http.StatusForbidden)
+		if !capabilityAllowsRole(capability, role) {
+			writeError(w, "forbidden: endpoint capability requires admin role", http.StatusForbidden)
 			return
 		}
 
@@ -137,17 +173,17 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		ctx = context.WithValue(ctx, contextKeyUsername, username)
 		ctx = context.WithValue(ctx, contextKeyRole, role)
 		r = r.WithContext(ctx)
-
 		next.ServeHTTP(w, r)
 	})
 }
 
 func isMutatingRequest(r *http.Request) bool {
-	return r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete
-}
-
-func isSelfServiceMutation(r *http.Request) bool {
-	return r.Method == http.MethodPost && r.URL.Path == "/api/auth/locale"
+	switch r.Method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
 }
 
 func isReadOnlyDiagnosticRequest(r *http.Request) bool {

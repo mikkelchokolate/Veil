@@ -39,6 +39,13 @@ func protocolString(m map[string]any, key, fallback string) string {
 	return strings.TrimSpace(s)
 }
 
+// olcrtcKey resolves the effective encryption key using the same precedence
+// as the dynamic inbound form: protocolFields wins over the legacy flat field.
+// Validation, server rendering and client export must agree on this value.
+func olcrtcKey(inbound model.Inbound) string {
+	return strings.TrimSpace(protocolString(inbound.ProtocolFields, "password", inbound.Password))
+}
+
 func olcrtcAuth(settings model.Settings, inbound model.Inbound) string {
 	auth := protocolString(inbound.ProtocolFields, "olcrtcAuth", "")
 	if auth == "" {

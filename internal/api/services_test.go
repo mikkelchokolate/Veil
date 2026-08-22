@@ -8,7 +8,7 @@ import (
 )
 
 func TestServicesRestartRejectsGet(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/services/veil/restart", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -18,7 +18,7 @@ func TestServicesRestartRejectsGet(t *testing.T) {
 }
 
 func TestServicesRestartRejectsInvalidService(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/services/evil/restart", strings.NewReader(`{"confirm":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -29,7 +29,7 @@ func TestServicesRestartRejectsInvalidService(t *testing.T) {
 }
 
 func TestServicesRestartRequiresConfirm(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/services/veil/restart", strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -46,7 +46,7 @@ func TestServicesRestartSuccess(t *testing.T) {
 	}
 	defer func() { serviceActionRunner = orig }()
 
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/services/caddy/restart", strings.NewReader(`{"confirm":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -64,7 +64,7 @@ func TestServicesRestartFailure(t *testing.T) {
 	}
 	defer func() { serviceActionRunner = orig }()
 
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/services/hysteria2/restart", strings.NewReader(`{"confirm":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -76,7 +76,7 @@ func TestServicesRestartFailure(t *testing.T) {
 }
 
 func TestServicesRejectsUnsupportedAction(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test"})
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/services/veil/stop", strings.NewReader(`{"confirm":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

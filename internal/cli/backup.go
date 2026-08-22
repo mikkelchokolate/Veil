@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,16 +64,6 @@ func newBackupCommand(version string) *cobra.Command {
 				return errors.New("backup encryption is required; provide --passphrase/--passphrase-file or explicitly use --allow-unencrypted")
 			}
 
-			backupData, err := backup.CreateBackupWithOptions(resolvedState, resolvedKey, resolvedPass, backup.ArchiveOptions{
-				VeilVersion: version,
-			})
-			if err != nil {
-				return fmt.Errorf("create backup failed: %w", err)
-			}
-			if _, err := backup.VerifyBackup(backupData, resolvedPass); err != nil {
-				return fmt.Errorf("verify generated backup failed: %w", err)
-			}
-
 			targetOutput := outputPath
 			if targetOutput != "" && outputDir != "" {
 				return errors.New("--output and --output-dir are mutually exclusive")
@@ -92,8 +83,19 @@ func newBackupCommand(version string) *cobra.Command {
 				}
 			}
 
-			if err := writeBackupArchive(targetOutput, backupData); err != nil {
-				return fmt.Errorf("write backup file: %w", err)
+			maxBytes, err := backup.ConfiguredMaxBackupBytes()
+			if err != nil {
+				return err
+			}
+			if err := backup.CreateBackupFileWithOptions(targetOutput, resolvedState, resolvedKey, resolvedPass, backup.ArchiveOptions{
+				VeilVersion: version,
+				MaxBytes:    maxBytes,
+			}); err != nil {
+				return fmt.Errorf("create backup failed: %w", err)
+			}
+			if _, err := backup.VerifyBackupFile(targetOutput, resolvedPass, maxBytes); err != nil {
+				_ = os.Remove(targetOutput)
+				return fmt.Errorf("verify generated backup failed: %w", err)
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Backup successfully created: %s\n", targetOutput)
@@ -131,12 +133,6 @@ func newBackupCommand(version string) *cobra.Command {
 				return err
 			}
 
-			// Read backup data
-			backupData, err := os.ReadFile(backupFile)
-			if err != nil {
-				return fmt.Errorf("read backup file %s: %w", backupFile, err)
-			}
-
 			if !checkOnly && !yes {
 				stat, err := os.Stdin.Stat()
 				if err != nil || (stat.Mode()&os.ModeCharDevice) == 0 {
@@ -156,12 +152,16 @@ func newBackupCommand(version string) *cobra.Command {
 				}
 			}
 
-			result, err := backup.RestoreBackupWithOptions(
-				backupData,
+			maxBytes, err := backup.ConfiguredMaxBackupBytes()
+			if err != nil {
+				return err
+			}
+			result, err := backup.RestoreBackupFileWithOptions(
+				backupFile,
 				resolvedState,
 				resolvedKey,
 				resolvedPass,
-				backup.RestoreOptions{CheckOnly: checkOnly},
+				backup.RestoreOptions{CheckOnly: checkOnly, MaxBytes: maxBytes},
 			)
 			if err != nil {
 				return fmt.Errorf("restore backup failed: %w", err)
@@ -192,11 +192,11 @@ func newBackupCommand(version string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			data, err := os.ReadFile(args[0])
+			maxBytes, err := backup.ConfiguredMaxBackupBytes()
 			if err != nil {
-				return fmt.Errorf("read backup file %s: %w", args[0], err)
+				return err
 			}
-			report, err := backup.VerifyBackup(data, resolvedPass)
+			report, err := backup.VerifyBackupFile(args[0], resolvedPass, maxBytes)
 			if err != nil {
 				return fmt.Errorf("verify backup failed: %w", err)
 			}
@@ -402,6 +402,7 @@ func printBackupVerification(cmd *cobra.Command, report backup.VerificationRepor
 		fmt.Fprintf(cmd.OutOrStdout(), "Veil version: %s\n", report.VeilVersion)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "State schema: %d\n", report.StateSchemaVersion)
+	fmt.Fprintf(cmd.OutOrStdout(), "Desired revision: %d\n", report.DesiredRevision)
 	for _, file := range report.Files {
 		fmt.Fprintf(cmd.OutOrStdout(), "- %s: %d bytes sha256:%s\n", file.Name, file.Size, file.SHA256)
 	}
@@ -412,7 +413,7 @@ func resolvePassphrase(pass, file string) (string, error) {
 		return "", errors.New("--passphrase and --passphrase-file are mutually exclusive")
 	}
 	if file != "" {
-		data, err := os.ReadFile(file)
+		data, err := readBackupPassphraseFile(file)
 		if err != nil {
 			return "", fmt.Errorf("read passphrase file: %w", err)
 		}
@@ -429,4 +430,28 @@ func resolvePassphrase(pass, file string) (string, error) {
 		return string(pwd), nil
 	}
 	return pass, nil
+}
+
+func readBackupPassphraseFile(path string) ([]byte, error) {
+	const maxPassphraseBytes int64 = 64 * 1024
+	file, err := openCLIRegularNoFollow(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, errors.New("passphrase file is not a regular file")
+	}
+	body, err := io.ReadAll(io.LimitReader(file, maxPassphraseBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > maxPassphraseBytes {
+		return nil, errors.New("passphrase file exceeds 65536-byte limit")
+	}
+	return body, nil
 }

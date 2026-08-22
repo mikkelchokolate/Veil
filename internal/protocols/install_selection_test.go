@@ -16,28 +16,33 @@ func TestInstallRuntimesForFiltersCatalogBeforeInstall(t *testing.T) {
 	r.Register(&mockRuntimeProvider{
 		mockPlugin: &mockPlugin{protocol: "alpha", displayName: "Alpha"},
 		runtime: runtimeinstall.Runtime{
-			Name:       "alpha",
-			Binary:     "alpha",
-			Method:     runtimeinstall.MethodRawBinary,
-			Repo:       "alpha/repo",
+			Name:    "alpha",
+			Binary:  "alpha",
+			Method:  runtimeinstall.MethodRawBinary,
+			Repo:    "alpha/repo",
+			Version: "v1", Integrity: "pinned-sha256", PinnedSHA256: "a8076d3d28d21e02012b20eaf7dbf75409a6277134439025f282e368e3305abf",
+			VersionArgs: []string{"--version"}, VersionCommand: "alpha --version", VersionPattern: `v1`,
 			AssetMatch: func(name string) bool { return name == "alpha" },
 		},
 	})
 	r.Register(&mockRuntimeProvider{
 		mockPlugin: &mockPlugin{protocol: "beta", displayName: "Beta"},
 		runtime: runtimeinstall.Runtime{
-			Name:       "beta",
-			Binary:     "beta",
-			Method:     runtimeinstall.MethodRawBinary,
-			Repo:       "beta/repo",
+			Name:    "beta",
+			Binary:  "beta",
+			Method:  runtimeinstall.MethodRawBinary,
+			Repo:    "beta/repo",
+			Version: "v1", Integrity: "pinned-sha256", PinnedSHA256: "a8076d3d28d21e02012b20eaf7dbf75409a6277134439025f282e368e3305abf",
+			VersionArgs: []string{"--version"}, VersionCommand: "beta --version", VersionPattern: `v1`,
 			AssetMatch: func(name string) bool { return name == "beta" },
 		},
 	})
 
 	var fetched []string
 	opts := runtimeinstall.Options{
-		BinDir: binDir,
-		Arch:   "amd64",
+		BinDir:     binDir,
+		Arch:       "amd64",
+		RunVersion: func(context.Context, string, []string) (string, error) { return "v1", nil },
 		FetchRelease: func(ctx context.Context, repo string) (*runtimeinstall.Release, error) {
 			fetched = append(fetched, repo)
 			if repo != "alpha/repo" {

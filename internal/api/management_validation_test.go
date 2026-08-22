@@ -35,7 +35,7 @@ func (busyPortProbe) Available(context.Context, string, int) (bool, error) {
 
 func TestValidationEndpointRequiresAuthentication(t *testing.T) {
 	validator := validStubValidator()
-	router, _ := NewRouter(ServerInfo{
+	router, _ := newTestRouter(ServerInfo{
 		Version:                "test",
 		Mode:                   "server",
 		AuthToken:              "secret-token",
@@ -64,7 +64,7 @@ func TestValidationEndpointRequiresAuthentication(t *testing.T) {
 
 func TestValidationEndpointRejectsViewerRole(t *testing.T) {
 	validator := validStubValidator()
-	router, reloader := NewRouter(ServerInfo{
+	router, reloader := newTestRouter(ServerInfo{
 		Version:                "test",
 		Mode:                   "server",
 		PublicListen:           true,
@@ -74,7 +74,7 @@ func TestValidationEndpointRejectsViewerRole(t *testing.T) {
 	state.mu.Lock()
 	state.users = []User{{Username: "reader", Role: "viewer"}}
 	state.mu.Unlock()
-	session := state.sessionRegistry().NewSession("reader", "viewer")
+	session := mustCreateSession(t, state.sessionRegistry(), "reader", "viewer")
 
 	request := httptest.NewRequest(http.MethodPost, "/api/validation", strings.NewReader(`{"settings":{},"inbounds":[],"warp":{}}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -89,7 +89,7 @@ func TestValidationEndpointRejectsViewerRole(t *testing.T) {
 }
 
 func TestValidationEndpointRejectsMalformedPayload(t *testing.T) {
-	router, _ := NewRouter(ServerInfo{
+	router, _ := newTestRouter(ServerInfo{
 		Version:                "test",
 		Mode:                   "dev",
 		ConfigurationValidator: validStubValidator(),
@@ -107,7 +107,7 @@ func TestValidationEndpointRejectsMalformedPayload(t *testing.T) {
 
 func TestValidationEndpointReturnsStructuredIssues(t *testing.T) {
 	validator := &stubConfigurationValidator{response: invalidValidationResponse()}
-	router, _ := NewRouter(ServerInfo{
+	router, _ := newTestRouter(ServerInfo{
 		Version:                "test",
 		Mode:                   "dev",
 		ConfigurationValidator: validator,
@@ -200,6 +200,7 @@ func TestInvalidLiveValidationStopsApplyBeforeStaging(t *testing.T) {
 }
 
 func TestLiveValidationAllowsUnchangedPersistedBinding(t *testing.T) {
+	stubManagementApplySideEffects(t)
 	state := newManagementState(ServerInfo{
 		Mode:        "dev",
 		PanelListen: "127.0.0.1:2096",
@@ -209,6 +210,11 @@ func TestLiveValidationAllowsUnchangedPersistedBinding(t *testing.T) {
 				return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC)
 			},
 		},
+	})
+	t.Cleanup(func() {
+		if err := closeClientSubsystem(state); err != nil {
+			t.Errorf("close live-validation state: %v", err)
+		}
 	})
 	state.inbounds = []Inbound{{
 		Name: "edge", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret",

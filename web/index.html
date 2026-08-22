@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta
+			name="description"
+			content="Veil panel. Sign in to manage clients, inbounds, routing, and apply."
+		/>
+		<link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+		<!--
+			The base href is rewritten by the Go server to the active WebBasePath
+			("/" or "/<secret>/") at serve time. Relative asset URLs then resolve
+			correctly under either mount point and /s/{token} stays outside the base.
+		-->
+		<base href="/" />
+		<title>Veil</title>
+	</head>
+	<body>
+		<div id="root">
+			<!--
+				Static login shell so first paint/LCP do not wait on the React
+				bundle. createRoot replaces this with LoginView (same markup).
+			-->
+			<main class="center-screen">
+				<form class="auth-card" method="post">
+					<h1>Veil</h1>
+					<div class="subtitle">Sign in to the panel</div>
+					<div class="form-field">
+						<label for="login-username">Username</label>
+						<input
+							id="login-username"
+							class="input"
+							autocomplete="username"
+							required
+						/>
+					</div>
+					<div class="form-field">
+						<label for="login-password">Password</label>
+						<input
+							id="login-password"
+							class="input"
+							type="password"
+							autocomplete="current-password"
+							required
+						/>
+					</div>
+					<button class="btn btn-primary" type="submit">Sign in</button>
+				</form>
+			</main>
+		</div>
+		<script type="module" src="./src/boot.ts"></script>
+	</body>
+</html>

@@ -9,7 +9,7 @@ import (
 )
 
 func TestRURecommendedPreviewRejectsOversizedJSONBody(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"domain":"` + strings.Repeat("a", 1024*1024+1) + `","email":"admin@example.com"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
 	w := httptest.NewRecorder()
@@ -22,7 +22,7 @@ func TestRURecommendedPreviewRejectsOversizedJSONBody(t *testing.T) {
 }
 
 func TestRURecommendedPreviewResponseOmitsRemovedStackFields(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com"}`)
 	w := httptest.NewRecorder()
 
@@ -39,7 +39,7 @@ func TestRURecommendedPreviewResponseOmitsRemovedStackFields(t *testing.T) {
 }
 
 func TestRURecommendedPreviewEndpointDefaultsToPanelOnly(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
 	w := httptest.NewRecorder()
@@ -59,7 +59,7 @@ func TestRURecommendedPreviewEndpointDefaultsToPanelOnly(t *testing.T) {
 }
 
 func TestRURecommendedPreviewEndpointRendersPanelCaddyAccess(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com","panelAccess":"caddy"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
 	w := httptest.NewRecorder()
@@ -82,22 +82,20 @@ func TestRURecommendedPreviewEndpointRendersPanelCaddyAccess(t *testing.T) {
 }
 
 func TestRURecommendedPreviewEndpointRejectsRemovedStackField(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"domain":"example.com","email":"admin@example.com","stack":"hysteria2"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
 
-	var errResp struct{ Message string }
-	_ = json.Unmarshal(w.Body.Bytes(), &errResp)
-	if w.Code != http.StatusBadRequest || !strings.Contains(errResp.Message, `json: unknown field "stack"`) {
+	if w.Code != http.StatusBadRequest || !strings.Contains(responseErrorMessage(t, w.Body.Bytes()), `json: unknown field "stack"`) {
 		t.Fatalf("expected removed stack field rejection, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
 func TestRURecommendedPreviewEndpointRequiresDomainEmailForPanelCaddy(t *testing.T) {
-	r, _ := NewRouter(ServerInfo{Version: "test", Mode: "dev"})
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"panelAccess":"caddy"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ru-recommended/preview", body)
 	w := httptest.NewRecorder()

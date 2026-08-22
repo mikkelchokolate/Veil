@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/backup"
+	"github.com/mikkelchokolate/Veil/internal/testutil/testdb"
 )
 
 func TestBackupVerifyAndRestoreCheckOnlyCLI(t *testing.T) {
@@ -61,6 +62,14 @@ func TestBackupVerifyAndRestoreCheckOnlyCLI(t *testing.T) {
 	}
 }
 
+func createCLIBackupDatabase(t *testing.T, statePath string) {
+	t.Helper()
+	db := testdb.CloneTo(t, filepath.Join(filepath.Dir(statePath), "veil.db"))
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func writeCLIBackupSource(t *testing.T) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -73,5 +82,6 @@ func writeCLIBackupSource(t *testing.T) (string, string) {
 	if err := os.WriteFile(keyPath, bytes.Repeat([]byte{0x4c}, 32), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	createCLIBackupDatabase(t, statePath)
 	return statePath, keyPath
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
@@ -31,13 +30,13 @@ func TestAtomicUserDeleteStopsWhenSessionPersistenceFails(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), errSessionRevocationPersistence.Error()) {
+	if responseErrorMessage(t, rec.Body.Bytes()) != "internal server error" {
 		t.Fatalf("unexpected body: %s", rec.Body.String())
 	}
 	if len(state.users) != 2 {
 		t.Fatalf("user was deleted despite revocation failure: %+v", state.users)
 	}
-	if _, ok := registry.Get(session.Token); !ok {
+	if !sessionPresentInMemory(registry, session.Token) {
 		t.Fatal("session disappeared despite rollback")
 	}
 }
@@ -96,7 +95,7 @@ func TestAtomicUserDeletePreservesLastAdministrator(t *testing.T) {
 	if len(state.users) != 1 {
 		t.Fatalf("last admin was deleted: %+v", state.users)
 	}
-	if _, ok := registry.Get(session.Token); !ok {
+	if !sessionPresentInMemory(registry, session.Token) {
 		t.Fatal("last admin session was revoked")
 	}
 }

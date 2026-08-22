@@ -1,6 +1,9 @@
 package service
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 type SystemdServiceStatusParser struct{}
 
@@ -26,6 +29,10 @@ func (SystemdServiceStatusParser) Parse(unit string, output string) ServiceRunti
 			if value != "" {
 				status.SubState = value
 			}
+		case "MainPID":
+			status.MainPID, _ = strconv.Atoi(value)
+		case "ExecMainStartTimestampMonotonic":
+			status.ExecMainStartMonotonic, _ = strconv.ParseUint(value, 10, 64)
 		}
 	}
 	return status
