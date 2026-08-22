@@ -1,10 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { apiFetch } from "../api/fetcher";
+import { ApiError, apiFetch } from "../api/fetcher";
 import { useI18n } from "../i18n/I18nContext";
+import { useAuth } from "./AuthContext";
 
 export function SetupView() {
 	const qc = useQueryClient();
+	const { refresh } = useAuth();
 	const { t } = useI18n();
 	const [username, setUsername] = useState("admin");
 	const [password, setPassword] = useState("");
@@ -35,7 +37,13 @@ export function SetupView() {
 				}),
 			});
 			await qc.invalidateQueries();
+			await refresh();
 		} catch (err) {
+			if (err instanceof ApiError && err.status === 409) {
+				await qc.invalidateQueries({ queryKey: ["setup"] });
+				await refresh();
+				return;
+			}
 			setError(err instanceof Error ? err.message : t("auth.setup.failed"));
 		} finally {
 			setBusy(false);

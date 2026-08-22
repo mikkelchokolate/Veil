@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError, type ApiValidationIssue, apiFetch } from "../api/fetcher";
 import type { ClientView, Inbound } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
@@ -168,6 +168,25 @@ export function InboundsPage() {
 		queryKey: ["protocols"],
 		queryFn: () => apiFetch("/api/protocols"),
 	});
+
+	useEffect(() => {
+		if (!creating && editing == null) return;
+		const schema =
+			protocolCatalog.data?.find((p) => p.protocol === form.protocol)
+				?.inboundFieldSchema ?? [];
+		setForm((prev) => {
+			const protocolFields = { ...prev.protocolFields };
+			let changed = false;
+			for (const field of schema) {
+				if (field.default != null && protocolFields[field.key] == null) {
+					protocolFields[field.key] = field.default;
+					changed = true;
+				}
+			}
+			return changed ? { ...prev, protocolFields } : prev;
+		});
+	}, [creating, editing, protocolCatalog.data, form.protocol]);
+
 	const clients = useQuery<{ items?: ClientView[] } | ClientView[]>({
 		queryKey: ["clients", "for-inbounds"],
 		queryFn: () => apiFetch("/api/v1/clients?pageSize=500"),
@@ -746,7 +765,13 @@ export function InboundsPage() {
 											</Badge>
 										</TableCell>
 										<TableCell>
-											{attached.length === 0 ? (
+											{clients.isError ? (
+												<span className="form-error">
+													{clients.error instanceof ApiError
+														? clients.error.message
+														: t("inbounds.clientsUnavailable")}
+												</span>
+											) : attached.length === 0 ? (
 												<span className="muted">—</span>
 											) : (
 												<span

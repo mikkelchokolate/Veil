@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { apiFetch } from "../api/fetcher";
 import { AuthProvider, useAuth } from "../auth/AuthContext";
 import { LoginView } from "../auth/LoginView";
@@ -182,5 +183,51 @@ describe("static login handoff", () => {
 				'"authenticated":false',
 			),
 		);
+	});
+
+	it("does not re-POST captured credentials when the translator identity changes", async () => {
+		const user = userEvent.setup();
+		window.__VEIL_PENDING_LOGIN = {
+			username: "admin",
+			password: "s3cret-pass",
+			submit: true,
+		};
+		let posts = 0;
+		server.use(
+			http.get("/api/auth/status", () =>
+				HttpResponse.json({ authenticated: false }),
+			),
+			http.post("/api/auth/login", () => {
+				posts += 1;
+				return HttpResponse.json({ csrfToken: "csrf" });
+			}),
+		);
+		function Tick() {
+			const [, setN] = useState(0);
+			return (
+				<>
+					<button type="button" onClick={() => setN((n) => n + 1)}>
+						tick
+					</button>
+					<LoginView />
+				</>
+			);
+		}
+		const qc = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={qc}>
+				<AuthProvider>
+					<I18nProvider>
+						<Tick />
+					</I18nProvider>
+				</AuthProvider>
+			</QueryClientProvider>,
+		);
+		await waitFor(() => expect(posts).toBe(1));
+		await user.click(screen.getByRole("button", { name: "tick" }));
+		await waitFor(() => expect(posts).toBe(1));
+		delete window.__VEIL_PENDING_LOGIN;
 	});
 });

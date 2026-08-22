@@ -207,7 +207,9 @@ export function ClientDetailPage() {
 				const enabledBindings = (c.bindings ?? []).filter((b) => b.enabled);
 				const quotaUnsupported = enabledBindings.some((b) => {
 					const ib = inboundList.find((item) => item.name === b.inboundId);
-					return ib?.protocol !== "hysteria2" || ib.enabled === false;
+					const proto = b.capability?.protocol ?? ib?.protocol;
+					if (proto == null) return false;
+					return proto !== "hysteria2" || ib?.enabled === false;
 				});
 				if (quotaUnsupported) {
 					throw new ApiError(400, t("clientDetail.quotaHy2Only"));

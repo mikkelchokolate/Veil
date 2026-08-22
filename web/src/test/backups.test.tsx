@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../api/fetcher";
 import { I18nProvider } from "../i18n/I18nContext";
 import { BackupsPage } from "../pages/BackupsPage";
 
@@ -10,7 +11,14 @@ const fetcherMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../api/fetcher", () => ({
-	ApiError: class ApiError extends Error {},
+	ApiError: class ApiError extends Error {
+		status: number;
+		body: unknown;
+		constructor(status: number, message: string) {
+			super(message);
+			this.status = status;
+		}
+	},
 	apiFetch: fetcherMocks.apiFetch,
 	apiUrl: fetcherMocks.apiUrl,
 }));
@@ -190,5 +198,66 @@ describe("BackupsPage", () => {
 		expect(
 			await screen.findByText(/failed to load restore job status/i),
 		).toBeInTheDocument();
+	});
+
+	it("surfaces a failed restore job when the poll returns the job as HTTP 500", async () => {
+		fetcherMocks.apiFetch.mockImplementation(
+			(path: string, init?: RequestInit) => {
+				if (path === "/api/backups") {
+					return Promise.resolve([
+						{
+							name: "veil-backup.enc",
+							size: 42,
+							createdAt: "2026-08-17T03:39:09Z",
+							encrypted: true,
+						},
+					]);
+				}
+				if (
+					path === "/api/backups/veil-backup.enc/restore" &&
+					init?.method === "POST"
+				) {
+					return Promise.resolve({
+						id: "job-1",
+						archive: "veil-backup.enc",
+						status: "queued",
+					});
+				}
+				if (path === "/api/backup-restore-jobs/job-1") {
+					const err = new ApiError(500, "disk full");
+					err.body = {
+						id: "job-1",
+						archive: "veil-backup.enc",
+						status: "failed",
+						error: "disk full",
+					};
+					return Promise.reject(err);
+				}
+				return Promise.resolve({});
+			},
+		);
+
+		const queryClient = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={queryClient}>
+				<I18nProvider>
+					<BackupsPage />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+
+		fireEvent.click(await screen.findByRole("button", { name: "Restore" }));
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Confirm restore" }),
+		);
+
+		expect(await screen.findByText("failed")).toBeInTheDocument();
+		expect(await screen.findByText("disk full")).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
+		expect(
+			screen.queryByText(/failed to load restore job status/i),
+		).not.toBeInTheDocument();
 	});
 });

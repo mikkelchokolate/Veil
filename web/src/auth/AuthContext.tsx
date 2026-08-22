@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import {
 	createContext,
 	type ReactNode,
@@ -30,6 +31,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+	const qc = useQueryClient();
 	const [session, setSession] = useState<Session | null>(null);
 	const [loading, setLoading] = useState(true);
 	const channelRef = useRef<BroadcastChannel | null>(null);
@@ -65,9 +67,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		setUnauthorizedHandler(() => {
 			setSession({ authenticated: false });
 			setCsrfToken(null);
+			qc.clear();
 		});
 		return () => setUnauthorizedHandler(null);
-	}, []);
+	}, [qc]);
 
 	useEffect(() => {
 		const onRefresh = () => void refresh();
@@ -153,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		} finally {
 			setSession({ authenticated: false });
 			setCsrfToken(null);
+			qc.clear();
 			try {
 				localStorage.removeItem("veil_spa");
 			} catch {
@@ -160,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			}
 			broadcastRefresh();
 		}
-	}, [broadcastRefresh]);
+	}, [broadcastRefresh, qc]);
 
 	const value = useMemo(
 		() => ({ session, loading, login, logout, refresh }),

@@ -69,7 +69,23 @@ export function BackupsPage() {
 	// Poll a queued/running restore job until it finishes.
 	const jobQuery = useQuery<RestoreJob>({
 		queryKey: ["backup-restore-job", activeJob?.id],
-		queryFn: () => apiFetch(`/api/backup-restore-jobs/${activeJob?.id}`),
+		queryFn: async () => {
+			try {
+				return await apiFetch<RestoreJob>(
+					`/api/backup-restore-jobs/${activeJob?.id}`,
+				);
+			} catch (err) {
+				if (
+					err instanceof ApiError &&
+					err.body &&
+					typeof err.body === "object" &&
+					"status" in (err.body as object)
+				) {
+					return err.body as RestoreJob;
+				}
+				throw err;
+			}
+		},
 		enabled:
 			!!activeJob &&
 			(activeJob.status === "queued" || activeJob.status === "running"),

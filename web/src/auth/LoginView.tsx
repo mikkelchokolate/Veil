@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { ApiError } from "../api/fetcher";
 import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nContext";
@@ -19,6 +19,7 @@ export function LoginView() {
 	const [password, setPassword] = useState(pending.password);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
+	const autoSubmitted = useRef(false);
 
 	async function submit(user: string, pass: string) {
 		setError(null);
@@ -39,6 +40,8 @@ export function LoginView() {
 
 	useEffect(() => {
 		if (!pending.submit || !pending.username || !pending.password) return;
+		if (autoSubmitted.current) return;
+		autoSubmitted.current = true;
 		let cancelled = false;
 		setBusy(true);
 		setError(null);

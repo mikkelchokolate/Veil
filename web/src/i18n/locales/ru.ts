@@ -159,6 +159,7 @@ export const ru: Record<string, string> = {
 	"inbounds.error.loadFailed": "Не удалось загрузить инбаунды",
 	"inbounds.empty": "Инбаунды не настроены.",
 	"inbounds.attachedClients": "Прикреплённые клиенты",
+	"inbounds.clientsUnavailable": "Не удалось загрузить прикреплённых клиентов.",
 	"inbounds.applyFailed": "ошибка применения",
 	"inbounds.saved": "сохранено",
 	"inbounds.desiredRev": "желаемая ревизия",

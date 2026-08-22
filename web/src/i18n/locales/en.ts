@@ -237,6 +237,7 @@ export const en: Record<string, string> = {
 	"inbounds.error.loadFailed": "Failed to load inbounds",
 	"inbounds.empty": "No inbounds configured.",
 	"inbounds.attachedClients": "Attached clients",
+	"inbounds.clientsUnavailable": "Could not load attached clients.",
 	"inbounds.applyFailed": "apply failed",
 	"inbounds.saved": "saved",
 	"inbounds.desiredRev": "desired rev",

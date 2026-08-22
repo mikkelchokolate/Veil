@@ -64,4 +64,37 @@ describe("InboundsPage create payload", () => {
 				?.masqueradeURL,
 		).toBe("https://www.bing.com/");
 	});
+
+	it("does not treat a failed attached-clients fetch as none", async () => {
+		server.use(
+			http.get("/api/inbounds", () =>
+				HttpResponse.json([
+					{
+						name: "edge",
+						protocol: "hysteria2",
+						transport: "udp",
+						port: 443,
+						enabled: true,
+					},
+				]),
+			),
+			http.get("/api/protocols", () =>
+				HttpResponse.json([
+					{
+						protocol: "hysteria2",
+						displayName: "Hysteria2",
+						transports: ["udp"],
+					},
+				]),
+			),
+			http.get("/api/v1/clients", () =>
+				HttpResponse.json(
+					{ error: { message: "clients down" } },
+					{ status: 500 },
+				),
+			),
+		);
+		renderInbounds();
+		expect(await screen.findByText(/clients down/i)).toBeInTheDocument();
+	});
 });
