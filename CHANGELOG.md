@@ -8,6 +8,12 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- The one-command installer now accepts checksum entries with either canonical
+  asset names or the legacy `./` prefix, while release manifests are generated
+  with canonical names. This fixes `Expected exactly one checksum ... got 0`.
+- Root-driven installs no longer preserve the GitHub Actions runner UID while
+  extracting the verified archive, so the secure binary handoff accepts the
+  downloaded regular file without weakening its ownership checks.
 - Normalized runtime credentials are now used consistently by global client
   links and subscriptions, so NaiveProxy links authenticate correctly.
 - NaiveProxy now uses the configured WARP SOCKS outbound, while routing rules
