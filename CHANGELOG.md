@@ -44,6 +44,9 @@ Clients, React Panel, backup/restore, protocol plugins, and isolated CI.
 - Tagged GitHub releases now build the Panel SPA (`web/dist`) before `go vet`
   and `go build`, so the published binary embeds the UI. The previous release
   path compiled the Go module without `make web` and failed `//go:embed all:dist`.
+- Release quality e2e now creates the `veil` system user before root
+  protocol data-path tests, and release browser-e2e uses the helper-backed CI
+  suite instead of a helper-less loopback panel.
 - The privileged helper (`veil-helper.service`) can now write to `/etc/ufw`,
   so firewall synchronization from the Panel (`/api/apply`) works in
   production. Previously the helper ran as root but was confined by

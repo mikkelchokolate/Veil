@@ -39,4 +39,12 @@ func TestReleaseWorkflowBuildsFrontendDistBeforeCompile(t *testing.T) {
 	if dist < 0 || vet < 0 || dist > vet {
 		t.Fatalf("frontend dist must be built before go vet so //go:embed all:dist succeeds")
 	}
+	for _, want := range []string{
+		"useradd --system --user-group --no-create-home --shell /usr/sbin/nologin veil",
+		"scripts/ci/browser-e2e.sh",
+	} {
+		if !strings.Contains(workflow, want) {
+			t.Errorf("release workflow missing %q", want)
+		}
+	}
 }
