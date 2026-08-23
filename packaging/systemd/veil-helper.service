@@ -29,5 +29,4 @@ RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-ReadOnlyPaths=/etc/veil
-ReadWritePaths=/etc/veil/generated /etc/veil/certs /etc/veil/state.key /var/lib/veil /usr/local/bin /etc/ufw
+ReadWritePaths=/etc/veil /var/lib/veil /usr/local/bin /etc/ufw

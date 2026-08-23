@@ -13,6 +13,10 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- Backup restore and state-key rotation can create sibling temp files next to
+  `/etc/veil/state.key`. The helper no longer marks `/etc/veil` read-only while
+  allowing only the key file itself, which failed with EROFS under
+  `ProtectSystem=strict`.
 - Panel Caddy now advertises only `h1`/`h2` on the Panel HTTPS port so HTTP/3
   does not occupy UDP 443 and block Hysteria2 Inbounds on that port.
 - Creating a Hysteria2 Inbound without an explicit port now defaults to UDP 443

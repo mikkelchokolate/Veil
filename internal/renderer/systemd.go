@@ -123,6 +123,8 @@ ReadWritePaths=/var/lib/veil
 [Install]
 WantedBy=multi-user.target
 `,
+		// Restore and key rotation write sibling temps next to state.key.
+		// Allowing only the key file itself is EROFS under ProtectSystem=strict.
 		UnitHelperService: `[Unit]
 Description=Veil privileged helper
 Requires=veil-helper.socket
@@ -154,8 +156,7 @@ RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-ReadOnlyPaths=` + cfg.EtcDir + `
-ReadWritePaths=` + path.Join(cfg.EtcDir, "generated") + ` ` + path.Join(cfg.EtcDir, "certs") + ` ` + path.Join(cfg.EtcDir, "state.key") + ` /var/lib/veil /usr/local/bin /etc/ufw
+ReadWritePaths=` + cfg.EtcDir + ` /var/lib/veil /usr/local/bin /etc/ufw
 `,
 		UnitHelperSocket: `[Unit]
 Description=Veil privileged helper socket
