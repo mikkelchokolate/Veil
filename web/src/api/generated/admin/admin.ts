@@ -156,6 +156,8 @@ export const getPostApiAdminRotateKeyUrl = () => {
  * Re-encrypts management state with a newly generated root-managed key.
  * Requires admin role and CSRF for cookie sessions. All browser sessions
  * except the initiating session are revoked after a successful rotation.
+ * Rotation advances the desired revision and runs the same apply job
+ * envelope as other management mutations so the panel does not stay Pending.
  * @summary Rotate the state-encryption key
  */
 export const postApiAdminRotateKey = async (emptyObject?: EmptyObject, options?: Parameters<typeof apiFetch>[1]): Promise<postApiAdminRotateKeyResponse> => {

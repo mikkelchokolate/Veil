@@ -598,7 +598,7 @@ export const getPostApiV1ClientsIdBindingsUrl = (id: string,) => {
 }
 
 /**
- * @summary Add a binding (optional credential)
+ * @summary Add a binding; empty credential is generated once
  */
 export const postApiV1ClientsIdBindings = async (id: string,
     postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdBindingsResponse> => {
@@ -681,7 +681,7 @@ export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof 
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary Add a binding (optional credential)
+ * @summary Add a binding; empty credential is generated once
  */
 
 export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(

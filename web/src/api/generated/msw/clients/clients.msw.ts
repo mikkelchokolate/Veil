@@ -598,7 +598,7 @@ export const getPostApiV1ClientsIdBindingsUrl = (id: string,) => {
 }
 
 /**
- * @summary Add a binding (optional credential)
+ * @summary Add a binding; empty credential is generated once
  */
 export const postApiV1ClientsIdBindings = async (id: string,
     postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdBindingsResponse> => {
@@ -654,7 +654,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiV1ClientsIdBindingsMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
     /**
- * @summary Add a binding (optional credential)
+ * @summary Add a binding; empty credential is generated once
  */
 export const usePostApiV1ClientsIdBindings = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError,{id: string;data: PostApiV1ClientsIdBindingsBody}, TContext>, request?: SecondParameter<typeof apiFetch>}

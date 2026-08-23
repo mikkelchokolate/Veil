@@ -47,6 +47,8 @@ import * as zod from 'zod';
  * Re-encrypts management state with a newly generated root-managed key.
  * Requires admin role and CSRF for cookie sessions. All browser sessions
  * except the initiating session are revoked after a successful rotation.
+ * Rotation advances the desired revision and runs the same apply job
+ * envelope as other management mutations so the panel does not stay Pending.
  * @summary Rotate the state-encryption key
  */
 export const postApiAdminRotateKeyHeaderIdempotencyKeyMax = 128;
@@ -71,17 +73,22 @@ export const PostApiAdminRotateKeyResponse = zod.object({
   "success": zod.boolean(),
   "revokedSessions": zod.int().min(postApiAdminRotateKeyResponseRevokedSessionsMin),
   "revision": zod.object({
-    "desired": zod.number(),
-    "applied": zod.number(),
-    "state": zod.enum(['synced', 'pending', 'failed'])
-  }).optional(),
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'failed'])
+}).optional(),
   "applyJob": zod.object({
-    "id": zod.string(),
-    "desiredRevision": zod.number(),
-    "baseRevision": zod.number(),
-    "status": zod.string(),
-    "trigger": zod.string(),
-    "createdAt": zod.number()
-  }).passthrough().optional()
-})
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'running', 'success', 'failed', 'rolled_back']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional()
+}).optional()
+}).describe('Key rotation envelope: sessions except the caller were revoked.\nsuccess=false means the key and state were committed (desired advanced)\nbut the apply job for that revision did not finish cleanly.\n')
 

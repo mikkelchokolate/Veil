@@ -247,7 +247,7 @@ export const GetApiV1ClientsIdBindingsParams = zod.object({
 export const GetApiV1ClientsIdBindingsResponse = zod.unknown()
 
 /**
- * @summary Add a binding (optional credential)
+ * @summary Add a binding; empty credential is generated once
  */
 
 

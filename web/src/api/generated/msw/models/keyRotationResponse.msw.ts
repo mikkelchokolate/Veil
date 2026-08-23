@@ -40,7 +40,6 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-
 import type { ApplyJob } from './applyJob.msw.ts';
 import type { RevisionView } from './revisionView.msw.ts';
 
