@@ -80,5 +80,12 @@ func (s *managementState) handleRotateKey(w http.ResponseWriter, r *http.Request
 		Action: "security.key.rotate", Target: "state", Success: true,
 		Details: map[string]any{"revokedSessions": revoked},
 	})
-	writeJSON(w, map[string]any{"success": true, "revokedSessions": revoked})
+	// Rotation itself already advanced desired (re-encrypt + snapshot).
+	// Without the mutation apply envelope the panel stays Pending until a
+	// manual reconcile, the same drift operators hit after other writes.
+	actor, _ := r.Context().Value(contextKeyUsername).(string)
+	outcome := s.autoApplyResultLocked(r, actor)
+	payload := map[string]any{"revokedSessions": revoked}
+	s.mergeOutcomeInto(payload, outcome)
+	writeJSON(w, payload)
 }

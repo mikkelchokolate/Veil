@@ -585,6 +585,10 @@ paths:
 
         except the initiating session are revoked after a successful rotation.
 
+        Rotation advances the desired revision and runs the same apply job
+
+        envelope as other management mutations so the panel does not stay Pending.
+
         '
       security:
       - veilToken: []
@@ -602,7 +606,7 @@ paths:
                 value: {}
       responses:
         '200':
-          description: State was re-encrypted and other sessions were revoked.
+          description: State was re-encrypted, other sessions were revoked, and an apply job ran for the new revision.
           content:
             application/json:
               schema:
@@ -612,6 +616,10 @@ paths:
                   value:
                     success: true
                     revokedSessions: 3
+                    revision:
+                      desired: 12
+                      applied: 12
+                      state: synced
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -3873,13 +3881,23 @@ components:
       - success
       - revokedSessions
       additionalProperties: false
+      description: 'Key rotation envelope: sessions except the caller were revoked.
+
+        success=false means the key and state were committed (desired advanced)
+
+        but the apply job for that revision did not finish cleanly.
+
+        '
       properties:
         success:
           type: boolean
-          const: true
         revokedSessions:
           type: integer
           minimum: 0
+        revision:
+          $ref: '#/components/schemas/RevisionView'
+        applyJob:
+          $ref: '#/components/schemas/ApplyJob'
     SetupStatusResponse:
       type: object
       required:

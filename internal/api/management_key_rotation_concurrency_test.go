@@ -39,6 +39,10 @@ func (c *blockingRotationClient) RotateKey(context.Context, privileged.RotateKey
 }
 
 func TestAPIKeyRotationBlocksSettingsUntilCipherReload(t *testing.T) {
+	origAutoApply := autoApplyAfterMutation
+	autoApplyAfterMutation = false
+	t.Cleanup(func() { autoApplyAfterMutation = origAutoApply })
+
 	root := t.TempDir()
 	statePath := filepath.Join(root, "state.json")
 	keyPath := filepath.Join(root, "state.key")

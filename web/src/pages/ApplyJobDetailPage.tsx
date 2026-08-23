@@ -376,10 +376,15 @@ export function ApplyJobDetailPage() {
 												.join("\n")
 										: "(none)",
 								].join("\n");
-								void navigator.clipboard.writeText(report).then(() => {
-									setCopied(true);
-									setTimeout(() => setCopied(false), 1500);
-								});
+								void navigator.clipboard.writeText(report).then(
+									() => {
+										setCopied(true);
+										setTimeout(() => setCopied(false), 1500);
+									},
+									() => {
+										setCopied(false);
+									},
+								);
 							}}
 						>
 							{copied ? t("applyJob.copied") : t("applyJob.copyReport")}

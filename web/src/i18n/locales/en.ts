@@ -363,6 +363,8 @@ export const en: Record<string, string> = {
 	"settings.webBasePathRequired":
 		"Web base path cannot be cleared from this form.",
 	"settings.rotated": "State key rotated. Other sessions were revoked.",
+	"settings.rotatedApplyFailed":
+		"State key rotated, but applying the new revision failed. Check Apply.",
 	"settings.rotateFailed": "Key rotation failed",
 
 	"backups.title": "Backups",

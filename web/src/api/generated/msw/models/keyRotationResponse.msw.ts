@@ -41,8 +41,18 @@
  * OpenAPI spec version: 0.6.3
  */
 
+import type { ApplyJob } from './applyJob.msw.ts';
+import type { RevisionView } from './revisionView.msw.ts';
+
+/**
+ * Key rotation envelope: sessions except the caller were revoked.
+ * success=false means the key and state were committed (desired advanced)
+ * but the apply job for that revision did not finish cleanly.
+ */
 export interface KeyRotationResponse {
-  success: true;
+  success: boolean;
   /** @minimum 0 */
   revokedSessions: number;
+  revision?: RevisionView;
+  applyJob?: ApplyJob;
 }

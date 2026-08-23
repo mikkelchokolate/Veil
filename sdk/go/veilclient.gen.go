@@ -388,21 +388,6 @@ func (e InboundTransport) Valid() bool {
 	}
 }
 
-// Defines values for KeyRotationResponseSuccess.
-const (
-	KeyRotationResponseSuccessTrue KeyRotationResponseSuccess = true
-)
-
-// Valid indicates whether the value is a known member of the KeyRotationResponseSuccess enum.
-func (e KeyRotationResponseSuccess) Valid() bool {
-	switch e {
-	case KeyRotationResponseSuccessTrue:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for Locale.
 const (
 	En Locale = "en"
@@ -1307,14 +1292,15 @@ type IssuedCredential struct {
 	Plaintext string `json:"plaintext"`
 }
 
-// KeyRotationResponse defines model for KeyRotationResponse.
+// KeyRotationResponse Key rotation envelope: sessions except the caller were revoked.
+// success=false means the key and state were committed (desired advanced)
+// but the apply job for that revision did not finish cleanly.
 type KeyRotationResponse struct {
-	RevokedSessions int                        `json:"revokedSessions"`
-	Success         KeyRotationResponseSuccess `json:"success"`
+	ApplyJob        *ApplyJob     `json:"applyJob,omitempty"`
+	Revision        *RevisionView `json:"revision,omitempty"`
+	RevokedSessions int           `json:"revokedSessions"`
+	Success         bool          `json:"success"`
 }
-
-// KeyRotationResponseSuccess defines model for KeyRotationResponse.Success.
-type KeyRotationResponseSuccess bool
 
 // Locale Persisted Panel display language.
 type Locale string
@@ -2709,6 +2695,8 @@ type ClientInterface interface {
 	// Re-encrypts management state with a newly generated root-managed key.
 	// Requires admin role and CSRF for cookie sessions. All browser sessions
 	// except the initiating session are revoked after a successful rotation.
+	// Rotation advances the desired revision and runs the same apply job
+	// envelope as other management mutations so the panel does not stay Pending.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -2720,6 +2708,8 @@ type ClientInterface interface {
 	// Re-encrypts management state with a newly generated root-managed key.
 	// Requires admin role and CSRF for cookie sessions. All browser sessions
 	// except the initiating session are revoked after a successful rotation.
+	// Rotation advances the desired revision and runs the same apply job
+	// envelope as other management mutations so the panel does not stay Pending.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -3406,14 +3396,14 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/clients/{id}/bindings (the `GetApiV1ClientsIdBindings` operationId).
 	GetApiV1ClientsIdBindings(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// PostApiV1ClientsIdBindingsWithBody Add a binding (optional credential)
+	// PostApiV1ClientsIdBindingsWithBody Add a binding; empty credential is generated once
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/clients/{id}/bindings (the `PostApiV1ClientsIdBindings` operationId).
 	PostApiV1ClientsIdBindingsWithBody(ctx context.Context, id ClientId, params *PostApiV1ClientsIdBindingsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// PostApiV1ClientsIdBindings Add a binding (optional credential)
+	// PostApiV1ClientsIdBindings Add a binding; empty credential is generated once
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -3655,6 +3645,8 @@ type ClientInterface interface {
 // Re-encrypts management state with a newly generated root-managed key.
 // Requires admin role and CSRF for cookie sessions. All browser sessions
 // except the initiating session are revoked after a successful rotation.
+// Rotation advances the desired revision and runs the same apply job
+// envelope as other management mutations so the panel does not stay Pending.
 //
 // Takes any type of body and a specified content type.
 //
@@ -3676,6 +3668,8 @@ func (c *Client) PostApiAdminRotateKeyWithBody(ctx context.Context, params *Post
 // Re-encrypts management state with a newly generated root-managed key.
 // Requires admin role and CSRF for cookie sessions. All browser sessions
 // except the initiating session are revoked after a successful rotation.
+// Rotation advances the desired revision and runs the same apply job
+// envelope as other management mutations so the panel does not stay Pending.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -5372,7 +5366,7 @@ func (c *Client) GetApiV1ClientsIdBindings(ctx context.Context, id ClientId, req
 	return c.Client.Do(req)
 }
 
-// PostApiV1ClientsIdBindingsWithBody Add a binding (optional credential)
+// PostApiV1ClientsIdBindingsWithBody Add a binding; empty credential is generated once
 //
 // Takes any type of body and a specified content type.
 //
@@ -5389,7 +5383,7 @@ func (c *Client) PostApiV1ClientsIdBindingsWithBody(ctx context.Context, id Clie
 	return c.Client.Do(req)
 }
 
-// PostApiV1ClientsIdBindings Add a binding (optional credential)
+// PostApiV1ClientsIdBindings Add a binding; empty credential is generated once
 //
 // Takes a body of the `application/json` content type.
 //
@@ -10473,6 +10467,8 @@ type ClientWithResponsesInterface interface {
 	// Re-encrypts management state with a newly generated root-managed key.
 	// Requires admin role and CSRF for cookie sessions. All browser sessions
 	// except the initiating session are revoked after a successful rotation.
+	// Rotation advances the desired revision and runs the same apply job
+	// envelope as other management mutations so the panel does not stay Pending.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -10484,6 +10480,8 @@ type ClientWithResponsesInterface interface {
 	// Re-encrypts management state with a newly generated root-managed key.
 	// Requires admin role and CSRF for cookie sessions. All browser sessions
 	// except the initiating session are revoked after a successful rotation.
+	// Rotation advances the desired revision and runs the same apply job
+	// envelope as other management mutations so the panel does not stay Pending.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -11262,14 +11260,14 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/clients/{id}/bindings (the `GetApiV1ClientsIdBindings` operationId).
 	GetApiV1ClientsIdBindingsWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdBindingsResponse, error)
 
-	// PostApiV1ClientsIdBindingsWithBodyWithResponse Add a binding (optional credential)
+	// PostApiV1ClientsIdBindingsWithBodyWithResponse Add a binding; empty credential is generated once
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/clients/{id}/bindings (the `PostApiV1ClientsIdBindings` operationId).
 	PostApiV1ClientsIdBindingsWithBodyWithResponse(ctx context.Context, id ClientId, params *PostApiV1ClientsIdBindingsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClientsIdBindingsResponse, error)
 
-	// PostApiV1ClientsIdBindingsWithResponse Add a binding (optional credential)
+	// PostApiV1ClientsIdBindingsWithResponse Add a binding; empty credential is generated once
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -17870,6 +17868,8 @@ func (r HeadSTokenResponse) ContentType() string {
 // Re-encrypts management state with a newly generated root-managed key.
 // Requires admin role and CSRF for cookie sessions. All browser sessions
 // except the initiating session are revoked after a successful rotation.
+// Rotation advances the desired revision and runs the same apply job
+// envelope as other management mutations so the panel does not stay Pending.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -17887,6 +17887,8 @@ func (c *ClientWithResponses) PostApiAdminRotateKeyWithBodyWithResponse(ctx cont
 // Re-encrypts management state with a newly generated root-managed key.
 // Requires admin role and CSRF for cookie sessions. All browser sessions
 // except the initiating session are revoked after a successful rotation.
+// Rotation advances the desired revision and runs the same apply job
+// envelope as other management mutations so the panel does not stay Pending.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -19271,7 +19273,7 @@ func (c *ClientWithResponses) GetApiV1ClientsIdBindingsWithResponse(ctx context.
 	return ParseGetApiV1ClientsIdBindingsResponse(rsp)
 }
 
-// PostApiV1ClientsIdBindingsWithBodyWithResponse Add a binding (optional credential)
+// PostApiV1ClientsIdBindingsWithBodyWithResponse Add a binding; empty credential is generated once
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -19284,7 +19286,7 @@ func (c *ClientWithResponses) PostApiV1ClientsIdBindingsWithBodyWithResponse(ctx
 	return ParsePostApiV1ClientsIdBindingsResponse(rsp)
 }
 
-// PostApiV1ClientsIdBindingsWithResponse Add a binding (optional credential)
+// PostApiV1ClientsIdBindingsWithResponse Add a binding; empty credential is generated once
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //

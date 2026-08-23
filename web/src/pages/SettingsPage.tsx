@@ -135,6 +135,7 @@ export function SettingsPage() {
 			setError(null);
 			setNotice(t("settings.saved"));
 			void qc.invalidateQueries({ queryKey: ["settings"] });
+			void qc.invalidateQueries({ queryKey: ["apply"] });
 		},
 		onError: (e) =>
 			setError(mutationErrorMessage(e, t("settings.saveFailed"))),
@@ -146,9 +147,15 @@ export function SettingsPage() {
 				method: "POST",
 				body: JSON.stringify({}),
 			}),
-		onSuccess: () => {
+		onSuccess: (body) => {
 			setConfirmRotate(false);
 			setError(null);
+			void qc.invalidateQueries({ queryKey: ["apply"] });
+			const envelope = body as { success?: boolean };
+			if (envelope.success === false) {
+				setNotice(t("settings.rotatedApplyFailed"));
+				return;
+			}
 			setNotice(t("settings.rotated"));
 		},
 		onError: (e) => {

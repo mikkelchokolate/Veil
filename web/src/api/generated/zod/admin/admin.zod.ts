@@ -68,7 +68,20 @@ export const postApiAdminRotateKeyResponseRevokedSessionsMin = 0;
 
 
 export const PostApiAdminRotateKeyResponse = zod.object({
-  "success": zod.literal(true),
-  "revokedSessions": zod.int().min(postApiAdminRotateKeyResponseRevokedSessionsMin)
+  "success": zod.boolean(),
+  "revokedSessions": zod.int().min(postApiAdminRotateKeyResponseRevokedSessionsMin),
+  "revision": zod.object({
+    "desired": zod.number(),
+    "applied": zod.number(),
+    "state": zod.enum(['synced', 'pending', 'failed'])
+  }).optional(),
+  "applyJob": zod.object({
+    "id": zod.string(),
+    "desiredRevision": zod.number(),
+    "baseRevision": zod.number(),
+    "status": zod.string(),
+    "trigger": zod.string(),
+    "createdAt": zod.number()
+  }).passthrough().optional()
 })
 

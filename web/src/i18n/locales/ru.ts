@@ -286,6 +286,8 @@ export const ru: Record<string, string> = {
 	"settings.webBasePathRequired":
 		"Базовый путь панели нельзя очистить в этой форме.",
 	"settings.rotated": "Ключ состояния изменён. Остальные сессии отозваны.",
+	"settings.rotatedApplyFailed":
+		"Ключ состояния изменён, но применение новой ревизии не удалось. Проверьте Apply.",
 	"settings.rotateFailed": "Не удалось сменить ключ",
 
 	"apply.title": "Состояние применения",
