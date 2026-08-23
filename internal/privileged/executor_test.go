@@ -15,10 +15,12 @@ import (
 	"os/user"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/backup"
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -1035,9 +1037,13 @@ func TestRunProductionBackupRejectsShortPassphrase(t *testing.T) {
 	if err := os.WriteFile(passphrasePath, []byte("short"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := runProductionBackup(context.Background(), ProductionConfig{BackupPassphrasePath: passphrasePath}, ResolvedBackup{Action: BackupActionCreate})
+	_, err := runProductionBackup(context.Background(), ProductionConfig{BackupPassphrasePath: passphrasePath}, ResolvedBackup{Action: BackupActionCreate, BackupPassphrasePath: passphrasePath})
 	if err == nil {
 		t.Fatal("expected short passphrase rejection")
+	}
+	var operationError *Error
+	if !errors.As(err, &operationError) || operationError.Message != MessageBackupPassphraseTooShort {
+		t.Fatalf("err = %v", err)
 	}
 }
 
@@ -1284,6 +1290,65 @@ func TestRunProductionBackupListAndPruneReturnErrors(t *testing.T) {
 	_, err = runProductionBackup(context.Background(), ProductionConfig{}, ResolvedBackup{Action: BackupActionPrune, BackupRoot: notDir})
 	if err == nil {
 		t.Fatal("expected prune error for file path")
+	}
+}
+
+func TestRunProductionBackupCreateWritesMissingPassphrase(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state.json")
+	keyPath := filepath.Join(root, "state.key")
+	passphrasePath := filepath.Join(root, "backup.passphrase")
+	backupRoot := filepath.Join(root, "backups")
+	if err := os.MkdirAll(backupRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, key, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var keyArray [32]byte
+	copy(keyArray[:], key)
+	cipher, err := secrets.NewCipher(keyArray)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateBody, err := managementstate.NewStore(statePath, cipher).Marshal(model.ManagementSnapshot{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statePath, stateBody, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	createBackupTestDatabase(t, root)
+
+	config := ProductionConfig{
+		StatePath:            statePath,
+		KeyPath:              keyPath,
+		BackupPassphrasePath: passphrasePath,
+		BackupRoot:           backupRoot,
+		BackupMaxBytes:       8 * 1024 * 1024,
+		VeilVersion:          "v0.0.1",
+		Now:                  func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) },
+	}
+	result, err := runProductionBackup(context.Background(), config, ResolvedBackup{
+		Action: BackupActionCreate, StatePath: statePath, KeyPath: keyPath,
+		BackupPassphrasePath: passphrasePath, BackupRoot: backupRoot,
+	})
+	if err != nil {
+		t.Fatalf("create backup: %v", err)
+	}
+	if result.ArchiveName == "" {
+		t.Fatal("expected archive name")
+	}
+	body, err := os.ReadFile(passphrasePath)
+	if err != nil {
+		t.Fatalf("generated passphrase: %v", err)
+	}
+	if len(strings.TrimRight(string(body), "\r\n")) < backup.MinPassphraseLength {
+		t.Fatalf("generated passphrase too short: %q", body)
 	}
 }
 

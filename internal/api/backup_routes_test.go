@@ -15,6 +15,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/backup"
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
 func TestBackupRoutesCreateListVerifyAndDownload(t *testing.T) {
@@ -87,8 +88,27 @@ func TestBackupRoutesRequireAdminAndServerSidePassphrase(t *testing.T) {
 	create := adminJSONRequest(http.MethodPost, "/api/backups", `{}`)
 	createResponse := httptest.NewRecorder()
 	state.handleBackups(createResponse, create)
-	if createResponse.Code != http.StatusServiceUnavailable {
+	if createResponse.Code != http.StatusCreated {
 		t.Fatalf("missing passphrase status=%d body=%s", createResponse.Code, createResponse.Body.String())
+	}
+	if _, err := os.Stat(state.backupPassphrasePath); err != nil {
+		t.Fatalf("create should write a backup passphrase: %v", err)
+	}
+}
+
+func TestBackupRoutesRejectShortPassphraseWithPublicMessage(t *testing.T) {
+	state := newPanelBackupState(t)
+	if err := os.WriteFile(state.backupPassphrasePath, []byte("short\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	create := adminJSONRequest(http.MethodPost, "/api/backups", `{}`)
+	createResponse := httptest.NewRecorder()
+	state.handleBackups(createResponse, create)
+	if createResponse.Code != http.StatusServiceUnavailable {
+		t.Fatalf("short passphrase status=%d body=%s", createResponse.Code, createResponse.Body.String())
+	}
+	if !strings.Contains(createResponse.Body.String(), privileged.MessageBackupPassphraseTooShort) {
+		t.Fatalf("short passphrase body=%s", createResponse.Body.String())
 	}
 }
 

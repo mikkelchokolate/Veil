@@ -878,13 +878,9 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 		}
 		return BackupResult{ArchiveName: request.ArchiveName, Pruned: []string{request.ArchiveName}}, nil
 	}
-	passphraseBody, err := readBoundedRegularFile(request.BackupPassphrasePath, maxBackupPassphraseBytes)
+	passphrase, err := loadBackupPassphrase(request)
 	if err != nil {
-		return BackupResult{}, fmt.Errorf("read backup passphrase: %w", err)
-	}
-	passphrase := strings.TrimRight(string(passphraseBody), "\r\n")
-	if len(passphrase) < 16 {
-		return BackupResult{}, errors.New("configured backup passphrase is too short")
+		return BackupResult{}, err
 	}
 	maxBytes, err := configuredBackupMaxBytes(config)
 	if err != nil {
@@ -1131,4 +1127,33 @@ func findCaddyCertWithRetry(ctx context.Context, domain string) (caddycert.Pair,
 			}
 		}
 	}
+}
+
+func loadBackupPassphrase(request ResolvedBackup) (string, error) {
+	path := request.BackupPassphrasePath
+	if path == "" {
+		return "", newError(ErrorOperationFailed, MessageBackupPassphraseUnconfigured)
+	}
+	body, err := readBoundedRegularFile(path, maxBackupPassphraseBytes)
+	if err != nil && isAbsent(err) && request.Action == BackupActionCreate {
+		if _, createErr := backup.WriteNewPassphraseFile(path); createErr != nil {
+			return "", createErr
+		}
+		body, err = readBoundedRegularFile(path, maxBackupPassphraseBytes)
+	}
+	if err != nil {
+		if isAbsent(err) {
+			return "", newError(ErrorOperationFailed, MessageBackupPassphraseUnconfigured)
+		}
+		return "", fmt.Errorf("read backup passphrase: %w", err)
+	}
+	passphrase := strings.TrimRight(string(body), "\r\n")
+	if len(passphrase) < backup.MinPassphraseLength {
+		return "", newError(ErrorOperationFailed, MessageBackupPassphraseTooShort)
+	}
+	return passphrase, nil
+}
+
+func isAbsent(err error) bool {
+	return err != nil && (os.IsNotExist(err) || errors.Is(err, syscall.ENOENT))
 }

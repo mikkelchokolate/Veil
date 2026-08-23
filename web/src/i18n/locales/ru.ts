@@ -338,6 +338,7 @@ export const ru: Record<string, string> = {
 	"backups.status.degraded": "деградировало",
 	"backups.status.pending": "ожидание",
 	"backups.empty": "Бэкапов пока нет.",
+	"backups.hint": "Архивы шифруются серверным паролем, созданным при установке. Браузер его не получает.",
 	"backups.adminRequired": "Бэкапы требуют роли администратора.",
 	"backups.error.load": "Не удалось загрузить бэкапы",
 	"backups.encrypted": "зашифрован",

@@ -3,6 +3,7 @@ package uninstall
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	veilruntime "github.com/mikkelchokolate/Veil/internal/runtime"
@@ -51,13 +52,27 @@ func ReloadSystemdDaemon() error {
 }
 
 func (a Actions) StopAndDisableService(service string) error {
-	if err := a.run("stop", []string{"systemctl", "stop", service}); err != nil {
+	stopTarget := service
+	if glob := instanceStopGlob(service); glob != "" {
+		// Template units such as veil-hysteria2@.service cannot be stopped
+		// themselves. Stop loaded instances via systemd's @* glob first.
+		stopTarget = glob
+	}
+	if err := a.run("stop", []string{"systemctl", "stop", stopTarget}); err != nil {
 		return fmt.Errorf("stop: %w", err)
 	}
 	if err := a.run("disable", []string{"systemctl", "disable", service}); err != nil {
 		return fmt.Errorf("disable: %w", err)
 	}
 	return nil
+}
+
+func instanceStopGlob(service string) string {
+	const suffix = "@.service"
+	if strings.HasSuffix(service, suffix) {
+		return strings.TrimSuffix(service, suffix) + "@*"
+	}
+	return ""
 }
 
 func (a Actions) RemovePath(path string) error {

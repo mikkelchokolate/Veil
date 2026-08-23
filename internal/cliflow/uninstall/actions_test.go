@@ -33,6 +33,20 @@ func TestActionsStopAndDisableServiceRunsSystemctlCommands(t *testing.T) {
 	}
 }
 
+func TestActionsStopAndDisableServiceStopsTemplateInstances(t *testing.T) {
+	runner := &fakeCommandRunner{}
+	if err := NewActions(runner, nil).StopAndDisableService("veil-hysteria2@.service"); err != nil {
+		t.Fatalf("StopAndDisableService: %v", err)
+	}
+	want := [][]string{
+		{"systemctl", "stop", "veil-hysteria2@*"},
+		{"systemctl", "disable", "veil-hysteria2@.service"},
+	}
+	if !sameCommands(runner.calls, want) {
+		t.Fatalf("calls = %+v, want %+v", runner.calls, want)
+	}
+}
+
 func TestActionsStopAndDisableServiceLabelsFailingPhase(t *testing.T) {
 	runner := &fakeCommandRunner{outs: []veilruntime.RuntimeCommandOutput{{}, {Err: errors.New("denied")}}}
 	err := NewActions(runner, nil).StopAndDisableService("veil.service")

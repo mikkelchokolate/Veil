@@ -304,10 +304,21 @@ func writePrivilegedError(w http.ResponseWriter, err error) {
 	if strings.Contains(strings.ToLower(message), "backup passphrase") {
 		status = http.StatusServiceUnavailable
 	}
-	if status >= http.StatusInternalServerError && message != "privileged helper is unavailable" {
+	if status >= http.StatusInternalServerError && !publicPrivilegedErrorMessage(message) {
 		message = "privileged operation failed"
 	}
 	writeErrorEnvelope(w, string(code), message, status)
+}
+
+func publicPrivilegedErrorMessage(message string) bool {
+	switch message {
+	case "privileged helper is unavailable",
+		privileged.MessageBackupPassphraseUnconfigured,
+		privileged.MessageBackupPassphraseTooShort:
+		return true
+	default:
+		return false
+	}
 }
 
 func privilegedHelperSocketUnavailable(err error) bool {

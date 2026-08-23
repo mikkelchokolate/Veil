@@ -20,6 +20,9 @@ const (
 	ErrorNotFound           ErrorCode = "not_found"
 	ErrorConflict           ErrorCode = "conflict"
 	ErrorOperationFailed    ErrorCode = "operation_failed"
+
+	MessageBackupPassphraseUnconfigured = "Backup passphrase is not configured"
+	MessageBackupPassphraseTooShort     = "configured backup passphrase is too short"
 )
 
 type Error struct {

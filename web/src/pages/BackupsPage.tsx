@@ -244,6 +244,7 @@ export function BackupsPage() {
 				</div>
 				{notice ? <p className="muted">{notice}</p> : null}
 				{error ? <FormMessage>{error}</FormMessage> : null}
+				<p className="muted">{t("backups.hint")}</p>
 			</div>
 
 			{job ? (

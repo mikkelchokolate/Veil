@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -33,6 +34,13 @@ func TestApplyRURecommendedProfileWritesPanelFiles(t *testing.T) {
 	assertFileMissing(t, result.FallbackIndexPath)
 	assertFileContains(t, filepath.Join(dir, "etc", "veil", "veil.env"), "VEIL_API_TOKEN=secret-panel")
 	assertFileContains(t, filepath.Join(dir, "etc", "veil", "veil.env"), "VEIL_TLS_CERT=")
+	passphrase, err := os.ReadFile(filepath.Join(dir, "etc", "veil", "backup.passphrase"))
+	if err != nil {
+		t.Fatalf("read backup passphrase: %v", err)
+	}
+	if len(strings.TrimSpace(string(passphrase))) < 16 {
+		t.Fatalf("install must write a backup passphrase for panel backups")
+	}
 	assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", "veil.service"), "ExecStart=/usr/local/bin/veil serve")
 	for _, name := range systemdunits.Names() {
 		assertFileContains(t, filepath.Join(dir, "etc", "systemd", "system", name), "[")
@@ -139,6 +147,14 @@ func TestApplyRURecommendedProfileChownsSecretsForVeilGroup(t *testing.T) {
 	}
 	if stat.Mode&0o040 == 0 {
 		t.Fatalf("veil.env must be group-readable (mode %o)", stat.Mode)
+	}
+	caddyPath := filepath.Join(paths.EtcDir, "generated", "caddy", "config.json")
+	info, err = os.Stat(caddyPath)
+	if err != nil {
+		t.Fatalf("stat caddy config: %v", err)
+	}
+	if info.Mode().Perm()&0o040 == 0 {
+		t.Fatalf("generated caddy config must be group-readable so the panel can apply inbounds (mode %o)", info.Mode().Perm())
 	}
 }
 

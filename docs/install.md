@@ -232,7 +232,7 @@ When installed natively on a Linux host, Veil manages the following directories 
 | `/etc/veil/veil.env` | `0640 root:veil` | Environment variables, Panel listen settings, and authentication tokens readable by the Panel service. |
 | `/var/lib/veil/state.json` | `0600 veil:veil` | Persisted Management state containing settings and configured Inbounds. |
 | `/etc/veil/state.key` | `0640 root:veil` | AES-256-GCM encryption key readable by the Panel but writable only through the privileged helper. |
-| `/etc/veil/backup.passphrase` | `0600` | Optional root-owned passphrase used by the scheduled backup service and Panel backup controls. |
+| `/etc/veil/backup.passphrase` | `0600 root:root` | Install-generated passphrase for Panel backup create/restore and the optional daily backup timer. |
 | `/var/lib/veil/backups/` | `0700 root:root` | Verified encrypted disaster-recovery archives managed through the privileged helper and backup timer. |
 | `/var/lib/veil/staging/` | `0700 veil:veil` | Candidate generated configuration awaiting privileged promotion. |
 | `/var/lib/veil/updates/` | `0700 veil:veil` | Downloaded release archive and checksum material awaiting helper verification. |

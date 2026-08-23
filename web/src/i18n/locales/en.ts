@@ -384,6 +384,7 @@ export const en: Record<string, string> = {
 	"backups.status.degraded": "degraded",
 	"backups.status.pending": "pending",
 	"backups.empty": "No backups yet.",
+	"backups.hint": "Archives are encrypted with a server-side passphrase created at install. The browser never receives it.",
 	"backups.adminRequired": "Backups require the admin role.",
 	"backups.error.load": "Failed to load backups",
 	"backups.encrypted": "encrypted",

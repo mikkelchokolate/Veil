@@ -21,6 +21,15 @@ All notable changes to Veil will be documented in this file.
   process lacks `CAP_NET_BIND_SERVICE`. A bind that fails with EACCES now
   inspects `/proc/net` occupancy, so Hysteria2 can share UDP 443 with Panel
   Caddy on TCP 443.
+- `veil uninstall` now stops loaded template instances (`veil-hysteria2@*`,
+  `veil-olcrtc@*`) instead of trying to stop the template unit name itself.
+- Fresh installs now grant the panel group-read on generated Caddy JSON
+  (`0640 root:veil`, directory `0750`) so the first inbound apply can hash the
+  live artifact instead of failing with permission denied.
+- Fresh installs now write `/etc/veil/backup.passphrase`, and Panel backup
+  create generates that file when it is missing, so Create backup works without
+  a separate `veil backup schedule enable`. A too-short passphrase returns a
+  public 503 instead of a generic privileged-operation error.
 
 ## [v0.7.1] - 2026-08-22
 

@@ -87,6 +87,9 @@ func (a InstallApply) Apply() (ApplyResult, error) {
 	if err := chownSecretsForVeilGroup(result.WrittenFiles); err != nil {
 		return result, err
 	}
+	if err := backup.EnsurePassphraseFile(filepath.Join(a.paths.EtcDir, "backup.passphrase")); err != nil {
+		return result, fmt.Errorf("write backup passphrase: %w", err)
+	}
 
 	if len(a.firewallActions) > 0 {
 		applier := newUFWApplier()
@@ -130,9 +133,9 @@ func chownSecretsForVeilGroup(paths []string) error {
 		return fmt.Errorf("parse veil gid %q: %w", u.Gid, err)
 	}
 	_ = uid // uid not needed; we keep root ownership and only grant group read
+	seenDirs := map[string]struct{}{}
 	for _, path := range paths {
-		base := filepath.Base(path)
-		if base != "veil.env" && !strings.HasSuffix(base, ".key") && !strings.HasSuffix(base, ".crt") {
+		if !needsVeilGroupRead(path) {
 			continue
 		}
 		if err := chownPath(path, 0, gid); err != nil {
@@ -141,8 +144,34 @@ func chownSecretsForVeilGroup(paths []string) error {
 		if err := chmodPath(path, 0o640); err != nil {
 			return fmt.Errorf("chmod %s for veil group: %w", path, err)
 		}
+		if !isGeneratedConfig(path) {
+			continue
+		}
+		dir := filepath.Dir(path)
+		if _, ok := seenDirs[dir]; ok {
+			continue
+		}
+		seenDirs[dir] = struct{}{}
+		if err := chownPath(dir, 0, gid); err != nil {
+			return fmt.Errorf("chown %s for veil group: %w", dir, err)
+		}
+		if err := chmodPath(dir, 0o750); err != nil {
+			return fmt.Errorf("chmod %s for veil group: %w", dir, err)
+		}
 	}
 	return nil
+}
+
+func needsVeilGroupRead(path string) bool {
+	base := filepath.Base(path)
+	if base == "veil.env" || strings.HasSuffix(base, ".key") || strings.HasSuffix(base, ".crt") {
+		return true
+	}
+	return isGeneratedConfig(path)
+}
+
+func isGeneratedConfig(path string) bool {
+	return strings.Contains(filepath.ToSlash(path), "/generated/")
 }
 
 func writeManagedFile(path string, content string, mode os.FileMode) error {
