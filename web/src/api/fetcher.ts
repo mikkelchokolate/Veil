@@ -154,10 +154,7 @@ const defaultTimeoutMs = 15_000;
 // while the host kept applying.
 const defaultMutationTimeoutMs = 60_000;
 
-export function mutationErrorMessage(
-	error: unknown,
-	fallback: string,
-): string {
+export function mutationErrorMessage(error: unknown, fallback: string): string {
 	if (
 		error instanceof ApiError ||
 		error instanceof TimeoutError ||

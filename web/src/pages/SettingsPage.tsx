@@ -137,8 +137,7 @@ export function SettingsPage() {
 			void qc.invalidateQueries({ queryKey: ["settings"] });
 			void qc.invalidateQueries({ queryKey: ["apply"] });
 		},
-		onError: (e) =>
-			setError(mutationErrorMessage(e, t("settings.saveFailed"))),
+		onError: (e) => setError(mutationErrorMessage(e, t("settings.saveFailed"))),
 	});
 
 	const rotateKey = useMutation({

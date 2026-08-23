@@ -146,9 +146,7 @@ export function ClientNewPage() {
 			setStep(3);
 		},
 		onError: (err) => {
-			setError(
-				mutationErrorMessage(err, t("clientNew.createError")),
-			);
+			setError(mutationErrorMessage(err, t("clientNew.createError")));
 		},
 	});
 

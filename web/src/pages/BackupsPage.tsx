@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ApiError, apiFetch, apiUrl, mutationErrorMessage } from "../api/fetcher";
+import {
+	ApiError,
+	apiFetch,
+	apiUrl,
+	mutationErrorMessage,
+} from "../api/fetcher";
 import type { BackupArchive } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import {
@@ -129,8 +134,7 @@ export function BackupsPage() {
 			setNotice(t("backups.notice.pruned"));
 			void qc.invalidateQueries({ queryKey: ["backups"] });
 		},
-		onError: (e) =>
-			setError(mutationErrorMessage(e, t("backups.error.prune"))),
+		onError: (e) => setError(mutationErrorMessage(e, t("backups.error.prune"))),
 	});
 
 	const verify = useMutation({

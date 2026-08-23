@@ -326,7 +326,9 @@ describe("ClientDetailPage lossless UI mutations", () => {
 		await waitFor(() =>
 			expect(api.requests.some((r) => r.path === "/bindings")).toBe(true),
 		);
-		expect(await screen.findByText("attach-one-time-secret")).toBeInTheDocument();
+		expect(
+			await screen.findByText("attach-one-time-secret"),
+		).toBeInTheDocument();
 		await user.click(within(card).getByRole("button", { name: /detach/i }));
 		await waitFor(() =>
 			expect(api.requests.some((r) => r.path === "/binding/delete")).toBe(true),

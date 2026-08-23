@@ -133,14 +133,17 @@ describe("apiFetch request policy", () => {
 
 	it("surfaces timeout and API errors instead of a generic fallback", () => {
 		expect(
-			fetcher.mutationErrorMessage(new fetcher.ApiError(422, "port in use"), "Create failed"),
+			fetcher.mutationErrorMessage(
+				new fetcher.ApiError(422, "port in use"),
+				"Create failed",
+			),
 		).toBe("port in use");
 		expect(
 			fetcher.mutationErrorMessage(new fetcher.TimeoutError(), "Create failed"),
 		).toBe("API request timed out");
-		expect(fetcher.mutationErrorMessage(new Error("boom"), "Create failed")).toBe(
-			"Create failed",
-		);
+		expect(
+			fetcher.mutationErrorMessage(new Error("boom"), "Create failed"),
+		).toBe("Create failed");
 	});
 
 	it("retries safe GET failures but never retries a mutation", async () => {
