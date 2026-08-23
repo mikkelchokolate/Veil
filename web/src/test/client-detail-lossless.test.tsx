@@ -185,9 +185,17 @@ function installStatefulClientAPI() {
 				inboundId: body.inboundId,
 				enabled: true,
 				version: 1,
+				credential: { configured: true, kind: "password", version: 1 },
 			};
 			(client.bindings as JSONRecord[]).push(binding);
-			return HttpResponse.json(binding, { status: 201 });
+			return HttpResponse.json(
+				{
+					...binding,
+					plaintext: "attach-one-time-secret",
+					success: true,
+				},
+				{ status: 201 },
+			);
 		}),
 		http.delete(
 			"/api/v1/clients/client-full/bindings/binding-1",
@@ -318,6 +326,7 @@ describe("ClientDetailPage lossless UI mutations", () => {
 		await waitFor(() =>
 			expect(api.requests.some((r) => r.path === "/bindings")).toBe(true),
 		);
+		expect(await screen.findByText("attach-one-time-secret")).toBeInTheDocument();
 		await user.click(within(card).getByRole("button", { name: /detach/i }));
 		await waitFor(() =>
 			expect(api.requests.some((r) => r.path === "/binding/delete")).toBe(true),

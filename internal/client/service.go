@@ -240,25 +240,12 @@ func (s *Service) CreateWithBindingsIssuedTx(tx *Tx, c Client, bindings []Bindin
 		if err != nil {
 			return "", nil, err
 		}
-		plaintext := b.Credential
-		generated := false
-		if plaintext == "" {
-			plaintext, err = generateCredentialPlaintext()
-			if err != nil {
-				return "", nil, err
-			}
-			generated = true
-		}
-		if _, err := tx.SetCredential(s.creds, bind.ID, "password", plaintext); err != nil {
+		issuedCred, err := s.IssueBindingPasswordTx(tx, bind, b.Credential)
+		if err != nil {
 			return "", nil, err
 		}
-		if generated {
-			issued = append(issued, IssuedCredential{
-				BindingID: bind.ID,
-				InboundID: bind.InboundID,
-				Kind:      "password",
-				Plaintext: plaintext,
-			})
+		if issuedCred.Plaintext != "" {
+			issued = append(issued, issuedCred)
 		}
 	}
 	return created.ID, issued, nil
@@ -295,6 +282,29 @@ func (s *Service) AddBindingWithIdentityEnabledTx(tx *Tx, clientID, inboundID, r
 		return Binding{}, fmt.Errorf("%w: inboundId is required", ErrValidation)
 	}
 	return tx.CreateBinding(Binding{ClientID: clientID, InboundID: inboundID, RuntimeIdentity: runtimeIdentity, Enabled: enabled})
+}
+
+// IssueBindingPasswordTx stores a password for a binding. An empty provided
+// value generates a high-entropy secret. Generated plaintext is returned once
+// so the operator can deliver it; operator-supplied secrets are not echoed.
+func (s *Service) IssueBindingPasswordTx(tx *Tx, binding Binding, provided string) (IssuedCredential, error) {
+	plaintext := strings.TrimSpace(provided)
+	generated := false
+	if plaintext == "" {
+		var err error
+		plaintext, err = generateCredentialPlaintext()
+		if err != nil {
+			return IssuedCredential{}, err
+		}
+		generated = true
+	}
+	if _, err := tx.SetCredential(s.creds, binding.ID, "password", plaintext); err != nil {
+		return IssuedCredential{}, err
+	}
+	if !generated {
+		return IssuedCredential{}, nil
+	}
+	return IssuedCredential{BindingID: binding.ID, InboundID: binding.InboundID, Kind: "password", Plaintext: plaintext}, nil
 }
 
 // RemoveBindingTx is the transactional variant of RemoveBinding.

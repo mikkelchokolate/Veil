@@ -2869,7 +2869,7 @@ paths:
       x-veil-role: admin-mutation
       tags:
       - clients
-      summary: Add a binding (optional credential)
+      summary: Add a binding; empty credential is generated once
       security:
       - sessionCookie: []
         csrfToken: []
@@ -2893,7 +2893,7 @@ paths:
                   type: boolean
       responses:
         '201':
-          description: Created binding.
+          description: Created binding. When the server generated the password, plaintext and issuedCredentials are returned exactly once.
         '409':
           $ref: '#/components/responses/Conflict'
         '422':

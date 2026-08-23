@@ -98,6 +98,9 @@ func TestRenderSystemdUnits(t *testing.T) {
 	if !strings.Contains(units["veil-olcrtc@.service"], "/etc/veil/generated/olcrtc/%i.yaml") {
 		t.Fatalf("bad olcrtc unit:\n%s", units["veil-olcrtc@.service"])
 	}
+	if !strings.Contains(units["veil-olcrtc@.service"], "StartLimitBurst=5") || !strings.Contains(units["veil-olcrtc@.service"], "StartLimitIntervalSec=30") {
+		t.Fatalf("olcrtc unit must cap crash-loops:\n%s", units["veil-olcrtc@.service"])
+	}
 	if !strings.Contains(units["veil-warp.service"], "ExecStart=/usr/local/bin/sing-box run -c /etc/veil/generated/sing-box/warp.json") || !strings.Contains(units["veil-warp.service"], "ExecReload=/usr/local/bin/sing-box check -c /etc/veil/generated/sing-box/warp.json") {
 		t.Fatalf("bad WARP unit:\n%s", units["veil-warp.service"])
 	}

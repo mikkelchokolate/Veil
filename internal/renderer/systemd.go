@@ -225,6 +225,8 @@ WantedBy=multi-user.target
 Description=Veil managed olcRTC (%i)
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=30
+StartLimitBurst=5
 
 [Service]
 Type=simple

@@ -320,9 +320,18 @@ export function ClientDetailPage() {
 	const attach = useMutation({
 		mutationFn: async (inboundId: string) => {
 			const res = await postApiV1ClientsIdBindings(clientId, { inboundId });
-			return res as unknown as MutationFeedback;
+			return res as unknown as MutationFeedback & {
+				id?: string;
+				plaintext?: string;
+			};
 		},
 		onSuccess: (data) => {
+			if (data.plaintext && data.id) {
+				setRevealed((prev) => ({
+					...prev,
+					[data.id as string]: data.plaintext as string,
+				}));
+			}
 			setAttachInbound("");
 			setError(null);
 			recordFeedback(data);

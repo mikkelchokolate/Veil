@@ -104,14 +104,21 @@ func TestPrivilegedApplyHealthChecksUseHelperStatus(t *testing.T) {
 	}
 }
 
-func TestPrivilegedApplyHealthChecksWaitForActivatingService(t *testing.T) {
-	oldInterval, oldTimeout := serviceHealthPollInterval, serviceHealthPollTimeout
-	serviceHealthPollInterval = time.Millisecond
-	serviceHealthPollTimeout = time.Second
+func stubServiceHealthTiming(t *testing.T, interval, timeout, window time.Duration) {
+	t.Helper()
+	oldInterval, oldTimeout, oldWindow := serviceHealthPollInterval, serviceHealthPollTimeout, serviceHealthStableWindow
+	serviceHealthPollInterval = interval
+	serviceHealthPollTimeout = timeout
+	serviceHealthStableWindow = window
 	t.Cleanup(func() {
 		serviceHealthPollInterval = oldInterval
 		serviceHealthPollTimeout = oldTimeout
+		serviceHealthStableWindow = oldWindow
 	})
+}
+
+func TestPrivilegedApplyHealthChecksWaitForActivatingService(t *testing.T) {
+	stubServiceHealthTiming(t, time.Millisecond, time.Second, 0)
 
 	client := &recordingPrivilegedClient{statusActiveStates: []string{"activating", "active"}}
 	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client})
@@ -127,6 +134,7 @@ func TestPrivilegedApplyHealthChecksWaitForActivatingService(t *testing.T) {
 }
 
 func TestPrivilegedApplyHealthChecksIgnoreStoppedOrphans(t *testing.T) {
+	stubServiceHealthTiming(t, time.Millisecond, time.Second, 0)
 	client := &recordingPrivilegedClient{}
 	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client})
 	results := NewManagementApplyContext(state).checkServiceHealth([]ServiceActionResult{
@@ -142,6 +150,45 @@ func TestPrivilegedApplyHealthChecksIgnoreStoppedOrphans(t *testing.T) {
 	}
 	if len(results) != 1 || results[0].Name != "veil-hysteria2@new.service" || !results[0].Healthy {
 		t.Fatalf("health results=%+v", results)
+	}
+}
+
+func TestPrivilegedApplyHealthChecksRequireStableOlcrtc(t *testing.T) {
+	stubServiceHealthTiming(t, time.Millisecond, time.Second, 0)
+	client := &recordingPrivilegedClient{statusActiveState: "active"}
+	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client})
+	results := NewManagementApplyContext(state).checkServiceHealth([]ServiceActionResult{{
+		Name: "veil-olcrtc@o1.service", Command: []string{"systemctl", "restart", "veil-olcrtc@o1.service"}, Success: true,
+	}})
+	if len(client.statusRequests) != 2 {
+		t.Fatalf("olcrtc must not be treated healthy on the first active poll, requests=%d results=%+v", len(client.statusRequests), results)
+	}
+	if len(results) != 1 || !results[0].Healthy {
+		t.Fatalf("health results=%+v", results)
+	}
+}
+
+func TestPrivilegedApplyHealthChecksRejectOlcrtcCrashLoop(t *testing.T) {
+	stubServiceHealthTiming(t, time.Millisecond, 40*time.Millisecond, 20*time.Millisecond)
+	client := &recordingPrivilegedClient{statusActiveStates: []string{"active", "failed"}}
+	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client})
+	results := NewManagementApplyContext(state).checkServiceHealth([]ServiceActionResult{{
+		Name: "veil-olcrtc@o1.service", Command: []string{"systemctl", "restart", "veil-olcrtc@o1.service"}, Success: true,
+	}})
+	if len(results) != 1 || results[0].Healthy {
+		t.Fatalf("crash-looping olcrtc must fail apply health, results=%+v requests=%d", results, len(client.statusRequests))
+	}
+}
+
+func TestPrivilegedApplyHealthChecksTimeoutUnstableOlcrtc(t *testing.T) {
+	stubServiceHealthTiming(t, time.Millisecond, 15*time.Millisecond, time.Second)
+	client := &recordingPrivilegedClient{statusActiveState: "active"}
+	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client})
+	results := NewManagementApplyContext(state).checkServiceHealth([]ServiceActionResult{{
+		Name: "veil-olcrtc@o1.service", Command: []string{"systemctl", "restart", "veil-olcrtc@o1.service"}, Success: true,
+	}})
+	if len(results) != 1 || results[0].Healthy || !strings.Contains(results[0].Error, "did not stay active") {
+		t.Fatalf("briefly-active olcrtc at timeout must be unhealthy, results=%+v", results)
 	}
 }
 

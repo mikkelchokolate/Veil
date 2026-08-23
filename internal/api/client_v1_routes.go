@@ -750,6 +750,7 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 				return
 			}
 			var b client.Binding
+			var issued client.IssuedCredential
 			outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
 				if !s.bindingInboundExistsLocked(req.InboundID) {
 					return fmt.Errorf("%w: binding inbound does not exist", client.ErrValidation)
@@ -770,10 +771,16 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 					return err
 				}
 				b = nb
-				if req.Credential != "" {
-					// The credential joins the SAME transaction: a binding is
-					// never committed without its credential (the former code
-					// swallowed this error entirely).
+				// Enabled bindings must have an active password before apply
+				// renders them. The panel attach button sends only inboundId;
+				// generate the secret here the same way client create does.
+				if enabled {
+					iss, err := s.clientService.IssueBindingPasswordTx(tx, b, req.Credential)
+					if err != nil {
+						return err
+					}
+					issued = iss
+				} else if req.Credential != "" {
 					if _, err := s.clientService.SetCredentialTx(tx, b.ID, "password", req.Credential); err != nil {
 						return err
 					}
@@ -785,7 +792,18 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 				return
 			}
 			s.logUserAction(r, "add_binding", clientID, true, req.InboundID)
-			s.writeMutationResponse(w, http.StatusCreated, b, outcome)
+			type createdBindingResponse struct {
+				client.Binding
+				Plaintext         string                    `json:"plaintext,omitempty"`
+				IssuedCredentials []client.IssuedCredential `json:"issuedCredentials,omitempty"`
+			}
+			resp := createdBindingResponse{Binding: b}
+			if issued.Plaintext != "" {
+				resp.Plaintext = issued.Plaintext
+				resp.IssuedCredentials = []client.IssuedCredential{issued}
+				markIdempotencySecretResponse(w, b.ID, 1)
+			}
+			s.writeMutationResponse(w, http.StatusCreated, resp, outcome)
 			return
 		}
 		methodNotAllowed(w, http.MethodPost)

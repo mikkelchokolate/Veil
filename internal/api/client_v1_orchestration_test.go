@@ -181,6 +181,39 @@ func TestClientMutationOrchestration(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("add binding: %d %s", w.Code, w.Body.String())
 	}
+	var bindBody map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &bindBody); err != nil {
+		t.Fatalf("decode binding: %v", err)
+	}
+	if pt, _ := bindBody["plaintext"].(string); pt == "" {
+		t.Errorf("attach without credential must return generated plaintext")
+	}
+	bindID, _ := bindBody["id"].(string)
+	if bindID == "" {
+		t.Fatalf("attach response missing binding id: %v", bindBody)
+	}
+	gw := httptest.NewRecorder()
+	r.ServeHTTP(gw, httptest.NewRequest(http.MethodGet, "/api/v1/clients/"+clientID, nil))
+	if gw.Code != http.StatusOK {
+		t.Fatalf("get client after attach: %d %s", gw.Code, gw.Body.String())
+	}
+	var view map[string]any
+	if err := json.Unmarshal(gw.Body.Bytes(), &view); err != nil {
+		t.Fatalf("decode client after attach: %v", err)
+	}
+	configured := false
+	bindings, _ := view["bindings"].([]any)
+	for _, raw := range bindings {
+		b, _ := raw.(map[string]any)
+		if id, _ := b["id"].(string); id != bindID {
+			continue
+		}
+		cred, _ := b["credential"].(map[string]any)
+		configured = cred["configured"] == true
+	}
+	if !configured {
+		t.Errorf("attach without credential must persist an active password")
+	}
 	if got := len(listApplyJobs(t, r)); got != jobsBeforeBind+1 {
 		t.Errorf("(7) binding add created %d jobs, want 1", got-jobsBeforeBind)
 	}
@@ -188,10 +221,9 @@ func TestClientMutationOrchestration(t *testing.T) {
 	if env.Revision.Desired != desiredBeforeBind+1 {
 		t.Errorf("(1) binding desired = %d, want %d", env.Revision.Desired, desiredBeforeBind+1)
 	}
-	var bindResp struct {
+	bindResp := struct {
 		ID string `json:"id"`
-	}
-	_ = json.Unmarshal(w.Body.Bytes(), &bindResp)
+	}{ID: bindID}
 
 	// --- CREDENTIAL rotation: exactly one job, plaintext returned once ---
 	desiredBeforeCred, _ := applyState(t, r)

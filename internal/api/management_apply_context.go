@@ -45,6 +45,11 @@ var (
 var (
 	serviceHealthPollInterval = 250 * time.Millisecond
 	serviceHealthPollTimeout  = 15 * time.Second
+	// serviceHealthStableWindow is how long a crash-prone protocol unit must
+	// stay active before apply treats it as healthy. One extra 250ms poll is
+	// not enough: olcRTC can start, join a Jitsi room, and exit in ~700ms,
+	// which still looks "active" for two consecutive polls.
+	serviceHealthStableWindow = 2 * time.Second
 )
 
 func currentFirewallApplier() firewallApplier {
@@ -804,10 +809,12 @@ func (ctx ManagementApplyContext) checkServiceHealth(actions []ServiceActionResu
 	deadline := time.Now().Add(serviceHealthPollTimeout)
 	requireStableActive := false
 	for _, unit := range units {
-		requireStableActive = requireStableActive || strings.HasPrefix(unit, "veil-hysteria2@")
+		requireStableActive = requireStableActive || serviceRequiresStableActive(unit)
 	}
-	stableActiveObserved := false
+	var healthySince time.Time
+	consecutiveHealthy := 0
 	for {
+		now := time.Now()
 		statuses, err := ctx.state.privileged.ServiceStatus(operationContext, privileged.ServiceStatusRequest{Units: units})
 		if err != nil {
 			return []ServiceHealthResult{{
@@ -832,16 +839,33 @@ func (ctx ManagementApplyContext) checkServiceHealth(actions []ServiceActionResu
 				Healthy: healthy, Output: status.ActiveState + "/" + status.SubState, Error: status.Error,
 			})
 		}
-		if allHealthy && (!requireStableActive || stableActiveObserved) {
-			return results
-		}
 		if allHealthy {
-			stableActiveObserved = true
+			consecutiveHealthy++
+			if healthySince.IsZero() {
+				healthySince = now
+			}
+			stable := !requireStableActive ||
+				(consecutiveHealthy >= 2 && now.Sub(healthySince) >= serviceHealthStableWindow)
+			if stable {
+				return results
+			}
 			retryable = true
 		} else {
-			stableActiveObserved = false
+			consecutiveHealthy = 0
+			healthySince = time.Time{}
 		}
-		if !retryable || !time.Now().Before(deadline) {
+		timedOut := !now.Before(deadline)
+		if timedOut && requireStableActive {
+			for i := range results {
+				if results[i].Healthy {
+					results[i].Healthy = false
+					if results[i].Error == "" {
+						results[i].Error = "service did not stay active"
+					}
+				}
+			}
+		}
+		if !retryable || timedOut {
 			return results
 		}
 		timer := time.NewTimer(serviceHealthPollInterval)
@@ -855,4 +879,8 @@ func (ctx ManagementApplyContext) checkServiceHealth(actions []ServiceActionResu
 		case <-timer.C:
 		}
 	}
+}
+
+func serviceRequiresStableActive(unit string) bool {
+	return strings.HasPrefix(unit, "veil-hysteria2@") || strings.HasPrefix(unit, "veil-olcrtc@")
 }
