@@ -14,6 +14,9 @@ type HostPortProbe struct {
 	// standard net.ListenConfig implementation.
 	listenTCP func(context.Context, *net.ListenConfig, string) (net.Listener, error)
 	listenUDP func(context.Context, *net.ListenConfig, string) (net.PacketConn, error)
+	// readProcNet is a test hook for /proc/net/<name>. When nil the probe
+	// reads /proc/net from the host.
+	readProcNet func(string) ([]byte, error)
 }
 
 func (p HostPortProbe) Available(ctx context.Context, transport string, port int) (bool, error) {
@@ -38,10 +41,7 @@ func (p HostPortProbe) Available(ctx context.Context, transport string, port int
 		}
 		listener, err := listen(ctx, &listenConfig, address)
 		if err != nil {
-			if ctx.Err() != nil {
-				return false, ctx.Err()
-			}
-			return false, nil
+			return p.availableAfterListenError(ctx, "tcp", port, err)
 		}
 		if err := listener.Close(); err != nil {
 			return false, fmt.Errorf("close TCP probe: %w", err)
@@ -56,10 +56,7 @@ func (p HostPortProbe) Available(ctx context.Context, transport string, port int
 		}
 		packet, err := listen(ctx, &listenConfig, address)
 		if err != nil {
-			if ctx.Err() != nil {
-				return false, ctx.Err()
-			}
-			return false, nil
+			return p.availableAfterListenError(ctx, "udp", port, err)
 		}
 		if err := packet.Close(); err != nil {
 			return false, fmt.Errorf("close UDP probe: %w", err)
@@ -68,6 +65,20 @@ func (p HostPortProbe) Available(ctx context.Context, transport string, port int
 	default:
 		return false, fmt.Errorf("unsupported transport %q", transport)
 	}
+}
+
+func (p HostPortProbe) availableAfterListenError(ctx context.Context, transport string, port int, err error) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+	// The panel process has no CAP_NET_BIND_SERVICE, so a bind of a
+	// privileged port fails with EACCES even when the port is free.
+	// Hysteria2/Naive/Mieru units do have that capability, so report
+	// occupancy from /proc/net instead of treating EACCES as "in use".
+	if isPermissionDenied(err) {
+		return p.availableFromProcNet(transport, port)
+	}
+	return false, nil
 }
 
 type HostDNSResolver struct {

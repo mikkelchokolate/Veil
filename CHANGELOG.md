@@ -17,6 +17,10 @@ All notable changes to Veil will be documented in this file.
   does not occupy UDP 443 and block Hysteria2 Inbounds on that port.
 - Creating a Hysteria2 Inbound without an explicit port now defaults to UDP 443
   instead of failing inbound validation.
+- Live validation no longer reports privileged ports as in use when the panel
+  process lacks `CAP_NET_BIND_SERVICE`. A bind that fails with EACCES now
+  inspects `/proc/net` occupancy, so Hysteria2 can share UDP 443 with Panel
+  Caddy on TCP 443.
 
 ## [v0.7.1] - 2026-08-22
 
