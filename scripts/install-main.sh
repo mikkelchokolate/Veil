@@ -139,11 +139,18 @@ if ! command -v pnpm >/dev/null 2>&1; then
     mkdir -p "$COREPACK_HOME"
     corepack enable >/dev/null
     corepack prepare "pnpm@${CI_PNPM_VERSION}" --activate
+  elif command -v npm >/dev/null 2>&1; then
+    npm install -g --prefix "$work/pnpm-prefix" "pnpm@${CI_PNPM_VERSION}"
+    export PATH="$work/pnpm-prefix/bin:$PATH"
   else
-    echo "pnpm ${CI_PNPM_VERSION} is required (enable corepack or install pnpm)" >&2
+    echo "pnpm ${CI_PNPM_VERSION} is required (enable corepack or install npm/pnpm)" >&2
     exit 1
   fi
 fi
+command -v pnpm >/dev/null 2>&1 || {
+  echo "pnpm is still not on PATH after bootstrap" >&2
+  exit 1
+}
 
 echo "Building Panel frontend..."
 (
