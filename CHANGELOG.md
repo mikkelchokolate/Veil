@@ -4,62 +4,7 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
-### Added
-
-- `scripts/install-main.sh` installs the current `main` commit from source:
-  `curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install-main.sh | sh`.
-  It is the HEAD equivalent of the tagged-release `install.sh` bootstrap and is
-  not cosign-signed.
-
-### Fixed
-
-- Backup restore and state-key rotation can create sibling temp files next to
-  `/etc/veil/state.key`. The helper no longer marks `/etc/veil` read-only while
-  allowing only the key file itself, which failed with EROFS under
-  `ProtectSystem=strict`.
-- Panel Caddy now advertises only `h1`/`h2` on the Panel HTTPS port so HTTP/3
-  does not occupy UDP 443 and block Hysteria2 Inbounds on that port.
-- Creating a Hysteria2 Inbound without an explicit port now defaults to UDP 443
-  instead of failing inbound validation.
-- Live validation no longer reports privileged ports as in use when the panel
-  process lacks `CAP_NET_BIND_SERVICE`. A bind that fails with EACCES now
-  inspects `/proc/net` occupancy, so Hysteria2 can share UDP 443 with Panel
-  Caddy on TCP 443.
-- `veil uninstall` now stops loaded template instances (`veil-hysteria2@*`,
-  `veil-olcrtc@*`) instead of trying to stop the template unit name itself.
-- Fresh installs now grant the panel group-read on generated Caddy JSON
-  (`0640 root:veil`, directory `0750`) so the first inbound apply can hash the
-  live artifact instead of failing with permission denied.
-- Fresh installs now write `/etc/veil/backup.passphrase`, and Panel backup
-  create generates that file when it is missing, so Create backup works without
-  a separate `veil backup schedule enable`. A too-short passphrase returns a
-  public 503 instead of a generic privileged-operation error.
-
-## [v0.7.1] - 2026-08-22
-
-### Fixed
-
-- The one-command installer now accepts checksum entries with either canonical
-  asset names or the legacy `./` prefix, while release manifests are generated
-  with canonical names. This fixes `Expected exactly one checksum ... got 0`.
-- Root-driven installs no longer preserve the GitHub Actions runner UID while
-  extracting the verified archive, so the secure binary handoff accepts the
-  downloaded regular file without weakening its ownership checks.
-- Normalized runtime credentials are now used consistently by global client
-  links and subscriptions, so NaiveProxy links authenticate correctly.
-- NaiveProxy now uses the configured WARP SOCKS outbound, while routing rules
-  marked `direct` continue to use the server's original network path.
-- Hysteria2 WARP ACL output now uses a valid outbound identifier.
-- Durable apply now reports failed revisions as errors, waits for newly started
-  services to become stable, and removes obsolete managed systemd wants.
-- `veil config validate` can validate encrypted olcRTC state snapshots with an
-  explicit `--key-path` without creating or replacing encryption keys.
-- `veil status` now honors `--web-base-path` and `VEIL_WEB_BASE_PATH`, allowing
-  it to query Panels mounted below a secret path.
-- Runtime provenance is now covered by the endpoint authorization policy
-  instead of being rejected as an unknown API operation.
-
-## [v0.7.0] - 2026-08-22
+## [v0.7.0] - 2026-08-23
 
 Architecture rework of the Veil management plane: durable apply, normalized
 Clients, React Panel, backup/restore, protocol plugins, and isolated CI.
@@ -79,6 +24,10 @@ Clients, React Panel, backup/restore, protocol plugins, and isolated CI.
 
 ### Added
 
+- `scripts/install-main.sh` installs the current `main` commit from source:
+  `curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install-main.sh | sh`.
+  It is the HEAD equivalent of the tagged-release `install.sh` bootstrap and is
+  not cosign-signed.
 - `veil help` prints the operator command catalog, including nested
   subcommands (`veil help admin`, `veil backup schedule`, and the rest of the
   tree). `veil help <command>` still shows flags for that command.
@@ -116,6 +65,58 @@ Clients, React Panel, backup/restore, protocol plugins, and isolated CI.
 - Room generation is now served under `POST /api/protocols/{protocol}/room`
   (was `/api/{protocol}/room`) so OpenAPI paths resolve unambiguously; the
   legacy server-rendered panel uses the same endpoint.
+- Rotating the state-encryption key now advances the desired revision and
+  runs the same apply-job envelope as other mutations, so the Panel header
+  does not stay Pending with no job.
+- The Panel no longer cancels an in-flight apply when the browser request
+  times out; the helper finishes the job and the UI polls it.
+- Attaching a client to an inbound with an empty credential now generates
+  that credential once and returns it in the mutation envelope.
+- olcRTC apply now waits for the managed unit to stay active before the
+  job is marked succeeded.
+- Backup restore and state-key rotation can create sibling temp files next
+  to `/etc/veil/state.key`. The helper no longer marks `/etc/veil` read-only
+  while allowing only the key file itself, which failed with EROFS under
+  `ProtectSystem=strict`.
+- Panel Caddy now advertises only `h1`/`h2` on the Panel HTTPS port so HTTP/3
+  does not occupy UDP 443 and block Hysteria2 Inbounds on that port.
+- Creating a Hysteria2 Inbound without an explicit port now defaults to UDP
+  443 instead of failing inbound validation.
+- Live validation no longer reports privileged ports as in use when the
+  panel process lacks `CAP_NET_BIND_SERVICE`. A bind that fails with EACCES
+  now inspects `/proc/net` occupancy, so Hysteria2 can share UDP 443 with
+  Panel Caddy on TCP 443.
+- `veil uninstall` now stops loaded template instances (`veil-hysteria2@*`,
+  `veil-olcrtc@*`) instead of trying to stop the template unit name itself.
+- Fresh installs now grant the panel group-read on generated Caddy JSON
+  (`0640 root:veil`, directory `0750`) so the first inbound apply can hash
+  the live artifact instead of failing with permission denied.
+- Fresh installs now write `/etc/veil/backup.passphrase`, and Panel backup
+  create generates that file when it is missing, so Create backup works
+  without a separate `veil backup schedule enable`. A too-short passphrase
+  returns a public 503 instead of a generic privileged-operation error.
+- The one-command installer now accepts checksum entries with either
+  canonical asset names or the legacy `./` prefix, while release manifests
+  are generated with canonical names. This fixes
+  `Expected exactly one checksum ... got 0`.
+- Root-driven installs no longer preserve the GitHub Actions runner UID
+  while extracting the verified archive, so the secure binary handoff
+  accepts the downloaded regular file without weakening its ownership
+  checks.
+- Normalized runtime credentials are now used consistently by global client
+  links and subscriptions, so NaiveProxy links authenticate correctly.
+- NaiveProxy now uses the configured WARP SOCKS outbound, while routing
+  rules marked `direct` continue to use the server's original network path.
+- Hysteria2 WARP ACL output now uses a valid outbound identifier.
+- Durable apply now reports failed revisions as errors, waits for newly
+  started services to become stable, and removes obsolete managed systemd
+  wants.
+- `veil config validate` can validate encrypted olcRTC state snapshots with
+  an explicit `--key-path` without creating or replacing encryption keys.
+- `veil status` now honors `--web-base-path` and `VEIL_WEB_BASE_PATH`,
+  allowing it to query Panels mounted below a secret path.
+- Runtime provenance is now covered by the endpoint authorization policy
+  instead of being rejected as an unknown API operation.
 
 ### Added
 
