@@ -713,7 +713,25 @@ func TestAutofill(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if out.Name != inbound.Name {
-		t.Error("Autofill should return inbound unchanged")
+		t.Error("Autofill should preserve the inbound name")
+	}
+	if out.Transport != "udp" {
+		t.Fatalf("Autofill transport = %q, want udp", out.Transport)
+	}
+	if out.Port != 443 {
+		t.Fatalf("Autofill port = %d, want 443", out.Port)
+	}
+}
+
+func TestAutofillPreservesExplicitPortAndTransport(t *testing.T) {
+	p := New()
+	inbound := model.Inbound{Name: "h2", Transport: "udp", Port: 8444}
+	out, err := p.Autofill(inbound)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Transport != "udp" || out.Port != 8444 {
+		t.Fatalf("Autofill mutated explicit bind: transport=%q port=%d", out.Transport, out.Port)
 	}
 }
 

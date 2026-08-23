@@ -220,6 +220,20 @@ func TestRenderCaddyJSONPanelOnly(t *testing.T) {
 	if _, ok := apps["http"]; !ok {
 		t.Error("expected http app")
 	}
+	server := apps["http"].(map[string]any)["servers"].(map[string]any)["tcp-0.0.0.0-443"].(map[string]any)
+	protocols, _ := server["protocols"].([]any)
+	got := make([]string, 0, len(protocols))
+	for _, proto := range protocols {
+		got = append(got, proto.(string))
+	}
+	if strings.Join(got, ",") != "h1,h2" {
+		t.Fatalf("panel protocols = %v, want [h1 h2] so HTTP/3 does not occupy UDP 443", got)
+	}
+	for _, proto := range got {
+		if proto == "h3" {
+			t.Fatal("panel Caddy must not enable HTTP/3 on the Panel HTTPS port")
+		}
+	}
 }
 
 func TestRenderCaddyJSONAcmeChallengeKeys(t *testing.T) {

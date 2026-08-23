@@ -74,9 +74,11 @@ release-check:
 	go test -tags e2e ./test/e2e/... -count=1
 	make build
 	sh -n scripts/install.sh
+	sh -n scripts/install-main.sh
 	bash -n scripts/install-privileged.sh scripts/uninstall.sh
 	bash scripts/install-privileged.sh --help >/dev/null
 	bash scripts/uninstall.sh --help >/dev/null
+	bash scripts/install-main.sh --help >/dev/null
 	git diff --check
 	@test -z "$$(git status --short)" || (git status --short && exit 1)
 

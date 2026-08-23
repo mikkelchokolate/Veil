@@ -120,6 +120,12 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 		"automatic_https":         map[string]any{"disable_redirects": true},
 		"tls_connection_policies": []map[string]any{{}},
 	}
+	// Keep Panel HTTPS on TCP only. Caddy's default protocol set includes h3,
+	// which binds UDP on the same port and makes Hysteria2 (QUIC/UDP 443)
+	// fail live validation and fail to start next to Panel Caddy.
+	if owner.Kind == caddyassembly.CaddyOwnerPanel {
+		server["protocols"] = []string{"h1", "h2"}
+	}
 	if owner.Kind == caddyassembly.CaddyOwnerNaive {
 		protocols, err := protocolsForTransport(owner.Transport)
 		if err != nil {

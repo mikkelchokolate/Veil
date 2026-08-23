@@ -279,9 +279,11 @@ func TestReleaseWorkflowEnforcesQualityGatesBeforePublish(t *testing.T) {
 		"govulncheck ./...",
 		"shellcheck scripts/*.sh",
 		"sh -n scripts/install.sh",
+		"sh -n scripts/install-main.sh",
 		"bash -n scripts/install-privileged.sh scripts/uninstall.sh",
 		"bash scripts/install-privileged.sh --help >/dev/null",
 		"bash scripts/uninstall.sh --help >/dev/null",
+		"bash scripts/install-main.sh --help >/dev/null",
 		"git diff --check",
 		"needs: [quality, release, docker-publish]",
 	} {
@@ -373,9 +375,11 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 		"govulncheck ./...",
 		"shellcheck scripts/*.sh",
 		"sh -n scripts/install.sh",
+		"sh -n scripts/install-main.sh",
 		"bash -n scripts/install-privileged.sh scripts/uninstall.sh",
 		"bash scripts/install-privileged.sh --help >/dev/null",
 		"bash scripts/uninstall.sh --help >/dev/null",
+		"bash scripts/install-main.sh --help >/dev/null",
 	} {
 		if !strings.Contains(lintScript, want) {
 			t.Fatalf("scripts/ci/lint.sh missing required gate %q", want)

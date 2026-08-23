@@ -75,7 +75,7 @@ const EMPTY: InboundForm = {
 	name: "",
 	protocol: "hysteria2",
 	transport: "udp",
-	port: "",
+	port: "443",
 	enabled: true,
 	masqueradeURL: "",
 	fallbackRoot: "",

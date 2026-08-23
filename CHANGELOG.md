@@ -4,6 +4,20 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+### Added
+
+- `scripts/install-main.sh` installs the current `main` commit from source:
+  `curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install-main.sh | sh`.
+  It is the HEAD equivalent of the tagged-release `install.sh` bootstrap and is
+  not cosign-signed.
+
+### Fixed
+
+- Panel Caddy now advertises only `h1`/`h2` on the Panel HTTPS port so HTTP/3
+  does not occupy UDP 443 and block Hysteria2 Inbounds on that port.
+- Creating a Hysteria2 Inbound without an explicit port now defaults to UDP 443
+  instead of failing inbound validation.
+
 ## [v0.7.1] - 2026-08-22
 
 ### Fixed

@@ -11,6 +11,7 @@ import (
 )
 
 const exactInstallCommand = "curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sh"
+const exactMainInstallCommand = "curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install-main.sh | sh"
 
 func TestDocumentationUsesExactOneCommandInstaller(t *testing.T) {
 	for _, path := range []string{"../../README.md", "../../docs/install.md"} {
@@ -22,11 +23,53 @@ func TestDocumentationUsesExactOneCommandInstaller(t *testing.T) {
 		if !strings.Contains(text, exactInstallCommand) {
 			t.Errorf("%s does not contain exact one-command install", path)
 		}
+		if !strings.Contains(text, exactMainInstallCommand) {
+			t.Errorf("%s does not contain exact main-branch install", path)
+		}
 		for _, forbidden := range []string{"| sudo sh", "| sudo bash", "bash ./bootstrap.sh", "cosign verify-blob --bundle bootstrap.sh.bundle"} {
 			if strings.Contains(text, forbidden) {
 				t.Errorf("%s contains forbidden/manual bootstrap fragment %q", path, forbidden)
 			}
 		}
+	}
+}
+
+func TestMainInstallScriptBuildsLatestMainBeforePrivilegedHandoff(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install-main.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	if !strings.HasPrefix(script, "#!/bin/sh\n") {
+		t.Fatalf("main installer must be POSIX sh")
+	}
+	if strings.Contains(script, "releases/latest/download/veil_") || strings.Contains(script, "veil_linux_amd64.tar.gz") {
+		t.Fatal("main installer must not download a tagged release archive")
+	}
+	sudoAt := strings.Index(script, "sudo env ")
+	if sudoAt < 0 {
+		t.Fatal("main installer has no final sudo handoff")
+	}
+	prefix := script[:sudoAt]
+	for _, marker := range []string{
+		"commits/${BRANCH}",
+		"archive/${sha}.tar.gz",
+		"pnpm build",
+		"go build",
+		"main.version=main-",
+		"installer_digest=",
+		"binary_digest=",
+		"VEIL_INSTALLER_SHA256=",
+		"VEIL_VERIFIED_BINARY_SHA256=",
+		"--local-bin",
+	} {
+		at := strings.Index(prefix, marker)
+		if at < 0 {
+			t.Errorf("main installer missing %q before sudo", marker)
+		}
+	}
+	if strings.Contains(script, "| sudo sh") || strings.Contains(script, "| sudo bash") {
+		t.Fatal("main installer must never pipe remote bytes into sudo")
 	}
 }
 

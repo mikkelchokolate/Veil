@@ -130,10 +130,12 @@ ci_test_stage "coverage check" coverage_check_stage
 
 ci_test_stage "shell hygiene" bash -c '
 sh -n scripts/install.sh
+sh -n scripts/install-main.sh
 bash -n scripts/install-privileged.sh scripts/uninstall.sh scripts/package-smoke.sh
 sh -n packaging/scripts/*.sh
 bash scripts/install-privileged.sh --help >/dev/null
 bash scripts/uninstall.sh --help >/dev/null
+bash scripts/install-main.sh --help >/dev/null
 git diff --check
 '
 

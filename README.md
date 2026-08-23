@@ -12,6 +12,12 @@ One command, answer a few questions, done:
 curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sh
 ```
 
+To install the current `main` commit instead of a tagged release (builds from source; not cosign-signed):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install-main.sh | sh
+```
+
 `install.sh` runs without root. It downloads and verifies the pinned verifier,
 `install-privileged.sh`, the Veil archive, signed checksums, and signed
 provenance. Only after every privileged payload passes verification does it

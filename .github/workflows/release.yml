@@ -106,10 +106,12 @@ jobs:
       - run: sudo env "PATH=$PATH" "HOME=$HOME" go test -tags e2e ./test/e2e/... -run '^TestRequiredMieruUDPDataPath$' -count=1 -v -timeout=90s
       - run: sudo env "PATH=$PATH" "HOME=$HOME" go test -tags e2e ./test/e2e/... -run '^TestRequiredNaiveProxyDataPath$' -count=1 -v -timeout=90s
       - run: sh -n scripts/install.sh
+      - run: sh -n scripts/install-main.sh
       - run: bash -n scripts/install-privileged.sh scripts/uninstall.sh scripts/package-smoke.sh
       - run: sh -n packaging/scripts/*.sh
       - run: bash scripts/install-privileged.sh --help >/dev/null
       - run: bash scripts/uninstall.sh --help >/dev/null
+      - run: bash scripts/install-main.sh --help >/dev/null
       - run: git diff --check
 
   browser-e2e:

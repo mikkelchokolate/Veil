@@ -16,6 +16,14 @@ The easiest way to install Veil is using the official quick-start script. This s
 curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sh
 ```
 
+To install the current `main` commit instead of a tagged release, use the
+source installer. It fetches origin/`main`, builds the Panel, then uses the
+same privileged installer handoff. This path is not cosign-signed.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install-main.sh | sh
+```
+
 After install, `veil help` lists every command. `veil help <command>` shows
 flags for one command.
 
@@ -48,6 +56,10 @@ curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/inst
 | `--force` | *(false)* | Force binary download and re-installation even if Veil is already present. |
 | `--yes` | *(false)* | Run the installation non-interactively (answers defaults). |
 | `--dry-run` | *(false)* | Download the binary but do not perform changes. |
+
+The `install-main.sh` bootstrap accepts the same `--panel-access`, `--domain`,
+`--email`, `--yes`, `--force`, and related flags and forwards them to
+`install-privileged.sh` after the `main` binary has been built.
 
 ---
 

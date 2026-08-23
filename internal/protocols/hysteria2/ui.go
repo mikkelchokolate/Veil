@@ -31,7 +31,16 @@ func (Plugin) SettingsFieldSchema() []schema.FieldSchema {
 // value wins over the flat field: on update the panel echoes the flat password
 // as "[REDACTED]" (restored to the stored value by the API layer), and the
 // field the user actually edited lives in ProtocolFields.
+//
+// Empty transport/port are filled with the Hysteria2 defaults (UDP/443) so a
+// Panel create that only supplies a name does not fail inbound validation.
 func (Plugin) Autofill(inbound model.Inbound) (model.Inbound, error) {
+	if inbound.Transport == "" {
+		inbound.Transport = "udp"
+	}
+	if inbound.Port == 0 {
+		inbound.Port = 443
+	}
 	if inbound.ProtocolFields != nil {
 		if password, ok := inbound.ProtocolFields["hysteria2Password"].(string); ok && password != "" && password != veilsettings.RedactedSecret {
 			inbound.Password = password
