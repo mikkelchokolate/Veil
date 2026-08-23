@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { ApiError, apiFetch } from "../api/fetcher";
+import { ApiError, apiFetch, mutationErrorMessage } from "../api/fetcher";
 import type { UserResponse } from "../api/generated/models";
 import { useAuth, useIsAdmin } from "../auth/AuthContext";
 import {
@@ -91,7 +91,7 @@ export function UsersPage() {
 			invalidate();
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : t("users.error.create")),
+			setError(mutationErrorMessage(err, t("users.error.create"))),
 	});
 
 	const update = useMutation({
@@ -115,7 +115,7 @@ export function UsersPage() {
 			invalidate();
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : t("users.error.update")),
+			setError(mutationErrorMessage(err, t("users.error.update"))),
 	});
 
 	const remove = useMutation({
@@ -128,7 +128,7 @@ export function UsersPage() {
 			invalidate();
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : t("users.error.delete")),
+			setError(mutationErrorMessage(err, t("users.error.delete"))),
 	});
 
 	const revoke = useMutation({
@@ -142,7 +142,7 @@ export function UsersPage() {
 			invalidate();
 		},
 		onError: (err) =>
-			setError(err instanceof ApiError ? err.message : t("users.error.revoke")),
+			setError(mutationErrorMessage(err, t("users.error.revoke"))),
 	});
 
 	function onSubmit(e: FormEvent) {

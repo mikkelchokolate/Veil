@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ApiError, apiFetch } from "../api/fetcher";
+import { apiFetch, mutationErrorMessage } from "../api/fetcher";
 import type { RoutingRule } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import { Badge } from "../components/ui/badge";
@@ -116,9 +116,7 @@ export function RoutingPage() {
 				) : null}
 				{del.isError ? (
 					<FormMessage>
-						{del.error instanceof ApiError
-							? del.error.message
-							: t("routing.deleteFailed")}
+						{mutationErrorMessage(del.error, t("routing.deleteFailed"))}
 					</FormMessage>
 				) : null}
 			</div>
@@ -206,9 +204,7 @@ export function RoutingPage() {
 							</div>
 							{save.isError ? (
 								<FormMessage>
-									{save.error instanceof ApiError
-										? save.error.message
-										: t("routing.saveFailed")}
+									{mutationErrorMessage(save.error, t("routing.saveFailed"))}
 								</FormMessage>
 							) : null}
 						</div>
@@ -221,9 +217,7 @@ export function RoutingPage() {
 					<p className="muted">{t("common.loading")}</p>
 				) : rules.isError ? (
 					<FormMessage>
-						{rules.error instanceof ApiError
-							? rules.error.message
-							: t("routing.loadFailed")}
+						{mutationErrorMessage(rules.error, t("routing.loadFailed"))}
 					</FormMessage>
 				) : (
 					<Table>

@@ -36,8 +36,11 @@ func ProviderSupportsAutoRoom(name string) bool {
 	return false
 }
 
-// JitsiRoomBase is the community Jitsi instance olcRTC tunnels through.
-const JitsiRoomBase = "https://meet.handyweb.org/"
+// JitsiRoomBase is the Jitsi instance used for auto-generated rooms.
+// meet.handyweb.org started returning HTTP 468 on /xmpp-websocket (WAF),
+// which makes every generated room crash-loop. This host is first in
+// olcRTC's published instance list and accepts anonymous MUC joins.
+const JitsiRoomBase = "https://meet.egovm.ru/"
 
 // GenerateRoom returns a fresh room id for a provider that supports automatic
 // room creation, or an error for a provider that requires a manually created

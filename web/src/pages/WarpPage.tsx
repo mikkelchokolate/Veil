@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, apiFetch } from "../api/fetcher";
+import { apiFetch, mutationErrorMessage } from "../api/fetcher";
 import type { WarpConfig } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import { Badge } from "../components/ui/badge";
@@ -39,9 +39,7 @@ export function WarpPage() {
 		return (
 			<div className="card">
 				<FormMessage>
-					{warp.error instanceof ApiError
-						? warp.error.message
-						: t("warp.unavailable")}
+					{mutationErrorMessage(warp.error, t("warp.unavailable"))}
 				</FormMessage>
 			</div>
 		);
@@ -99,9 +97,7 @@ export function WarpPage() {
 			) : null}
 			{toggle.isError ? (
 				<FormMessage>
-					{toggle.error instanceof ApiError
-						? toggle.error.message
-						: t("warp.toggleFailed")}
+					{mutationErrorMessage(toggle.error, t("warp.toggleFailed"))}
 				</FormMessage>
 			) : null}
 			<p className="muted" style={{ fontSize: 12, marginTop: 8 }}>

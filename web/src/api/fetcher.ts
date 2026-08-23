@@ -148,6 +148,25 @@ export type ApiFetchOptions = RequestInit & {
 };
 
 const defaultTimeoutMs = 15_000;
+// Mutations wait for apply + service health (up to serviceHealthPollTimeout
+// plus staging/restart). A 15s abort cancels the HTTP request and used to
+// cancel apply itself, which left inbound creates looking like "Create failed"
+// while the host kept applying.
+const defaultMutationTimeoutMs = 60_000;
+
+export function mutationErrorMessage(
+	error: unknown,
+	fallback: string,
+): string {
+	if (
+		error instanceof ApiError ||
+		error instanceof TimeoutError ||
+		error instanceof CancelledError
+	) {
+		return error.message;
+	}
+	return fallback;
+}
 
 function requestInitFrom(options?: ApiFetchOptions): RequestInit {
 	if (!options) return {};
@@ -162,7 +181,9 @@ export async function apiFetch<T>(
 	options?: ApiFetchOptions,
 ): Promise<T> {
 	const method = (options?.method ?? "GET").toUpperCase();
-	const timeoutMs = options?.timeoutMs ?? defaultTimeoutMs;
+	const timeoutMs =
+		options?.timeoutMs ??
+		(isSafeMethod(method) ? defaultTimeoutMs : defaultMutationTimeoutMs);
 	const attempts = options?.attempts ?? (isSafeMethod(method) ? 3 : 1);
 	const headers = new Headers(options?.headers ?? {});
 	if (!headers.has("Accept")) headers.set("Accept", "application/json");

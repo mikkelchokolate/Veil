@@ -14,7 +14,7 @@ import {
 } from "@tanstack/react-table";
 import { useEffect, useMemo, useState } from "react";
 import { listClients } from "../api/clients";
-import { ApiError } from "../api/fetcher";
+import { ApiError, mutationErrorMessage } from "../api/fetcher";
 import { postApiV1ClientsBulk } from "../api/generated/clients/clients";
 import type { ClientView } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
@@ -190,7 +190,7 @@ export function ClientsPage() {
 		onError: (err) => {
 			setBulkResults(null);
 			setBulkError(
-				err instanceof ApiError ? err.message : t("clients.error.bulk"),
+				mutationErrorMessage(err, t("clients.error.bulk")),
 			);
 		},
 	});

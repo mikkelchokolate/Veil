@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ApiError, apiFetch } from "../api/fetcher";
+import { ApiError, apiFetch, mutationErrorMessage } from "../api/fetcher";
 // Generated from docs/openapi.yaml via Orval — do NOT hand-write DTOs for the
 // client create contract (blocker W4).
 import type {
@@ -147,7 +147,7 @@ export function ClientNewPage() {
 		},
 		onError: (err) => {
 			setError(
-				err instanceof ApiError ? err.message : t("clientNew.createError"),
+				mutationErrorMessage(err, t("clientNew.createError")),
 			);
 		},
 	});

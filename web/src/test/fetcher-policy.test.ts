@@ -89,11 +89,58 @@ describe("apiFetch request policy", () => {
 			() => undefined,
 			(error: unknown) => error,
 		);
-		await vi.advanceTimersByTimeAsync(60_000);
+		await vi.advanceTimersByTimeAsync(15_000);
 		const TimeoutError = (fetcher as FetcherExports).TimeoutError;
 		expect(TimeoutError).toBeTypeOf("function");
 		const error = await outcome;
 		expect(error).toBeInstanceOf(TimeoutError as new () => Error);
+	});
+
+	it("gives mutations a longer default timeout than GET so apply health can finish", async () => {
+		vi.useFakeTimers();
+		vi.stubGlobal(
+			"fetch",
+			vi.fn((_url: string, options?: RequestInit) => {
+				if (!options?.signal) {
+					return Promise.reject(new Error("request had no timeout signal"));
+				}
+				return new Promise<Response>((_resolve, reject) => {
+					options.signal?.addEventListener("abort", () => {
+						reject(new DOMException("aborted", "AbortError"));
+					});
+				});
+			}),
+		);
+		const pending = fetcher.apiFetch("/api/inbounds", {
+			method: "POST",
+			body: "{}",
+		});
+		const outcome = pending.then(
+			() => "resolved",
+			(error: unknown) => error,
+		);
+		await vi.advanceTimersByTimeAsync(15_000);
+		let settled = false;
+		void outcome.then(() => {
+			settled = true;
+		});
+		await Promise.resolve();
+		expect(settled).toBe(false);
+		await vi.advanceTimersByTimeAsync(45_000);
+		const TimeoutError = (fetcher as FetcherExports).TimeoutError;
+		expect(await outcome).toBeInstanceOf(TimeoutError as new () => Error);
+	});
+
+	it("surfaces timeout and API errors instead of a generic fallback", () => {
+		expect(
+			fetcher.mutationErrorMessage(new fetcher.ApiError(422, "port in use"), "Create failed"),
+		).toBe("port in use");
+		expect(
+			fetcher.mutationErrorMessage(new fetcher.TimeoutError(), "Create failed"),
+		).toBe("API request timed out");
+		expect(fetcher.mutationErrorMessage(new Error("boom"), "Create failed")).toBe(
+			"Create failed",
+		);
 	});
 
 	it("retries safe GET failures but never retries a mutation", async () => {

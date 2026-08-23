@@ -1,7 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ApiError, type ApiValidationIssue, apiFetch } from "../api/fetcher";
+import {
+	ApiError,
+	type ApiValidationIssue,
+	apiFetch,
+	mutationErrorMessage,
+} from "../api/fetcher";
 import type { ClientView, Inbound } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import {
@@ -282,9 +287,7 @@ export function InboundsPage() {
 		},
 		onError: (e) => {
 			setIssues(e instanceof ApiError ? (e.issues ?? null) : null);
-			setError(
-				e instanceof ApiError ? e.message : t("inbounds.error.createFailed"),
-			);
+			setError(mutationErrorMessage(e, t("inbounds.error.createFailed")));
 		},
 	});
 
@@ -303,9 +306,7 @@ export function InboundsPage() {
 		},
 		onError: (e) => {
 			setIssues(e instanceof ApiError ? (e.issues ?? null) : null);
-			setError(
-				e instanceof ApiError ? e.message : t("inbounds.error.updateFailed"),
-			);
+			setError(mutationErrorMessage(e, t("inbounds.error.updateFailed")));
 		},
 	});
 
@@ -323,9 +324,7 @@ export function InboundsPage() {
 		},
 		onError: (e) => {
 			setIssues(e instanceof ApiError ? (e.issues ?? null) : null);
-			setError(
-				e instanceof ApiError ? e.message : t("inbounds.error.deleteFailed"),
-			);
+			setError(mutationErrorMessage(e, t("inbounds.error.deleteFailed")));
 		},
 	});
 

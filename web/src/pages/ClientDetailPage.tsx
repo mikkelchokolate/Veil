@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { ApiError, apiFetch } from "../api/fetcher";
+import { ApiError, apiFetch, mutationErrorMessage } from "../api/fetcher";
 import {
 	deleteApiV1ClientsId,
 	deleteApiV1ClientsIdBindingsBindingId,
@@ -154,7 +154,7 @@ export function ClientDetailPage() {
 	}
 
 	function mutationFailed(err: unknown, fallbackKey: string) {
-		setError(err instanceof ApiError ? err.message : t(fallbackKey));
+		setError(mutationErrorMessage(err, t(fallbackKey)));
 		if (err instanceof ApiError && err.status === 409) {
 			invalidate();
 		}

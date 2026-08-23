@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ApiError, apiFetch } from "../api/fetcher";
+import { ApiError, apiFetch, mutationErrorMessage } from "../api/fetcher";
 import type { Settings } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import {
@@ -137,7 +137,7 @@ export function SettingsPage() {
 			void qc.invalidateQueries({ queryKey: ["settings"] });
 		},
 		onError: (e) =>
-			setError(e instanceof ApiError ? e.message : t("settings.saveFailed")),
+			setError(mutationErrorMessage(e, t("settings.saveFailed"))),
 	});
 
 	const rotateKey = useMutation({
@@ -152,7 +152,7 @@ export function SettingsPage() {
 			setNotice(t("settings.rotated"));
 		},
 		onError: (e) => {
-			setError(e instanceof ApiError ? e.message : t("settings.rotateFailed"));
+			setError(mutationErrorMessage(e, t("settings.rotateFailed")));
 		},
 	});
 

@@ -866,7 +866,7 @@ func (ctx ManagementApplyContext) checkServiceHealth(actions []ServiceActionResu
 			}
 		}
 		if !retryable || timedOut {
-			return results
+			return ctx.annotateUnhealthyJournals(operationContext, results)
 		}
 		timer := time.NewTimer(serviceHealthPollInterval)
 		select {
@@ -883,4 +883,69 @@ func (ctx ManagementApplyContext) checkServiceHealth(actions []ServiceActionResu
 
 func serviceRequiresStableActive(unit string) bool {
 	return strings.HasPrefix(unit, "veil-hysteria2@") || strings.HasPrefix(unit, "veil-olcrtc@")
+}
+
+func (ctx ManagementApplyContext) annotateUnhealthyJournals(operationContext context.Context, results []ServiceHealthResult) []ServiceHealthResult {
+	for i := range results {
+		if results[i].Healthy {
+			continue
+		}
+		hint := ctx.serviceJournalHint(operationContext, results[i].Name)
+		if hint == "" {
+			continue
+		}
+		if results[i].Error == "" {
+			results[i].Error = hint
+			continue
+		}
+		if !strings.Contains(results[i].Error, hint) {
+			results[i].Error = results[i].Error + ": " + hint
+		}
+	}
+	return results
+}
+
+func (ctx ManagementApplyContext) serviceJournalHint(operationContext context.Context, unit string) string {
+	if ctx.state == nil || ctx.state.privileged == nil || unit == "" || unit == "managed-services" {
+		return ""
+	}
+	journal, err := ctx.state.privileged.Journal(operationContext, privileged.JournalRequest{Unit: unit, Lines: 40})
+	if err != nil {
+		return ""
+	}
+	return journalFailureHint(journal.Lines)
+}
+
+func journalFailureHint(lines []string) string {
+	var last string
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		lower := strings.ToLower(line)
+		if strings.Contains(lower, "started veil-") || strings.Contains(lower, "stopped veil-") {
+			continue
+		}
+		if last == "" {
+			last = truncateJournalLine(line)
+		}
+		if strings.Contains(lower, "error") ||
+			strings.Contains(lower, "fatal") ||
+			strings.Contains(lower, "panic") ||
+			strings.Contains(lower, "handshake") ||
+			strings.Contains(lower, "failed") ||
+			strings.Contains(lower, "expected") {
+			return truncateJournalLine(line)
+		}
+	}
+	return last
+}
+
+func truncateJournalLine(line string) string {
+	const max = 240
+	if len(line) <= max {
+		return line
+	}
+	return line[:max] + "…"
 }

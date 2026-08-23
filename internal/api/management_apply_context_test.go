@@ -85,6 +85,17 @@ func TestCheckServiceHealthUsesCurrentStateRuntimeCatalog(t *testing.T) {
 	}
 }
 
+func TestJournalFailureHintPrefersHandshakeErrors(t *testing.T) {
+	hint := journalFailureHint([]string{
+		"Started veil-olcrtc@o1.service",
+		"connecting to room",
+		"expected handshake response status code 101 but got 468",
+	})
+	if !strings.Contains(hint, "468") {
+		t.Fatalf("hint = %q, want handshake status", hint)
+	}
+}
+
 func TestSyncFirewallLockedOpensPanelPortByDefault(t *testing.T) {
 	state := newManagementState(ServerInfo{Version: "test", Mode: "dev"})
 	state.settings.PanelListen = "0.0.0.0:3000"

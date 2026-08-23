@@ -220,11 +220,7 @@ func (s *managementState) autoApplyLocked(r *http.Request) (ApplyResponse, bool)
 		return ApplyResponse{}, false
 	}
 	defer s.serviceActionMu.Unlock()
-	operationContext := s.lifecycleContext()
-	if r != nil {
-		operationContext = r.Context()
-	}
-	response, status, err := NewApplyWorkflow(NewManagementApplyContextWithContext(s, operationContext)).RunLocked(ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
+	response, status, err := NewApplyWorkflow(NewManagementApplyContextWithContext(s, s.mutationApplyContext())).RunLocked(ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
 	success := err == nil && status == http.StatusOK
 	details := ""
 	if err != nil {
@@ -262,14 +258,10 @@ func (s *managementState) autoApplyResultLocked(r *http.Request, actor string) a
 	outcome.revision = rev
 	var job apply.Job
 	var runErr error
-	operationContext := s.lifecycleContext()
-	if r != nil {
-		operationContext = r.Context()
-	}
 	func() {
 		s.mu.Unlock()
 		defer s.mu.Lock()
-		job, runErr = runner.RunLatest(operationContext, "mutation", actor)
+		job, runErr = runner.RunLatest(s.mutationApplyContext(), "mutation", actor)
 	}()
 	if job.ID != "" {
 		outcome.job = &job

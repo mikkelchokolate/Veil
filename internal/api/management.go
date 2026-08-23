@@ -312,6 +312,15 @@ func (s *managementState) lifecycleContext() context.Context {
 	return context.TODO()
 }
 
+// mutationApplyContext is the context for apply-after-mutation. It must
+// outlive the HTTP request: the SPA aborts at the fetch timeout (or the
+// operator navigates away) while apply still has to finish health polling
+// and rollback. Using the request context previously marked health as
+// "context canceled" and left apply jobs / history inconsistent.
+func (s *managementState) mutationApplyContext() context.Context {
+	return s.lifecycleContext()
+}
+
 func (s *managementState) saveLocked() error {
 	return NewManagementStateLifecycle(s).SaveLocked()
 }

@@ -180,6 +180,30 @@ func TestPrivilegedApplyHealthChecksRejectOlcrtcCrashLoop(t *testing.T) {
 	}
 }
 
+func TestPrivilegedApplyHealthChecksAttachJournalOnFailure(t *testing.T) {
+	stubServiceHealthTiming(t, time.Millisecond, 40*time.Millisecond, 20*time.Millisecond)
+	client := &recordingPrivilegedClient{
+		statusActiveStates: []string{"failed"},
+		journalLines: []string{
+			"Started veil-olcrtc@o1.service",
+			"expected handshake response status code 101 but got 468",
+		},
+	}
+	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client})
+	results := NewManagementApplyContext(state).checkServiceHealth([]ServiceActionResult{{
+		Name: "veil-olcrtc@o1.service", Command: []string{"systemctl", "restart", "veil-olcrtc@o1.service"}, Success: true,
+	}})
+	if len(results) != 1 || results[0].Healthy {
+		t.Fatalf("failed olcrtc must be unhealthy, results=%+v", results)
+	}
+	if !strings.Contains(results[0].Error, "468") {
+		t.Fatalf("health error must include journal handshake failure, results=%+v journals=%+v", results, client.journals)
+	}
+	if len(client.journals) == 0 || client.journals[0].Unit != "veil-olcrtc@o1.service" {
+		t.Fatalf("expected a journal read for the failed unit, journals=%+v", client.journals)
+	}
+}
+
 func TestPrivilegedApplyHealthChecksTimeoutUnstableOlcrtc(t *testing.T) {
 	stubServiceHealthTiming(t, time.Millisecond, 15*time.Millisecond, time.Second)
 	client := &recordingPrivilegedClient{statusActiveState: "active"}

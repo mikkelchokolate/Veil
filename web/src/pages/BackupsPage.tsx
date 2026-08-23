@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ApiError, apiFetch, apiUrl } from "../api/fetcher";
+import { ApiError, apiFetch, apiUrl, mutationErrorMessage } from "../api/fetcher";
 import type { BackupArchive } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import {
@@ -115,7 +115,7 @@ export function BackupsPage() {
 			void qc.invalidateQueries({ queryKey: ["backups"] });
 		},
 		onError: (e) =>
-			setError(e instanceof ApiError ? e.message : t("backups.error.create")),
+			setError(mutationErrorMessage(e, t("backups.error.create"))),
 	});
 
 	const prune = useMutation({
@@ -130,7 +130,7 @@ export function BackupsPage() {
 			void qc.invalidateQueries({ queryKey: ["backups"] });
 		},
 		onError: (e) =>
-			setError(e instanceof ApiError ? e.message : t("backups.error.prune")),
+			setError(mutationErrorMessage(e, t("backups.error.prune"))),
 	});
 
 	const verify = useMutation({
@@ -152,7 +152,7 @@ export function BackupsPage() {
 			setVerifyResult((prev) => ({ ...prev, [name]: res }));
 		},
 		onError: (e) =>
-			setError(e instanceof ApiError ? e.message : t("backups.error.verify")),
+			setError(mutationErrorMessage(e, t("backups.error.verify"))),
 	});
 
 	const remove = useMutation({
@@ -167,7 +167,7 @@ export function BackupsPage() {
 			void qc.invalidateQueries({ queryKey: ["backups"] });
 		},
 		onError: (e) =>
-			setError(e instanceof ApiError ? e.message : t("backups.error.delete")),
+			setError(mutationErrorMessage(e, t("backups.error.delete"))),
 	});
 
 	const restore = useMutation({
@@ -188,7 +188,7 @@ export function BackupsPage() {
 			setActiveJob(j);
 		},
 		onError: (e) =>
-			setError(e instanceof ApiError ? e.message : t("backups.error.restore")),
+			setError(mutationErrorMessage(e, t("backups.error.restore"))),
 	});
 
 	async function download(name: string) {
