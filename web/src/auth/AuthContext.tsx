@@ -9,7 +9,12 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { apiFetch, setCsrfToken, setUnauthorizedHandler } from "../api/fetcher";
+import {
+	apiFetch,
+	CancelledError,
+	setCsrfToken,
+	setUnauthorizedHandler,
+} from "../api/fetcher";
 import type { UserRole } from "../api/generated/models";
 
 export interface Session {
@@ -35,6 +40,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	const [session, setSession] = useState<Session | null>(null);
 	const [loading, setLoading] = useState(true);
 	const channelRef = useRef<BroadcastChannel | null>(null);
+	const epochRef = useRef(0);
+	const refreshSeqRef = useRef(0);
+	const refreshAbortRef = useRef<AbortController | null>(null);
+	const logoutInFlightRef = useRef(false);
+
+	const abortRefresh = useCallback(() => {
+		refreshAbortRef.current?.abort();
+		refreshAbortRef.current = null;
+	}, []);
 
 	const broadcastRefresh = useCallback(() => {
 		channelRef.current?.postMessage({ type: "refresh" });
@@ -46,18 +60,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	}, []);
 
 	const refresh = useCallback(async () => {
+		if (logoutInFlightRef.current) return;
+		const epoch = epochRef.current;
+		const seq = ++refreshSeqRef.current;
+		abortRefresh();
+		const controller = new AbortController();
+		refreshAbortRef.current = controller;
 		try {
 			// apiFetch returns the parsed body directly and throws on non-2xx.
-			const status = await apiFetch<Session>("/api/auth/status");
+			const status = await apiFetch<Session>("/api/auth/status", {
+				signal: controller.signal,
+			});
+			if (
+				logoutInFlightRef.current ||
+				epoch !== epochRef.current ||
+				seq !== refreshSeqRef.current
+			) {
+				return;
+			}
 			setSession(status);
 			setCsrfToken(status.authenticated ? (status.csrfToken ?? null) : null);
-		} catch {
+		} catch (error) {
+			if (
+				logoutInFlightRef.current ||
+				epoch !== epochRef.current ||
+				seq !== refreshSeqRef.current
+			) {
+				return;
+			}
+			if (error instanceof CancelledError) return;
 			setSession({ authenticated: false });
 			setCsrfToken(null);
 		} finally {
-			setLoading(false);
+			if (
+				!logoutInFlightRef.current &&
+				epoch === epochRef.current &&
+				seq === refreshSeqRef.current
+			) {
+				setLoading(false);
+			}
 		}
-	}, []);
+	}, [abortRefresh]);
 
 	useEffect(() => {
 		void refresh();
@@ -65,12 +108,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 	useEffect(() => {
 		setUnauthorizedHandler(() => {
+			epochRef.current += 1;
+			refreshSeqRef.current += 1;
+			abortRefresh();
 			setSession({ authenticated: false });
 			setCsrfToken(null);
 			qc.clear();
 		});
 		return () => setUnauthorizedHandler(null);
-	}, [qc]);
+	}, [abortRefresh, qc]);
 
 	useEffect(() => {
 		const onRefresh = () => void refresh();
@@ -112,6 +158,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 				method: "POST",
 				body: JSON.stringify({ username, password }),
 			});
+			const epoch = ++epochRef.current;
+			logoutInFlightRef.current = false;
+			refreshSeqRef.current += 1;
+			abortRefresh();
 			if (data?.csrfToken) {
 				setCsrfToken(data.csrfToken);
 			}
@@ -127,6 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			};
 			try {
 				const status = await apiFetch<Session>("/api/auth/status");
+				if (epoch !== epochRef.current) return;
 				if (status.authenticated) {
 					setSession(status);
 					setCsrfToken(status.csrfToken ?? data.csrfToken ?? null);
@@ -134,12 +185,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 					setSession(fromLogin());
 				}
 			} catch {
+				if (epoch !== epochRef.current) return;
 				// Login already issued the session cookie; do not wipe CSRF if
 				// status is briefly unavailable.
 				setSession(fromLogin());
 			} finally {
-				setLoading(false);
+				if (epoch === epochRef.current) setLoading(false);
 			}
+			if (epoch !== epochRef.current) return;
 			try {
 				localStorage.setItem("veil_spa", "1");
 			} catch {
@@ -147,24 +200,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			}
 			broadcastRefresh();
 		},
-		[broadcastRefresh],
+		[abortRefresh, broadcastRefresh],
 	);
 
 	const logout = useCallback(async () => {
+		const epoch = ++epochRef.current;
+		logoutInFlightRef.current = true;
+		refreshSeqRef.current += 1;
+		abortRefresh();
 		try {
 			await apiFetch("/api/auth/logout", { method: "POST" });
 		} finally {
-			setSession({ authenticated: false });
-			setCsrfToken(null);
-			qc.clear();
-			try {
-				localStorage.removeItem("veil_spa");
-			} catch {
-				/* storage may be disabled */
+			if (epoch === epochRef.current) {
+				setSession({ authenticated: false });
+				setCsrfToken(null);
+				qc.clear();
+				try {
+					localStorage.removeItem("veil_spa");
+				} catch {
+					/* storage may be disabled */
+				}
+				broadcastRefresh();
+				logoutInFlightRef.current = false;
 			}
-			broadcastRefresh();
 		}
-	}, [broadcastRefresh, qc]);
+	}, [abortRefresh, broadcastRefresh, qc]);
 
 	const value = useMemo(
 		() => ({ session, loading, login, logout, refresh }),
