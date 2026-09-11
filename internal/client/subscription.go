@@ -11,13 +11,47 @@ import (
 // to render client links. It is satisfied by model.Inbound via a thin adapter
 // so the client package does not depend on the whole management state.
 type InboundSnapshot struct {
-	Name           string
-	Protocol       string
-	Transport      string
-	Port           int
-	Enabled        bool
-	Password       string
-	ProtocolFields map[string]any
+	Name              string
+	Protocol          string
+	Transport         string
+	Port              int
+	Enabled           bool
+	Password          string
+	ProtocolFields    map[string]any
+	NaiveUsername     string
+	NaivePassword     string
+	Hysteria2Password string
+	Hysteria2Insecure bool
+	MasqueradeURL     string
+	FallbackRoot      string
+	OlcrtcAuth        string
+	OlcrtcTransport   string
+	OlcrtcRoomID      string
+}
+
+// NewInboundSnapshot copies the protocol-export fields from a management inbound
+// and materializes legacy flats into ProtocolFields so reduced per-client
+// snapshots keep the same effective contract as the shared link builder.
+func NewInboundSnapshot(inbound model.Inbound) InboundSnapshot {
+	inbound = clientaccess.MaterializeInbound(inbound)
+	return InboundSnapshot{
+		Name:              inbound.Name,
+		Protocol:          inbound.Protocol,
+		Transport:         inbound.Transport,
+		Port:              inbound.Port,
+		Enabled:           inbound.Enabled,
+		Password:          inbound.Password,
+		ProtocolFields:    inbound.ProtocolFields,
+		NaiveUsername:     inbound.NaiveUsername,
+		NaivePassword:     inbound.NaivePassword,
+		Hysteria2Password: inbound.Hysteria2Password,
+		Hysteria2Insecure: inbound.Hysteria2Insecure,
+		MasqueradeURL:     inbound.MasqueradeURL,
+		FallbackRoot:      inbound.FallbackRoot,
+		OlcrtcAuth:        inbound.OlcrtcAuth,
+		OlcrtcTransport:   inbound.OlcrtcTransport,
+		OlcrtcRoomID:      inbound.OlcrtcRoomID,
+	}
 }
 
 // SubscriptionRenderer builds the link set for ONE client from its bindings
@@ -99,12 +133,21 @@ func (r *SubscriptionRenderer) LinksForSnapshot(c Client, bindings []Binding, pl
 
 func snapshotToInbound(s InboundSnapshot) model.Inbound {
 	return model.Inbound{
-		Name:           s.Name,
-		Protocol:       s.Protocol,
-		Transport:      s.Transport,
-		Port:           s.Port,
-		Enabled:        s.Enabled,
-		Password:       s.Password,
-		ProtocolFields: s.ProtocolFields,
+		Name:              s.Name,
+		Protocol:          s.Protocol,
+		Transport:         s.Transport,
+		Port:              s.Port,
+		Enabled:           s.Enabled,
+		Password:          s.Password,
+		ProtocolFields:    s.ProtocolFields,
+		NaiveUsername:     s.NaiveUsername,
+		NaivePassword:     s.NaivePassword,
+		Hysteria2Password: s.Hysteria2Password,
+		Hysteria2Insecure: s.Hysteria2Insecure,
+		MasqueradeURL:     s.MasqueradeURL,
+		FallbackRoot:      s.FallbackRoot,
+		OlcrtcAuth:        s.OlcrtcAuth,
+		OlcrtcTransport:   s.OlcrtcTransport,
+		OlcrtcRoomID:      s.OlcrtcRoomID,
 	}
 }
