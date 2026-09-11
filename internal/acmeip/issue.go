@@ -198,10 +198,16 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		issueArgs = append(issueArgs, "-d", opts.PublicIPv6)
 	}
 
+	home, err := sys.HomeDir()
+	if err != nil {
+		return IssuedCert{}, fmt.Errorf("home directory: %w", err)
+	}
+	preexistingACME := snapshotAcmeDirs(sys, home, opts.PublicIPv4, opts.PublicIPv6)
+
 	issueCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	if out, err := runWithContext(issueCtx, sys, acmeSh, issueArgs...); err != nil {
-		cleanupAcmeState(sys, acmeSh, opts.PublicIPv4, opts.PublicIPv6)
+		cleanupAcmeState(sys, acmeSh, opts.PublicIPv4, opts.PublicIPv6, preexistingACME)
 		return IssuedCert{}, fmt.Errorf("issue certificate for %s: %w (output: %s)", opts.PublicIPv4, err, string(out))
 	}
 
@@ -216,7 +222,7 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		// acme.sh returns non-zero when the reloadcmd fails, but the files may
 		// still have been installed. Verify before failing.
 		if _, certErr := sys.Stat(certPath); certErr != nil {
-			cleanupAcmeState(sys, acmeSh, opts.PublicIPv4, opts.PublicIPv6)
+			cleanupAcmeState(sys, acmeSh, opts.PublicIPv4, opts.PublicIPv6, preexistingACME)
 			return IssuedCert{}, fmt.Errorf("install certificate: %w (output: %s)", err, string(out))
 		}
 	}
@@ -340,14 +346,48 @@ func lookupGroupID(name string) int {
 	return -1
 }
 
-func cleanupAcmeState(sys System, acmeSh, ipv4, ipv6 string) {
+func acmeDomainDirs(home, ip string) []string {
+	if ip == "" {
+		return nil
+	}
+	return []string{
+		filepath.Join(home, ".acme.sh", ip),
+		filepath.Join(home, ".acme.sh", ip+"_ecc"),
+	}
+}
+
+func snapshotAcmeDirs(sys System, home string, ips ...string) map[string]bool {
+	existed := map[string]bool{}
+	for _, ip := range ips {
+		for _, dir := range acmeDomainDirs(home, ip) {
+			if _, err := sys.Stat(dir); err == nil {
+				existed[dir] = true
+			}
+		}
+	}
+	return existed
+}
+
+func cleanupAcmeState(sys System, acmeSh, ipv4, ipv6 string, preexisting map[string]bool) {
 	home, _ := sys.HomeDir()
 	for _, ip := range []string{ipv4, ipv6} {
 		if ip == "" {
 			continue
 		}
-		_ = sys.Run("rm", "-rf", filepath.Join(home, ".acme.sh", ip), filepath.Join(home, ".acme.sh", ip+"_ecc"))
-		if acmeSh != "" {
+		dirs := acmeDomainDirs(home, ip)
+		owned := make([]string, 0, len(dirs))
+		preserved := false
+		for _, dir := range dirs {
+			if preexisting[dir] {
+				preserved = true
+				continue
+			}
+			owned = append(owned, dir)
+		}
+		if len(owned) > 0 {
+			_ = sys.Run("rm", append([]string{"-rf"}, owned...)...)
+		}
+		if acmeSh != "" && !preserved {
 			_ = sys.Run(acmeSh, "--remove", "-d", ip)
 		}
 	}

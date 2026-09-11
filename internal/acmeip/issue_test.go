@@ -48,8 +48,9 @@ type fakeSystem struct {
 }
 
 type commandResult struct {
-	out string
-	err error
+	out        string
+	err        error
+	writeOwned func()
 }
 
 type chownCall struct {
