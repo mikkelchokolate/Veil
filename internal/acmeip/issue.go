@@ -3,6 +3,8 @@ package acmeip
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"os"
@@ -218,13 +220,34 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		"--fullchain-file", certPath,
 		"--reloadcmd", "systemctl restart veil || true",
 	}
-	if out, err := runWithContext(ctx, sys, acmeSh, installArgs...); err != nil {
-		// acme.sh returns non-zero when the reloadcmd fails, but the files may
-		// still have been installed. Verify before failing.
-		if _, certErr := sys.Stat(certPath); certErr != nil {
-			cleanupAcmeState(sys, acmeSh, opts.PublicIPv4, opts.PublicIPv6, preexistingACME)
-			return IssuedCert{}, fmt.Errorf("install certificate: %w (output: %s)", err, string(out))
+	prevCert, _ := sys.ReadFile(certPath)
+	prevKey, _ := sys.ReadFile(keyPath)
+	out, installErr := runWithContext(ctx, sys, acmeSh, installArgs...)
+	newCert, certErr := sys.ReadFile(certPath)
+	newKey, keyErr := sys.ReadFile(keyPath)
+	installed := certErr == nil && keyErr == nil && validateIssuedMaterial(newCert, newKey, opts.PublicIPv4, opts.PublicIPv6) == nil &&
+		(!bytes.Equal(prevCert, newCert) || !bytes.Equal(prevKey, newKey) || len(prevCert) == 0)
+	if !installed {
+		if len(prevCert) > 0 {
+			_ = sys.WriteFile(certPath, prevCert, 0o644)
 		}
+		if len(prevKey) > 0 {
+			_ = sys.WriteFile(keyPath, prevKey, 0o640)
+		}
+		if installErr != nil {
+			cleanupAcmeState(sys, acmeSh, opts.PublicIPv4, opts.PublicIPv6, preexistingACME)
+			return IssuedCert{}, fmt.Errorf("install certificate: %w (output: %s)", installErr, string(out))
+		}
+		if certErr != nil {
+			return IssuedCert{}, fmt.Errorf("install certificate: read %s: %w", certPath, certErr)
+		}
+		if keyErr != nil {
+			return IssuedCert{}, fmt.Errorf("install certificate: read %s: %w", keyPath, keyErr)
+		}
+		if err := validateIssuedMaterial(newCert, newKey, opts.PublicIPv4, opts.PublicIPv6); err != nil {
+			return IssuedCert{}, fmt.Errorf("install certificate: %w", err)
+		}
+		return IssuedCert{}, fmt.Errorf("install certificate: destination still has previous material")
 	}
 
 	if err := fixCertOwnership(sys, certPath, keyPath); err != nil {
@@ -395,4 +418,31 @@ func cleanupAcmeState(sys System, acmeSh, ipv4, ipv6 string, preexisting map[str
 
 func runWithContext(ctx context.Context, sys System, cmd string, args ...string) ([]byte, error) {
 	return sys.CombinedOutputContext(ctx, cmd, args...)
+}
+
+func validateIssuedMaterial(certPEM, keyPEM []byte, ipv4, ipv6 string) error {
+	pair, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return fmt.Errorf("certificate/key pair: %w", err)
+	}
+	if len(pair.Certificate) == 0 {
+		return fmt.Errorf("certificate/key pair: no certificate")
+	}
+	cert, err := x509.ParseCertificate(pair.Certificate[0])
+	if err != nil {
+		return fmt.Errorf("parse certificate: %w", err)
+	}
+	now := time.Now()
+	if now.Before(cert.NotBefore) || !now.Before(cert.NotAfter) {
+		return fmt.Errorf("certificate is not currently valid")
+	}
+	if err := cert.VerifyHostname(ipv4); err != nil {
+		return fmt.Errorf("certificate does not include IP %s: %w", ipv4, err)
+	}
+	if ipv6 != "" {
+		if err := cert.VerifyHostname(ipv6); err != nil {
+			return fmt.Errorf("certificate does not include IP %s: %w", ipv6, err)
+		}
+	}
+	return nil
 }

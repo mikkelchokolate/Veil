@@ -2,8 +2,15 @@ package acmeip
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"os"
 	"path/filepath"
@@ -45,12 +52,16 @@ type fakeSystem struct {
 	installSocat  bool
 	commandDelay  time.Duration
 	events        []string
+	installIPs    []string
+	issuedCertPEM []byte
+	issuedKeyPEM  []byte
 }
 
 type commandResult struct {
 	out        string
 	err        error
 	writeOwned func()
+	writeFiles bool
 }
 
 type chownCall struct {
@@ -114,8 +125,7 @@ func (f *fakeSystem) CombinedOutput(cmd string, args ...string) ([]byte, error) 
 	if !ok {
 		return nil, fmt.Errorf("unexpected command: %s %v", cmd, args)
 	}
-	// Only simulate side effects when the mocked command succeeds.
-	if res.err == nil {
+	if res.err == nil || res.writeFiles {
 		if cmd == "sh" && len(args) >= 2 {
 			script := args[1]
 			if strings.Contains(script, "get.acme.sh") && f.installAcmeSh {
@@ -127,11 +137,81 @@ func (f *fakeSystem) CombinedOutput(cmd string, args ...string) ([]byte, error) 
 			}
 		}
 		if cmd == filepath.Join(f.home, ".acme.sh", "acme.sh") && len(args) >= 1 && args[0] == "--installcert" {
-			f.files["/etc/veil/panel/tls.crt"] = &fakeFileInfo{name: "tls.crt", mode: 0o600}
-			f.files["/etc/veil/panel/tls.key"] = &fakeFileInfo{name: "tls.key", mode: 0o600}
+			certPath, keyPath, ip := parseInstallcertArgs(args)
+			ips := f.installIPs
+			if len(ips) == 0 {
+				ips = []string{ip}
+			}
+			certPEM, keyPEM := f.certMaterial(ips...)
+			f.fileData[certPath] = certPEM
+			f.fileData[keyPath] = keyPEM
+			f.files[certPath] = &fakeFileInfo{name: filepath.Base(certPath), mode: 0o600}
+			f.files[keyPath] = &fakeFileInfo{name: filepath.Base(keyPath), mode: 0o600}
 		}
 	}
 	return []byte(res.out), res.err
+}
+
+func parseInstallcertArgs(args []string) (certPath, keyPath, ip string) {
+	certPath = "/etc/veil/panel/tls.crt"
+	keyPath = "/etc/veil/panel/tls.key"
+	for i, arg := range args {
+		if i+1 >= len(args) {
+			continue
+		}
+		switch arg {
+		case "-d":
+			ip = args[i+1]
+		case "--fullchain-file":
+			certPath = args[i+1]
+		case "--key-file":
+			keyPath = args[i+1]
+		}
+	}
+	return certPath, keyPath, ip
+}
+
+func (f *fakeSystem) certMaterial(ips ...string) (certPEM, keyPEM []byte) {
+	if len(f.issuedCertPEM) > 0 && len(f.issuedKeyPEM) > 0 {
+		return f.issuedCertPEM, f.issuedKeyPEM
+	}
+	f.issuedCertPEM, f.issuedKeyPEM = generateIPCertPEM(time.Now().Add(24*time.Hour), ips...)
+	return f.issuedCertPEM, f.issuedKeyPEM
+}
+
+func generateIPCertPEM(notAfter time.Time, ips ...string) (certPEM, keyPEM []byte) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+	serial, err := rand.Int(rand.Reader, big.NewInt(1<<62))
+	if err != nil {
+		panic(err)
+	}
+	template := x509.Certificate{
+		SerialNumber: serial,
+		Subject:      pkix.Name{CommonName: "veil-test"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     notAfter,
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	for _, ip := range ips {
+		if parsed := net.ParseIP(ip); parsed != nil {
+			template.IPAddresses = append(template.IPAddresses, parsed)
+		}
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		panic(err)
+	}
+	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	keyBytes, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		panic(err)
+	}
+	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
+	return certPEM, keyPEM
 }
 
 func (f *fakeSystem) LookPath(name string) (string, error) {
@@ -267,6 +347,7 @@ func TestIssueIPCertIncludesIPv6WhenProvided(t *testing.T) {
 	sys := newFakeSystem()
 	sys.setAcmeInstalled()
 	sys.lookPaths["socat"] = "/usr/bin/socat"
+	sys.installIPs = []string{"1.2.3.4", "2001:db8::1"}
 
 	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
 	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", "letsencrypt")] = commandResult{out: "OK"}
@@ -347,7 +428,7 @@ func TestIssueIPCertCleansUpOnIssueFailure(t *testing.T) {
 	}
 }
 
-func TestIssueIPCertSucceedsWhenInstallcertFailsButFilesExist(t *testing.T) {
+func TestIssueIPCertAcceptsNewCertWhenInstallcertReloadFails(t *testing.T) {
 	sys := newFakeSystem()
 	sys.setAcmeInstalled()
 	sys.lookPaths["socat"] = "/usr/bin/socat"
@@ -355,15 +436,11 @@ func TestIssueIPCertSucceedsWhenInstallcertFailsButFilesExist(t *testing.T) {
 	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
 	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", "letsencrypt")] = commandResult{out: "OK"}
 	sys.commands[sys.key(acmeSh, "--issue", "-d", "1.2.3.4", "--standalone", "--server", "letsencrypt", "--certificate-profile", "shortlived", "--days", "3", "--httpport", "80", "--force")] = commandResult{out: "Cert issued"}
-	sys.commands[sys.key(acmeSh, "--installcert", "-d", "1.2.3.4", "--key-file", "/etc/veil/panel/tls.key", "--fullchain-file", "/etc/veil/panel/tls.crt", "--reloadcmd", "systemctl restart veil || true")] = commandResult{err: errors.New("reload failed")}
-
-	// Simulate that acme.sh still wrote the files.
-	sys.files["/etc/veil/panel/tls.crt"] = &fakeFileInfo{name: "tls.crt", mode: 0o600}
-	sys.files["/etc/veil/panel/tls.key"] = &fakeFileInfo{name: "tls.key", mode: 0o600}
+	sys.commands[sys.key(acmeSh, "--installcert", "-d", "1.2.3.4", "--key-file", "/etc/veil/panel/tls.key", "--fullchain-file", "/etc/veil/panel/tls.crt", "--reloadcmd", "systemctl restart veil || true")] = commandResult{err: errors.New("reload failed"), writeFiles: true}
 
 	_, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: "1.2.3.4", System: sys})
 	if err != nil {
-		t.Fatalf("expected success when files exist despite installcert error: %v", err)
+		t.Fatalf("expected success when installcert wrote a new valid pair: %v", err)
 	}
 }
 
