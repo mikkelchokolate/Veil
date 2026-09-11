@@ -7,6 +7,7 @@ type Config struct {
 	PanelPort      int
 	PanelHTTPSPort int
 	LEIPCertPort   int
+	SSHPorts       []int
 }
 
 type Rule struct {
@@ -30,5 +31,20 @@ func UFWPlan(config Config) []Rule {
 	if config.LEIPCertPort > 0 {
 		rules = append(rules, Rule{Command: "ufw", Args: []string{"allow", fmt.Sprintf("%d/tcp", config.LEIPCertPort), "comment", "Veil ACME HTTP-01"}})
 	}
-	return rules
+	if len(rules) == 0 {
+		return nil
+	}
+	sshRules := make([]Rule, 0, len(config.SSHPorts))
+	seen := map[int]bool{}
+	for _, port := range config.SSHPorts {
+		if port <= 0 || port > 65535 || seen[port] {
+			continue
+		}
+		seen[port] = true
+		sshRules = append(sshRules, Rule{Command: "ufw", Args: []string{"allow", fmt.Sprintf("%d/tcp", port), "comment", "Veil management SSH"}})
+	}
+	if len(sshRules) == 0 {
+		return rules
+	}
+	return append(sshRules, rules...)
 }

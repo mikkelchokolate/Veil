@@ -41,11 +41,7 @@ var installFirewallApplyFunc = func(rules []firewall.Rule) error {
 	if os.Geteuid() != 0 {
 		return nil
 	}
-	applier := firewall.NewUFWApplier()
-	if err := applier.EnsureActive(); err != nil {
-		return fmt.Errorf("enable firewall: %w", err)
-	}
-	return applier.ApplyRules(rules)
+	return firewall.NewUFWApplier().ApplySafely(rules)
 }
 
 func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommendedProfile, opts ruRecommendedInstallOptions) error {
