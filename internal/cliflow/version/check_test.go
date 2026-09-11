@@ -236,7 +236,7 @@ func TestCompareVersions(t *testing.T) {
 		{"1.0.1", "1.0", 1},
 		{"", "1.0", -1},
 		{"1.0", "", 1},
-		{"1.abc", "1.0", 0},
+		{"1.abc", "1.0", -1},
 	}
 	for _, c := range cases {
 		if got := Compare(c.a, c.b); got != c.want {
