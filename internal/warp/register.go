@@ -28,6 +28,9 @@ const (
 	defaultRegBaseURL = "https://api.cloudflareclient.com/v0a4005"
 	defaultClientVer  = "a-6.30-3596"
 	defaultEndpoint   = "engage.cloudflareclient.com:2408"
+	// maxRegistrationResponseBytes caps Cloudflare registration JSON. The
+	// payload is a small device/config object; hundreds of KiB is ample.
+	maxRegistrationResponseBytes = 256 << 10
 )
 
 // Registration is a provisioned Cloudflare WARP account, ready to drop into a
@@ -155,12 +158,19 @@ func (r *Registrar) Register(ctx context.Context) (Registration, error) {
 		return Registration{}, fmt.Errorf("warp: register request: %w", err)
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxRegistrationResponseBytes+1))
 	if err != nil {
 		return Registration{}, err
 	}
+	if len(body) > maxRegistrationResponseBytes {
+		return Registration{}, fmt.Errorf("warp: registration response exceeds %d-byte limit", maxRegistrationResponseBytes)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return Registration{}, fmt.Errorf("warp: registration failed (status %d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		msg := strings.TrimSpace(string(body))
+		if len(msg) > 512 {
+			msg = msg[:512]
+		}
+		return Registration{}, fmt.Errorf("warp: registration failed (status %d): %s", resp.StatusCode, msg)
 	}
 
 	var parsed warpRegResponse
