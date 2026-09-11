@@ -79,16 +79,9 @@ func (l Lifecycle) BackupExisting(paths []string) (string, error) {
 }
 
 func (l Lifecycle) Restore(backupID string) ([]string, error) {
-	backupPath := filepath.Join(l.Dir, backupID)
-	info, err := os.Stat(backupPath)
+	backupPath, _, err := l.resolveBackupDir(backupID)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("backup %s does not exist in %s", backupID, l.Dir)
-		}
-		return nil, fmt.Errorf("stat backup dir: %w", err)
-	}
-	if !info.IsDir() {
-		return nil, fmt.Errorf("backup %s is not a directory", backupID)
+		return nil, err
 	}
 
 	manifestPath := filepath.Join(backupPath, "manifest.json")
@@ -133,11 +126,47 @@ func (l Lifecycle) Restore(backupID string) ([]string, error) {
 }
 
 func (l Lifecycle) Cleanup(backupID string) error {
-	backupPath := filepath.Join(l.Dir, backupID)
-	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
-		return fmt.Errorf("backup %s does not exist in %s", backupID, l.Dir)
+	backupPath, _, err := l.resolveBackupDir(backupID)
+	if err != nil {
+		return err
 	}
 	return os.RemoveAll(backupPath)
+}
+
+func (l Lifecycle) resolveBackupDir(backupID string) (string, os.FileInfo, error) {
+	if err := validateBackupID(backupID); err != nil {
+		return "", nil, err
+	}
+	root, err := filepath.Abs(l.Dir)
+	if err != nil {
+		return "", nil, fmt.Errorf("resolve backup dir: %w", err)
+	}
+	candidate := filepath.Join(root, backupID)
+	if !backupPathWithin(root, candidate) {
+		return "", nil, fmt.Errorf("invalid backup ID %q", backupID)
+	}
+	info, err := os.Lstat(candidate)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil, fmt.Errorf("backup %s does not exist in %s", backupID, l.Dir)
+		}
+		return "", nil, fmt.Errorf("stat backup dir: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return "", nil, fmt.Errorf("backup %s is not a directory", backupID)
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", nil, fmt.Errorf("stat backup dir: %w", err)
+	}
+	resolvedCandidate, err := filepath.EvalSymlinks(candidate)
+	if err != nil {
+		return "", nil, fmt.Errorf("stat backup dir: %w", err)
+	}
+	if !backupPathWithin(resolvedRoot, resolvedCandidate) {
+		return "", nil, fmt.Errorf("invalid backup ID %q", backupID)
+	}
+	return candidate, info, nil
 }
 
 func (l Lifecycle) List() ([]string, error) {
