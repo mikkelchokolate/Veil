@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -237,4 +238,189 @@ func passphraseFileFromBackupService(t *testing.T, fragments ...string) string {
 
 func sameBackupPath(a, b string) bool {
 	return filepath.Clean(a) == filepath.Clean(b)
+}
+
+func TestBackupScheduleEnableRestoresPreviousPassphraseIfSystemdFails(t *testing.T) {
+	oldPassphrase := "previous-passphrase"
+	newPassphrase := "replacement-passphrase"
+
+	t.Run("daemonReload", func(t *testing.T) {
+		passPath, oldMode := writeScheduledPassphrase(t, oldPassphrase)
+		restore := stubBackupScheduleSystemd(t, filepath.Join(t.TempDir(), "systemd"), func(args []string) error {
+			if len(args) > 0 && args[0] == "daemon-reload" {
+				return fmt.Errorf("daemon-reload failed")
+			}
+			return nil
+		})
+		defer restore()
+
+		err := runScheduleEnable(t, newPassphrase, passPath)
+		if err == nil || !strings.Contains(err.Error(), "daemon-reload") {
+			t.Fatalf("expected daemon-reload error, got %v", err)
+		}
+		assertPassphraseUnchanged(t, passPath, oldPassphrase, oldMode)
+	})
+
+	t.Run("timerEnable", func(t *testing.T) {
+		passPath, oldMode := writeScheduledPassphrase(t, oldPassphrase)
+		restore := stubBackupScheduleSystemd(t, filepath.Join(t.TempDir(), "systemd"), func(args []string) error {
+			if len(args) >= 1 && args[0] == "enable" {
+				return fmt.Errorf("enable failed")
+			}
+			return nil
+		})
+		defer restore()
+
+		err := runScheduleEnable(t, newPassphrase, passPath)
+		if err == nil || !strings.Contains(err.Error(), "enable veil-backup.timer") {
+			t.Fatalf("expected enable error, got %v", err)
+		}
+		assertPassphraseUnchanged(t, passPath, oldPassphrase, oldMode)
+	})
+}
+
+func TestBackupScheduleEnableKeepsPreviousPassphraseIfPublicationFails(t *testing.T) {
+	dir := t.TempDir()
+	parent := filepath.Join(dir, "notadir")
+	if err := os.WriteFile(parent, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	existing := filepath.Join(dir, "backup.passphrase")
+	oldPassphrase := "previous-passphrase"
+	if err := os.WriteFile(existing, []byte(oldPassphrase+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(existing)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var calls int
+	restore := stubBackupScheduleSystemd(t, filepath.Join(t.TempDir(), "systemd"), func(args []string) error {
+		calls++
+		return nil
+	})
+	defer restore()
+
+	err = runScheduleEnable(t, "replacement-passphrase", filepath.Join(parent, "backup.passphrase"))
+	if err == nil {
+		t.Fatal("expected passphrase publication error")
+	}
+	if calls != 0 {
+		t.Fatalf("systemd ran despite publication failure: %d calls", calls)
+	}
+	assertPassphraseUnchanged(t, existing, oldPassphrase, info.Mode())
+}
+
+func TestBackupScheduleEnableRemovesNewPassphraseIfFreshEnableFails(t *testing.T) {
+	passPath := filepath.Join(t.TempDir(), "backup.passphrase")
+	restore := stubBackupScheduleSystemd(t, filepath.Join(t.TempDir(), "systemd"), func(args []string) error {
+		if len(args) > 0 && args[0] == "daemon-reload" {
+			return fmt.Errorf("daemon-reload failed")
+		}
+		return nil
+	})
+	defer restore()
+
+	err := runScheduleEnable(t, "replacement-passphrase", passPath)
+	if err == nil || !strings.Contains(err.Error(), "daemon-reload") {
+		t.Fatalf("expected daemon-reload error, got %v", err)
+	}
+	if _, err := os.Stat(passPath); !os.IsNotExist(err) {
+		t.Fatalf("fresh failed enable left passphrase file: %v", err)
+	}
+	if _, err := os.Stat(passPath + ".replace-backup"); !os.IsNotExist(err) {
+		t.Fatalf("replace-backup remains after failed fresh enable: %v", err)
+	}
+}
+
+func TestBackupScheduleEnableCommitsNewPassphraseAfterSystemdSucceeds(t *testing.T) {
+	passPath, _ := writeScheduledPassphrase(t, "previous-passphrase")
+	restore := stubBackupScheduleSystemd(t, filepath.Join(t.TempDir(), "systemd"), nil)
+	defer restore()
+
+	if err := runScheduleEnable(t, "replacement-passphrase", passPath); err != nil {
+		t.Fatalf("schedule enable: %v", err)
+	}
+	got, err := os.ReadFile(passPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "replacement-passphrase\n" {
+		t.Fatalf("passphrase file = %q", got)
+	}
+	if _, err := os.Stat(passPath + ".replace-backup"); !os.IsNotExist(err) {
+		t.Fatalf("replace-backup remains after success: %v", err)
+	}
+}
+
+func TestBackupScheduleEnableFailedRotationKeepsRecoverableArchivePassphrase(t *testing.T) {
+	oldPassphrase := "previous-passphrase"
+	passPath, oldMode := writeScheduledPassphrase(t, oldPassphrase)
+	statePath, keyPath := writeCLIBackupSource(t)
+	archive := runBackupCreateOneShot(t, passPath, statePath, keyPath, t.TempDir())
+
+	restore := stubBackupScheduleSystemd(t, filepath.Join(t.TempDir(), "systemd"), func(args []string) error {
+		if len(args) > 0 && args[0] == "enable" {
+			return fmt.Errorf("enable failed")
+		}
+		return nil
+	})
+	defer restore()
+
+	err := runScheduleEnable(t, "replacement-passphrase", passPath)
+	if err == nil || !strings.Contains(err.Error(), "enable veil-backup.timer") {
+		t.Fatalf("expected enable error, got %v", err)
+	}
+	assertPassphraseUnchanged(t, passPath, oldPassphrase, oldMode)
+	if _, err := backup.VerifyBackupFile(archive, oldPassphrase, 0); err != nil {
+		t.Fatalf("existing archive no longer verifies with restored passphrase: %v", err)
+	}
+}
+
+func writeScheduledPassphrase(t *testing.T, passphrase string) (string, os.FileMode) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "backup.passphrase")
+	if err := os.WriteFile(path, []byte(passphrase+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path, info.Mode()
+}
+
+func runScheduleEnable(t *testing.T, passphrase, passPath string) error {
+	t.Helper()
+	cmd := NewRootCommand("test")
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetErr(new(bytes.Buffer))
+	cmd.SetArgs([]string{
+		"backup", "schedule", "enable",
+		"--passphrase", passphrase,
+		"--passphrase-path", passPath,
+	})
+	return cmd.Execute()
+}
+
+func assertPassphraseUnchanged(t *testing.T, path, passphrase string, mode os.FileMode) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read passphrase: %v", err)
+	}
+	if string(got) != passphrase+"\n" {
+		t.Fatalf("passphrase file = %q, want %q", got, passphrase+"\n")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode() != mode {
+		t.Fatalf("passphrase mode = %v, want %v", info.Mode(), mode)
+	}
+	if _, err := os.Stat(path + ".replace-backup"); !os.IsNotExist(err) {
+		t.Fatalf("replace-backup remains: %v", err)
+	}
 }

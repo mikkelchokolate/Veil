@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 )
 
 func backupScheduleDropInDir(systemdDir string) string {
@@ -36,17 +34,58 @@ func normalizeScheduledPassphrasePath(path string) (string, error) {
 }
 
 func syncBackupScheduleUnit(passphrasePath string) error {
+	replaced, err := publishBackupScheduleUnit(passphrasePath)
+	if err != nil {
+		return err
+	}
+	replaced.Commit()
+	return nil
+}
+
+func publishBackupScheduleUnit(passphrasePath string) (*fileReplace, error) {
 	dropInPath := backupScheduleDropInPath(backupSystemdDir)
 	if scheduledPassphrasePathIsDefault(passphrasePath) {
-		if err := os.Remove(dropInPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("remove backup passphrase systemd drop-in: %w", err)
+		replaced, err := removeFileKeepingRollback(dropInPath)
+		if err != nil {
+			return nil, fmt.Errorf("remove backup passphrase systemd drop-in: %w", err)
 		}
-		return nil
+		return replaced, nil
 	}
-	if err := atomicfile.Write(dropInPath, []byte(renderBackupScheduleDropIn(passphrasePath)), 0o644, 0o755); err != nil {
-		return fmt.Errorf("write backup passphrase systemd drop-in: %w", err)
+	replaced, err := publishReplacingFile(dropInPath, []byte(renderBackupScheduleDropIn(passphrasePath)), 0o644, 0o755)
+	if err != nil {
+		return nil, fmt.Errorf("write backup passphrase systemd drop-in: %w", err)
 	}
-	return nil
+	return replaced, nil
+}
+
+func removeFileKeepingRollback(path string) (*fileReplace, error) {
+	replaced := &fileReplace{path: path, backupPath: path + ".replace-backup"}
+	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return replaced, nil
+		}
+		return nil, err
+	}
+	if err := os.Remove(replaced.backupPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	if err := os.Rename(path, replaced.backupPath); err != nil {
+		return nil, err
+	}
+	replaced.hadPrevious = true
+	return replaced, nil
+}
+
+func restoreScheduleEnable(passReplace, unitReplace *fileReplace) error {
+	unitErr := unitReplace.Restore()
+	passErr := passReplace.Restore()
+	if passErr != nil {
+		if unitErr != nil {
+			return fmt.Errorf("%v (also restore systemd drop-in: %v)", passErr, unitErr)
+		}
+		return passErr
+	}
+	return unitErr
 }
 
 func removeBackupScheduleDropIn() error {

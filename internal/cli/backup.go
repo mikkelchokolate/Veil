@@ -284,18 +284,33 @@ func newBackupCommand(version string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := writeBackupArchive(schedulePassphrasePath, []byte(resolvedPass+"\n")); err != nil {
+			passReplace, err := publishReplacingFile(schedulePassphrasePath, []byte(resolvedPass+"\n"), 0o600, 0o700)
+			if err != nil {
 				return fmt.Errorf("write scheduled backup passphrase: %w", err)
 			}
-			if err := syncBackupScheduleUnit(schedulePassphrasePath); err != nil {
+			unitReplace, err := publishBackupScheduleUnit(schedulePassphrasePath)
+			if err != nil {
+				if restoreErr := passReplace.Restore(); restoreErr != nil {
+					return fmt.Errorf("%v (also restore previous passphrase: %v)", err, restoreErr)
+				}
 				return err
 			}
 			if err := backupSystemctlRun("daemon-reload"); err != nil {
+				if restoreErr := restoreScheduleEnable(passReplace, unitReplace); restoreErr != nil {
+					return fmt.Errorf("systemctl daemon-reload: %w (also restore previous passphrase: %v)", err, restoreErr)
+				}
 				return fmt.Errorf("systemctl daemon-reload: %w", err)
 			}
 			if err := backupSystemctlRun("enable", "--now", "veil-backup.timer"); err != nil {
+				restoreErr := restoreScheduleEnable(passReplace, unitReplace)
+				_ = backupSystemctlRun("daemon-reload")
+				if restoreErr != nil {
+					return fmt.Errorf("enable veil-backup.timer: %w (also restore previous passphrase: %v)", err, restoreErr)
+				}
 				return fmt.Errorf("enable veil-backup.timer: %w", err)
 			}
+			passReplace.Commit()
+			unitReplace.Commit()
 			fmt.Fprintf(cmd.OutOrStdout(), "Encrypted backup schedule enabled; passphrase stored at %s\n", schedulePassphrasePath)
 			return nil
 		},
@@ -369,56 +384,90 @@ func addRetentionFlags(cmd *cobra.Command, daily, weekly, monthly *int) {
 	cmd.Flags().IntVar(monthly, "monthly", 12, "number of latest UTC months to retain")
 }
 
+type fileReplace struct {
+	path        string
+	backupPath  string
+	hadPrevious bool
+}
+
 func writeBackupArchive(path string, body []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	replaced, err := publishReplacingFile(path, body, 0o600, 0o700)
+	if err != nil {
 		return err
+	}
+	replaced.Commit()
+	return nil
+}
+
+func publishReplacingFile(path string, body []byte, mode os.FileMode, dirMode os.FileMode) (*fileReplace, error) {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, dirMode); err != nil {
+		return nil, err
 	}
 	temp, err := os.CreateTemp(dir, ".veil-backup-*")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	tempPath := temp.Name()
 	if _, err := temp.Write(body); err != nil {
 		_ = temp.Close()
 		_ = os.Remove(tempPath)
-		return err
+		return nil, err
 	}
 	if err := temp.Sync(); err != nil {
 		_ = temp.Close()
 		_ = os.Remove(tempPath)
-		return err
+		return nil, err
 	}
 	if err := temp.Close(); err != nil {
 		_ = os.Remove(tempPath)
-		return err
+		return nil, err
 	}
-	if err := os.Chmod(tempPath, 0o600); err != nil {
+	if err := os.Chmod(tempPath, mode); err != nil {
 		_ = os.Remove(tempPath)
-		return err
+		return nil, err
 	}
-	backupPath := path + ".replace-backup"
-	hadExisting := false
+	replaced := &fileReplace{path: path, backupPath: path + ".replace-backup"}
 	if _, err := os.Stat(path); err == nil {
-		if err := os.Remove(backupPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := os.Remove(replaced.backupPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 			_ = os.Remove(tempPath)
-			return err
+			return nil, err
 		}
-		if err := os.Rename(path, backupPath); err != nil {
+		if err := os.Rename(path, replaced.backupPath); err != nil {
 			_ = os.Remove(tempPath)
-			return err
+			return nil, err
 		}
-		hadExisting = true
+		replaced.hadPrevious = true
 	}
 	if err := os.Rename(tempPath, path); err != nil {
-		if hadExisting {
-			_ = os.Rename(backupPath, path)
+		if replaced.hadPrevious {
+			_ = os.Rename(replaced.backupPath, path)
 		}
 		_ = os.Remove(tempPath)
-		return err
+		return nil, err
 	}
-	if hadExisting {
-		_ = os.Remove(backupPath)
+	return replaced, nil
+}
+
+func (r *fileReplace) Commit() {
+	if r == nil || !r.hadPrevious {
+		return
+	}
+	_ = os.Remove(r.backupPath)
+}
+
+func (r *fileReplace) Restore() error {
+	if r == nil {
+		return nil
+	}
+	if r.hadPrevious {
+		if err := os.Rename(r.backupPath, r.path); err != nil {
+			return err
+		}
+		return nil
+	}
+	if err := os.Remove(r.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 	return nil
 }
