@@ -15,6 +15,54 @@ function jsonResponse(body: unknown, init: Partial<Response> = {}): Response {
 	} as Response;
 }
 
+function streamingJsonResponse(
+	body: unknown,
+	options: {
+		delayMs?: number;
+		signal?: AbortSignal;
+		neverComplete?: boolean;
+		fail?: Error;
+	} = {},
+): Response {
+	const payload = new TextEncoder().encode(JSON.stringify(body));
+	const stream = new ReadableStream<Uint8Array>({
+		start(controller) {
+			const fail = (error: unknown) => {
+				try {
+					controller.error(error);
+				} catch {
+					/* already closed or errored */
+				}
+			};
+			const finish = () => {
+				if (options.fail) {
+					fail(options.fail);
+					return;
+				}
+				controller.enqueue(payload);
+				controller.close();
+			};
+			let timer: ReturnType<typeof setTimeout> | undefined;
+			if (!options.neverComplete) {
+				timer = setTimeout(finish, options.delayMs ?? 0);
+			}
+			options.signal?.addEventListener(
+				"abort",
+				() => {
+					if (timer !== undefined) clearTimeout(timer);
+					fail(new DOMException("aborted", "AbortError"));
+				},
+				{ once: true },
+			);
+		},
+	});
+	return new Response(stream, {
+		status: 200,
+		statusText: "OK",
+		headers: { "Content-Type": "application/json" },
+	});
+}
+
 describe("apiFetch request policy", () => {
 	afterEach(() => {
 		fetcher.setUnauthorizedHandler(null);
@@ -233,6 +281,87 @@ describe("apiFetch request policy", () => {
 		expect(CancelledError).toBeTypeOf("function");
 		const error = await outcome;
 		expect(error).toBeInstanceOf(CancelledError as new () => Error);
+	});
+
+	it("times out a stalled response body after headers arrive", async () => {
+		const fetchMock = vi.fn((_url: string, options?: RequestInit) =>
+			Promise.resolve(
+				streamingJsonResponse(
+					{ ok: true },
+					{ delayMs: 100, signal: options?.signal },
+				),
+			),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+		const started = Date.now();
+		const outcome = await fetcher
+			.apiFetch("/api/slow-body", { timeoutMs: 15, attempts: 1 })
+			.then(
+				() => "resolved" as const,
+				(error: unknown) => error,
+			);
+		expect(outcome).toBeInstanceOf(fetcher.TimeoutError);
+		expect(Date.now() - started).toBeLessThan(80);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("cancels a body read when the caller aborts after headers", async () => {
+		const controller = new AbortController();
+		const fetchMock = vi.fn((_url: string, options?: RequestInit) =>
+			Promise.resolve(
+				streamingJsonResponse(
+					{ ok: true },
+					{ neverComplete: true, signal: options?.signal },
+				),
+			),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+		const pending = fetcher.apiFetch("/api/stream", {
+			signal: controller.signal,
+			attempts: 1,
+		});
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+		await Promise.resolve();
+		controller.abort();
+		await expect(pending).rejects.toBeInstanceOf(fetcher.CancelledError);
+	});
+
+	it("still returns a fast body that finishes inside the timeout", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn((_url: string, options?: RequestInit) =>
+				Promise.resolve(
+					streamingJsonResponse(
+						{ ok: true },
+						{ delayMs: 5, signal: options?.signal },
+					),
+				),
+			),
+		);
+		await expect(
+			fetcher.apiFetch("/api/fast-body", { timeoutMs: 200, attempts: 1 }),
+		).resolves.toEqual({ ok: true });
+	});
+
+	it("surfaces a body stream error after headers", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn((_url: string, options?: RequestInit) =>
+				Promise.resolve(
+					streamingJsonResponse(
+						{ ok: true },
+						{
+							delayMs: 5,
+							fail: new TypeError("body failed"),
+							signal: options?.signal,
+						},
+					),
+				),
+			),
+		);
+		await expect(
+			fetcher.apiFetch("/api/broken-body", { timeoutMs: 200, attempts: 1 }),
+		).rejects.toThrow("body failed");
 	});
 
 	it("rejects a cross-origin redirect even when the final response is 200", async () => {

@@ -95,11 +95,36 @@ function abortError(error: unknown): boolean {
 		: error instanceof Error && error.name === "AbortError";
 }
 
+async function readBody(
+	response: Response,
+	signal: AbortSignal,
+): Promise<string> {
+	let onAbort: (() => void) | undefined;
+	const aborted = new Promise<never>((_, reject) => {
+		onAbort = () => {
+			void response.body?.cancel().catch(() => undefined);
+			reject(new DOMException("The operation was aborted.", "AbortError"));
+		};
+		if (signal.aborted) {
+			onAbort();
+			return;
+		}
+		signal.addEventListener("abort", onAbort, { once: true });
+	});
+	const textPromise = response.text();
+	void textPromise.catch(() => undefined);
+	try {
+		return await Promise.race([textPromise, aborted]);
+	} finally {
+		if (onAbort) signal.removeEventListener("abort", onAbort);
+	}
+}
+
 async function requestOnce(
 	url: string,
 	options: RequestInit,
 	timeoutMs: number,
-): Promise<Response> {
+): Promise<{ response: Response; text: string }> {
 	if (options.signal?.aborted) {
 		throw new CancelledError();
 	}
@@ -116,12 +141,21 @@ async function requestOnce(
 		controller.abort();
 	}, timeoutMs);
 	try {
-		return await fetch(url, {
+		if (options.signal?.aborted) {
+			onCallerAbort();
+			throw new CancelledError();
+		}
+		const response = await fetch(url, {
 			...options,
 			signal: controller.signal,
 			redirect: "follow",
 		});
+		const text = await readBody(response, controller.signal);
+		return { response, text };
 	} catch (error) {
+		if (error instanceof CancelledError || error instanceof TimeoutError) {
+			throw error;
+		}
 		if (abortError(error)) {
 			if (callerCancelled) throw new CancelledError();
 			if (timedOut) throw new TimeoutError();
@@ -199,12 +233,14 @@ export async function apiFetch<T>(
 		headers,
 	};
 	let response: Response | undefined;
+	let text = "";
 	let lastError: unknown;
 	for (let attempt = 0; attempt < attempts; attempt += 1) {
 		try {
-			response = await requestOnce(apiUrl(path), requestOptions, timeoutMs);
+			const result = await requestOnce(apiUrl(path), requestOptions, timeoutMs);
+			response = result.response;
+			text = result.text;
 			if (!retryableStatus(response.status) || attempt === attempts - 1) break;
-			await response.body?.cancel();
 		} catch (error) {
 			if (
 				error instanceof TimeoutError ||
@@ -218,7 +254,6 @@ export async function apiFetch<T>(
 	}
 	if (!response) throw lastError ?? new Error("API request failed");
 	assertSameOriginRedirect(response);
-	const text = await response.text();
 	let body: unknown;
 	if (text) {
 		try {
