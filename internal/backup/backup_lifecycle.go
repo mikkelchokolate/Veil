@@ -43,6 +43,8 @@ func (l Lifecycle) BackupExisting(paths []string) (string, error) {
 	}
 
 	manifest := backupManifest{}
+	seen := make(map[string]struct{})
+	memberIndex := 0
 
 	for _, src := range paths {
 		srcInfo, err := os.Stat(src)
@@ -56,9 +58,18 @@ func (l Lifecycle) BackupExisting(paths []string) (string, error) {
 			continue
 		}
 
-		dst := filepath.Join(backupPath, filepath.Base(src))
+		key, err := filepath.Abs(src)
+		if err != nil {
+			return "", fmt.Errorf("resolve %s: %w", src, err)
+		}
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
 
-		// Copy file contents
+		dst := filepath.Join(backupPath, backupMemberName(memberIndex, src))
+		memberIndex++
+
 		if err := copyFile(src, dst, srcInfo.Mode()); err != nil {
 			return "", fmt.Errorf("backup %s: %w", src, err)
 		}
@@ -187,4 +198,12 @@ func (l Lifecycle) List() ([]string, error) {
 
 	sort.Strings(ids)
 	return ids, nil
+}
+
+func backupMemberName(index int, src string) string {
+	base := filepath.Base(filepath.Clean(src))
+	if base == "." || base == ".." || base == string(filepath.Separator) || !filepath.IsLocal(base) {
+		base = "member"
+	}
+	return fmt.Sprintf("%d_%s", index, base)
 }
