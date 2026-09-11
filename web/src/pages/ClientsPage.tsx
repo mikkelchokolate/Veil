@@ -12,7 +12,7 @@ import {
 	useReactTable,
 	type VisibilityState,
 } from "@tanstack/react-table";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { listClients } from "../api/clients";
 import { ApiError, mutationErrorMessage } from "../api/fetcher";
 import { postApiV1ClientsBulk } from "../api/generated/clients/clients";
@@ -102,41 +102,48 @@ export function ClientsPage() {
 	const sort = parsed.sort ?? "created";
 	const searchParam = parsed.search ?? "";
 
-	// S3: debounced server-side search. The input is uncontrolled-local; the
-	// debounced value is what actually reaches the query and the URL.
+	// Editable input is local; the URL search param is the committed value
+	// used by the list query. Typing is debounced into the URL. External
+	// navigation (history, same-route links) overwrites the input and must
+	// cancel a pending debounce so the previous search cannot write back.
 	const [searchInput, setSearchInput] = useState(searchParam);
-	const [searchText, setSearchText] = useState(searchParam);
+	const searchParamRef = useRef(searchParam);
+	searchParamRef.current = searchParam;
+	const userTypedRef = useRef(false);
 	useEffect(() => {
-		const t = setTimeout(() => setSearchText(searchInput.trim()), DEBOUNCE_MS);
-		return () => clearTimeout(t);
-	}, [searchInput]);
-	// Push the debounced value into the URL so it is shareable/restorable.
+		userTypedRef.current = false;
+		setSearchInput(searchParam);
+	}, [searchParam]);
 	useEffect(() => {
-		if (searchText !== searchParam) {
+		if (!userTypedRef.current) return;
+		const t = setTimeout(() => {
+			if (!userTypedRef.current) return;
+			const next = searchInput.trim();
+			if (next === searchParamRef.current) return;
 			void navigate({
 				to: "/clients",
 				search: (prev) => ({
 					...prev,
-					search: searchText || undefined,
+					search: next || undefined,
 					page: 1,
 				}),
 				replace: true,
 			});
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [searchText, searchParam, navigate]);
+		}, DEBOUNCE_MS);
+		return () => clearTimeout(t);
+	}, [searchInput, navigate]);
 
 	const query = useQuery({
 		queryKey: [
 			"clients",
 			"list",
-			{ page, pageSize, searchText, status, inboundId, sort },
+			{ page, pageSize, searchText: searchParam, status, inboundId, sort },
 		],
 		queryFn: () =>
 			listClients({
 				page,
 				pageSize,
-				search: searchText,
+				search: searchParam,
 				inboundId,
 				sort,
 				...(status === "depleted"
@@ -338,7 +345,10 @@ export function ClientsPage() {
 						style={{ maxWidth: 260 }}
 						placeholder={t("clients.searchPlaceholder")}
 						value={searchInput}
-						onChange={(e) => setSearchInput(e.target.value)}
+						onChange={(e) => {
+							userTypedRef.current = true;
+							setSearchInput(e.target.value);
+						}}
 						aria-label={t("clients.searchAriaLabel")}
 					/>
 					<Select
