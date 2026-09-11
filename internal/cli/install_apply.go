@@ -176,9 +176,16 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		}
 	}
 
-	// 2a. For direct panel access, try to obtain a trusted Let's Encrypt IP
-	// certificate. Fall back to the self-signed certificate already in the
-	// profile if detection or issuance fails.
+	// 2a. Open the planned ACME HTTP-01 port (and the rest of the install
+	// firewall plan) before requesting the certificate. Fall back to the
+	// self-signed certificate already in the profile if issuance fails.
+	installPlan, planErr := buildInstallPlan(profile, opts)
+	if planErr == nil && len(installPlan.FirewallActions) > 0 {
+		if err := installFirewallApplyFunc(installPlan.FirewallActions); err != nil {
+			_ = writeAuditInstall(opts.AuditLog, "", false, err.Error(), nil)
+			return fmt.Errorf("apply firewall rules: %w", err)
+		}
+	}
 	if opts.PanelAccess == "direct" && opts.LEIPCert {
 		if err := issueLEIPCertForProfile(cmd.Context(), &profile, opts, resolvedIP); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: could not obtain Let's Encrypt IP certificate: %v\n", err)
@@ -208,15 +215,6 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	if err != nil {
 		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), nil)
 		return err
-	}
-
-	// 4a. Ensure the firewall is active and open ports required by the panel.
-	installPlan, planErr := buildInstallPlan(profile, opts)
-	if planErr == nil && len(installPlan.FirewallActions) > 0 {
-		if err := installFirewallApplyFunc(installPlan.FirewallActions); err != nil {
-			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
-			return fmt.Errorf("apply firewall rules: %w", err)
-		}
 	}
 
 	if shouldPrepareInstallHost(systemdDir) {
