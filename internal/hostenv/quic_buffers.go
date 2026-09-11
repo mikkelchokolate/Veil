@@ -1,10 +1,12 @@
 package hostenv
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 )
 
 const (
@@ -45,14 +47,23 @@ func ApplyQUICUDPBuffers() error {
 		return fmt.Errorf("write %s: %w", quicSysctlPath, err)
 	}
 	if _, err := quicLookPath("sysctl"); err != nil {
-		return nil
+		return fmt.Errorf("sysctl not found for live QUIC buffer tuning: %w", err)
 	}
+	var errs []error
 	for _, spec := range []string{
 		fmt.Sprintf("net.core.rmem_max=%d", QUICUDPBufferBytes),
 		fmt.Sprintf("net.core.wmem_max=%d", QUICUDPBufferBytes),
 	} {
 		cmd := quicCommand("sysctl", "-w", spec)
-		_ = cmd.Run()
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			msg := strings.TrimSpace(string(output))
+			if msg == "" {
+				errs = append(errs, fmt.Errorf("sysctl -w %s: %w", spec, err))
+			} else {
+				errs = append(errs, fmt.Errorf("sysctl -w %s: %w (%s)", spec, err, msg))
+			}
+		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
