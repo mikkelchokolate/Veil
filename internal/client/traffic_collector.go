@@ -53,13 +53,14 @@ type Collector struct {
 	interval  time.Duration
 	onExhaust func(clientID string)
 
-	mu        sync.Mutex
-	collectMu sync.Mutex
-	health    map[string]providerHealthState
-	running   bool
-	stop      chan struct{}
-	done      chan struct{}
-	cancel    context.CancelFunc
+	mu         sync.Mutex
+	collectMu  sync.Mutex
+	generation uint64
+	health     map[string]providerHealthState
+	running    bool
+	stop       chan struct{}
+	done       chan struct{}
+	cancel     context.CancelFunc
 }
 
 func NewCollector(store *TrafficStore, interval time.Duration, onExhaust func(clientID string)) *Collector {
@@ -107,6 +108,7 @@ func (c *Collector) ResetProviders(providers []TrafficProvider) error {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.generation++
 	c.providers = append([]TrafficProvider(nil), providers...)
 	for _, provider := range providers {
 		c.ensureProviderHealthLocked(provider.Key())
@@ -165,6 +167,7 @@ func (c *Collector) CollectOnceContext(ctx context.Context) error {
 
 	c.mu.Lock()
 	providers := append([]TrafficProvider(nil), c.providers...)
+	generation := c.generation
 	c.mu.Unlock()
 	now := time.Now().Unix()
 	var collectionErrors []error
@@ -204,10 +207,10 @@ func (c *Collector) CollectOnceContext(ctx context.Context) error {
 		if err != nil {
 			wrapped := fmt.Errorf("traffic provider %s: %w", provider.Key(), err)
 			collectionErrors = append(collectionErrors, wrapped)
-			c.recordFailure(provider.Key(), wrapped, now)
+			c.recordFailure(provider.Key(), wrapped, now, generation)
 			continue
 		}
-		c.recordSuccess(provider.Key(), now)
+		c.recordSuccess(provider.Key(), now, generation)
 	}
 	return errors.Join(collectionErrors...)
 }
@@ -216,12 +219,18 @@ func (c *Collector) MarkDegraded(key string, err error) {
 	if err == nil {
 		return
 	}
-	c.recordFailure(key, err, time.Now().Unix())
+	c.mu.Lock()
+	generation := c.generation
+	c.mu.Unlock()
+	c.recordFailure(key, err, time.Now().Unix(), generation)
 }
 
-func (c *Collector) recordSuccess(key string, now int64) {
+func (c *Collector) recordSuccess(key string, now int64, generation uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if generation != c.generation {
+		return
+	}
 	c.ensureProviderHealthLocked(key)
 	state := c.health[key]
 	state.State = "healthy"
@@ -230,9 +239,12 @@ func (c *Collector) recordSuccess(key string, now int64) {
 	c.health[key] = state
 }
 
-func (c *Collector) recordFailure(key string, err error, now int64) {
+func (c *Collector) recordFailure(key string, err error, now int64, generation uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if generation != c.generation {
+		return
+	}
 	c.ensureProviderHealthLocked(key)
 	state := c.health[key]
 	state.State = "degraded"
@@ -320,6 +332,7 @@ func (c *Collector) Stop() {
 	stop := c.stop
 	done := c.done
 	cancel := c.cancel
+	generation := c.generation
 	close(stop)
 	if cancel != nil {
 		cancel()
@@ -328,7 +341,7 @@ func (c *Collector) Stop() {
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		c.recordFailure("collector", errors.New("traffic provider shutdown timed out"), time.Now().Unix())
+		c.recordFailure("collector", errors.New("traffic provider shutdown timed out"), time.Now().Unix(), generation)
 		return
 	}
 	c.mu.Lock()

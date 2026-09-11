@@ -43,6 +43,10 @@ func (s *managementState) handleV1TrafficClient(w http.ResponseWriter, r *http.R
 		s.handleV1TrafficHistory(w, r, clientID)
 		return
 	}
+	if len(parts) != 1 {
+		writeNotFound(w)
+		return
+	}
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, http.MethodGet)
 		return
@@ -109,6 +113,9 @@ func (s *managementState) handleV1TrafficSummary(w http.ResponseWriter, r *http.
 					state = "degraded"
 					break
 				}
+				if provider.State != "healthy" || provider.LastSuccessfulObservationAt == 0 {
+					state = "pending"
+				}
 			}
 		}
 	}
@@ -141,7 +148,11 @@ func (s *managementState) handleV1TrafficTop(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	limit := parseLimitParam(r.URL.Query().Get("limit"), 10, 500)
-	clients, _, err := s.clientService.List(client.ListFilter{PageSize: 1000})
+	if s.clientRepo == nil {
+		writeError(w, "client store unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	clients, err := s.clientRepo.AllClients()
 	if err != nil {
 		writeError(w, err.Error(), http.StatusInternalServerError)
 		return

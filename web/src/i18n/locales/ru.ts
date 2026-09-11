@@ -176,6 +176,7 @@ export const ru: Record<string, string> = {
 	"traffic.telemetryState": "Состояние телеметрии",
 	"traffic.state.healthy": "исправно",
 	"traffic.state.degraded": "деградировано",
+	"traffic.state.pending": "ожидает первое наблюдение",
 	"traffic.state.unsupported": "не поддерживается",
 	"traffic.providerError": "{provider}: {details}",
 	"traffic.summaryUnavailable": "Сводка трафика недоступна",

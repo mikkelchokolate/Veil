@@ -254,6 +254,7 @@ export const en: Record<string, string> = {
 	"traffic.telemetryState": "Telemetry state",
 	"traffic.state.healthy": "healthy",
 	"traffic.state.degraded": "degraded",
+	"traffic.state.pending": "pending first observation",
 	"traffic.state.unsupported": "unsupported",
 	"traffic.providerError": "{provider}: {details}",
 	"traffic.summaryUnavailable": "Traffic summary unavailable",

@@ -32,7 +32,9 @@ type TrafficStore struct {
 
 func NewTrafficStore(db *sql.DB) *TrafficStore { return &TrafficStore{db: db} }
 
-var providerKeyPattern = regexp.MustCompile(`^[A-Za-z0-9:._-]{1,160}$`)
+// Composite keys are protocol + inbound name + binding id. Valid inbound names
+// can exceed 100 characters, so the limit must cover that concatenation.
+var providerKeyPattern = regexp.MustCompile(`^[A-Za-z0-9:._-]{1,512}$`)
 
 // WithRecordLock serializes quota rollover with sample recording. The callback
 // may open its own SQLite transaction; it must not call RecordSample.
