@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/inbounds"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
@@ -248,8 +249,18 @@ func (s *managementState) handleProtocolRoom(protocol string) http.HandlerFunc {
 }
 
 func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Request) {
-	name := strings.TrimPrefix(r.URL.Path, "/api/inbounds/")
-	if name == "" || strings.Contains(name, "/") || !inbounds.IsSafeName(name) {
+	rest := strings.TrimPrefix(r.URL.Path, "/api/inbounds/")
+	parts := strings.Split(rest, "/")
+	name := parts[0]
+	if name == "" || !inbounds.IsSafeName(name) {
+		writeNotFound(w)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "clients" {
+		s.handleInboundAttachedClients(w, r, name)
+		return
+	}
+	if len(parts) != 1 {
 		writeNotFound(w)
 		return
 	}
@@ -326,6 +337,37 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 		}
 		return nil
 	})
+}
+
+func (s *managementState) handleInboundAttachedClients(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	if !s.bindingInboundExists(name) {
+		writeNotFound(w)
+		return
+	}
+	if !s.clientsV1Enabled(w) {
+		return
+	}
+	query := r.URL.Query()
+	filter := client.ListFilter{
+		Page:      atoiDefault(query.Get("page"), 1),
+		PageSize:  atoiDefault(query.Get("pageSize"), 25),
+		InboundID: name,
+		Search:    query.Get("search"),
+		Sort:      query.Get("sort"),
+	}
+	if filter.PageSize > maxV1ClientListPageSize {
+		filter.PageSize = maxV1ClientListPageSize
+	}
+	items, total, err := s.clientService.List(filter)
+	if err != nil {
+		s.writeV1ClientError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"items": items, "total": total, "page": filter.Page, "pageSize": filter.PageSize})
 }
 
 // isOlcrtcKey was a dead duplicate of internal/protocols/olcrtc.isOlcrtcKey

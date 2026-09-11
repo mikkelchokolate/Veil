@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
@@ -192,17 +192,16 @@ export function InboundsPage() {
 		});
 	}, [creating, editing, protocolCatalog.data, form.protocol]);
 
-	const clients = useQuery<{ items?: ClientView[] } | ClientView[]>({
-		queryKey: ["clients", "for-inbounds"],
-		queryFn: () => apiFetch("/api/v1/clients?pageSize=500"),
+	const inboundItems = inbounds.data ?? [];
+	const attachedQueries = useQueries({
+		queries: inboundItems.map((ib) => ({
+			queryKey: ["clients", "for-inbound", ib.name],
+			queryFn: () =>
+				apiFetch(
+					`/api/inbounds/${encodeURIComponent(ib.name)}/clients?pageSize=500`,
+				) as Promise<{ items?: ClientView[]; total?: number }>,
+		})),
 	});
-	const clientList: ClientView[] = Array.isArray(clients.data)
-		? clients.data
-		: (clients.data?.items ?? []);
-
-	function attachedClients(inboundName: string): ClientView[] {
-		return clientList.filter((c) => (c.inboundIds ?? []).includes(inboundName));
-	}
 
 	function invalidate() {
 		void qc.invalidateQueries({ queryKey: ["inbounds"] });
@@ -746,8 +745,11 @@ export function InboundsPage() {
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{(inbounds.data ?? []).map((ib) => {
-								const attached = attachedClients(ib.name);
+							{(inbounds.data ?? []).map((ib, inboundIndex) => {
+								const attachedQuery = attachedQueries[inboundIndex];
+								const attached = attachedQuery?.data?.items ?? [];
+								const attachedTotal =
+									attachedQuery?.data?.total ?? attached.length;
 								return (
 									<TableRow key={ib.name}>
 										<TableCell>{ib.name}</TableCell>
@@ -764,13 +766,13 @@ export function InboundsPage() {
 											</Badge>
 										</TableCell>
 										<TableCell>
-											{clients.isError ? (
+											{attachedQuery?.isError ? (
 												<span className="form-error">
-													{clients.error instanceof ApiError
-														? clients.error.message
+													{attachedQuery.error instanceof ApiError
+														? attachedQuery.error.message
 														: t("inbounds.clientsUnavailable")}
 												</span>
-											) : attached.length === 0 ? (
+											) : attachedTotal === 0 ? (
 												<span className="muted">—</span>
 											) : (
 												<span
@@ -789,6 +791,11 @@ export function InboundsPage() {
 															<Badge>{c.name}</Badge>
 														</Link>
 													))}
+													{attachedTotal > attached.length ? (
+														<span className="muted">
+															+{attachedTotal - attached.length}
+														</span>
+													) : null}
 												</span>
 											)}
 										</TableCell>
