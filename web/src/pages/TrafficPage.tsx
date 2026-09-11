@@ -48,6 +48,117 @@ echarts.use([
 	CanvasRenderer,
 ]);
 
+function chartOption(
+	items: TopEntry[],
+	t: (key: string) => string,
+): echarts.EChartsCoreOption {
+	const uploadLabel = t("traffic.upload");
+	const downloadLabel = t("traffic.download");
+	const totalLabel = t("traffic.total");
+	return {
+		tooltip: {
+			trigger: "axis",
+			axisPointer: { type: "shadow" },
+			formatter: (params: unknown) => {
+				const p = params as Array<{
+					name: string;
+					value: number;
+					seriesName: string;
+				}>;
+				if (!p.length) return "";
+				const name = p[0].name;
+				const up = p.find((x) => x.seriesName === uploadLabel)?.value ?? 0;
+				const down = p.find((x) => x.seriesName === downloadLabel)?.value ?? 0;
+				return `${name}<br/>${uploadLabel}: ${fmtBytes(up)}<br/>${downloadLabel}: ${fmtBytes(down)}<br/>${totalLabel}: ${fmtBytes(up + down)}`;
+			},
+		},
+		legend: { data: [uploadLabel, downloadLabel] },
+		grid: { left: "3%", right: "4%", bottom: "3%", containLabel: true },
+		xAxis: {
+			type: "category",
+			data: items.map((entry) => entry.name),
+			axisLabel: { rotate: 30 },
+		},
+		yAxis: {
+			type: "value",
+			axisLabel: { formatter: (v: number) => fmtBytes(v) },
+		},
+		series: [
+			{
+				name: uploadLabel,
+				type: "bar",
+				stack: "total",
+				data: items.map((entry) => entry.uploadBytes ?? 0),
+				itemStyle: { color: "#3b82f6" },
+			},
+			{
+				name: downloadLabel,
+				type: "bar",
+				stack: "total",
+				data: items.map((entry) => entry.downloadBytes ?? 0),
+				itemStyle: { color: "#10b981" },
+			},
+		],
+	};
+}
+
+function TrafficUsageChart({ items }: { items: TopEntry[] }) {
+	const { t } = useI18n();
+	const elRef = useRef<HTMLDivElement>(null);
+	const chartRef = useRef<echarts.ECharts | null>(null);
+	const itemsRef = useRef(items);
+	const tRef = useRef(t);
+	itemsRef.current = items;
+	tRef.current = t;
+
+	useEffect(() => {
+		const el = elRef.current;
+		if (!el) return;
+		let disposed = false;
+
+		const apply = () => {
+			if (disposed) return;
+			let chart = chartRef.current;
+			if (!chart) {
+				if (el.clientWidth === 0 || el.clientHeight === 0) return;
+				chart = echarts.init(el);
+				chartRef.current = chart;
+			}
+			chart.setOption(chartOption(itemsRef.current, tRef.current), true);
+		};
+
+		apply();
+		const onResize = () => {
+			apply();
+			chartRef.current?.resize();
+		};
+		window.addEventListener("resize", onResize);
+		const ro =
+			typeof ResizeObserver === "undefined"
+				? null
+				: new ResizeObserver(onResize);
+		ro?.observe(el);
+
+		return () => {
+			disposed = true;
+			window.removeEventListener("resize", onResize);
+			ro?.disconnect();
+			try {
+				chartRef.current?.dispose();
+			} catch {
+				/* painter may already be torn down */
+			}
+			chartRef.current = null;
+		};
+	}, []);
+
+	useEffect(() => {
+		chartRef.current?.setOption(chartOption(items, t), true);
+	}, [items, t]);
+
+	return <div ref={elRef} className="traffic-chart" />;
+}
+
 /** B9: traffic dashboard with Apache ECharts breakdown. When no runtime feeds
  * counters the panel says so explicitly instead of rendering a fake graph. */
 export function TrafficPage() {
@@ -71,85 +182,6 @@ export function TrafficPage() {
 	const degradedProviders = (summary.data?.providers ?? []).filter(
 		(provider) => provider.state === "degraded",
 	);
-	const chartRef = useRef<HTMLDivElement>(null);
-	const chartInstance = useRef<echarts.ECharts | null>(null);
-
-	// Initialize chart when collecting. Skip a 0×0 box (jsdom, or CSP
-	// hiding the box) — echarts throws if it cannot read clientWidth.
-	useEffect(() => {
-		if (!hasTelemetry || !chartRef.current) return;
-		const el = chartRef.current;
-		if (el.clientWidth === 0 || el.clientHeight === 0) return;
-		if (!chartInstance.current) {
-			chartInstance.current = echarts.init(el);
-		}
-		const uploadLabel = t("traffic.upload");
-		const downloadLabel = t("traffic.download");
-		const totalLabel = t("traffic.total");
-		const items = top.data?.items ?? [];
-		const option: echarts.EChartsCoreOption = {
-			tooltip: {
-				trigger: "axis",
-				axisPointer: { type: "shadow" },
-				formatter: (params: unknown) => {
-					const p = params as Array<{
-						name: string;
-						value: number;
-						seriesName: string;
-					}>;
-					if (!p.length) return "";
-					const name = p[0].name;
-					const up = p.find((x) => x.seriesName === uploadLabel)?.value ?? 0;
-					const down =
-						p.find((x) => x.seriesName === downloadLabel)?.value ?? 0;
-					return `${name}<br/>${uploadLabel}: ${fmtBytes(up)}<br/>${downloadLabel}: ${fmtBytes(down)}<br/>${totalLabel}: ${fmtBytes(up + down)}`;
-				},
-			},
-			legend: { data: [uploadLabel, downloadLabel] },
-			grid: { left: "3%", right: "4%", bottom: "3%", containLabel: true },
-			xAxis: {
-				type: "category",
-				data: items.map((t) => t.name),
-				axisLabel: { rotate: 30 },
-			},
-			yAxis: {
-				type: "value",
-				axisLabel: { formatter: (v: number) => fmtBytes(v) },
-			},
-			series: [
-				{
-					name: uploadLabel,
-					type: "bar",
-					stack: "total",
-					data: items.map((t) => t.uploadBytes ?? 0),
-					itemStyle: { color: "#3b82f6" },
-				},
-				{
-					name: downloadLabel,
-					type: "bar",
-					stack: "total",
-					data: items.map((t) => t.downloadBytes ?? 0),
-					itemStyle: { color: "#10b981" },
-				},
-			],
-		};
-		chartInstance.current.setOption(option);
-		const onResize = () => chartInstance.current?.resize();
-		window.addEventListener("resize", onResize);
-		return () => window.removeEventListener("resize", onResize);
-	}, [hasTelemetry, top.data, t]);
-
-	// Cleanup on unmount.
-	useEffect(() => {
-		return () => {
-			try {
-				chartInstance.current?.dispose();
-			} catch {
-				/* painter may already be torn down */
-			}
-			chartInstance.current = null;
-		};
-	}, []);
 
 	return (
 		<>
@@ -208,7 +240,7 @@ export function TrafficPage() {
 						<p className="muted">{t("traffic.noUsageRecorded")}</p>
 					) : (
 						<>
-							<div ref={chartRef} className="traffic-chart" />
+							<TrafficUsageChart items={top.data?.items ?? []} />
 							<div style={{ marginTop: 16 }}>
 								<Table>
 									<TableHeader>
