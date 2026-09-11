@@ -127,39 +127,43 @@ func (v Validator) validateInbound(
 	}
 
 	if inbound.Transport != "" && inbound.Port >= 1 && inbound.Port <= 65535 {
-		key := bindingKey(inbound.Transport, inbound.Port)
+		listenPort := inboundListenPort(request.Settings, inbound)
+		if listenPort < 1 || listenPort > 65535 {
+			listenPort = inbound.Port
+		}
+		key := bindingKey(inbound.Transport, listenPort)
 		if previous, exists := seen[key]; exists {
 			issues = append(issues, issue(
 				"duplicate_binding", SeverityError, "port", id,
-				fmt.Sprintf("%s port %d is already assigned to %s", strings.ToUpper(inbound.Transport), inbound.Port, previous),
+				fmt.Sprintf("%s port %d is already assigned to %s", strings.ToUpper(inbound.Transport), listenPort, previous),
 				"Choose another port or disable the other inbound.", "candidate",
 			))
 		} else {
 			seen[key] = displayInboundID(inbound)
 		}
 
-		if inbound.Transport == "tcp" && panelPort > 0 && inbound.Port == panelPort {
+		if inbound.Transport == "tcp" && panelPort > 0 && listenPort == panelPort {
 			issues = append(issues, issue(
 				"reserved_panel_port", SeverityError, "port", id,
-				fmt.Sprintf("TCP port %d is reserved by the Panel", inbound.Port),
+				fmt.Sprintf("TCP port %d is reserved by the Panel", listenPort),
 				"Choose another inbound port or move the Panel listener.", "candidate",
 			))
 		}
 
 		if v.Ports != nil &&
-			!ownedBinding(inbound, request.CurrentInbounds) &&
+			!ownedBinding(request.Settings, inbound, request.CurrentInbounds) &&
 			!ownedPanelCaddyBinding(request.Settings, inbound) {
-			available, err := v.Ports.Available(ctx, inbound.Transport, inbound.Port)
+			available, err := v.Ports.Available(ctx, inbound.Transport, listenPort)
 			if err != nil {
 				issues = append(issues, issue(
 					"port_probe_failed", SeverityError, "port", id,
-					fmt.Sprintf("Could not check %s port %d", strings.ToUpper(inbound.Transport), inbound.Port),
+					fmt.Sprintf("Could not check %s port %d", strings.ToUpper(inbound.Transport), listenPort),
 					"Check host permissions and retry validation.", "live-host",
 				))
 			} else if !available {
 				issues = append(issues, issue(
 					"port_in_use", SeverityError, "port", id,
-					fmt.Sprintf("%s port %d is already in use", strings.ToUpper(inbound.Transport), inbound.Port),
+					fmt.Sprintf("%s port %d is already in use", strings.ToUpper(inbound.Transport), listenPort),
 					"Stop the conflicting service or choose another inbound port.", "live-host",
 				))
 			}
@@ -329,6 +333,13 @@ func mieruCrossInboundIssues(inbound model.Inbound, runtimeIdentities map[string
 		return issues
 	}
 	if len(credentials) == 0 {
+		// Normalized identities replace the inbound-name fallback once they
+		// exist. Inventing the fallback here would false-collide with a
+		// runtime identity equal to the inbound name, and with identities on
+		// other inbounds that match an unused fallback.
+		if len(runtimeIdentities[inbound.Name]) > 0 {
+			return issues
+		}
 		name := inbound.Name
 		if previous, ok := seen[name]; ok {
 			issues = append(issues, mieruDuplicateUsernameIssue(name, previous, inbound))
@@ -451,13 +462,21 @@ func hasCredential(settings model.Settings, inbound model.Inbound) bool {
 	return validator.HasCredential(settings, inbound)
 }
 
-func ownedBinding(candidate model.Inbound, current []model.Inbound) bool {
+func inboundListenPort(settings model.Settings, inbound model.Inbound) int {
+	if inbound.Protocol == "naiveproxy" {
+		return model.ResolveNaivePublicPort(settings, inbound)
+	}
+	return inbound.Port
+}
+
+func ownedBinding(settings model.Settings, candidate model.Inbound, current []model.Inbound) bool {
+	candidatePort := inboundListenPort(settings, candidate)
 	for _, inbound := range current {
 		if inbound.Enabled &&
 			inbound.Name == candidate.Name &&
 			inbound.Protocol == candidate.Protocol &&
 			inbound.Transport == candidate.Transport &&
-			inbound.Port == candidate.Port {
+			inboundListenPort(settings, inbound) == candidatePort {
 			return true
 		}
 	}
@@ -468,7 +487,7 @@ func ownedPanelCaddyBinding(settings model.Settings, candidate model.Inbound) bo
 	return settings.PanelAccess == "caddy" &&
 		candidate.Protocol == "naiveproxy" &&
 		candidate.Transport == "tcp" &&
-		candidate.Port == 443
+		inboundListenPort(settings, candidate) == 443
 }
 
 func bindingKey(transport string, port int) string {
