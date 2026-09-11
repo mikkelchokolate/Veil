@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/firewall"
@@ -14,5 +15,6 @@ func TestMain(m *testing.M) {
 	installPrepareHostFunc = func(hostaccess.Paths) error { return nil }
 	installFirewallApplyFunc = func([]firewall.Rule) error { return nil }
 	commandLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
+	backupSystemdDir = filepath.Join(os.TempDir(), "veil-cli-test-systemd")
 	os.Exit(m.Run())
 }

@@ -17,9 +17,20 @@ import (
 	"golang.org/x/term"
 )
 
+const (
+	defaultScheduledBackupPassphrasePath = "/etc/veil/backup.passphrase"
+	backupScheduleDropInName             = "passphrase-path.conf"
+)
+
 var backupSystemctlRun = func(args ...string) error {
 	return exec.Command("systemctl", args...).Run()
 }
+
+// backupSystemdDir is the systemd unit directory that schedule enable/disable
+// uses for the veil-backup.service drop-in. Tests replace it with a temp dir.
+var backupSystemdDir = "/etc/systemd/system"
+
+var backupVeilBinary = "/usr/local/bin/veil"
 
 func newBackupCommand(version string) *cobra.Command {
 	var statePath string
@@ -269,8 +280,15 @@ func newBackupCommand(version string) *cobra.Command {
 			if len(resolvedPass) < 16 {
 				return errors.New("scheduled backup passphrase must be at least 16 characters")
 			}
+			schedulePassphrasePath, err = normalizeScheduledPassphrasePath(schedulePassphrasePath)
+			if err != nil {
+				return err
+			}
 			if err := writeBackupArchive(schedulePassphrasePath, []byte(resolvedPass+"\n")); err != nil {
 				return fmt.Errorf("write scheduled backup passphrase: %w", err)
+			}
+			if err := syncBackupScheduleUnit(schedulePassphrasePath); err != nil {
+				return err
 			}
 			if err := backupSystemctlRun("daemon-reload"); err != nil {
 				return fmt.Errorf("systemctl daemon-reload: %w", err)
@@ -286,12 +304,26 @@ func newBackupCommand(version string) *cobra.Command {
 		Use:   "disable",
 		Short: "Disable the daily backup timer",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if !cmd.Flags().Changed("passphrase-path") {
+				if fromDropIn := scheduledPassphrasePathFromDropIn(backupSystemdDir); fromDropIn != "" {
+					schedulePassphrasePath = fromDropIn
+				}
+			} else {
+				var err error
+				schedulePassphrasePath, err = normalizeScheduledPassphrasePath(schedulePassphrasePath)
+				if err != nil {
+					return err
+				}
+			}
 			if err := backupSystemctlRun("disable", "--now", "veil-backup.timer"); err != nil {
 				return fmt.Errorf("disable veil-backup.timer: %w", err)
 			}
 			if removeSchedulePassphrase {
 				if err := os.Remove(schedulePassphrasePath); err != nil && !errors.Is(err, os.ErrNotExist) {
 					return fmt.Errorf("remove scheduled backup passphrase: %w", err)
+				}
+				if err := removeBackupScheduleDropIn(); err != nil {
+					return err
 				}
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), "Encrypted backup schedule disabled.")
@@ -300,8 +332,8 @@ func newBackupCommand(version string) *cobra.Command {
 	}
 	scheduleEnableCmd.Flags().StringVarP(&passphrase, "passphrase", "p", "", "backup encryption passphrase")
 	scheduleEnableCmd.Flags().StringVar(&passphraseFile, "passphrase-file", "", "file containing the backup encryption passphrase")
-	scheduleEnableCmd.Flags().StringVar(&schedulePassphrasePath, "passphrase-path", "/etc/veil/backup.passphrase", "root-owned passphrase destination used by the systemd service")
-	scheduleDisableCmd.Flags().StringVar(&schedulePassphrasePath, "passphrase-path", "/etc/veil/backup.passphrase", "scheduled backup passphrase path")
+	scheduleEnableCmd.Flags().StringVar(&schedulePassphrasePath, "passphrase-path", defaultScheduledBackupPassphrasePath, "root-owned passphrase destination used by the systemd service")
+	scheduleDisableCmd.Flags().StringVar(&schedulePassphrasePath, "passphrase-path", defaultScheduledBackupPassphrasePath, "scheduled backup passphrase path")
 	scheduleDisableCmd.Flags().BoolVar(&removeSchedulePassphrase, "remove-passphrase", false, "remove the stored passphrase after disabling the timer")
 	scheduleCmd.AddCommand(scheduleEnableCmd, scheduleDisableCmd)
 	cmd.AddCommand(scheduleCmd)
