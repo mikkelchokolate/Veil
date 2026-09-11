@@ -81,19 +81,14 @@ func TestWriteFileMkdirAllError(t *testing.T) {
 
 func TestWriteFileWriteError(t *testing.T) {
 	dir := t.TempDir()
-	target := filepath.Join(dir, "target")
-	if err := os.Mkdir(target, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	// Make the temporary path (target + ".tmp") an existing directory so
-	// os.WriteFile fails because it cannot open a directory for writing.
-	if err := os.Mkdir(target+".tmp", 0o755); err != nil {
+	parentFile := filepath.Join(dir, "parent")
+	if err := os.WriteFile(parentFile, []byte("parent"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	err := WriteFile(target, "x", 0o600)
+	err := WriteFile(filepath.Join(parentFile, "child.txt"), "x", 0o600)
 	if err == nil {
-		t.Fatal("expected error writing when temporary path is a directory")
+		t.Fatal("expected error writing when parent path is not a directory")
 	}
 }
 

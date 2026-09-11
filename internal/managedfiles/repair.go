@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 )
 
 type File struct {
@@ -92,14 +94,7 @@ func Apply(plan RepairPlan) (RepairResult, error) {
 }
 
 func WriteFile(path string, content string, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(content), mode); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return atomicfile.Write(path, []byte(content), mode, 0o755)
 }
 
 func IsMissingOrBlocked(err error) bool {
