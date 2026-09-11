@@ -3,12 +3,32 @@ package update
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestRestartAfterUpdateHealthCheckUsesInstalledListen(t *testing.T) {
+	t.Setenv("VEIL_LISTEN", "127.0.0.1:47359")
+	var gotAddr string
+	err := RestartAfterUpdate(io.Discard, "current", "backup", WorkflowOptions{Staged: true}, RestartHooks{
+		Restart: func(string) error { return nil },
+		Health: func(addr, token string, timeout time.Duration) error {
+			gotAddr = addr
+			return nil
+		},
+		Rollback: func(string, string) error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("RestartAfterUpdate: %v", err)
+	}
+	if gotAddr != "127.0.0.1:47359" {
+		t.Fatalf("health check addr = %q, want installed listen 127.0.0.1:47359", gotAddr)
+	}
+}
 
 func copyBackupRollback(backupPath, currentPath string) error {
 	data, err := os.ReadFile(backupPath)

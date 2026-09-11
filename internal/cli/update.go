@@ -51,7 +51,7 @@ rollback to the previous binary if the health check fails.`,
 	cmd.Flags().BoolVar(&force, "force", false, "reinstall even if already at latest version")
 	cmd.Flags().BoolVar(&restart, "restart", false, "restart veil.service and health check after update")
 	cmd.Flags().BoolVar(&staged, "staged", false, "restart with health check and automatic rollback on failure")
-	cmd.Flags().StringVar(&listen, "listen", "", "veil serve address for health check (default: 127.0.0.1:2096)")
+	cmd.Flags().StringVar(&listen, "listen", "", "veil serve address for health check; defaults to VEIL_LISTEN, the installed panel listen address, or 127.0.0.1:2096")
 	cmd.Flags().StringVar(&authToken, "auth-token", "", "API token for health check")
 	return cmd
 }

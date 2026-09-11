@@ -37,6 +37,7 @@ func TestNewQueryUsesCustomAuthResolver(t *testing.T) {
 }
 
 func TestResolveListen(t *testing.T) {
+	isolateListenConfig(t)
 	cases := []struct {
 		in, want string
 	}{

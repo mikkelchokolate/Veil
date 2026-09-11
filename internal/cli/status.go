@@ -17,9 +17,9 @@ func newStatusCommand(version string) *cobra.Command {
 		Short: "Show Veil service status",
 		Long: `Status queries a running veil serve instance and displays service status.
 
-By default it connects to 127.0.0.1:2096. Use --listen to specify a different
-address and --auth-token to authenticate. For a panel mounted below a secret
-base path, use --web-base-path or VEIL_WEB_BASE_PATH.`,
+By default it uses --listen, then VEIL_LISTEN, then the installed panel listen
+address, and finally 127.0.0.1:2096. Use --auth-token to authenticate. For a
+panel mounted below a secret base path, use --web-base-path or VEIL_WEB_BASE_PATH.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			env := serveflow.NewEnvironment()
 			resolvedWebBasePath, _ := env.WebBasePath(webBasePath)
@@ -27,7 +27,7 @@ base path, use --web-base-path or VEIL_WEB_BASE_PATH.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&listen, "listen", "", "veil serve address (default: 127.0.0.1:2096)")
+	cmd.Flags().StringVar(&listen, "listen", "", "veil serve address; defaults to VEIL_LISTEN, the installed panel listen address, or 127.0.0.1:2096")
 	cmd.Flags().StringVar(&authToken, "auth-token", "", "API bearer token")
 	cmd.Flags().StringVar(&webBasePath, "web-base-path", "", "base path prefix for the web panel; defaults to VEIL_WEB_BASE_PATH or /")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "output as JSON")
