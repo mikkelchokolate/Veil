@@ -5,6 +5,7 @@ import {
 	RouterProvider,
 } from "@tanstack/react-router";
 import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { AuthProvider } from "../auth/AuthContext";
 import { I18nProvider } from "../i18n/I18nContext";
 import { routeTree } from "../routeTree.gen";
@@ -217,5 +218,83 @@ describe("ClientsPage", () => {
 		expect(
 			seen.some((entry) => entry.search === "alice" && entry.page === "2"),
 		).toBe(true);
+	});
+
+	it("select-all follows visible client IDs after pagination", async () => {
+		const user = userEvent.setup();
+		const bulkBodies: Array<Record<string, unknown>> = [];
+		server.use(
+			http.get("/api/v1/clients", ({ request }) => {
+				const url = new URL(request.url);
+				const page = Number(url.searchParams.get("page") ?? 1);
+				const pageSize = Number(url.searchParams.get("pageSize") ?? 2);
+				const items =
+					page === 1
+						? [
+								{
+									id: "p1a",
+									name: "Alice",
+									status: "active",
+									enabled: true,
+									createdAt: 1700000000,
+								},
+								{
+									id: "p1b",
+									name: "Bob",
+									status: "active",
+									enabled: true,
+									createdAt: 1700000000,
+								},
+							]
+						: [
+								{
+									id: "p2a",
+									name: "Carol",
+									status: "active",
+									enabled: true,
+									createdAt: 1700000000,
+								},
+								{
+									id: "p2b",
+									name: "Dave",
+									status: "active",
+									enabled: true,
+									createdAt: 1700000000,
+								},
+							];
+				return HttpResponse.json({ items, total: 4, page, pageSize });
+			}),
+			http.post("/api/v1/clients/bulk", async ({ request }) => {
+				bulkBodies.push((await request.json()) as Record<string, unknown>);
+				return HttpResponse.json({ succeeded: 2, results: [] });
+			}),
+		);
+		const { router } = renderClients("/clients?pageSize=2");
+		await screen.findByText("Alice");
+		const selectAll = screen.getByRole("checkbox", { name: /select all/i });
+		expect(selectAll).not.toBeChecked();
+		await user.click(selectAll);
+		expect(selectAll).toBeChecked();
+		expect(screen.getByText(/2 selected/i)).toBeInTheDocument();
+
+		await act(async () => {
+			await router.navigate({
+				to: "/clients",
+				search: (prev) => ({ ...prev, page: 2, pageSize: 2 }),
+			});
+		});
+		await screen.findByText("Carol");
+		expect(screen.queryByText("Alice")).not.toBeInTheDocument();
+		const selectAllPage2 = screen.getByRole("checkbox", {
+			name: /select all/i,
+		});
+		expect(selectAllPage2).not.toBeChecked();
+		expect(screen.queryByText(/2 selected/i)).not.toBeInTheDocument();
+
+		await user.click(selectAllPage2);
+		expect(selectAllPage2).toBeChecked();
+		await user.click(screen.getByRole("button", { name: /^enable$/i }));
+		await waitFor(() => expect(bulkBodies).toHaveLength(1));
+		expect(bulkBodies[0]?.clientIds).toEqual(["p2a", "p2b"]);
 	});
 });

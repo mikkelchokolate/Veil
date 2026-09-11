@@ -201,6 +201,29 @@ export function ClientsPage() {
 	});
 
 	const items = (query.data?.items ?? []) as ClientView[];
+	const pageIds = useMemo(() => items.map((c) => c.id), [items]);
+	const selectedOnPage = useMemo(() => {
+		const next = new Set<string>();
+		for (const id of pageIds) {
+			if (selected.has(id)) next.add(id);
+		}
+		return next;
+	}, [pageIds, selected]);
+	const allPageSelected =
+		pageIds.length > 0 && selectedOnPage.size === pageIds.length;
+	const somePageSelected = selectedOnPage.size > 0 && !allPageSelected;
+	useEffect(() => {
+		const visible = new Set(pageIds);
+		setSelected((prev) => {
+			let dropped = false;
+			const next = new Set<string>();
+			for (const id of prev) {
+				if (visible.has(id)) next.add(id);
+				else dropped = true;
+			}
+			return dropped ? next : prev;
+		});
+	}, [pageIds]);
 	const total = query.data?.total ?? 0;
 	const totalPages = Math.max(1, Math.ceil(total / pageSize));
 	const pageCountLabel =
@@ -208,9 +231,9 @@ export function ClientsPage() {
 			? t("clients.pagination.count_one", { n: total })
 			: t("clients.pagination.count_other", { n: total });
 	const deleteCountLabel =
-		selected.size === 1
-			? t("clients.delete.count_one", { n: selected.size })
-			: t("clients.delete.count_other", { n: selected.size });
+		selectedOnPage.size === 1
+			? t("clients.delete.count_one", { n: selectedOnPage.size })
+			: t("clients.delete.count_other", { n: selectedOnPage.size });
 
 	// S3: aggregate summary across the current page (bytes kept as numbers
 	// server-side already; fmtBytes formats without precision loss). Per-client
@@ -233,7 +256,10 @@ export function ClientsPage() {
 						header: () => (
 							<input
 								type="checkbox"
-								checked={items.length > 0 && selected.size === items.length}
+								checked={allPageSelected}
+								ref={(el) => {
+									if (el) el.indeterminate = somePageSelected;
+								}}
 								onChange={toggleAll}
 								aria-label={t("clients.selectAll")}
 							/>
@@ -322,10 +348,10 @@ export function ClientsPage() {
 	}
 
 	function toggleAll() {
-		if (selected.size === items.length) {
+		if (allPageSelected) {
 			setSelected(new Set());
 		} else {
-			setSelected(new Set(items.map((c) => c.id)));
+			setSelected(new Set(pageIds));
 		}
 	}
 
@@ -425,7 +451,7 @@ export function ClientsPage() {
 				) : null}
 			</div>
 
-			{isAdmin && selected.size > 0 ? (
+			{isAdmin && selectedOnPage.size > 0 ? (
 				<div
 					className="card"
 					style={{
@@ -436,12 +462,12 @@ export function ClientsPage() {
 					}}
 				>
 					<span className="muted">
-						{t("clients.selected", { n: selected.size })}
+						{t("clients.selected", { n: selectedOnPage.size })}
 					</span>
 					<Button
 						disabled={bulk.isPending}
 						onClick={() =>
-							bulk.mutate({ action: "enable", ids: [...selected] })
+							bulk.mutate({ action: "enable", ids: [...selectedOnPage] })
 						}
 					>
 						{t("common.enable")}
@@ -449,7 +475,7 @@ export function ClientsPage() {
 					<Button
 						disabled={bulk.isPending}
 						onClick={() =>
-							bulk.mutate({ action: "disable", ids: [...selected] })
+							bulk.mutate({ action: "disable", ids: [...selectedOnPage] })
 						}
 					>
 						{t("common.disable")}
@@ -457,7 +483,10 @@ export function ClientsPage() {
 					<Button
 						disabled={bulk.isPending}
 						onClick={() =>
-							bulk.mutate({ action: "reset_traffic", ids: [...selected] })
+							bulk.mutate({
+								action: "reset_traffic",
+								ids: [...selectedOnPage],
+							})
 						}
 					>
 						{t("clients.resetTraffic")}
@@ -598,7 +627,10 @@ export function ClientsPage() {
 							disabled={bulk.isPending}
 							onClick={(e) => {
 								e.preventDefault();
-								bulk.mutate({ action: "delete", ids: [...selected] });
+								bulk.mutate({
+									action: "delete",
+									ids: [...selectedOnPage],
+								});
 							}}
 						>
 							{bulk.isPending
