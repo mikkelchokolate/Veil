@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"reflect"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/client"
 )
 
 func TestClientCreateHonorsDisabledBindingAndPatchPreservesBindingMaterial(t *testing.T) {
@@ -75,16 +77,16 @@ func TestClientPatchRejectsImpossibleQuotaStateAndStaleWritesUniformly(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	impossible := v1Request(t, router, http.MethodPatch, "/api/v1/clients/"+clientID, fmt.Sprintf(`{"version":%d,"quotaBytes":null}`, created.Version))
-	if impossible.Code != http.StatusBadRequest {
-		t.Fatalf("quotaBytes=null left daily reset metadata in an impossible composite state: %d %s", impossible.Code, impossible.Body.String())
+	cleared := v1Request(t, router, http.MethodPatch, "/api/v1/clients/"+clientID, fmt.Sprintf(`{"version":%d,"quotaBytes":null}`, created.Version))
+	if cleared.Code != http.StatusOK {
+		t.Fatalf("quotaBytes=null should clear derived quota state: %d %s", cleared.Code, cleared.Body.String())
 	}
-	unchanged, err := state.clientRepo.Get(clientID)
+	unlimited, err := state.clientRepo.Get(clientID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if unchanged.Version != created.Version || unchanged.QuotaBytes == nil || unchanged.QuotaResetPolicy != "daily" || unchanged.QuotaResetAt == nil {
-		t.Fatalf("rejected impossible quota PATCH mutated row: before=%+v after=%+v", created, unchanged)
+	if unlimited.QuotaBytes != nil || unlimited.Depleted || unlimited.QuotaResetAt != nil || unlimited.QuotaResetPolicy != client.ResetNever {
+		t.Fatalf("cleared quota left derived state: %+v", unlimited)
 	}
 	stale := v1Request(t, router, http.MethodPatch, "/api/v1/clients/"+clientID, fmt.Sprintf(`{"version":%d,"notes":"stale"}`, created.Version-1))
 	if stale.Code != http.StatusConflict {

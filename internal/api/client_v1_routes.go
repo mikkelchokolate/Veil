@@ -140,9 +140,12 @@ type v1BulkRequest struct {
 }
 
 type v1BulkResult struct {
-	ID      string `json:"id"`
-	OK      bool   `json:"ok"`
-	Message string `json:"message,omitempty"`
+	ID                string                    `json:"id"`
+	OK                bool                      `json:"ok"`
+	Message           string                    `json:"message,omitempty"`
+	BindingID         string                    `json:"bindingId,omitempty"`
+	Plaintext         string                    `json:"plaintext,omitempty"`
+	IssuedCredentials []client.IssuedCredential `json:"issuedCredentials,omitempty"`
 }
 
 // handleV1Bulk applies one action to many clients. Per-client failures roll
@@ -166,6 +169,16 @@ func (s *managementState) handleV1Bulk(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "action and clientIds are required", http.StatusBadRequest)
 		return
 	}
+	if req.Action == "extend" || req.Action == "extend_expiry" {
+		if req.Days == nil {
+			writeError(w, "days is required", http.StatusBadRequest)
+			return
+		}
+		if _, err := client.ExtendExpiresAt(0, *req.Days); err != nil {
+			s.writeV1ClientError(w, err)
+			return
+		}
+	}
 	results := make([]v1BulkResult, 0, len(req.ClientIDs))
 	succeeded := 0
 	skipped := 0
@@ -177,7 +190,7 @@ func (s *managementState) handleV1Bulk(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			res := v1BulkResult{ID: id}
-			ok, sk, aerr := s.applyBulkActionTx(tx, id, req)
+			ok, sk, aerr := s.applyBulkActionTx(tx, id, req, &res)
 			switch {
 			case aerr != nil:
 				_ = tx.RollbackToSavepoint(sp)
@@ -220,6 +233,12 @@ func (s *managementState) handleV1Bulk(w http.ResponseWriter, r *http.Request) {
 		"results":   results,
 	}
 	s.mergeOutcomeInto(resp, outcome)
+	for _, item := range results {
+		if item.Plaintext != "" {
+			markIdempotencySecretResponse(w, item.ID, 1)
+			break
+		}
+	}
 	writeJSON(w, resp)
 }
 
@@ -231,7 +250,7 @@ var errNoClientChanges = errors.New("no client changes applied")
 // applyBulkActionTx applies one bulk action to one client inside the bulk
 // transaction. Returns (applied, skipped, err) with the same semantics as the
 // former autocommit variant.
-func (s *managementState) applyBulkActionTx(tx *client.Tx, id string, req v1BulkRequest) (bool, bool, error) {
+func (s *managementState) applyBulkActionTx(tx *client.Tx, id string, req v1BulkRequest, res *v1BulkResult) (bool, bool, error) {
 	existing, err := tx.Get(id)
 	if err != nil {
 		return false, false, err
@@ -268,7 +287,7 @@ func (s *managementState) applyBulkActionTx(tx *client.Tx, id string, req v1Bulk
 			return false, false, err
 		}
 	case "extend", "extend_expiry":
-		if req.Days == nil || *req.Days <= 0 {
+		if req.Days == nil {
 			return false, false, client.ErrValidation
 		}
 		var base int64
@@ -278,17 +297,35 @@ func (s *managementState) applyBulkActionTx(tx *client.Tx, id string, req v1Bulk
 		} else {
 			base = now
 		}
-		newExp := base + int64(*req.Days)*86400
+		newExp, err := client.ExtendExpiresAt(base, *req.Days)
+		if err != nil {
+			return false, false, err
+		}
 		c.ExpiresAt = &newExp
 	case "attach_inbound":
 		if req.InboundID == "" {
 			return false, false, client.ErrValidation
 		}
+		if !s.bindingInboundExistsLocked(req.InboundID) {
+			return false, false, fmt.Errorf("%w: binding inbound does not exist", client.ErrValidation)
+		}
 		if err := s.validateQuotaBindingsLocked(c.QuotaBytes, []client.Binding{{InboundID: req.InboundID, Enabled: true}}); err != nil {
 			return false, false, err
 		}
-		if _, err := s.clientService.AddBindingTx(tx, id, req.InboundID); err != nil {
+		b, err := s.clientService.AddBindingTx(tx, id, req.InboundID)
+		if err != nil {
 			return false, false, err
+		}
+		issued, err := s.clientService.IssueBindingPasswordTx(tx, b, "")
+		if err != nil {
+			return false, false, err
+		}
+		if res != nil {
+			res.BindingID = b.ID
+			if issued.Plaintext != "" {
+				res.Plaintext = issued.Plaintext
+				res.IssuedCredentials = []client.IssuedCredential{issued}
+			}
 		}
 		return true, false, nil
 	case "detach_inbound":
@@ -563,7 +600,7 @@ func (s *managementState) handleV1ClientByID(w http.ResponseWriter, r *http.Requ
 	case http.MethodGet:
 		view, err := s.clientService.Get(id)
 		if err != nil {
-			writeNotFound(w)
+			s.writeV1ClientError(w, err)
 			return
 		}
 		writeJSON(w, view)
@@ -595,7 +632,7 @@ func (s *managementState) handleV1UpdateClient(w http.ResponseWriter, r *http.Re
 	}
 	existing, err := s.clientService.Get(id)
 	if err != nil {
-		writeNotFound(w)
+		s.writeV1ClientError(w, err)
 		return
 	}
 	c := existing.Client
@@ -689,9 +726,10 @@ func (s *managementState) handleV1ClientSubresource(w http.ResponseWriter, r *ht
 	}
 }
 
-// handleV1ClientAudit returns the audit entries scoped to one client. Entries
-// match when the audit target is the client's ID, its current name, or a
-// client-scoped action whose target is this client. Admin-only, newest first.
+// handleV1ClientAudit returns the audit entries scoped to one client. Modern
+// records match the immutable client ID. Legacy name-targeted events are
+// included only for known client actions so an inbound or user with the same
+// display name cannot leak into this history. Admin-only, newest first.
 func (s *managementState) handleV1ClientAudit(w http.ResponseWriter, r *http.Request, clientID string) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, http.MethodGet)
@@ -703,24 +741,61 @@ func (s *managementState) handleV1ClientAudit(w http.ResponseWriter, r *http.Req
 	}
 	view, err := s.clientService.Get(clientID)
 	if err != nil {
-		writeNotFound(w)
+		s.writeV1ClientError(w, err)
 		return
 	}
-	records, err := s.auditRecorder().List(500, time.Time{})
+	limit := 100
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 500 {
+			writeError(w, "limit must be an integer between 1 and 500", http.StatusBadRequest)
+			return
+		}
+		limit = parsed
+	}
+	var before time.Time
+	if raw := strings.TrimSpace(r.URL.Query().Get("before")); raw != "" {
+		parsed, err := time.Parse(time.RFC3339Nano, raw)
+		if err != nil {
+			writeError(w, "before must be an RFC3339 timestamp", http.StatusBadRequest)
+			return
+		}
+		before = parsed
+	}
+	records, err := s.auditRecorder().ListMatching(limit, before, func(rec audit.Record) bool {
+		return clientAuditMatches(rec, clientID, view.Name)
+	})
 	if err != nil {
 		writeError(w, "failed to read audit history", http.StatusInternalServerError)
 		return
 	}
-	items := make([]audit.Record, 0)
-	for _, rec := range records {
-		// Client-scoped actions record the target as the client ID (mutations)
-		// or the client name (create). Bindings/credentials record the client
-		// ID as target with the sub-id in details.
-		if rec.Target == clientID || rec.Target == view.Name {
-			items = append(items, rec)
-		}
+	response := AuditListResponse{Items: records}
+	if len(records) == limit {
+		response.NextBefore = records[len(records)-1].Timestamp.Format(time.RFC3339Nano)
 	}
-	writeJSON(w, map[string]any{"items": items})
+	writeJSON(w, response)
+}
+
+func clientAuditMatches(rec audit.Record, clientID, clientName string) bool {
+	if rec.Target == clientID {
+		return true
+	}
+	if clientName == "" || rec.Target != clientName {
+		return false
+	}
+	return isLegacyClientAuditAction(rec.Action)
+}
+
+func isLegacyClientAuditAction(action string) bool {
+	switch action {
+	case "create_client", "update_client", "delete_client",
+		"add_binding", "update_binding", "remove_binding",
+		"set_credential", "rotate_credential",
+		"revoke_subscription_token":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *managementState) bindingInboundExists(inboundID string) bool {
