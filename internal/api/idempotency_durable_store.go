@@ -274,9 +274,6 @@ func (s *idempotencyStore) reserveDurable(r *http.Request, key, scope, fingerpri
 	if current.Fingerprint != fingerprint || current.State != "reserved" {
 		return false, current, nil
 	}
-	if idempotencyOwnerAlive(current.Owner) {
-		return false, current, nil
-	}
 	var domainState, domainResult string
 	if current.OperationID != "" {
 		_ = s.db.QueryRow(`SELECT state,domain_result_json FROM domain_operations WHERE id=? AND scope=? AND operation_generation=?`, current.OperationID, scope, current.Generation).Scan(&domainState, &domainResult)
@@ -306,6 +303,9 @@ WHERE scope=? AND payload_hash=? AND owner_process=? AND operation_generation=? 
 		return false, recovered, err
 	}
 	if current.ReservedUntil > nowUnix {
+		return false, current, nil
+	}
+	if current.Owner == s.owner {
 		return false, current, nil
 	}
 	operationID = uuid.NewString()
