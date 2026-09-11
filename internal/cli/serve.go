@@ -5,6 +5,7 @@ import (
 	"time"
 
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
+	statusflow "github.com/mikkelchokolate/Veil/internal/cliflow/status"
 	"github.com/spf13/cobra"
 )
 
@@ -88,6 +89,9 @@ func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
 	if err != nil {
 		return err
 	}
+	if err := writeContainerHealthContract(cfg); err != nil {
+		return err
+	}
 	server, stateReloader := serveflow.NewHTTPServer(serveflow.HTTPServerOptions{
 		Listen:              cfg.Listen,
 		Version:             opts.Version,
@@ -150,4 +154,16 @@ func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
 	}
 
 	return serveflow.RunLifecycle(serveflow.LifecycleOptions{Context: cmd.Context(), Out: cmd.OutOrStdout(), Err: cmd.ErrOrStderr(), Server: server, StateReloader: stateReloader, TLSEnabled: cfg.TLSEnabled, TLSCert: cfg.TLSCert, TLSKey: cfg.TLSKey, DrainTimeout: serveDrainTimeout})
+}
+
+func writeContainerHealthContract(cfg serveflow.Config) error {
+	path := statusflow.ContractPathFromEnv()
+	if path == "" {
+		return nil
+	}
+	serverName := cfg.AutoTLSDomain
+	if serverName == "" {
+		serverName = cfg.Domain
+	}
+	return statusflow.WriteContract(path, statusflow.ContractFromServe(cfg.Listen, cfg.TLSEnabled, cfg.WebBasePath, cfg.TLSCert, serverName))
 }
