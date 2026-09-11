@@ -511,6 +511,9 @@ export const en: Record<string, string> = {
 	"clientDetail.auditResult": "Result",
 	"clientDetail.auditFailed": "failed",
 	"clientDetail.auditOk": "ok",
+	"clientDetail.error.conflict":
+		"This client was updated elsewhere. Your draft is kept — save again to retry, or reload server values.",
+	"clientDetail.reloadServerValues": "Reload server values",
 	"clientDetail.error.save": "Save failed",
 	"clientDetail.error.update": "Update failed",
 	"clientDetail.error.delete": "Delete failed",
