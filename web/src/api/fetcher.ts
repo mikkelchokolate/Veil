@@ -100,9 +100,12 @@ async function requestOnce(
 	options: RequestInit,
 	timeoutMs: number,
 ): Promise<Response> {
+	if (options.signal?.aborted) {
+		throw new CancelledError();
+	}
 	const controller = new AbortController();
 	let timedOut = false;
-	let callerCancelled = options.signal?.aborted ?? false;
+	let callerCancelled = false;
 	const onCallerAbort = () => {
 		callerCancelled = true;
 		controller.abort();

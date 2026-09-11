@@ -164,6 +164,50 @@ describe("apiFetch request policy", () => {
 		expect(mutationFetch).toHaveBeenCalledTimes(1);
 	});
 
+	it("does not send a POST when the caller signal is already aborted", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+		vi.stubGlobal("fetch", fetchMock);
+		const controller = new AbortController();
+		controller.abort();
+		const outcome = await fetcher
+			.apiFetch("/api/v1/clients", {
+				method: "POST",
+				body: JSON.stringify({ name: "canceled-test" }),
+				signal: controller.signal,
+				attempts: 1,
+			})
+			.then(
+				() => undefined,
+				(error: unknown) => error,
+			);
+		expect(outcome).toBeInstanceOf(fetcher.CancelledError);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("does not send a GET when the caller signal is already aborted", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+		vi.stubGlobal("fetch", fetchMock);
+		const controller = new AbortController();
+		controller.abort();
+		await expect(
+			fetcher.apiFetch("/api/v1/clients", { signal: controller.signal }),
+		).rejects.toBeInstanceOf(fetcher.CancelledError);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("does not dispatch a retry after the caller cancels", async () => {
+		const controller = new AbortController();
+		const fetchMock = vi.fn().mockImplementationOnce(async () => {
+			controller.abort();
+			throw new TypeError("network");
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(
+			fetcher.apiFetch("/api/safe", { signal: controller.signal }),
+		).rejects.toBeInstanceOf(fetcher.CancelledError);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
 	it("maps caller cancellation separately from timeout", async () => {
 		const controller = new AbortController();
 		vi.stubGlobal(
