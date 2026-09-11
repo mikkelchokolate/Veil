@@ -43,6 +43,8 @@ type fakeSystem struct {
 	runCalls      [][]string
 	installAcmeSh bool
 	installSocat  bool
+	commandDelay  time.Duration
+	events        []string
 }
 
 type commandResult struct {
@@ -75,12 +77,35 @@ func (f *fakeSystem) key(cmd string, args ...string) string {
 }
 
 func (f *fakeSystem) Run(cmd string, args ...string) error {
+	f.events = append(f.events, "cleanup")
 	f.runCalls = append(f.runCalls, append([]string{cmd}, args...))
 	res, ok := f.commands[f.key(cmd, args...)]
 	if !ok {
 		return nil
 	}
 	return res.err
+}
+
+func (f *fakeSystem) CombinedOutputContext(ctx context.Context, cmd string, args ...string) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	isIssue := len(args) > 0 && args[0] == "--issue"
+	if isIssue && f.commandDelay > 0 {
+		timer := time.NewTimer(f.commandDelay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			f.events = append(f.events, "issuer-stopped")
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	out, err := f.CombinedOutput(cmd, args...)
+	if isIssue {
+		f.events = append(f.events, "issuer-stopped")
+	}
+	return out, err
 }
 
 func (f *fakeSystem) CombinedOutput(cmd string, args ...string) ([]byte, error) {
@@ -450,7 +475,7 @@ func TestEnsureAcmeShAlreadyInstalled(t *testing.T) {
 	sys := newFakeSystem()
 	sys.setAcmeInstalled()
 
-	acmeSh, err := ensureAcmeSh(sys)
+	acmeSh, err := ensureAcmeSh(context.Background(), sys)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -463,7 +488,7 @@ func TestEnsureAcmeShHomeDirError(t *testing.T) {
 	sys := newFakeSystem()
 	sys.homeErr = errors.New("no home")
 
-	_, err := ensureAcmeSh(sys)
+	_, err := ensureAcmeSh(context.Background(), sys)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -473,7 +498,7 @@ func TestEnsureAcmeShMissingCurl(t *testing.T) {
 	sys := newFakeSystem()
 	delete(sys.lookPaths, "curl")
 
-	_, err := ensureAcmeSh(sys)
+	_, err := ensureAcmeSh(context.Background(), sys)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -483,7 +508,7 @@ func TestEnsureAcmeShInstallFails(t *testing.T) {
 	sys := newFakeSystem()
 	sys.commands[sys.key("sh", "-c", "curl -fsSL https://get.acme.sh | sh")] = commandResult{err: errors.New("network down")}
 
-	_, err := ensureAcmeSh(sys)
+	_, err := ensureAcmeSh(context.Background(), sys)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -494,7 +519,7 @@ func TestEnsureAcmeShInstallSucceedsButBinaryMissing(t *testing.T) {
 	sys.installAcmeSh = false
 	sys.commands[sys.key("sh", "-c", "curl -fsSL https://get.acme.sh | sh")] = commandResult{out: "installed"}
 
-	_, err := ensureAcmeSh(sys)
+	_, err := ensureAcmeSh(context.Background(), sys)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -504,7 +529,7 @@ func TestEnsureSocatAlreadyInstalled(t *testing.T) {
 	sys := newFakeSystem()
 	sys.lookPaths["socat"] = "/usr/bin/socat"
 
-	if err := ensureSocat(sys); err != nil {
+	if err := ensureSocat(context.Background(), sys); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -514,7 +539,7 @@ func TestEnsureSocatInstallsViaAptGet(t *testing.T) {
 	sys.lookPaths["apt-get"] = "/usr/bin/apt-get"
 	sys.commands[sys.key("sh", "-c", "apt-get update >/dev/null 2>&1 && apt-get install -y socat")] = commandResult{out: "done"}
 
-	if err := ensureSocat(sys); err != nil {
+	if err := ensureSocat(context.Background(), sys); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -524,7 +549,7 @@ func TestEnsureSocatInstallsViaDnf(t *testing.T) {
 	sys.lookPaths["dnf"] = "/usr/bin/dnf"
 	sys.commands[sys.key("sh", "-c", "dnf makecache -y >/dev/null 2>&1 && dnf -y install socat")] = commandResult{out: "done"}
 
-	if err := ensureSocat(sys); err != nil {
+	if err := ensureSocat(context.Background(), sys); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -534,7 +559,7 @@ func TestEnsureSocatInstallsViaYum(t *testing.T) {
 	sys.lookPaths["yum"] = "/usr/bin/yum"
 	sys.commands[sys.key("sh", "-c", "yum makecache -y >/dev/null 2>&1 && yum -y install socat")] = commandResult{out: "done"}
 
-	if err := ensureSocat(sys); err != nil {
+	if err := ensureSocat(context.Background(), sys); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -544,7 +569,7 @@ func TestEnsureSocatInstallsViaPacman(t *testing.T) {
 	sys.lookPaths["pacman"] = "/usr/bin/pacman"
 	sys.commands[sys.key("sh", "-c", "pacman -Sy --noconfirm socat")] = commandResult{out: "done"}
 
-	if err := ensureSocat(sys); err != nil {
+	if err := ensureSocat(context.Background(), sys); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -554,7 +579,7 @@ func TestEnsureSocatInstallsViaZypper(t *testing.T) {
 	sys.lookPaths["zypper"] = "/usr/bin/zypper"
 	sys.commands[sys.key("sh", "-c", "zypper refresh >/dev/null 2>&1 && zypper -q install -y socat")] = commandResult{out: "done"}
 
-	if err := ensureSocat(sys); err != nil {
+	if err := ensureSocat(context.Background(), sys); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -564,7 +589,7 @@ func TestEnsureSocatInstallsViaApk(t *testing.T) {
 	sys.lookPaths["apk"] = "/sbin/apk"
 	sys.commands[sys.key("sh", "-c", "apk add --no-cache socat")] = commandResult{out: "done"}
 
-	if err := ensureSocat(sys); err != nil {
+	if err := ensureSocat(context.Background(), sys); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -576,7 +601,7 @@ func TestEnsureSocatInstallSucceedsButStillMissing(t *testing.T) {
 	sys.commands[sys.key("sh", "-c", "apt-get update >/dev/null 2>&1 && apt-get install -y socat")] = commandResult{out: "done"}
 	// Do not add socat to lookPaths, simulating a broken install.
 
-	if err := ensureSocat(sys); err == nil {
+	if err := ensureSocat(context.Background(), sys); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -586,7 +611,7 @@ func TestEnsureSocatInstallFails(t *testing.T) {
 	sys.lookPaths["apt-get"] = "/usr/bin/apt-get"
 	sys.commands[sys.key("sh", "-c", "apt-get update >/dev/null 2>&1 && apt-get install -y socat")] = commandResult{err: errors.New("package not found")}
 
-	if err := ensureSocat(sys); err == nil {
+	if err := ensureSocat(context.Background(), sys); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -596,7 +621,7 @@ func TestEnsureSocatNoSupportedPackageManager(t *testing.T) {
 	// Only keep unrelated binaries.
 	sys.lookPaths = map[string]string{"curl": "/usr/bin/curl"}
 
-	if err := ensureSocat(sys); err == nil {
+	if err := ensureSocat(context.Background(), sys); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -673,6 +698,37 @@ func TestFixCertOwnershipNonRootSkipsChown(t *testing.T) {
 	}
 	if len(sys.chownCalls) != 0 {
 		t.Fatalf("expected no chown calls, got %v", sys.chownCalls)
+	}
+}
+
+func TestIssueIPCertDoesNotCleanupUntilCanceledIssuerStops(t *testing.T) {
+	sys := newFakeSystem()
+	sys.setAcmeInstalled()
+	sys.lookPaths["socat"] = "/usr/bin/socat"
+	sys.commandDelay = 200 * time.Millisecond
+
+	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
+	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", "letsencrypt")] = commandResult{out: "OK"}
+	sys.commands[sys.key(acmeSh, "--issue", "-d", "1.2.3.4", "--standalone", "--server", "letsencrypt", "--certificate-profile", "shortlived", "--days", "3", "--httpport", "80", "--force")] = commandResult{out: "slow"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, err := IssueIPCert(ctx, IssueOptions{PublicIPv4: "1.2.3.4", System: sys})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded, got %v", err)
+	}
+	if len(sys.events) == 0 || sys.events[0] != "issuer-stopped" {
+		t.Fatalf("cleanup ran before the issuer stopped: %v", sys.events)
+	}
+	sawCleanup := false
+	for _, event := range sys.events {
+		if event == "cleanup" {
+			sawCleanup = true
+			break
+		}
+	}
+	if !sawCleanup {
+		t.Fatalf("expected cleanup after issuer stop, events=%v", sys.events)
 	}
 }
 

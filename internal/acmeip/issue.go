@@ -1,6 +1,7 @@
 package acmeip
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -34,6 +35,7 @@ type IssueOptions struct {
 type System interface {
 	Run(cmd string, args ...string) error
 	CombinedOutput(cmd string, args ...string) ([]byte, error)
+	CombinedOutputContext(ctx context.Context, cmd string, args ...string) ([]byte, error)
 	LookPath(name string) (string, error)
 	ReadFile(name string) ([]byte, error)
 	WriteFile(name string, data []byte, perm os.FileMode) error
@@ -54,6 +56,30 @@ func (defaultSystem) Run(cmd string, args ...string) error {
 
 func (defaultSystem) CombinedOutput(cmd string, args ...string) ([]byte, error) {
 	return exec.Command(cmd, args...).CombinedOutput()
+}
+
+func (defaultSystem) CombinedOutputContext(ctx context.Context, cmd string, args ...string) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	command := exec.Command(cmd, args...)
+	configureProcessGroup(command)
+	var buf bytes.Buffer
+	command.Stdout = &buf
+	command.Stderr = &buf
+	if err := command.Start(); err != nil {
+		return nil, err
+	}
+	done := make(chan error, 1)
+	go func() { done <- command.Wait() }()
+	select {
+	case <-ctx.Done():
+		killProcessGroup(command)
+		<-done
+		return buf.Bytes(), ctx.Err()
+	case err := <-done:
+		return buf.Bytes(), err
+	}
 }
 
 func (defaultSystem) LookPath(name string) (string, error) {
@@ -138,11 +164,11 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		httpPort = 80
 	}
 
-	acmeSh, err := ensureAcmeSh(sys)
+	acmeSh, err := ensureAcmeSh(ctx, sys)
 	if err != nil {
 		return IssuedCert{}, fmt.Errorf("acme.sh setup: %w", err)
 	}
-	if err := ensureSocat(sys); err != nil {
+	if err := ensureSocat(ctx, sys); err != nil {
 		return IssuedCert{}, fmt.Errorf("socat setup: %w", err)
 	}
 	if !sys.IsPortFree(httpPort) {
@@ -154,7 +180,7 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 	}
 
 	// Set default CA so the first issue does not hit ZeroSSL.
-	if out, err := sys.CombinedOutput(acmeSh, "--set-default-ca", "--server", "letsencrypt"); err != nil {
+	if out, err := runWithContext(ctx, sys, acmeSh, "--set-default-ca", "--server", "letsencrypt"); err != nil {
 		return IssuedCert{}, fmt.Errorf("set default CA: %w (output: %s)", err, string(out))
 	}
 
@@ -186,7 +212,7 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		"--fullchain-file", certPath,
 		"--reloadcmd", "systemctl restart veil || true",
 	}
-	if out, err := sys.CombinedOutput(acmeSh, installArgs...); err != nil {
+	if out, err := runWithContext(ctx, sys, acmeSh, installArgs...); err != nil {
 		// acme.sh returns non-zero when the reloadcmd fails, but the files may
 		// still have been installed. Verify before failing.
 		if _, certErr := sys.Stat(certPath); certErr != nil {
@@ -202,7 +228,7 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 	return IssuedCert{CertPath: certPath, KeyPath: keyPath}, nil
 }
 
-func ensureAcmeSh(sys System) (string, error) {
+func ensureAcmeSh(ctx context.Context, sys System) (string, error) {
 	home, err := sys.HomeDir()
 	if err != nil {
 		return "", fmt.Errorf("home directory: %w", err)
@@ -217,7 +243,7 @@ func ensureAcmeSh(sys System) (string, error) {
 	}
 
 	args := []string{"-c", "curl -fsSL https://get.acme.sh | sh"}
-	if out, err := sys.CombinedOutput("sh", args...); err != nil {
+	if out, err := runWithContext(ctx, sys, "sh", args...); err != nil {
 		return "", fmt.Errorf("install acme.sh: %w (output: %s)", err, string(out))
 	}
 
@@ -227,7 +253,7 @@ func ensureAcmeSh(sys System) (string, error) {
 	return acmeSh, nil
 }
 
-func ensureSocat(sys System) error {
+func ensureSocat(ctx context.Context, sys System) error {
 	if _, err := sys.LookPath("socat"); err == nil {
 		return nil
 	}
@@ -249,7 +275,7 @@ func ensureSocat(sys System) error {
 		if _, err := sys.LookPath(m.name); err != nil {
 			continue
 		}
-		if out, err := sys.CombinedOutput(m.cmd, m.args...); err != nil {
+		if out, err := runWithContext(ctx, sys, m.cmd, m.args...); err != nil {
 			return fmt.Errorf("install socat via %s: %w (output: %s)", m.name, err, string(out))
 		}
 		if _, err := sys.LookPath("socat"); err == nil {
@@ -328,17 +354,5 @@ func cleanupAcmeState(sys System, acmeSh, ipv4, ipv6 string) {
 }
 
 func runWithContext(ctx context.Context, sys System, cmd string, args ...string) ([]byte, error) {
-	outCh := make(chan []byte, 1)
-	errCh := make(chan error, 1)
-	go func() {
-		out, err := sys.CombinedOutput(cmd, args...)
-		outCh <- out
-		errCh <- err
-	}()
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case out := <-outCh:
-		return out, <-errCh
-	}
+	return sys.CombinedOutputContext(ctx, cmd, args...)
 }
