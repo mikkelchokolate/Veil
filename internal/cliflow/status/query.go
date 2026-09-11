@@ -2,6 +2,8 @@ package status
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -84,6 +86,7 @@ const DefaultListen = "127.0.0.1:2096"
 var (
 	installedEnvFile   string
 	installedStateFile string
+	panelTLSCertFile   string
 )
 
 func ResolveListen(flagValue string) string {
@@ -100,7 +103,7 @@ func ResolveListen(flagValue string) string {
 	if addr == "" {
 		addr = DefaultListen
 	}
-	return localProbeAddr(addr)
+	return normalizeProbeAddr(addr)
 }
 
 func effectiveEnvFile() string {
@@ -180,7 +183,7 @@ func installedPanelListen() string {
 	return snapshot.Settings.PanelListen
 }
 
-func localProbeAddr(addr string) string {
+func normalizeProbeAddr(addr string) string {
 	if strings.Contains(addr, "://") {
 		parsed, err := url.Parse(addr)
 		if err != nil || parsed.Host == "" {
@@ -275,4 +278,45 @@ func Fetch(ctx context.Context, url string, token string) (*Response, error) {
 	return &status, nil
 }
 
-var HTTPClient = func(rawURL string) *http.Client { return http.DefaultClient }
+var HTTPClient = defaultHTTPClient
+
+func defaultHTTPClient(rawURL string) *http.Client {
+	if !strings.HasPrefix(strings.ToLower(rawURL), "https://") {
+		return http.DefaultClient
+	}
+	certPath := effectivePanelTLSCertFile()
+	pem, err := os.ReadFile(certPath)
+	if err != nil {
+		return http.DefaultClient
+	}
+	pool, poolErr := x509.SystemCertPool()
+	if poolErr != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
+	if !pool.AppendCertsFromPEM(pem) {
+		return http.DefaultClient
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{RootCAs: pool}
+	return &http.Client{Transport: transport}
+}
+
+func effectivePanelTLSCertFile() string {
+	if path := strings.TrimSpace(os.Getenv("VEIL_TLS_CERT")); path != "" {
+		return path
+	}
+	if path := strings.TrimSpace(installedEnvValue("VEIL_TLS_CERT")); path != "" {
+		return path
+	}
+	if panelTLSCertFile != "" {
+		return panelTLSCertFile
+	}
+	return defaultPanelTLSCertPath()
+}
+
+func defaultPanelTLSCertPath() string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(windowsProgramData(), "Veil", "panel", "tls.crt")
+	}
+	return "/etc/veil/panel/tls.crt"
+}

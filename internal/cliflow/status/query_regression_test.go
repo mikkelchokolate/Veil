@@ -10,12 +10,13 @@ func isolateListenConfig(t *testing.T) {
 	t.Helper()
 	t.Setenv("VEIL_LISTEN", "")
 	t.Setenv("VEIL_STATE_PATH", "")
-	origEnv, origState := installedEnvFile, installedStateFile
+	origEnv, origState, origCert := installedEnvFile, installedStateFile, panelTLSCertFile
 	missing := t.TempDir()
 	installedEnvFile = filepath.Join(missing, "veil.env")
 	installedStateFile = filepath.Join(missing, "state.json")
+	panelTLSCertFile = filepath.Join(missing, "tls.crt")
 	t.Cleanup(func() {
-		installedEnvFile, installedStateFile = origEnv, origState
+		installedEnvFile, installedStateFile, panelTLSCertFile = origEnv, origState, origCert
 	})
 }
 
