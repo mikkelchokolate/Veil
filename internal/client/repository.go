@@ -215,7 +215,11 @@ func (q queries) Get(id string) (Client, error) {
 	row := q.q.QueryRow(`SELECT id, name, email, enabled, group_id, quota_bytes, quota_reset_policy,
   quota_reset_at, expires_at, device_limit, notes, depleted, created_at, updated_at, version
   FROM clients WHERE id=?`, id)
-	return scanClient(row)
+	c, err := scanClient(row)
+	if err != nil {
+		return Client{}, mapNotFound("get", err)
+	}
+	return c, nil
 }
 
 // Update applies an optimistic-locking update: it succeeds only when the row's
@@ -234,7 +238,7 @@ func (q queries) Update(c Client, wantVersion int) (Client, error) {
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		if _, err := q.Get(c.ID); err != nil {
-			return Client{}, ErrNotFound
+			return Client{}, err
 		}
 		return Client{}, ErrVersionConflict
 	}
@@ -337,8 +341,8 @@ func buildWhere(f ListFilter) (string, []any) {
 	var clauses []string
 	var args []any
 	if f.Search != "" {
-		clauses = append(clauses, "(name LIKE ? OR email LIKE ?)")
-		like := "%" + f.Search + "%"
+		clauses = append(clauses, "(name LIKE ? ESCAPE '"+likeEscapeChar+"' OR email LIKE ? ESCAPE '"+likeEscapeChar+"')")
+		like := likeContainsLiteral(f.Search)
 		args = append(args, like, like)
 	}
 	switch f.Status {
@@ -426,7 +430,11 @@ func (q queries) CreateBinding(b Binding) (Binding, error) {
 func (q queries) GetBinding(id string) (Binding, error) {
 	row := q.q.QueryRow(`SELECT id, client_id, inbound_id, runtime_identity, enabled, protocol_settings, created_at, updated_at, version
   FROM client_bindings WHERE id=?`, id)
-	return scanBinding(row)
+	b, err := scanBinding(row)
+	if err != nil {
+		return Binding{}, mapNotFound("get binding", err)
+	}
+	return b, nil
 }
 
 func (q queries) BindingsForClient(clientID string) ([]Binding, error) {
@@ -456,7 +464,7 @@ func (q queries) UpdateBinding(b Binding, wantVersion int) (Binding, error) {
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		if _, err := q.GetBinding(b.ID); err != nil {
-			return Binding{}, ErrNotFound
+			return Binding{}, err
 		}
 		return Binding{}, ErrVersionConflict
 	}
@@ -636,4 +644,90 @@ func boolToInt(b bool) int {
 
 func isUniqueViolation(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
+}
+
+func mapNotFound(op string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	return fmt.Errorf("client: %s: %w", op, err)
+}
+
+const likeEscapeChar = "!"
+
+func likeContainsLiteral(s string) string {
+	replacer := strings.NewReplacer(
+		likeEscapeChar, likeEscapeChar+likeEscapeChar,
+		"%", likeEscapeChar+"%",
+		"_", likeEscapeChar+"_",
+	)
+	return "%" + replacer.Replace(s) + "%"
+}
+
+type inboundRuntimeBinding struct {
+	Client  Client
+	Binding Binding
+}
+
+// ListRuntimeBindingsForInbound returns every enabled binding on inboundID
+// whose client is currently eligible for runtime credential injection. The
+// scan is inbound-scoped and unbounded so it is not affected by List pagination.
+func (q queries) ListRuntimeBindingsForInbound(inboundID string, now int64) ([]inboundRuntimeBinding, error) {
+	rows, err := q.q.Query(`SELECT
+  c.id, c.name, c.email, c.enabled, c.group_id, c.quota_bytes, c.quota_reset_policy,
+  c.quota_reset_at, c.expires_at, c.device_limit, c.notes, c.depleted, c.created_at, c.updated_at, c.version,
+  b.id, b.client_id, b.inbound_id, b.runtime_identity, b.enabled, b.protocol_settings,
+  b.created_at, b.updated_at, b.version
+FROM client_bindings b
+INNER JOIN clients c ON c.id = b.client_id
+WHERE b.inbound_id=? AND b.enabled=1 AND c.enabled=1 AND c.depleted=0
+  AND (c.expires_at IS NULL OR c.expires_at>?)
+ORDER BY c.created_at ASC, c.id ASC`, inboundID, now)
+	if err != nil {
+		return nil, fmt.Errorf("client: list runtime bindings: %w", err)
+	}
+	defer rows.Close()
+	var out []inboundRuntimeBinding
+	for rows.Next() {
+		row, err := scanClientAndBinding(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+func scanClientAndBinding(row scanner) (inboundRuntimeBinding, error) {
+	var c Client
+	var b Binding
+	var cEnabled, cDepleted, bEnabled int
+	err := row.Scan(
+		&c.ID, &c.Name, &c.Email, &cEnabled, &c.GroupID, &c.QuotaBytes, &c.QuotaResetPolicy,
+		&c.QuotaResetAt, &c.ExpiresAt, &c.DeviceLimit, &c.Notes, &cDepleted, &c.CreatedAt, &c.UpdatedAt, &c.Version,
+		&b.ID, &b.ClientID, &b.InboundID, &b.RuntimeIdentity, &bEnabled, &b.ProtocolSettings,
+		&b.CreatedAt, &b.UpdatedAt, &b.Version,
+	)
+	if err != nil {
+		return inboundRuntimeBinding{}, err
+	}
+	c.Enabled = cEnabled == 1
+	c.Depleted = cDepleted == 1
+	b.Enabled = bEnabled == 1
+	return inboundRuntimeBinding{Client: c, Binding: b}, nil
+}
+
+// SupersedeQuotaEnforcement marks every non-superseded quota enforcement
+// target for clientID as superseded so a quota-clear cannot leave a depleted
+// runtime target in place.
+func (q queries) SupersedeQuotaEnforcement(clientID string) error {
+	_, err := q.q.Exec(`UPDATE quota_enforcement SET state='superseded', superseded_revision=desired_revision, updated_at=?
+WHERE client_id=? AND state<>'superseded'`, nowUnix(), clientID)
+	if err != nil {
+		return fmt.Errorf("client: supersede quota enforcement: %w", err)
+	}
+	return nil
 }

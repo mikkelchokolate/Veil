@@ -1,7 +1,6 @@
 package client
 
 import (
-	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -153,8 +152,8 @@ func TestDeleteClientCascadeBindings(t *testing.T) {
 	if err := repo.Delete(c.ID); err != nil {
 		t.Fatalf("delete client: %v", err)
 	}
-	if _, err := repo.GetBinding(b.ID); !errors.Is(err, sql.ErrNoRows) && err == nil {
-		t.Fatalf("binding must be cascade-deleted")
+	if _, err := repo.GetBinding(b.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("binding must be cascade-deleted, got %v", err)
 	}
 }
 
