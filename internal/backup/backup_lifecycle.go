@@ -67,21 +67,22 @@ func (l Lifecycle) BackupExisting(paths []string) (string, error) {
 		}
 		seen[key] = struct{}{}
 
-		dst := filepath.Join(backupPath, backupMemberName(memberIndex, src))
+		member := backupMemberName(memberIndex, src)
 		memberIndex++
+		dst := filepath.Join(backupPath, member)
 
 		if err := copyFile(src, dst, srcInfo.Mode()); err != nil {
 			return "", fmt.Errorf("backup %s: %w", src, err)
 		}
 
 		manifest.Entries = append(manifest.Entries, BackupEntry{
-			OriginalPath: src,
-			BackupPath:   dst,
+			OriginalPath: key,
+			BackupPath:   member,
 			Size:         srcInfo.Size(),
 		})
 	}
 
-	manifestPath := filepath.Join(backupPath, "manifest.json")
+	manifestPath := filepath.Join(backupPath, backupManifestName)
 	if err := lifecycleManifestSave(manifestPath, manifest); err != nil {
 		return "", err
 	}
@@ -95,7 +96,7 @@ func (l Lifecycle) Restore(backupID string) ([]string, error) {
 		return nil, err
 	}
 
-	manifestPath := filepath.Join(backupPath, "manifest.json")
+	manifestPath := filepath.Join(backupPath, backupManifestName)
 	manifest, err := NewBackupManifestStore(manifestPath).Load()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -104,7 +105,19 @@ func (l Lifecycle) Restore(backupID string) ([]string, error) {
 		return nil, err
 	}
 
-	existingPaths := NewBackupSafetyPolicy().ExistingOriginalPaths(manifest)
+	entries, err := resolveManifestEntries(backupPath, manifest)
+	if err != nil {
+		return nil, err
+	}
+
+	existingPaths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if _, err := os.Lstat(entry.OriginalPath); err == nil {
+			existingPaths = append(existingPaths, entry.OriginalPath)
+		} else if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("stat %s: %w", entry.OriginalPath, err)
+		}
+	}
 	if len(existingPaths) > 0 {
 		if _, safetyErr := l.BackupExisting(existingPaths); safetyErr != nil {
 			return nil, fmt.Errorf("create safety backup before restore: %w", safetyErr)
@@ -112,24 +125,14 @@ func (l Lifecycle) Restore(backupID string) ([]string, error) {
 	}
 
 	var restored []string
-	for _, entry := range manifest.Entries {
-		// Ensure parent directory of original path exists
+	for _, entry := range entries {
 		parentDir := filepath.Dir(entry.OriginalPath)
 		if err := os.MkdirAll(parentDir, 0o755); err != nil {
 			return nil, fmt.Errorf("create parent dir %s: %w", parentDir, err)
 		}
-
-		// Get file info for permissions from backup file
-		backupFileInfo, err := os.Stat(entry.BackupPath)
-		if err != nil {
-			return nil, fmt.Errorf("stat backup file %s: %w", entry.BackupPath, err)
-		}
-
-		// Copy from backup to original location
-		if err := copyFile(entry.BackupPath, entry.OriginalPath, backupFileInfo.Mode()); err != nil {
+		if err := copyFile(entry.BackupPath, entry.OriginalPath, entry.Mode); err != nil {
 			return nil, fmt.Errorf("restore %s: %w", entry.OriginalPath, err)
 		}
-
 		restored = append(restored, entry.OriginalPath)
 	}
 
