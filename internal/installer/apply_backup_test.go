@@ -51,9 +51,9 @@ func TestApplyWithBackupDirBacksUpExistingFilesBeforeOverwrite(t *testing.T) {
 		t.Fatalf("expected BackupID to be set when BackupDir is provided")
 	}
 
-	// Verify backup contains old Caddy JSON
-	backupPath := filepath.Join(backupDir, result.BackupID, "config.json")
-	body, err := os.ReadFile(backupPath)
+	// Members are stored as "{index}_{basename}" to keep colliding names distinct (#50).
+	memberPath := backupMemberForOriginal(t, backupDir, result.BackupID, oldCaddyPath)
+	body, err := os.ReadFile(memberPath)
 	if err != nil {
 		t.Fatalf("read backup caddy json: %v", err)
 	}
@@ -231,4 +231,23 @@ func TestApplyBackupSkipsNewFilesThatDidNotExist(t *testing.T) {
 	if fileCount != 0 {
 		t.Fatalf("expected no backed up files for fresh apply, got %d: %v", fileCount, entries)
 	}
+}
+
+func backupMemberForOriginal(t *testing.T, backupDir, backupID, originalPath string) string {
+	t.Helper()
+	absOriginal, err := filepath.Abs(originalPath)
+	if err != nil {
+		t.Fatalf("abs original: %v", err)
+	}
+	manifest, err := backup.NewManifestStore(filepath.Join(backupDir, backupID, "manifest.json")).Load()
+	if err != nil {
+		t.Fatalf("load backup manifest: %v", err)
+	}
+	for _, entry := range manifest.Entries {
+		if entry.OriginalPath == absOriginal {
+			return filepath.Join(backupDir, backupID, entry.BackupPath)
+		}
+	}
+	t.Fatalf("no backup member for %s in %+v", absOriginal, manifest.Entries)
+	return ""
 }
