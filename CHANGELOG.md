@@ -4,6 +4,11 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.7.1] - 2026-09-12
+
+Patch release: open-issue sweep from v0.7.0, runtime/toolchain bumps, and
+Hysteria2 stall fixes for GUI clients.
+
 ### Changed
 
 - Protocol runtime pins: Hysteria2 `app/v2.12.2`, Mieru/mita `v3.36.1`,
@@ -15,9 +20,11 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
-- Open GitHub issues #49–#107: backup/rollback safety, installer ACME/UFW,
-  subscriptions, idempotency, traffic observation, clients, live validation,
-  staged updates, and Panel UI races. See individual commits on this branch.
+- Open GitHub issues #49–#69, #71–#90, and #94–#107: backup/rollback safety,
+  installer ACME/UFW, subscriptions, idempotency, traffic observation,
+  clients, live validation, staged updates, and Panel UI races.
+- Hysteria2 inbounds ignore GUI-client advertised bandwidth and keep QUIC
+  idle/keepalive windows that do not stall long-lived sessions.
 
 ## [v0.7.0] - 2026-08-23
 
