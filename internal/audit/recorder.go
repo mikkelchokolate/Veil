@@ -445,20 +445,24 @@ func (r *Recorder) repairTornPrimaryTailLocked() error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	closeFile := func() error {
+		return file.Close()
+	}
 	info, err := file.Stat()
 	if err != nil {
+		_ = closeFile()
 		return err
 	}
 	if info.Size() == 0 {
-		return nil
+		return closeFile()
 	}
 	body := make([]byte, info.Size())
 	if _, err := file.ReadAt(body, 0); err != nil {
+		_ = closeFile()
 		return err
 	}
 	if bytes.HasSuffix(body, []byte{'\n'}) {
-		return nil
+		return closeFile()
 	}
 	lastNL := bytes.LastIndexByte(body, '\n')
 	var lastLine []byte
@@ -470,17 +474,23 @@ func (r *Recorder) repairTornPrimaryTailLocked() error {
 		lastLine = body
 	}
 	if len(bytes.TrimSpace(lastLine)) == 0 {
-		return nil
+		return closeFile()
 	}
 	var record Record
 	if json.Unmarshal(lastLine, &record) == nil {
 		if _, err := file.WriteAt([]byte{'\n'}, info.Size()); err != nil {
+			_ = closeFile()
 			return err
 		}
 	} else if err := file.Truncate(keep); err != nil {
+		_ = closeFile()
 		return err
 	}
 	if err := file.Sync(); err != nil {
+		_ = closeFile()
+		return err
+	}
+	if err := closeFile(); err != nil {
 		return err
 	}
 	return syncDirectory(filepath.Dir(r.path))

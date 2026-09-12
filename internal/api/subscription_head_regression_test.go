@@ -206,4 +206,3 @@ func TestPublicSubscriptionHEADHTMLHasNoBody(t *testing.T) {
 		t.Fatalf("HEAD html content-type = %q", ct)
 	}
 }
-

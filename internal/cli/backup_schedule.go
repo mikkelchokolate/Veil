@@ -33,15 +33,6 @@ func normalizeScheduledPassphrasePath(path string) (string, error) {
 	return filepath.Clean(path), nil
 }
 
-func syncBackupScheduleUnit(passphrasePath string) error {
-	replaced, err := publishBackupScheduleUnit(passphrasePath)
-	if err != nil {
-		return err
-	}
-	replaced.Commit()
-	return nil
-}
-
 func publishBackupScheduleUnit(passphrasePath string) (*fileReplace, error) {
 	dropInPath := backupScheduleDropInPath(backupSystemdDir)
 	if scheduledPassphrasePathIsDefault(passphrasePath) {
