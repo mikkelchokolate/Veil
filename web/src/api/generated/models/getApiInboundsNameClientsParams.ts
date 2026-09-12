@@ -40,53 +40,17 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import * as zod from 'zod';
 
-
+export type GetApiInboundsNameClientsParams = {
 /**
- * Available without authentication only on a local loopback listener.
- * @summary Inspect first-run setup state
+ * @minimum 1
  */
-export const GetApiSetupStatusResponse = zod.object({
-  "required": zod.boolean(),
-  "allowed": zod.boolean(),
-  "panelAccess": zod.enum(['local', 'direct', 'caddy', ''])
-})
-
+page?: number;
 /**
- * Single-use operation available only on an unconfigured local loopback listener.
- * @summary Create the initial administrator
+ * @minimum 1
+ * @maximum 500
  */
-export const postApiSetupCompleteHeaderIdempotencyKeyMax = 128;
-
-
-export const postApiSetupCompleteHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
-
-
-export const PostApiSetupCompleteHeader = zod.object({
-  "Idempotency-Key": zod.string().min(1).max(postApiSetupCompleteHeaderIdempotencyKeyMax).regex(postApiSetupCompleteHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
-})
-
-export const postApiSetupCompleteBodyUsernameMin = 3;
-export const postApiSetupCompleteBodyUsernameMax = 64;
-
-
-export const postApiSetupCompleteBodyUsernameRegExp = new RegExp('^[\\p{L}\\p{N}._-]+$', 'u');
-export const postApiSetupCompleteBodyPasswordMin = 12;
-
-
-
-export const PostApiSetupCompleteBody = zod.object({
-  "username": zod.string().min(postApiSetupCompleteBodyUsernameMin).max(postApiSetupCompleteBodyUsernameMax).regex(postApiSetupCompleteBodyUsernameRegExp),
-  "password": zod.string().min(postApiSetupCompleteBodyPasswordMin),
-  "backupAcknowledged": zod.literal(true),
-  "locale": zod.enum(['en', 'ru']).optional().describe('Persisted Panel display language.')
-})
-
-export const PostApiSetupCompleteResponse = zod.object({
-  "completed": zod.literal(true),
-  "username": zod.string(),
-  "role": zod.enum(['admin', 'viewer']),
-  "locale": zod.enum(['en', 'ru']).describe('Persisted Panel display language.')
-})
-
+pageSize?: number;
+search?: string;
+sort?: string;
+};

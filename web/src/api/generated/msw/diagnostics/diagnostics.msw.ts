@@ -123,11 +123,19 @@ export const getPostApiToolsDnsLookupUrl = () => {
  */
 export const postApiToolsDnsLookup = async (dNSLookupRequest: DNSLookupRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiToolsDnsLookupResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiToolsDnsLookupResponse>(getPostApiToolsDnsLookupUrl(),
   {
@@ -142,11 +150,13 @@ return apiFetch<postApiToolsDnsLookupResponse>(getPostApiToolsDnsLookupUrl(),
 
 
 
-export const getPostApiToolsDnsLookupMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError,{data: DNSLookupRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError,{data: DNSLookupRequest}, TContext> => {
+export const getPostApiToolsDnsLookupMutationKey = () => ['postApiToolsDnsLookup'] as const;
 
-const mutationKey = ['postApiToolsDnsLookup'];
+export const getPostApiToolsDnsLookupMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError,PostApiToolsDnsLookupMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError,PostApiToolsDnsLookupMutationVariables, TContext> => {
+
+const mutationKey = getPostApiToolsDnsLookupMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -156,7 +166,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, {data: DNSLookupRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, PostApiToolsDnsLookupMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  postApiToolsDnsLookup(data,requestOptions)
@@ -172,16 +182,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiToolsDnsLookupMutationResult = NonNullable<Awaited<ReturnType<typeof postApiToolsDnsLookup>>>
     export type PostApiToolsDnsLookupMutationBody = DNSLookupRequest
     export type PostApiToolsDnsLookupMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiToolsDnsLookupMutationVariables = {data: DNSLookupRequest}
 
     /**
  * @summary DNS lookup diagnostic
  */
 export const usePostApiToolsDnsLookup = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError,{data: DNSLookupRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsDnsLookup>>, TError,PostApiToolsDnsLookupMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiToolsDnsLookup>>,
         TError,
-        {data: DNSLookupRequest},
+        PostApiToolsDnsLookupMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiToolsDnsLookupMutationOptions(options), queryClient);
@@ -238,11 +249,19 @@ export const getPostApiToolsPingUrl = () => {
  */
 export const postApiToolsPing = async (pingRequest: PingRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiToolsPingResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiToolsPingResponse>(getPostApiToolsPingUrl(),
   {
@@ -257,11 +276,13 @@ return apiFetch<postApiToolsPingResponse>(getPostApiToolsPingUrl(),
 
 
 
-export const getPostApiToolsPingMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError,{data: PingRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError,{data: PingRequest}, TContext> => {
+export const getPostApiToolsPingMutationKey = () => ['postApiToolsPing'] as const;
 
-const mutationKey = ['postApiToolsPing'];
+export const getPostApiToolsPingMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError,PostApiToolsPingMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError,PostApiToolsPingMutationVariables, TContext> => {
+
+const mutationKey = getPostApiToolsPingMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -271,7 +292,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiToolsPing>>, {data: PingRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiToolsPing>>, PostApiToolsPingMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  postApiToolsPing(data,requestOptions)
@@ -287,16 +308,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiToolsPingMutationResult = NonNullable<Awaited<ReturnType<typeof postApiToolsPing>>>
     export type PostApiToolsPingMutationBody = PingRequest
     export type PostApiToolsPingMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiToolsPingMutationVariables = {data: PingRequest}
 
     /**
  * @summary Ping diagnostic
  */
 export const usePostApiToolsPing = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError,{data: PingRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsPing>>, TError,PostApiToolsPingMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiToolsPing>>,
         TError,
-        {data: PingRequest},
+        PostApiToolsPingMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiToolsPingMutationOptions(options), queryClient);
@@ -353,11 +375,19 @@ export const getPostApiToolsSpeedtestUrl = () => {
  */
 export const postApiToolsSpeedtest = async (emptyObject?: EmptyObject, options?: Parameters<typeof apiFetch>[1]): Promise<postApiToolsSpeedtestResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiToolsSpeedtestResponse>(getPostApiToolsSpeedtestUrl(),
   {
@@ -372,11 +402,13 @@ return apiFetch<postApiToolsSpeedtestResponse>(getPostApiToolsSpeedtestUrl(),
 
 
 
-export const getPostApiToolsSpeedtestMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError,{data?: EmptyObject}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError,{data?: EmptyObject}, TContext> => {
+export const getPostApiToolsSpeedtestMutationKey = () => ['postApiToolsSpeedtest'] as const;
 
-const mutationKey = ['postApiToolsSpeedtest'];
+export const getPostApiToolsSpeedtestMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError,PostApiToolsSpeedtestMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError,PostApiToolsSpeedtestMutationVariables, TContext> => {
+
+const mutationKey = getPostApiToolsSpeedtestMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -386,7 +418,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, {data?: EmptyObject}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, PostApiToolsSpeedtestMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  postApiToolsSpeedtest(data,requestOptions)
@@ -402,16 +434,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiToolsSpeedtestMutationResult = NonNullable<Awaited<ReturnType<typeof postApiToolsSpeedtest>>>
     export type PostApiToolsSpeedtestMutationBody = EmptyObject | undefined
     export type PostApiToolsSpeedtestMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiToolsSpeedtestMutationVariables = {data?: EmptyObject}
 
     /**
  * @summary Speedtest diagnostic
  */
 export const usePostApiToolsSpeedtest = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError,{data?: EmptyObject}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiToolsSpeedtest>>, TError,PostApiToolsSpeedtestMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiToolsSpeedtest>>,
         TError,
-        {data?: EmptyObject},
+        PostApiToolsSpeedtestMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiToolsSpeedtestMutationOptions(options), queryClient);

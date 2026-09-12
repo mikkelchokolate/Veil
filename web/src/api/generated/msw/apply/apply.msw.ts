@@ -505,11 +505,13 @@ export const postApiApplyJobsIdRetry = async (id: string, options?: Parameters<t
 
 
 
-export const getPostApiApplyJobsIdRetryMutationOptions = <TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError,{id: string}, TContext> => {
+export const getPostApiApplyJobsIdRetryMutationKey = () => ['postApiApplyJobsIdRetry'] as const;
 
-const mutationKey = ['postApiApplyJobsIdRetry'];
+export const getPostApiApplyJobsIdRetryMutationOptions = <TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError,PostApiApplyJobsIdRetryMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError,PostApiApplyJobsIdRetryMutationVariables, TContext> => {
+
+const mutationKey = getPostApiApplyJobsIdRetryMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -519,7 +521,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, {id: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, PostApiApplyJobsIdRetryMutationVariables> = (props) => {
           const {id} = props ?? {};
 
           return  postApiApplyJobsIdRetry(id,requestOptions)
@@ -535,16 +537,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiApplyJobsIdRetryMutationResult = NonNullable<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>>
 
     export type PostApiApplyJobsIdRetryMutationError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiApplyJobsIdRetryMutationVariables = {id: string}
 
     /**
  * @summary Create a NEW apply job for the same desired revision
  */
 export const usePostApiApplyJobsIdRetry = <TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError,PostApiApplyJobsIdRetryMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>,
         TError,
-        {id: string},
+        PostApiApplyJobsIdRetryMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiApplyJobsIdRetryMutationOptions(options), queryClient);
@@ -609,11 +612,13 @@ export const postApiApplyReconcile = async ( options?: Parameters<typeof apiFetc
 
 
 
+export const getPostApiApplyReconcileMutationKey = () => ['postApiApplyReconcile'] as const;
+
 export const getPostApiApplyReconcileMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyReconcile>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiApplyReconcile>>, TError,void, TContext> => {
 
-const mutationKey = ['postApiApplyReconcile'];
+const mutationKey = getPostApiApplyReconcileMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -639,6 +644,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiApplyReconcileMutationResult = NonNullable<Awaited<ReturnType<typeof postApiApplyReconcile>>>
 
     export type PostApiApplyReconcileMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+
 
     /**
  * @summary Apply current desired revision if ahead of applied (idempotent)
@@ -711,11 +717,19 @@ export const getPostApiApplyRollbackUrl = () => {
  */
 export const postApiApplyRollback = async (postApiApplyRollbackBody: PostApiApplyRollbackBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiApplyRollbackResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiApplyRollbackResponse>(getPostApiApplyRollbackUrl(),
   {
@@ -730,11 +744,13 @@ return apiFetch<postApiApplyRollbackResponse>(getPostApiApplyRollbackUrl(),
 
 
 
-export const getPostApiApplyRollbackMutationOptions = <TError = BadRequestResponse | void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError,{data: PostApiApplyRollbackBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError,{data: PostApiApplyRollbackBody}, TContext> => {
+export const getPostApiApplyRollbackMutationKey = () => ['postApiApplyRollback'] as const;
 
-const mutationKey = ['postApiApplyRollback'];
+export const getPostApiApplyRollbackMutationOptions = <TError = BadRequestResponse | void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError,PostApiApplyRollbackMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError,PostApiApplyRollbackMutationVariables, TContext> => {
+
+const mutationKey = getPostApiApplyRollbackMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -744,7 +760,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiApplyRollback>>, {data: PostApiApplyRollbackBody}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiApplyRollback>>, PostApiApplyRollbackMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  postApiApplyRollback(data,requestOptions)
@@ -760,16 +776,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiApplyRollbackMutationResult = NonNullable<Awaited<ReturnType<typeof postApiApplyRollback>>>
     export type PostApiApplyRollbackMutationBody = PostApiApplyRollbackBody
     export type PostApiApplyRollbackMutationError = BadRequestResponse | void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiApplyRollbackMutationVariables = {data: PostApiApplyRollbackBody}
 
     /**
  * @summary Create a new desired revision from an older immutable snapshot
  */
 export const usePostApiApplyRollback = <TError = BadRequestResponse | void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError,{data: PostApiApplyRollbackBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyRollback>>, TError,PostApiApplyRollbackMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiApplyRollback>>,
         TError,
-        {data: PostApiApplyRollbackBody},
+        PostApiApplyRollbackMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiApplyRollbackMutationOptions(options), queryClient);
@@ -826,11 +843,19 @@ export const getPostApiApplyUrl = () => {
  */
 export const postApiApply = async (applyRequest: ApplyRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiApplyResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiApplyResponse>(getPostApiApplyUrl(),
   {
@@ -845,11 +870,13 @@ return apiFetch<postApiApplyResponse>(getPostApiApplyUrl(),
 
 
 
-export const getPostApiApplyMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApply>>, TError,{data: ApplyRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiApply>>, TError,{data: ApplyRequest}, TContext> => {
+export const getPostApiApplyMutationKey = () => ['postApiApply'] as const;
 
-const mutationKey = ['postApiApply'];
+export const getPostApiApplyMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApply>>, TError,PostApiApplyMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiApply>>, TError,PostApiApplyMutationVariables, TContext> => {
+
+const mutationKey = getPostApiApplyMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -859,7 +886,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiApply>>, {data: ApplyRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiApply>>, PostApiApplyMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  postApiApply(data,requestOptions)
@@ -875,16 +902,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiApplyMutationResult = NonNullable<Awaited<ReturnType<typeof postApiApply>>>
     export type PostApiApplyMutationBody = ApplyRequest
     export type PostApiApplyMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiApplyMutationVariables = {data: ApplyRequest}
 
     /**
  * @summary Stage and optionally promote current management state
  */
 export const usePostApiApply = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApply>>, TError,{data: ApplyRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApply>>, TError,PostApiApplyMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiApply>>,
         TError,
-        {data: ApplyRequest},
+        PostApiApplyMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiApplyMutationOptions(options), queryClient);
@@ -949,11 +977,13 @@ export const postApiApplyPlan = async ( options?: Parameters<typeof apiFetch>[1]
 
 
 
+export const getPostApiApplyPlanMutationKey = () => ['postApiApplyPlan'] as const;
+
 export const getPostApiApplyPlanMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyPlan>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiApplyPlan>>, TError,void, TContext> => {
 
-const mutationKey = ['postApiApplyPlan'];
+const mutationKey = getPostApiApplyPlanMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -979,6 +1009,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiApplyPlanMutationResult = NonNullable<Awaited<ReturnType<typeof postApiApplyPlan>>>
 
     export type PostApiApplyPlanMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+
 
     /**
  * @summary Preview the apply plan without writing live files
@@ -1157,11 +1188,19 @@ export const getPostApiProfilesRuRecommendedPreviewUrl = () => {
  */
 export const postApiProfilesRuRecommendedPreview = async (rURecommendedPreviewRequest: RURecommendedPreviewRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiProfilesRuRecommendedPreviewResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiProfilesRuRecommendedPreviewResponse>(getPostApiProfilesRuRecommendedPreviewUrl(),
   {
@@ -1176,11 +1215,13 @@ return apiFetch<postApiProfilesRuRecommendedPreviewResponse>(getPostApiProfilesR
 
 
 
-export const getPostApiProfilesRuRecommendedPreviewMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError,{data: RURecommendedPreviewRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError,{data: RURecommendedPreviewRequest}, TContext> => {
+export const getPostApiProfilesRuRecommendedPreviewMutationKey = () => ['postApiProfilesRuRecommendedPreview'] as const;
 
-const mutationKey = ['postApiProfilesRuRecommendedPreview'];
+export const getPostApiProfilesRuRecommendedPreviewMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError,PostApiProfilesRuRecommendedPreviewMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError,PostApiProfilesRuRecommendedPreviewMutationVariables, TContext> => {
+
+const mutationKey = getPostApiProfilesRuRecommendedPreviewMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1190,7 +1231,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, {data: RURecommendedPreviewRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, PostApiProfilesRuRecommendedPreviewMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  postApiProfilesRuRecommendedPreview(data,requestOptions)
@@ -1206,16 +1247,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiProfilesRuRecommendedPreviewMutationResult = NonNullable<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>>
     export type PostApiProfilesRuRecommendedPreviewMutationBody = RURecommendedPreviewRequest
     export type PostApiProfilesRuRecommendedPreviewMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiProfilesRuRecommendedPreviewMutationVariables = {data: RURecommendedPreviewRequest}
 
     /**
  * @summary Preview the ru-recommended install profile
  */
 export const usePostApiProfilesRuRecommendedPreview = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError,{data: RURecommendedPreviewRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>, TError,PostApiProfilesRuRecommendedPreviewMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiProfilesRuRecommendedPreview>>,
         TError,
-        {data: RURecommendedPreviewRequest},
+        PostApiProfilesRuRecommendedPreviewMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiProfilesRuRecommendedPreviewMutationOptions(options), queryClient);

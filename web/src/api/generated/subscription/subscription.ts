@@ -149,11 +149,13 @@ export const getSToken = async (token: string,
 
 
 
-export const getGetSTokenMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getSToken>>, TError,{token: string;params?: GetSTokenParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof getSToken>>, TError,{token: string;params?: GetSTokenParams}, TContext> => {
+export const getGetSTokenMutationKey = () => ['getSToken'] as const;
 
-const mutationKey = ['getSToken'];
+export const getGetSTokenMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getSToken>>, TError,GetSTokenMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getSToken>>, TError,GetSTokenMutationVariables, TContext> => {
+
+const mutationKey = getGetSTokenMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -163,7 +165,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getSToken>>, {token: string;params?: GetSTokenParams}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getSToken>>, GetSTokenMutationVariables> = (props) => {
           const {token,params} = props ?? {};
 
           return  getSToken(token,params,requestOptions)
@@ -179,16 +181,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetSTokenMutationResult = NonNullable<Awaited<ReturnType<typeof getSToken>>>
 
     export type GetSTokenMutationError = void
+    export type GetSTokenMutationVariables = {token: string;params?: GetSTokenParams}
 
     /**
  * @summary Public subscription endpoint (token is the capability)
  */
 export const useGetSToken = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getSToken>>, TError,{token: string;params?: GetSTokenParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getSToken>>, TError,GetSTokenMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof getSToken>>,
         TError,
-        {token: string;params?: GetSTokenParams},
+        GetSTokenMutationVariables,
         TContext
       > => {
       return useMutation(getGetSTokenMutationOptions(options), queryClient);

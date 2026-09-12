@@ -142,11 +142,19 @@ export const getPostApiAdminRotateKeyUrl = () => {
  */
 export const postApiAdminRotateKey = async (emptyObject?: EmptyObject, options?: Parameters<typeof apiFetch>[1]): Promise<postApiAdminRotateKeyResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiAdminRotateKeyResponse>(getPostApiAdminRotateKeyUrl(),
   {
@@ -161,11 +169,13 @@ return apiFetch<postApiAdminRotateKeyResponse>(getPostApiAdminRotateKeyUrl(),
 
 
 
-export const getPostApiAdminRotateKeyMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError,{data?: EmptyObject}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError,{data?: EmptyObject}, TContext> => {
+export const getPostApiAdminRotateKeyMutationKey = () => ['postApiAdminRotateKey'] as const;
 
-const mutationKey = ['postApiAdminRotateKey'];
+export const getPostApiAdminRotateKeyMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError,PostApiAdminRotateKeyMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError,PostApiAdminRotateKeyMutationVariables, TContext> => {
+
+const mutationKey = getPostApiAdminRotateKeyMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -175,7 +185,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAdminRotateKey>>, {data?: EmptyObject}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAdminRotateKey>>, PostApiAdminRotateKeyMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  postApiAdminRotateKey(data,requestOptions)
@@ -191,16 +201,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiAdminRotateKeyMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAdminRotateKey>>>
     export type PostApiAdminRotateKeyMutationBody = EmptyObject | undefined
     export type PostApiAdminRotateKeyMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ServiceUnavailableResponse
+    export type PostApiAdminRotateKeyMutationVariables = {data?: EmptyObject}
 
     /**
  * @summary Rotate the state-encryption key
  */
 export const usePostApiAdminRotateKey = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError,{data?: EmptyObject}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminRotateKey>>, TError,PostApiAdminRotateKeyMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiAdminRotateKey>>,
         TError,
-        {data?: EmptyObject},
+        PostApiAdminRotateKeyMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiAdminRotateKeyMutationOptions(options), queryClient);

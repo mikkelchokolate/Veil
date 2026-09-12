@@ -125,11 +125,19 @@ export const getPostApiServicesNameRestartUrl = (name: string,) => {
 export const postApiServicesNameRestart = async (name: string,
     serviceActionRequest: ServiceActionRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiServicesNameRestartResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiServicesNameRestartResponse>(getPostApiServicesNameRestartUrl(name),
   {
@@ -144,11 +152,13 @@ return apiFetch<postApiServicesNameRestartResponse>(getPostApiServicesNameRestar
 
 
 
-export const getPostApiServicesNameRestartMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceActionResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError,{name: string;data: ServiceActionRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError,{name: string;data: ServiceActionRequest}, TContext> => {
+export const getPostApiServicesNameRestartMutationKey = () => ['postApiServicesNameRestart'] as const;
 
-const mutationKey = ['postApiServicesNameRestart'];
+export const getPostApiServicesNameRestartMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceActionResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError,PostApiServicesNameRestartMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError,PostApiServicesNameRestartMutationVariables, TContext> => {
+
+const mutationKey = getPostApiServicesNameRestartMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -158,7 +168,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiServicesNameRestart>>, {name: string;data: ServiceActionRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiServicesNameRestart>>, PostApiServicesNameRestartMutationVariables> = (props) => {
           const {name,data} = props ?? {};
 
           return  postApiServicesNameRestart(name,data,requestOptions)
@@ -174,16 +184,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiServicesNameRestartMutationResult = NonNullable<Awaited<ReturnType<typeof postApiServicesNameRestart>>>
     export type PostApiServicesNameRestartMutationBody = ServiceActionRequest
     export type PostApiServicesNameRestartMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceActionResponse | ServiceUnavailableResponse
+    export type PostApiServicesNameRestartMutationVariables = {name: string;data: ServiceActionRequest}
 
     /**
  * @summary Restart a managed systemd unit
  */
 export const usePostApiServicesNameRestart = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceActionResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError,{name: string;data: ServiceActionRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiServicesNameRestart>>, TError,PostApiServicesNameRestartMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiServicesNameRestart>>,
         TError,
-        {name: string;data: ServiceActionRequest},
+        PostApiServicesNameRestartMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiServicesNameRestartMutationOptions(options), queryClient);

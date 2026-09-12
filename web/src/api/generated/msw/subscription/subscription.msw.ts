@@ -283,11 +283,13 @@ export const headSToken = async (token: string,
 
 
 
-export const getHeadSTokenMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof headSToken>>, TError,{token: string;params?: HeadSTokenParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof headSToken>>, TError,{token: string;params?: HeadSTokenParams}, TContext> => {
+export const getHeadSTokenMutationKey = () => ['headSToken'] as const;
 
-const mutationKey = ['headSToken'];
+export const getHeadSTokenMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof headSToken>>, TError,HeadSTokenMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof headSToken>>, TError,HeadSTokenMutationVariables, TContext> => {
+
+const mutationKey = getHeadSTokenMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -297,7 +299,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof headSToken>>, {token: string;params?: HeadSTokenParams}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof headSToken>>, HeadSTokenMutationVariables> = (props) => {
           const {token,params} = props ?? {};
 
           return  headSToken(token,params,requestOptions)
@@ -313,16 +315,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type HeadSTokenMutationResult = NonNullable<Awaited<ReturnType<typeof headSToken>>>
 
     export type HeadSTokenMutationError = void
+    export type HeadSTokenMutationVariables = {token: string;params?: HeadSTokenParams}
 
     /**
  * @summary HEAD variant of the public subscription endpoint (headers only)
  */
 export const useHeadSToken = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof headSToken>>, TError,{token: string;params?: HeadSTokenParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof headSToken>>, TError,HeadSTokenMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof headSToken>>,
         TError,
-        {token: string;params?: HeadSTokenParams},
+        HeadSTokenMutationVariables,
         TContext
       > => {
       return useMutation(getHeadSTokenMutationOptions(options), queryClient);

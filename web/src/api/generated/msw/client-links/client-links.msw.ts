@@ -393,11 +393,19 @@ export const getPostApiClientLinksQrUrl = () => {
  */
 export const postApiClientLinksQr = async (clientLinkQRRequest: ClientLinkQRRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiClientLinksQrResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiClientLinksQrResponse>(getPostApiClientLinksQrUrl(),
   {
@@ -412,11 +420,13 @@ return apiFetch<postApiClientLinksQrResponse>(getPostApiClientLinksQrUrl(),
 
 
 
-export const getPostApiClientLinksQrMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ConflictResponse | ErrorEnvelope | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError,{data: ClientLinkQRRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError,{data: ClientLinkQRRequest}, TContext> => {
+export const getPostApiClientLinksQrMutationKey = () => ['postApiClientLinksQr'] as const;
 
-const mutationKey = ['postApiClientLinksQr'];
+export const getPostApiClientLinksQrMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ConflictResponse | ErrorEnvelope | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError,PostApiClientLinksQrMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError,PostApiClientLinksQrMutationVariables, TContext> => {
+
+const mutationKey = getPostApiClientLinksQrMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -426,7 +436,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiClientLinksQr>>, {data: ClientLinkQRRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiClientLinksQr>>, PostApiClientLinksQrMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  postApiClientLinksQr(data,requestOptions)
@@ -442,16 +452,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiClientLinksQrMutationResult = NonNullable<Awaited<ReturnType<typeof postApiClientLinksQr>>>
     export type PostApiClientLinksQrMutationBody = ClientLinkQRRequest
     export type PostApiClientLinksQrMutationError = BadRequestResponse | UnauthorizedResponse | ConflictResponse | ErrorEnvelope | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiClientLinksQrMutationVariables = {data: ClientLinkQRRequest}
 
     /**
  * @summary Render a client URI as a local QR PNG
  */
 export const usePostApiClientLinksQr = <TError = BadRequestResponse | UnauthorizedResponse | ConflictResponse | ErrorEnvelope | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError,{data: ClientLinkQRRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiClientLinksQr>>, TError,PostApiClientLinksQrMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiClientLinksQr>>,
         TError,
-        {data: ClientLinkQRRequest},
+        PostApiClientLinksQrMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiClientLinksQrMutationOptions(options), queryClient);

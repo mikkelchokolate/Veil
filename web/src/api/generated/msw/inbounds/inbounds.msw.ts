@@ -61,8 +61,10 @@ import type {
 
 import type {
   BadRequestResponse,
+  ClientListResponse,
   ConflictResponse,
   ForbiddenResponse,
+  GetApiInboundsNameClientsParams,
   Inbound,
   LockedResponse,
   NotFoundResponse,
@@ -269,11 +271,19 @@ export const getPostApiInboundsUrl = () => {
  */
 export const postApiInbounds = async (inbound: Inbound, options?: Parameters<typeof apiFetch>[1]): Promise<postApiInboundsResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiInboundsResponse>(getPostApiInboundsUrl(),
   {
@@ -288,11 +298,13 @@ return apiFetch<postApiInboundsResponse>(getPostApiInboundsUrl(),
 
 
 
-export const getPostApiInboundsMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError,{data: Inbound}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError,{data: Inbound}, TContext> => {
+export const getPostApiInboundsMutationKey = () => ['postApiInbounds'] as const;
 
-const mutationKey = ['postApiInbounds'];
+export const getPostApiInboundsMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError,PostApiInboundsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError,PostApiInboundsMutationVariables, TContext> => {
+
+const mutationKey = getPostApiInboundsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -302,7 +314,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInbounds>>, {data: Inbound}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInbounds>>, PostApiInboundsMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  postApiInbounds(data,requestOptions)
@@ -318,16 +330,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiInboundsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInbounds>>>
     export type PostApiInboundsMutationBody = Inbound
     export type PostApiInboundsMutationError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiInboundsMutationVariables = {data: Inbound}
 
     /**
  * @summary Create an inbound
  */
 export const usePostApiInbounds = <TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError,{data: Inbound}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInbounds>>, TError,PostApiInboundsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiInbounds>>,
         TError,
-        {data: Inbound},
+        PostApiInboundsMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiInboundsMutationOptions(options), queryClient);
@@ -514,11 +527,19 @@ export const getPutApiInboundsNameUrl = (name: string,) => {
 export const putApiInboundsName = async (name: string,
     inbound: Inbound, options?: Parameters<typeof apiFetch>[1]): Promise<putApiInboundsNameResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<putApiInboundsNameResponse>(getPutApiInboundsNameUrl(name),
   {
@@ -533,11 +554,13 @@ return apiFetch<putApiInboundsNameResponse>(getPutApiInboundsNameUrl(name),
 
 
 
-export const getPutApiInboundsNameMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError,{name: string;data: Inbound}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError,{name: string;data: Inbound}, TContext> => {
+export const getPutApiInboundsNameMutationKey = () => ['putApiInboundsName'] as const;
 
-const mutationKey = ['putApiInboundsName'];
+export const getPutApiInboundsNameMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError,PutApiInboundsNameMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError,PutApiInboundsNameMutationVariables, TContext> => {
+
+const mutationKey = getPutApiInboundsNameMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -547,7 +570,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiInboundsName>>, {name: string;data: Inbound}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiInboundsName>>, PutApiInboundsNameMutationVariables> = (props) => {
           const {name,data} = props ?? {};
 
           return  putApiInboundsName(name,data,requestOptions)
@@ -563,16 +586,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PutApiInboundsNameMutationResult = NonNullable<Awaited<ReturnType<typeof putApiInboundsName>>>
     export type PutApiInboundsNameMutationBody = Inbound
     export type PutApiInboundsNameMutationError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PutApiInboundsNameMutationVariables = {name: string;data: Inbound}
 
     /**
  * @summary Update an inbound
  */
 export const usePutApiInboundsName = <TError = BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError,{name: string;data: Inbound}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiInboundsName>>, TError,PutApiInboundsNameMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof putApiInboundsName>>,
         TError,
-        {name: string;data: Inbound},
+        PutApiInboundsNameMutationVariables,
         TContext
       > => {
       return useMutation(getPutApiInboundsNameMutationOptions(options), queryClient);
@@ -647,11 +671,13 @@ export const deleteApiInboundsName = async (name: string, options?: Parameters<t
 
 
 
-export const getDeleteApiInboundsNameMutationOptions = <TError = ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError,{name: string}, TContext> => {
+export const getDeleteApiInboundsNameMutationKey = () => ['deleteApiInboundsName'] as const;
 
-const mutationKey = ['deleteApiInboundsName'];
+export const getDeleteApiInboundsNameMutationOptions = <TError = ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError,DeleteApiInboundsNameMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError,DeleteApiInboundsNameMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiInboundsNameMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -661,7 +687,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiInboundsName>>, {name: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiInboundsName>>, DeleteApiInboundsNameMutationVariables> = (props) => {
           const {name} = props ?? {};
 
           return  deleteApiInboundsName(name,requestOptions)
@@ -677,17 +703,157 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type DeleteApiInboundsNameMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiInboundsName>>>
 
     export type DeleteApiInboundsNameMutationError = ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type DeleteApiInboundsNameMutationVariables = {name: string}
 
     /**
  * @summary Delete an inbound
  */
 export const useDeleteApiInboundsName = <TError = ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundsName>>, TError,DeleteApiInboundsNameMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteApiInboundsName>>,
         TError,
-        {name: string},
+        DeleteApiInboundsNameMutationVariables,
         TContext
       > => {
       return useMutation(getDeleteApiInboundsNameMutationOptions(options), queryClient);
     }
+    export type getApiInboundsNameClientsResponse200 = {
+  data: ClientListResponse
+  status: 200
+}
+
+export type getApiInboundsNameClientsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getApiInboundsNameClientsResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
+export type getApiInboundsNameClientsResponseSuccess = (getApiInboundsNameClientsResponse200) & {
+  headers: Headers;
+};
+export type getApiInboundsNameClientsResponseError = (getApiInboundsNameClientsResponse404 | getApiInboundsNameClientsResponse503) & {
+  headers: Headers;
+};
+
+export type getApiInboundsNameClientsResponse = (getApiInboundsNameClientsResponseSuccess | getApiInboundsNameClientsResponseError)
+
+export const getGetApiInboundsNameClientsUrl = (name: string,
+    params?: GetApiInboundsNameClientsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/inbounds/${name}/clients?${stringifiedParams}` : `/api/inbounds/${name}/clients`
+}
+
+/**
+ * @summary List clients attached to one inbound
+ */
+export const getApiInboundsNameClients = async (name: string,
+    params?: GetApiInboundsNameClientsParams, options?: Parameters<typeof apiFetch>[1]): Promise<getApiInboundsNameClientsResponse> => {
+
+  return apiFetch<getApiInboundsNameClientsResponse>(getGetApiInboundsNameClientsUrl(name,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiInboundsNameClientsQueryKey = (name: string,
+    params?: GetApiInboundsNameClientsParams,) => {
+    return [
+    `/api/inbounds/${name}/clients`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiInboundsNameClientsQueryOptions = <TData = Awaited<ReturnType<typeof getApiInboundsNameClients>>, TError = NotFoundResponse | ServiceUnavailableResponse>(name: string,
+    params?: GetApiInboundsNameClientsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundsNameClients>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiInboundsNameClientsQueryKey(name,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiInboundsNameClients>>> = ({ signal }) => getApiInboundsNameClients(name,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: name !== null && name !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiInboundsNameClients>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiInboundsNameClientsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiInboundsNameClients>>>
+export type GetApiInboundsNameClientsQueryError = NotFoundResponse | ServiceUnavailableResponse
+
+
+export function useGetApiInboundsNameClients<TData = Awaited<ReturnType<typeof getApiInboundsNameClients>>, TError = NotFoundResponse | ServiceUnavailableResponse>(
+ name: string,
+    params: undefined |  GetApiInboundsNameClientsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundsNameClients>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiInboundsNameClients>>,
+          TError,
+          Awaited<ReturnType<typeof getApiInboundsNameClients>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiInboundsNameClients<TData = Awaited<ReturnType<typeof getApiInboundsNameClients>>, TError = NotFoundResponse | ServiceUnavailableResponse>(
+ name: string,
+    params?: GetApiInboundsNameClientsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundsNameClients>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiInboundsNameClients>>,
+          TError,
+          Awaited<ReturnType<typeof getApiInboundsNameClients>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiInboundsNameClients<TData = Awaited<ReturnType<typeof getApiInboundsNameClients>>, TError = NotFoundResponse | ServiceUnavailableResponse>(
+ name: string,
+    params?: GetApiInboundsNameClientsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundsNameClients>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List clients attached to one inbound
+ */
+
+export function useGetApiInboundsNameClients<TData = Awaited<ReturnType<typeof getApiInboundsNameClients>>, TError = NotFoundResponse | ServiceUnavailableResponse>(
+ name: string,
+    params?: GetApiInboundsNameClientsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundsNameClients>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiInboundsNameClientsQueryOptions(name,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+

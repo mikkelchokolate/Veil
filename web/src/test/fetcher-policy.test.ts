@@ -19,7 +19,7 @@ function streamingJsonResponse(
 	body: unknown,
 	options: {
 		delayMs?: number;
-		signal?: AbortSignal;
+		signal?: AbortSignal | null | undefined;
 		neverComplete?: boolean;
 		fail?: Error;
 	} = {},

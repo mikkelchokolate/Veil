@@ -139,11 +139,13 @@ export const getApiProtocols = async ( options?: Parameters<typeof apiFetch>[1])
 
 
 
+export const getGetApiProtocolsMutationKey = () => ['getApiProtocols'] as const;
+
 export const getGetApiProtocolsMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiProtocols>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiProtocols>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiProtocols'];
+const mutationKey = getGetApiProtocolsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -169,6 +171,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiProtocolsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiProtocols>>>
 
     export type GetApiProtocolsMutationError = UnauthorizedResponse | ForbiddenResponse
+
 
     /**
  * @summary List supported protocols and their UI/runtime metadata
@@ -232,11 +235,19 @@ export const getPostApiProtocolsProtocolRoomUrl = (protocol: string,) => {
 export const postApiProtocolsProtocolRoom = async (protocol: string,
     postApiProtocolsProtocolRoomBody?: PostApiProtocolsProtocolRoomBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiProtocolsProtocolRoomResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiProtocolsProtocolRoomResponse>(getPostApiProtocolsProtocolRoomUrl(protocol),
   {

@@ -130,11 +130,13 @@ export const getApiRoutingRules = async ( options?: Parameters<typeof apiFetch>[
 
 
 
+export const getGetApiRoutingRulesMutationKey = () => ['getApiRoutingRules'] as const;
+
 export const getGetApiRoutingRulesMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingRules>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingRules>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiRoutingRules'];
+const mutationKey = getGetApiRoutingRulesMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -160,6 +162,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiRoutingRulesMutationResult = NonNullable<Awaited<ReturnType<typeof getApiRoutingRules>>>
 
     export type GetApiRoutingRulesMutationError = unknown
+
 
     /**
  * @summary List routing rules
@@ -226,11 +229,19 @@ export const getPostApiRoutingRulesUrl = () => {
  */
 export const postApiRoutingRules = async (routingRule: RoutingRule, options?: Parameters<typeof apiFetch>[1]): Promise<postApiRoutingRulesResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiRoutingRulesResponse>(getPostApiRoutingRulesUrl(),
   {
@@ -364,11 +375,13 @@ export const getApiRoutingRulesName = async (name: string, options?: Parameters<
 
 
 
-export const getGetApiRoutingRulesNameMutationOptions = <TError = NotFoundResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingRulesName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingRulesName>>, TError,{name: string}, TContext> => {
+export const getGetApiRoutingRulesNameMutationKey = () => ['getApiRoutingRulesName'] as const;
 
-const mutationKey = ['getApiRoutingRulesName'];
+export const getGetApiRoutingRulesNameMutationOptions = <TError = NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingRulesName>>, TError,GetApiRoutingRulesNameMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingRulesName>>, TError,GetApiRoutingRulesNameMutationVariables, TContext> => {
+
+const mutationKey = getGetApiRoutingRulesNameMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -378,7 +391,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiRoutingRulesName>>, {name: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiRoutingRulesName>>, GetApiRoutingRulesNameMutationVariables> = (props) => {
           const {name} = props ?? {};
 
           return  getApiRoutingRulesName(name,requestOptions)
@@ -394,16 +407,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiRoutingRulesNameMutationResult = NonNullable<Awaited<ReturnType<typeof getApiRoutingRulesName>>>
 
     export type GetApiRoutingRulesNameMutationError = NotFoundResponse
+    export type GetApiRoutingRulesNameMutationVariables = {name: string}
 
     /**
  * @summary Read a routing rule
  */
 export const useGetApiRoutingRulesName = <TError = NotFoundResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingRulesName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingRulesName>>, TError,GetApiRoutingRulesNameMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof getApiRoutingRulesName>>,
         TError,
-        {name: string},
+        GetApiRoutingRulesNameMutationVariables,
         TContext
       > => {
       return useMutation(getGetApiRoutingRulesNameMutationOptions(options), queryClient);
@@ -466,11 +480,19 @@ export const getPutApiRoutingRulesNameUrl = (name: string,) => {
 export const putApiRoutingRulesName = async (name: string,
     routingRule: RoutingRule, options?: Parameters<typeof apiFetch>[1]): Promise<putApiRoutingRulesNameResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<putApiRoutingRulesNameResponse>(getPutApiRoutingRulesNameUrl(name),
   {
@@ -742,11 +764,13 @@ export const getApiRoutingPresets = async ( options?: Parameters<typeof apiFetch
 
 
 
+export const getGetApiRoutingPresetsMutationKey = () => ['getApiRoutingPresets'] as const;
+
 export const getGetApiRoutingPresetsMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingPresets>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiRoutingPresets>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiRoutingPresets'];
+const mutationKey = getGetApiRoutingPresetsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -772,6 +796,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiRoutingPresetsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiRoutingPresets>>>
 
     export type GetApiRoutingPresetsMutationError = unknown
+
 
     /**
  * @summary List routing presets and source material

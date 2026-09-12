@@ -292,11 +292,19 @@ export const getPostApiBackupsUrl = () => {
  */
 export const postApiBackups = async (backupCreateRequest: BackupCreateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiBackupsResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiBackupsResponse>(getPostApiBackupsUrl(),
   {
@@ -311,11 +319,13 @@ return apiFetch<postApiBackupsResponse>(getPostApiBackupsUrl(),
 
 
 
-export const getPostApiBackupsMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackups>>, TError,{data: BackupCreateRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiBackups>>, TError,{data: BackupCreateRequest}, TContext> => {
+export const getPostApiBackupsMutationKey = () => ['postApiBackups'] as const;
 
-const mutationKey = ['postApiBackups'];
+export const getPostApiBackupsMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackups>>, TError,PostApiBackupsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiBackups>>, TError,PostApiBackupsMutationVariables, TContext> => {
+
+const mutationKey = getPostApiBackupsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -325,7 +335,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBackups>>, {data: BackupCreateRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBackups>>, PostApiBackupsMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  postApiBackups(data,requestOptions)
@@ -341,16 +351,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiBackupsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiBackups>>>
     export type PostApiBackupsMutationBody = BackupCreateRequest
     export type PostApiBackupsMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiBackupsMutationVariables = {data: BackupCreateRequest}
 
     /**
  * @summary Create and verify an encrypted archive
  */
 export const usePostApiBackups = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackups>>, TError,{data: BackupCreateRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackups>>, TError,PostApiBackupsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiBackups>>,
         TError,
-        {data: BackupCreateRequest},
+        PostApiBackupsMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiBackupsMutationOptions(options), queryClient);
@@ -418,11 +429,19 @@ export const getPostApiBackupsPruneUrl = () => {
  */
 export const postApiBackupsPrune = async (backupPruneRequest: BackupPruneRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiBackupsPruneResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiBackupsPruneResponse>(getPostApiBackupsPruneUrl(),
   {
@@ -437,11 +456,13 @@ return apiFetch<postApiBackupsPruneResponse>(getPostApiBackupsPruneUrl(),
 
 
 
-export const getPostApiBackupsPruneMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsPrune>>, TError,{data: BackupPruneRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsPrune>>, TError,{data: BackupPruneRequest}, TContext> => {
+export const getPostApiBackupsPruneMutationKey = () => ['postApiBackupsPrune'] as const;
 
-const mutationKey = ['postApiBackupsPrune'];
+export const getPostApiBackupsPruneMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsPrune>>, TError,PostApiBackupsPruneMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsPrune>>, TError,PostApiBackupsPruneMutationVariables, TContext> => {
+
+const mutationKey = getPostApiBackupsPruneMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -451,7 +472,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBackupsPrune>>, {data: BackupPruneRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBackupsPrune>>, PostApiBackupsPruneMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  postApiBackupsPrune(data,requestOptions)
@@ -467,16 +488,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiBackupsPruneMutationResult = NonNullable<Awaited<ReturnType<typeof postApiBackupsPrune>>>
     export type PostApiBackupsPruneMutationBody = BackupPruneRequest
     export type PostApiBackupsPruneMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiBackupsPruneMutationVariables = {data: BackupPruneRequest}
 
     /**
  * @summary Apply managed archive retention
  */
 export const usePostApiBackupsPrune = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsPrune>>, TError,{data: BackupPruneRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsPrune>>, TError,PostApiBackupsPruneMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiBackupsPrune>>,
         TError,
-        {data: BackupPruneRequest},
+        PostApiBackupsPruneMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiBackupsPruneMutationOptions(options), queryClient);
@@ -562,11 +584,13 @@ export const deleteApiBackupsName = async (name: string, options?: Parameters<ty
 
 
 
-export const getDeleteApiBackupsNameMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiBackupsName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiBackupsName>>, TError,{name: string}, TContext> => {
+export const getDeleteApiBackupsNameMutationKey = () => ['deleteApiBackupsName'] as const;
 
-const mutationKey = ['deleteApiBackupsName'];
+export const getDeleteApiBackupsNameMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiBackupsName>>, TError,DeleteApiBackupsNameMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiBackupsName>>, TError,DeleteApiBackupsNameMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiBackupsNameMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -576,7 +600,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiBackupsName>>, {name: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiBackupsName>>, DeleteApiBackupsNameMutationVariables> = (props) => {
           const {name} = props ?? {};
 
           return  deleteApiBackupsName(name,requestOptions)
@@ -592,16 +616,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type DeleteApiBackupsNameMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiBackupsName>>>
 
     export type DeleteApiBackupsNameMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type DeleteApiBackupsNameMutationVariables = {name: string}
 
     /**
  * @summary Delete one managed encrypted archive
  */
 export const useDeleteApiBackupsName = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiBackupsName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiBackupsName>>, TError,DeleteApiBackupsNameMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteApiBackupsName>>,
         TError,
-        {name: string},
+        DeleteApiBackupsNameMutationVariables,
         TContext
       > => {
       return useMutation(getDeleteApiBackupsNameMutationOptions(options), queryClient);
@@ -799,11 +824,19 @@ export const getPostApiBackupsNameVerifyUrl = (name: string,) => {
 export const postApiBackupsNameVerify = async (name: string,
     emptyObject?: EmptyObject, options?: Parameters<typeof apiFetch>[1]): Promise<postApiBackupsNameVerifyResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiBackupsNameVerifyResponse>(getPostApiBackupsNameVerifyUrl(name),
   {
@@ -818,11 +851,13 @@ return apiFetch<postApiBackupsNameVerifyResponse>(getPostApiBackupsNameVerifyUrl
 
 
 
-export const getPostApiBackupsNameVerifyMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError,{name: string;data?: EmptyObject}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError,{name: string;data?: EmptyObject}, TContext> => {
+export const getPostApiBackupsNameVerifyMutationKey = () => ['postApiBackupsNameVerify'] as const;
 
-const mutationKey = ['postApiBackupsNameVerify'];
+export const getPostApiBackupsNameVerifyMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError,PostApiBackupsNameVerifyMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError,PostApiBackupsNameVerifyMutationVariables, TContext> => {
+
+const mutationKey = getPostApiBackupsNameVerifyMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -832,7 +867,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, {name: string;data?: EmptyObject}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, PostApiBackupsNameVerifyMutationVariables> = (props) => {
           const {name,data} = props ?? {};
 
           return  postApiBackupsNameVerify(name,data,requestOptions)
@@ -848,16 +883,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiBackupsNameVerifyMutationResult = NonNullable<Awaited<ReturnType<typeof postApiBackupsNameVerify>>>
     export type PostApiBackupsNameVerifyMutationBody = EmptyObject | undefined
     export type PostApiBackupsNameVerifyMutationError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiBackupsNameVerifyMutationVariables = {name: string;data?: EmptyObject}
 
     /**
  * @summary Decrypt and verify an archive without writing state
  */
 export const usePostApiBackupsNameVerify = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError,{name: string;data?: EmptyObject}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameVerify>>, TError,PostApiBackupsNameVerifyMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiBackupsNameVerify>>,
         TError,
-        {name: string;data?: EmptyObject},
+        PostApiBackupsNameVerifyMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiBackupsNameVerifyMutationOptions(options), queryClient);
@@ -933,11 +969,19 @@ export const getPostApiBackupsNameRestoreUrl = (name: string,) => {
 export const postApiBackupsNameRestore = async (name: string,
     backupRestoreRequest: BackupRestoreRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiBackupsNameRestoreResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiBackupsNameRestoreResponse>(getPostApiBackupsNameRestoreUrl(name),
   {
@@ -952,11 +996,13 @@ return apiFetch<postApiBackupsNameRestoreResponse>(getPostApiBackupsNameRestoreU
 
 
 
-export const getPostApiBackupsNameRestoreMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError,{name: string;data: BackupRestoreRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError,{name: string;data: BackupRestoreRequest}, TContext> => {
+export const getPostApiBackupsNameRestoreMutationKey = () => ['postApiBackupsNameRestore'] as const;
 
-const mutationKey = ['postApiBackupsNameRestore'];
+export const getPostApiBackupsNameRestoreMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError,PostApiBackupsNameRestoreMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError,PostApiBackupsNameRestoreMutationVariables, TContext> => {
+
+const mutationKey = getPostApiBackupsNameRestoreMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -966,7 +1012,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, {name: string;data: BackupRestoreRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, PostApiBackupsNameRestoreMutationVariables> = (props) => {
           const {name,data} = props ?? {};
 
           return  postApiBackupsNameRestore(name,data,requestOptions)
@@ -982,16 +1028,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiBackupsNameRestoreMutationResult = NonNullable<Awaited<ReturnType<typeof postApiBackupsNameRestore>>>
     export type PostApiBackupsNameRestoreMutationBody = BackupRestoreRequest
     export type PostApiBackupsNameRestoreMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiBackupsNameRestoreMutationVariables = {name: string;data: BackupRestoreRequest}
 
     /**
  * @summary Queue a verified state and key restore
  */
 export const usePostApiBackupsNameRestore = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError,{name: string;data: BackupRestoreRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBackupsNameRestore>>, TError,PostApiBackupsNameRestoreMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiBackupsNameRestore>>,
         TError,
-        {name: string;data: BackupRestoreRequest},
+        PostApiBackupsNameRestoreMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiBackupsNameRestoreMutationOptions(options), queryClient);
