@@ -5,13 +5,12 @@ import {
 	useQueryClient,
 } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { flexRender } from "@tanstack/react-table";
 import {
-	type ColumnDef,
-	flexRender,
+	type LegacyColumnDef as ColumnDef,
 	getCoreRowModel,
-	useReactTable,
-	type VisibilityState,
-} from "@tanstack/react-table";
+	useLegacyTable,
+} from "@tanstack/react-table/legacy";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { listClients } from "../api/clients";
 import { ApiError, mutationErrorMessage } from "../api/fetcher";
@@ -158,7 +157,7 @@ export function ClientsPage() {
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [bulkError, setBulkError] = useState<string | null>(null);
 	const [bulkResults, setBulkResults] = useState<BulkResult[] | null>(null);
-	const [colVis, setColVis] = useState<VisibilityState>({});
+	const [colVis, setColVis] = useState<Record<string, boolean>>({});
 	const [showColMenu, setShowColMenu] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -330,7 +329,7 @@ export function ClientsPage() {
 		expiresAt: t("clients.columns.expires"),
 	};
 
-	const table = useReactTable({
+	const table = useLegacyTable({
 		data: items,
 		columns,
 		getCoreRowModel: getCoreRowModel(),
