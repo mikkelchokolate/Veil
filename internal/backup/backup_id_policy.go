@@ -3,8 +3,20 @@ package backup
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"time"
 )
+
+// backupIDPattern matches IDs produced by IDPolicy.Next: YYYYMMDD_HHMMSS
+// with an optional _N suffix when that second already exists.
+var backupIDPattern = regexp.MustCompile(`^\d{8}_\d{6}(?:_[1-9]\d*)?$`)
+
+func validateBackupID(id string) error {
+	if !backupIDPattern.MatchString(id) || !filepath.IsLocal(id) {
+		return fmt.Errorf("invalid backup ID %q", id)
+	}
+	return nil
+}
 
 type IDPolicy struct {
 	now    func() time.Time

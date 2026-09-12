@@ -14,6 +14,7 @@ import (
 type recordingFirewallRunner struct {
 	calls       []veilruntime.RuntimeCommandInput
 	failCommand string
+	enabled     bool
 }
 
 func (r *recordingFirewallRunner) Run(in veilruntime.RuntimeCommandInput) veilruntime.RuntimeCommandOutput {
@@ -22,15 +23,32 @@ func (r *recordingFirewallRunner) Run(in veilruntime.RuntimeCommandInput) veilru
 		return veilruntime.RuntimeCommandOutput{Err: fmt.Errorf("empty command"), Empty: true}
 	}
 	if len(in.Command) >= 2 && in.Command[1] == "status" {
-		return veilruntime.RuntimeCommandOutput{Output: "Status: inactive"}
+		status := "Status: inactive"
+		if r.enabled {
+			status = "Status: active"
+		}
+		return veilruntime.RuntimeCommandOutput{Output: status}
 	}
-	if r.failCommand == "enable" && len(in.Command) >= 2 && in.Command[1] == "--force" {
+	if r.failCommand == "enable" && len(in.Command) >= 3 && in.Command[1] == "--force" && in.Command[2] == "enable" {
 		return veilruntime.RuntimeCommandOutput{Err: fmt.Errorf("ufw not found"), NotFound: true, Output: "ufw not found"}
 	}
 	if r.failCommand == "allow" && len(in.Command) >= 2 && in.Command[1] == "allow" {
 		return veilruntime.RuntimeCommandOutput{Err: fmt.Errorf("ufw allow failed"), Output: "failed"}
 	}
+	if len(in.Command) >= 3 && in.Command[1] == "--force" && in.Command[2] == "enable" {
+		r.enabled = true
+	}
+	if len(in.Command) >= 3 && in.Command[1] == "--force" && in.Command[2] == "disable" {
+		r.enabled = false
+	}
 	return veilruntime.RuntimeCommandOutput{}
+}
+
+func testFirewallActions() []firewall.Rule {
+	return []firewall.Rule{
+		{Command: "ufw", Args: []string{"allow", "22/tcp", "comment", "Veil management SSH"}},
+		{Command: "ufw", Args: []string{"allow", "2096/tcp", "comment", "Veil panel"}},
+	}
 }
 
 func setTestUFWApplier(runner *recordingFirewallRunner) func() {
@@ -66,10 +84,8 @@ func TestApplyRURecommendedProfileWithPlanInvokesFirewallApplier(t *testing.T) {
 	paths := ApplyPaths{EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: filepath.Join(dir, "var", "lib", "veil")}
 	profile := RURecommendedProfile{PanelAuthToken: "secret-panel"}
 	plan := InstallPlan{
-		Profile: profile,
-		FirewallActions: []firewall.Rule{
-			{Command: "ufw", Args: []string{"allow", "2096/tcp", "comment", "Veil panel"}},
-		},
+		Profile:         profile,
+		FirewallActions: testFirewallActions(),
 	}
 
 	result, err := ApplyRURecommendedProfileWithPlan(profile, paths, plan)
@@ -106,18 +122,16 @@ func TestApplyReturnsErrorWhenFirewallEnsureActiveFails(t *testing.T) {
 	paths := ApplyPaths{EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: filepath.Join(dir, "var", "lib", "veil")}
 	profile := RURecommendedProfile{PanelAuthToken: "secret-panel"}
 	plan := InstallPlan{
-		Profile: profile,
-		FirewallActions: []firewall.Rule{
-			{Command: "ufw", Args: []string{"allow", "2096/tcp", "comment", "Veil panel"}},
-		},
+		Profile:         profile,
+		FirewallActions: testFirewallActions(),
 	}
 
 	_, err := ApplyRURecommendedProfileWithPlan(profile, paths, plan)
 	if err == nil {
 		t.Fatal("expected error when firewall cannot be enabled")
 	}
-	if !strings.Contains(err.Error(), "enable firewall") {
-		t.Fatalf("expected enable firewall error, got %v", err)
+	if !strings.Contains(err.Error(), "apply firewall rules") {
+		t.Fatalf("expected apply firewall rules error, got %v", err)
 	}
 }
 
@@ -130,10 +144,8 @@ func TestApplyReturnsErrorWhenFirewallApplyRulesFails(t *testing.T) {
 	paths := ApplyPaths{EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: filepath.Join(dir, "var", "lib", "veil")}
 	profile := RURecommendedProfile{PanelAuthToken: "secret-panel"}
 	plan := InstallPlan{
-		Profile: profile,
-		FirewallActions: []firewall.Rule{
-			{Command: "ufw", Args: []string{"allow", "2096/tcp", "comment", "Veil panel"}},
-		},
+		Profile:         profile,
+		FirewallActions: testFirewallActions(),
 	}
 
 	_, err := ApplyRURecommendedProfileWithPlan(profile, paths, plan)

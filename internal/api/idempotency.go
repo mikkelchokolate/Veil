@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"mime"
 	"net/http"
 	"sort"
 	"strings"
@@ -176,15 +177,22 @@ func (s *idempotencyStore) Middleware(next http.Handler) http.Handler {
 		if status == 0 {
 			status = http.StatusOK
 		}
-		if status >= http.StatusOK && status < http.StatusBadRequest && capture.body.Len() <= maxIdempotencyBody {
-			s.complete(scope, entry, status, capture.header, capture.body.Bytes())
+		responseStatus := status
+		responseBody := append([]byte(nil), capture.body.Bytes()...)
+		if capture.overflow && status >= http.StatusOK && status < http.StatusBadRequest {
+			responseStatus = http.StatusAccepted
+			responseBody = []byte(`{"status":"committed","result":"response_too_large"}`)
+			capture.header.Set("Content-Type", "application/json")
+		}
+		if status >= http.StatusOK && status < http.StatusBadRequest {
+			s.complete(scope, entry, responseStatus, capture.header, responseBody)
 		} else {
 			s.abort(scope, entry)
 		}
 		finished = true
 		copyHTTPHeader(w.Header(), capture.header)
-		w.WriteHeader(status)
-		_, _ = w.Write(capture.body.Bytes())
+		w.WriteHeader(responseStatus)
+		_, _ = w.Write(responseBody)
 	})
 }
 
@@ -290,6 +298,18 @@ func idempotencyAuthGeneration(r *http.Request) string {
 	return hex.EncodeToString(digest[:])
 }
 
+func idempotencyRequestMediaType(r *http.Request) string {
+	raw := strings.TrimSpace(r.Header.Get("Content-Type"))
+	if raw == "" {
+		return ""
+	}
+	mediaType, _, err := mime.ParseMediaType(raw)
+	if err != nil {
+		return strings.ToLower(raw)
+	}
+	return strings.ToLower(mediaType)
+}
+
 func idempotencyFingerprint(r *http.Request, body []byte) string {
 	digest := sha256.New()
 	_, _ = io.WriteString(digest, r.Method)
@@ -297,8 +317,9 @@ func idempotencyFingerprint(r *http.Request, body []byte) string {
 	for key := range query {
 		sort.Strings(query[key])
 	}
+	mediaType := idempotencyRequestMediaType(r)
 	canonicalBody := body
-	if strings.Contains(strings.ToLower(r.Header.Get("Content-Type")), "json") && len(bytes.TrimSpace(body)) > 0 {
+	if mediaType == "application/json" && len(bytes.TrimSpace(body)) > 0 {
 		decoder := json.NewDecoder(bytes.NewReader(body))
 		decoder.UseNumber()
 		var value any
@@ -308,7 +329,7 @@ func idempotencyFingerprint(r *http.Request, body []byte) string {
 			}
 		}
 	}
-	_, _ = io.WriteString(digest, "\n"+r.URL.EscapedPath()+"?"+query.Encode()+"\n")
+	_, _ = io.WriteString(digest, "\n"+mediaType+"\n"+r.URL.EscapedPath()+"?"+query.Encode()+"\n")
 	_, _ = digest.Write(canonicalBody)
 	return hex.EncodeToString(digest.Sum(nil))
 }

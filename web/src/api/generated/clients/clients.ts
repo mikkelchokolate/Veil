@@ -144,11 +144,13 @@ export const getApiV1Clients = async ( options?: Parameters<typeof apiFetch>[1])
 
 
 
+export const getGetApiV1ClientsMutationKey = () => ['getApiV1Clients'] as const;
+
 export const getGetApiV1ClientsMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1Clients>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiV1Clients>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiV1Clients'];
+const mutationKey = getGetApiV1ClientsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -174,6 +176,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiV1ClientsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1Clients>>>
 
     export type GetApiV1ClientsMutationError = unknown
+
 
     /**
  * @summary List clients with effective status
@@ -240,11 +243,19 @@ export const getPostApiV1ClientsUrl = () => {
  */
 export const postApiV1Clients = async (clientCreateRequest: ClientCreateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiV1ClientsResponse>(getPostApiV1ClientsUrl(),
   {
@@ -380,11 +391,19 @@ export const getPostApiV1ClientsBulkUrl = () => {
  */
 export const postApiV1ClientsBulk = async (postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsBulkResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiV1ClientsBulkResponse>(getPostApiV1ClientsBulkUrl(),
   {
@@ -511,11 +530,13 @@ export const getApiV1ClientsIdBindings = async (id: string, options?: Parameters
 
 
 
-export const getGetApiV1ClientsIdBindingsMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindings>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindings>>, TError,{id: string}, TContext> => {
+export const getGetApiV1ClientsIdBindingsMutationKey = () => ['getApiV1ClientsIdBindings'] as const;
 
-const mutationKey = ['getApiV1ClientsIdBindings'];
+export const getGetApiV1ClientsIdBindingsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindings>>, TError,GetApiV1ClientsIdBindingsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindings>>, TError,GetApiV1ClientsIdBindingsMutationVariables, TContext> => {
+
+const mutationKey = getGetApiV1ClientsIdBindingsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -525,7 +546,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsIdBindings>>, {id: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsIdBindings>>, GetApiV1ClientsIdBindingsMutationVariables> = (props) => {
           const {id} = props ?? {};
 
           return  getApiV1ClientsIdBindings(id,requestOptions)
@@ -541,16 +562,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiV1ClientsIdBindingsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1ClientsIdBindings>>>
 
     export type GetApiV1ClientsIdBindingsMutationError = unknown
+    export type GetApiV1ClientsIdBindingsMutationVariables = {id: string}
 
     /**
  * @summary List client bindings
  */
 export const useGetApiV1ClientsIdBindings = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindings>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindings>>, TError,GetApiV1ClientsIdBindingsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof getApiV1ClientsIdBindings>>,
         TError,
-        {id: string},
+        GetApiV1ClientsIdBindingsMutationVariables,
         TContext
       > => {
       return useMutation(getGetApiV1ClientsIdBindingsMutationOptions(options), queryClient);
@@ -603,11 +625,19 @@ export const getPostApiV1ClientsIdBindingsUrl = (id: string,) => {
 export const postApiV1ClientsIdBindings = async (id: string,
     postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdBindingsResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiV1ClientsIdBindingsResponse>(getPostApiV1ClientsIdBindingsUrl(id),
   {
@@ -752,11 +782,19 @@ export const patchApiV1ClientsIdBindingsBindingId = async (id: string,
     bindingId: string,
     patchApiV1ClientsIdBindingsBindingIdBody: PatchApiV1ClientsIdBindingsBindingIdBody, options?: Parameters<typeof apiFetch>[1]): Promise<patchApiV1ClientsIdBindingsBindingIdResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<patchApiV1ClientsIdBindingsBindingIdResponse>(getPatchApiV1ClientsIdBindingsBindingIdUrl(id,bindingId),
   {
@@ -1049,11 +1087,19 @@ export const postApiV1ClientsIdCredentialsBindingId = async (id: string,
     bindingId: string,
     postApiV1ClientsIdCredentialsBindingIdBody: PostApiV1ClientsIdCredentialsBindingIdBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdCredentialsBindingIdResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiV1ClientsIdCredentialsBindingIdResponse>(getPostApiV1ClientsIdCredentialsBindingIdUrl(id,bindingId),
   {
@@ -1204,11 +1250,19 @@ export const postApiV1ClientsIdCredentialsBindingIdRotate = async (id: string,
     bindingId: string,
     postApiV1ClientsIdCredentialsBindingIdRotateBody: PostApiV1ClientsIdCredentialsBindingIdRotateBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdCredentialsBindingIdRotateResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiV1ClientsIdCredentialsBindingIdRotateResponse>(getPostApiV1ClientsIdCredentialsBindingIdRotateUrl(id,bindingId),
   {
@@ -1488,11 +1542,13 @@ export const getApiV1ClientsId = async (id: string, options?: Parameters<typeof 
 
 
 
-export const getGetApiV1ClientsIdMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsId>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsId>>, TError,{id: string}, TContext> => {
+export const getGetApiV1ClientsIdMutationKey = () => ['getApiV1ClientsId'] as const;
 
-const mutationKey = ['getApiV1ClientsId'];
+export const getGetApiV1ClientsIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsId>>, TError,GetApiV1ClientsIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsId>>, TError,GetApiV1ClientsIdMutationVariables, TContext> => {
+
+const mutationKey = getGetApiV1ClientsIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1502,7 +1558,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsId>>, {id: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsId>>, GetApiV1ClientsIdMutationVariables> = (props) => {
           const {id} = props ?? {};
 
           return  getApiV1ClientsId(id,requestOptions)
@@ -1518,16 +1574,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiV1ClientsIdMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1ClientsId>>>
 
     export type GetApiV1ClientsIdMutationError = void
+    export type GetApiV1ClientsIdMutationVariables = {id: string}
 
     /**
  * @summary Get a client with bindings and effective status
  */
 export const useGetApiV1ClientsId = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsId>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsId>>, TError,GetApiV1ClientsIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof getApiV1ClientsId>>,
         TError,
-        {id: string},
+        GetApiV1ClientsIdMutationVariables,
         TContext
       > => {
       return useMutation(getGetApiV1ClientsIdMutationOptions(options), queryClient);
@@ -1580,11 +1637,19 @@ export const getPatchApiV1ClientsIdUrl = (id: string,) => {
 export const patchApiV1ClientsId = async (id: string,
     clientPatchRequest: ClientPatchRequest, options?: Parameters<typeof apiFetch>[1]): Promise<patchApiV1ClientsIdResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<patchApiV1ClientsIdResponse>(getPatchApiV1ClientsIdUrl(id),
   {
@@ -1874,11 +1939,13 @@ export const getApiV1ClientsIdLinks = async (id: string, options?: Parameters<ty
 
 
 
-export const getGetApiV1ClientsIdLinksMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError,{id: string}, TContext> => {
+export const getGetApiV1ClientsIdLinksMutationKey = () => ['getApiV1ClientsIdLinks'] as const;
 
-const mutationKey = ['getApiV1ClientsIdLinks'];
+export const getGetApiV1ClientsIdLinksMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError,GetApiV1ClientsIdLinksMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError,GetApiV1ClientsIdLinksMutationVariables, TContext> => {
+
+const mutationKey = getGetApiV1ClientsIdLinksMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1888,7 +1955,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, {id: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, GetApiV1ClientsIdLinksMutationVariables> = (props) => {
           const {id} = props ?? {};
 
           return  getApiV1ClientsIdLinks(id,requestOptions)
@@ -1904,16 +1971,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiV1ClientsIdLinksMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>>
 
     export type GetApiV1ClientsIdLinksMutationError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+    export type GetApiV1ClientsIdLinksMutationVariables = {id: string}
 
     /**
  * @summary Connection URIs and configs for one client
  */
 export const useGetApiV1ClientsIdLinks = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>, TError,GetApiV1ClientsIdLinksMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof getApiV1ClientsIdLinks>>,
         TError,
-        {id: string},
+        GetApiV1ClientsIdLinksMutationVariables,
         TContext
       > => {
       return useMutation(getGetApiV1ClientsIdLinksMutationOptions(options), queryClient);
@@ -1956,11 +2024,13 @@ export const getApiV1ClientsIdTokens = async (id: string, options?: Parameters<t
 
 
 
-export const getGetApiV1ClientsIdTokensMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>, TError,{id: string}, TContext> => {
+export const getGetApiV1ClientsIdTokensMutationKey = () => ['getApiV1ClientsIdTokens'] as const;
 
-const mutationKey = ['getApiV1ClientsIdTokens'];
+export const getGetApiV1ClientsIdTokensMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>, TError,GetApiV1ClientsIdTokensMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>, TError,GetApiV1ClientsIdTokensMutationVariables, TContext> => {
+
+const mutationKey = getGetApiV1ClientsIdTokensMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1970,7 +2040,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>, {id: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>, GetApiV1ClientsIdTokensMutationVariables> = (props) => {
           const {id} = props ?? {};
 
           return  getApiV1ClientsIdTokens(id,requestOptions)
@@ -1986,16 +2056,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiV1ClientsIdTokensMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>>
 
     export type GetApiV1ClientsIdTokensMutationError = unknown
+    export type GetApiV1ClientsIdTokensMutationVariables = {id: string}
 
     /**
  * @summary List a client's subscription tokens (redacted)
  */
 export const useGetApiV1ClientsIdTokens = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>, TError,GetApiV1ClientsIdTokensMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>,
         TError,
-        {id: string},
+        GetApiV1ClientsIdTokensMutationVariables,
         TContext
       > => {
       return useMutation(getGetApiV1ClientsIdTokensMutationOptions(options), queryClient);
@@ -2048,11 +2119,19 @@ export const getPostApiV1ClientsIdTokensUrl = (id: string,) => {
 export const postApiV1ClientsIdTokens = async (id: string,
     postApiV1ClientsIdTokensBody: PostApiV1ClientsIdTokensBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdTokensResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiV1ClientsIdTokensResponse>(getPostApiV1ClientsIdTokensUrl(id),
   {
@@ -2204,11 +2283,13 @@ export const getApiV1ClientsIdTokensTokenId = async (id: string,
 
 
 
-export const getGetApiV1ClientsIdTokensTokenIdMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError,{id: string;tokenId: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError,{id: string;tokenId: string}, TContext> => {
+export const getGetApiV1ClientsIdTokensTokenIdMutationKey = () => ['getApiV1ClientsIdTokensTokenId'] as const;
 
-const mutationKey = ['getApiV1ClientsIdTokensTokenId'];
+export const getGetApiV1ClientsIdTokensTokenIdMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError,GetApiV1ClientsIdTokensTokenIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError,GetApiV1ClientsIdTokensTokenIdMutationVariables, TContext> => {
+
+const mutationKey = getGetApiV1ClientsIdTokensTokenIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -2218,7 +2299,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, {id: string;tokenId: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, GetApiV1ClientsIdTokensTokenIdMutationVariables> = (props) => {
           const {id,tokenId} = props ?? {};
 
           return  getApiV1ClientsIdTokensTokenId(id,tokenId,requestOptions)
@@ -2234,16 +2315,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiV1ClientsIdTokensTokenIdMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>>
 
     export type GetApiV1ClientsIdTokensTokenIdMutationError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+    export type GetApiV1ClientsIdTokensTokenIdMutationVariables = {id: string;tokenId: string}
 
     /**
  * @summary Rebuild the subscription URL for a stored token
  */
 export const useGetApiV1ClientsIdTokensTokenId = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError,{id: string;tokenId: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>, TError,GetApiV1ClientsIdTokensTokenIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof getApiV1ClientsIdTokensTokenId>>,
         TError,
-        {id: string;tokenId: string},
+        GetApiV1ClientsIdTokensTokenIdMutationVariables,
         TContext
       > => {
       return useMutation(getGetApiV1ClientsIdTokensTokenIdMutationOptions(options), queryClient);
@@ -2440,11 +2522,19 @@ export const postApiV1ClientsIdTokensTokenIdRotate = async (id: string,
     tokenId: string,
     postApiV1ClientsIdTokensTokenIdRotateBody?: PostApiV1ClientsIdTokensTokenIdRotateBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdTokensTokenIdRotateResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiV1ClientsIdTokensTokenIdRotateResponse>(getPostApiV1ClientsIdTokensTokenIdRotateUrl(id,tokenId),
   {

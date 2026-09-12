@@ -1574,6 +1574,52 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
       x-roles:
       - admin
+  /api/inbounds/{name}/clients:
+    parameters:
+    - $ref: '#/components/parameters/Name'
+    get:
+      x-veil-role: viewer
+      tags:
+      - inbounds
+      summary: List clients attached to one inbound
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+      - name: search
+        in: query
+        schema:
+          type: string
+      - name: sort
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Paginated clients bound to this inbound.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientListResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/routing/rules:
     get:
       x-veil-role: viewer

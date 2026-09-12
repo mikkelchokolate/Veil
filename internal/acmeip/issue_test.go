@@ -2,8 +2,15 @@ package acmeip
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"os"
 	"path/filepath"
@@ -43,11 +50,18 @@ type fakeSystem struct {
 	runCalls      [][]string
 	installAcmeSh bool
 	installSocat  bool
+	commandDelay  time.Duration
+	events        []string
+	installIPs    []string
+	issuedCertPEM []byte
+	issuedKeyPEM  []byte
 }
 
 type commandResult struct {
-	out string
-	err error
+	out        string
+	err        error
+	writeOwned func()
+	writeFiles bool
 }
 
 type chownCall struct {
@@ -75,6 +89,7 @@ func (f *fakeSystem) key(cmd string, args ...string) string {
 }
 
 func (f *fakeSystem) Run(cmd string, args ...string) error {
+	f.events = append(f.events, "cleanup")
 	f.runCalls = append(f.runCalls, append([]string{cmd}, args...))
 	res, ok := f.commands[f.key(cmd, args...)]
 	if !ok {
@@ -83,13 +98,34 @@ func (f *fakeSystem) Run(cmd string, args ...string) error {
 	return res.err
 }
 
+func (f *fakeSystem) CombinedOutputContext(ctx context.Context, cmd string, args ...string) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	isIssue := len(args) > 0 && args[0] == "--issue"
+	if isIssue && f.commandDelay > 0 {
+		timer := time.NewTimer(f.commandDelay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			f.events = append(f.events, "issuer-stopped")
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	out, err := f.CombinedOutput(cmd, args...)
+	if isIssue {
+		f.events = append(f.events, "issuer-stopped")
+	}
+	return out, err
+}
+
 func (f *fakeSystem) CombinedOutput(cmd string, args ...string) ([]byte, error) {
 	res, ok := f.commands[f.key(cmd, args...)]
 	if !ok {
 		return nil, fmt.Errorf("unexpected command: %s %v", cmd, args)
 	}
-	// Only simulate side effects when the mocked command succeeds.
-	if res.err == nil {
+	if res.err == nil || res.writeFiles {
 		if cmd == "sh" && len(args) >= 2 {
 			script := args[1]
 			if strings.Contains(script, "get.acme.sh") && f.installAcmeSh {
@@ -101,11 +137,81 @@ func (f *fakeSystem) CombinedOutput(cmd string, args ...string) ([]byte, error) 
 			}
 		}
 		if cmd == filepath.Join(f.home, ".acme.sh", "acme.sh") && len(args) >= 1 && args[0] == "--installcert" {
-			f.files["/etc/veil/panel/tls.crt"] = &fakeFileInfo{name: "tls.crt", mode: 0o600}
-			f.files["/etc/veil/panel/tls.key"] = &fakeFileInfo{name: "tls.key", mode: 0o600}
+			certPath, keyPath, ip := parseInstallcertArgs(args)
+			ips := f.installIPs
+			if len(ips) == 0 {
+				ips = []string{ip}
+			}
+			certPEM, keyPEM := f.certMaterial(ips...)
+			f.fileData[certPath] = certPEM
+			f.fileData[keyPath] = keyPEM
+			f.files[certPath] = &fakeFileInfo{name: filepath.Base(certPath), mode: 0o600}
+			f.files[keyPath] = &fakeFileInfo{name: filepath.Base(keyPath), mode: 0o600}
 		}
 	}
 	return []byte(res.out), res.err
+}
+
+func parseInstallcertArgs(args []string) (certPath, keyPath, ip string) {
+	certPath = "/etc/veil/panel/tls.crt"
+	keyPath = "/etc/veil/panel/tls.key"
+	for i, arg := range args {
+		if i+1 >= len(args) {
+			continue
+		}
+		switch arg {
+		case "-d":
+			ip = args[i+1]
+		case "--fullchain-file":
+			certPath = args[i+1]
+		case "--key-file":
+			keyPath = args[i+1]
+		}
+	}
+	return certPath, keyPath, ip
+}
+
+func (f *fakeSystem) certMaterial(ips ...string) (certPEM, keyPEM []byte) {
+	if len(f.issuedCertPEM) > 0 && len(f.issuedKeyPEM) > 0 {
+		return f.issuedCertPEM, f.issuedKeyPEM
+	}
+	f.issuedCertPEM, f.issuedKeyPEM = generateIPCertPEM(time.Now().Add(24*time.Hour), ips...)
+	return f.issuedCertPEM, f.issuedKeyPEM
+}
+
+func generateIPCertPEM(notAfter time.Time, ips ...string) (certPEM, keyPEM []byte) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+	serial, err := rand.Int(rand.Reader, big.NewInt(1<<62))
+	if err != nil {
+		panic(err)
+	}
+	template := x509.Certificate{
+		SerialNumber: serial,
+		Subject:      pkix.Name{CommonName: "veil-test"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     notAfter,
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	for _, ip := range ips {
+		if parsed := net.ParseIP(ip); parsed != nil {
+			template.IPAddresses = append(template.IPAddresses, parsed)
+		}
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		panic(err)
+	}
+	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	keyBytes, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		panic(err)
+	}
+	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
+	return certPEM, keyPEM
 }
 
 func (f *fakeSystem) LookPath(name string) (string, error) {
@@ -241,6 +347,7 @@ func TestIssueIPCertIncludesIPv6WhenProvided(t *testing.T) {
 	sys := newFakeSystem()
 	sys.setAcmeInstalled()
 	sys.lookPaths["socat"] = "/usr/bin/socat"
+	sys.installIPs = []string{"1.2.3.4", "2001:db8::1"}
 
 	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
 	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", "letsencrypt")] = commandResult{out: "OK"}
@@ -321,7 +428,7 @@ func TestIssueIPCertCleansUpOnIssueFailure(t *testing.T) {
 	}
 }
 
-func TestIssueIPCertSucceedsWhenInstallcertFailsButFilesExist(t *testing.T) {
+func TestIssueIPCertAcceptsNewCertWhenInstallcertReloadFails(t *testing.T) {
 	sys := newFakeSystem()
 	sys.setAcmeInstalled()
 	sys.lookPaths["socat"] = "/usr/bin/socat"
@@ -329,15 +436,11 @@ func TestIssueIPCertSucceedsWhenInstallcertFailsButFilesExist(t *testing.T) {
 	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
 	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", "letsencrypt")] = commandResult{out: "OK"}
 	sys.commands[sys.key(acmeSh, "--issue", "-d", "1.2.3.4", "--standalone", "--server", "letsencrypt", "--certificate-profile", "shortlived", "--days", "3", "--httpport", "80", "--force")] = commandResult{out: "Cert issued"}
-	sys.commands[sys.key(acmeSh, "--installcert", "-d", "1.2.3.4", "--key-file", "/etc/veil/panel/tls.key", "--fullchain-file", "/etc/veil/panel/tls.crt", "--reloadcmd", "systemctl restart veil || true")] = commandResult{err: errors.New("reload failed")}
-
-	// Simulate that acme.sh still wrote the files.
-	sys.files["/etc/veil/panel/tls.crt"] = &fakeFileInfo{name: "tls.crt", mode: 0o600}
-	sys.files["/etc/veil/panel/tls.key"] = &fakeFileInfo{name: "tls.key", mode: 0o600}
+	sys.commands[sys.key(acmeSh, "--installcert", "-d", "1.2.3.4", "--key-file", "/etc/veil/panel/tls.key", "--fullchain-file", "/etc/veil/panel/tls.crt", "--reloadcmd", "systemctl restart veil || true")] = commandResult{err: errors.New("reload failed"), writeFiles: true}
 
 	_, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: "1.2.3.4", System: sys})
 	if err != nil {
-		t.Fatalf("expected success when files exist despite installcert error: %v", err)
+		t.Fatalf("expected success when installcert wrote a new valid pair: %v", err)
 	}
 }
 
@@ -450,7 +553,7 @@ func TestEnsureAcmeShAlreadyInstalled(t *testing.T) {
 	sys := newFakeSystem()
 	sys.setAcmeInstalled()
 
-	acmeSh, err := ensureAcmeSh(sys)
+	acmeSh, err := ensureAcmeSh(context.Background(), sys)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -463,7 +566,7 @@ func TestEnsureAcmeShHomeDirError(t *testing.T) {
 	sys := newFakeSystem()
 	sys.homeErr = errors.New("no home")
 
-	_, err := ensureAcmeSh(sys)
+	_, err := ensureAcmeSh(context.Background(), sys)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -473,7 +576,7 @@ func TestEnsureAcmeShMissingCurl(t *testing.T) {
 	sys := newFakeSystem()
 	delete(sys.lookPaths, "curl")
 
-	_, err := ensureAcmeSh(sys)
+	_, err := ensureAcmeSh(context.Background(), sys)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -483,7 +586,7 @@ func TestEnsureAcmeShInstallFails(t *testing.T) {
 	sys := newFakeSystem()
 	sys.commands[sys.key("sh", "-c", "curl -fsSL https://get.acme.sh | sh")] = commandResult{err: errors.New("network down")}
 
-	_, err := ensureAcmeSh(sys)
+	_, err := ensureAcmeSh(context.Background(), sys)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -494,7 +597,7 @@ func TestEnsureAcmeShInstallSucceedsButBinaryMissing(t *testing.T) {
 	sys.installAcmeSh = false
 	sys.commands[sys.key("sh", "-c", "curl -fsSL https://get.acme.sh | sh")] = commandResult{out: "installed"}
 
-	_, err := ensureAcmeSh(sys)
+	_, err := ensureAcmeSh(context.Background(), sys)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -504,7 +607,7 @@ func TestEnsureSocatAlreadyInstalled(t *testing.T) {
 	sys := newFakeSystem()
 	sys.lookPaths["socat"] = "/usr/bin/socat"
 
-	if err := ensureSocat(sys); err != nil {
+	if err := ensureSocat(context.Background(), sys); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -514,7 +617,7 @@ func TestEnsureSocatInstallsViaAptGet(t *testing.T) {
 	sys.lookPaths["apt-get"] = "/usr/bin/apt-get"
 	sys.commands[sys.key("sh", "-c", "apt-get update >/dev/null 2>&1 && apt-get install -y socat")] = commandResult{out: "done"}
 
-	if err := ensureSocat(sys); err != nil {
+	if err := ensureSocat(context.Background(), sys); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -524,7 +627,7 @@ func TestEnsureSocatInstallsViaDnf(t *testing.T) {
 	sys.lookPaths["dnf"] = "/usr/bin/dnf"
 	sys.commands[sys.key("sh", "-c", "dnf makecache -y >/dev/null 2>&1 && dnf -y install socat")] = commandResult{out: "done"}
 
-	if err := ensureSocat(sys); err != nil {
+	if err := ensureSocat(context.Background(), sys); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -534,7 +637,7 @@ func TestEnsureSocatInstallsViaYum(t *testing.T) {
 	sys.lookPaths["yum"] = "/usr/bin/yum"
 	sys.commands[sys.key("sh", "-c", "yum makecache -y >/dev/null 2>&1 && yum -y install socat")] = commandResult{out: "done"}
 
-	if err := ensureSocat(sys); err != nil {
+	if err := ensureSocat(context.Background(), sys); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -544,7 +647,7 @@ func TestEnsureSocatInstallsViaPacman(t *testing.T) {
 	sys.lookPaths["pacman"] = "/usr/bin/pacman"
 	sys.commands[sys.key("sh", "-c", "pacman -Sy --noconfirm socat")] = commandResult{out: "done"}
 
-	if err := ensureSocat(sys); err != nil {
+	if err := ensureSocat(context.Background(), sys); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -554,7 +657,7 @@ func TestEnsureSocatInstallsViaZypper(t *testing.T) {
 	sys.lookPaths["zypper"] = "/usr/bin/zypper"
 	sys.commands[sys.key("sh", "-c", "zypper refresh >/dev/null 2>&1 && zypper -q install -y socat")] = commandResult{out: "done"}
 
-	if err := ensureSocat(sys); err != nil {
+	if err := ensureSocat(context.Background(), sys); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -564,7 +667,7 @@ func TestEnsureSocatInstallsViaApk(t *testing.T) {
 	sys.lookPaths["apk"] = "/sbin/apk"
 	sys.commands[sys.key("sh", "-c", "apk add --no-cache socat")] = commandResult{out: "done"}
 
-	if err := ensureSocat(sys); err != nil {
+	if err := ensureSocat(context.Background(), sys); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -576,7 +679,7 @@ func TestEnsureSocatInstallSucceedsButStillMissing(t *testing.T) {
 	sys.commands[sys.key("sh", "-c", "apt-get update >/dev/null 2>&1 && apt-get install -y socat")] = commandResult{out: "done"}
 	// Do not add socat to lookPaths, simulating a broken install.
 
-	if err := ensureSocat(sys); err == nil {
+	if err := ensureSocat(context.Background(), sys); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -586,7 +689,7 @@ func TestEnsureSocatInstallFails(t *testing.T) {
 	sys.lookPaths["apt-get"] = "/usr/bin/apt-get"
 	sys.commands[sys.key("sh", "-c", "apt-get update >/dev/null 2>&1 && apt-get install -y socat")] = commandResult{err: errors.New("package not found")}
 
-	if err := ensureSocat(sys); err == nil {
+	if err := ensureSocat(context.Background(), sys); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -596,7 +699,7 @@ func TestEnsureSocatNoSupportedPackageManager(t *testing.T) {
 	// Only keep unrelated binaries.
 	sys.lookPaths = map[string]string{"curl": "/usr/bin/curl"}
 
-	if err := ensureSocat(sys); err == nil {
+	if err := ensureSocat(context.Background(), sys); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -673,6 +776,37 @@ func TestFixCertOwnershipNonRootSkipsChown(t *testing.T) {
 	}
 	if len(sys.chownCalls) != 0 {
 		t.Fatalf("expected no chown calls, got %v", sys.chownCalls)
+	}
+}
+
+func TestIssueIPCertDoesNotCleanupUntilCanceledIssuerStops(t *testing.T) {
+	sys := newFakeSystem()
+	sys.setAcmeInstalled()
+	sys.lookPaths["socat"] = "/usr/bin/socat"
+	sys.commandDelay = 200 * time.Millisecond
+
+	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
+	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", "letsencrypt")] = commandResult{out: "OK"}
+	sys.commands[sys.key(acmeSh, "--issue", "-d", "1.2.3.4", "--standalone", "--server", "letsencrypt", "--certificate-profile", "shortlived", "--days", "3", "--httpport", "80", "--force")] = commandResult{out: "slow"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, err := IssueIPCert(ctx, IssueOptions{PublicIPv4: "1.2.3.4", System: sys})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded, got %v", err)
+	}
+	if len(sys.events) == 0 || sys.events[0] != "issuer-stopped" {
+		t.Fatalf("cleanup ran before the issuer stopped: %v", sys.events)
+	}
+	sawCleanup := false
+	for _, event := range sys.events {
+		if event == "cleanup" {
+			sawCleanup = true
+			break
+		}
+	}
+	if !sawCleanup {
+		t.Fatalf("expected cleanup after issuer stop, events=%v", sys.events)
 	}
 }
 

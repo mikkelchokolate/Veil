@@ -5,14 +5,13 @@ import {
 	useQueryClient,
 } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { flexRender } from "@tanstack/react-table";
 import {
-	type ColumnDef,
-	flexRender,
+	type LegacyColumnDef as ColumnDef,
 	getCoreRowModel,
-	useReactTable,
-	type VisibilityState,
-} from "@tanstack/react-table";
-import { useEffect, useMemo, useState } from "react";
+	useLegacyTable,
+} from "@tanstack/react-table/legacy";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { listClients } from "../api/clients";
 import { ApiError, mutationErrorMessage } from "../api/fetcher";
 import { postApiV1ClientsBulk } from "../api/generated/clients/clients";
@@ -102,41 +101,48 @@ export function ClientsPage() {
 	const sort = parsed.sort ?? "created";
 	const searchParam = parsed.search ?? "";
 
-	// S3: debounced server-side search. The input is uncontrolled-local; the
-	// debounced value is what actually reaches the query and the URL.
+	// Editable input is local; the URL search param is the committed value
+	// used by the list query. Typing is debounced into the URL. External
+	// navigation (history, same-route links) overwrites the input and must
+	// cancel a pending debounce so the previous search cannot write back.
 	const [searchInput, setSearchInput] = useState(searchParam);
-	const [searchText, setSearchText] = useState(searchParam);
+	const searchParamRef = useRef(searchParam);
+	searchParamRef.current = searchParam;
+	const userTypedRef = useRef(false);
 	useEffect(() => {
-		const t = setTimeout(() => setSearchText(searchInput.trim()), DEBOUNCE_MS);
-		return () => clearTimeout(t);
-	}, [searchInput]);
-	// Push the debounced value into the URL so it is shareable/restorable.
+		userTypedRef.current = false;
+		setSearchInput(searchParam);
+	}, [searchParam]);
 	useEffect(() => {
-		if (searchText !== searchParam) {
+		if (!userTypedRef.current) return;
+		const t = setTimeout(() => {
+			if (!userTypedRef.current) return;
+			const next = searchInput.trim();
+			if (next === searchParamRef.current) return;
 			void navigate({
 				to: "/clients",
 				search: (prev) => ({
 					...prev,
-					search: searchText || undefined,
+					search: next || undefined,
 					page: 1,
 				}),
 				replace: true,
 			});
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [searchText, searchParam, navigate]);
+		}, DEBOUNCE_MS);
+		return () => clearTimeout(t);
+	}, [searchInput, navigate]);
 
 	const query = useQuery({
 		queryKey: [
 			"clients",
 			"list",
-			{ page, pageSize, searchText, status, inboundId, sort },
+			{ page, pageSize, searchText: searchParam, status, inboundId, sort },
 		],
 		queryFn: () =>
 			listClients({
 				page,
 				pageSize,
-				search: searchText,
+				search: searchParam,
 				inboundId,
 				sort,
 				...(status === "depleted"
@@ -151,7 +157,7 @@ export function ClientsPage() {
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [bulkError, setBulkError] = useState<string | null>(null);
 	const [bulkResults, setBulkResults] = useState<BulkResult[] | null>(null);
-	const [colVis, setColVis] = useState<VisibilityState>({});
+	const [colVis, setColVis] = useState<Record<string, boolean>>({});
 	const [showColMenu, setShowColMenu] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -194,6 +200,29 @@ export function ClientsPage() {
 	});
 
 	const items = (query.data?.items ?? []) as ClientView[];
+	const pageIds = useMemo(() => items.map((c) => c.id), [items]);
+	const selectedOnPage = useMemo(() => {
+		const next = new Set<string>();
+		for (const id of pageIds) {
+			if (selected.has(id)) next.add(id);
+		}
+		return next;
+	}, [pageIds, selected]);
+	const allPageSelected =
+		pageIds.length > 0 && selectedOnPage.size === pageIds.length;
+	const somePageSelected = selectedOnPage.size > 0 && !allPageSelected;
+	useEffect(() => {
+		const visible = new Set(pageIds);
+		setSelected((prev) => {
+			let dropped = false;
+			const next = new Set<string>();
+			for (const id of prev) {
+				if (visible.has(id)) next.add(id);
+				else dropped = true;
+			}
+			return dropped ? next : prev;
+		});
+	}, [pageIds]);
 	const total = query.data?.total ?? 0;
 	const totalPages = Math.max(1, Math.ceil(total / pageSize));
 	const pageCountLabel =
@@ -201,9 +230,9 @@ export function ClientsPage() {
 			? t("clients.pagination.count_one", { n: total })
 			: t("clients.pagination.count_other", { n: total });
 	const deleteCountLabel =
-		selected.size === 1
-			? t("clients.delete.count_one", { n: selected.size })
-			: t("clients.delete.count_other", { n: selected.size });
+		selectedOnPage.size === 1
+			? t("clients.delete.count_one", { n: selectedOnPage.size })
+			: t("clients.delete.count_other", { n: selectedOnPage.size });
 
 	// S3: aggregate summary across the current page (bytes kept as numbers
 	// server-side already; fmtBytes formats without precision loss). Per-client
@@ -226,7 +255,10 @@ export function ClientsPage() {
 						header: () => (
 							<input
 								type="checkbox"
-								checked={items.length > 0 && selected.size === items.length}
+								checked={allPageSelected}
+								ref={(el) => {
+									if (el) el.indeterminate = somePageSelected;
+								}}
 								onChange={toggleAll}
 								aria-label={t("clients.selectAll")}
 							/>
@@ -297,7 +329,7 @@ export function ClientsPage() {
 		expiresAt: t("clients.columns.expires"),
 	};
 
-	const table = useReactTable({
+	const table = useLegacyTable({
 		data: items,
 		columns,
 		getCoreRowModel: getCoreRowModel(),
@@ -315,10 +347,10 @@ export function ClientsPage() {
 	}
 
 	function toggleAll() {
-		if (selected.size === items.length) {
+		if (allPageSelected) {
 			setSelected(new Set());
 		} else {
-			setSelected(new Set(items.map((c) => c.id)));
+			setSelected(new Set(pageIds));
 		}
 	}
 
@@ -338,7 +370,10 @@ export function ClientsPage() {
 						style={{ maxWidth: 260 }}
 						placeholder={t("clients.searchPlaceholder")}
 						value={searchInput}
-						onChange={(e) => setSearchInput(e.target.value)}
+						onChange={(e) => {
+							userTypedRef.current = true;
+							setSearchInput(e.target.value);
+						}}
 						aria-label={t("clients.searchAriaLabel")}
 					/>
 					<Select
@@ -415,7 +450,7 @@ export function ClientsPage() {
 				) : null}
 			</div>
 
-			{isAdmin && selected.size > 0 ? (
+			{isAdmin && selectedOnPage.size > 0 ? (
 				<div
 					className="card"
 					style={{
@@ -426,12 +461,12 @@ export function ClientsPage() {
 					}}
 				>
 					<span className="muted">
-						{t("clients.selected", { n: selected.size })}
+						{t("clients.selected", { n: selectedOnPage.size })}
 					</span>
 					<Button
 						disabled={bulk.isPending}
 						onClick={() =>
-							bulk.mutate({ action: "enable", ids: [...selected] })
+							bulk.mutate({ action: "enable", ids: [...selectedOnPage] })
 						}
 					>
 						{t("common.enable")}
@@ -439,7 +474,7 @@ export function ClientsPage() {
 					<Button
 						disabled={bulk.isPending}
 						onClick={() =>
-							bulk.mutate({ action: "disable", ids: [...selected] })
+							bulk.mutate({ action: "disable", ids: [...selectedOnPage] })
 						}
 					>
 						{t("common.disable")}
@@ -447,7 +482,10 @@ export function ClientsPage() {
 					<Button
 						disabled={bulk.isPending}
 						onClick={() =>
-							bulk.mutate({ action: "reset_traffic", ids: [...selected] })
+							bulk.mutate({
+								action: "reset_traffic",
+								ids: [...selectedOnPage],
+							})
 						}
 					>
 						{t("clients.resetTraffic")}
@@ -588,7 +626,10 @@ export function ClientsPage() {
 							disabled={bulk.isPending}
 							onClick={(e) => {
 								e.preventDefault();
-								bulk.mutate({ action: "delete", ids: [...selected] });
+								bulk.mutate({
+									action: "delete",
+									ids: [...selectedOnPage],
+								});
 							}}
 						>
 							{bulk.isPending

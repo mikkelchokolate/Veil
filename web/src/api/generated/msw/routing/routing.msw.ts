@@ -256,11 +256,19 @@ export const getPostApiRoutingRulesUrl = () => {
  */
 export const postApiRoutingRules = async (routingRule: RoutingRule, options?: Parameters<typeof apiFetch>[1]): Promise<postApiRoutingRulesResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiRoutingRulesResponse>(getPostApiRoutingRulesUrl(),
   {
@@ -275,11 +283,13 @@ return apiFetch<postApiRoutingRulesResponse>(getPostApiRoutingRulesUrl(),
 
 
 
-export const getPostApiRoutingRulesMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError,{data: RoutingRule}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError,{data: RoutingRule}, TContext> => {
+export const getPostApiRoutingRulesMutationKey = () => ['postApiRoutingRules'] as const;
 
-const mutationKey = ['postApiRoutingRules'];
+export const getPostApiRoutingRulesMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError,PostApiRoutingRulesMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError,PostApiRoutingRulesMutationVariables, TContext> => {
+
+const mutationKey = getPostApiRoutingRulesMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -289,7 +299,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiRoutingRules>>, {data: RoutingRule}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiRoutingRules>>, PostApiRoutingRulesMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  postApiRoutingRules(data,requestOptions)
@@ -305,16 +315,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiRoutingRulesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiRoutingRules>>>
     export type PostApiRoutingRulesMutationBody = RoutingRule
     export type PostApiRoutingRulesMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiRoutingRulesMutationVariables = {data: RoutingRule}
 
     /**
  * @summary Create a routing rule
  */
 export const usePostApiRoutingRules = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError,{data: RoutingRule}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiRoutingRules>>, TError,PostApiRoutingRulesMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiRoutingRules>>,
         TError,
-        {data: RoutingRule},
+        PostApiRoutingRulesMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiRoutingRulesMutationOptions(options), queryClient);
@@ -496,11 +507,19 @@ export const getPutApiRoutingRulesNameUrl = (name: string,) => {
 export const putApiRoutingRulesName = async (name: string,
     routingRule: RoutingRule, options?: Parameters<typeof apiFetch>[1]): Promise<putApiRoutingRulesNameResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<putApiRoutingRulesNameResponse>(getPutApiRoutingRulesNameUrl(name),
   {
@@ -515,11 +534,13 @@ return apiFetch<putApiRoutingRulesNameResponse>(getPutApiRoutingRulesNameUrl(nam
 
 
 
-export const getPutApiRoutingRulesNameMutationOptions = <TError = BadRequestResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError,{name: string;data: RoutingRule}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError,{name: string;data: RoutingRule}, TContext> => {
+export const getPutApiRoutingRulesNameMutationKey = () => ['putApiRoutingRulesName'] as const;
 
-const mutationKey = ['putApiRoutingRulesName'];
+export const getPutApiRoutingRulesNameMutationOptions = <TError = BadRequestResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError,PutApiRoutingRulesNameMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError,PutApiRoutingRulesNameMutationVariables, TContext> => {
+
+const mutationKey = getPutApiRoutingRulesNameMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -529,7 +550,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiRoutingRulesName>>, {name: string;data: RoutingRule}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiRoutingRulesName>>, PutApiRoutingRulesNameMutationVariables> = (props) => {
           const {name,data} = props ?? {};
 
           return  putApiRoutingRulesName(name,data,requestOptions)
@@ -545,16 +566,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PutApiRoutingRulesNameMutationResult = NonNullable<Awaited<ReturnType<typeof putApiRoutingRulesName>>>
     export type PutApiRoutingRulesNameMutationBody = RoutingRule
     export type PutApiRoutingRulesNameMutationError = BadRequestResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PutApiRoutingRulesNameMutationVariables = {name: string;data: RoutingRule}
 
     /**
  * @summary Update a routing rule
  */
 export const usePutApiRoutingRulesName = <TError = BadRequestResponse | NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError,{name: string;data: RoutingRule}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiRoutingRulesName>>, TError,PutApiRoutingRulesNameMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof putApiRoutingRulesName>>,
         TError,
-        {name: string;data: RoutingRule},
+        PutApiRoutingRulesNameMutationVariables,
         TContext
       > => {
       return useMutation(getPutApiRoutingRulesNameMutationOptions(options), queryClient);
@@ -624,11 +646,13 @@ export const deleteApiRoutingRulesName = async (name: string, options?: Paramete
 
 
 
-export const getDeleteApiRoutingRulesNameMutationOptions = <TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError,{name: string}, TContext> => {
+export const getDeleteApiRoutingRulesNameMutationKey = () => ['deleteApiRoutingRulesName'] as const;
 
-const mutationKey = ['deleteApiRoutingRulesName'];
+export const getDeleteApiRoutingRulesNameMutationOptions = <TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError,DeleteApiRoutingRulesNameMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError,DeleteApiRoutingRulesNameMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiRoutingRulesNameMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -638,7 +662,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, {name: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, DeleteApiRoutingRulesNameMutationVariables> = (props) => {
           const {name} = props ?? {};
 
           return  deleteApiRoutingRulesName(name,requestOptions)
@@ -654,16 +678,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type DeleteApiRoutingRulesNameMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>>
 
     export type DeleteApiRoutingRulesNameMutationError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type DeleteApiRoutingRulesNameMutationVariables = {name: string}
 
     /**
  * @summary Delete a routing rule
  */
 export const useDeleteApiRoutingRulesName = <TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiRoutingRulesName>>, TError,DeleteApiRoutingRulesNameMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteApiRoutingRulesName>>,
         TError,
-        {name: string},
+        DeleteApiRoutingRulesNameMutationVariables,
         TContext
       > => {
       return useMutation(getDeleteApiRoutingRulesNameMutationOptions(options), queryClient);
@@ -845,11 +870,13 @@ export const postApiRoutingPresetsName = async (name: string, options?: Paramete
 
 
 
-export const getPostApiRoutingPresetsNameMutationOptions = <TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError,{name: string}, TContext> => {
+export const getPostApiRoutingPresetsNameMutationKey = () => ['postApiRoutingPresetsName'] as const;
 
-const mutationKey = ['postApiRoutingPresetsName'];
+export const getPostApiRoutingPresetsNameMutationOptions = <TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError,PostApiRoutingPresetsNameMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError,PostApiRoutingPresetsNameMutationVariables, TContext> => {
+
+const mutationKey = getPostApiRoutingPresetsNameMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -859,7 +886,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, {name: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, PostApiRoutingPresetsNameMutationVariables> = (props) => {
           const {name} = props ?? {};
 
           return  postApiRoutingPresetsName(name,requestOptions)
@@ -875,16 +902,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiRoutingPresetsNameMutationResult = NonNullable<Awaited<ReturnType<typeof postApiRoutingPresetsName>>>
 
     export type PostApiRoutingPresetsNameMutationError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiRoutingPresetsNameMutationVariables = {name: string}
 
     /**
  * @summary Apply a routing preset
  */
 export const usePostApiRoutingPresetsName = <TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiRoutingPresetsName>>, TError,PostApiRoutingPresetsNameMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiRoutingPresetsName>>,
         TError,
-        {name: string},
+        PostApiRoutingPresetsNameMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiRoutingPresetsNameMutationOptions(options), queryClient);

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net"
@@ -23,6 +24,9 @@ type healthRegressionTrafficProvider struct {
 }
 
 func (p *healthRegressionTrafficProvider) Key() string { return p.key }
+func (p *healthRegressionTrafficProvider) ReadContext(context.Context) (client.ProviderBatch, error) {
+	return p.Read()
+}
 func (p *healthRegressionTrafficProvider) Read() (client.ProviderBatch, error) {
 	readings := make([]client.ProviderReading, 0, len(p.readings))
 	for _, reading := range p.readings {

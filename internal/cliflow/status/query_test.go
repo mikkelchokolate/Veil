@@ -37,6 +37,7 @@ func TestNewQueryUsesCustomAuthResolver(t *testing.T) {
 }
 
 func TestResolveListen(t *testing.T) {
+	isolateListenConfig(t)
 	cases := []struct {
 		in, want string
 	}{
@@ -348,6 +349,8 @@ func (alwaysErrorRoundTripper) RoundTrip(*http.Request) (*http.Response, error) 
 }
 
 func TestHTTPClientDefault(t *testing.T) {
+	isolateListenConfig(t)
+	t.Setenv("VEIL_TLS_CERT", "")
 	client := HTTPClient("https://example.com/api/status")
 	if client != http.DefaultClient {
 		t.Fatal("expected HTTPClient to return http.DefaultClient by default")

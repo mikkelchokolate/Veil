@@ -135,11 +135,13 @@ export const getApiApplyState = async ( options?: Parameters<typeof apiFetch>[1]
 
 
 
+export const getGetApiApplyStateMutationKey = () => ['getApiApplyState'] as const;
+
 export const getGetApiApplyStateMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyState>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiApplyState>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiApplyState'];
+const mutationKey = getGetApiApplyStateMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -165,6 +167,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiApplyStateMutationResult = NonNullable<Awaited<ReturnType<typeof getApiApplyState>>>
 
     export type GetApiApplyStateMutationError = unknown
+
 
     /**
  * @summary Desired/applied revisions and derived system state
@@ -217,11 +220,13 @@ export const getApiApplyJobs = async ( options?: Parameters<typeof apiFetch>[1])
 
 
 
+export const getGetApiApplyJobsMutationKey = () => ['getApiApplyJobs'] as const;
+
 export const getGetApiApplyJobsMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobs>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobs>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiApplyJobs'];
+const mutationKey = getGetApiApplyJobsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -247,6 +252,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiApplyJobsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiApplyJobs>>>
 
     export type GetApiApplyJobsMutationError = unknown
+
 
     /**
  * @summary List apply jobs (newest first)
@@ -306,11 +312,13 @@ export const getApiApplyJobsId = async (id: string, options?: Parameters<typeof 
 
 
 
-export const getGetApiApplyJobsIdMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError,{id: string}, TContext> => {
+export const getGetApiApplyJobsIdMutationKey = () => ['getApiApplyJobsId'] as const;
 
-const mutationKey = ['getApiApplyJobsId'];
+export const getGetApiApplyJobsIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError,GetApiApplyJobsIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError,GetApiApplyJobsIdMutationVariables, TContext> => {
+
+const mutationKey = getGetApiApplyJobsIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -320,7 +328,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiApplyJobsId>>, {id: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiApplyJobsId>>, GetApiApplyJobsIdMutationVariables> = (props) => {
           const {id} = props ?? {};
 
           return  getApiApplyJobsId(id,requestOptions)
@@ -336,16 +344,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiApplyJobsIdMutationResult = NonNullable<Awaited<ReturnType<typeof getApiApplyJobsId>>>
 
     export type GetApiApplyJobsIdMutationError = void
+    export type GetApiApplyJobsIdMutationVariables = {id: string}
 
     /**
  * @summary Get one apply job
  */
 export const useGetApiApplyJobsId = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError,GetApiApplyJobsIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof getApiApplyJobsId>>,
         TError,
-        {id: string},
+        GetApiApplyJobsIdMutationVariables,
         TContext
       > => {
       return useMutation(getGetApiApplyJobsIdMutationOptions(options), queryClient);
@@ -681,11 +690,19 @@ export const getPostApiApplyRollbackUrl = () => {
  */
 export const postApiApplyRollback = async (postApiApplyRollbackBody: PostApiApplyRollbackBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiApplyRollbackResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiApplyRollbackResponse>(getPostApiApplyRollbackUrl(),
   {
@@ -826,11 +843,19 @@ export const getPostApiApplyUrl = () => {
  */
 export const postApiApply = async (applyRequest: ApplyRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiApplyResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiApplyResponse>(getPostApiApplyUrl(),
   {
@@ -1091,11 +1116,13 @@ export const getApiApplyHistory = async ( options?: Parameters<typeof apiFetch>[
 
 
 
+export const getGetApiApplyHistoryMutationKey = () => ['getApiApplyHistory'] as const;
+
 export const getGetApiApplyHistoryMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyHistory>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiApplyHistory>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiApplyHistory'];
+const mutationKey = getGetApiApplyHistoryMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1121,6 +1148,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiApplyHistoryMutationResult = NonNullable<Awaited<ReturnType<typeof getApiApplyHistory>>>
 
     export type GetApiApplyHistoryMutationError = unknown
+
 
     /**
  * @summary Apply workflow history
@@ -1187,11 +1215,19 @@ export const getPostApiProfilesRuRecommendedPreviewUrl = () => {
  */
 export const postApiProfilesRuRecommendedPreview = async (rURecommendedPreviewRequest: RURecommendedPreviewRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiProfilesRuRecommendedPreviewResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiProfilesRuRecommendedPreviewResponse>(getPostApiProfilesRuRecommendedPreviewUrl(),
   {

@@ -43,3 +43,22 @@ func TestUFWPlanLEIPCertPort(t *testing.T) {
 		t.Fatalf("unexpected plan:\n got: %#v\nwant: %#v", plan, want)
 	}
 }
+
+func TestUFWPlanStagesSSHBeforePanelPorts(t *testing.T) {
+	plan := UFWPlan(Config{PanelPort: 2096, SSHPorts: []int{2222, 22}})
+	want := []Rule{
+		{Command: "ufw", Args: []string{"allow", "2222/tcp", "comment", "Veil management SSH"}},
+		{Command: "ufw", Args: []string{"allow", "22/tcp", "comment", "Veil management SSH"}},
+		{Command: "ufw", Args: []string{"allow", "2096/tcp", "comment", "Veil panel"}},
+	}
+	if !reflect.DeepEqual(plan, want) {
+		t.Fatalf("unexpected plan:\n got: %#v\nwant: %#v", plan, want)
+	}
+}
+
+func TestUFWPlanOmitsSSHWhenNoPublicPorts(t *testing.T) {
+	plan := UFWPlan(Config{SSHPorts: []int{22}})
+	if len(plan) != 0 {
+		t.Fatalf("local/empty plans must not open SSH or other ports, got %#v", plan)
+	}
+}

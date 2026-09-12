@@ -26,6 +26,9 @@ describe("InboundsPage create payload", () => {
 			http.get("/api/v1/clients", () =>
 				HttpResponse.json({ items: [], total: 0, page: 1, pageSize: 500 }),
 			),
+			http.get("/api/inbounds/:name/clients", () =>
+				HttpResponse.json({ items: [], total: 0, page: 1, pageSize: 500 }),
+			),
 			http.get("/api/protocols", () =>
 				HttpResponse.json([
 					{
@@ -87,7 +90,7 @@ describe("InboundsPage create payload", () => {
 					},
 				]),
 			),
-			http.get("/api/v1/clients", () =>
+			http.get("/api/inbounds/:name/clients", () =>
 				HttpResponse.json(
 					{ error: { message: "clients down" } },
 					{ status: 500 },

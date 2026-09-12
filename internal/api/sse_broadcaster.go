@@ -98,7 +98,7 @@ func (h *sseBroadcaster) buildSnapshot() sseSnapshot {
 	}
 	var clientIDs []string
 	if clientRepo != nil {
-		clients, _, err := clientRepo.List(client.ListFilter{PageSize: 1000})
+		clients, err := clientRepo.AllClients()
 		if err != nil {
 			return snapshot
 		}
@@ -106,7 +106,7 @@ func (h *sseBroadcaster) buildSnapshot() sseSnapshot {
 			clientIDs = append(clientIDs, current.ID)
 		}
 	} else {
-		clients, _, err := clientService.List(client.ListFilter{PageSize: 1000})
+		clients, _, err := clientService.List(client.ListFilter{PageSize: 100000})
 		if err != nil {
 			return snapshot
 		}

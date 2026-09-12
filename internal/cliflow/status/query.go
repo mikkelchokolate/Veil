@@ -2,10 +2,17 @@ package status
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -74,11 +81,141 @@ func (q Query) Run(ctx context.Context) error {
 	return fmt.Errorf("fetch status from %s: %w", strings.Join(candidates, ", "), lastErr)
 }
 
+const DefaultListen = "127.0.0.1:2096"
+
+var (
+	installedEnvFile   string
+	installedStateFile string
+	panelTLSCertFile   string
+)
+
 func ResolveListen(flagValue string) string {
-	if addr := strings.TrimSpace(flagValue); addr != "" {
+	addr := strings.TrimSpace(flagValue)
+	if addr == "" {
+		addr = strings.TrimSpace(os.Getenv("VEIL_LISTEN"))
+	}
+	if addr == "" {
+		addr = strings.TrimSpace(installedEnvValue("VEIL_LISTEN"))
+	}
+	if addr == "" {
+		addr = strings.TrimSpace(installedPanelListen())
+	}
+	if addr == "" {
+		addr = DefaultListen
+	}
+	return normalizeProbeAddr(addr)
+}
+
+func effectiveEnvFile() string {
+	if installedEnvFile != "" {
+		return installedEnvFile
+	}
+	return defaultVeilEnvPath()
+}
+
+func effectiveStateFile() string {
+	if installedStateFile != "" {
+		return installedStateFile
+	}
+	if path := strings.TrimSpace(os.Getenv("VEIL_STATE_PATH")); path != "" {
+		return path
+	}
+	return defaultStatePath()
+}
+
+func defaultVeilEnvPath() string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(windowsProgramData(), "Veil", "veil.env")
+	}
+	return "/etc/veil/veil.env"
+}
+
+func defaultStatePath() string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(windowsProgramData(), "Veil", "state.json")
+	}
+	return "/var/lib/veil/state.json"
+}
+
+func windowsProgramData() string {
+	if pd := strings.TrimSpace(os.Getenv("ProgramData")); pd != "" {
+		return pd
+	}
+	return `C:\ProgramData`
+}
+
+func installedEnvValue(key string) string {
+	body, err := os.ReadFile(effectiveEnvFile())
+	if err != nil {
+		return ""
+	}
+	return envFileValue(body, key)
+}
+
+func envFileValue(body []byte, key string) string {
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		name, value, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(name) != key {
+			continue
+		}
+		return strings.Trim(strings.TrimSpace(value), `"'`)
+	}
+	return ""
+}
+
+func installedPanelListen() string {
+	body, err := os.ReadFile(effectiveStateFile())
+	if err != nil {
+		return ""
+	}
+	var snapshot struct {
+		Settings struct {
+			PanelListen string `json:"panelListen"`
+		} `json:"settings"`
+	}
+	if err := json.Unmarshal(body, &snapshot); err != nil {
+		return ""
+	}
+	return snapshot.Settings.PanelListen
+}
+
+func normalizeProbeAddr(addr string) string {
+	if strings.Contains(addr, "://") {
+		parsed, err := url.Parse(addr)
+		if err != nil || parsed.Host == "" {
+			return addr
+		}
+		host, port, err := net.SplitHostPort(parsed.Host)
+		if err != nil {
+			return addr
+		}
+		parsed.Host = net.JoinHostPort(rewriteUnspecifiedHost(host), port)
+		return parsed.String()
+	}
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
 		return addr
 	}
-	return "127.0.0.1:2096"
+	return net.JoinHostPort(rewriteUnspecifiedHost(host), port)
+}
+
+func rewriteUnspecifiedHost(host string) string {
+	trimmed := strings.Trim(host, "[]")
+	if trimmed == "" || trimmed == "*" || trimmed == "0.0.0.0" {
+		return "127.0.0.1"
+	}
+	ip := net.ParseIP(trimmed)
+	if ip != nil && ip.IsUnspecified() {
+		if ip.To4() == nil {
+			return "::1"
+		}
+		return "127.0.0.1"
+	}
+	return host
 }
 
 func CandidateAddrs(addr string) []string {
@@ -141,4 +278,45 @@ func Fetch(ctx context.Context, url string, token string) (*Response, error) {
 	return &status, nil
 }
 
-var HTTPClient = func(rawURL string) *http.Client { return http.DefaultClient }
+var HTTPClient = defaultHTTPClient
+
+func defaultHTTPClient(rawURL string) *http.Client {
+	if !strings.HasPrefix(strings.ToLower(rawURL), "https://") {
+		return http.DefaultClient
+	}
+	certPath := effectivePanelTLSCertFile()
+	pem, err := os.ReadFile(certPath)
+	if err != nil {
+		return http.DefaultClient
+	}
+	pool, poolErr := x509.SystemCertPool()
+	if poolErr != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
+	if !pool.AppendCertsFromPEM(pem) {
+		return http.DefaultClient
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{RootCAs: pool}
+	return &http.Client{Transport: transport}
+}
+
+func effectivePanelTLSCertFile() string {
+	if path := strings.TrimSpace(os.Getenv("VEIL_TLS_CERT")); path != "" {
+		return path
+	}
+	if path := strings.TrimSpace(installedEnvValue("VEIL_TLS_CERT")); path != "" {
+		return path
+	}
+	if panelTLSCertFile != "" {
+		return panelTLSCertFile
+	}
+	return defaultPanelTLSCertPath()
+}
+
+func defaultPanelTLSCertPath() string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(windowsProgramData(), "Veil", "panel", "tls.crt")
+	}
+	return "/etc/veil/panel/tls.crt"
+}

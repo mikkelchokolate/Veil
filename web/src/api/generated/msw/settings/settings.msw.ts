@@ -268,11 +268,19 @@ export const getPutApiSettingsUrl = () => {
  */
 export const putApiSettings = async (settings: Settings, options?: Parameters<typeof apiFetch>[1]): Promise<putApiSettingsResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<putApiSettingsResponse>(getPutApiSettingsUrl(),
   {
@@ -287,11 +295,13 @@ return apiFetch<putApiSettingsResponse>(getPutApiSettingsUrl(),
 
 
 
-export const getPutApiSettingsMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiSettings>>, TError,{data: Settings}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiSettings>>, TError,{data: Settings}, TContext> => {
+export const getPutApiSettingsMutationKey = () => ['putApiSettings'] as const;
 
-const mutationKey = ['putApiSettings'];
+export const getPutApiSettingsMutationOptions = <TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiSettings>>, TError,PutApiSettingsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiSettings>>, TError,PutApiSettingsMutationVariables, TContext> => {
+
+const mutationKey = getPutApiSettingsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -301,7 +311,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiSettings>>, {data: Settings}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiSettings>>, PutApiSettingsMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  putApiSettings(data,requestOptions)
@@ -317,16 +327,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PutApiSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof putApiSettings>>>
     export type PutApiSettingsMutationBody = Settings
     export type PutApiSettingsMutationError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PutApiSettingsMutationVariables = {data: Settings}
 
     /**
  * @summary Update Panel settings
  */
 export const usePutApiSettings = <TError = BadRequestResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiSettings>>, TError,{data: Settings}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiSettings>>, TError,PutApiSettingsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof putApiSettings>>,
         TError,
-        {data: Settings},
+        PutApiSettingsMutationVariables,
         TContext
       > => {
       return useMutation(getPutApiSettingsMutationOptions(options), queryClient);

@@ -61,7 +61,7 @@ func TestApplyQUICUDPBuffersWritesSysctlAndApplies(t *testing.T) {
 	var specs []string
 	quicCommand = func(name string, args ...string) *exec.Cmd {
 		specs = append(specs, strings.Join(append([]string{name}, args...), " "))
-		return exec.Command("true")
+		return commandExiting(0)
 	}
 	if err := ApplyQUICUDPBuffers(); err != nil {
 		t.Fatal(err)

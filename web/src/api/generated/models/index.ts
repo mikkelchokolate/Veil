@@ -108,6 +108,7 @@ export * from './getApiApplyJobs200.ts';
 export * from './getApiAuditParams.ts';
 export * from './getApiClientLinksSubscriptionFormat.ts';
 export * from './getApiClientLinksSubscriptionParams.ts';
+export * from './getApiInboundsNameClientsParams.ts';
 export * from './getApiLogsParams.ts';
 export * from './getApiV1ClientsIdLinks200.ts';
 export * from './getApiV1EventsParams.ts';

@@ -62,11 +62,8 @@ func TestBackupBeforeApplyBacksUpExistingFiles(t *testing.T) {
 		t.Fatalf("expected 2 backed up files, got %d (entries: %v)", fileCount, entries)
 	}
 
-	// Verify file contents in backup
-	backedFile1 := filepath.Join(backupPath, "file1.txt")
-	backedFile2 := filepath.Join(backupPath, "file2.txt")
-	assertFileContains(t, backedFile1, "hello file1")
-	assertFileContains(t, backedFile2, "hello file2")
+	assertFileContains(t, filepath.Join(backupPath, "0_file1.txt"), "hello file1")
+	assertFileContains(t, filepath.Join(backupPath, "1_file2.txt"), "hello file2")
 }
 
 func TestBackupBeforeApplySkipsNonExistentFiles(t *testing.T) {

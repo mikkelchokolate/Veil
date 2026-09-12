@@ -112,11 +112,13 @@ export const getApiSystem = async ( options?: Parameters<typeof apiFetch>[1]): P
 
 
 
+export const getGetApiSystemMutationKey = () => ['getApiSystem'] as const;
+
 export const getGetApiSystemMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiSystem>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiSystem>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiSystem'];
+const mutationKey = getGetApiSystemMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -142,6 +144,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiSystemMutationResult = NonNullable<Awaited<ReturnType<typeof getApiSystem>>>
 
     export type GetApiSystemMutationError = unknown
+
 
     /**
  * @summary System resource observation
@@ -194,11 +197,13 @@ export const getApiTls = async ( options?: Parameters<typeof apiFetch>[1]): Prom
 
 
 
+export const getGetApiTlsMutationKey = () => ['getApiTls'] as const;
+
 export const getGetApiTlsMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiTls>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiTls>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiTls'];
+const mutationKey = getGetApiTlsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -224,6 +229,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiTlsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiTls>>>
 
     export type GetApiTlsMutationError = unknown
+
 
     /**
  * @summary Panel TLS observation
@@ -276,11 +282,13 @@ export const getApiNetwork = async ( options?: Parameters<typeof apiFetch>[1]): 
 
 
 
+export const getGetApiNetworkMutationKey = () => ['getApiNetwork'] as const;
+
 export const getGetApiNetworkMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiNetwork>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiNetwork>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiNetwork'];
+const mutationKey = getGetApiNetworkMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -306,6 +314,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiNetworkMutationResult = NonNullable<Awaited<ReturnType<typeof getApiNetwork>>>
 
     export type GetApiNetworkMutationError = unknown
+
 
     /**
  * @summary Network counters observation
@@ -358,11 +367,13 @@ export const getApiConnections = async ( options?: Parameters<typeof apiFetch>[1
 
 
 
+export const getGetApiConnectionsMutationKey = () => ['getApiConnections'] as const;
+
 export const getGetApiConnectionsMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiConnections>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiConnections>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiConnections'];
+const mutationKey = getGetApiConnectionsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -388,6 +399,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiConnectionsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiConnections>>>
 
     export type GetApiConnectionsMutationError = unknown
+
 
     /**
  * @summary Listening ports / connections observation
@@ -440,11 +452,13 @@ export const getApiProcesses = async ( options?: Parameters<typeof apiFetch>[1])
 
 
 
+export const getGetApiProcessesMutationKey = () => ['getApiProcesses'] as const;
+
 export const getGetApiProcessesMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiProcesses>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiProcesses>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiProcesses'];
+const mutationKey = getGetApiProcessesMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -470,6 +484,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiProcessesMutationResult = NonNullable<Awaited<ReturnType<typeof getApiProcesses>>>
 
     export type GetApiProcessesMutationError = unknown
+
 
     /**
  * @summary Managed processes observation
@@ -522,11 +537,13 @@ export const getApiDisk = async ( options?: Parameters<typeof apiFetch>[1]): Pro
 
 
 
+export const getGetApiDiskMutationKey = () => ['getApiDisk'] as const;
+
 export const getGetApiDiskMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiDisk>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiDisk>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiDisk'];
+const mutationKey = getGetApiDiskMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -552,6 +569,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiDiskMutationResult = NonNullable<Awaited<ReturnType<typeof getApiDisk>>>
 
     export type GetApiDiskMutationError = unknown
+
 
     /**
  * @summary Disk usage observation
@@ -604,11 +622,13 @@ export const getApiRuntimeObservation = async ( options?: Parameters<typeof apiF
 
 
 
+export const getGetApiRuntimeObservationMutationKey = () => ['getApiRuntimeObservation'] as const;
+
 export const getGetApiRuntimeObservationMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiRuntimeObservation>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiRuntimeObservation>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiRuntimeObservation'];
+const mutationKey = getGetApiRuntimeObservationMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -634,6 +654,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiRuntimeObservationMutationResult = NonNullable<Awaited<ReturnType<typeof getApiRuntimeObservation>>>
 
     export type GetApiRuntimeObservationMutationError = unknown
+
 
     /**
  * @summary Combined runtime observation
@@ -700,11 +721,13 @@ export const getApiLogs = async (params?: GetApiLogsParams, options?: Parameters
 
 
 
-export const getGetApiLogsMutationOptions = <TError = BadRequestResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiLogs>>, TError,{params?: GetApiLogsParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof getApiLogs>>, TError,{params?: GetApiLogsParams}, TContext> => {
+export const getGetApiLogsMutationKey = () => ['getApiLogs'] as const;
 
-const mutationKey = ['getApiLogs'];
+export const getGetApiLogsMutationOptions = <TError = BadRequestResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiLogs>>, TError,GetApiLogsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiLogs>>, TError,GetApiLogsMutationVariables, TContext> => {
+
+const mutationKey = getGetApiLogsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -714,7 +737,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiLogs>>, {params?: GetApiLogsParams}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiLogs>>, GetApiLogsMutationVariables> = (props) => {
           const {params} = props ?? {};
 
           return  getApiLogs(params,requestOptions)
@@ -730,16 +753,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiLogsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiLogs>>>
 
     export type GetApiLogsMutationError = BadRequestResponse
+    export type GetApiLogsMutationVariables = {params?: GetApiLogsParams}
 
     /**
  * @summary Bounded journald reads for managed units
  */
 export const useGetApiLogs = <TError = BadRequestResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiLogs>>, TError,{params?: GetApiLogsParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiLogs>>, TError,GetApiLogsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof getApiLogs>>,
         TError,
-        {params?: GetApiLogsParams},
+        GetApiLogsMutationVariables,
         TContext
       > => {
       return useMutation(getGetApiLogsMutationOptions(options), queryClient);
@@ -799,11 +823,13 @@ export const getRuntimeProvenance = async ( options?: Parameters<typeof apiFetch
 
 
 
+export const getGetRuntimeProvenanceMutationKey = () => ['getRuntimeProvenance'] as const;
+
 export const getGetRuntimeProvenanceMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getRuntimeProvenance>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getRuntimeProvenance>>, TError,void, TContext> => {
 
-const mutationKey = ['getRuntimeProvenance'];
+const mutationKey = getGetRuntimeProvenanceMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -829,6 +855,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetRuntimeProvenanceMutationResult = NonNullable<Awaited<ReturnType<typeof getRuntimeProvenance>>>
 
     export type GetRuntimeProvenanceMutationError = UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse
+
 
     /**
  * @summary Get verified installed runtime provenance

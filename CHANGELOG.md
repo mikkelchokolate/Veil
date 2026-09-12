@@ -4,6 +4,21 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+### Changed
+
+- Protocol runtime pins: Hysteria2 `app/v2.12.2`, Mieru/mita `v3.36.1`,
+  WARP/sing-box `v1.14.0`, and olcRTC `189d16c093c4`. NaiveProxy remains on
+  Caddy `v2.11.4` with the klzgrad forwardproxy fork.
+- Panel toolchain: Go `1.27.1`, Node.js `26.8.2`, pnpm `12.4.1`,
+  Playwright `1.63.0`, Alpine `3.24`, and current Go modules plus Panel SPA
+  dependencies.
+
+### Fixed
+
+- Open GitHub issues #49–#107: backup/rollback safety, installer ACME/UFW,
+  subscriptions, idempotency, traffic observation, clients, live validation,
+  staged updates, and Panel UI races. See individual commits on this branch.
+
 ## [v0.7.0] - 2026-08-23
 
 Architecture rework of the Veil management plane: durable apply, normalized

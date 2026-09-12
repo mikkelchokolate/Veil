@@ -23,6 +23,9 @@ func TestRenderHysteria2RecommendedConfig(t *testing.T) {
 		"url: https://www.bing.com/",
 		"rewriteHost: true",
 		"speedTest: true",
+		"ignoreClientBandwidth: true",
+		"maxIdleTimeout: 2m",
+		"keepAlivePeriod: 10s",
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Fatalf("rendered config missing %q:\n%s", want, cfg)

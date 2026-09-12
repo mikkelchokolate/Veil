@@ -2045,6 +2045,14 @@ type PutApiInboundsNameParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// GetApiInboundsNameClientsParams defines parameters for GetApiInboundsNameClients.
+type GetApiInboundsNameClientsParams struct {
+	Page     *int    `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *int    `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+	Search   *string `form:"search,omitempty" json:"search,omitempty"`
+	Sort     *string `form:"sort,omitempty" json:"sort,omitempty"`
+}
+
 // GetApiLogsParams defines parameters for GetApiLogs.
 type GetApiLogsParams struct {
 	Unit  *string `form:"unit,omitempty" json:"unit,omitempty"`
@@ -3056,6 +3064,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /api/inbounds/{name} (the `PutApiInboundsName` operationId).
 	PutApiInboundsName(ctx context.Context, name Name, params *PutApiInboundsNameParams, body PutApiInboundsNameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiInboundsNameClients List clients attached to one inbound
+	//
+	// Corresponds with GET /api/inbounds/{name}/clients (the `GetApiInboundsNameClients` operationId).
+	GetApiInboundsNameClients(ctx context.Context, name Name, params *GetApiInboundsNameClientsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiLogs Bounded journald reads for managed units
 	//
@@ -4487,6 +4500,21 @@ func (c *Client) PutApiInboundsNameWithBody(ctx context.Context, name Name, para
 // Corresponds with PUT /api/inbounds/{name} (the `PutApiInboundsName` operationId).
 func (c *Client) PutApiInboundsName(ctx context.Context, name Name, params *PutApiInboundsNameParams, body PutApiInboundsNameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutApiInboundsNameRequest(c.Server, name, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetApiInboundsNameClients List clients attached to one inbound
+//
+// Corresponds with GET /api/inbounds/{name}/clients (the `GetApiInboundsNameClients` operationId).
+func (c *Client) GetApiInboundsNameClients(ctx context.Context, name Name, params *GetApiInboundsNameClientsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiInboundsNameClientsRequest(c.Server, name, params)
 	if err != nil {
 		return nil, err
 	}
@@ -7487,6 +7515,103 @@ func NewPutApiInboundsNameRequestWithBody(server string, name Name, params *PutA
 			req.Header.Set("Idempotency-Key", headerParam0)
 		}
 
+	}
+
+	return req, nil
+}
+
+// NewGetApiInboundsNameClientsRequest constructs an http.Request for the GetApiInboundsNameClients method
+func NewGetApiInboundsNameClientsRequest(server string, name Name, params *GetApiInboundsNameClientsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "name", name, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/inbounds/%s/clients", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PageSize != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "pageSize", *params.PageSize, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Search != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "search", *params.Search, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "sort", *params.Sort, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -10875,6 +11000,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /api/inbounds/{name} (the `PutApiInboundsName` operationId).
 	PutApiInboundsNameWithResponse(ctx context.Context, name Name, params *PutApiInboundsNameParams, body PutApiInboundsNameJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiInboundsNameResponse, error)
 
+	// GetApiInboundsNameClientsWithResponse List clients attached to one inbound
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/inbounds/{name}/clients (the `GetApiInboundsNameClients` operationId).
+	GetApiInboundsNameClientsWithResponse(ctx context.Context, name Name, params *GetApiInboundsNameClientsParams, reqEditors ...RequestEditorFn) (*GetApiInboundsNameClientsResponse, error)
+
 	// GetApiLogsWithResponse Bounded journald reads for managed units
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -14031,6 +14163,61 @@ func (r PutApiInboundsNameResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PutApiInboundsNameResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetApiInboundsNameClientsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ClientListResponse
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiInboundsNameClientsResponse) GetJSON200() *ClientListResponse {
+	return r.JSON200
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetApiInboundsNameClientsResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r GetApiInboundsNameClientsResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiInboundsNameClientsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiInboundsNameClientsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiInboundsNameClientsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiInboundsNameClientsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -18570,6 +18757,19 @@ func (c *ClientWithResponses) PutApiInboundsNameWithResponse(ctx context.Context
 	return ParsePutApiInboundsNameResponse(rsp)
 }
 
+// GetApiInboundsNameClientsWithResponse List clients attached to one inbound
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/inbounds/{name}/clients (the `GetApiInboundsNameClients` operationId).
+func (c *ClientWithResponses) GetApiInboundsNameClientsWithResponse(ctx context.Context, name Name, params *GetApiInboundsNameClientsParams, reqEditors ...RequestEditorFn) (*GetApiInboundsNameClientsResponse, error) {
+	rsp, err := c.GetApiInboundsNameClients(ctx, name, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiInboundsNameClientsResponse(rsp)
+}
+
 // GetApiLogsWithResponse Bounded journald reads for managed units
 //
 // Returns a wrapper object for the known response body format(s).
@@ -21817,6 +22017,46 @@ func ParsePutApiInboundsNameResponse(rsp *http.Response) (*PutApiInboundsNameRes
 			return nil, err
 		}
 		response.JSON423 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiInboundsNameClientsResponse parses an HTTP response from a GetApiInboundsNameClientsWithResponse call
+func ParseGetApiInboundsNameClientsResponse(rsp *http.Response) (*GetApiInboundsNameClientsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiInboundsNameClientsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ClientListResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest ServiceUnavailable

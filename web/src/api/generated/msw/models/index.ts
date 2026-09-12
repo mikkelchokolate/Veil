@@ -108,6 +108,7 @@ export * from './getApiApplyJobs200.msw.ts';
 export * from './getApiAuditParams.msw.ts';
 export * from './getApiClientLinksSubscriptionFormat.msw.ts';
 export * from './getApiClientLinksSubscriptionParams.msw.ts';
+export * from './getApiInboundsNameClientsParams.msw.ts';
 export * from './getApiLogsParams.msw.ts';
 export * from './getApiV1ClientsIdLinks200.msw.ts';
 export * from './getApiV1EventsParams.msw.ts';

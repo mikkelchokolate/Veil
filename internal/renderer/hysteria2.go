@@ -72,6 +72,16 @@ type hysteria2YAML struct {
 	// speedTest lets the official Hysteria client measure the QUIC path
 	// directly (not Ookla through proxied TCP).
 	SpeedTest bool `yaml:"speedTest"`
+	// ignoreClientBandwidth disables Hysteria Brutal CC using the client's
+	// advertised rates. GUI clients (Throne, NekoBox) often send wrong
+	// bandwidth and the QUIC path then stalls ("pauses") under load.
+	IgnoreClientBandwidth bool               `yaml:"ignoreClientBandwidth"`
+	QUIC                  *hysteria2QUICYAML `yaml:"quic,omitempty"`
+}
+
+type hysteria2QUICYAML struct {
+	MaxIdleTimeout  string `yaml:"maxIdleTimeout,omitempty"`
+	KeepAlivePeriod string `yaml:"keepAlivePeriod,omitempty"`
 }
 
 type hysteria2OutboundYAML struct {
@@ -131,6 +141,11 @@ func RenderHysteria2(cfg Hysteria2Config) (string, error) {
 	doc.Masquerade.Proxy.URL = cfg.MasqueradeURL
 	doc.Masquerade.Proxy.RewriteHost = true
 	doc.SpeedTest = true
+	doc.IgnoreClientBandwidth = true
+	doc.QUIC = &hysteria2QUICYAML{
+		MaxIdleTimeout:  "2m",
+		KeepAlivePeriod: "10s",
+	}
 	if cfg.Upstream != "" {
 		acl := renderHysteria2ACL(cfg)
 		if len(acl) > 0 {

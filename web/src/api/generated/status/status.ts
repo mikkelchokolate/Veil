@@ -115,11 +115,13 @@ export const getHealthz = async ( options?: Parameters<typeof apiFetch>[1]): Pro
 
 
 
+export const getGetHealthzMutationKey = () => ['getHealthz'] as const;
+
 export const getGetHealthzMutationOptions = <TError = UnauthorizedResponse | HealthResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getHealthz>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getHealthz>>, TError,void, TContext> => {
 
-const mutationKey = ['getHealthz'];
+const mutationKey = getGetHealthzMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -145,6 +147,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetHealthzMutationResult = NonNullable<Awaited<ReturnType<typeof getHealthz>>>
 
     export type GetHealthzMutationError = UnauthorizedResponse | HealthResponse
+
 
     /**
  * @summary Liveness/readiness probe
@@ -209,11 +212,13 @@ export const getMetrics = async ( options?: Parameters<typeof apiFetch>[1]): Pro
 
 
 
+export const getGetMetricsMutationKey = () => ['getMetrics'] as const;
+
 export const getGetMetricsMutationOptions = <TError = UnauthorizedResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getMetrics>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getMetrics>>, TError,void, TContext> => {
 
-const mutationKey = ['getMetrics'];
+const mutationKey = getGetMetricsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -239,6 +244,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetMetricsMutationResult = NonNullable<Awaited<ReturnType<typeof getMetrics>>>
 
     export type GetMetricsMutationError = UnauthorizedResponse
+
 
     /**
  * @summary Prometheus metrics exposition
@@ -298,11 +304,13 @@ export const getApiStatus = async ( options?: Parameters<typeof apiFetch>[1]): P
 
 
 
+export const getGetApiStatusMutationKey = () => ['getApiStatus'] as const;
+
 export const getGetApiStatusMutationOptions = <TError = UnauthorizedResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiStatus>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiStatus>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiStatus'];
+const mutationKey = getGetApiStatusMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -328,6 +336,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiStatusMutationResult = NonNullable<Awaited<ReturnType<typeof getApiStatus>>>
 
     export type GetApiStatusMutationError = UnauthorizedResponse
+
 
     /**
  * @summary Service status snapshot for managed systemd units
@@ -380,11 +389,13 @@ export const getApiFirewall = async ( options?: Parameters<typeof apiFetch>[1]):
 
 
 
+export const getGetApiFirewallMutationKey = () => ['getApiFirewall'] as const;
+
 export const getGetApiFirewallMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiFirewall>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiFirewall>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiFirewall'];
+const mutationKey = getGetApiFirewallMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -410,6 +421,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiFirewallMutationResult = NonNullable<Awaited<ReturnType<typeof getApiFirewall>>>
 
     export type GetApiFirewallMutationError = unknown
+
 
     /**
  * @summary Firewall rule plan and status

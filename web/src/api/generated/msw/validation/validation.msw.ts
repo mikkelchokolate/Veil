@@ -135,11 +135,19 @@ export const getPostApiValidationUrl = () => {
  */
 export const postApiValidation = async (validationRequest: ValidationRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiValidationResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiValidationResponse>(getPostApiValidationUrl(),
   {
@@ -154,11 +162,13 @@ return apiFetch<postApiValidationResponse>(getPostApiValidationUrl(),
 
 
 
-export const getPostApiValidationMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiValidation>>, TError,{data: ValidationRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiValidation>>, TError,{data: ValidationRequest}, TContext> => {
+export const getPostApiValidationMutationKey = () => ['postApiValidation'] as const;
 
-const mutationKey = ['postApiValidation'];
+export const getPostApiValidationMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiValidation>>, TError,PostApiValidationMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiValidation>>, TError,PostApiValidationMutationVariables, TContext> => {
+
+const mutationKey = getPostApiValidationMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -168,7 +178,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiValidation>>, {data: ValidationRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiValidation>>, PostApiValidationMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  postApiValidation(data,requestOptions)
@@ -184,16 +194,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiValidationMutationResult = NonNullable<Awaited<ReturnType<typeof postApiValidation>>>
     export type PostApiValidationMutationBody = ValidationRequest
     export type PostApiValidationMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiValidationMutationVariables = {data: ValidationRequest}
 
     /**
  * @summary Validate a candidate configuration against live host state
  */
 export const usePostApiValidation = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiValidation>>, TError,{data: ValidationRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiValidation>>, TError,PostApiValidationMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiValidation>>,
         TError,
-        {data: ValidationRequest},
+        PostApiValidationMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiValidationMutationOptions(options), queryClient);

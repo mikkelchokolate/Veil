@@ -21,7 +21,7 @@ var fileCopierSync = (*os.File).Sync
 // fileCopierCopy is overridable in tests to inject copy failures.
 var fileCopierCopy = io.Copy
 
-// Copy copies a file from src to dst preserving the given mode and syncing the destination.
+// Copy copies src to dst, setting mode on a sibling temp file before replace.
 func (FileCopier) Copy(src, dst string, mode os.FileMode) error {
 	srcFile, err := os.Open(src)
 	if err != nil {
@@ -29,20 +29,42 @@ func (FileCopier) Copy(src, dst string, mode os.FileMode) error {
 	}
 	defer srcFile.Close()
 
-	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	dir := filepath.Dir(dst)
+	tmp, err := os.CreateTemp(dir, ".veil-copy-*")
 	if err != nil {
 		return fmt.Errorf("create destination: %w", err)
 	}
-	if _, err := fileCopierCopy(dstFile, srcFile); err != nil {
-		_ = dstFile.Close()
+	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		_ = tmp.Close()
+		if !committed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	if _, err := fileCopierCopy(tmp, srcFile); err != nil {
 		return fmt.Errorf("copy: %w", err)
 	}
-	if err := fileCopierSync(dstFile); err != nil {
-		_ = dstFile.Close()
+	if err := os.Chmod(tmpPath, mode); err != nil {
 		return err
 	}
-	if err := dstFile.Close(); err != nil {
+	if err := fileCopierSync(tmp); err != nil {
 		return err
 	}
-	return syncDirectory(filepath.Dir(dst))
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if existing, err := os.Lstat(dst); err == nil {
+		if err := restoreChownToMatch(tmpPath, existing); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.Rename(tmpPath, dst); err != nil {
+		return fmt.Errorf("create destination: %w", err)
+	}
+	committed = true
+	return syncDirectory(dir)
 }

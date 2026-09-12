@@ -280,3 +280,73 @@ export const DeleteApiInboundsNameHeader = zod.object({
 
 export const DeleteApiInboundsNameResponse = zod.unknown()
 
+/**
+ * @summary List clients attached to one inbound
+ */
+
+
+
+export const GetApiInboundsNameClientsParams = zod.object({
+  "name": zod.string().min(1)
+})
+
+
+export const getApiInboundsNameClientsQueryPageSizeMax = 500;
+
+
+
+export const GetApiInboundsNameClientsQueryParams = zod.object({
+  "page": zod.int().min(1).optional(),
+  "pageSize": zod.int().min(1).max(getApiInboundsNameClientsQueryPageSizeMax).optional(),
+  "search": zod.string().optional(),
+  "sort": zod.string().optional()
+})
+
+export const getApiInboundsNameClientsResponseItemsItemQuotaBytesMin = 0;
+export const getApiInboundsNameClientsResponseItemsItemQuotaBytesMax = 9007199254740991;
+
+
+
+export const GetApiInboundsNameClientsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string().optional(),
+  "enabled": zod.boolean().optional(),
+  "groupId": zod.string().optional(),
+  "quotaBytes": zod.int().min(getApiInboundsNameClientsResponseItemsItemQuotaBytesMin).max(getApiInboundsNameClientsResponseItemsItemQuotaBytesMax).optional(),
+  "quotaResetPolicy": zod.string().optional(),
+  "quotaResetAt": zod.int().optional(),
+  "expiresAt": zod.int().optional(),
+  "deviceLimit": zod.int().optional(),
+  "notes": zod.string().optional(),
+  "depleted": zod.boolean().optional(),
+  "status": zod.enum(['active', 'disabled', 'expired', 'depleted', 'pending_apply', 'apply_failed', 'orphaned']).describe('Effective status.'),
+  "inboundIds": zod.array(zod.string()).optional(),
+  "hasCreds": zod.boolean().optional(),
+  "createdAt": zod.int().optional(),
+  "updatedAt": zod.int().optional(),
+  "version": zod.int().optional(),
+  "bindings": zod.array(zod.object({
+  "id": zod.string(),
+  "inboundId": zod.string(),
+  "runtimeIdentity": zod.string(),
+  "enabled": zod.boolean(),
+  "version": zod.int(),
+  "capability": zod.object({
+  "protocol": zod.string(),
+  "transports": zod.array(zod.string()),
+  "perClientCredentials": zod.boolean(),
+  "requiresCaddy": zod.boolean()
+}).optional(),
+  "credential": zod.object({
+  "configured": zod.boolean(),
+  "kind": zod.string().optional(),
+  "version": zod.int().optional(),
+  "rotatedAt": zod.int().optional()
+}).optional()
+})).optional()
+})),
+  "total": zod.int()
+})
+

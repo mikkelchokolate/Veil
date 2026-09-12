@@ -6,14 +6,22 @@ import (
 	"testing"
 )
 
-func TestDockerfileHealthcheckUsesExplicitHTTPForDefaultServe(t *testing.T) {
+func TestDockerfileHealthcheckUsesContainerContract(t *testing.T) {
 	body, err := os.ReadFile("../../Dockerfile")
 	if err != nil {
 		t.Fatal(err)
 	}
 	dockerfile := string(body)
-	if !strings.Contains(dockerfile, `veil status --listen http://127.0.0.1:2096 --json`) {
-		t.Fatalf("Dockerfile healthcheck should use explicit HTTP for default non-TLS serve:\n%s", dockerfile)
+	if strings.Contains(dockerfile, `veil status --listen http://127.0.0.1:2096 --json`) {
+		t.Fatalf("Dockerfile healthcheck still hardcodes HTTP :2096:\n%s", dockerfile)
+	}
+	for _, want := range []string{
+		"VEIL_CONTAINER_HEALTH_PATH=/var/lib/veil/container-health.json",
+		"CMD veil healthcheck",
+	} {
+		if !strings.Contains(dockerfile, want) {
+			t.Fatalf("Dockerfile missing %q:\n%s", want, dockerfile)
+		}
 	}
 }
 

@@ -1,6 +1,10 @@
 package backup
 
-import "os"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+)
 
 func backupPathExists(path string) (bool, error) {
 	_, err := os.Stat(path)
@@ -11,4 +15,12 @@ func backupPathExists(path string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func backupPathWithin(root, candidate string) bool {
+	relative, err := filepath.Rel(root, candidate)
+	if err != nil || relative == "." || filepath.IsAbs(relative) {
+		return false
+	}
+	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }

@@ -37,6 +37,7 @@ type InstallPlanInput struct {
 	PanelPort    int
 	CaddyBinary  string
 	LEIPCertPort int
+	SSHPorts     []int
 }
 
 type InstallPlan struct {
@@ -73,6 +74,10 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 		panelPort = 0
 		panelHTTPSPort = 443
 	}
+	sshPorts := append([]int(nil), input.SSHPorts...)
+	if len(sshPorts) == 0 {
+		sshPorts = firewall.DetectSSHPorts()
+	}
 	return InstallPlan{
 		Profile:        profile,
 		Platform:       hostenv.Platform{OS: input.Platform.OS, Arch: arch},
@@ -83,6 +88,7 @@ func BuildInstallPlan(profile RURecommendedProfile, input InstallPlanInput) (Ins
 			PanelPort:      panelPort,
 			PanelHTTPSPort: panelHTTPSPort,
 			LEIPCertPort:   input.LEIPCertPort,
+			SSHPorts:       sshPorts,
 		}),
 		PanelTools: []string{"speedtest-cli or speedtest"},
 	}, nil

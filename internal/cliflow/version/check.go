@@ -85,29 +85,178 @@ func FetchLatestReleaseTag() (string, error) {
 	return release.TagName, nil
 }
 
+type semver struct {
+	major, minor, patch int
+	pre                 []preIdent
+}
+
+type preIdent struct {
+	num   int
+	str   string
+	isNum bool
+}
+
 func Compare(a, b string) int {
-	a = strings.TrimPrefix(a, "v")
-	b = strings.TrimPrefix(b, "v")
-	partsA := strings.Split(a, ".")
-	partsB := strings.Split(b, ".")
-	maxLen := len(partsA)
-	if len(partsB) > maxLen {
-		maxLen = len(partsB)
+	va, okA := parseSemver(a)
+	vb, okB := parseSemver(b)
+	if !okA && !okB {
+		return 0
 	}
-	for i := 0; i < maxLen; i++ {
-		var va, vb int
-		if i < len(partsA) {
-			fmt.Sscanf(partsA[i], "%d", &va)
+	if !okA {
+		return -1
+	}
+	if !okB {
+		return 1
+	}
+	return va.compare(vb)
+}
+
+func parseSemver(v string) (semver, bool) {
+	v = strings.TrimSpace(v)
+	v = strings.TrimPrefix(v, "v")
+	if v == "" {
+		return semver{}, false
+	}
+	corePre, _, _ := strings.Cut(v, "+")
+	core, pre, hasPre := strings.Cut(corePre, "-")
+	parts := strings.Split(core, ".")
+	if len(parts) < 1 || len(parts) > 3 {
+		return semver{}, false
+	}
+	parsed := semver{}
+	for i, part := range parts {
+		n, ok := parseNumericIdent(part)
+		if !ok {
+			return semver{}, false
 		}
-		if i < len(partsB) {
-			fmt.Sscanf(partsB[i], "%d", &vb)
+		switch i {
+		case 0:
+			parsed.major = n
+		case 1:
+			parsed.minor = n
+		case 2:
+			parsed.patch = n
 		}
-		if va < vb {
-			return -1
+	}
+	if !hasPre {
+		return parsed, true
+	}
+	if pre == "" {
+		return semver{}, false
+	}
+	for _, ident := range strings.Split(pre, ".") {
+		if ident == "" {
+			return semver{}, false
 		}
-		if va > vb {
-			return 1
+		if isAllDigits(ident) {
+			n, ok := parseNumericIdent(ident)
+			if !ok {
+				return semver{}, false
+			}
+			parsed.pre = append(parsed.pre, preIdent{num: n, isNum: true})
+			continue
 		}
+		if !isPrereleaseIdent(ident) {
+			return semver{}, false
+		}
+		parsed.pre = append(parsed.pre, preIdent{str: ident})
+	}
+	return parsed, true
+}
+
+func (a semver) compare(b semver) int {
+	if c := compareInt(a.major, b.major); c != 0 {
+		return c
+	}
+	if c := compareInt(a.minor, b.minor); c != 0 {
+		return c
+	}
+	if c := compareInt(a.patch, b.patch); c != 0 {
+		return c
+	}
+	if len(a.pre) == 0 && len(b.pre) == 0 {
+		return 0
+	}
+	if len(a.pre) == 0 {
+		return 1
+	}
+	if len(b.pre) == 0 {
+		return -1
+	}
+	n := min(len(a.pre), len(b.pre))
+	for i := 0; i < n; i++ {
+		if c := a.pre[i].compare(b.pre[i]); c != 0 {
+			return c
+		}
+	}
+	return compareInt(len(a.pre), len(b.pre))
+}
+
+func (a preIdent) compare(b preIdent) int {
+	if a.isNum && b.isNum {
+		return compareInt(a.num, b.num)
+	}
+	if a.isNum {
+		return -1
+	}
+	if b.isNum {
+		return 1
+	}
+	if a.str < b.str {
+		return -1
+	}
+	if a.str > b.str {
+		return 1
+	}
+	return 0
+}
+
+func parseNumericIdent(s string) (int, bool) {
+	if s == "" || !isAllDigits(s) {
+		return 0, false
+	}
+	n := 0
+	for i := 0; i < len(s); i++ {
+		n = n*10 + int(s[i]-'0')
+		if n < 0 {
+			return 0, false
+		}
+	}
+	return n, true
+}
+
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func isPrereleaseIdent(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func compareInt(a, b int) int {
+	if a < b {
+		return -1
+	}
+	if a > b {
+		return 1
 	}
 	return 0
 }

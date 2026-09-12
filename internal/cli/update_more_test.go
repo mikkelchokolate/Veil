@@ -231,8 +231,15 @@ func TestRestartUpdatedVeilFailsHealthCheckWithoutStaged(t *testing.T) {
 func TestRestartUpdatedVeilStagedHealthCheckRollsBack(t *testing.T) {
 	oldRestart := runSystemctlRestart
 	oldHealth := updateHealthChecker
+	healthCalls := 0
 	runSystemctlRestart = func(string) error { return nil }
-	updateHealthChecker = func(string, string, time.Duration) error { return fmt.Errorf("unhealthy") }
+	updateHealthChecker = func(string, string, time.Duration) error {
+		healthCalls++
+		if healthCalls == 1 {
+			return fmt.Errorf("unhealthy")
+		}
+		return nil
+	}
 	t.Cleanup(func() {
 		runSystemctlRestart = oldRestart
 		updateHealthChecker = oldHealth
@@ -256,6 +263,9 @@ func TestRestartUpdatedVeilStagedHealthCheckRollsBack(t *testing.T) {
 	body, _ := os.ReadFile(current)
 	if string(body) != "old" {
 		t.Fatalf("expected old binary restored, got %q", body)
+	}
+	if healthCalls < 2 {
+		t.Fatalf("restored binary was never health-checked: health calls = %d", healthCalls)
 	}
 	if !strings.Contains(out.String(), "Rolled back to previous binary") {
 		t.Fatalf("missing rollback message:\n%s", out.String())

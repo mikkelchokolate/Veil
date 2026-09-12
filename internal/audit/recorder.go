@@ -94,6 +94,9 @@ func NewRecorder(path string, options RecorderOptions) *Recorder {
 		spoolPath: options.SpoolPath, queueCapacity: queueCapacity,
 		backpressurePolicy: policy, maxSpoolBytes: maxSpoolBytes,
 	}
+	if err := recorder.repairTornPrimaryTailLocked(); err != nil {
+		recorder.degraded = err
+	}
 	if err := recorder.replaySpool(); err != nil {
 		recorder.degraded = err
 	}
@@ -149,6 +152,9 @@ func (r *Recorder) Degraded() error {
 
 func (r *Recorder) appendPrimaryLocked(body []byte) error {
 	if err := os.MkdirAll(filepath.Dir(r.path), 0o700); err != nil {
+		return err
+	}
+	if err := r.repairTornPrimaryTailLocked(); err != nil {
 		return err
 	}
 	if err := r.rotateIfNeededLocked(int64(len(body))); err != nil {
@@ -300,6 +306,56 @@ func (r *Recorder) List(limit int, before time.Time) ([]Record, error) {
 	return records, nil
 }
 
+// ListMatching returns up to limit records that satisfy match, newest first,
+// walking the complete retained log rather than stopping after a global page
+// of unrelated events. A nil match includes every record (subject to before).
+func (r *Recorder) ListMatching(limit int, before time.Time, match func(Record) bool) ([]Record, error) {
+	if r == nil || r.path == "" {
+		return []Record{}, nil
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	matched := make([]Record, 0, limit)
+
+	for generation := 0; generation <= r.backups; generation++ {
+		path := r.path
+		if generation > 0 {
+			path += "." + strconv.Itoa(generation)
+		}
+		fileRecords, err := readRecordsBounded(path, r.maxBytes)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		for i := len(fileRecords) - 1; i >= 0; i-- {
+			record := fileRecords[i]
+			if !before.IsZero() && !record.Timestamp.Before(before) {
+				continue
+			}
+			if match != nil && !match(record) {
+				continue
+			}
+			matched = append(matched, record)
+		}
+	}
+	sort.SliceStable(matched, func(i, j int) bool {
+		return matched[i].Timestamp.After(matched[j].Timestamp)
+	})
+	if len(matched) > limit {
+		matched = matched[:limit]
+	}
+	return matched, nil
+}
+
 func (r *Recorder) rotateIfNeededLocked(incoming int64) error {
 	info, err := os.Stat(r.path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -376,6 +432,68 @@ func readRecordsBounded(path string, maxBytes int64) ([]Record, error) {
 		records = append(records, record)
 	}
 	return records, nil
+}
+
+func (r *Recorder) repairTornPrimaryTailLocked() error {
+	if r == nil || r.path == "" {
+		return nil
+	}
+	file, err := os.OpenFile(r.path, os.O_RDWR, 0o600)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	closeFile := func() error {
+		return file.Close()
+	}
+	info, err := file.Stat()
+	if err != nil {
+		_ = closeFile()
+		return err
+	}
+	if info.Size() == 0 {
+		return closeFile()
+	}
+	body := make([]byte, info.Size())
+	if _, err := file.ReadAt(body, 0); err != nil {
+		_ = closeFile()
+		return err
+	}
+	if bytes.HasSuffix(body, []byte{'\n'}) {
+		return closeFile()
+	}
+	lastNL := bytes.LastIndexByte(body, '\n')
+	var lastLine []byte
+	keep := int64(0)
+	if lastNL >= 0 {
+		lastLine = body[lastNL+1:]
+		keep = int64(lastNL + 1)
+	} else {
+		lastLine = body
+	}
+	if len(bytes.TrimSpace(lastLine)) == 0 {
+		return closeFile()
+	}
+	var record Record
+	if json.Unmarshal(lastLine, &record) == nil {
+		if _, err := file.WriteAt([]byte{'\n'}, info.Size()); err != nil {
+			_ = closeFile()
+			return err
+		}
+	} else if err := file.Truncate(keep); err != nil {
+		_ = closeFile()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		_ = closeFile()
+		return err
+	}
+	if err := closeFile(); err != nil {
+		return err
+	}
+	return syncDirectory(filepath.Dir(r.path))
 }
 
 func syncDirectory(path string) error {

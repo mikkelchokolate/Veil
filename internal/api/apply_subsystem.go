@@ -230,40 +230,62 @@ func (s *managementState) registerTrafficProvidersLocked() {
 	if s.trafficCollector == nil || s.clientRepo == nil {
 		return
 	}
-	if err := s.trafficCollector.ResetProductionProviders(s.buildTrafficProvidersLocked()); err != nil {
+	providers, err := s.buildTrafficProvidersLocked()
+	if err != nil {
+		log.Printf("traffic: preserve existing providers after refresh failure: %v", err)
+		s.trafficCollector.MarkDegraded("collector", err)
+		return
+	}
+	if err := s.trafficCollector.ResetProductionProviders(providers); err != nil {
 		s.trafficCollector.MarkDegraded("collector", err)
 	}
 }
 
-// buildTrafficProvidersLocked constructs TrafficProviders for every supported
-// protocol with live runtime roots. Caller must hold s.mu.
-func (s *managementState) buildTrafficProvidersLocked() []client.TrafficProvider {
+// buildTrafficProvidersLocked constructs TrafficProviders for the live applied
+// configuration. A database read failure returns an error so the caller can
+// keep the last working provider set. Caller must hold s.mu.
+func (s *managementState) buildTrafficProvidersLocked() ([]client.TrafficProvider, error) {
 	if s.trafficCollector == nil || s.clientRepo == nil {
-		return nil
+		return nil, nil
 	}
 	allBindings, err := s.clientRepo.AllBindings()
 	if err != nil {
-		log.Printf("traffic: list bindings for provider: %v", err)
-		return nil
+		return nil, fmt.Errorf("list bindings for provider: %w", err)
 	}
 	allClients, err := s.clientRepo.AllClients()
 	if err != nil {
-		log.Printf("traffic: list clients for provider: %v", err)
-		return nil
+		return nil, fmt.Errorf("list clients for provider: %w", err)
 	}
+	inbounds, settings := s.liveTrafficObservationConfigLocked()
 	providers := []client.TrafficProvider{}
-	for _, inbound := range s.inbounds {
+	for _, inbound := range inbounds {
 		if inbound.Protocol != "hysteria2" || !inbound.Enabled {
 			continue
 		}
 		bindings := hysteria2TrafficIdentityMap(inbound.Name, inbound.Profiles, allBindings, allClients)
 		endpoint := fmt.Sprintf("http://127.0.0.1:%d/traffic", inbound.Port)
-		secret := hysteria2.TrafficStatsSecret(s.settings, inbound)
+		secret := hysteria2.TrafficStatsSecret(settings, inbound)
 		provider := hysteria2.NewAuthenticatedStatsProvider("hysteria2:"+inbound.Name, endpoint, secret, bindings)
 		providers = append(providers, provider)
 		log.Printf("traffic: registered authenticated hysteria2 provider for inbound %s", inbound.Name)
 	}
-	return providers
+	return providers, nil
+}
+
+func (s *managementState) liveTrafficObservationConfigLocked() ([]Inbound, Settings) {
+	if s.applyTrackingEnabled() && s.applyRevisions != nil && s.applySnapshots != nil {
+		revisions, err := s.applyRevisions.Get()
+		if err == nil && revisions.Applied > 0 {
+			payload, err := s.applySnapshots.Load(revisions.Applied)
+			if err == nil {
+				var snapshot managementSnapshot
+				if err := json.Unmarshal(payload, &snapshot); err == nil {
+					return snapshot.Inbounds, snapshot.Settings
+				}
+			}
+		}
+	}
+	return s.inbounds, s.settings
 }
 
 // RefreshTrafficProviders re-registers traffic providers so attribution tracks

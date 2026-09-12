@@ -6,6 +6,20 @@ import (
 	"time"
 )
 
+func TestValidateBackupIDRejectsTraversal(t *testing.T) {
+	for _, id := range []string{"", ".", "..", "../x", "x/y", "20240101_120000/..", "fixture"} {
+		if err := validateBackupID(id); err == nil {
+			t.Fatalf("validateBackupID(%q) succeeded", id)
+		}
+	}
+	if err := validateBackupID("20240101_120000"); err != nil {
+		t.Fatalf("validateBackupID(generated) = %v", err)
+	}
+	if err := validateBackupID("20240101_120000_2"); err != nil {
+		t.Fatalf("validateBackupID(suffix) = %v", err)
+	}
+}
+
 func TestBackupIDPolicyAddsSuffixUntilFreeID(t *testing.T) {
 	now := func() time.Time { return time.Date(2026, 5, 7, 12, 30, 45, 0, time.UTC) }
 	existing := map[string]bool{

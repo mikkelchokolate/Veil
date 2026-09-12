@@ -24,6 +24,9 @@ export const defaultHandlers = [
 			state: "applied",
 		}),
 	),
+	http.get("/api/inbounds/:name/clients", () =>
+		HttpResponse.json({ items: [], total: 0, page: 1, pageSize: 500 }),
+	),
 ];
 
 export { HttpResponse, http };

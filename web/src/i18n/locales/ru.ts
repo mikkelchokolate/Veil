@@ -176,6 +176,7 @@ export const ru: Record<string, string> = {
 	"traffic.telemetryState": "Состояние телеметрии",
 	"traffic.state.healthy": "исправно",
 	"traffic.state.degraded": "деградировано",
+	"traffic.state.pending": "ожидает первое наблюдение",
 	"traffic.state.unsupported": "не поддерживается",
 	"traffic.providerError": "{provider}: {details}",
 	"traffic.summaryUnavailable": "Сводка трафика недоступна",
@@ -517,6 +518,9 @@ export const ru: Record<string, string> = {
 	"clientDetail.auditResult": "Результат",
 	"clientDetail.auditFailed": "ошибка",
 	"clientDetail.auditOk": "ok",
+	"clientDetail.error.conflict":
+		"Клиент был изменён в другом месте. Черновик сохранён — сохраните снова или загрузите значения с сервера.",
+	"clientDetail.reloadServerValues": "Загрузить значения с сервера",
 	"clientDetail.error.save": "Ошибка сохранения",
 	"clientDetail.error.update": "Ошибка обновления",
 	"clientDetail.error.delete": "Ошибка удаления",

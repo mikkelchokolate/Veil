@@ -130,11 +130,13 @@ export const getApiAudit = async (params?: GetApiAuditParams, options?: Paramete
 
 
 
-export const getGetApiAuditMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiAudit>>, TError,{params?: GetApiAuditParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof getApiAudit>>, TError,{params?: GetApiAuditParams}, TContext> => {
+export const getGetApiAuditMutationKey = () => ['getApiAudit'] as const;
 
-const mutationKey = ['getApiAudit'];
+export const getGetApiAuditMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiAudit>>, TError,GetApiAuditMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiAudit>>, TError,GetApiAuditMutationVariables, TContext> => {
+
+const mutationKey = getGetApiAuditMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -144,7 +146,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiAudit>>, {params?: GetApiAuditParams}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiAudit>>, GetApiAuditMutationVariables> = (props) => {
           const {params} = props ?? {};
 
           return  getApiAudit(params,requestOptions)
@@ -160,16 +162,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiAuditMutationResult = NonNullable<Awaited<ReturnType<typeof getApiAudit>>>
 
     export type GetApiAuditMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse
+    export type GetApiAuditMutationVariables = {params?: GetApiAuditParams}
 
     /**
  * @summary List structured Panel audit history
  */
 export const useGetApiAudit = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiAudit>>, TError,{params?: GetApiAuditParams}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiAudit>>, TError,GetApiAuditMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof getApiAudit>>,
         TError,
-        {params?: GetApiAuditParams},
+        GetApiAuditMutationVariables,
         TContext
       > => {
       return useMutation(getGetApiAuditMutationOptions(options), queryClient);

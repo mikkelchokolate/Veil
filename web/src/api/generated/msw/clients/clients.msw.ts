@@ -270,11 +270,19 @@ export const getPostApiV1ClientsUrl = () => {
  */
 export const postApiV1Clients = async (clientCreateRequest: ClientCreateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiV1ClientsResponse>(getPostApiV1ClientsUrl(),
   {
@@ -289,11 +297,13 @@ return apiFetch<postApiV1ClientsResponse>(getPostApiV1ClientsUrl(),
 
 
 
-export const getPostApiV1ClientsMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError,{data: ClientCreateRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError,{data: ClientCreateRequest}, TContext> => {
+export const getPostApiV1ClientsMutationKey = () => ['postApiV1Clients'] as const;
 
-const mutationKey = ['postApiV1Clients'];
+export const getPostApiV1ClientsMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError,PostApiV1ClientsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError,PostApiV1ClientsMutationVariables, TContext> => {
+
+const mutationKey = getPostApiV1ClientsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -303,7 +313,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1Clients>>, {data: ClientCreateRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1Clients>>, PostApiV1ClientsMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  postApiV1Clients(data,requestOptions)
@@ -319,16 +329,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiV1ClientsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1Clients>>>
     export type PostApiV1ClientsMutationBody = ClientCreateRequest
     export type PostApiV1ClientsMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiV1ClientsMutationVariables = {data: ClientCreateRequest}
 
     /**
  * @summary Create a client
  */
 export const usePostApiV1Clients = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError,{data: ClientCreateRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1Clients>>, TError,PostApiV1ClientsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1Clients>>,
         TError,
-        {data: ClientCreateRequest},
+        PostApiV1ClientsMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiV1ClientsMutationOptions(options), queryClient);
@@ -380,11 +391,19 @@ export const getPostApiV1ClientsBulkUrl = () => {
  */
 export const postApiV1ClientsBulk = async (postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsBulkResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiV1ClientsBulkResponse>(getPostApiV1ClientsBulkUrl(),
   {
@@ -399,11 +418,13 @@ return apiFetch<postApiV1ClientsBulkResponse>(getPostApiV1ClientsBulkUrl(),
 
 
 
-export const getPostApiV1ClientsBulkMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError,{data: PostApiV1ClientsBulkBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError,{data: PostApiV1ClientsBulkBody}, TContext> => {
+export const getPostApiV1ClientsBulkMutationKey = () => ['postApiV1ClientsBulk'] as const;
 
-const mutationKey = ['postApiV1ClientsBulk'];
+export const getPostApiV1ClientsBulkMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError,PostApiV1ClientsBulkMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError,PostApiV1ClientsBulkMutationVariables, TContext> => {
+
+const mutationKey = getPostApiV1ClientsBulkMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -413,7 +434,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, {data: PostApiV1ClientsBulkBody}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, PostApiV1ClientsBulkMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  postApiV1ClientsBulk(data,requestOptions)
@@ -429,16 +450,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiV1ClientsBulkMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsBulk>>>
     export type PostApiV1ClientsBulkMutationBody = PostApiV1ClientsBulkBody
     export type PostApiV1ClientsBulkMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiV1ClientsBulkMutationVariables = {data: PostApiV1ClientsBulkBody}
 
     /**
  * @summary Bulk action across clients; per-client results
  */
 export const usePostApiV1ClientsBulk = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError,{data: PostApiV1ClientsBulkBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError,PostApiV1ClientsBulkMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1ClientsBulk>>,
         TError,
-        {data: PostApiV1ClientsBulkBody},
+        PostApiV1ClientsBulkMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiV1ClientsBulkMutationOptions(options), queryClient);
@@ -603,11 +625,19 @@ export const getPostApiV1ClientsIdBindingsUrl = (id: string,) => {
 export const postApiV1ClientsIdBindings = async (id: string,
     postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdBindingsResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiV1ClientsIdBindingsResponse>(getPostApiV1ClientsIdBindingsUrl(id),
   {
@@ -622,11 +652,13 @@ return apiFetch<postApiV1ClientsIdBindingsResponse>(getPostApiV1ClientsIdBinding
 
 
 
-export const getPostApiV1ClientsIdBindingsMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError,{id: string;data: PostApiV1ClientsIdBindingsBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError,{id: string;data: PostApiV1ClientsIdBindingsBody}, TContext> => {
+export const getPostApiV1ClientsIdBindingsMutationKey = () => ['postApiV1ClientsIdBindings'] as const;
 
-const mutationKey = ['postApiV1ClientsIdBindings'];
+export const getPostApiV1ClientsIdBindingsMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError,PostApiV1ClientsIdBindingsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError,PostApiV1ClientsIdBindingsMutationVariables, TContext> => {
+
+const mutationKey = getPostApiV1ClientsIdBindingsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -636,7 +668,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, {id: string;data: PostApiV1ClientsIdBindingsBody}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, PostApiV1ClientsIdBindingsMutationVariables> = (props) => {
           const {id,data} = props ?? {};
 
           return  postApiV1ClientsIdBindings(id,data,requestOptions)
@@ -652,16 +684,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiV1ClientsIdBindingsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>>
     export type PostApiV1ClientsIdBindingsMutationBody = PostApiV1ClientsIdBindingsBody
     export type PostApiV1ClientsIdBindingsMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiV1ClientsIdBindingsMutationVariables = {id: string;data: PostApiV1ClientsIdBindingsBody}
 
     /**
  * @summary Add a binding; empty credential is generated once
  */
 export const usePostApiV1ClientsIdBindings = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError,{id: string;data: PostApiV1ClientsIdBindingsBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>, TError,PostApiV1ClientsIdBindingsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1ClientsIdBindings>>,
         TError,
-        {id: string;data: PostApiV1ClientsIdBindingsBody},
+        PostApiV1ClientsIdBindingsMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiV1ClientsIdBindingsMutationOptions(options), queryClient);
@@ -716,11 +749,19 @@ export const patchApiV1ClientsIdBindingsBindingId = async (id: string,
     bindingId: string,
     patchApiV1ClientsIdBindingsBindingIdBody: PatchApiV1ClientsIdBindingsBindingIdBody, options?: Parameters<typeof apiFetch>[1]): Promise<patchApiV1ClientsIdBindingsBindingIdResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<patchApiV1ClientsIdBindingsBindingIdResponse>(getPatchApiV1ClientsIdBindingsBindingIdUrl(id,bindingId),
   {
@@ -735,11 +776,13 @@ return apiFetch<patchApiV1ClientsIdBindingsBindingIdResponse>(getPatchApiV1Clien
 
 
 
-export const getPatchApiV1ClientsIdBindingsBindingIdMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError,{id: string;bindingId: string;data: PatchApiV1ClientsIdBindingsBindingIdBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError,{id: string;bindingId: string;data: PatchApiV1ClientsIdBindingsBindingIdBody}, TContext> => {
+export const getPatchApiV1ClientsIdBindingsBindingIdMutationKey = () => ['patchApiV1ClientsIdBindingsBindingId'] as const;
 
-const mutationKey = ['patchApiV1ClientsIdBindingsBindingId'];
+export const getPatchApiV1ClientsIdBindingsBindingIdMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError,PatchApiV1ClientsIdBindingsBindingIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError,PatchApiV1ClientsIdBindingsBindingIdMutationVariables, TContext> => {
+
+const mutationKey = getPatchApiV1ClientsIdBindingsBindingIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -749,7 +792,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, {id: string;bindingId: string;data: PatchApiV1ClientsIdBindingsBindingIdBody}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, PatchApiV1ClientsIdBindingsBindingIdMutationVariables> = (props) => {
           const {id,bindingId,data} = props ?? {};
 
           return  patchApiV1ClientsIdBindingsBindingId(id,bindingId,data,requestOptions)
@@ -765,16 +808,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PatchApiV1ClientsIdBindingsBindingIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>>
     export type PatchApiV1ClientsIdBindingsBindingIdMutationBody = PatchApiV1ClientsIdBindingsBindingIdBody
     export type PatchApiV1ClientsIdBindingsBindingIdMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PatchApiV1ClientsIdBindingsBindingIdMutationVariables = {id: string;bindingId: string;data: PatchApiV1ClientsIdBindingsBindingIdBody}
 
     /**
  * @summary Update a binding (toggle enabled, optimistic locking)
  */
 export const usePatchApiV1ClientsIdBindingsBindingId = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError,{id: string;bindingId: string;data: PatchApiV1ClientsIdBindingsBindingIdBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>, TError,PatchApiV1ClientsIdBindingsBindingIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof patchApiV1ClientsIdBindingsBindingId>>,
         TError,
-        {id: string;bindingId: string;data: PatchApiV1ClientsIdBindingsBindingIdBody},
+        PatchApiV1ClientsIdBindingsBindingIdMutationVariables,
         TContext
       > => {
       return useMutation(getPatchApiV1ClientsIdBindingsBindingIdMutationOptions(options), queryClient);
@@ -841,11 +885,13 @@ export const deleteApiV1ClientsIdBindingsBindingId = async (id: string,
 
 
 
-export const getDeleteApiV1ClientsIdBindingsBindingIdMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError,{id: string;bindingId: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError,{id: string;bindingId: string}, TContext> => {
+export const getDeleteApiV1ClientsIdBindingsBindingIdMutationKey = () => ['deleteApiV1ClientsIdBindingsBindingId'] as const;
 
-const mutationKey = ['deleteApiV1ClientsIdBindingsBindingId'];
+export const getDeleteApiV1ClientsIdBindingsBindingIdMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError,DeleteApiV1ClientsIdBindingsBindingIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError,DeleteApiV1ClientsIdBindingsBindingIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiV1ClientsIdBindingsBindingIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -855,7 +901,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, {id: string;bindingId: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, DeleteApiV1ClientsIdBindingsBindingIdMutationVariables> = (props) => {
           const {id,bindingId} = props ?? {};
 
           return  deleteApiV1ClientsIdBindingsBindingId(id,bindingId,requestOptions)
@@ -871,16 +917,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type DeleteApiV1ClientsIdBindingsBindingIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>>
 
     export type DeleteApiV1ClientsIdBindingsBindingIdMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type DeleteApiV1ClientsIdBindingsBindingIdMutationVariables = {id: string;bindingId: string}
 
     /**
  * @summary Remove a binding
  */
 export const useDeleteApiV1ClientsIdBindingsBindingId = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError,{id: string;bindingId: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>, TError,DeleteApiV1ClientsIdBindingsBindingIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteApiV1ClientsIdBindingsBindingId>>,
         TError,
-        {id: string;bindingId: string},
+        DeleteApiV1ClientsIdBindingsBindingIdMutationVariables,
         TContext
       > => {
       return useMutation(getDeleteApiV1ClientsIdBindingsBindingIdMutationOptions(options), queryClient);
@@ -935,11 +982,19 @@ export const postApiV1ClientsIdCredentialsBindingId = async (id: string,
     bindingId: string,
     postApiV1ClientsIdCredentialsBindingIdBody: PostApiV1ClientsIdCredentialsBindingIdBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdCredentialsBindingIdResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiV1ClientsIdCredentialsBindingIdResponse>(getPostApiV1ClientsIdCredentialsBindingIdUrl(id,bindingId),
   {
@@ -954,11 +1009,13 @@ return apiFetch<postApiV1ClientsIdCredentialsBindingIdResponse>(getPostApiV1Clie
 
 
 
-export const getPostApiV1ClientsIdCredentialsBindingIdMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError,{id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError,{id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdBody}, TContext> => {
+export const getPostApiV1ClientsIdCredentialsBindingIdMutationKey = () => ['postApiV1ClientsIdCredentialsBindingId'] as const;
 
-const mutationKey = ['postApiV1ClientsIdCredentialsBindingId'];
+export const getPostApiV1ClientsIdCredentialsBindingIdMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError,PostApiV1ClientsIdCredentialsBindingIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError,PostApiV1ClientsIdCredentialsBindingIdMutationVariables, TContext> => {
+
+const mutationKey = getPostApiV1ClientsIdCredentialsBindingIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -968,7 +1025,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, {id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdBody}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, PostApiV1ClientsIdCredentialsBindingIdMutationVariables> = (props) => {
           const {id,bindingId,data} = props ?? {};
 
           return  postApiV1ClientsIdCredentialsBindingId(id,bindingId,data,requestOptions)
@@ -984,16 +1041,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiV1ClientsIdCredentialsBindingIdMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>>
     export type PostApiV1ClientsIdCredentialsBindingIdMutationBody = PostApiV1ClientsIdCredentialsBindingIdBody
     export type PostApiV1ClientsIdCredentialsBindingIdMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiV1ClientsIdCredentialsBindingIdMutationVariables = {id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdBody}
 
     /**
  * @summary Set a binding credential
  */
 export const usePostApiV1ClientsIdCredentialsBindingId = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError,{id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>, TError,PostApiV1ClientsIdCredentialsBindingIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingId>>,
         TError,
-        {id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdBody},
+        PostApiV1ClientsIdCredentialsBindingIdMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiV1ClientsIdCredentialsBindingIdMutationOptions(options), queryClient);
@@ -1048,11 +1106,19 @@ export const postApiV1ClientsIdCredentialsBindingIdRotate = async (id: string,
     bindingId: string,
     postApiV1ClientsIdCredentialsBindingIdRotateBody: PostApiV1ClientsIdCredentialsBindingIdRotateBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdCredentialsBindingIdRotateResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiV1ClientsIdCredentialsBindingIdRotateResponse>(getPostApiV1ClientsIdCredentialsBindingIdRotateUrl(id,bindingId),
   {
@@ -1067,11 +1133,13 @@ return apiFetch<postApiV1ClientsIdCredentialsBindingIdRotateResponse>(getPostApi
 
 
 
-export const getPostApiV1ClientsIdCredentialsBindingIdRotateMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError,{id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdRotateBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError,{id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdRotateBody}, TContext> => {
+export const getPostApiV1ClientsIdCredentialsBindingIdRotateMutationKey = () => ['postApiV1ClientsIdCredentialsBindingIdRotate'] as const;
 
-const mutationKey = ['postApiV1ClientsIdCredentialsBindingIdRotate'];
+export const getPostApiV1ClientsIdCredentialsBindingIdRotateMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError,PostApiV1ClientsIdCredentialsBindingIdRotateMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError,PostApiV1ClientsIdCredentialsBindingIdRotateMutationVariables, TContext> => {
+
+const mutationKey = getPostApiV1ClientsIdCredentialsBindingIdRotateMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1081,7 +1149,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, {id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdRotateBody}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, PostApiV1ClientsIdCredentialsBindingIdRotateMutationVariables> = (props) => {
           const {id,bindingId,data} = props ?? {};
 
           return  postApiV1ClientsIdCredentialsBindingIdRotate(id,bindingId,data,requestOptions)
@@ -1097,16 +1165,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiV1ClientsIdCredentialsBindingIdRotateMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>>
     export type PostApiV1ClientsIdCredentialsBindingIdRotateMutationBody = PostApiV1ClientsIdCredentialsBindingIdRotateBody
     export type PostApiV1ClientsIdCredentialsBindingIdRotateMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiV1ClientsIdCredentialsBindingIdRotateMutationVariables = {id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdRotateBody}
 
     /**
  * @summary Rotate a binding credential
  */
 export const usePostApiV1ClientsIdCredentialsBindingIdRotate = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError,{id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdRotateBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>, TError,PostApiV1ClientsIdCredentialsBindingIdRotateMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1ClientsIdCredentialsBindingIdRotate>>,
         TError,
-        {id: string;bindingId: string;data: PostApiV1ClientsIdCredentialsBindingIdRotateBody},
+        PostApiV1ClientsIdCredentialsBindingIdRotateMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiV1ClientsIdCredentialsBindingIdRotateMutationOptions(options), queryClient);
@@ -1171,11 +1240,13 @@ export const postApiV1ClientsMigrateLegacy = async ( options?: Parameters<typeof
 
 
 
+export const getPostApiV1ClientsMigrateLegacyMutationKey = () => ['postApiV1ClientsMigrateLegacy'] as const;
+
 export const getPostApiV1ClientsMigrateLegacyMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>, TError,void, TContext> => {
 
-const mutationKey = ['postApiV1ClientsMigrateLegacy'];
+const mutationKey = getPostApiV1ClientsMigrateLegacyMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1201,6 +1272,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiV1ClientsMigrateLegacyMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsMigrateLegacy>>>
 
     export type PostApiV1ClientsMigrateLegacyMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+
 
     /**
  * @summary Convert legacy inbound-embedded profiles to normalized clients (idempotent)
@@ -1382,11 +1454,19 @@ export const getPatchApiV1ClientsIdUrl = (id: string,) => {
 export const patchApiV1ClientsId = async (id: string,
     clientPatchRequest: ClientPatchRequest, options?: Parameters<typeof apiFetch>[1]): Promise<patchApiV1ClientsIdResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<patchApiV1ClientsIdResponse>(getPatchApiV1ClientsIdUrl(id),
   {
@@ -1401,11 +1481,13 @@ return apiFetch<patchApiV1ClientsIdResponse>(getPatchApiV1ClientsIdUrl(id),
 
 
 
-export const getPatchApiV1ClientsIdMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError,{id: string;data: ClientPatchRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError,{id: string;data: ClientPatchRequest}, TContext> => {
+export const getPatchApiV1ClientsIdMutationKey = () => ['patchApiV1ClientsId'] as const;
 
-const mutationKey = ['patchApiV1ClientsId'];
+export const getPatchApiV1ClientsIdMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError,PatchApiV1ClientsIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError,PatchApiV1ClientsIdMutationVariables, TContext> => {
+
+const mutationKey = getPatchApiV1ClientsIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1415,7 +1497,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiV1ClientsId>>, {id: string;data: ClientPatchRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiV1ClientsId>>, PatchApiV1ClientsIdMutationVariables> = (props) => {
           const {id,data} = props ?? {};
 
           return  patchApiV1ClientsId(id,data,requestOptions)
@@ -1431,16 +1513,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PatchApiV1ClientsIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiV1ClientsId>>>
     export type PatchApiV1ClientsIdMutationBody = ClientPatchRequest
     export type PatchApiV1ClientsIdMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PatchApiV1ClientsIdMutationVariables = {id: string;data: ClientPatchRequest}
 
     /**
  * @summary Patch explicitly supplied client fields without clearing omitted durable fields
  */
 export const usePatchApiV1ClientsId = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError,{id: string;data: ClientPatchRequest}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiV1ClientsId>>, TError,PatchApiV1ClientsIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof patchApiV1ClientsId>>,
         TError,
-        {id: string;data: ClientPatchRequest},
+        PatchApiV1ClientsIdMutationVariables,
         TContext
       > => {
       return useMutation(getPatchApiV1ClientsIdMutationOptions(options), queryClient);
@@ -1510,11 +1593,13 @@ export const deleteApiV1ClientsId = async (id: string, options?: Parameters<type
 
 
 
-export const getDeleteApiV1ClientsIdMutationOptions = <TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError,{id: string}, TContext> => {
+export const getDeleteApiV1ClientsIdMutationKey = () => ['deleteApiV1ClientsId'] as const;
 
-const mutationKey = ['deleteApiV1ClientsId'];
+export const getDeleteApiV1ClientsIdMutationOptions = <TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError,DeleteApiV1ClientsIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError,DeleteApiV1ClientsIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiV1ClientsIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1524,7 +1609,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, {id: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, DeleteApiV1ClientsIdMutationVariables> = (props) => {
           const {id} = props ?? {};
 
           return  deleteApiV1ClientsId(id,requestOptions)
@@ -1540,16 +1625,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type DeleteApiV1ClientsIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1ClientsId>>>
 
     export type DeleteApiV1ClientsIdMutationError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type DeleteApiV1ClientsIdMutationVariables = {id: string}
 
     /**
  * @summary Delete a client
  */
 export const useDeleteApiV1ClientsId = <TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsId>>, TError,DeleteApiV1ClientsIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteApiV1ClientsId>>,
         TError,
-        {id: string},
+        DeleteApiV1ClientsIdMutationVariables,
         TContext
       > => {
       return useMutation(getDeleteApiV1ClientsIdMutationOptions(options), queryClient);
@@ -1844,11 +1930,19 @@ export const getPostApiV1ClientsIdTokensUrl = (id: string,) => {
 export const postApiV1ClientsIdTokens = async (id: string,
     postApiV1ClientsIdTokensBody: PostApiV1ClientsIdTokensBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdTokensResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiV1ClientsIdTokensResponse>(getPostApiV1ClientsIdTokensUrl(id),
   {
@@ -1863,11 +1957,13 @@ return apiFetch<postApiV1ClientsIdTokensResponse>(getPostApiV1ClientsIdTokensUrl
 
 
 
-export const getPostApiV1ClientsIdTokensMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError,{id: string;data: PostApiV1ClientsIdTokensBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError,{id: string;data: PostApiV1ClientsIdTokensBody}, TContext> => {
+export const getPostApiV1ClientsIdTokensMutationKey = () => ['postApiV1ClientsIdTokens'] as const;
 
-const mutationKey = ['postApiV1ClientsIdTokens'];
+export const getPostApiV1ClientsIdTokensMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError,PostApiV1ClientsIdTokensMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError,PostApiV1ClientsIdTokensMutationVariables, TContext> => {
+
+const mutationKey = getPostApiV1ClientsIdTokensMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1877,7 +1973,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, {id: string;data: PostApiV1ClientsIdTokensBody}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, PostApiV1ClientsIdTokensMutationVariables> = (props) => {
           const {id,data} = props ?? {};
 
           return  postApiV1ClientsIdTokens(id,data,requestOptions)
@@ -1893,16 +1989,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiV1ClientsIdTokensMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>>
     export type PostApiV1ClientsIdTokensMutationBody = PostApiV1ClientsIdTokensBody
     export type PostApiV1ClientsIdTokensMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiV1ClientsIdTokensMutationVariables = {id: string;data: PostApiV1ClientsIdTokensBody}
 
     /**
  * @summary Issue a subscription token; plaintext returned once
  */
 export const usePostApiV1ClientsIdTokens = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError,{id: string;data: PostApiV1ClientsIdTokensBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>, TError,PostApiV1ClientsIdTokensMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1ClientsIdTokens>>,
         TError,
-        {id: string;data: PostApiV1ClientsIdTokensBody},
+        PostApiV1ClientsIdTokensMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiV1ClientsIdTokensMutationOptions(options), queryClient);
@@ -2106,11 +2203,13 @@ export const deleteApiV1ClientsIdTokensTokenId = async (id: string,
 
 
 
-export const getDeleteApiV1ClientsIdTokensTokenIdMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError,{id: string;tokenId: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError,{id: string;tokenId: string}, TContext> => {
+export const getDeleteApiV1ClientsIdTokensTokenIdMutationKey = () => ['deleteApiV1ClientsIdTokensTokenId'] as const;
 
-const mutationKey = ['deleteApiV1ClientsIdTokensTokenId'];
+export const getDeleteApiV1ClientsIdTokensTokenIdMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError,DeleteApiV1ClientsIdTokensTokenIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError,DeleteApiV1ClientsIdTokensTokenIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiV1ClientsIdTokensTokenIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -2120,7 +2219,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, {id: string;tokenId: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, DeleteApiV1ClientsIdTokensTokenIdMutationVariables> = (props) => {
           const {id,tokenId} = props ?? {};
 
           return  deleteApiV1ClientsIdTokensTokenId(id,tokenId,requestOptions)
@@ -2136,16 +2235,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type DeleteApiV1ClientsIdTokensTokenIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>>
 
     export type DeleteApiV1ClientsIdTokensTokenIdMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type DeleteApiV1ClientsIdTokensTokenIdMutationVariables = {id: string;tokenId: string}
 
     /**
  * @summary Revoke a subscription token
  */
 export const useDeleteApiV1ClientsIdTokensTokenId = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError,{id: string;tokenId: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>, TError,DeleteApiV1ClientsIdTokensTokenIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteApiV1ClientsIdTokensTokenId>>,
         TError,
-        {id: string;tokenId: string},
+        DeleteApiV1ClientsIdTokensTokenIdMutationVariables,
         TContext
       > => {
       return useMutation(getDeleteApiV1ClientsIdTokensTokenIdMutationOptions(options), queryClient);
@@ -2200,11 +2300,19 @@ export const postApiV1ClientsIdTokensTokenIdRotate = async (id: string,
     tokenId: string,
     postApiV1ClientsIdTokensTokenIdRotateBody?: PostApiV1ClientsIdTokensTokenIdRotateBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdTokensTokenIdRotateResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiV1ClientsIdTokensTokenIdRotateResponse>(getPostApiV1ClientsIdTokensTokenIdRotateUrl(id,tokenId),
   {
@@ -2219,11 +2327,13 @@ return apiFetch<postApiV1ClientsIdTokensTokenIdRotateResponse>(getPostApiV1Clien
 
 
 
-export const getPostApiV1ClientsIdTokensTokenIdRotateMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError,{id: string;tokenId: string;data?: PostApiV1ClientsIdTokensTokenIdRotateBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError,{id: string;tokenId: string;data?: PostApiV1ClientsIdTokensTokenIdRotateBody}, TContext> => {
+export const getPostApiV1ClientsIdTokensTokenIdRotateMutationKey = () => ['postApiV1ClientsIdTokensTokenIdRotate'] as const;
 
-const mutationKey = ['postApiV1ClientsIdTokensTokenIdRotate'];
+export const getPostApiV1ClientsIdTokensTokenIdRotateMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError,PostApiV1ClientsIdTokensTokenIdRotateMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError,PostApiV1ClientsIdTokensTokenIdRotateMutationVariables, TContext> => {
+
+const mutationKey = getPostApiV1ClientsIdTokensTokenIdRotateMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -2233,7 +2343,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, {id: string;tokenId: string;data?: PostApiV1ClientsIdTokensTokenIdRotateBody}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, PostApiV1ClientsIdTokensTokenIdRotateMutationVariables> = (props) => {
           const {id,tokenId,data} = props ?? {};
 
           return  postApiV1ClientsIdTokensTokenIdRotate(id,tokenId,data,requestOptions)
@@ -2249,16 +2359,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiV1ClientsIdTokensTokenIdRotateMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>>
     export type PostApiV1ClientsIdTokensTokenIdRotateMutationBody = PostApiV1ClientsIdTokensTokenIdRotateBody | undefined
     export type PostApiV1ClientsIdTokensTokenIdRotateMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiV1ClientsIdTokensTokenIdRotateMutationVariables = {id: string;tokenId: string;data?: PostApiV1ClientsIdTokensTokenIdRotateBody}
 
     /**
  * @summary Rotate a subscription token; new plaintext returned once
  */
 export const usePostApiV1ClientsIdTokensTokenIdRotate = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError,{id: string;tokenId: string;data?: PostApiV1ClientsIdTokensTokenIdRotateBody}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>, TError,PostApiV1ClientsIdTokensTokenIdRotateMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1ClientsIdTokensTokenIdRotate>>,
         TError,
-        {id: string;tokenId: string;data?: PostApiV1ClientsIdTokensTokenIdRotateBody},
+        PostApiV1ClientsIdTokensTokenIdRotateMutationVariables,
         TContext
       > => {
       return useMutation(getPostApiV1ClientsIdTokensTokenIdRotateMutationOptions(options), queryClient);

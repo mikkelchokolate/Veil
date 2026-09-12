@@ -74,6 +74,7 @@ func TestOpenAPIRoutesAndMethodsMatchRegisteredAPI(t *testing.T) {
 		"/api/protocols/{protocol}/room":               {"post"},
 		"/api/inbounds":                                {"get", "post"},
 		"/api/inbounds/{name}":                         {"delete", "get", "put"},
+		"/api/inbounds/{name}/clients":                 {"get"},
 		"/api/routing/rules":                           {"get", "post"},
 		"/api/routing/rules/{name}":                    {"delete", "get", "put"},
 		"/api/routing/presets":                         {"get"},

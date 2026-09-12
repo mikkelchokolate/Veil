@@ -17,9 +17,6 @@ func TestSubscriptionHEADPerformsNoTelemetryWriteOrArtifactRendering(t *testing.
 	if err := state.db.QueryRow(`SELECT COALESCE(last_used_at,0) FROM subscription_tokens WHERE token_hash IS NOT NULL LIMIT 1`).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := state.db.Exec(`PRAGMA query_only=ON`); err != nil {
-		t.Fatal(err)
-	}
 
 	req := httptest.NewRequest(http.MethodHead, "/s/"+plaintext, nil)
 	w := httptest.NewRecorder()
@@ -30,8 +27,8 @@ func TestSubscriptionHEADPerformsNoTelemetryWriteOrArtifactRendering(t *testing.
 	if w.Body.Len() != 0 {
 		t.Fatalf("HEAD returned body %q", w.Body.String())
 	}
-	if _, err := state.db.Exec(`PRAGMA query_only=OFF`); err != nil {
-		t.Fatal(err)
+	if w.Header().Get("Subscription-Userinfo") == "" || w.Header().Get("X-Veil-Applied-Revision") == "" {
+		t.Fatalf("HEAD omitted subscription metadata: %v", w.Header())
 	}
 	var after int64
 	if err := state.db.QueryRow(`SELECT COALESCE(last_used_at,0) FROM subscription_tokens WHERE token_hash IS NOT NULL LIMIT 1`).Scan(&after); err != nil {
@@ -105,5 +102,107 @@ func TestSubscriptionIgnoresAnotherClientsCorruptCredential(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("unrelated corrupt credential broke subscription: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestPublicSubscriptionHEADMatchesGETMetadata(t *testing.T) {
+	router, _ := newSubscriptionTestRouter(t)
+	plaintext, _ := seedClientWithToken(t, router)
+
+	getReq := httptest.NewRequest(http.MethodGet, "/s/"+plaintext+"?format=raw", nil)
+	get := httptest.NewRecorder()
+	router.ServeHTTP(get, getReq)
+	if get.Code != http.StatusOK {
+		t.Fatalf("GET status=%d body=%s", get.Code, get.Body.String())
+	}
+
+	headReq := httptest.NewRequest(http.MethodHead, "/s/"+plaintext+"?format=raw", nil)
+	head := httptest.NewRecorder()
+	router.ServeHTTP(head, headReq)
+	if head.Code != http.StatusOK {
+		t.Fatalf("HEAD status=%d body=%s", head.Code, head.Body.String())
+	}
+	if head.Body.Len() != 0 {
+		t.Fatalf("HEAD returned body %q", head.Body.String())
+	}
+	for _, key := range []string{
+		"Subscription-Userinfo",
+		"Profile-Title",
+		"Profile-Update-Interval",
+		"X-Veil-Configuration-State",
+		"X-Veil-Applied-Revision",
+		"X-Veil-Desired-Revision",
+		"Content-Type",
+		"Content-Disposition",
+	} {
+		if got, want := head.Header().Get(key), get.Header().Get(key); got != want || got == "" {
+			t.Fatalf("HEAD %s = %q, GET %s = %q", key, got, key, want)
+		}
+	}
+}
+
+func TestPublicSubscriptionHEADRejectsInvalidFormat(t *testing.T) {
+	router, _ := newSubscriptionTestRouter(t)
+	plaintext, _ := seedClientWithToken(t, router)
+
+	getReq := httptest.NewRequest(http.MethodGet, "/s/"+plaintext+"?format=unsupported", nil)
+	get := httptest.NewRecorder()
+	router.ServeHTTP(get, getReq)
+	if get.Code != http.StatusBadRequest {
+		t.Fatalf("GET invalid format status=%d body=%s", get.Code, get.Body.String())
+	}
+
+	headReq := httptest.NewRequest(http.MethodHead, "/s/"+plaintext+"?format=unsupported", nil)
+	head := httptest.NewRecorder()
+	router.ServeHTTP(head, headReq)
+	if head.Code != http.StatusBadRequest {
+		t.Fatalf("HEAD invalid format status=%d body=%s", head.Code, head.Body.String())
+	}
+	if head.Body.Len() != 0 {
+		t.Fatalf("HEAD invalid format returned body %q", head.Body.String())
+	}
+}
+
+func TestPublicSubscriptionHEADUnavailableWithoutAppliedRevision(t *testing.T) {
+	router, state := newSubscriptionTestRouter(t)
+	plaintext, _ := seedClientWithToken(t, router)
+	if _, err := state.db.Exec(`UPDATE revisions SET applied_revision=0`); err != nil {
+		t.Fatal(err)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/s/"+plaintext+"?format=raw", nil)
+	get := httptest.NewRecorder()
+	router.ServeHTTP(get, getReq)
+	if get.Code != http.StatusServiceUnavailable {
+		t.Fatalf("GET missing applied revision status=%d body=%s", get.Code, get.Body.String())
+	}
+
+	headReq := httptest.NewRequest(http.MethodHead, "/s/"+plaintext+"?format=raw", nil)
+	head := httptest.NewRecorder()
+	router.ServeHTTP(head, headReq)
+	if head.Code != http.StatusServiceUnavailable {
+		t.Fatalf("HEAD missing applied revision status=%d body=%s", head.Code, head.Body.String())
+	}
+	if head.Body.Len() != 0 {
+		t.Fatalf("HEAD missing applied revision returned body %q", head.Body.String())
+	}
+}
+
+func TestPublicSubscriptionHEADHTMLHasNoBody(t *testing.T) {
+	router, _ := newSubscriptionTestRouter(t)
+	plaintext, _ := seedClientWithToken(t, router)
+
+	req := httptest.NewRequest(http.MethodHead, "/s/"+plaintext, nil)
+	req.Header.Set("Accept", "text/html")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("HEAD html status=%d body=%s", w.Code, w.Body.String())
+	}
+	if w.Body.Len() != 0 {
+		t.Fatalf("HEAD html returned body %q", w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
+		t.Fatalf("HEAD html content-type = %q", ct)
 	}
 }

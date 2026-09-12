@@ -491,7 +491,7 @@ export const PatchApiV1ClientsIdBody = zod.object({
   "expiresAt": zod.int().nullish(),
   "deviceLimit": zod.int().min(patchApiV1ClientsIdBodyDeviceLimitMin).nullish(),
   "notes": zod.string().nullish()
-}).describe('Presence-aware patch. Omitted fields are preserved, explicit null clears nullable\/defaultable fields, and supplied values replace them.')
+}).describe('Presence-aware patch. Omitted fields are preserved, explicit null clears nullable/defaultable fields, and supplied values replace them.')
 
 export const patchApiV1ClientsIdResponseQuotaBytesMin = 0;
 export const patchApiV1ClientsIdResponseQuotaBytesMax = 9007199254740991;

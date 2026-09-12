@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ApiError, apiFetch, mutationErrorMessage } from "../api/fetcher";
@@ -93,6 +93,18 @@ function buildEditSchema(t: (key: string) => string) {
 }
 type EditValues = z.infer<ReturnType<typeof buildEditSchema>>;
 
+function valuesFromClient(c: ClientDetail): EditValues {
+	const notes = (c as { notes?: string }).notes ?? "";
+	return {
+		name: c.name ?? "",
+		email: c.email ?? "",
+		enabled: c.enabled ?? true,
+		quotaBytes: c.quotaBytes != null ? String(c.quotaBytes) : "",
+		expiresAt: c.expiresAt ? unixToDateInput(c.expiresAt) : "",
+		notes,
+	};
+}
+
 interface InboundOption {
 	name: string;
 	protocol: string;
@@ -117,6 +129,7 @@ export function ClientDetailPage() {
 	const [tab, setTab] = useState<Tab>("overview");
 	const [revealed, setRevealed] = useState<Record<string, string>>({});
 	const [error, setError] = useState<string | null>(null);
+	const [conflict, setConflict] = useState(false);
 	const [feedback, setFeedback] = useState<MutationFeedback | null>(null);
 	const [attachInbound, setAttachInbound] = useState("");
 	const { t } = useI18n();
@@ -154,8 +167,14 @@ export function ClientDetailPage() {
 	}
 
 	function mutationFailed(err: unknown, fallbackKey: string) {
-		setError(mutationErrorMessage(err, t(fallbackKey)));
-		if (err instanceof ApiError && err.status === 409) {
+		const isConflict = err instanceof ApiError && err.status === 409;
+		setConflict(isConflict);
+		setError(
+			isConflict
+				? t("clientDetail.error.conflict")
+				: mutationErrorMessage(err, t(fallbackKey)),
+		);
+		if (isConflict) {
 			invalidate();
 		}
 	}
@@ -172,21 +191,20 @@ export function ClientDetailPage() {
 			notes: "",
 		},
 	});
+	const isDirty = form.formState.isDirty;
+	const loadedClientId = useRef<string | null>(null);
+	const acceptServerValues = useRef(true);
 	useEffect(() => {
 		const c = client.data;
 		if (!c) return;
-		const notes = (c as { notes?: string }).notes ?? "";
-		form.reset({
-			name: c.name ?? "",
-			email: c.email ?? "",
-			enabled: c.enabled ?? true,
-			// Bytes as a decimal string; never through Number() lossy input paths.
-			quotaBytes: c.quotaBytes != null ? String(c.quotaBytes) : "",
-			expiresAt: c.expiresAt ? unixToDateInput(c.expiresAt) : "",
-			notes,
-		});
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [client.data, form.reset]);
+		if (loadedClientId.current !== clientId) {
+			acceptServerValues.current = true;
+			loadedClientId.current = clientId;
+		}
+		if (!acceptServerValues.current && isDirty) return;
+		form.reset(valuesFromClient(c));
+		acceptServerValues.current = false;
+	}, [client.data, clientId, form.reset, isDirty]);
 
 	const invalidate = () => {
 		void qc.invalidateQueries({ queryKey: ["clients", clientId] });
@@ -241,7 +259,9 @@ export function ClientDetailPage() {
 		},
 		onSuccess: (data) => {
 			setError(null);
+			setConflict(false);
 			recordFeedback(data);
+			acceptServerValues.current = true;
 			invalidate();
 		},
 		onError: (err) => mutationFailed(err, "clientDetail.error.save"),
@@ -443,6 +463,21 @@ export function ClientDetailPage() {
 			{error ? (
 				<div className="card">
 					<p className="form-error">{error}</p>
+					{conflict ? (
+						<Button
+							type="button"
+							onClick={() => {
+								acceptServerValues.current = true;
+								const latest = client.data;
+								if (latest) form.reset(valuesFromClient(latest));
+								acceptServerValues.current = false;
+								setConflict(false);
+								setError(null);
+							}}
+						>
+							{t("clientDetail.reloadServerValues")}
+						</Button>
+					) : null}
 				</div>
 			) : null}
 

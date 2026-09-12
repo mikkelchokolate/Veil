@@ -71,7 +71,7 @@ export const postApiSetupCompleteBodyUsernameMin = 3;
 export const postApiSetupCompleteBodyUsernameMax = 64;
 
 
-export const postApiSetupCompleteBodyUsernameRegExp = new RegExp('^[\\p{L}\\p{N}._-]+$');
+export const postApiSetupCompleteBodyUsernameRegExp = new RegExp('^[\\p{L}\\p{N}._-]+$', 'u');
 export const postApiSetupCompleteBodyPasswordMin = 12;
 
 

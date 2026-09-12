@@ -18,7 +18,7 @@ function renderClientDetail() {
 		routeTree,
 		history: createMemoryHistory({ initialEntries: ["/clients/c1"] }),
 	});
-	return render(
+	const view = render(
 		<QueryClientProvider client={qc}>
 			<AuthProvider>
 				<I18nProvider>
@@ -27,10 +27,11 @@ function renderClientDetail() {
 			</AuthProvider>
 		</QueryClientProvider>,
 	);
+	return { ...view, qc };
 }
 
 describe("ClientDetailPage conflict and expiry", () => {
-	it("refetches after a 409 so the next save is not stuck on a stale version", async () => {
+	it("keeps the unsaved draft after a 409 and retries with the refreshed version", async () => {
 		const user = userEvent.setup();
 		let version = 1;
 		let name = "Original";
@@ -82,14 +83,91 @@ describe("ClientDetailPage conflict and expiry", () => {
 		expect(patches[0]).toEqual({ version: 1, name: "Local edit" });
 
 		await waitFor(() =>
-			expect(screen.getByLabelText(/^name$/i)).toHaveValue("From other tab"),
+			expect(
+				screen.getByText(/updated elsewhere|version conflict/i),
+			).toBeInTheDocument(),
 		);
+		expect(screen.getByLabelText(/^name$/i)).toHaveValue("Local edit");
 
-		await user.clear(screen.getByLabelText(/^name$/i));
-		await user.type(screen.getByLabelText(/^name$/i), "Resolved");
 		await user.click(screen.getByRole("button", { name: /save changes/i }));
 		await waitFor(() => expect(patches).toHaveLength(2));
-		expect(patches[1]).toEqual({ version: 2, name: "Resolved" });
+		expect(patches[1]).toEqual({ version: 2, name: "Local edit" });
+	});
+
+	it("does not reset a dirty form when the client query refetches", async () => {
+		const user = userEvent.setup();
+		let name = "Original";
+		let notes = "server notes";
+		let gets = 0;
+		server.use(
+			http.get("/api/inbounds", () => HttpResponse.json([])),
+			http.get("/api/v1/clients/c1", () => {
+				gets += 1;
+				return HttpResponse.json({
+					id: "c1",
+					name,
+					notes,
+					enabled: true,
+					version: 1,
+					status: "active",
+					bindings: [],
+				});
+			}),
+		);
+		const { qc } = renderClientDetail();
+		const nameField = await screen.findByLabelText(/^name$/i);
+		expect(nameField).toHaveValue("Original");
+		await waitFor(() => expect(gets).toBeGreaterThan(0));
+		const getsAfterLoad = gets;
+		await user.clear(nameField);
+		await user.type(nameField, "Unsaved draft");
+		name = "From other tab";
+		notes = "other notes";
+		await qc.invalidateQueries({ queryKey: ["clients", "c1"] });
+		await waitFor(() => expect(gets).toBeGreaterThan(getsAfterLoad));
+		expect(screen.getByLabelText(/^name$/i)).toHaveValue("Unsaved draft");
+	});
+
+	it("reloads server values when the operator discards a conflicted draft", async () => {
+		const user = userEvent.setup();
+		let version = 1;
+		let name = "Original";
+		server.use(
+			http.get("/api/inbounds", () => HttpResponse.json([])),
+			http.get("/api/v1/clients/c1", () =>
+				HttpResponse.json({
+					id: "c1",
+					name,
+					enabled: true,
+					version,
+					status: "active",
+					bindings: [],
+				}),
+			),
+			http.patch("/api/v1/clients/c1", async () => {
+				name = "From other tab";
+				version = 2;
+				return HttpResponse.json(
+					{ error: { message: "version conflict" } },
+					{ status: 409 },
+				);
+			}),
+		);
+		renderClientDetail();
+		const nameField = await screen.findByLabelText(/^name$/i);
+		await user.clear(nameField);
+		await user.type(nameField, "Local edit");
+		await user.click(screen.getByRole("button", { name: /save changes/i }));
+		await waitFor(() =>
+			expect(
+				screen.getByText(/updated elsewhere|version conflict/i),
+			).toBeInTheDocument(),
+		);
+		expect(nameField).toHaveValue("Local edit");
+		await user.click(
+			screen.getByRole("button", { name: /reload server values/i }),
+		);
+		await waitFor(() => expect(nameField).toHaveValue("From other tab"));
 	});
 
 	it("saves expiry as the local calendar day, not UTC midnight of the date string", async () => {

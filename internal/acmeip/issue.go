@@ -1,7 +1,10 @@
 package acmeip
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"os"
@@ -34,6 +37,7 @@ type IssueOptions struct {
 type System interface {
 	Run(cmd string, args ...string) error
 	CombinedOutput(cmd string, args ...string) ([]byte, error)
+	CombinedOutputContext(ctx context.Context, cmd string, args ...string) ([]byte, error)
 	LookPath(name string) (string, error)
 	ReadFile(name string) ([]byte, error)
 	WriteFile(name string, data []byte, perm os.FileMode) error
@@ -54,6 +58,30 @@ func (defaultSystem) Run(cmd string, args ...string) error {
 
 func (defaultSystem) CombinedOutput(cmd string, args ...string) ([]byte, error) {
 	return exec.Command(cmd, args...).CombinedOutput()
+}
+
+func (defaultSystem) CombinedOutputContext(ctx context.Context, cmd string, args ...string) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	command := exec.Command(cmd, args...)
+	configureProcessGroup(command)
+	var buf bytes.Buffer
+	command.Stdout = &buf
+	command.Stderr = &buf
+	if err := command.Start(); err != nil {
+		return nil, err
+	}
+	done := make(chan error, 1)
+	go func() { done <- command.Wait() }()
+	select {
+	case <-ctx.Done():
+		killProcessGroup(command)
+		<-done
+		return buf.Bytes(), ctx.Err()
+	case err := <-done:
+		return buf.Bytes(), err
+	}
 }
 
 func (defaultSystem) LookPath(name string) (string, error) {
@@ -138,11 +166,11 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		httpPort = 80
 	}
 
-	acmeSh, err := ensureAcmeSh(sys)
+	acmeSh, err := ensureAcmeSh(ctx, sys)
 	if err != nil {
 		return IssuedCert{}, fmt.Errorf("acme.sh setup: %w", err)
 	}
-	if err := ensureSocat(sys); err != nil {
+	if err := ensureSocat(ctx, sys); err != nil {
 		return IssuedCert{}, fmt.Errorf("socat setup: %w", err)
 	}
 	if !sys.IsPortFree(httpPort) {
@@ -154,7 +182,7 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 	}
 
 	// Set default CA so the first issue does not hit ZeroSSL.
-	if out, err := sys.CombinedOutput(acmeSh, "--set-default-ca", "--server", "letsencrypt"); err != nil {
+	if out, err := runWithContext(ctx, sys, acmeSh, "--set-default-ca", "--server", "letsencrypt"); err != nil {
 		return IssuedCert{}, fmt.Errorf("set default CA: %w (output: %s)", err, string(out))
 	}
 
@@ -172,10 +200,16 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		issueArgs = append(issueArgs, "-d", opts.PublicIPv6)
 	}
 
+	home, err := sys.HomeDir()
+	if err != nil {
+		return IssuedCert{}, fmt.Errorf("home directory: %w", err)
+	}
+	preexistingACME := snapshotAcmeDirs(sys, home, opts.PublicIPv4, opts.PublicIPv6)
+
 	issueCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	if out, err := runWithContext(issueCtx, sys, acmeSh, issueArgs...); err != nil {
-		cleanupAcmeState(sys, acmeSh, opts.PublicIPv4, opts.PublicIPv6)
+		cleanupAcmeState(sys, acmeSh, opts.PublicIPv4, opts.PublicIPv6, preexistingACME)
 		return IssuedCert{}, fmt.Errorf("issue certificate for %s: %w (output: %s)", opts.PublicIPv4, err, string(out))
 	}
 
@@ -186,13 +220,34 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		"--fullchain-file", certPath,
 		"--reloadcmd", "systemctl restart veil || true",
 	}
-	if out, err := sys.CombinedOutput(acmeSh, installArgs...); err != nil {
-		// acme.sh returns non-zero when the reloadcmd fails, but the files may
-		// still have been installed. Verify before failing.
-		if _, certErr := sys.Stat(certPath); certErr != nil {
-			cleanupAcmeState(sys, acmeSh, opts.PublicIPv4, opts.PublicIPv6)
-			return IssuedCert{}, fmt.Errorf("install certificate: %w (output: %s)", err, string(out))
+	prevCert, _ := sys.ReadFile(certPath)
+	prevKey, _ := sys.ReadFile(keyPath)
+	out, installErr := runWithContext(ctx, sys, acmeSh, installArgs...)
+	newCert, certErr := sys.ReadFile(certPath)
+	newKey, keyErr := sys.ReadFile(keyPath)
+	installed := certErr == nil && keyErr == nil && validateIssuedMaterial(newCert, newKey, opts.PublicIPv4, opts.PublicIPv6) == nil &&
+		(!bytes.Equal(prevCert, newCert) || !bytes.Equal(prevKey, newKey) || len(prevCert) == 0)
+	if !installed {
+		if len(prevCert) > 0 {
+			_ = sys.WriteFile(certPath, prevCert, 0o644)
 		}
+		if len(prevKey) > 0 {
+			_ = sys.WriteFile(keyPath, prevKey, 0o640)
+		}
+		if installErr != nil {
+			cleanupAcmeState(sys, acmeSh, opts.PublicIPv4, opts.PublicIPv6, preexistingACME)
+			return IssuedCert{}, fmt.Errorf("install certificate: %w (output: %s)", installErr, string(out))
+		}
+		if certErr != nil {
+			return IssuedCert{}, fmt.Errorf("install certificate: read %s: %w", certPath, certErr)
+		}
+		if keyErr != nil {
+			return IssuedCert{}, fmt.Errorf("install certificate: read %s: %w", keyPath, keyErr)
+		}
+		if err := validateIssuedMaterial(newCert, newKey, opts.PublicIPv4, opts.PublicIPv6); err != nil {
+			return IssuedCert{}, fmt.Errorf("install certificate: %w", err)
+		}
+		return IssuedCert{}, fmt.Errorf("install certificate: destination still has previous material")
 	}
 
 	if err := fixCertOwnership(sys, certPath, keyPath); err != nil {
@@ -202,7 +257,7 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 	return IssuedCert{CertPath: certPath, KeyPath: keyPath}, nil
 }
 
-func ensureAcmeSh(sys System) (string, error) {
+func ensureAcmeSh(ctx context.Context, sys System) (string, error) {
 	home, err := sys.HomeDir()
 	if err != nil {
 		return "", fmt.Errorf("home directory: %w", err)
@@ -217,7 +272,7 @@ func ensureAcmeSh(sys System) (string, error) {
 	}
 
 	args := []string{"-c", "curl -fsSL https://get.acme.sh | sh"}
-	if out, err := sys.CombinedOutput("sh", args...); err != nil {
+	if out, err := runWithContext(ctx, sys, "sh", args...); err != nil {
 		return "", fmt.Errorf("install acme.sh: %w (output: %s)", err, string(out))
 	}
 
@@ -227,7 +282,7 @@ func ensureAcmeSh(sys System) (string, error) {
 	return acmeSh, nil
 }
 
-func ensureSocat(sys System) error {
+func ensureSocat(ctx context.Context, sys System) error {
 	if _, err := sys.LookPath("socat"); err == nil {
 		return nil
 	}
@@ -249,7 +304,7 @@ func ensureSocat(sys System) error {
 		if _, err := sys.LookPath(m.name); err != nil {
 			continue
 		}
-		if out, err := sys.CombinedOutput(m.cmd, m.args...); err != nil {
+		if out, err := runWithContext(ctx, sys, m.cmd, m.args...); err != nil {
 			return fmt.Errorf("install socat via %s: %w (output: %s)", m.name, err, string(out))
 		}
 		if _, err := sys.LookPath("socat"); err == nil {
@@ -314,31 +369,80 @@ func lookupGroupID(name string) int {
 	return -1
 }
 
-func cleanupAcmeState(sys System, acmeSh, ipv4, ipv6 string) {
+func acmeDomainDirs(home, ip string) []string {
+	if ip == "" {
+		return nil
+	}
+	return []string{
+		filepath.Join(home, ".acme.sh", ip),
+		filepath.Join(home, ".acme.sh", ip+"_ecc"),
+	}
+}
+
+func snapshotAcmeDirs(sys System, home string, ips ...string) map[string]bool {
+	existed := map[string]bool{}
+	for _, ip := range ips {
+		for _, dir := range acmeDomainDirs(home, ip) {
+			if _, err := sys.Stat(dir); err == nil {
+				existed[dir] = true
+			}
+		}
+	}
+	return existed
+}
+
+func cleanupAcmeState(sys System, acmeSh, ipv4, ipv6 string, preexisting map[string]bool) {
 	home, _ := sys.HomeDir()
 	for _, ip := range []string{ipv4, ipv6} {
 		if ip == "" {
 			continue
 		}
-		_ = sys.Run("rm", "-rf", filepath.Join(home, ".acme.sh", ip), filepath.Join(home, ".acme.sh", ip+"_ecc"))
-		if acmeSh != "" {
+		dirs := acmeDomainDirs(home, ip)
+		owned := make([]string, 0, len(dirs))
+		preserved := false
+		for _, dir := range dirs {
+			if preexisting[dir] {
+				preserved = true
+				continue
+			}
+			owned = append(owned, dir)
+		}
+		if len(owned) > 0 {
+			_ = sys.Run("rm", append([]string{"-rf"}, owned...)...)
+		}
+		if acmeSh != "" && !preserved {
 			_ = sys.Run(acmeSh, "--remove", "-d", ip)
 		}
 	}
 }
 
 func runWithContext(ctx context.Context, sys System, cmd string, args ...string) ([]byte, error) {
-	outCh := make(chan []byte, 1)
-	errCh := make(chan error, 1)
-	go func() {
-		out, err := sys.CombinedOutput(cmd, args...)
-		outCh <- out
-		errCh <- err
-	}()
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case out := <-outCh:
-		return out, <-errCh
+	return sys.CombinedOutputContext(ctx, cmd, args...)
+}
+
+func validateIssuedMaterial(certPEM, keyPEM []byte, ipv4, ipv6 string) error {
+	pair, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return fmt.Errorf("certificate/key pair: %w", err)
 	}
+	if len(pair.Certificate) == 0 {
+		return fmt.Errorf("certificate/key pair: no certificate")
+	}
+	cert, err := x509.ParseCertificate(pair.Certificate[0])
+	if err != nil {
+		return fmt.Errorf("parse certificate: %w", err)
+	}
+	now := time.Now()
+	if now.Before(cert.NotBefore) || !now.Before(cert.NotAfter) {
+		return fmt.Errorf("certificate is not currently valid")
+	}
+	if err := cert.VerifyHostname(ipv4); err != nil {
+		return fmt.Errorf("certificate does not include IP %s: %w", ipv4, err)
+	}
+	if ipv6 != "" {
+		if err := cert.VerifyHostname(ipv6); err != nil {
+			return fmt.Errorf("certificate does not include IP %s: %w", ipv6, err)
+		}
+	}
+	return nil
 }

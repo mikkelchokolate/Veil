@@ -93,10 +93,7 @@ func (a InstallApply) Apply() (ApplyResult, error) {
 
 	if len(a.firewallActions) > 0 {
 		applier := newUFWApplier()
-		if err := applier.EnsureActive(); err != nil {
-			return result, fmt.Errorf("enable firewall: %w", err)
-		}
-		if err := applier.ApplyRules(a.firewallActions); err != nil {
+		if err := applier.ApplySafely(a.firewallActions); err != nil {
 			return result, fmt.Errorf("apply firewall rules: %w", err)
 		}
 	}

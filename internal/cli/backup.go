@@ -17,9 +17,20 @@ import (
 	"golang.org/x/term"
 )
 
+const (
+	defaultScheduledBackupPassphrasePath = "/etc/veil/backup.passphrase"
+	backupScheduleDropInName             = "passphrase-path.conf"
+)
+
 var backupSystemctlRun = func(args ...string) error {
 	return exec.Command("systemctl", args...).Run()
 }
+
+// backupSystemdDir is the systemd unit directory that schedule enable/disable
+// uses for the veil-backup.service drop-in. Tests replace it with a temp dir.
+var backupSystemdDir = "/etc/systemd/system"
+
+var backupVeilBinary = "/usr/local/bin/veil"
 
 func newBackupCommand(version string) *cobra.Command {
 	var statePath string
@@ -269,15 +280,37 @@ func newBackupCommand(version string) *cobra.Command {
 			if len(resolvedPass) < 16 {
 				return errors.New("scheduled backup passphrase must be at least 16 characters")
 			}
-			if err := writeBackupArchive(schedulePassphrasePath, []byte(resolvedPass+"\n")); err != nil {
+			schedulePassphrasePath, err = normalizeScheduledPassphrasePath(schedulePassphrasePath)
+			if err != nil {
+				return err
+			}
+			passReplace, err := publishReplacingFile(schedulePassphrasePath, []byte(resolvedPass+"\n"), 0o600, 0o700)
+			if err != nil {
 				return fmt.Errorf("write scheduled backup passphrase: %w", err)
 			}
+			unitReplace, err := publishBackupScheduleUnit(schedulePassphrasePath)
+			if err != nil {
+				if restoreErr := passReplace.Restore(); restoreErr != nil {
+					return fmt.Errorf("%v (also restore previous passphrase: %v)", err, restoreErr)
+				}
+				return err
+			}
 			if err := backupSystemctlRun("daemon-reload"); err != nil {
+				if restoreErr := restoreScheduleEnable(passReplace, unitReplace); restoreErr != nil {
+					return fmt.Errorf("systemctl daemon-reload: %w (also restore previous passphrase: %v)", err, restoreErr)
+				}
 				return fmt.Errorf("systemctl daemon-reload: %w", err)
 			}
 			if err := backupSystemctlRun("enable", "--now", "veil-backup.timer"); err != nil {
+				restoreErr := restoreScheduleEnable(passReplace, unitReplace)
+				_ = backupSystemctlRun("daemon-reload")
+				if restoreErr != nil {
+					return fmt.Errorf("enable veil-backup.timer: %w (also restore previous passphrase: %v)", err, restoreErr)
+				}
 				return fmt.Errorf("enable veil-backup.timer: %w", err)
 			}
+			passReplace.Commit()
+			unitReplace.Commit()
 			fmt.Fprintf(cmd.OutOrStdout(), "Encrypted backup schedule enabled; passphrase stored at %s\n", schedulePassphrasePath)
 			return nil
 		},
@@ -286,12 +319,26 @@ func newBackupCommand(version string) *cobra.Command {
 		Use:   "disable",
 		Short: "Disable the daily backup timer",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if !cmd.Flags().Changed("passphrase-path") {
+				if fromDropIn := scheduledPassphrasePathFromDropIn(backupSystemdDir); fromDropIn != "" {
+					schedulePassphrasePath = fromDropIn
+				}
+			} else {
+				var err error
+				schedulePassphrasePath, err = normalizeScheduledPassphrasePath(schedulePassphrasePath)
+				if err != nil {
+					return err
+				}
+			}
 			if err := backupSystemctlRun("disable", "--now", "veil-backup.timer"); err != nil {
 				return fmt.Errorf("disable veil-backup.timer: %w", err)
 			}
 			if removeSchedulePassphrase {
 				if err := os.Remove(schedulePassphrasePath); err != nil && !errors.Is(err, os.ErrNotExist) {
 					return fmt.Errorf("remove scheduled backup passphrase: %w", err)
+				}
+				if err := removeBackupScheduleDropIn(); err != nil {
+					return err
 				}
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), "Encrypted backup schedule disabled.")
@@ -300,8 +347,8 @@ func newBackupCommand(version string) *cobra.Command {
 	}
 	scheduleEnableCmd.Flags().StringVarP(&passphrase, "passphrase", "p", "", "backup encryption passphrase")
 	scheduleEnableCmd.Flags().StringVar(&passphraseFile, "passphrase-file", "", "file containing the backup encryption passphrase")
-	scheduleEnableCmd.Flags().StringVar(&schedulePassphrasePath, "passphrase-path", "/etc/veil/backup.passphrase", "root-owned passphrase destination used by the systemd service")
-	scheduleDisableCmd.Flags().StringVar(&schedulePassphrasePath, "passphrase-path", "/etc/veil/backup.passphrase", "scheduled backup passphrase path")
+	scheduleEnableCmd.Flags().StringVar(&schedulePassphrasePath, "passphrase-path", defaultScheduledBackupPassphrasePath, "root-owned passphrase destination used by the systemd service")
+	scheduleDisableCmd.Flags().StringVar(&schedulePassphrasePath, "passphrase-path", defaultScheduledBackupPassphrasePath, "scheduled backup passphrase path")
 	scheduleDisableCmd.Flags().BoolVar(&removeSchedulePassphrase, "remove-passphrase", false, "remove the stored passphrase after disabling the timer")
 	scheduleCmd.AddCommand(scheduleEnableCmd, scheduleDisableCmd)
 	cmd.AddCommand(scheduleCmd)
@@ -337,56 +384,90 @@ func addRetentionFlags(cmd *cobra.Command, daily, weekly, monthly *int) {
 	cmd.Flags().IntVar(monthly, "monthly", 12, "number of latest UTC months to retain")
 }
 
+type fileReplace struct {
+	path        string
+	backupPath  string
+	hadPrevious bool
+}
+
 func writeBackupArchive(path string, body []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	replaced, err := publishReplacingFile(path, body, 0o600, 0o700)
+	if err != nil {
 		return err
+	}
+	replaced.Commit()
+	return nil
+}
+
+func publishReplacingFile(path string, body []byte, mode os.FileMode, dirMode os.FileMode) (*fileReplace, error) {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, dirMode); err != nil {
+		return nil, err
 	}
 	temp, err := os.CreateTemp(dir, ".veil-backup-*")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	tempPath := temp.Name()
 	if _, err := temp.Write(body); err != nil {
 		_ = temp.Close()
 		_ = os.Remove(tempPath)
-		return err
+		return nil, err
 	}
 	if err := temp.Sync(); err != nil {
 		_ = temp.Close()
 		_ = os.Remove(tempPath)
-		return err
+		return nil, err
 	}
 	if err := temp.Close(); err != nil {
 		_ = os.Remove(tempPath)
-		return err
+		return nil, err
 	}
-	if err := os.Chmod(tempPath, 0o600); err != nil {
+	if err := os.Chmod(tempPath, mode); err != nil {
 		_ = os.Remove(tempPath)
-		return err
+		return nil, err
 	}
-	backupPath := path + ".replace-backup"
-	hadExisting := false
+	replaced := &fileReplace{path: path, backupPath: path + ".replace-backup"}
 	if _, err := os.Stat(path); err == nil {
-		if err := os.Remove(backupPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := os.Remove(replaced.backupPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 			_ = os.Remove(tempPath)
-			return err
+			return nil, err
 		}
-		if err := os.Rename(path, backupPath); err != nil {
+		if err := os.Rename(path, replaced.backupPath); err != nil {
 			_ = os.Remove(tempPath)
-			return err
+			return nil, err
 		}
-		hadExisting = true
+		replaced.hadPrevious = true
 	}
 	if err := os.Rename(tempPath, path); err != nil {
-		if hadExisting {
-			_ = os.Rename(backupPath, path)
+		if replaced.hadPrevious {
+			_ = os.Rename(replaced.backupPath, path)
 		}
 		_ = os.Remove(tempPath)
-		return err
+		return nil, err
 	}
-	if hadExisting {
-		_ = os.Remove(backupPath)
+	return replaced, nil
+}
+
+func (r *fileReplace) Commit() {
+	if r == nil || !r.hadPrevious {
+		return
+	}
+	_ = os.Remove(r.backupPath)
+}
+
+func (r *fileReplace) Restore() error {
+	if r == nil {
+		return nil
+	}
+	if r.hadPrevious {
+		if err := os.Rename(r.backupPath, r.path); err != nil {
+			return err
+		}
+		return nil
+	}
+	if err := os.Remove(r.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 	return nil
 }

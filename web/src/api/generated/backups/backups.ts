@@ -153,11 +153,13 @@ export const getApiBackups = async ( options?: Parameters<typeof apiFetch>[1]): 
 
 
 
+export const getGetApiBackupsMutationKey = () => ['getApiBackups'] as const;
+
 export const getGetApiBackupsMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiBackups>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiBackups>>, TError,void, TContext> => {
 
-const mutationKey = ['getApiBackups'];
+const mutationKey = getGetApiBackupsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -183,6 +185,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiBackupsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiBackups>>>
 
     export type GetApiBackupsMutationError = UnauthorizedResponse | ForbiddenResponse
+
 
     /**
  * @summary List managed disaster-recovery archives
@@ -262,11 +265,19 @@ export const getPostApiBackupsUrl = () => {
  */
 export const postApiBackups = async (backupCreateRequest: BackupCreateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiBackupsResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiBackupsResponse>(getPostApiBackupsUrl(),
   {
@@ -418,11 +429,19 @@ export const getPostApiBackupsPruneUrl = () => {
  */
 export const postApiBackupsPrune = async (backupPruneRequest: BackupPruneRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiBackupsPruneResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiBackupsPruneResponse>(getPostApiBackupsPruneUrl(),
   {
@@ -722,11 +741,13 @@ export const getApiBackupsNameDownload = async (name: string, options?: Paramete
 
 
 
-export const getGetApiBackupsNameDownloadMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiBackupsNameDownload>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof getApiBackupsNameDownload>>, TError,{name: string}, TContext> => {
+export const getGetApiBackupsNameDownloadMutationKey = () => ['getApiBackupsNameDownload'] as const;
 
-const mutationKey = ['getApiBackupsNameDownload'];
+export const getGetApiBackupsNameDownloadMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiBackupsNameDownload>>, TError,GetApiBackupsNameDownloadMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiBackupsNameDownload>>, TError,GetApiBackupsNameDownloadMutationVariables, TContext> => {
+
+const mutationKey = getGetApiBackupsNameDownloadMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -736,7 +757,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiBackupsNameDownload>>, {name: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiBackupsNameDownload>>, GetApiBackupsNameDownloadMutationVariables> = (props) => {
           const {name} = props ?? {};
 
           return  getApiBackupsNameDownload(name,requestOptions)
@@ -752,16 +773,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiBackupsNameDownloadMutationResult = NonNullable<Awaited<ReturnType<typeof getApiBackupsNameDownload>>>
 
     export type GetApiBackupsNameDownloadMutationError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+    export type GetApiBackupsNameDownloadMutationVariables = {name: string}
 
     /**
  * @summary Download an encrypted archive
  */
 export const useGetApiBackupsNameDownload = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiBackupsNameDownload>>, TError,{name: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiBackupsNameDownload>>, TError,GetApiBackupsNameDownloadMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof getApiBackupsNameDownload>>,
         TError,
-        {name: string},
+        GetApiBackupsNameDownloadMutationVariables,
         TContext
       > => {
       return useMutation(getGetApiBackupsNameDownloadMutationOptions(options), queryClient);
@@ -829,11 +851,19 @@ export const getPostApiBackupsNameVerifyUrl = (name: string,) => {
 export const postApiBackupsNameVerify = async (name: string,
     emptyObject?: EmptyObject, options?: Parameters<typeof apiFetch>[1]): Promise<postApiBackupsNameVerifyResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiBackupsNameVerifyResponse>(getPostApiBackupsNameVerifyUrl(name),
   {
@@ -999,11 +1029,19 @@ export const getPostApiBackupsNameRestoreUrl = (name: string,) => {
 export const postApiBackupsNameRestore = async (name: string,
     backupRestoreRequest: BackupRestoreRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiBackupsNameRestoreResponse> => {
 
-    const getHeaders = (h?: HeadersInit | Headers): Record<string, string> => {
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
 return apiFetch<postApiBackupsNameRestoreResponse>(getPostApiBackupsNameRestoreUrl(name),
   {
@@ -1159,11 +1197,13 @@ export const getApiBackupRestoreJobsId = async (id: string, options?: Parameters
 
 
 
-export const getGetApiBackupRestoreJobsIdMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiBackupRestoreJobsId>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof getApiBackupRestoreJobsId>>, TError,{id: string}, TContext> => {
+export const getGetApiBackupRestoreJobsIdMutationKey = () => ['getApiBackupRestoreJobsId'] as const;
 
-const mutationKey = ['getApiBackupRestoreJobsId'];
+export const getGetApiBackupRestoreJobsIdMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiBackupRestoreJobsId>>, TError,GetApiBackupRestoreJobsIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiBackupRestoreJobsId>>, TError,GetApiBackupRestoreJobsIdMutationVariables, TContext> => {
+
+const mutationKey = getGetApiBackupRestoreJobsIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1173,7 +1213,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiBackupRestoreJobsId>>, {id: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiBackupRestoreJobsId>>, GetApiBackupRestoreJobsIdMutationVariables> = (props) => {
           const {id} = props ?? {};
 
           return  getApiBackupRestoreJobsId(id,requestOptions)
@@ -1189,16 +1229,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiBackupRestoreJobsIdMutationResult = NonNullable<Awaited<ReturnType<typeof getApiBackupRestoreJobsId>>>
 
     export type GetApiBackupRestoreJobsIdMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+    export type GetApiBackupRestoreJobsIdMutationVariables = {id: string}
 
     /**
  * @summary Read queued restore progress
  */
 export const useGetApiBackupRestoreJobsId = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiBackupRestoreJobsId>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof apiFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiBackupRestoreJobsId>>, TError,GetApiBackupRestoreJobsIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof getApiBackupRestoreJobsId>>,
         TError,
-        {id: string},
+        GetApiBackupRestoreJobsIdMutationVariables,
         TContext
       > => {
       return useMutation(getGetApiBackupRestoreJobsIdMutationOptions(options), queryClient);

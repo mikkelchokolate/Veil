@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 )
@@ -22,9 +23,21 @@ func TestRestartUpdatedVeilRollsBackWhenStagedRestartFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	restarts := 0
 	oldRestart := runSystemctlRestart
-	runSystemctlRestart = func(unit string) error { return fmt.Errorf("restart failed") }
-	t.Cleanup(func() { runSystemctlRestart = oldRestart })
+	oldHealth := updateHealthChecker
+	runSystemctlRestart = func(unit string) error {
+		restarts++
+		if restarts == 1 {
+			return fmt.Errorf("restart failed")
+		}
+		return nil
+	}
+	updateHealthChecker = func(string, string, time.Duration) error { return nil }
+	t.Cleanup(func() {
+		runSystemctlRestart = oldRestart
+		updateHealthChecker = oldHealth
+	})
 
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
@@ -41,6 +54,9 @@ func TestRestartUpdatedVeilRollsBackWhenStagedRestartFails(t *testing.T) {
 	}
 	if string(body) != "old-binary" {
 		t.Fatalf("rollback did not restore old binary: %q", string(body))
+	}
+	if restarts < 2 {
+		t.Fatalf("restored binary was never started again: restart calls = %d", restarts)
 	}
 	if !strings.Contains(out.String(), "Rolled back to previous binary.") {
 		t.Fatalf("rollback output missing:\n%s", out.String())

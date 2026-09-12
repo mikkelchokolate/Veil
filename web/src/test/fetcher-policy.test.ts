@@ -15,6 +15,54 @@ function jsonResponse(body: unknown, init: Partial<Response> = {}): Response {
 	} as Response;
 }
 
+function streamingJsonResponse(
+	body: unknown,
+	options: {
+		delayMs?: number;
+		signal?: AbortSignal | null | undefined;
+		neverComplete?: boolean;
+		fail?: Error;
+	} = {},
+): Response {
+	const payload = new TextEncoder().encode(JSON.stringify(body));
+	const stream = new ReadableStream<Uint8Array>({
+		start(controller) {
+			const fail = (error: unknown) => {
+				try {
+					controller.error(error);
+				} catch {
+					/* already closed or errored */
+				}
+			};
+			const finish = () => {
+				if (options.fail) {
+					fail(options.fail);
+					return;
+				}
+				controller.enqueue(payload);
+				controller.close();
+			};
+			let timer: ReturnType<typeof setTimeout> | undefined;
+			if (!options.neverComplete) {
+				timer = setTimeout(finish, options.delayMs ?? 0);
+			}
+			options.signal?.addEventListener(
+				"abort",
+				() => {
+					if (timer !== undefined) clearTimeout(timer);
+					fail(new DOMException("aborted", "AbortError"));
+				},
+				{ once: true },
+			);
+		},
+	});
+	return new Response(stream, {
+		status: 200,
+		statusText: "OK",
+		headers: { "Content-Type": "application/json" },
+	});
+}
+
 describe("apiFetch request policy", () => {
 	afterEach(() => {
 		fetcher.setUnauthorizedHandler(null);
@@ -164,6 +212,50 @@ describe("apiFetch request policy", () => {
 		expect(mutationFetch).toHaveBeenCalledTimes(1);
 	});
 
+	it("does not send a POST when the caller signal is already aborted", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+		vi.stubGlobal("fetch", fetchMock);
+		const controller = new AbortController();
+		controller.abort();
+		const outcome = await fetcher
+			.apiFetch("/api/v1/clients", {
+				method: "POST",
+				body: JSON.stringify({ name: "canceled-test" }),
+				signal: controller.signal,
+				attempts: 1,
+			})
+			.then(
+				() => undefined,
+				(error: unknown) => error,
+			);
+		expect(outcome).toBeInstanceOf(fetcher.CancelledError);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("does not send a GET when the caller signal is already aborted", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+		vi.stubGlobal("fetch", fetchMock);
+		const controller = new AbortController();
+		controller.abort();
+		await expect(
+			fetcher.apiFetch("/api/v1/clients", { signal: controller.signal }),
+		).rejects.toBeInstanceOf(fetcher.CancelledError);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("does not dispatch a retry after the caller cancels", async () => {
+		const controller = new AbortController();
+		const fetchMock = vi.fn().mockImplementationOnce(async () => {
+			controller.abort();
+			throw new TypeError("network");
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(
+			fetcher.apiFetch("/api/safe", { signal: controller.signal }),
+		).rejects.toBeInstanceOf(fetcher.CancelledError);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
 	it("maps caller cancellation separately from timeout", async () => {
 		const controller = new AbortController();
 		vi.stubGlobal(
@@ -189,6 +281,87 @@ describe("apiFetch request policy", () => {
 		expect(CancelledError).toBeTypeOf("function");
 		const error = await outcome;
 		expect(error).toBeInstanceOf(CancelledError as new () => Error);
+	});
+
+	it("times out a stalled response body after headers arrive", async () => {
+		const fetchMock = vi.fn((_url: string, options?: RequestInit) =>
+			Promise.resolve(
+				streamingJsonResponse(
+					{ ok: true },
+					{ delayMs: 100, signal: options?.signal },
+				),
+			),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+		const started = Date.now();
+		const outcome = await fetcher
+			.apiFetch("/api/slow-body", { timeoutMs: 15, attempts: 1 })
+			.then(
+				() => "resolved" as const,
+				(error: unknown) => error,
+			);
+		expect(outcome).toBeInstanceOf(fetcher.TimeoutError);
+		expect(Date.now() - started).toBeLessThan(80);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("cancels a body read when the caller aborts after headers", async () => {
+		const controller = new AbortController();
+		const fetchMock = vi.fn((_url: string, options?: RequestInit) =>
+			Promise.resolve(
+				streamingJsonResponse(
+					{ ok: true },
+					{ neverComplete: true, signal: options?.signal },
+				),
+			),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+		const pending = fetcher.apiFetch("/api/stream", {
+			signal: controller.signal,
+			attempts: 1,
+		});
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+		await Promise.resolve();
+		controller.abort();
+		await expect(pending).rejects.toBeInstanceOf(fetcher.CancelledError);
+	});
+
+	it("still returns a fast body that finishes inside the timeout", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn((_url: string, options?: RequestInit) =>
+				Promise.resolve(
+					streamingJsonResponse(
+						{ ok: true },
+						{ delayMs: 5, signal: options?.signal },
+					),
+				),
+			),
+		);
+		await expect(
+			fetcher.apiFetch("/api/fast-body", { timeoutMs: 200, attempts: 1 }),
+		).resolves.toEqual({ ok: true });
+	});
+
+	it("surfaces a body stream error after headers", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn((_url: string, options?: RequestInit) =>
+				Promise.resolve(
+					streamingJsonResponse(
+						{ ok: true },
+						{
+							delayMs: 5,
+							fail: new TypeError("body failed"),
+							signal: options?.signal,
+						},
+					),
+				),
+			),
+		);
+		await expect(
+			fetcher.apiFetch("/api/broken-body", { timeoutMs: 200, attempts: 1 }),
+		).rejects.toThrow("body failed");
 	});
 
 	it("rejects a cross-origin redirect even when the final response is 200", async () => {

@@ -141,6 +141,42 @@ func validate(c Client) error {
 	return nil
 }
 
+type quotaClearStore interface {
+	Get(id string) (Client, error)
+	SupersedeQuotaEnforcement(clientID string) error
+}
+
+func normalizeClearedQuota(c *Client) {
+	if c.QuotaBytes != nil {
+		return
+	}
+	c.QuotaResetPolicy = ResetNever
+	c.QuotaResetAt = nil
+	c.Depleted = false
+}
+
+// prepareQuotaClear treats a nil quota as an explicit transition to unlimited:
+// derived reset/depletion state is cleared and any active enforcement target
+// is superseded in the same store/transaction. The consistency validator still
+// rejects impossible nil-quota/depleted combinations if a caller bypasses this.
+func prepareQuotaClear(store quotaClearStore, c *Client) error {
+	if c.QuotaBytes != nil {
+		return nil
+	}
+	existing, err := store.Get(c.ID)
+	if err != nil {
+		return err
+	}
+	normalizeClearedQuota(c)
+	if existing.QuotaBytes != nil || existing.Depleted || existing.QuotaResetAt != nil ||
+		(existing.QuotaResetPolicy != "" && existing.QuotaResetPolicy != ResetNever) {
+		if err := store.SupersedeQuotaEnforcement(c.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Create validates and creates a client. The caller (HTTP layer) is
 // responsible for the post-commit apply orchestration.
 func (s *Service) Create(c Client) (View, error) {
@@ -257,6 +293,9 @@ func (s *Service) CreateWithBindingsIssuedTx(tx *Tx, c Client, bindings []Bindin
 // takes the management-state mutex, which the API layer already holds around
 // the whole mutation).
 func (s *Service) UpdateTx(tx *Tx, c Client, version int) error {
+	if err := prepareQuotaClear(tx, &c); err != nil {
+		return err
+	}
 	if err := validate(c); err != nil {
 		return err
 	}
@@ -368,7 +407,7 @@ func (s *Service) SetBindingEnabledTx(tx *Tx, bindingID string, enabled bool, ve
 func (s *Service) Get(id string) (View, error) {
 	c, err := s.repo.Get(id)
 	if err != nil {
-		return View{}, ErrNotFound
+		return View{}, err
 	}
 	return s.toView(c)
 }
@@ -392,6 +431,9 @@ func (s *Service) List(f ListFilter) ([]View, int, error) {
 
 // Update applies an optimistic-locking update.
 func (s *Service) Update(c Client, version int) (View, error) {
+	if err := prepareQuotaClear(s.repo, &c); err != nil {
+		return View{}, err
+	}
 	if err := validate(c); err != nil {
 		return View{}, err
 	}
@@ -497,42 +539,30 @@ type BindingCredential struct {
 // credentials are merged into the inbound's access model so normalized clients
 // reach the live config. Only enabled clients and enabled bindings contribute.
 func (s *Service) CredentialsForInbound(inboundID string) ([]BindingCredential, error) {
-	clients, _, err := s.repo.List(ListFilter{})
+	rows, err := s.repo.ListRuntimeBindingsForInbound(inboundID, s.now())
 	if err != nil {
 		return nil, err
 	}
 	out := []BindingCredential{}
-	for _, c := range clients {
-		if !c.Enabled || c.Depleted || (c.ExpiresAt != nil && *c.ExpiresAt <= s.now()) {
-			continue
-		}
-		bindings, err := s.repo.BindingsForClient(c.ID)
+	for _, row := range rows {
+		creds, err := s.creds.ListForBinding(row.Binding.ID)
 		if err != nil {
 			return nil, err
 		}
-		for _, b := range bindings {
-			if b.InboundID != inboundID || !b.Enabled {
+		foundActive := false
+		for _, cr := range creds {
+			if cr.RevokedAt != nil {
 				continue
 			}
-			creds, err := s.creds.ListForBinding(b.ID)
-			if err != nil {
-				return nil, err
+			foundActive = true
+			plaintext, rerr := s.creds.Reveal(cr.ID)
+			if rerr != nil {
+				return nil, rerr
 			}
-			foundActive := false
-			for _, cr := range creds {
-				if cr.RevokedAt != nil {
-					continue
-				}
-				foundActive = true
-				plaintext, rerr := s.creds.Reveal(cr.ID)
-				if rerr != nil {
-					return nil, rerr
-				}
-				out = append(out, BindingCredential{Name: c.Name, Username: b.RuntimeIdentity, Password: plaintext})
-			}
-			if !foundActive {
-				return nil, fmt.Errorf("%w: enabled binding %s has no active credential", ErrValidation, b.ID)
-			}
+			out = append(out, BindingCredential{Name: row.Client.Name, Username: row.Binding.RuntimeIdentity, Password: plaintext})
+		}
+		if !foundActive {
+			return nil, fmt.Errorf("%w: enabled binding %s has no active credential", ErrValidation, row.Binding.ID)
 		}
 	}
 	return out, nil

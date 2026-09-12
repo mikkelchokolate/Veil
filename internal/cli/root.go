@@ -64,6 +64,7 @@ func NewRootCommandWithOptions(version string, options RootOptions) *cobra.Comma
 	cmd.AddCommand(newServeCommand(version))
 	cmd.AddCommand(newUpdateCommand(version))
 	cmd.AddCommand(newStatusCommand(version))
+	cmd.AddCommand(newHealthcheckCommand())
 	cmd.AddCommand(newConfigCommand())
 	cmd.AddCommand(newAdminCommand(options.PasswordHasher))
 	cmd.AddCommand(newBackupCommand(version))

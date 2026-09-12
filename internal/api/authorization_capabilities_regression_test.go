@@ -58,6 +58,7 @@ func productionAuthorizationMatrix() []routeAuthorizationExpectation {
 		{http.MethodGet, "/api/inbounds", false, true, "redacted viewer metadata"},
 		{http.MethodPost, "/api/inbounds", false, false, "admin mutation"},
 		{http.MethodGet, "/api/inbounds/edge", false, true, "redacted viewer metadata"},
+		{http.MethodGet, "/api/inbounds/edge/clients", false, true, "per-inbound attached clients"},
 		{http.MethodPut, "/api/inbounds/edge", false, false, "admin mutation"},
 		{http.MethodDelete, "/api/inbounds/edge", false, false, "admin mutation"},
 		{http.MethodGet, "/api/routing/rules", false, true, "viewer metadata"},

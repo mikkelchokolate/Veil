@@ -50,6 +50,9 @@ func TestPanelCaddyInstallPlanOpensHTTPSInsteadOfPanelPort(t *testing.T) {
 	if !hasFirewallAction(plan, "443/tcp") {
 		t.Fatalf("panel Caddy install should open HTTPS: %+v", plan.FirewallActions)
 	}
+	if !hasFirewallAction(plan, "22/tcp") && !hasSSHFirewallAction(plan) {
+		t.Fatalf("panel Caddy install should stage SSH before enabling UFW: %+v", plan.FirewallActions)
+	}
 	if plan.CaddyBuild.BinaryPath != "/usr/local/bin/caddy" || !strings.Contains(plan.Summary(), "Caddy/Panel reverse proxy") {
 		t.Fatalf("panel Caddy install should include standard Caddy guidance: %+v\n%s", plan.CaddyBuild, plan.Summary())
 	}

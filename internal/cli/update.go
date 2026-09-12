@@ -1,15 +1,12 @@
 package cli
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
-	statusflow "github.com/mikkelchokolate/Veil/internal/cliflow/status"
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 	"github.com/mikkelchokolate/Veil/internal/releaseverify"
-	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/spf13/cobra"
 )
 
@@ -54,7 +51,7 @@ rollback to the previous binary if the health check fails.`,
 	cmd.Flags().BoolVar(&force, "force", false, "reinstall even if already at latest version")
 	cmd.Flags().BoolVar(&restart, "restart", false, "restart veil.service and health check after update")
 	cmd.Flags().BoolVar(&staged, "staged", false, "restart with health check and automatic rollback on failure")
-	cmd.Flags().StringVar(&listen, "listen", "", "veil serve address for health check (default: 127.0.0.1:2096)")
+	cmd.Flags().StringVar(&listen, "listen", "", "veil serve address for health check; defaults to VEIL_LISTEN, the installed panel listen address, or 127.0.0.1:2096")
 	cmd.Flags().StringVar(&authToken, "auth-token", "", "API token for health check")
 	return cmd
 }
@@ -76,39 +73,10 @@ var runSystemctlRestart = updateflow.RunSystemctlRestart
 var updateHealthChecker = updateflow.WaitForHealthy
 
 func restartUpdatedVeil(cmd *cobra.Command, currentPath string, backupPath string, opts updateflow.WorkflowOptions) error {
-	out := cmd.OutOrStdout()
-	addr := statusflow.ResolveListen(opts.Listen)
 	token, _ := serveflow.NewEnvironment().AuthToken(opts.AuthToken)
-
-	fmt.Fprintln(out, "Restarting "+renderer.UnitVeil+"...")
-	if err := runSystemctlRestart(renderer.UnitVeil); err != nil {
-		if opts.Staged {
-			fmt.Fprintf(out, "Restart failed, rolling back to previous binary...\n")
-			if rollbackErr := updateflow.RollbackBinary(backupPath, currentPath); rollbackErr != nil {
-				return fmt.Errorf("restart failed and rollback also failed: restart: %w; rollback: %v", err, rollbackErr)
-			}
-			fmt.Fprintln(out, "Rolled back to previous binary.")
-			return fmt.Errorf("restart failed, rolled back: %w", err)
-		}
-		return fmt.Errorf("restart failed (binary updated, rollback with: mv %s %s): %w", backupPath, currentPath, err)
-	}
-	fmt.Fprintln(out, "Service restarted. Running health check...")
-
-	if err := updateHealthChecker(addr, token, 10*time.Second); err != nil {
-		if opts.Staged {
-			fmt.Fprintf(out, "Health check failed, rolling back to previous binary...\n")
-			if rollbackErr := updateflow.RollbackBinary(backupPath, currentPath); rollbackErr != nil {
-				return fmt.Errorf("health check failed and rollback also failed: health: %w; rollback: %v", err, rollbackErr)
-			}
-			// Restart again after rollback to get the old binary running
-			if restartErr := runSystemctlRestart(renderer.UnitVeil); restartErr != nil {
-				fmt.Fprintf(out, "Warning: rollback binary installed but restart failed: %v\n", restartErr)
-			}
-			fmt.Fprintln(out, "Rolled back to previous binary.")
-			return fmt.Errorf("health check failed, rolled back: %w", err)
-		}
-		return fmt.Errorf("health check failed after restart (binary updated, rollback with: mv %s %s): %w", backupPath, currentPath, err)
-	}
-	fmt.Fprintf(out, "Service healthy. Update complete.\n")
-	return nil
+	opts.AuthToken = token
+	return updateflow.RestartAfterUpdate(cmd.OutOrStdout(), currentPath, backupPath, opts, updateflow.RestartHooks{
+		Restart: runSystemctlRestart,
+		Health:  updateHealthChecker,
+	})
 }

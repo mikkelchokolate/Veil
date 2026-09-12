@@ -109,7 +109,10 @@ func (s *managementState) handlePublicSubscription(w http.ResponseWriter, r *htt
 		return
 	}
 	token := rest
-	if !s.subscriptionLimiter.allow(token, r.RemoteAddr, time.Now()) {
+	if r.Method == http.MethodHead {
+		w = headWithoutBody{ResponseWriter: w}
+	}
+	if !s.subscriptionLimiter.allow(token, clientIP(r), time.Now()) {
 		writeError(w, "subscription rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}
@@ -126,10 +129,6 @@ func (s *managementState) handlePublicSubscription(w http.ResponseWriter, r *htt
 	}
 	if tok == nil {
 		writeNotFound(w) // unknown/disabled/revoked/expired -> indistinguishable 404
-		return
-	}
-	if r.Method == http.MethodHead {
-		w.WriteHeader(http.StatusOK)
 		return
 	}
 	cl, links, applied, desired, err := s.appliedSubscription(tok.ClientID)
@@ -211,7 +210,7 @@ func (s *managementState) appliedClientProjection(revision uint64, payload []byt
 	if !ok {
 		return managementSnapshot{}, client.ErrNotFound
 	}
-	return projection, nil
+	return cloneAppliedProjection(projection), nil
 }
 
 func (s *managementState) appliedSubscription(clientID string) (client.View, []model.ClientLink, uint64, uint64, error) {
@@ -286,9 +285,7 @@ func (s *managementState) appliedSubscription(clientID string) (client.View, []m
 	}
 	inbounds := make(map[string]client.InboundSnapshot, len(snapshot.Inbounds))
 	for _, inbound := range snapshot.Inbounds {
-		inbounds[inbound.Name] = client.InboundSnapshot{Name: inbound.Name, Protocol: inbound.Protocol,
-			Transport: inbound.Transport, Port: inbound.Port, Enabled: inbound.Enabled,
-			Password: inbound.Password, ProtocolFields: inbound.ProtocolFields}
+		inbounds[inbound.Name] = client.NewInboundSnapshot(inbound)
 	}
 	effectiveAt := snapshot.EffectiveAt
 	if effectiveAt == 0 {
@@ -297,7 +294,7 @@ func (s *managementState) appliedSubscription(clientID string) (client.View, []m
 	view := client.View{Client: current, Status: client.ComputeStatus(current, time.Unix(effectiveAt, 0).UTC(), false, false, len(bindings) == 0), InboundIDs: inboundIDs, HasCreds: len(plaintext) > 0}
 	links := []model.ClientLink{}
 	if view.Status == client.StatusActive {
-		renderer := s.subRenderer.WithSettings(clientaccess.Settings{Domain: snapshot.Settings.Domain})
+		renderer := s.subRenderer.WithSettings(clientaccess.CloneSettings(snapshot.Settings))
 		links, err = renderer.LinksForSnapshot(current, bindings, plaintext, func(inboundID string) (client.InboundSnapshot, bool) {
 			value, ok := inbounds[inboundID]
 			return value, ok
@@ -319,7 +316,6 @@ func (s *managementState) writeSubscription(w http.ResponseWriter, r *http.Reque
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	clientaccess.NewClientSubscriptionDeliveryHeaders(subscription).Apply(w.Header())
 	var upload, download int64
 	trafficState := "unsupported"
 	if s.trafficStore != nil {
@@ -340,13 +336,22 @@ func (s *managementState) writeSubscription(w http.ResponseWriter, r *http.Reque
 		ProfileUpdateIntervalHours: subscriptionUpdateIntervalHours(),
 		ProfileTitle:               subscriptionProfileTitle(cl),
 	}
-	meta.Apply(w.Header())
-	// Optional HTML landing for browsers that open the link directly.
 	if wantsHTML(r) {
+		clientaccess.NewClientLinkDeliveryHeaders().Apply(w.Header())
+		meta.Apply(w.Header())
+		w.Header().Del("Content-Disposition")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if r.Method == http.MethodHead {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		s.writeSubscriptionHTML(w, cl, links)
 		return
 	}
+	clientaccess.NewClientSubscriptionDeliveryHeaders(subscription).Apply(w.Header())
+	meta.Apply(w.Header())
 	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 	_, _ = w.Write([]byte(subscription.Body))
@@ -487,7 +492,7 @@ func (s *managementState) handleV1ClientLinks(w http.ResponseWriter, r *http.Req
 	}
 	view, err := s.clientService.Get(clientID)
 	if err != nil {
-		writeNotFound(w)
+		s.writeV1ClientError(w, err)
 		return
 	}
 	s.mu.Lock()
@@ -495,16 +500,12 @@ func (s *managementState) handleV1ClientLinks(w http.ResponseWriter, r *http.Req
 	inbounds := append([]Inbound(nil), s.inbounds...)
 	renderer := s.subRenderer
 	s.mu.Unlock()
-	links, err := renderer.WithSettings(clientaccess.Settings{Domain: settings.Domain}).LinksForClient(view.Client, func(inboundID string) (client.InboundSnapshot, bool) {
+	links, err := renderer.WithSettings(clientaccess.CloneSettings(settings)).LinksForClient(view.Client, func(inboundID string) (client.InboundSnapshot, bool) {
 		for _, inbound := range inbounds {
 			if inbound.Name != inboundID {
 				continue
 			}
-			return client.InboundSnapshot{
-				Name: inbound.Name, Protocol: inbound.Protocol, Transport: inbound.Transport,
-				Port: inbound.Port, Enabled: inbound.Enabled, Password: inbound.Password,
-				ProtocolFields: inbound.ProtocolFields,
-			}, true
+			return client.NewInboundSnapshot(inbound), true
 		}
 		return client.InboundSnapshot{}, false
 	})
@@ -524,16 +525,51 @@ func (s *managementState) handleV1ClientLinks(w http.ResponseWriter, r *http.Req
 // the URL from the panel, which knows its own origin.
 func (s *managementState) subscriptionURLFor(plaintext string) string {
 	s.mu.Lock()
-	domain := ""
-	if s.settings.Domain != "" {
-		domain = s.settings.Domain
-	}
+	settings := s.settings
 	s.mu.Unlock()
-	if domain == "" {
-		return "/s/" + plaintext
+	return publicSubscriptionURL(settings, plaintext)
+}
+
+func publicSubscriptionURL(settings Settings, plaintext string) string {
+	path := "/s/" + plaintext
+	host := strings.Trim(strings.TrimSpace(settings.Domain), "[]")
+	if host == "" {
+		return path
 	}
-	scheme := "https"
-	return scheme + "://" + domain + "/s/" + plaintext
+	port := publicSubscriptionPort(settings)
+	authority := host
+	if port != "" && port != "443" {
+		authority = net.JoinHostPort(host, port)
+	} else if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
+		authority = "[" + host + "]"
+	}
+	return "https://" + authority + path
+}
+
+func publicSubscriptionPort(settings Settings) string {
+	if strings.EqualFold(strings.TrimSpace(settings.PanelAccess), "caddy") {
+		if settings.PanelPublicPort > 0 && settings.PanelPublicPort != 443 {
+			return strconv.Itoa(settings.PanelPublicPort)
+		}
+		return "443"
+	}
+	listen := strings.TrimSpace(settings.PanelListen)
+	if listen == "" {
+		return ""
+	}
+	_, port, err := net.SplitHostPort(listen)
+	if err != nil || port == "" || port == "0" {
+		return ""
+	}
+	return port
+}
+
+type headWithoutBody struct {
+	http.ResponseWriter
+}
+
+func (headWithoutBody) Write(p []byte) (int, error) {
+	return len(p), nil
 }
 
 func wantsHTML(r *http.Request) bool {
