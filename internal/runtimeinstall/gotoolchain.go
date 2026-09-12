@@ -27,15 +27,15 @@ var (
 	findBestGoFn  = findBestGo
 )
 
-const defaultGoVersion = "1.27.0"
+const defaultGoVersion = "1.27.1"
 
 var defaultGoSHA256 = map[string]string{
-	"linux-amd64": "675c26c449cbb18fc24b74650de1eabbae6e16f64326fd85a283fb3b58280685",
-	"linux-arm64": "51798d2c42d0e1c6ed7fd9f48728b4193abac9e8aad6dbac2fe96a81f5909bda",
+	"linux-amd64": "63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445",
+	"linux-arm64": "3450b45a3f9ee8568792736a5c5e70a1f2e9b36c35a8f74958c03e51d7d92bec",
 }
 
-// goVersionRE extracts "1.27.0" from strings like "go version go1.27.0 linux/amd64"
-// or a plain "1.27.0" version argument.
+// goVersionRE extracts "1.27.1" from strings like "go version go1.27.1 linux/amd64"
+// or a plain "1.27.1" version argument.
 var goVersionRE = regexp.MustCompile(`(?:^|[^0-9.])(\d+)\.(\d+)(?:\.(\d+))?`)
 
 type goVersion struct {

@@ -30,14 +30,14 @@
 #     -e VEIL_AUTO_TLS=1 \
 #     veil serve --listen 0.0.0.0:443 --auth-token your-secret-token --auto-tls
 
-ARG NODE_IMAGE=node:26.7.0-alpine@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019
-ARG GO_IMAGE=golang:1.27.0-alpine@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc
-ARG ALPINE_IMAGE=alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
+ARG NODE_IMAGE=node:26.8.2-alpine@sha256:ef24c5053d50fdc3e4e56eb4e7ddb7861874ab0fdc797046ba897581deb8e868
+ARG GO_IMAGE=golang:1.27.1-alpine@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125
+ARG ALPINE_IMAGE=alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
 FROM ${NODE_IMAGE} AS webbuilder
 
 ARG NPM_VERSION=12.0.2
-ARG PNPM_VERSION=11.22.0
+ARG PNPM_VERSION=12.4.1
 
 # The Go binary embeds web/dist (see web/web.go); build the SPA first so the
 # image ships the real panel UI.
