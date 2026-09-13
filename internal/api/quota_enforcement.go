@@ -86,7 +86,7 @@ WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND state<>'
 			return err
 		}
 	} else {
-		_, err = s.db.Exec(`UPDATE quota_enforcement SET state='applying',updated_at=? WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND desired_revision=? AND state<>'superseded'`,
+		_, err = s.db.Exec(`UPDATE quota_enforcement SET state='applying',next_retry_at=0,updated_at=? WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND desired_revision=? AND state<>'superseded'`,
 			time.Now().UTC().Unix(), mutation.ClientID, mutation.TargetGeneration, mutation.TargetPayloadHash, desiredRevision)
 		if err != nil {
 			s.mu.Unlock()
