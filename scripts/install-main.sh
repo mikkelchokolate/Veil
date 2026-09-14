@@ -95,12 +95,85 @@ go_ok() {
   esac
 }
 
-node_ok() {
-  command -v node >/dev/null 2>&1 || return 1
-  major="$(node -p "process.versions.node.split('.')[0]" 2>/dev/null || true)"
-  [ -n "$major" ] || return 1
-  [ "$major" -ge 20 ]
+# BEGIN_NODE_HELPERS
+# Vite 8 (web/package.json) requires Node 20.19+ or 22.12+; 24+ also works.
+# Odd majors 21/23 lack the unflagged require(esm) baseline Vite 8 documents.
+node_version_supported() {
+  ver="${1#v}"
+  ver="${ver%%[!0-9.]*}"
+  [ -n "$ver" ] || return 1
+  major="${ver%%.*}"
+  case "$major" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  rest=""
+  minor=0
+  if [ "$major" != "$ver" ]; then
+    rest="${ver#*.}"
+    minor="${rest%%.*}"
+  fi
+  case "$minor" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  if [ "$major" -ge 24 ]; then
+    return 0
+  fi
+  if [ "$major" -eq 22 ] && [ "$minor" -ge 12 ]; then
+    return 0
+  fi
+  if [ "$major" -eq 20 ] && [ "$minor" -ge 19 ]; then
+    return 0
+  fi
+  return 1
 }
+
+node_ok() {
+  node_bin="${1:-}"
+  if [ -n "$node_bin" ]; then
+    [ -x "$node_bin" ] || return 1
+  else
+    command -v node >/dev/null 2>&1 || return 1
+    node_bin="$(command -v node)"
+    [ -n "$node_bin" ] || return 1
+  fi
+  ver="$("$node_bin" -v 2>/dev/null || true)"
+  [ -n "$ver" ] || return 1
+  node_version_supported "$ver" || return 1
+  major="$("$node_bin" -p "process.versions.node.split('.')[0]" 2>/dev/null || true)"
+  [ -n "$major" ] || return 1
+  case "$major" in
+    *[!0-9]*) return 1 ;;
+  esac
+  return 0
+}
+
+diagnose_node() {
+  target="${1:-}"
+  echo "Node usability diagnostics:" >&2
+  echo "PATH=${PATH}" >&2
+  echo "command -v node: $(command -v node 2>/dev/null || echo not-found)" >&2
+  echo "uname: $(uname -s 2>/dev/null || true) $(uname -m 2>/dev/null || true)" >&2
+  if [ -z "$target" ]; then
+    target="$(command -v node 2>/dev/null || true)"
+  fi
+  echo "node binary: ${target:-none}" >&2
+  if [ -n "$target" ] && [ -e "$target" ]; then
+    ls -l "$target" >&2 || true
+    echo "node -v:" >&2
+    "$target" -v >&2 || echo "node -v exited $?" >&2
+    echo "node -p process.versions.node.split:" >&2
+    "$target" -p "process.versions.node.split('.')[0]" >&2 || echo "node -p exited $?" >&2
+    if command -v ldd >/dev/null 2>&1; then
+      echo "ldd:" >&2
+      ldd "$target" >&2 || true
+    else
+      echo "ldd: not found" >&2
+    fi
+  else
+    echo "node binary is missing" >&2
+  fi
+}
+# END_NODE_HELPERS
 
 if ! go_ok; then
   if [ "$go_arch" != "amd64" ]; then
@@ -112,6 +185,7 @@ if ! go_ok; then
   printf '%s  %s\n' "$CI_GO_TARBALL_SHA256" "$work/go.tgz" | sha256sum -c - >/dev/null
   tar -xzf "$work/go.tgz" -C "$work"
   export PATH="$work/go/bin:$PATH"
+  hash -r 2>/dev/null || true
   go_ok || { echo "Bootstrapped Go is not usable" >&2; exit 1; }
 fi
 
@@ -125,32 +199,74 @@ if ! node_ok; then
     exit 1
   }
   echo "Installing Node.js ${CI_NODE_VERSION}..."
-  node_tarball="node-v${CI_NODE_VERSION}-linux-${node_arch}.tar.xz"
+  node_suffix=""
+  node_sha256="$CI_NODE_TARBALL_SHA256"
+  if [ -e /lib/ld-musl-x86_64.so.1 ] || [ -e /lib/ld-musl-aarch64.so.1 ]; then
+    node_suffix="-musl"
+    node_sha256="${CI_NODE_MUSL_TARBALL_SHA256:-}"
+    if [ -z "$node_sha256" ]; then
+      echo "musl libc detected; pinned Node musl checksum is missing" >&2
+      exit 1
+    fi
+  fi
+  node_tarball="node-v${CI_NODE_VERSION}-linux-${node_arch}${node_suffix}.tar.xz"
   curl -fsSLo "$work/$node_tarball" "https://nodejs.org/dist/v${CI_NODE_VERSION}/${node_tarball}"
-  printf '%s  %s\n' "$CI_NODE_TARBALL_SHA256" "$work/$node_tarball" | sha256sum -c - >/dev/null
+  printf '%s  %s\n' "$node_sha256" "$work/$node_tarball" | sha256sum -c - >/dev/null
   tar -xJf "$work/$node_tarball" -C "$work"
-  export PATH="$work/node-v${CI_NODE_VERSION}-linux-${node_arch}/bin:$PATH"
-  node_ok || { echo "Bootstrapped Node.js is not usable" >&2; exit 1; }
-fi
-
-if ! command -v pnpm >/dev/null 2>&1; then
-  if command -v corepack >/dev/null 2>&1; then
-    export COREPACK_HOME="$work/corepack"
-    mkdir -p "$COREPACK_HOME"
-    corepack enable >/dev/null
-    corepack prepare "pnpm@${CI_PNPM_VERSION}" --activate
-  elif command -v npm >/dev/null 2>&1; then
-    npm install -g --prefix "$work/pnpm-prefix" "pnpm@${CI_PNPM_VERSION}"
-    export PATH="$work/pnpm-prefix/bin:$PATH"
-  else
-    echo "pnpm ${CI_PNPM_VERSION} is required (enable corepack or install npm/pnpm)" >&2
+  node_bin=""
+  for candidate in "$work"/node-v*/bin/node; do
+    if [ -f "$candidate" ]; then
+      node_bin="$candidate"
+      break
+    fi
+  done
+  if [ -z "$node_bin" ] || [ ! -f "$node_bin" ]; then
+    echo "Extracted Node.js tarball is missing bin/node (arch=${node_arch} tarball=${node_tarball})" >&2
+    diagnose_node "$work/node-v${CI_NODE_VERSION}-linux-${node_arch}${node_suffix}/bin/node"
+    echo "Bootstrapped Node.js is not usable" >&2
+    exit 1
+  fi
+  chmod +x "$node_bin" 2>/dev/null || true
+  node_bindir="$(dirname "$node_bin")"
+  PATH="$node_bindir:$PATH"
+  export PATH
+  hash -r 2>/dev/null || true
+  if ! node_ok "$node_bin"; then
+    diagnose_node "$node_bin"
+    echo "Bootstrapped Node.js is not usable" >&2
     exit 1
   fi
 fi
-command -v pnpm >/dev/null 2>&1 || {
-  echo "pnpm is still not on PATH after bootstrap" >&2
-  exit 1
+
+# BEGIN_PNPM_BOOTSTRAP
+ensure_pnpm() {
+  if command -v pnpm >/dev/null 2>&1; then
+    return 0
+  fi
+  if command -v corepack >/dev/null 2>&1; then
+    COREPACK_HOME="${COREPACK_HOME:-$work/corepack}"
+    export COREPACK_HOME
+    mkdir -p "$COREPACK_HOME" "$work/bin"
+    if corepack enable --install-directory "$work/bin" >/dev/null; then
+      PATH="$work/bin:$PATH"
+      export PATH
+      hash -r 2>/dev/null || true
+      corepack prepare "pnpm@${CI_PNPM_VERSION}" --activate
+    fi
+  fi
+  if ! command -v pnpm >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+    npm install -g --prefix "$work/pnpm-prefix" "pnpm@${CI_PNPM_VERSION}"
+    PATH="$work/pnpm-prefix/bin:$PATH"
+    export PATH
+    hash -r 2>/dev/null || true
+  fi
+  if ! command -v pnpm >/dev/null 2>&1; then
+    echo "pnpm ${CI_PNPM_VERSION} is required (enable corepack or install npm/pnpm)" >&2
+    exit 1
+  fi
 }
+# END_PNPM_BOOTSTRAP
+ensure_pnpm
 
 echo "Building Panel frontend..."
 (
@@ -183,7 +299,13 @@ echo "Installing main@${short} with the privileged installer..."
 # No privileged process is started before the built binary and installer
 # bytes are hashed and handed to install-privileged.sh's verified path.
 if [ "$(id -u)" -eq 0 ]; then
+  # A `sudo install-main.sh` invocation builds as root while inheriting
+  # SUDO_UID. The verified handoff must describe that root owner, not the
+  # original unprivileged caller.
   env \
+    SUDO_UID= \
+    SUDO_GID= \
+    SUDO_USER= \
     VEIL_INSTALLER_SHA256="$installer_digest" \
     VEIL_VERIFIED_BINARY_SHA256="$binary_digest" \
     bash "$installer" --local-bin "$work/veil" "$@"

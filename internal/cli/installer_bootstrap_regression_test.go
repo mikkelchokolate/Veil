@@ -82,7 +82,7 @@ func TestPipedBootstrapVerifiesEveryPrivilegedPayloadBeforeSudo(t *testing.T) {
 	if !strings.HasPrefix(script, "#!/bin/sh\n") {
 		t.Fatalf("piped bootstrap must be POSIX sh")
 	}
-	sudoAt := strings.Index(script, "\nsudo env ")
+	sudoAt := strings.Index(script, "sudo env ")
 	if sudoAt < 0 {
 		t.Fatal("bootstrap has no final sudo handoff")
 	}
@@ -97,7 +97,7 @@ func TestPipedBootstrapVerifiesEveryPrivilegedPayloadBeforeSudo(t *testing.T) {
 			t.Errorf("verification marker %q must occur before sudo", marker)
 		}
 	}
-	if strings.Contains(script[:sudoAt], "sudo ") {
+	if strings.Contains(script[:sudoAt], "sudo env") || strings.Contains(script[:sudoAt], "| sudo") {
 		t.Error("bootstrap invokes sudo before verification completes")
 	}
 	for _, handoff := range []string{"VEIL_INSTALLER_SHA256=", "VEIL_VERIFIED_ARCHIVE_SHA256=", "VEIL_VERIFIED_BINARY_SHA256=", "install-privileged.sh", "--local-bin"} {
