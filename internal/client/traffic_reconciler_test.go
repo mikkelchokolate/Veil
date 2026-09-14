@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -39,6 +40,66 @@ func TestReconcilerMarksDepletedAtQuota(t *testing.T) {
 	}
 	if len(flipped) != 1 || flipped[0] != c.ID {
 		t.Fatalf("onChange not fired for %s: %v", c.ID, flipped)
+	}
+}
+
+func TestReconcilerPreservesTransactionalFailureBackoff(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+	traffic := NewTrafficStore(db)
+	quota := int64(1)
+	current, err := repo.Create(Client{Name: "backoff", Enabled: true, QuotaBytes: &quota, QuotaResetPolicy: ResetNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := repo.CreateBinding(Binding{ClientID: current.ID, InboundID: "in-backoff", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := traffic.RecordSample(Sample{BindingID: binding.ID, ClientID: current.ID, UploadBytes: 2, AtUnix: 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Unix(1_700_000_000, 0).UTC()
+	scheduledRetry := now.Add(2 * time.Minute).Unix()
+	attempts := 0
+	reconciler := NewTransactionalReconciler(repo, traffic, 0, func(mutation QuotaMutation) error {
+		attempts++
+		updated, err := repo.Get(mutation.ClientID)
+		if err != nil {
+			return err
+		}
+		updated.Depleted = true
+		if _, err := repo.Update(updated, updated.Version); err != nil {
+			return err
+		}
+		_, err = db.Exec(`UPDATE quota_enforcement SET state='failed', attempts=attempts+1, next_retry_at=?, last_error='simulated apply failure'
+WHERE client_id=? AND target_generation=? AND target_payload_hash=?`, scheduledRetry, mutation.ClientID, mutation.TargetGeneration, mutation.TargetPayloadHash)
+		if err != nil {
+			return err
+		}
+		return errors.New("simulated apply failure")
+	})
+	reconciler.now = func() time.Time { return now }
+
+	if _, err := reconciler.ReconcileOnce(); err == nil {
+		t.Fatal("first reconcile succeeded after simulated apply failure")
+	}
+	var nextRetry int64
+	if err := db.QueryRow(`SELECT next_retry_at FROM quota_enforcement WHERE client_id=?`, current.ID).Scan(&nextRetry); err != nil {
+		t.Fatal(err)
+	}
+	if nextRetry != scheduledRetry {
+		t.Fatalf("next_retry_at = %d, want transactional callback retry %d", nextRetry, scheduledRetry)
+	}
+
+	reconciler.now = func() time.Time { return now.Add(time.Minute) }
+	if changed, err := reconciler.ReconcileOnce(); err != nil || changed != 0 {
+		t.Fatalf("reconcile before scheduled retry = (%d, %v), want (0, nil)", changed, err)
+	}
+	if attempts != 1 {
+		t.Fatalf("apply attempts before scheduled retry = %d, want 1", attempts)
 	}
 }
 

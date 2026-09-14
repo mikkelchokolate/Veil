@@ -248,9 +248,12 @@ WHERE client_id=? AND state<>'superseded' AND (target_generation<>? OR target_pa
 			}
 			continue
 		}
-		if _, err := tx.Exec(`UPDATE quota_enforcement SET state=?,next_retry_at=?,last_error=?,updated_at=?
+		if _, err := tx.Exec(`UPDATE quota_enforcement SET state=?,next_retry_at=CASE
+	WHEN ?='failed' AND state='failed' AND next_retry_at>? THEN next_retry_at
+	ELSE ?
+END,last_error=?,updated_at=?
 WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND state<>'superseded'`,
-			update.state, nextRetry, message, now, update.clientID, mutation.TargetGeneration, mutation.TargetPayloadHash); err != nil {
+			update.state, update.state, now, nextRetry, message, now, update.clientID, mutation.TargetGeneration, mutation.TargetPayloadHash); err != nil {
 			return err
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	veilapply "github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/client"
@@ -65,15 +66,23 @@ func TestQuotaEnforcementRetriesUntilDepletedRevisionIsApplied(t *testing.T) {
 	}
 	var failedState string
 	var nextRetryAt int64
-	if err := state.db.QueryRow(`SELECT state, next_retry_at FROM quota_enforcement WHERE client_id=?`, clientID).Scan(&failedState, &nextRetryAt); err != nil {
+	var attempts int
+	if err := state.db.QueryRow(`SELECT state, next_retry_at, attempts FROM quota_enforcement WHERE client_id=?`, clientID).Scan(&failedState, &nextRetryAt, &attempts); err != nil {
 		t.Errorf("load persisted failed enforcement state: %v", err)
 	} else {
 		if failedState != "failed" && failedState != "pending" {
 			t.Errorf("failed enforcement state = %q, want failed or pending", failedState)
 		}
-		if nextRetryAt <= 0 {
-			t.Errorf("nextRetryAt = %d, want scheduled retry", nextRetryAt)
+		if nextRetryAt <= time.Now().UTC().Unix() {
+			t.Errorf("nextRetryAt = %d, want a future scheduled retry", nextRetryAt)
 		}
+		if attempts != 1 {
+			t.Errorf("attempts after first failed apply = %d, want 1", attempts)
+		}
+	}
+
+	if changed, err := state.trafficReconciler.ReconcileOnce(); err != nil || changed != 0 {
+		t.Fatalf("reconcile before scheduled retry = (%d, %v), want (0, nil)", changed, err)
 	}
 
 	state.applyRunner.Close()
