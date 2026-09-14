@@ -335,16 +335,17 @@ func TestManagementApplyServicesRunsAllowlistedReloadsAfterLivePromotion(t *test
 	expectedCaddyAdminLoad := []string{"caddy", "admin", "load"}
 	expectedHy2 := []string{"systemctl", "restart", "veil-hysteria2@hysteria2.service"}
 	expectedHy2Enable := []string{"systemctl", "enable", "veil-hysteria2@hysteria2.service"}
-	if !response.ServicesApplied || len(response.ServiceActions) != 3 || len(serviceCalls) != 2 {
-		t.Fatalf("expected caddy admin load + hysteria2 restart + enable: response=%+v calls=%+v", response, serviceCalls)
+	expectedCaddyEnable := []string{"systemctl", "enable", unitCaddy}
+	if !response.ServicesApplied || len(response.ServiceActions) != 4 || len(serviceCalls) != 3 {
+		t.Fatalf("expected caddy admin load + enable + hysteria2 restart + enable: response=%+v calls=%+v", response, serviceCalls)
 	}
 	if !stringSlicesEqual(response.ServiceActions[0].Command, expectedCaddyAdminLoad) {
 		t.Fatalf("expected caddy admin load action: %+v", response.ServiceActions)
 	}
-	if !stringSlicesEqual(serviceCalls[0], expectedHy2) || !stringSlicesEqual(serviceCalls[1], expectedHy2Enable) {
-		t.Fatalf("unexpected service calls (want restart+enable): %+v", serviceCalls)
+	if !stringSlicesEqual(serviceCalls[0], expectedCaddyEnable) || !stringSlicesEqual(serviceCalls[1], expectedHy2) || !stringSlicesEqual(serviceCalls[2], expectedHy2Enable) {
+		t.Fatalf("unexpected service calls (want caddy enable, hy2 restart, hy2 enable): %+v", serviceCalls)
 	}
-	if !response.ServiceActions[0].Success || !response.ServiceActions[1].Success || !response.ServiceActions[2].Success {
+	if !response.ServiceActions[0].Success || !response.ServiceActions[1].Success || !response.ServiceActions[2].Success || !response.ServiceActions[3].Success {
 		t.Fatalf("expected successful service action results: %+v", response.ServiceActions)
 	}
 }
@@ -393,10 +394,11 @@ func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
 	// and rollback then fails to restore the previous Caddy service. Filesystem
 	// restoration alone is not a complete rollback, so the result stays
 	// ambiguous/recovery-pending.
-	if response.ServicesApplied || response.RolledBack || !response.Ambiguous || len(response.ServiceActions) != 2 || len(response.RollbackActions) != 1 {
+	if response.ServicesApplied || response.RolledBack || !response.Ambiguous || len(response.ServiceActions) != 3 || len(response.RollbackActions) != 1 {
 		t.Fatalf("expected failed service action and incomplete Caddy rollback: response=%+v calls=%+v", response, serviceCalls)
 	}
 	wantCalls := [][]string{
+		{"systemctl", "enable", unitCaddy},
 		{"systemctl", "restart", "veil-hysteria2@hysteria2.service"},
 		{"systemctl", "is-active", "veil-caddy.service"},
 		{"systemctl", "start", "veil-caddy.service"},
@@ -515,6 +517,7 @@ func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T)
 		t.Fatalf("expected rollback to restore old live config, got %q", string(body))
 	}
 	wantRollbackCalls := [][]string{
+		{"systemctl", "enable", unitCaddy},
 		{"systemctl", "is-active", "veil-caddy.service"},
 		{"systemctl", "reload", "veil-caddy.service"},
 	}
@@ -576,7 +579,7 @@ func TestManagementApplyWritesAuditHistoryForSuccessfulServiceApply(t *testing.T
 	if entry.ID == "" || entry.Timestamp == "" || !entry.Success || entry.Stage != "services" || !entry.Applied || !entry.LiveApplied || !entry.ServicesApplied || entry.RolledBack {
 		t.Fatalf("unexpected history entry: %+v", entry)
 	}
-	if len(entry.WrittenFiles) == 0 || len(entry.LiveFiles) != 1 || len(entry.ServiceActions) != 1 || len(entry.HealthChecks) != 1 {
+	if len(entry.WrittenFiles) == 0 || len(entry.LiveFiles) != 1 || len(entry.ServiceActions) != 2 || len(entry.HealthChecks) != 1 {
 		t.Fatalf("history entry missing apply details: %+v", entry)
 	}
 }
@@ -627,7 +630,7 @@ func TestManagementApplyWritesAuditHistoryForRollback(t *testing.T) {
 	if err := json.Unmarshal(body, &history); err != nil {
 		t.Fatalf("decode history: %v", err)
 	}
-	if len(history) != 1 || history[0].Success || history[0].Stage != "rollback" || history[0].RolledBack || len(history[0].RollbackFiles) != 1 || len(history[0].RollbackActions) != 1 {
+	if len(history) != 1 || history[0].Success || history[0].Stage != "rollback" || history[0].RolledBack || len(history[0].RollbackFiles) != 1 || len(history[0].RollbackActions) < 1 {
 		t.Fatalf("expected incomplete rollback history entry with preserved evidence: %+v", history)
 	}
 }

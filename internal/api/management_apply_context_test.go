@@ -377,6 +377,7 @@ func TestReloadPromotedServicesStopsLegacyCaddyBeforeStartingSingleton(t *testin
 		"veil-caddy@legacy.service:stop",
 		"veil-caddy@legacy.service:disable",
 		"veil-caddy.service:reload",
+		"veil-caddy.service:enable",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("service actions = %v, want %v", got, want)
