@@ -259,7 +259,7 @@ func NewRunner(revs *RevisionStore, jobs *JobStore, executor any) *Runner {
 		revs: revs, jobs: jobs, executor: resolved,
 		ownerID:  fmt.Sprintf("pid:%d:%s", os.Getpid(), uuid.NewString()),
 		leaseTTL: 30 * time.Second, heartbeatInterval: 10 * time.Second,
-		recoveryRetryInterval: 5 * time.Second, now: time.Now,
+		recoveryRetryInterval: 15 * time.Second, now: time.Now,
 		monitorStop: make(chan struct{}), monitorDone: make(chan struct{}),
 	}
 	recoverCtx, recoverCancel := context.WithCancel(context.Background())
@@ -356,7 +356,11 @@ func (r *Runner) monitorRecovery() {
 					continue
 				}
 				r.setRecoveryError(nil)
-				r.setRecoveryError(r.resumeRecoveryPending(r.recoverCtx))
+				resumeErr := r.resumeRecoveryPending(r.recoverCtx)
+				if r.recoverCtx != nil && r.recoverCtx.Err() != nil {
+					return
+				}
+				r.setRecoveryError(resumeErr)
 				continue
 			}
 			if lease.Owner != "" && lease.ExpiresAt > now.Unix() && processOwnerAlive(lease.Owner) {
@@ -372,6 +376,9 @@ func (r *Runner) monitorRecovery() {
 			if recoveryErr == nil {
 				r.setRecoveryError(nil)
 				recoveryErr = r.resumeRecoveryPending(r.recoverCtx)
+				if r.recoverCtx != nil && r.recoverCtx.Err() != nil {
+					return
+				}
 			}
 			if recoveryErr == nil {
 				recoveryErr = r.jobs.MarkApplyingInterrupted("apply job had no valid durable lease during continuous recovery")
@@ -432,7 +439,7 @@ WHERE j.status=? ORDER BY j.created_at,j.id LIMIT 1`, StatusRecoveryPending).Sca
 
 func (r *Runner) recoveryInterval() time.Duration {
 	if r == nil || r.recoveryRetryInterval <= 0 {
-		return 5 * time.Second
+		return 15 * time.Second
 	}
 	return r.recoveryRetryInterval
 }
