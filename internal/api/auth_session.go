@@ -14,6 +14,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/observability"
 	"github.com/mikkelchokolate/Veil/internal/panel"
+	"github.com/mikkelchokolate/Veil/internal/webbasepath"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -31,6 +32,35 @@ func constantTimePasswordEqual(supplied, expected string) bool {
 	contentsEqual := subtle.ConstantTimeCompare(suppliedPadded[:], expectedPadded[:])
 	lengthsEqual := subtle.ConstantTimeEq(int32(len(supplied)), int32(len(expected)))
 	return contentsEqual&lengthsEqual == 1
+}
+
+func cookiePathForWebBase(webBasePath string) string {
+	normalized, err := webbasepath.Normalize(webBasePath)
+	if err != nil || normalized == "" {
+		return "/"
+	}
+	return normalized
+}
+
+func (s *managementState) panelCookieAttrs(r *http.Request) (path string, secure bool) {
+	s.mu.Lock()
+	panelAccess := s.settings.PanelAccess
+	webBasePath := s.settings.WebBasePath
+	s.mu.Unlock()
+	return cookiePathForWebBase(webBasePath), (r != nil && r.TLS != nil) || panelAccess == "caddy"
+}
+
+func (s *managementState) setSessionCookie(w http.ResponseWriter, r *http.Request, token string, maxAge int) {
+	path, secure := s.panelCookieAttrs(r)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "veil_session",
+		Value:    token,
+		Path:     path,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   maxAge,
+	})
 }
 
 func (s *managementState) sessionRegistry() *SessionRegistry {
@@ -69,7 +99,6 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	userCount := len(s.users)
 	fallbackPassword := s.settings.NaivePassword
-	panelAccess := s.settings.PanelAccess
 	s.mu.Unlock()
 
 	valid := false
@@ -120,15 +149,7 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Success: true,
 	})
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "veil_session",
-		Value:    session.Token,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   r.TLS != nil || panelAccess == "caddy",
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   86400,
-	})
+	s.setSessionCookie(w, r, session.Token, 86400)
 
 	writeJSON(w, map[string]any{
 		"success":   true,
@@ -211,15 +232,7 @@ func (s *managementState) handleLogout(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	panelAccess := s.settings.PanelAccess
-	http.SetCookie(w, &http.Cookie{
-		Name:     "veil_session",
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   r.TLS != nil || panelAccess == "caddy",
-		MaxAge:   -1,
-	})
+	s.setSessionCookie(w, r, "", -1)
 
 	writeJSON(w, map[string]any{"success": true})
 }
@@ -318,14 +331,12 @@ func (s *managementState) handleAuthLocale(w http.ResponseWriter, r *http.Reques
 	}
 	s.catchUpAfterPanelMutation()
 
-	s.mu.Lock()
-	panelAccess := s.settings.PanelAccess
-	s.mu.Unlock()
+	path, secure := s.panelCookieAttrs(r)
 	http.SetCookie(w, &http.Cookie{
 		Name:     "veil_locale",
 		Value:    updated.Locale,
-		Path:     "/",
-		Secure:   r.TLS != nil || panelAccess == "caddy",
+		Path:     path,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   31536000,
 	})
