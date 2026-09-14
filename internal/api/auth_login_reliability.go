@@ -107,7 +107,7 @@ func (s *managementState) handleLoginWithRevalidation(w http.ResponseWriter, r *
 		return
 	}
 
-	session, role, locale, panelAccess, err := s.createSessionForLoginSnapshot(snapshot, r)
+	session, role, locale, _, err := s.createSessionForLoginSnapshot(snapshot, r)
 	if errors.Is(err, errLoginCredentialsChanged) {
 		s.recordRequestAudit(r, audit.Record{
 			Actor:   req.Username,
@@ -140,15 +140,7 @@ func (s *managementState) handleLoginWithRevalidation(w http.ResponseWriter, r *
 		Target:  "panel",
 		Success: true,
 	})
-	http.SetCookie(w, &http.Cookie{
-		Name:     "veil_session",
-		Value:    session.Token,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   r.TLS != nil || panelAccess == "caddy",
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   86400,
-	})
+	s.setSessionCookie(w, r, session.Token, 86400)
 	writeJSON(w, map[string]any{
 		"success":   true,
 		"username":  req.Username,

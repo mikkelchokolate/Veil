@@ -42,17 +42,7 @@ func (s *managementState) handleLogoutWithSettingsSnapshot(w http.ResponseWriter
 		})
 	}
 
-	s.mu.Lock()
-	panelAccess := s.settings.PanelAccess
-	s.mu.Unlock()
-	http.SetCookie(w, &http.Cookie{
-		Name:     "veil_session",
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   r.TLS != nil || panelAccess == "caddy",
-		MaxAge:   -1,
-	})
+	s.setSessionCookie(w, r, "", -1)
 
 	writeJSON(w, map[string]any{"success": true})
 }
