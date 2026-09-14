@@ -47,4 +47,34 @@ describe("SettingsPage web base path", () => {
 		expect(screen.queryByText(/settings saved/i)).not.toBeInTheDocument();
 		expect(puts).toEqual([]);
 	});
+
+	it("clears a protocolFields-only naiveUsername instead of echoing the live value", async () => {
+		const puts: Array<Record<string, unknown>> = [];
+		server.use(
+			http.get("/api/settings", () =>
+				HttpResponse.json({
+					mode: "prod",
+					panelListen: "127.0.0.1:2096",
+					protocolFields: { naiveUsername: "veil" },
+				}),
+			),
+			http.put("/api/settings", async ({ request }) => {
+				puts.push((await request.json()) as Record<string, unknown>);
+				return HttpResponse.json({ success: true });
+			}),
+		);
+		renderSettings();
+		fireEvent.click(await screen.findByRole("button", { name: /^edit$/i }));
+		const input = await screen.findByLabelText(/naiveproxy username/i);
+		expect(input).toHaveValue("veil");
+		fireEvent.change(input, { target: { value: "" } });
+		fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+		await screen.findByText(/settings saved/i);
+		expect(puts).toHaveLength(1);
+		expect(puts[0]?.naiveUsername).toBe("");
+		expect(
+			(puts[0]?.protocolFields as Record<string, unknown> | undefined)
+				?.naiveUsername,
+		).toBe("");
+	});
 });

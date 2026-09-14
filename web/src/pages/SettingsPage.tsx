@@ -226,8 +226,12 @@ export function SettingsPage() {
 			"panelPublicPort",
 		]);
 		const pf = base.protocolFields as Record<string, unknown>;
+		const originalPf = (original.protocolFields ?? {}) as Record<
+			string,
+			unknown
+		>;
 		for (const f of ALL_FIELDS) {
-			const cur = String(original[f.key] ?? "");
+			const cur = String(original[f.key] ?? originalPf[f.key] ?? "");
 			if (form[f.key] === cur) {
 				continue;
 			}
@@ -278,10 +282,6 @@ export function SettingsPage() {
 		// Compare against the pristine echo snapshot, not the mutated base.
 		// The echo may carry schema values only in protocolFields (legacy
 		// states), so compare the form value against flat ?? protocolFields.
-		const originalPf = (original.protocolFields ?? {}) as Record<
-			string,
-			unknown
-		>;
 		let changed = false;
 		for (const f of ALL_FIELDS) {
 			const originalValue = String(original[f.key] ?? originalPf[f.key] ?? "");

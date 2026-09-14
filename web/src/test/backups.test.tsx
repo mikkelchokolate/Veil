@@ -84,6 +84,44 @@ describe("BackupsPage", () => {
 		);
 	});
 
+	it("confirms prune and posts the displayed 7/4/12 retention", async () => {
+		const pruneBodies: unknown[] = [];
+		fetcherMocks.apiFetch.mockImplementation(
+			(path: string, init?: RequestInit) => {
+				if (path === "/api/backups") {
+					return Promise.resolve({ items: [] });
+				}
+				if (path === "/api/backups/prune" && init?.method === "POST") {
+					pruneBodies.push(
+						typeof init.body === "string" ? JSON.parse(init.body) : init.body,
+					);
+					return Promise.resolve({ pruned: 1 });
+				}
+				return Promise.resolve({});
+			},
+		);
+		const queryClient = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={queryClient}>
+				<I18nProvider>
+					<BackupsPage />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Prune old backups" }),
+		);
+		expect(pruneBodies).toEqual([]);
+		expect(
+			await screen.findByText(/keep 7 daily, 4 weekly, and 12 monthly/i),
+		).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: /^confirm prune$/i }));
+		await waitFor(() => expect(pruneBodies).toHaveLength(1));
+		expect(pruneBodies[0]).toEqual({ daily: 7, weekly: 4, monthly: 12 });
+	});
+
 	it("shows dismiss after a succeeded restore job", async () => {
 		fetcherMocks.apiFetch.mockImplementation(
 			(path: string, init?: RequestInit) => {
