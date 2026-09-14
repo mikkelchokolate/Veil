@@ -520,6 +520,7 @@ func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T)
 		{"systemctl", "enable", unitCaddy},
 		{"systemctl", "is-active", "veil-caddy.service"},
 		{"systemctl", "reload", "veil-caddy.service"},
+		{"systemctl", "enable", unitCaddy},
 	}
 	if !reflect.DeepEqual(serviceCalls, wantRollbackCalls) {
 		t.Fatalf("unexpected bounded Caddy rollback calls: got=%+v want=%+v", serviceCalls, wantRollbackCalls)
