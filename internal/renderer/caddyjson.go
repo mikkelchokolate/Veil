@@ -228,11 +228,17 @@ func resolveNaiveFallbackRoot(input string) (string, error) {
 }
 
 func renderAcmeChallengeServer(key bindregistry.BindKey, owner caddyassembly.AcmeChallengeOwner) map[string]any {
-	return map[string]any{
+	server := map[string]any{
 		"listen":          []string{listenString(key)},
 		"automatic_https": map[string]any{"disable_redirects": true},
 		"routes":          []map[string]any{},
 	}
+	// TLS-ALPN-01 is TCP-only. Caddy's default protocol set includes h3,
+	// which would bind UDP on the same port and steal it from Hysteria2.
+	if key.Port == 443 && key.Network == bindregistry.ListenTCP {
+		server["protocols"] = []string{"h1", "h2"}
+	}
+	return server
 }
 
 func panelErrorRoutes() map[string]any {

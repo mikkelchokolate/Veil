@@ -17,6 +17,9 @@ func (p Plugin) BuildLinks(settings model.Settings, inbound model.Inbound) ([]mo
 	}
 	insecure := hysteria2Insecure(settings, inbound)
 	if len(creds) == 0 {
+		if len(inbound.Profiles) > 0 {
+			return nil, nil
+		}
 		password := hysteria2Password(settings, inbound)
 		link := model.ClientLink{
 			Name:      inbound.Name,

@@ -190,9 +190,21 @@ func geoRuleSet(tag, kind, code string) map[string]any {
 		"type":            "remote",
 		"tag":             tag,
 		"format":          "binary",
-		"url":             fmt.Sprintf("https://raw.githubusercontent.com/SagerNet/sing-%s/rule-set/%s-%s.srs", kind, kind, code),
+		"url":             fmt.Sprintf("https://raw.githubusercontent.com/SagerNet/sing-%s/rule-set/%s-%s.srs", kind, kind, sagerNetRuleCode(kind, code)),
 		"download_detour": "direct",
 	}
+}
+
+// sagerNetRuleCode maps Veil preset tokens onto published SagerNet rule-set
+// filenames. `ru-blocked` is a Veil preset name, not a SagerNet artifact.
+func sagerNetRuleCode(kind, code string) string {
+	if code == "ru-blocked" {
+		if kind == "geoip" {
+			return "ru"
+		}
+		return "geolocation-ru"
+	}
+	return code
 }
 
 func splitCSV(value string) []string {
