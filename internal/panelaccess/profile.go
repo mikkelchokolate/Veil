@@ -80,6 +80,10 @@ func NewProfile(input ProfileInput) Profile {
 // be exercised without mocking the crypto/rand package.
 var newTLSFunc = NewTLS
 
+// probeCaddyCapabilities is overridable in tests. Install renders panel Caddy
+// JSON before `veil runtime install` has placed /usr/local/bin/caddy.
+var probeCaddyCapabilities = caddycapabilities.Probe
+
 func (p Profile) Build() (ProfileMaterial, error) {
 	input := p.input
 	material := ProfileMaterial{PanelListen: RecommendedListen(input.PanelAccess, input.PanelPort)}
@@ -108,9 +112,12 @@ func (p Profile) Build() (ProfileMaterial, error) {
 		if err != nil {
 			return ProfileMaterial{}, err
 		}
-		caps, err := caddycapabilities.Probe("")
+		caps, err := probeCaddyCapabilities("")
 		if err != nil {
-			return ProfileMaterial{}, fmt.Errorf("failed to probe Caddy capabilities: %w", err)
+			if !caddycapabilities.IsMissingBinary(err) {
+				return ProfileMaterial{}, fmt.Errorf("failed to probe Caddy capabilities: %w", err)
+			}
+			caps = caddycapabilities.CaddyCapabilities{}
 		}
 		body, err := renderer.RenderCaddyJSON(plan, caps)
 		if err != nil {

@@ -5,11 +5,15 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
+	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 )
 
 func TestRecommendedListenDefaultsPort(t *testing.T) {
@@ -40,6 +44,50 @@ func TestProfileBuildRejectsInvalidEmail(t *testing.T) {
 	_, err := NewProfile(ProfileInput{PanelAccess: "caddy", Domain: "panel.example.com", Email: "not-an-email", PanelPort: 2096}).Build()
 	if err == nil || !strings.Contains(err.Error(), "email") {
 		t.Fatalf("expected email validation error, got %v", err)
+	}
+}
+
+func TestProfileBuildAllowsCaddyAccessWhenCaddyBinaryIsMissing(t *testing.T) {
+	original := probeCaddyCapabilities
+	probeCaddyCapabilities = func(string) (caddycapabilities.CaddyCapabilities, error) {
+		return caddycapabilities.CaddyCapabilities{}, fmt.Errorf("caddy list-modules failed: %w", exec.ErrNotFound)
+	}
+	t.Cleanup(func() { probeCaddyCapabilities = original })
+
+	material, err := NewProfile(ProfileInput{
+		PanelAccess: "caddy",
+		Domain:      "panel.example.com",
+		Email:       "admin@example.com",
+		PanelPort:   2096,
+	}).Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if !material.InstallPanelCaddy || material.CaddyJSON == "" {
+		t.Fatalf("material = %+v", material)
+	}
+	for _, want := range []string{"panel.example.com", "127.0.0.1:2096", material.WebBasePath} {
+		if !strings.Contains(material.CaddyJSON, want) {
+			t.Fatalf("CaddyJSON missing %q:\n%s", want, material.CaddyJSON)
+		}
+	}
+}
+
+func TestProfileBuildPropagatesCaddyProbeErrorsOtherThanMissingBinary(t *testing.T) {
+	original := probeCaddyCapabilities
+	probeCaddyCapabilities = func(string) (caddycapabilities.CaddyCapabilities, error) {
+		return caddycapabilities.CaddyCapabilities{}, errors.New("caddy crashed")
+	}
+	t.Cleanup(func() { probeCaddyCapabilities = original })
+
+	_, err := NewProfile(ProfileInput{
+		PanelAccess: "caddy",
+		Domain:      "panel.example.com",
+		Email:       "admin@example.com",
+		PanelPort:   2096,
+	}).Build()
+	if err == nil || !strings.Contains(err.Error(), "failed to probe Caddy capabilities") {
+		t.Fatalf("expected probe error, got %v", err)
 	}
 }
 

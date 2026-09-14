@@ -2,6 +2,7 @@ package caddycapabilities
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 )
@@ -14,6 +15,13 @@ type CaddyCapabilities struct {
 
 type caddyModule struct {
 	Name string `json:"module_name"`
+}
+
+// IsMissingBinary reports whether Probe failed because no Caddy executable
+// was on PATH (or the given path does not exist). Panel-only install renders
+// Caddy JSON before veil runtime install has placed the binary.
+func IsMissingBinary(err error) bool {
+	return errors.Is(err, exec.ErrNotFound)
 }
 
 func Probe(binaryPath string) (CaddyCapabilities, error) {

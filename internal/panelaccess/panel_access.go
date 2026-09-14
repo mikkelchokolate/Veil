@@ -71,9 +71,12 @@ func (p PanelAccess) GeneratedConfig(paths generatedconfig.Paths) (generatedconf
 	if err != nil {
 		return generatedconfig.GeneratedConfigArtifact{}, false, err
 	}
-	caps, err := caddycapabilities.Probe("")
+	caps, err := probeCaddyCapabilities("")
 	if err != nil {
-		return generatedconfig.GeneratedConfigArtifact{}, false, fmt.Errorf("failed to probe Caddy capabilities: %w", err)
+		if !caddycapabilities.IsMissingBinary(err) {
+			return generatedconfig.GeneratedConfigArtifact{}, false, fmt.Errorf("failed to probe Caddy capabilities: %w", err)
+		}
+		caps = caddycapabilities.CaddyCapabilities{}
 	}
 	body, err := renderer.RenderCaddyJSON(plan, caps)
 	if err != nil {
