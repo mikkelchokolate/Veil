@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "@tanstack/react-router";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { ApiError, apiFetch } from "../api/fetcher";
 import type { ApplyJob } from "../api/generated/models";
@@ -150,6 +150,7 @@ export function ApplyJobDetailPage() {
 	const { jobId } = useParams({ strict: false }) as { jobId: string };
 	const isAdmin = useIsAdmin();
 	const qc = useQueryClient();
+	const navigate = useNavigate();
 	const { t } = useI18n();
 	const [showPlan, setShowPlan] = useState(false);
 	const [copied, setCopied] = useState(false);
@@ -195,9 +196,15 @@ export function ApplyJobDetailPage() {
 
 	const retry = useMutation({
 		mutationFn: () =>
-			apiFetch(`/api/apply/jobs/${jobId}/retry`, { method: "POST" }),
-		onSuccess: () => {
+			apiFetch<{ applyJob?: ApplyJob }>(`/api/apply/jobs/${jobId}/retry`, {
+				method: "POST",
+			}),
+		onSuccess: (data) => {
+			const nextId = data.applyJob?.id;
 			void qc.invalidateQueries({ queryKey: ["apply"] });
+			if (nextId && nextId !== jobId) {
+				void navigate({ to: "/apply/$jobId", params: { jobId: nextId } });
+			}
 		},
 	});
 
@@ -312,7 +319,11 @@ export function ApplyJobDetailPage() {
 									: t("applyJob.retryFailed")}
 							</FormMessage>
 						) : null}
-						{retry.isSuccess ? (
+						{retry.isSuccess &&
+						retry.data?.applyJob?.id === jobId &&
+						(retry.data.applyJob.status === "pending" ||
+							retry.data.applyJob.status === "running" ||
+							(retry.data.applyJob.status as string) === "applying") ? (
 							<p className="muted">{t("applyJob.retryQueued")}</p>
 						) : null}
 					</>

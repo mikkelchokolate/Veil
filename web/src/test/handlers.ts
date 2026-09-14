@@ -24,6 +24,13 @@ export const defaultHandlers = [
 			state: "applied",
 		}),
 	),
+	http.get("/api/settings", () =>
+		HttpResponse.json({
+			mode: "prod",
+			panelListen: "127.0.0.1:2096",
+			defaultInboundPublicPort: 0,
+		}),
+	),
 	http.get("/api/inbounds/:name/clients", () =>
 		HttpResponse.json({ items: [], total: 0, page: 1, pageSize: 500 }),
 	),

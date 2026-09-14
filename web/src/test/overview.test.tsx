@@ -7,7 +7,10 @@ import {
 } from "@tanstack/react-router";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PanelRestartTimeoutError } from "../api/panelUpdate";
+import {
+	PanelRestartTimeoutError,
+	PanelUpdateFailedError,
+} from "../api/panelUpdate";
 import { AuthProvider } from "../auth/AuthContext";
 import { I18nProvider } from "../i18n/I18nContext";
 import { OverviewPage } from "../pages/OverviewPage";
@@ -147,11 +150,84 @@ describe("OverviewPage version", () => {
 		);
 		await confirmUpdate();
 		await waitFor(() =>
-			expect(panelUpdateMocks.waitForPanelVersion).toHaveBeenCalled(),
+			expect(panelUpdateMocks.waitForPanelVersion).toHaveBeenCalledWith(
+				expect.objectContaining({
+					previousVersion: "v0.6.3-test",
+					expectedVersion: "v0.6.4",
+					jobId: "job-1",
+				}),
+			),
 		);
 		await waitFor(() =>
 			expect(panelUpdateMocks.reloadPanel).toHaveBeenCalled(),
 		);
+	});
+
+	it("does not reload while restart polling is still waiting on the old binary", async () => {
+		overviewApis();
+		panelUpdateMocks.waitForPanelVersion.mockReturnValue(
+			new Promise(() => undefined),
+		);
+		server.use(
+			http.post("/api/version/update", () =>
+				HttpResponse.json(
+					{
+						jobId: "job-1",
+						status: "restart_pending",
+						staged: true,
+						installed: true,
+						version: "v0.6.4",
+					},
+					{ status: 202 },
+				),
+			),
+		);
+		renderOverview();
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Update panel" }),
+			).toBeEnabled(),
+		);
+		await confirmUpdate();
+		await waitFor(() =>
+			expect(panelUpdateMocks.waitForPanelVersion).toHaveBeenCalled(),
+		);
+		expect(
+			await screen.findByText(/waiting for the panel service to restart/i),
+		).toBeInTheDocument();
+		expect(panelUpdateMocks.reloadPanel).not.toHaveBeenCalled();
+	});
+
+	it("shows a job failure without reloading", async () => {
+		overviewApis();
+		panelUpdateMocks.waitForPanelVersion.mockRejectedValue(
+			new PanelUpdateFailedError("helper refused restart"),
+		);
+		server.use(
+			http.post("/api/version/update", () =>
+				HttpResponse.json(
+					{
+						jobId: "job-1",
+						status: "restart_pending",
+						staged: true,
+						installed: true,
+						version: "v0.6.4",
+					},
+					{ status: 202 },
+				),
+			),
+		);
+		renderOverview();
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Update panel" }),
+			).toBeEnabled(),
+		);
+		await confirmUpdate();
+		await waitFor(() =>
+			expect(screen.getByText(/helper refused restart/i)).toBeInTheDocument(),
+		);
+		expect(panelUpdateMocks.reloadPanel).not.toHaveBeenCalled();
 	});
 
 	it("shows the API error when staging fails", async () => {

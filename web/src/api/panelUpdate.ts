@@ -14,23 +14,73 @@ export class PanelRestartTimeoutError extends Error {
 	}
 }
 
-export function postPanelUpdate(): Promise<unknown> {
-	return apiFetch("/api/version/update", {
+export class PanelUpdateFailedError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "PanelUpdateFailedError";
+	}
+}
+
+export type PanelUpdateResponse = {
+	jobId?: string;
+	status?: string;
+	staged?: boolean;
+	installed?: boolean;
+	version?: string;
+	message?: string;
+};
+
+export type PanelUpdateJob = {
+	id: string;
+	version?: string;
+	status: string;
+	error?: string;
+};
+
+export function postPanelUpdate(): Promise<PanelUpdateResponse> {
+	return apiFetch<PanelUpdateResponse>("/api/version/update", {
 		method: "POST",
 		timeoutMs: PANEL_UPDATE_TIMEOUT_MS,
 	});
+}
+
+/** Strip an optional " (commit)" suffix so tag comparison survives rebuilds. */
+export function panelVersionIdentity(version: string): string {
+	return version.replace(/\s*\([^)]*\)\s*$/, "").trim();
 }
 
 export type WaitForPanelVersionOptions = {
 	delayMs?: number;
 	intervalMs?: number;
 	maxAttempts?: number;
+	previousVersion?: string;
+	expectedVersion?: string;
+	jobId?: string;
 	fetchVersion?: () => Promise<VersionResponse>;
+	fetchJob?: (jobId: string) => Promise<PanelUpdateJob>;
 	sleep?: (ms: number) => Promise<void>;
 	onAttempt?: (attempt: number, max: number) => void;
 };
 
-/** Wait for GET /api/version after the panel restarts onto the staged binary. */
+function defaultFetchVersion(): Promise<VersionResponse> {
+	return apiFetch<VersionResponse>("/api/version", {
+		timeoutMs: 5_000,
+		attempts: 1,
+	});
+}
+
+function defaultFetchJob(jobId: string): Promise<PanelUpdateJob> {
+	return apiFetch<PanelUpdateJob>(
+		`/api/version/update/jobs/${encodeURIComponent(jobId)}`,
+		{
+			timeoutMs: 5_000,
+			attempts: 1,
+		},
+	);
+}
+
+/** Wait until GET /api/version is a different binary (or the update job is
+ * terminal). A 200 from the still-running old process is not success. */
 export async function waitForPanelVersion(
 	options: WaitForPanelVersionOptions = {},
 ): Promise<VersionResponse> {
@@ -40,25 +90,48 @@ export async function waitForPanelVersion(
 	const sleep =
 		options.sleep ??
 		((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
-	const fetchVersion =
-		options.fetchVersion ??
-		(() =>
-			apiFetch<VersionResponse>("/api/version", {
-				timeoutMs: 5_000,
-				attempts: 1,
-			}));
+	const fetchVersion = options.fetchVersion ?? defaultFetchVersion;
+	const fetchJob = options.fetchJob ?? defaultFetchJob;
+	const previousIdentity = options.previousVersion
+		? panelVersionIdentity(options.previousVersion)
+		: undefined;
 
 	await sleep(delayMs);
 	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
 		options.onAttempt?.(attempt, maxAttempts);
 		try {
-			return await fetchVersion();
-		} catch {
+			if (options.jobId) {
+				try {
+					const job = await fetchJob(options.jobId);
+					if (job.status === "failed") {
+						throw new PanelUpdateFailedError(
+							job.error?.trim() || "panel update failed",
+						);
+					}
+					if (job.status === "succeeded") {
+						return await fetchVersion();
+					}
+				} catch (error) {
+					if (error instanceof PanelUpdateFailedError) throw error;
+				}
+			}
+			const current = await fetchVersion();
+			const currentIdentity = panelVersionIdentity(current.version);
+			if (!previousIdentity || currentIdentity !== previousIdentity) {
+				return current;
+			}
+		} catch (error) {
+			if (error instanceof PanelUpdateFailedError) throw error;
 			if (attempt === maxAttempts) {
 				throw new PanelRestartTimeoutError();
 			}
 			await sleep(intervalMs);
+			continue;
 		}
+		if (attempt === maxAttempts) {
+			throw new PanelRestartTimeoutError();
+		}
+		await sleep(intervalMs);
 	}
 	throw new PanelRestartTimeoutError();
 }

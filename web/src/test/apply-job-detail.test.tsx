@@ -49,6 +49,106 @@ describe("ApplyJobDetailPage", () => {
 		).toBeInTheDocument();
 	});
 
+	it("follows the new apply job after retry instead of claiming queued", async () => {
+		server.use(
+			http.get("/api/apply/jobs/job-1", () =>
+				HttpResponse.json({
+					id: "job-1",
+					desiredRevision: 2,
+					baseRevision: 1,
+					status: "failed",
+					trigger: "manual",
+					createdAt: 1700000000,
+					errorMessage: "original failed",
+				}),
+			),
+			http.get("/api/apply/jobs/job-2", () =>
+				HttpResponse.json({
+					id: "job-2",
+					desiredRevision: 2,
+					baseRevision: 1,
+					status: "failed",
+					trigger: "retry",
+					createdAt: 1700000001,
+					errorMessage: "still broken",
+				}),
+			),
+			http.get("/api/apply/history", () => HttpResponse.json({ items: [] })),
+			http.post("/api/apply/jobs/job-1/retry", () =>
+				HttpResponse.json({
+					applyJob: {
+						id: "job-2",
+						desiredRevision: 2,
+						baseRevision: 1,
+						status: "failed",
+						trigger: "retry",
+						createdAt: 1700000001,
+						errorMessage: "still broken",
+					},
+				}),
+			),
+		);
+		renderJob();
+		fireEvent.click(
+			await screen.findByRole("button", { name: /retry this revision/i }),
+		);
+		expect(
+			await screen.findByRole("heading", { name: /apply job job-2/i }),
+		).toBeInTheDocument();
+		expect(
+			(await screen.findAllByText(/still broken/i)).length,
+		).toBeGreaterThan(0);
+		expect(screen.queryByText(/retry queued/i)).not.toBeInTheDocument();
+	});
+
+	it("opens the succeeded retry job rather than the original failure", async () => {
+		server.use(
+			http.get("/api/apply/jobs/job-1", () =>
+				HttpResponse.json({
+					id: "job-1",
+					desiredRevision: 2,
+					baseRevision: 1,
+					status: "failed",
+					trigger: "manual",
+					createdAt: 1700000000,
+					errorMessage: "original failed",
+				}),
+			),
+			http.get("/api/apply/jobs/job-2", () =>
+				HttpResponse.json({
+					id: "job-2",
+					desiredRevision: 2,
+					baseRevision: 1,
+					status: "succeeded",
+					trigger: "retry",
+					createdAt: 1700000001,
+				}),
+			),
+			http.get("/api/apply/history", () => HttpResponse.json({ items: [] })),
+			http.post("/api/apply/jobs/job-1/retry", () =>
+				HttpResponse.json({
+					applyJob: {
+						id: "job-2",
+						desiredRevision: 2,
+						baseRevision: 1,
+						status: "succeeded",
+						trigger: "retry",
+						createdAt: 1700000001,
+					},
+				}),
+			),
+		);
+		renderJob();
+		fireEvent.click(
+			await screen.findByRole("button", { name: /retry this revision/i }),
+		);
+		expect(
+			await screen.findByRole("heading", { name: /apply job job-2/i }),
+		).toBeInTheDocument();
+		expect(screen.queryByText(/retry queued/i)).not.toBeInTheDocument();
+		expect(screen.queryByText(/original failed/i)).not.toBeInTheDocument();
+	});
+
 	it("renders a 422 plan body instead of a load error", async () => {
 		server.use(
 			http.get("/api/apply/jobs/job-1", () =>
