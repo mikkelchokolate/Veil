@@ -68,8 +68,8 @@ function PanelVersionCard() {
 			setPhase("waiting");
 			return waitForPanelVersion({
 				previousVersion: previous,
-				expectedVersion: staged.version,
-				jobId: staged.jobId,
+				...(staged.version ? { expectedVersion: staged.version } : {}),
+				...(staged.jobId ? { jobId: staged.jobId } : {}),
 				onAttempt: (attempt, max) => setWaitProgress({ attempt, max }),
 			});
 		},
