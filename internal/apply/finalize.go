@@ -468,6 +468,72 @@ WHERE job_id=? AND owner_process=? AND generation=?`, finished, jobID, owner, ge
 	return tx.Commit()
 }
 
+func retainRecoveryPending(db *sql.DB, owner string, generation uint64, now time.Time, jobID, code, message string) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := assertLeaseCurrentTx(tx, owner, generation, now); err != nil {
+		return err
+	}
+	finished := now.UTC().Unix()
+	if code == "" {
+		code = "RECOVERY_PENDING"
+	}
+	result, err := tx.Exec(`UPDATE apply_jobs SET status=?, started_at=COALESCE(started_at,?), finished_at=NULL,
+  error_code=?, error_message=?
+  WHERE id=? AND owner_process=? AND lease_generation=?`,
+		StatusRecoveryPending, finished, code, message, jobID, owner, generation)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows != 1 {
+		return ErrApplyLeaseLost
+	}
+	result, err = tx.Exec(`UPDATE runtime_publications SET updated_at=?
+WHERE job_id=? AND owner_process=? AND generation=?`, finished, jobID, owner, generation)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows != 1 {
+		return errors.New("apply: publication receipt missing while retaining recovery")
+	}
+	return tx.Commit()
+}
+
+func resetRuntimePublicationIntent(db *sql.DB, job Job, lease Lease, now int64) error {
+	digest, err := revisionSnapshotDigest(db, job.DesiredRevision)
+	if err != nil {
+		return fmt.Errorf("apply: digest intended revision snapshot: %w", err)
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := assertLeaseCurrentTx(tx, lease.Owner, lease.Generation, time.Unix(now, 0).UTC()); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM runtime_publications WHERE job_id=?`, job.ID); err != nil {
+		return fmt.Errorf("apply: clear recovery publication: %w", err)
+	}
+	_, err = tx.Exec(`INSERT INTO runtime_publications
+  (job_id,revision,base_revision,generation,snapshot_sha256,operations_json,published_at,
+   owner_process,operation_id,lease_expires_at,phase,artifacts_json,service_phase,firewall_phase,updated_at)
+  VALUES(?,?,?,?,?,?,0,?,?,?,'intent','[]','pending','pending',?)`,
+		job.ID, job.DesiredRevision, job.BaseRevision, lease.Generation, digest, "[]",
+		lease.Owner, lease.Operation, lease.ExpiresAt, now)
+	if err != nil {
+		return fmt.Errorf("apply: persist runtime publication intent: %w", err)
+	}
+	if _, err := tx.Exec(`INSERT INTO runtime_publication_phases(job_id,phase,generation,evidence_json,committed_at) VALUES(?,?,?,?,?)`,
+		job.ID, PublicationPhaseIntent, lease.Generation, `{}`, now); err != nil {
+		return fmt.Errorf("apply: persist publication intent phase evidence: %w", err)
+	}
+	return tx.Commit()
+}
+
 func listRuntimePublications(db *sql.DB) ([]runtimePublication, error) {
 	rows, err := db.Query(`SELECT job_id, revision, generation, snapshot_sha256, operations_json, published_at,
  owner_process,operation_id,lease_expires_at,phase,expected_live_manifest_sha256,

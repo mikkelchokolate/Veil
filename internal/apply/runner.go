@@ -227,10 +227,12 @@ type Runner struct {
 	executor Executor
 	ownerID  string
 
-	leaseTTL          time.Duration
-	heartbeatInterval time.Duration
-	now               func() time.Time
-	startupErr        error
+	leaseTTL              time.Duration
+	heartbeatInterval     time.Duration
+	recoveryRetryInterval time.Duration
+	now                   func() time.Time
+	startupErr            error
+	lastRecoveryAttempt   time.Time
 
 	monitorStop chan struct{}
 	monitorDone chan struct{}
@@ -254,7 +256,8 @@ func NewRunner(revs *RevisionStore, jobs *JobStore, executor any) *Runner {
 	runner := &Runner{
 		revs: revs, jobs: jobs, executor: resolved,
 		ownerID:  fmt.Sprintf("pid:%d:%s", os.Getpid(), uuid.NewString()),
-		leaseTTL: 30 * time.Second, heartbeatInterval: 10 * time.Second, now: time.Now,
+		leaseTTL: 30 * time.Second, heartbeatInterval: 10 * time.Second,
+		recoveryRetryInterval: 5 * time.Second, now: time.Now,
 		monitorStop: make(chan struct{}), monitorDone: make(chan struct{}),
 	}
 	if revs == nil || revs.db == nil || jobs == nil {
@@ -339,7 +342,7 @@ func (r *Runner) monitorRecovery() {
 			}
 			now := r.now()
 			if lease.Owner == r.ownerID && lease.ExpiresAt > now.Unix() {
-				due, dueErr := r.jobs.RecoveryPendingDue(now.Add(-5 * time.Second).Unix())
+				due, dueErr := r.jobs.RecoveryPendingDue(now.Add(-r.recoveryInterval()).Unix())
 				if dueErr != nil {
 					r.setRecoveryError(dueErr)
 					continue
@@ -410,18 +413,80 @@ WHERE j.status=? ORDER BY j.created_at,j.id LIMIT 1`, StatusRecoveryPending).Sca
 	if job.OwnerProcess != r.ownerID || job.LeaseGeneration == 0 {
 		return fmt.Errorf("%w: recovery-pending publication %s is not fenced to this runner", ErrApplyBusy, job.ID)
 	}
-	if err := advanceRuntimePublicationPhase(r.revs.db, job.ID, job.LeaseGeneration, PublicationPhaseRecoveryTransferred, PublicationDetails{}, r.now().UTC().Unix()); err != nil {
-		return fmt.Errorf("apply: transfer recovery evidence: %w", err)
+	if !r.recoveryRetryDue() {
+		return nil
 	}
-	if err := finalizeFencedJob(r.revs.db, r.ownerID, job.LeaseGeneration, r.now(), job, StatusFailed,
-		"PUBLICATION_RECOVERY_TRANSFERRED", "runtime publication evidence transferred to a fresh full-convergence attempt", nil, nil, false, false); err != nil {
-		return fmt.Errorf("apply: finalize transferred recovery job: %w", err)
+	return r.retryRecoveryJob(ctx, job)
+}
+
+func (r *Runner) recoveryInterval() time.Duration {
+	if r == nil || r.recoveryRetryInterval <= 0 {
+		return 5 * time.Second
 	}
-	_, err = r.runContext(ctx, job.DesiredRevision, "publication-recovery", "system", r.executor)
+	return r.recoveryRetryInterval
+}
+
+func (r *Runner) recoveryRetryDue() bool {
+	r.mu.Lock()
+	last := r.lastRecoveryAttempt
+	r.mu.Unlock()
+	if last.IsZero() {
+		return true
+	}
+	return !r.now().Before(last.Add(r.recoveryInterval()))
+}
+
+func (r *Runner) noteRecoveryAttempt() {
+	r.mu.Lock()
+	r.lastRecoveryAttempt = r.now()
+	r.mu.Unlock()
+}
+
+func (r *Runner) retryRecoveryJob(ctx context.Context, job Job) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	r.mu.Lock()
+	if r.active {
+		r.mu.Unlock()
+		return nil
+	}
+	r.active = true
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		r.active = false
+		r.mu.Unlock()
+	}()
+
+	lease, err := r.leases.Current()
+	if err != nil {
+		r.noteRecoveryAttempt()
+		return fmt.Errorf("apply: inspect recovery lease: %w", err)
+	}
+	if lease.Owner != r.ownerID || lease.Generation != job.LeaseGeneration {
+		return fmt.Errorf("%w: recovery-pending publication %s is not fenced to this runner", ErrApplyBusy, job.ID)
+	}
+	if err := resetRuntimePublicationIntent(r.revs.db, job, lease, r.now().UTC().Unix()); err != nil {
+		r.noteRecoveryAttempt()
+		return fmt.Errorf("apply: reset recovery publication: %w", err)
+	}
+	if _, err := r.revs.db.Exec(`UPDATE apply_jobs SET started_at=? WHERE id=? AND owner_process=? AND lease_generation=?`,
+		r.now().UTC().Unix(), job.ID, r.ownerID, job.LeaseGeneration); err != nil {
+		r.noteRecoveryAttempt()
+		return fmt.Errorf("apply: touch recovery job: %w", err)
+	}
+
+	_, leaseHandled, err := r.executeFenced(ctx, job, lease, r.executor)
+	if !leaseHandled {
+		if releaseErr := r.leases.Release(r.ownerID, lease.Generation); releaseErr != nil {
+			err = errors.Join(err, fmt.Errorf("apply: release durable lease: %w", releaseErr))
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("apply: resume full convergence for revision %d: %w", job.DesiredRevision, err)
 	}
-	return r.resumeRecoveryPending(ctx)
+	return nil
 }
 
 func (r *Runner) setRecoveryError(err error) {
@@ -609,6 +674,16 @@ func (r *Runner) runContext(ctx context.Context, revision uint64, trigger, actor
 		return job, errors.Join(err, finishErr)
 	}
 
+	job, leaseHandled, err := r.executeFenced(ctx, job, lease, executor)
+	if leaseHandled {
+		leaseReleased = true
+	}
+	return job, err
+}
+
+func (r *Runner) executeFenced(ctx context.Context, job Job, lease Lease, executor Executor) (Job, bool, error) {
+	defer r.noteRecoveryAttempt()
+	revision := job.DesiredRevision
 	execCtx := ContextWithFence(ctx, Fence{
 		Owner: r.ownerID, Generation: lease.Generation, OperationID: lease.Operation, LeaseExpiresAt: lease.ExpiresAt,
 	})
@@ -648,45 +723,42 @@ func (r *Runner) runContext(ctx context.Context, revision uint64, trigger, actor
 			(result.RuntimeMutation.RollbackComplete && !result.RuntimeMutation.Ambiguous)
 		if !safeRollback {
 			pendingErr := markFinalizationPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, execErr)
-			if pendingErr == nil {
-				leaseReleased = true
-			}
 			job.Status = StatusRecoveryPending
 			job.ErrorCode = "RECOVERY_PENDING"
 			job.ErrorMessage = execErr.Error()
 			job.Operations = result.Operations
-			return job, errors.Join(execErr, pendingErr)
+			return job, pendingErr == nil, errors.Join(execErr, pendingErr)
 		}
 		rollbackErr := markRuntimePublicationRolledBack(r.revs.db, job.ID, lease.Generation, r.now().UTC().Unix())
-		var finishErr error
-		if rollbackErr == nil {
-			finishErr = finalizeFencedJob(r.revs.db, r.ownerID, lease.Generation, r.now(), job, StatusFailed, code, execErr.Error(), result.Operations, nil, false, false)
+		if rollbackErr != nil {
+			pendingErr := retainRecoveryPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, code, execErr.Error())
+			job.Status = StatusRecoveryPending
+			job.ErrorCode = code
+			job.ErrorMessage = execErr.Error()
+			job.Operations = result.Operations
+			return job, pendingErr == nil, errors.Join(execErr, rollbackErr, pendingErr)
 		}
-		finishErr = errors.Join(rollbackErr, finishErr)
-		if finishErr == nil {
-			leaseReleased = true
-		}
+		finishErr := finalizeFencedJob(r.revs.db, r.ownerID, lease.Generation, r.now(), job, StatusFailed, code, execErr.Error(), result.Operations, nil, false, false)
 		job.Status = StatusFailed
 		job.ErrorCode = code
 		job.ErrorMessage = execErr.Error()
 		job.Operations = result.Operations
-		return job, errors.Join(execErr, finishErr)
+		return job, finishErr == nil, errors.Join(execErr, finishErr)
 	}
 
 	if result.Disposition == "" {
-		return job, errors.New("apply: successful executor result has no disposition")
+		return job, false, errors.New("apply: successful executor result has no disposition")
 	}
 	if result.MarkRevisionLive != (result.Disposition == ApplyDispositionRuntimeConverged) {
-		return job, errors.New("apply: revision-live marker does not match runtime convergence disposition")
+		return job, false, errors.New("apply: revision-live marker does not match runtime convergence disposition")
 	}
 	if result.Disposition == ApplyDispositionStaged {
 		if err := finalizeFencedJob(r.revs.db, r.ownerID, lease.Generation, r.now(), job, StatusStaged, "", "", result.Operations, nil, false, false); err != nil {
-			return job, err
+			return job, false, err
 		}
-		leaseReleased = true
 		job.Status = StatusStaged
 		job.Operations = result.Operations
-		return job, nil
+		return job, true, nil
 	}
 
 	_, strictPhases := executor.(ContextExecutor)
@@ -695,28 +767,21 @@ func (r *Runner) runContext(ctx context.Context, revision uint64, trigger, actor
 	}
 	if err := recordRuntimePublication(r.revs.db, job, lease.Generation, result.Disposition, result.Operations, result.Confirmations, !strictPhases, r.now().UTC().Unix()); err != nil {
 		pendingErr := markFinalizationPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, err)
-		if pendingErr == nil {
-			leaseReleased = true
-		}
 		job.Status = StatusRecoveryPending
 		job.ErrorCode = "PUBLICATION_RECEIPT_PENDING"
 		job.ErrorMessage = err.Error()
-		return job, errors.Join(err, pendingErr)
+		return job, pendingErr == nil, errors.Join(err, pendingErr)
 	}
 	if err := finalizeFencedJob(r.revs.db, r.ownerID, lease.Generation, r.now(), job, StatusSucceeded, "", "", result.Operations, result.Confirmations, result.MarkRevisionLive, false); err != nil {
 		pendingErr := markFinalizationPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, err)
-		if pendingErr == nil {
-			leaseReleased = true
-		}
 		job.Status = StatusRecoveryPending
 		job.ErrorCode = "FINALIZATION_PENDING"
 		job.ErrorMessage = err.Error()
-		return job, errors.Join(err, pendingErr)
+		return job, pendingErr == nil, errors.Join(err, pendingErr)
 	}
-	leaseReleased = true
 	job.Status = StatusSucceeded
 	job.Operations = result.Operations
-	return job, nil
+	return job, true, nil
 }
 
 func (r *Runner) recoverBeforeAcquisition() error {

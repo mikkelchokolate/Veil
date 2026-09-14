@@ -189,7 +189,7 @@ func (s *JobStore) LatestWithStatus(status string) (Job, bool, error) {
 func (s *JobStore) LatestFailed() (Job, bool, error) {
 	job, err := scanJob(s.db.QueryRow(`SELECT id, desired_revision, base_revision, status, trigger, actor_id,
   created_at, started_at, finished_at, error_code, error_message, operations, owner_process, lease_generation
-  FROM apply_jobs WHERE status IN ('failed','rolled_back','rollback_failed') ORDER BY created_at DESC,rowid DESC LIMIT 1`))
+  FROM apply_jobs WHERE status IN ('failed','rolled_back','rollback_failed') AND error_code<>'PUBLICATION_RECOVERY_TRANSFERRED' ORDER BY created_at DESC,rowid DESC LIMIT 1`))
 	if err == sql.ErrNoRows {
 		return Job{}, false, nil
 	}
@@ -198,7 +198,7 @@ func (s *JobStore) LatestFailed() (Job, bool, error) {
 
 func (s *JobStore) RecoveryPendingDue(cutoff int64) (bool, error) {
 	var exists int
-	if err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM apply_jobs WHERE status='recovery_pending' AND updated_at<=?)`, cutoff).Scan(&exists); err != nil {
+	if err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM apply_jobs WHERE status='recovery_pending' AND COALESCE(started_at, created_at)<=?)`, cutoff).Scan(&exists); err != nil {
 		return false, err
 	}
 	return exists == 1, nil
