@@ -95,3 +95,42 @@ VALUES(?,?,?,?,?,?,?)`, job.ID, first, 7, "", "[]", time.Now().Unix(), "finaliza
 		t.Fatalf("applied rewound to %d, want %d", state.Applied, second)
 	}
 }
+
+func TestRecoverFinalizationPendingDoesNotMarkApplied(t *testing.T) {
+	db := openTestDB(t)
+	revisions, jobs := NewRevisionStore(db), NewJobStore(db)
+	desired, err := revisions.BumpDesired()
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := Job{
+		ID: uuid.NewString(), DesiredRevision: desired, BaseRevision: 0,
+		Status: StatusRecoveryPending, Trigger: "publication-recovery", CreatedAt: time.Now().Unix(),
+		OwnerProcess: "pid:1:stale", LeaseGeneration: 7,
+	}
+	if err := jobs.Create(job); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO runtime_publications(job_id, revision, generation, snapshot_sha256, operations_json, published_at, phase)
+VALUES(?,?,?,?,?,?,?)`, job.ID, desired, 7, "", "[]", time.Now().Unix(), "finalization_pending"); err != nil {
+		t.Fatal(err)
+	}
+	leases := NewLeaseStore(db)
+	if err := recoverRuntimePublications(db, leases, jobs, "pid:recovery", time.Now, 30*time.Second); err != nil {
+		t.Fatalf("recoverRuntimePublications: %v", err)
+	}
+	state, err := revisions.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Applied != 0 {
+		t.Fatalf("applied = %d, want 0 (finalization_pending is not publication success)", state.Applied)
+	}
+	persisted, err := jobs.Get(job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.Status == StatusSucceeded {
+		t.Fatalf("finalization_pending job was marked succeeded: %+v", persisted)
+	}
+}

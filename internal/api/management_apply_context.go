@@ -317,6 +317,7 @@ func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []S
 			if err == nil {
 				adminResult.Success = true
 				results = append(results, adminResult)
+				results = append(results, ctx.runPrivilegedServiceAction(unitCaddy, privileged.ServiceActionEnable))
 				continue
 			}
 			// An inactive singleton has no Admin API yet during the first migration
@@ -336,6 +337,7 @@ func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []S
 		if !result.Success {
 			return results
 		}
+		results = append(results, ctx.runPrivilegedServiceAction(unitCaddy, privileged.ServiceActionEnable))
 	}
 
 	// Phase 2: Synchronize hysteria2 certificates after Caddy has reloaded so
@@ -379,8 +381,8 @@ func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []S
 		// enables veil.service, veil-helper.socket and (optionally)
 		// veil-caddy.service; per-instance protocol units (hysteria2/olcrtc)
 		// and the mieru singleton are otherwise dead after a reboot with no
-		// Veil-side signal (audit #117/#137). WARP is handled above; caddy and
-		// the panel unit are handled by the installer.
+		// Veil-side signal (audit #117/#137). WARP is handled above. Caddy is
+		// enabled in phase 1 after a successful load/reload.
 		if runtime.Unit != renderer.UnitVeil && runtime.Unit != unitCaddy && runtime.Unit != renderer.UnitWarp {
 			enable := ctx.runPrivilegedServiceAction(runtime.Unit, privileged.ServiceActionEnable)
 			results = append(results, enable)

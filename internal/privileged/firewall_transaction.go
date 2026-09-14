@@ -82,7 +82,7 @@ func reconcileUFW(ctx context.Context, runner CommandRunner, request ResolvedFir
 	}
 	staleTargets := make([]string, 0)
 	for target, comment := range initial.Rules {
-		if !isVeilManagedFirewallComment(comment) {
+		if !isVeilManagedFirewallComment(comment) || isProtectedVeilFirewallComment(comment) {
 			continue
 		}
 		if _, keep := desiredTargets[target]; !keep {
@@ -193,7 +193,12 @@ func restoreUFWState(ctx context.Context, runner CommandRunner, initial ufwState
 		entries := append([]ufwRuleState(nil), initial.Entries...)
 		sort.Slice(entries, func(i, j int) bool { return entries[i].Order < entries[j].Order })
 		for _, entry := range entries {
-			if len(entry.Args) < 2 {
+			if entry.Family == "ipv6" {
+				// `ufw allow 443/tcp` already installs the IPv6 twin. Replaying
+				// "(v6)" status lines as ufw arguments is invalid syntax.
+				continue
+			}
+			if len(entry.Args) < 2 || !isUFWAction(entry.Action) {
 				joined = errors.Join(joined, errors.New("firewall recovery entry is incomplete"))
 				continue
 			}
@@ -265,33 +270,50 @@ func parseUFWStatus(output string) (ufwState, error) {
 		if len(fields) < 2 {
 			continue
 		}
-		target := fields[0]
 		comment := ""
 		if len(parts) == 2 {
 			comment = strings.TrimSpace(parts[1])
 		}
 		family := "ipv4"
-		if strings.Contains(line, "(v6)") {
-			family = "ipv6"
+		compact := make([]string, 0, len(fields))
+		for _, field := range fields {
+			if field == "(v6)" {
+				family = "ipv6"
+				continue
+			}
+			compact = append(compact, field)
 		}
-		destination := strings.TrimSpace(strings.ReplaceAll(target, "(v6)", ""))
+		if len(compact) < 2 {
+			continue
+		}
+		destination := compact[0]
+		actionIdx := 1
+		action := strings.ToLower(compact[actionIdx])
+		if actionIdx+1 < len(compact) {
+			switch strings.ToLower(compact[actionIdx+1]) {
+			case "in", "out":
+				actionIdx++
+			}
+		}
+		if !isUFWAction(action) {
+			continue
+		}
+		source := "Anywhere"
+		if actionIdx+1 < len(compact) {
+			source = strings.Join(compact[actionIdx+1:], " ")
+		}
 		protocol := ""
 		if slash := strings.LastIndex(destination, "/"); slash >= 0 && slash+1 < len(destination) {
 			protocol = destination[slash+1:]
-		}
-		action := strings.ToLower(fields[1])
-		source := "Anywhere"
-		if len(fields) > 2 {
-			source = strings.Join(fields[2:], " ")
 		}
 		entry := ufwRuleState{
 			Family: family, Action: action, Direction: "in", Source: source,
 			Destination: destination, Protocol: protocol, Order: len(state.Entries) + 1,
 			Comment: comment, Args: []string{action, destination},
 		}
-		for i := 2; i+1 < len(fields); i++ {
-			if strings.EqualFold(fields[i], "on") {
-				entry.Interface = fields[i+1]
+		for i := 1; i+1 < len(compact); i++ {
+			if strings.EqualFold(compact[i], "on") {
+				entry.Interface = compact[i+1]
 				break
 			}
 		}
@@ -299,7 +321,7 @@ func parseUFWStatus(output string) (ufwState, error) {
 			entry.Args = append(entry.Args, "comment", comment)
 		}
 		state.Entries = append(state.Entries, entry)
-		state.Rules[target] = comment
+		state.Rules[destination] = comment
 	}
 	for i := range state.Entries {
 		state.Entries[i].Enabled = state.Enabled
@@ -312,4 +334,18 @@ func parseUFWStatus(output string) (ufwState, error) {
 
 func isVeilManagedFirewallComment(comment string) bool {
 	return strings.HasPrefix(strings.TrimSpace(comment), "Veil ")
+}
+
+func isProtectedVeilFirewallComment(comment string) bool {
+	c := strings.TrimSpace(comment)
+	return c == "Veil management SSH" || strings.HasPrefix(c, "Veil ACME")
+}
+
+func isUFWAction(action string) bool {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "allow", "deny", "reject", "limit":
+		return true
+	default:
+		return false
+	}
 }

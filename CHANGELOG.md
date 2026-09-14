@@ -4,11 +4,6 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
-## [v0.7.2] - 2026-09-14
-
-Installer Caddy fix: `veil install --panel-access caddy` works on a fresh
-host that does not yet have Caddy on PATH.
-
 ### Fixed
 
 - Fresh-host `veil install --panel-access caddy` aborted with
@@ -16,6 +11,12 @@ host that does not yet have Caddy on PATH.
   the installer probed Caddy capabilities before runtime install placed the
   binary. Panel Caddy JSON now renders when Caddy is missing; `veil runtime
   install` still installs Caddy afterwards.
+- Helper `parseUFWStatus` treated IPv6 `(v6)` as the UFW action, so apply
+  restore replayed invalid syntax, rolled back live UDP/TCP rules, and the
+  panel later marked `finalization_pending` as applied. IPv6 status twins
+  are skipped on restore; install-time SSH/ACME comments are kept; Caddy is
+  enabled after a successful load/reload; `finalization_pending` stays in
+  recovery instead of succeeding.
 
 ## [v0.7.1] - 2026-09-12
 
