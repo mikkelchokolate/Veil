@@ -3,6 +3,7 @@ package caddycapabilities
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os/exec"
 	"testing"
 )
@@ -14,6 +15,9 @@ func TestIsMissingBinary(t *testing.T) {
 	if !IsMissingBinary(exec.ErrNotFound) {
 		t.Fatal("exec.ErrNotFound should be missing binary")
 	}
+	if !IsMissingBinary(fs.ErrNotExist) {
+		t.Fatal("fs.ErrNotExist should be missing binary")
+	}
 	wrapped := fmt.Errorf("caddy list-modules failed: %w", exec.ErrNotFound)
 	if !IsMissingBinary(wrapped) {
 		t.Fatal("wrapped ErrNotFound should be missing binary")
@@ -24,12 +28,19 @@ func TestIsMissingBinary(t *testing.T) {
 }
 
 func TestProbeMissingBinary(t *testing.T) {
-	_, err := Probe("/veil-test-missing-caddy")
+	_, err := Probe("veil-test-missing-caddy-not-on-path")
 	if err == nil {
 		t.Fatal("expected probe error for missing binary")
 	}
 	if !IsMissingBinary(err) {
 		t.Fatalf("IsMissingBinary(%v) = false", err)
+	}
+	_, pathErr := Probe("/veil-test-missing-caddy")
+	if pathErr == nil {
+		t.Fatal("expected probe error for missing path")
+	}
+	if !IsMissingBinary(pathErr) {
+		t.Fatalf("IsMissingBinary(%v) = false", pathErr)
 	}
 }
 
