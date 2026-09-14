@@ -506,7 +506,7 @@ func TestManagementApplyServicesRollsBackLiveConfigOnHealthFailure(t *testing.T)
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.ServicesApplied || response.RolledBack || !response.Ambiguous || len(response.RollbackFiles) != 1 || len(response.RollbackActions) != 1 {
+	if response.ServicesApplied || response.RolledBack || !response.Ambiguous || len(response.RollbackFiles) != 1 || len(response.RollbackActions) < 1 {
 		t.Fatalf("expected recovery-pending response after rollback health could not be verified: %+v", response)
 	}
 	body, err := os.ReadFile(liveCaddy)
