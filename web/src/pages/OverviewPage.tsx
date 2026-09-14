@@ -66,12 +66,17 @@ function PanelVersionCard() {
 				(await apiFetch<VersionResponse>("/api/version")).version;
 			const staged = await postPanelUpdate();
 			setPhase("waiting");
-			return waitForPanelVersion({
+			const waitOptions: Parameters<typeof waitForPanelVersion>[0] = {
 				previousVersion: previous,
-				expectedVersion: staged.version,
-				jobId: staged.jobId,
 				onAttempt: (attempt, max) => setWaitProgress({ attempt, max }),
-			});
+			};
+			if (staged.version) {
+				waitOptions.expectedVersion = staged.version;
+			}
+			if (staged.jobId) {
+				waitOptions.jobId = staged.jobId;
+			}
+			return waitForPanelVersion(waitOptions);
 		},
 		onMutate: () => {
 			setPhase("starting");

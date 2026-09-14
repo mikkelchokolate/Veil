@@ -65,7 +65,7 @@ describe("liveApplyLastError", () => {
 					lastError: transferred,
 				},
 				[
-					{ id: "ok", status: "succeeded", errorCode: undefined },
+					{ id: "ok", status: "succeeded" },
 					{
 						id: "old",
 						status: "failed",
