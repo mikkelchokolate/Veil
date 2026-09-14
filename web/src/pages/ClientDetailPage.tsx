@@ -175,6 +175,7 @@ export function ClientDetailPage() {
 				: mutationErrorMessage(err, t(fallbackKey)),
 		);
 		if (isConflict) {
+			adoptRefetchedVersion.current = true;
 			invalidate();
 		}
 	}
@@ -194,16 +195,24 @@ export function ClientDetailPage() {
 	const isDirty = form.formState.isDirty;
 	const loadedClientId = useRef<string | null>(null);
 	const acceptServerValues = useRef(true);
+	const draftVersion = useRef<number | null>(null);
+	const adoptRefetchedVersion = useRef(false);
 	useEffect(() => {
 		const c = client.data;
 		if (!c) return;
 		if (loadedClientId.current !== clientId) {
 			acceptServerValues.current = true;
 			loadedClientId.current = clientId;
+			draftVersion.current = c.version ?? 0;
+		}
+		if (adoptRefetchedVersion.current) {
+			draftVersion.current = c.version ?? 0;
+			adoptRefetchedVersion.current = false;
 		}
 		if (!acceptServerValues.current && isDirty) return;
 		form.reset(valuesFromClient(c));
 		acceptServerValues.current = false;
+		draftVersion.current = c.version ?? 0;
 	}, [client.data, clientId, form.reset, isDirty]);
 
 	const invalidate = () => {
@@ -237,7 +246,7 @@ export function ClientDetailPage() {
 			const expiresUnix =
 				expires != null && !Number.isNaN(expires) ? expires : null;
 			const res = await patchApiV1ClientsId(clientId, {
-				version: c.version ?? 0,
+				version: draftVersion.current ?? c.version ?? 0,
 				...(form.getFieldState("name").isDirty ? { name: v.name } : {}),
 				...(form.getFieldState("email").isDirty
 					? { email: v.email || null }
@@ -469,7 +478,10 @@ export function ClientDetailPage() {
 							onClick={() => {
 								acceptServerValues.current = true;
 								const latest = client.data;
-								if (latest) form.reset(valuesFromClient(latest));
+								if (latest) {
+									form.reset(valuesFromClient(latest));
+									draftVersion.current = latest.version ?? 0;
+								}
 								acceptServerValues.current = false;
 								setConflict(false);
 								setError(null);

@@ -128,6 +128,44 @@ describe("ClientDetailPage conflict and expiry", () => {
 		expect(screen.getByLabelText(/^name$/i)).toHaveValue("Unsaved draft");
 	});
 
+	it("keeps the draft baseline version after a silent refetch", async () => {
+		const user = userEvent.setup();
+		let version = 1;
+		let name = "Original";
+		const patches: Array<Record<string, unknown>> = [];
+		server.use(
+			http.get("/api/inbounds", () => HttpResponse.json([])),
+			http.get("/api/v1/clients/c1", () =>
+				HttpResponse.json({
+					id: "c1",
+					name,
+					enabled: true,
+					version,
+					status: "active",
+					bindings: [],
+				}),
+			),
+			http.patch("/api/v1/clients/c1", async ({ request }) => {
+				const body = (await request.json()) as Record<string, unknown>;
+				patches.push(body);
+				return HttpResponse.json({ success: true, version: version + 1 });
+			}),
+		);
+		const { qc } = renderClientDetail();
+		const nameField = await screen.findByLabelText(/^name$/i);
+		await user.clear(nameField);
+		await user.type(nameField, "A draft");
+		name = "B saved";
+		version = 2;
+		await qc.invalidateQueries({ queryKey: ["clients", "c1"] });
+		await waitFor(() =>
+			expect(screen.getByLabelText(/^name$/i)).toHaveValue("A draft"),
+		);
+		await user.click(screen.getByRole("button", { name: /save changes/i }));
+		await waitFor(() => expect(patches).toHaveLength(1));
+		expect(patches[0]).toEqual({ version: 1, name: "A draft" });
+	});
+
 	it("reloads server values when the operator discards a conflicted draft", async () => {
 		const user = userEvent.setup();
 		let version = 1;

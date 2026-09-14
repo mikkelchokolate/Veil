@@ -20,7 +20,9 @@ import {
 } from "../components/ui/alert-dialog";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { FormMessage } from "../components/ui/form";
+import { FormItem, FormMessage } from "../components/ui/form";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
 import {
 	Table,
 	TableBody,
@@ -61,6 +63,10 @@ export function BackupsPage() {
 	>({});
 	const [confirmRestore, setConfirmRestore] = useState<string | null>(null);
 	const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+	const [confirmPrune, setConfirmPrune] = useState(false);
+	const [pruneDaily, setPruneDaily] = useState("7");
+	const [pruneWeekly, setPruneWeekly] = useState("4");
+	const [pruneMonthly, setPruneMonthly] = useState("12");
 	const [activeJob, setActiveJob] = useState<RestoreJob | null>(null);
 
 	const backups = useQuery<{ items?: BackupArchive[] } | BackupArchive[]>({
@@ -123,13 +129,25 @@ export function BackupsPage() {
 			setError(mutationErrorMessage(e, t("backups.error.create"))),
 	});
 
+	function parseRetention(value: string, fallback: number): number {
+		const n = Number.parseInt(value, 10);
+		return Number.isFinite(n) && n >= 0 ? n : fallback;
+	}
+
+	const pruneRetention = {
+		daily: parseRetention(pruneDaily, 7),
+		weekly: parseRetention(pruneWeekly, 4),
+		monthly: parseRetention(pruneMonthly, 12),
+	};
+
 	const prune = useMutation({
 		mutationFn: () =>
 			apiFetch("/api/backups/prune", {
 				method: "POST",
-				body: JSON.stringify({}),
+				body: JSON.stringify(pruneRetention),
 			}),
 		onSuccess: () => {
+			setConfirmPrune(false);
 			setError(null);
 			setNotice(t("backups.notice.pruned"));
 			void qc.invalidateQueries({ queryKey: ["backups"] });
@@ -233,7 +251,10 @@ export function BackupsPage() {
 					<h2 style={{ margin: 0, flex: 1 }}>{t("backups.title")}</h2>
 					{isAdmin ? (
 						<>
-							<Button disabled={prune.isPending} onClick={() => prune.mutate()}>
+							<Button
+								disabled={prune.isPending}
+								onClick={() => setConfirmPrune(true)}
+							>
 								{prune.isPending ? t("backups.pruning") : t("backups.prune")}
 							</Button>
 							<Button
@@ -396,6 +417,75 @@ export function BackupsPage() {
 					</Table>
 				)}
 			</div>
+
+			<AlertDialog
+				open={confirmPrune}
+				onOpenChange={(open) => {
+					if (!open) setConfirmPrune(false);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							{t("backups.pruneConfirmTitle")}
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							{t("backups.pruneConfirmDescription", {
+								daily: pruneRetention.daily,
+								weekly: pruneRetention.weekly,
+								monthly: pruneRetention.monthly,
+							})}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<div className="creation-dialog-fields" style={{ marginTop: 8 }}>
+						<FormItem>
+							<Label htmlFor="prune-daily">{t("backups.retentionDaily")}</Label>
+							<Input
+								id="prune-daily"
+								inputMode="numeric"
+								value={pruneDaily}
+								onChange={(e) => setPruneDaily(e.target.value)}
+							/>
+						</FormItem>
+						<FormItem>
+							<Label htmlFor="prune-weekly">
+								{t("backups.retentionWeekly")}
+							</Label>
+							<Input
+								id="prune-weekly"
+								inputMode="numeric"
+								value={pruneWeekly}
+								onChange={(e) => setPruneWeekly(e.target.value)}
+							/>
+						</FormItem>
+						<FormItem>
+							<Label htmlFor="prune-monthly">
+								{t("backups.retentionMonthly")}
+							</Label>
+							<Input
+								id="prune-monthly"
+								inputMode="numeric"
+								value={pruneMonthly}
+								onChange={(e) => setPruneMonthly(e.target.value)}
+							/>
+						</FormItem>
+					</div>
+					<AlertDialogFooter>
+						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={prune.isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								prune.mutate();
+							}}
+						>
+							{prune.isPending
+								? t("backups.pruning")
+								: t("backups.confirmPrune")}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 
 			<AlertDialog
 				open={confirmDelete !== null}
