@@ -19,6 +19,14 @@ func (Plugin) RenderConfig(input generatedconfig.ProtocolRenderInput) ([]generat
 	}
 	var artifacts []generatedconfig.GeneratedConfigArtifact
 	for _, inbound := range input.Inbounds {
+		access, err := clientaccess.BuildClientAccess(input.Settings, inbound)
+		if err != nil {
+			return nil, false, err
+		}
+		if len(access.Hysteria2Users()) == 0 && len(inbound.Profiles) > 0 {
+			// Profiles exist but none are enabled: do not revive the inbound password.
+			continue
+		}
 		body, err := renderHysteria2(input.Settings, inbound, input.Warp, input.Rules, input.Paths)
 		if err != nil {
 			return nil, false, err
@@ -29,7 +37,7 @@ func (Plugin) RenderConfig(input generatedconfig.ProtocolRenderInput) ([]generat
 			Body: body,
 		})
 	}
-	return artifacts, true, nil
+	return artifacts, len(artifacts) > 0, nil
 }
 
 // ArtifactSpec returns the artifact metadata for Hysteria2 configs.

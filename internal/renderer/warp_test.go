@@ -105,7 +105,7 @@ func TestRenderWarpSingBoxConfigCountryRulesUseRuleSets(t *testing.T) {
 		`"rule_set": "geoip-ru"`,
 		`"rule_set": "geosite-ru-blocked"`,
 		`SagerNet/sing-geoip/rule-set/geoip-ru.srs`,
-		`SagerNet/sing-geosite/rule-set/geosite-ru-blocked.srs`,
+		`SagerNet/sing-geosite/rule-set/geosite-geolocation-ru.srs`,
 		`"download_detour": "direct"`,
 		`"final": "warp"`,
 		`"outbound": "direct"`,

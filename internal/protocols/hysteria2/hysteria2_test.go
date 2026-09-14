@@ -134,6 +134,29 @@ func TestRenderConfigWithMasqueradeURLFallbackChain(t *testing.T) {
 	}
 }
 
+func TestRenderConfigDoesNotRevivePasswordWhenAllProfilesDisabled(t *testing.T) {
+	p := New()
+	artifacts, ok, err := p.RenderConfig(generatedconfig.ProtocolRenderInput{
+		Settings: model.Settings{Domain: "example.com", Hysteria2Password: "fallback-secret"},
+		Paths:    generatedconfig.NewPaths("/tmp/veil"),
+		Inbounds: []model.Inbound{{
+			Name:      "h2",
+			Protocol:  "hysteria2",
+			Transport: "udp",
+			Port:      8443,
+			Enabled:   true,
+			Password:  "fallback-secret",
+			Profiles:  []model.ClientProfile{{Name: "off", Username: "u", Password: "p", Enabled: false}},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok || len(artifacts) != 0 {
+		t.Fatalf("expected no live YAML when every profile is disabled, got ok=%v artifacts=%d", ok, len(artifacts))
+	}
+}
+
 func TestRenderConfigWithPasswordFallbackChain(t *testing.T) {
 	p := New()
 	paths := generatedconfig.NewPaths("/tmp/veil")

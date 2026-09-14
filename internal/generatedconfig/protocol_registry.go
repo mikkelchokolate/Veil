@@ -83,7 +83,13 @@ func (r ProtocolRegistry) Render(input ConfigInput) (map[string]string, error) {
 		if protocol.RequiresRenderSettings && !NewGeneratedRenderSettingsPolicyWithFieldKeys(r.renderSettingKeys).HasRenderSettings(input.Settings, input.Inbounds) {
 			continue
 		}
-		artifacts, ok, err := protocol.Render(ProtocolRenderInput{Settings: input.Settings, Paths: paths, Inbounds: selected, Rules: input.Rules, Warp: input.Warp})
+		renderInbounds := selected
+		if protocol.Protocol == "naiveproxy" {
+			// Caddy JSON also issues ACME certs for Hysteria2-only domains.
+			// Passing only Naive inbounds drops those subjects from live Caddy.
+			renderInbounds = input.Inbounds
+		}
+		artifacts, ok, err := protocol.Render(ProtocolRenderInput{Settings: input.Settings, Paths: paths, Inbounds: renderInbounds, Rules: input.Rules, Warp: input.Warp})
 		if err != nil {
 			return nil, err
 		}

@@ -17,6 +17,15 @@ All notable changes to Veil will be documented in this file.
   are skipped on restore; install-time SSH/ACME comments are kept; Caddy is
   enabled after a successful load/reload; `finalization_pending` stays in
   recovery instead of succeeding.
+- ACME tls-alpn challenge servers on TCP 443 now pin `h1`/`h2` so HTTP/3
+  cannot steal UDP 443 from Hysteria2.
+- Live Caddy JSON includes Hysteria2 inbound domains in ACME subjects when
+  NaiveProxy is also enabled.
+- WARP `ru-blocked` rule-sets fetch published SagerNet `geoip-ru` /
+  `geosite-geolocation-ru` artifacts instead of missing `*-ru-blocked.srs`.
+- Hysteria2 no longer revives the inbound password after every client
+  profile is disabled.
+- veil-helper.service can write `/run/ufw.lock` under ProtectSystem=strict.
 
 ## [v0.7.1] - 2026-09-12
 

@@ -156,7 +156,7 @@ RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-ReadWritePaths=` + cfg.EtcDir + ` /var/lib/veil /usr/local/bin /etc/ufw
+ReadWritePaths=` + cfg.EtcDir + ` /var/lib/veil /usr/local/bin /etc/ufw /run /var/run
 `,
 		UnitHelperSocket: `[Unit]
 Description=Veil privileged helper socket

@@ -316,6 +316,30 @@ func TestRenderCaddyJSONRejectsNaiveWithoutForwardProxy(t *testing.T) {
 	}
 }
 
+func TestRenderCaddyJSONAcmeChallengeOn443DisablesHTTP3(t *testing.T) {
+	plan := caddyassembly.CaddyRenderPlan{
+		ACMEChallenges: map[bindregistry.BindKey]caddyassembly.AcmeChallengeOwner{
+			{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}: {
+				ChallengeMode: "tls-alpn-01",
+				Domains:       []string{"hy.example.com"},
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"hy.example.com": {Domain: "hy.example.com", Email: "a@example.com"},
+		},
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"protocols": [`) || !strings.Contains(string(data), `"h1"`) {
+		t.Fatalf("ACME :443 challenge server must pin h1/h2:\n%s", data)
+	}
+	if strings.Contains(string(data), `"h3"`) {
+		t.Fatal("ACME challenge server must not enable HTTP/3")
+	}
+}
+
 func TestRenderCaddyJSONAllowsNaiveTCPWithForwardProxy(t *testing.T) {
 	plan := caddyassembly.CaddyRenderPlan{
 		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
