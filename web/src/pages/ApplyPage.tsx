@@ -1,8 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { ApiError, apiFetch } from "../api/fetcher";
 import type { ApplyJob } from "../api/generated/models";
 import { useApplyState } from "../apply/ApplyStatusIndicator";
+import {
+	isSupersededRecoveryJob,
+	liveApplyLastError,
+	truncateApplyError,
+} from "../apply/jobsView";
 import { useIsAdmin } from "../auth/AuthContext";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -59,6 +65,7 @@ export function ApplyPage() {
 	const qc = useQueryClient();
 	const state = useApplyState();
 	const jobs = useApplyJobs();
+	const [showTransferred, setShowTransferred] = useState(false);
 
 	const reconcile = useMutation({
 		mutationFn: () => apiFetch("/api/apply/reconcile", { method: "POST" }),
@@ -75,6 +82,12 @@ export function ApplyPage() {
 
 	const s = state.data;
 	const drift = s ? s.desiredRevision !== s.appliedRevision : false;
+	const allJobs = jobs.data?.items ?? [];
+	const transferredJobs = allJobs.filter(isSupersededRecoveryJob);
+	const visibleJobs = showTransferred
+		? allJobs
+		: allJobs.filter((job) => !isSupersededRecoveryJob(job));
+	const lastError = s ? liveApplyLastError(s, allJobs) : undefined;
 
 	return (
 		<>
@@ -110,11 +123,11 @@ export function ApplyPage() {
 								</Badge>
 							</p>
 						) : null}
-						{s.lastError?.message ? (
+						{lastError?.message ? (
 							<FormMessage>
 								{t("apply.lastError", {
-									code: s.lastError.code ? ` (${s.lastError.code})` : "",
-									message: s.lastError.message,
+									code: lastError.code ? ` (${lastError.code})` : "",
+									message: truncateApplyError(lastError.message, 280),
 								})}
 							</FormMessage>
 						) : null}
@@ -142,6 +155,19 @@ export function ApplyPage() {
 
 			<div className="card">
 				<h2>{t("apply.jobsTitle")}</h2>
+				{transferredJobs.length > 0 ? (
+					<p className="muted" style={{ fontSize: 13 }}>
+						{t("apply.transferredJobsHidden", { n: transferredJobs.length })}{" "}
+						<Button
+							size="sm"
+							onClick={() => setShowTransferred((open) => !open)}
+						>
+							{showTransferred
+								? t("apply.hideTransferredJobs")
+								: t("apply.showTransferredJobs")}
+						</Button>
+					</p>
+				) : null}
 				{jobs.isLoading ? (
 					<p className="muted">{t("common.loading")}</p>
 				) : jobs.isError ? (
@@ -160,15 +186,24 @@ export function ApplyPage() {
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{(jobs.data?.items ?? []).length === 0 ? (
+							{visibleJobs.length === 0 ? (
 								<TableRow>
 									<TableCell colSpan={isAdmin ? 7 : 6} className="muted">
-										{t("apply.noJobs")}
+										{allJobs.length === 0
+											? t("apply.noJobs")
+											: t("apply.transferredJobsHidden", {
+													n: transferredJobs.length,
+												})}
 									</TableCell>
 								</TableRow>
 							) : (
-								(jobs.data?.items ?? []).map((j) => (
-									<TableRow key={j.id}>
+								visibleJobs.map((j) => (
+									<TableRow
+										key={j.id}
+										className={
+											isSupersededRecoveryJob(j) ? "opacity-60" : undefined
+										}
+									>
 										<TableCell className="muted">
 											{fmtTime(j.createdAt)}
 										</TableCell>
@@ -196,11 +231,24 @@ export function ApplyPage() {
 										<TableCell className="muted">
 											{fmtDuration(j.startedAt, j.finishedAt)}
 										</TableCell>
-										<TableCell className="muted" style={{ maxWidth: 320 }}>
+										<TableCell className="muted" style={{ maxWidth: 240 }}>
 											{j.errorMessage ? (
-												<span className="text-[var(--danger)]">
+												<span
+													className="text-[var(--danger)]"
+													title={
+														j.errorCode
+															? `[${j.errorCode}] ${j.errorMessage}`
+															: j.errorMessage
+													}
+													style={{
+														display: "block",
+														overflow: "hidden",
+														textOverflow: "ellipsis",
+														whiteSpace: "nowrap",
+													}}
+												>
 													{j.errorCode ? `[${j.errorCode}] ` : ""}
-													{j.errorMessage}
+													{truncateApplyError(j.errorMessage)}
 												</span>
 											) : (
 												"—"
@@ -208,8 +256,9 @@ export function ApplyPage() {
 										</TableCell>
 										{isAdmin ? (
 											<TableCell>
-												{j.status === "failed" ||
-												(j.status as string) === "rollback_failed" ? (
+												{(j.status === "failed" ||
+													(j.status as string) === "rollback_failed") &&
+												!isSupersededRecoveryJob(j) ? (
 													<Button
 														size="sm"
 														disabled={retry.isPending}

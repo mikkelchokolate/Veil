@@ -113,6 +113,65 @@ describe("ApplyPage", () => {
 		expect(screen.queryByText("apply.status.applying")).not.toBeInTheDocument();
 	});
 
+	it("hides transferred recovery jobs and a superseded lastError after a later success", async () => {
+		const giant =
+			"runtime publication evidence transferred to a fresh full-convergence attempt " +
+			"x".repeat(400);
+		server.use(
+			http.get("/api/apply/state", () =>
+				HttpResponse.json({
+					desiredRevision: 2,
+					appliedRevision: 2,
+					state: "synced",
+					lastError: {
+						code: "PUBLICATION_RECOVERY_TRANSFERRED",
+						message: giant,
+					},
+				}),
+			),
+			http.get("/api/apply/jobs", () =>
+				HttpResponse.json({
+					items: [
+						{
+							id: "j-ok",
+							desiredRevision: 2,
+							baseRevision: 1,
+							status: "succeeded",
+							trigger: "publication-recovery",
+							createdAt: 1700000100,
+						},
+						{
+							id: "j-x",
+							desiredRevision: 2,
+							baseRevision: 1,
+							status: "failed",
+							trigger: "publication-recovery",
+							createdAt: 1700000000,
+							errorCode: "PUBLICATION_RECOVERY_TRANSFERRED",
+							errorMessage: giant,
+						},
+					],
+				}),
+			),
+		);
+		renderApply();
+		expect(await screen.findByText("succeeded")).toBeInTheDocument();
+		expect(
+			screen.getByText(/1 transferred recovery jobs hidden/i),
+		).toBeInTheDocument();
+		expect(screen.queryByText(giant)).not.toBeInTheDocument();
+		expect(screen.queryByText(/last error/i)).not.toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("button", { name: /show transferred jobs/i }),
+		);
+		const truncated = await screen.findByTitle(
+			`[PUBLICATION_RECOVERY_TRANSFERRED] ${giant}`,
+		);
+		expect(truncated.textContent?.includes("…")).toBe(true);
+		expect(truncated.textContent ?? "").not.toContain("x".repeat(400));
+		expect(screen.getAllByText("1 → 2")).toHaveLength(2);
+	});
+
 	it("offers retry on rollback_failed and shows a retry error", async () => {
 		server.use(
 			http.get("/api/apply/state", () =>

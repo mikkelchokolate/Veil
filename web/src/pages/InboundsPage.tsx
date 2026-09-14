@@ -101,6 +101,55 @@ const EMPTY: InboundForm = {
 	protocolFields: {},
 };
 
+function parsePort(value: string): number | undefined {
+	if (value === "") return undefined;
+	const port = Number.parseInt(value, 10);
+	return Number.isFinite(port) ? port : undefined;
+}
+
+function schemaFieldDefault(
+	field: ProtocolField,
+	port: string,
+	settingsPort?: number,
+): unknown {
+	if (field.key === "publicPort") {
+		return (
+			parsePort(port) ??
+			(settingsPort != null && settingsPort > 0 ? settingsPort : field.default)
+		);
+	}
+	return field.default;
+}
+
+function applyCreateDefaults(
+	schema: ProtocolField[],
+	protocolFields: Record<string, unknown>,
+	port: string,
+	settingsPort?: number,
+): { protocolFields: Record<string, unknown>; changed: boolean } {
+	const next = { ...protocolFields };
+	let changed = false;
+	for (const field of schema) {
+		if (field.default != null && next[field.key] == null) {
+			next[field.key] = schemaFieldDefault(field, port, settingsPort);
+			changed = true;
+		}
+	}
+	return { protocolFields: next, changed };
+}
+
+function livePortValue(ib: Inbound): string {
+	if (ib.port != null) return String(ib.port);
+	const publicPort = ib.protocolFields?.publicPort;
+	if (typeof publicPort === "number" && Number.isFinite(publicPort)) {
+		return String(publicPort);
+	}
+	if (typeof publicPort === "string" && publicPort !== "") {
+		return publicPort;
+	}
+	return "";
+}
+
 export function InboundsPage() {
 	const isAdmin = useIsAdmin();
 	const { t } = useI18n();
@@ -166,6 +215,10 @@ export function InboundsPage() {
 		queryKey: ["inbounds", "all"],
 		queryFn: () => apiFetch("/api/inbounds"),
 	});
+	const settings = useQuery<{ defaultInboundPublicPort?: number }>({
+		queryKey: ["settings"],
+		queryFn: () => apiFetch("/api/settings"),
+	});
 	// Attached clients per inbound (normalized clients read model).
 	const protocolCatalog = useQuery<
 		Array<{
@@ -180,22 +233,28 @@ export function InboundsPage() {
 	});
 
 	useEffect(() => {
-		if (!creating && editing == null) return;
+		if (!creating) return;
 		const schema =
 			protocolCatalog.data?.find((p) => p.protocol === form.protocol)
 				?.inboundFieldSchema ?? [];
+		const settingsPort = settings.data?.defaultInboundPublicPort;
 		setForm((prev) => {
-			const protocolFields = { ...prev.protocolFields };
-			let changed = false;
-			for (const field of schema) {
-				if (field.default != null && protocolFields[field.key] == null) {
-					protocolFields[field.key] = field.default;
-					changed = true;
-				}
-			}
-			return changed ? { ...prev, protocolFields } : prev;
+			const prefillPort =
+				settingsPort != null &&
+				settingsPort > 0 &&
+				(prev.port === "" || prev.port === EMPTY.port)
+					? String(settingsPort)
+					: prev.port;
+			const { protocolFields, changed } = applyCreateDefaults(
+				schema,
+				prev.protocolFields,
+				prefillPort,
+				settingsPort,
+			);
+			if (!changed && prefillPort === prev.port) return prev;
+			return { ...prev, port: prefillPort, protocolFields };
 		});
-	}, [creating, editing, protocolCatalog.data, form.protocol]);
+	}, [creating, protocolCatalog.data, form.protocol, settings.data]);
 
 	const inboundItems = inbounds.data ?? [];
 	const attachedQueries = useQueries({
@@ -233,7 +292,11 @@ export function InboundsPage() {
 	}
 
 	function toBody(f: InboundForm, keepName?: string) {
-		const port = f.port === "" ? undefined : Number.parseInt(f.port, 10);
+		const port = parsePort(f.port);
+		const schema =
+			protocolCatalog.data?.find((p) => p.protocol === f.protocol)
+				?.inboundFieldSchema ?? [];
+		const hasPublicPort = schema.some((field) => field.key === "publicPort");
 		const protocolFields: Record<string, unknown> = {
 			...f.protocolFields,
 			hysteria2Insecure: Object.hasOwn(
@@ -243,6 +306,9 @@ export function InboundsPage() {
 				? Boolean(f.protocolFields.hysteria2Insecure)
 				: f.hysteria2Insecure,
 		};
+		if (port != null && hasPublicPort) {
+			protocolFields.publicPort = port;
+		}
 		const pick = (key: string, flat: string): unknown => {
 			if (Object.hasOwn(protocolFields, key)) return protocolFields[key];
 			if (flat !== "") return flat;
@@ -337,11 +403,18 @@ export function InboundsPage() {
 		const schema =
 			protocolCatalog.data?.find((p) => p.protocol === proto)
 				?.inboundFieldSchema ?? [];
-		const protocolFields: Record<string, unknown> = {};
-		for (const field of schema) {
-			if (field.default != null) protocolFields[field.key] = field.default;
-		}
-		setForm({ ...EMPTY, protocolFields });
+		const settingsPort = settings.data?.defaultInboundPublicPort;
+		const port =
+			settingsPort != null && settingsPort > 0
+				? String(settingsPort)
+				: EMPTY.port;
+		const { protocolFields } = applyCreateDefaults(
+			schema,
+			{},
+			port,
+			settingsPort,
+		);
+		setForm({ ...EMPTY, port, protocolFields });
 		setCreating(true);
 		setEditing(null);
 	}
@@ -350,7 +423,7 @@ export function InboundsPage() {
 			name: ib.name,
 			protocol: ib.protocol,
 			transport: ib.transport ?? "tcp",
-			port: ib.port != null ? String(ib.port) : "",
+			port: livePortValue(ib),
 			enabled: ib.enabled ?? true,
 			masqueradeURL: ib.masqueradeURL ?? "",
 			fallbackRoot: ib.fallbackRoot ?? "",
@@ -413,17 +486,14 @@ export function InboundsPage() {
 									(p) => p.protocol === nextProtocol,
 								);
 								const nextTransports = nextMeta?.transports ?? [];
-								const protocolFields: Record<string, unknown> = {
-									...form.protocolFields,
-								};
-								for (const field of nextMeta?.inboundFieldSchema ?? []) {
-									if (
-										field.default != null &&
-										protocolFields[field.key] == null
-									) {
-										protocolFields[field.key] = field.default;
-									}
-								}
+								const { protocolFields } = creating
+									? applyCreateDefaults(
+											nextMeta?.inboundFieldSchema ?? [],
+											form.protocolFields,
+											form.port,
+											settings.data?.defaultInboundPublicPort,
+										)
+									: { protocolFields: { ...form.protocolFields } };
 								// Reset transport to the first transport the new
 								// protocol supports (e.g. naiveproxy is tcp-only);
 								// keeping the previous protocol's transport makes
@@ -468,7 +538,19 @@ export function InboundsPage() {
 							id="ib-port"
 							inputMode="numeric"
 							value={form.port}
-							onChange={(e) => setForm({ ...form, port: e.target.value })}
+							onChange={(e) => {
+								const port = e.target.value;
+								const nextFields = { ...form.protocolFields };
+								if (hasDynamicField("publicPort")) {
+									const parsed = parsePort(port);
+									if (parsed == null) {
+										delete nextFields.publicPort;
+									} else {
+										nextFields.publicPort = parsed;
+									}
+								}
+								setForm({ ...form, port, protocolFields: nextFields });
+							}}
 						/>
 					</FormItem>
 					{!hasDynamicField("masqueradeURL") ? (
@@ -498,85 +580,88 @@ export function InboundsPage() {
 					{(
 						protocolCatalog.data?.find((p) => p.protocol === form.protocol)
 							?.inboundFieldSchema ?? []
-					).map((field) => {
-						const value = form.protocolFields[field.key] ?? field.default ?? "";
-						const setValue = (next: unknown) =>
-							setForm({
-								...form,
-								protocolFields: { ...form.protocolFields, [field.key]: next },
-							});
-						if (field.type === "checkbox") {
+					)
+						.filter((field) => field.key !== "publicPort")
+						.map((field) => {
+							const value =
+								form.protocolFields[field.key] ?? field.default ?? "";
+							const setValue = (next: unknown) =>
+								setForm({
+									...form,
+									protocolFields: { ...form.protocolFields, [field.key]: next },
+								});
+							if (field.type === "checkbox") {
+								return (
+									<Label
+										key={field.key}
+										htmlFor={`ib-field-${field.key}`}
+										style={{ display: "flex", gap: 8, alignItems: "center" }}
+									>
+										<input
+											id={`ib-field-${field.key}`}
+											type="checkbox"
+											checked={Boolean(value)}
+											onChange={(e) => setValue(e.target.checked)}
+										/>
+										<span>{field.label}</span>
+									</Label>
+								);
+							}
 							return (
-								<Label
-									key={field.key}
-									htmlFor={`ib-field-${field.key}`}
-									style={{ display: "flex", gap: 8, alignItems: "center" }}
-								>
-									<input
-										id={`ib-field-${field.key}`}
-										type="checkbox"
-										checked={Boolean(value)}
-										onChange={(e) => setValue(e.target.checked)}
-									/>
-									<span>{field.label}</span>
-								</Label>
+								<FormItem key={field.key}>
+									<Label htmlFor={`ib-field-${field.key}`}>
+										{field.label}
+										{field.required ? " *" : ""}
+									</Label>
+									{field.type === "select" ? (
+										<Select
+											id={`ib-field-${field.key}`}
+											value={String(value)}
+											onChange={(e) => setValue(e.target.value)}
+										>
+											{(field.options ?? []).map((option) => (
+												<option key={option.value} value={option.value}>
+													{option.label}
+												</option>
+											))}
+										</Select>
+									) : (
+										<Input
+											id={`ib-field-${field.key}`}
+											type={
+												field.type === "password"
+													? "password"
+													: field.type === "number"
+														? "number"
+														: "text"
+											}
+											value={String(value)}
+											onChange={(e) =>
+												setValue(
+													field.type === "number"
+														? e.target.value === ""
+															? undefined
+															: Number(e.target.value)
+														: e.target.value,
+												)
+											}
+										/>
+									)}
+									{field.generateAction ? (
+										<button
+											type="button"
+											className="btn btn-secondary"
+											style={{ marginTop: 6, fontSize: 12 }}
+											onClick={() => void generateFieldValue(field)}
+										>
+											{field.generateAction === "room"
+												? t("inbounds.generateRoom")
+												: t("inbounds.generatePassword")}
+										</button>
+									) : null}
+								</FormItem>
 							);
-						}
-						return (
-							<FormItem key={field.key}>
-								<Label htmlFor={`ib-field-${field.key}`}>
-									{field.label}
-									{field.required ? " *" : ""}
-								</Label>
-								{field.type === "select" ? (
-									<Select
-										id={`ib-field-${field.key}`}
-										value={String(value)}
-										onChange={(e) => setValue(e.target.value)}
-									>
-										{(field.options ?? []).map((option) => (
-											<option key={option.value} value={option.value}>
-												{option.label}
-											</option>
-										))}
-									</Select>
-								) : (
-									<Input
-										id={`ib-field-${field.key}`}
-										type={
-											field.type === "password"
-												? "password"
-												: field.type === "number"
-													? "number"
-													: "text"
-										}
-										value={String(value)}
-										onChange={(e) =>
-											setValue(
-												field.type === "number"
-													? e.target.value === ""
-														? undefined
-														: Number(e.target.value)
-													: e.target.value,
-											)
-										}
-									/>
-								)}
-								{field.generateAction ? (
-									<button
-										type="button"
-										className="btn btn-secondary"
-										style={{ marginTop: 6, fontSize: 12 }}
-										onClick={() => void generateFieldValue(field)}
-									>
-										{field.generateAction === "room"
-											? t("inbounds.generateRoom")
-											: t("inbounds.generatePassword")}
-									</button>
-								) : null}
-							</FormItem>
-						);
-					})}
+						})}
 
 					{form.protocol === "olcrtc" && !hasDynamicField("olcrtcRoomID") ? (
 						<FormItem>

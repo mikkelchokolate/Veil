@@ -54,9 +54,18 @@ const alice = {
 	totalBytes: 30,
 };
 
+type Talker = {
+	clientId: string;
+	name: string;
+	uploadBytes?: number;
+	downloadBytes?: number;
+	totalBytes?: number;
+	usedBytes?: number;
+};
+
 function trafficApis(opts: {
 	providerCount: number;
-	items: (typeof alice)[];
+	items: Talker[];
 	topError?: boolean;
 }) {
 	server.use(
@@ -193,5 +202,26 @@ describe("Traffic chart instance lifecycle", () => {
 		expect(echartsMocks.instances[1]?.el).toBe(
 			document.querySelector(".traffic-chart"),
 		);
+	});
+
+	it("renders Total from usedBytes when the live API omits totalBytes", async () => {
+		trafficApis({
+			providerCount: 1,
+			items: [
+				{
+					clientId: "c1",
+					name: "Alice",
+					uploadBytes: 10,
+					downloadBytes: 20,
+					usedBytes: 30,
+				},
+			],
+		});
+		renderTraffic();
+		await screen.findByText("Alice");
+		const rows = screen.getAllByRole("row");
+		const aliceRow = rows.find((row) => row.textContent?.includes("Alice"));
+		expect(aliceRow).toHaveTextContent("30 B");
+		expect(aliceRow?.textContent).not.toMatch(/—/);
 	});
 });

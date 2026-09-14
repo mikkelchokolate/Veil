@@ -61,9 +61,15 @@ function PanelVersionCard() {
 
 	const update = useMutation({
 		mutationFn: async () => {
-			await postPanelUpdate();
+			const previous =
+				version.data?.version ??
+				(await apiFetch<VersionResponse>("/api/version")).version;
+			const staged = await postPanelUpdate();
 			setPhase("waiting");
 			return waitForPanelVersion({
+				previousVersion: previous,
+				expectedVersion: staged.version,
+				jobId: staged.jobId,
 				onAttempt: (attempt, max) => setWaitProgress({ attempt, max }),
 			});
 		},

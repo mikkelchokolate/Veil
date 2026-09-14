@@ -9,7 +9,6 @@ import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { useEffect, useRef } from "react";
 import { apiFetch } from "../api/fetcher";
-import type { TrafficTopEntry } from "../api/generated/models";
 import { Badge } from "../components/ui/badge";
 import { FormMessage } from "../components/ui/form";
 import {
@@ -38,7 +37,27 @@ interface TrafficSummary {
 	usedBytes?: number;
 }
 
-type TopEntry = TrafficTopEntry;
+type TopEntry = {
+	clientId: string;
+	name: string;
+	uploadBytes?: number;
+	downloadBytes?: number;
+	totalBytes?: number;
+	usedBytes?: number;
+};
+
+function talkerTotalBytes(entry: TopEntry): number | undefined {
+	if (entry.totalBytes != null && Number.isFinite(entry.totalBytes)) {
+		return entry.totalBytes;
+	}
+	if (entry.usedBytes != null && Number.isFinite(entry.usedBytes)) {
+		return entry.usedBytes;
+	}
+	if (entry.uploadBytes != null || entry.downloadBytes != null) {
+		return (entry.uploadBytes ?? 0) + (entry.downloadBytes ?? 0);
+	}
+	return undefined;
+}
 
 echarts.use([
 	BarChart,
@@ -262,7 +281,7 @@ export function TrafficPage() {
 													{fmtBytes(t.downloadBytes)}
 												</TableCell>
 												<TableCell className="muted">
-													{fmtBytes(t.totalBytes)}
+													{fmtBytes(talkerTotalBytes(t))}
 												</TableCell>
 											</TableRow>
 										))}
