@@ -144,6 +144,7 @@ LOCAL_BIN="${VEIL_LOCAL_BIN:-${LOCAL_BIN:-}}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version) require_value "$1" "${2:-}"; VERSION="$2"; shift 2 ;;
+    --version=*) VERSION="${1#--version=}"; require_value "--version" "${VERSION}"; shift ;;
     --install-dir) require_value "$1" "${2:-}"; INSTALL_DIR="$2"; shift 2 ;;
     --profile) require_value "$1" "${2:-}"; PROFILE="$2"; shift 2 ;;
     --domain) require_value "$1" "${2:-}"; DOMAIN="$2"; shift 2 ;;

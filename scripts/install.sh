@@ -7,12 +7,18 @@ COSIGN_AMD64_SHA256="caaad125acef1cb81d58dcdc454a1e429d09a750d1e9e2b3ed1aed89644
 COSIGN_ARM64_SHA256="bd0f9763bca54de88699c3656ade2f39c9a1c7a2916ff35601caf23a79be0629"
 ISSUER="https://token.actions.githubusercontent.com"
 
-for command in curl sha256sum tar sed awk uname mktemp python3 sudo; do
+for command in curl sha256sum tar sed awk uname mktemp python3; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "Required command not found: $command" >&2
     exit 1
   }
 done
+if [ "$(id -u)" -ne 0 ]; then
+  command -v sudo >/dev/null 2>&1 || {
+    echo "sudo is required to install systemd units" >&2
+    exit 1
+  }
+fi
 
 work="$(mktemp -d)"
 cleanup() { rm -rf "$work"; }
@@ -32,7 +38,8 @@ curl -fsSLo "$cosign" "https://github.com/sigstore/cosign/releases/download/${CO
 printf '%s  %s\n' "$cosign_sha256" "$cosign" | sha256sum -c - >/dev/null
 chmod 0755 "$cosign"
 
-requested_tag="latest"
+# BEGIN_RELEASE_TAG_SELECT
+requested_tag="${VEIL_VERSION:-latest}"
 expect_version=""
 for argument in "$@"; do
   if [ -n "$expect_version" ]; then
@@ -46,6 +53,8 @@ for argument in "$@"; do
   esac
 done
 [ -z "$expect_version" ] || { echo "Missing value for --version" >&2; exit 1; }
+[ -n "$requested_tag" ] || { echo "Missing value for --version" >&2; exit 1; }
+# END_RELEASE_TAG_SELECT
 
 if [ "$requested_tag" = "latest" ]; then
   release_json="$(curl -fsSL "https://api.github.com/repos/${OFFICIAL_REPO}/releases/latest")"
@@ -126,8 +135,19 @@ installer_digest="$(sha256sum "$work/install-privileged.sh" | awk '{print $1}')"
 
 # No privileged process is started before every downloaded privileged payload
 # above has passed signature, provenance, checksum, and archive-shape checks.
-sudo env \
-  VEIL_INSTALLER_SHA256="$installer_digest" \
-  VEIL_VERIFIED_ARCHIVE_SHA256="$archive_digest" \
-  VEIL_VERIFIED_BINARY_SHA256="$binary_digest" \
-  bash "$work/install-privileged.sh" --local-bin "$work/veil" "$@"
+if [ "$(id -u)" -eq 0 ]; then
+  env \
+    SUDO_UID= \
+    SUDO_GID= \
+    SUDO_USER= \
+    VEIL_INSTALLER_SHA256="$installer_digest" \
+    VEIL_VERIFIED_ARCHIVE_SHA256="$archive_digest" \
+    VEIL_VERIFIED_BINARY_SHA256="$binary_digest" \
+    bash "$work/install-privileged.sh" --local-bin "$work/veil" "$@"
+else
+  sudo env \
+    VEIL_INSTALLER_SHA256="$installer_digest" \
+    VEIL_VERIFIED_ARCHIVE_SHA256="$archive_digest" \
+    VEIL_VERIFIED_BINARY_SHA256="$binary_digest" \
+    bash "$work/install-privileged.sh" --local-bin "$work/veil" "$@"
+fi
