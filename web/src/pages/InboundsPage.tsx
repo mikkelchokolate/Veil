@@ -54,10 +54,26 @@ type ProtocolField = {
 	type: string;
 	required?: boolean;
 	default?: unknown;
-	options?: Array<{ label: string; value: string }>;
+	options?: Array<{
+		label: string;
+		value: string;
+		attributes?: Record<string, string>;
+	}>;
 	generateAction?: string;
 	generateActionField?: string;
 };
+
+function optionAutoRoom(
+	schema: ProtocolField[],
+	providerKey: string,
+	provider: string,
+): boolean | undefined {
+	const field = schema.find((item) => item.key === providerKey);
+	const raw = field?.options?.find((option) => option.value === provider)
+		?.attributes?.["data-autoroom"];
+	if (raw == null) return undefined;
+	return raw === "true";
+}
 
 interface InboundForm {
 	name: string;
@@ -183,12 +199,18 @@ export function InboundsPage() {
 			return;
 		}
 		if (action === "room") {
+			const providerKey = field.generateActionField ?? "olcrtcAuth";
+			const provider = String(
+				form.protocolFields[providerKey] ?? form.olcrtcAuth ?? "",
+			);
+			const schema =
+				protocolCatalog.data?.find((p) => p.protocol === form.protocol)
+					?.inboundFieldSchema ?? [];
+			if (optionAutoRoom(schema, providerKey, provider) === false) {
+				setGenerateError(t("inbounds.generateRoomManual"));
+				return;
+			}
 			try {
-				const provider = String(
-					form.protocolFields[field.generateActionField ?? ""] ??
-						form.olcrtcAuth ??
-						"",
-				);
 				const result = (await apiFetch(`/api/protocols/${form.protocol}/room`, {
 					method: "POST",
 					body: JSON.stringify({ provider }),
@@ -583,6 +605,9 @@ export function InboundsPage() {
 					)
 						.filter((field) => field.key !== "publicPort")
 						.map((field) => {
+							const schema =
+								protocolCatalog.data?.find((p) => p.protocol === form.protocol)
+									?.inboundFieldSchema ?? [];
 							const value =
 								form.protocolFields[field.key] ?? field.default ?? "";
 							const setValue = (next: unknown) =>
@@ -590,6 +615,19 @@ export function InboundsPage() {
 									...form,
 									protocolFields: { ...form.protocolFields, [field.key]: next },
 								});
+							const roomManual =
+								field.generateAction === "room" &&
+								optionAutoRoom(
+									schema,
+									field.generateActionField ?? "olcrtcAuth",
+									String(
+										form.protocolFields[
+											field.generateActionField ?? "olcrtcAuth"
+										] ??
+											form.olcrtcAuth ??
+											"",
+									),
+								) === false;
 							if (field.type === "checkbox") {
 								return (
 									<Label
@@ -652,6 +690,12 @@ export function InboundsPage() {
 											type="button"
 											className="btn btn-secondary"
 											style={{ marginTop: 6, fontSize: 12 }}
+											disabled={roomManual}
+											title={
+												roomManual
+													? t("inbounds.generateRoomManual")
+													: undefined
+											}
 											onClick={() => void generateFieldValue(field)}
 										>
 											{field.generateAction === "room"
