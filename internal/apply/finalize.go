@@ -795,7 +795,7 @@ func recoverRuntimePublications(db *sql.DB, leases *LeaseStore, jobs *JobStore, 
 			}
 			continue
 		}
-		if receipt.Phase != PublicationPhasePublished && receipt.Phase != "finalization_pending" {
+		if receipt.Phase != PublicationPhasePublished {
 			// Transfer the durable lease and evidence to the recovery owner. No
 			// later publication can proceed while this exact runtime generation is
 			// unresolved.
@@ -811,7 +811,7 @@ func recoverRuntimePublications(db *sql.DB, leases *LeaseStore, jobs *JobStore, 
 			}
 			continue
 		}
-		markApplied := receipt.Phase == "published" || receipt.Phase == "finalization_pending"
+		markApplied := receipt.Phase == "published"
 		if markApplied {
 			revs, err := getRevisionsQ(db)
 			if err != nil {

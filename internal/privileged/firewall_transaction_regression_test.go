@@ -146,6 +146,86 @@ func TestFirewallRefusesToEnableWithoutRequiredManagementAccess(t *testing.T) {
 	}
 }
 
+func TestParseUFWStatusDoesNotTreatIPv6MarkerAsAction(t *testing.T) {
+	state, err := parseUFWStatus(strings.Join([]string{
+		"Status: active",
+		"To                         Action      From",
+		"--                         ------      ----",
+		"22/tcp                     ALLOW       Anywhere                   # Veil management SSH",
+		"443/tcp                    ALLOW       Anywhere                   # Veil panel HTTPS",
+		"443/tcp (v6)               ALLOW       Anywhere (v6)              # Veil panel HTTPS",
+		"22356/udp                  ALLOW       Anywhere                   # Veil Hysteria2",
+		"22356/udp (v6)             ALLOW       Anywhere (v6)              # Veil Hysteria2",
+	}, "\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.Enabled {
+		t.Fatal("expected active UFW")
+	}
+	var v6 int
+	for _, entry := range state.Entries {
+		if entry.Action == "(v6)" || (len(entry.Args) > 0 && entry.Args[0] == "(v6)") {
+			t.Fatalf("parsed (v6) as ufw action: %+v", entry)
+		}
+		if !isUFWAction(entry.Action) {
+			t.Fatalf("non-ufw action %q in %+v", entry.Action, entry)
+		}
+		if entry.Family == "ipv6" {
+			v6++
+		}
+	}
+	if v6 != 2 {
+		t.Fatalf("ipv6 entries = %d, want 2", v6)
+	}
+	if got := state.Rules["443/tcp"]; got != "Veil panel HTTPS" {
+		t.Fatalf("443/tcp comment = %q", got)
+	}
+}
+
+func TestRestoreUFWStateSkipsIPv6StatusLines(t *testing.T) {
+	model := &transactionalUFWModel{enabled: true, rules: map[string]string{}}
+	initial, err := parseUFWStatus(strings.Join([]string{
+		"Status: active",
+		"22/tcp ALLOW Anywhere # Veil management SSH",
+		"22/tcp (v6) ALLOW Anywhere (v6) # Veil management SSH",
+		"443/tcp ALLOW Anywhere # Veil panel HTTPS",
+		"443/tcp (v6) ALLOW Anywhere (v6) # Veil panel HTTPS",
+	}, "\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := restoreUFWState(context.Background(), model.runner, initial, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range model.calls {
+		joined := strings.Join(call, " ")
+		if strings.Contains(joined, "(v6)") {
+			t.Fatalf("restore replayed IPv6 marker as ufw args: %v", call)
+		}
+	}
+}
+
+func TestReconcileKeepsInstallTimeSSHAndACMEComments(t *testing.T) {
+	model := &transactionalUFWModel{enabled: true, rules: map[string]string{
+		"22/tcp":   "Veil management SSH",
+		"80/tcp":   "Veil ACME HTTP-01",
+		"9999/tcp": "Veil stale",
+	}}
+	if _, err := runFirewallRules(context.Background(), model.runner, transactionalFirewallRequest()); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := model.rules["22/tcp"]; !exists {
+		t.Fatalf("management SSH was deleted: %v", model.rules)
+	}
+	if _, exists := model.rules["80/tcp"]; !exists {
+		t.Fatalf("ACME HTTP-01 was deleted: %v", model.rules)
+	}
+	if _, exists := model.rules["9999/tcp"]; exists {
+		t.Fatalf("stale Veil rule remains: %v", model.rules)
+	}
+}
+
 func TestFirewallStatusDetectionIsLocaleIndependent(t *testing.T) {
 	model := &transactionalUFWModel{enabled: true, localized: true, rules: map[string]string{"22/tcp": "OpenSSH"}}
 	if _, err := runFirewallRules(context.Background(), model.runner, transactionalFirewallRequest()); err != nil {
