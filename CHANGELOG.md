@@ -4,6 +4,19 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.7.2] - 2026-09-14
+
+Installer Caddy fix: `veil install --panel-access caddy` works on a fresh
+host that does not yet have Caddy on PATH.
+
+### Fixed
+
+- Fresh-host `veil install --panel-access caddy` aborted with
+  `caddy list-modules failed: executable file not found in $PATH` because
+  the installer probed Caddy capabilities before runtime install placed the
+  binary. Panel Caddy JSON now renders when Caddy is missing; `veil runtime
+  install` still installs Caddy afterwards.
+
 ## [v0.7.1] - 2026-09-12
 
 Patch release: open-issue sweep from v0.7.0, runtime/toolchain bumps, and
