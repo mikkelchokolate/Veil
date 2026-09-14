@@ -47,6 +47,8 @@ func TestOpenAPIRoutesAndMethodsMatchRegisteredAPI(t *testing.T) {
 	actual := openAPIRouteMethods(t, "../../docs/openapi.yaml")
 	expected := map[string][]string{
 		"/healthz":                                     {"get"},
+		"/livez":                                       {"get"},
+		"/readyz":                                      {"get"},
 		"/metrics":                                     {"get"},
 		"/api/setup/status":                            {"get"},
 		"/api/setup/complete":                          {"post"},

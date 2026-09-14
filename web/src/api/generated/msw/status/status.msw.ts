@@ -58,6 +58,8 @@ import type {
 import type {
   FirewallRule,
   HealthResponse,
+  LivezResponse,
+  ReadyzResponse,
   StatusResponse,
   UnauthorizedResponse
 } from '../models';
@@ -198,6 +200,251 @@ export function useGetHealthz<TData = Awaited<ReturnType<typeof getHealthz>>, TE
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetHealthzQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getLivezResponse200 = {
+  data: LivezResponse
+  status: 200
+}
+
+export type getLivezResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getLivezResponseSuccess = (getLivezResponse200) & {
+  headers: Headers;
+};
+export type getLivezResponseError = (getLivezResponse401) & {
+  headers: Headers;
+};
+
+export type getLivezResponse = (getLivezResponseSuccess | getLivezResponseError)
+
+export const getGetLivezUrl = () => {
+
+
+
+
+  return `/livez`
+}
+
+/**
+ * Authenticated on public Panel listeners; public on loopback-only development listeners. Returns a binary alive status without management health components.
+ * @summary Process liveness probe
+ */
+export const getLivez = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getLivezResponse> => {
+
+  return apiFetch<getLivezResponse>(getGetLivezUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLivezQueryKey = () => {
+    return [
+    `/livez`
+    ] as const;
+    }
+
+
+export const getGetLivezQueryOptions = <TData = Awaited<ReturnType<typeof getLivez>>, TError = UnauthorizedResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLivez>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLivezQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLivez>>> = ({ signal }) => getLivez({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLivez>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetLivezQueryResult = NonNullable<Awaited<ReturnType<typeof getLivez>>>
+export type GetLivezQueryError = UnauthorizedResponse
+
+
+export function useGetLivez<TData = Awaited<ReturnType<typeof getLivez>>, TError = UnauthorizedResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLivez>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getLivez>>,
+          TError,
+          Awaited<ReturnType<typeof getLivez>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetLivez<TData = Awaited<ReturnType<typeof getLivez>>, TError = UnauthorizedResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLivez>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getLivez>>,
+          TError,
+          Awaited<ReturnType<typeof getLivez>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetLivez<TData = Awaited<ReturnType<typeof getLivez>>, TError = UnauthorizedResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLivez>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Process liveness probe
+ */
+
+export function useGetLivez<TData = Awaited<ReturnType<typeof getLivez>>, TError = UnauthorizedResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLivez>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetLivezQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getReadyzResponse200 = {
+  data: ReadyzResponse
+  status: 200
+}
+
+export type getReadyzResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getReadyzResponse503 = {
+  data: ReadyzResponse
+  status: 503
+}
+
+export type getReadyzResponseSuccess = (getReadyzResponse200) & {
+  headers: Headers;
+};
+export type getReadyzResponseError = (getReadyzResponse401 | getReadyzResponse503) & {
+  headers: Headers;
+};
+
+export type getReadyzResponse = (getReadyzResponseSuccess | getReadyzResponseError)
+
+export const getGetReadyzUrl = () => {
+
+
+
+
+  return `/readyz`
+}
+
+/**
+ * Authenticated on public Panel listeners; public on loopback-only development listeners. The component snapshot is the same viewer-only diagnostic as `/api/health` and is never returned to unauthenticated public listeners.
+ * @summary Readiness probe
+ */
+export const getReadyz = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getReadyzResponse> => {
+
+  return apiFetch<getReadyzResponse>(getGetReadyzUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetReadyzQueryKey = () => {
+    return [
+    `/readyz`
+    ] as const;
+    }
+
+
+export const getGetReadyzQueryOptions = <TData = Awaited<ReturnType<typeof getReadyz>>, TError = UnauthorizedResponse | ReadyzResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReadyz>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetReadyzQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReadyz>>> = ({ signal }) => getReadyz({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getReadyz>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetReadyzQueryResult = NonNullable<Awaited<ReturnType<typeof getReadyz>>>
+export type GetReadyzQueryError = UnauthorizedResponse | ReadyzResponse
+
+
+export function useGetReadyz<TData = Awaited<ReturnType<typeof getReadyz>>, TError = UnauthorizedResponse | ReadyzResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReadyz>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getReadyz>>,
+          TError,
+          Awaited<ReturnType<typeof getReadyz>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetReadyz<TData = Awaited<ReturnType<typeof getReadyz>>, TError = UnauthorizedResponse | ReadyzResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReadyz>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getReadyz>>,
+          TError,
+          Awaited<ReturnType<typeof getReadyz>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetReadyz<TData = Awaited<ReturnType<typeof getReadyz>>, TError = UnauthorizedResponse | ReadyzResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReadyz>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Readiness probe
+ */
+
+export function useGetReadyz<TData = Awaited<ReturnType<typeof getReadyz>>, TError = UnauthorizedResponse | ReadyzResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReadyz>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetReadyzQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

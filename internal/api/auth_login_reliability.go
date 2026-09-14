@@ -42,7 +42,7 @@ func (snapshot loginCredentialSnapshot) passwordMatches(password string) bool {
 	if snapshot.FoundUser {
 		return bcrypt.CompareHashAndPassword([]byte(snapshot.PasswordHash), []byte(password)) == nil
 	}
-	return snapshot.FallbackAllowed && password == snapshot.FallbackPassword
+	return snapshot.FallbackAllowed && constantTimePasswordEqual(password, snapshot.FallbackPassword)
 }
 
 func (s *managementState) createSessionForLoginSnapshot(snapshot loginCredentialSnapshot, r *http.Request) (Session, string, string, string, error) {
@@ -97,17 +97,13 @@ func (s *managementState) handleLoginWithRevalidation(w http.ResponseWriter, r *
 	if !decodeJSONRequest(w, r, &req) {
 		return
 	}
+	if s.rejectThrottledLogin(w, r, req.Username) {
+		return
+	}
 
 	snapshot := s.snapshotLoginCredentials(req.Username)
 	if !snapshot.passwordMatches(req.Password) {
-		s.recordRequestAudit(r, audit.Record{
-			Actor:   req.Username,
-			Action:  "auth.login",
-			Target:  "panel",
-			Success: false,
-			Error:   "invalid credentials",
-		})
-		writeError(w, "invalid username or password", http.StatusUnauthorized)
+		s.recordInvalidLogin(w, r, req.Username)
 		return
 	}
 
@@ -136,6 +132,7 @@ func (s *managementState) handleLoginWithRevalidation(w http.ResponseWriter, r *
 		return
 	}
 
+	s.clearLoginFailures(loginUsernameKey(req.Username))
 	s.recordRequestAudit(r, audit.Record{
 		Actor:   req.Username,
 		Role:    role,

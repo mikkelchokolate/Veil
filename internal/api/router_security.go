@@ -66,7 +66,7 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 			writeError(w, "endpoint authorization policy is not defined", http.StatusNotFound)
 			return
 		}
-		if path == "/healthz" && opts.ProtectHealthz {
+		if opts.ProtectHealthz && isHealthProbePath(path) {
 			capability = capabilityViewer
 		}
 		if path == "/metrics" && opts.ProtectMetrics {
@@ -79,9 +79,9 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 			// Public endpoints short-circuit auth, but a mutating public
 			// request that arrives with a LIVE cookie session must still
 			// prove CSRF (audit #198: logout was revocable cross-site).
-			// Login has no session cookie yet; setup/complete runs before
-			// any session exists, so neither is affected.
-			if isMutatingRequest(r) {
+			// Login and first-run setup replace or create credentials while
+			// the SPA may have dropped CSRF after a failed status refresh.
+			if isMutatingRequest(r) && !csrfExemptPublicMutation(path) {
 				if cookie, err := r.Cookie("veil_session"); err == nil {
 					if _, ok := state.sessionRegistry().Get(cookie.Value); ok {
 						providedCSRF := r.Header.Get("X-CSRF-Token")
@@ -175,6 +175,24 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		r = r.WithContext(ctx)
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isHealthProbePath(path string) bool {
+	switch path {
+	case "/healthz", "/livez", "/readyz":
+		return true
+	default:
+		return false
+	}
+}
+
+func csrfExemptPublicMutation(path string) bool {
+	switch path {
+	case "/api/auth/login", "/api/setup/complete":
+		return true
+	default:
+		return false
+	}
 }
 
 func isMutatingRequest(r *http.Request) bool {

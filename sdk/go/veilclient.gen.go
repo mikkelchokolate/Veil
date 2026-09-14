@@ -330,16 +330,16 @@ func (e FirewallRuleProtocol) Valid() bool {
 
 // Defines values for HealthResponseStatus.
 const (
-	Ok        HealthResponseStatus = "ok"
-	Unhealthy HealthResponseStatus = "unhealthy"
+	HealthResponseStatusOk        HealthResponseStatus = "ok"
+	HealthResponseStatusUnhealthy HealthResponseStatus = "unhealthy"
 )
 
 // Valid indicates whether the value is a known member of the HealthResponseStatus enum.
 func (e HealthResponseStatus) Valid() bool {
 	switch e {
-	case Ok:
+	case HealthResponseStatusOk:
 		return true
-	case Unhealthy:
+	case HealthResponseStatusUnhealthy:
 		return true
 	default:
 		return false
@@ -382,6 +382,21 @@ func (e InboundTransport) Valid() bool {
 	case InboundTransportTcp:
 		return true
 	case InboundTransportUdp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LivezResponseStatus.
+const (
+	Alive LivezResponseStatus = "alive"
+)
+
+// Valid indicates whether the value is a known member of the LivezResponseStatus enum.
+func (e LivezResponseStatus) Valid() bool {
+	switch e {
+	case Alive:
 		return true
 	default:
 		return false
@@ -442,6 +457,24 @@ func (e RURecommendedPreviewResponsePanelAccess) Valid() bool {
 	case RURecommendedPreviewResponsePanelAccessDirect:
 		return true
 	case RURecommendedPreviewResponsePanelAccessLocal:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReadyzResponseStatus.
+const (
+	ReadyzResponseStatusDegraded ReadyzResponseStatus = "degraded"
+	ReadyzResponseStatusOk       ReadyzResponseStatus = "ok"
+)
+
+// Valid indicates whether the value is a known member of the ReadyzResponseStatus enum.
+func (e ReadyzResponseStatus) Valid() bool {
+	switch e {
+	case ReadyzResponseStatusDegraded:
+		return true
+	case ReadyzResponseStatusOk:
 		return true
 	default:
 		return false
@@ -1247,6 +1280,12 @@ type FirewallRule struct {
 // FirewallRuleProtocol defines model for FirewallRule.Protocol.
 type FirewallRuleProtocol string
 
+// HealthComponent defines model for HealthComponent.
+type HealthComponent struct {
+	Reason *string `json:"reason,omitempty"`
+	Status string  `json:"status"`
+}
+
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
 	Error  *string              `json:"error,omitempty"`
@@ -1301,6 +1340,14 @@ type KeyRotationResponse struct {
 	RevokedSessions int           `json:"revokedSessions"`
 	Success         bool          `json:"success"`
 }
+
+// LivezResponse defines model for LivezResponse.
+type LivezResponse struct {
+	Status LivezResponseStatus `json:"status"`
+}
+
+// LivezResponseStatus defines model for LivezResponse.Status.
+type LivezResponseStatus string
 
 // Locale Persisted Panel display language.
 type Locale string
@@ -1427,6 +1474,15 @@ type RURecommendedPreviewResponse struct {
 
 // RURecommendedPreviewResponsePanelAccess defines model for RURecommendedPreviewResponse.PanelAccess.
 type RURecommendedPreviewResponsePanelAccess string
+
+// ReadyzResponse defines model for ReadyzResponse.
+type ReadyzResponse struct {
+	Components *map[string]HealthComponent `json:"components,omitempty"`
+	Status     ReadyzResponseStatus        `json:"status"`
+}
+
+// ReadyzResponseStatus defines model for ReadyzResponse.Status.
+type ReadyzResponseStatus string
 
 // RevisionView defines model for RevisionView.
 type RevisionView struct {
@@ -3626,6 +3682,13 @@ type ClientInterface interface {
 	// Corresponds with GET /healthz (the `GetHealthz` operationId).
 	GetHealthz(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetLivez Process liveness probe
+	//
+	// Authenticated on public Panel listeners; public on loopback-only development listeners. Returns a binary alive status without management health components.
+	//
+	// Corresponds with GET /livez (the `GetLivez` operationId).
+	GetLivez(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetMetrics Prometheus metrics exposition
 	//
 	// Exposure is controlled independently with `--metrics-access` /
@@ -3636,6 +3699,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /metrics (the `GetMetrics` operationId).
 	GetMetrics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetReadyz Readiness probe
+	//
+	// Authenticated on public Panel listeners; public on loopback-only development listeners. The component snapshot is the same viewer-only diagnostic as `/api/health` and is never returned to unauthenticated public listeners.
+	//
+	// Corresponds with GET /readyz (the `GetReadyz` operationId).
+	GetReadyz(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetSToken Public subscription endpoint (token is the capability)
 	//
@@ -5932,6 +6002,23 @@ func (c *Client) GetHealthz(ctx context.Context, reqEditors ...RequestEditorFn) 
 	return c.Client.Do(req)
 }
 
+// GetLivez Process liveness probe
+//
+// Authenticated on public Panel listeners; public on loopback-only development listeners. Returns a binary alive status without management health components.
+//
+// Corresponds with GET /livez (the `GetLivez` operationId).
+func (c *Client) GetLivez(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLivezRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetMetrics Prometheus metrics exposition
 //
 // Exposure is controlled independently with `--metrics-access` /
@@ -5943,6 +6030,23 @@ func (c *Client) GetHealthz(ctx context.Context, reqEditors ...RequestEditorFn) 
 // Corresponds with GET /metrics (the `GetMetrics` operationId).
 func (c *Client) GetMetrics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMetricsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetReadyz Readiness probe
+//
+// Authenticated on public Panel listeners; public on loopback-only development listeners. The component snapshot is the same viewer-only diagnostic as `/api/health` and is never returned to unauthenticated public listeners.
+//
+// Corresponds with GET /readyz (the `GetReadyz` operationId).
+func (c *Client) GetReadyz(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetReadyzRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -10394,6 +10498,33 @@ func NewGetHealthzRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewGetLivezRequest constructs an http.Request for the GetLivez method
+func NewGetLivezRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/livez")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetMetricsRequest constructs an http.Request for the GetMetrics method
 func NewGetMetricsRequest(server string) (*http.Request, error) {
 	var err error
@@ -10404,6 +10535,33 @@ func NewGetMetricsRequest(server string) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/metrics")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetReadyzRequest constructs an http.Request for the GetReadyz method
+func NewGetReadyzRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/readyz")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -11637,6 +11795,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /healthz (the `GetHealthz` operationId).
 	GetHealthzWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetHealthzResponse, error)
 
+	// GetLivezWithResponse Process liveness probe
+	//
+	// Authenticated on public Panel listeners; public on loopback-only development listeners. Returns a binary alive status without management health components.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /livez (the `GetLivez` operationId).
+	GetLivezWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetLivezResponse, error)
+
 	// GetMetricsWithResponse Prometheus metrics exposition
 	//
 	// Exposure is controlled independently with `--metrics-access` /
@@ -11649,6 +11816,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /metrics (the `GetMetrics` operationId).
 	GetMetricsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMetricsResponse, error)
+
+	// GetReadyzWithResponse Readiness probe
+	//
+	// Authenticated on public Panel listeners; public on loopback-only development listeners. The component snapshot is the same viewer-only diagnostic as `/api/health` and is never returned to unauthenticated public listeners.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /readyz (the `GetReadyz` operationId).
+	GetReadyzWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetReadyzResponse, error)
 
 	// GetSTokenWithResponse Public subscription endpoint (token is the capability)
 	//
@@ -17934,6 +18110,61 @@ func (r GetHealthzResponse) ContentType() string {
 	return ""
 }
 
+// GetLivezResponse401Headers the declared response headers of an HTTP 401 response for GetLivez
+type GetLivezResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type GetLivezResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *LivezResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetLivezResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetLivezResponse) GetJSON200() *LivezResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetLivezResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetBody returns the raw response body bytes
+func (r GetLivezResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLivezResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLivezResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetLivezResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // GetMetricsResponse401Headers the declared response headers of an HTTP 401 response for GetMetrics
 type GetMetricsResponse401Headers struct {
 	WWWAuthenticate *string
@@ -17976,6 +18207,68 @@ func (r GetMetricsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetMetricsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetReadyzResponse401Headers the declared response headers of an HTTP 401 response for GetReadyz
+type GetReadyzResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type GetReadyzResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ReadyzResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ReadyzResponse
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetReadyzResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetReadyzResponse) GetJSON200() *ReadyzResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetReadyzResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r GetReadyzResponse) GetJSON503() *ReadyzResponse {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetReadyzResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetReadyzResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetReadyzResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetReadyzResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -19911,6 +20204,21 @@ func (c *ClientWithResponses) GetHealthzWithResponse(ctx context.Context, reqEdi
 	return ParseGetHealthzResponse(rsp)
 }
 
+// GetLivezWithResponse Process liveness probe
+//
+// Authenticated on public Panel listeners; public on loopback-only development listeners. Returns a binary alive status without management health components.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /livez (the `GetLivez` operationId).
+func (c *ClientWithResponses) GetLivezWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetLivezResponse, error) {
+	rsp, err := c.GetLivez(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLivezResponse(rsp)
+}
+
 // GetMetricsWithResponse Prometheus metrics exposition
 //
 // Exposure is controlled independently with `--metrics-access` /
@@ -19928,6 +20236,21 @@ func (c *ClientWithResponses) GetMetricsWithResponse(ctx context.Context, reqEdi
 		return nil, err
 	}
 	return ParseGetMetricsResponse(rsp)
+}
+
+// GetReadyzWithResponse Readiness probe
+//
+// Authenticated on public Panel listeners; public on loopback-only development listeners. The component snapshot is the same viewer-only diagnostic as `/api/health` and is never returned to unauthenticated public listeners.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /readyz (the `GetReadyz` operationId).
+func (c *ClientWithResponses) GetReadyzWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetReadyzResponse, error) {
+	rsp, err := c.GetReadyz(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetReadyzResponse(rsp)
 }
 
 // GetSTokenWithResponse Public subscription endpoint (token is the capability)
@@ -24992,6 +25315,52 @@ func ParseGetHealthzResponse(rsp *http.Response) (*GetHealthzResponse, error) {
 	return response, nil
 }
 
+// ParseGetLivezResponse parses an HTTP response from a GetLivezWithResponse call
+func ParseGetLivezResponse(rsp *http.Response) (*GetLivezResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLivezResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LivezResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetLivezResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseGetMetricsResponse parses an HTTP response from a GetMetricsWithResponse call
 func ParseGetMetricsResponse(rsp *http.Response) (*GetMetricsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -25018,6 +25387,59 @@ func ParseGetMetricsResponse(rsp *http.Response) (*GetMetricsResponse, error) {
 	switch {
 	case rsp.StatusCode == 401:
 		var headers GetMetricsResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetReadyzResponse parses an HTTP response from a GetReadyzWithResponse call
+func ParseGetReadyzResponse(rsp *http.Response) (*GetReadyzResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetReadyzResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ReadyzResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ReadyzResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetReadyzResponse401Headers
 		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {

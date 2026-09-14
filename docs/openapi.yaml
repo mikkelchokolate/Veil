@@ -129,6 +129,62 @@ paths:
       security: []
       x-roles:
       - public
+  /livez:
+    get:
+      x-veil-role: public
+      tags:
+      - status
+      summary: Process liveness probe
+      description: Authenticated on public Panel listeners; public on loopback-only development listeners. Returns a binary alive status without management health components.
+      responses:
+        '200':
+          description: Process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivezResponse'
+              examples:
+                ok:
+                  value:
+                    status: alive
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+      security: []
+      x-roles:
+      - public
+  /readyz:
+    get:
+      x-veil-role: public
+      tags:
+      - status
+      summary: Readiness probe
+      description: Authenticated on public Panel listeners; public on loopback-only development listeners. The component snapshot is the same viewer-only diagnostic as `/api/health` and is never returned to unauthenticated public listeners.
+      responses:
+        '200':
+          description: Panel is ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyzResponse'
+              examples:
+                ok:
+                  value:
+                    status: ok
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          description: One or more readiness components are degraded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyzResponse'
+              examples:
+                degraded:
+                  value:
+                    status: degraded
+      security: []
+      x-roles:
+      - public
   /metrics:
     get:
       x-veil-role: public
@@ -3913,6 +3969,39 @@ components:
           - ok
           - unhealthy
         error:
+          type: string
+    LivezResponse:
+      type: object
+      required:
+      - status
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum:
+          - alive
+    ReadyzResponse:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          enum:
+          - ok
+          - degraded
+        components:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/HealthComponent'
+    HealthComponent:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          type: string
+        reason:
           type: string
     SuccessResponse:
       type: object

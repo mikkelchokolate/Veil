@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/api"
+	"github.com/mikkelchokolate/Veil/internal/clientaddr"
 	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"golang.org/x/crypto/acme/autocert"
@@ -72,6 +73,7 @@ func (s HTTPServer) Build() (*http.Server, api.Reloader) {
 		Email:                   opts.Email,
 		WebBasePath:             opts.WebBasePath,
 		SetupAllowed:            opts.SetupAllowed,
+		TrustedProxyCIDRs:       clientaddr.DefaultTrustedProxyCIDRs(opts.PanelAccess),
 		ConfigurationValidator:  validator,
 		Privileged:              privileged.NewSocketClient(helperSocket),
 		RequirePrivilegedHelper: true,

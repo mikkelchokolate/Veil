@@ -21,6 +21,41 @@ function renderSetup() {
 }
 
 describe("SetupView", () => {
+	it("posts first-run setup without CSRF after a failed refresh", async () => {
+		const user = userEvent.setup();
+		let setupCsrf: string | null | undefined;
+		server.use(
+			http.get("/api/auth/status", () =>
+				HttpResponse.json({ error: { message: "internal" } }, { status: 500 }),
+			),
+			http.post("/api/setup/complete", ({ request }) => {
+				setupCsrf = request.headers.get("X-CSRF-Token");
+				return HttpResponse.json({ completed: true }, { status: 201 });
+			}),
+		);
+		renderSetup();
+		await user.clear(screen.getByLabelText("Username"));
+		await user.type(screen.getByLabelText("Username"), "admin");
+		await user.type(
+			screen.getByLabelText("Password"),
+			"a-long-secure-password",
+		);
+		await user.type(
+			screen.getByLabelText("Confirm password"),
+			"a-long-secure-password",
+		);
+		await user.click(
+			screen.getByRole("checkbox", {
+				name: /preserve both the encrypted state/i,
+			}),
+		);
+		await user.click(
+			screen.getByRole("button", { name: "Create administrator" }),
+		);
+		await waitFor(() => expect(setupCsrf !== undefined).toBe(true));
+		expect(setupCsrf === null || setupCsrf === undefined).toBe(true);
+	});
+
 	it("requires backup acknowledgement and posts backupAcknowledged", async () => {
 		const user = userEvent.setup();
 		let body: Record<string, unknown> | null = null;

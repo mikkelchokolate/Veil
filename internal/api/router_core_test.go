@@ -115,21 +115,29 @@ func TestRouterRequiresAuthTokenForAPIWhenConfigured(t *testing.T) {
 }
 
 func TestRouterProtectsHealthzWhenPublicListenIsProtected(t *testing.T) {
-	r, _ := newTestRouter(ServerInfo{Version: "test", AuthToken: "secret-token", PublicListen: true})
-
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("expected unauthenticated healthz to return 401, got %d: %s", w.Code, w.Body.String())
+	r, reloader := newTestRouter(ServerInfo{Version: "test", AuthToken: "secret-token", PublicListen: true})
+	if state, ok := reloader.(*managementState); ok {
+		t.Cleanup(func() { _ = state.Close() })
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	req.Header.Set("Authorization", "Bearer secret-token")
-	w = httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected authenticated healthz to return 200, got %d: %s", w.Code, w.Body.String())
+	for _, path := range []string{"/healthz", "/livez", "/readyz"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("expected unauthenticated %s to return 401, got %d: %s", path, w.Code, w.Body.String())
+		}
+		if path == "/readyz" && strings.Contains(w.Body.String(), `"components"`) {
+			t.Fatalf("unauthenticated /readyz leaked health components: %s", w.Body.String())
+		}
+
+		req = httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("X-Veil-Token", "secret-token")
+		w = httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK && w.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected authenticated %s to return 200 or 503, got %d: %s", path, w.Code, w.Body.String())
+		}
 	}
 }
 

@@ -27,6 +27,15 @@ type Resolver struct {
 	trusted []netip.Prefix
 }
 
+// DefaultTrustedProxyCIDRs returns the proxy prefixes Veil's own Caddy reverse
+// proxy uses. Direct and local Panel access must not honor X-Forwarded-For.
+func DefaultTrustedProxyCIDRs(panelAccess string) []string {
+	if panelAccess != "caddy" {
+		return nil
+	}
+	return []string{"127.0.0.0/8", "::1/128"}
+}
+
 func New(trustedCIDRs []string) (Resolver, error) {
 	resolver := Resolver{}
 	for _, raw := range trustedCIDRs {

@@ -53,19 +53,7 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSONRequest(w, r, &req) {
 		return
 	}
-	usernameKey := strings.ToLower(strings.TrimSpace(req.Username))
-	if allowed, retryAfter := s.allowLoginUsername(usernameKey); !allowed {
-		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
-		s.recordRequestAudit(r, audit.Record{
-			Actor: req.Username, Action: "auth.login.rate_limited", Target: "panel",
-			Success: false, Error: "username rate limit",
-		})
-		writeError(w, "too many login attempts", http.StatusTooManyRequests)
-		return
-	}
-	if retryAfter := s.loginBackoffRemaining(usernameKey); retryAfter > 0 {
-		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
-		writeError(w, "too many login attempts", http.StatusTooManyRequests)
+	if s.rejectThrottledLogin(w, r, req.Username) {
 		return
 	}
 
@@ -101,20 +89,11 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !valid {
-		retryAfter := s.recordLoginFailure(usernameKey)
-		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
-		s.recordRequestAudit(r, audit.Record{
-			Actor:   req.Username,
-			Action:  "auth.login",
-			Target:  "panel",
-			Success: false,
-			Error:   "invalid credentials",
-		})
-		writeError(w, "invalid username or password", http.StatusUnauthorized)
+		s.recordInvalidLogin(w, r, req.Username)
 		return
 	}
 
-	s.clearLoginFailures(usernameKey)
+	s.clearLoginFailures(loginUsernameKey(req.Username))
 	session, err := s.sessionRegistry().Create(SessionCreateInput{
 		Username:   req.Username,
 		Role:       role,
@@ -158,6 +137,42 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 		"locale":    locale,
 		"csrfToken": session.CSRFToken,
 	})
+}
+
+func loginUsernameKey(username string) string {
+	return strings.ToLower(strings.TrimSpace(username))
+}
+
+func (s *managementState) rejectThrottledLogin(w http.ResponseWriter, r *http.Request, username string) bool {
+	key := loginUsernameKey(username)
+	if allowed, retryAfter := s.allowLoginUsername(key); !allowed {
+		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
+		s.recordRequestAudit(r, audit.Record{
+			Actor: username, Action: "auth.login.rate_limited", Target: "panel",
+			Success: false, Error: "username rate limit",
+		})
+		writeError(w, "too many login attempts", http.StatusTooManyRequests)
+		return true
+	}
+	if retryAfter := s.loginBackoffRemaining(key); retryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
+		writeError(w, "too many login attempts", http.StatusTooManyRequests)
+		return true
+	}
+	return false
+}
+
+func (s *managementState) recordInvalidLogin(w http.ResponseWriter, r *http.Request, username string) {
+	retryAfter := s.recordLoginFailure(loginUsernameKey(username))
+	w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
+	s.recordRequestAudit(r, audit.Record{
+		Actor:   username,
+		Action:  "auth.login",
+		Target:  "panel",
+		Success: false,
+		Error:   "invalid credentials",
+	})
+	writeError(w, "invalid username or password", http.StatusUnauthorized)
 }
 
 func (s *managementState) allowLoginUsername(normalizedUsername string) (bool, time.Duration) {
