@@ -63,6 +63,8 @@ type ProtocolField = {
 	generateActionField?: string;
 };
 
+const OLCRTC_AUTH_FIELD = "olcrtcAuth";
+
 function optionAutoRoom(
 	schema: ProtocolField[],
 	providerKey: string,
@@ -73,6 +75,15 @@ function optionAutoRoom(
 		?.attributes?.["data-autoroom"];
 	if (raw == null) return undefined;
 	return raw === "true";
+}
+
+function roomProviderKey(field: ProtocolField): string {
+	return field.generateActionField ?? OLCRTC_AUTH_FIELD;
+}
+
+function currentRoomProvider(form: InboundForm, field: ProtocolField): string {
+	const key = roomProviderKey(field);
+	return String(form.protocolFields[key] ?? form.olcrtcAuth ?? "");
 }
 
 interface InboundForm {
@@ -199,10 +210,8 @@ export function InboundsPage() {
 			return;
 		}
 		if (action === "room") {
-			const providerKey = field.generateActionField ?? "olcrtcAuth";
-			const provider = String(
-				form.protocolFields[providerKey] ?? form.olcrtcAuth ?? "",
-			);
+			const providerKey = roomProviderKey(field);
+			const provider = currentRoomProvider(form, field);
 			const schema =
 				protocolCatalog.data?.find((p) => p.protocol === form.protocol)
 					?.inboundFieldSchema ?? [];
@@ -619,14 +628,8 @@ export function InboundsPage() {
 								field.generateAction === "room" &&
 								optionAutoRoom(
 									schema,
-									field.generateActionField ?? "olcrtcAuth",
-									String(
-										form.protocolFields[
-											field.generateActionField ?? "olcrtcAuth"
-										] ??
-											form.olcrtcAuth ??
-											"",
-									),
+									roomProviderKey(field),
+									currentRoomProvider(form, field),
 								) === false;
 							if (field.type === "checkbox") {
 								return (
