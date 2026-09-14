@@ -111,6 +111,41 @@ describe("static login handoff", () => {
 		expect(alert).not.toHaveTextContent(/invalid username or password/i);
 	});
 
+	it("signs in without CSRF after a failed refresh while a session cookie may still be live", async () => {
+		const user = userEvent.setup();
+		let loginCsrf: string | null | undefined;
+		server.use(
+			http.get("/api/auth/status", () =>
+				HttpResponse.json({ error: { message: "internal" } }, { status: 500 }),
+			),
+			http.post("/api/auth/login", ({ request }) => {
+				loginCsrf = request.headers.get("X-CSRF-Token");
+				return HttpResponse.json({
+					csrfToken: "csrf-after-login",
+					username: "admin",
+					role: "admin",
+					locale: "en",
+					success: true,
+				});
+			}),
+		);
+		renderLogin();
+		await waitFor(() =>
+			expect(screen.getByTestId("session-probe")).toHaveTextContent(
+				'"authenticated":false',
+			),
+		);
+		await user.type(screen.getByLabelText("Username"), "admin");
+		await user.type(screen.getByLabelText("Password"), "s3cret-pass");
+		await user.click(screen.getByRole("button", { name: /^sign in$/i }));
+		await waitFor(() =>
+			expect(screen.getByTestId("session-probe")).toHaveTextContent(
+				'"authenticated":true',
+			),
+		);
+		expect(loginCsrf === null || loginCsrf === undefined).toBe(true);
+	});
+
 	it("keeps the login CSRF token when status is briefly unavailable", async () => {
 		const user = userEvent.setup();
 		server.use(

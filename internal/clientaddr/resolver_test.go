@@ -5,6 +5,19 @@ import (
 	"testing"
 )
 
+func TestCaddyLoopbackProxyCIDRs(t *testing.T) {
+	got := DefaultTrustedProxyCIDRs("caddy")
+	if len(got) != 2 || got[0] != "127.0.0.0/8" || got[1] != "::1/128" {
+		t.Fatalf("caddy trusted proxies = %#v", got)
+	}
+	if got := DefaultTrustedProxyCIDRs("direct"); len(got) != 0 {
+		t.Fatalf("direct trusted proxies = %#v", got)
+	}
+	if got := DefaultTrustedProxyCIDRs("local"); len(got) != 0 {
+		t.Fatalf("local trusted proxies = %#v", got)
+	}
+}
+
 func TestTrustedProxyChainIsParsedFromTrustedSide(t *testing.T) {
 	resolver, err := New([]string{"10.0.0.0/8", "192.0.2.0/24"})
 	if err != nil {

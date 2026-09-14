@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/mikkelchokolate/Veil/internal/clientaddr"
 	"github.com/mikkelchokolate/Veil/internal/observability"
 	"github.com/mikkelchokolate/Veil/internal/webbasepath"
 )
@@ -73,7 +74,11 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	})
 	idempotent := state.idempotency.Middleware(restoreGuarded)
 	gated := clientRequestGateMiddleware(state, idempotent)
-	rateLimited, limiter := newRateLimitMiddleware(metrics, info.TrustedProxyCIDRs, gated)
+	trustedProxies := info.TrustedProxyCIDRs
+	if len(trustedProxies) == 0 {
+		trustedProxies = clientaddr.DefaultTrustedProxyCIDRs(info.PanelAccess)
+	}
+	rateLimited, limiter := newRateLimitMiddleware(metrics, trustedProxies, gated)
 	state.httpRateLimiter = limiter
 	authenticated := authMiddlewareWithOptions(state, authMiddlewareOptions{
 		Token:             info.AuthToken,

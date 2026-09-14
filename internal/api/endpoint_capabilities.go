@@ -26,6 +26,8 @@ type endpointPolicy struct {
 // classified by HTTP method alone and unknown API operations fail closed.
 var endpointPolicies = []endpointPolicy{
 	{http.MethodGet, "/healthz", capabilityPublic},
+	{http.MethodGet, "/livez", capabilityPublic},
+	{http.MethodGet, "/readyz", capabilityPublic},
 	{http.MethodGet, "/metrics", capabilityPublic},
 	{http.MethodGet, "/s/{token}", capabilityPublic},
 	{http.MethodPost, "/api/auth/login", capabilityPublic},

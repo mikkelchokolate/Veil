@@ -53,6 +53,8 @@ import type {
 import type {
   FirewallRule,
   HealthResponse,
+  LivezResponse,
+  ReadyzResponse,
   StatusResponse,
   UnauthorizedResponse
 } from '../models';
@@ -161,6 +163,197 @@ export const useGetHealthz = <TError = UnauthorizedResponse | HealthResponse,
         TContext
       > => {
       return useMutation(getGetHealthzMutationOptions(options), queryClient);
+    }
+    export type getLivezResponse200 = {
+  data: LivezResponse
+  status: 200
+}
+
+export type getLivezResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getLivezResponseSuccess = (getLivezResponse200) & {
+  headers: Headers;
+};
+export type getLivezResponseError = (getLivezResponse401) & {
+  headers: Headers;
+};
+
+export type getLivezResponse = (getLivezResponseSuccess | getLivezResponseError)
+
+export const getGetLivezUrl = () => {
+
+
+
+
+  return `/livez`
+}
+
+/**
+ * Authenticated on public Panel listeners; public on loopback-only development listeners. Returns a binary alive status without management health components.
+ * @summary Process liveness probe
+ */
+export const getLivez = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getLivezResponse> => {
+
+  return apiFetch<getLivezResponse>(getGetLivezUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLivezMutationKey = () => ['getLivez'] as const;
+
+export const getGetLivezMutationOptions = <TError = UnauthorizedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getLivez>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getLivez>>, TError,void, TContext> => {
+
+const mutationKey = getGetLivezMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getLivez>>, void> = () => {
+
+
+          return  getLivez(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetLivezMutationResult = NonNullable<Awaited<ReturnType<typeof getLivez>>>
+
+    export type GetLivezMutationError = UnauthorizedResponse
+
+
+    /**
+ * @summary Process liveness probe
+ */
+export const useGetLivez = <TError = UnauthorizedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getLivez>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getLivez>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetLivezMutationOptions(options), queryClient);
+    }
+    export type getReadyzResponse200 = {
+  data: ReadyzResponse
+  status: 200
+}
+
+export type getReadyzResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getReadyzResponse503 = {
+  data: ReadyzResponse
+  status: 503
+}
+
+export type getReadyzResponseSuccess = (getReadyzResponse200) & {
+  headers: Headers;
+};
+export type getReadyzResponseError = (getReadyzResponse401 | getReadyzResponse503) & {
+  headers: Headers;
+};
+
+export type getReadyzResponse = (getReadyzResponseSuccess | getReadyzResponseError)
+
+export const getGetReadyzUrl = () => {
+
+
+
+
+  return `/readyz`
+}
+
+/**
+ * Authenticated on public Panel listeners; public on loopback-only development listeners. The component snapshot is the same viewer-only diagnostic as `/api/health` and is never returned to unauthenticated public listeners.
+ * @summary Readiness probe
+ */
+export const getReadyz = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getReadyzResponse> => {
+
+  return apiFetch<getReadyzResponse>(getGetReadyzUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetReadyzMutationKey = () => ['getReadyz'] as const;
+
+export const getGetReadyzMutationOptions = <TError = UnauthorizedResponse | ReadyzResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getReadyz>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getReadyz>>, TError,void, TContext> => {
+
+const mutationKey = getGetReadyzMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getReadyz>>, void> = () => {
+
+
+          return  getReadyz(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetReadyzMutationResult = NonNullable<Awaited<ReturnType<typeof getReadyz>>>
+
+    export type GetReadyzMutationError = UnauthorizedResponse | ReadyzResponse
+
+
+    /**
+ * @summary Readiness probe
+ */
+export const useGetReadyz = <TError = UnauthorizedResponse | ReadyzResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getReadyz>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getReadyz>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetReadyzMutationOptions(options), queryClient);
     }
     export type getMetricsResponse200 = {
   data: string

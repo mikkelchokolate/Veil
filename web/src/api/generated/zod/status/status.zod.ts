@@ -53,6 +53,26 @@ export const GetHealthzResponse = zod.object({
 })
 
 /**
+ * Authenticated on public Panel listeners; public on loopback-only development listeners. Returns a binary alive status without management health components.
+ * @summary Process liveness probe
+ */
+export const GetLivezResponse = zod.object({
+  "status": zod.enum(['alive'])
+})
+
+/**
+ * Authenticated on public Panel listeners; public on loopback-only development listeners. The component snapshot is the same viewer-only diagnostic as `/api/health` and is never returned to unauthenticated public listeners.
+ * @summary Readiness probe
+ */
+export const GetReadyzResponse = zod.object({
+  "status": zod.enum(['ok', 'degraded']),
+  "components": zod.record(zod.string(), zod.object({
+  "status": zod.string(),
+  "reason": zod.string().optional()
+})).optional()
+})
+
+/**
  * Exposure is controlled independently with `--metrics-access` /
  * `VEIL_METRICS_ACCESS`.
  * `auto` authenticates metrics on public listeners and whenever auth is

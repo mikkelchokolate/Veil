@@ -25,6 +25,8 @@ type routeAuthorizationExpectation struct {
 func productionAuthorizationMatrix() []routeAuthorizationExpectation {
 	return []routeAuthorizationExpectation{
 		{http.MethodGet, "/healthz", true, true, "health"},
+		{http.MethodGet, "/livez", true, true, "liveness probe"},
+		{http.MethodGet, "/readyz", true, true, "readiness probe"},
 		{http.MethodGet, "/metrics", true, true, "metrics when not configured private"},
 		{http.MethodGet, "/api/setup/status", true, true, "setup bootstrap"},
 		{http.MethodPost, "/api/setup/complete", true, true, "setup bootstrap"},
