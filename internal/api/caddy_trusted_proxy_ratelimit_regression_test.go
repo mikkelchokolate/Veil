@@ -4,17 +4,26 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 )
 
 func newCaddyPanelRouter(t *testing.T) (http.Handler, *managementState) {
 	t.Helper()
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	if err := atomicfile.Write(statePath, []byte(`{"schemaVersion":4,"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","panelAccess":"caddy"}}`), 0o600, 0o700); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
 	router, reloader := newTestRouter(ServerInfo{
 		Version:     "test",
-		Mode:        "server",
-		ApplyRoot:   t.TempDir(),
+		Mode:        "dev",
+		StatePath:   statePath,
+		ApplyRoot:   dir,
 		PanelAccess: "caddy",
 		PanelListen: "127.0.0.1:2096",
 	})
@@ -79,6 +88,9 @@ func TestCaddyPanelSubscriptionAndAuditUseForwardedClient(t *testing.T) {
 	router.ServeHTTP(independentRec, independent)
 	if independentRec.Code == http.StatusTooManyRequests {
 		t.Fatalf("forwarded subscription client shared the Caddy loopback source bucket: %s", independentRec.Body.String())
+	}
+	if independentRec.Code != http.StatusNotFound {
+		t.Fatalf("expected independent forwarded subscription client 404, got %d %s", independentRec.Code, independentRec.Body.String())
 	}
 
 	for i := 0; i < 300; i++ {
