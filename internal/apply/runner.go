@@ -234,9 +234,11 @@ type Runner struct {
 	startupErr            error
 	lastRecoveryAttempt   time.Time
 
-	monitorStop chan struct{}
-	monitorDone chan struct{}
-	closeOnce   sync.Once
+	recoverCtx    context.Context
+	recoverCancel context.CancelFunc
+	monitorStop   chan struct{}
+	monitorDone   chan struct{}
+	closeOnce     sync.Once
 }
 
 func NewRunner(revs *RevisionStore, jobs *JobStore, executor any) *Runner {
@@ -260,6 +262,9 @@ func NewRunner(revs *RevisionStore, jobs *JobStore, executor any) *Runner {
 		recoveryRetryInterval: 5 * time.Second, now: time.Now,
 		monitorStop: make(chan struct{}), monitorDone: make(chan struct{}),
 	}
+	recoverCtx, recoverCancel := context.WithCancel(context.Background())
+	runner.recoverCtx = recoverCtx
+	runner.recoverCancel = recoverCancel
 	if revs == nil || revs.db == nil || jobs == nil {
 		runner.startupErr = errors.New("apply: runner stores are not configured")
 		close(runner.monitorDone)
@@ -272,7 +277,7 @@ func NewRunner(revs *RevisionStore, jobs *JobStore, executor any) *Runner {
 		close(runner.monitorDone)
 		return runner
 	}
-	if err := runner.resumeRecoveryPending(context.Background()); err != nil {
+	if err := runner.resumeRecoveryPending(runner.recoverCtx); err != nil {
 		runner.startupErr = err
 		go runner.monitorRecovery()
 		return runner
@@ -351,7 +356,7 @@ func (r *Runner) monitorRecovery() {
 					continue
 				}
 				r.setRecoveryError(nil)
-				r.setRecoveryError(r.resumeRecoveryPending(context.Background()))
+				r.setRecoveryError(r.resumeRecoveryPending(r.recoverCtx))
 				continue
 			}
 			if lease.Owner != "" && lease.ExpiresAt > now.Unix() && processOwnerAlive(lease.Owner) {
@@ -366,7 +371,7 @@ func (r *Runner) monitorRecovery() {
 			recoveryErr := recoverRuntimePublications(r.revs.db, r.leases, r.jobs, r.ownerID, r.now, r.leaseTTL)
 			if recoveryErr == nil {
 				r.setRecoveryError(nil)
-				recoveryErr = r.resumeRecoveryPending(context.Background())
+				recoveryErr = r.resumeRecoveryPending(r.recoverCtx)
 			}
 			if recoveryErr == nil {
 				recoveryErr = r.jobs.MarkApplyingInterrupted("apply job had no valid durable lease during continuous recovery")
@@ -379,6 +384,12 @@ func (r *Runner) monitorRecovery() {
 func (r *Runner) resumeRecoveryPending(ctx context.Context) error {
 	if r == nil || r.revs == nil || r.revs.db == nil {
 		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	var job Job
 	var servicePhase string
@@ -505,7 +516,12 @@ func (r *Runner) ReadinessError() error {
 }
 
 func (r *Runner) Close() {
-	r.closeOnce.Do(func() { close(r.monitorStop) })
+	r.closeOnce.Do(func() {
+		if r.recoverCancel != nil {
+			r.recoverCancel()
+		}
+		close(r.monitorStop)
+	})
 	<-r.monitorDone
 }
 

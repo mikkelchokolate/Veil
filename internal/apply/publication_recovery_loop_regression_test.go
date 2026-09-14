@@ -50,12 +50,13 @@ func TestPublicationRecoveryDoesNotSpamFailedJobsForOneRevision(t *testing.T) {
 		}, errors.New("ufw prepare failed: invalid syntax")
 	}))
 	defer runner.Close()
+	runner.recoveryRetryInterval = 2 * time.Second
 
 	if _, err := runner.RunContext(context.Background(), revision, "mutation", "admin"); err == nil {
 		t.Fatal("expected firewall prepare failure")
 	}
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(1200 * time.Millisecond)
 	listed, err := jobs.List(50)
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +69,7 @@ func TestPublicationRecoveryDoesNotSpamFailedJobsForOneRevision(t *testing.T) {
 	}
 	assertRetainedFirewallPrepareError(t, listed[0])
 
-	deadline := time.Now().Add(8 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for attempts.Load() < 2 && time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
 	}
