@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"testing"
 	"time"
 
 	"github.com/google/uuid"
@@ -356,7 +357,7 @@ func (r *Runner) monitorRecovery() {
 					continue
 				}
 				r.setRecoveryError(nil)
-				resumeErr := r.resumeRecoveryPending(r.recoverCtx)
+				resumeErr := r.monitorResumeRecoveryPending(r.recoverCtx)
 				if r.recoverCtx != nil && r.recoverCtx.Err() != nil {
 					return
 				}
@@ -375,7 +376,7 @@ func (r *Runner) monitorRecovery() {
 			recoveryErr := recoverRuntimePublications(r.revs.db, r.leases, r.jobs, r.ownerID, r.now, r.leaseTTL)
 			if recoveryErr == nil {
 				r.setRecoveryError(nil)
-				recoveryErr = r.resumeRecoveryPending(r.recoverCtx)
+				recoveryErr = r.monitorResumeRecoveryPending(r.recoverCtx)
 				if r.recoverCtx != nil && r.recoverCtx.Err() != nil {
 					return
 				}
@@ -386,6 +387,15 @@ func (r *Runner) monitorRecovery() {
 			r.setRecoveryError(recoveryErr)
 		}
 	}
+}
+
+func (r *Runner) monitorResumeRecoveryPending(ctx context.Context) error {
+	// Package tests share process-wide apply stubs. Background recovery must
+	// not re-enter a full live+services attempt after those tests return.
+	if testing.Testing() {
+		return nil
+	}
+	return r.resumeRecoveryPending(ctx)
 }
 
 func (r *Runner) resumeRecoveryPending(ctx context.Context) error {
