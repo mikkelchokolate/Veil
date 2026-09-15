@@ -177,6 +177,14 @@ func TestPackageScriptsExist(t *testing.T) {
 			t.Fatalf("preremove.sh missing upgrade guard %q:\n%s", want, script)
 		}
 	}
+	postinstall, err := os.ReadFile("../../packaging/scripts/postinstall.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	postinstallScript := strings.ReplaceAll(string(postinstall), "\r\n", "\n")
+	if !strings.Contains(postinstallScript, "Backup members store restore mode") {
+		t.Fatal("postinstall must preserve backup member permission metadata")
+	}
 }
 
 func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {

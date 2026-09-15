@@ -13,6 +13,8 @@ RuntimeDirectoryMode=0750
 RuntimeDirectoryPreserve=yes
 EnvironmentFile=-/etc/veil/veil.env
 Environment=VEIL_HELPER_SOCKET=/run/veil/helper.sock
+Environment=VEIL_STATE_PATH=/var/lib/veil/state.json
+Environment=VEIL_KEY_PATH=/etc/veil/state.key
 Environment=VEIL_APPLY_ROOT=/var/lib/veil/staging
 Environment=VEIL_LIVE_ROOT=/etc/veil/generated
 ExecStart=/usr/local/bin/veil serve

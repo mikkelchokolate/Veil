@@ -21,6 +21,33 @@ func TestInstallApplyRendersVeilUnitWithSelectedBinaryPath(t *testing.T) {
 	}
 }
 
+func TestInstallApplyPropagatesCustomEtcAndVarDir(t *testing.T) {
+	dir := t.TempDir()
+	etcDir := filepath.Join(dir, "opt", "veil", "etc")
+	varDir := filepath.Join(dir, "opt", "veil", "var")
+	profile := RURecommendedProfile{PanelAuthToken: "secret-panel"}
+	files, err := desiredManagedFiles(profile, ApplyPaths{EtcDir: etcDir, VarDir: varDir, SystemdDir: filepath.Join(dir, "systemd")})
+	if err != nil {
+		t.Fatalf("desiredFiles: %v", err)
+	}
+	env := managedFileContent(files, "veil.env")
+	for _, want := range []string{
+		"VEIL_STATE_PATH=" + filepath.ToSlash(filepath.Join(varDir, "state.json")),
+		"VEIL_KEY_PATH=" + filepath.ToSlash(filepath.Join(etcDir, "state.key")),
+	} {
+		if !strings.Contains(env, want) {
+			t.Fatalf("veil.env missing %q:\n%s", want, env)
+		}
+	}
+	unit := managedFileContent(files, "veil.service")
+	if !strings.Contains(unit, "VEIL_STATE_PATH="+filepath.ToSlash(filepath.Join(varDir, "state.json"))) {
+		t.Fatalf("veil.service missing custom state path:\n%s", unit)
+	}
+	if !strings.Contains(unit, "ReadWritePaths="+varDir) && !strings.Contains(unit, "ReadWritePaths="+filepath.ToSlash(varDir)) {
+		t.Fatalf("veil.service missing custom ReadWritePaths:\n%s", unit)
+	}
+}
+
 func TestInstallApplyRendersCaddyUnitWithResolvedBinaryPath(t *testing.T) {
 	dir := t.TempDir()
 	profile := RURecommendedProfile{InstallPanelCaddy: true, PanelAuthToken: "secret-panel", CaddyJSON: "{}"}

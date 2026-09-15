@@ -64,6 +64,31 @@ func countSystemdDirective(body, directive string) int {
 	return count
 }
 
+func TestRenderSystemdUnitsPropagatesCustomEtcAndVarDir(t *testing.T) {
+	units := RenderSystemdUnits(SystemdConfig{EtcDir: "/opt/veil/etc", VarDir: "/opt/veil/var"})
+	panel := units[UnitVeil]
+	for _, want := range []string{
+		"Environment=VEIL_STATE_PATH=/opt/veil/var/state.json",
+		"Environment=VEIL_KEY_PATH=/opt/veil/etc/state.key",
+		"Environment=VEIL_APPLY_ROOT=/opt/veil/var/staging",
+		"Environment=VEIL_LIVE_ROOT=/opt/veil/etc/generated",
+		"ReadOnlyPaths=/opt/veil/etc",
+		"ReadWritePaths=/opt/veil/var",
+	} {
+		if !strings.Contains(panel, want) {
+			t.Fatalf("veil.service missing %q:\n%s", want, panel)
+		}
+	}
+	helper := units[UnitHelperService]
+	if !strings.Contains(helper, "ReadWritePaths=/opt/veil/etc /opt/veil/var /usr/local/bin /etc/ufw /run /var/run") {
+		t.Fatalf("helper ReadWritePaths should include custom trees:\n%s", helper)
+	}
+	backup := units[UnitBackupService]
+	if !strings.Contains(backup, "--state /opt/veil/var/state.json") || !strings.Contains(backup, "--output-dir /opt/veil/var/backups") {
+		t.Fatalf("backup unit should use custom state paths:\n%s", backup)
+	}
+}
+
 func TestRenderSystemdUnits(t *testing.T) {
 	units := RenderSystemdUnits(SystemdConfig{
 		VeilBinary:     "/usr/local/bin/veil",
@@ -163,6 +188,8 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 		"Group=veil",
 		"Requires=veil-helper.socket",
 		"Environment=VEIL_HELPER_SOCKET=/run/veil/helper.sock",
+		"Environment=VEIL_STATE_PATH=/var/lib/veil/state.json",
+		"Environment=VEIL_KEY_PATH=/etc/veil/state.key",
 		"Environment=VEIL_APPLY_ROOT=/var/lib/veil/staging",
 		"Environment=VEIL_LIVE_ROOT=/etc/veil/generated",
 		"CapabilityBoundingSet=\n",
