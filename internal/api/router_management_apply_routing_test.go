@@ -111,6 +111,71 @@ func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
 	}
 }
 
+func TestManagementApplyIncludesHysteria2GeoMatchersOnFirstDatDownload(t *testing.T) {
+	oldDownloader := routeDatDownloader
+	oldVerifier := routeDatSignatureVerifier
+	oldTransform := routeDatSourceTransform
+	routeDatSourceTransform = func(source RoutingSource) RoutingSource {
+		return pinRoutingTestBodies(source, map[string]string{"geoip.dat": "fake geoip dat", "geosite.dat": "fake geosite dat"})
+	}
+	routeDatSignatureVerifier = func(context.Context, generatedconfig.RoutingSourceFile, []byte, []byte) error { return nil }
+	routeDatDownloader = func(_ context.Context, url string) ([]byte, error) {
+		if strings.HasSuffix(url, "/geoip.dat") {
+			return []byte("fake geoip dat"), nil
+		}
+		if strings.HasSuffix(url, "/geoip.dat.sha256sum") {
+			return []byte(testSHA256Line("fake geoip dat", "geoip.dat")), nil
+		}
+		if strings.HasSuffix(url, "/geosite.dat") {
+			return []byte("fake geosite dat"), nil
+		}
+		if strings.HasSuffix(url, "/geosite.dat.sha256sum") {
+			return []byte(testSHA256Line("fake geosite dat", "geosite.dat")), nil
+		}
+		if strings.HasSuffix(url, ".bundle") {
+			return []byte(`{"fake":"sigstore bundle"}`), nil
+		}
+		return nil, fmt.Errorf("unexpected routing dat URL: %s", url)
+	}
+	t.Cleanup(func() {
+		routeDatDownloader = oldDownloader
+		routeDatSignatureVerifier = oldVerifier
+		routeDatSourceTransform = oldTransform
+	})
+
+	applyRoot := t.TempDir()
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	inbound := httptest.NewRecorder()
+	r.ServeHTTP(inbound, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hy2","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true,"password":"hy2-secret"}`)))
+	if inbound.Code != http.StatusCreated && inbound.Code != http.StatusOK {
+		t.Fatalf("create hysteria2 inbound: %d %s", inbound.Code, inbound.Body.String())
+	}
+	warp := httptest.NewRecorder()
+	r.ServeHTTP(warp, httptest.NewRequest(http.MethodPut, "/api/warp", strings.NewReader(`{"enabled":true,"endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)))
+	if warp.Code != http.StatusOK {
+		t.Fatalf("enable WARP expected 200, got %d: %s", warp.Code, warp.Body.String())
+	}
+	applyPreset := httptest.NewRecorder()
+	r.ServeHTTP(applyPreset, httptest.NewRequest(http.MethodPost, "/api/routing/presets/RU-blocked", nil))
+	if applyPreset.Code != http.StatusOK {
+		t.Fatalf("apply RU-blocked preset expected 200, got %d: %s", applyPreset.Code, applyPreset.Body.String())
+	}
+	apply := httptest.NewRecorder()
+	r.ServeHTTP(apply, httptest.NewRequest(http.MethodPost, "/api/apply", strings.NewReader(`{"confirm":true}`)))
+	if apply.Code != http.StatusOK {
+		t.Fatalf("apply expected 200, got %d: %s", apply.Code, apply.Body.String())
+	}
+	hy2, err := os.ReadFile(filepath.Join(applyRoot, "generated", "hysteria2", "server.yaml"))
+	if err != nil {
+		t.Fatalf("expected staged hysteria2 config: %v", err)
+	}
+	for _, want := range []string{"proxy(geoip:ru-blocked)", "proxy(geosite:ru-blocked)"} {
+		if !strings.Contains(string(hy2), want) {
+			t.Fatalf("first-dat-download hysteria2 ACL missing %q:\n%s", want, hy2)
+		}
+	}
+}
+
 func TestManagementApplyRejectsRoutingDatChecksumMismatch(t *testing.T) {
 	oldDownloader := routeDatDownloader
 	oldVerifier := routeDatSignatureVerifier
