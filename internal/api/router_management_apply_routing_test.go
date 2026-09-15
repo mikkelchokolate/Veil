@@ -145,6 +145,11 @@ func TestManagementApplyIncludesHysteria2GeoMatchersOnFirstDatDownload(t *testin
 
 	applyRoot := t.TempDir()
 	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
+	settings := httptest.NewRecorder()
+	r.ServeHTTP(settings, httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","hysteria2Password":"hy2-secret"}`)))
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings: %d %s", settings.Code, settings.Body.String())
+	}
 	inbound := httptest.NewRecorder()
 	r.ServeHTTP(inbound, httptest.NewRequest(http.MethodPost, "/api/inbounds", strings.NewReader(`{"name":"hy2","protocol":"hysteria2","transport":"udp","port":8443,"enabled":true,"password":"hy2-secret"}`)))
 	if inbound.Code != http.StatusCreated && inbound.Code != http.StatusOK {
@@ -165,7 +170,7 @@ func TestManagementApplyIncludesHysteria2GeoMatchersOnFirstDatDownload(t *testin
 	if apply.Code != http.StatusOK {
 		t.Fatalf("apply expected 200, got %d: %s", apply.Code, apply.Body.String())
 	}
-	hy2, err := os.ReadFile(filepath.Join(applyRoot, "generated", "hysteria2", "server.yaml"))
+	hy2, err := os.ReadFile(filepath.Join(applyRoot, "generated", "hysteria2", "hy2.yaml"))
 	if err != nil {
 		t.Fatalf("expected staged hysteria2 config: %v", err)
 	}
