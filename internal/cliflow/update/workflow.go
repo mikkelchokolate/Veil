@@ -19,6 +19,7 @@ type WorkflowOptions struct {
 	Staged         bool
 	Listen         string
 	AuthToken      string
+	WebBasePath    string
 }
 
 type WorkflowDependencies struct {

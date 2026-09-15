@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -129,6 +131,46 @@ func TestQueryRunRejectsUnsafeWebBasePath(t *testing.T) {
 	q := NewQuery(Options{Listen: "127.0.0.1:1", WebBasePath: "../admin"}, io.Discard, nil)
 	if err := q.Run(context.Background()); err == nil || !strings.Contains(err.Error(), "invalid web base path") {
 		t.Fatalf("Run error = %v", err)
+	}
+}
+
+func TestQueryRunUsesInstalledEnvWebBasePathAndToken(t *testing.T) {
+	isolateListenConfig(t)
+	status := &Response{Version: "0.4.0", Mode: "server"}
+	var gotPath, gotToken string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotToken = r.Header.Get("X-Veil-Token")
+		if r.URL.Path != "/secret-panel/api/status" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Header.Get("X-Veil-Token") != "installed-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(status)
+	}))
+	t.Cleanup(server.Close)
+
+	dir := t.TempDir()
+	envPath := filepath.Join(dir, "veil.env")
+	if err := os.WriteFile(envPath, []byte("VEIL_WEB_BASE_PATH=/secret-panel/\nVEIL_API_TOKEN=installed-token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	installedEnvFile = envPath
+
+	old := HTTPClient
+	HTTPClient = func(string) *http.Client { return server.Client() }
+	t.Cleanup(func() { HTTPClient = old })
+
+	q := NewQuery(Options{Listen: server.URL}, io.Discard, nil)
+	if err := q.Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v (path=%q token=%q)", err, gotPath, gotToken)
+	}
+	if gotPath != "/secret-panel/api/status" {
+		t.Fatalf("path = %q, want /secret-panel/api/status", gotPath)
 	}
 }
 

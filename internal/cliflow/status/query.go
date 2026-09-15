@@ -60,14 +60,40 @@ func NewQuery(opts Options, out io.Writer, resolveAuth AuthTokenResolver) Query 
 	return Query{opts: opts, out: out, resolveAuth: resolveAuth}
 }
 
+func ResolveWebBasePath(flagValue string) string {
+	if path := strings.TrimSpace(flagValue); path != "" {
+		return path
+	}
+	if path := strings.TrimSpace(os.Getenv("VEIL_WEB_BASE_PATH")); path != "" {
+		return path
+	}
+	if path := strings.TrimSpace(installedEnvValue("VEIL_WEB_BASE_PATH")); path != "" {
+		return path
+	}
+	return "/"
+}
+
+func ResolveAuthToken(flagValue string) string {
+	if token := strings.TrimSpace(flagValue); token != "" {
+		return token
+	}
+	if token := strings.TrimSpace(os.Getenv("VEIL_API_TOKEN")); token != "" {
+		return token
+	}
+	return strings.TrimSpace(installedEnvValue("VEIL_API_TOKEN"))
+}
+
 func (q Query) Run(ctx context.Context) error {
 	addr := ResolveListen(q.opts.Listen)
 	candidates := CandidateAddrs(addr)
-	basePath, err := webbasepath.Normalize(q.opts.WebBasePath)
+	basePath, err := webbasepath.Normalize(ResolveWebBasePath(q.opts.WebBasePath))
 	if err != nil {
 		return fmt.Errorf("invalid web base path: %w", err)
 	}
 	token, _ := q.resolveAuth(q.opts.AuthToken)
+	if strings.TrimSpace(token) == "" {
+		token = ResolveAuthToken("")
+	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	var lastErr error

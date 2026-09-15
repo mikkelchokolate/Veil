@@ -3,6 +3,7 @@ package update
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	statusflow "github.com/mikkelchokolate/Veil/internal/cliflow/status"
@@ -15,23 +16,27 @@ type RestartHooks struct {
 	Rollback func(backupPath, currentPath string) error
 }
 
-func (h RestartHooks) withDefaults() RestartHooks {
-	if h.Restart == nil {
-		h.Restart = RunSystemctlRestart
-	}
-	if h.Health == nil {
-		h.Health = WaitForHealthy
-	}
-	if h.Rollback == nil {
-		h.Rollback = RollbackBinary
-	}
-	return h
-}
-
 func RestartAfterUpdate(out io.Writer, currentPath, backupPath string, opts WorkflowOptions, hooks RestartHooks) error {
-	hooks = hooks.withDefaults()
 	addr := statusflow.ResolveListen(opts.Listen)
-	token := opts.AuthToken
+	token := strings.TrimSpace(opts.AuthToken)
+	if token == "" {
+		token = statusflow.ResolveAuthToken("")
+	}
+	webBasePath := strings.TrimSpace(opts.WebBasePath)
+	if webBasePath == "" {
+		webBasePath = statusflow.ResolveWebBasePath("")
+	}
+	if hooks.Restart == nil {
+		hooks.Restart = RunSystemctlRestart
+	}
+	if hooks.Rollback == nil {
+		hooks.Rollback = RollbackBinary
+	}
+	if hooks.Health == nil {
+		hooks.Health = func(probeAddr, probeToken string, timeout time.Duration) error {
+			return WaitForHealthyAt(probeAddr, probeToken, webBasePath, timeout)
+		}
+	}
 
 	fmt.Fprintln(out, "Restarting "+renderer.UnitVeil+"...")
 	if err := hooks.Restart(renderer.UnitVeil); err != nil {

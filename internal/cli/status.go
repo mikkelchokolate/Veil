@@ -18,12 +18,11 @@ func newStatusCommand(version string) *cobra.Command {
 		Long: `Status queries a running veil serve instance and displays service status.
 
 By default it uses --listen, then VEIL_LISTEN, then the installed panel listen
-address, and finally 127.0.0.1:2096. Use --auth-token to authenticate. For a
-panel mounted below a secret base path, use --web-base-path or VEIL_WEB_BASE_PATH.`,
+address, and finally 127.0.0.1:2096. Auth token and web base path come from
+flags, process environment, or /etc/veil/veil.env (the same file systemd loads).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			env := serveflow.NewEnvironment()
-			resolvedWebBasePath, _ := env.WebBasePath(webBasePath)
-			return statusflow.NewQuery(statusflow.Options{Listen: listen, AuthToken: authToken, WebBasePath: resolvedWebBasePath, JSON: jsonOutput}, cmd.OutOrStdout(), env.AuthToken).Run(cmd.Context())
+			return statusflow.NewQuery(statusflow.Options{Listen: listen, AuthToken: authToken, WebBasePath: webBasePath, JSON: jsonOutput}, cmd.OutOrStdout(), env.AuthToken).Run(cmd.Context())
 		},
 	}
 

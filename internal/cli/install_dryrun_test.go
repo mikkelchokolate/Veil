@@ -185,6 +185,42 @@ func TestInstallRURecommendedRejectsInvalidPublicIP(t *testing.T) {
 	}
 }
 
+func TestInstallDryRunPublicIPWithoutDomainDoesNotRequireDomain(t *testing.T) {
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--public-ip", "203.0.113.10", "--dry-run"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("public-ip without domain should skip DNS check: %v\n%s", err, out.String())
+	}
+	if strings.Contains(out.String(), "DNS check") {
+		t.Fatalf("no-domain install should not run DNS validation:\n%s", out.String())
+	}
+}
+
+func TestInstallDryRunDirectPublicIPWithoutDomainPrintsPlan(t *testing.T) {
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"install",
+		"--profile", "ru-recommended",
+		"--panel-access", "direct",
+		"--public-ip", "203.0.113.10",
+		"--dry-run",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("direct public-ip without domain: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "Install plan") {
+		t.Fatalf("expected install plan:\n%s", out.String())
+	}
+}
+
 func TestInstallRURecommendedDoesNotRequireDomainForLocalPanel(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
