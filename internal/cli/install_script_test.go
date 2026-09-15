@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func checkBash(t *testing.T) {
@@ -219,10 +221,15 @@ func TestPrivilegedInstallerForwardsLeIPCertFalse(t *testing.T) {
 	}
 
 	checkBash(t)
-	cmd := exec.Command("bash", "../../scripts/install-privileged.sh", "--le-ip-cert=not-a-bool")
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "bash", "../../scripts/install-privileged.sh", "--le-ip-cert=not-a-bool")
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected invalid --le-ip-cert to fail, got:\n%s", out)
+	}
+	if ctx.Err() != nil {
+		t.Fatalf("invalid --le-ip-cert hung instead of exiting: %v\n%s", ctx.Err(), out)
 	}
 	if !strings.Contains(string(out), "Invalid boolean value") {
 		t.Fatalf("unexpected invalid boolean output:\n%s", out)

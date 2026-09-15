@@ -98,11 +98,11 @@ require_value() {
 
 parse_bool() {
   case "$1" in
-    1|true|TRUE|yes|YES|on|ON) printf '1' ;;
-    0|false|FALSE|no|NO|off|OFF) printf '0' ;;
+    1|true|TRUE|yes|YES|on|ON) PARSE_BOOL_RESULT="1" ;;
+    0|false|FALSE|no|NO|off|OFF) PARSE_BOOL_RESULT="0" ;;
     *)
       echo "Invalid boolean value for --le-ip-cert: $1" >&2
-      exit 1
+      return 1
       ;;
   esac
 }
@@ -173,14 +173,19 @@ while [[ $# -gt 0 ]]; do
     --panel-port) require_value "$1" "${2:-}"; PANEL_PORT="$2"; shift 2 ;;
     --le-ip-cert)
       if [[ -n "${2:-}" && "${2}" != --* ]]; then
-        LE_IP_CERT="$(parse_bool "$2")"
+        parse_bool "$2" || exit 1
+        LE_IP_CERT="${PARSE_BOOL_RESULT}"
         shift 2
       else
         LE_IP_CERT="1"
         shift
       fi
       ;;
-    --le-ip-cert=*) LE_IP_CERT="$(parse_bool "${1#--le-ip-cert=}")"; shift ;;
+    --le-ip-cert=*)
+      parse_bool "${1#--le-ip-cert=}" || exit 1
+      LE_IP_CERT="${PARSE_BOOL_RESULT}"
+      shift
+      ;;
     --no-le-ip-cert) LE_IP_CERT="0"; shift ;;
     --le-ip-cert-port) require_value "$1" "${2:-}"; LE_IP_CERT_PORT="$2"; shift 2 ;;
     --local-bin) require_value "$1" "${2:-}"; LOCAL_BIN="$2"; shift 2 ;;

@@ -431,20 +431,25 @@ func TestInstallLeIPCertFalseSkipsIssuance(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	etcDir := t.TempDir()
-	varDir := t.TempDir()
-	cmd.SetArgs([]string{
-		"install",
-		"--panel-access", "direct",
-		"--le-ip-cert=false",
-		"--public-ip", "127.0.0.1",
-		"--etc-dir", etcDir,
-		"--var-dir", varDir,
-		"--systemd-dir", t.TempDir(),
-		"--yes",
-	})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("install --le-ip-cert=false: %v\n%s", err, out.String())
+
+	tempEtc := t.TempDir()
+	tempVar := t.TempDir()
+	profile := installer.RURecommendedProfile{
+		Username:    "veil",
+		Password:    "test-password",
+		WebBasePath: "/panel/",
+		PanelListen: "0.0.0.0:3000",
+		PanelAccess: "direct",
+	}
+
+	if err := applyRURecommendedInstall(cmd, profile, ruRecommendedInstallOptions{
+		EtcDir:      tempEtc,
+		VarDir:      tempVar,
+		PanelAccess: "direct",
+		LEIPCert:    false,
+		PublicIP:    "127.0.0.1",
+	}); err != nil {
+		t.Fatalf("applyRURecommendedInstall --le-ip-cert=false: %v\n%s", err, out.String())
 	}
 	if issued {
 		t.Fatal("explicit --le-ip-cert=false must not request an IP certificate")
