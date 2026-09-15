@@ -279,9 +279,9 @@ func NewRunner(revs *RevisionStore, jobs *JobStore, executor any) *Runner {
 		return runner
 	}
 	// Package tests share process-wide apply stubs and lifecycle contexts
-	// that never cancel. Do not background-retry full ApplyLive+ApplyServices
-	// or hold the singleton lease from the 1s monitor; RunLatest waits forever
-	// on ErrApplyBusy when that lease is already owned.
+	// that never cancel. Close superseded recovery rows at startup, but do
+	// not re-enter ApplyLive+ApplyServices or start the 1s monitor; RunLatest
+	// waits forever on ErrApplyBusy when that monitor holds the lease.
 	if testing.Testing() {
 		if err := runner.resumeRecoveryPendingWithRetry(runner.recoverCtx, false); err != nil {
 			runner.startupErr = err
@@ -612,8 +612,9 @@ func (r *Runner) RunLatest(ctx context.Context, trigger, actor string) (Job, err
 			if waitErr := r.waitIdle(ctx); waitErr != nil {
 				return last, waitErr
 			}
-			// Lease may be held by background recovery of this or another
-			// owner. waitIdle only watches r.active, so pause before retry.
+			if releaseErr := r.releaseOwnIdleLease(); releaseErr != nil {
+				return last, releaseErr
+			}
 			select {
 			case <-ctx.Done():
 				return last, ctx.Err()
@@ -635,6 +636,29 @@ func (r *Runner) RunLatest(ctx context.Context, trigger, actor string) (Job, err
 			return last, nil
 		}
 	}
+}
+
+func (r *Runner) releaseOwnIdleLease() error {
+	if r == nil || r.leases == nil {
+		return nil
+	}
+	r.mu.Lock()
+	active := r.active
+	r.mu.Unlock()
+	if active {
+		return nil
+	}
+	lease, err := r.leases.Current()
+	if err != nil {
+		return err
+	}
+	if lease.Owner != r.ownerID {
+		return nil
+	}
+	if err := r.leases.Release(r.ownerID, lease.Generation); err != nil && !errors.Is(err, ErrApplyLeaseLost) {
+		return err
+	}
+	return nil
 }
 
 func (r *Runner) waitIdle(ctx context.Context) error {
