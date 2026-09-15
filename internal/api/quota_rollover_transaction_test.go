@@ -70,8 +70,8 @@ func TestQuotaRolloverCommitsPeriodStateSnapshotAndExactlyOneApplyJob(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if upload != 0 || download != 0 {
-		t.Fatalf("current-period usage=(%d,%d), want reset", upload, download)
+	if upload != 80 || download != 30 {
+		t.Fatalf("current-period usage=(%d,%d), want 80/30 recorded after the elapsed boundary", upload, download)
 	}
 	history, err := state.trafficStore.HistoryForClient(created.ID, 0, now+3600, 100)
 	if err != nil {

@@ -100,7 +100,7 @@ func (r *Reconciler) ReconcileOnce() (changed int, err error) {
 			}
 			pendingEntry := pendingTargets[current.ID]
 			pendingMutation, pending := pendingEntry.mutation, pendingEntry.pending
-			if pending && pendingMutation.TargetGeneration != int64(current.Version)+1 {
+			if pending && pendingMutation.TargetGeneration < int64(current.Version) {
 				if superErr := r.supersedeQuotaTarget(pendingMutation, now.Unix()); superErr != nil {
 					reconcileErrors = append(reconcileErrors, fmt.Errorf("client %s: %w", current.ID, superErr))
 				}
