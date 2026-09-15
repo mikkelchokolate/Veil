@@ -26,12 +26,22 @@ type Service struct {
 	// (name) for the enriched binding read model. Optional; when nil the
 	// view falls back to bare inboundIds.
 	inboundLookup func(inboundID string) *BindingCapability
+	// applyReadiness reports per-client apply failure/pending from desired vs
+	// applied snapshots. Optional; when nil, status ignores apply state.
+	applyReadiness func(clientID string) (applyFailed, pendingApply bool)
 }
 
 // WithInboundLookup attaches a resolver that maps an inbound ID to its
 // protocol capabilities, enabling the enriched bindings read model on views.
 func (s *Service) WithInboundLookup(fn func(inboundID string) *BindingCapability) *Service {
 	s.inboundLookup = fn
+	return s
+}
+
+// WithApplyReadiness attaches the per-client apply projection used by
+// ComputeStatus (apply_failed / pending_apply).
+func (s *Service) WithApplyReadiness(fn func(clientID string) (bool, bool)) *Service {
+	s.applyReadiness = fn
 	return s
 }
 
@@ -611,6 +621,10 @@ func (s *Service) viewWith(c Client,
 			}
 		}
 	}
-	status := ComputeStatus(c, timeFromUnix(s.now()), false, false, len(bindings) == 0)
+	applyFailed, pendingApply := false, false
+	if s.applyReadiness != nil {
+		applyFailed, pendingApply = s.applyReadiness(c.ID)
+	}
+	status := ComputeStatus(c, timeFromUnix(s.now()), applyFailed, pendingApply, len(bindings) == 0)
 	return View{Client: c, Status: status, InboundIDs: inbounds, HasCreds: hasCreds, Bindings: bindingViews}, nil
 }

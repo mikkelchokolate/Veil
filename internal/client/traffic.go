@@ -171,14 +171,17 @@ func (s *TrafficStore) recordSampleTx(tx *sql.Tx, sm Sample) error {
 	if currentUpload < 0 || currentDownload < 0 || upDelta > math.MaxInt64-currentUpload || downDelta > math.MaxInt64-currentDownload {
 		return fmt.Errorf("client: traffic counter overflow")
 	}
-	// Absolute counter.
-	if _, err := tx.Exec(`INSERT INTO traffic_counters (client_id, binding_id, upload_bytes, download_bytes, updated_at)
-	  VALUES(?,?,?,?,?)
+	// Absolute counter. last_observed_at is the sample time, never the HTTP
+	// read clock, so per-client reports can distinguish fresh vs stale usage.
+	if _, err := tx.Exec(`INSERT INTO traffic_counters (client_id, binding_id, upload_bytes, download_bytes, last_observed_at, telemetry_state, updated_at)
+	  VALUES(?,?,?,?,?,'observed',?)
 	  ON CONFLICT(client_id, binding_id) DO UPDATE SET
 	    upload_bytes=upload_bytes+excluded.upload_bytes,
 	    download_bytes=download_bytes+excluded.download_bytes,
+	    last_observed_at=excluded.last_observed_at,
+	    telemetry_state=excluded.telemetry_state,
 	    updated_at=excluded.updated_at`,
-		clientID, sm.BindingID, upDelta, downDelta, sm.AtUnix); err != nil {
+		clientID, sm.BindingID, upDelta, downDelta, sm.AtUnix, sm.AtUnix); err != nil {
 		return fmt.Errorf("client: traffic counter: %w", err)
 	}
 	// Bucketed sample (bucket = truncated to minute).
@@ -214,12 +217,40 @@ func (s *TrafficStore) AggregateTotals() (upload, download int64, err error) {
 
 // TotalsForClient returns current quota-period upload/download usage.
 func (s *TrafficStore) TotalsForClient(clientID string) (upload, download int64, err error) {
-	row := s.db.QueryRow(`SELECT COALESCE(SUM(upload_bytes),0), COALESCE(SUM(download_bytes),0)
-	  FROM traffic_counters WHERE client_id=?`, clientID)
-	if err := row.Scan(&upload, &download); err != nil {
-		return 0, 0, fmt.Errorf("client: traffic totals: %w", err)
+	snap, err := s.SnapshotForClient(clientID)
+	if err != nil {
+		return 0, 0, err
 	}
-	return upload, download, nil
+	return snap.UploadBytes, snap.DownloadBytes, nil
+}
+
+// ClientTrafficSnapshot is current-period usage plus observation freshness.
+// LastObservedAt is the oldest trustworthy binding timestamp so a fresh
+// binding cannot hide a stale sibling.
+type ClientTrafficSnapshot struct {
+	UploadBytes      int64
+	DownloadBytes    int64
+	LastObservedAt   int64
+	NewestObservedAt int64
+	CounterRows      int
+	ObservedRows     int
+}
+
+// SnapshotForClient loads quota totals and observation timestamps together.
+func (s *TrafficStore) SnapshotForClient(clientID string) (ClientTrafficSnapshot, error) {
+	var snap ClientTrafficSnapshot
+	row := s.db.QueryRow(`SELECT
+	  COALESCE(SUM(upload_bytes),0),
+	  COALESCE(SUM(download_bytes),0),
+	  COALESCE(MIN(CASE WHEN COALESCE(last_observed_at,0)>0 THEN last_observed_at WHEN updated_at>0 THEN updated_at END),0),
+	  COALESCE(MAX(CASE WHEN COALESCE(last_observed_at,0)>0 THEN last_observed_at ELSE updated_at END),0),
+	  COUNT(*),
+	  COALESCE(SUM(CASE WHEN COALESCE(last_observed_at,0)>0 OR updated_at>0 THEN 1 ELSE 0 END),0)
+	  FROM traffic_counters WHERE client_id=?`, clientID)
+	if err := row.Scan(&snap.UploadBytes, &snap.DownloadBytes, &snap.LastObservedAt, &snap.NewestObservedAt, &snap.CounterRows, &snap.ObservedRows); err != nil {
+		return ClientTrafficSnapshot{}, fmt.Errorf("client: traffic snapshot: %w", err)
+	}
+	return snap, nil
 }
 
 // TotalsForClients loads quota totals for one reconciliation page in one query.

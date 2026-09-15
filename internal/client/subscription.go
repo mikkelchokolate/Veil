@@ -103,10 +103,20 @@ func (r *SubscriptionRenderer) LinksForClient(c Client, resolve func(inboundID s
 }
 
 // LinksForSnapshot renders exclusively from immutable binding and credential
-// material supplied by the caller.
+// material supplied by the caller. Enabled Mieru inbounds are aggregated into
+// one client config (every port binding) so per-client export matches the
+// admin aggregator and the single-daemon server model.
 func (r *SubscriptionRenderer) LinksForSnapshot(c Client, bindings []Binding, plaintext map[string]string, resolve func(inboundID string) (InboundSnapshot, bool)) ([]model.ClientLink, error) {
 	registry := clientaccess.NewClientAccessProtocolRegistry()
-	var out []model.ClientLink
+	type resolvedBinding struct {
+		inbound    model.Inbound
+		credential clientaccess.ClientCredential
+		mieru      bool
+	}
+	resolved := make([]resolvedBinding, 0, len(bindings))
+	var mieruInbounds []model.Inbound
+	var mieruCredential clientaccess.ClientCredential
+	haveMieruCred := false
 	for _, b := range bindings {
 		if !b.Enabled {
 			continue
@@ -124,9 +134,31 @@ func (r *SubscriptionRenderer) LinksForSnapshot(c Client, bindings []Binding, pl
 			return nil, fmt.Errorf("client: binding %s has no runtime identity", b.ID)
 		}
 		inbound := snapshotToInbound(snap)
-		cc := clientaccess.ClientCredential{Name: c.Name, Username: identity, Password: password}
-		links := registry.BuildLinks(r.settings, inbound, []clientaccess.ClientCredential{cc})
-		out = append(out, links...)
+		credential := clientaccess.ClientCredential{Name: c.Name, Username: identity, Password: password}
+		isMieru := inbound.Protocol == "mieru"
+		resolved = append(resolved, resolvedBinding{inbound: inbound, credential: credential, mieru: isMieru})
+		if isMieru {
+			mieruInbounds = append(mieruInbounds, inbound)
+			if !haveMieruCred {
+				mieruCredential = credential
+				haveMieruCred = true
+			}
+		}
+	}
+	var out []model.ClientLink
+	emittedMieru := false
+	for _, item := range resolved {
+		if item.mieru {
+			if emittedMieru {
+				continue
+			}
+			emittedMieru = true
+			if link, ok := clientaccess.BuildMieruAggregatedLink(r.settings, mieruInbounds, "mieru/"+c.Name, mieruCredential); ok {
+				out = append(out, link)
+			}
+			continue
+		}
+		out = append(out, registry.BuildLinks(r.settings, item.inbound, []clientaccess.ClientCredential{item.credential})...)
 	}
 	return out, nil
 }

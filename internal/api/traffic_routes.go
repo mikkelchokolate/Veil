@@ -51,28 +51,63 @@ func (s *managementState) handleV1TrafficClient(w http.ResponseWriter, r *http.R
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	up, down, err := s.trafficStore.TotalsForClient(clientID)
+	snap, err := s.trafficStore.SnapshotForClient(clientID)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	cl, _ := s.clientService.Get(clientID)
-	used := up + down
+	used := snap.UploadBytes + snap.DownloadBytes
 	var remaining *int64
 	if cl.QuotaBytes != nil {
 		rem := *cl.QuotaBytes - used
 		remaining = &rem
 	}
-	writeJSON(w, map[string]any{
+	resp := map[string]any{
 		"clientId":       clientID,
-		"uploadBytes":    up,
-		"downloadBytes":  down,
+		"uploadBytes":    snap.UploadBytes,
+		"downloadBytes":  snap.DownloadBytes,
 		"usedBytes":      used,
 		"quotaBytes":     cl.QuotaBytes,
 		"remainingBytes": remaining,
 		"depleted":       cl.QuotaBytes != nil && used >= *cl.QuotaBytes,
-		"collectedAt":    time.Now().Unix(),
-	})
+		"state":          clientTrafficReportState(s, cl, snap),
+	}
+	if snap.LastObservedAt > 0 {
+		resp["collectedAt"] = snap.LastObservedAt
+	} else {
+		resp["collectedAt"] = nil
+	}
+	writeJSON(w, resp)
+}
+
+func clientTrafficReportState(s *managementState, view client.View, snap client.ClientTrafficSnapshot) string {
+	accounting := false
+	for _, binding := range view.Bindings {
+		if binding.Capability != nil && binding.Capability.TrafficAccounting {
+			accounting = true
+			break
+		}
+	}
+	degraded := false
+	if s.trafficCollector != nil {
+		for _, health := range s.trafficCollector.ProviderHealth() {
+			if health.State == "degraded" {
+				degraded = true
+				break
+			}
+		}
+	}
+	if snap.LastObservedAt == 0 {
+		if accounting {
+			return "pending"
+		}
+		return "unsupported"
+	}
+	if degraded {
+		return "stale"
+	}
+	return "healthy"
 }
 
 func (s *managementState) handleV1TrafficHistory(w http.ResponseWriter, r *http.Request, clientID string) {

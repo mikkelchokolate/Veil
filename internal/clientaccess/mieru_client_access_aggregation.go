@@ -46,19 +46,33 @@ func (MieruClientAccessAggregator) Build(settings Settings, inbounds []Inbound) 
 		if len(group.inbounds) == 0 {
 			continue
 		}
-		config, err := NewMieruClientConfig().BuildWithBindings(settings, group.inbounds, group.name, group.credential)
-		if err != nil {
+		link, ok := BuildMieruAggregatedLink(settings, group.inbounds, group.name, group.credential)
+		if !ok {
 			continue
 		}
-		first := group.inbounds[0]
-		bindings := make([]MieruURIBinding, 0, len(group.inbounds))
-		for _, inbound := range group.inbounds {
-			bindings = append(bindings, MieruURIBinding{Port: inbound.Port, Transport: inbound.Transport})
-		}
-		uri := MieruClientURIWithBindings(clientEndpoint(settings), group.credential.Username, group.credential.Password, group.name, bindings)
-		links = append(links, ClientLink{Name: group.name, Protocol: "mieru", Transport: first.Transport, Port: first.Port, URI: uri, Config: config})
+		links = append(links, link)
 	}
 	return links, nil
+}
+
+// BuildMieruAggregatedLink emits one Mieru client config/URI whose portBindings
+// cover every supplied inbound. Per-client export uses this so TCP+UDP bindings
+// become a single profile instead of N single-port configs.
+func BuildMieruAggregatedLink(settings Settings, inbounds []Inbound, linkName string, credential ClientCredential) (ClientLink, bool) {
+	if clientEndpoint(settings) == "" || len(inbounds) == 0 {
+		return ClientLink{}, false
+	}
+	config, err := NewMieruClientConfig().BuildWithBindings(settings, inbounds, linkName, credential)
+	if err != nil {
+		return ClientLink{}, false
+	}
+	first := inbounds[0]
+	bindings := make([]MieruURIBinding, 0, len(inbounds))
+	for _, inbound := range inbounds {
+		bindings = append(bindings, MieruURIBinding{Port: inbound.Port, Transport: inbound.Transport})
+	}
+	uri := MieruClientURIWithBindings(clientEndpoint(settings), credential.Username, credential.Password, linkName, bindings)
+	return ClientLink{Name: linkName, Protocol: "mieru", Transport: first.Transport, Port: first.Port, URI: uri, Config: config}, true
 }
 
 func addMieruClientAccessGroup(groups map[string]*mieruClientAccessGroup, order *[]string, linkName string, credential ClientCredential, inbound Inbound) {
