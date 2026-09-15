@@ -126,6 +126,9 @@ func RecoverInterruptedRestore(statePath, keyPath, databasePath string) error {
 		if err := writeRestoreJournal(root, journal); err != nil {
 			return err
 		}
+		if err := writeRestoreCommitReceipt(root); err != nil {
+			return err
+		}
 		return removeRestoreJournal(root)
 	}
 	return rollbackRestoreJournal(root, &journal)
@@ -189,7 +192,11 @@ func prepareRestoreJournalFenced(statePath string, staged []*stagedRestoreFile, 
 		}
 		journal.Files = append(journal.Files, record)
 	}
-	if err := writeRestoreJournal(filepath.Dir(statePath), journal); err != nil {
+	root := filepath.Dir(statePath)
+	if err := ClearRestoreCommitReceipt(root); err != nil {
+		return restoreTransactionJournal{}, err
+	}
+	if err := writeRestoreJournal(root, journal); err != nil {
 		return restoreTransactionJournal{}, err
 	}
 	return journal, nil
@@ -346,6 +353,9 @@ func completeRestoreJournal(root, databasePath string, journal *restoreTransacti
 	if err := writeRestoreJournal(root, *journal); err != nil {
 		return err
 	}
+	if err := writeRestoreCommitReceipt(root); err != nil {
+		return err
+	}
 	if err := removeRestoreJournal(root); err != nil {
 		return fmt.Errorf("%w: %v", errRestoreCommitted, err)
 	}
@@ -411,6 +421,9 @@ func rollbackRestoreJournal(root string, journal *restoreTransactionJournal) err
 	}
 	journal.Phase = "rolled-back"
 	if err := writeRestoreJournal(root, *journal); err != nil {
+		return err
+	}
+	if err := ClearRestoreCommitReceipt(root); err != nil {
 		return err
 	}
 	return removeRestoreJournal(root)

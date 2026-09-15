@@ -19,7 +19,7 @@ func (r MetricsRequestRecorder) Record(method, path string, statusCode int, dura
 	m := r.collector
 	m.requestsTotal.Add(1)
 	r.increment(&m.requestsByCode, strconv.Itoa(statusCode))
-	r.increment(&m.requestsByPath, method+":"+path)
+	r.increment(&m.requestsByPath, method+":"+NormalizeHTTPPath(path))
 	m.requestDuration.add(duration)
 }
 

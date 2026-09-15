@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
+	"github.com/mikkelchokolate/Veil/internal/backup"
 )
 
 const (
@@ -54,20 +57,59 @@ func (s *managementState) loadBackupRestoreJobs() error {
 			return fmt.Errorf("invalid restore job history entry")
 		}
 		if job.Status == "queued" || job.Status == "running" {
-			job.Status = "failed"
-			job.Error = "restore interrupted by panel restart"
+			committed := false
+			if job.Status == "running" {
+				ok, commitErr := backup.RestoreTransactionCommitted(s.statePath, s.keyPath, s.restoreDatabasePath())
+				committed = commitErr == nil && ok
+			}
+			if committed {
+				job.Status = "degraded"
+				job.Outcome = "restored"
+				job.Phase = "revalidation_failed"
+				job.Restored = true
+				job.HTTPStatus = http.StatusInternalServerError
+				job.Error = "restore committed before panel restart; reopen and convergence did not finish"
+			} else {
+				job.Status = "failed"
+				job.Outcome = "not_restored"
+				job.Phase = "restore_interrupted"
+				job.Restored = false
+				job.HTTPStatus = http.StatusInternalServerError
+				job.Error = "restore interrupted by panel restart"
+			}
 			job.FinishedAt = now
 			changed = true
 		}
 		s.backupJobs[job.ID] = job
 	}
 	if changed {
+		if root := s.restoreStateRoot(); root != "" {
+			_ = backup.ClearRestoreCommitReceipt(root)
+		}
 		s.backupJobsMu.Lock()
 		err = s.persistBackupRestoreJobsLocked()
 		s.backupJobsMu.Unlock()
 		return err
 	}
 	return nil
+}
+
+func (s *managementState) restoreStateRoot() string {
+	if s.statePath == "" {
+		return ""
+	}
+	return filepath.Dir(s.statePath)
+}
+
+func (s *managementState) restoreDatabasePath() string {
+	if s.statePath == "" {
+		return ""
+	}
+	path := filepath.Join(filepath.Dir(s.statePath), "veil.db")
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	return path
 }
 
 func (s *managementState) persistBackupRestoreJobsLocked() error {

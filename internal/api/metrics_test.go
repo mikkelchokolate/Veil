@@ -64,6 +64,38 @@ func TestMetricsEndpointRequiresAuthWhenPolicyEnabled(t *testing.T) {
 	}
 }
 
+func TestMetricsPathLabelsUseTemplatesNotRawPaths(t *testing.T) {
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
+	token := "subtok_" + strings.Repeat("a", 24)
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/s/"+token, nil))
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/clients/client-one", nil))
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/clients/client-two", nil))
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/no-such/probe-1", nil))
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/no-such/probe-2", nil))
+
+	metrics := httptest.NewRecorder()
+	r.ServeHTTP(metrics, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body := metrics.Body.String()
+	if strings.Contains(body, token) {
+		t.Fatalf("metrics leaked subscription token: %s", body)
+	}
+	if strings.Contains(body, "client-one") || strings.Contains(body, "client-two") {
+		t.Fatalf("metrics leaked client ids: %s", body)
+	}
+	if !strings.Contains(body, `veil_http_requests_by_path_total{path="GET:/s/{token}"}`) {
+		t.Fatalf("missing templated subscription series: %s", body)
+	}
+	if !strings.Contains(body, `veil_http_requests_by_path_total{path="GET:/api/v1/clients/{id}"} 2`) {
+		t.Fatalf("unique client ids did not share one series: %s", body)
+	}
+	if strings.Count(body, `path="GET:/no-such/`) != 0 {
+		t.Fatalf("unauthenticated probes created unbounded path labels: %s", body)
+	}
+	if !strings.Contains(body, `veil_http_requests_by_path_total{path="GET:/{unmatched}"}`) {
+		t.Fatalf("unmatched probes were not collapsed: %s", body)
+	}
+}
+
 func TestMetricsEndpointHEADReturnsNoBody(t *testing.T) {
 	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodHead, "/metrics", nil)

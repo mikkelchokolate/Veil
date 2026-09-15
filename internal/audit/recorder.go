@@ -85,13 +85,17 @@ func NewRecorder(path string, options RecorderOptions) *Recorder {
 	if queueCapacity <= 0 {
 		queueCapacity = 128
 	}
+	spoolPath := options.SpoolPath
+	if spoolPath == "" && filepath.Base(path) == "panel.jsonl" {
+		spoolPath = filepath.Join(filepath.Dir(path), "critical.spool")
+	}
 	policy := options.BackpressurePolicy
-	if policy == "" && options.SpoolPath != "" {
+	if policy == "" && spoolPath != "" {
 		policy = "spool_critical"
 	}
 	recorder := &Recorder{
 		path: path, maxBytes: maxBytes, backups: backups, now: now,
-		spoolPath: options.SpoolPath, queueCapacity: queueCapacity,
+		spoolPath: spoolPath, queueCapacity: queueCapacity,
 		backpressurePolicy: policy, maxSpoolBytes: maxSpoolBytes,
 	}
 	if err := recorder.repairTornPrimaryTailLocked(); err != nil {
@@ -253,8 +257,17 @@ func (r *Recorder) replaySpoolLocked() error {
 }
 
 func criticalAuditAction(action string) bool {
-	for _, prefix := range []string{"backup.restore", "update.", "auth.role", "auth.setup", "key.rotate"} {
-		if strings.HasPrefix(action, prefix) {
+	for _, prefix := range []string{
+		"backup.restore",
+		"security.key.rotate",
+		"setup.complete",
+		"user.update",
+		"update.",
+		"auth.role",
+		"auth.setup",
+		"key.rotate",
+	} {
+		if action == prefix || strings.HasPrefix(action, prefix) {
 			return true
 		}
 	}
