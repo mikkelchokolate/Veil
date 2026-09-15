@@ -17,10 +17,27 @@ func TestReplaceSnapshotTxPreservesTrafficForRetainedBindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	providerKey := "hysteria2:hy2:" + binding.ID
 	if err := store.RecordSample(Sample{
 		BindingID: binding.ID, UploadBytes: 11, DownloadBytes: 22, AtUnix: 10,
-		Monotonic: true, ProviderKey: "hysteria2:hy2:" + binding.ID,
 	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordSample(Sample{
+		BindingID: binding.ID, UploadBytes: 11, DownloadBytes: 22, AtUnix: 11,
+		Monotonic: true, ProviderKey: providerKey,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	up, down, err := store.TotalsForClient(current.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up != 11 || down != 22 {
+		t.Fatalf("pre-rollback totals=%d/%d, want 11/22", up, down)
+	}
+	var lastUp, lastDown int64
+	if err := db.QueryRow(`SELECT last_upload_raw, last_download_raw FROM traffic_runtime_state WHERE provider_key=?`, providerKey).Scan(&lastUp, &lastDown); err != nil {
 		t.Fatal(err)
 	}
 
@@ -39,12 +56,19 @@ func TestReplaceSnapshotTxPreservesTrafficForRetainedBindings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	up, down, err := store.TotalsForClient(current.ID)
+	up, down, err = store.TotalsForClient(current.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if up != 11 || down != 22 {
 		t.Fatalf("retained binding traffic after rollback totals=%d/%d, want 11/22", up, down)
+	}
+	var restoredUp, restoredDown int64
+	if err := db.QueryRow(`SELECT last_upload_raw, last_download_raw FROM traffic_runtime_state WHERE provider_key=?`, providerKey).Scan(&restoredUp, &restoredDown); err != nil {
+		t.Fatalf("retained runtime baseline: %v", err)
+	}
+	if restoredUp != lastUp || restoredDown != lastDown {
+		t.Fatalf("runtime baseline after rollback %d/%d, want %d/%d", restoredUp, restoredDown, lastUp, lastDown)
 	}
 	for _, table := range []string{"traffic_counters", "traffic_samples", "traffic_runtime_state"} {
 		var count int
