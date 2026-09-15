@@ -93,6 +93,185 @@ func TestRenderCaddyJSONNaiveForwardProxyOrder(t *testing.T) {
 	}
 }
 
+func TestRenderCaddyJSONSharedPanelNaiveDistinctDomainCertDiscovery(t *testing.T) {
+	settings := model.Settings{
+		PanelAccess:       "caddy",
+		PanelDomain:       "panel.example.com",
+		PanelPublicPort:   443,
+		PanelListen:       "127.0.0.1:2096",
+		WebBasePath:       "/panel/",
+		PanelEmail:        "admin@example.com",
+		DefaultAcmeEmail:  "admin@example.com",
+		AcmeChallengeMode: "tls-alpn-01",
+	}
+	inbounds := []model.Inbound{{
+		Name:     "naive",
+		Protocol: "naiveproxy",
+		Enabled:  true,
+		Profiles: []model.ClientProfile{{Name: "alice", Username: "alice", Password: "pass", Enabled: true}},
+		ProtocolFields: map[string]any{
+			"domain":     "vpn.example.com",
+			"transport":  "tcp",
+			"publicPort": 443,
+		},
+	}}
+	plan, _, _, err := caddyassembly.BuildFinalRenderPlan(settings, inbounds)
+	if err != nil {
+		t.Fatalf("BuildFinalRenderPlan: %v", err)
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	server := cfg["apps"].(map[string]any)["http"].(map[string]any)["servers"].(map[string]any)["tcp-0.0.0.0-443"].(map[string]any)
+	var (
+		seenPanelHost       bool
+		seenNaiveCertHost   bool
+		seenUnmatchedProxy  bool
+		forwardProxyMatched bool
+	)
+	for _, rawRoute := range server["routes"].([]any) {
+		route := rawRoute.(map[string]any)
+		_, matched := route["match"]
+		handlers := route["handle"].([]any)
+		names := make([]string, 0, len(handlers))
+		for _, raw := range handlers {
+			names = append(names, raw.(map[string]any)["handler"].(string))
+		}
+		hosts := routeHosts(route)
+		if containsString(hosts, "panel.example.com") {
+			seenPanelHost = true
+			if containsString(names, "forward_proxy") {
+				t.Fatalf("Panel host matcher must not wrap forward_proxy: %+v", route)
+			}
+		}
+		if containsString(hosts, "vpn.example.com") {
+			if len(names) != 1 || names[0] != "file_server" {
+				t.Fatalf("Naive cert-discovery route must be host-matched file_server, got %v", names)
+			}
+			seenNaiveCertHost = true
+		}
+		if containsString(names, "forward_proxy") {
+			if matched {
+				forwardProxyMatched = true
+			} else {
+				seenUnmatchedProxy = true
+			}
+		}
+	}
+	if !seenPanelHost {
+		t.Fatalf("shared server missing Panel host matcher:\n%s", data)
+	}
+	if !seenNaiveCertHost {
+		t.Fatalf("Naive host matcher must not be skipped merely because PanelDomain is set:\n%s", data)
+	}
+	if !seenUnmatchedProxy || forwardProxyMatched {
+		t.Fatalf("forward_proxy must stay unmatched for CONNECT:\n%s", data)
+	}
+	subjects := tlsSubjects(cfg)
+	if !containsString(subjects, "panel.example.com") || !containsString(subjects, "vpn.example.com") {
+		t.Fatalf("TLS subjects = %v, want both panel.example.com and vpn.example.com", subjects)
+	}
+}
+
+func TestRenderCaddyJSONSharedPanelNaiveSameDomainKeepsSingleHostMatcher(t *testing.T) {
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}: {
+				Kind:         caddyassembly.CaddyOwnerNaive,
+				Domain:       "vpn.example.com",
+				PanelDomain:  "vpn.example.com",
+				InboundName:  "naive",
+				Transport:    "tcp",
+				BackendPort:  2096,
+				WebBasePath:  "/panel/",
+				NaiveUsers:   []caddyassembly.CaddyNaiveUser{{Username: "veil", Password: "secret"}},
+				FallbackRoot: "/var/lib/veil/www",
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"vpn.example.com": {Domain: "vpn.example.com", Email: "admin@example.com"},
+		},
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	server := cfg["apps"].(map[string]any)["http"].(map[string]any)["servers"].(map[string]any)["tcp-0.0.0.0-443"].(map[string]any)
+	naiveOnlyFileServer := 0
+	for _, rawRoute := range server["routes"].([]any) {
+		route := rawRoute.(map[string]any)
+		handlers := route["handle"].([]any)
+		if len(handlers) != 1 || handlers[0].(map[string]any)["handler"] != "file_server" {
+			continue
+		}
+		if containsString(routeHosts(route), "vpn.example.com") {
+			naiveOnlyFileServer++
+		}
+	}
+	if naiveOnlyFileServer != 0 {
+		t.Fatalf("same-domain share should keep the Panel host matcher only, got extra Naive file_server matcher:\n%s", data)
+	}
+}
+
+func routeHosts(route map[string]any) []string {
+	matches, ok := route["match"].([]any)
+	if !ok {
+		return nil
+	}
+	var hosts []string
+	for _, raw := range matches {
+		match, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		rawHosts, ok := match["host"].([]any)
+		if !ok {
+			continue
+		}
+		for _, host := range rawHosts {
+			if s, ok := host.(string); ok {
+				hosts = append(hosts, s)
+			}
+		}
+	}
+	return hosts
+}
+
+func tlsSubjects(cfg map[string]any) []string {
+	apps, _ := cfg["apps"].(map[string]any)
+	tlsApp, _ := apps["tls"].(map[string]any)
+	automation, _ := tlsApp["automation"].(map[string]any)
+	policies, _ := automation["policies"].([]any)
+	var subjects []string
+	for _, raw := range policies {
+		policy, _ := raw.(map[string]any)
+		for _, subject := range policy["subjects"].([]any) {
+			if s, ok := subject.(string); ok {
+				subjects = append(subjects, s)
+			}
+		}
+	}
+	return subjects
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestRenderCaddyJSONSharedPanelNaiveDoesNotBlockForwardProxy(t *testing.T) {
 	plan := caddyassembly.CaddyRenderPlan{
 		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{

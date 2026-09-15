@@ -177,23 +177,25 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 		}
 		proxyRoute := map[string]any{"handle": handlers}
 		// HTTP CONNECT sets Host to the destination (example.com), not the
-		// inbound domain. Shared Panel/Naive already keeps forward_proxy
-		// unmatched for that reason. Naive-only binds still need a host
-		// matcher so Caddy auto-HTTPS discovers the inbound domain
-		// (audit #122), but that matcher must sit on a file_server route —
-		// putting it on forward_proxy drops every real client CONNECT.
+		// inbound domain, so forward_proxy must stay unmatched. Caddy
+		// automatic HTTPS only collects names from HTTP route host matchers
+		// (TLS automation subjects are a filter, not an issuance command).
+		// Naive-only binds and shared binds whose Naive domain differs from
+		// PanelDomain therefore need a host-matched file_server so ACME
+		// issues for the inbound name (audit #122 / #209). Same-domain share
+		// is already covered by the Panel host matcher.
 		domain := strings.TrimSpace(owner.Domain)
-		if domain != "" && owner.PanelDomain == "" {
+		panelDomain := strings.TrimSpace(owner.PanelDomain)
+		if domain != "" && !strings.EqualFold(domain, panelDomain) {
 			routes = append(routes, map[string]any{
 				"match": []map[string]any{{"host": []string{domain}}},
 				"handle": []map[string]any{{
 					"handler": "file_server",
 					"root":    fallbackRoot,
 				}},
-			}, proxyRoute)
-		} else {
-			routes = append(routes, proxyRoute)
+			})
 		}
+		routes = append(routes, proxyRoute)
 		server["routes"] = routes
 	}
 	return server, nil

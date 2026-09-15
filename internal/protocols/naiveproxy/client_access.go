@@ -2,7 +2,6 @@ package naiveproxy
 
 import (
 	"fmt"
-	"net/url"
 
 	"github.com/mikkelchokolate/Veil/internal/clientaccess"
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -14,10 +13,11 @@ func (p Plugin) BuildLinks(settings model.Settings, inbound model.Inbound) ([]mo
 }
 
 // BuildLinks creates client links for a naiveproxy inbound based on its
-// configured transport. TCP yields an https:// URI, QUIC yields a quic:// URI,
-// and dual yields both. The port is omitted when it matches the default (443).
-// Only enabled profiles are exported, and the effective public port is used,
-// matching the registry path (audit #79/#124/#130).
+// configured transport. TCP yields a naive+https:// URI, QUIC yields a
+// naive+quic:// URI, and dual yields both. The port is omitted when it
+// matches the default (443). Only enabled profiles are exported, and the
+// effective public port is used, matching the registry path
+// (audit #79/#124/#130/#186).
 func BuildLinks(settings model.Settings, inbound model.Inbound) ([]model.ClientLink, error) {
 	domain := NaiveDomain(settings, inbound)
 	if domain == "" {
@@ -70,13 +70,5 @@ func BuildLinks(settings model.Settings, inbound model.Inbound) ([]model.ClientL
 }
 
 func naiveURI(scheme, user, pass, domain string, port, defaultPort int) string {
-	host := domain
-	if port != defaultPort {
-		host = fmt.Sprintf("%s:%d", domain, port)
-	}
-	// Userinfo must be percent-encoded (RFC 3986): raw interpolation lets a
-	// username/password containing '@' or ':' redirect the URI to another
-	// host or break parsing (audit #191, red-team verified).
-	userinfo := url.UserPassword(user, pass).String()
-	return fmt.Sprintf("%s://%s@%s", scheme, userinfo, host)
+	return clientaccess.NaiveShareURI(domain, port, user, pass, scheme, defaultPort)
 }
