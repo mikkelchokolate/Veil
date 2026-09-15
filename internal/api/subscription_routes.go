@@ -287,11 +287,9 @@ func (s *managementState) appliedSubscription(clientID string) (client.View, []m
 	for _, inbound := range snapshot.Inbounds {
 		inbounds[inbound.Name] = client.NewInboundSnapshot(inbound)
 	}
-	effectiveAt := snapshot.EffectiveAt
-	if effectiveAt == 0 {
-		effectiveAt, _ = s.applySnapshots.EffectiveAt(revisions.Applied)
-	}
-	view := client.View{Client: current, Status: client.ComputeStatus(current, time.Unix(effectiveAt, 0).UTC(), false, false, len(bindings) == 0), InboundIDs: inboundIDs, HasCreds: len(plaintext) > 0}
+	// Public capability fetches use request time so a frozen snapshot ExpiresAt
+	// in the past cannot keep serving credentials until the next apply.
+	view := client.View{Client: current, Status: client.ComputeStatus(current, time.Now().UTC(), false, false, len(bindings) == 0), InboundIDs: inboundIDs, HasCreds: len(plaintext) > 0}
 	links := []model.ClientLink{}
 	if view.Status == client.StatusActive {
 		renderer := s.subRenderer.WithSettings(clientaccess.CloneSettings(snapshot.Settings))
@@ -490,31 +488,31 @@ func (s *managementState) handleV1ClientLinks(w http.ResponseWriter, r *http.Req
 		writeError(w, "client store unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	view, err := s.clientService.Get(clientID)
-	if err != nil {
+	if _, err := s.clientService.Get(clientID); err != nil {
 		s.writeV1ClientError(w, err)
 		return
 	}
-	s.mu.Lock()
-	settings := s.settings
-	inbounds := append([]Inbound(nil), s.inbounds...)
-	renderer := s.subRenderer
-	s.mu.Unlock()
-	links, err := renderer.WithSettings(clientaccess.CloneSettings(settings)).LinksForClient(view.Client, func(inboundID string) (client.InboundSnapshot, bool) {
-		for _, inbound := range inbounds {
-			if inbound.Name != inboundID {
-				continue
-			}
-			return client.NewInboundSnapshot(inbound), true
-		}
-		return client.InboundSnapshot{}, false
-	})
+	_, links, applied, desired, err := s.appliedSubscription(clientID)
 	if err != nil {
-		writeError(w, err.Error(), http.StatusInternalServerError)
-		return
+		switch {
+		case errors.Is(err, client.ErrNotFound), err.Error() == "no applied revision":
+			links = []model.ClientLink{}
+		default:
+			writeError(w, "applied subscription unavailable", http.StatusServiceUnavailable)
+			return
+		}
 	}
 	if links == nil {
 		links = []model.ClientLink{}
+	}
+	if applied > 0 {
+		configurationState := "applied"
+		if desired != applied {
+			configurationState = "stale"
+		}
+		w.Header().Set("X-Veil-Configuration-State", configurationState)
+		w.Header().Set("X-Veil-Applied-Revision", strconv.FormatUint(applied, 10))
+		w.Header().Set("X-Veil-Desired-Revision", strconv.FormatUint(desired, 10))
 	}
 	clientaccess.NewClientLinkDeliveryHeaders().Apply(w.Header())
 	writeJSON(w, map[string]any{"items": links})
