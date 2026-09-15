@@ -15,28 +15,36 @@ import (
 
 func TestEnsureAccountCreatesSystemGroupAndUser(t *testing.T) {
 	var commands []string
-	groupReady := false
-	userReady := false
+	groups := map[string]bool{}
+	users := map[string]bool{}
 	deps := AccountDependencies{
-		LookupGroup: func(string) (*user.Group, error) {
-			if !groupReady {
+		LookupGroup: func(name string) (*user.Group, error) {
+			if !groups[name] {
 				return nil, errors.New("missing group")
 			}
-			return &user.Group{Name: "veil", Gid: "4242"}, nil
+			gid := "4242"
+			if name == "veil-proxy" {
+				gid = "4243"
+			}
+			return &user.Group{Name: name, Gid: gid}, nil
 		},
-		LookupUser: func(string) (*user.User, error) {
-			if !userReady {
+		LookupUser: func(name string) (*user.User, error) {
+			if !users[name] {
 				return nil, errors.New("missing user")
 			}
-			return &user.User{Username: "veil", Uid: "4242", Gid: "4242"}, nil
+			uid, gid := "4242", "4242"
+			if name == "veil-proxy" {
+				uid, gid = "4243", "4243"
+			}
+			return &user.User{Username: name, Uid: uid, Gid: gid}, nil
 		},
 		Run: func(name string, args ...string) error {
 			commands = append(commands, name+" "+strings.Join(args, " "))
-			if name == "groupadd" {
-				groupReady = true
+			if name == "groupadd" && len(args) > 0 {
+				groups[args[len(args)-1]] = true
 			}
-			if name == "useradd" {
-				userReady = true
+			if name == "useradd" && len(args) > 0 {
+				users[args[len(args)-1]] = true
 			}
 			return nil
 		},
@@ -45,12 +53,15 @@ func TestEnsureAccountCreatesSystemGroupAndUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ensure account: %v", err)
 	}
-	if identity.UID != 4242 || identity.GID != 4242 {
+	if identity.UID != 4242 || identity.GID != 4242 || identity.ProxyUID != 4243 || identity.ProxyGID != 4243 {
 		t.Fatalf("identity=%+v", identity)
 	}
 	want := []string{
 		"groupadd --system veil",
 		"useradd --system --gid veil --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin veil",
+		"groupadd --system veil-proxy",
+		"useradd --system --gid veil-proxy --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin veil-proxy",
+		"usermod -aG veil-proxy veil",
 	}
 	if strings.Join(commands, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("commands=%v", commands)
@@ -184,15 +195,27 @@ func TestPrepare(t *testing.T) {
 
 func TestEnsureAccount(t *testing.T) {
 	t.Run("existing group and user", func(t *testing.T) {
+		var commands []string
 		deps := AccountDependencies{
-			LookupGroup: func(string) (*user.Group, error) {
-				return &user.Group{Name: "veil", Gid: "100"}, nil
+			LookupGroup: func(name string) (*user.Group, error) {
+				gid := "100"
+				if name == "veil-proxy" {
+					gid = "101"
+				}
+				return &user.Group{Name: name, Gid: gid}, nil
 			},
-			LookupUser: func(string) (*user.User, error) {
-				return &user.User{Username: "veil", Uid: "100", Gid: "100"}, nil
+			LookupUser: func(name string) (*user.User, error) {
+				uid, gid := "100", "100"
+				if name == "veil-proxy" {
+					uid, gid = "101", "101"
+				}
+				return &user.User{Username: name, Uid: uid, Gid: gid}, nil
 			},
-			Run: func(string, ...string) error {
-				t.Fatal("Run should not be called when group and user exist")
+			Run: func(name string, args ...string) error {
+				commands = append(commands, name+" "+strings.Join(args, " "))
+				if name != "usermod" {
+					t.Fatalf("unexpected command %s %v", name, args)
+				}
 				return nil
 			},
 		}
@@ -200,8 +223,11 @@ func TestEnsureAccount(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ensure account: %v", err)
 		}
-		if id.UID != 100 || id.GID != 100 {
+		if id.UID != 100 || id.GID != 100 || id.ProxyUID != 101 || id.ProxyGID != 101 {
 			t.Fatalf("identity=%+v", id)
+		}
+		if strings.Join(commands, "\n") != "usermod -aG veil-proxy veil" {
+			t.Fatalf("commands=%v", commands)
 		}
 	})
 
@@ -232,30 +258,38 @@ func TestEnsureAccount(t *testing.T) {
 
 	t.Run("fallback group and user creation", func(t *testing.T) {
 		var commands []string
-		groupReady := false
-		userReady := false
+		groups := map[string]bool{}
+		users := map[string]bool{}
 		deps := AccountDependencies{
-			LookupGroup: func(string) (*user.Group, error) {
-				if !groupReady {
+			LookupGroup: func(name string) (*user.Group, error) {
+				if !groups[name] {
 					return nil, errors.New("missing group")
 				}
-				return &user.Group{Name: "veil", Gid: "4242"}, nil
+				gid := "4242"
+				if name == "veil-proxy" {
+					gid = "4243"
+				}
+				return &user.Group{Name: name, Gid: gid}, nil
 			},
-			LookupUser: func(string) (*user.User, error) {
-				if !userReady {
+			LookupUser: func(name string) (*user.User, error) {
+				if !users[name] {
 					return nil, errors.New("missing user")
 				}
-				return &user.User{Username: "veil", Uid: "4242", Gid: "4242"}, nil
+				uid, gid := "4242", "4242"
+				if name == "veil-proxy" {
+					uid, gid = "4243", "4243"
+				}
+				return &user.User{Username: name, Uid: uid, Gid: gid}, nil
 			},
 			Run: func(name string, args ...string) error {
 				commands = append(commands, name+" "+strings.Join(args, " "))
-				if name == "addgroup" {
-					groupReady = true
+				if name == "addgroup" && len(args) >= 2 && args[0] == "-S" {
+					groups[args[1]] = true
 				}
-				if name == "adduser" {
-					userReady = true
+				if name == "adduser" && len(args) > 0 {
+					users[args[len(args)-1]] = true
 				}
-				if name == "groupadd" || name == "useradd" {
+				if name == "groupadd" || name == "useradd" || name == "usermod" {
 					return errors.New("primary command failed")
 				}
 				return nil
@@ -265,7 +299,7 @@ func TestEnsureAccount(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ensure account: %v", err)
 		}
-		if id.UID != 4242 || id.GID != 4242 {
+		if id.UID != 4242 || id.GID != 4242 || id.ProxyUID != 4243 || id.ProxyGID != 4243 {
 			t.Fatalf("identity=%+v", id)
 		}
 		want := []string{
@@ -273,6 +307,12 @@ func TestEnsureAccount(t *testing.T) {
 			"addgroup -S veil",
 			"useradd --system --gid veil --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin veil",
 			"adduser -S -D -H -h /nonexistent -s /sbin/nologin -G veil veil",
+			"groupadd --system veil-proxy",
+			"addgroup -S veil-proxy",
+			"useradd --system --gid veil-proxy --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin veil-proxy",
+			"adduser -S -D -H -h /nonexistent -s /sbin/nologin -G veil-proxy veil-proxy",
+			"usermod -aG veil-proxy veil",
+			"addgroup veil veil-proxy",
 		}
 		if strings.Join(commands, "\n") != strings.Join(want, "\n") {
 			t.Fatalf("commands:\n%s\nwant:\n%s", strings.Join(commands, "\n"), strings.Join(want, "\n"))

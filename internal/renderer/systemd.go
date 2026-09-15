@@ -180,7 +180,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-SupplementaryGroups=veil
+SupplementaryGroups=veil veil-proxy
 # Caddy stores its cert/key material and local CA root here. The hardening
 # below drops CAP_DAC_OVERRIDE and /var/lib/veil is owned by the veil user, so
 # Caddy (root) cannot write there; give it a dedicated state dir it owns
@@ -208,8 +208,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=veil
-Group=veil
+User=veil-proxy
+Group=veil-proxy
 ExecStart=` + cfg.HysteriaBinary + ` server --config ` + hysteriaConfig + `
 Restart=on-failure
 RestartSec=3
@@ -217,7 +217,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlock + `ReadWritePaths=/etc/veil /var/lib/veil
+` + systemdHardeningBlock + `InaccessiblePaths=/run/veil/helper.sock /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
@@ -231,8 +231,8 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-User=veil
-Group=veil
+User=veil-proxy
+Group=veil-proxy
 ExecStart=` + cfg.OlcrtcBinary + ` ` + olcrtcConfig + `
 Restart=on-failure
 RestartSec=3
@@ -240,7 +240,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlockOlcrtc + `ReadWritePaths=/etc/veil /var/lib/veil
+` + systemdHardeningBlockOlcrtc + `InaccessiblePaths=/run/veil/helper.sock /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
@@ -252,8 +252,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=veil
-Group=veil
+User=veil-proxy
+Group=veil-proxy
 ExecStart=` + cfg.SingBoxBinary + ` run -c ` + warpConfig + `
 ExecReload=` + cfg.SingBoxBinary + ` check -c ` + warpConfig + `
 Restart=on-failure
@@ -274,7 +274,7 @@ LockPersonality=true
 RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
-ReadWritePaths=/etc/veil /var/lib/veil
+InaccessiblePaths=/run/veil/helper.sock /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target
@@ -286,8 +286,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=veil
-Group=veil
+User=veil-proxy
+Group=veil-proxy
 Environment=MITA_CONFIG_FILE=/run/veil-mieru/server.conf.pb
 Environment=MITA_UDS_PATH=/run/veil-mieru/mita.sock
 Environment=MITA_INSECURE_UDS=1
@@ -303,7 +303,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlock + `ReadWritePaths=/etc/veil /var/lib/veil
+` + systemdHardeningBlock + `InaccessiblePaths=/run/veil/helper.sock /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target

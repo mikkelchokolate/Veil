@@ -216,6 +216,12 @@ func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 			}
 		}
 	}
+	protocolUnits := []string{
+		"../../packaging/systemd/veil-hysteria2@.service",
+		"../../packaging/systemd/veil-olcrtc@.service",
+		"../../packaging/systemd/veil-mieru.service",
+		"../../packaging/systemd/veil-warp.service",
+	}
 	for _, unit := range runtimeUnits {
 		body, err := os.ReadFile(unit)
 		if err != nil {
@@ -229,6 +235,30 @@ func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 		} {
 			if !strings.Contains(config, want) {
 				t.Fatalf("runtime unit %s missing %q", unit, want)
+			}
+		}
+	}
+	panelUser := "User=veil"
+	for _, unit := range protocolUnits {
+		body, err := os.ReadFile(unit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		config := strings.ReplaceAll(string(body), "\r\n", "\n")
+		if !strings.Contains(config, "User=veil-proxy") || !strings.Contains(config, "Group=veil-proxy") {
+			t.Fatalf("protocol unit %s must run as veil-proxy, not the Panel UID:\n%s", unit, config)
+		}
+		if strings.Contains(config, panelUser+"\n") {
+			t.Fatalf("protocol unit %s must not share User=veil with veil.service:\n%s", unit, config)
+		}
+		if strings.Contains(config, "ReadWritePaths=/var/lib/veil") || strings.Contains(config, "ReadWritePaths=/etc/veil") {
+			t.Fatalf("protocol unit %s must not remount Panel state writable:\n%s", unit, config)
+		}
+		for _, want := range []string{
+			"InaccessiblePaths=/run/veil/helper.sock /var/lib/veil",
+		} {
+			if !strings.Contains(config, want) {
+				t.Fatalf("protocol unit %s missing %q:\n%s", unit, want, config)
 			}
 		}
 	}

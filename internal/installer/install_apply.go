@@ -134,12 +134,22 @@ func chownSecretsForVeilGroup(paths []string) error {
 		return fmt.Errorf("parse veil gid %q: %w", u.Gid, err)
 	}
 	_ = uid // uid not needed; we keep root ownership and only grant group read
+	generatedGID := gid
+	if proxy, err := lookupUser("veil-proxy"); err == nil {
+		if parsed, err := strconv.Atoi(proxy.Gid); err == nil {
+			generatedGID = parsed
+		}
+	}
 	seenDirs := map[string]struct{}{}
 	for _, path := range paths {
 		if !needsVeilGroupRead(path) {
 			continue
 		}
-		if err := chownPath(path, 0, gid); err != nil {
+		ownerGid := gid
+		if isGeneratedConfig(path) {
+			ownerGid = generatedGID
+		}
+		if err := chownPath(path, 0, ownerGid); err != nil {
 			return fmt.Errorf("chown %s for veil group: %w", path, err)
 		}
 		if err := chmodPath(path, 0o640); err != nil {
@@ -153,7 +163,7 @@ func chownSecretsForVeilGroup(paths []string) error {
 			continue
 		}
 		seenDirs[dir] = struct{}{}
-		if err := chownPath(dir, 0, gid); err != nil {
+		if err := chownPath(dir, 0, ownerGid); err != nil {
 			return fmt.Errorf("chown %s for veil group: %w", dir, err)
 		}
 		if err := chmodPath(dir, 0o750); err != nil {

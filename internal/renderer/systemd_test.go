@@ -212,4 +212,19 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 			t.Fatalf("veil-helper.socket missing %q:\n%s", want, socket)
 		}
 	}
+	for _, name := range []string{UnitHysteria2, UnitOlcrtc, UnitWarp, UnitMieru} {
+		unit := units[name]
+		if !strings.Contains(unit, "User=veil-proxy") || !strings.Contains(unit, "Group=veil-proxy") {
+			t.Fatalf("%s must run as veil-proxy:\n%s", name, unit)
+		}
+		if strings.Contains(unit, "User=veil\n") {
+			t.Fatalf("%s must not share User=veil with veil.service:\n%s", name, unit)
+		}
+		if strings.Contains(unit, "ReadWritePaths=/var/lib/veil") || strings.Contains(unit, "ReadWritePaths=/etc/veil") {
+			t.Fatalf("%s must not remount Panel state writable:\n%s", name, unit)
+		}
+		if !strings.Contains(unit, "InaccessiblePaths=/run/veil/helper.sock /var/lib/veil") {
+			t.Fatalf("%s missing helper/state InaccessiblePaths:\n%s", name, unit)
+		}
+	}
 }

@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=veil
-Group=veil
+User=veil-proxy
+Group=veil-proxy
 ExecStart=/usr/local/bin/sing-box run -c /etc/veil/generated/sing-box/warp.json
 ExecReload=/usr/local/bin/sing-box check -c /etc/veil/generated/sing-box/warp.json
 Restart=on-failure
@@ -27,7 +27,7 @@ LockPersonality=true
 RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
-ReadWritePaths=/etc/veil /var/lib/veil
+InaccessiblePaths=/run/veil/helper.sock /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target

@@ -7,8 +7,8 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-User=veil
-Group=veil
+User=veil-proxy
+Group=veil-proxy
 ExecStart=/usr/local/bin/olcrtc /etc/veil/generated/olcrtc/%i.yaml
 Restart=on-failure
 RestartSec=3
@@ -28,7 +28,7 @@ LockPersonality=true
 RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
-ReadWritePaths=/etc/veil /var/lib/veil
+InaccessiblePaths=/run/veil/helper.sock /var/lib/veil
 
 [Install]
 WantedBy=multi-user.target

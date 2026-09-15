@@ -5,37 +5,48 @@
 set -e
 
 group_exists() {
+    name="$1"
     if command -v getent >/dev/null 2>&1; then
-        getent group veil >/dev/null 2>&1
+        getent group "$name" >/dev/null 2>&1
     else
-        grep -q '^veil:' /etc/group
+        grep -q "^${name}:" /etc/group
     fi
 }
 
-if ! group_exists; then
-    if command -v groupadd >/dev/null 2>&1; then
-        groupadd --system veil
-    else
-        addgroup -S veil
+ensure_system_account() {
+    name="$1"
+    if ! group_exists "$name"; then
+        if command -v groupadd >/dev/null 2>&1; then
+            groupadd --system "$name"
+        else
+            addgroup -S "$name"
+        fi
     fi
-fi
+    if ! id -u "$name" >/dev/null 2>&1; then
+        nologin=/usr/sbin/nologin
+        [ -x "$nologin" ] || nologin=/sbin/nologin
+        [ -x "$nologin" ] || nologin=/bin/false
+        if command -v useradd >/dev/null 2>&1; then
+            useradd --system --gid "$name" --no-create-home --home-dir /nonexistent --shell "$nologin" "$name"
+        else
+            adduser -S -D -H -h /nonexistent -s "$nologin" -G "$name" "$name"
+        fi
+    fi
+}
 
-if ! id -u veil >/dev/null 2>&1; then
-    nologin=/usr/sbin/nologin
-    [ -x "$nologin" ] || nologin=/sbin/nologin
-    [ -x "$nologin" ] || nologin=/bin/false
-    if command -v useradd >/dev/null 2>&1; then
-        useradd --system --gid veil --no-create-home --home-dir /nonexistent --shell "$nologin" veil
-    else
-        adduser -S -D -H -h /nonexistent -s "$nologin" -G veil veil
-    fi
+ensure_system_account veil
+ensure_system_account veil-proxy
+if command -v usermod >/dev/null 2>&1; then
+    usermod -aG veil-proxy veil >/dev/null 2>&1 || true
+else
+    addgroup veil veil-proxy >/dev/null 2>&1 || true
 fi
 
 if [ -f /etc/sysctl.d/99-veil-quic.conf ]; then
     sysctl -p /etc/sysctl.d/99-veil-quic.conf >/dev/null 2>&1 || true
 fi
 
-install -d -m 0750 -o root -g veil /etc/veil
+install -d -m 0751 -o root -g veil /etc/veil
 install -d -m 0750 -o veil -g veil /var/lib/veil
 
 safety_sources="/etc/veil/state.key /etc/veil/veil.env /var/lib/veil/state.json /var/lib/veil/sessions.json"
@@ -89,7 +100,7 @@ for file in /var/lib/veil/state.json /var/lib/veil/sessions.json; do
 done
 for dir in /etc/veil/generated /etc/veil/tls; do
     if [ -d "$dir" ] && [ ! -L "$dir" ]; then
-        chown -R root:veil "$dir"
+        chown -R root:veil-proxy "$dir"
         find "$dir" -type d -exec chmod 0750 {} \;
         find "$dir" -type f -exec chmod 0640 {} \;
     fi
