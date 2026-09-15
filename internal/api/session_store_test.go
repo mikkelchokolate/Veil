@@ -15,6 +15,17 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+func TestSessionRegistryHealthyTreatsMissingSnapshotAsEmpty(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions.json")
+	registry, err := NewSessionRegistry(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Healthy(); err != nil {
+		t.Fatalf("empty session store reported unhealthy: %v", err)
+	}
+}
+
 func TestSessionRegistryPersistsHashedSecretsAcrossRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.json")
 	registry, err := NewSessionRegistry(path)

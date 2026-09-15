@@ -188,16 +188,29 @@ func (routes PanelRoutes) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	if r.Method == http.MethodGet {
-		if routes.Info.StatePath != "" {
-			if _, err := os.Stat(routes.Info.StatePath); err != nil {
-				writeJSONStatus(w, http.StatusServiceUnavailable, map[string]string{
-					"status": "unhealthy",
-					"error":  "management state unavailable",
-				})
-				return
-			}
+	unhealthy := false
+	if routes.State != nil {
+		routes.State.mu.Lock()
+		unhealthy = routes.State.startupStateLoadFailed
+		routes.State.mu.Unlock()
+	}
+	if !unhealthy && routes.Info.StatePath != "" {
+		if _, err := os.Stat(routes.Info.StatePath); err != nil {
+			unhealthy = true
 		}
+	}
+	if unhealthy {
+		if r.Method == http.MethodGet {
+			writeJSONStatus(w, http.StatusServiceUnavailable, map[string]string{
+				"status": "unhealthy",
+				"error":  "management state unavailable",
+			})
+			return
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	if r.Method == http.MethodGet {
 		writeJSON(w, map[string]string{"status": "ok"})
 	}
 }

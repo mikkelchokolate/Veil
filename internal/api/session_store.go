@@ -606,6 +606,9 @@ func (r *SessionRegistry) storageHealthyLocked() error {
 		return nil
 	}
 	info, err := os.Stat(r.path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
