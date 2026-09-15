@@ -9,6 +9,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/clientaddr"
 	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
+	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 )
 
@@ -103,10 +104,24 @@ func (s HTTPServer) tlsConfig() *tls.Config {
 			Email:      opts.AutoTLSEmail,
 		}
 		cfg := NewTLSConfig()
-		cfg.GetCertificate = mgr.GetCertificate
+		acmeTLS := mgr.TLSConfig()
+		cfg.GetCertificate = acmeTLS.GetCertificate
+		cfg.NextProtos = append([]string(nil), acmeTLS.NextProtos...)
+		if !tlsNextProtoContains(cfg.NextProtos, acme.ALPNProto) {
+			cfg.NextProtos = append(cfg.NextProtos, acme.ALPNProto)
+		}
 		return cfg
 	}
 	return NewTLSConfig()
+}
+
+func tlsNextProtoContains(protos []string, want string) bool {
+	for _, proto := range protos {
+		if proto == want {
+			return true
+		}
+	}
+	return false
 }
 
 // NewTLSConfig returns a secure TLS configuration for the serve command.
