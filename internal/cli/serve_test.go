@@ -169,12 +169,11 @@ func TestServeTLSIntegration(t *testing.T) {
 		t.Fatalf("failed to generate self-signed cert: %v", err)
 	}
 
-	// Create a temp state.json so healthz returns 200.
-	stateFile, err := writeTempFile("veil-test-state-*.json", []byte("{}"))
-	if err != nil {
+	root := t.TempDir()
+	stateFile := filepath.Join(root, "state.json")
+	if err := os.WriteFile(stateFile, []byte("{}"), 0o600); err != nil {
 		t.Fatalf("failed to create temp state file: %v", err)
 	}
-	defer os.Remove(stateFile)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -191,6 +190,9 @@ func TestServeTLSIntegration(t *testing.T) {
 		"--tls-cert", cert.certFile,
 		"--tls-key", cert.keyFile,
 		"--state", stateFile,
+		"--key-path", filepath.Join(root, "state.key"),
+		"--apply-root", filepath.Join(root, "apply"),
+		"--helper-socket", filepath.Join(root, "helper.sock"),
 	})
 
 	errCh := make(chan error, 1)

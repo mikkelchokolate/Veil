@@ -234,17 +234,13 @@ func (l ManagementStateLifecycle) RecoverPendingKeyRotationContext(ctx context.C
 	if l.state.statePath == "" {
 		return nil
 	}
-	pendingJournal := pendingKeyRotationJournal(l.state.statePath)
+	if !pendingKeyRotationJournal(l.state.statePath) {
+		return nil
+	}
 	if l.state.privileged == nil {
-		if !pendingJournal {
-			return nil
-		}
 		return errors.New("recover interrupted key rotation: privileged helper is unavailable")
 	}
 	if err := l.state.privileged.RecoverKeyRotation(ctx, privileged.RecoverKeyRotationRequest{}); err != nil {
-		if !pendingJournal && privilegedHelperSocketUnavailable(err) {
-			return nil
-		}
 		return fmt.Errorf("recover interrupted key rotation through privileged helper: %w", err)
 	}
 	return nil

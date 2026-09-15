@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/privileged"
+	"github.com/mikkelchokolate/Veil/internal/statecommit"
 )
 
 func TestMissingHelperDoesNotFailClosedWithoutRotationJournal(t *testing.T) {
@@ -41,6 +42,37 @@ func TestMissingHelperDoesNotFailClosedWithoutRotationJournal(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("%s status=%d body=%s", path, rec.Code, rec.Body.String())
 		}
+	}
+}
+
+func TestMissingHelperFailClosesWhenRotationJournalExists(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state.json")
+	if err := os.WriteFile(statecommit.KeyRotationJournalPath(statePath), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	router, reloader := newTestRouter(ServerInfo{
+		Version:                 "test",
+		Mode:                    "server",
+		StatePath:               statePath,
+		KeyPath:                 filepath.Join(root, "state.key"),
+		ApplyRoot:               filepath.Join(root, "apply"),
+		RequirePrivilegedHelper: true,
+		Privileged:              privileged.NewSocketClient(filepath.Join(root, "helper.sock")),
+		SetupAllowed:            true,
+	})
+	if state, ok := reloader.(*managementState); ok {
+		t.Cleanup(func() { _ = state.Close() })
+		if !state.startupStateLoadFailed {
+			t.Fatal("pending rotation journal with a missing helper did not fail-close startup")
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("auth status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

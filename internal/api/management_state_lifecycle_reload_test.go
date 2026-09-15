@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/privileged"
+	"github.com/mikkelchokolate/Veil/internal/statecommit"
 )
 
 type startupRecoveryClient struct {
@@ -22,7 +23,7 @@ func (c *startupRecoveryClient) RecoverKeyRotation(context.Context, privileged.R
 	return nil
 }
 
-func TestManagementStateStartupUsesPrivilegedRecoveryBeforeCipherLoad(t *testing.T) {
+func TestManagementStateStartupSkipsPrivilegedRecoveryWithoutJournal(t *testing.T) {
 	dir := t.TempDir()
 	keyPath := filepath.Join(dir, "state.key")
 	client := &startupRecoveryClient{
@@ -31,6 +32,36 @@ func TestManagementStateStartupUsesPrivilegedRecoveryBeforeCipherLoad(t *testing
 	}
 	state := newManagementState(ServerInfo{
 		StatePath:               filepath.Join(dir, "state.json"),
+		KeyPath:                 keyPath,
+		Mode:                    "dev",
+		Privileged:              client,
+		RequirePrivilegedHelper: true,
+	})
+	defer closeClientSubsystem(state)
+	if client.calledBeforeKeyLoad || client.recoverRotationCalls != 0 {
+		t.Fatal("privileged key-rotation recovery ran without a rotation journal")
+	}
+	if state.cipher == nil {
+		t.Fatal("startup did not construct cipher when no rotation journal existed")
+	}
+	if state.startupStateLoadFailed {
+		t.Fatalf("startup fail-closed without a rotation journal: %v", state.startupStateLoadErr)
+	}
+}
+
+func TestManagementStateStartupUsesPrivilegedRecoveryBeforeCipherLoad(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	keyPath := filepath.Join(dir, "state.key")
+	if err := os.WriteFile(statecommit.KeyRotationJournalPath(statePath), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client := &startupRecoveryClient{
+		recordingPrivilegedClient: &recordingPrivilegedClient{},
+		keyPath:                   keyPath,
+	}
+	state := newManagementState(ServerInfo{
+		StatePath:               statePath,
 		KeyPath:                 keyPath,
 		Mode:                    "dev",
 		Privileged:              client,
@@ -84,6 +115,9 @@ func TestManagementStateReloadUpdatesFailClosedLifecycleStatus(t *testing.T) {
 		t.Fatal("successful reload did not clear fail-closed lifecycle status")
 	}
 
+	if err := os.WriteFile(statecommit.KeyRotationJournalPath(state.statePath), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	client.err = errors.New("helper unavailable")
 	if err := state.Reload(); err == nil {
 		t.Fatal("failed privileged recovery returned nil")
