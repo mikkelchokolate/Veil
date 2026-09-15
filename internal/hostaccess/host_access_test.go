@@ -107,6 +107,23 @@ func TestMigrateCreatesSafetyCopiesAndScopedPermissions(t *testing.T) {
 	assertMode(t, filepath.Join(varDir, "state.json"), 0o600)
 	assertMode(t, filepath.Join(varDir, "sessions.json"), 0o600)
 	assertMode(t, filepath.Join(varDir, "backups"), 0o700)
+	backupMember := filepath.Join(varDir, "backups", "config.json")
+	if err := os.MkdirAll(filepath.Dir(backupMember), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(backupMember, []byte("cfg"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(backupMember, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	err = Migrate(Paths{EtcDir: etcDir, VarDir: varDir, RootUID: uid, RootGID: gid}, Identity{UID: uid, GID: gid}, func() time.Time {
+		return time.Date(2026, 6, 5, 12, 0, 1, 0, time.UTC)
+	})
+	if err != nil {
+		t.Fatalf("remigrate: %v", err)
+	}
+	assertMode(t, backupMember, 0o640)
 	safetyRoot := filepath.Join(varDir, "migration-backups", "20260605T120000Z")
 	for _, name := range []string{"state.key", "veil.env", "state.json", "sessions.json"} {
 		if _, err := os.Stat(filepath.Join(safetyRoot, name)); err != nil {

@@ -182,7 +182,7 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 		}
 	}
 	for _, dir := range []string{"backups", "promotion-backups", "migration-backups"} {
-		if err := applyTreeOwnership(filepath.Join(paths.VarDir, dir), 0o700, 0o600, paths.RootUID, paths.RootGID); err != nil {
+		if err := applyBackupTreeOwnership(filepath.Join(paths.VarDir, dir), paths.RootUID, paths.RootGID); err != nil {
 			return err
 		}
 	}
@@ -289,6 +289,30 @@ func ensureOwnedDirectory(path string, mode os.FileMode, uid, gid int) error {
 		return err
 	}
 	return testHooks.chown(path, uid, gid)
+}
+
+func applyBackupTreeOwnership(root string, uid, gid int) error {
+	if err := ensureOwnedDirectory(root, 0o700, uid, gid); err != nil {
+		return err
+	}
+	return testHooks.walkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("refuse to migrate symlink %s", path)
+		}
+		if entry.IsDir() {
+			if err := testHooks.chmod(path, 0o700); err != nil {
+				return err
+			}
+		}
+		return testHooks.chown(path, uid, gid)
+	})
 }
 
 func applyTreeOwnership(root string, dirMode, fileMode os.FileMode, uid, gid int) error {

@@ -1,25 +1,39 @@
 package privileged
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
 
+func pathFromEnv(key, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return fallback
+}
+
 const DefaultSocketPath = "/run/veil/helper.sock"
 
 func DefaultPolicy() Policy {
+	statePath := pathFromEnv("VEIL_STATE_PATH", "/var/lib/veil/state.json")
+	keyPath := pathFromEnv("VEIL_KEY_PATH", "/etc/veil/state.key")
+	applyRoot := pathFromEnv("VEIL_APPLY_ROOT", "/var/lib/veil/staging")
+	liveRoot := pathFromEnv("VEIL_LIVE_ROOT", "/etc/veil/generated")
+	varDir := pathFromEnv("VEIL_VAR_DIR", filepath.Dir(statePath))
+	etcDir := pathFromEnv("VEIL_ETC_DIR", filepath.Dir(keyPath))
 	return Policy{
-		StagingRoot:          "/var/lib/veil/staging/generated",
-		GeneratedRoot:        "/etc/veil/generated",
-		StateRoot:            "/var/lib/veil",
-		StatePath:            "/var/lib/veil/state.json",
-		KeyPath:              "/etc/veil/state.key",
-		BackupPassphrasePath: "/etc/veil/backup.passphrase",
-		BackupRoot:           "/var/lib/veil/backups",
-		UpdateRoot:           "/var/lib/veil/updates",
-		FencePath:            "/var/lib/veil/transactions/runtime-fence.json",
+		StagingRoot:          filepath.Join(applyRoot, "generated"),
+		GeneratedRoot:        liveRoot,
+		StateRoot:            varDir,
+		StatePath:            statePath,
+		KeyPath:              keyPath,
+		BackupPassphrasePath: pathFromEnv("VEIL_BACKUP_PASSPHRASE", filepath.Join(etcDir, "backup.passphrase")),
+		BackupRoot:           pathFromEnv("VEIL_BACKUP_ROOT", filepath.Join(varDir, "backups")),
+		UpdateRoot:           filepath.Join(varDir, "updates"),
+		FencePath:            filepath.Join(varDir, "transactions", "runtime-fence.json"),
 		RequireFence:         true,
 		ManagedUnits:         defaultManagedUnits(),
 		ManagedUnitPrefixes:  defaultManagedUnitPrefixes(),
