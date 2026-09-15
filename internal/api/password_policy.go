@@ -15,6 +15,12 @@ var (
 	errPanelPasswordTooLong  = errors.New("password must be at most 72 UTF-8 bytes")
 )
 
+// ValidatePanelPassword enforces the same 12-character / 72-byte policy as
+// first-run setup and HTTP user mutations.
+func ValidatePanelPassword(password string) error {
+	return validatePanelPassword(password)
+}
+
 func validatePanelPassword(password string) error {
 	if utf8.RuneCountInString(password) < panelPasswordMinCharacters {
 		return errPanelPasswordTooShort
