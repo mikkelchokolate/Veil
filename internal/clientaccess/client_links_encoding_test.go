@@ -2,6 +2,7 @@ package clientaccess
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -56,6 +57,57 @@ func TestEscapeUserInfoComponent(t *testing.T) {
 	}
 	if got := escapeUserInfoComponent("p@ss"); got != "p%40ss" {
 		t.Fatalf("@ must become %%40, got %q", got)
+	}
+}
+
+func TestHysteria2ClientURIEncodesFragmentPerRFC3986(t *testing.T) {
+	uri := Hysteria2ClientURI("example.com", 443, "pass", "Alice Phone", false)
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		t.Fatalf("parse %q: %v", uri, err)
+	}
+	if parsed.Fragment != "Alice Phone" {
+		t.Fatalf("fragment = %q, want %q (uri: %s)", parsed.Fragment, "Alice Phone", uri)
+	}
+	if strings.Contains(uri, "Alice+") || strings.Contains(parsed.RawFragment, "+") {
+		t.Fatalf("space encoded as '+': uri=%q raw=%q", uri, parsed.RawFragment)
+	}
+	if !strings.Contains(uri, "Alice%20Phone") {
+		t.Fatalf("expected %%20 in uri %q", uri)
+	}
+
+	userPass := Hysteria2UserPassClientURI("example.com", 443, "alice", "pass", "Иван Петров", false)
+	parsed, err = url.Parse(userPass)
+	if err != nil {
+		t.Fatalf("parse %q: %v", userPass, err)
+	}
+	if parsed.Fragment != "Иван Петров" {
+		t.Fatalf("fragment = %q, want Иван Петров (uri: %s)", parsed.Fragment, userPass)
+	}
+	if strings.Contains(parsed.RawFragment, "+") {
+		t.Fatalf("RawFragment %q encodes space as '+'; want %%20 (uri: %s)", parsed.RawFragment, userPass)
+	}
+}
+
+func TestHysteria2ProfileLinkEncodesSpacedClientName(t *testing.T) {
+	link, ok := hysteria2ProfileClientLink(ClientAccessLinkInput{
+		Settings:   Settings{Domain: "vpn.example.com"},
+		Inbound:    Inbound{Name: "hy2", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true},
+		LinkName:   "hy2/Иван Петров",
+		Credential: ClientCredential{Name: "Иван Петров", Username: "alice", Password: "pass"},
+	})
+	if !ok {
+		t.Fatal("expected link")
+	}
+	parsed, err := url.Parse(link.URI)
+	if err != nil {
+		t.Fatalf("parse %q: %v", link.URI, err)
+	}
+	if parsed.Fragment != "hy2/Иван Петров" {
+		t.Fatalf("fragment = %q, want hy2/Иван Петров (uri: %s)", parsed.Fragment, link.URI)
+	}
+	if strings.Contains(parsed.RawFragment, "+") {
+		t.Fatalf("per-client RawFragment %q encodes space as '+'", parsed.RawFragment)
 	}
 }
 

@@ -96,7 +96,7 @@ func Hysteria2ClientURI(domain string, port int, password string, name string, i
 	if insecure {
 		query.Set("insecure", "1")
 	}
-	fragment := url.QueryEscape(name)
+	fragment := escapeURIFragment(name)
 	return fmt.Sprintf("hysteria2://%s@%s/?%s#%s", escapeUserInfoComponent(password), shareURIHostPort(domain, port), query.Encode(), fragment)
 }
 
@@ -124,20 +124,43 @@ func Hysteria2UserPassClientURI(domain string, port int, username string, passwo
 	if insecure {
 		query.Set("insecure", "1")
 	}
-	fragment := url.QueryEscape(name)
+	fragment := escapeURIFragment(name)
 	userinfo := url.UserPassword(username, password).String()
 	return fmt.Sprintf("hysteria2://%s@%s/?%s#%s", userinfo, shareURIHostPort(domain, port), query.Encode(), fragment)
 }
 
+// escapeURIFragment percent-encodes a Hysteria2 remark using RFC 3986 fragment
+// syntax. url.QueryEscape turns spaces into '+', which clients do not decode
+// back to a space when reading the fragment.
+func escapeURIFragment(name string) string {
+	return url.PathEscape(name)
+}
+
+type MieruURIBinding struct {
+	Port      int
+	Transport string
+}
+
 func MieruClientURI(domain string, port int, username, password, profile, transport string) string {
-	proto := strings.ToUpper(strings.TrimSpace(transport))
-	if proto != "UDP" {
-		proto = "TCP"
+	return MieruClientURIWithBindings(domain, username, password, profile, []MieruURIBinding{{Port: port, Transport: transport}})
+}
+
+func MieruClientURIWithBindings(domain, username, password, profile string, bindings []MieruURIBinding) string {
+	if len(bindings) == 0 {
+		bindings = []MieruURIBinding{{Transport: "TCP"}}
 	}
 	query := url.Values{}
-	query.Set("port", strconv.Itoa(port))
+	for _, binding := range bindings {
+		query.Add("port", strconv.Itoa(binding.Port))
+	}
 	query.Set("profile", profile)
-	query.Set("protocol", proto)
+	for _, binding := range bindings {
+		proto := strings.ToUpper(strings.TrimSpace(binding.Transport))
+		if proto != "UDP" {
+			proto = "TCP"
+		}
+		query.Add("protocol", proto)
+	}
 	userinfo := url.UserPassword(username, password).String()
 	return fmt.Sprintf("mierus://%s@%s?%s", userinfo, shareURIHost(domain), query.Encode())
 }

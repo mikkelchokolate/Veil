@@ -197,6 +197,7 @@ func renderHysteria2ACL(cfg Hysteria2Config) []string {
 	hasGeoSite := usableRoutingDat(cfg.GeoSitePath) != ""
 	lines := []string{}
 	final := "warp"
+	explicitFinal := false
 	for _, rule := range cfg.RoutingRules {
 		if rule.Match == "" || rule.Outbound == "" {
 			continue
@@ -209,6 +210,7 @@ func renderHysteria2ACL(cfg Hysteria2Config) []string {
 		for _, matcher := range matchers {
 			if matcher.Kind == routing.MatchAll {
 				final = outbound
+				explicitFinal = true
 				continue
 			}
 			line, ok := hysteria2ACLLine(outbound, matcher, hasGeoIP, hasGeoSite)
@@ -217,7 +219,7 @@ func renderHysteria2ACL(cfg Hysteria2Config) []string {
 			}
 		}
 	}
-	if len(lines) == 0 {
+	if len(lines) == 0 && !explicitFinal {
 		return nil
 	}
 	return append(lines, final+"(all)")

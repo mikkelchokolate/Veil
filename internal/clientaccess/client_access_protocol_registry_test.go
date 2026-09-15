@@ -37,6 +37,9 @@ func TestClientAccessProtocolRegistryAggregatesMieruInbounds(t *testing.T) {
 	if len(links) != 1 || links[0].Name != "mieru/alice" || !strings.Contains(links[0].Config, `"protocol": "TCP"`) || !strings.Contains(links[0].Config, `"protocol": "UDP"`) {
 		t.Fatalf("aggregated Mieru links = %+v", links)
 	}
+	if !strings.Contains(links[0].URI, "protocol=TCP") || !strings.Contains(links[0].URI, "protocol=UDP") {
+		t.Fatalf("aggregated Mieru URI missing extra port/protocol pair: %q", links[0].URI)
+	}
 }
 
 func TestClientAccessProtocolRegistrySkipsUnknownProtocols(t *testing.T) {
