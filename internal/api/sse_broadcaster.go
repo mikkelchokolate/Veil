@@ -78,10 +78,25 @@ func (h *sseBroadcaster) refresh() {
 
 // sseRefreshGate is an optional test barrier invoked before taking the request
 // read lock so shutdown can be shown not to join the worker while holding it.
-var sseRefreshGate func()
+var (
+	sseRefreshMu   sync.Mutex
+	sseRefreshGate func()
+)
+
+func loadSSERefreshGate() func() {
+	sseRefreshMu.Lock()
+	defer sseRefreshMu.Unlock()
+	return sseRefreshGate
+}
+
+func storeSSERefreshGate(fn func()) {
+	sseRefreshMu.Lock()
+	sseRefreshGate = fn
+	sseRefreshMu.Unlock()
+}
 
 func (h *sseBroadcaster) buildSnapshot() sseSnapshot {
-	if gate := sseRefreshGate; gate != nil {
+	if gate := loadSSERefreshGate(); gate != nil {
 		gate()
 	}
 	h.state.clientRequestMu.RLock()
@@ -121,14 +136,16 @@ func (h *sseBroadcaster) buildSnapshot() sseSnapshot {
 			clientIDs = append(clientIDs, current.ID)
 		}
 	}
-	traffic := map[string]any{"at": time.Now().Unix(), "clients": map[string]any{}}
-	for _, clientID := range clientIDs {
-		upload, download, err := trafficStore.TotalsForClient(clientID)
-		if err != nil {
-			continue
-		}
-		traffic["clients"].(map[string]any)[clientID] = map[string]int64{"upload": upload, "download": download}
+	totals, err := trafficStore.TotalsForClients(clientIDs)
+	if err != nil {
+		return snapshot
 	}
+	clients := make(map[string]any, len(clientIDs))
+	for _, clientID := range clientIDs {
+		pair := totals[clientID]
+		clients[clientID] = map[string]int64{"upload": pair[0], "download": pair[1]}
+	}
+	traffic := map[string]any{"at": time.Now().Unix(), "clients": clients}
 	trafficData, _ := json.Marshal(traffic)
 	snapshot.traffic = []byte(fmt.Sprintf("event: traffic\ndata: %s\n\n", trafficData))
 	return snapshot

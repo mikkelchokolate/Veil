@@ -202,7 +202,7 @@ func (c *Collector) CollectOnceContext(ctx context.Context) error {
 			}
 		}
 		if err == nil && len(batch.UnknownIdentities) > 0 {
-			err = fmt.Errorf("unknown runtime identities: %s", strings.Join(batch.UnknownIdentities, ","))
+			log.Printf("event=traffic_unknown_identities provider=%q identities=%q", provider.Key(), strings.Join(batch.UnknownIdentities, ","))
 		}
 		if err != nil {
 			wrapped := fmt.Errorf("traffic provider %s: %w", provider.Key(), err)

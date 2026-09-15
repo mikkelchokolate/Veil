@@ -54,14 +54,14 @@ func TestUnknownHysteriaIdentityDoesNotDiscardValidBatchReadings(t *testing.T) {
 	if err := collector.Register(provider); err != nil {
 		t.Fatal(err)
 	}
-	if err := collector.CollectOnce(); err == nil || !strings.Contains(err.Error(), "unknown runtime identities") {
+	if err := collector.CollectOnce(); err != nil {
 		t.Fatalf("first mixed batch error=%v", err)
 	}
 	provider.batch.Readings[0].UploadBytes = 160
 	provider.batch.Readings[0].DownloadBytes = 260
 	provider.batch.ObservedAt = time.Now().UTC()
-	if err := collector.CollectOnce(); err == nil {
-		t.Fatal("mixed batch should keep provider degraded")
+	if err := collector.CollectOnce(); err != nil {
+		t.Fatalf("second mixed batch error=%v", err)
 	}
 	up, down, err := store.TotalsForClient(row.ID)
 	if err != nil {
@@ -71,8 +71,8 @@ func TestUnknownHysteriaIdentityDoesNotDiscardValidBatchReadings(t *testing.T) {
 		t.Fatalf("valid reading was discarded: totals=%d/%d", up, down)
 	}
 	status := collector.ProviderHealth()
-	if len(status) != 1 || status[0].State != "degraded" {
-		t.Fatalf("provider health=%+v", status)
+	if len(status) != 1 || status[0].State != "healthy" {
+		t.Fatalf("provider health=%+v, leftover identities must not degrade the provider", status)
 	}
 }
 

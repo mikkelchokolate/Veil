@@ -9,16 +9,16 @@ func TestManagementStateCloseJoinsSSEWithoutRequestWriteLock(t *testing.T) {
 	state := newClientLifecycleTestState(t)
 	entered := make(chan struct{})
 	release := make(chan struct{})
-	sseRefreshGate = func() {
+	storeSSERefreshGate(func() {
 		select {
 		case <-entered:
 		default:
 			close(entered)
 		}
 		<-release
-	}
+	})
 	t.Cleanup(func() {
-		sseRefreshGate = nil
+		storeSSERefreshGate(nil)
 		select {
 		case <-release:
 		default:
