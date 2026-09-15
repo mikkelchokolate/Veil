@@ -4,12 +4,22 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	statusflow "github.com/mikkelchokolate/Veil/internal/cliflow/status"
+	"github.com/mikkelchokolate/Veil/internal/webbasepath"
 )
 
 func WaitForHealthy(addr string, token string, timeout time.Duration) error {
+	return WaitForHealthyAt(addr, token, statusflow.ResolveWebBasePath(""), timeout)
+}
+
+func WaitForHealthyAt(addr, token, webBasePath string, timeout time.Duration) error {
+	basePath, err := webbasepath.Normalize(webBasePath)
+	if err != nil {
+		return fmt.Errorf("invalid web base path: %w", err)
+	}
 	deadline := time.Now().Add(timeout)
 	candidates := statusflow.CandidateAddrs(addr)
 	for {
@@ -26,7 +36,7 @@ func WaitForHealthy(addr string, token string, timeout time.Duration) error {
 			if remaining < requestTimeout {
 				requestTimeout = remaining
 			}
-			url := candidate + "/healthz"
+			url := strings.TrimRight(candidate, "/") + basePath + "healthz"
 			ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 			if err != nil {

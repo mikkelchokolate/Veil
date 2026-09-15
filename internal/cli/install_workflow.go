@@ -114,7 +114,7 @@ func (w RURecommendedInstallWorkflow) Run() error {
 	panelListenPort := install.PanelPort
 	panelRandom := install.PanelRandom
 	installflow.NewPresentation(cmd.OutOrStdout()).PrintRURecommended(built, opts.DryRun)
-	if parsedPublicIP != nil {
+	if parsedPublicIP != nil && strings.TrimSpace(opts.Domain) != "" {
 		ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
 		defer cancel()
 		dnsCheck, err := hostenv.CheckDomainDNS(ctx, installDNSResolver, opts.Domain, parsedPublicIP)

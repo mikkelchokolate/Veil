@@ -10,6 +10,8 @@ func isolateListenConfig(t *testing.T) {
 	t.Helper()
 	t.Setenv("VEIL_LISTEN", "")
 	t.Setenv("VEIL_STATE_PATH", "")
+	t.Setenv("VEIL_WEB_BASE_PATH", "")
+	t.Setenv("VEIL_API_TOKEN", "")
 	origEnv, origState, origCert := installedEnvFile, installedStateFile, panelTLSCertFile
 	missing := t.TempDir()
 	installedEnvFile = filepath.Join(missing, "veil.env")
@@ -90,5 +92,45 @@ func TestResolveListenIgnoresUnreadableInstalledConfig(t *testing.T) {
 	installedEnvFile = envPath
 	if got := ResolveListen(""); got != "127.0.0.1:2096" {
 		t.Fatalf("ResolveListen with unreadable env file = %q, want default", got)
+	}
+}
+
+func TestResolveWebBasePathReadsInstalledEnvFile(t *testing.T) {
+	isolateListenConfig(t)
+	dir := t.TempDir()
+	envPath := filepath.Join(dir, "veil.env")
+	if err := os.WriteFile(envPath, []byte("VEIL_WEB_BASE_PATH=/secret-panel/\nVEIL_API_TOKEN=installed-token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	installedEnvFile = envPath
+	if got := ResolveWebBasePath(""); got != "/secret-panel/" {
+		t.Fatalf("ResolveWebBasePath(\"\") = %q, want /secret-panel/ from veil.env", got)
+	}
+	if got := ResolveWebBasePath("/flag/"); got != "/flag/" {
+		t.Fatalf("flag should override veil.env, got %q", got)
+	}
+	t.Setenv("VEIL_WEB_BASE_PATH", "/from-env/")
+	if got := ResolveWebBasePath(""); got != "/from-env/" {
+		t.Fatalf("process env should override veil.env, got %q", got)
+	}
+}
+
+func TestResolveAuthTokenReadsInstalledEnvFile(t *testing.T) {
+	isolateListenConfig(t)
+	dir := t.TempDir()
+	envPath := filepath.Join(dir, "veil.env")
+	if err := os.WriteFile(envPath, []byte("VEIL_API_TOKEN=installed-token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	installedEnvFile = envPath
+	if got := ResolveAuthToken(""); got != "installed-token" {
+		t.Fatalf("ResolveAuthToken(\"\") = %q, want installed-token", got)
+	}
+	if got := ResolveAuthToken("flag-token"); got != "flag-token" {
+		t.Fatalf("flag should override veil.env, got %q", got)
+	}
+	t.Setenv("VEIL_API_TOKEN", "process-token")
+	if got := ResolveAuthToken(""); got != "process-token" {
+		t.Fatalf("process env should override veil.env, got %q", got)
 	}
 }

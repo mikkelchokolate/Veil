@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +29,45 @@ func TestRestartAfterUpdateHealthCheckUsesInstalledListen(t *testing.T) {
 	}
 	if gotAddr != "127.0.0.1:47359" {
 		t.Fatalf("health check addr = %q, want installed listen 127.0.0.1:47359", gotAddr)
+	}
+}
+
+func TestRestartAfterUpdateDoesNotRollbackWhenPrefixedHealthzOK(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		if r.URL.Path == "/healthz" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.URL.Path != "/secret-panel/healthz" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	rolledBack := false
+	err := RestartAfterUpdate(io.Discard, "current", "backup", WorkflowOptions{
+		Staged:      true,
+		Listen:      server.URL,
+		WebBasePath: "/secret-panel/",
+	}, RestartHooks{
+		Restart: func(string) error { return nil },
+		Rollback: func(string, string) error {
+			rolledBack = true
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("RestartAfterUpdate: %v (path=%q)", err, gotPath)
+	}
+	if rolledBack {
+		t.Fatal("staged update rolled back even though prefixed healthz returned 200")
+	}
+	if gotPath != "/secret-panel/healthz" {
+		t.Fatalf("path = %q, want /secret-panel/healthz", gotPath)
 	}
 }
 

@@ -2,9 +2,11 @@ package cli
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
+	statusflow "github.com/mikkelchokolate/Veil/internal/cliflow/status"
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 	"github.com/mikkelchokolate/Veil/internal/releaseverify"
 	"github.com/spf13/cobra"
@@ -74,7 +76,13 @@ var updateHealthChecker = updateflow.WaitForHealthy
 
 func restartUpdatedVeil(cmd *cobra.Command, currentPath string, backupPath string, opts updateflow.WorkflowOptions) error {
 	token, _ := serveflow.NewEnvironment().AuthToken(opts.AuthToken)
+	if token == "" {
+		token = statusflow.ResolveAuthToken("")
+	}
 	opts.AuthToken = token
+	if strings.TrimSpace(opts.WebBasePath) == "" {
+		opts.WebBasePath = statusflow.ResolveWebBasePath("")
+	}
 	return updateflow.RestartAfterUpdate(cmd.OutOrStdout(), currentPath, backupPath, opts, updateflow.RestartHooks{
 		Restart: runSystemctlRestart,
 		Health:  updateHealthChecker,
