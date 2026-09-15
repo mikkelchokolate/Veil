@@ -199,13 +199,22 @@ func (s *managementState) handleV1TrafficTop(w http.ResponseWriter, r *http.Requ
 		DownloadBytes int64  `json:"downloadBytes"`
 		UsedBytes     int64  `json:"usedBytes"`
 	}
+	ids := make([]string, len(clients))
+	for i, current := range clients {
+		ids[i] = current.ID
+	}
+	totals, err := s.trafficStore.TotalsForClients(ids)
+	if err != nil {
+		writeError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	entries := make([]entry, 0, len(clients))
-	for _, c := range clients {
-		up, down, _ := s.trafficStore.TotalsForClient(c.ID)
-		if up+down == 0 {
+	for _, current := range clients {
+		pair := totals[current.ID]
+		if pair[0]+pair[1] == 0 {
 			continue
 		}
-		entries = append(entries, entry{ClientID: c.ID, Name: c.Name, UploadBytes: up, DownloadBytes: down, UsedBytes: up + down})
+		entries = append(entries, entry{ClientID: current.ID, Name: current.Name, UploadBytes: pair[0], DownloadBytes: pair[1], UsedBytes: pair[0] + pair[1]})
 	}
 	// Sort by used desc (simple insertion sort; N is small).
 	for i := 1; i < len(entries); i++ {
