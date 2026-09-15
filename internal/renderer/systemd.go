@@ -194,12 +194,11 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-SupplementaryGroups=veil veil-proxy
-# Caddy stores its cert/key material and local CA root here. The hardening
-# below drops CAP_DAC_OVERRIDE and /var/lib/veil is owned by the veil user, so
-# Caddy (root) cannot write there; give it a dedicated state dir it owns
-# (systemd creates /var/lib/caddy) for both ACME storage and the self-signed
-# internal-CA fallback.
+User=veil
+Group=veil
+# Caddy binds :80/:443 with CAP_NET_BIND_SERVICE and reads 0640 root:veil
+# config as group veil. ACME material stays in StateDirectory=caddy
+# (/var/lib/caddy); /etc/veil and /var/lib/veil stay read-only.
 StateDirectory=caddy
 Environment=HOME=/var/lib/caddy XDG_DATA_HOME=/var/lib/caddy XDG_CONFIG_HOME=/var/lib/caddy
 ExecStart=` + cfg.CaddyBinary + ` run --config ` + caddyConfig + `
@@ -210,7 +209,8 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlock + `ReadWritePaths=` + cfg.EtcDir + ` ` + cfg.VarDir + `
+PrivateDevices=true
+` + systemdHardeningBlock + `ReadOnlyPaths=` + cfg.EtcDir + `
 
 [Install]
 WantedBy=multi-user.target
@@ -441,7 +441,7 @@ func dropInServiceOverrides(name string, cfg SystemdConfig) string {
 		b.WriteString("ExecStart=" + caddyBin + " run --config " + config + "\n")
 		b.WriteString("ExecReload=\n")
 		b.WriteString("ExecReload=" + caddyBin + " reload --config " + config + "\n")
-		b.WriteString("ReadWritePaths=" + cfg.EtcDir + " " + cfg.VarDir + "\n")
+		b.WriteString("ReadOnlyPaths=" + cfg.EtcDir + "\n")
 	}
 	return b.String()
 }
