@@ -167,6 +167,16 @@ func TestPackageScriptsExist(t *testing.T) {
 			t.Fatalf("packaging script %s does not handle systemd", script)
 		}
 	}
+	preremove, err := os.ReadFile("../../packaging/scripts/preremove.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.ReplaceAll(string(preremove), "\r\n", "\n")
+	for _, want := range []string{"is_upgrade", "upgrade|deconfigure|failed-upgrade", "[ \"$arg\" -gt 0 ]"} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("preremove.sh missing upgrade guard %q:\n%s", want, script)
+		}
+	}
 }
 
 func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {

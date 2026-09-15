@@ -47,6 +47,13 @@ run_deb_smoke() {
     debian:bookworm-slim sh -euxc '
       apt-get update
       apt-get install -y ca-certificates
+      cat > /usr/bin/systemctl <<'"'"'EOF'"'"'
+#!/bin/sh
+echo "systemctl $*" >> /tmp/systemctl.log
+exit 0
+EOF
+      chmod +x /usr/bin/systemctl
+      : > /tmp/systemctl.log
       dpkg -i /packages/old/*.deb
       test -x /usr/local/bin/veil
       for unit in veil.service veil-helper.service veil-helper.socket veil-backup.service veil-backup.timer veil-caddy.service veil-hysteria2@.service veil-mieru.service veil-olcrtc@.service veil-warp.service; do
@@ -62,7 +69,19 @@ run_deb_smoke() {
       printf env-before-upgrade > /etc/veil/veil.env
       chmod 0644 /var/lib/veil/state.json /var/lib/veil/sessions.json /etc/veil/state.key /etc/veil/veil.env
 
+      systemctl enable veil.service veil-helper.socket
+      : > /tmp/systemctl.log
       dpkg -i /packages/new/*.deb
+      if grep -E "(^|[[:space:]])disable veil(\.service)?($|[[:space:]])" /tmp/systemctl.log; then
+        echo "package upgrade disabled veil.service" >&2
+        cat /tmp/systemctl.log >&2
+        exit 1
+      fi
+      if grep -E "(^|[[:space:]])disable veil-helper.socket($|[[:space:]])" /tmp/systemctl.log; then
+        echo "package upgrade disabled veil-helper.socket" >&2
+        cat /tmp/systemctl.log >&2
+        exit 1
+      fi
       test "$(cat /var/lib/veil/state.json)" = state-before-upgrade
       test "$(cat /var/lib/veil/sessions.json)" = sessions-before-upgrade
       test "$(cat /etc/veil/state.key)" = key-before-upgrade

@@ -291,8 +291,6 @@ if [[ -n "${LOCAL_BIN}" ]]; then
   if [[ -z "${DRY_RUN}" ]]; then
 	if [[ -n "${had_previous:-}" ]]; then
 	  install -m 0755 "${previous_binary}" "${INSTALL_DIR}/veil"
-	else
-	  rm -f "${INSTALL_DIR}/veil"
 	fi
 	rm -f "${previous_binary:-}"
 	if [[ "${LOCAL_BIN}" == "${INSTALL_DIR}"/.veil-verified-* ]]; then rm -f "${LOCAL_BIN}"; fi

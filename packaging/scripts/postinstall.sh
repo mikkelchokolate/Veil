@@ -108,6 +108,10 @@ fi
 if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload >/dev/null 2>&1 || true
     systemctl enable veil-helper.socket >/dev/null 2>&1 || true
+    # Restart already-running units so they pick up the replaced binary. This is
+    # a no-op on a fresh package install (units are not running yet).
+    systemctl try-restart veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.timer >/dev/null 2>&1 || true
+    systemctl try-restart 'veil-hysteria2@*.service' 'veil-olcrtc@*.service' >/dev/null 2>&1 || true
 fi
 
 echo "Veil installed. Run 'veil install' to configure Panel access, or"

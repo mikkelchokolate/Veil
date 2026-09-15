@@ -58,18 +58,62 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${EUID}" -ne 0 && -z "${DRY_RUN}" ]]; then
-  echo "Veil uninstaller must run as root." >&2
-  echo "Run with sudo." >&2
-  exit 1
-fi
+require_root() {
+  if [[ "${EUID}" -ne 0 && -z "${DRY_RUN}" ]]; then
+    echo "Veil uninstaller must run as root." >&2
+    echo "Run with sudo." >&2
+    exit 1
+  fi
+}
 
 VEIL_BIN="${INSTALL_DIR}/veil"
 args=(--install-dir "${INSTALL_DIR}" --etc-dir "${ETC_DIR}" --var-dir "${VAR_DIR}" --systemd-dir "${SYSTEMD_DIR}")
 if [[ -n "${PURGE}" ]]; then args+=(--purge); fi
 if [[ -n "${KEEP_DATA}" ]]; then args+=(--keep-data); fi
 
+has_leftover_state() {
+  [[ -e "${ETC_DIR}" || -e "${VAR_DIR}" ]] && return 0
+  local unit
+  for unit in "${SYSTEMD_DIR}"/veil*.service "${SYSTEMD_DIR}"/veil*.socket "${SYSTEMD_DIR}"/veil*.timer; do
+    if [[ -e "${unit}" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+print_leftover_plan() {
+  echo "Veil binary not found at ${VEIL_BIN}; leftover host state remains:"
+  if [[ -z "${KEEP_DATA}" ]]; then
+    echo "  - ${ETC_DIR}"
+    echo "  - ${VAR_DIR}"
+  else
+    echo "  - keep ${ETC_DIR}"
+    echo "  - keep ${VAR_DIR}"
+  fi
+  echo "  - ${SYSTEMD_DIR}/veil*.service"
+  echo "  - ${SYSTEMD_DIR}/veil*.socket"
+  echo "  - ${SYSTEMD_DIR}/veil*.timer"
+}
+
+remove_leftover_state() {
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl stop veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.timer >/dev/null 2>&1 || true
+    systemctl disable veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.timer >/dev/null 2>&1 || true
+    systemctl stop 'veil-hysteria2@*' 'veil-olcrtc@*' >/dev/null 2>&1 || true
+    systemctl disable 'veil-hysteria2@*.service' 'veil-olcrtc@*.service' >/dev/null 2>&1 || true
+  fi
+  if [[ -z "${KEEP_DATA}" ]]; then
+    rm -rf "${ETC_DIR}" "${VAR_DIR}"
+  fi
+  rm -f "${SYSTEMD_DIR}"/veil*.service "${SYSTEMD_DIR}"/veil*.socket "${SYSTEMD_DIR}"/veil*.timer
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload >/dev/null 2>&1 || true
+  fi
+}
+
 if [[ -x "${VEIL_BIN}" ]]; then
+  require_root
   if [[ -n "${DRY_RUN}" ]]; then
     exec "${VEIL_BIN}" uninstall "${args[@]}" --dry-run
   fi
@@ -77,7 +121,22 @@ if [[ -x "${VEIL_BIN}" ]]; then
     exec "${VEIL_BIN}" uninstall "${args[@]}" --yes
   fi
   exec "${VEIL_BIN}" uninstall "${args[@]}"
-else
+fi
+
+if ! has_leftover_state; then
   echo "Veil binary not found at ${VEIL_BIN}" >&2
   echo "Nothing to uninstall." >&2
+  exit 0
 fi
+
+print_leftover_plan
+if [[ -n "${DRY_RUN}" ]]; then
+  exit 0
+fi
+if [[ -z "${YES}" ]]; then
+  echo "Re-run with --yes to remove leftover configuration, state, and units." >&2
+  exit 1
+fi
+require_root
+remove_leftover_state
+echo "Uninstalled leftover Veil host state."

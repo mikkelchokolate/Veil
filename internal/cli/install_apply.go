@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/acmeip"
+	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
+	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 	installflow "github.com/mikkelchokolate/Veil/internal/cliflow/install"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/hostaccess"
@@ -18,6 +20,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/service"
 	"github.com/mikkelchokolate/Veil/internal/statecommit"
@@ -95,11 +98,13 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	}
 
 	reusedExistingState := false
+	var snapshot model.ManagementSnapshot
 	if stateExists {
 		// Reuse the existing state.json so an in-place reinstall keeps the admin
 		// login and the secret web base path.
 		store := managementstate.NewStore(resolvedStatePath, cipher)
-		snapshot, ok, err := store.Load()
+		loaded, ok, err := store.Load()
+		snapshot = loaded
 		if err != nil || !ok {
 			// State is present but unreadable (corrupted, or the key no longer
 			// matches). Stop instead of silently leaving a panel nobody can log
@@ -174,6 +179,10 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		if _, err := statecommit.Save(initialSnapshot, statecommit.Options{StatePath: resolvedStatePath, Cipher: cipher}); err != nil {
 			return fmt.Errorf("write initial state.json: %w", err)
 		}
+	}
+
+	if reusedExistingState && profile.InstallPanelCaddy {
+		profile.CaddyJSON = retainCaddyJSONOnReinstall(profile, snapshot, opts.EtcDir)
 	}
 
 	// 2a. Open the planned ACME HTTP-01 port (and the rest of the install
@@ -348,3 +357,75 @@ func resolvePublicIPForDirectInstall(ctx context.Context, opts ruRecommendedInst
 }
 
 var execLookPath = exec.LookPath
+
+var installProbeCaddyCapabilities = caddycapabilities.Probe
+
+func retainCaddyJSONOnReinstall(profile installer.RURecommendedProfile, snapshot model.ManagementSnapshot, etcDir string) string {
+	livePath := filepath.Join(etcDir, "generated", "caddy", "config.json")
+	live := ""
+	if body, err := os.ReadFile(livePath); err == nil {
+		live = strings.TrimSpace(string(body))
+	}
+	if rendered, err := renderCaddyJSONFromSnapshot(snapshot, profile); err == nil && strings.TrimSpace(rendered) != "" {
+		if len(snapshot.Inbounds) > 0 || live == "" {
+			return rendered
+		}
+	}
+	if live != "" {
+		return live
+	}
+	return profile.CaddyJSON
+}
+
+func renderCaddyJSONFromSnapshot(snapshot model.ManagementSnapshot, profile installer.RURecommendedProfile) (string, error) {
+	settings := snapshot.Settings
+	if settings.PanelAccess == "" {
+		settings.PanelAccess = "caddy"
+	}
+	if settings.WebBasePath == "" {
+		settings.WebBasePath = profile.WebBasePath
+	}
+	if settings.Domain == "" {
+		settings.Domain = profile.Domain
+	}
+	if settings.Email == "" {
+		settings.Email = profile.Email
+	}
+	if settings.PanelDomain == "" {
+		settings.PanelDomain = settings.Domain
+	}
+	if settings.PanelEmail == "" {
+		settings.PanelEmail = settings.Email
+	}
+	if settings.PanelListen == "" {
+		settings.PanelListen = profile.PanelListen
+	}
+	plan, _, _, err := caddyassembly.BuildFinalRenderPlan(settings, snapshot.Inbounds)
+	if err != nil {
+		return "", err
+	}
+	caps, err := installProbeCaddyCapabilities("")
+	if err != nil {
+		if !caddycapabilities.IsMissingBinary(err) {
+			return "", err
+		}
+		caps = caddycapabilities.CaddyCapabilities{}
+	}
+	if snapshotHasNaiveInbound(snapshot) {
+		caps.ForwardProxy = true
+	}
+	body, err := renderer.RenderCaddyJSON(plan, caps)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+func snapshotHasNaiveInbound(snapshot model.ManagementSnapshot) bool {
+	for _, inbound := range snapshot.Inbounds {
+		if inbound.Enabled && inbound.Protocol == "naiveproxy" {
+			return true
+		}
+	}
+	return false
+}

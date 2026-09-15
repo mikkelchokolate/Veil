@@ -1,6 +1,29 @@
 #!/bin/sh
 # Veil package preremove: stop and disable managed units before files are removed.
+# Debian prerm and RPM %preun also run on upgrade. Skip stop/disable then so a
+# live install is not disabled across apt/dnf upgrade.
 set -e
+
+is_upgrade() {
+    arg="${1:-}"
+    case "$arg" in
+        upgrade|deconfigure|failed-upgrade)
+            return 0
+            ;;
+        remove|purge|0|"")
+            return 1
+            ;;
+    esac
+    # RPM leftover count: a positive integer means another instance remains.
+    case "$arg" in
+        *[!0-9]*) return 1 ;;
+    esac
+    [ "$arg" -gt 0 ]
+}
+
+if is_upgrade "${1:-}"; then
+    exit 0
+fi
 
 stop_disable_unit() {
     unit="$1"
