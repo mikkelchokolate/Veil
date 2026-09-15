@@ -206,6 +206,144 @@ func TestRestoreUFWStateSkipsIPv6StatusLines(t *testing.T) {
 	}
 }
 
+func TestParseUFWStatusCapturesSourceInterfaceAndFamily(t *testing.T) {
+	state, err := parseUFWStatus(strings.Join([]string{
+		"Status: active",
+		"To                         Action      From",
+		"--                         ------      ----",
+		"22/tcp                     ALLOW       10.0.0.0/8",
+		"22/tcp                     ALLOW       Anywhere",
+		"22/tcp on eth0             ALLOW       Anywhere",
+		"3000                       ALLOW       192.168.0.0/16",
+		"22/tcp (v6)                ALLOW       2001:db8::/32",
+		"22/tcp (v6)                ALLOW       Anywhere (v6)",
+	}, "\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []struct {
+		source      string
+		destination string
+		iface       string
+		family      string
+	}{
+		{source: "10.0.0.0/8", destination: "22/tcp", family: "ipv4"},
+		{source: "Anywhere", destination: "22/tcp", family: "ipv4"},
+		{source: "Anywhere", destination: "22/tcp", iface: "eth0", family: "ipv4"},
+		{source: "192.168.0.0/16", destination: "3000", family: "ipv4"},
+		{source: "2001:db8::/32", destination: "22/tcp", family: "ipv6"},
+		{source: "Anywhere", destination: "22/tcp", family: "ipv6"},
+	}
+	if len(state.Entries) != len(want) {
+		t.Fatalf("entries = %d, want %d: %+v", len(state.Entries), len(want), state.Entries)
+	}
+	for i, entry := range state.Entries {
+		if entry.Source != want[i].source || entry.Destination != want[i].destination ||
+			entry.Interface != want[i].iface || entry.Family != want[i].family {
+			t.Fatalf("entry %d = %+v, want source=%s dest=%s iface=%s family=%s",
+				i, entry, want[i].source, want[i].destination, want[i].iface, want[i].family)
+		}
+		if strings.Contains(strings.Join(entry.Args, " "), "(v6)") {
+			t.Fatalf("parsed (v6) into restore args: %+v", entry)
+		}
+	}
+	restricted := state.Entries[0]
+	if !containsUFWArg(restricted.Args, "from", "10.0.0.0/8") {
+		t.Fatalf("restricted rule args %v missing from 10.0.0.0/8", restricted.Args)
+	}
+	if len(restricted.Args) >= 2 && restricted.Args[0] == "allow" && restricted.Args[1] == "22/tcp" {
+		t.Fatalf("restricted rule used unrestricted simple syntax: %v", restricted.Args)
+	}
+}
+
+func TestRestoreUFWStateReplaysSourceInterfaceAndIPv6Constraints(t *testing.T) {
+	model := &transactionalUFWModel{enabled: true, rules: map[string]string{}}
+	initial, err := parseUFWStatus(strings.Join([]string{
+		"Status: active",
+		"To                         Action      From",
+		"--                         ------      ----",
+		"22/tcp                     ALLOW       10.0.0.0/8",
+		"22/tcp                     ALLOW       Anywhere",
+		"22/tcp on eth0             ALLOW       Anywhere",
+		"22/tcp (v6)                ALLOW       2001:db8::/32",
+		"22/tcp (v6)                ALLOW       Anywhere (v6)",
+		"443/tcp                    ALLOW       Anywhere",
+		"443/tcp (v6)               ALLOW       Anywhere (v6)",
+	}, "\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := restoreUFWState(context.Background(), model.runner, initial, nil); err != nil {
+		t.Fatal(err)
+	}
+	assertUFWRestoreCall(t, model.calls, []string{"allow", "from", "10.0.0.0/8", "to", "any", "port", "22", "proto", "tcp"})
+	assertUFWRestoreCall(t, model.calls, []string{"allow", "22/tcp"})
+	assertUFWRestoreCall(t, model.calls, []string{"allow", "in", "on", "eth0", "to", "any", "port", "22", "proto", "tcp"})
+	assertUFWRestoreCall(t, model.calls, []string{"allow", "from", "2001:db8::/32", "to", "any", "port", "22", "proto", "tcp"})
+	assertUFWRestoreCall(t, model.calls, []string{"allow", "443/tcp"})
+	for _, call := range model.calls {
+		joined := strings.Join(call, " ")
+		if strings.Contains(joined, "(v6)") {
+			t.Fatalf("restore replayed IPv6 marker as ufw args: %v", call)
+		}
+	}
+}
+
+func TestRestoreUFWStateRebuildsWidenedJournalArgsFromSource(t *testing.T) {
+	model := &transactionalUFWModel{enabled: true, rules: map[string]string{}}
+	initial := ufwState{
+		Enabled: true,
+		Entries: []ufwRuleState{{
+			Family:      "ipv4",
+			Action:      "allow",
+			Direction:   "in",
+			Source:      "10.0.0.0/8",
+			Destination: "22/tcp",
+			Protocol:    "tcp",
+			Args:        []string{"allow", "22/tcp"},
+		}},
+	}
+	if err := restoreUFWState(context.Background(), model.runner, initial, nil); err != nil {
+		t.Fatal(err)
+	}
+	assertUFWRestoreCall(t, model.calls, []string{"allow", "from", "10.0.0.0/8", "to", "any", "port", "22", "proto", "tcp"})
+	for _, call := range model.calls {
+		args := ufwArgsFromCall(call)
+		if len(args) >= 2 && args[0] == "allow" && args[1] == "22/tcp" {
+			t.Fatalf("leftover journal restore widened to allow-from-anywhere: %v", call)
+		}
+	}
+}
+
+func ufwArgsFromCall(call []string) []string {
+	for i, part := range call {
+		if part == "ufw" && i+1 < len(call) {
+			return call[i+1:]
+		}
+	}
+	return call
+}
+
+func containsUFWArg(args []string, key, value string) bool {
+	for i, arg := range args {
+		if arg == key && i+1 < len(args) && args[i+1] == value {
+			return true
+		}
+	}
+	return false
+}
+
+func assertUFWRestoreCall(t *testing.T, calls [][]string, want []string) {
+	t.Helper()
+	for _, call := range calls {
+		args := ufwArgsFromCall(call)
+		if reflect.DeepEqual(args, want) {
+			return
+		}
+	}
+	t.Fatalf("missing restore call %v in %v", want, calls)
+}
+
 func TestReconcileKeepsInstallTimeSSHAndACMEComments(t *testing.T) {
 	model := &transactionalUFWModel{enabled: true, rules: map[string]string{
 		"22/tcp":   "Veil management SSH",

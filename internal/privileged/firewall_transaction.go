@@ -193,16 +193,15 @@ func restoreUFWState(ctx context.Context, runner CommandRunner, initial ufwState
 		entries := append([]ufwRuleState(nil), initial.Entries...)
 		sort.Slice(entries, func(i, j int) bool { return entries[i].Order < entries[j].Order })
 		for _, entry := range entries {
-			if entry.Family == "ipv6" {
-				// `ufw allow 443/tcp` already installs the IPv6 twin. Replaying
-				// "(v6)" status lines as ufw arguments is invalid syntax.
+			args, skip, err := ufwReplayArgs(entry)
+			if skip {
 				continue
 			}
-			if len(entry.Args) < 2 || !isUFWAction(entry.Action) {
-				joined = errors.Join(joined, errors.New("firewall recovery entry is incomplete"))
+			if err != nil {
+				joined = errors.Join(joined, err)
 				continue
 			}
-			if _, err := runUFW(ctx, runner, 10*time.Second, entry.Args...); err != nil {
+			if _, err := runUFW(ctx, runner, 10*time.Second, args...); err != nil {
 				joined = errors.Join(joined, err)
 			}
 		}
@@ -283,45 +282,51 @@ func parseUFWStatus(output string) (ufwState, error) {
 			}
 			compact = append(compact, field)
 		}
-		if len(compact) < 2 {
-			continue
-		}
-		destination := compact[0]
-		actionIdx := 1
-		action := strings.ToLower(compact[actionIdx])
-		if actionIdx+1 < len(compact) {
-			switch strings.ToLower(compact[actionIdx+1]) {
-			case "in", "out":
-				actionIdx++
+		actionIdx := -1
+		for i, field := range compact {
+			if isUFWAction(field) {
+				actionIdx = i
+				break
 			}
 		}
-		if !isUFWAction(action) {
+		if actionIdx < 0 {
 			continue
 		}
-		source := "Anywhere"
-		if actionIdx+1 < len(compact) {
-			source = strings.Join(compact[actionIdx+1:], " ")
+		action := strings.ToLower(compact[actionIdx])
+		direction := "in"
+		sourceIdx := actionIdx + 1
+		if sourceIdx < len(compact) {
+			switch strings.ToLower(compact[sourceIdx]) {
+			case "in", "out":
+				direction = strings.ToLower(compact[sourceIdx])
+				sourceIdx++
+			}
+		}
+		destination, iface := parseUFWToColumn(compact[:actionIdx])
+		source, fromIface := parseUFWFromColumn(compact[sourceIdx:])
+		if iface == "" {
+			iface = fromIface
+		}
+		if destination == "" && iface == "" {
+			continue
 		}
 		protocol := ""
 		if slash := strings.LastIndex(destination, "/"); slash >= 0 && slash+1 < len(destination) {
 			protocol = destination[slash+1:]
 		}
 		entry := ufwRuleState{
-			Family: family, Action: action, Direction: "in", Source: source,
-			Destination: destination, Protocol: protocol, Order: len(state.Entries) + 1,
-			Comment: comment, Args: []string{action, destination},
+			Family: family, Action: action, Direction: direction, Interface: iface,
+			Source: source, Destination: destination, Protocol: protocol,
+			Order: len(state.Entries) + 1, Comment: comment,
 		}
-		for i := 1; i+1 < len(compact); i++ {
-			if strings.EqualFold(compact[i], "on") {
-				entry.Interface = compact[i+1]
-				break
-			}
-		}
-		if comment != "" {
-			entry.Args = append(entry.Args, "comment", comment)
+		entry.Args = buildUFWRestoreArgs(entry)
+		if len(entry.Args) < 2 {
+			continue
 		}
 		state.Entries = append(state.Entries, entry)
-		state.Rules[destination] = comment
+		if destination != "" {
+			state.Rules[destination] = comment
+		}
 	}
 	for i := range state.Entries {
 		state.Entries[i].Enabled = state.Enabled
@@ -348,4 +353,161 @@ func isUFWAction(action string) bool {
 	default:
 		return false
 	}
+}
+
+func parseUFWToColumn(fields []string) (destination, iface string) {
+	if len(fields) >= 2 && strings.EqualFold(fields[len(fields)-2], "on") {
+		return strings.Join(fields[:len(fields)-2], " "), fields[len(fields)-1]
+	}
+	return strings.Join(fields, " "), ""
+}
+
+func parseUFWFromColumn(fields []string) (source, iface string) {
+	if len(fields) == 0 {
+		return "Anywhere", ""
+	}
+	if len(fields) >= 2 && strings.EqualFold(fields[len(fields)-2], "on") {
+		src := strings.Join(fields[:len(fields)-2], " ")
+		if src == "" {
+			src = "Anywhere"
+		}
+		return src, fields[len(fields)-1]
+	}
+	return strings.Join(fields, " "), ""
+}
+
+func ufwReplayArgs(entry ufwRuleState) ([]string, bool, error) {
+	if !isUFWAction(entry.Action) {
+		return nil, false, errors.New("firewall recovery entry is incomplete")
+	}
+	if strings.EqualFold(entry.Family, "ipv6") && isUnrestrictedUFWSource(entry.Source) {
+		// Simple IPv4 restore (`ufw allow 22/tcp`) already installs the IPv6
+		// twin. Replaying "(v6)" status lines as ufw arguments is invalid.
+		return nil, true, nil
+	}
+	args := buildUFWRestoreArgs(entry)
+	if len(args) < 2 {
+		return nil, false, errors.New("firewall recovery entry is incomplete")
+	}
+	return args, false, nil
+}
+
+func buildUFWRestoreArgs(entry ufwRuleState) []string {
+	action := strings.ToLower(strings.TrimSpace(entry.Action))
+	if !isUFWAction(action) {
+		return nil
+	}
+	dest := strings.TrimSpace(entry.Destination)
+	iface := strings.TrimSpace(entry.Interface)
+	unrestricted := isUnrestrictedUFWSource(entry.Source)
+	direction := strings.ToLower(strings.TrimSpace(entry.Direction))
+
+	// Unrestricted inbound rules without an interface keep simple syntax so
+	// UFW still installs the matching IPv6 twin.
+	if unrestricted && iface == "" && direction != "out" && dest != "" && !isUnrestrictedUFWDestination(dest) {
+		return appendUFWComment([]string{action, dest}, entry.Comment)
+	}
+
+	args := []string{action}
+	switch direction {
+	case "out":
+		args = append(args, "out")
+	default:
+		if iface != "" {
+			args = append(args, "in")
+		}
+	}
+	if iface != "" {
+		args = append(args, "on", iface)
+	}
+	if !unrestricted {
+		from := ufwSourceAddress(entry.Source)
+		if from == "" {
+			return nil
+		}
+		args = append(args, "from", from)
+	}
+	port, proto := splitUFWDestination(dest)
+	switch {
+	case port != "" || proto != "":
+		args = append(args, "to", "any")
+		if port != "" {
+			args = append(args, "port", port)
+		}
+		if proto != "" {
+			args = append(args, "proto", proto)
+		}
+	case dest != "" && !isUnrestrictedUFWDestination(dest):
+		args = append(args, "to", dest)
+	}
+	if len(args) < 2 {
+		return nil
+	}
+	return appendUFWComment(args, entry.Comment)
+}
+
+func appendUFWComment(args []string, comment string) []string {
+	if strings.TrimSpace(comment) == "" {
+		return args
+	}
+	return append(args, "comment", comment)
+}
+
+func isUnrestrictedUFWSource(source string) bool {
+	return isUnrestrictedUFWAddress(source)
+}
+
+func isUnrestrictedUFWDestination(dest string) bool {
+	return isUnrestrictedUFWAddress(dest)
+}
+
+func isUnrestrictedUFWAddress(value string) bool {
+	s := strings.ToLower(strings.TrimSpace(value))
+	s = strings.TrimSpace(strings.TrimSuffix(s, "(v6)"))
+	switch s {
+	case "", "anywhere", "any", "::/0", "0.0.0.0/0":
+		return true
+	default:
+		return false
+	}
+}
+
+func ufwSourceAddress(source string) string {
+	fields := strings.Fields(strings.TrimSpace(source))
+	if len(fields) == 0 || isUnrestrictedUFWSource(fields[0]) {
+		return ""
+	}
+	return fields[0]
+}
+
+func splitUFWDestination(dest string) (port, proto string) {
+	dest = strings.TrimSpace(dest)
+	if dest == "" || isUnrestrictedUFWDestination(dest) {
+		return "", ""
+	}
+	if slash := strings.LastIndex(dest, "/"); slash >= 0 && slash+1 < len(dest) {
+		candidate := strings.ToLower(dest[slash+1:])
+		switch candidate {
+		case "tcp", "udp", "icmp", "ipv6", "esp", "ah", "igmp", "gre", "vrrp":
+			return dest[:slash], candidate
+		}
+	}
+	if isUFWPortSpec(dest) {
+		return dest, ""
+	}
+	return "", ""
+}
+
+func isUFWPortSpec(value string) bool {
+	if value == "" || value[0] < '0' || value[0] > '9' {
+		return false
+	}
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if c >= '0' && c <= '9' || c == ',' || c == ':' {
+			continue
+		}
+		return false
+	}
+	return true
 }
