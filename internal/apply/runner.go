@@ -564,6 +564,16 @@ func (r *Runner) Run(revision uint64, trigger, actor string) (job Job, runErr er
 	return r.RunContext(context.Background(), revision, trigger, actor)
 }
 
+func testBoundContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if !testing.Testing() {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, 15*time.Second)
+}
+
 func (r *Runner) RunContext(ctx context.Context, revision uint64, trigger, actor string) (job Job, runErr error) {
 	return r.runContext(ctx, revision, trigger, actor, r.executor)
 }
@@ -588,9 +598,9 @@ func (r *Runner) RunContextWithConfirmations(ctx context.Context, revision uint6
 // callers wait for the active job instead of returning ErrApplyBusy and leaving
 // the system pending forever.
 func (r *Runner) RunLatest(ctx context.Context, trigger, actor string) (Job, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	bound, cancel := testBoundContext(ctx)
+	defer cancel()
+	ctx = bound
 	var last Job
 	for {
 		if err := ctx.Err(); err != nil {
@@ -680,9 +690,9 @@ func (r *Runner) waitIdle(ctx context.Context) error {
 }
 
 func (r *Runner) runContext(ctx context.Context, revision uint64, trigger, actor string, executor Executor) (job Job, runErr error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	bound, cancel := testBoundContext(ctx)
+	defer cancel()
+	ctx = bound
 	r.mu.Lock()
 	if r.active {
 		r.mu.Unlock()
