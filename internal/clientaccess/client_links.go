@@ -2,6 +2,7 @@ package clientaccess
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -43,17 +44,50 @@ func NaiveClientURI(domain string, port int, username string, password string) s
 	return naiveClientURITransport(domain, port, username, password, "https", 443)
 }
 
-// naiveClientURITransport renders the upstream naiveproxy share URI. The
-// client (klzgrad/naiveproxy) accepts https:// (TCP/HTTP2) and quic://
-// (HTTP/3/UDP); the port is omitted when it equals the scheme default.
-// Userinfo is percent-encoded via url.UserPassword.
+// NaiveShareURI renders a GUI-importable NaiveProxy share URI
+// (naive+https:// or naive+quic://). Launchers strip the naive+ prefix
+// and pass the remainder to the naive binary as --proxy=.
+func NaiveShareURI(domain string, port int, username, password, scheme string, defaultPort int) string {
+	return naiveClientURITransport(domain, port, username, password, scheme, defaultPort)
+}
+
+func naiveShareScheme(scheme string) string {
+	scheme = strings.TrimSpace(scheme)
+	if scheme == "" {
+		scheme = "https"
+	}
+	if strings.HasPrefix(scheme, "naive+") {
+		return scheme
+	}
+	return "naive+" + scheme
+}
+
+// shareURIHost puts IPv6 literals in brackets so URI parsers do not treat
+// the last hextet as a port. DNS names and IPv4 stay unbracketed.
+func shareURIHost(host string) string {
+	host = strings.TrimSpace(host)
+	stripped := strings.Trim(host, "[]")
+	if ip := net.ParseIP(stripped); ip != nil && ip.To4() == nil {
+		return "[" + stripped + "]"
+	}
+	return host
+}
+
+func shareURIHostPort(host string, port int) string {
+	host = strings.TrimSpace(host)
+	return net.JoinHostPort(strings.Trim(host, "[]"), strconv.Itoa(port))
+}
+
+// naiveClientURITransport renders a share-link URI for Clash/sing-box/v2rayN
+// (naive+https:// / naive+quic://). The port is omitted when it equals the
+// scheme default. Userinfo is percent-encoded via url.UserPassword.
 func naiveClientURITransport(domain string, port int, username, password, scheme string, defaultPort int) string {
 	userinfo := url.UserPassword(username, password).String()
-	host := domain
+	host := shareURIHost(domain)
 	if port != defaultPort {
-		host = fmt.Sprintf("%s:%d", domain, port)
+		host = shareURIHostPort(domain, port)
 	}
-	return fmt.Sprintf("%s://%s@%s", scheme, userinfo, host)
+	return fmt.Sprintf("%s://%s@%s", naiveShareScheme(scheme), userinfo, host)
 }
 
 func Hysteria2ClientURI(domain string, port int, password string, name string, insecure bool) string {
@@ -63,7 +97,7 @@ func Hysteria2ClientURI(domain string, port int, password string, name string, i
 		query.Set("insecure", "1")
 	}
 	fragment := url.QueryEscape(name)
-	return fmt.Sprintf("hysteria2://%s@%s:%d/?%s#%s", escapeUserInfoComponent(password), domain, port, query.Encode(), fragment)
+	return fmt.Sprintf("hysteria2://%s@%s/?%s#%s", escapeUserInfoComponent(password), shareURIHostPort(domain, port), query.Encode(), fragment)
 }
 
 func escapeUserInfoComponent(value string) string {
@@ -92,7 +126,7 @@ func Hysteria2UserPassClientURI(domain string, port int, username string, passwo
 	}
 	fragment := url.QueryEscape(name)
 	userinfo := url.UserPassword(username, password).String()
-	return fmt.Sprintf("hysteria2://%s@%s:%d/?%s#%s", userinfo, domain, port, query.Encode(), fragment)
+	return fmt.Sprintf("hysteria2://%s@%s/?%s#%s", userinfo, shareURIHostPort(domain, port), query.Encode(), fragment)
 }
 
 func MieruClientURI(domain string, port int, username, password, profile, transport string) string {
@@ -105,7 +139,7 @@ func MieruClientURI(domain string, port int, username, password, profile, transp
 	query.Set("profile", profile)
 	query.Set("protocol", proto)
 	userinfo := url.UserPassword(username, password).String()
-	return fmt.Sprintf("mierus://%s@%s?%s", userinfo, domain, query.Encode())
+	return fmt.Sprintf("mierus://%s@%s?%s", userinfo, shareURIHost(domain), query.Encode())
 }
 
 func OlcrtcClientURI(auth, transport, roomID, key, mimo string) string {
