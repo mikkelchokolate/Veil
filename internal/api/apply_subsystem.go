@@ -174,7 +174,9 @@ func initClientSubsystem(s *managementState) {
 	// the service. The HTTP handler runs the unified orchestration exactly
 	// once per committed mutation (revision bump + snapshot + one job) and
 	// returns that exact revision/job in the response.
-	s.clientService = client.NewService(clientRepo, clientCreds).WithInboundLookup(s.bindingCapabilityForInbound)
+	s.clientService = client.NewService(clientRepo, clientCreds).
+		WithInboundLookup(s.bindingCapabilityForInbound).
+		WithApplyReadiness(s.clientApplyReadiness)
 	s.clientMigrator = client.NewMigrator(clientRepo, clientCreds, client.WithIncludeDisabled())
 	s.tokenStore = client.NewTokenStore(s.db).WithCipher(s.cipher)
 	s.subRenderer = client.NewSubscriptionRenderer(clientRepo, clientCreds)

@@ -128,6 +128,8 @@ type managementState struct {
 	expirationReconciler    *expirationReconciler
 	sse                     *sseBroadcaster
 	clientSubsystemStopping bool
+	applyReadinessMu        sync.Mutex
+	applyReadinessCache     clientApplyReadinessCache
 	// A3: normalized client state pinned from the immutable revision snapshot
 	// for the duration of an apply render. When non-nil these override live
 	// SQLite state so a retry of revision N renders exactly revision N.
