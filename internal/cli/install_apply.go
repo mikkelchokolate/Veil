@@ -2,8 +2,11 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +17,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
 	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 	installflow "github.com/mikkelchokolate/Veil/internal/cliflow/install"
+	statusflow "github.com/mikkelchokolate/Veil/internal/cliflow/status"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/hostaccess"
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
@@ -38,6 +42,9 @@ var leIPCertIssueFunc = func(ctx context.Context, opts acmeip.IssueOptions) (acm
 
 var installExecutableFunc = os.Executable
 var installPrepareHostFunc = hostaccess.Prepare
+var installWaitPanelReadyFunc = waitForInstalledPanelReady
+var installHelperSocketPath = "/run/veil/helper.sock"
+var installPanelReadyTimeout = 15 * time.Second
 var installFirewallApplyFunc = func(rules []firewall.Rule) error {
 	// Firewall management requires root. In tests and staging installs that run
 	// as an unprivileged user we silently skip applying rules rather than fail.
@@ -232,6 +239,10 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 			return err
 		}
 		installRuntimesFunc(cmd, opts)
+		if err := installWaitPanelReadyFunc(cmd, profile, opts); err != nil {
+			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
+			return fmt.Errorf("panel did not become ready: %w", err)
+		}
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "Written files:")
 	for _, path := range result.WrittenFiles {
@@ -357,6 +368,91 @@ func resolvePublicIPForDirectInstall(ctx context.Context, opts ruRecommendedInst
 }
 
 var execLookPath = exec.LookPath
+
+func waitForInstalledPanelReady(cmd *cobra.Command, profile installer.RURecommendedProfile, opts ruRecommendedInstallOptions) error {
+	ctx := context.Background()
+	if cmd != nil && cmd.Context() != nil {
+		ctx = cmd.Context()
+	}
+	ctx, cancel := context.WithTimeout(ctx, installPanelReadyTimeout)
+	defer cancel()
+
+	certPath := ""
+	serverName := ""
+	if profile.PanelTLSEnabled {
+		certPath = filepath.Join(opts.EtcDir, "panel", "tls.crt")
+		serverName = profile.Domain
+		if serverName == "" {
+			serverName = "localhost"
+		}
+	}
+	contract := statusflow.ContractFromServe(profile.PanelListen, profile.PanelTLSEnabled, profile.WebBasePath, certPath, serverName)
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	var last error
+	for {
+		last = probeInstalledPanel(ctx, contract, profile.PanelAuthToken)
+		if last == nil {
+			if err := helperSocketReady(); err != nil {
+				last = err
+			} else {
+				return nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			if last == nil {
+				last = ctx.Err()
+			}
+			return fmt.Errorf("%w; check journalctl -u veil.service veil-helper.socket", last)
+		case <-ticker.C:
+		}
+	}
+}
+
+func helperSocketReady() error {
+	if _, err := os.Lstat(installHelperSocketPath); err != nil {
+		return fmt.Errorf("helper socket %s: %w", installHelperSocketPath, err)
+	}
+	return nil
+}
+
+func probeInstalledPanel(ctx context.Context, contract statusflow.ContainerHealthContract, token string) error {
+	url, err := statusflow.LocalHealthURL(contract)
+	if err != nil {
+		return err
+	}
+	client, err := statusflow.HealthHTTPClient(contract)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	if token != "" {
+		req.Header.Set("X-Veil-Token", token)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("panel healthz %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("panel healthz %s: %s", url, resp.Status)
+	}
+	if !strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "application/json") {
+		return fmt.Errorf("panel healthz %s is not a Veil instance (content-type %q)", url, resp.Header.Get("Content-Type"))
+	}
+	var payload struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil || payload.Status != "ok" {
+		return fmt.Errorf("panel healthz %s is not a Veil instance", url)
+	}
+	return nil
+}
 
 var installProbeCaddyCapabilities = caddycapabilities.Probe
 

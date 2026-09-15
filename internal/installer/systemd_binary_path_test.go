@@ -48,6 +48,25 @@ func TestInstallApplyPropagatesCustomEtcAndVarDir(t *testing.T) {
 	}
 }
 
+func TestInstallApplyQuotesVeilUnitWhenBinaryPathHasSpaces(t *testing.T) {
+	dir := t.TempDir()
+	profile := RURecommendedProfile{PanelAuthToken: "secret-panel"}
+	paths := ApplyPaths{
+		EtcDir:     filepath.Join(dir, "etc", "veil"),
+		VarDir:     filepath.Join(dir, "var", "lib", "veil"),
+		SystemdDir: filepath.Join(dir, "systemd"),
+		VeilBinary: "/opt/Veil Panel/bin/veil",
+	}
+	files, err := desiredManagedFiles(profile, paths)
+	if err != nil {
+		t.Fatalf("desiredFiles: %v", err)
+	}
+	unit := managedFileContent(files, "veil.service")
+	if !strings.Contains(unit, `ExecStart="/opt/Veil Panel/bin/veil" serve`) {
+		t.Fatalf("veil.service should quote binary path with spaces:\n%s", unit)
+	}
+}
+
 func TestInstallApplyRendersCaddyUnitWithResolvedBinaryPath(t *testing.T) {
 	dir := t.TempDir()
 	profile := RURecommendedProfile{InstallPanelCaddy: true, PanelAuthToken: "secret-panel", CaddyJSON: "{}"}

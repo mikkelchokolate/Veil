@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/mikkelchokolate/Veil/internal/acmeip"
+	statusflow "github.com/mikkelchokolate/Veil/internal/cliflow/status"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/hostaccess"
 	"github.com/mikkelchokolate/Veil/internal/installer"
@@ -24,7 +28,80 @@ import (
 func withMockedInstallRuntimes(t *testing.T) {
 	old := installRuntimesFunc
 	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) {}
-	t.Cleanup(func() { installRuntimesFunc = old })
+	oldWait := installWaitPanelReadyFunc
+	installWaitPanelReadyFunc = func(*cobra.Command, installer.RURecommendedProfile, ruRecommendedInstallOptions) error {
+		return nil
+	}
+	t.Cleanup(func() {
+		installRuntimesFunc = old
+		installWaitPanelReadyFunc = oldWait
+	})
+}
+
+func TestApplyRURecommendedInstallFailsWhenPanelDoesNotBecomeReady(t *testing.T) {
+	withMockedInstallRuntimes(t)
+	oldApply := installApplyFunc
+	oldSystemd := installSystemdRunFunc
+	oldExecutable := installExecutableFunc
+	oldPrepareHost := installPrepareHostFunc
+	installApplyFunc = func(installer.RURecommendedProfile, installer.ApplyPaths) (installer.ApplyResult, error) {
+		return installer.ApplyResult{BackupID: "backup-1", WrittenFiles: []string{"/etc/veil/veil.env"}}, nil
+	}
+	installSystemdRunFunc = func([]service.SystemdAction) error { return nil }
+	installExecutableFunc = func() (string, error) { return "/usr/local/bin/veil", nil }
+	installPrepareHostFunc = func(hostaccess.Paths) error { return nil }
+	installWaitPanelReadyFunc = func(*cobra.Command, installer.RURecommendedProfile, ruRecommendedInstallOptions) error {
+		return fmt.Errorf("still starting")
+	}
+	t.Cleanup(func() {
+		installApplyFunc = oldApply
+		installSystemdRunFunc = oldSystemd
+		installExecutableFunc = oldExecutable
+		installPrepareHostFunc = oldPrepareHost
+	})
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	err := applyRURecommendedInstall(cmd, installer.RURecommendedProfile{
+		Domain: "example.com", Username: "veil", Password: "test-password", WebBasePath: "/panel/",
+	}, ruRecommendedInstallOptions{EtcDir: t.TempDir(), VarDir: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "did not become ready") {
+		t.Fatalf("expected readiness failure, got %v", err)
+	}
+	if strings.Contains(out.String(), "Panel:") {
+		t.Fatalf("install must not print credentials after a readiness failure:\n%s", out.String())
+	}
+}
+
+func TestProbeInstalledPanelRejectsUnrelatedListener(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("hello"))
+	}))
+	t.Cleanup(server.Close)
+	contract := statusflow.ContractFromServe(server.Listener.Addr().String(), false, "/", "", "")
+	err := probeInstalledPanel(context.Background(), contract, "")
+	if err == nil || !strings.Contains(err.Error(), "not a Veil instance") {
+		t.Fatalf("expected unrelated listener to be rejected, got %v", err)
+	}
+}
+
+func TestProbeInstalledPanelAcceptsVeilHealthz(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/panel/healthz" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	t.Cleanup(server.Close)
+	contract := statusflow.ContractFromServe(server.Listener.Addr().String(), false, "/panel/", "", "")
+	if err := probeInstalledPanel(context.Background(), contract, ""); err != nil {
+		t.Fatalf("veil healthz: %v", err)
+	}
 }
 
 func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsPanelCredentials(t *testing.T) {

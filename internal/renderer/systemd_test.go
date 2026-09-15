@@ -96,6 +96,47 @@ func TestRenderSystemdUnitsPropagatesCustomEtcAndVarDir(t *testing.T) {
 	}
 }
 
+func TestRenderSystemdUnitsQuotesExecStartWhenPathHasSpaces(t *testing.T) {
+	units := RenderSystemdUnits(SystemdConfig{
+		VeilBinary:  "/opt/Veil Panel/bin/veil",
+		CaddyBinary: "/opt/Veil Panel/bin/caddy",
+		EtcDir:      "/opt/Veil Panel/etc",
+	})
+	veil := units[UnitVeil]
+	if !strings.Contains(veil, `ExecStart="/opt/Veil Panel/bin/veil" serve`) {
+		t.Fatalf("veil.service must quote executable path with spaces:\n%s", veil)
+	}
+	if strings.Contains(veil, "ExecStart=/opt/Veil Panel/bin/veil serve") {
+		t.Fatalf("unquoted ExecStart would be split by systemd:\n%s", veil)
+	}
+	if !strings.Contains(veil, `EnvironmentFile=-"/opt/Veil Panel/etc/veil.env"`) {
+		t.Fatalf("EnvironmentFile must quote config path with spaces:\n%s", veil)
+	}
+	if !strings.Contains(veil, `ReadOnlyPaths="/opt/Veil Panel/etc"`) {
+		t.Fatalf("ReadOnlyPaths must quote config path with spaces:\n%s", veil)
+	}
+	helper := units[UnitHelperService]
+	if !strings.Contains(helper, `ExecStart="/opt/Veil Panel/bin/veil" helper serve --systemd-socket-activation`) {
+		t.Fatalf("helper ExecStart must quote executable path with spaces:\n%s", helper)
+	}
+	backup := units[UnitBackupService]
+	if !strings.Contains(backup, `ExecStart="/opt/Veil Panel/bin/veil" backup create`) {
+		t.Fatalf("backup ExecStart must quote executable path with spaces:\n%s", backup)
+	}
+	if !strings.Contains(backup, `--key-path "/opt/Veil Panel/etc/state.key"`) {
+		t.Fatalf("backup key path must be quoted:\n%s", backup)
+	}
+	caddy := units[UnitCaddy]
+	if !strings.Contains(caddy, `ExecStart="/opt/Veil Panel/bin/caddy" run --config "/opt/Veil Panel/etc/generated/caddy/config.json"`) {
+		t.Fatalf("caddy ExecStart must quote binary and config paths:\n%s", caddy)
+	}
+
+	defaults := RenderSystemdUnits(SystemdConfig{})
+	if !strings.Contains(defaults[UnitVeil], "ExecStart=/usr/local/bin/veil serve") {
+		t.Fatalf("default veil ExecStart should stay unquoted:\n%s", defaults[UnitVeil])
+	}
+}
+
 func TestRenderSystemdUnits(t *testing.T) {
 	units := RenderSystemdUnits(SystemdConfig{
 		VeilBinary:     "/usr/local/bin/veil",

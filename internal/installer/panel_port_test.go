@@ -32,6 +32,34 @@ func TestSelectPanelPortRejectsInvalidPort(t *testing.T) {
 	}
 }
 
+func TestSelectPanelPortRejectsPrivilegedPorts(t *testing.T) {
+	orig := unprivilegedPortStart
+	unprivilegedPortStart = func() int { return DefaultUnprivilegedPortStart }
+	t.Cleanup(func() { unprivilegedPortStart = orig })
+
+	for _, port := range []int{80, 443, 1023} {
+		_, _, err := SelectPanelPort(port, func() (int, error) { return 31874, nil })
+		if err == nil || !strings.Contains(err.Error(), "privileged") {
+			t.Fatalf("port %d: expected privileged-port error, got %v", port, err)
+		}
+	}
+	port, random, err := SelectPanelPort(2096, func() (int, error) { return 31874, nil })
+	if err != nil || port != 2096 || random {
+		t.Fatalf("unprivileged port 2096 should be accepted, got port=%d random=%v err=%v", port, random, err)
+	}
+}
+
+func TestSelectPanelPortHonorsLoweredUnprivilegedFloor(t *testing.T) {
+	orig := unprivilegedPortStart
+	unprivilegedPortStart = func() int { return 0 }
+	t.Cleanup(func() { unprivilegedPortStart = orig })
+
+	port, random, err := SelectPanelPort(80, func() (int, error) { return 31874, nil })
+	if err != nil || port != 80 || random {
+		t.Fatalf("port 80 should be accepted when unprivileged floor is 0, got port=%d random=%v err=%v", port, random, err)
+	}
+}
+
 func TestSelectPanelPortReturnsErrorWhenRandomPortFails(t *testing.T) {
 	sentinel := fmt.Errorf("random port failure")
 	port, random, err := SelectPanelPort(0, func() (int, error) { return 0, sentinel })
