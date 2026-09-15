@@ -4,8 +4,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"os/exec"
+	"path/filepath"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/api"
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -13,6 +16,59 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/statecommit"
 	"github.com/spf13/cobra"
 )
+
+var adminNotifyPanel = notifyRunningPanel
+
+var adminSystemctlRun = func(args ...string) error {
+	return exec.Command("systemctl", args...).Run()
+}
+
+func notifyRunningPanel() error {
+	if err := adminSystemctlRun("is-active", "--quiet", "veil.service"); err != nil {
+		return nil
+	}
+	if err := adminSystemctlRun("kill", "-s", "HUP", "veil.service"); err != nil {
+		return fmt.Errorf("veil.service is running but could not be reloaded; stop the unit first: %w", err)
+	}
+	return nil
+}
+
+func revokePersistedUserSessions(statePath, username string) error {
+	registry, err := api.NewSessionRegistry(filepath.Join(filepath.Dir(statePath), "sessions.json"))
+	if err != nil {
+		return err
+	}
+	_, err = registry.DeleteByUsername(username)
+	return err
+}
+
+func afterAdminCredentialWrite(statePath string, usernames []string, revokeAll bool) error {
+	if revokeAll {
+		if err := api.InvalidatePersistedSessions(statePath); err != nil {
+			return err
+		}
+	} else {
+		for _, username := range usernames {
+			if username == "" {
+				continue
+			}
+			if err := revokePersistedUserSessions(statePath, username); err != nil {
+				return err
+			}
+		}
+	}
+	return adminNotifyPanel()
+}
+
+func administratorCount(users []model.User) int {
+	count := 0
+	for _, user := range users {
+		if user.Role == "admin" {
+			count++
+		}
+	}
+	return count
+}
 
 func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 	var statePath string
@@ -61,6 +117,10 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 				return fmt.Errorf("save state: %w", err)
 			}
 
+			if err := afterAdminCredentialWrite(resolvedState, nil, true); err != nil {
+				return fmt.Errorf("credentials were reset but the running Panel was not updated: %w", err)
+			}
+
 			fmt.Fprintf(cmd.OutOrStdout(), "Admin credentials successfully reset.\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "Username: %s\n", username)
 			fmt.Fprintf(cmd.OutOrStdout(), "Password: %s\n", pass)
@@ -79,6 +139,17 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 			if customPassword == "" {
 				return fmt.Errorf("--password is required")
 			}
+			if err := api.ValidatePanelPassword(customPassword); err != nil {
+				return err
+			}
+			roleFlagSet := cmd.Flags().Changed("role")
+			targetRole := customRole
+			if targetRole == "" {
+				targetRole = "admin"
+			}
+			if targetRole != "admin" && targetRole != "viewer" {
+				return fmt.Errorf("role must be admin or viewer")
+			}
 
 			env := serveflow.NewEnvironment()
 			resolvedState, _ := env.StatePath(statePath)
@@ -89,10 +160,6 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 				return fmt.Errorf("hash password: %w", err)
 			}
 
-			targetRole := customRole
-			if targetRole == "" {
-				targetRole = "admin"
-			}
 			username := customUsername
 			if _, err := statecommit.Update(statecommit.UpdateOptions{
 				StatePath: resolvedState, KeyPath: resolvedKey, AllowCreate: true,
@@ -111,21 +178,45 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 						username = "admin"
 					}
 				}
-				updatedUser := model.User{
-					Username: username, PasswordHash: string(hashed), Role: targetRole,
-				}
+				existingIndex := -1
 				for index := range snapshot.Users {
 					if snapshot.Users[index].Username == username {
-						snapshot.Users[index] = updatedUser
-						managementstate.CompleteSetupForAdmins(snapshot, time.Now())
-						return nil
+						existingIndex = index
+						break
 					}
 				}
-				snapshot.Users = append(snapshot.Users, updatedUser)
+				role := targetRole
+				locale := ""
+				if existingIndex >= 0 {
+					existing := snapshot.Users[existingIndex]
+					if !roleFlagSet {
+						role = existing.Role
+					}
+					locale = existing.Locale
+				}
+				if role != "admin" && existingIndex >= 0 && snapshot.Users[existingIndex].Role == "admin" && administratorCount(snapshot.Users) <= 1 {
+					return fmt.Errorf("%w; create another administrator first or use `veil admin reset`", managementstate.ErrLastAdministrator)
+				}
+				updatedUser := model.User{
+					Username:     username,
+					PasswordHash: string(hashed),
+					Role:         role,
+					Locale:       locale,
+				}
+				if existingIndex >= 0 {
+					snapshot.Users[existingIndex] = updatedUser
+				} else {
+					snapshot.Users = append(snapshot.Users, updatedUser)
+				}
+				targetRole = role
 				managementstate.CompleteSetupForAdmins(snapshot, time.Now())
 				return nil
 			}); err != nil {
 				return fmt.Errorf("save state: %w", err)
+			}
+
+			if err := afterAdminCredentialWrite(resolvedState, []string{username}, false); err != nil {
+				return fmt.Errorf("credentials were saved but the running Panel was not updated: %w", err)
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "User credentials successfully set.\n")
@@ -194,6 +285,9 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 				TargetKeyPath: targetKeyPath,
 			}); err != nil {
 				return fmt.Errorf("rotate state key: %w", err)
+			}
+			if err := afterAdminCredentialWrite(resolvedState, nil, true); err != nil {
+				return fmt.Errorf("state key was rotated but the running Panel was not updated: %w", err)
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Key successfully rotated.\n")
