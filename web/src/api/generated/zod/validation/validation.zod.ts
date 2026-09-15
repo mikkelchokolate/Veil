@@ -94,7 +94,7 @@ export const PostApiValidationBody = zod.object({
   "panelPublicPort": zod.int().min(postApiValidationBodySettingsPanelPublicPortMin).max(postApiValidationBodySettingsPanelPublicPortMax).optional().describe('Public port for the panel when served through Caddy. Defaults to 443 when zero.'),
   "defaultInboundPublicPort": zod.int().min(postApiValidationBodySettingsDefaultInboundPublicPortMin).max(postApiValidationBodySettingsDefaultInboundPublicPortMax).optional().describe('Default public port for new inbounds. Falls back to 443 when zero.'),
   "defaultAcmeEmail": zod.email().optional().describe('Default ACME contact email for inbound certificates.'),
-  "acmeChallengeMode": zod.enum(['http-01', 'dns-01', 'tls-alpn-01']).optional().describe('ACME challenge mode used for inbound certificates.')
+  "acmeChallengeMode": zod.enum(['http-01', 'tls-alpn-01']).optional().describe('ACME challenge mode used for inbound certificates.')
 }),
   "inbounds": zod.array(zod.object({
   "name": zod.string(),

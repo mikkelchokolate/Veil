@@ -504,7 +504,6 @@ func (e RevisionViewState) Valid() bool {
 
 // Defines values for SettingsAcmeChallengeMode.
 const (
-	Dns01     SettingsAcmeChallengeMode = "dns-01"
 	Http01    SettingsAcmeChallengeMode = "http-01"
 	TlsAlpn01 SettingsAcmeChallengeMode = "tls-alpn-01"
 )
@@ -512,8 +511,6 @@ const (
 // Valid indicates whether the value is a known member of the SettingsAcmeChallengeMode enum.
 func (e SettingsAcmeChallengeMode) Valid() bool {
 	switch e {
-	case Dns01:
-		return true
 	case Http01:
 		return true
 	case TlsAlpn01:

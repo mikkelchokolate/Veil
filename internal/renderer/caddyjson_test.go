@@ -891,6 +891,36 @@ func TestRenderCaddyJSONHttp01ChallengeHandlerEndToEnd(t *testing.T) {
 	}
 }
 
+func TestRenderCaddyJSONRejectsDNS01Issuer(t *testing.T) {
+	settings := model.Settings{
+		PanelAccess:       "caddy",
+		PanelDomain:       "panel.example.com",
+		PanelPublicPort:   443,
+		PanelListen:       "127.0.0.1:2096",
+		WebBasePath:       "/panel/",
+		PanelEmail:        "admin@example.com",
+		DefaultAcmeEmail:  "admin@example.com",
+		AcmeChallengeMode: "dns-01",
+	}
+	plan, _, issues, err := caddyassembly.BuildFinalRenderPlan(settings, nil)
+	if err != nil {
+		t.Fatalf("BuildFinalRenderPlan: %v", err)
+	}
+	if len(issues) == 0 {
+		t.Fatal("expected unsupported dns-01 challenge issue")
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{})
+	if err == nil {
+		t.Fatalf("expected dns-01 render error, got:\n%s", data)
+	}
+	if !strings.Contains(err.Error(), "dns-01") {
+		t.Fatalf("error = %v", err)
+	}
+	if strings.Contains(string(data), `"disabled": true`) {
+		t.Fatalf("must not emit an ACME issuer with every challenge disabled:\n%s", data)
+	}
+}
+
 func TestRenderCaddyJSONValidatesWithCaddy(t *testing.T) {
 	if _, err := exec.LookPath("caddy"); err != nil {
 		t.Skip("caddy binary not available in PATH:", err)

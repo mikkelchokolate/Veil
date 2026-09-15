@@ -17,6 +17,7 @@ func PlanAcmeChallengeBinds(
 ) (map[bindregistry.BindKey]AcmeChallengeOwner, []model.ValidationIssue) {
 	result := make(map[bindregistry.BindKey]AcmeChallengeOwner)
 	var issues []model.ValidationIssue
+	unsupportedReported := map[string]struct{}{}
 
 	add := func(key bindregistry.BindKey, mode, domain string) {
 		owner := result[key]
@@ -82,9 +83,28 @@ func PlanAcmeChallengeBinds(
 				continue
 			}
 			add(key, mode, spec.Domain)
-		case "dns-01":
-			// no bind
+		default:
+			if mode == "" {
+				continue
+			}
+			if _, seen := unsupportedReported[mode]; seen {
+				continue
+			}
+			unsupportedReported[mode] = struct{}{}
+			issues = append(issues, model.ValidationIssue{
+				Code:     "acme_challenge_unsupported",
+				Severity: "error",
+				Message:  unsupportedAcmeChallengeMessage(mode),
+				Source:   "caddyassembly",
+			})
 		}
 	}
 	return result, issues
+}
+
+func unsupportedAcmeChallengeMessage(mode string) string {
+	if mode == "dns-01" {
+		return "acmeChallengeMode dns-01 is not supported until a DNS provider is configured"
+	}
+	return "acmeChallengeMode must be http-01 or tls-alpn-01"
 }

@@ -82,6 +82,12 @@ func (v SettingsValidation) NormalizeAndValidate(settings *Settings, current Set
 			return errors.New("panelListen port must be a valid integer between 1 and 65535")
 		}
 	}
+	settings.AcmeChallengeMode = strings.TrimSpace(settings.AcmeChallengeMode)
+	switch settings.AcmeChallengeMode {
+	case "", "http-01", "tls-alpn-01":
+	default:
+		return errors.New("acmeChallengeMode must be http-01 or tls-alpn-01")
+	}
 	if settings.FallbackRoot != "" {
 		if err := normalizeFallbackRoot(&settings.FallbackRoot); err != nil {
 			return err

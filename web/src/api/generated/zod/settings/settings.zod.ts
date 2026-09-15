@@ -77,7 +77,7 @@ export const GetApiSettingsResponse = zod.object({
   "panelPublicPort": zod.int().min(getApiSettingsResponsePanelPublicPortMin).max(getApiSettingsResponsePanelPublicPortMax).optional().describe('Public port for the panel when served through Caddy. Defaults to 443 when zero.'),
   "defaultInboundPublicPort": zod.int().min(getApiSettingsResponseDefaultInboundPublicPortMin).max(getApiSettingsResponseDefaultInboundPublicPortMax).optional().describe('Default public port for new inbounds. Falls back to 443 when zero.'),
   "defaultAcmeEmail": zod.email().optional().describe('Default ACME contact email for inbound certificates.'),
-  "acmeChallengeMode": zod.enum(['http-01', 'dns-01', 'tls-alpn-01']).optional().describe('ACME challenge mode used for inbound certificates.')
+  "acmeChallengeMode": zod.enum(['http-01', 'tls-alpn-01']).optional().describe('ACME challenge mode used for inbound certificates.')
 })
 
 /**
@@ -124,7 +124,7 @@ export const PutApiSettingsBody = zod.object({
   "panelPublicPort": zod.int().min(putApiSettingsBodyPanelPublicPortMin).max(putApiSettingsBodyPanelPublicPortMax).optional().describe('Public port for the panel when served through Caddy. Defaults to 443 when zero.'),
   "defaultInboundPublicPort": zod.int().min(putApiSettingsBodyDefaultInboundPublicPortMin).max(putApiSettingsBodyDefaultInboundPublicPortMax).optional().describe('Default public port for new inbounds. Falls back to 443 when zero.'),
   "defaultAcmeEmail": zod.email().optional().describe('Default ACME contact email for inbound certificates.'),
-  "acmeChallengeMode": zod.enum(['http-01', 'dns-01', 'tls-alpn-01']).optional().describe('ACME challenge mode used for inbound certificates.')
+  "acmeChallengeMode": zod.enum(['http-01', 'tls-alpn-01']).optional().describe('ACME challenge mode used for inbound certificates.')
 })
 
 export const putApiSettingsResponsePanelPublicPortMin = 0;
@@ -158,6 +158,6 @@ export const PutApiSettingsResponse = zod.object({
   "panelPublicPort": zod.int().min(putApiSettingsResponsePanelPublicPortMin).max(putApiSettingsResponsePanelPublicPortMax).optional().describe('Public port for the panel when served through Caddy. Defaults to 443 when zero.'),
   "defaultInboundPublicPort": zod.int().min(putApiSettingsResponseDefaultInboundPublicPortMin).max(putApiSettingsResponseDefaultInboundPublicPortMax).optional().describe('Default public port for new inbounds. Falls back to 443 when zero.'),
   "defaultAcmeEmail": zod.email().optional().describe('Default ACME contact email for inbound certificates.'),
-  "acmeChallengeMode": zod.enum(['http-01', 'dns-01', 'tls-alpn-01']).optional().describe('ACME challenge mode used for inbound certificates.')
+  "acmeChallengeMode": zod.enum(['http-01', 'tls-alpn-01']).optional().describe('ACME challenge mode used for inbound certificates.')
 })
 

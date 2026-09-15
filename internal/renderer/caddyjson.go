@@ -23,9 +23,13 @@ func RenderCaddyJSON(plan caddyassembly.CaddyRenderPlan, caps caddycapabilities.
 	if err != nil {
 		return nil, err
 	}
+	tlsApp, err := renderTLSApp(plan)
+	if err != nil {
+		return nil, err
+	}
 	cfg := caddyConfig{Admin: map[string]any{"listen": "127.0.0.1:2019"}, Apps: map[string]any{}}
 	cfg.Apps["http"] = httpApp
-	cfg.Apps["tls"] = renderTLSApp(plan)
+	cfg.Apps["tls"] = tlsApp
 	return json.MarshalIndent(cfg, "", "  ")
 }
 
@@ -63,7 +67,7 @@ func renderHTTPApp(plan caddyassembly.CaddyRenderPlan, caps caddycapabilities.Ca
 	return map[string]any{"servers": servers}, nil
 }
 
-func renderTLSApp(plan caddyassembly.CaddyRenderPlan) map[string]any {
+func renderTLSApp(plan caddyassembly.CaddyRenderPlan) (map[string]any, error) {
 	type issuerGroup struct {
 		email   string
 		mode    string
@@ -95,15 +99,24 @@ func renderTLSApp(plan caddyassembly.CaddyRenderPlan) map[string]any {
 	sort.Strings(keys)
 	for _, k := range keys {
 		g := groups[k]
+		issuer, err := renderACMEIssuer(g.email, g.mode)
+		if err != nil {
+			return nil, err
+		}
 		policies = append(policies, map[string]any{
 			"subjects": g.domains,
-			"issuers":  []map[string]any{renderACMEIssuer(g.email, g.mode)},
+			"issuers":  []map[string]any{issuer},
 		})
 	}
-	return map[string]any{"automation": map[string]any{"policies": policies}}
+	return map[string]any{"automation": map[string]any{"policies": policies}}, nil
 }
 
-func renderACMEIssuer(email, mode string) map[string]any {
+func renderACMEIssuer(email, mode string) (map[string]any, error) {
+	switch mode {
+	case "http-01", "tls-alpn-01":
+	default:
+		return nil, fmt.Errorf("acmeChallengeMode %q is not supported; use http-01 or tls-alpn-01", mode)
+	}
 	return map[string]any{
 		"module": "acme",
 		"email":  email,
@@ -111,7 +124,7 @@ func renderACMEIssuer(email, mode string) map[string]any {
 			"http":     map[string]any{"disabled": mode != "http-01"},
 			"tls-alpn": map[string]any{"disabled": mode != "tls-alpn-01"},
 		},
-	}
+	}, nil
 }
 
 func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, caps caddycapabilities.CaddyCapabilities) (map[string]any, error) {

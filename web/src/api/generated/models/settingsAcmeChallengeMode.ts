@@ -49,6 +49,5 @@ export type SettingsAcmeChallengeMode = typeof SettingsAcmeChallengeMode[keyof t
 
 export const SettingsAcmeChallengeMode = {
   'http-01': 'http-01',
-  'dns-01': 'dns-01',
   'tls-alpn-01': 'tls-alpn-01',
 } as const;
