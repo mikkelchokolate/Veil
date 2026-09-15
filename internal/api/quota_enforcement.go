@@ -51,17 +51,7 @@ WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND state<>'
 						return err
 					}
 				}
-				current, err := tx.Get(mutation.ClientID)
-				if err != nil {
-					return err
-				}
-				current.Depleted = mutation.Depleted
-				if mutation.NextResetAt != nil {
-					next := *mutation.NextResetAt
-					current.QuotaResetAt = &next
-				}
-				_, err = tx.Update(current, current.Version)
-				return err
+				return client.ApplyQuotaMutationTx(tx, mutation)
 			}, func(tx *client.Tx, revision uint64) error {
 				result, err := tx.Exec(`UPDATE quota_enforcement SET state='applying',desired_revision=?,last_error='',next_retry_at=0,updated_at=?
 WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND state<>'superseded'`,
@@ -83,6 +73,11 @@ WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND state<>'
 		})
 		if err != nil {
 			s.mu.Unlock()
+			if errors.Is(err, client.ErrVersionConflict) {
+				_, _ = s.db.Exec(`UPDATE quota_enforcement SET state='superseded',updated_at=?
+WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND state<>'superseded'`,
+					time.Now().UTC().Unix(), mutation.ClientID, mutation.TargetGeneration, mutation.TargetPayloadHash)
+			}
 			return err
 		}
 	} else {

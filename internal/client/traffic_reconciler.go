@@ -100,6 +100,12 @@ func (r *Reconciler) ReconcileOnce() (changed int, err error) {
 			}
 			pendingEntry := pendingTargets[current.ID]
 			pendingMutation, pending := pendingEntry.mutation, pendingEntry.pending
+			if pending && pendingMutation.TargetGeneration < int64(current.Version) {
+				if superErr := r.supersedeQuotaTarget(pendingMutation, now.Unix()); superErr != nil {
+					reconcileErrors = append(reconcileErrors, fmt.Errorf("client %s: %w", current.ID, superErr))
+				}
+				pending = false
+			}
 			if needed {
 				mutation = BindQuotaTarget(current, mutation)
 			} else if pending {
@@ -245,6 +251,7 @@ WHERE client_id=? AND state<>'superseded' AND (target_generation<>? OR target_pa
     target_period_epoch=excluded.target_period_epoch,
     state=excluded.state,
     desired_revision=CASE WHEN quota_enforcement.target_payload_hash=excluded.target_payload_hash THEN quota_enforcement.desired_revision ELSE 0 END,
+    applied_revision=CASE WHEN quota_enforcement.target_payload_hash=excluded.target_payload_hash THEN quota_enforcement.applied_revision ELSE 0 END,
     next_retry_at=excluded.next_retry_at,last_error=excluded.last_error,
     attempts=quota_enforcement.attempts+1,updated_at=excluded.updated_at`,
 				update.clientID, mutation.TargetGeneration, mutation.TargetPayloadHash, depleted, mutation.TargetPeriodEpoch,
@@ -302,6 +309,43 @@ func (r *Reconciler) planWithTotals(current Client, now time.Time, totals [2]int
 	upload, download := totals[0], totals[1]
 	mutation.Depleted = quotaReached(upload, download, *current.QuotaBytes)
 	return mutation, mutation.Depleted != current.Depleted || mutation.NextResetAt != nil, nil
+}
+
+func (r *Reconciler) supersedeQuotaTarget(mutation QuotaMutation, now int64) error {
+	if r == nil || r.repo == nil || r.repo.db == nil || mutation.ClientID == "" {
+		return nil
+	}
+	_, err := r.repo.db.Exec(`UPDATE quota_enforcement SET state='superseded',updated_at=?
+WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND state<>'superseded'`,
+		now, mutation.ClientID, mutation.TargetGeneration, mutation.TargetPayloadHash)
+	return err
+}
+
+// ApplyQuotaMutationTx writes the planned depleted/reset fields using the
+// generation bound at plan time. An intervening client edit must conflict
+// instead of applying a stale quota decision to a newer version.
+func ApplyQuotaMutationTx(tx *Tx, mutation QuotaMutation) error {
+	if tx == nil {
+		return fmt.Errorf("client: quota mutation transaction is required")
+	}
+	current, err := tx.Get(mutation.ClientID)
+	if err != nil {
+		return err
+	}
+	wantVersion := current.Version
+	if mutation.TargetGeneration > 0 {
+		wantVersion = int(mutation.TargetGeneration - 1)
+		if current.Version != wantVersion {
+			return ErrVersionConflict
+		}
+	}
+	current.Depleted = mutation.Depleted
+	if mutation.NextResetAt != nil {
+		next := *mutation.NextResetAt
+		current.QuotaResetAt = &next
+	}
+	_, err = tx.Update(current, wantVersion)
+	return err
 }
 
 func quotaReached(upload, download, quota int64) bool {
@@ -386,17 +430,7 @@ func (r *Reconciler) applyDirect(mutation QuotaMutation) error {
 					return err
 				}
 			}
-			current, err := tx.Get(mutation.ClientID)
-			if err != nil {
-				return err
-			}
-			current.Depleted = mutation.Depleted
-			if mutation.NextResetAt != nil {
-				next := *mutation.NextResetAt
-				current.QuotaResetAt = &next
-			}
-			_, err = tx.Update(current, current.Version)
-			return err
+			return ApplyQuotaMutationTx(tx, mutation)
 		})
 	})
 }
