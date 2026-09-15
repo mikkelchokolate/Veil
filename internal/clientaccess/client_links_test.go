@@ -35,6 +35,19 @@ func TestBuildClientLinksSkipsDomainBasedLinksWhenDomainIsUnset(t *testing.T) {
 	}
 }
 
+func TestBuildClientLinksOmitsNaiveFallbackWhenAllProfilesDisabled(t *testing.T) {
+	response, err := BuildClientLinks(Settings{Domain: "vpn.example.com", NaiveUsername: "veil", NaivePassword: "global"}, []Inbound{{
+		Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true,
+		Profiles: []ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: false}},
+	}})
+	if err != nil {
+		t.Fatalf("BuildClientLinks: %v", err)
+	}
+	if response.Count != 0 || len(response.Links) != 0 {
+		t.Fatalf("all-disabled Naive profiles must not export fallback, got %+v", response)
+	}
+}
+
 func TestBuildClientLinksUsesClientProfilesWhenPresent(t *testing.T) {
 	settings := Settings{
 		Domain:            "vpn.example.com",

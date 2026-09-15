@@ -78,6 +78,24 @@ func TestBuildLinksPercentEncodesUserinfo(t *testing.T) {
 	}
 }
 
+func TestBuildLinksOmitsFallbackWhenAllProfilesDisabled(t *testing.T) {
+	settings := model.Settings{Domain: "vpn.example.com", NaiveUsername: "veil", NaivePassword: "global"}
+	inbound := model.Inbound{
+		Name:           "naive",
+		Protocol:       "naiveproxy",
+		Enabled:        true,
+		Profiles:       []model.ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: false}},
+		ProtocolFields: map[string]any{"domain": "vpn.example.com", "transport": "tcp"},
+	}
+	links, err := BuildLinks(settings, inbound)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(links) != 0 {
+		t.Fatalf("all-disabled profiles must not revive fallback URI, got %+v", links)
+	}
+}
+
 func TestBuildLinksEmitsNaivePlusHTTPSAndBracketsIPv6(t *testing.T) {
 	settings := model.Settings{Domain: "2001:db8::20", DefaultInboundPublicPort: 443}
 	inbound := model.Inbound{

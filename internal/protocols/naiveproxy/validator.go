@@ -97,6 +97,8 @@ func (Plugin) NeedsDomain(model.Settings, model.Inbound) bool { return true }
 func (Plugin) NeedsEmail(model.Settings, model.Inbound) bool { return true }
 
 // HasCredential reports whether the inbound has a usable naiveproxy credential.
+// The inbound/settings fallback is used only when the inbound has no client
+// profiles. All-disabled profiles must not revive naiveUsername/naivePassword.
 func (p Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bool {
 	for _, profile := range inbound.Profiles {
 		if !profile.Enabled || strings.TrimSpace(profile.Password) == "" {
@@ -105,6 +107,14 @@ func (p Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bo
 		if strings.TrimSpace(profile.Username) != "" {
 			return true
 		}
+	}
+	for _, credential := range inbound.RuntimeCredentials {
+		if strings.TrimSpace(credential.Username) != "" && strings.TrimSpace(credential.Password) != "" {
+			return true
+		}
+	}
+	if len(inbound.Profiles) > 0 {
+		return false
 	}
 	username := naiveUsername(settings, inbound)
 	password := naivePassword(settings, inbound)

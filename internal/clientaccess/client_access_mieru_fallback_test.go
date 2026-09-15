@@ -5,6 +5,19 @@ import (
 	"testing"
 )
 
+func TestBuildClientLinksOmitsMieruFallbackWhenAllProfilesDisabled(t *testing.T) {
+	response, err := BuildClientLinks(Settings{Domain: "vpn.example.com"}, []Inbound{{
+		Name: "mieru", Protocol: "mieru", Transport: "udp", Port: 443, Enabled: true, Password: "inbound-pass",
+		Profiles: []ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: false}},
+	}})
+	if err != nil {
+		t.Fatalf("BuildClientLinks: %v", err)
+	}
+	if response.Count != 0 || len(response.Links) != 0 {
+		t.Fatalf("all-disabled Mieru profiles must not export fallback, got %+v", response)
+	}
+}
+
 func TestBuildClientLinksIncludesMieruClientConfigForInboundPasswordFallback(t *testing.T) {
 	response, err := BuildClientLinks(Settings{Domain: "vpn.example.com"}, []Inbound{{Name: "mieru", Protocol: "mieru", Transport: "udp", Port: 443, Enabled: true, Password: "inbound-pass"}})
 	if err != nil {

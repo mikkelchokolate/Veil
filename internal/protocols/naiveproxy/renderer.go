@@ -3,10 +3,12 @@ package naiveproxy
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
 	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
+	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
@@ -23,6 +25,7 @@ func (Plugin) RenderConfig(input generatedconfig.ProtocolRenderInput) ([]generat
 	if err != nil {
 		return nil, false, err
 	}
+	applyNaiveLiveUsers(plan, input.Settings, input.Inbounds)
 	if input.Warp.Enabled {
 		socksPort := input.Warp.SocksPort
 		if socksPort == 0 {
@@ -61,4 +64,59 @@ func (Plugin) ArtifactSpec() generatedconfig.ArtifactSpec {
 			return []string{"caddy", "validate", "--config", path}
 		},
 	}
+}
+
+func applyNaiveLiveUsers(plan caddyassembly.CaddyRenderPlan, settings model.Settings, inbounds []model.Inbound) {
+	byName := map[string]model.Inbound{}
+	for _, inbound := range inbounds {
+		if inbound.Protocol == "naiveproxy" {
+			byName[inbound.Name] = inbound
+		}
+	}
+	for key, owner := range plan.Servers {
+		if owner.Kind != caddyassembly.CaddyOwnerNaive {
+			continue
+		}
+		inbound, ok := byName[owner.InboundName]
+		if !ok {
+			continue
+		}
+		owner.NaiveUsers = liveNaiveUsers(settings, inbound)
+		plan.Servers[key] = owner
+	}
+}
+
+func liveNaiveUsers(settings model.Settings, inbound model.Inbound) []caddyassembly.CaddyNaiveUser {
+	var users []caddyassembly.CaddyNaiveUser
+	runtimeUsers := make(map[string]caddyassembly.CaddyNaiveUser, len(inbound.RuntimeCredentials))
+	for _, credential := range inbound.RuntimeCredentials {
+		username := strings.TrimSpace(credential.Username)
+		password := strings.TrimSpace(credential.Password)
+		if username != "" && password != "" {
+			runtimeUsers[username] = caddyassembly.CaddyNaiveUser{Username: username, Password: password}
+		}
+	}
+	for _, profile := range inbound.Profiles {
+		if !profile.Enabled || strings.TrimSpace(profile.Username) == "" || strings.TrimSpace(profile.Password) == "" {
+			continue
+		}
+		if _, replaced := runtimeUsers[profile.Username]; !replaced {
+			users = append(users, caddyassembly.CaddyNaiveUser{Username: profile.Username, Password: profile.Password})
+		}
+	}
+	for _, credential := range inbound.RuntimeCredentials {
+		if user, ok := runtimeUsers[strings.TrimSpace(credential.Username)]; ok {
+			users = append(users, user)
+			delete(runtimeUsers, user.Username)
+		}
+	}
+	if len(users) > 0 || len(inbound.Profiles) > 0 {
+		return users
+	}
+	username := naiveUsername(settings, inbound)
+	password := naivePassword(settings, inbound)
+	if username != "" && password != "" {
+		return []caddyassembly.CaddyNaiveUser{{Username: username, Password: password}}
+	}
+	return nil
 }

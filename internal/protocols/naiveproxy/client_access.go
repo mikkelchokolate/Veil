@@ -30,6 +30,9 @@ func BuildLinks(settings model.Settings, inbound model.Inbound) ([]model.ClientL
 		return nil, err
 	}
 	if len(resolved) == 0 {
+		if len(inbound.Profiles) > 0 {
+			return nil, nil
+		}
 		username := naiveUsername(settings, inbound)
 		password := naivePassword(settings, inbound)
 		if username == "" || password == "" {
