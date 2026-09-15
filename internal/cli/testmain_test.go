@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,5 +23,11 @@ func TestMain(m *testing.M) {
 	}
 	commandLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
 	backupSystemdDir = filepath.Join(os.TempDir(), "veil-cli-test-systemd")
+	backupSystemctlRun = func(args []string) error {
+		if len(args) > 0 && args[0] == "is-active" {
+			return fmt.Errorf("inactive")
+		}
+		return nil
+	}
 	os.Exit(m.Run())
 }

@@ -50,6 +50,7 @@ var (
 	openNoFollow           = openRegularNoFollow
 	caddyRetryInterval     = 2 * time.Second
 	defaultCaddyCertOutDir = "/etc/veil/certs"
+	backupSystemdDir       = "/etc/systemd/system"
 )
 
 // chownNoFollow opens path with O_NOFOLLOW and applies fchown on the file
@@ -1131,7 +1132,7 @@ func findCaddyCertWithRetry(ctx context.Context, domain string) (caddycert.Pair,
 }
 
 func loadBackupPassphrase(request ResolvedBackup) (string, error) {
-	path := request.BackupPassphrasePath
+	path := resolveLiveBackupPassphrasePath(request.BackupPassphrasePath)
 	if path == "" {
 		return "", newError(ErrorOperationFailed, MessageBackupPassphraseUnconfigured)
 	}
@@ -1157,4 +1158,20 @@ func loadBackupPassphrase(request ResolvedBackup) (string, error) {
 
 func isAbsent(err error) bool {
 	return err != nil && (os.IsNotExist(err) || errors.Is(err, syscall.ENOENT))
+}
+
+func resolveLiveBackupPassphrasePath(fallback string) string {
+	if v := strings.TrimSpace(os.Getenv("VEIL_BACKUP_PASSPHRASE")); v != "" {
+		return v
+	}
+	if path := backup.ScheduledPassphrasePath(backupSystemdDir); path != "" {
+		if fallback == "" || isPackagedDefaultBackupPassphrasePath(fallback) {
+			return path
+		}
+	}
+	return fallback
+}
+
+func isPackagedDefaultBackupPassphrasePath(path string) bool {
+	return filepath.ToSlash(filepath.Clean(path)) == "/etc/veil/backup.passphrase"
 }

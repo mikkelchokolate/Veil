@@ -30,7 +30,21 @@ func normalizeScheduledPassphrasePath(path string) (string, error) {
 	if !filepath.IsAbs(path) && !strings.HasPrefix(filepath.ToSlash(path), "/") {
 		return "", errors.New("passphrase path must be absolute")
 	}
-	return filepath.Clean(path), nil
+	clean := filepath.Clean(path)
+	if passphrasePathHiddenByProtectHome(clean) {
+		return "", fmt.Errorf("passphrase path %s is hidden by veil-backup.service ProtectHome=yes", clean)
+	}
+	return clean, nil
+}
+
+func passphrasePathHiddenByProtectHome(path string) bool {
+	slash := filepath.ToSlash(path)
+	for _, prefix := range []string{"/root", "/home", "/run/user"} {
+		if slash == prefix || strings.HasPrefix(slash, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func publishBackupScheduleUnit(passphrasePath string) (*fileReplace, error) {

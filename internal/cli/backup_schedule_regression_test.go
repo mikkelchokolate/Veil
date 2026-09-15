@@ -116,6 +116,24 @@ func TestBackupScheduleEnableWiresCustomPassphrasePathIntoSystemdService(t *test
 	}
 }
 
+func TestBackupScheduleEnableRejectsProtectHomeHiddenPassphrasePath(t *testing.T) {
+	restore := stubBackupScheduleSystemd(t, filepath.Join(t.TempDir(), "systemd"), nil)
+	defer restore()
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"backup", "schedule", "enable",
+		"--passphrase", "custom-path-passphrase",
+		"--passphrase-path", "/root/veil-backup.passphrase",
+	})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "ProtectHome") {
+		t.Fatalf("expected ProtectHome rejection, got %v\n%s", err, out.String())
+	}
+}
+
 func TestBackupScheduleDisableRemovePassphraseFollowsDropInPath(t *testing.T) {
 	host := t.TempDir()
 	systemdDir := filepath.Join(host, "systemd")

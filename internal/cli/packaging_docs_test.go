@@ -317,6 +317,9 @@ func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 	if !strings.Contains(helperConfig, "CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER") {
 		t.Fatalf("veil-helper.service must grant the DAC/chown capabilities the helper needs:\n%s", helperConfig)
 	}
+	if !strings.Contains(helperConfig, "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK") {
+		t.Fatalf("veil-helper.service must allow Caddy Admin IPv4/IPv6 plus netlink:\n%s", helperConfig)
+	}
 	backupBody, err := os.ReadFile("../../packaging/systemd/veil-backup.service")
 	if err != nil {
 		t.Fatal(err)
