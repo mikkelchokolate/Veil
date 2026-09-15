@@ -154,6 +154,9 @@ func TestPolicyAllowsLegacyCaddyfileOnlyForRemoval(t *testing.T) {
 	if len(resolved.RemoveArtifacts) != 1 || resolved.RemoveArtifacts[0].ID != "caddy/legacy.Caddyfile" {
 		t.Fatalf("resolved removal = %+v", resolved.RemoveArtifacts)
 	}
+	if !policy.promotionDestinationAllowed(resolved.RemoveArtifacts[0].ID, resolved.RemoveArtifacts[0].Destination) {
+		t.Fatal("recovery must accept leftover Caddyfile destinations already in a v1 journal")
+	}
 
 	_, err = policy.ResolvePromotion(PromoteRequest{
 		ArtifactIDs: []string{"caddy/legacy.Caddyfile"},

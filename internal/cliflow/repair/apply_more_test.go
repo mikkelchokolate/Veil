@@ -123,3 +123,87 @@ func TestSystemdUnitsFromRepairPlanDeduplicates(t *testing.T) {
 		t.Fatalf("expected one unit, got %v", units)
 	}
 }
+
+func TestSystemdActionsFromRepairPlanSkipsHelperBackupAndTemplates(t *testing.T) {
+	systemdDir := t.TempDir()
+	instance := filepath.Join(systemdDir, "veil-hysteria2@edge.service")
+	if err := os.WriteFile(instance, []byte("[Service]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plan := installer.RepairPlan{Actions: []installer.RepairAction{
+		{Path: filepath.Join(systemdDir, "veil-backup.service")},
+		{Path: filepath.Join(systemdDir, "veil-helper.service")},
+		{Path: filepath.Join(systemdDir, "veil-helper.socket")},
+		{Path: filepath.Join(systemdDir, "veil-backup.timer")},
+		{Path: filepath.Join(systemdDir, "veil-hysteria2@.service")},
+		{Path: filepath.Join(systemdDir, "veil-olcrtc@.service")},
+		{Path: filepath.Join(systemdDir, "veil.service")},
+		{Path: filepath.Join(systemdDir, "veil-caddy.service")},
+		{Path: filepath.Join(systemdDir, "veil.env")},
+	}}
+	got := joinSystemdActions(SystemdActionsFromRepairPlan(plan))
+	for _, forbidden := range []string{
+		"enable veil-backup.service",
+		"enable veil-helper.service",
+		"restart veil-backup.service",
+		"restart veil-helper.service",
+		"restart veil-hysteria2@.service",
+		"restart veil-olcrtc@.service",
+		"enable veil-hysteria2@.service",
+		"enable veil-olcrtc@.service",
+	} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("repair systemd plan contains %q:\n%s", forbidden, got)
+		}
+	}
+	for _, want := range []string{
+		"daemon-reload",
+		"enable --now veil-backup.timer",
+		"enable --now veil-helper.socket",
+		"enable veil.service",
+		"restart veil.service",
+		"enable veil-caddy.service",
+		"restart veil-caddy.service",
+		"enable veil-hysteria2@edge.service",
+		"restart veil-hysteria2@edge.service",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("repair systemd plan missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestApplyRepairPlanDoesNotEnableUnstartableUnits(t *testing.T) {
+	var gotActions []service.SystemdAction
+	tmp := t.TempDir()
+	plan := installer.RepairPlan{Actions: []installer.RepairAction{
+		{Path: filepath.Join(tmp, "veil-backup.service"), Reason: installer.RepairReasonMissing, Content: "unit", Mode: 0o644},
+		{Path: filepath.Join(tmp, "veil-helper.service"), Reason: installer.RepairReasonMissing, Content: "unit", Mode: 0o644},
+		{Path: filepath.Join(tmp, "veil-hysteria2@.service"), Reason: installer.RepairReasonMissing, Content: "unit", Mode: 0o644},
+		{Path: filepath.Join(tmp, "veil.service"), Reason: installer.RepairReasonMissing, Content: "unit", Mode: 0o644},
+	}}
+	var out bytes.Buffer
+	if err := ApplyPlan(plan, Options{Yes: true, BackupDirSet: true, BackupDir: tmp}, &out, ApplyDependencies{
+		RunSystemd: func(actions []service.SystemdAction) error {
+			gotActions = actions
+			return nil
+		},
+	}); err != nil {
+		t.Fatalf("ApplyPlan: %v", err)
+	}
+	got := joinSystemdActions(gotActions)
+	if strings.Contains(got, "enable veil-backup.service") || strings.Contains(got, "restart veil-hysteria2@.service") {
+		t.Fatalf("apply ran unstartable unit actions:\n%s", got)
+	}
+	if !strings.Contains(got, "enable --now veil-backup.timer") || !strings.Contains(got, "restart veil.service") {
+		t.Fatalf("apply skipped required unit actions:\n%s", got)
+	}
+}
+
+func joinSystemdActions(actions []service.SystemdAction) string {
+	parts := make([]string, 0, len(actions))
+	for _, action := range actions {
+		parts = append(parts, strings.Join(append([]string{action.Command}, action.Args...), " "))
+	}
+	return strings.Join(parts, "\n")
+}

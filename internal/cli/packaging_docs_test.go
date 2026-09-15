@@ -317,6 +317,17 @@ func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 	if !strings.Contains(helperConfig, "CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER") {
 		t.Fatalf("veil-helper.service must grant the DAC/chown capabilities the helper needs:\n%s", helperConfig)
 	}
+	backupBody, err := os.ReadFile("../../packaging/systemd/veil-backup.service")
+	if err != nil {
+		t.Fatal(err)
+	}
+	backupConfig := strings.ReplaceAll(string(backupBody), "\r\n", "\n")
+	if !strings.Contains(backupConfig, "CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH\n") {
+		t.Fatalf("veil-backup.service must grant DAC capabilities to read veil-owned state:\n%s", backupConfig)
+	}
+	if strings.Contains(backupConfig, "CapabilityBoundingSet=\n") {
+		t.Fatalf("veil-backup.service must not drop all capabilities:\n%s", backupConfig)
+	}
 }
 
 // TestOpenAPISpecCoversCoreRoutes verifies the OpenAPI document exists and
