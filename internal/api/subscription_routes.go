@@ -531,6 +531,11 @@ func (s *managementState) subscriptionURLFor(plaintext string) string {
 func publicSubscriptionURL(settings Settings, plaintext string) string {
 	path := "/s/" + plaintext
 	host := strings.Trim(strings.TrimSpace(settings.Domain), "[]")
+	if strings.EqualFold(strings.TrimSpace(settings.PanelAccess), "caddy") {
+		if panel := strings.Trim(strings.TrimSpace(settings.PanelDomain), "[]"); panel != "" {
+			host = panel
+		}
+	}
 	if host == "" {
 		return path
 	}

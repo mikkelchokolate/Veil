@@ -44,6 +44,34 @@ func TestPublicSubscriptionURLCaddyOmitsDefaultHTTPSPort(t *testing.T) {
 	}
 }
 
+func TestPublicSubscriptionURLCaddyUsesPanelDomain(t *testing.T) {
+	got := publicSubscriptionURL(Settings{
+		PanelAccess:     "caddy",
+		PanelListen:     "127.0.0.1:2096",
+		Domain:          "vpn.example.com",
+		PanelDomain:     "panel.example.com",
+		PanelPublicPort: 443,
+	}, "dummy-test-token")
+	want := "https://panel.example.com/s/dummy-test-token"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestPublicSubscriptionURLCaddyPanelDomainCustomPublicPort(t *testing.T) {
+	got := publicSubscriptionURL(Settings{
+		PanelAccess:     "caddy",
+		PanelListen:     "127.0.0.1:2096",
+		Domain:          "vpn.example.com",
+		PanelDomain:     "panel.example.com",
+		PanelPublicPort: 8443,
+	}, "dummy-test-token")
+	want := "https://panel.example.com:8443/s/dummy-test-token"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
 func TestPublicSubscriptionURLCaddyCustomPublicPort(t *testing.T) {
 	got := publicSubscriptionURL(Settings{
 		PanelAccess:     "caddy",
@@ -139,5 +167,58 @@ func TestSubscriptionTokenIssueListRevealRotateUsePublicOrigin(t *testing.T) {
 	}
 	if !strings.Contains(rotated.Body.String(), wantPrefix) {
 		t.Fatalf("rotate url missing origin: %s", rotated.Body.String())
+	}
+}
+
+func TestSubscriptionTokenIssueListRevealRotateUsePanelDomain(t *testing.T) {
+	router, state := newSubscriptionTestRouter(t)
+	_, clientID := seedClientWithToken(t, router)
+
+	state.mu.Lock()
+	state.settings.PanelAccess = "caddy"
+	state.settings.PanelListen = "127.0.0.1:2096"
+	state.settings.Domain = "vpn.example.com"
+	state.settings.PanelDomain = "panel.example.com"
+	state.settings.PanelPublicPort = 443
+	state.mu.Unlock()
+
+	issued := v1Request(t, router, http.MethodPost, "/api/v1/clients/"+clientID+"/tokens", `{"label":"laptop"}`)
+	if issued.Code != http.StatusCreated {
+		t.Fatalf("issue: %d %s", issued.Code, issued.Body.String())
+	}
+	var created struct {
+		Plaintext string `json:"plaintext"`
+		URL       string `json:"url"`
+		Token     struct {
+			ID string `json:"id"`
+		} `json:"token"`
+	}
+	if err := json.Unmarshal(issued.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	wantPrefix := "https://panel.example.com/s/"
+	if !strings.HasPrefix(created.URL, wantPrefix) || !strings.Contains(created.URL, created.Plaintext) {
+		t.Fatalf("issued url = %q", created.URL)
+	}
+	if strings.Contains(created.URL, "vpn.example.com") {
+		t.Fatalf("issued url used inbound domain: %q", created.URL)
+	}
+
+	listed := v1Request(t, router, http.MethodGet, "/api/v1/clients/"+clientID+"/tokens", "")
+	if !strings.Contains(listed.Body.String(), wantPrefix) {
+		t.Fatalf("list url missing panel domain: %s", listed.Body.String())
+	}
+
+	revealed := v1Request(t, router, http.MethodGet, "/api/v1/clients/"+clientID+"/tokens/"+created.Token.ID, "")
+	if !strings.Contains(revealed.Body.String(), wantPrefix) {
+		t.Fatalf("reveal url missing panel domain: %s", revealed.Body.String())
+	}
+
+	rotated := v1Request(t, router, http.MethodPost, "/api/v1/clients/"+clientID+"/tokens/"+created.Token.ID+"/rotate", `{}`)
+	if rotated.Code != http.StatusOK {
+		t.Fatalf("rotate: %d %s", rotated.Code, rotated.Body.String())
+	}
+	if !strings.Contains(rotated.Body.String(), wantPrefix) {
+		t.Fatalf("rotate url missing panel domain: %s", rotated.Body.String())
 	}
 }
