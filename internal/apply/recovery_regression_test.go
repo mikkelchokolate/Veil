@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+func (r *Runner) startMonitorForTest() {
+	r.monitorDone = make(chan struct{})
+	go r.monitorRecovery()
+}
+
 func TestRunnerRecoversPendingJobWithoutValidLease(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
@@ -55,6 +60,7 @@ func TestRunnerRecoversApplyingJobWhenLeaseExpiresAfterStartup(t *testing.T) {
 	runner := NewRunner(revisions, jobs, func(uint64) (Result, error) {
 		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
 	})
+	runner.startMonitorForTest()
 	defer func() {
 		if closeMethod := reflect.ValueOf(runner).MethodByName("Close"); closeMethod.IsValid() {
 			closeMethod.Call(nil)
@@ -93,6 +99,7 @@ func TestRunnerRecordsRuntimePublicationRecoveryFailure(t *testing.T) {
 	runner := NewRunner(revisions, jobs, func(uint64) (Result, error) {
 		return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
 	})
+	runner.startMonitorForTest()
 	defer runner.Close()
 	if _, err := db.Exec(`DROP TABLE runtime_publications`); err != nil {
 		t.Fatal(err)

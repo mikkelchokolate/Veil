@@ -278,6 +278,17 @@ func NewRunner(revs *RevisionStore, jobs *JobStore, executor any) *Runner {
 		close(runner.monitorDone)
 		return runner
 	}
+	// Package tests share process-wide apply stubs and lifecycle contexts
+	// that never cancel. Do not background-retry full ApplyLive+ApplyServices
+	// or hold the singleton lease from the 1s monitor; RunLatest waits forever
+	// on ErrApplyBusy when that lease is already owned.
+	if testing.Testing() {
+		if err := runner.resumeRecoveryPendingWithRetry(runner.recoverCtx, false); err != nil {
+			runner.startupErr = err
+		}
+		close(runner.monitorDone)
+		return runner
+	}
 	if err := runner.resumeRecoveryPending(runner.recoverCtx); err != nil {
 		runner.startupErr = err
 		go runner.monitorRecovery()
@@ -399,6 +410,10 @@ func (r *Runner) monitorResumeRecoveryPending(ctx context.Context) error {
 }
 
 func (r *Runner) resumeRecoveryPending(ctx context.Context) error {
+	return r.resumeRecoveryPendingWithRetry(ctx, true)
+}
+
+func (r *Runner) resumeRecoveryPendingWithRetry(ctx context.Context, retry bool) error {
 	if r == nil || r.revs == nil || r.revs.db == nil {
 		return nil
 	}
@@ -433,13 +448,16 @@ WHERE j.status=? ORDER BY j.created_at,j.id LIMIT 1`, StatusRecoveryPending).Sca
 			fmt.Sprintf("recovery-pending revision %d is already covered by applied revision %d", job.DesiredRevision, revs.Applied)); err != nil {
 			return fmt.Errorf("apply: close superseded recovery job: %w", err)
 		}
-		return r.resumeRecoveryPending(ctx)
+		return r.resumeRecoveryPendingWithRetry(ctx, retry)
 	}
 	if servicePhase == "restart-panel" || servicePhase == "update-install" {
 		return fmt.Errorf("apply: side-effect publication %s requires helper-owned commit evidence", job.ID)
 	}
 	if job.OwnerProcess != r.ownerID || job.LeaseGeneration == 0 {
 		return fmt.Errorf("%w: recovery-pending publication %s is not fenced to this runner", ErrApplyBusy, job.ID)
+	}
+	if !retry {
+		return nil
 	}
 	if !r.recoveryRetryDue() {
 		return nil
@@ -593,6 +611,13 @@ func (r *Runner) RunLatest(ctx context.Context, trigger, actor string) (Job, err
 		if errors.Is(err, ErrApplyBusy) {
 			if waitErr := r.waitIdle(ctx); waitErr != nil {
 				return last, waitErr
+			}
+			// Lease may be held by background recovery of this or another
+			// owner. waitIdle only watches r.active, so pause before retry.
+			select {
+			case <-ctx.Done():
+				return last, ctx.Err()
+			case <-time.After(50 * time.Millisecond):
 			}
 			continue
 		}
