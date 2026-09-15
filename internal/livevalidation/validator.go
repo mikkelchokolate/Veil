@@ -336,8 +336,9 @@ func mieruCrossInboundIssues(inbound model.Inbound, runtimeIdentities map[string
 		// Normalized identities replace the inbound-name fallback once they
 		// exist. Inventing the fallback here would false-collide with a
 		// runtime identity equal to the inbound name, and with identities on
-		// other inbounds that match an unused fallback.
-		if len(runtimeIdentities[inbound.Name]) > 0 {
+		// other inbounds that match an unused fallback. Profiles exist and
+		// all disabled is the same contract: the inbound-name user is unused.
+		if len(runtimeIdentities[inbound.Name]) > 0 || len(inbound.Profiles) > 0 {
 			return issues
 		}
 		name := inbound.Name

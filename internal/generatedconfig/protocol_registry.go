@@ -66,6 +66,20 @@ func (r ProtocolRegistry) Validate(settings Settings, inbounds []Inbound) error 
 			return fmt.Errorf("multiple enabled %s inbounds are not renderable as a single generated config yet", protocol.Protocol)
 		}
 	}
+	return validateAggregatedMieruUsers(settings, r.enabledInbounds(settings, inbounds, "mieru"))
+}
+
+func validateAggregatedMieruUsers(settings Settings, inbounds []Inbound) error {
+	if len(inbounds) == 0 {
+		return nil
+	}
+	config, ok, err := NewMieruGeneratedConfigModel(settings).Build(inbounds)
+	if err != nil {
+		return err
+	}
+	if !ok || len(config.Users) == 0 {
+		return fmt.Errorf("this inbound has no usable client credential")
+	}
 	return nil
 }
 

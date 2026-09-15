@@ -35,6 +35,37 @@ func TestPluginMetadata(t *testing.T) {
 	}
 }
 
+func TestLiveNaiveUsersOmitsFallbackWhenAllProfilesDisabled(t *testing.T) {
+	settings := model.Settings{NaiveUsername: "veil", NaivePassword: "global"}
+	users := liveNaiveUsers(settings, model.Inbound{
+		Name:     "naive",
+		Protocol: "naiveproxy",
+		Enabled:  true,
+		Password: "inbound-pass",
+		Profiles: []model.ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: false}},
+	})
+	if len(users) != 0 {
+		t.Fatalf("users = %+v, want none", users)
+	}
+}
+
+func TestLiveNaiveUsersKeepsLegacyFallbackWithoutProfiles(t *testing.T) {
+	settings := model.Settings{NaiveUsername: "veil", NaivePassword: "global"}
+	users := liveNaiveUsers(settings, model.Inbound{Name: "naive", Protocol: "naiveproxy", Enabled: true})
+	if len(users) != 1 || users[0].Username != "veil" || users[0].Password != "global" {
+		t.Fatalf("users = %+v", users)
+	}
+}
+
+func TestLiveNaiveUsersKeepsEnabledProfiles(t *testing.T) {
+	users := liveNaiveUsers(model.Settings{NaivePassword: "global"}, model.Inbound{
+		Profiles: []model.ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: true}},
+	})
+	if len(users) != 1 || users[0].Username != "alice" || users[0].Password != "alice-pass" {
+		t.Fatalf("users = %+v", users)
+	}
+}
+
 func TestRenderConfigWithInbound(t *testing.T) {
 	p := New()
 	settings := model.Settings{
@@ -536,12 +567,12 @@ func TestHasCredential(t *testing.T) {
 		}
 	})
 
-	t.Run("disabled profile falls back", func(t *testing.T) {
+	t.Run("disabled profile does not fall back", func(t *testing.T) {
 		inbound := model.Inbound{Profiles: []model.ClientProfile{
 			{Name: "pro1", Username: "u", Password: "p", Enabled: false},
 		}}
-		if !p.HasCredential(settings, inbound) {
-			t.Error("HasCredential = false, want true with fallback credentials")
+		if p.HasCredential(settings, inbound) {
+			t.Error("HasCredential = true, want false when all profiles are disabled")
 		}
 	})
 

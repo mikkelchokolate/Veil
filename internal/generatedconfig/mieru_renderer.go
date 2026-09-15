@@ -16,6 +16,12 @@ func (r GeneratedMieruConfigRenderer) Render(inbounds []Inbound) (GeneratedConfi
 	if err != nil || !ok {
 		return GeneratedConfigArtifact{}, ok, err
 	}
+	if len(config.Users) == 0 {
+		// Isolated all-disabled inbounds still contribute a port binding with
+		// no users. Skip writing server_config.json instead of failing apply
+		// with "at least one mieru user is required".
+		return GeneratedConfigArtifact{}, false, nil
+	}
 	body, err := renderer.RenderMieru(config)
 	return GeneratedConfigArtifact{Path: r.paths.Mieru(), Body: body}, true, err
 }

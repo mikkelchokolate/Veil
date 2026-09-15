@@ -13,6 +13,37 @@ func TestGeneratedConfigCardinalityRejectsMultipleEnabledSameProtocol(t *testing
 	}
 }
 
+func TestGeneratedConfigCardinalityRejectsMieruWithNoUsableUsers(t *testing.T) {
+	registry := NewProtocolRegistry([]Protocol{{Protocol: "mieru"}})
+	err := NewGeneratedConfigCardinality(Settings{}, registry).Validate([]Inbound{{
+		Name:     "mieru",
+		Protocol: "mieru",
+		Enabled:  true,
+		Password: "leftover",
+		Profiles: []ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: false}},
+	}})
+	if err == nil || err.Error() != "this inbound has no usable client credential" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestGeneratedConfigCardinalityAllowsMieruWhenSiblingHasUsers(t *testing.T) {
+	registry := NewProtocolRegistry([]Protocol{{Protocol: "mieru"}})
+	err := NewGeneratedConfigCardinality(Settings{}, registry).Validate([]Inbound{
+		{
+			Name: "tcp", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true,
+			Profiles: []ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: true}},
+		},
+		{
+			Name: "alice", Protocol: "mieru", Transport: "udp", Port: 443, Enabled: true, Password: "leftover",
+			Profiles: []ClientProfile{{Name: "bob", Username: "bob", Password: "bob-pass", Enabled: false}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+}
+
 func TestGeneratedConfigCardinalityIgnoresDisabledAndProtocolsWithoutLimit(t *testing.T) {
 	registry := NewProtocolRegistry([]Protocol{{Protocol: "naiveproxy", MaxEnabled: 1}, {Protocol: "mieru"}})
 	err := NewGeneratedConfigCardinality(Settings{}, registry).Validate([]Inbound{

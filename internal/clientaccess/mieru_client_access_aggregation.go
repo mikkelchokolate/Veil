@@ -29,7 +29,7 @@ func (MieruClientAccessAggregator) Build(settings Settings, inbounds []Inbound) 
 			return nil, err
 		}
 		if len(credentials) == 0 {
-			if inbound.Password == "" {
+			if len(inbound.Profiles) > 0 || inbound.Password == "" {
 				continue
 			}
 			credential := ClientCredential{Name: inbound.Name, Username: inbound.Name, Password: inbound.Password}

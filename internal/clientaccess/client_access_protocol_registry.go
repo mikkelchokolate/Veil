@@ -187,6 +187,9 @@ func naiveRegistryScheme(input ClientAccessLinkInput) string {
 }
 
 func naiveFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
+	if len(input.Inbound.Profiles) > 0 {
+		return ClientLink{}, false
+	}
 	if !hasClientEndpoint(input) {
 		return ClientLink{}, false
 	}
@@ -265,6 +268,9 @@ func mieruClientConfigLink(input ClientAccessLinkInput) (ClientLink, bool) {
 }
 
 func mieruFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
+	if len(input.Inbound.Profiles) > 0 {
+		return ClientLink{}, false
+	}
 	input.Credential = ClientCredential{Name: input.Inbound.Name, Username: input.Inbound.Name, Password: input.Inbound.Password}
 	return mieruClientConfigLink(input)
 }
