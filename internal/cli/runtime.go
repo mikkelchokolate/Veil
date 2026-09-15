@@ -15,7 +15,9 @@ import (
 
 // runtimeInstallFunc is injectable so tests can exercise the command without
 // reaching the network.
-var runtimeInstallFunc = protocols.InstallSelectedRuntimes
+var runtimeInstallFunc = func(ctx context.Context, opts runtimeinstall.Options, only []string) ([]runtimeinstall.Result, error) {
+	return protocols.InstallSelectedRuntimes(ctx, opts, only)
+}
 
 // installRuntimesFunc provisions protocol runtimes during `veil install`. It is
 // intentionally non-fatal: a fresh Panel install must still succeed even if a
@@ -191,7 +193,13 @@ func runRuntimeInstall(out io.Writer, errOut io.Writer, ctx context.Context, opt
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	results := runtimeInstallFunc(ctx, runtimeinstall.Options{BinDir: opts.BinDir, Arch: opts.Arch}, opts.Only)
+	if err := rejectUnknownRuntimeSelection(opts.Only); err != nil {
+		return err
+	}
+	results, err := runtimeInstallFunc(ctx, runtimeinstall.Options{BinDir: opts.BinDir, Arch: opts.Arch}, opts.Only)
+	if err != nil {
+		return err
+	}
 	if len(results) == 0 {
 		if len(opts.Only) > 0 {
 			return fmt.Errorf("no matching runtimes for --only %s", strings.Join(opts.Only, ","))
@@ -222,4 +230,16 @@ func runRuntimeInstall(out io.Writer, errOut io.Writer, ctx context.Context, opt
 	}
 	fmt.Fprintln(out, "All requested protocol runtimes are installed.")
 	return nil
+}
+
+func rejectUnknownRuntimeSelection(only []string) error {
+	if len(only) == 0 {
+		return nil
+	}
+	catalog := make([]runtimeinstall.Runtime, 0, len(runtimeNames()))
+	for _, name := range runtimeNames() {
+		catalog = append(catalog, runtimeinstall.Runtime{Name: name})
+	}
+	_, err := runtimeinstall.FilterCatalog(catalog, only)
+	return err
 }
