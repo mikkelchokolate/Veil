@@ -200,23 +200,28 @@ func TestServeTLSIntegration(t *testing.T) {
 		errCh <- cmd.Execute()
 	}()
 
-	// Wait for server startup.
-	select {
-	case err := <-errCh:
-		t.Fatalf("server exited before test: %v", err)
-	case <-time.After(500 * time.Millisecond):
-	}
-
-	// Make an HTTPS request with a client that trusts our self-signed cert.
 	httpClient := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
-		Timeout: 5 * time.Second,
+		Timeout: 2 * time.Second,
 	}
-	resp, err := httpClient.Get("https://127.0.0.1:13096/healthz")
-	if err != nil {
-		t.Fatalf("HTTPS healthz request failed: %v", err)
+	var resp *http.Response
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		select {
+		case err := <-errCh:
+			t.Fatalf("server exited before test: %v\n%s", err, out.String())
+		default:
+		}
+		resp, err = httpClient.Get("https://127.0.0.1:13096/healthz")
+		if err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("HTTPS healthz request failed: %v\n%s", err, out.String())
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 	defer resp.Body.Close()
 	if resp.TLS == nil {
