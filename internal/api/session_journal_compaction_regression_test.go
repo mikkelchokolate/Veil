@@ -13,7 +13,8 @@ func TestSessionJournalIgnoresOnlyTornFinalRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := registry.Create(SessionCreateInput{Username: "first", Role: "viewer"}); err != nil {
+	first, err := registry.Create(SessionCreateInput{Username: "first", Role: "viewer"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	journalSession, err := registry.Create(SessionCreateInput{Username: "journal", Role: "viewer"})
@@ -33,8 +34,12 @@ func TestSessionJournalIgnoresOnlyTornFinalRecord(t *testing.T) {
 	if err := os.WriteFile(registry.journalPath(), []byte("not-json\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewSessionRegistry(path); err == nil {
-		t.Fatal("complete corrupt journal record was ignored")
+	recovered, err := NewSessionRegistry(path)
+	if err != nil {
+		t.Fatalf("valid snapshot discarded because journal was corrupt: %v", err)
+	}
+	if _, ok := recovered.Get(first.Token); !ok {
+		t.Fatal("snapshot session was not kept after a complete corrupt journal record")
 	}
 }
 
