@@ -44,6 +44,9 @@ func TestUninstallDryRunShowsPlan(t *testing.T) {
 		"/etc/systemd/system/veil.service",
 		"/etc/systemd/system/veil-olcrtc@.service",
 		"/etc/systemd/system/veil-mieru.service",
+		"/etc/systemd/system/veil-backup.service.d",
+		"/var/lib/caddy",
+		"/var/lib/mita",
 		"Remove binary:",
 	} {
 		if !strings.Contains(filepath.ToSlash(got), filepath.ToSlash(want)) {
@@ -127,7 +130,7 @@ func TestUninstallYesExecutesUninstall(t *testing.T) {
 	}
 
 	// Verify units, binary, configuration, and state are all removed by default.
-	for _, path := range []string{"/etc/systemd/system/veil.service", "/etc/systemd/system/veil-olcrtc@.service", "/etc/systemd/system/veil-mieru.service", "/usr/local/bin/veil", "/etc/veil", "/var/lib/veil"} {
+	for _, path := range []string{"/etc/systemd/system/veil.service", "/etc/systemd/system/veil-olcrtc@.service", "/etc/systemd/system/veil-mieru.service", "/etc/systemd/system/veil-backup.service.d", "/usr/local/bin/veil", "/etc/veil", "/var/lib/veil", "/var/lib/caddy", "/var/lib/mita"} {
 		found := false
 		for _, r := range removed {
 			if filepath.ToSlash(r) == filepath.ToSlash(path) {
@@ -152,6 +155,58 @@ func TestUninstallYesExecutesUninstall(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestUninstallYesRemovesBackupDropInAndTemplateInstanceWants(t *testing.T) {
+	origStop := uninstallServiceStopper
+	origRemove := uninstallFileRemover
+	origReload := uninstallSystemdReloader
+	t.Cleanup(func() {
+		uninstallServiceStopper = origStop
+		uninstallFileRemover = origRemove
+		uninstallSystemdReloader = origReload
+	})
+	host := t.TempDir()
+	systemdDir := filepath.Join(host, "systemd")
+	wantsDir := filepath.Join(systemdDir, "multi-user.target.wants")
+	if err := os.MkdirAll(wantsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hy2Want := filepath.Join(wantsDir, "veil-hysteria2@hy2-main.service")
+	olcWant := filepath.Join(wantsDir, "veil-olcrtc@room-1.service")
+	if err := os.WriteFile(hy2Want, []byte("want"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(olcWant, []byte("want"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stopped, removed []string
+	uninstallServiceStopper = func(service string) error { stopped = append(stopped, service); return nil }
+	uninstallFileRemover = func(path string) error {
+		removed = append(removed, filepath.ToSlash(path))
+		return nil
+	}
+	uninstallSystemdReloader = func() error { return nil }
+	cmd := NewRootCommand("test")
+	cmd.SetArgs([]string{
+		"uninstall", "--yes",
+		"--etc-dir", filepath.Join(host, "etc"),
+		"--var-dir", filepath.Join(host, "var"),
+		"--systemd-dir", systemdDir,
+		"--install-dir", filepath.Join(host, "bin"),
+	})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"veil-hysteria2@hy2-main.service", "veil-olcrtc@room-1.service"} {
+		if !contains(stopped, want) {
+			t.Fatalf("did not disable leftover instance %s, stopped=%v", want, stopped)
+		}
+	}
+	dropIn := filepath.ToSlash(filepath.Join(systemdDir, "veil-backup.service.d"))
+	if !contains(removed, dropIn) || !contains(removed, filepath.ToSlash(hy2Want)) || !contains(removed, filepath.ToSlash(olcWant)) {
+		t.Fatalf("did not remove leftover systemd paths, removed=%v", removed)
 	}
 }
 
@@ -206,15 +261,15 @@ func TestUninstallKeepDataPreservesState(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	for _, preserved := range []string{"/etc/veil", "/var/lib/veil"} {
+	for _, preserved := range []string{"/etc/veil", "/var/lib/veil", "/var/lib/caddy", "/var/lib/mita"} {
 		for _, path := range removed {
 			if path == preserved {
 				t.Fatalf("--keep-data removed preserved path %s: %v", preserved, removed)
 			}
 		}
 	}
-	if !contains(removed, "/usr/local/bin/veil") {
-		t.Fatalf("--keep-data must still remove the binary: %v", removed)
+	if !contains(removed, "/usr/local/bin/veil") || !contains(removed, "/etc/systemd/system/veil-backup.service.d") {
+		t.Fatalf("--keep-data must still remove the binary and backup drop-in: %v", removed)
 	}
 }
 
@@ -248,7 +303,7 @@ func TestUninstallPurgeRemovesState(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"/etc/veil", "/var/lib/veil"} {
+	for _, want := range []string{"/etc/veil", "/var/lib/veil", "/var/lib/caddy", "/var/lib/mita"} {
 		found := false
 		for _, path := range removed {
 			found = found || path == want

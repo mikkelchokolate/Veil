@@ -9,15 +9,23 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/systemdunits"
 )
 
+const (
+	backupScheduleDropInDir = "veil-backup.service.d"
+	caddyStateDirDefault    = "/var/lib/caddy"
+	mitaStateDirDefault     = "/var/lib/mita"
+)
+
 type Options struct {
-	DryRun     bool
-	Yes        bool
-	Purge      bool
-	KeepData   bool
-	EtcDir     string
-	VarDir     string
-	SystemdDir string
-	InstallDir string
+	DryRun        bool
+	Yes           bool
+	Purge         bool
+	KeepData      bool
+	EtcDir        string
+	VarDir        string
+	SystemdDir    string
+	InstallDir    string
+	CaddyStateDir string
+	MitaStateDir  string
 }
 
 // PreservesData reports whether configuration and state directories are kept.
@@ -44,6 +52,11 @@ func Run(opts Options, out io.Writer, errOut io.Writer, deps Dependencies) error
 		return fmt.Errorf("uninstall requires --yes; rerun with --dry-run to preview")
 	}
 	for _, svc := range Services() {
+		if err := deps.ServiceStopper(svc); err != nil {
+			fmt.Fprintf(errOut, "warning: service %s: %v\n", svc, err)
+		}
+	}
+	for _, svc := range TemplateInstanceUnits(opts) {
 		if err := deps.ServiceStopper(svc); err != nil {
 			fmt.Fprintf(errOut, "warning: service %s: %v\n", svc, err)
 		}
@@ -79,11 +92,12 @@ func Plan(opts Options) string {
 	opts = opts.WithDefaults()
 	if opts.PreservesData() {
 		b.WriteString("Preserved state:\n")
-		b.WriteString(fmt.Sprintf("  - %s\n", opts.EtcDir))
-		b.WriteString(fmt.Sprintf("  - %s\n", opts.VarDir))
+		for _, path := range stateDataPaths(opts) {
+			b.WriteString(fmt.Sprintf("  - %s\n", path))
+		}
 	} else {
 		b.WriteString("Remove configuration and state:\n")
-		for _, path := range []string{opts.EtcDir, opts.VarDir} {
+		for _, path := range stateDataPaths(opts) {
 			b.WriteString(fmt.Sprintf("  - %s\n", path))
 		}
 	}
@@ -113,6 +127,12 @@ func (opts Options) WithDefaults() Options {
 	if opts.InstallDir == "" {
 		opts.InstallDir = "/usr/local/bin"
 	}
+	if opts.CaddyStateDir == "" {
+		opts.CaddyStateDir = caddyStateDirDefault
+	}
+	if opts.MitaStateDir == "" {
+		opts.MitaStateDir = mitaStateDirDefault
+	}
 	return opts
 }
 
@@ -120,21 +140,76 @@ func Paths(opts Options) []string {
 	opts = opts.WithDefaults()
 	paths := []string{}
 	if !opts.PreservesData() {
-		paths = append(paths, filepath.ToSlash(opts.EtcDir), filepath.ToSlash(opts.VarDir))
+		paths = append(paths, stateDataPaths(opts)...)
 	}
 	paths = append(paths, SystemdUnitPaths(opts)...)
 	paths = append(paths, BinaryPath(opts))
 	return paths
 }
 
+func stateDataPaths(opts Options) []string {
+	opts = opts.WithDefaults()
+	return []string{
+		filepath.ToSlash(opts.EtcDir),
+		filepath.ToSlash(opts.VarDir),
+		filepath.ToSlash(opts.CaddyStateDir),
+		filepath.ToSlash(opts.MitaStateDir),
+	}
+}
+
 func SystemdUnitPaths(opts Options) []string {
 	opts = opts.WithDefaults()
 	units := systemdunits.Names()
-	paths := make([]string, 0, len(units))
+	paths := make([]string, 0, len(units)+2)
 	for _, name := range units {
 		paths = append(paths, filepath.ToSlash(filepath.Join(opts.SystemdDir, name)))
 	}
+	paths = append(paths, filepath.ToSlash(filepath.Join(opts.SystemdDir, backupScheduleDropInDir)))
+	paths = append(paths, TemplateInstancePaths(opts)...)
 	return paths
+}
+
+func TemplateInstancePaths(opts Options) []string {
+	opts = opts.WithDefaults()
+	wantsDir := filepath.Join(opts.SystemdDir, "multi-user.target.wants")
+	var paths []string
+	for _, name := range systemdunits.Names() {
+		glob := templateInstanceWantsGlob(name)
+		if glob == "" {
+			continue
+		}
+		matches, err := filepath.Glob(filepath.Join(wantsDir, glob))
+		if err != nil {
+			continue
+		}
+		for _, match := range matches {
+			paths = append(paths, filepath.ToSlash(match))
+		}
+	}
+	return paths
+}
+
+func TemplateInstanceUnits(opts Options) []string {
+	paths := TemplateInstancePaths(opts)
+	units := make([]string, 0, len(paths))
+	seen := map[string]bool{}
+	for _, path := range paths {
+		name := filepath.Base(path)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		units = append(units, name)
+	}
+	return units
+}
+
+func templateInstanceWantsGlob(unit string) string {
+	const suffix = "@.service"
+	if strings.HasSuffix(unit, suffix) {
+		return strings.TrimSuffix(unit, suffix) + "@*.service"
+	}
+	return ""
 }
 
 func BinaryPath(opts Options) string {

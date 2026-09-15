@@ -39,7 +39,7 @@ func TestRunWithConfirmationStopsServicesRemovesPathsAndReloadsSystemd(t *testin
 		t.Fatalf("Run: %v", err)
 	}
 	// Default uninstall removes configuration and state so a reinstall is fresh.
-	if !contains(stopped, "veil-mieru.service") || !contains(removed, "/tmp/systemd/veil-mieru.service") || !contains(removed, "/tmp/bin/veil") || !contains(removed, "/tmp/etc") || !contains(removed, "/tmp/var") || !reloaded {
+	if !contains(stopped, "veil-mieru.service") || !contains(removed, "/tmp/systemd/veil-mieru.service") || !contains(removed, "/tmp/bin/veil") || !contains(removed, "/tmp/etc") || !contains(removed, "/tmp/var") || !contains(removed, "/tmp/systemd/veil-backup.service.d") || !contains(removed, "/var/lib/caddy") || !contains(removed, "/var/lib/mita") || !reloaded {
 		t.Fatalf("stopped=%+v removed=%+v reloaded=%v", stopped, removed, reloaded)
 	}
 	if !strings.Contains(out.String(), "Remove configuration and state:") {
@@ -61,11 +61,11 @@ func TestRunKeepDataPreservesConfigurationAndState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if contains(removed, "/tmp/etc") || contains(removed, "/tmp/var") {
+	if contains(removed, "/tmp/etc") || contains(removed, "/tmp/var") || contains(removed, "/var/lib/caddy") || contains(removed, "/var/lib/mita") {
 		t.Fatalf("--keep-data must preserve configuration and state, removed=%+v", removed)
 	}
-	if !contains(removed, "/tmp/bin/veil") {
-		t.Fatalf("--keep-data must still remove the binary, removed=%+v", removed)
+	if !contains(removed, "/tmp/bin/veil") || !contains(removed, "/tmp/systemd/veil-backup.service.d") {
+		t.Fatalf("--keep-data must still remove the binary and backup drop-in, removed=%+v", removed)
 	}
 	if !strings.Contains(out.String(), "Preserved state:") {
 		t.Fatalf("output does not report preserved state: %s", out.String())
