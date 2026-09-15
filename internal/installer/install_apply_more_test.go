@@ -59,6 +59,35 @@ func setTestUFWApplier(runner *recordingFirewallRunner) func() {
 	return func() { newUFWApplier = orig }
 }
 
+func TestApplyContinuesWhenQUICBufferTuningFails(t *testing.T) {
+	orig := applyQUICUDPBuffers
+	origWarn := quicBufferWarn
+	applyQUICUDPBuffers = func() error { return fmt.Errorf("sysctl rejected") }
+	var warned string
+	quicBufferWarn = func(format string, args ...any) {
+		warned = fmt.Sprintf(format, args...)
+	}
+	t.Cleanup(func() {
+		applyQUICUDPBuffers = orig
+		quicBufferWarn = origWarn
+	})
+
+	dir := t.TempDir()
+	result, err := ApplyRURecommendedProfile(RURecommendedProfile{PanelAuthToken: "secret-panel"}, ApplyPaths{
+		EtcDir: filepath.Join(dir, "etc", "veil"),
+		VarDir: filepath.Join(dir, "var", "lib", "veil"),
+	})
+	if err != nil {
+		t.Fatalf("install must continue after QUIC tuning failure: %v", err)
+	}
+	if len(result.WrittenFiles) == 0 {
+		t.Fatal("expected managed files to be written")
+	}
+	if !strings.Contains(warned, "sysctl rejected") {
+		t.Fatalf("expected QUIC warning, got %q", warned)
+	}
+}
+
 func TestNewInstallApplyWithPlanAppliesWithoutFirewallActions(t *testing.T) {
 	dir := t.TempDir()
 	paths := ApplyPaths{EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: filepath.Join(dir, "var", "lib", "veil")}

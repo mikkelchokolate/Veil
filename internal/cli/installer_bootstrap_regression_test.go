@@ -196,6 +196,46 @@ func TestPrivilegedBinaryHandoffCopiesAndHashesOneOpenedInode(t *testing.T) {
 	}
 }
 
+func TestPrivilegedFirstInstallFailureKeepsBinary(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	if strings.Contains(script, `rm -f "${INSTALL_DIR}/veil"`) {
+		t.Fatal("failed first --local-bin install must leave the veil binary so uninstall can run")
+	}
+
+	if os.Geteuid() != 0 {
+		return
+	}
+	checkBash(t)
+	installerDigest := fmt.Sprintf("%x", sha256.Sum256(body))
+	root := t.TempDir()
+	source := filepath.Join(root, "candidate")
+	candidate := []byte("#!/bin/sh\nexit 47\n")
+	if err := os.WriteFile(source, candidate, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	candidateDigest := fmt.Sprintf("%x", sha256.Sum256(candidate))
+	destination := filepath.Join(root, "install")
+	if err := os.MkdirAll(destination, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command("bash", "../../scripts/install-privileged.sh", "--local-bin", source, "--install-dir", destination, "--yes")
+	command.Env = append(os.Environ(), "VEIL_INSTALLER_SHA256="+installerDigest, "VEIL_VERIFIED_BINARY_SHA256="+candidateDigest)
+	if output, err := command.CombinedOutput(); err == nil {
+		t.Fatalf("failing first install unexpectedly succeeded: %s", output)
+	}
+	installed, err := os.ReadFile(filepath.Join(destination, "veil"))
+	if err != nil {
+		t.Fatalf("failed first install deleted the veil binary: %v", err)
+	}
+	if string(installed) != string(candidate) {
+		t.Fatalf("failed first install did not leave the new binary: %q", installed)
+	}
+}
+
 func TestPrivilegedInstallFailureRestoresPreviousBinary(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("root-owned installer transaction test")

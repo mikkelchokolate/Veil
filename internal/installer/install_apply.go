@@ -15,10 +15,12 @@ import (
 )
 
 var (
-	effectiveUID = os.Geteuid
-	lookupUser   = user.Lookup
-	chownPath    = os.Chown
-	chmodPath    = os.Chmod
+	effectiveUID        = os.Geteuid
+	lookupUser          = user.Lookup
+	chownPath           = os.Chown
+	chmodPath           = os.Chmod
+	applyQUICUDPBuffers = hostenv.ApplyQUICUDPBuffers
+	quicBufferWarn      = func(format string, args ...any) { fmt.Fprintf(os.Stderr, format, args...) }
 )
 
 type ApplyPaths struct {
@@ -97,8 +99,10 @@ func (a InstallApply) Apply() (ApplyResult, error) {
 			return result, fmt.Errorf("apply firewall rules: %w", err)
 		}
 	}
-	if err := hostenv.ApplyQUICUDPBuffers(); err != nil {
-		return result, fmt.Errorf("tune QUIC UDP buffers: %w", err)
+	if err := applyQUICUDPBuffers(); err != nil {
+		// Live sysctl can be rejected on OpenVZ/LXC after secrets and firewall
+		// rules are already on disk. Persist-or-warn; do not fail the install.
+		quicBufferWarn("WARNING: could not tune QUIC UDP buffers: %v\n", err)
 	}
 
 	return result, nil

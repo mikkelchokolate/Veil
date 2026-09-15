@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -197,6 +198,76 @@ func TestCurlInstallScriptRequiresRootForPanelServiceInstall(t *testing.T) {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh missing root/systemd guidance %q:\n%s", want, script)
 		}
+	}
+}
+
+func TestUninstallScriptFailsClosedWhenBinaryMissingButStateRemains(t *testing.T) {
+	checkBash(t)
+	root := t.TempDir()
+	installDir := filepath.Join(root, "bin")
+	etcDir := filepath.Join(root, "etc")
+	varDir := filepath.Join(root, "var")
+	systemdDir := filepath.Join(root, "systemd")
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(etcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(etcDir, "veil.env"), []byte("VEIL_API_TOKEN=leftover\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(systemdDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	run := func(extra ...string) (string, error) {
+		t.Helper()
+		args := append([]string{
+			"../../scripts/uninstall.sh",
+			"--install-dir", installDir,
+			"--etc-dir", etcDir,
+			"--var-dir", varDir,
+			"--systemd-dir", systemdDir,
+		}, extra...)
+		cmd := exec.Command("bash", args...)
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	out, err := run("--dry-run")
+	if err != nil {
+		t.Fatalf("leftover dry-run failed: %v\n%s", err, out)
+	}
+	if strings.Contains(out, "Nothing to uninstall") {
+		t.Fatalf("leftover state must not be reported as empty:\n%s", out)
+	}
+	if !strings.Contains(out, etcDir) {
+		t.Fatalf("leftover dry-run should mention %s:\n%s", etcDir, out)
+	}
+
+	out, err = run()
+	if err == nil {
+		t.Fatalf("leftover uninstall without --yes must fail closed, got:\n%s", out)
+	}
+	if strings.Contains(out, "Nothing to uninstall") {
+		t.Fatalf("leftover uninstall without --yes must not claim success:\n%s", out)
+	}
+
+	emptyRoot := t.TempDir()
+	cmd := exec.Command("bash", "../../scripts/uninstall.sh",
+		"--install-dir", filepath.Join(emptyRoot, "bin"),
+		"--etc-dir", filepath.Join(emptyRoot, "etc"),
+		"--var-dir", filepath.Join(emptyRoot, "var"),
+		"--systemd-dir", filepath.Join(emptyRoot, "systemd"),
+		"--dry-run",
+	)
+	outBytes, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("empty uninstall dry-run failed: %v\n%s", err, outBytes)
+	}
+	if !strings.Contains(string(outBytes), "Nothing to uninstall") {
+		t.Fatalf("empty host should still report nothing to uninstall:\n%s", outBytes)
 	}
 }
 
