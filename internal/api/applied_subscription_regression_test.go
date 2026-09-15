@@ -1,10 +1,12 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	veilapply "github.com/mikkelchokolate/Veil/internal/apply"
@@ -118,6 +120,25 @@ func TestPublicSubscriptionUsesLastAppliedImmutableSnapshot(t *testing.T) {
 			if got := after.Header().Get("X-Veil-Applied-Revision"); got != strconv.FormatUint(revisionsBefore.Applied, 10) {
 				t.Errorf("applied revision header = %q, want %d", got, revisionsBefore.Applied)
 			}
+			assertAuthenticatedLinksMatchAppliedSubscription(t, router, clientID, after.Body.String())
+			links := v1Request(t, router, http.MethodGet, "/api/v1/clients/"+clientID+"/links", "")
+			if links.Header().Get("X-Veil-Configuration-State") != "stale" {
+				t.Errorf("authenticated links configuration state = %q, want stale", links.Header().Get("X-Veil-Configuration-State"))
+			}
+			switch mutation.name {
+			case "credential":
+				if strings.Contains(links.Body.String(), "desired-not-applied-credential") {
+					t.Errorf("authenticated links published unapplied credential: %s", links.Body.String())
+				}
+			case "domain":
+				if strings.Contains(links.Body.String(), "desired-not-applied.example.net") {
+					t.Errorf("authenticated links published unapplied domain: %s", links.Body.String())
+				}
+			case "protocol":
+				if strings.Contains(strings.ToLower(links.Body.String()), "mieru") {
+					t.Errorf("authenticated links published unapplied protocol: %s", links.Body.String())
+				}
+			}
 			if got := after.Header().Get("X-Veil-Desired-Revision"); got != strconv.FormatUint(revisionsAfter.Desired, 10) {
 				t.Errorf("desired revision header = %q, want %d", got, revisionsAfter.Desired)
 			}
@@ -125,5 +146,68 @@ func TestPublicSubscriptionUsesLastAppliedImmutableSnapshot(t *testing.T) {
 				t.Errorf("WARP/routing-only desired change altered subscription")
 			}
 		})
+	}
+}
+
+func TestAuthenticatedLinksConvergeAfterSuccessfulApply(t *testing.T) {
+	router, state := newApplyTrackedRouterWithState(t)
+	inboundResponse := v1Request(t, router, http.MethodPost, "/api/inbounds",
+		`{"name":"applied-links-hy","protocol":"hysteria2","transport":"udp","port":27444,"enabled":true}`)
+	if inboundResponse.Code != http.StatusCreated && inboundResponse.Code != http.StatusOK {
+		t.Fatalf("create inbound: %d %s", inboundResponse.Code, inboundResponse.Body.String())
+	}
+	clientResponse := v1Request(t, router, http.MethodPost, "/api/v1/clients",
+		`{"name":"applied-links-client","bindings":[{"inboundId":"applied-links-hy","runtimeIdentity":"applied_links_identity","credential":"applied-links-credential"}]}`)
+	if clientResponse.Code != http.StatusCreated {
+		t.Fatalf("create client: %d %s", clientResponse.Code, clientResponse.Body.String())
+	}
+	created := unwrapClient(t, clientResponse.Body.Bytes())
+	clientID := created["id"].(string)
+	issuedToken, err := state.tokenStore.Issue(clientID, "applied-links-test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings := v1Request(t, router, http.MethodPut, "/api/settings",
+		`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"applied-after-success.example.net"}`)
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings: %d %s", settings.Code, settings.Body.String())
+	}
+	after := publicRawSubscription(t, router, issuedToken.Plaintext)
+	if after.Code != http.StatusOK || !strings.Contains(after.Body.String(), "applied-after-success.example.net") {
+		t.Fatalf("applied subscription missing new domain: %d %q", after.Code, after.Body.String())
+	}
+	assertAuthenticatedLinksMatchAppliedSubscription(t, router, clientID, after.Body.String())
+}
+
+func assertAuthenticatedLinksMatchAppliedSubscription(t *testing.T, router http.Handler, clientID, rawSubscription string) {
+	t.Helper()
+	resp := v1Request(t, router, http.MethodGet, "/api/v1/clients/"+clientID+"/links", "")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("links: %d %s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		Items []struct {
+			URI string `json:"uri"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if rawSubscription == "" {
+		if len(payload.Items) != 0 {
+			t.Fatalf("authenticated links = %+v, want empty to match applied subscription", payload.Items)
+		}
+		return
+	}
+	if len(payload.Items) == 0 {
+		t.Fatalf("authenticated links empty, applied subscription %q", rawSubscription)
+	}
+	for _, item := range payload.Items {
+		if item.URI == "" {
+			continue
+		}
+		if !strings.Contains(rawSubscription, item.URI) {
+			t.Errorf("authenticated link %q missing from applied subscription %q", item.URI, rawSubscription)
+		}
 	}
 }

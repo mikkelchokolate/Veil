@@ -484,11 +484,18 @@ func ownedBinding(settings model.Settings, candidate model.Inbound, current []mo
 	return false
 }
 
+func panelCaddyPublicPort(settings model.Settings) int {
+	if settings.PanelPublicPort > 0 {
+		return settings.PanelPublicPort
+	}
+	return 443
+}
+
 func ownedPanelCaddyBinding(settings model.Settings, candidate model.Inbound) bool {
 	return settings.PanelAccess == "caddy" &&
 		candidate.Protocol == "naiveproxy" &&
 		candidate.Transport == "tcp" &&
-		inboundListenPort(settings, candidate) == 443
+		inboundListenPort(settings, candidate) == panelCaddyPublicPort(settings)
 }
 
 func bindingKey(transport string, port int) string {

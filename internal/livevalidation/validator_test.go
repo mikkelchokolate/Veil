@@ -134,6 +134,65 @@ func TestValidatorAllowsNaiveProxyToReplacePanelCaddyBindingOn443(t *testing.T) 
 	}
 }
 
+func TestValidatorAllowsNaiveProxyToShareCustomPanelPublicPort(t *testing.T) {
+	validator := testValidator()
+	validator.Ports = fakePortProbe{available: map[string]bool{"tcp:9443": false}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{
+			PanelAccess:     "caddy",
+			PanelPublicPort: 9443,
+			Domain:          "vpn.example.com",
+			Email:           "admin@example.com",
+			NaiveUsername:   "veil",
+			NaivePassword:   "secret",
+		},
+		Inbounds: []model.Inbound{{
+			Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true,
+			ProtocolFields: map[string]any{"publicPort": 9443},
+		}},
+	})
+
+	if hasIssueCode(response, "port_in_use") {
+		t.Fatalf("Veil-owned Panel Caddy binding on custom public port should be replaceable by NaiveProxy: %+v", response)
+	}
+}
+
+func TestValidatorRejectsNaiveProxyOnDifferentBusyPortThanPanelPublicPort(t *testing.T) {
+	validator := testValidator()
+	validator.Ports = fakePortProbe{available: map[string]bool{"tcp:8443": false}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{
+			PanelAccess:     "caddy",
+			PanelPublicPort: 9443,
+			Domain:          "vpn.example.com",
+			Email:           "admin@example.com",
+			NaiveUsername:   "veil",
+			NaivePassword:   "secret",
+		},
+		Inbounds: []model.Inbound{{
+			Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 8443, Enabled: true,
+		}},
+	})
+
+	assertIssueCode(t, response, "port_in_use")
+}
+
+func TestValidatorDoesNotTreatCustomPanelPublicPortAsOwnedByOtherProtocols(t *testing.T) {
+	validator := testValidator()
+	validator.Ports = fakePortProbe{available: map[string]bool{"tcp:9443": false}}
+
+	response := validator.Validate(context.Background(), Request{
+		Settings: model.Settings{PanelAccess: "caddy", PanelPublicPort: 9443},
+		Inbounds: []model.Inbound{{
+			Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 9443, Enabled: true, Password: "secret",
+		}},
+	})
+
+	assertIssueCode(t, response, "port_in_use")
+}
+
 func TestValidatorDoesNotTreatPanelCaddyBindingAsOwnedByOtherProtocols(t *testing.T) {
 	validator := testValidator()
 	validator.Ports = fakePortProbe{available: map[string]bool{"tcp:443": false}}
