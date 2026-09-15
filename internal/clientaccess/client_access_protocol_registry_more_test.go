@@ -186,6 +186,47 @@ func TestResolveInboundDomainViaModelHelper(t *testing.T) {
 	}
 }
 
+func TestNaiveProfileLinkPortUsesPublicPort(t *testing.T) {
+	link, ok := naiveProfileClientLink(ClientAccessLinkInput{
+		Settings: Settings{Domain: "vpn.example.com"},
+		Inbound: Inbound{
+			Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true,
+			ProtocolFields: map[string]any{"publicPort": 8443, "domain": "vpn.example.com"},
+		},
+		LinkName:   "naive/alice",
+		Credential: ClientCredential{Name: "alice", Username: "alice", Password: "pass"},
+	})
+	if !ok {
+		t.Fatal("expected link")
+	}
+	if link.Port != 8443 {
+		t.Fatalf("port = %d, want 8443", link.Port)
+	}
+	if !strings.Contains(link.URI, ":8443") {
+		t.Fatalf("URI = %q, want publicPort 8443", link.URI)
+	}
+}
+
+func TestNaiveFallbackLinkPortUsesPublicPort(t *testing.T) {
+	link, ok := naiveFallbackClientLink(ClientAccessLinkInput{
+		Settings: Settings{Domain: "vpn.example.com", NaiveUsername: "veil", NaivePassword: "global"},
+		Inbound: Inbound{
+			Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true,
+			ProtocolFields: map[string]any{"publicPort": 8443, "domain": "vpn.example.com"},
+		},
+		LinkName: "naive",
+	})
+	if !ok {
+		t.Fatal("expected link")
+	}
+	if link.Port != 8443 {
+		t.Fatalf("port = %d, want 8443", link.Port)
+	}
+	if !strings.Contains(link.URI, ":8443") {
+		t.Fatalf("URI = %q, want publicPort 8443", link.URI)
+	}
+}
+
 func TestNaiveProfileLinkUsesInboundDomain(t *testing.T) {
 	link, ok := naiveProfileClientLink(ClientAccessLinkInput{
 		Settings:   Settings{Domain: "global.example.com"},
