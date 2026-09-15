@@ -100,6 +100,14 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 				writeError(w, err.Error(), http.StatusBadRequest)
 				return nil
 			}
+			if err := veilsettings.CheckProcessCanAdoptCaddyIdentity(candidate, Settings{
+				WebBasePath: s.serveWebBasePath,
+				PanelListen: s.servePanelListen,
+				PanelAccess: s.servePanelAccess,
+			}); err != nil {
+				writeError(w, err.Error(), http.StatusBadRequest)
+				return nil
+			}
 			if validation, ok := s.enforceValidationLocked(r.Context(), candidate, s.inbounds, s.warp); !ok {
 				s.logUserAction(r, "update_settings", "settings", false, "live validation failed")
 				writeValidationFailure(w, validation)

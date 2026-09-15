@@ -27,11 +27,11 @@ func TestPlanAcmeChallengeBindsDNS01NoBind(t *testing.T) {
 	}
 	owners := map[bindregistry.BindKey]bindregistry.BindOwner{}
 	planned, issues := PlanAcmeChallengeBinds("dns-01", domains, owners)
-	if len(issues) > 0 {
-		t.Fatalf("unexpected issues: %v", issues)
-	}
 	if len(planned) != 0 {
 		t.Fatalf("dns-01 should add no binds, got %v", planned)
+	}
+	if len(issues) != 1 || issues[0].Code != "acme_challenge_unsupported" || issues[0].Severity != "error" {
+		t.Fatalf("expected unsupported dns-01 error, got %v", issues)
 	}
 }
 

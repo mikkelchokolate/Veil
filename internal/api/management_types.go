@@ -73,6 +73,9 @@ type managementState struct {
 	requireApplyTracking           bool
 	setupAllowed                   bool
 	setup                          SetupState
+	serveWebBasePath               string
+	servePanelListen               string
+	servePanelAccess               string
 	settings                       Settings
 	inbounds                       []Inbound
 	rules                          []RoutingRule

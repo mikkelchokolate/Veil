@@ -18,7 +18,7 @@ type RURecommendedPreviewResponse struct {
 	Email       string `json:"email"`
 	PanelAccess string `json:"panelAccess"`
 	PanelURL    string `json:"panelUrl,omitempty"`
-	CaddyJSON   string `json:"caddyJSON,omitempty"`
+	Caddyfile   string `json:"caddyfile,omitempty"`
 }
 
 type ProfilePreviewRoutes struct{}
@@ -56,7 +56,7 @@ func (ProfilePreviewRoutes) handleRURecommendedPreview(w http.ResponseWriter, r 
 		Email:       profile.Email,
 		PanelAccess: req.PanelAccess,
 		PanelURL:    panelURL,
-		CaddyJSON:   redactProfileSecrets(profile, profile.CaddyJSON),
+		Caddyfile:   redactProfileSecrets(profile, profile.CaddyJSON),
 	})
 }
 

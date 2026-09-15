@@ -17,7 +17,7 @@ func TestSettingsPartialPutPreservesOmittedNonSchemaFields(t *testing.T) {
 	// schema keys mirrored into protocolFields (as the SPA echo does).
 	seed := `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"hy.example.com",
 		"firewallManagement":false,"defaultInboundPublicPort":443,
-		"defaultAcmeEmail":"acme@example.com","acmeChallengeMode":"dns-01",
+		"defaultAcmeEmail":"acme@example.com","acmeChallengeMode":"tls-alpn-01",
 		"protocolFields":{
 			"naiveUsername":"veil","panelDomain":"panel.example.com",
 			"panelEmail":"panel@example.com","panelPublicPort":8443}}`
@@ -43,7 +43,7 @@ func TestSettingsPartialPutPreservesOmittedNonSchemaFields(t *testing.T) {
 	if state.settings.DefaultAcmeEmail != "acme@example.com" {
 		t.Fatalf("defaultAcmeEmail = %q", state.settings.DefaultAcmeEmail)
 	}
-	if state.settings.AcmeChallengeMode != "dns-01" {
+	if state.settings.AcmeChallengeMode != "tls-alpn-01" {
 		t.Fatalf("acmeChallengeMode = %q", state.settings.AcmeChallengeMode)
 	}
 }

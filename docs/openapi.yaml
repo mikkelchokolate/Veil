@@ -4600,7 +4600,6 @@ components:
           type: string
           enum:
           - http-01
-          - dns-01
           - tls-alpn-01
           description: ACME challenge mode used for inbound certificates.
     ClientProfile:

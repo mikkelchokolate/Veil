@@ -62,7 +62,7 @@ export function SettingsPage() {
 		{
 			key: "acmeChallengeMode",
 			label: t("settings.field.acmeChallengeMode"),
-			placeholder: "http-01 | dns-01",
+			placeholder: "http-01 | tls-alpn-01",
 		},
 		{
 			key: "defaultInboundPublicPort",
