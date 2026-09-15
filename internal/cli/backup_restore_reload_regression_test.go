@@ -38,7 +38,7 @@ func TestCLIBackupRestoreSignalsRunningPanel(t *testing.T) {
 
 	var calls [][]string
 	oldRun := backupSystemctlRun
-	backupSystemctlRun = func(args []string) error {
+	backupSystemctlRun = func(args ...string) error {
 		calls = append(calls, append([]string(nil), args...))
 		return nil
 	}
@@ -99,7 +99,7 @@ func TestCLIBackupRestoreSkipsReloadWhenPanelInactive(t *testing.T) {
 
 	var calls [][]string
 	oldRun := backupSystemctlRun
-	backupSystemctlRun = func(args []string) error {
+	backupSystemctlRun = func(args ...string) error {
 		calls = append(calls, append([]string(nil), args...))
 		if len(args) > 0 && args[0] == "is-active" {
 			return os.ErrNotExist
