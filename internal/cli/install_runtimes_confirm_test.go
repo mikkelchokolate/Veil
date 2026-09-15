@@ -64,6 +64,7 @@ func TestInstallYesInstallsRuntimesOnce(t *testing.T) {
 		"--panel-access", "local",
 		"--etc-dir", t.TempDir(),
 		"--var-dir", t.TempDir(),
+		"--systemd-dir", t.TempDir(),
 		"--yes",
 	})
 	if err := cmd.Execute(); err != nil {
