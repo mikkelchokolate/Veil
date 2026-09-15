@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/acmeip"
 	"github.com/mikkelchokolate/Veil/internal/api"
@@ -432,11 +433,12 @@ func shouldRenewLEIPCert(certPath string) bool {
 	if !info.Valid || info.Error != "" {
 		return true
 	}
-	if info.DaysRemaining <= 7 {
-		return true
-	}
 	if !strings.Contains(info.Issuer, "Let's Encrypt") {
 		return true
 	}
-	return false
+	notAfter, err := time.Parse(time.RFC3339, info.NotAfter)
+	if err != nil {
+		return true
+	}
+	return !notAfter.After(time.Now().Add(72 * time.Hour))
 }
