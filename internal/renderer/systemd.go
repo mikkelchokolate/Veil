@@ -50,6 +50,21 @@ var systemdHardeningBlockOlcrtc = strings.Replace(
 	1,
 )
 
+func systemdQuote(p string) string {
+	if p == "" || !strings.ContainsAny(p, " \t\"'\\") {
+		return p
+	}
+	escaped := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(p)
+	return `"` + escaped + `"`
+}
+
+func systemdAssign(key, value string) string {
+	if value == "" || !strings.ContainsAny(value, " \t\"'\\") {
+		return key + "=" + value
+	}
+	return key + "=" + systemdQuote(value)
+}
+
 func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 	if cfg.VeilBinary == "" {
 		cfg.VeilBinary = "/usr/local/bin/veil"
@@ -79,11 +94,24 @@ func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 	statePath := path.Join(cfg.VarDir, "state.json")
 	keyPath := path.Join(cfg.EtcDir, "state.key")
 	backupDir := path.Join(cfg.VarDir, "backups")
-	caddyConfig := path.Join(cfg.EtcDir, "generated", "caddy", "config.json")
-	hysteriaConfig := path.Join(cfg.EtcDir, "generated", "hysteria2", "%i.yaml")
-	olcrtcConfig := path.Join(cfg.EtcDir, "generated", "olcrtc", "%i.yaml")
-	warpConfig := path.Join(cfg.EtcDir, "generated", "sing-box", "warp.json")
-	mieruConfig := path.Join(cfg.EtcDir, "generated", "mieru", "server_config.json")
+	veilBin := systemdQuote(cfg.VeilBinary)
+	caddyBin := systemdQuote(cfg.CaddyBinary)
+	hysteriaBin := systemdQuote(cfg.HysteriaBinary)
+	singBoxBin := systemdQuote(cfg.SingBoxBinary)
+	mieruBin := systemdQuote(cfg.MieruBinary)
+	olcrtcBin := systemdQuote(cfg.OlcrtcBinary)
+	etcDir := systemdQuote(cfg.EtcDir)
+	varDir := systemdQuote(cfg.VarDir)
+	envFile := systemdQuote(path.Join(cfg.EtcDir, "veil.env"))
+	caddyConfig := systemdQuote(path.Join(cfg.EtcDir, "generated", "caddy", "config.json"))
+	hysteriaConfig := systemdQuote(path.Join(cfg.EtcDir, "generated", "hysteria2", "%i.yaml"))
+	olcrtcConfig := systemdQuote(path.Join(cfg.EtcDir, "generated", "olcrtc", "%i.yaml"))
+	warpConfig := systemdQuote(path.Join(cfg.EtcDir, "generated", "sing-box", "warp.json"))
+	mieruConfig := systemdQuote(path.Join(cfg.EtcDir, "generated", "mieru", "server_config.json"))
+	stateKey := systemdQuote(keyPath)
+	passphraseFile := systemdQuote(path.Join(cfg.EtcDir, "backup.passphrase"))
+	quotedState := systemdQuote(statePath)
+	quotedBackupDir := systemdQuote(backupDir)
 	return map[string]string{
 		UnitVeil: `[Unit]
 Description=Veil panel
@@ -98,13 +126,13 @@ Group=veil
 RuntimeDirectory=veil
 RuntimeDirectoryMode=0750
 RuntimeDirectoryPreserve=yes
-EnvironmentFile=-` + path.Join(cfg.EtcDir, "veil.env") + `
+EnvironmentFile=-` + envFile + `
 Environment=VEIL_HELPER_SOCKET=/run/veil/helper.sock
-Environment=VEIL_STATE_PATH=` + statePath + `
-Environment=VEIL_KEY_PATH=` + keyPath + `
-Environment=VEIL_APPLY_ROOT=` + applyRoot + `
-Environment=VEIL_LIVE_ROOT=` + path.Join(cfg.EtcDir, "generated") + `
-ExecStart=` + cfg.VeilBinary + ` serve
+Environment=` + systemdAssign("VEIL_STATE_PATH", statePath) + `
+Environment=` + systemdAssign("VEIL_KEY_PATH", keyPath) + `
+Environment=` + systemdAssign("VEIL_APPLY_ROOT", applyRoot) + `
+Environment=` + systemdAssign("VEIL_LIVE_ROOT", path.Join(cfg.EtcDir, "generated")) + `
+ExecStart=` + veilBin + ` serve
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
@@ -127,8 +155,8 @@ LockPersonality=true
 RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
-ReadOnlyPaths=` + cfg.EtcDir + `
-ReadWritePaths=` + cfg.VarDir + `
+ReadOnlyPaths=` + etcDir + `
+ReadWritePaths=` + varDir + `
 
 [Install]
 WantedBy=multi-user.target
@@ -144,7 +172,7 @@ After=veil-helper.socket
 Type=simple
 User=root
 Group=root
-ExecStart=` + cfg.VeilBinary + ` helper serve --systemd-socket-activation
+ExecStart=` + veilBin + ` helper serve --systemd-socket-activation
 NoNewPrivileges=true
 PrivateDevices=true
 PrivateTmp=true
@@ -166,11 +194,11 @@ RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-Environment=VEIL_STATE_PATH=` + statePath + `
-Environment=VEIL_KEY_PATH=` + keyPath + `
-Environment=VEIL_APPLY_ROOT=` + applyRoot + `
-Environment=VEIL_LIVE_ROOT=` + path.Join(cfg.EtcDir, "generated") + `
-ReadWritePaths=` + cfg.EtcDir + ` ` + cfg.VarDir + ` /usr/local/bin /etc/ufw /run /var/run
+Environment=` + systemdAssign("VEIL_STATE_PATH", statePath) + `
+Environment=` + systemdAssign("VEIL_KEY_PATH", keyPath) + `
+Environment=` + systemdAssign("VEIL_APPLY_ROOT", applyRoot) + `
+Environment=` + systemdAssign("VEIL_LIVE_ROOT", path.Join(cfg.EtcDir, "generated")) + `
+ReadWritePaths=` + etcDir + ` ` + varDir + ` /usr/local/bin /etc/ufw /run /var/run
 `,
 		UnitHelperSocket: `[Unit]
 Description=Veil privileged helper socket
@@ -201,8 +229,8 @@ Group=veil
 # (/var/lib/caddy); /etc/veil and /var/lib/veil stay read-only.
 StateDirectory=caddy
 Environment=HOME=/var/lib/caddy XDG_DATA_HOME=/var/lib/caddy XDG_CONFIG_HOME=/var/lib/caddy
-ExecStart=` + cfg.CaddyBinary + ` run --config ` + caddyConfig + `
-ExecReload=` + cfg.CaddyBinary + ` reload --config ` + caddyConfig + `
+ExecStart=` + caddyBin + ` run --config ` + caddyConfig + `
+ExecReload=` + caddyBin + ` reload --config ` + caddyConfig + `
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
@@ -210,7 +238,7 @@ ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
 PrivateDevices=true
-` + systemdHardeningBlock + `ReadOnlyPaths=` + cfg.EtcDir + `
+` + systemdHardeningBlock + `ReadOnlyPaths=` + etcDir + `
 
 [Install]
 WantedBy=multi-user.target
@@ -224,14 +252,14 @@ Wants=network-online.target
 Type=simple
 User=veil-proxy
 Group=veil-proxy
-ExecStart=` + cfg.HysteriaBinary + ` server --config ` + hysteriaConfig + `
+ExecStart=` + hysteriaBin + ` server --config ` + hysteriaConfig + `
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlock + `InaccessiblePaths=/run/veil/helper.sock ` + cfg.VarDir + `
+` + systemdHardeningBlock + `InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
 
 [Install]
 WantedBy=multi-user.target
@@ -247,14 +275,14 @@ StartLimitBurst=5
 Type=simple
 User=veil-proxy
 Group=veil-proxy
-ExecStart=` + cfg.OlcrtcBinary + ` ` + olcrtcConfig + `
+ExecStart=` + olcrtcBin + ` ` + olcrtcConfig + `
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlockOlcrtc + `InaccessiblePaths=/run/veil/helper.sock ` + cfg.VarDir + `
+` + systemdHardeningBlockOlcrtc + `InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
 
 [Install]
 WantedBy=multi-user.target
@@ -268,8 +296,8 @@ Wants=network-online.target
 Type=simple
 User=veil-proxy
 Group=veil-proxy
-ExecStart=` + cfg.SingBoxBinary + ` run -c ` + warpConfig + `
-ExecReload=` + cfg.SingBoxBinary + ` check -c ` + warpConfig + `
+ExecStart=` + singBoxBin + ` run -c ` + warpConfig + `
+ExecReload=` + singBoxBin + ` check -c ` + warpConfig + `
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
@@ -288,7 +316,7 @@ LockPersonality=true
 RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
-InaccessiblePaths=/run/veil/helper.sock ` + cfg.VarDir + `
+InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
 
 [Install]
 WantedBy=multi-user.target
@@ -308,16 +336,16 @@ Environment=MITA_INSECURE_UDS=1
 Environment=MITA_LOG_NO_TIMESTAMP=true
 RuntimeDirectory=veil-mieru
 StateDirectory=mita
-ExecStart=` + cfg.MieruBinary + ` run
-ExecStartPost=/bin/sh -c 'i=0; while [ $$i -lt 50 ]; do if [ -S /run/veil-mieru/mita.sock ]; then ` + cfg.MieruBinary + ` apply config ` + mieruConfig + ` && ` + cfg.MieruBinary + ` start && exit 0; fi; i=$$((i+1)); sleep 0.2; done; echo "mita activation timed out" >&2; exit 1'
-ExecStop=` + cfg.MieruBinary + ` stop
+ExecStart=` + mieruBin + ` run
+ExecStartPost=/bin/sh -c 'i=0; while [ $$i -lt 50 ]; do if [ -S /run/veil-mieru/mita.sock ]; then ` + mieruBin + ` apply config ` + mieruConfig + ` && ` + mieruBin + ` start && exit 0; fi; i=$$((i+1)); sleep 0.2; done; echo "mita activation timed out" >&2; exit 1'
+ExecStop=` + mieruBin + ` stop
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlock + `InaccessiblePaths=/run/veil/helper.sock ` + cfg.VarDir + `
+` + systemdHardeningBlock + `InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
 
 [Install]
 WantedBy=multi-user.target
@@ -325,13 +353,13 @@ WantedBy=multi-user.target
 		UnitBackupService: `[Unit]
 Description=Veil encrypted state backup
 Documentation=https://github.com/mikkelchokolate/Veil/blob/main/docs/disaster-recovery.md
-ConditionPathExists=` + path.Join(cfg.EtcDir, "backup.passphrase") + `
+ConditionPathExists=` + passphraseFile + `
 After=local-fs.target
 
 [Service]
 Type=oneshot
-EnvironmentFile=-` + path.Join(cfg.EtcDir, "veil.env") + `
-ExecStart=` + cfg.VeilBinary + ` backup create --state ` + statePath + ` --key-path ` + keyPath + ` --passphrase-file ` + path.Join(cfg.EtcDir, "backup.passphrase") + ` --output-dir ` + backupDir + ` --prune --daily 7 --weekly 4 --monthly 12
+EnvironmentFile=-` + envFile + `
+ExecStart=` + veilBin + ` backup create --state ` + quotedState + ` --key-path ` + stateKey + ` --passphrase-file ` + passphraseFile + ` --output-dir ` + quotedBackupDir + ` --prune --daily 7 --weekly 4 --monthly 12
 User=root
 Group=root
 NoNewPrivileges=true
@@ -350,7 +378,7 @@ LockPersonality=true
 RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
-ReadWritePaths=` + cfg.VarDir + `
+ReadWritePaths=` + varDir + `
 `,
 		UnitBackupTimer: `[Unit]
 Description=Daily Veil encrypted state backup
@@ -410,27 +438,27 @@ func dropInServiceOverrides(name string, cfg SystemdConfig) string {
 	switch name {
 	case UnitVeil:
 		b.WriteString("ExecStart=\n")
-		b.WriteString("ExecStart=" + cfg.VeilBinary + " serve\n")
-		b.WriteString("EnvironmentFile=-" + path.Join(cfg.EtcDir, "veil.env") + "\n")
-		b.WriteString("Environment=VEIL_STATE_PATH=" + path.Join(cfg.VarDir, "state.json") + "\n")
-		b.WriteString("Environment=VEIL_KEY_PATH=" + path.Join(cfg.EtcDir, "state.key") + "\n")
-		b.WriteString("Environment=VEIL_APPLY_ROOT=" + path.Join(cfg.VarDir, "staging") + "\n")
-		b.WriteString("Environment=VEIL_LIVE_ROOT=" + path.Join(cfg.EtcDir, "generated") + "\n")
-		b.WriteString("ReadOnlyPaths=" + cfg.EtcDir + "\n")
-		b.WriteString("ReadWritePaths=" + cfg.VarDir + "\n")
+		b.WriteString("ExecStart=" + systemdQuote(cfg.VeilBinary) + " serve\n")
+		b.WriteString("EnvironmentFile=-" + systemdQuote(path.Join(cfg.EtcDir, "veil.env")) + "\n")
+		b.WriteString("Environment=" + systemdAssign("VEIL_STATE_PATH", path.Join(cfg.VarDir, "state.json")) + "\n")
+		b.WriteString("Environment=" + systemdAssign("VEIL_KEY_PATH", path.Join(cfg.EtcDir, "state.key")) + "\n")
+		b.WriteString("Environment=" + systemdAssign("VEIL_APPLY_ROOT", path.Join(cfg.VarDir, "staging")) + "\n")
+		b.WriteString("Environment=" + systemdAssign("VEIL_LIVE_ROOT", path.Join(cfg.EtcDir, "generated")) + "\n")
+		b.WriteString("ReadOnlyPaths=" + systemdQuote(cfg.EtcDir) + "\n")
+		b.WriteString("ReadWritePaths=" + systemdQuote(cfg.VarDir) + "\n")
 	case UnitHelperService:
 		b.WriteString("ExecStart=\n")
-		b.WriteString("ExecStart=" + cfg.VeilBinary + " helper serve --systemd-socket-activation\n")
-		b.WriteString("Environment=VEIL_STATE_PATH=" + path.Join(cfg.VarDir, "state.json") + "\n")
-		b.WriteString("Environment=VEIL_KEY_PATH=" + path.Join(cfg.EtcDir, "state.key") + "\n")
-		b.WriteString("Environment=VEIL_APPLY_ROOT=" + path.Join(cfg.VarDir, "staging") + "\n")
-		b.WriteString("Environment=VEIL_LIVE_ROOT=" + path.Join(cfg.EtcDir, "generated") + "\n")
-		b.WriteString("ReadWritePaths=" + cfg.EtcDir + " " + cfg.VarDir + " /usr/local/bin /etc/ufw /run /var/run\n")
+		b.WriteString("ExecStart=" + systemdQuote(cfg.VeilBinary) + " helper serve --systemd-socket-activation\n")
+		b.WriteString("Environment=" + systemdAssign("VEIL_STATE_PATH", path.Join(cfg.VarDir, "state.json")) + "\n")
+		b.WriteString("Environment=" + systemdAssign("VEIL_KEY_PATH", path.Join(cfg.EtcDir, "state.key")) + "\n")
+		b.WriteString("Environment=" + systemdAssign("VEIL_APPLY_ROOT", path.Join(cfg.VarDir, "staging")) + "\n")
+		b.WriteString("Environment=" + systemdAssign("VEIL_LIVE_ROOT", path.Join(cfg.EtcDir, "generated")) + "\n")
+		b.WriteString("ReadWritePaths=" + systemdQuote(cfg.EtcDir) + " " + systemdQuote(cfg.VarDir) + " /usr/local/bin /etc/ufw /run /var/run\n")
 	case UnitBackupService:
 		b.WriteString("ExecStart=\n")
-		b.WriteString("ExecStart=" + cfg.VeilBinary + " backup create --state " + path.Join(cfg.VarDir, "state.json") + " --key-path " + path.Join(cfg.EtcDir, "state.key") + " --passphrase-file " + path.Join(cfg.EtcDir, "backup.passphrase") + " --output-dir " + path.Join(cfg.VarDir, "backups") + " --prune --daily 7 --weekly 4 --monthly 12\n")
-		b.WriteString("EnvironmentFile=-" + path.Join(cfg.EtcDir, "veil.env") + "\n")
-		b.WriteString("ReadWritePaths=" + cfg.VarDir + "\n")
+		b.WriteString("ExecStart=" + systemdQuote(cfg.VeilBinary) + " backup create --state " + systemdQuote(path.Join(cfg.VarDir, "state.json")) + " --key-path " + systemdQuote(path.Join(cfg.EtcDir, "state.key")) + " --passphrase-file " + systemdQuote(path.Join(cfg.EtcDir, "backup.passphrase")) + " --output-dir " + systemdQuote(path.Join(cfg.VarDir, "backups")) + " --prune --daily 7 --weekly 4 --monthly 12\n")
+		b.WriteString("EnvironmentFile=-" + systemdQuote(path.Join(cfg.EtcDir, "veil.env")) + "\n")
+		b.WriteString("ReadWritePaths=" + systemdQuote(cfg.VarDir) + "\n")
 	case UnitCaddy:
 		caddyBin := cfg.CaddyBinary
 		if caddyBin == "" {
@@ -438,10 +466,10 @@ func dropInServiceOverrides(name string, cfg SystemdConfig) string {
 		}
 		config := path.Join(cfg.EtcDir, "generated", "caddy", "config.json")
 		b.WriteString("ExecStart=\n")
-		b.WriteString("ExecStart=" + caddyBin + " run --config " + config + "\n")
+		b.WriteString("ExecStart=" + systemdQuote(caddyBin) + " run --config " + systemdQuote(config) + "\n")
 		b.WriteString("ExecReload=\n")
-		b.WriteString("ExecReload=" + caddyBin + " reload --config " + config + "\n")
-		b.WriteString("ReadOnlyPaths=" + cfg.EtcDir + "\n")
+		b.WriteString("ExecReload=" + systemdQuote(caddyBin) + " reload --config " + systemdQuote(config) + "\n")
+		b.WriteString("ReadOnlyPaths=" + systemdQuote(cfg.EtcDir) + "\n")
 	}
 	return b.String()
 }
