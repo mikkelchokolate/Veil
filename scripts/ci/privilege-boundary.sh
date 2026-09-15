@@ -24,6 +24,13 @@ fi
 if ! getent passwd veil >/dev/null; then
   ${SUDO} useradd --system --gid veil --home-dir /nonexistent --shell /usr/sbin/nologin veil
 fi
+if ! getent group veil-proxy >/dev/null; then
+  ${SUDO} groupadd --system veil-proxy
+fi
+if ! getent passwd veil-proxy >/dev/null; then
+  ${SUDO} useradd --system --gid veil-proxy --home-dir /nonexistent --shell /usr/sbin/nologin veil-proxy
+fi
+${SUDO} usermod -aG veil-proxy veil >/dev/null 2>&1 || true
 if [ "$(id -u)" -eq 0 ]; then
   go test -tags linuxintegration ./test/linuxintegration/... -count=1 -v
 else

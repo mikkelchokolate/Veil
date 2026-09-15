@@ -35,8 +35,10 @@ var testHooks = struct {
 }
 
 type Identity struct {
-	UID int
-	GID int
+	UID      int
+	GID      int
+	ProxyUID int
+	ProxyGID int
 }
 
 type Paths struct {
@@ -74,47 +76,73 @@ func EnsureAccount(deps AccountDependencies) (Identity, error) {
 	if deps.LookupUser == nil || deps.LookupGroup == nil || deps.Run == nil {
 		return Identity{}, fmt.Errorf("host account dependencies are incomplete")
 	}
-	group, err := deps.LookupGroup("veil")
+	panel, err := ensureNamedAccount(deps, "veil")
 	if err != nil {
-		if err := deps.Run("groupadd", "--system", "veil"); err != nil {
-			if fallbackErr := deps.Run("addgroup", "-S", "veil"); fallbackErr != nil {
-				return Identity{}, fmt.Errorf("create veil group: %v; fallback: %w", err, fallbackErr)
+		return Identity{}, err
+	}
+	proxy, err := ensureNamedAccount(deps, "veil-proxy")
+	if err != nil {
+		return Identity{}, err
+	}
+	if err := addSupplementaryGroup(deps, "veil", "veil-proxy"); err != nil {
+		return Identity{}, err
+	}
+	panel.ProxyUID = proxy.UID
+	panel.ProxyGID = proxy.GID
+	return panel, nil
+}
+
+func ensureNamedAccount(deps AccountDependencies, name string) (Identity, error) {
+	group, err := deps.LookupGroup(name)
+	if err != nil {
+		if err := deps.Run("groupadd", "--system", name); err != nil {
+			if fallbackErr := deps.Run("addgroup", "-S", name); fallbackErr != nil {
+				return Identity{}, fmt.Errorf("create %s group: %v; fallback: %w", name, err, fallbackErr)
 			}
 		}
-		group, err = deps.LookupGroup("veil")
+		group, err = deps.LookupGroup(name)
 		if err != nil {
-			return Identity{}, fmt.Errorf("resolve created veil group: %w", err)
+			return Identity{}, fmt.Errorf("resolve created %s group: %w", name, err)
 		}
 	}
-	account, err := deps.LookupUser("veil")
+	account, err := deps.LookupUser(name)
 	if err != nil {
 		if err := deps.Run(
-			"useradd", "--system", "--gid", "veil", "--no-create-home",
-			"--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin", "veil",
+			"useradd", "--system", "--gid", name, "--no-create-home",
+			"--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin", name,
 		); err != nil {
 			if fallbackErr := deps.Run(
-				"adduser", "-S", "-D", "-H", "-h", "/nonexistent", "-s", "/sbin/nologin", "-G", "veil", "veil",
+				"adduser", "-S", "-D", "-H", "-h", "/nonexistent", "-s", "/sbin/nologin", "-G", name, name,
 			); fallbackErr != nil {
-				return Identity{}, fmt.Errorf("create veil user: %v; fallback: %w", err, fallbackErr)
+				return Identity{}, fmt.Errorf("create %s user: %v; fallback: %w", name, err, fallbackErr)
 			}
 		}
-		account, err = deps.LookupUser("veil")
+		account, err = deps.LookupUser(name)
 		if err != nil {
-			return Identity{}, fmt.Errorf("resolve created veil user: %w", err)
+			return Identity{}, fmt.Errorf("resolve created %s user: %w", name, err)
 		}
 	}
 	uid, err := strconv.Atoi(account.Uid)
 	if err != nil {
-		return Identity{}, fmt.Errorf("parse veil uid: %w", err)
+		return Identity{}, fmt.Errorf("parse %s uid: %w", name, err)
 	}
 	gid, err := strconv.Atoi(group.Gid)
 	if err != nil {
-		return Identity{}, fmt.Errorf("parse veil gid: %w", err)
+		return Identity{}, fmt.Errorf("parse %s gid: %w", name, err)
 	}
 	if account.Gid != group.Gid {
-		return Identity{}, fmt.Errorf("veil user primary gid %s does not match veil group gid %s", account.Gid, group.Gid)
+		return Identity{}, fmt.Errorf("%s user primary gid %s does not match %s group gid %s", name, account.Gid, name, group.Gid)
 	}
 	return Identity{UID: uid, GID: gid}, nil
+}
+
+func addSupplementaryGroup(deps AccountDependencies, userName, groupName string) error {
+	if err := deps.Run("usermod", "-aG", groupName, userName); err != nil {
+		if fallbackErr := deps.Run("addgroup", userName, groupName); fallbackErr != nil {
+			return fmt.Errorf("add %s to %s: %v; fallback: %w", userName, groupName, err, fallbackErr)
+		}
+	}
+	return nil
 }
 
 func Migrate(paths Paths, panel Identity, now func() time.Time) error {
@@ -124,7 +152,7 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 	if now == nil {
 		now = time.Now
 	}
-	if err := ensureOwnedDirectory(paths.EtcDir, 0o750, paths.RootUID, panel.GID); err != nil {
+	if err := ensureOwnedDirectory(paths.EtcDir, 0o751, paths.RootUID, panel.GID); err != nil {
 		return err
 	}
 	if err := ensureOwnedDirectory(paths.VarDir, 0o750, panel.UID, panel.GID); err != nil {
@@ -159,10 +187,14 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 		}
 	}
 
-	if err := applyTreeOwnership(filepath.Join(paths.EtcDir, "generated"), 0o750, 0o640, paths.RootUID, panel.GID); err != nil {
+	generatedGID := panel.GID
+	if panel.ProxyGID != 0 {
+		generatedGID = panel.ProxyGID
+	}
+	if err := applyTreeOwnership(filepath.Join(paths.EtcDir, "generated"), 0o750, 0o640, paths.RootUID, generatedGID); err != nil {
 		return err
 	}
-	if err := applyTreeOwnership(filepath.Join(paths.EtcDir, "tls"), 0o750, 0o640, paths.RootUID, panel.GID); err != nil {
+	if err := applyTreeOwnership(filepath.Join(paths.EtcDir, "tls"), 0o750, 0o640, paths.RootUID, generatedGID); err != nil {
 		return err
 	}
 	// The panel's self-signed TLS material (local/direct access) lives here and is

@@ -86,7 +86,7 @@ EOF
       test "$(cat /var/lib/veil/sessions.json)" = sessions-before-upgrade
       test "$(cat /etc/veil/state.key)" = key-before-upgrade
       test "$(cat /etc/veil/veil.env)" = env-before-upgrade
-      test "$(stat -c "%U:%G %a" /etc/veil)" = "root:veil 750"
+      test "$(stat -c "%U:%G %a" /etc/veil)" = "root:veil 751"
       test "$(stat -c "%U:%G %a" /var/lib/veil)" = "veil:veil 750"
       test "$(stat -c "%U:%G %a" /var/lib/veil/state.json)" = "veil:veil 600"
       test "$(stat -c "%U:%G %a" /var/lib/veil/sessions.json)" = "veil:veil 600"
