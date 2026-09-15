@@ -166,10 +166,30 @@ func recoverFirewallTransactionLocked(ctx context.Context, config ProductionConf
 	if err != nil {
 		return err
 	}
+	if journal.Phase == "applied" {
+		return removeFirewallJournal(config.PromotionBackupRoot)
+	}
 	if err := rollbackFirewallJournal(ctx, config.RunCommand, journal); err != nil {
+		if qerr := quarantineFirewallJournal(config.PromotionBackupRoot); qerr != nil {
+			return errors.Join(err, qerr)
+		}
 		return err
 	}
 	return removeFirewallJournal(config.PromotionBackupRoot)
+}
+
+func quarantineFirewallJournal(root string) error {
+	src := firewallJournalPath(root)
+	dst := src + ".quarantined"
+	if err := os.Rename(src, dst); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	dir, err := os.Open(root)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }
 
 func rollbackFirewallJournal(_ context.Context, runner CommandRunner, journal firewallTransactionJournal) error {
