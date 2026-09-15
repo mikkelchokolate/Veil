@@ -79,6 +79,9 @@ func TestApplyPublicationSIGKILLMatrix(t *testing.T) {
 				return Result{Success: true, Disposition: ApplyDispositionRuntimeConverged, MarkRevisionLive: true}, nil
 			}))
 			defer runner.Close()
+			if err := runner.resumeRecoveryPending(context.Background()); err != nil && boundary.expectApplied {
+				t.Fatalf("resume crashed publication at %s: %v", boundary.name, err)
+			}
 			state, err := NewRevisionStore(db).Get()
 			if err != nil {
 				t.Fatal(err)
