@@ -685,7 +685,7 @@ func TestBuildLinksTCP(t *testing.T) {
 	if links[0].Transport != "tcp" {
 		t.Errorf("link.Transport = %q, want tcp", links[0].Transport)
 	}
-	want := "https://u1:p1@example.com"
+	want := "naive+https://u1:p1@example.com"
 	if links[0].URI != want {
 		t.Errorf("link.URI = %q, want %q", links[0].URI, want)
 	}
@@ -718,7 +718,7 @@ func TestBuildLinksQUIC(t *testing.T) {
 	if links[0].Transport != "quic" {
 		t.Errorf("link.Transport = %q, want quic", links[0].Transport)
 	}
-	want := "quic://u1:p1@example.com"
+	want := "naive+quic://u1:p1@example.com"
 	if links[0].URI != want {
 		t.Errorf("link.URI = %q, want %q", links[0].URI, want)
 	}
@@ -745,7 +745,7 @@ func TestBuildLinksNonDefaultPort(t *testing.T) {
 	if len(links) != 1 {
 		t.Fatalf("len(links) = %d, want 1", len(links))
 	}
-	want := "https://u1:p1@example.com:8443"
+	want := "naive+https://u1:p1@example.com:8443"
 	if links[0].URI != want {
 		t.Errorf("link.URI = %q, want %q", links[0].URI, want)
 	}
@@ -795,8 +795,8 @@ func TestBuildLinksMultipleProfiles(t *testing.T) {
 		t.Fatalf("len(links) = %d, want 2", len(links))
 	}
 	wantURIs := []string{
-		"https://u1:p1@example.com",
-		"https://u2:p2@example.com",
+		"naive+https://u1:p1@example.com",
+		"naive+https://u2:p2@example.com",
 	}
 	for i, want := range wantURIs {
 		if links[i].URI != want {
