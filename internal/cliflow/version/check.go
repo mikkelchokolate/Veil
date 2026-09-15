@@ -111,8 +111,42 @@ func Compare(a, b string) int {
 	return va.compare(vb)
 }
 
-func parseSemver(v string) (semver, bool) {
+// ReleaseTag returns the stamped release tag, stripping a trailing
+// " (<commit>)" display suffix used by release binaries.
+func ReleaseTag(v string) string {
 	v = strings.TrimSpace(v)
+	open := strings.LastIndex(v, " (")
+	if open < 0 || !strings.HasSuffix(v, ")") {
+		return v
+	}
+	commit := v[open+2 : len(v)-1]
+	if !isHexCommit(commit) {
+		return v
+	}
+	tag := strings.TrimSpace(v[:open])
+	if tag == "" {
+		return v
+	}
+	return tag
+}
+
+func isHexCommit(s string) bool {
+	n := len(s)
+	if n < 7 || n > 40 {
+		return false
+	}
+	for i := 0; i < n; i++ {
+		c := s[i]
+		if (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func parseSemver(v string) (semver, bool) {
+	v = ReleaseTag(v)
 	v = strings.TrimPrefix(v, "v")
 	if v == "" {
 		return semver{}, false
