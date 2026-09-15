@@ -53,7 +53,11 @@ func TestQuotaRolloverAdvancesToFirstFutureUTCBoundaryAndRetainsHistory(t *testi
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := traffic.RecordSample(Sample{BindingID: binding.ID, UploadBytes: 90, DownloadBytes: 20, AtUnix: fixedNow.Add(-time.Hour).Unix()}); err != nil {
+			periodStart := quotaPeriodStartUnix(tc.policy, tc.wantNext.Unix())
+			if err := traffic.RecordSample(Sample{BindingID: binding.ID, UploadBytes: 90, DownloadBytes: 20, AtUnix: periodStart - 60}); err != nil {
+				t.Fatal(err)
+			}
+			if err := traffic.RecordSample(Sample{BindingID: binding.ID, UploadBytes: 11, DownloadBytes: 4, AtUnix: periodStart + 30}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -80,14 +84,14 @@ func TestQuotaRolloverAdvancesToFirstFutureUTCBoundaryAndRetainsHistory(t *testi
 			if err != nil {
 				t.Fatal(err)
 			}
-			if up != 0 || down != 0 {
-				t.Errorf("current-period usage=%d/%d want=0/0", up, down)
+			if up != 11 || down != 4 {
+				t.Errorf("current-period usage=%d/%d want=11/4 (new-period bytes kept)", up, down)
 			}
 			history, err := traffic.HistoryForClient(c.ID, 0, fixedNow.Unix(), 10)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(history) != 1 || history[0].UploadDelta != 90 || history[0].DownloadDelta != 20 {
+			if len(history) != 2 {
 				t.Errorf("lifetime analytics were deleted or changed: %+v", history)
 			}
 
@@ -100,8 +104,8 @@ func TestQuotaRolloverAdvancesToFirstFutureUTCBoundaryAndRetainsHistory(t *testi
 				t.Fatalf("second reconcile: %v", err)
 			}
 			up, down, _ = traffic.TotalsForClient(c.ID)
-			if up != 7 || down != 3 {
-				t.Errorf("new-period usage was reset again: got=%d/%d want=7/3", up, down)
+			if up != 18 || down != 7 {
+				t.Errorf("new-period usage was reset again: got=%d/%d want=18/7", up, down)
 			}
 		})
 	}

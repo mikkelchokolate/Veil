@@ -293,7 +293,7 @@ func (s *TrafficStore) ResetForClient(clientID string) error {
 			return fmt.Errorf("client: begin quota reset transaction: %w", err)
 		}
 		defer tx.Rollback()
-		if err := ResetQuotaPeriodTx(tx, clientID); err != nil {
+		if err := ResetQuotaPeriodTx(tx, clientID, 0); err != nil {
 			return err
 		}
 		if err := tx.Commit(); err != nil {
@@ -303,11 +303,23 @@ func (s *TrafficStore) ResetForClient(clientID string) error {
 	})
 }
 
-// ResetQuotaPeriodTx joins a caller-managed transaction. It intentionally does
-// not delete traffic_samples: those rows are lifetime analytics.
-func ResetQuotaPeriodTx(q DBTX, clientID string) error {
+// ResetQuotaPeriodTx joins a caller-managed transaction. It retires previous
+// period counters and rebuilds the current period from retained samples with
+// bucket_start >= periodStart. periodStart <= 0 deletes without rebuild
+// (manual reset_traffic). Analytics history is never deleted.
+func ResetQuotaPeriodTx(q DBTX, clientID string, periodStart int64) error {
 	if _, err := q.Exec(`DELETE FROM traffic_counters WHERE client_id=?`, clientID); err != nil {
 		return fmt.Errorf("client: traffic reset counters: %w", err)
+	}
+	if periodStart <= 0 {
+		return nil
+	}
+	if _, err := q.Exec(`INSERT INTO traffic_counters (client_id, binding_id, upload_bytes, download_bytes, last_observed_at, telemetry_state, updated_at)
+	  SELECT client_id, binding_id, SUM(upload_delta), SUM(download_delta), MAX(bucket_start), 'observed', MAX(bucket_start)
+	  FROM traffic_samples
+	  WHERE client_id=? AND bucket_start>=?
+	  GROUP BY client_id, binding_id`, clientID, periodStart); err != nil {
+		return fmt.Errorf("client: traffic rebuild current period: %w", err)
 	}
 	return nil
 }
@@ -345,7 +357,7 @@ func (s *TrafficStore) HistoryForBinding(bindingID string, from, to int64, limit
 	}
 	rows, err := s.db.Query(`SELECT bucket_start, client_id, binding_id, upload_delta, download_delta
 	  FROM traffic_samples WHERE binding_id=? AND bucket_start>=? AND bucket_start<=?
-	  ORDER BY bucket_start ASC LIMIT ?`, bindingID, from, to, limit)
+	  ORDER BY bucket_start DESC LIMIT ?`, bindingID, from, to, limit)
 	if err != nil {
 		return nil, fmt.Errorf("client: traffic history: %w", err)
 	}
@@ -358,7 +370,11 @@ func (s *TrafficStore) HistoryForBinding(bindingID string, from, to int64, limit
 		}
 		out = append(out, r)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	reverseSampleRows(out)
+	return out, nil
 }
 
 // HistoryForClient aggregates bucketed deltas across a client's bindings.
@@ -368,7 +384,7 @@ func (s *TrafficStore) HistoryForClient(clientID string, from, to int64, limit i
 	}
 	rows, err := s.db.Query(`SELECT bucket_start, client_id, '', SUM(upload_delta), SUM(download_delta)
 	  FROM traffic_samples WHERE client_id=? AND bucket_start>=? AND bucket_start<=?
-	  GROUP BY bucket_start, client_id ORDER BY bucket_start ASC LIMIT ?`, clientID, from, to, limit)
+	  GROUP BY bucket_start, client_id ORDER BY bucket_start DESC LIMIT ?`, clientID, from, to, limit)
 	if err != nil {
 		return nil, fmt.Errorf("client: traffic history: %w", err)
 	}
@@ -381,5 +397,15 @@ func (s *TrafficStore) HistoryForClient(clientID string, from, to int64, limit i
 		}
 		out = append(out, r)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	reverseSampleRows(out)
+	return out, nil
+}
+
+func reverseSampleRows(rows []SampleRow) {
+	for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
+		rows[i], rows[j] = rows[j], rows[i]
+	}
 }
