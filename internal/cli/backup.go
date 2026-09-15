@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/api"
 	"github.com/mikkelchokolate/Veil/internal/backup"
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 	"github.com/spf13/cobra"
@@ -182,6 +183,9 @@ func newBackupCommand(version string) *cobra.Command {
 				fmt.Fprintln(cmd.OutOrStdout(), "Restore check passed; no files were changed.")
 				printBackupVerification(cmd, result.Verification)
 				return nil
+			}
+			if err := api.InvalidatePersistedSessions(resolvedState); err != nil {
+				return fmt.Errorf("restored backup but failed to invalidate browser sessions: %w", err)
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), "Backup successfully restored.")
 			if result.SafetyStatePath != "" {

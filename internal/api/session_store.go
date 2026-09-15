@@ -146,6 +146,33 @@ type SessionRegistry struct {
 
 var globalSessions = mustNewSessionRegistry("")
 
+func persistedSessionStorePath(statePath string) string {
+	statePath = strings.TrimSpace(statePath)
+	if statePath == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(statePath), "sessions.json")
+}
+
+// InvalidatePersistedSessions removes the on-disk session snapshot and journal
+// next to state.json. CLI restore uses this so pre-restore cookies cannot
+// authenticate after the documented stop/restore/start recovery path.
+func InvalidatePersistedSessions(statePath string) error {
+	sessionPath := persistedSessionStorePath(statePath)
+	if sessionPath == "" {
+		return nil
+	}
+	var first error
+	for _, path := range []string{sessionPath, sessionPath + ".journal"} {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			if first == nil {
+				first = err
+			}
+		}
+	}
+	return first
+}
+
 func NewSessionRegistry(path string) (*SessionRegistry, error) {
 	registry := &SessionRegistry{
 		path:            path,
