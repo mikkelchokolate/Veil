@@ -179,8 +179,9 @@ func (s *managementState) handleRoutingPresetByName(w http.ResponseWriter, r *ht
 		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.autoApplyLocked(r)
-	writeJSON(w, routing.NewRoutingPresetResponseBuilder(s.routingPreset, s.routingSource, s.rules).Build())
+	actor, _ := r.Context().Value(contextKeyUsername).(string)
+	outcome := s.autoApplyResultLocked(r, actor)
+	s.writeMutationResponse(w, http.StatusOK, routing.NewRoutingPresetResponseBuilder(s.routingPreset, s.routingSource, s.rules).Build(), outcome)
 }
 
 func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
