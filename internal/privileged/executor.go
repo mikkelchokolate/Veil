@@ -697,10 +697,10 @@ func ensureRuntimeArtifactOwnership(artifactID, path string) error {
 	return nil
 }
 
-// grantPanelReadAccessToCaddyArtifact keeps the Caddy config owned by root for
-// the root Caddy service while making it readable by the veil group for the
-// unprivileged Panel's Caddy Admin API loader. The config contains credentials,
-// so it must not be world-readable.
+// grantPanelReadAccessToCaddyArtifact keeps the Caddy config root-owned and
+// group-readable by veil so the unprivileged Panel and veil-caddy.service
+// (User=veil) can load it. The config contains credentials, so it must not
+// be world-readable.
 func grantPanelReadAccessToCaddyArtifact(path string) error {
 	if effectiveUID() != 0 {
 		return nil
