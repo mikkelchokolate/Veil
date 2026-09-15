@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/backup"
@@ -46,7 +48,7 @@ func ApplyPlan(plan installer.RepairPlan, opts Options, out io.Writer, deps Appl
 		_ = writeAuditRepair(opts.AuditLog, backupID, false, err.Error(), result.WrittenFiles)
 		return fmt.Errorf("tune QUIC UDP buffers: %w", err)
 	}
-	if actions := service.SystemdApplyPlan(SystemdUnitsFromRepairPlan(plan)); len(actions) > 0 {
+	if actions := SystemdActionsFromRepairPlan(plan); len(actions) > 0 {
 		if deps.RunSystemd == nil {
 			return fmt.Errorf("repair systemd runner is not configured")
 		}
@@ -82,6 +84,94 @@ func SystemdUnitsFromRepairPlan(plan installer.RepairPlan) []string {
 		units = append(units, name)
 	}
 	return units
+}
+
+func SystemdActionsFromRepairPlan(plan installer.RepairPlan) []service.SystemdAction {
+	dirs := map[string]string{}
+	var names []string
+	for _, action := range plan.Actions {
+		name := filepath.Base(action.Path)
+		switch filepath.Ext(name) {
+		case ".service", ".socket", ".timer":
+		default:
+			continue
+		}
+		if _, exists := dirs[name]; exists {
+			continue
+		}
+		dirs[name] = filepath.Dir(action.Path)
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return nil
+	}
+
+	enableNow := map[string]struct{}{}
+	enable := map[string]struct{}{}
+	restart := map[string]struct{}{}
+	addStartable := func(name string) {
+		if isSystemdTemplate(name) {
+			return
+		}
+		enable[name] = struct{}{}
+		restart[name] = struct{}{}
+	}
+	for _, name := range names {
+		switch name {
+		case "veil-helper.service", "veil-helper.socket":
+			enableNow["veil-helper.socket"] = struct{}{}
+			continue
+		case "veil-backup.service", "veil-backup.timer":
+			enableNow["veil-backup.timer"] = struct{}{}
+			continue
+		}
+		if strings.HasSuffix(name, ".socket") || strings.HasSuffix(name, ".timer") {
+			enableNow[name] = struct{}{}
+			continue
+		}
+		if isSystemdTemplate(name) {
+			prefix := strings.TrimSuffix(name, ".service")
+			matches, _ := filepath.Glob(filepath.Join(dirs[name], prefix+"*.service"))
+			for _, match := range matches {
+				instance := filepath.Base(match)
+				if !isSystemdTemplate(instance) {
+					addStartable(instance)
+				}
+			}
+			continue
+		}
+		if strings.HasSuffix(name, ".service") {
+			addStartable(name)
+		}
+	}
+
+	actions := []service.SystemdAction{{Command: "systemctl", Args: []string{"daemon-reload"}}}
+	for _, name := range sortedUnitNames(enableNow) {
+		actions = append(actions, service.SystemdAction{Command: "systemctl", Args: []string{"enable", "--now", name}})
+	}
+	for _, name := range sortedUnitNames(enable) {
+		if _, ok := enableNow[name]; ok {
+			continue
+		}
+		actions = append(actions, service.SystemdAction{Command: "systemctl", Args: []string{"enable", name}})
+	}
+	for _, name := range sortedUnitNames(restart) {
+		actions = append(actions, service.SystemdAction{Command: "systemctl", Args: []string{"restart", name}})
+	}
+	return actions
+}
+
+func isSystemdTemplate(name string) bool {
+	return strings.Contains(name, "@.")
+}
+
+func sortedUnitNames(set map[string]struct{}) []string {
+	names := make([]string, 0, len(set))
+	for name := range set {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func writeAuditRepair(auditLog, backupID string, success bool, errMsg string, writtenFiles []string) error {

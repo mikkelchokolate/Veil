@@ -189,8 +189,28 @@ func (p Policy) ResolvePromotion(request PromoteRequest) (ResolvedPromotion, err
 }
 
 func (p Policy) promotionDestinationAllowed(id, destination string) bool {
-	artifact, ok := p.managedArtifactPath(id)
-	return ok && filepath.Clean(artifact.Generated) == filepath.Clean(destination)
+	spec, ok := p.lookupArtifact(id, true)
+	if !ok {
+		return false
+	}
+	resolved, err := resolveBelow(p.GeneratedRoot, spec.Generated)
+	if err != nil {
+		return false
+	}
+	return filepath.Clean(resolved) == filepath.Clean(destination)
+}
+
+func (p Policy) lookupArtifact(id string, allowLegacyCaddyRemoval bool) (ArtifactPath, bool) {
+	if spec, ok := p.Artifacts[id]; ok {
+		return spec, true
+	}
+	if spec, ok := p.managedArtifactPath(id); ok {
+		return spec, true
+	}
+	if allowLegacyCaddyRemoval {
+		return legacyCaddyArtifactPath(id)
+	}
+	return ArtifactPath{}, false
 }
 
 func (p Policy) resolveArtifacts(ids []string, allowLegacyCaddyRemoval bool) ([]ResolvedArtifact, error) {
@@ -201,13 +221,7 @@ func (p Policy) resolveArtifacts(ids []string, allowLegacyCaddyRemoval bool) ([]
 			return nil, newError(ErrorConflict, "duplicate artifact id")
 		}
 		seen[id] = struct{}{}
-		spec, ok := p.Artifacts[id]
-		if !ok {
-			spec, ok = p.managedArtifactPath(id)
-		}
-		if !ok && allowLegacyCaddyRemoval {
-			spec, ok = legacyCaddyArtifactPath(id)
-		}
+		spec, ok := p.lookupArtifact(id, allowLegacyCaddyRemoval)
 		if !ok {
 			return nil, newError(ErrorNotFound, "unknown artifact id")
 		}
