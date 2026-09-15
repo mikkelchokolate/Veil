@@ -2,6 +2,7 @@ package clientaccess
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -52,5 +53,20 @@ func TestBuildClientLinksAggregatesMieruTransportBindingsForClientProfile(t *tes
 	}
 	if p.Servers[0].PortBindings[0].Protocol != "TCP" || p.Servers[0].PortBindings[1].Protocol != "UDP" {
 		t.Fatalf("port bindings = %+v", p.Servers[0].PortBindings)
+	}
+	uri := response.Links[0].URI
+	if !strings.Contains(uri, "port=443") {
+		t.Fatalf("aggregated URI missing first port: %q", uri)
+	}
+	ports := strings.Count(uri, "port=443")
+	if ports != 2 {
+		t.Fatalf("aggregated URI must repeat port for both bindings, got %d in %q", ports, uri)
+	}
+	if !strings.Contains(uri, "protocol=TCP") || !strings.Contains(uri, "protocol=UDP") {
+		t.Fatalf("aggregated URI must include both protocols: %q", uri)
+	}
+	payload := NewClientSubscriptionPayload(response).Build()
+	if !strings.Contains(payload, "port=443") || !strings.Contains(payload, "protocol=TCP") || !strings.Contains(payload, "protocol=UDP") {
+		t.Fatalf("subscription payload missing aggregated port/protocol pairs: %q", payload)
 	}
 }

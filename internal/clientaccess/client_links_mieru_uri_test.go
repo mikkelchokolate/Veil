@@ -17,6 +17,38 @@ func TestMieruClientURIFormat(t *testing.T) {
 	}
 }
 
+func TestMieruClientURIWithBindingsRepeatsPortAndProtocol(t *testing.T) {
+	got := MieruClientURIWithBindings("vpn.example.com", "alice", "alice-pass", "mieru/alice", []MieruURIBinding{
+		{Port: 443, Transport: "tcp"},
+		{Port: 443, Transport: "udp"},
+	})
+	parsed, err := url.Parse(got)
+	if err != nil {
+		t.Fatalf("parse %q: %v", got, err)
+	}
+	query := parsed.Query()
+	if gotPorts := query["port"]; len(gotPorts) != 2 || gotPorts[0] != "443" || gotPorts[1] != "443" {
+		t.Fatalf("port = %v, want [443 443] from %q", gotPorts, got)
+	}
+	if gotProto := query["protocol"]; len(gotProto) != 2 || gotProto[0] != "TCP" || gotProto[1] != "UDP" {
+		t.Fatalf("protocol = %v, want [TCP UDP] from %q", gotProto, got)
+	}
+}
+
+func TestMieruClientURISingleBindingHasOnePortProtocolPair(t *testing.T) {
+	got := MieruClientURI("vpn.example.com", 443, "alice", "alice-pass", "mieru/alice", "tcp")
+	parsed, err := url.Parse(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ports := parsed.Query()["port"]; len(ports) != 1 || ports[0] != "443" {
+		t.Fatalf("port = %v from %q", ports, got)
+	}
+	if proto := parsed.Query()["protocol"]; len(proto) != 1 || proto[0] != "TCP" {
+		t.Fatalf("protocol = %v from %q", proto, got)
+	}
+}
+
 func TestMieruClientURIProtocolNormalization(t *testing.T) {
 	for _, tc := range []struct {
 		transport string

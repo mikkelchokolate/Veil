@@ -51,7 +51,11 @@ func (MieruClientAccessAggregator) Build(settings Settings, inbounds []Inbound) 
 			continue
 		}
 		first := group.inbounds[0]
-		uri := MieruClientURI(clientEndpoint(settings), first.Port, group.credential.Username, group.credential.Password, group.name, first.Transport)
+		bindings := make([]MieruURIBinding, 0, len(group.inbounds))
+		for _, inbound := range group.inbounds {
+			bindings = append(bindings, MieruURIBinding{Port: inbound.Port, Transport: inbound.Transport})
+		}
+		uri := MieruClientURIWithBindings(clientEndpoint(settings), group.credential.Username, group.credential.Password, group.name, bindings)
 		links = append(links, ClientLink{Name: group.name, Protocol: "mieru", Transport: first.Transport, Port: first.Port, URI: uri, Config: config})
 	}
 	return links, nil

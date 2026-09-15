@@ -149,6 +149,56 @@ func TestRenderHysteria2ACLIncludesGeositeWhenDatExists(t *testing.T) {
 	}
 }
 
+func TestRenderHysteria2ACLAllOnlyProxyKeepsNamedOutbound(t *testing.T) {
+	cfg, err := RenderHysteria2(Hysteria2Config{
+		ListenPort:    443,
+		Password:      "secret",
+		MasqueradeURL: "https://www.bing.com/",
+		Upstream:      "127.0.0.1:40000",
+		RoutingRules:  []Hysteria2RoutingRule{{Match: "all", Outbound: "proxy"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"name: proxy",
+		"name: warp",
+		"proxy(all)",
+	} {
+		if !strings.Contains(cfg, want) {
+			t.Fatalf("missing %q in:\n%s", want, cfg)
+		}
+	}
+	if strings.Contains(cfg, "warp(all)") {
+		t.Fatalf("explicit all→proxy must not collapse to warp-only:\n%s", cfg)
+	}
+}
+
+func TestRenderHysteria2ACLAllOnlyDirectKeepsNamedOutbound(t *testing.T) {
+	cfg, err := RenderHysteria2(Hysteria2Config{
+		ListenPort:    443,
+		Password:      "secret",
+		MasqueradeURL: "https://www.bing.com/",
+		Upstream:      "127.0.0.1:40000",
+		RoutingRules:  []Hysteria2RoutingRule{{Match: "all", Outbound: "direct"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"name: direct",
+		"name: warp",
+		"direct(all)",
+	} {
+		if !strings.Contains(cfg, want) {
+			t.Fatalf("missing %q in:\n%s", want, cfg)
+		}
+	}
+	if strings.Contains(cfg, "warp(all)") {
+		t.Fatalf("explicit all→direct must not collapse to warp-only:\n%s", cfg)
+	}
+}
+
 func TestRenderHysteria2ACLKeepsProxyOffWarp(t *testing.T) {
 	cfg, err := RenderHysteria2(Hysteria2Config{
 		ListenPort:    443,
