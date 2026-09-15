@@ -74,6 +74,42 @@ func TestRenderOlcrtcDefaultsDNS(t *testing.T) {
 	}
 }
 
+func TestRenderOlcrtcIncludesSOCKSWhenConfigured(t *testing.T) {
+	body, err := RenderOlcrtc(OlcrtcConfig{
+		Auth:      "jitsi",
+		RoomID:    "https://meet.example.com/myroom",
+		Key:       "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+		Transport: "datachannel",
+		SocksAddr: "127.0.0.1",
+		SocksPort: 40001,
+	})
+	if err != nil {
+		t.Fatalf("RenderOlcrtc: %v", err)
+	}
+	for _, want := range []string{
+		"proxy_addr: 127.0.0.1",
+		"proxy_port: 40001",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("missing %q in:\n%s", want, body)
+		}
+	}
+}
+
+func TestRenderOlcrtcOmitsSOCKSWhenUnset(t *testing.T) {
+	body, err := RenderOlcrtc(OlcrtcConfig{
+		Auth:   "jitsi",
+		RoomID: "https://meet.example.com/myroom",
+		Key:    "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+	})
+	if err != nil {
+		t.Fatalf("RenderOlcrtc: %v", err)
+	}
+	if strings.Contains(body, "socks:") || strings.Contains(body, "proxy_addr:") || strings.Contains(body, "proxy_port:") {
+		t.Fatalf("direct exit must omit socks:\n%s", body)
+	}
+}
+
 func TestRenderOlcrtcDefaultsTransport(t *testing.T) {
 	body, err := RenderOlcrtc(OlcrtcConfig{
 		Auth:   "jitsi",

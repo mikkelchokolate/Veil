@@ -9,7 +9,7 @@ import (
 )
 
 func TestRenderOlcrtcRejectsMissingPersistedKey(t *testing.T) {
-	if _, err := renderOlcrtc(model.Settings{}, model.Inbound{Name: "x"}); err == nil || !strings.Contains(err.Error(), "encryption key") {
+	if _, err := renderOlcrtc(model.Settings{}, model.Inbound{Name: "x"}, model.WarpConfig{}); err == nil || !strings.Contains(err.Error(), "encryption key") {
 		t.Fatalf("missing key error = %v, want explicit persisted-key failure", err)
 	}
 }
@@ -31,11 +31,11 @@ func TestRenderOlcrtcIsDeterministicWithPersistedKey(t *testing.T) {
 		Name: "x", Protocol: "olcrtc", Password: strings.Repeat("ab", 32),
 		OlcrtcAuth: "jitsi", OlcrtcTransport: "datachannel", OlcrtcRoomID: "https://meet.example.test/room",
 	}
-	first, err := renderOlcrtc(model.Settings{}, inbound)
+	first, err := renderOlcrtc(model.Settings{}, inbound, model.WarpConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := renderOlcrtc(model.Settings{}, inbound)
+	second, err := renderOlcrtc(model.Settings{}, inbound, model.WarpConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}

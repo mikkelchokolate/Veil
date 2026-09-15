@@ -22,11 +22,22 @@ func (Plugin) NeedsDomain(model.Settings, model.Inbound) bool { return false }
 func (Plugin) NeedsEmail(model.Settings, model.Inbound) bool { return false }
 
 // HasCredential reports whether the inbound has a usable Mieru credential.
+// The inbound-name/password fallback is used only when the inbound has no
+// client profiles. If profiles exist and all are disabled, leftover inbound
+// password must not count as a live user.
 func (Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bool {
 	for _, profile := range inbound.Profiles {
 		if profile.Enabled && strings.TrimSpace(profile.Password) != "" {
 			return true
 		}
+	}
+	for _, credential := range inbound.RuntimeCredentials {
+		if strings.TrimSpace(credential.Password) != "" {
+			return true
+		}
+	}
+	if len(inbound.Profiles) > 0 {
+		return false
 	}
 	password := strings.TrimSpace(inbound.Password)
 	if password == "" {

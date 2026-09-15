@@ -15,7 +15,7 @@ func (Plugin) RenderConfig(input generatedconfig.ProtocolRenderInput) ([]generat
 	}
 	var artifacts []generatedconfig.GeneratedConfigArtifact
 	for _, inbound := range input.Inbounds {
-		body, err := renderOlcrtc(input.Settings, inbound)
+		body, err := renderOlcrtc(input.Settings, inbound, input.Warp)
 		if err != nil {
 			return nil, false, err
 		}
@@ -36,7 +36,7 @@ func (Plugin) ArtifactSpec() generatedconfig.ArtifactSpec {
 	}
 }
 
-func renderOlcrtc(settings model.Settings, inbound model.Inbound) (string, error) {
+func renderOlcrtc(settings model.Settings, inbound model.Inbound, warp model.WarpConfig) (string, error) {
 	password := olcrtcKey(inbound)
 	if password == "" {
 		// Rendering must be deterministic. Credential generation belongs to the
@@ -44,11 +44,20 @@ func renderOlcrtc(settings model.Settings, inbound model.Inbound) (string, error
 		// the server config diverge from client export on the very next render.
 		return "", errors.New("olcrtc encryption key is required before rendering")
 	}
-	return renderer.RenderOlcrtc(renderer.OlcrtcConfig{
+	cfg := renderer.OlcrtcConfig{
 		Auth:      olcrtcAuth(settings, inbound),
 		RoomID:    olcrtcRoomID(settings, inbound),
 		Key:       password,
 		Transport: olcrtcTransport(settings, inbound),
 		DNS:       "",
-	})
+	}
+	if warp.Enabled {
+		port := warp.SocksPort
+		if port == 0 {
+			port = 40000
+		}
+		cfg.SocksAddr = "127.0.0.1"
+		cfg.SocksPort = port
+	}
+	return renderer.RenderOlcrtc(cfg)
 }

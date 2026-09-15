@@ -14,6 +14,8 @@ type OlcrtcConfig struct {
 	Key       string
 	Transport string
 	DNS       string
+	SocksAddr string
+	SocksPort int
 }
 
 type olcrtcYAML struct {
@@ -32,6 +34,12 @@ type olcrtcYAML struct {
 		Transport string `yaml:"transport"`
 		DNS       string `yaml:"dns"`
 	} `yaml:"net"`
+	Socks *olcrtcSocksYAML `yaml:"socks,omitempty"`
+}
+
+type olcrtcSocksYAML struct {
+	ProxyAddr string `yaml:"proxy_addr"`
+	ProxyPort int    `yaml:"proxy_port"`
 }
 
 func RenderOlcrtc(cfg OlcrtcConfig) (string, error) {
@@ -53,6 +61,9 @@ func RenderOlcrtc(cfg OlcrtcConfig) (string, error) {
 	doc.Crypto.Key = cfg.Key
 	doc.Net.Transport = cfg.Transport
 	doc.Net.DNS = cfg.DNS
+	if cfg.SocksAddr != "" && cfg.SocksPort > 0 {
+		doc.Socks = &olcrtcSocksYAML{ProxyAddr: cfg.SocksAddr, ProxyPort: cfg.SocksPort}
+	}
 
 	var out bytes.Buffer
 	enc := yaml.NewEncoder(&out)
