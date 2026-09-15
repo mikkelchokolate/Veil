@@ -105,3 +105,55 @@ func TestIntentionalRollbackCreatesNewDesiredRevisionWithoutDecrementing(t *test
 		t.Fatalf("immutable rollback audit mismatch: rows=%d selected=%d new=%d", rows, selectedRevision, newRevision)
 	}
 }
+
+func TestIntentionalRollbackRejectsStalePreRollbackClientDraft(t *testing.T) {
+	router, state := newApplyTrackedRouterWithState(t)
+	createdResponse := v1Request(t, router, http.MethodPost, "/api/v1/clients", `{"name":"selected-name","enabled":true}`)
+	if createdResponse.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", createdResponse.Code, createdResponse.Body.String())
+	}
+	created := unwrapClient(t, createdResponse.Body.Bytes())
+	clientID := created["id"].(string)
+	first, err := state.applyRevisions.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	second := v1Request(t, router, http.MethodPatch, "/api/v1/clients/"+clientID, `{"version":1,"name":"second-name"}`)
+	if second.Code != http.StatusOK {
+		t.Fatalf("second edit: %d %s", second.Code, second.Body.String())
+	}
+	third := v1Request(t, router, http.MethodPatch, "/api/v1/clients/"+clientID, `{"version":2,"name":"third-name"}`)
+	if third.Code != http.StatusOK {
+		t.Fatalf("third edit: %d %s", third.Code, third.Body.String())
+	}
+
+	rollback := v1Request(t, router, http.MethodPost, "/api/apply/rollback",
+		`{"selectedRevision":`+strconv.FormatUint(first.Desired, 10)+`,"confirm":true}`)
+	if rollback.Code != http.StatusOK {
+		t.Fatalf("rollback: %d %s", rollback.Code, rollback.Body.String())
+	}
+	got := v1Request(t, router, http.MethodGet, "/api/v1/clients/"+clientID, "")
+	if got.Code != http.StatusOK {
+		t.Fatalf("get after rollback: %d %s", got.Code, got.Body.String())
+	}
+	restored := unwrapClient(t, got.Body.Bytes())
+	if restored["name"] != "selected-name" {
+		t.Fatalf("rollback name=%v", restored["name"])
+	}
+	liveVersion, _ := restored["version"].(float64)
+	if liveVersion <= 3 {
+		t.Fatalf("rollback reused optimistic-lock version %v", restored["version"])
+	}
+
+	stale := v1Request(t, router, http.MethodPatch, "/api/v1/clients/"+clientID,
+		`{"version":2,"name":"old-pre-rollback-draft"}`)
+	if stale.Code != http.StatusConflict {
+		t.Fatalf("stale pre-rollback draft: %d %s", stale.Code, stale.Body.String())
+	}
+	freshBody := `{"version":` + strconv.FormatInt(int64(liveVersion), 10) + `,"name":"post-rollback"}`
+	fresh := v1Request(t, router, http.MethodPatch, "/api/v1/clients/"+clientID, freshBody)
+	if fresh.Code != http.StatusOK {
+		t.Fatalf("fresh post-rollback edit: %d %s", fresh.Code, fresh.Body.String())
+	}
+}
