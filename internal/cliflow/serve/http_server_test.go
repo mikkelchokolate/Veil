@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/privileged"
+	"golang.org/x/crypto/acme"
 )
 
 func startRecoveryTestHelper(t *testing.T) string {
@@ -202,6 +203,30 @@ func TestServeHTTPServerBuildsAutoTLSServer(t *testing.T) {
 	}
 	if server.TLSConfig.GetCertificate == nil {
 		t.Fatalf("expected auto-tls GetCertificate")
+	}
+	if !tlsNextProtoContains(server.TLSConfig.NextProtos, acme.ALPNProto) {
+		t.Fatalf("auto-tls NextProtos=%v missing %q", server.TLSConfig.NextProtos, acme.ALPNProto)
+	}
+}
+
+func TestServeHTTPServerFileTLSDoesNotAdvertiseACMEALPN(t *testing.T) {
+	server, _ := NewHTTPServer(HTTPServerOptions{
+		Listen:      "127.0.0.1:2096",
+		Version:     "test",
+		AuthToken:   "token",
+		StatePath:   filepath.Join(t.TempDir(), "state.json"),
+		ApplyRoot:   filepath.Join(t.TempDir(), "apply"),
+		KeyPath:     filepath.Join(t.TempDir(), "state.key"),
+		TLSEnabled:  true,
+		TLSCert:     "/tmp/cert.pem",
+		TLSKey:      "/tmp/key.pem",
+		WebBasePath: "/",
+	}).Build()
+	if server.TLSConfig == nil {
+		t.Fatalf("expected TLS config")
+	}
+	if tlsNextProtoContains(server.TLSConfig.NextProtos, acme.ALPNProto) {
+		t.Fatalf("file TLS advertised ACME ALPN: %v", server.TLSConfig.NextProtos)
 	}
 }
 
