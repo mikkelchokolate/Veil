@@ -18,11 +18,15 @@ func TestRenderSystemdUnitsIncludesHardenedEncryptedBackupTimer(t *testing.T) {
 		"EnvironmentFile=-/etc/veil/veil.env",
 		"NoNewPrivileges=true",
 		"ProtectSystem=strict",
+		"CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH",
 		"ReadWritePaths=/var/lib/veil",
 	} {
 		if !strings.Contains(service, want) {
 			t.Fatalf("backup service missing %q:\n%s", want, service)
 		}
+	}
+	if strings.Contains(service, "CapabilityBoundingSet=\n") {
+		t.Fatalf("backup service must not drop DAC capabilities:\n%s", service)
 	}
 	for _, want := range []string{
 		"OnCalendar=*-*-* 02:00:00",
