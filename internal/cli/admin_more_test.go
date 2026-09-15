@@ -197,6 +197,7 @@ func TestAdminSetUpdatesFirstAdminWhenUsernameOmitted(t *testing.T) {
 	if err := managementstate.NewStore(statePath, cipher).Save(model.ManagementSnapshot{
 		Users: []model.User{
 			{Username: "existing_admin", PasswordHash: "hash", Role: "admin"},
+			{Username: "other_admin", PasswordHash: "hash", Role: "admin"},
 			{Username: "viewer1", PasswordHash: "hash", Role: "viewer"},
 		},
 	}); err != nil {
