@@ -97,6 +97,61 @@ func TestRenderConfigWithInbounds(t *testing.T) {
 	}
 }
 
+func TestRenderConfigWithWarpSOCKS(t *testing.T) {
+	p := New()
+	inbound := model.Inbound{
+		Name:     "alpha",
+		Protocol: "olcrtc",
+		Password: "secret-key-used-for-render",
+		ProtocolFields: map[string]any{
+			"olcrtcAuth":      "jitsi",
+			"olcrtcTransport": "datachannel",
+			"olcrtcRoomID":    "room-alpha",
+		},
+	}
+	on, _, err := p.RenderConfig(generatedconfig.ProtocolRenderInput{
+		Settings: model.Settings{},
+		Paths:    generatedconfig.NewPaths("/etc/veil"),
+		Inbounds: []model.Inbound{inbound},
+		Warp:     model.WarpConfig{Enabled: true, SocksPort: 40001},
+	})
+	if err != nil {
+		t.Fatalf("RenderConfig: %v", err)
+	}
+	if len(on) != 1 {
+		t.Fatalf("artifacts = %d", len(on))
+	}
+	if !strings.Contains(on[0].Body, "proxy_addr: 127.0.0.1") || !strings.Contains(on[0].Body, "proxy_port: 40001") {
+		t.Fatalf("WARP on missing SOCKS:\n%s", on[0].Body)
+	}
+
+	off, _, err := p.RenderConfig(generatedconfig.ProtocolRenderInput{
+		Settings: model.Settings{},
+		Paths:    generatedconfig.NewPaths("/etc/veil"),
+		Inbounds: []model.Inbound{inbound},
+		Warp:     model.WarpConfig{Enabled: false, SocksPort: 40001},
+	})
+	if err != nil {
+		t.Fatalf("RenderConfig disabled: %v", err)
+	}
+	if strings.Contains(off[0].Body, "proxy_addr:") || strings.Contains(off[0].Body, "proxy_port:") {
+		t.Fatalf("WARP off must omit SOCKS:\n%s", off[0].Body)
+	}
+
+	defaults, _, err := p.RenderConfig(generatedconfig.ProtocolRenderInput{
+		Settings: model.Settings{},
+		Paths:    generatedconfig.NewPaths("/etc/veil"),
+		Inbounds: []model.Inbound{inbound},
+		Warp:     model.WarpConfig{Enabled: true},
+	})
+	if err != nil {
+		t.Fatalf("RenderConfig default port: %v", err)
+	}
+	if !strings.Contains(defaults[0].Body, "proxy_port: 40000") {
+		t.Fatalf("default SOCKS port missing:\n%s", defaults[0].Body)
+	}
+}
+
 func TestRenderConfigFieldPrecedence(t *testing.T) {
 	p := New()
 	cases := []struct {

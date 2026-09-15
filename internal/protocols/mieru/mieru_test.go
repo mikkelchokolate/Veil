@@ -337,6 +337,27 @@ func TestHasCredential(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "all disabled profiles ignore leftover inbound password",
+			inbound: model.Inbound{
+				Password: "leftover",
+				Profiles: []model.ClientProfile{
+					{Name: "alice", Password: "secret", Enabled: false},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "runtime credential counts when profiles are disabled",
+			inbound: model.Inbound{
+				Password: "leftover",
+				Profiles: []model.ClientProfile{
+					{Name: "alice", Password: "secret", Enabled: false},
+				},
+				RuntimeCredentials: []model.RuntimeCredential{{Name: "alice", Username: "alice", Password: "live"}},
+			},
+			want: true,
+		},
+		{
 			name:    "inbound password",
 			inbound: model.Inbound{Password: "secret"},
 			want:    true,
