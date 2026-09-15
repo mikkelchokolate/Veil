@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func checkBash(t *testing.T) {
@@ -198,6 +200,39 @@ func TestCurlInstallScriptRequiresRootForPanelServiceInstall(t *testing.T) {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh missing root/systemd guidance %q:\n%s", want, script)
 		}
+	}
+}
+
+func TestPrivilegedInstallerForwardsLeIPCertFalse(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	for _, want := range []string{
+		"--le-ip-cert=*)",
+		"--no-le-ip-cert",
+		"args+=(--le-ip-cert=false)",
+		"args+=(--le-ip-cert=true)",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("install-privileged.sh missing LE IP cert opt-out %q:\n%s", want, script)
+		}
+	}
+
+	checkBash(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "bash", "../../scripts/install-privileged.sh", "--le-ip-cert=not-a-bool")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected invalid --le-ip-cert to fail, got:\n%s", out)
+	}
+	if ctx.Err() != nil {
+		t.Fatalf("invalid --le-ip-cert hung instead of exiting: %v\n%s", ctx.Err(), out)
+	}
+	if !strings.Contains(string(out), "Invalid boolean value") {
+		t.Fatalf("unexpected invalid boolean output:\n%s", out)
 	}
 }
 

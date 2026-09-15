@@ -401,6 +401,61 @@ func TestApplyRURecommendedInstallAppliesFirewallRules(t *testing.T) {
 	}
 }
 
+func TestInstallLeIPCertFalseSkipsIssuance(t *testing.T) {
+	withMockedInstallRuntimes(t)
+	oldApply := installApplyFunc
+	oldSystemd := installSystemdRunFunc
+	oldExecutable := installExecutableFunc
+	oldPrepareHost := installPrepareHostFunc
+	oldIssue := leIPCertIssueFunc
+	issued := false
+	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
+		return installer.ApplyResult{WrittenFiles: []string{"/etc/veil/veil.env"}}, nil
+	}
+	installSystemdRunFunc = func([]service.SystemdAction) error { return nil }
+	installExecutableFunc = func() (string, error) { return "/opt/veil/bin/veil", nil }
+	installPrepareHostFunc = func(hostaccess.Paths) error { return nil }
+	leIPCertIssueFunc = func(ctx context.Context, opts acmeip.IssueOptions) (acmeip.IssuedCert, error) {
+		issued = true
+		return acmeip.IssuedCert{}, nil
+	}
+	t.Cleanup(func() {
+		installApplyFunc = oldApply
+		installSystemdRunFunc = oldSystemd
+		installExecutableFunc = oldExecutable
+		installPrepareHostFunc = oldPrepareHost
+		leIPCertIssueFunc = oldIssue
+	})
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	tempEtc := t.TempDir()
+	tempVar := t.TempDir()
+	profile := installer.RURecommendedProfile{
+		Username:    "veil",
+		Password:    "test-password",
+		WebBasePath: "/panel/",
+		PanelListen: "0.0.0.0:3000",
+		PanelAccess: "direct",
+	}
+
+	if err := applyRURecommendedInstall(cmd, profile, ruRecommendedInstallOptions{
+		EtcDir:      tempEtc,
+		VarDir:      tempVar,
+		PanelAccess: "direct",
+		LEIPCert:    false,
+		PublicIP:    "127.0.0.1",
+	}); err != nil {
+		t.Fatalf("applyRURecommendedInstall --le-ip-cert=false: %v\n%s", err, out.String())
+	}
+	if issued {
+		t.Fatal("explicit --le-ip-cert=false must not request an IP certificate")
+	}
+}
+
 func TestApplyRURecommendedInstallDirectIssuesLEIPCert(t *testing.T) {
 	withMockedInstallRuntimes(t)
 	oldApply := installApplyFunc

@@ -117,6 +117,11 @@ for dir in /etc/veil/generated /etc/veil/tls; do
         find "$dir" -type f -exec chmod 0640 {} \;
     fi
 done
+if [ -d /etc/veil/panel ] && [ ! -L /etc/veil/panel ]; then
+    chown -R root:veil /etc/veil/panel
+    find /etc/veil/panel -type d -exec chmod 0750 {} \;
+    find /etc/veil/panel -type f -exec chmod 0640 {} \;
+fi
 for file in /etc/veil/state.key /etc/veil/veil.env; do
     if [ -f "$file" ] && [ ! -L "$file" ]; then
         chown root:veil "$file"
