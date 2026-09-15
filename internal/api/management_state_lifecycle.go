@@ -525,6 +525,10 @@ func (l ManagementStateLifecycle) ReloadLocked() error {
 	if err := l.loadCoherentStateLocked(); err != nil {
 		return err
 	}
+	l.state.appliedProjectionMu.Lock()
+	l.state.appliedProjections = nil
+	l.state.appliedProjectionRevision = 0
+	l.state.appliedProjectionMu.Unlock()
 	if l.state.statePath != "" {
 		// Reload may have replaced the master cipher. Rebuild the normalized
 		// client subsystem even when it was already initialized so no service

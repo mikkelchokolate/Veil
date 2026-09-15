@@ -469,6 +469,10 @@ func commitRotationRevision(
 		_ = tx.Rollback()
 		return 0, err
 	}
+	if err := reencryptRevisionSnapshotsTx(tx, oldCipher, newCipher); err != nil {
+		_ = tx.Rollback()
+		return 0, err
+	}
 	payload, err := immutableSnapshotPayloadFromSource(tx, snapshot, newCipher)
 	if err != nil {
 		_ = tx.Rollback()
@@ -491,6 +495,80 @@ func commitRotationRevision(
 		return revision, &uncertainRotationCommitError{err: fmt.Errorf("state commit: commit key-rotation revision %d: %w", revision, err)}
 	}
 	return revision, nil
+}
+
+// reencryptRevisionSnapshotsTx migrates every retained immutable snapshot onto
+// the replacement master cipher. Revision numbers and state-file digests stay
+// stable; only secret ciphertext is rewritten so rollback and last-applied
+// subscription material remain decryptable after rotation.
+func reencryptRevisionSnapshotsTx(tx *client.Tx, oldCipher, newCipher *secrets.Cipher) error {
+	if tx == nil {
+		return fmt.Errorf("state commit: snapshot rotation transaction is required")
+	}
+	if oldCipher == nil || newCipher == nil {
+		return fmt.Errorf("state commit: snapshot rotation ciphers unavailable")
+	}
+	rows, err := tx.Query(`SELECT revision, payload FROM revision_snapshots ORDER BY revision`)
+	if err != nil {
+		return fmt.Errorf("state commit: list snapshots for key rotation: %w", err)
+	}
+	type snapshotRow struct {
+		revision uint64
+		payload  string
+	}
+	var snapshots []snapshotRow
+	for rows.Next() {
+		var row snapshotRow
+		if err := rows.Scan(&row.revision, &row.payload); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("state commit: scan snapshot for key rotation: %w", err)
+		}
+		snapshots = append(snapshots, row)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("state commit: close snapshot rotation rows: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("state commit: list snapshots for key rotation: %w", err)
+	}
+	for _, row := range snapshots {
+		var snapshot model.ManagementSnapshot
+		if err := json.Unmarshal([]byte(row.payload), &snapshot); err != nil {
+			return fmt.Errorf("state commit: decode snapshot %d for key rotation: %w", row.revision, err)
+		}
+		if err := managementstate.DecryptSnapshot(&snapshot, oldCipher); err != nil {
+			return fmt.Errorf("state commit: decrypt snapshot %d for key rotation: %w", row.revision, err)
+		}
+		if err := managementstate.EncryptSnapshot(&snapshot, newCipher); err != nil {
+			return fmt.Errorf("state commit: encrypt snapshot %d for key rotation: %w", row.revision, err)
+		}
+		for index := range snapshot.Credentials {
+			value := string(snapshot.Credentials[index].EncryptedValue)
+			if value == "" {
+				continue
+			}
+			plaintext, err := oldCipher.Decrypt(value)
+			if err != nil {
+				return fmt.Errorf("state commit: decrypt snapshot %d credential %s: %w", row.revision, snapshot.Credentials[index].ID, err)
+			}
+			encrypted, err := newCipher.Encrypt(plaintext)
+			if err != nil {
+				return fmt.Errorf("state commit: encrypt snapshot %d credential %s: %w", row.revision, snapshot.Credentials[index].ID, err)
+			}
+			snapshot.Credentials[index].EncryptedValue = []byte(encrypted)
+			if snapshot.Credentials[index].KeyVersion > 0 {
+				snapshot.Credentials[index].KeyVersion++
+			}
+		}
+		payload, err := json.Marshal(snapshot)
+		if err != nil {
+			return fmt.Errorf("state commit: marshal snapshot %d for key rotation: %w", row.revision, err)
+		}
+		if _, err := tx.Exec(`UPDATE revision_snapshots SET payload=? WHERE revision=?`, string(payload), row.revision); err != nil {
+			return fmt.Errorf("state commit: persist rotated snapshot %d: %w", row.revision, err)
+		}
+	}
+	return nil
 }
 
 func rollbackKeyRotation(journal keyRotationJournal) error {

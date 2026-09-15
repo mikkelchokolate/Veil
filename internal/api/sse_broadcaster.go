@@ -76,7 +76,14 @@ func (h *sseBroadcaster) refresh() {
 	h.mu.Unlock()
 }
 
+// sseRefreshGate is an optional test barrier invoked before taking the request
+// read lock so shutdown can be shown not to join the worker while holding it.
+var sseRefreshGate func()
+
 func (h *sseBroadcaster) buildSnapshot() sseSnapshot {
+	if gate := sseRefreshGate; gate != nil {
+		gate()
+	}
 	h.state.clientRequestMu.RLock()
 	defer h.state.clientRequestMu.RUnlock()
 	h.state.mu.Lock()
@@ -172,6 +179,10 @@ func (h *sseBroadcaster) Close() {
 
 func (s *managementState) sharedSSEBroadcaster() *sseBroadcaster {
 	s.mu.Lock()
+	if s.clientSubsystemStopping {
+		s.mu.Unlock()
+		return nil
+	}
 	if s.sse == nil {
 		s.sse = newSSEBroadcaster(s)
 	}
@@ -209,7 +220,12 @@ func (s *managementState) serveSharedSSE(w http.ResponseWriter, r *http.Request,
 	if username, ok := r.Context().Value(contextKeyUsername).(string); ok && username != "" {
 		identity = username + "|" + identity
 	}
-	updates, release, err := s.sharedSSEBroadcaster().subscribe(identity)
+	hub := s.sharedSSEBroadcaster()
+	if hub == nil {
+		writeError(w, "streaming unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	updates, release, err := hub.subscribe(identity)
 	if err != nil {
 		writeError(w, "too many SSE connections", http.StatusTooManyRequests)
 		return
