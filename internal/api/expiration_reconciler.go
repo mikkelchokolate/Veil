@@ -80,19 +80,18 @@ func (r *expirationReconciler) nextBoundary(ctx context.Context) (int64, bool, e
 	if r == nil || r.state == nil || r.state.db == nil {
 		return 0, false, nil
 	}
-	now := time.Now().UTC().Unix()
 	var boundary sql.NullInt64
 	err := r.state.db.QueryRowContext(ctx, `
 SELECT MIN(boundary) FROM (
   SELECT MIN(c.expires_at) AS boundary
   FROM clients c
   LEFT JOIN expiration_enforcement e ON e.client_id=c.id AND e.state<>'superseded'
-  WHERE c.enabled=1 AND c.expires_at>? AND
+  WHERE c.enabled=1 AND c.expires_at IS NOT NULL AND
         (e.id IS NULL OR NOT (e.state='enforced' AND e.target_generation=c.version AND e.target_expires_at=c.expires_at))
   UNION ALL
   SELECT MIN(next_retry_at) AS boundary FROM expiration_enforcement
-  WHERE state='failed' AND next_retry_at>?
-)`, now, now).Scan(&boundary)
+  WHERE state='failed' AND next_retry_at>0
+)`).Scan(&boundary)
 	if err != nil {
 		return 0, false, err
 	}
@@ -121,10 +120,10 @@ func (r *expirationReconciler) ReconcileOnce(ctx context.Context) error {
 	if r == nil || r.state == nil || r.state.db == nil {
 		return nil
 	}
-	now := time.Now().UTC().Unix()
 	var afterCreated int64 = -1
 	afterID := ""
 	for {
+		now := time.Now().UTC().Unix()
 		rows, err := r.state.db.QueryContext(ctx, `
 SELECT c.id,c.expires_at,c.created_at,c.version
 FROM clients c
@@ -160,7 +159,7 @@ ORDER BY c.created_at,c.id LIMIT 100`, now, afterCreated, afterCreated, afterID)
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			if err := r.state.enforceExpiration(ctx, candidate, now); err != nil {
+			if err := r.state.enforceExpiration(ctx, candidate, time.Now().UTC().Unix()); err != nil {
 				log.Printf("client expiry %s: %v", candidate.ID, err)
 			}
 			afterCreated, afterID = candidate.CreatedAt, candidate.ID
@@ -238,7 +237,7 @@ FROM expiration_enforcement WHERE client_id=? AND target_generation=? AND target
 				_, updateErr := s.db.Exec(`UPDATE expiration_enforcement SET state='enforced',applied_revision=?,next_retry_at=0,last_error='',updated_at=? WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND desired_revision=? AND state<>'superseded'`, desired, effectiveAt, candidate.ID, candidate.TargetGeneration, candidate.TargetPayloadHash, desired)
 				return uint64(desired), true, updateErr
 			}
-			if nextRetry > effectiveAt {
+			if nextRetry > time.Now().UTC().Unix() {
 				return uint64(desired), true, nil
 			}
 			_, updateErr := s.db.Exec(`UPDATE expiration_enforcement SET state='applying',attempts=attempts+1,next_retry_at=0,updated_at=? WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND desired_revision=? AND state<>'superseded'`, effectiveAt, candidate.ID, candidate.TargetGeneration, candidate.TargetPayloadHash, desired)
@@ -251,7 +250,7 @@ FROM expiration_enforcement WHERE client_id=? AND target_generation=? AND target
 	if err := s.db.QueryRow(`SELECT enabled,expires_at FROM clients WHERE id=?`, candidate.ID).Scan(&enabled, &currentExpiry); err != nil {
 		return 0, false, err
 	}
-	if !enabled || !currentExpiry.Valid || currentExpiry.Int64 != candidate.ExpiresAt || currentExpiry.Int64 > effectiveAt {
+	if !enabled || !currentExpiry.Valid || currentExpiry.Int64 != candidate.ExpiresAt || currentExpiry.Int64 > time.Now().UTC().Unix() {
 		return 0, true, nil
 	}
 
@@ -259,10 +258,10 @@ FROM expiration_enforcement WHERE client_id=? AND target_generation=? AND target
 	if err != nil {
 		return 0, false, err
 	}
-	if effectiveAt < candidate.ExpiresAt {
-		effectiveAt = candidate.ExpiresAt
+	if snapshot.EffectiveAt < candidate.ExpiresAt {
+		snapshot.EffectiveAt = candidate.ExpiresAt
 	}
-	snapshot.EffectiveAt = effectiveAt
+	effectiveAt = snapshot.EffectiveAt
 	if err := s.encryptSnapshot(&snapshot); err != nil {
 		return 0, false, err
 	}

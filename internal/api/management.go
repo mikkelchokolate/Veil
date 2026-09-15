@@ -266,8 +266,10 @@ func (s *managementState) Reload() error {
 }
 
 // Close stops and joins every normalized-domain background worker before
-// closing the SQLite store. RunLifecycle calls it after HTTP draining, while
-// backup restore uses the same detach/stop/close primitives around its DB swap.
+// closing the SQLite store. The SSE broadcaster is joined before taking
+// clientRequestMu so an in-flight snapshot refresh cannot deadlock against
+// shutdown. RunLifecycle calls it after HTTP draining, while backup restore
+// uses the same detach/stop/close primitives around its DB swap.
 func (s *managementState) Close() error {
 	if s.lifecycleCancel != nil {
 		s.lifecycleCancel()
@@ -276,8 +278,6 @@ func (s *managementState) Close() error {
 	if s.applyRunner != nil {
 		s.applyRunner.Close()
 	}
-	s.clientRequestMu.Lock()
-	defer s.clientRequestMu.Unlock()
 	s.mu.Lock()
 	s.clientSubsystemStopping = true
 	workers := detachClientBackgroundWorkers(s)
@@ -300,6 +300,8 @@ func (s *managementState) Close() error {
 	}
 	stopClientBackgroundWorkers(workers)
 
+	s.clientRequestMu.Lock()
+	defer s.clientRequestMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return closeClientDatabase(s)
