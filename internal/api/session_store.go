@@ -288,7 +288,7 @@ func (r *SessionRegistry) Get(token string) (Session, bool) {
 		r.sessions[tokenHash] = record
 		if err := r.persistUpsertLocked(record); err != nil {
 			r.sessions[tokenHash] = previous
-			return Session{}, false
+			return publicSession(previous, token, r.rawCSRF[tokenHash]), true
 		}
 	}
 	return publicSession(record, token, r.rawCSRF[tokenHash]), true
@@ -471,6 +471,7 @@ func (r *SessionRegistry) load() error {
 	if r.path == "" {
 		return nil
 	}
+	snapshotLoaded := false
 	body, err := os.ReadFile(r.path)
 	if err == nil {
 		var file sessionStoreFile
@@ -493,10 +494,18 @@ func (r *SessionRegistry) load() error {
 			}
 			r.sessions[session.TokenHash] = session
 		}
+		snapshotLoaded = true
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	return r.loadJournalLocked()
+	if err := r.loadJournalLocked(); err != nil {
+		if snapshotLoaded {
+			_ = r.quarantineJournalLocked()
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *SessionRegistry) RevalidateToken(token string, restoredRoles map[string]string) (bool, error) {
@@ -539,6 +548,22 @@ func (r *SessionRegistry) journalPath() string {
 		return ""
 	}
 	return r.path + ".journal"
+}
+
+func (r *SessionRegistry) quarantineJournalLocked() error {
+	path := r.journalPath()
+	if path == "" {
+		return nil
+	}
+	suffix, err := generateRandomHex(8)
+	if err != nil {
+		return os.Remove(path)
+	}
+	quarantinePath := path + ".corrupt-" + suffix
+	if err := os.Rename(path, quarantinePath); err != nil {
+		return os.Remove(path)
+	}
+	return syncSessionDirectory(r.path)
 }
 
 func (r *SessionRegistry) storageHealthyLocked() error {
