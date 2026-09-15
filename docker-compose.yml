@@ -7,8 +7,7 @@ services:
     build: .
     container_name: veil
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:2096:2096"
+    network_mode: host
     volumes:
       - veil-state:/var/lib/veil
       - veil-etc:/etc/veil
@@ -17,7 +16,7 @@ services:
       - VEIL_WEB_BASE_PATH=${VEIL_WEB_BASE_PATH:-}
       - VEIL_AUTO_TLS=${VEIL_AUTO_TLS:-}
       - VEIL_AUTO_TLS_DIR=${VEIL_AUTO_TLS_DIR:-}
-    command: serve --listen 0.0.0.0:2096${VEIL_API_TOKEN:+ --auth-token $VEIL_API_TOKEN}${VEIL_WEB_BASE_PATH:+ --web-base-path $VEIL_WEB_BASE_PATH}${VEIL_AUTO_TLS:+ --auto-tls}
+    command: serve
     healthcheck:
       test: ["CMD", "veil", "healthcheck"]
       interval: 30s

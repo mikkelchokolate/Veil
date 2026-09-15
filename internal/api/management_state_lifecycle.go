@@ -19,6 +19,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/statecommit"
 	"github.com/mikkelchokolate/Veil/internal/testguard"
 )
 
@@ -233,13 +234,25 @@ func (l ManagementStateLifecycle) RecoverPendingKeyRotationContext(ctx context.C
 	if l.state.statePath == "" {
 		return nil
 	}
+	pendingJournal := pendingKeyRotationJournal(l.state.statePath)
 	if l.state.privileged == nil {
+		if !pendingJournal {
+			return nil
+		}
 		return errors.New("recover interrupted key rotation: privileged helper is unavailable")
 	}
 	if err := l.state.privileged.RecoverKeyRotation(ctx, privileged.RecoverKeyRotationRequest{}); err != nil {
+		if !pendingJournal && privilegedHelperSocketUnavailable(err) {
+			return nil
+		}
 		return fmt.Errorf("recover interrupted key rotation through privileged helper: %w", err)
 	}
 	return nil
+}
+
+func pendingKeyRotationJournal(statePath string) bool {
+	_, err := os.Stat(statecommit.KeyRotationJournalPath(statePath))
+	return err == nil
 }
 
 func (l ManagementStateLifecycle) loadCoherentStateLocked() error {

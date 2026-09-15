@@ -69,6 +69,32 @@ func TestServeHTTPServerBuildsTLSConfiguredServer(t *testing.T) {
 	}
 }
 
+func TestServeHTTPServerLoadsAuthWithoutHelperSocket(t *testing.T) {
+	root := t.TempDir()
+	server, reloader := NewHTTPServer(HTTPServerOptions{
+		Listen:       "127.0.0.1:2096",
+		Version:      "test",
+		StatePath:    filepath.Join(root, "state.json"),
+		ApplyRoot:    filepath.Join(root, "apply"),
+		KeyPath:      filepath.Join(root, "state.key"),
+		HelperSocket: filepath.Join(root, "helper.sock"),
+		WebBasePath:  "/",
+		SetupAllowed: true,
+	}).Build()
+	if closer, ok := reloader.(interface{ Close() error }); ok {
+		t.Cleanup(func() { _ = closer.Close() })
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
+	response := httptest.NewRecorder()
+	server.Handler.ServeHTTP(response, request)
+	if response.Code == http.StatusServiceUnavailable {
+		t.Fatalf("missing helper fail-closed public auth: %d %s", response.Code, response.Body.String())
+	}
+	if response.Code != http.StatusOK {
+		t.Fatalf("auth status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestServeHTTPServerReportsMissingHelperSocketAsRepairable(t *testing.T) {
 	server, _ := NewHTTPServer(HTTPServerOptions{
 		Listen:       "127.0.0.1:2096",
