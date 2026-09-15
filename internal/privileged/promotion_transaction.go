@@ -360,6 +360,9 @@ func restorePromotionPreTransaction(root string, journal *promotionTransactionJo
 				if err := atomicfile.Write(record.Destination, body, 0o600, 0o700); err != nil {
 					return err
 				}
+				if err := ensureRuntimeArtifactOwnership(record.ArtifactID, record.Destination); err != nil {
+					return err
+				}
 			}
 		} else if err := removePromotionDestination(record.Destination); err != nil {
 			return err
