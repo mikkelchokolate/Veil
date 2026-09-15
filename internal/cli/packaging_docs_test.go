@@ -273,6 +273,28 @@ func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 			}
 		}
 	}
+	caddyBody, err := os.ReadFile("../../packaging/systemd/veil-caddy.service")
+	if err != nil {
+		t.Fatal(err)
+	}
+	caddyConfig := strings.ReplaceAll(string(caddyBody), "\r\n", "\n")
+	for _, want := range []string{"User=veil\n", "Group=veil\n", "PrivateDevices=true"} {
+		if !strings.Contains(caddyConfig, want) {
+			t.Fatalf("veil-caddy.service missing %q:\n%s", want, caddyConfig)
+		}
+	}
+	if strings.Contains(caddyConfig, "ReadWritePaths=/etc/veil") || strings.Contains(caddyConfig, "ReadWritePaths=/var/lib/veil") {
+		t.Fatalf("veil-caddy.service must not remount Veil paths writable:\n%s", caddyConfig)
+	}
+	for _, unit := range runtimeUnits {
+		body, err := os.ReadFile(unit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(strings.ReplaceAll(string(body), "\r\n", "\n"), "User=") {
+			t.Fatalf("runtime unit %s is missing User=", unit)
+		}
+	}
 	// The unprivileged Panel keeps an empty capability set; it delegates privileged
 	// work to the helper.
 	panelBody, err := os.ReadFile("../../packaging/systemd/veil.service")

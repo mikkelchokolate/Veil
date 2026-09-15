@@ -87,6 +87,13 @@ func TestRenderSystemdUnitsPropagatesCustomEtcAndVarDir(t *testing.T) {
 	if !strings.Contains(backup, "--state /opt/veil/var/state.json") || !strings.Contains(backup, "--output-dir /opt/veil/var/backups") {
 		t.Fatalf("backup unit should use custom state paths:\n%s", backup)
 	}
+	caddy := units[UnitCaddy]
+	if !strings.Contains(caddy, "ReadOnlyPaths=/opt/veil/etc") {
+		t.Fatalf("caddy ReadOnlyPaths should include custom etc:\n%s", caddy)
+	}
+	if strings.Contains(caddy, "ReadWritePaths=") {
+		t.Fatalf("caddy unit must not remount custom trees writable:\n%s", caddy)
+	}
 }
 
 func TestRenderSystemdUnits(t *testing.T) {
@@ -111,8 +118,14 @@ func TestRenderSystemdUnits(t *testing.T) {
 	if !strings.Contains(units["veil-caddy.service"], "/etc/veil/generated/caddy/config.json") {
 		t.Fatalf("bad caddy unit:\n%s", units["veil-caddy.service"])
 	}
-	if !strings.Contains(units["veil-caddy.service"], "SupplementaryGroups=veil") {
-		t.Fatalf("caddy unit must traverse veil-owned 0750 config directories without CAP_DAC_OVERRIDE:\n%s", units["veil-caddy.service"])
+	if !strings.Contains(units["veil-caddy.service"], "User=veil") || !strings.Contains(units["veil-caddy.service"], "Group=veil") {
+		t.Fatalf("caddy unit must run as veil:\n%s", units["veil-caddy.service"])
+	}
+	if strings.Contains(units["veil-caddy.service"], "ReadWritePaths=") {
+		t.Fatalf("caddy unit must not remount Veil state writable:\n%s", units["veil-caddy.service"])
+	}
+	if !strings.Contains(units["veil-caddy.service"], "PrivateDevices=true") {
+		t.Fatalf("caddy unit must set PrivateDevices=true:\n%s", units["veil-caddy.service"])
 	}
 	if !strings.Contains(units["veil-hysteria2@.service"], "/etc/veil/generated/hysteria2/%i.yaml") {
 		t.Fatalf("bad hysteria2 unit:\n%s", units["veil-hysteria2@.service"])
@@ -237,6 +250,21 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 	} {
 		if !strings.Contains(socket, want) {
 			t.Fatalf("veil-helper.socket missing %q:\n%s", want, socket)
+		}
+	}
+	caddy := units[UnitCaddy]
+	for _, want := range []string{"User=veil\n", "Group=veil\n", "PrivateDevices=true", "ReadOnlyPaths=/etc/veil"} {
+		if !strings.Contains(caddy, want) {
+			t.Fatalf("veil-caddy.service missing %q:\n%s", want, caddy)
+		}
+	}
+	if strings.Contains(caddy, "ReadWritePaths=") {
+		t.Fatalf("veil-caddy.service must not remount Veil paths writable:\n%s", caddy)
+	}
+	for _, name := range []string{UnitHysteria2, UnitOlcrtc, UnitWarp, UnitMieru, UnitCaddy} {
+		unit := units[name]
+		if !strings.Contains(unit, "User=") {
+			t.Fatalf("%s is missing User=:\n%s", name, unit)
 		}
 	}
 	for _, name := range []string{UnitHysteria2, UnitOlcrtc, UnitWarp, UnitMieru} {
