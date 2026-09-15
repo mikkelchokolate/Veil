@@ -211,6 +211,8 @@ func TestShouldRenewLEIPCert(t *testing.T) {
 		{"missing", "", "Let's Encrypt", time.Now().Add(30 * 24 * time.Hour), true},
 		{"invalid PEM", "invalid.pem", "Let's Encrypt", time.Now().Add(30 * 24 * time.Hour), true},
 		{"LE fresh", "le-fresh.pem", "Let's Encrypt", time.Now().Add(30 * 24 * time.Hour), false},
+		{"LE shortlived fresh", "le-short.pem", "Let's Encrypt", time.Now().Add(160 * time.Hour), false},
+		{"LE renew window", "le-window.pem", "Let's Encrypt", time.Now().Add(72 * time.Hour), true},
 		{"LE expired soon", "le-soon.pem", "Let's Encrypt", time.Now().Add(1 * 24 * time.Hour), true},
 		{"not LE", "not-le.pem", "Veil", time.Now().Add(30 * 24 * time.Hour), true},
 	}
@@ -284,6 +286,31 @@ func TestMaybeIssueLEIPCertSkipsWhenNotNeeded(t *testing.T) {
 	}
 	if called {
 		t.Fatal("LE issue should not be called when cert is fresh")
+	}
+}
+
+func TestMaybeIssueLEIPCertSkipsFreshShortLivedCert(t *testing.T) {
+	etcDir := t.TempDir()
+	certPath := filepath.Join(etcDir, "panel", "tls.crt")
+	if err := os.MkdirAll(filepath.Dir(certPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writeTestCert(t, certPath, "Let's Encrypt", time.Now().Add(160*time.Hour))
+
+	oldIssue := leIPCertIssueFunc
+	called := false
+	leIPCertIssueFunc = func(ctx context.Context, opts acmeip.IssueOptions) (acmeip.IssuedCert, error) {
+		called = true
+		return acmeip.IssuedCert{}, nil
+	}
+	t.Cleanup(func() { leIPCertIssueFunc = oldIssue })
+
+	profile := installer.RURecommendedProfile{Email: "admin@example.com"}
+	if err := maybeIssueLEIPCert(context.Background(), &profile, Options{EtcDir: etcDir, PublicIP: "127.0.0.1"}); err != nil {
+		t.Fatalf("maybeIssueLEIPCert: %v", err)
+	}
+	if called {
+		t.Fatal("LE issue should not be called for a fresh short-lived cert")
 	}
 }
 
