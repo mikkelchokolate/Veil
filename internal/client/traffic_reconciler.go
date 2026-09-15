@@ -14,13 +14,14 @@ import (
 // QuotaMutation is one atomic quota-state transition. ResetPeriod clears only
 // current-period counters; NextResetAt is the first future UTC boundary.
 type QuotaMutation struct {
-	ClientID          string
-	Depleted          bool
-	ResetPeriod       bool
-	NextResetAt       *int64
-	TargetGeneration  int64
-	TargetPayloadHash string
-	TargetPeriodEpoch int64
+	ClientID           string
+	Depleted           bool
+	ResetPeriod        bool
+	NextResetAt        *int64
+	CurrentPeriodStart int64
+	TargetGeneration   int64
+	TargetPayloadHash  string
+	TargetPeriodEpoch  int64
 }
 
 // Reconciler periodically evaluates current-period usage. Production supplies
@@ -239,7 +240,11 @@ WHERE client_id=? AND state<>'superseded' AND (target_generation<>? OR target_pa
   (client_id,target_generation,target_payload_hash,target_depleted,target_period_epoch,state,next_retry_at,last_error,attempts,updated_at)
   SELECT ?,?,?,?,?,?,?,?,1,? WHERE EXISTS(SELECT 1 FROM clients WHERE id=?)
   ON CONFLICT(client_id,target_generation) DO UPDATE SET
-    state=CASE WHEN quota_enforcement.state='superseded' THEN quota_enforcement.state ELSE excluded.state END,
+    target_payload_hash=excluded.target_payload_hash,
+    target_depleted=excluded.target_depleted,
+    target_period_epoch=excluded.target_period_epoch,
+    state=excluded.state,
+    desired_revision=CASE WHEN quota_enforcement.target_payload_hash=excluded.target_payload_hash THEN quota_enforcement.desired_revision ELSE 0 END,
     next_retry_at=excluded.next_retry_at,last_error=excluded.last_error,
     attempts=quota_enforcement.attempts+1,updated_at=excluded.updated_at`,
 				update.clientID, mutation.TargetGeneration, mutation.TargetPayloadHash, depleted, mutation.TargetPeriodEpoch,
@@ -287,6 +292,7 @@ func (r *Reconciler) planWithTotals(current Client, now time.Time, totals [2]int
 			mutation.Depleted = false
 			mutation.ResetPeriod = true
 			mutation.NextResetAt = &next
+			mutation.CurrentPeriodStart = quotaPeriodStartUnix(current.QuotaResetPolicy, next)
 			return mutation, true, nil
 		}
 	default:
@@ -328,6 +334,20 @@ func nextQuotaBoundary(policy string, now time.Time) (int64, error) {
 	return next.Unix(), nil
 }
 
+func quotaPeriodStartUnix(policy string, nextReset int64) int64 {
+	next := time.Unix(nextReset, 0).UTC()
+	switch policy {
+	case ResetDaily:
+		return next.AddDate(0, 0, -1).Unix()
+	case ResetWeekly:
+		return next.AddDate(0, 0, -7).Unix()
+	case ResetMonthly:
+		return next.AddDate(0, -1, 0).Unix()
+	default:
+		return nextReset
+	}
+}
+
 func (r *Reconciler) applyMutation(mutation QuotaMutation) error {
 	if r.onMutation != nil {
 		return r.onMutation(mutation)
@@ -336,7 +356,7 @@ func (r *Reconciler) applyMutation(mutation QuotaMutation) error {
 	// leave counters reset while the Client mutation failed.
 	if r.onChange != nil {
 		if mutation.ResetPeriod {
-			if err := r.preflightPeriodReset(mutation.ClientID); err != nil {
+			if err := r.preflightPeriodReset(mutation); err != nil {
 				return err
 			}
 		}
@@ -347,14 +367,14 @@ func (r *Reconciler) applyMutation(mutation QuotaMutation) error {
 	return r.applyDirect(mutation)
 }
 
-func (r *Reconciler) preflightPeriodReset(clientID string) error {
+func (r *Reconciler) preflightPeriodReset(mutation QuotaMutation) error {
 	return r.traffic.WithRecordLock(func() error {
 		tx, err := r.repo.BeginTx()
 		if err != nil {
 			return err
 		}
 		defer tx.Rollback()
-		return ResetQuotaPeriodTx(tx, clientID)
+		return ResetQuotaPeriodTx(tx, mutation.ClientID, mutation.CurrentPeriodStart)
 	})
 }
 
@@ -362,7 +382,7 @@ func (r *Reconciler) applyDirect(mutation QuotaMutation) error {
 	return r.traffic.WithRecordLock(func() error {
 		return r.repo.WithTx(func(tx *Tx) error {
 			if mutation.ResetPeriod {
-				if err := ResetQuotaPeriodTx(tx, mutation.ClientID); err != nil {
+				if err := ResetQuotaPeriodTx(tx, mutation.ClientID, mutation.CurrentPeriodStart); err != nil {
 					return err
 				}
 			}

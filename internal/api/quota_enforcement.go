@@ -47,7 +47,7 @@ WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND state<>'
 			var commitErr error
 			desiredRevision, commitErr = s.commitClientMutationBoundLocked(func(tx *client.Tx) error {
 				if mutation.ResetPeriod {
-					if err := client.ResetQuotaPeriodTx(tx, mutation.ClientID); err != nil {
+					if err := client.ResetQuotaPeriodTx(tx, mutation.ClientID, mutation.CurrentPeriodStart); err != nil {
 						return err
 					}
 				}

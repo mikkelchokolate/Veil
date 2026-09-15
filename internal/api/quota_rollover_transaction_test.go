@@ -26,7 +26,7 @@ func TestQuotaRolloverCommitsPeriodStateSnapshotAndExactlyOneApplyJob(t *testing
 	}
 	now := time.Now().UTC().Unix()
 	if err := state.trafficStore.RecordSample(client.Sample{
-		ClientID: created.ID, UploadBytes: 80, DownloadBytes: 30, AtUnix: now,
+		ClientID: created.ID, UploadBytes: 80, DownloadBytes: 30, AtUnix: expired - 60,
 	}); err != nil {
 		t.Fatal(err)
 	}
