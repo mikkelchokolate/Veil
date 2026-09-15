@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	veilapply "github.com/mikkelchokolate/Veil/internal/apply"
+	versionflow "github.com/mikkelchokolate/Veil/internal/cliflow/version"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
@@ -68,7 +69,7 @@ func (s *managementState) reconcilePanelUpdateJobs(runningVersion string) {
 			continue
 		}
 		switch {
-		case version == runningVersion:
+		case versionflow.ReleaseTag(version) == versionflow.ReleaseTag(runningVersion):
 			s.updatePanelUpdateJob(id, "succeeded", "", "", nil)
 		case now-updated > 300:
 			s.updatePanelUpdateJob(id, "failed", "", "", fmt.Errorf("panel restarted without expected version %s", version))
