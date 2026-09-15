@@ -992,7 +992,10 @@ func TestInstallAllRuntimesForSkipsPluginsWithoutRuntimeProvider(t *testing.T) {
 		},
 	}
 
-	results := installRuntimesFor(ctx, opts, r, nil)
+	results, err := installRuntimesFor(ctx, opts, r, nil)
+	if err != nil {
+		t.Fatalf("installRuntimesFor: %v", err)
+	}
 	// The registry contributes "demo"; WARP is always appended from the catalog.
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results (plain plugin skipped, warp included), got %d", len(results))

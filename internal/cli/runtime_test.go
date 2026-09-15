@@ -12,7 +12,7 @@ import (
 
 func TestRuntimeInstallCommandReportsPerRuntimeResults(t *testing.T) {
 	old := runtimeInstallFunc
-	runtimeInstallFunc = func(_ context.Context, opts runtimeinstall.Options, only []string) []runtimeinstall.Result {
+	runtimeInstallFunc = func(_ context.Context, opts runtimeinstall.Options, only []string) ([]runtimeinstall.Result, error) {
 		if opts.BinDir != "/tmp/veilbin" {
 			t.Fatalf("bin dir = %q", opts.BinDir)
 		}
@@ -22,7 +22,7 @@ func TestRuntimeInstallCommandReportsPerRuntimeResults(t *testing.T) {
 		return []runtimeinstall.Result{
 			{Name: "mieru", Binary: "mita", Installed: true, Version: "v3.34.0", Path: "/tmp/veilbin/mita"},
 			{Name: "olcrtc", Binary: "olcrtc", Installed: true, Path: "/tmp/veilbin/olcrtc"},
-		}
+		}, nil
 	}
 	t.Cleanup(func() { runtimeInstallFunc = old })
 
@@ -49,10 +49,10 @@ func TestRuntimeInstallCommandReportsPerRuntimeResults(t *testing.T) {
 
 func TestRuntimeInstallCommandFailsWhenRuntimeFails(t *testing.T) {
 	old := runtimeInstallFunc
-	runtimeInstallFunc = func(_ context.Context, _ runtimeinstall.Options, _ []string) []runtimeinstall.Result {
+	runtimeInstallFunc = func(_ context.Context, _ runtimeinstall.Options, _ []string) ([]runtimeinstall.Result, error) {
 		return []runtimeinstall.Result{
 			{Name: "hysteria2", Binary: "hysteria", Err: context.DeadlineExceeded},
-		}
+		}, nil
 	}
 	t.Cleanup(func() { runtimeInstallFunc = old })
 
@@ -72,13 +72,13 @@ func TestRuntimeInstallCommandFailsWhenRuntimeFails(t *testing.T) {
 
 func TestRuntimeInstallCommandOnlyFiltersByProtocolBeforeInstall(t *testing.T) {
 	old := runtimeInstallFunc
-	runtimeInstallFunc = func(_ context.Context, _ runtimeinstall.Options, only []string) []runtimeinstall.Result {
+	runtimeInstallFunc = func(_ context.Context, _ runtimeinstall.Options, only []string) ([]runtimeinstall.Result, error) {
 		if !reflect.DeepEqual(only, []string{"mieru"}) {
 			t.Fatalf("runtime installer received only = %v, want [mieru]", only)
 		}
 		return []runtimeinstall.Result{
 			{Name: "mieru", Binary: "mita", Installed: true, Version: "v3", Path: "/usr/local/bin/mita"},
-		}
+		}, nil
 	}
 	t.Cleanup(func() { runtimeInstallFunc = old })
 
@@ -101,11 +101,10 @@ func TestRuntimeInstallCommandOnlyFiltersByProtocolBeforeInstall(t *testing.T) {
 
 func TestRuntimeInstallCommandUnknownOnlyReportsSelection(t *testing.T) {
 	old := runtimeInstallFunc
-	runtimeInstallFunc = func(_ context.Context, _ runtimeinstall.Options, only []string) []runtimeinstall.Result {
-		if !reflect.DeepEqual(only, []string{"unknown"}) {
-			t.Fatalf("runtime installer received only = %v, want [unknown]", only)
-		}
-		return nil
+	called := false
+	runtimeInstallFunc = func(_ context.Context, _ runtimeinstall.Options, _ []string) ([]runtimeinstall.Result, error) {
+		called = true
+		return nil, nil
 	}
 	t.Cleanup(func() { runtimeInstallFunc = old })
 
@@ -118,18 +117,51 @@ func TestRuntimeInstallCommandUnknownOnlyReportsSelection(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected unknown runtime selection to fail")
 	}
-	if !strings.Contains(err.Error(), "no matching runtimes for --only unknown") {
+	if called {
+		t.Fatal("unknown --only names must be rejected before installing")
+	}
+	if !strings.Contains(err.Error(), "unknown runtime name(s) unknown") || !strings.Contains(err.Error(), "supported:") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRuntimeInstallCommandRejectsMixedUnknownOnlyWithoutInstalling(t *testing.T) {
+	old := runtimeInstallFunc
+	called := false
+	runtimeInstallFunc = func(_ context.Context, _ runtimeinstall.Options, _ []string) ([]runtimeinstall.Result, error) {
+		called = true
+		return []runtimeinstall.Result{{Name: "mieru", Binary: "mita", Installed: true}}, nil
+	}
+	t.Cleanup(func() { runtimeInstallFunc = old })
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"runtime", "install", "--only", "mieru,hysetria2"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("expected mixed unknown --only to fail, got:\n%s", out.String())
+	}
+	if called {
+		t.Fatal("invalid --only selection must not install the matching subset")
+	}
+	if strings.Contains(out.String(), "All requested protocol runtimes are installed.") {
+		t.Fatalf("must not report complete success:\n%s", out.String())
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "hysetria2") || !strings.Contains(msg, "supported:") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestRuntimeInstallCommandNoRuntimeResultsReportsPlatform(t *testing.T) {
 	old := runtimeInstallFunc
-	runtimeInstallFunc = func(_ context.Context, _ runtimeinstall.Options, only []string) []runtimeinstall.Result {
+	runtimeInstallFunc = func(_ context.Context, _ runtimeinstall.Options, only []string) ([]runtimeinstall.Result, error) {
 		if len(only) != 0 {
 			t.Fatalf("only = %v, want empty", only)
 		}
-		return nil
+		return nil, nil
 	}
 	t.Cleanup(func() { runtimeInstallFunc = old })
 
