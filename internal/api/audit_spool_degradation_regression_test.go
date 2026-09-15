@@ -24,6 +24,35 @@ func TestAuditPrimaryFailureWithDurableSpoolIsVisibleAsDegraded(t *testing.T) {
 	}
 }
 
+func TestProductionAuditRecorderSpoolsKeyRotationAndRestore(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state.json")
+	if err := os.WriteFile(statePath, []byte(`{"version":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	auditPath := filepath.Join(filepath.Dir(statePath), "audit", "panel.jsonl")
+	if err := os.MkdirAll(filepath.Dir(auditPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(auditPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	recorder := audit.NewRecorder(auditPath, audit.RecorderOptions{})
+	state := &managementState{audit: recorder}
+	if err := state.recordRequestAudit(nil, audit.Record{Action: "security.key.rotate", Success: true}); err != nil {
+		t.Fatalf("production key rotation audit was dropped: %v", err)
+	}
+	if err := state.recordRequestAudit(nil, audit.Record{Action: "backup.restore", Success: true}); err != nil {
+		t.Fatalf("production restore audit was dropped: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(auditPath), "critical.spool")); err != nil {
+		t.Fatalf("production recorder did not enable the critical spool: %v", err)
+	}
+	if !state.isAuditDegraded() || recorder.Degraded() == nil {
+		t.Fatal("successful spool hid primary audit degradation")
+	}
+}
+
 func TestAuditSpoolReplayFailureRemainsVisible(t *testing.T) {
 	root := t.TempDir()
 	spool := filepath.Join(root, "critical.spool")

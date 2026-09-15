@@ -175,7 +175,11 @@ func newManagementStateProduction(info ServerInfo) *managementState {
 	} else if info.ApplyRoot != "" {
 		auditPath = filepath.Join(defaultApplyRoot(info.ApplyRoot), "generated", "veil", "audit.log")
 	}
-	state.audit = audit.NewRecorder(auditPath, audit.RecorderOptions{})
+	auditOptions := audit.RecorderOptions{}
+	if auditPath != "" {
+		auditOptions.SpoolPath = filepath.Join(filepath.Dir(auditPath), "critical.spool")
+	}
+	state.audit = audit.NewRecorder(auditPath, auditOptions)
 	if state.privileged == nil && !info.RequirePrivilegedHelper {
 		state.privileged = newLocalPrivilegedClient(state)
 		state.privilegedLocal = true

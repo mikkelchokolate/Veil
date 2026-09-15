@@ -574,6 +574,12 @@ func (s *managementState) updateBackupRestoreJob(id string, update func(*BackupR
 	}
 	update(&job)
 	s.backupJobs[id] = job
+	if root := s.restoreStateRoot(); root != "" {
+		switch job.Status {
+		case "running", "succeeded", "failed", "degraded", "pending":
+			_ = backup.ClearRestoreCommitReceipt(root)
+		}
+	}
 	return s.persistBackupRestoreJobsLocked()
 }
 
