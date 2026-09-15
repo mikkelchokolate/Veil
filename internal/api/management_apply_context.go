@@ -126,10 +126,6 @@ func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
 
 func (ctx ManagementApplyContext) writeApplyStageLocked(plan ApplyPlanResponse) ([]string, []ConfigValidationResult, []string, error) {
 	s := ctx.state
-	rendered, err := s.renderManagementConfigsLocked()
-	if err != nil {
-		return nil, nil, nil, err
-	}
 	snapshot, err := s.snapshotLocked()
 	if err != nil {
 		return nil, nil, nil, err
@@ -140,8 +136,8 @@ func (ctx ManagementApplyContext) writeApplyStageLocked(plan ApplyPlanResponse) 
 		Cipher:        s.cipher,
 		Plan:          plan,
 		Snapshot:      snapshot,
-		Rendered:      rendered,
 		RoutingSource: routing.EnsureDatSource(s.routingSource, s.rules),
+		Render:        s.renderManagementConfigsLocked,
 		Validate:      stagedConfigValidator,
 	})
 }
