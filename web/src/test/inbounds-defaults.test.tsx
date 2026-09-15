@@ -309,4 +309,75 @@ describe("InboundsPage create payload", () => {
 		renderInbounds();
 		expect(await screen.findByText(/clients down/i)).toBeInTheDocument();
 	});
+
+	it("disables Generate room for Telemost and keeps it enabled for Jitsi", async () => {
+		const rooms: string[] = [];
+		server.use(
+			http.get("/api/inbounds", () => HttpResponse.json([])),
+			http.get("/api/protocols", () =>
+				HttpResponse.json([
+					{
+						protocol: "hysteria2",
+						displayName: "Hysteria2",
+						transports: ["udp"],
+					},
+					{
+						protocol: "olcrtc",
+						displayName: "olcRTC",
+						transports: ["udp"],
+						inboundFieldSchema: [
+							{
+								key: "olcrtcAuth",
+								label: "olcRTC Auth Provider",
+								type: "select",
+								default: "jitsi",
+								options: [
+									{
+										label: "jitsi",
+										value: "jitsi",
+										attributes: { "data-autoroom": "true" },
+									},
+									{
+										label: "telemost",
+										value: "telemost",
+										attributes: { "data-autoroom": "false" },
+									},
+								],
+							},
+							{
+								key: "olcrtcRoomID",
+								label: "olcRTC Room ID",
+								type: "text",
+								generateAction: "room",
+								generateActionField: "olcrtcAuth",
+							},
+						],
+					},
+				]),
+			),
+			http.post("/api/protocols/olcrtc/room", async ({ request }) => {
+				rooms.push(await request.text());
+				return HttpResponse.json({ roomID: "auto-room" });
+			}),
+		);
+		renderInbounds();
+		await screen.findByText(/no inbounds configured/i);
+		fireEvent.click(screen.getByRole("button", { name: /new inbound/i }));
+		fireEvent.change(await screen.findByLabelText(/^protocol$/i), {
+			target: { value: "olcrtc" },
+		});
+		const generate = await screen.findByRole("button", {
+			name: /generate room/i,
+		});
+		expect(generate).toBeEnabled();
+		fireEvent.click(generate);
+		await waitFor(() => expect(rooms).toHaveLength(1));
+		fireEvent.change(screen.getByLabelText(/olcrtc auth provider/i), {
+			target: { value: "telemost" },
+		});
+		expect(
+			screen.getByRole("button", { name: /generate room/i }),
+		).toBeDisabled();
+		expect(rooms).toHaveLength(1);
+	});
 });

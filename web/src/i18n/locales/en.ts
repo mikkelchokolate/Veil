@@ -234,6 +234,8 @@ export const en: Record<string, string> = {
 	"inbounds.generatePassword": "Generate",
 	"inbounds.generateRoom": "Generate room",
 	"inbounds.generateFailed": "Generate failed",
+	"inbounds.generateRoomManual":
+		"This provider cannot auto-create a room. Create the room on the service and paste the id.",
 	"inbounds.error.createFailed": "Create failed",
 	"inbounds.error.updateFailed": "Update failed",
 	"inbounds.error.deleteFailed": "Delete failed",

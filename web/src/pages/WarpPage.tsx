@@ -20,11 +20,16 @@ export function WarpPage() {
 	});
 
 	const toggle = useMutation({
-		mutationFn: (enabled: boolean) =>
-			apiFetch("/api/warp", {
+		mutationFn: (enabled: boolean) => {
+			const current = warp.data;
+			if (!current) throw new Error("warp config not loaded");
+			// Echo the GET snapshot, including redacted secrets, so omitted
+			// privateKey is not treated as empty and does not re-register.
+			return apiFetch("/api/warp", {
 				method: "PUT",
-				body: JSON.stringify({ enabled }),
-			}),
+				body: JSON.stringify({ ...current, enabled }),
+			});
+		},
 		onSuccess: () => void qc.invalidateQueries({ queryKey: ["warp"] }),
 	});
 

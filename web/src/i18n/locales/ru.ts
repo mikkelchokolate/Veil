@@ -153,6 +153,8 @@ export const ru: Record<string, string> = {
 	"inbounds.generatePassword": "Сгенерировать",
 	"inbounds.generateRoom": "Сгенерировать комнату",
 	"inbounds.generateFailed": "Не удалось сгенерировать",
+	"inbounds.generateRoomManual":
+		"Этот провайдер не умеет создавать комнату автоматически. Создайте её в сервисе и вставьте идентификатор.",
 	"inbounds.error.createFailed": "Ошибка создания",
 	"inbounds.error.updateFailed": "Ошибка обновления",
 	"inbounds.error.deleteFailed": "Ошибка удаления",

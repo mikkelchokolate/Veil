@@ -244,6 +244,13 @@ export function UsersPage() {
 												}}
 												onSubmit={(e) => {
 													e.preventDefault();
+													if (
+														editRole === u.role &&
+														(editPassword ?? "") === ""
+													) {
+														setEditing(null);
+														return;
+													}
 													update.mutate({
 														name: u.username,
 														role: editRole,
