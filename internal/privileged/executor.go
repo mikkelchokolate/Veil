@@ -164,9 +164,9 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 	}
 	baseRecovery := config.RecoverKeyRotationWorkflow
 	config.RecoverKeyRotationWorkflow = func(ctx context.Context) error {
-		if err := recoverFirewallTransaction(ctx, config); err != nil {
-			return fmt.Errorf("recover interrupted firewall transaction: %w", err)
-		}
+		// Leftover UFW journals are recovered best-effort. A restore failure
+		// must not fail-close Panel start or login.
+		_ = recoverFirewallTransaction(ctx, config)
 		return baseRecovery(ctx)
 	}
 	if config.CaddyAdminURL == "" {
