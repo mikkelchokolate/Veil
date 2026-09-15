@@ -238,7 +238,6 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
 			return err
 		}
-		installRuntimesFunc(cmd, opts)
 		if err := installWaitPanelReadyFunc(cmd, profile, opts); err != nil {
 			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
 			return fmt.Errorf("panel did not become ready: %w", err)
