@@ -27,6 +27,16 @@ var backupSystemctlRun = func(args ...string) error {
 	return exec.Command("systemctl", args...).Run()
 }
 
+func reloadRunningPanelAfterRestore() (bool, error) {
+	if err := backupSystemctlRun("is-active", "--quiet", "veil.service"); err != nil {
+		return false, nil
+	}
+	if err := backupSystemctlRun("kill", "-s", "HUP", "veil.service"); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // backupSystemdDir is the systemd unit directory that schedule enable/disable
 // uses for the veil-backup.service drop-in. Tests replace it with a temp dir.
 var backupSystemdDir = "/etc/systemd/system"
@@ -187,7 +197,14 @@ func newBackupCommand(version string) *cobra.Command {
 			if err := api.InvalidatePersistedSessions(resolvedState); err != nil {
 				return fmt.Errorf("restored backup but failed to invalidate browser sessions: %w", err)
 			}
+			reloaded, err := reloadRunningPanelAfterRestore()
+			if err != nil {
+				return fmt.Errorf("restored backup but failed to reload the running Panel: %w", err)
+			}
 			fmt.Fprintln(cmd.OutOrStdout(), "Backup successfully restored.")
+			if reloaded {
+				fmt.Fprintln(cmd.OutOrStdout(), "Signaled the running Panel to reload restored state.")
+			}
 			if result.SafetyStatePath != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "Previous state preserved at: %s\n", result.SafetyStatePath)
 			}
