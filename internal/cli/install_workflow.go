@@ -136,20 +136,19 @@ func (w RURecommendedInstallWorkflow) Run() error {
 	if opts.DryRun {
 		return nil
 	}
-	// Ensure protocol runtimes (Caddy, hysteria, mita, sing-box, olcrtc) are
-	// installed before validating prerequisites, so caddy Panel access works on
-	// a fresh machine without manual runtime installation.
+	if !opts.Yes {
+		if err := installflow.ConfirmPlan(cmd.InOrStdin(), cmd.OutOrStdout(), opts.Interactive); err != nil {
+			return err
+		}
+	}
+	// Protocol runtimes are needed before Caddy prerequisite validation, but
+	// only after the operator has accepted the plan.
 	installRuntimesFunc(cmd, opts)
 	caddyBinary, err := validateInstallRuntimePrerequisites(built)
 	if err != nil {
 		return err
 	}
 	opts.CaddyBinary = caddyBinary
-	if !opts.Yes {
-		if err := installflow.ConfirmPlan(cmd.InOrStdin(), cmd.OutOrStdout(), opts.Interactive); err != nil {
-			return err
-		}
-	}
 	return applyRURecommendedInstall(cmd, built, opts)
 }
 

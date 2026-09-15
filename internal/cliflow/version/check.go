@@ -113,6 +113,9 @@ func Compare(a, b string) int {
 
 func parseSemver(v string) (semver, bool) {
 	v = strings.TrimSpace(v)
+	if i := strings.Index(v, " ("); i >= 0 {
+		v = strings.TrimSpace(v[:i])
+	}
 	v = strings.TrimPrefix(v, "v")
 	if v == "" {
 		return semver{}, false
