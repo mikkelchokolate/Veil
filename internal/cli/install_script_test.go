@@ -201,6 +201,34 @@ func TestCurlInstallScriptRequiresRootForPanelServiceInstall(t *testing.T) {
 	}
 }
 
+func TestPrivilegedInstallerForwardsLeIPCertFalse(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	for _, want := range []string{
+		"--le-ip-cert=*)",
+		"--no-le-ip-cert",
+		"args+=(--le-ip-cert=false)",
+		"args+=(--le-ip-cert=true)",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("install-privileged.sh missing LE IP cert opt-out %q:\n%s", want, script)
+		}
+	}
+
+	checkBash(t)
+	cmd := exec.Command("bash", "../../scripts/install-privileged.sh", "--le-ip-cert=not-a-bool")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected invalid --le-ip-cert to fail, got:\n%s", out)
+	}
+	if !strings.Contains(string(out), "Invalid boolean value") {
+		t.Fatalf("unexpected invalid boolean output:\n%s", out)
+	}
+}
+
 func TestUninstallScriptFailsClosedWhenBinaryMissingButStateRemains(t *testing.T) {
 	checkBash(t)
 	root := t.TempDir()

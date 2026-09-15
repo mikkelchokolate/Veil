@@ -196,6 +196,26 @@ func TestPrivilegedBinaryHandoffCopiesAndHashesOneOpenedInode(t *testing.T) {
 	}
 }
 
+func TestPrivilegedDryRunDoesNotWriteInstallDir(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/install-privileged.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	for _, want := range []string{
+		`stage_dir="$(mktemp -d "${TMPDIR:-/tmp}/veil-verified.XXXXXX")"`,
+		`VEIL_ALLOW_NONROOT_STAGE=`,
+		`allow_nonroot = os.environ.get("VEIL_ALLOW_NONROOT_STAGE") == "1"`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("verified dry-run must stage outside INSTALL_DIR; missing %q", want)
+		}
+	}
+	if !strings.Contains(script, `if [[ "${LOCAL_BIN}" == *"/.veil-verified-"* ]]; then rm -f "${LOCAL_BIN}"; fi`) {
+		t.Fatal("verified staging cleanup must run even for dry-run failures")
+	}
+}
+
 func TestPrivilegedFirstInstallFailureKeepsBinary(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/install-privileged.sh")
 	if err != nil {

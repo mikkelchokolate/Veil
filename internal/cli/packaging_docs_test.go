@@ -185,6 +185,9 @@ func TestPackageScriptsExist(t *testing.T) {
 	if !strings.Contains(postinstallScript, "Backup members store restore mode") {
 		t.Fatal("postinstall must preserve backup member permission metadata")
 	}
+	if !strings.Contains(postinstallScript, "/etc/veil/panel") {
+		t.Fatal("postinstall.sh must migrate Panel TLS material under /etc/veil/panel")
+	}
 }
 
 func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {

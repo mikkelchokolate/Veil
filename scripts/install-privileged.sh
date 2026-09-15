@@ -50,7 +50,8 @@ Options:
   --email EMAIL        ACME email for Panel Caddy access
   --panel-access MODE      local, direct, or caddy; prompted interactively when omitted
   --panel-port PORT        Panel TCP port; prompted interactively when omitted; 0 means random high port
-  --le-ip-cert             Obtain a Let's Encrypt IP certificate in direct mode (default true)
+  --le-ip-cert[=BOOL]      Obtain a Let's Encrypt IP certificate in direct mode (default true)
+  --no-le-ip-cert          Disable Let's Encrypt IP certificate issuance
   --le-ip-cert-port PORT   Port used for Let's Encrypt HTTP-01 validation (default 80)
   --local-bin PATH         Use a local veil binary instead of downloading a release
   --yes                Pass --yes to veil install for non-interactive apply
@@ -92,6 +93,25 @@ require_value() {
   if [[ -z "${value}" || "${value}" == --* ]]; then
     echo "Missing value for ${flag}" >&2
     exit 1
+  fi
+}
+
+parse_bool() {
+  case "$1" in
+    1|true|TRUE|yes|YES|on|ON) printf '1' ;;
+    0|false|FALSE|no|NO|off|OFF) printf '0' ;;
+    *)
+      echo "Invalid boolean value for --le-ip-cert: $1" >&2
+      exit 1
+      ;;
+  esac
+}
+
+append_le_ip_cert_args() {
+  if [[ "${LE_IP_CERT}" == "0" ]]; then
+    args+=(--le-ip-cert=false)
+  elif [[ "${LE_IP_CERT}" == "1" ]]; then
+    args+=(--le-ip-cert=true)
   fi
 }
 
@@ -151,7 +171,17 @@ while [[ $# -gt 0 ]]; do
     --email) require_value "$1" "${2:-}"; EMAIL="$2"; shift 2 ;;
     --panel-access) require_value "$1" "${2:-}"; PANEL_ACCESS="$2"; shift 2 ;;
     --panel-port) require_value "$1" "${2:-}"; PANEL_PORT="$2"; shift 2 ;;
-    --le-ip-cert) LE_IP_CERT="1"; shift ;;
+    --le-ip-cert)
+      if [[ -n "${2:-}" && "${2}" != --* ]]; then
+        LE_IP_CERT="$(parse_bool "$2")"
+        shift 2
+      else
+        LE_IP_CERT="1"
+        shift
+      fi
+      ;;
+    --le-ip-cert=*) LE_IP_CERT="$(parse_bool "${1#--le-ip-cert=}")"; shift ;;
+    --no-le-ip-cert) LE_IP_CERT="0"; shift ;;
     --le-ip-cert-port) require_value "$1" "${2:-}"; LE_IP_CERT_PORT="$2"; shift 2 ;;
     --local-bin) require_value "$1" "${2:-}"; LOCAL_BIN="$2"; shift 2 ;;
     --yes) YES="1"; shift ;;
@@ -191,9 +221,17 @@ if [[ -n "${LOCAL_BIN}" && -z "${UNSAFE_DEVELOPMENT}" ]]; then
     exit 1
   fi
   require_cmd python3
-  mkdir -p "${INSTALL_DIR}"
+  stage_dir="${INSTALL_DIR}"
+  allow_nonroot_stage=""
+  if [[ -n "${DRY_RUN}" ]]; then
+    stage_dir="$(mktemp -d "${TMPDIR:-/tmp}/veil-verified.XXXXXX")"
+    allow_nonroot_stage="1"
+  else
+    mkdir -p "${INSTALL_DIR}"
+  fi
   verified_copy="$(VEIL_LOCAL_SOURCE="${LOCAL_BIN}" VEIL_EXPECTED_BINARY_SHA256="${expected_binary}" \
-    VEIL_EXPECTED_SOURCE_UID="${SUDO_UID:-$(id -u)}" VEIL_INSTALL_DIR="${INSTALL_DIR}" python3 - <<'PY'
+    VEIL_EXPECTED_SOURCE_UID="${SUDO_UID:-$(id -u)}" VEIL_INSTALL_DIR="${stage_dir}" \
+    VEIL_ALLOW_NONROOT_STAGE="${allow_nonroot_stage}" python3 - <<'PY'
 import hashlib, os, stat, tempfile
 
 source = os.environ["VEIL_LOCAL_SOURCE"]
@@ -213,7 +251,10 @@ try:
     if not stat.S_ISREG(source_stat.st_mode) or source_stat.st_nlink != 1 or source_stat.st_uid != expected_uid:
         raise SystemExit("Verified binary source inode ownership/type/link count is unsafe")
     install_stat = os.stat(install_dir)
-    if not stat.S_ISDIR(install_stat.st_mode) or install_stat.st_uid != 0 or install_stat.st_mode & 0o022:
+    allow_nonroot = os.environ.get("VEIL_ALLOW_NONROOT_STAGE") == "1"
+    if not stat.S_ISDIR(install_stat.st_mode) or install_stat.st_mode & 0o022:
+        raise SystemExit("Install directory ownership/mode is unsafe")
+    if not allow_nonroot and install_stat.st_uid != 0:
         raise SystemExit("Install directory ownership/mode is unsafe")
     temp_fd, temp_path = tempfile.mkstemp(prefix=".veil-verified-", dir=install_dir)
     digest = hashlib.sha256()
@@ -228,7 +269,8 @@ try:
                 written = os.write(temp_fd, view)
                 view = view[written:]
         os.fchmod(temp_fd, 0o755)
-        os.fchown(temp_fd, 0, 0)
+        if os.geteuid() == 0:
+            os.fchown(temp_fd, 0, 0)
         os.fsync(temp_fd)
     finally:
         os.close(temp_fd)
@@ -277,13 +319,14 @@ if [[ -n "${LOCAL_BIN}" ]]; then
   if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
   if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
   if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
-  if [[ -n "${LE_IP_CERT}" ]]; then args+=(--le-ip-cert); fi
+  append_le_ip_cert_args
   if [[ -n "${LE_IP_CERT_PORT}" ]]; then args+=(--le-ip-cert-port "${LE_IP_CERT_PORT}"); fi
   if [[ -n "${YES}" ]]; then args+=(--yes); elif [[ -z "${DRY_RUN}" ]]; then args+=(--interactive); fi
   if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
   if run_veil_install; then
 	if [[ -n "${previous_binary:-}" ]]; then rm -f "${previous_binary}"; fi
-	if [[ "${LOCAL_BIN}" == "${INSTALL_DIR}"/.veil-verified-* ]]; then rm -f "${LOCAL_BIN}"; fi
+	if [[ "${LOCAL_BIN}" == *"/.veil-verified-"* ]]; then rm -f "${LOCAL_BIN}"; fi
+	if [[ -n "${stage_dir:-}" && "${stage_dir}" != "${INSTALL_DIR}" ]]; then rm -rf "${stage_dir}"; fi
 	exit 0
   else
 	status=$?
@@ -293,8 +336,9 @@ if [[ -n "${LOCAL_BIN}" ]]; then
 	  install -m 0755 "${previous_binary}" "${INSTALL_DIR}/veil"
 	fi
 	rm -f "${previous_binary:-}"
-	if [[ "${LOCAL_BIN}" == "${INSTALL_DIR}"/.veil-verified-* ]]; then rm -f "${LOCAL_BIN}"; fi
   fi
+  if [[ "${LOCAL_BIN}" == *"/.veil-verified-"* ]]; then rm -f "${LOCAL_BIN}"; fi
+  if [[ -n "${stage_dir:-}" && "${stage_dir}" != "${INSTALL_DIR}" ]]; then rm -rf "${stage_dir}"; fi
   exit "${status}"
 fi
 
@@ -311,7 +355,7 @@ if [[ -z "${FORCE}" && -f "${INSTALL_DIR}/veil" && -x "${INSTALL_DIR}/veil" ]]; 
     if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
     if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
     if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
-    if [[ -n "${LE_IP_CERT}" ]]; then args+=(--le-ip-cert); fi
+    append_le_ip_cert_args
     if [[ -n "${LE_IP_CERT_PORT}" ]]; then args+=(--le-ip-cert-port "${LE_IP_CERT_PORT}"); fi
     if [[ -n "${YES}" ]]; then args+=(--yes); elif [[ -z "${DRY_RUN}" ]]; then args+=(--interactive); fi
     if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi
@@ -464,7 +508,7 @@ if [[ -n "${PANEL_ACCESS}" ]]; then args+=(--panel-access "${PANEL_ACCESS}"); fi
 if [[ -n "${DOMAIN}" ]]; then args+=(--domain "${DOMAIN}"); fi
 if [[ -n "${EMAIL}" ]]; then args+=(--email "${EMAIL}"); fi
 if [[ -n "${PANEL_PORT}" ]]; then args+=(--panel-port "${PANEL_PORT}"); fi
-if [[ -n "${LE_IP_CERT}" ]]; then args+=(--le-ip-cert); fi
+append_le_ip_cert_args
 if [[ -n "${LE_IP_CERT_PORT}" ]]; then args+=(--le-ip-cert-port "${LE_IP_CERT_PORT}"); fi
 if [[ -n "${YES}" ]]; then args+=(--yes); elif [[ -z "${DRY_RUN}" ]]; then args+=(--interactive); fi
 if [[ -n "${DRY_RUN}" ]]; then args+=(--dry-run); fi

@@ -67,7 +67,11 @@ EOF
       printf sessions-before-upgrade > /var/lib/veil/sessions.json
       printf key-before-upgrade > /etc/veil/state.key
       printf env-before-upgrade > /etc/veil/veil.env
+      mkdir -p /etc/veil/panel
+      printf panel-tls-key > /etc/veil/panel/tls.key
       chmod 0644 /var/lib/veil/state.json /var/lib/veil/sessions.json /etc/veil/state.key /etc/veil/veil.env
+      chmod 0700 /etc/veil/panel
+      chmod 0600 /etc/veil/panel/tls.key
 
       systemctl enable veil.service veil-helper.socket
       : > /tmp/systemctl.log
@@ -92,6 +96,9 @@ EOF
       test "$(stat -c "%U:%G %a" /var/lib/veil/sessions.json)" = "veil:veil 600"
       test "$(stat -c "%U:%G %a" /etc/veil/state.key)" = "root:veil 640"
       test "$(stat -c "%U:%G %a" /etc/veil/veil.env)" = "root:veil 640"
+      test "$(stat -c "%U:%G %a" /etc/veil/panel)" = "root:veil 750"
+      test "$(stat -c "%U:%G %a" /etc/veil/panel/tls.key)" = "root:veil 640"
+      test "$(cat /etc/veil/panel/tls.key)" = panel-tls-key
       for file in state.json sessions.json state.key veil.env; do
         find /var/lib/veil/migration-backups -type f -name "$file" -print -quit | grep .
       done
