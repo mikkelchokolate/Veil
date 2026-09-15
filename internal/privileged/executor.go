@@ -304,7 +304,8 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 				"version": 1, "transactionId": request.Fence.OperationID, "expectedExecutableDigest": expectedDigest,
 				"previousStartGeneration": before.ExecMainStartMonotonic, "commitPhase": "intent",
 			})
-			if err := atomicfile.Write(manifestPath, intent, 0o600, 0o700); err != nil {
+			// 0644 stays root-owned and not group/other-writable so User=veil can read the receipt.
+			if err := atomicfile.Write(manifestPath, intent, 0o644, 0o700); err != nil {
 				return err
 			}
 			if _, err := config.RunCommand(ctx, []string{"systemctl", "restart", "veil.service"}, 30*time.Second); err != nil {
@@ -323,7 +324,7 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 				"previousStartGeneration": before.ExecMainStartMonotonic, "newStartGeneration": after.ExecMainStartMonotonic,
 				"mainPid": after.MainPID, "serviceActive": true, "activationManifest": manifestPath, "commitPhase": "committed",
 			})
-			return atomicfile.Write(manifestPath, committed, 0o600, 0o700)
+			return atomicfile.Write(manifestPath, committed, 0o644, 0o700)
 		},
 		SyncCaddyCert: func(ctx context.Context, request SyncCaddyCertRequest) (SyncCaddyCertResult, error) {
 			return runSyncCaddyCert(ctx, request, config)
@@ -409,7 +410,7 @@ func runProductionUpdate(config ProductionConfig, request ResolvedUpdate) (Updat
 	if err != nil {
 		return UpdateResult{}, err
 	}
-	if err := atomicfile.Write(manifestPath, intentBody, 0o600, 0o700); err != nil {
+	if err := atomicfile.Write(manifestPath, intentBody, 0o644, 0o700); err != nil {
 		return UpdateResult{}, err
 	}
 	if _, err := updateflow.ReplaceBinaryFromArchive(binaryPath, archive, true); err != nil {
@@ -440,7 +441,7 @@ func runProductionUpdate(config ProductionConfig, request ResolvedUpdate) (Updat
 	if err != nil {
 		return UpdateResult{}, err
 	}
-	if err := atomicfile.Write(manifestPath, evidenceBody, 0o600, 0o700); err != nil {
+	if err := atomicfile.Write(manifestPath, evidenceBody, 0o644, 0o700); err != nil {
 		return UpdateResult{}, err
 	}
 	for _, path := range []string{request.Path, request.ChecksumsPath, request.ChecksumsBundlePath, request.ProvenancePath, request.ProvenanceBundlePath} {

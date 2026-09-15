@@ -144,7 +144,7 @@ func (s *Server) dispatch(ctx context.Context, request RequestEnvelope) (any, er
 	case OperationStageUpdate:
 		return s.client.StageUpdate(ctx, *request.Update)
 	case OperationRestartPanel:
-		if err := s.client.RestartPanel(ctx); err != nil {
+		if err := s.client.RestartPanel(ContextWithRestartPanelRequest(ctx, *request.RestartPanel)); err != nil {
 			return nil, err
 		}
 		return struct{}{}, nil
