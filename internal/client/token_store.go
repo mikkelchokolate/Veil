@@ -514,6 +514,53 @@ func (t *Tx) RotateTokenWithExpiryTx(id string, expiresAt *int64, expirySupplied
 	return t.IssueTokenTx(tok.ClientID, tok.Label, tok.ExpiresAt)
 }
 
+// ReencryptSubscriptionTokens moves every stored token reveal ciphertext to a
+// replacement master cipher within the caller's transaction. Active and
+// revoked rows are both covered so no live database ciphertext is stranded
+// under the old key.
+func (t *Tx) ReencryptSubscriptionTokens(oldCipher, newCipher *secrets.Cipher) error {
+	if oldCipher == nil || newCipher == nil {
+		return fmt.Errorf("client: token rotation ciphers unavailable")
+	}
+	rows, err := t.q.Query(`SELECT id, token_ciphertext FROM subscription_tokens WHERE token_ciphertext IS NOT NULL AND token_ciphertext<>'' ORDER BY id`)
+	if err != nil {
+		return fmt.Errorf("client: list tokens for master-key rotation: %w", err)
+	}
+	type encryptedToken struct {
+		id    string
+		value []byte
+	}
+	var tokens []encryptedToken
+	for rows.Next() {
+		var token encryptedToken
+		if err := rows.Scan(&token.id, &token.value); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("client: scan token for master-key rotation: %w", err)
+		}
+		tokens = append(tokens, token)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("client: close token rotation rows: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("client: list tokens for master-key rotation: %w", err)
+	}
+	for _, token := range tokens {
+		plaintext, err := oldCipher.Decrypt(string(token.value))
+		if err != nil {
+			return fmt.Errorf("client: decrypt token %s for master-key rotation: %w", token.id, err)
+		}
+		encrypted, err := newCipher.Encrypt(plaintext)
+		if err != nil {
+			return fmt.Errorf("client: encrypt token %s for master-key rotation: %w", token.id, err)
+		}
+		if _, err := t.q.Exec(`UPDATE subscription_tokens SET token_ciphertext=? WHERE id=?`, []byte(encrypted), token.id); err != nil {
+			return fmt.Errorf("client: persist token %s master-key rotation: %w", token.id, err)
+		}
+	}
+	return nil
+}
+
 func scanToken(row scanner, withHash bool) (SubscriptionToken, error) {
 	var t SubscriptionToken
 	var hashBytes []byte
