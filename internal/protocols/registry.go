@@ -127,6 +127,15 @@ func AsClientAccessProvider(p ProtocolPlugin) (ClientAccessProvider, bool) {
 	return c, ok
 }
 
+// EnforcesPerClientCredentials reports whether the protocol's runtime
+// authenticates each client with a distinct credential. Protocols that only
+// render links (ClientAccessProvider) default to false so a shared-credential
+// protocol never advertises per-client rotation/expiry enforcement.
+func EnforcesPerClientCredentials(p ProtocolPlugin) bool {
+	e, ok := p.(PerClientCredentialEnforcer)
+	return ok && e.EnforcesPerClientCredentials()
+}
+
 // AsClientAccessAggregator returns the ClientAccessAggregator capability or nil.
 func AsClientAccessAggregator(p ProtocolPlugin) (ClientAccessAggregator, bool) {
 	c, ok := p.(ClientAccessAggregator)

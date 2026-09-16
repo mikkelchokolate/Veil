@@ -39,9 +39,5 @@ func (Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bool
 	if len(inbound.Profiles) > 0 {
 		return false
 	}
-	password := strings.TrimSpace(inbound.Password)
-	if password == "" {
-		password = protocolString(inbound.ProtocolFields, "password", "")
-	}
-	return password != ""
+	return strings.TrimSpace(model.EffectiveInboundPassword(inbound)) != ""
 }

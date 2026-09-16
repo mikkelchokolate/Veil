@@ -19,6 +19,10 @@ func (Plugin) RequiresCaddy() bool     { return true }
 func (Plugin) FirewallService() string { return "Veil NaiveProxy" }
 func (Plugin) MaxEnabled() int         { return 0 }
 
+// EnforcesPerClientCredentials reports that the Caddy forward_auth user list
+// authenticates each client with its own credential (audit #309).
+func (Plugin) EnforcesPerClientCredentials() bool { return true }
+
 func protocolString(m map[string]any, key, fallback string) string {
 	if m == nil {
 		return fallback

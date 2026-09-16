@@ -1,6 +1,10 @@
 package clientaccess
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/mikkelchokolate/Veil/internal/model"
+)
 
 type InboundCredentialPolicy struct {
 	generate InboundPasswordGenerator
@@ -17,7 +21,7 @@ func (p InboundCredentialPolicy) ApplyCreate(inbound *Inbound) {
 	if inbound == nil {
 		return
 	}
-	if inbound.Password == "" && len(inbound.Profiles) == 0 {
+	if model.EffectiveInboundPassword(*inbound) == "" && len(inbound.Profiles) == 0 {
 		inbound.Password = p.generate()
 	}
 	p.completeProfilePasswords(inbound, nil)
@@ -27,7 +31,7 @@ func (p InboundCredentialPolicy) ApplyUpdate(inbound *Inbound, previous Inbound)
 	if inbound == nil {
 		return
 	}
-	if inbound.Password == "" {
+	if model.EffectiveInboundPassword(*inbound) == "" {
 		inbound.Password = previous.Password
 	}
 	p.completeProfilePasswords(inbound, previous.Profiles)
