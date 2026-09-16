@@ -57,6 +57,10 @@ func (DiagnosticToolRoutes) handleDNSLookup(w http.ResponseWriter, r *http.Reque
 		writeError(w, "hostname: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	if err := validateDiagnosticTargetScope(r.Context(), req.Hostname); err != nil {
+		writeError(w, "hostname: "+err.Error(), http.StatusBadRequest)
+		return
+	}
 	addrs, cname, err := dnsLookuper(req.Hostname)
 	writeJSON(w, diagnostics.NewDNSLookupResult(req.Hostname, addrs, cname, err).Map())
 }
@@ -79,6 +83,10 @@ func (DiagnosticToolRoutes) handlePing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := validateDiagnosticTarget(req.Host); err != nil {
+		writeError(w, "host: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := validateDiagnosticTargetScope(r.Context(), req.Host); err != nil {
 		writeError(w, "host: "+err.Error(), http.StatusBadRequest)
 		return
 	}

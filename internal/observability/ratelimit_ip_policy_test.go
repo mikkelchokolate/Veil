@@ -196,6 +196,9 @@ func TestIsRateLimitedReadPath(t *testing.T) {
 	}{
 		{"/api/logs", true},
 		{"/api/logs?unit=caddy&lines=50", true},
+		{"/api/v1/events", true},
+		{"/api/v1/traffic/stream", true},
+		{"/api/v1/traffic/top", false},
 		{"/api/status", false},
 		{"/metrics", false},
 		{"/healthz", false},

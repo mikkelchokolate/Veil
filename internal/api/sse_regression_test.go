@@ -81,6 +81,9 @@ func TestSSEConnectionsAreBoundedPerCanonicalAddressAndUser(t *testing.T) {
 			if writer.Code != 429 && writer.Code != 503 {
 				t.Fatalf("rejected SSE connection status=%d body=%s", writer.Code, writer.Body.String())
 			}
+			if writer.Code == 429 && writer.Header().Get("Retry-After") == "" {
+				t.Fatal("connection-cap 429 response missing Retry-After")
+			}
 		case <-time.After(time.Second):
 			cancel()
 			t.Fatal("SSE admission decision timed out")
