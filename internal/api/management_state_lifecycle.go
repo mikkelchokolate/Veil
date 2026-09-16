@@ -542,6 +542,13 @@ func (l ManagementStateLifecycle) ReloadLocked() error {
 		// retains the pre-rotation credential cipher.
 		initClientSubsystem(l.state)
 	}
+	// The durable idempotency replay cipher is derived from the master key; a
+	// rotation must rebind it the same way the credential/token stores rebind.
+	if l.state.idempotency != nil {
+		if err := l.state.idempotency.setReplayCipher(l.state.cipher); err != nil {
+			return fmt.Errorf("rebind idempotency replay cipher: %w", err)
+		}
+	}
 	// A6: auto-migrate legacy inbound-embedded profiles to normalized
 	// Client+Binding+Credential on startup/upgrade. Idempotent (stable derived
 	// client IDs) so safe to run every boot. Runs AFTER state load so legacy

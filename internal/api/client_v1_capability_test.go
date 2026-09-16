@@ -60,6 +60,53 @@ func TestV1ClientViewIncludesBindingCapabilities(t *testing.T) {
 	}
 }
 
+// TestV1ClientViewOlcrtcDoesNotAdvertisePerClientEnforcement covers audit
+// #309: olcRTC renders per-client links, but every client shares the
+// inbound-wide encryption key, so the binding capability must not claim
+// per-client credential rotation or expiry enforcement.
+func TestV1ClientViewOlcrtcDoesNotAdvertisePerClientEnforcement(t *testing.T) {
+	r, _ := newApplyTrackedRouter(t)
+
+	inboundBody := strings.NewReader(`{"name":"rtc","protocol":"olcrtc","transport":"udp","port":8443,"enabled":true}`)
+	iw := httptest.NewRecorder()
+	ireq := httptest.NewRequest(http.MethodPost, "/api/inbounds", inboundBody)
+	ireq.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(iw, ireq)
+	if iw.Code != http.StatusOK && iw.Code != http.StatusCreated {
+		t.Fatalf("create inbound: %d %s", iw.Code, iw.Body.String())
+	}
+
+	id := createV1ClientWithBinding(t, r, "rtc-client", "rtc", "pass-1")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/clients/"+id, nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("get client: %d %s", w.Code, w.Body.String())
+	}
+	var view map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&view); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	bindings, _ := view["bindings"].([]any)
+	if len(bindings) == 0 {
+		t.Fatalf("expected bindings array in client view, got: %v", keysOf(view))
+	}
+	b0, _ := bindings[0].(map[string]any)
+	cap, ok := b0["capability"].(map[string]any)
+	if !ok {
+		t.Fatalf("binding missing capability object: %v", b0)
+	}
+	if cap["protocol"] != "olcrtc" {
+		t.Errorf("capability protocol=%v, want olcrtc", cap["protocol"])
+	}
+	if cap["perClientCredentials"] != false {
+		t.Errorf("olcrtc perClientCredentials=%v, want false (shared inbound key)", cap["perClientCredentials"])
+	}
+	if cap["expirationEnforcement"] != false {
+		t.Errorf("olcrtc expirationEnforcement=%v, want false (shared inbound key)", cap["expirationEnforcement"])
+	}
+}
+
 func createV1ClientWithBinding(t *testing.T, r http.Handler, name, inboundID, cred string) string {
 	t.Helper()
 	body := strings.NewReader(`{"name":"` + name + `","bindings":[{"inboundId":"` + inboundID + `","credential":"` + cred + `"}]}`)

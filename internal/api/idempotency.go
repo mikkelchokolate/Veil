@@ -86,11 +86,7 @@ func (s *idempotencyStore) setReplayCipher(source *secrets.Cipher) error {
 	if source == nil {
 		return nil
 	}
-	material := append(source.KeyBytes(), []byte("veil-idempotency-replay-v1")...)
-	digest := sha256.Sum256(material)
-	var key [secrets.KeySize]byte
-	copy(key[:], digest[:])
-	cipher, err := secrets.NewCipher(key)
+	cipher, err := secrets.DeriveCipher(source, secrets.IdempotencyReplayLabel)
 	if err != nil {
 		return err
 	}

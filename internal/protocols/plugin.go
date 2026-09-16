@@ -69,6 +69,16 @@ type ClientAccessProvider interface {
 	BuildLinks(settings model.Settings, inbound model.Inbound) ([]model.ClientLink, error)
 }
 
+// PerClientCredentialEnforcer is implemented by protocol plugins whose
+// runtime authenticates each client with a distinct credential. Rendering
+// per-client links (ClientAccessProvider) is necessary but not sufficient:
+// olcRTC can emit a link per client yet every link shares the inbound-wide
+// encryption key, so it must not advertise per-client credential rotation or
+// expiry enforcement (audit #309).
+type PerClientCredentialEnforcer interface {
+	EnforcesPerClientCredentials() bool
+}
+
 // UIProvider contributes dynamic form fields and one-click provisioning.
 type UIProvider interface {
 	InboundFieldSchema() []schema.FieldSchema

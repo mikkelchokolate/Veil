@@ -2,8 +2,8 @@ package generatedconfig
 
 import (
 	"fmt"
-	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
@@ -60,15 +60,11 @@ func (m MieruGeneratedConfigModel) Build(inbounds []Inbound) (renderer.MieruConf
 	return config, true, nil
 }
 
+// mieruEffectivePassword resolves the fallback credential the server renders.
+// The same bytes must reach the exported client config, so resolution shares
+// model.EffectiveInboundPassword and never trims the winning value (audit #311).
 func mieruEffectivePassword(inbound Inbound) string {
-	if inbound.ProtocolFields != nil {
-		if value, ok := inbound.ProtocolFields["password"].(string); ok {
-			if value = strings.TrimSpace(value); value != "" {
-				return value
-			}
-		}
-	}
-	return strings.TrimSpace(inbound.Password)
+	return model.EffectiveInboundPassword(inbound)
 }
 
 func hasProfiles(inbound Inbound) bool {
