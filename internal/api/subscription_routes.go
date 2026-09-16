@@ -531,6 +531,11 @@ func (s *managementState) subscriptionURLFor(plaintext string) string {
 func publicSubscriptionURL(settings Settings, plaintext string) string {
 	path := "/s/" + plaintext
 	host := strings.Trim(strings.TrimSpace(settings.Domain), "[]")
+	if strings.EqualFold(strings.TrimSpace(settings.PanelAccess), "caddy") {
+		if panel := strings.Trim(strings.TrimSpace(settings.PanelDomain), "[]"); panel != "" {
+			host = panel
+		}
+	}
 	if host == "" {
 		return path
 	}
@@ -571,9 +576,17 @@ func (headWithoutBody) Write(p []byte) (int, error) {
 }
 
 func wantsHTML(r *http.Request) bool {
+	if r.URL.Query().Get("format") != "" {
+		return false
+	}
+	// Copied /s/{token} URLs are machine feeds. HTML is only for a real
+	// browser document navigation; Accept: text/html alone is common on
+	// Clash/v2rayN-class importers.
+	if strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Dest"))) != "document" {
+		return false
+	}
 	accept := r.Header.Get("Accept")
-	return r.URL.Query().Get("format") == "" &&
-		strings.Contains(accept, "text/html") &&
+	return strings.Contains(accept, "text/html") &&
 		!strings.Contains(accept, "application/json")
 }
 

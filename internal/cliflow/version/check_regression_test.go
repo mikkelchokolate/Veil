@@ -25,6 +25,7 @@ func TestCompareTreatsPrereleaseAsOlderThanMatchingStable(t *testing.T) {
 		{"v1.2.3 (" + strings.Repeat("a", 40) + ")", "v1.2.4", -1},
 		{"v1.2.4 (" + strings.Repeat("a", 40) + ")", "v1.2.3", 1},
 		{"v1.2.3-rc.1 (" + strings.Repeat("a", 40) + ")", "v1.2.3", -1},
+		{"v1.2.3-rc.1 (8a5690c3f495609f224e51e55bce16af8d300603)", "v1.2.3-rc.1", 0},
 		{"dev", "v1.2.0", -1},
 		{"(devel)", "v1.0.0", -1},
 		{"1.abc", "1.0.0", -1},

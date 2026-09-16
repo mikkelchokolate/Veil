@@ -194,6 +194,7 @@ func TestPublicSubscriptionHEADHTMLHasNoBody(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodHead, "/s/"+plaintext, nil)
 	req.Header.Set("Accept", "text/html")
+	req.Header.Set("Sec-Fetch-Dest", "document")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

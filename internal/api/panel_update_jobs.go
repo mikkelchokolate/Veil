@@ -61,18 +61,28 @@ func (s *managementState) reconcilePanelUpdateJobs(runningVersion string) {
 	if err != nil {
 		return
 	}
-	defer rows.Close()
+	type pendingJob struct {
+		id, version string
+		updated     int64
+	}
+	var pending []pendingJob
 	for rows.Next() {
-		var id, version string
-		var updated int64
-		if rows.Scan(&id, &version, &updated) != nil {
-			continue
+		var job pendingJob
+		if rows.Scan(&job.id, &job.version, &job.updated) == nil {
+			pending = append(pending, job)
 		}
+	}
+	// The pool holds a single connection; updates must run after the cursor
+	// closes or they wait on the conn the scan still occupies.
+	if err := rows.Close(); err != nil {
+		return
+	}
+	for _, job := range pending {
 		switch {
-		case versionflow.ReleaseTag(version) == versionflow.ReleaseTag(runningVersion):
-			s.updatePanelUpdateJob(id, "succeeded", "", "", nil)
-		case now-updated > 300:
-			s.updatePanelUpdateJob(id, "failed", "", "", fmt.Errorf("panel restarted without expected version %s", version))
+		case versionflow.ReleaseTag(job.version) == versionflow.ReleaseTag(runningVersion):
+			s.updatePanelUpdateJob(job.id, "succeeded", "", "", nil)
+		case now-job.updated > 300:
+			s.updatePanelUpdateJob(job.id, "failed", "", "", fmt.Errorf("panel restarted without expected version %s", job.version))
 		}
 	}
 }

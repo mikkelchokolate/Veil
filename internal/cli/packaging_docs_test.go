@@ -190,6 +190,20 @@ func TestPackageScriptsExist(t *testing.T) {
 	}
 }
 
+func TestDockerEntrypointKeepsApplyRootOffLiveGeneratedTree(t *testing.T) {
+	body, err := os.ReadFile("../../packaging/docker/entrypoint.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	if strings.Contains(script, "VEIL_APPLY_ROOT:-/etc/veil}") || strings.Contains(script, "VEIL_APPLY_ROOT=/etc/veil") {
+		t.Fatal("container entrypoint must not default VEIL_APPLY_ROOT to the live config tree")
+	}
+	if !strings.Contains(script, "VEIL_APPLY_ROOT:-/var/lib/veil/staging}") {
+		t.Fatal("container entrypoint must default VEIL_APPLY_ROOT to /var/lib/veil/staging")
+	}
+}
+
 func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 	runtimeUnits := []string{
 		"../../packaging/systemd/veil-caddy.service",
