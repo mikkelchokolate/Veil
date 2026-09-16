@@ -52,6 +52,12 @@ func TestSanitizeServiceLogOutputSecretFormats(t *testing.T) {
 			wantClean: true,
 		},
 		{
+			name:        "caddy JSON auth_credentials multiple entries",
+			in:          `{"auth_credentials":["` + secret + `","SECONDSECRETVALUE456"]}`,
+			wantClean:   true,
+			secretValue: "SECONDSECRETVALUE456",
+		},
+		{
 			name: "hysteria2 YAML password value",
 			in:   "auth:\n  type: password\n  password: " + secret,
 			// Old logSecretPattern matched the bare "password" inside
@@ -78,6 +84,25 @@ func TestSanitizeServiceLogOutputSecretFormats(t *testing.T) {
 			wantClean: true,
 		},
 		{
+			name: "journalctl-prefixed hysteria2 userpass",
+			in: "2026-08-13T10:00:00Z host hysteria[1]:   userpass:\n" +
+				"2026-08-13T10:00:00Z host hysteria[1]:     alice: " + secret + "\n" +
+				"2026-08-13T10:00:00Z host hysteria[1]:     bob: " + secret + "2",
+			wantClean: true,
+		},
+		{
+			name:        "public subscription path",
+			in:          "GET /s/" + strings.Repeat("A", 43) + " HTTP/1.1",
+			wantClean:   true,
+			secretValue: strings.Repeat("A", 43),
+		},
+		{
+			name:        "public subscription URL",
+			in:          "https://panel.example.com/s/" + strings.Repeat("A", 43),
+			wantClean:   true,
+			secretValue: strings.Repeat("A", 43),
+		},
+		{
 			// audit #186: Caddyfile basic_auth directive
 			name:      "caddy basic_auth directive",
 			in:        "basic_auth alice " + secret + " {\n  realm vpn\n}",
@@ -99,13 +124,15 @@ func TestSanitizeServiceLogOutputSecretFormats(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			checkSecret := tc.secretValue
-			if checkSecret == "" {
-				checkSecret = secret
+			toCheck := []string{secret}
+			if tc.secretValue != "" {
+				toCheck = append(toCheck, tc.secretValue)
 			}
 			out := sanitizeServiceLogOutput(tc.in)
-			if strings.Contains(out, checkSecret) {
-				t.Fatalf("secret leaked through sanitizer:\n in:  %s\n out: %s", tc.in, out)
+			for _, checkSecret := range toCheck {
+				if strings.Contains(out, checkSecret) {
+					t.Fatalf("secret leaked through sanitizer:\n in:  %s\n out: %s", tc.in, out)
+				}
 			}
 			if tc.wantClean && !strings.Contains(out, redacted) {
 				t.Fatalf("expected redaction marker in output:\n in:  %s\n out: %s", tc.in, out)

@@ -193,6 +193,7 @@ func TestPublicSubscriptionHTMLLanding(t *testing.T) {
 	plaintext, _ := seedClientWithToken(t, r)
 	req := httptest.NewRequest(http.MethodGet, "/s/"+plaintext, nil)
 	req.Header.Set("Accept", "text/html")
+	req.Header.Set("Sec-Fetch-Dest", "document")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

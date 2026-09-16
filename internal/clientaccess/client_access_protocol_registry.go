@@ -162,7 +162,11 @@ func (r ClientAccessProtocolRegistry) BuildLinks(settings Settings, inbound Inbo
 }
 
 func newProtocolClientLink(input ClientAccessLinkInput) ClientLink {
-	return ClientLink{Name: input.LinkName, Protocol: input.Inbound.Protocol, Transport: input.Inbound.Transport, Port: input.Inbound.Port}
+	port := input.Inbound.Port
+	if input.Inbound.Protocol == "naiveproxy" {
+		port = model.ResolveNaivePublicPort(input.Settings, input.Inbound)
+	}
+	return ClientLink{Name: input.LinkName, Protocol: input.Inbound.Protocol, Transport: input.Inbound.Transport, Port: port}
 }
 
 func naiveProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
