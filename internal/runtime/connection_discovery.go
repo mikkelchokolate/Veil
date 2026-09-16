@@ -27,10 +27,12 @@ func (d ConnectionDiscovery) Read() (ConnectionsStats, error) {
 	// (CI containers without any host listener) otherwise emit
 	// "listeners": null and break API consumers.
 	stats := ConnectionsStats{Listeners: []ConnectionListener{}}
-	tcp, _ := d.listeningSockets("tcp")
-	stats.Listeners = append(stats.Listeners, tcp...)
-	udp, _ := d.listeningSockets("udp")
-	stats.Listeners = append(stats.Listeners, udp...)
+	// Dual-stack sockets (e.g. Hysteria2 listen :<port>) appear only in the
+	// tcp6/udp6 tables, so all four /proc tables must be scanned.
+	for _, proto := range []string{"tcp", "tcp6", "udp", "udp6"} {
+		listeners, _ := d.listeningSockets(proto)
+		stats.Listeners = append(stats.Listeners, listeners...)
+	}
 	return stats, nil
 }
 

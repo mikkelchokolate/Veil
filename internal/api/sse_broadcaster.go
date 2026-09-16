@@ -244,6 +244,7 @@ func (s *managementState) serveSharedSSE(w http.ResponseWriter, r *http.Request,
 	}
 	updates, release, err := hub.subscribe(identity)
 	if err != nil {
+		w.Header().Set("Retry-After", "5")
 		writeError(w, "too many SSE connections", http.StatusTooManyRequests)
 		return
 	}
