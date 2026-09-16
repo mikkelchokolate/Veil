@@ -469,7 +469,15 @@ func commitRotationRevision(
 		_ = tx.Rollback()
 		return 0, err
 	}
+	if err := tx.ReencryptSubscriptionTokens(oldCipher, newCipher); err != nil {
+		_ = tx.Rollback()
+		return 0, err
+	}
 	if err := reencryptRevisionSnapshotsTx(tx, oldCipher, newCipher); err != nil {
+		_ = tx.Rollback()
+		return 0, err
+	}
+	if err := reencryptIdempotencyReplayTx(tx, oldCipher, newCipher); err != nil {
 		_ = tx.Rollback()
 		return 0, err
 	}
@@ -566,6 +574,60 @@ func reencryptRevisionSnapshotsTx(tx *client.Tx, oldCipher, newCipher *secrets.C
 		}
 		if _, err := tx.Exec(`UPDATE revision_snapshots SET payload=? WHERE revision=?`, string(payload), row.revision); err != nil {
 			return fmt.Errorf("state commit: persist rotated snapshot %d: %w", row.revision, err)
+		}
+	}
+	return nil
+}
+
+// reencryptIdempotencyReplayTx migrates durable one-time secret replay
+// envelopes onto the replay cipher derived from the replacement master key.
+// The envelope body lives only in idempotency_results.response_body for rows
+// flagged encrypted; the records table stores metadata, not ciphertext. An
+// envelope that cannot be re-sealed fails the rotation instead of stranding
+// under the pre-rotation key.
+func reencryptIdempotencyReplayTx(tx *client.Tx, oldCipher, newCipher *secrets.Cipher) error {
+	oldReplay, err := secrets.DeriveCipher(oldCipher, secrets.IdempotencyReplayLabel)
+	if err != nil {
+		return err
+	}
+	newReplay, err := secrets.DeriveCipher(newCipher, secrets.IdempotencyReplayLabel)
+	if err != nil {
+		return err
+	}
+	rows, err := tx.Query(`SELECT id, response_body FROM idempotency_results WHERE encrypted=1 AND response_body IS NOT NULL ORDER BY id`)
+	if err != nil {
+		return fmt.Errorf("state commit: list idempotency envelopes for key rotation: %w", err)
+	}
+	type envelopeRow struct {
+		id   string
+		body []byte
+	}
+	var envelopes []envelopeRow
+	for rows.Next() {
+		var row envelopeRow
+		if err := rows.Scan(&row.id, &row.body); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("state commit: scan idempotency envelope for key rotation: %w", err)
+		}
+		envelopes = append(envelopes, row)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("state commit: close idempotency envelope rows: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("state commit: list idempotency envelopes for key rotation: %w", err)
+	}
+	for _, row := range envelopes {
+		plaintext, err := oldReplay.Decrypt(string(row.body))
+		if err != nil {
+			return fmt.Errorf("state commit: decrypt idempotency envelope %s for key rotation: %w", row.id, err)
+		}
+		sealed, err := newReplay.Encrypt(plaintext)
+		if err != nil {
+			return fmt.Errorf("state commit: encrypt idempotency envelope %s for key rotation: %w", row.id, err)
+		}
+		if _, err := tx.Exec(`UPDATE idempotency_results SET response_body=? WHERE id=?`, []byte(sealed), row.id); err != nil {
+			return fmt.Errorf("state commit: persist idempotency envelope %s key rotation: %w", row.id, err)
 		}
 	}
 	return nil

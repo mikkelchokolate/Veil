@@ -7,6 +7,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -58,11 +59,30 @@ func NewCipher(key [KeySize]byte) (*Cipher, error) {
 	return &Cipher{aead: aead, key: key}, nil
 }
 
+// IdempotencyReplayLabel is the derivation label for the durable one-time
+// secret idempotency replay envelope cipher. API replay handling and state-key
+// rotation must derive the identical sub-cipher.
+const IdempotencyReplayLabel = "veil-idempotency-replay-v1"
+
 // KeyBytes returns a copy of the cipher's key bytes.
 func (c *Cipher) KeyBytes() []byte {
 	out := make([]byte, KeySize)
 	copy(out, c.key[:])
 	return out
+}
+
+// DeriveCipher derives an independent cipher from a source cipher's key
+// material and a domain label (SHA-256 of key bytes concatenated with the
+// label). Rotating the source key rotates every derived cipher.
+func DeriveCipher(source *Cipher, label string) (*Cipher, error) {
+	if source == nil {
+		return nil, errors.New("secrets: derive cipher source unavailable")
+	}
+	material := append(source.KeyBytes(), []byte(label)...)
+	digest := sha256.Sum256(material)
+	var key [KeySize]byte
+	copy(key[:], digest[:])
+	return NewCipher(key)
 }
 
 // Encrypt encrypts a plaintext string and returns a "ve1:<base64url>" string.
