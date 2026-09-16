@@ -202,20 +202,21 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 			return fmt.Errorf("apply firewall rules: %w", err)
 		}
 	}
-	if opts.PanelAccess == "direct" && opts.LEIPCert {
-		if err := issueLEIPCertForProfile(cmd.Context(), &profile, opts, resolvedIP); err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: could not obtain Let's Encrypt IP certificate: %v\n", err)
-			fmt.Fprintln(cmd.ErrOrStderr(), "Falling back to the generated self-signed certificate.")
-		}
-	}
-
-	// 3. Create the veil service account before writing/chowning secrets.
+	// 3. Create the veil service account before writing/chowning secrets AND
+	// before the ACME IP certificate is issued: fixCertOwnership chgrps the
+	// installed key to the veil group, which must already exist (audit #120).
 	// installer.Apply chowns generated files to the veil user; that lookup
 	// fails on a fresh host if useradd has not run yet.
 	if shouldPrepareInstallHost(systemdDir) {
 		if err := installPrepareHostFunc(hostaccess.Paths{EtcDir: opts.EtcDir, VarDir: opts.VarDir}); err != nil {
 			_ = writeAuditInstall(opts.AuditLog, "", false, err.Error(), nil)
 			return fmt.Errorf("prepare panel service account and permissions: %w", err)
+		}
+	}
+	if opts.PanelAccess == "direct" && opts.LEIPCert {
+		if err := issueLEIPCertForProfile(cmd.Context(), &profile, opts, resolvedIP); err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: could not obtain Let's Encrypt IP certificate: %v\n", err)
+			fmt.Fprintln(cmd.ErrOrStderr(), "Falling back to the generated self-signed certificate.")
 		}
 	}
 

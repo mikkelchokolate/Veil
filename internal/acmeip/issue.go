@@ -12,6 +12,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -218,7 +219,7 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		"-d", opts.PublicIPv4,
 		"--key-file", keyPath,
 		"--fullchain-file", certPath,
-		"--reloadcmd", "systemctl restart veil || true",
+		"--reloadcmd", renewReloadCmd(certPath, keyPath),
 	}
 	prevCert, _ := sys.ReadFile(certPath)
 	prevKey, _ := sys.ReadFile(keyPath)
@@ -255,6 +256,22 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 	}
 
 	return IssuedCert{CertPath: certPath, KeyPath: keyPath}, nil
+}
+
+// renewReloadCmd builds the acme.sh --reloadcmd registered at installcert time.
+// acme.sh runs it on every renewal and rewrites the key 0600 root:root, so the
+// command restores group readability BEFORE restarting the panel — otherwise
+// veil.service (User=veil) can no longer read tls.key after renewal (audit
+// #120). chgrp is best-effort for hosts without the veil group.
+func renewReloadCmd(certPath, keyPath string) string {
+	return fmt.Sprintf("chmod 0644 %s && chmod 0640 %s && (chgrp veil %s %s 2>/dev/null || true) && systemctl restart veil || true",
+		shellQuote(certPath), shellQuote(keyPath), shellQuote(certPath), shellQuote(keyPath))
+}
+
+// shellQuote wraps a path in single quotes for embedding in the acme.sh
+// reloadcmd string, escaping embedded quotes POSIX-style.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func ensureAcmeSh(ctx context.Context, sys System) (string, error) {

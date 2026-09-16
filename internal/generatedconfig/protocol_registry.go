@@ -1,6 +1,10 @@
 package generatedconfig
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/mikkelchokolate/Veil/internal/model"
+)
 
 type ConfigInput struct {
 	ApplyRoot string
@@ -91,17 +95,22 @@ func (r ProtocolRegistry) Render(input ConfigInput) (map[string]string, error) {
 	configs := map[string]string{}
 	for _, protocol := range r.protocols {
 		selected := r.enabledInbounds(input.Settings, input.Inbounds, protocol.Protocol)
-		if len(selected) == 0 {
+		renderInbounds := selected
+		if protocol.Protocol == "naiveproxy" {
+			// The naive renderer owns the consolidated caddy/config.json, which
+			// also issues ACME certs for Hysteria2-only domains. It must run
+			// whenever a cert consumer exists — not only when a Naive inbound
+			// is enabled — or the live Caddy config never includes those names
+			// and the cert-sync step fail-closes apply (audit #156).
+			renderInbounds = input.Inbounds
+			if len(selected) == 0 && !hasCaddyManagedCertConsumer(input.Inbounds) {
+				continue
+			}
+		} else if len(selected) == 0 {
 			continue
 		}
 		if protocol.RequiresRenderSettings && !NewGeneratedRenderSettingsPolicyWithFieldKeys(r.renderSettingKeys).HasRenderSettings(input.Settings, input.Inbounds) {
 			continue
-		}
-		renderInbounds := selected
-		if protocol.Protocol == "naiveproxy" {
-			// Caddy JSON also issues ACME certs for Hysteria2-only domains.
-			// Passing only Naive inbounds drops those subjects from live Caddy.
-			renderInbounds = input.Inbounds
 		}
 		artifacts, ok, err := protocol.Render(ProtocolRenderInput{Settings: input.Settings, Paths: paths, Inbounds: renderInbounds, Rules: input.Rules, Warp: input.Warp})
 		if err != nil {
@@ -135,6 +144,19 @@ func (r ProtocolRegistry) protocol(protocol string) (Protocol, bool) {
 		}
 	}
 	return Protocol{}, false
+}
+
+// hasCaddyManagedCertConsumer reports whether any enabled hysteria2 inbound
+// declares a per-inbound domain. Such inbounds rely on Caddy-managed ACME
+// certificates (NeedsCaddyCertSync), so the consolidated caddy/config.json
+// must be rendered even when no Naive inbound is enabled (audit #156).
+func hasCaddyManagedCertConsumer(inbounds []Inbound) bool {
+	for _, inbound := range inbounds {
+		if inbound.Enabled && inbound.Protocol == "hysteria2" && model.InboundDomain(inbound) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (ProtocolRegistry) enabledInbounds(settings Settings, inbounds []Inbound, protocol string) []Inbound {
