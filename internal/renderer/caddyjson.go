@@ -108,7 +108,22 @@ func renderTLSApp(plan caddyassembly.CaddyRenderPlan) (map[string]any, error) {
 			"issuers":  []map[string]any{issuer},
 		})
 	}
-	return map[string]any{"automation": map[string]any{"policies": policies}}, nil
+	tlsApp := map[string]any{"automation": map[string]any{"policies": policies}}
+	// Automation policy subjects only select a policy; they do not enroll a
+	// name for certificate management. Panel and Naive domains are enrolled by
+	// HTTP route host matchers, but a Hysteria2-only domain has no host
+	// matcher anywhere, so enroll it explicitly through the automate loader or
+	// Caddy never requests its first certificate (audit #308).
+	var automate []string
+	for _, spec := range specs {
+		if !spec.Owners.Panel && len(spec.Owners.NaiveInboundNames) == 0 {
+			automate = append(automate, spec.Domain)
+		}
+	}
+	if len(automate) > 0 {
+		tlsApp["certificates"] = map[string]any{"automate": automate}
+	}
+	return tlsApp, nil
 }
 
 func renderACMEIssuer(email, mode string) (map[string]any, error) {

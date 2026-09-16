@@ -87,3 +87,79 @@ func TestResolveInboundEmail(t *testing.T) {
 		})
 	}
 }
+
+// TestResolveInboundEmailInheritsLegacyEmailForPanelDomain covers audit #305:
+// an enabled inbound reusing the Panel's own hostname under caddy panel access
+// shares the installed certificate/account policy — including the legacy
+// settings.Email — and must not demand the email be re-entered.
+func TestResolveInboundEmailInheritsLegacyEmailForPanelDomain(t *testing.T) {
+	settings := Settings{
+		PanelAccess: "caddy",
+		Domain:      "panel.example.com",
+		Email:       "admin@example.com",
+	}
+	inbound := Inbound{
+		Protocol:       "hysteria2",
+		Enabled:        true,
+		ProtocolFields: map[string]any{"domain": " Panel.Example.Com "},
+	}
+	if got := ResolveInboundEmail(inbound, settings); got != "admin@example.com" {
+		t.Fatalf("panel-domain email = %q, want legacy settings.Email", got)
+	}
+}
+
+// TestResolveInboundEmailStillRejectsUnrelatedDomain keeps the legacy-email
+// exclusion for non-Panel domains (audit #305).
+func TestResolveInboundEmailStillRejectsUnrelatedDomain(t *testing.T) {
+	settings := Settings{
+		PanelAccess: "caddy",
+		Domain:      "panel.example.com",
+		Email:       "admin@example.com",
+	}
+	inbound := Inbound{
+		Protocol:       "hysteria2",
+		Enabled:        true,
+		ProtocolFields: map[string]any{"domain": "other.example.com"},
+	}
+	if got := ResolveInboundEmail(inbound, settings); got != "" {
+		t.Fatalf("unrelated domain resolved legacy email %q", got)
+	}
+}
+
+// TestResolveInboundEmailPanelDomainWithoutCaddyAccess needs an explicit or
+// default email: without caddy panel access the domain is not Panel-owned and
+// the legacy email must not leak (audit #305).
+func TestResolveInboundEmailPanelDomainWithoutCaddyAccess(t *testing.T) {
+	settings := Settings{
+		PanelAccess: "direct",
+		Domain:      "panel.example.com",
+		Email:       "admin@example.com",
+	}
+	inbound := Inbound{
+		Protocol:       "hysteria2",
+		Enabled:        true,
+		ProtocolFields: map[string]any{"domain": "panel.example.com"},
+	}
+	if got := ResolveInboundEmail(inbound, settings); got != "" {
+		t.Fatalf("direct panel access resolved legacy email %q", got)
+	}
+}
+
+// TestResolveInboundEmailPanelDomainVariant checks the PanelDomain field wins
+// over Domain when resolving the panel hostname (audit #305).
+func TestResolveInboundEmailPanelDomainVariant(t *testing.T) {
+	settings := Settings{
+		PanelAccess: "caddy",
+		PanelDomain: "panel.example.com",
+		Domain:      "fallback.example.com",
+		Email:       "admin@example.com",
+	}
+	inbound := Inbound{
+		Protocol:       "naiveproxy",
+		Enabled:        true,
+		ProtocolFields: map[string]any{"domain": "panel.example.com"},
+	}
+	if got := ResolveInboundEmail(inbound, settings); got != "admin@example.com" {
+		t.Fatalf("PanelDomain match email = %q, want legacy settings.Email", got)
+	}
+}

@@ -94,7 +94,10 @@ func InboundEmail(inbound Inbound) string {
 // settings.DefaultAcmeEmail and settings.PanelEmail. It intentionally does NOT
 // fall back to the legacy settings.Email, because that global email is reserved
 // for the panel's own domain and should not silently issue certificates for
-// unrelated inbound domains.
+// unrelated inbound domains. The one exception mirrors the Caddy domain-owner
+// resolver: when panel access is caddy and the inbound's effective domain is
+// exactly the panel's hostname, the existing Panel certificate/account policy —
+// including the installed legacy email — is inherited (audit #305).
 func ResolveInboundEmail(inbound Inbound, settings Settings) string {
 	if e := InboundEmail(inbound); e != "" {
 		return e
@@ -104,5 +107,15 @@ func ResolveInboundEmail(inbound Inbound, settings Settings) string {
 			return v
 		}
 	}
-	return ""
+	if settings.PanelAccess != "caddy" {
+		return ""
+	}
+	panelDomain := strings.ToLower(strings.TrimSpace(settings.PanelDomain))
+	if panelDomain == "" {
+		panelDomain = strings.ToLower(strings.TrimSpace(settings.Domain))
+	}
+	if panelDomain == "" || ResolveInboundDomain(inbound, settings) != panelDomain {
+		return ""
+	}
+	return strings.TrimSpace(settings.Email)
 }

@@ -41,7 +41,19 @@ func (Plugin) RenderConfig(input generatedconfig.ProtocolRenderInput) ([]generat
 
 	caps, err := caddycapabilities.Probe("")
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to probe Caddy capabilities: %w", err)
+		if !caddycapabilities.IsMissingBinary(err) {
+			return nil, false, fmt.Errorf("failed to probe Caddy capabilities: %w", err)
+		}
+		// A Hysteria2-only plan (audit #156) renders this artifact before the
+		// Caddy runtime exists; tolerate a missing binary the way the
+		// panelaccess path does. Naive inbounds still fail hard: they need the
+		// forward_proxy module probed.
+		for _, inb := range input.Inbounds {
+			if inb.Protocol == "naiveproxy" && inb.Enabled {
+				return nil, false, fmt.Errorf("failed to probe Caddy capabilities: %w", err)
+			}
+		}
+		caps = caddycapabilities.CaddyCapabilities{}
 	}
 	data, err := renderer.RenderCaddyJSON(plan, caps)
 	if err != nil {

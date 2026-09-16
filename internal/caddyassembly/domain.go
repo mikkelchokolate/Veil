@@ -36,6 +36,12 @@ func ResolveDomainCertSpecs(settings model.Settings, inbounds []model.Inbound) (
 	}
 
 	for _, inb := range inbounds {
+		// A disabled inbound must not enroll certificate domains, require an
+		// email or conflict with an enabled domain's email — disabling an
+		// entry is how operators remove its ACME requirements (audit #306).
+		if !inb.Enabled {
+			continue
+		}
 		if inb.Protocol == "naiveproxy" {
 			domain := naiveDomainWithFallback(inb, settings)
 			if domain == "" {

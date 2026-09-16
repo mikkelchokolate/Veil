@@ -25,7 +25,7 @@ func TestInstallCertFailureMustNotAcceptOldExpiredPair(t *testing.T) {
 	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
 	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", "letsencrypt")] = commandResult{out: "OK"}
 	sys.commands[sys.key(acmeSh, "--issue", "-d", "192.0.2.20", "--standalone", "--server", "letsencrypt", "--certificate-profile", "shortlived", "--days", "3", "--httpport", "80", "--force")] = commandResult{out: "Cert issued"}
-	sys.commands[sys.key(acmeSh, "--installcert", "-d", "192.0.2.20", "--key-file", keyPath, "--fullchain-file", certPath, "--reloadcmd", "systemctl restart veil || true")] = commandResult{err: errors.New("installcert failed")}
+	sys.commands[sys.key(acmeSh, "--installcert", "-d", "192.0.2.20", "--key-file", keyPath, "--fullchain-file", certPath, "--reloadcmd", renewReloadCmd(certPath, keyPath))] = commandResult{err: errors.New("installcert failed")}
 
 	_, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: "192.0.2.20", System: sys})
 	if err == nil {
@@ -44,7 +44,7 @@ func TestInstallCertFailureWithoutOldCertificateStillErrors(t *testing.T) {
 	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
 	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", "letsencrypt")] = commandResult{out: "OK"}
 	sys.commands[sys.key(acmeSh, "--issue", "-d", "192.0.2.20", "--standalone", "--server", "letsencrypt", "--certificate-profile", "shortlived", "--days", "3", "--httpport", "80", "--force")] = commandResult{out: "Cert issued"}
-	sys.commands[sys.key(acmeSh, "--installcert", "-d", "192.0.2.20", "--key-file", "/etc/veil/panel/tls.key", "--fullchain-file", "/etc/veil/panel/tls.crt", "--reloadcmd", "systemctl restart veil || true")] = commandResult{err: errors.New("installcert failed")}
+	sys.commands[sys.key(acmeSh, "--installcert", "-d", "192.0.2.20", "--key-file", "/etc/veil/panel/tls.key", "--fullchain-file", "/etc/veil/panel/tls.crt", "--reloadcmd", renewReloadCmd("/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key"))] = commandResult{err: errors.New("installcert failed")}
 
 	_, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: "192.0.2.20", System: sys})
 	if err == nil {

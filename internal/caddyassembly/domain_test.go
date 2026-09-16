@@ -9,8 +9,8 @@ import (
 func TestResolveDomainCertSpecsConflictingEmail(t *testing.T) {
 	settings := model.Settings{PanelAccess: "direct"}
 	inbounds := []model.Inbound{
-		{Name: "n1", Protocol: "naiveproxy", ProtocolFields: map[string]any{"domain": "x.com", "email": "a@x.com"}},
-		{Name: "n2", Protocol: "naiveproxy", ProtocolFields: map[string]any{"domain": "x.com", "email": "b@x.com"}},
+		{Name: "n1", Protocol: "naiveproxy", Enabled: true, ProtocolFields: map[string]any{"domain": "x.com", "email": "a@x.com"}},
+		{Name: "n2", Protocol: "naiveproxy", Enabled: true, ProtocolFields: map[string]any{"domain": "x.com", "email": "b@x.com"}},
 	}
 	_, err := ResolveDomainCertSpecs(settings, inbounds)
 	if err == nil {
@@ -21,7 +21,7 @@ func TestResolveDomainCertSpecsConflictingEmail(t *testing.T) {
 func TestResolveDomainCertSpecsFallback(t *testing.T) {
 	settings := model.Settings{PanelAccess: "direct", DefaultAcmeEmail: "admin@x.com"}
 	inbounds := []model.Inbound{
-		{Name: "n1", Protocol: "naiveproxy", ProtocolFields: map[string]any{"domain": "x.com"}},
+		{Name: "n1", Protocol: "naiveproxy", Enabled: true, ProtocolFields: map[string]any{"domain": "x.com"}},
 	}
 	specs, err := ResolveDomainCertSpecs(settings, inbounds)
 	if err != nil {
@@ -35,7 +35,7 @@ func TestResolveDomainCertSpecsFallback(t *testing.T) {
 func TestResolveDomainCertSpecsIncludesHysteria2OnlyDomain(t *testing.T) {
 	settings := model.Settings{PanelAccess: "direct", DefaultAcmeEmail: "admin@x.com"}
 	inbounds := []model.Inbound{
-		{Name: "hy2", Protocol: "hysteria2", ProtocolFields: map[string]any{"domain": "hy.example.com"}},
+		{Name: "hy2", Protocol: "hysteria2", Enabled: true, ProtocolFields: map[string]any{"domain": "hy.example.com"}},
 	}
 	specs, err := ResolveDomainCertSpecs(settings, inbounds)
 	if err != nil {
@@ -56,10 +56,47 @@ func TestResolveDomainCertSpecsIncludesHysteria2OnlyDomain(t *testing.T) {
 func TestResolveDomainCertSpecsIgnoresLegacyGlobalEmailForNaive(t *testing.T) {
 	settings := model.Settings{PanelAccess: "direct", Email: "legacy@x.com"}
 	inbounds := []model.Inbound{
-		{Name: "n1", Protocol: "naiveproxy", ProtocolFields: map[string]any{"domain": "x.com"}},
+		{Name: "n1", Protocol: "naiveproxy", Enabled: true, ProtocolFields: map[string]any{"domain": "x.com"}},
 	}
 	_, err := ResolveDomainCertSpecs(settings, inbounds)
 	if err == nil {
 		t.Fatal("expected error when no explicit/default/panel email is available")
+	}
+}
+
+// TestResolveDomainCertSpecsSkipsDisabledInbounds covers audit #306: a
+// disabled inbound must not enroll a certificate domain, require an email, or
+// conflict with an enabled domain's email.
+func TestResolveDomainCertSpecsSkipsDisabledInbounds(t *testing.T) {
+	settings := model.Settings{PanelAccess: "direct"}
+	specs, err := ResolveDomainCertSpecs(settings, []model.Inbound{
+		{Name: "hy-off", Protocol: "hysteria2", Enabled: false, ProtocolFields: map[string]any{"domain": "unused.example.com"}},
+	})
+	if err != nil {
+		t.Fatalf("disabled inbound caused error: %v", err)
+	}
+	if len(specs) != 0 {
+		t.Fatalf("disabled inbound enrolled domains: %+v", specs)
+	}
+}
+
+// TestResolveDomainCertSpecsDisabledDoesNotConflictWithEnabled ensures a
+// disabled entry's email cannot conflict with an enabled owner of the same
+// domain (audit #306).
+func TestResolveDomainCertSpecsDisabledDoesNotConflictWithEnabled(t *testing.T) {
+	settings := model.Settings{PanelAccess: "direct", DefaultAcmeEmail: "admin@x.com"}
+	specs, err := ResolveDomainCertSpecs(settings, []model.Inbound{
+		{Name: "n1", Protocol: "naiveproxy", Enabled: true, ProtocolFields: map[string]any{"domain": "x.com", "email": "a@x.com"}},
+		{Name: "n2", Protocol: "naiveproxy", Enabled: false, ProtocolFields: map[string]any{"domain": "x.com", "email": "b@x.com"}},
+		{Name: "hy-off", Protocol: "hysteria2", Enabled: false, ProtocolFields: map[string]any{"domain": "hy.example.com"}},
+	})
+	if err != nil {
+		t.Fatalf("disabled inbounds must not conflict: %v", err)
+	}
+	if len(specs) != 1 || specs["x.com"].Email != "a@x.com" {
+		t.Fatalf("specs = %+v", specs)
+	}
+	if len(specs["x.com"].Owners.NaiveInboundNames) != 1 || specs["x.com"].Owners.NaiveInboundNames[0] != "n1" {
+		t.Fatalf("disabled inbound listed as owner: %+v", specs["x.com"].Owners)
 	}
 }
