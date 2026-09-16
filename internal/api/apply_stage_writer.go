@@ -24,7 +24,10 @@ type ApplyStageInput struct {
 	Snapshot      managementSnapshot
 	Rendered      map[string]string
 	RoutingSource RoutingSource
-	Validate      func([]string) []ConfigValidationResult
+	// Render, when set, runs after routing dat is on disk so protocol configs
+	// that stat geoip/geosite (Hysteria2 ACL) see the files this apply fetched.
+	Render   func() (map[string]string, error)
+	Validate func([]string) []ConfigValidationResult
 }
 
 func WriteApplyStage(input ApplyStageInput) ([]string, []ConfigValidationResult, []string, error) {
@@ -46,13 +49,6 @@ func WriteApplyStage(input ApplyStageInput) ([]string, []ConfigValidationResult,
 		return nil, nil, nil, err
 	}
 	written := []string{planPath, statePath}
-	renderedPaths := sortedRenderedPaths(input.Rendered)
-	for _, path := range renderedPaths {
-		if err := atomicfile.Write(path, []byte(input.Rendered[path]), 0o600, 0o700); err != nil {
-			return nil, nil, nil, err
-		}
-		written = append(written, path)
-	}
 	routingSource := input.RoutingSource
 	if routeDatSourceTransform != nil {
 		routingSource = routeDatSourceTransform(routingSource)
@@ -67,6 +63,20 @@ func WriteApplyStage(input ApplyStageInput) ([]string, []ConfigValidationResult,
 		return nil, nil, nil, err
 	}
 	written = append(written, routingFiles...)
+	rendered := input.Rendered
+	if input.Render != nil {
+		rendered, err = input.Render()
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+	renderedPaths := sortedRenderedPaths(rendered)
+	for _, path := range renderedPaths {
+		if err := atomicfile.Write(path, []byte(rendered[path]), 0o600, 0o700); err != nil {
+			return nil, nil, nil, err
+		}
+		written = append(written, path)
+	}
 	validate := input.Validate
 	if validate == nil {
 		validate = stagedConfigValidator
