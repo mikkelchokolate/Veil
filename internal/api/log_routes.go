@@ -62,26 +62,59 @@ func (routes LogRoutes) handleLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (routes LogRoutes) resolveLogUnit(unit string) (string, bool) {
-	for _, catalog := range routes.logUnitCatalogs() {
-		for _, candidate := range catalog.Runtimes() {
-			if candidate.ActionName == unit || candidate.Name == unit {
-				return candidate.Unit, true
-			}
-			if candidate.Unit == unit || strings.TrimSuffix(candidate.Unit, ".service") == unit {
-				return candidate.Unit, true
-			}
+	var visibleRuntimes []ManagedRuntime
+	if routes.State != nil {
+		visibleRuntimes = NewVisibleManagedRuntimeCatalogForState(routes.State).Runtimes()
+		if resolved, ok := matchLogUnit(visibleRuntimes, unit); ok {
+			return resolved, true
+		}
+	}
+	for _, candidate := range NewManagedRuntimeCatalog().Runtimes() {
+		if !logUnitCandidateMatch(candidate, unit) {
+			continue
+		}
+		// A bare template unit (veil-hysteria2@.service) never holds logs once
+		// live per-inbound instances exist. journalctl -u accepts unit
+		// patterns, so resolve to every live instance of the template instead
+		// of journaling the empty template unit.
+		if candidate.TemplateUnit != "" && candidate.Unit == candidate.TemplateUnit &&
+			hasVisibleTemplateInstance(visibleRuntimes, candidate.TemplateUnit) {
+			return templateInstanceLogPattern(candidate.TemplateUnit), true
+		}
+		return candidate.Unit, true
+	}
+	return "", false
+}
+
+func matchLogUnit(runtimes []ManagedRuntime, unit string) (string, bool) {
+	for _, candidate := range runtimes {
+		if logUnitCandidateMatch(candidate, unit) {
+			return candidate.Unit, true
 		}
 	}
 	return "", false
 }
 
-func (routes LogRoutes) logUnitCatalogs() []ManagedRuntimeCatalog {
-	catalogs := []ManagedRuntimeCatalog{}
-	if routes.State != nil {
-		catalogs = append(catalogs, NewVisibleManagedRuntimeCatalogForState(routes.State))
+func logUnitCandidateMatch(candidate ManagedRuntime, unit string) bool {
+	if candidate.ActionName == unit || candidate.Name == unit {
+		return true
 	}
-	catalogs = append(catalogs, NewManagedRuntimeCatalog())
-	return catalogs
+	return candidate.Unit == unit || strings.TrimSuffix(candidate.Unit, ".service") == unit
+}
+
+func hasVisibleTemplateInstance(runtimes []ManagedRuntime, templateUnit string) bool {
+	for _, candidate := range runtimes {
+		if candidate.TemplateUnit == templateUnit && candidate.Unit != templateUnit {
+			return true
+		}
+	}
+	return false
+}
+
+// templateInstanceLogPattern maps veil-hysteria2@.service to the journalctl
+// unit pattern veil-hysteria2@*.service, which selects all live instances.
+func templateInstanceLogPattern(templateUnit string) string {
+	return strings.TrimSuffix(templateUnit, ".service") + "*.service"
 }
 
 func validLogUnit(unit string) bool {

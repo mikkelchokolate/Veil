@@ -55,11 +55,14 @@ func (m RateLimitDecisionModule) endpointLimit(path string) (EndpointLimit, stri
 }
 
 func isMutatingMethod(method string) bool {
-	return method == http.MethodPost || method == http.MethodPut || method == http.MethodDelete
+	return method == http.MethodPost || method == http.MethodPut ||
+		method == http.MethodDelete || method == http.MethodPatch
 }
 
 // isRateLimitedReadPath returns true for GET paths that should be rate-limited
-// (expensive queries like log reading).
+// (expensive queries like log reading and long-lived SSE stream opens).
 func isRateLimitedReadPath(path string) bool {
-	return strings.HasPrefix(path, "/api/logs")
+	return strings.HasPrefix(path, "/api/logs") ||
+		path == "/api/v1/events" ||
+		path == "/api/v1/traffic/stream"
 }

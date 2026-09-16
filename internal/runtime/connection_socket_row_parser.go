@@ -17,7 +17,7 @@ func (ConnectionSocketRowParser) Parse(proto string, line string) (ConnectionSoc
 	if len(fields) < 4 {
 		return ConnectionSocketRow{}, false
 	}
-	if proto == "tcp" && fields[3] != "0A" {
+	if (proto == "tcp" || proto == "tcp6") && fields[3] != "0A" {
 		return ConnectionSocketRow{}, false
 	}
 	addr, port := parseHexAddress(fields[1])
