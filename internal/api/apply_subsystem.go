@@ -124,8 +124,9 @@ func initApplySubsystem(s *managementState) {
 
 // bindingCapabilityForInbound resolves the protocol capabilities of the named
 // inbound for the enriched client binding read model. Returns nil when the
-// inbound or its protocol is unknown. Per-client credential support is taken
-// from the protocol's ClientAccessProvider capability.
+// inbound or its protocol is unknown. Per-client credential and expiry
+// enforcement are advertised only when the protocol's runtime authenticates
+// clients with distinct credentials (PerClientCredentialEnforcer).
 func (s *managementState) bindingCapabilityForInbound(inboundID string) *client.BindingCapability {
 	s.mu.Lock()
 	var proto string
@@ -145,7 +146,11 @@ func (s *managementState) bindingCapabilityForInbound(inboundID string) *client.
 		return nil
 	}
 	meta := protocols.MetadataOf(p)
-	_, perClient := protocols.AsClientAccessProvider(p)
+	// Link rendering (ClientAccessProvider) does not imply runtime
+	// enforcement: olcRTC emits a link per client but every client shares the
+	// inbound-wide key, so per-client rotation/expiry must not be advertised
+	// (audit #309).
+	perClient := protocols.EnforcesPerClientCredentials(p)
 	return &client.BindingCapability{
 		Protocol:              meta.Protocol,
 		Transports:            meta.Transports,

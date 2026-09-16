@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
+	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
 // Plugin implements the olcRTC protocol.
@@ -40,10 +41,15 @@ func protocolString(m map[string]any, key, fallback string) string {
 }
 
 // olcrtcKey resolves the effective encryption key using the same precedence
-// as the dynamic inbound form: protocolFields wins over the legacy flat field.
-// Validation, server rendering and client export must agree on this value.
+// as the dynamic inbound form: a non-empty protocolFields value wins over the
+// legacy flat field. An empty or redacted dynamic value counts as unset so it
+// can never hide a valid stored flat key (audit #122). Validation, server
+// rendering and client export must agree on this value.
 func olcrtcKey(inbound model.Inbound) string {
-	return strings.TrimSpace(protocolString(inbound.ProtocolFields, "password", inbound.Password))
+	if key := protocolString(inbound.ProtocolFields, "password", ""); key != "" && key != veilsettings.RedactedSecret {
+		return key
+	}
+	return strings.TrimSpace(inbound.Password)
 }
 
 func olcrtcAuth(settings model.Settings, inbound model.Inbound) string {

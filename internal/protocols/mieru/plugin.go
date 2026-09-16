@@ -1,9 +1,5 @@
 package mieru
 
-import (
-	"strings"
-)
-
 // Plugin implements the Mieru protocol.
 type Plugin struct{}
 
@@ -17,17 +13,6 @@ func (Plugin) RequiresCaddy() bool     { return false }
 func (Plugin) FirewallService() string { return "Veil Mieru" }
 func (Plugin) MaxEnabled() int         { return 0 }
 
-func protocolString(m map[string]any, key, fallback string) string {
-	if m == nil {
-		return fallback
-	}
-	v, ok := m[key]
-	if !ok {
-		return fallback
-	}
-	s, ok := v.(string)
-	if !ok {
-		return fallback
-	}
-	return strings.TrimSpace(s)
-}
+// EnforcesPerClientCredentials reports that mita authenticates each client
+// with its own username/password pair (audit #309).
+func (Plugin) EnforcesPerClientCredentials() bool { return true }

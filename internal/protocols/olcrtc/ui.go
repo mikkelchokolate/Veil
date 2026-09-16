@@ -135,6 +135,15 @@ func (Plugin) Autofill(inbound model.Inbound) (model.Inbound, error) {
 		}
 		inbound.Password = key
 	}
+	// Persist the effective key in ProtocolFields the same way room/auth/
+	// transport are mirrored: the SPA password input must render the stored
+	// key (redacted on GET), otherwise an untouched form re-saves an empty
+	// dynamic value and Generate rotates the live key by surprise. An absent,
+	// empty, invalid or still-redacted dynamic key mirrors the flat key so
+	// every consumer resolves the same effective key (audit #122).
+	if key, ok := inbound.ProtocolFields["password"].(string); !ok || key == "" || key == veilsettings.RedactedSecret || !isOlcrtcKey(key) {
+		inbound.ProtocolFields["password"] = inbound.Password
+	}
 	return inbound, nil
 }
 

@@ -21,6 +21,10 @@ func (Plugin) MaxEnabled() int         { return 0 }
 
 func (Plugin) NeedsCaddyCertSync() bool { return true }
 
+// EnforcesPerClientCredentials reports that hysteria2 authenticates each
+// client with its own credential (audit #309).
+func (Plugin) EnforcesPerClientCredentials() bool { return true }
+
 func protocolString(m map[string]any, key, fallback string) string {
 	if m == nil {
 		return fallback

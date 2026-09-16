@@ -1,6 +1,10 @@
 package clientaccess
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/mikkelchokolate/Veil/internal/model"
+)
 
 type MieruClientAccessAggregator struct{}
 
@@ -29,10 +33,11 @@ func (MieruClientAccessAggregator) Build(settings Settings, inbounds []Inbound) 
 			return nil, err
 		}
 		if len(credentials) == 0 {
-			if len(inbound.Profiles) > 0 || inbound.Password == "" {
+			password := model.EffectiveInboundPassword(inbound)
+			if len(inbound.Profiles) > 0 || password == "" {
 				continue
 			}
-			credential := ClientCredential{Name: inbound.Name, Username: inbound.Name, Password: inbound.Password}
+			credential := ClientCredential{Name: inbound.Name, Username: inbound.Name, Password: password}
 			addMieruClientAccessGroup(groups, &order, inbound.Name, credential, inbound)
 			continue
 		}

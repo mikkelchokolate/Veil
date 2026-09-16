@@ -45,9 +45,9 @@ func protocolBool(m map[string]any, key string, fallback bool) bool {
 func normalizeClientAccessInbound(inbound Inbound) Inbound {
 	switch inbound.Protocol {
 	case "mieru", "olcrtc":
-		if password := protocolString(inbound.ProtocolFields, "password", ""); password != "" {
-			inbound.Password = password
-		}
+		// Preserve the resolved password byte-for-byte so the exported client
+		// config carries the same credential the server renders (audit #311).
+		inbound.Password = model.EffectiveInboundPassword(inbound)
 	}
 	return inbound
 }
