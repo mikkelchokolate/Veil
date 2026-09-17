@@ -200,7 +200,10 @@ func (gt *GoToolchain) Ensure(ctx context.Context) (string, error) {
 	if runtime.GOOS == "windows" {
 		goBin += ".exe"
 	}
-	if _, err := os.Stat(goBin); err == nil {
+	// A cached toolchain counts only when bin/go is a regular executable file
+	// (audit #297): an interrupted extraction can leave a partial tree — or a
+	// stray directory — at goDir, and reusing it fails every later build.
+	if info, err := os.Stat(goBin); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
 		return goBin, nil
 	}
 	if err := os.MkdirAll(filepath.Dir(goDir), 0o755); err != nil {
@@ -270,6 +273,16 @@ func (gt *GoToolchain) downloadAndExtract(ctx context.Context, goDir string) err
 	}
 	defer gz.Close()
 
+	// Extract into a staging sibling and publish with a single rename
+	// (audit #297): members written straight into goDir would leave a
+	// permanently cached partial toolchain if the process dies mid-extract.
+	staging := goDir + ".extracting"
+	if err := os.RemoveAll(staging); err != nil {
+		return fmt.Errorf("clear Go staging dir: %w", err)
+	}
+	// Cleaned up on every error return; on success the rename removes it.
+	defer os.RemoveAll(staging)
+
 	tr := tar.NewReader(gz)
 	for {
 		hdr, err := tr.Next()
@@ -287,7 +300,7 @@ func (gt *GoToolchain) downloadAndExtract(ctx context.Context, goDir string) err
 		if !filepath.IsLocal(rel) {
 			return fmt.Errorf("tar Go: invalid path %q", hdr.Name)
 		}
-		target := filepath.Join(goDir, rel)
+		target := filepath.Join(staging, rel)
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(target, 0o755); err != nil {
@@ -309,6 +322,14 @@ func (gt *GoToolchain) downloadAndExtract(ctx context.Context, goDir string) err
 			}
 		}
 	}
+	// Publish atomically: replace any stale partial tree with the fully
+	// extracted staging directory in one rename.
+	if err := os.RemoveAll(goDir); err != nil {
+		return fmt.Errorf("clear Go cache dir: %w", err)
+	}
+	if err := os.Rename(staging, goDir); err != nil {
+		return fmt.Errorf("publish Go toolchain: %w", err)
+	}
 	return nil
 }
 
@@ -329,12 +350,36 @@ func resolveGo(ctx context.Context, cacheDir string, ensureGo func(context.Conte
 	return "", nil
 }
 
+// goRootFor determines the GOROOT belonging to the selected go binary
+// (audit #296). A PATH hit like /usr/bin/go is commonly a symlink or distro
+// shim into a versioned libdir (/usr/lib/go-1.x/bin/go); two levels above the
+// unresolved link path is /usr, which contains no standard library. Ask the
+// toolchain itself first, then fall back to the resolved path heuristic.
+func goRootFor(ctx context.Context, goBin string) string {
+	probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(probeCtx, goBin, "env", "GOROOT")
+	cmd.Env = goLocalEnv()
+	if out, err := cmd.Output(); err == nil {
+		if goroot := strings.TrimSpace(string(out)); goroot != "" {
+			if info, statErr := os.Stat(filepath.Join(goroot, "bin")); statErr == nil && info.IsDir() {
+				return goroot
+			}
+		}
+	}
+	resolved := goBin
+	if p, err := filepath.EvalSymlinks(goBin); err == nil {
+		resolved = p
+	}
+	return filepath.Dir(filepath.Dir(resolved))
+}
+
 // goBuildEnv returns the environment for running a go build with the given go
-// binary. Sets GOROOT to the directory two levels above the go binary (the
-// standard layout), and ensures the binary's directory is in PATH.
-func goBuildEnv(goBin string) []string {
+// binary. Sets GOROOT to the toolchain the binary belongs to, and ensures the
+// binary's directory is in PATH.
+func goBuildEnv(ctx context.Context, goBin string) []string {
 	env := os.Environ()
-	goroot := filepath.Dir(filepath.Dir(goBin))
+	goroot := goRootFor(ctx, goBin)
 	goBinDir := filepath.Dir(goBin)
 	filtered := make([]string, 0, len(env)+5)
 	hasGoroot := false
