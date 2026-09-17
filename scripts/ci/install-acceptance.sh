@@ -219,7 +219,7 @@ create_inbound ci-olc '{"name":"ci-olc","protocol":"olcrtc","transport":"udp","p
 # Durable idempotency contract: replaying the same mutation with the same
 # Idempotency-Key must return the original response, not a duplicate-name 409.
 idem_code() { # body
-  curl --http1.1 -sk --max-time "${timeout}" -o /tmp/ia-resp.json -w '%{http_code}' -X POST \
+  curl --http1.1 -sk --max-time 300 -o /tmp/ia-resp.json -w '%{http_code}' -X POST \
     -H "X-Veil-Token: ${TOKEN}" -H 'Content-Type: application/json' \
     -H "Idempotency-Key: ci-acceptance-mieru-idem" -d "$1" "${API}/api/inbounds"
 }
