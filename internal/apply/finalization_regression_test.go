@@ -60,8 +60,12 @@ END;`); err != nil {
 	if persisted.FinishedAt != nil {
 		t.Errorf("unresolved finalization was falsely made terminal: %+v", persisted)
 	}
-	if len(persisted.Operations) != 0 {
-		t.Errorf("operations committed outside failed finalization transaction: %+v", persisted.Operations)
+	// The failed attempt's operation breakdown must be retained with the
+	// pending transition so a refreshed job detail still shows diagnostics
+	// (audit #310); it is written atomically inside the pending transaction,
+	// not leaked from the aborted 'succeeded' one.
+	if len(persisted.Operations) != 1 || persisted.Operations[0].Target != "runtime" {
+		t.Errorf("operation breakdown was not retained with the pending transition: %+v", persisted.Operations)
 	}
 }
 

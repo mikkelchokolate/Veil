@@ -40,12 +40,15 @@ import {
 	TableRow,
 } from "../components/ui/table";
 import { useI18n } from "../i18n/I18nContext";
+import { createInbound } from "./inboundsCreateRecovery";
 
 /** S4: mutation envelope feedback (revision/applyJob/success). */
 interface MutationFeedback {
 	revision?: { desired?: number; applied?: number; state?: string };
 	applyJob?: { id?: string; status?: string };
 	success?: boolean;
+	/** reconciled marks an outcome recovered after a lost response (timeout). */
+	reconciled?: boolean;
 }
 
 type ProtocolField = {
@@ -373,11 +376,12 @@ export function InboundsPage() {
 	}
 
 	const create = useMutation({
-		mutationFn: async (f: InboundForm) =>
-			apiFetch("/api/inbounds", {
-				method: "POST",
-				body: JSON.stringify(toBody(f)),
-			}),
+		mutationFn: async (f: InboundForm): Promise<MutationFeedback> =>
+			// Retried under a stable Idempotency-Key and reconciled by the
+			// committed object so a lost response cannot strand the operator on
+			// a retryable Create form for an already-existing inbound (audit
+			// #312).
+			createInbound(toBody(f), f.name),
 		onSuccess: (data) => {
 			setCreating(false);
 			setForm(EMPTY);
@@ -826,6 +830,11 @@ export function InboundsPage() {
 								{t("inbounds.desiredRev")} {feedback.revision.desired ?? "—"} ·{" "}
 								{t("inbounds.applied")} {feedback.revision.applied ?? "—"} ·{" "}
 								{feedback.revision.state ?? ""}
+							</span>
+						) : null}
+						{feedback.reconciled ? (
+							<span className="muted" style={{ fontSize: 13 }}>
+								{t("inbounds.createReconciled")}
 							</span>
 						) : null}
 						{feedback.applyJob?.id ? (

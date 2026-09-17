@@ -167,6 +167,8 @@ export const ru: Record<string, string> = {
 	"inbounds.desiredRev": "желаемая ревизия",
 	"inbounds.applied": "применено",
 	"inbounds.job": "задача",
+	"inbounds.createReconciled":
+		"Ответ был потерян, но инбаунд зафиксирован — отслеживается задача применения.",
 	"inbounds.dismiss": "Закрыть",
 	"inbounds.delete.title": "Удалить инбаунд?",
 	"inbounds.delete.description":
