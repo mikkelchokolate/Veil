@@ -148,9 +148,10 @@ func TestPromotionCrashProcess(t *testing.T) {
 	chownCalls := 0
 	chownPath = func(string, int, int) error {
 		chownCalls++
-		// Non-Caddy artifacts call chown(directory), chown(file). Block on
-		// the directory ownership step immediately after each file rename.
-		if chownCalls == (faultArtifact-1)*2+1 {
+		// Non-Caddy artifacts call chown(directory), chown(generated root),
+		// chown(file). Block on the directory ownership step immediately
+		// after each file rename.
+		if chownCalls == (faultArtifact-1)*3+1 {
 			if err := os.WriteFile(marker, []byte("published"), 0o600); err != nil {
 				os.Exit(93)
 			}

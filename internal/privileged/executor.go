@@ -657,41 +657,80 @@ func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
 	return result, nil
 }
 
-// chownToVeilIfRoot changes the owner of path to the veil user when the helper
-// is running as root. This keeps generated config files and certificates
-// readable by the protocol runtime services, which run as the veil user. A
-// missing/invalid veil account or failed chown is fatal so Apply can roll back
-// instead of reporting success for an unreadable runtime artifact.
-func chownToVeilIfRoot(path string) error {
-	if effectiveUID() != 0 {
-		return nil
+// runtimeArtifactGID resolves the group generated runtime artifacts are shared
+// with: veil-proxy, the account the protocol units (User=veil-proxy) run as.
+// The panel account is a supplementary member of veil-proxy, so a single group
+// covers both readers. It falls back to the veil group on hosts without the
+// dedicated proxy account. A missing/invalid group is fatal so Apply can roll
+// back instead of reporting success for an unreadable runtime artifact.
+func runtimeArtifactGID() (int, error) {
+	if proxy, err := lookupUser("veil-proxy"); err == nil {
+		if gid, err := strconv.Atoi(proxy.Gid); err == nil {
+			return gid, nil
+		}
 	}
 	u, err := lookupUser("veil")
 	if err != nil {
-		return fmt.Errorf("resolve veil user: %w", err)
-	}
-	uid, err := strconv.Atoi(u.Uid)
-	if err != nil {
-		return fmt.Errorf("parse veil uid %q: %w", u.Uid, err)
+		return 0, fmt.Errorf("resolve veil group: %w", err)
 	}
 	gid, err := strconv.Atoi(u.Gid)
 	if err != nil {
-		return fmt.Errorf("parse veil gid %q: %w", u.Gid, err)
+		return 0, fmt.Errorf("parse veil gid %q: %w", u.Gid, err)
 	}
-	return chownPath(path, uid, gid)
+	return gid, nil
+}
+
+func chownForProxyReadDir(path string, gid int) error {
+	if err := chownPath(path, 0, gid); err != nil {
+		return err
+	}
+	return chmodPath(path, 0o750)
+}
+
+func chownForProxyReadFile(path string, gid int) error {
+	if err := chownPath(path, 0, gid); err != nil {
+		return err
+	}
+	return chmodPath(path, 0o640)
+}
+
+// grantProxyReadAccessToProtocolArtifact keeps generated protocol configs
+// root-owned and group-readable by veil-proxy so the protocol runtime services
+// (User=veil-proxy) can load them. The configs contain credentials, so they
+// must not be world-readable.
+func grantProxyReadAccessToProtocolArtifact(artifactID, path string) error {
+	if effectiveUID() != 0 {
+		return nil
+	}
+	gid, err := runtimeArtifactGID()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(path)
+	if err := chownForProxyReadDir(dir, gid); err != nil {
+		return fmt.Errorf("set protocol config directory ownership: %w", err)
+	}
+	// Promotion creates missing intermediate directories root:root 0700 via
+	// atomicfile.Write. Artifact IDs are always "<proto>/<file>", so when the
+	// ID carries a directory component the artifact's parent is a generated
+	// subdirectory and its parent in turn is the generated root, which must
+	// also stay traversable for veil-proxy.
+	if filepath.Dir(filepath.ToSlash(filepath.Clean(artifactID))) != "." {
+		if err := chownForProxyReadDir(filepath.Dir(dir), gid); err != nil {
+			return fmt.Errorf("set generated root ownership: %w", err)
+		}
+	}
+	if err := chownForProxyReadFile(path, gid); err != nil {
+		return fmt.Errorf("set protocol config ownership: %w", err)
+	}
+	return nil
 }
 
 func ensureRuntimeArtifactOwnership(artifactID, path string) error {
 	if strings.HasPrefix(filepath.ToSlash(filepath.Clean(artifactID)), "caddy/") {
 		return grantPanelReadAccessToCaddyArtifact(path)
 	}
-	if err := chownToVeilIfRoot(filepath.Dir(path)); err != nil {
-		return fmt.Errorf("set protocol config directory ownership: %w", err)
-	}
-	if err := chownToVeilIfRoot(path); err != nil {
-		return fmt.Errorf("set protocol config ownership: %w", err)
-	}
-	return nil
+	return grantProxyReadAccessToProtocolArtifact(artifactID, path)
 }
 
 // grantPanelReadAccessToCaddyArtifact keeps the Caddy config root-owned and
@@ -1077,22 +1116,35 @@ func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config 
 	if err := os.MkdirAll(request.OutDir, 0o700); err != nil {
 		return SyncCaddyCertResult{}, fmt.Errorf("create cert output directory: %w", err)
 	}
-	if err := chownToVeilIfRoot(request.OutDir); err != nil {
-		return SyncCaddyCertResult{}, fmt.Errorf("set certificate directory ownership: %w", err)
+	proxyGID := 0
+	proxyRead := effectiveUID() == 0
+	if proxyRead {
+		var err error
+		proxyGID, err = runtimeArtifactGID()
+		if err != nil {
+			return SyncCaddyCertResult{}, fmt.Errorf("set certificate ownership: %w", err)
+		}
+		if err := chownForProxyReadDir(request.OutDir, proxyGID); err != nil {
+			return SyncCaddyCertResult{}, fmt.Errorf("set certificate directory ownership: %w", err)
+		}
 	}
 	certOut := filepath.Join(request.OutDir, request.Domain+".crt")
 	keyOut := filepath.Join(request.OutDir, request.Domain+".key")
 	if err := atomicfile.Write(certOut, certData, 0o600, 0o700); err != nil {
 		return SyncCaddyCertResult{}, fmt.Errorf("write certificate: %w", err)
 	}
-	if err := chownToVeilIfRoot(certOut); err != nil {
-		return SyncCaddyCertResult{}, fmt.Errorf("set certificate ownership: %w", err)
+	if proxyRead {
+		if err := chownForProxyReadFile(certOut, proxyGID); err != nil {
+			return SyncCaddyCertResult{}, fmt.Errorf("set certificate ownership: %w", err)
+		}
 	}
 	if err := atomicfile.Write(keyOut, keyData, 0o600, 0o700); err != nil {
 		return SyncCaddyCertResult{}, fmt.Errorf("write key: %w", err)
 	}
-	if err := chownToVeilIfRoot(keyOut); err != nil {
-		return SyncCaddyCertResult{}, fmt.Errorf("set certificate key ownership: %w", err)
+	if proxyRead {
+		if err := chownForProxyReadFile(keyOut, proxyGID); err != nil {
+			return SyncCaddyCertResult{}, fmt.Errorf("set certificate key ownership: %w", err)
+		}
 	}
 	return SyncCaddyCertResult{Found: true, CertPath: certOut, KeyPath: keyOut}, nil
 }
