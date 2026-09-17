@@ -25,8 +25,14 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "${CI_ROOT}"
 
-if ! systemctl is-system-running 2>/dev/null | grep -Eq 'running|degraded'; then
-  ci_die "install-acceptance requires a live systemd init (pid1=$(cat /proc/1/comm), state=$(systemctl is-system-running 2>&1 || true))"
+systemd_ready=1
+for _ in $(seq 1 90); do
+  state="$(systemctl is-system-running 2>/dev/null || true)"
+  case "${state}" in running|degraded) systemd_ready=0; break ;; esac
+  sleep 1
+done
+if [ "${systemd_ready}" -ne 0 ]; then
+  ci_die "install-acceptance requires a live systemd init (pid1=$(cat /proc/1/comm), state=${state:-unknown})"
 fi
 
 if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
