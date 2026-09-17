@@ -431,6 +431,11 @@ func issueLEIPCertForProfile(ctx context.Context, profile *installer.RURecommend
 		Email:      opts.Email,
 		CertPath:   certPath,
 		KeyPath:    keyPath,
+		// VEIL_ACME_CA_URL points issuance at a controlled ACME CA (e.g. a test
+		// CA in CI) instead of Let's Encrypt; VEIL_ACME_INSECURE skips ACME
+		// endpoint TLS verification for self-signed test endpoints.
+		CAServer: strings.TrimSpace(os.Getenv("VEIL_ACME_CA_URL")),
+		Insecure: strings.TrimSpace(os.Getenv("VEIL_ACME_INSECURE")) != "",
 	})
 	if err != nil {
 		return err
