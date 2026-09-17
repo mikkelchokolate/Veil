@@ -25,8 +25,14 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "${CI_ROOT}"
 
-if ! systemctl is-system-running 2>/dev/null | grep -Eq 'running|degraded'; then
-  ci_die "install-acceptance requires a live systemd init (pid1=$(cat /proc/1/comm), state=$(systemctl is-system-running 2>&1 || true))"
+systemd_ready=1
+for _ in $(seq 1 90); do
+  state="$(systemctl is-system-running 2>/dev/null || true)"
+  case "${state}" in running|degraded) systemd_ready=0; break ;; esac
+  sleep 1
+done
+if [ "${systemd_ready}" -ne 0 ]; then
+  ci_die "install-acceptance requires a live systemd init (pid1=$(cat /proc/1/comm), state=${state:-unknown})"
 fi
 
 if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
@@ -140,7 +146,16 @@ fi
 
 ci_step "panel readiness through the product status probe"
 ci_run veil-status ${SUDO} /usr/local/bin/veil status --json
-grep -Eq '"healthy"|"status"' "${CI_ARTIFACT_DIR}/veil-status.log" || ci_die "veil status output unexpected"
+grep -q '"activeState": "active"' "${CI_ARTIFACT_DIR}/veil-status.log" \
+  || ci_die "veil status does not report an active service: $(cat "${CI_ARTIFACT_DIR}/veil-status.log")"
+grep -q '"subState": "running"' "${CI_ARTIFACT_DIR}/veil-status.log" \
+  || ci_die "veil status does not report a running service: $(cat "${CI_ARTIFACT_DIR}/veil-status.log")"
+# The health contract lives under the secret web base path and needs the API token.
+TOKEN="$(${SUDO} grep '^VEIL_API_TOKEN=' /etc/veil/veil.env | cut -d= -f2- | tr -d '[:space:]')"
+BASE_PATH="$(${SUDO} grep '^VEIL_WEB_BASE_PATH=' /etc/veil/veil.env | cut -d= -f2- | tr -d '[:space:]')"
+health_code="$(curl --http1.1 -sk --max-time 60 -o /tmp/ia-health.json -w '%{http_code}' -H "X-Veil-Token: ${TOKEN}" "https://127.0.0.1:${PANEL_PORT}${BASE_PATH}healthz")"
+[ "${health_code}" = "200" ] || ci_die "panel /healthz returned HTTP ${health_code}"
+grep -q '"status"' /tmp/ia-health.json || ci_die "panel /healthz payload unexpected: $(cat /tmp/ia-health.json)"
 
 # --- 4. First-inbound acceptance per protocol (audit #313) ---------------------
 # Create the first inbound of every protocol feasible on a direct install
@@ -151,19 +166,36 @@ grep -Eq '"healthy"|"status"' "${CI_ARTIFACT_DIR}/veil-status.log" || ci_die "ve
 ci_step "first-inbound acceptance via the management API"
 TOKEN="$(${SUDO} grep '^VEIL_API_TOKEN=' /etc/veil/veil.env | cut -d= -f2- | tr -d '[:space:]')"
 [ -n "${TOKEN}" ] || ci_die "VEIL_API_TOKEN missing from /etc/veil/veil.env"
-API="https://127.0.0.1:${PANEL_PORT}"
+# VEIL_WEB_BASE_PATH already carries leading and trailing slashes.
+API="https://127.0.0.1:${PANEL_PORT}${BASE_PATH%/}"
 
 api_code() { # method path [body] -> http code; response body in /tmp/ia-resp.json
-  local method="$1" path="$2" body="${3:-}"
+  local method="$1" path="$2" body="${3:-}" timeout=60
+  # Mutations are serialized behind live validation plus a synchronous
+  # auto-apply; give POSTs a generous ceiling.
+  [ "${method}" = "POST" ] && timeout=300
   if [ -n "${body}" ]; then
-    curl -sk -o /tmp/ia-resp.json -w '%{http_code}' -X "${method}" \
+    curl --http1.1 -sk --max-time "${timeout}" -o /tmp/ia-resp.json -w '%{http_code}' -X "${method}" \
       -H "X-Veil-Token: ${TOKEN}" -H 'Content-Type: application/json' \
       -d "${body}" "${API}${path}"
   else
-    curl -sk -o /tmp/ia-resp.json -w '%{http_code}' -X "${method}" \
+    curl --http1.1 -sk --max-time "${timeout}" -o /tmp/ia-resp.json -w '%{http_code}' -X "${method}" \
       -H "X-Veil-Token: ${TOKEN}" "${API}${path}"
   fi
 }
+
+# The panel's startup reconcile can hold the mutation lock right after
+# install; wait for a management read to succeed before posting mutations.
+api_ready=1
+for _ in $(seq 1 24); do
+  ready_code="$(api_code GET /api/apply/state || true)"
+  if [ "${ready_code}" = "200" ]; then
+    api_ready=0
+    break
+  fi
+  sleep 5
+done
+[ "${api_ready}" -eq 0 ] || ci_die "management API did not become ready (last code ${ready_code:-none})"
 
 create_inbound() { # label body
   local label="$1" code
@@ -187,7 +219,7 @@ create_inbound ci-olc '{"name":"ci-olc","protocol":"olcrtc","transport":"udp","p
 # Durable idempotency contract: replaying the same mutation with the same
 # Idempotency-Key must return the original response, not a duplicate-name 409.
 idem_code() { # body
-  curl -sk -o /tmp/ia-resp.json -w '%{http_code}' -X POST \
+  curl --http1.1 -sk --max-time 300 -o /tmp/ia-resp.json -w '%{http_code}' -X POST \
     -H "X-Veil-Token: ${TOKEN}" -H 'Content-Type: application/json' \
     -H "Idempotency-Key: ci-acceptance-mieru-idem" -d "$1" "${API}/api/inbounds"
 }
@@ -245,7 +277,7 @@ pebble_mod="$(go env GOMODCACHE)/github.com/letsencrypt/pebble/v2@${CI_PEBBLE_VE
   > "${CI_ARTIFACT_DIR}/pebble.log" 2>&1 &)
 pebble_up=1
 for _ in $(seq 1 60); do
-  if curl -sk https://127.0.0.1:14000/dir | grep -q newOrder; then
+  if curl --http1.1 -sk --max-time 60 https://127.0.0.1:14000/dir | grep -q newOrder; then
     pebble_up=0
     break
   fi
