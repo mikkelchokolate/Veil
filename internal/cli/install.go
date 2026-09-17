@@ -21,6 +21,7 @@ func newInstallCommand() *cobra.Command {
 	var domain string
 	var email string
 	var dryRun bool
+	var checkOnly bool
 	var yes bool
 	var etcDir string
 	var varDir string
@@ -43,6 +44,7 @@ func newInstallCommand() *cobra.Command {
 				Domain:         domain,
 				Email:          email,
 				DryRun:         dryRun,
+				CheckOnly:      checkOnly,
 				Yes:            yes,
 				EtcDir:         etcDir,
 				VarDir:         varDir,
@@ -66,6 +68,7 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&domain, "domain", "", "domain for ACME and client configs")
 	cmd.Flags().StringVar(&email, "email", "", "ACME email")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render installation plan without writing files")
+	cmd.Flags().BoolVar(&checkOnly, "check", false, "run the install capability report and exit without changes")
 	cmd.Flags().BoolVar(&yes, "yes", false, "confirm writing generated files")
 	cmd.Flags().StringVar(&etcDir, "etc-dir", defaultEtcDir, "Veil configuration directory")
 	cmd.Flags().StringVar(&varDir, "var-dir", defaultVarDir, "Veil state directory")

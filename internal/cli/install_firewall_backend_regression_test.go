@@ -137,6 +137,7 @@ func TestInstallFirewallBackendSkipsNonRoot(t *testing.T) {
 }
 
 func TestInstallFirewallBackendCheckRunsBeforeRuntimes(t *testing.T) {
+	withMockedInstallPreflight(t)
 	order := []string{}
 	oldBackend := installEnsureFirewallBackendFunc
 	oldRuntimes := installRuntimesFunc

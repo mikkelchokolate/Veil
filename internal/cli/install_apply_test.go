@@ -36,10 +36,37 @@ func withMockedInstallRuntimes(t *testing.T) {
 	installEnsureFirewallBackendFunc = func(context.Context, installer.RURecommendedProfile, ruRecommendedInstallOptions) error {
 		return nil
 	}
+	oldPreflightCollect := installPreflightCollectFunc
+	installPreflightCollectFunc = func(context.Context, installer.RURecommendedProfile, ruRecommendedInstallOptions) installPreflightReport {
+		return installPreflightReport{Root: true}
+	}
+	oldPreflightProvision := installPreflightProvisionFunc
+	installPreflightProvisionFunc = func(context.Context, installPreflightReport) error {
+		return nil
+	}
 	t.Cleanup(func() {
 		installRuntimesFunc = old
 		installWaitPanelReadyFunc = oldWait
 		installEnsureFirewallBackendFunc = oldFirewallBackend
+		installPreflightCollectFunc = oldPreflightCollect
+		installPreflightProvisionFunc = oldPreflightProvision
+	})
+}
+
+// withMockedInstallPreflight stubs the preflight inventory/provision seams for
+// tests that drive Run() through cobra on hosts without systemd/pkg managers.
+func withMockedInstallPreflight(t *testing.T) {
+	oldCollect := installPreflightCollectFunc
+	installPreflightCollectFunc = func(context.Context, installer.RURecommendedProfile, ruRecommendedInstallOptions) installPreflightReport {
+		return installPreflightReport{Root: true}
+	}
+	oldProvision := installPreflightProvisionFunc
+	installPreflightProvisionFunc = func(context.Context, installPreflightReport) error {
+		return nil
+	}
+	t.Cleanup(func() {
+		installPreflightCollectFunc = oldCollect
+		installPreflightProvisionFunc = oldProvision
 	})
 }
 

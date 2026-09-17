@@ -31,6 +31,12 @@ type IssueOptions struct {
 	CertPath   string
 	KeyPath    string
 	System     System
+	// CAServer overrides the acme.sh --server value (an acme.sh CA name like
+	// "letsencrypt" or a directory URL such as a controlled test CA). Empty
+	// means Let's Encrypt. Insecure adds acme.sh --insecure, which skips TLS
+	// verification of the ACME endpoint — for controlled test CAs only.
+	CAServer string
+	Insecure bool
 }
 
 // System abstracts command execution and file operations so IssueIPCert can be
@@ -182,8 +188,12 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		return IssuedCert{}, err
 	}
 
+	caServer := strings.TrimSpace(opts.CAServer)
+	if caServer == "" {
+		caServer = "letsencrypt"
+	}
 	// Set default CA so the first issue does not hit ZeroSSL.
-	if out, err := runWithContext(ctx, sys, acmeSh, "--set-default-ca", "--server", "letsencrypt"); err != nil {
+	if out, err := runWithContext(ctx, sys, acmeSh, "--set-default-ca", "--server", caServer); err != nil {
 		return IssuedCert{}, fmt.Errorf("set default CA: %w (output: %s)", err, string(out))
 	}
 
@@ -191,11 +201,16 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		"--issue",
 		"-d", opts.PublicIPv4,
 		"--standalone",
-		"--server", "letsencrypt",
-		"--certificate-profile", "shortlived",
-		"--days", "3",
-		"--httpport", strconv.Itoa(httpPort),
-		"--force",
+		"--server", caServer,
+	}
+	if caServer == "letsencrypt" {
+		// Let's Encrypt's shortlived profile is required for IP certificates;
+		// other CAs (e.g. a controlled test CA) reject profile/days overrides.
+		issueArgs = append(issueArgs, "--certificate-profile", "shortlived", "--days", "3")
+	}
+	issueArgs = append(issueArgs, "--httpport", strconv.Itoa(httpPort), "--force")
+	if opts.Insecure {
+		issueArgs = append(issueArgs, "--insecure")
 	}
 	if opts.PublicIPv6 != "" {
 		issueArgs = append(issueArgs, "-d", opts.PublicIPv6)

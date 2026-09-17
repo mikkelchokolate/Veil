@@ -18,6 +18,7 @@ declare -A JOB_IMAGE=(
   [browser-e2e]=browser
   [privilege-boundary]=system
   [e2e]=system
+  [install-acceptance]=system
   [package-smoke]=system
   [image-build]=system
   [standard]=base

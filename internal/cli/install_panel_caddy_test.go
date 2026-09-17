@@ -13,6 +13,7 @@ import (
 )
 
 func TestInstallPanelCaddyAccessPrintsPanelURLWithoutProxyStack(t *testing.T) {
+	withMockedInstallPreflight(t)
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -36,6 +37,7 @@ func TestInstallPanelCaddyAccessPrintsPanelURLWithoutProxyStack(t *testing.T) {
 }
 
 func TestInstallPanelCaddyAccessDryRunShowsResolvedCaddyBinary(t *testing.T) {
+	withMockedInstallPreflight(t)
 	oldLookPath := commandLookPath
 	commandLookPath = func(name string) (string, error) {
 		if name == "caddy" {
@@ -60,6 +62,7 @@ func TestInstallPanelCaddyAccessDryRunShowsResolvedCaddyBinary(t *testing.T) {
 }
 
 func TestInstallPanelCaddyAccessUsesResolvedCaddyBinaryInSystemdUnit(t *testing.T) {
+	withMockedInstallPreflight(t)
 	oldApply := installApplyFunc
 	oldLookPath := commandLookPath
 	oldSystemd := installSystemdRunFunc
@@ -118,6 +121,7 @@ func TestInstallPanelCaddyAccessUsesResolvedCaddyBinaryInSystemdUnit(t *testing.
 }
 
 func TestInstallPanelCaddyAccessRequiresCaddyBinaryForApply(t *testing.T) {
+	withMockedInstallPreflight(t)
 	oldLookPath := commandLookPath
 	oldFirewallBackend := installEnsureFirewallBackendFunc
 	commandLookPath = func(name string) (string, error) {

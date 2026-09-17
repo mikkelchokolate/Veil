@@ -24,6 +24,7 @@ case "${phase}" in
   system)
     ci_job_run privilege-boundary
     ci_job_run e2e
+    ci_job_run install-acceptance
     ;;
   docker)
     ci_job_run package-smoke

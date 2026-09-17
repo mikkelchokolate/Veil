@@ -42,7 +42,7 @@ cd "${WORKSPACE}" || exit 1
 
 # Jobs that must run as root (system integration) vs as the unprivileged ci
 # user. Root only where the production layout requires it.
-ROOT_JOBS=" privilege-boundary e2e package-smoke image-build "
+ROOT_JOBS=" privilege-boundary e2e install-acceptance package-smoke image-build "
 JOB_USER="ci"
 case "${ROOT_JOBS}" in
   *" ${JOB} "*) JOB_USER="root" ;;

@@ -63,6 +63,17 @@ EOF
       id veil
       /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
 
+      # Real installer contract of the packaged binary (audit #304): on this
+      # non-systemd container `veil install --check` must print the capability
+      # report and refuse with an actionable init failure instead of mutating.
+      if /usr/local/bin/veil install --check >/tmp/install-check.out 2>&1; then
+        echo "veil install --check unexpectedly succeeded without systemd" >&2
+        exit 1
+      fi
+      grep -q "capability report" /tmp/install-check.out
+      grep -q "init" /tmp/install-check.out
+      test ! -e /var/lib/veil/state.json
+
       printf state-before-upgrade > /var/lib/veil/state.json
       printf sessions-before-upgrade > /var/lib/veil/sessions.json
       printf key-before-upgrade > /etc/veil/state.key

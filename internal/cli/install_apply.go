@@ -67,6 +67,9 @@ var installGeteuidFunc = os.Geteuid
 // activeForeignFirewallFunc reports the name of a different firewall service
 // already managing the host ("" when none is active).
 var activeForeignFirewallFunc = func(ctx context.Context) string {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	for _, unit := range []string{"firewalld.service", "nftables.service", "iptables.service"} {
 		probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		err := exec.CommandContext(probeCtx, "systemctl", "is-active", "--quiet", unit).Run()
@@ -81,6 +84,9 @@ var activeForeignFirewallFunc = func(ctx context.Context) string {
 // provisionUFWCommandFunc executes one package-manager command for ufw
 // provisioning; tests stub it to record calls.
 var provisionUFWCommandFunc = func(ctx context.Context, name string, args ...string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	out, err := exec.CommandContext(probeCtx, name, args...).CombinedOutput()

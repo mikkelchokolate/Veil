@@ -30,7 +30,7 @@ manifest="${CI_ARTIFACT_DIR}/environment-${JOB}.txt"
   echo; echo "## pid1";       cat /proc/1/comm || true
   echo; echo "## mount";      mount | grep -Ev 'cgroup|proc|sysfs|devpts|mqueue|shm' || true
   echo; echo "## df";         df -h / /workspace 2>/dev/null || df -h / || true
-  if [ "${JOB}" = "privilege-boundary" ] || [ "${JOB}" = "e2e" ] || [ "${JOB}" = "package-smoke" ] || [ "${JOB}" = "image-build" ]; then
+  if [ "${JOB}" = "privilege-boundary" ] || [ "${JOB}" = "e2e" ] || [ "${JOB}" = "install-acceptance" ] || [ "${JOB}" = "package-smoke" ] || [ "${JOB}" = "image-build" ]; then
     echo; echo "## systemd state"; systemctl is-system-running 2>&1 || true
     echo; echo "## docker";        docker version 2>&1 | head -8 || echo "docker: not available"
     echo; echo "## buildctl";      buildctl --version 2>&1 || echo "buildctl: not available"
