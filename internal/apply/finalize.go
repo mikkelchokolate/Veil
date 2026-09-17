@@ -434,7 +434,7 @@ FROM runtime_publications p WHERE p.job_id=?`, finalPhase, finalizedAt, jobID)
 	return nil
 }
 
-func markFinalizationPending(db *sql.DB, owner string, generation uint64, now time.Time, jobID string, cause error) error {
+func markFinalizationPending(db *sql.DB, owner string, generation uint64, now time.Time, jobID string, cause error, operations []OperationResult) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
@@ -443,11 +443,17 @@ func markFinalizationPending(db *sql.DB, owner string, generation uint64, now ti
 	if err := assertLeaseCurrentTx(tx, owner, generation, now); err != nil {
 		return err
 	}
+	// Persist the attempted operation breakdown with the pending transition so
+	// a refreshed job detail still shows the failed attempt's diagnostics.
+	body, err := json.Marshal(operations)
+	if err != nil {
+		return err
+	}
 	finished := now.UTC().Unix()
 	result, err := tx.Exec(`UPDATE apply_jobs SET status=?, started_at=COALESCE(started_at,?), finished_at=NULL,
-  error_code='FINALIZATION_PENDING', error_message=?
+  error_code='FINALIZATION_PENDING', error_message=?, operations=?
   WHERE id=? AND owner_process=? AND lease_generation=?`,
-		StatusRecoveryPending, finished, cause.Error(), jobID, owner, generation)
+		StatusRecoveryPending, finished, cause.Error(), string(body), jobID, owner, generation)
 	if err != nil {
 		return err
 	}
@@ -468,7 +474,7 @@ WHERE job_id=? AND owner_process=? AND generation=?`, finished, jobID, owner, ge
 	return tx.Commit()
 }
 
-func retainRecoveryPending(db *sql.DB, owner string, generation uint64, now time.Time, jobID, code, message string) error {
+func retainRecoveryPending(db *sql.DB, owner string, generation uint64, now time.Time, jobID, code, message string, operations []OperationResult) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
@@ -477,14 +483,20 @@ func retainRecoveryPending(db *sql.DB, owner string, generation uint64, now time
 	if err := assertLeaseCurrentTx(tx, owner, generation, now); err != nil {
 		return err
 	}
+	// Persist the attempted operation breakdown with the pending transition so
+	// a refreshed job detail still shows the failed attempt's diagnostics.
+	body, err := json.Marshal(operations)
+	if err != nil {
+		return err
+	}
 	finished := now.UTC().Unix()
 	if code == "" {
 		code = "RECOVERY_PENDING"
 	}
 	result, err := tx.Exec(`UPDATE apply_jobs SET status=?, started_at=COALESCE(started_at,?), finished_at=NULL,
-  error_code=?, error_message=?
+  error_code=?, error_message=?, operations=?
   WHERE id=? AND owner_process=? AND lease_generation=?`,
-		StatusRecoveryPending, finished, code, message, jobID, owner, generation)
+		StatusRecoveryPending, finished, code, message, string(body), jobID, owner, generation)
 	if err != nil {
 		return err
 	}

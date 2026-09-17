@@ -266,7 +266,7 @@ if [ "$1" = "enable" ]; then
     exit 1
   fi
   mkdir -p "$install_dir"
-  printf '#!/bin/sh\necho pnpm-from-corepack\n' > "$install_dir/pnpm"
+  printf '#!/bin/sh\nif [ "$1" = "--version" ]; then echo 12.4.1; else echo pnpm-from-corepack; fi\n' > "$install_dir/pnpm"
   chmod 0755 "$install_dir/pnpm"
   exit 0
 fi
@@ -300,6 +300,172 @@ pnpm
 	}
 	if len(entries) != 1 || entries[0].Name() != "keep" {
 		t.Fatalf("corepack wrote outside work dir: %v", entries)
+	}
+}
+
+// Audit #301: a leftover pnpm shim whose interpreter is gone satisfies
+// `command -v` but cannot execute. ensure_pnpm must detect the broken shim,
+// bootstrap the pinned pnpm into the installer's private directory, and put it
+// first on PATH without touching the user's shim.
+func TestMainInstallerRepairsBrokenPnpmShim(t *testing.T) {
+	script := readInstallerScript(t, "install-main.sh")
+	helpers := extractRegion(t, script, "# BEGIN_PNPM_BOOTSTRAP", "# END_PNPM_BOOTSTRAP")
+	dir := t.TempDir()
+	stubDir := filepath.Join(dir, "stub")
+	work := filepath.Join(dir, "work")
+	if err := os.MkdirAll(stubDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A stale executable shim: present on PATH, unrunnable.
+	brokenShim := filepath.Join(stubDir, "pnpm")
+	if err := os.WriteFile(brokenShim, []byte("#!/nonexistent-old-node/bin/node\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeExec(t, stubDir, "corepack", `
+if [ "$1" = "enable" ]; then
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --install-directory) install_dir="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  mkdir -p "$install_dir"
+  printf '#!/bin/sh\nif [ "$1" = "--version" ]; then echo 12.4.1; fi\n' > "$install_dir/pnpm"
+  chmod 0755 "$install_dir/pnpm"
+  exit 0
+fi
+if [ "$1" = "prepare" ]; then exit 0; fi
+exit 1
+`)
+	harness := "#!/bin/sh\nset -eu\nwork=\"$1\"\nCI_PNPM_VERSION=12.4.1\n" + helpers + `
+ensure_pnpm
+command -v pnpm
+pnpm --version
+`
+	env := []string{
+		"PATH=" + stubDir + string(os.PathListSeparator) + "/bin" + string(os.PathListSeparator) + "/usr/bin",
+		"HOME=" + dir,
+	}
+	out, err := runBashScript(t, dir, env, harness, work)
+	if err != nil {
+		t.Fatalf("ensure_pnpm must recover from a broken shim: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "12.4.1") {
+		t.Fatalf("expected pinned pnpm to run, got:\n%s", out)
+	}
+	if !strings.Contains(out, filepath.Join(work, "bin")) && !strings.Contains(out, filepath.ToSlash(filepath.Join(work, "bin"))) {
+		t.Fatalf("pinned pnpm must resolve under work/bin, got:\n%s", out)
+	}
+}
+
+// Audit #294: the pinned Node build needs OS runtime libraries (libatomic and
+// the C/C++ runtime). ensure_runtime_libs must map missing SONAMEs to distro
+// packages and install them before the toolchain is launched.
+func TestMainInstallerProvisionsMissingNodeRuntimeLibs(t *testing.T) {
+	script := readInstallerScript(t, "install-main.sh")
+	helpers := extractRegion(t, script, "# BEGIN_DEPS_HELPERS", "# END_DEPS_HELPERS")
+	dir := t.TempDir()
+	stubDir := filepath.Join(dir, "stub")
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(stubDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeExec(t, stubDir, "ldd", `
+echo '	libatomic.so.1 => not found'
+echo '	libstdc++.so.6 => not found'
+echo '	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6'
+`)
+	writeExec(t, stubDir, "apt-get", `
+echo "apt-get $*" >> "$HOME/apt.log"
+exit 0
+`)
+	// Non-root CI runners invoke installs through sudo, which resets PATH and
+	// would bypass the apt-get stub; a pass-through sudo keeps the PATH order.
+	writeExec(t, stubDir, "sudo", `exec "$@"`)
+	writeExec(t, binDir, "node", "#!/bin/sh\nexit 0\n")
+	harness := "#!/bin/sh\nset -eu\n" + helpers + `
+ensure_runtime_libs "$1"
+`
+	env := []string{
+		"PATH=" + stubDir + string(os.PathListSeparator) + "/bin" + string(os.PathListSeparator) + "/usr/bin",
+		"HOME=" + dir,
+	}
+	nodeBin := filepath.Join(binDir, "node")
+	out, err := runBashScript(t, dir, env, harness, nodeBin)
+	if err != nil {
+		t.Fatalf("ensure_runtime_libs failed: %v\n%s", err, out)
+	}
+	aptLog, err := os.ReadFile(filepath.Join(dir, "apt.log"))
+	if err != nil {
+		t.Fatalf("apt-get was not invoked:\n%s", out)
+	}
+	log := string(aptLog)
+	if !strings.Contains(log, "install -y libatomic1 libstdc++6") {
+		t.Fatalf("expected narrowly scoped libatomic1+libstdc++6 install, got:\n%s", log)
+	}
+}
+
+func TestMainInstallerReportsUnresolvableRuntimeLibs(t *testing.T) {
+	script := readInstallerScript(t, "install-main.sh")
+	helpers := extractRegion(t, script, "# BEGIN_DEPS_HELPERS", "# END_DEPS_HELPERS")
+	dir := t.TempDir()
+	stubDir := filepath.Join(dir, "stub")
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(stubDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeExec(t, stubDir, "ldd", `echo '	libatomic.so.1 => not found'`)
+	writeExec(t, binDir, "node", "#!/bin/sh\nexit 0\n")
+	// Simulate a host with no supported package manager: PATH contains the real
+	// toolchain dirs, so override the detector instead of relying on lookup.
+	harness := "#!/bin/sh\n" + helpers + `
+detect_pkg_manager() { return 1; }
+if ensure_runtime_libs "$1"; then echo OK; else echo FAILED; fi
+`
+	env := []string{
+		"PATH=" + stubDir + string(os.PathListSeparator) + "/bin" + string(os.PathListSeparator) + "/usr/bin",
+		"HOME=" + dir,
+	}
+	out, err := runBashScript(t, dir, env, harness, filepath.Join(binDir, "node"))
+	if err != nil {
+		t.Fatalf("harness failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "FAILED") || !strings.Contains(out, "libatomic.so.1") {
+		t.Fatalf("expected actionable missing-library report, got:\n%s", out)
+	}
+}
+
+// Audit #300: the installer accepts aarch64/arm64, so both toolchains must
+// have verified pins for that architecture instead of amd64-only bailouts.
+func TestMainInstallerBootstrapCoversARM64(t *testing.T) {
+	script := readInstallerScript(t, "install-main.sh")
+	versions := readInstallerScript(t, filepath.Join("ci", "versions.sh"))
+	if !strings.Contains(versions, "CI_GO_TARBALL_SHA256_ARM64=") ||
+		!strings.Contains(versions, "CI_NODE_TARBALL_SHA256_ARM64=") {
+		t.Fatal("versions.sh must pin arm64 checksums for both toolchains")
+	}
+	for _, needle := range []string{
+		`arm64) go_sha256="${CI_GO_TARBALL_SHA256_ARM64`,
+		`arm64) node_sha256="${CI_NODE_TARBALL_SHA256_ARM64`,
+		"go${CI_GO_VERSION}.linux-${go_arch}.tar.gz",
+		"node-v${CI_NODE_VERSION}-linux-${node_arch}",
+	} {
+		if !strings.Contains(script, needle) {
+			t.Fatalf("install-main.sh missing arm64 bootstrap selector %q", needle)
+		}
+	}
+	if !strings.Contains(script, `aarch64|arm64) go_arch="arm64"; node_arch="arm64"`) {
+		t.Fatal("install-main.sh must map aarch64/arm64 to the arm64 artifacts")
 	}
 }
 

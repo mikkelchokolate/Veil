@@ -650,14 +650,10 @@ func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
 		return PromoteResult{}, err
 	}
 	result.BackupID = backupID
-	// Historical callers treat both restored and removed destinations as written
-	// rollback artifacts. Preserve that API while the transaction manifest keeps
-	// the exact operation kind.
-	result.WrittenArtifacts = result.WrittenArtifacts[:0]
-	for _, record := range manifest.Records {
-		result.WrittenArtifacts = append(result.WrittenArtifacts, record.ArtifactID)
-	}
-	result.RemovedArtifacts = nil
+	// WrittenArtifacts lists only the configs that were actually restored;
+	// RemovedArtifacts lists newly added configs the restore deleted. Callers
+	// rely on the distinction to reload restored services and to stop/disable
+	// units whose just-created configs no longer exist.
 	return result, nil
 }
 

@@ -814,7 +814,7 @@ func (r *Runner) executeFenced(ctx context.Context, job Job, lease Lease, execut
 		safeRollback := !result.RuntimeMutation.MutationStarted ||
 			(result.RuntimeMutation.RollbackComplete && !result.RuntimeMutation.Ambiguous)
 		if !safeRollback {
-			pendingErr := markFinalizationPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, execErr)
+			pendingErr := markFinalizationPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, execErr, result.Operations)
 			job.Status = StatusRecoveryPending
 			job.ErrorCode = "RECOVERY_PENDING"
 			job.ErrorMessage = execErr.Error()
@@ -823,7 +823,7 @@ func (r *Runner) executeFenced(ctx context.Context, job Job, lease Lease, execut
 		}
 		rollbackErr := markRuntimePublicationRolledBack(r.revs.db, job.ID, lease.Generation, r.now().UTC().Unix())
 		if rollbackErr != nil {
-			pendingErr := retainRecoveryPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, code, execErr.Error())
+			pendingErr := retainRecoveryPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, code, execErr.Error(), result.Operations)
 			job.Status = StatusRecoveryPending
 			job.ErrorCode = code
 			job.ErrorMessage = execErr.Error()
@@ -858,17 +858,19 @@ func (r *Runner) executeFenced(ctx context.Context, job Job, lease Lease, execut
 		strictPhases = policy.RequiresDurablePhases()
 	}
 	if err := recordRuntimePublication(r.revs.db, job, lease.Generation, result.Disposition, result.Operations, result.Confirmations, !strictPhases, r.now().UTC().Unix()); err != nil {
-		pendingErr := markFinalizationPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, err)
+		pendingErr := markFinalizationPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, err, result.Operations)
 		job.Status = StatusRecoveryPending
 		job.ErrorCode = "PUBLICATION_RECEIPT_PENDING"
 		job.ErrorMessage = err.Error()
+		job.Operations = result.Operations
 		return job, pendingErr == nil, errors.Join(err, pendingErr)
 	}
 	if err := finalizeFencedJob(r.revs.db, r.ownerID, lease.Generation, r.now(), job, StatusSucceeded, "", "", result.Operations, result.Confirmations, result.MarkRevisionLive, false); err != nil {
-		pendingErr := markFinalizationPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, err)
+		pendingErr := markFinalizationPending(r.revs.db, r.ownerID, lease.Generation, r.now(), job.ID, err, result.Operations)
 		job.Status = StatusRecoveryPending
 		job.ErrorCode = "FINALIZATION_PENDING"
 		job.ErrorMessage = err.Error()
+		job.Operations = result.Operations
 		return job, pendingErr == nil, errors.Join(err, pendingErr)
 	}
 	job.Status = StatusSucceeded

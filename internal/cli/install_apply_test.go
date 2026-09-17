@@ -32,9 +32,14 @@ func withMockedInstallRuntimes(t *testing.T) {
 	installWaitPanelReadyFunc = func(*cobra.Command, installer.RURecommendedProfile, ruRecommendedInstallOptions) error {
 		return nil
 	}
+	oldFirewallBackend := installEnsureFirewallBackendFunc
+	installEnsureFirewallBackendFunc = func(context.Context, installer.RURecommendedProfile, ruRecommendedInstallOptions) error {
+		return nil
+	}
 	t.Cleanup(func() {
 		installRuntimesFunc = old
 		installWaitPanelReadyFunc = oldWait
+		installEnsureFirewallBackendFunc = oldFirewallBackend
 	})
 }
 

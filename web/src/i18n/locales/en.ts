@@ -248,6 +248,8 @@ export const en: Record<string, string> = {
 	"inbounds.desiredRev": "desired rev",
 	"inbounds.applied": "applied",
 	"inbounds.job": "job",
+	"inbounds.createReconciled":
+		"Response was lost, but the inbound was committed — tracking its apply job.",
 	"inbounds.dismiss": "Dismiss",
 	"inbounds.delete.title": "Delete inbound?",
 	"inbounds.delete.description":

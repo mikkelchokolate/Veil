@@ -18,8 +18,11 @@ ensure_system_account() {
     if ! group_exists "$name"; then
         if command -v groupadd >/dev/null 2>&1; then
             groupadd --system "$name"
-        else
+        elif command -v addgroup >/dev/null 2>&1; then
             addgroup -S "$name"
+        else
+            echo "Cannot create group $name: neither groupadd (shadow-utils) nor addgroup is installed" >&2
+            exit 1
         fi
     fi
     if ! id -u "$name" >/dev/null 2>&1; then
@@ -28,8 +31,11 @@ ensure_system_account() {
         [ -x "$nologin" ] || nologin=/bin/false
         if command -v useradd >/dev/null 2>&1; then
             useradd --system --gid "$name" --no-create-home --home-dir /nonexistent --shell "$nologin" "$name"
-        else
+        elif command -v adduser >/dev/null 2>&1; then
             adduser -S -D -H -h /nonexistent -s "$nologin" -G "$name" "$name"
+        else
+            echo "Cannot create user $name: neither useradd (shadow-utils) nor adduser is installed" >&2
+            exit 1
         fi
     fi
 }
@@ -38,7 +44,7 @@ ensure_system_account veil
 ensure_system_account veil-proxy
 if command -v usermod >/dev/null 2>&1; then
     usermod -aG veil-proxy veil >/dev/null 2>&1 || true
-else
+elif command -v addgroup >/dev/null 2>&1; then
     addgroup veil veil-proxy >/dev/null 2>&1 || true
 fi
 

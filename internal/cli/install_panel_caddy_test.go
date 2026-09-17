@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -64,6 +65,7 @@ func TestInstallPanelCaddyAccessUsesResolvedCaddyBinaryInSystemdUnit(t *testing.
 	oldSystemd := installSystemdRunFunc
 	oldExecutable := installExecutableFunc
 	oldInstallRuntimes := installRuntimesFunc
+	oldFirewallBackend := installEnsureFirewallBackendFunc
 	var gotPaths installer.ApplyPaths
 	installApplyFunc = func(profile installer.RURecommendedProfile, paths installer.ApplyPaths) (installer.ApplyResult, error) {
 		gotPaths = paths
@@ -78,12 +80,16 @@ func TestInstallPanelCaddyAccessUsesResolvedCaddyBinaryInSystemdUnit(t *testing.
 	installSystemdRunFunc = func([]service.SystemdAction) error { return nil }
 	installExecutableFunc = func() (string, error) { return "/usr/local/bin/veil", nil }
 	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) {}
+	installEnsureFirewallBackendFunc = func(context.Context, installer.RURecommendedProfile, ruRecommendedInstallOptions) error {
+		return nil
+	}
 	defer func() {
 		installApplyFunc = oldApply
 		commandLookPath = oldLookPath
 		installSystemdRunFunc = oldSystemd
 		installExecutableFunc = oldExecutable
 		installRuntimesFunc = oldInstallRuntimes
+		installEnsureFirewallBackendFunc = oldFirewallBackend
 	}()
 
 	cmd := NewRootCommand("test")
@@ -113,13 +119,20 @@ func TestInstallPanelCaddyAccessUsesResolvedCaddyBinaryInSystemdUnit(t *testing.
 
 func TestInstallPanelCaddyAccessRequiresCaddyBinaryForApply(t *testing.T) {
 	oldLookPath := commandLookPath
+	oldFirewallBackend := installEnsureFirewallBackendFunc
 	commandLookPath = func(name string) (string, error) {
 		if name == "caddy" {
 			return "", errors.New("missing caddy")
 		}
 		return "/usr/bin/" + name, nil
 	}
-	t.Cleanup(func() { commandLookPath = oldLookPath })
+	installEnsureFirewallBackendFunc = func(context.Context, installer.RURecommendedProfile, ruRecommendedInstallOptions) error {
+		return nil
+	}
+	t.Cleanup(func() {
+		commandLookPath = oldLookPath
+		installEnsureFirewallBackendFunc = oldFirewallBackend
+	})
 
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer

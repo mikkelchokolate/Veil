@@ -79,17 +79,12 @@ func TestWarpUnitActiveLocked(t *testing.T) {
 	}
 }
 
-func TestHysteria2ConfigReloadNeeded(t *testing.T) {
+func TestHysteria2CertDomainsIgnoresMissingAndNonHysteria2Files(t *testing.T) {
 	root := t.TempDir()
-	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: root, LiveRoot: filepath.Join(root, "live")})
-	state.inbounds = []Inbound{{Name: "h", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
-	ctx := NewManagementApplyContext(state)
-	liveFiles := []string{filepath.Join(root, "live", "hysteria2", "h.yaml")}
-	if !ctx.hysteria2ConfigReloadNeeded(liveFiles) {
-		t.Fatal("expected reload needed for hysteria2 live file")
-	}
-	if ctx.hysteria2ConfigReloadNeeded([]string{filepath.Join(root, "live", "caddy", "config.json")}) {
-		t.Fatal("expected no reload for caddy file")
+	missing := filepath.Join(root, "live", "hysteria2", "h.yaml")
+	caddy := filepath.Join(root, "live", "caddy", "config.json")
+	if domains := hysteria2CertDomainsFromConfigs([]string{missing, caddy}); len(domains) != 0 {
+		t.Fatalf("expected no sync domains for missing/caddy files, got %v", domains)
 	}
 }
 

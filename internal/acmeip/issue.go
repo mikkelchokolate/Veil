@@ -167,12 +167,12 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		httpPort = 80
 	}
 
+	if err := ensureAcmePrereqs(ctx, sys); err != nil {
+		return IssuedCert{}, fmt.Errorf("acme prerequisites: %w", err)
+	}
 	acmeSh, err := ensureAcmeSh(ctx, sys)
 	if err != nil {
 		return IssuedCert{}, fmt.Errorf("acme.sh setup: %w", err)
-	}
-	if err := ensureSocat(ctx, sys); err != nil {
-		return IssuedCert{}, fmt.Errorf("socat setup: %w", err)
 	}
 	if !sys.IsPortFree(httpPort) {
 		return IssuedCert{}, fmt.Errorf("port %d is already in use; Let's Encrypt HTTP-01 validation needs a free port %d (forward external port 80 if you use a non-standard port)", httpPort, httpPort)
@@ -299,37 +299,80 @@ func ensureAcmeSh(ctx context.Context, sys System) (string, error) {
 	return acmeSh, nil
 }
 
-func ensureSocat(ctx context.Context, sys System) error {
-	if _, err := sys.LookPath("socat"); err == nil {
+// ensureAcmePrereqs verifies the complete toolchain acme.sh needs BEFORE its
+// upstream installer runs (audit #298): curl to fetch it, an OpenSSL binary
+// for key generation, and a cron scheduler for renewal. Without crontab the
+// upstream install refuses to complete, and without OpenSSL key creation
+// fails — in both cases the caller silently fell back to self-signed TLS.
+func ensureAcmePrereqs(ctx context.Context, sys System) error {
+	if _, err := sys.LookPath("curl"); err != nil {
+		return fmt.Errorf("curl is required to install acme.sh")
+	}
+	if err := ensureToolInstalled(ctx, sys, "openssl", func(string) string { return "openssl" }); err != nil {
+		return err
+	}
+	// socat serves the standalone HTTP-01 challenge.
+	if err := ensureSocat(ctx, sys); err != nil {
+		return fmt.Errorf("socat setup: %w", err)
+	}
+	if err := ensureToolInstalled(ctx, sys, "crontab", func(manager string) string {
+		switch manager {
+		case "apt-get":
+			return "cron"
+		case "apk":
+			return "dcron"
+		default: // dnf, yum, pacman, zypper
+			return "cronie"
+		}
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+// distroManagers maps a detected package-manager command to a shell template
+// installing the named package (%s is the package list).
+var distroManagers = []struct {
+	name string
+	tmpl string
+}{
+	{"apt-get", "apt-get update >/dev/null 2>&1 && apt-get install -y %s"},
+	{"dnf", "dnf makecache -y >/dev/null 2>&1 && dnf -y install %s"},
+	{"yum", "yum makecache -y >/dev/null 2>&1 && yum -y install %s"},
+	{"pacman", "pacman -Sy --noconfirm %s"},
+	{"zypper", "zypper refresh >/dev/null 2>&1 && zypper -q install -y %s"},
+	{"apk", "apk add --no-cache %s"},
+}
+
+// ensureToolInstalled guarantees the named executable is in PATH, provisioning
+// the distro package that provides it when missing. pkgForManager maps the
+// detected manager to the package name; an empty string means that manager
+// cannot supply the tool and the next manager is tried.
+func ensureToolInstalled(ctx context.Context, sys System, tool string, pkgForManager func(manager string) string) error {
+	if _, err := sys.LookPath(tool); err == nil {
 		return nil
 	}
-
-	managers := []struct {
-		name string
-		cmd  string
-		args []string
-	}{
-		{"apt-get", "sh", []string{"-c", "apt-get update >/dev/null 2>&1 && apt-get install -y socat"}},
-		{"dnf", "sh", []string{"-c", "dnf makecache -y >/dev/null 2>&1 && dnf -y install socat"}},
-		{"yum", "sh", []string{"-c", "yum makecache -y >/dev/null 2>&1 && yum -y install socat"}},
-		{"pacman", "sh", []string{"-c", "pacman -Sy --noconfirm socat"}},
-		{"zypper", "sh", []string{"-c", "zypper refresh >/dev/null 2>&1 && zypper -q install -y socat"}},
-		{"apk", "sh", []string{"-c", "apk add --no-cache socat"}},
-	}
-
-	for _, m := range managers {
+	for _, m := range distroManagers {
 		if _, err := sys.LookPath(m.name); err != nil {
 			continue
 		}
-		if out, err := runWithContext(ctx, sys, m.cmd, m.args...); err != nil {
-			return fmt.Errorf("install socat via %s: %w (output: %s)", m.name, err, string(out))
+		pkg := pkgForManager(m.name)
+		if pkg == "" {
+			continue
 		}
-		if _, err := sys.LookPath("socat"); err == nil {
+		if out, err := runWithContext(ctx, sys, "sh", "-c", fmt.Sprintf(m.tmpl, pkg)); err != nil {
+			return fmt.Errorf("install %s via %s: %w (output: %s)", pkg, m.name, err, string(out))
+		}
+		if _, err := sys.LookPath(tool); err == nil {
 			return nil
 		}
-		return fmt.Errorf("socat installation via %s completed but socat is not in PATH", m.name)
+		return fmt.Errorf("%s installation via %s completed but %s is not in PATH", pkg, m.name, tool)
 	}
-	return fmt.Errorf("no supported package manager found to install socat")
+	return fmt.Errorf("%s is required but not installed, and no supported package manager was found to install it", tool)
+}
+
+func ensureSocat(ctx context.Context, sys System) error {
+	return ensureToolInstalled(ctx, sys, "socat", func(string) string { return "socat" })
 }
 
 func ensureCertDirs(sys System, certPath, keyPath string) error {

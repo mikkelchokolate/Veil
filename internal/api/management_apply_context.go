@@ -17,11 +17,11 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
-	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/routing"
 	"github.com/mikkelchokolate/Veil/internal/service"
+	"gopkg.in/yaml.v3"
 )
 
 // caddyAdminLoader loads a Caddy JSON config through the Admin API. Tests
@@ -338,12 +338,13 @@ func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []S
 
 	// Phase 2: Synchronize hysteria2 certificates after Caddy has reloaded so
 	// new domains have a chance to obtain a certificate before hysteria2 starts.
-	if ctx.hysteria2ConfigReloadNeeded(liveFiles) {
-		for _, domain := range ctx.hysteria2DomainsLocked() {
-			results = append(results, ctx.syncCaddyCertForHysteria2(domain))
-			if !results[len(results)-1].Success {
-				return results
-			}
+	// Domains are read from the config files being made live so a rollback
+	// restores certificates for the previous state instead of polling for a
+	// domain that only existed in the failed candidate.
+	for _, domain := range hysteria2CertDomainsFromConfigs(liveFiles) {
+		results = append(results, ctx.syncCaddyCertForHysteria2(domain))
+		if !results[len(results)-1].Success {
+			return results
 		}
 	}
 
@@ -514,40 +515,38 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigs(records []livePromotio
 	return rollbackFiles, rollbackActions
 }
 
-func (ctx ManagementApplyContext) hysteria2ConfigReloadNeeded(liveFiles []string) bool {
-	for _, runtime := range NewManagedRuntimeCatalogFor(ctx.state.settings, ctx.state.inbounds, ctx.state.warp).Runtimes() {
-		if runtime.Protocol != "hysteria2" {
-			continue
-		}
-		if runtime.PromotedSubpath == "" {
-			continue
-		}
-		want := filepath.Join(ctx.state.liveRoot, filepath.FromSlash(runtime.PromotedSubpath))
-		if containsCleanPath(liveFiles, want) {
-			return true
-		}
-	}
-	return false
-}
-
-func (ctx ManagementApplyContext) hysteria2DomainsLocked() []string {
+// hysteria2CertDomainsFromConfigs extracts the Caddy-managed certificate
+// domains referenced by the given hysteria2 config files. A generated config
+// points tls.cert at <etc>/certs/<domain>.crt when the inbound serves a
+// Caddy-issued certificate; the panel cert path requires no sync. Reading the
+// domain from the artifact itself keeps apply and rollback consistent: both
+// sync exactly the domains the about-to-run configs will serve.
+func hysteria2CertDomainsFromConfigs(configFiles []string) []string {
 	seen := make(map[string]struct{})
 	var domains []string
-	for _, inb := range ctx.state.inbounds {
-		if !inb.Enabled || inb.Protocol != "hysteria2" {
+	for _, path := range configFiles {
+		if filepath.Base(filepath.Dir(path)) != "hysteria2" ||
+			!strings.EqualFold(filepath.Ext(path), ".yaml") {
 			continue
 		}
-		// Only sync a Caddy cert when the hysteria2 inbound actually serves a
-		// Caddy-managed certificate. This must mirror the renderer's cert
-		// selection (inbound_renderer.go): the Caddy cert is used only when
-		// PanelAccess == "caddy" or the inbound has its own per-inbound domain.
-		// Otherwise the inbound serves the panel cert and requires no sync;
-		// syncing would block apply on cert polling and abort before the
-		// service restart (regression: auto-apply produced no service action).
-		if ctx.state.settings.PanelAccess != "caddy" && model.InboundDomain(inb) == "" {
+		body, err := os.ReadFile(path)
+		if err != nil {
 			continue
 		}
-		domain := model.ResolveInboundDomain(inb, ctx.state.settings)
+		var doc struct {
+			TLS struct {
+				Cert string `yaml:"cert"`
+			} `yaml:"tls"`
+		}
+		if err := yaml.Unmarshal(body, &doc); err != nil {
+			continue
+		}
+		cert := filepath.Clean(doc.TLS.Cert)
+		if filepath.Base(filepath.Dir(cert)) != "certs" ||
+			!strings.EqualFold(filepath.Ext(cert), ".crt") {
+			continue
+		}
+		domain := strings.TrimSuffix(filepath.Base(cert), filepath.Ext(cert))
 		if domain == "" {
 			continue
 		}
@@ -557,6 +556,7 @@ func (ctx ManagementApplyContext) hysteria2DomainsLocked() []string {
 		seen[domain] = struct{}{}
 		domains = append(domains, domain)
 	}
+	sort.Strings(domains)
 	return domains
 }
 

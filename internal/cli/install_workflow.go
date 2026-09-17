@@ -141,6 +141,12 @@ func (w RURecommendedInstallWorkflow) Run() error {
 			return err
 		}
 	}
+	// Firewall dependency phase (audit #295): direct/caddy installs produce a
+	// ufw plan, so provision ufw — or refuse next to a competing active
+	// firewall — before state, runtimes, or downloads touch the host.
+	if err := installEnsureFirewallBackendFunc(cmd.Context(), built, opts); err != nil {
+		return err
+	}
 	// Protocol runtimes are needed before Caddy prerequisite validation, but
 	// only after the operator has accepted the plan.
 	installRuntimesFunc(cmd, opts)

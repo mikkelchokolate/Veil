@@ -720,7 +720,10 @@ func TestRestorePromotedArtifactsHandlesMissingDestination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("restore: %v", err)
 	}
-	if !reflect.DeepEqual(result.WrittenArtifacts, []string{"gone"}) {
+	// A newly added artifact has no previous version: the restore deletes it
+	// and reports it as removed, not written, so callers stop its unit instead
+	// of restarting a service against a missing config.
+	if !reflect.DeepEqual(result.RemovedArtifacts, []string{"gone"}) || len(result.WrittenArtifacts) != 0 {
 		t.Fatalf("unexpected result: %+v", result)
 	}
 }

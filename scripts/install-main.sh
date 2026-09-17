@@ -175,14 +175,129 @@ diagnose_node() {
 }
 # END_NODE_HELPERS
 
+# BEGIN_DEPS_HELPERS
+# Provision the operating-system runtime libraries a downloaded toolchain links
+# against (audit #294). The pinned Node build needs libatomic plus the usual
+# C/C++ runtime (libstdc++, libgcc_s, glibc/musl); minimal hosts may ship none
+# of them. Missing libraries are mapped to the distro package providing them
+# and installed through the detected package manager with a narrowly scoped
+# command — never by fetching .so files or mutating loader search paths.
+detect_pkg_manager() {
+  for manager in apt-get dnf yum pacman zypper apk; do
+    if command -v "$manager" >/dev/null 2>&1; then
+      echo "$manager"
+      return 0
+    fi
+  done
+  return 1
+}
+
+pkg_install() {
+  manager="$1"
+  shift
+  sudo=""
+  if [ "$(id -u)" -ne 0 ]; then
+    if command -v sudo >/dev/null 2>&1; then
+      sudo="sudo"
+    else
+      echo "Installing packages requires root; re-run with sudo or install them manually: $*" >&2
+      return 1
+    fi
+  fi
+  case "$manager" in
+    apt-get)
+      $sudo apt-get update -qq >/dev/null 2>&1 || true
+      $sudo apt-get install -y "$@"
+      ;;
+    dnf)    $sudo dnf -y install "$@" ;;
+    yum)    $sudo yum -y install "$@" ;;
+    pacman) $sudo pacman -Sy --noconfirm "$@" ;;
+    zypper) $sudo zypper -q install -y "$@" ;;
+    apk)    $sudo apk add "$@" ;;
+    *) return 1 ;;
+  esac
+}
+
+# Map a missing SONAME to the package providing it for the detected manager.
+lib_package_name() {
+  soname="$1"
+  manager="$2"
+  family=""
+  case "$soname" in
+    libatomic*)   family="atomic" ;;
+    libstdc++*)   family="stdcxx" ;;
+    libgcc_s*)    family="gcc" ;;
+    libc.so.*|libm.so.*|libdl.so.*|libpthread*|ld-linux*|ld-*.so*) family="libc" ;;
+    *) return 1 ;;
+  esac
+  case "$family:$manager" in
+    atomic:apt-get) echo "libatomic1" ;;
+    atomic:pacman)  echo "gcc-libs" ;;
+    atomic:*)       echo "libatomic" ;;
+    stdcxx:apt-get) echo "libstdc++6" ;;
+    stdcxx:pacman)  echo "gcc-libs" ;;
+    stdcxx:zypper)  echo "libstdc++6" ;;
+    stdcxx:*)       echo "libstdc++" ;;
+    gcc:apt-get)    echo "libgcc-s1" ;;
+    gcc:pacman)     echo "gcc-libs" ;;
+    gcc:zypper)     echo "libgcc_s1" ;;
+    gcc:*)          echo "libgcc" ;;
+    libc:apt-get)   echo "libc6" ;;
+    libc:apk)       echo "musl" ;;
+    libc:*)         echo "glibc" ;;
+    *) return 1 ;;
+  esac
+}
+
+# ensure_runtime_libs installs packages supplying shared libraries the given
+# binary is missing. Returns nonzero with an actionable message when the
+# dependency cannot be resolved on this host.
+ensure_runtime_libs() {
+  bin="$1"
+  command -v ldd >/dev/null 2>&1 || return 0
+  missing="$(ldd "$bin" 2>/dev/null | awk '/not found/ {print $1}' | sort -u)"
+  [ -n "$missing" ] || return 0
+  manager="$(detect_pkg_manager || true)"
+  packages=""
+  for lib in $missing; do
+    pkg=""
+    if [ -n "$manager" ]; then
+      pkg="$(lib_package_name "$lib" "$manager" || true)"
+    fi
+    if [ -z "$pkg" ]; then
+      echo "Missing shared library for $bin: $lib" >&2
+      echo "Install the package providing $lib with your package manager and re-run." >&2
+      return 1
+    fi
+    case " $packages " in
+      *" $pkg "*) ;;
+      *) packages="$packages $pkg" ;;
+    esac
+  done
+  if [ -z "$manager" ]; then
+    echo "Missing shared libraries for $bin: $missing" >&2
+    echo "No supported package manager found; install the packages providing them and re-run." >&2
+    return 1
+  fi
+  echo "Installing toolchain runtime libraries:$packages"
+  # shellcheck disable=SC2086 # package list is intentionally word-split
+  pkg_install "$manager" $packages
+}
+# END_DEPS_HELPERS
+
 if ! go_ok; then
-  if [ "$go_arch" != "amd64" ]; then
-    echo "Go ${CI_GO_VERSION}+ is required to build from ${BRANCH}; install it or use amd64 (pinned bootstrap checksums cover amd64)." >&2
+  go_sha256=""
+  case "$go_arch" in
+    amd64) go_sha256="$CI_GO_TARBALL_SHA256" ;;
+    arm64) go_sha256="${CI_GO_TARBALL_SHA256_ARM64:-}" ;;
+  esac
+  if [ -z "$go_sha256" ]; then
+    echo "Go ${CI_GO_VERSION}+ is required to build from ${BRANCH}; install it first (no pinned bootstrap checksum for linux-${go_arch})." >&2
     exit 1
   fi
   echo "Installing Go ${CI_GO_VERSION}..."
   curl -fsSLo "$work/go.tgz" "https://go.dev/dl/go${CI_GO_VERSION}.linux-${go_arch}.tar.gz"
-  printf '%s  %s\n' "$CI_GO_TARBALL_SHA256" "$work/go.tgz" | sha256sum -c - >/dev/null
+  printf '%s  %s\n' "$go_sha256" "$work/go.tgz" | sha256sum -c - >/dev/null
   tar -xzf "$work/go.tgz" -C "$work"
   export PATH="$work/go/bin:$PATH"
   hash -r 2>/dev/null || true
@@ -190,8 +305,13 @@ if ! go_ok; then
 fi
 
 if ! node_ok; then
-  if [ "$node_arch" != "x64" ]; then
-    echo "Node.js ${CI_NODE_VERSION}+ is required to build the Panel; install it or use amd64 (pinned bootstrap checksums cover x64)." >&2
+  node_sha256=""
+  case "$node_arch" in
+    x64)   node_sha256="$CI_NODE_TARBALL_SHA256" ;;
+    arm64) node_sha256="${CI_NODE_TARBALL_SHA256_ARM64:-}" ;;
+  esac
+  if [ -z "$node_sha256" ]; then
+    echo "Node.js ${CI_NODE_VERSION}+ is required to build the Panel; install it first (no pinned bootstrap checksum for linux-${node_arch})." >&2
     exit 1
   fi
   command -v xz >/dev/null 2>&1 || {
@@ -200,8 +320,11 @@ if ! node_ok; then
   }
   echo "Installing Node.js ${CI_NODE_VERSION}..."
   node_suffix=""
-  node_sha256="$CI_NODE_TARBALL_SHA256"
   if [ -e /lib/ld-musl-x86_64.so.1 ] || [ -e /lib/ld-musl-aarch64.so.1 ]; then
+    if [ "$node_arch" != "x64" ]; then
+      echo "musl libc on ${node_arch}: there is no official Node.js musl build for this architecture; install Node.js ${CI_NODE_VERSION}+ manually and re-run." >&2
+      exit 1
+    fi
     node_suffix="-musl"
     node_sha256="${CI_NODE_MUSL_TARBALL_SHA256:-}"
     if [ -z "$node_sha256" ]; then
@@ -231,6 +354,13 @@ if ! node_ok; then
   PATH="$node_bindir:$PATH"
   export PATH
   hash -r 2>/dev/null || true
+  # Provision OS runtime libraries (libatomic/libstdc++/...) the pinned build
+  # links against before launching it (audit #294).
+  if ! ensure_runtime_libs "$node_bin"; then
+    diagnose_node "$node_bin"
+    echo "Bootstrapped Node.js is not usable" >&2
+    exit 1
+  fi
   if ! node_ok "$node_bin"; then
     diagnose_node "$node_bin"
     echo "Bootstrapped Node.js is not usable" >&2
@@ -239,8 +369,29 @@ if ! node_ok; then
 fi
 
 # BEGIN_PNPM_BOOTSTRAP
+# A leftover pnpm shim can exist on PATH while its interpreter is gone
+# (audit #301): `command -v` alone accepts it and the first real invocation
+# fails. Reuse an existing pnpm only when it actually executes and reports the
+# pinned major; otherwise prepare the pinned pnpm in this installer's private
+# location and put it first on PATH without touching the user's shim.
+pnpm_ok() {
+  command -v pnpm >/dev/null 2>&1 || return 1
+  pnpm_bin="$(command -v pnpm)"
+  [ -n "$pnpm_bin" ] && [ -x "$pnpm_bin" ] || return 1
+  if command -v timeout >/dev/null 2>&1; then
+    ver="$(timeout 20 "$pnpm_bin" --version 2>/dev/null || true)"
+  else
+    ver="$("$pnpm_bin" --version 2>/dev/null || true)"
+  fi
+  [ -n "$ver" ] || return 1
+  case "$ver" in
+    "${CI_PNPM_VERSION%%.*}".*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 ensure_pnpm() {
-  if command -v pnpm >/dev/null 2>&1; then
+  if pnpm_ok; then
     return 0
   fi
   if command -v corepack >/dev/null 2>&1; then
@@ -254,13 +405,13 @@ ensure_pnpm() {
       corepack prepare "pnpm@${CI_PNPM_VERSION}" --activate
     fi
   fi
-  if ! command -v pnpm >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+  if ! pnpm_ok && command -v npm >/dev/null 2>&1; then
     npm install -g --prefix "$work/pnpm-prefix" "pnpm@${CI_PNPM_VERSION}"
     PATH="$work/pnpm-prefix/bin:$PATH"
     export PATH
     hash -r 2>/dev/null || true
   fi
-  if ! command -v pnpm >/dev/null 2>&1; then
+  if ! pnpm_ok; then
     echo "pnpm ${CI_PNPM_VERSION} is required (enable corepack or install npm/pnpm)" >&2
     exit 1
   fi

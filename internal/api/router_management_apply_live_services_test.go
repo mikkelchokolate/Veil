@@ -391,17 +391,17 @@ func TestManagementApplyServicesStopsOnReloadFailure(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 	// The forward Caddy load succeeds, the following Hysteria2 restart fails,
-	// and rollback then fails to restore the previous Caddy service. Filesystem
-	// restoration alone is not a complete rollback, so the result stays
-	// ambiguous/recovery-pending.
+	// and rollback then fails to stop the Caddy unit whose just-created config
+	// the restore deleted (audit #307: a removed config's unit must be
+	// stopped+disabled, never restarted). Filesystem restoration alone is not
+	// a complete rollback, so the result stays ambiguous/recovery-pending.
 	if response.ServicesApplied || response.RolledBack || !response.Ambiguous || len(response.ServiceActions) != 3 || len(response.RollbackActions) != 1 {
 		t.Fatalf("expected failed service action and incomplete Caddy rollback: response=%+v calls=%+v", response, serviceCalls)
 	}
 	wantCalls := [][]string{
 		{"systemctl", "enable", unitCaddy},
 		{"systemctl", "restart", "veil-hysteria2@hysteria2.service"},
-		{"systemctl", "is-active", "veil-caddy.service"},
-		{"systemctl", "start", "veil-caddy.service"},
+		{"systemctl", "stop", "veil-caddy.service"},
 	}
 	if !reflect.DeepEqual(serviceCalls, wantCalls) {
 		t.Fatalf("unexpected forward/rollback service calls: got=%+v want=%+v", serviceCalls, wantCalls)
