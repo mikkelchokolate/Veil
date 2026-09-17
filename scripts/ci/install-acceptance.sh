@@ -166,7 +166,8 @@ grep -q '"status"' /tmp/ia-health.json || ci_die "panel /healthz payload unexpec
 ci_step "first-inbound acceptance via the management API"
 TOKEN="$(${SUDO} grep '^VEIL_API_TOKEN=' /etc/veil/veil.env | cut -d= -f2- | tr -d '[:space:]')"
 [ -n "${TOKEN}" ] || ci_die "VEIL_API_TOKEN missing from /etc/veil/veil.env"
-API="https://127.0.0.1:${PANEL_PORT}${BASE_PATH}"
+# VEIL_WEB_BASE_PATH already carries leading and trailing slashes.
+API="https://127.0.0.1:${PANEL_PORT}${BASE_PATH%/}"
 
 api_code() { # method path [body] -> http code; response body in /tmp/ia-resp.json
   local method="$1" path="$2" body="${3:-}"
