@@ -153,7 +153,7 @@ grep -q '"subState": "running"' "${CI_ARTIFACT_DIR}/veil-status.log" \
 # The health contract lives under the secret web base path and needs the API token.
 TOKEN="$(${SUDO} grep '^VEIL_API_TOKEN=' /etc/veil/veil.env | cut -d= -f2- | tr -d '[:space:]')"
 BASE_PATH="$(${SUDO} grep '^VEIL_WEB_BASE_PATH=' /etc/veil/veil.env | cut -d= -f2- | tr -d '[:space:]')"
-health_code="$(curl -sk -o /tmp/ia-health.json -w '%{http_code}' -H "X-Veil-Token: ${TOKEN}" "https://127.0.0.1:${PANEL_PORT}${BASE_PATH}healthz")"
+health_code="$(curl --http1.1 -sk --max-time 60 -o /tmp/ia-health.json -w '%{http_code}' -H "X-Veil-Token: ${TOKEN}" "https://127.0.0.1:${PANEL_PORT}${BASE_PATH}healthz")"
 [ "${health_code}" = "200" ] || ci_die "panel /healthz returned HTTP ${health_code}"
 grep -q '"status"' /tmp/ia-health.json || ci_die "panel /healthz payload unexpected: $(cat /tmp/ia-health.json)"
 
@@ -172,11 +172,11 @@ API="https://127.0.0.1:${PANEL_PORT}${BASE_PATH%/}"
 api_code() { # method path [body] -> http code; response body in /tmp/ia-resp.json
   local method="$1" path="$2" body="${3:-}"
   if [ -n "${body}" ]; then
-    curl -sk -o /tmp/ia-resp.json -w '%{http_code}' -X "${method}" \
+    curl --http1.1 -sk --max-time 60 -o /tmp/ia-resp.json -w '%{http_code}' -X "${method}" \
       -H "X-Veil-Token: ${TOKEN}" -H 'Content-Type: application/json' \
       -d "${body}" "${API}${path}"
   else
-    curl -sk -o /tmp/ia-resp.json -w '%{http_code}' -X "${method}" \
+    curl --http1.1 -sk --max-time 60 -o /tmp/ia-resp.json -w '%{http_code}' -X "${method}" \
       -H "X-Veil-Token: ${TOKEN}" "${API}${path}"
   fi
 }
@@ -203,7 +203,7 @@ create_inbound ci-olc '{"name":"ci-olc","protocol":"olcrtc","transport":"udp","p
 # Durable idempotency contract: replaying the same mutation with the same
 # Idempotency-Key must return the original response, not a duplicate-name 409.
 idem_code() { # body
-  curl -sk -o /tmp/ia-resp.json -w '%{http_code}' -X POST \
+  curl --http1.1 -sk --max-time 60 -o /tmp/ia-resp.json -w '%{http_code}' -X POST \
     -H "X-Veil-Token: ${TOKEN}" -H 'Content-Type: application/json' \
     -H "Idempotency-Key: ci-acceptance-mieru-idem" -d "$1" "${API}/api/inbounds"
 }
@@ -261,7 +261,7 @@ pebble_mod="$(go env GOMODCACHE)/github.com/letsencrypt/pebble/v2@${CI_PEBBLE_VE
   > "${CI_ARTIFACT_DIR}/pebble.log" 2>&1 &)
 pebble_up=1
 for _ in $(seq 1 60); do
-  if curl -sk https://127.0.0.1:14000/dir | grep -q newOrder; then
+  if curl --http1.1 -sk --max-time 60 https://127.0.0.1:14000/dir | grep -q newOrder; then
     pebble_up=0
     break
   fi
