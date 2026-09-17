@@ -37,6 +37,19 @@ fi
 
 if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
 
+# Failure forensics: capture the panel journal and unit states whenever the
+# job dies mid-flight - the interesting failures are API/apply hangs.
+collect_diagnostics() {
+  rc=$?
+  [ -d "${CI_ARTIFACT_DIR}" ] || return "${rc}"
+  ${SUDO:-} journalctl --no-pager -n 400 -u veil.service -u veil-helper.service -u veil-helper.socket > "${CI_ARTIFACT_DIR}/veil-units-journal.txt" 2>&1 || true
+  ${SUDO:-} journalctl --no-pager -n 200 -u "veil-hysteria2@*" -u "veil-mieru.service" -u "veil-olcrtc@*" > "${CI_ARTIFACT_DIR}/protocol-units-journal.txt" 2>&1 || true
+  systemctl list-units --all "veil*" --no-pager > "${CI_ARTIFACT_DIR}/veil-units.txt" 2>&1 || true
+  ps aux > "${CI_ARTIFACT_DIR}/processes.txt" 2>&1 || true
+  return "${rc}"
+}
+trap collect_diagnostics EXIT
+
 PANEL_PORT=2096
 INSTALL_FLAGS=(--yes --panel-access direct --le-ip-cert=false --public-ip 127.0.0.1 --panel-port "${PANEL_PORT}")
 
