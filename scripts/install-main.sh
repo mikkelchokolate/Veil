@@ -375,14 +375,9 @@ fi
 # pinned major; otherwise prepare the pinned pnpm in this installer's private
 # location and put it first on PATH without touching the user's shim.
 pnpm_ok() {
-  pnpm_bin="${1:-}"
-  if [ -n "$pnpm_bin" ]; then
-    [ -x "$pnpm_bin" ] || return 1
-  else
-    command -v pnpm >/dev/null 2>&1 || return 1
-    pnpm_bin="$(command -v pnpm)"
-    [ -n "$pnpm_bin" ] || return 1
-  fi
+  command -v pnpm >/dev/null 2>&1 || return 1
+  pnpm_bin="$(command -v pnpm)"
+  [ -n "$pnpm_bin" ] && [ -x "$pnpm_bin" ] || return 1
   if command -v timeout >/dev/null 2>&1; then
     ver="$(timeout 20 "$pnpm_bin" --version 2>/dev/null || true)"
   else
