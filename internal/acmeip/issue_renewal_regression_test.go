@@ -14,18 +14,22 @@ func TestRenewReloadCmdRepairsOwnershipBeforeRestart(t *testing.T) {
 
 	chmodCert := strings.Index(cmd, "chmod 0644 '/etc/veil/panel/tls.crt'")
 	chmodKey := strings.Index(cmd, "chmod 0640 '/etc/veil/panel/tls.key'")
-	chgrp := strings.Index(cmd, "chgrp veil '/etc/veil/panel/tls.crt' '/etc/veil/panel/tls.key'")
+	chgrp := strings.Index(cmd, "chgrp veil-proxy '/etc/veil/panel/tls.crt' '/etc/veil/panel/tls.key'")
+	chgrpFallback := strings.Index(cmd, "chgrp veil '/etc/veil/panel/tls.crt' '/etc/veil/panel/tls.key'")
 	restart := strings.Index(cmd, "systemctl restart veil")
-	for name, idx := range map[string]int{"chmod cert": chmodCert, "chmod key": chmodKey, "chgrp": chgrp, "restart": restart} {
+	for name, idx := range map[string]int{"chmod cert": chmodCert, "chmod key": chmodKey, "chgrp": chgrp, "chgrp fallback": chgrpFallback, "restart": restart} {
 		if idx < 0 {
 			t.Fatalf("reloadcmd missing %s step: %q", name, cmd)
 		}
 	}
-	if !(chmodCert < restart && chmodKey < restart && chgrp < restart) {
+	if !(chmodCert < restart && chmodKey < restart && chgrp < restart && chgrpFallback < restart) {
 		t.Fatalf("permission repair must precede the restart: %q", cmd)
 	}
 	if !(chmodCert < chgrp && chmodKey < chgrp) {
 		t.Fatalf("chgrp must follow chmod so the group gets the repaired modes: %q", cmd)
+	}
+	if !(chgrp < chgrpFallback) {
+		t.Fatalf("veil-proxy chgrp must be attempted before the veil fallback: %q", cmd)
 	}
 }
 
