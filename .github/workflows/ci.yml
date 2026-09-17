@@ -277,6 +277,42 @@ jobs:
           path: .artifacts/ci/
           if-no-files-found: ignore
 
+  install-acceptance:
+    needs: frontend
+    env:
+      CI_FRONTEND_DIST_ARTIFACT_DIR: .artifacts/ci/frontend-dist
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download source-keyed frontend dist
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ci-frontend-dist-${{ github.sha }}
+          path: .artifacts/ci/frontend-dist
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          echo "go_version=${CI_GO_VERSION}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ steps.versions.outputs.go_version }}
+      - name: Unstick Ubuntu apt mirrors
+        run: bash scripts/ci/apt-bootstrap.sh
+      - name: install-acceptance job (real veil install on live systemd)
+        run: bash scripts/ci/install-acceptance.sh
+      - name: Upload CI artifacts (incl. install log and unit journal)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-install-acceptance-${{ matrix.arch }}
+          path: .artifacts/ci/
+          if-no-files-found: ignore
+
   browser-e2e:
     needs: frontend
     env:

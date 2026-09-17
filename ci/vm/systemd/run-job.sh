@@ -13,7 +13,7 @@ rc=0
 job="$(tr -d '\r\n' < "${exchange}/job" 2>/dev/null || true)"
 phase="$(tr -d '\r\n' < "${exchange}/full-phase" 2>/dev/null || true)"
 source_sha="$(tr -d '\r\n' < "${exchange}/source-sha" 2>/dev/null || true)"
-case "${job}" in privilege-boundary|e2e|full) ;; *) echo "invalid system job: ${job}" >&2; rc=2 ;; esac
+case "${job}" in privilege-boundary|e2e|full|install-acceptance) ;; *) echo "invalid system job: ${job}" >&2; rc=2 ;; esac
 
 if [ "${rc}" -eq 0 ]; then
   for _ in $(seq 1 60); do

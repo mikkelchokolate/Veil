@@ -136,7 +136,12 @@ ubuntu:24.04@sha256:<pinned>
 
 - `base` runs: frontend, test, lint, stress.
 - `browser` runs: browser-e2e.
-- `system` runs in a booted systemd smolvm guest: privilege-boundary and e2e.
+- `system` runs in a booted systemd smolvm guest: privilege-boundary, e2e, and
+  install-acceptance (real `veil install` + unit/panel/firewall assertions,
+  first-inbound API coverage per protocol, certificate issuance against a
+  controlled pebble ACME CA, and a guest reboot → post-reboot persistence
+  phase when the smolvm backend stages the run). On GitHub Actions the same
+  job runs on ubuntu-24.04 amd64 and arm64 hosted runners with live systemd.
 - `package-smoke` and `image-build` require an OCI daemon. They run through an
   explicit host Docker backend even when `CI_BACKEND=smolvm`; their logs identify
   that boundary and never claim those jobs ran inside smolvm.

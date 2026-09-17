@@ -1013,3 +1013,52 @@ func TestEnsureCertDirsKeyDirMkdirAllFails(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestIssueIPCertCustomCAServerSkipsLEProfileAndAddsInsecure(t *testing.T) {
+	sys := newFakeSystem()
+	sys.setAcmeInstalled()
+	sys.lookPaths["socat"] = "/usr/bin/socat"
+	sys.portFree[5002] = true
+
+	caURL := "https://127.0.0.1:14000/dir"
+	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
+	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", caURL)] = commandResult{out: "OK"}
+	// Controlled CAs get no --certificate-profile/--days overrides, and the
+	// insecure flag follows the issue call.
+	sys.commands[sys.key(acmeSh, "--issue", "-d", "1.2.3.4", "--standalone", "--server", caURL, "--httpport", "5002", "--force", "--insecure")] = commandResult{out: "Cert issued"}
+	sys.commands[sys.key(acmeSh, "--installcert", "-d", "1.2.3.4", "--key-file", "/etc/veil/panel/tls.key", "--fullchain-file", "/etc/veil/panel/tls.crt", "--reloadcmd", renewReloadCmd("/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key"))] = commandResult{out: "Installed"}
+
+	cert, err := IssueIPCert(context.Background(), IssueOptions{
+		PublicIPv4: "1.2.3.4",
+		HTTPPort:   5002,
+		CAServer:   caURL,
+		Insecure:   true,
+		System:     sys,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cert.CertPath != "/etc/veil/panel/tls.crt" {
+		t.Fatalf("unexpected cert path: %+v", cert)
+	}
+}
+
+func TestIssueIPCertCustomCAServerWithoutInsecure(t *testing.T) {
+	sys := newFakeSystem()
+	sys.setAcmeInstalled()
+	sys.lookPaths["socat"] = "/usr/bin/socat"
+
+	caURL := "https://acme-staging.example.test/dir"
+	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
+	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", caURL)] = commandResult{out: "OK"}
+	sys.commands[sys.key(acmeSh, "--issue", "-d", "1.2.3.4", "--standalone", "--server", caURL, "--httpport", "80", "--force")] = commandResult{out: "Cert issued"}
+	sys.commands[sys.key(acmeSh, "--installcert", "-d", "1.2.3.4", "--key-file", "/etc/veil/panel/tls.key", "--fullchain-file", "/etc/veil/panel/tls.crt", "--reloadcmd", renewReloadCmd("/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key"))] = commandResult{out: "Installed"}
+
+	if _, err := IssueIPCert(context.Background(), IssueOptions{
+		PublicIPv4: "1.2.3.4",
+		CAServer:   caURL,
+		System:     sys,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

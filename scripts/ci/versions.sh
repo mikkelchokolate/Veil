@@ -82,6 +82,11 @@ CI_SINGBOX_SHA256="2375de6999f4f56ab46b4fc5ddf26a6aba1d3e61a0f4e7ddec2f4690457d5
 CI_CADDY_VERSION="v2.11.4"
 CI_FORWARDPROXY_VERSION="d62c80d3dd2c706b6b87579844d2397bddd18317"
 
+# Controlled ACME CA (pebble) for the install-acceptance issuance leg — real
+# certificate issuance without depending on the public Let's Encrypt
+# availability or rate limits.
+CI_PEBBLE_VERSION="v2.10.1"
+
 # --- Local VM runtime ---------------------------------------------------------
 # Minimum smolvm version required for the local VM backend.
 CI_SMOLVM_MIN_VERSION="1.6.13"

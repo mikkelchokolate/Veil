@@ -24,6 +24,7 @@ type ruRecommendedInstallOptions struct {
 	Domain         string
 	Email          string
 	DryRun         bool
+	CheckOnly      bool
 	Yes            bool
 	EtcDir         string
 	VarDir         string
@@ -62,6 +63,10 @@ func validateRURecommendedInstallRequirements(opts ruRecommendedInstallOptions) 
 	}
 	return nil
 }
+
+// Preflight seams (audit #304): tests stub collection and provisioning.
+var installPreflightCollectFunc = collectInstallPreflight
+var installPreflightProvisionFunc = provisionInstallPreflight
 
 func buildRURecommendedInstallFromOptions(opts ruRecommendedInstallOptions) (installer.RURecommendedInstall, error) {
 	return installer.BuildRURecommendedInstall(installer.RURecommendedInstallInput{
@@ -133,6 +138,17 @@ func (w RURecommendedInstallWorkflow) Run() error {
 		fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("-", 12))
 		fmt.Fprintln(cmd.OutOrStdout(), planSummary)
 	}
+	// Single platform-aware prerequisite inventory (audit #304): the report is
+	// collected read-only, printed for the operator, and every required gap
+	// must be provisionable before any download or state write happens.
+	preflight := installPreflightCollectFunc(cmd.Context(), built, opts)
+	fmt.Fprint(cmd.OutOrStdout(), preflight.String())
+	if opts.CheckOnly {
+		if !preflight.ready() {
+			return fmt.Errorf("host does not satisfy the install prerequisites; see remedies above")
+		}
+		return nil
+	}
 	if opts.DryRun {
 		return nil
 	}
@@ -140,6 +156,12 @@ func (w RURecommendedInstallWorkflow) Run() error {
 		if err := installflow.ConfirmPlan(cmd.InOrStdin(), cmd.OutOrStdout(), opts.Interactive); err != nil {
 			return err
 		}
+	}
+	if !preflight.ready() {
+		return fmt.Errorf("host does not satisfy the install prerequisites; see remedies in the capability report above")
+	}
+	if err := installPreflightProvisionFunc(cmd.Context(), preflight); err != nil {
+		return err
 	}
 	// Firewall dependency phase (audit #295): direct/caddy installs produce a
 	// ufw plan, so provision ufw — or refuse next to a competing active
