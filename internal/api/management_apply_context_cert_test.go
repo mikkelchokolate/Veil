@@ -39,7 +39,8 @@ func TestReloadPromotedServicesSyncsCaddyCertBeforeHysteria2(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(hyPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(hyPath, []byte("config"), 0o600); err != nil {
+	// The rendered config points tls.cert at the Caddy-managed per-domain cert.
+	if err := os.WriteFile(hyPath, []byte("listen: :443\ntls:\n  cert: /etc/veil/certs/hy2.example.com.crt\n  key: /etc/veil/certs/hy2.example.com.key\n"), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(caddyPath), 0o755); err != nil {
@@ -97,7 +98,9 @@ func TestReloadPromotedServicesSkipsCertSyncWithoutHysteria2Domain(t *testing.T)
 	if err := os.MkdirAll(filepath.Dir(hyPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(hyPath, []byte("config"), 0o600); err != nil {
+	// Without a per-inbound domain the renderer serves the panel certificate,
+	// which needs no Caddy sync.
+	if err := os.WriteFile(hyPath, []byte("listen: :443\ntls:\n  cert: /etc/veil/panel/tls.crt\n  key: /etc/veil/panel/tls.key\n"), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
