@@ -146,7 +146,14 @@ fi
 
 ci_step "panel readiness through the product status probe"
 ci_run veil-status ${SUDO} /usr/local/bin/veil status --json
-grep -Eq '"healthy"|"status"' "${CI_ARTIFACT_DIR}/veil-status.log" || ci_die "veil status output unexpected"
+grep -q '"activeState": "active"' "${CI_ARTIFACT_DIR}/veil-status.log" \
+  || ci_die "veil status does not report an active service: $(cat "${CI_ARTIFACT_DIR}/veil-status.log")"
+grep -q '"subState": "running"' "${CI_ARTIFACT_DIR}/veil-status.log" \
+  || ci_die "veil status does not report a running service: $(cat "${CI_ARTIFACT_DIR}/veil-status.log")"
+BASE_PATH="$(${SUDO} grep '^VEIL_WEB_BASE_PATH=' /etc/veil/veil.env | cut -d= -f2- | tr -d '[:space:]')"
+health_code="$(curl -sk -o /tmp/ia-health.json -w '%{http_code}' "https://127.0.0.1:${PANEL_PORT}${BASE_PATH}healthz")"
+[ "${health_code}" = "200" ] || ci_die "panel /healthz returned HTTP ${health_code}"
+grep -q '"status"' /tmp/ia-health.json || ci_die "panel /healthz payload unexpected: $(cat /tmp/ia-health.json)"
 
 # --- 4. First-inbound acceptance per protocol (audit #313) ---------------------
 # Create the first inbound of every protocol feasible on a direct install
