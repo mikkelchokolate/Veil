@@ -23,10 +23,15 @@ func TestPromotionRollbackReappliesRuntimeArtifactOwnership(t *testing.T) {
 
 	effectiveUID = func() int { return 0 }
 	lookupUser = func(name string) (*user.User, error) {
-		if name != "veil" {
-			t.Fatalf("lookup user = %q, want veil", name)
+		switch name {
+		case "veil":
+			return &user.User{Uid: "123", Gid: "456"}, nil
+		case "veil-proxy":
+			return &user.User{Uid: "124", Gid: "457"}, nil
+		default:
+			t.Fatalf("lookup user = %q, want veil or veil-proxy", name)
+			return nil, nil
 		}
-		return &user.User{Uid: "123", Gid: "456"}, nil
 	}
 
 	root := t.TempDir()
@@ -71,8 +76,8 @@ func TestPromotionRollbackReappliesRuntimeArtifactOwnership(t *testing.T) {
 	assertFileContent(t, caddyDst, `{"apps":{"old":true}}`)
 	assertFileContent(t, protocol2Dst, "old-core")
 
-	if !hasChown(afterFail, protocol1Dst, 123, 456) {
-		t.Fatalf("restored protocol artifact was not chowned veil:veil: %+v", afterFail)
+	if !hasChown(afterFail, protocol1Dst, 0, 457) {
+		t.Fatalf("restored protocol artifact was not chowned root:veil-proxy: %+v", afterFail)
 	}
 	if !hasChown(afterFail, caddyDst, 0, 456) {
 		t.Fatalf("restored caddy artifact was not chowned root:veil: %+v", afterFail)
@@ -93,10 +98,15 @@ func TestPromotionRecoveryReappliesRuntimeArtifactOwnership(t *testing.T) {
 
 	effectiveUID = func() int { return 0 }
 	lookupUser = func(name string) (*user.User, error) {
-		if name != "veil" {
-			t.Fatalf("lookup user = %q, want veil", name)
+		switch name {
+		case "veil":
+			return &user.User{Uid: "123", Gid: "456"}, nil
+		case "veil-proxy":
+			return &user.User{Uid: "124", Gid: "457"}, nil
+		default:
+			t.Fatalf("lookup user = %q, want veil or veil-proxy", name)
+			return nil, nil
 		}
-		return &user.User{Uid: "123", Gid: "456"}, nil
 	}
 
 	root := t.TempDir()
@@ -148,8 +158,8 @@ func TestPromotionRecoveryReappliesRuntimeArtifactOwnership(t *testing.T) {
 	}
 	assertFileContent(t, protocolDst, "old-edge")
 	assertFileContent(t, caddyDst, `{"apps":{"old":true}}`)
-	if !hasChown(chowns, protocolDst, 123, 456) {
-		t.Fatalf("recovered protocol artifact was not chowned veil:veil: %+v", chowns)
+	if !hasChown(chowns, protocolDst, 0, 457) {
+		t.Fatalf("recovered protocol artifact was not chowned root:veil-proxy: %+v", chowns)
 	}
 	if !hasChown(chowns, caddyDst, 0, 456) {
 		t.Fatalf("recovered caddy artifact was not chowned root:veil: %+v", chowns)
