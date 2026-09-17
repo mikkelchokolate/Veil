@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -132,15 +133,31 @@ func renderACMEIssuer(email, mode string) (map[string]any, error) {
 	default:
 		return nil, fmt.Errorf("acmeChallengeMode %q is not supported; use http-01 or tls-alpn-01", mode)
 	}
-	return map[string]any{
+	issuer := map[string]any{
 		"module": "acme",
 		"email":  email,
 		"challenges": map[string]any{
 			"http":     map[string]any{"disabled": mode != "http-01"},
 			"tls-alpn": map[string]any{"disabled": mode != "tls-alpn-01"},
 		},
-	}, nil
+	}
+	// Controlled CA plumbing (install-acceptance pebble leg, staging/private
+	// CAs): VEIL_ACME_CA_URL points the issuer at a non-Let's-Encrypt
+	// directory and VEIL_ACME_CA_ROOT makes Caddy trust that endpoint's
+	// self-signed TLS certificate. The values are persisted into veil.env at
+	// install so runtime re-renders keep the same CA (audit #304).
+	if caURL := acmeIssuerCAURL(); caURL != "" {
+		issuer["ca"] = caURL
+	}
+	if caRoot := acmeIssuerCARoot(); caRoot != "" {
+		issuer["trusted_roots_pem_files"] = []string{caRoot}
+	}
+	return issuer, nil
 }
+
+// acmeIssuerCAURL/acmeIssuerCARoot are seams so tests can pin the env contract.
+var acmeIssuerCAURL = func() string { return strings.TrimSpace(os.Getenv("VEIL_ACME_CA_URL")) }
+var acmeIssuerCARoot = func() string { return strings.TrimSpace(os.Getenv("VEIL_ACME_CA_ROOT")) }
 
 func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, caps caddycapabilities.CaddyCapabilities) (map[string]any, error) {
 	server := map[string]any{

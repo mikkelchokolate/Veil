@@ -43,7 +43,7 @@ collect_diagnostics() {
   rc=$?
   [ -d "${CI_ARTIFACT_DIR}" ] || return "${rc}"
   ${SUDO:-} journalctl --no-pager -n 400 -u veil.service -u veil-helper.service -u veil-helper.socket > "${CI_ARTIFACT_DIR}/veil-units-journal.txt" 2>&1 || true
-  ${SUDO:-} journalctl --no-pager -n 200 -u "veil-hysteria2@*" -u "veil-mieru.service" -u "veil-olcrtc@*" > "${CI_ARTIFACT_DIR}/protocol-units-journal.txt" 2>&1 || true
+  ${SUDO:-} journalctl --no-pager -n 200 -u "veil-hysteria2@*" -u "veil-mieru.service" -u "veil-olcrtc@*" -u veil-caddy.service > "${CI_ARTIFACT_DIR}/protocol-units-journal.txt" 2>&1 || true
   systemctl list-units --all "veil*" --no-pager > "${CI_ARTIFACT_DIR}/veil-units.txt" 2>&1 || true
   ps aux > "${CI_ARTIFACT_DIR}/processes.txt" 2>&1 || true
   return "${rc}"
@@ -302,8 +302,11 @@ if [ ! -x "${pebble_bin}" ]; then
   GOBIN="$(go env GOPATH)/bin" go install "github.com/letsencrypt/pebble/v2/cmd/pebble@${CI_PEBBLE_VERSION}"
 fi
 pebble_mod="$(go env GOMODCACHE)/github.com/letsencrypt/pebble/v2@${CI_PEBBLE_VERSION}"
-(cd "${pebble_mod}" && PEBBLE_VA_NOSLEEP=1 "${pebble_bin}" -config test/config/pebble-config.json \
-  > "${CI_ARTIFACT_DIR}/pebble.log" 2>&1 &)
+# Patch tlsPort to 443 so the pebble VA validates tls-alpn-01 against Caddy's
+# real public listener in the caddy-mode leg below (the stock test config
+# targets 5001, which nothing here listens on).
+sed 's/"tlsPort": 5001/"tlsPort": 443/' "${pebble_mod}/test/config/pebble-config.json"   > "${CI_ARTIFACT_DIR}/pebble-config.json"
+(cd "${pebble_mod}" && PEBBLE_VA_NOSLEEP=1 "${pebble_bin}" -config "${CI_ARTIFACT_DIR}/pebble-config.json"   > "${CI_ARTIFACT_DIR}/pebble.log" 2>&1 &)
 pebble_up=1
 for _ in $(seq 1 60); do
   if curl --http1.1 -sk --max-time 60 https://127.0.0.1:14000/dir | grep -q newOrder; then
@@ -338,6 +341,38 @@ if [ -n "${IA_PHASE_MARKER}" ]; then
   sleep 30
   ci_die "guest reboot did not take effect"
 fi
+
+# --- 8. Caddy panel proxy leg (audit #304: verify the public route) ----------
+# The legs above install with --panel-access direct; this leg proves the caddy
+# reverse-proxy path on the same host: a real caddy-mode install, real ACME
+# issuance for the panel domain via caddy's tls-alpn-01 against the pebble CA,
+# and an HTTPS request through the public :443 route to the panel — the
+# failure mode where install reports success but nothing serves the URL.
+ci_step "caddy-mode install: real ACME issuance + public route"
+CADDY_CI_DOMAIN="veil-ci.test"
+# Both the pebble VA (its system resolver honours /etc/hosts) and the local
+# route probe must resolve the panel domain to this host.
+grep -q " ${CADDY_CI_DOMAIN}" /etc/hosts || echo "127.0.0.1 ${CADDY_CI_DOMAIN}" | ${SUDO} tee -a /etc/hosts >/dev/null
+# Trust anchor for Caddy's ACME client; readable by the veil user through the
+# unit's ReadOnlyPaths=/etc/veil.
+${SUDO} install -m 0644 "${pebble_mod}/test/certs/pebble.minica.pem" /etc/veil/acme-root.pem
+ci_run veil-install-caddy ${SUDO} env   VEIL_ACME_CA_URL="https://127.0.0.1:14000/dir" VEIL_ACME_CA_ROOT=/etc/veil/acme-root.pem   /usr/local/bin/veil install --yes --panel-access caddy --domain "${CADDY_CI_DOMAIN}" --email "ci@veil-ci.test"
+systemctl is-active --quiet veil-caddy.service || ci_die "veil-caddy.service is not active after caddy-mode install"
+systemctl is-enabled --quiet veil-caddy.service || ci_die "veil-caddy.service is not enabled"
+# tls-alpn-01 issuance completes on the first TLS handshake; poll the public
+# route until caddy serves a pebble-issued certificate and proxies the panel.
+# --cacert success proves the cert chain; any HTTP status other than the
+# caddy-generated fallbacks (000 connect failure, 404 route miss, 502 backend
+# down) proves the request reached the panel through the public route.
+caddy_route=1
+route_code=000
+for _ in $(seq 1 60); do
+  route_code="$(curl --http1.1 -sk --cacert /etc/veil/acme-root.pem     --resolve "${CADDY_CI_DOMAIN}:443:127.0.0.1" --max-time 15     -o /tmp/ia-caddy-route.out -w '%{http_code}' "https://${CADDY_CI_DOMAIN}${BASE_PATH}" 2>/dev/null || true)"
+  case "${route_code}" in 000|404|502) ;; *) caddy_route=0; break ;; esac
+  sleep 2
+done
+cp /tmp/ia-caddy-route.out "${CI_ARTIFACT_DIR}/caddy-route.out" 2>/dev/null || true
+[ "${caddy_route}" -eq 0 ] || ci_die "public caddy route https://${CADDY_CI_DOMAIN}${BASE_PATH} did not serve the panel (last HTTP ${route_code})"
 
 uninstall_leg
 

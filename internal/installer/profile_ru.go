@@ -30,6 +30,8 @@ type RURecommendedProfile struct {
 	WebBasePath       string
 	InstallPanelCaddy bool
 	CaddyJSON         string
+	ACMECAURL         string
+	ACMECARoot        string
 	MasqueradeURL     string
 	FallbackRoot      string
 }

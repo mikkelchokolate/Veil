@@ -32,6 +32,8 @@ type Input struct {
 	PanelTLSKeyPEM    string
 	InstallPanelCaddy bool
 	CaddyJSON         string
+	ACMECAURL         string
+	ACMECARoot        string
 }
 
 type File struct {
@@ -73,6 +75,15 @@ func (m ManagedMaterial) EnvContent() string {
 	}
 	if input.WebBasePath != "" && input.WebBasePath != "/" {
 		env.WriteString("VEIL_WEB_BASE_PATH=" + input.WebBasePath + "\n")
+	}
+	// Persist the controlled-CA configuration so veil.service (EnvironmentFile)
+	// keeps rendering Caddy issuers against the same ACME directory after
+	// install-time env is gone (audit #304 controlled-CA leg).
+	if input.ACMECAURL != "" {
+		env.WriteString("VEIL_ACME_CA_URL=" + input.ACMECAURL + "\n")
+	}
+	if input.ACMECARoot != "" {
+		env.WriteString("VEIL_ACME_CA_ROOT=" + input.ACMECARoot + "\n")
 	}
 	if paths := input.Paths; paths.EtcDir != "" {
 		env.WriteString("VEIL_ETC_DIR=" + filepath.ToSlash(paths.EtcDir) + "\n")

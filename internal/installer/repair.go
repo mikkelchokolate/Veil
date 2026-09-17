@@ -44,6 +44,8 @@ func desiredManagedFiles(profile RURecommendedProfile, paths ApplyPaths) ([]mana
 		PanelTLSKeyPEM:    profile.PanelTLSKeyPEM,
 		InstallPanelCaddy: profile.InstallPanelCaddy,
 		CaddyJSON:         profile.CaddyJSON,
+		ACMECAURL:         profile.ACMECAURL,
+		ACMECARoot:        profile.ACMECARoot,
 	}).Files()
 	if err != nil {
 		return nil, err
