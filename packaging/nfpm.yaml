@@ -79,7 +79,10 @@ overrides:
   deb:
     depends:
       - ca-certificates
+    recommends:
       # Veil manages the host firewall through ufw on direct/caddy installs.
+      # Recommends, not Depends: dpkg -i must still work on hosts that manage
+      # the firewall differently; the installer preflights ufw at runtime.
       - ufw
   rpm:
     depends:
