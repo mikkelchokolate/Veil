@@ -182,7 +182,7 @@ func TestGoLocalEnv(t *testing.T) {
 func TestGoBuildEnv(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin")
 	t.Setenv("GOPROXY", "https://proxy")
-	env := goBuildEnv("/usr/local/go/bin/go")
+	env := goBuildEnv(context.Background(), "/usr/local/go/bin/go")
 	m := map[string]string{}
 	for _, e := range env {
 		if i := strings.Index(e, "="); i > 0 {
@@ -212,7 +212,7 @@ func TestGoBuildEnvPreservesExisting(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin")
 	t.Setenv("GONOSUMDB", "example.com")
 	t.Setenv("GOPROXY", "https://proxy")
-	env := goBuildEnv("/usr/local/go/bin/go")
+	env := goBuildEnv(context.Background(), "/usr/local/go/bin/go")
 	m := map[string]string{}
 	for _, e := range env {
 		if i := strings.Index(e, "="); i > 0 {
@@ -235,7 +235,7 @@ func TestGoBuildEnvPreservesExisting(t *testing.T) {
 
 func TestGoBuildEnvHandlesWindowsPath(t *testing.T) {
 	t.Setenv("Path", "/usr/bin")
-	env := goBuildEnv("/usr/local/go/bin/go")
+	env := goBuildEnv(context.Background(), "/usr/local/go/bin/go")
 	hasPath := false
 	for _, e := range env {
 		if strings.HasPrefix(e, "Path=") || strings.HasPrefix(e, "PATH=") {
@@ -557,7 +557,7 @@ func TestGoBuildEnvAddsPathWhenMissing(t *testing.T) {
 	t.Setenv("Path", "")
 	os.Unsetenv("PATH")
 	os.Unsetenv("Path")
-	env := goBuildEnv("/usr/local/go/bin/go")
+	env := goBuildEnv(context.Background(), "/usr/local/go/bin/go")
 	found := false
 	for _, e := range env {
 		if e == "PATH=:/usr/local/go/bin" {
@@ -709,20 +709,14 @@ func TestGoToolchainEnsureDirMkdirError(t *testing.T) {
 	oldSHA := defaultGoSHA256[key]
 	defer func() { defaultGoSHA256[key] = oldSHA }()
 
-	goDir := filepath.Join(dir, "go"+defaultGoVersion)
-	// Pre-create a file where the tarball wants to create a nested directory.
-	if err := os.MkdirAll(goDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(goDir, "pkg"), []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
+	// Extraction happens in a staging dir published by rename; a tar that
+	// places a file where a later dir member must live still fails MkdirAll.
 	tarball := buildGoTarballWithHeaders(t, []struct {
 		hdr  tar.Header
 		data []byte
 	}{
-		{hdr: tar.Header{Name: "go/pkg/", Mode: 0o755, Typeflag: tar.TypeDir}},
+		{hdr: tar.Header{Name: "go/pkg", Mode: 0o644, Typeflag: tar.TypeReg}, data: []byte("x")},
+		{hdr: tar.Header{Name: "go/pkg/sub/", Mode: 0o755, Typeflag: tar.TypeDir}},
 	})
 	sum := sha256.Sum256(tarball)
 	defaultGoSHA256[key] = hex.EncodeToString(sum[:])
@@ -743,19 +737,12 @@ func TestGoToolchainEnsureFileOpenError(t *testing.T) {
 	oldSHA := defaultGoSHA256[key]
 	defer func() { defaultGoSHA256[key] = oldSHA }()
 
-	goDir := filepath.Join(dir, "go"+defaultGoVersion)
-	targetFile := filepath.Join(goDir, "file.txt")
-	if err := os.MkdirAll(goDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(targetFile, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
+	// A dir member followed by a regular file at the same path fails OpenFile.
 	tarball := buildGoTarballWithHeaders(t, []struct {
 		hdr  tar.Header
 		data []byte
 	}{
+		{hdr: tar.Header{Name: "go/file.txt", Mode: 0o755, Typeflag: tar.TypeDir}},
 		{hdr: tar.Header{Name: "go/file.txt", Mode: 0o644, Typeflag: tar.TypeReg}, data: []byte("x")},
 	})
 	sum := sha256.Sum256(tarball)

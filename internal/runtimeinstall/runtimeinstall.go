@@ -1137,7 +1137,7 @@ func main() {
 	for _, args := range cmds {
 		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 		cmd.Dir = buildDir
-		cmd.Env = goBuildEnv(goBin)
+		cmd.Env = goBuildEnv(ctx, goBin)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("%s: %s: %w", strings.Join(args, " "), strings.TrimSpace(string(out)), err)
@@ -1148,7 +1148,7 @@ func main() {
 	buildArgs := []string{goBin, "build", "-mod=readonly", "-o", outPath, "-ldflags=-s -w", "-trimpath", "."}
 	cmd := exec.CommandContext(ctx, buildArgs[0], buildArgs[1:]...)
 	cmd.Dir = buildDir
-	cmd.Env = append(goBuildEnv(goBin), "CGO_ENABLED=0")
+	cmd.Env = append(goBuildEnv(ctx, goBin), "CGO_ENABLED=0")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("caddy build: %s: %w", strings.TrimSpace(string(out)), err)
@@ -1296,14 +1296,14 @@ func extractChecksum(checksums, assetName, binary string) string {
 
 func fetchReleaseByTag(ctx context.Context, client *http.Client, repo, version string) (*Release, error) {
 	endpoint := fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s", repo, url.PathEscape(version))
-	return fetchReleaseAt(ctx, client, endpoint, "")
+	return fetchReleaseAt(ctx, client, endpoint, repo, version)
 }
 
 func fetchLatestRelease(ctx context.Context, client *http.Client, repo string) (*Release, error) {
-	return fetchReleaseAt(ctx, client, fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo), repo)
+	return fetchReleaseAt(ctx, client, fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo), repo, "")
 }
 
-func fetchReleaseAt(ctx context.Context, client *http.Client, endpoint, latestFallbackRepo string) (*Release, error) {
+func fetchReleaseAt(ctx context.Context, client *http.Client, endpoint, fallbackRepo, pinnedTag string) (*Release, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -1320,8 +1320,14 @@ func fetchReleaseAt(ctx context.Context, client *http.Client, endpoint, latestFa
 		if closeErr != nil {
 			return nil, closeErr
 		}
-		if latestFallbackRepo != "" && (resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests) {
-			return fetchLatestReleaseWeb(ctx, client, latestFallbackRepo)
+		if fallbackRepo != "" && (resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests) {
+			// The pinned-release path (audit #302) resolves assets from the
+			// tag's expanded-assets page directly; the tag is already known,
+			// so the /releases/latest redirect hop is unnecessary there.
+			if pinnedTag != "" {
+				return fetchReleaseAssetsWeb(ctx, client, fallbackRepo, pinnedTag)
+			}
+			return fetchLatestReleaseWeb(ctx, client, fallbackRepo)
 		}
 		return nil, fmt.Errorf("GitHub API %s: %s", endpoint, resp.Status)
 	}
@@ -1341,6 +1347,12 @@ func fetchLatestReleaseWeb(ctx context.Context, client *http.Client, repo string
 	if err != nil {
 		return nil, err
 	}
+	return fetchReleaseAssetsWeb(ctx, client, repo, tag)
+}
+
+// fetchReleaseAssetsWeb scrapes the expanded_assets page of a known tag for
+// asset names and download URLs (audit #302).
+func fetchReleaseAssetsWeb(ctx context.Context, client *http.Client, repo, tag string) (*Release, error) {
 	url := fmt.Sprintf("https://github.com/%s/releases/expanded_assets/%s", repo, url.PathEscape(tag))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -1450,7 +1462,7 @@ func downloadURL(ctx context.Context, client *http.Client, url string) ([]byte, 
 
 func runGoInstall(ctx context.Context, goBin, binDir, sourcePackage string) error {
 	cmd := exec.CommandContext(ctx, goBin, "install", sourcePackage)
-	cmd.Env = append(goBuildEnv(goBin), "GOBIN="+binDir, "CGO_ENABLED=0")
+	cmd.Env = append(goBuildEnv(ctx, goBin), "GOBIN="+binDir, "CGO_ENABLED=0")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		trimmed := strings.TrimSpace(string(out))
