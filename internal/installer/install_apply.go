@@ -146,7 +146,7 @@ func chownSecretsForVeilGroup(paths []string) error {
 			continue
 		}
 		ownerGid := gid
-		if isGeneratedConfig(path) {
+		if isRuntimeSharedConfig(path) {
 			ownerGid = generatedGID
 		}
 		if err := chownPath(path, 0, ownerGid); err != nil {
@@ -155,7 +155,7 @@ func chownSecretsForVeilGroup(paths []string) error {
 		if err := chmodPath(path, 0o640); err != nil {
 			return fmt.Errorf("chmod %s for veil group: %w", path, err)
 		}
-		if !isGeneratedConfig(path) {
+		if !isRuntimeSharedConfig(path) {
 			continue
 		}
 		dir := filepath.Dir(path)
@@ -183,6 +183,16 @@ func needsVeilGroupRead(path string) bool {
 
 func isGeneratedConfig(path string) bool {
 	return strings.Contains(filepath.ToSlash(path), "/generated/")
+}
+
+// isRuntimeSharedConfig reports paths the protocol units (User=veil-proxy)
+// read directly: generated configs and the shared panel TLS material. The
+// panel account is a supplementary veil-proxy member, so a single group
+// covers both readers. Panel-only secrets such as state.key and veil.env
+// stay in the veil group.
+func isRuntimeSharedConfig(path string) bool {
+	slash := filepath.ToSlash(path)
+	return isGeneratedConfig(path) || strings.Contains(slash, "/panel/")
 }
 
 func writeManagedFile(path string, content string, mode os.FileMode) error {

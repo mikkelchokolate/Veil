@@ -276,11 +276,13 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 // renewReloadCmd builds the acme.sh --reloadcmd registered at installcert time.
 // acme.sh runs it on every renewal and rewrites the key 0600 root:root, so the
 // command restores group readability BEFORE restarting the panel — otherwise
-// veil.service (User=veil) can no longer read tls.key after renewal (audit
-// #120). chgrp is best-effort for hosts without the veil group.
+// veil.service (User=veil) and the protocol units (User=veil-proxy) can no
+// longer read tls.key after renewal (audit #120). chgrp prefers veil-proxy —
+// the group both readers share — and falls back to veil; both are
+// best-effort for hosts without the accounts.
 func renewReloadCmd(certPath, keyPath string) string {
-	return fmt.Sprintf("chmod 0644 %s && chmod 0640 %s && (chgrp veil %s %s 2>/dev/null || true) && systemctl restart veil || true",
-		shellQuote(certPath), shellQuote(keyPath), shellQuote(certPath), shellQuote(keyPath))
+	return fmt.Sprintf("chmod 0644 %s && chmod 0640 %s && (chgrp veil-proxy %s %s 2>/dev/null || chgrp veil %s %s 2>/dev/null || true) && systemctl restart veil || true",
+		shellQuote(certPath), shellQuote(keyPath), shellQuote(certPath), shellQuote(keyPath), shellQuote(certPath), shellQuote(keyPath))
 }
 
 // shellQuote wraps a path in single quotes for embedding in the acme.sh
@@ -424,10 +426,18 @@ func fixCertOwnership(sys System, certPath, keyPath string) error {
 	if err := sys.Chmod(keyPath, 0o640); err != nil {
 		return err
 	}
-	// The panel service runs as the veil user. If we are root and the veil
-	// group exists, make the key readable by that group.
+	// Protocol units run as veil-proxy and share the panel certificate (the
+	// panel account is a supplementary veil-proxy member). If we are root and
+	// the veil-proxy group exists — falling back to veil — make the material
+	// readable by that group and keep the cert directory traversable.
 	if uid := getuidFunc(); uid == 0 {
-		if gid := lookupGroupID("veil"); gid >= 0 {
+		gid := lookupGroupID("veil-proxy")
+		if gid < 0 {
+			gid = lookupGroupID("veil")
+		}
+		if gid >= 0 {
+			_ = sys.Chown(filepath.Dir(certPath), 0, gid)
+			_ = sys.Chmod(filepath.Dir(certPath), 0o750)
 			_ = sys.Chown(certPath, 0, gid)
 			_ = sys.Chown(keyPath, 0, gid)
 		}
