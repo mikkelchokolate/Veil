@@ -121,6 +121,22 @@ for bin in hysteria mita caddy mieru naive olcrtc sing-box; do
   fi
 done
 
+# Pre-fetch any runtimes the image did not seed. GitHub release resolution
+# flakes on shared runner egress IPs (rate limits, transient "no assets
+# found"), and a missing runtime only surfaces minutes later inside the
+# first-inbound leg — retry the fetch here so the install leg stays
+# deterministic.
+ci_step "protocol runtime download (retry on registry flakes)"
+runtime_ok=1
+for _ in $(seq 1 4); do
+  if ${SUDO} /usr/local/bin/veil runtime install; then
+    runtime_ok=0
+    break
+  fi
+  sleep 10
+done
+[ "${runtime_ok}" -eq 0 ] || ci_die "runtime download failed after retries"
+
 # --- 1. Capability report: read-only, exit 0 on a supported host --------------
 ci_step "install --check capability report (must not mutate)"
 ${SUDO} /usr/local/bin/veil install --check --panel-access direct --le-ip-cert=false --public-ip 127.0.0.1 --panel-port "${PANEL_PORT}" \
