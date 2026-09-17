@@ -43,7 +43,7 @@ func (t *fallbackBodyLifetimeTransport) RoundTrip(*http.Request) (*http.Response
 func TestReleaseFallbackClosesRateLimitedResponseBeforeNextRequest(t *testing.T) {
 	transport := &fallbackBodyLifetimeTransport{sentinel: errors.New("stop after lifetime observation")}
 	client := &http.Client{Transport: transport}
-	_, err := fetchReleaseAt(t.Context(), client, "https://api.github.test/releases/latest", "owner/repo")
+	_, err := fetchReleaseAt(t.Context(), client, "https://api.github.test/releases/latest", "owner/repo", "")
 	if !errors.Is(err, transport.sentinel) {
 		t.Fatalf("unexpected fallback result: %v", err)
 	}
