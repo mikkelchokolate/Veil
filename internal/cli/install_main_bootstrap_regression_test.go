@@ -386,6 +386,9 @@ echo '	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6'
 echo "apt-get $*" >> "$HOME/apt.log"
 exit 0
 `)
+	// Non-root CI runners invoke installs through sudo, which resets PATH and
+	// would bypass the apt-get stub; a pass-through sudo keeps the PATH order.
+	writeExec(t, stubDir, "sudo", `exec "$@"`)
 	writeExec(t, binDir, "node", "#!/bin/sh\nexit 0\n")
 	harness := "#!/bin/sh\nset -eu\n" + helpers + `
 ensure_runtime_libs "$1"
