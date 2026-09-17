@@ -17,6 +17,8 @@ CI_UBUNTU_BASE="ubuntu:24.04@sha256:a61567bd31828687156d735ea8eb01ba4e37636e225d
 # --- Core toolchain ---------------------------------------------------------
 CI_GO_VERSION="1.27.1"
 CI_GO_TARBALL_SHA256="63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445" # go1.27.1.linux-amd64.tar.gz
+# linux-arm64 pin matches internal/runtimeinstall/gotoolchain.go defaultGoSHA256.
+CI_GO_TARBALL_SHA256_ARM64="3450b45a3f9ee8568792736a5c5e70a1f2e9b36c35a8f74958c03e51d7d92bec" # go1.27.1.linux-arm64.tar.gz
 # The live-host network path intermittently stalls Go's HTTP/2 proxy connections
 # with bytes stuck in Send-Q. Pin HTTP/1.1 transport for deterministic clean-cache
 # downloads in both local CI and GitHub Actions. Fall back to checksum-verified
@@ -26,6 +28,7 @@ CI_GO_GOPROXY="https://proxy.golang.org|direct"
 
 CI_NODE_VERSION="26.8.2"
 CI_NODE_TARBALL_SHA256="40e1d3225c1c9ae9a2671c98ecb9857e4d5555026394f348645676798840d5c5" # node-v26.8.2-linux-x64.tar.xz
+CI_NODE_TARBALL_SHA256_ARM64="81d8f0fdea9dcd3bfdcfeafc5f8359c151f097e9880b0007c0645ca670d07971" # node-v26.8.2-linux-arm64.tar.xz
 CI_NODE_MUSL_TARBALL_SHA256="e174fe6faf29bf1b02531e81e97989cb62690c305684e7364cdc1c24f482c237" # node-v26.8.2-linux-x64-musl.tar.xz
 
 CI_NPM_VERSION="12.0.2"

@@ -79,9 +79,14 @@ overrides:
   deb:
     depends:
       - ca-certificates
+      # Veil manages the host firewall through ufw on direct/caddy installs.
+      - ufw
   rpm:
     depends:
       - ca-certificates
+      # postinstall.sh creates the veil/veil-proxy service accounts with
+      # groupadd/useradd, which shadow-utils provides.
+      - shadow-utils
   apk:
     depends:
       - ca-certificates

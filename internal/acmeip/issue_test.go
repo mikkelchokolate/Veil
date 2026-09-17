@@ -33,28 +33,31 @@ func (f fakeFileInfo) IsDir() bool        { return f.mode.IsDir() }
 func (f fakeFileInfo) Sys() any           { return nil }
 
 type fakeSystem struct {
-	home          string
-	homeErr       error
-	uid           int
-	files         map[string]*fakeFileInfo
-	fileData      map[string][]byte
-	commands      map[string]commandResult
-	lookPaths     map[string]string
-	lookPathErr   map[string]error
-	portFree      map[int]bool
-	mkdirErr      error
-	mkdirErrFor   map[string]error
-	chmodErr      error
-	chmodErrFor   map[string]error
-	chownCalls    []chownCall
-	runCalls      [][]string
-	installAcmeSh bool
-	installSocat  bool
-	commandDelay  time.Duration
-	events        []string
-	installIPs    []string
-	issuedCertPEM []byte
-	issuedKeyPEM  []byte
+	home           string
+	homeErr        error
+	uid            int
+	files          map[string]*fakeFileInfo
+	fileData       map[string][]byte
+	commands       map[string]commandResult
+	lookPaths      map[string]string
+	lookPathErr    map[string]error
+	portFree       map[int]bool
+	mkdirErr       error
+	mkdirErrFor    map[string]error
+	chmodErr       error
+	chmodErrFor    map[string]error
+	chownCalls     []chownCall
+	runCalls       [][]string
+	execCalls      []string
+	installAcmeSh  bool
+	installSocat   bool
+	installOpenSSL bool
+	installCron    bool
+	commandDelay   time.Duration
+	events         []string
+	installIPs     []string
+	issuedCertPEM  []byte
+	issuedKeyPEM   []byte
 }
 
 type commandResult struct {
@@ -72,15 +75,17 @@ type chownCall struct {
 
 func newFakeSystem() *fakeSystem {
 	return &fakeSystem{
-		home:          "/root",
-		uid:           0,
-		files:         map[string]*fakeFileInfo{},
-		fileData:      map[string][]byte{},
-		commands:      map[string]commandResult{},
-		lookPaths:     map[string]string{"curl": "/usr/bin/curl", "sh": "/bin/sh", "rm": "/bin/rm", "getent": "/usr/bin/getent"},
-		portFree:      map[int]bool{80: true},
-		installAcmeSh: true,
-		installSocat:  true,
+		home:           "/root",
+		uid:            0,
+		files:          map[string]*fakeFileInfo{},
+		fileData:       map[string][]byte{},
+		commands:       map[string]commandResult{},
+		lookPaths:      map[string]string{"curl": "/usr/bin/curl", "sh": "/bin/sh", "rm": "/bin/rm", "getent": "/usr/bin/getent", "openssl": "/usr/bin/openssl", "crontab": "/usr/bin/crontab"},
+		portFree:       map[int]bool{80: true},
+		installAcmeSh:  true,
+		installSocat:   true,
+		installOpenSSL: true,
+		installCron:    true,
 	}
 }
 
@@ -121,6 +126,7 @@ func (f *fakeSystem) CombinedOutputContext(ctx context.Context, cmd string, args
 }
 
 func (f *fakeSystem) CombinedOutput(cmd string, args ...string) ([]byte, error) {
+	f.execCalls = append(f.execCalls, cmd+" "+strings.Join(args, " "))
 	res, ok := f.commands[f.key(cmd, args...)]
 	if !ok {
 		return nil, fmt.Errorf("unexpected command: %s %v", cmd, args)
@@ -134,6 +140,12 @@ func (f *fakeSystem) CombinedOutput(cmd string, args ...string) ([]byte, error) 
 			}
 			if strings.Contains(script, "socat") && f.installSocat {
 				f.lookPaths["socat"] = "/usr/bin/socat"
+			}
+			if strings.Contains(script, "openssl") && f.installOpenSSL {
+				f.lookPaths["openssl"] = "/usr/bin/openssl"
+			}
+			if strings.Contains(script, "cron") && f.installCron {
+				f.lookPaths["crontab"] = "/usr/bin/crontab"
 			}
 		}
 		if cmd == filepath.Join(f.home, ".acme.sh", "acme.sh") && len(args) >= 1 && args[0] == "--installcert" {

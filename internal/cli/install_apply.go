@@ -2,7 +2,9 @@ package cli
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net"
@@ -52,6 +54,97 @@ var installFirewallApplyFunc = func(rules []firewall.Rule) error {
 		return nil
 	}
 	return firewall.NewUFWApplier().ApplySafely(rules)
+}
+
+// installEnsureFirewallBackendFunc runs the firewall dependency phase before
+// the install mutates host state or downloads runtimes (audit #295).
+var installEnsureFirewallBackendFunc = ensureInstallFirewallBackend
+
+// installGeteuidFunc reports the effective uid; tests stub it to exercise the
+// root-only firewall dependency phase.
+var installGeteuidFunc = os.Geteuid
+
+// activeForeignFirewallFunc reports the name of a different firewall service
+// already managing the host ("" when none is active).
+var activeForeignFirewallFunc = func(ctx context.Context) string {
+	for _, unit := range []string{"firewalld.service", "nftables.service", "iptables.service"} {
+		probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		err := exec.CommandContext(probeCtx, "systemctl", "is-active", "--quiet", unit).Run()
+		cancel()
+		if err == nil {
+			return strings.TrimSuffix(unit, ".service")
+		}
+	}
+	return ""
+}
+
+// provisionUFWCommandFunc executes one package-manager command for ufw
+// provisioning; tests stub it to record calls.
+var provisionUFWCommandFunc = func(ctx context.Context, name string, args ...string) error {
+	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	out, err := exec.CommandContext(probeCtx, name, args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s %s: %w (output: %s)", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+var provisionUFWFunc = provisionUFW
+
+// ensureInstallFirewallBackend chooses and validates the firewall strategy
+// before state, runtimes, or downloads touch the host. Direct/caddy installs
+// produce a ufw plan; when ufw is absent it is provisioned through the distro
+// package manager — unless a different firewall is already active, in which
+// case silently installing a competing backend would not open the ports.
+func ensureInstallFirewallBackend(ctx context.Context, profile installer.RURecommendedProfile, opts ruRecommendedInstallOptions) error {
+	if installGeteuidFunc() != 0 {
+		// Non-root installs cannot mutate the firewall; the apply step already
+		// skips rule application for them.
+		return nil
+	}
+	plan, err := buildInstallPlan(profile, opts)
+	if err != nil {
+		return err
+	}
+	if len(plan.FirewallActions) == 0 {
+		return nil
+	}
+	if _, err := execLookPath("ufw"); err == nil {
+		return nil
+	}
+	if active := activeForeignFirewallFunc(ctx); active != "" {
+		return fmt.Errorf("host firewall %q is already active; Veil manages ufw and installing a second firewall would not reliably open the panel/ACME ports — open the planned ports in %s or disable it, then re-run install", active, active)
+	}
+	return provisionUFWFunc(ctx)
+}
+
+func provisionUFW(ctx context.Context) error {
+	managers := []struct {
+		name string
+		args [][]string
+	}{
+		{"apt-get", [][]string{{"update"}, {"install", "-y", "ufw"}}},
+		{"dnf", [][]string{{"-y", "install", "ufw"}}},
+		{"yum", [][]string{{"-y", "install", "ufw"}}},
+		{"pacman", [][]string{{"-Sy", "--noconfirm", "ufw"}}},
+		{"zypper", [][]string{{"-q", "install", "-y", "ufw"}}},
+	}
+	for _, m := range managers {
+		if _, err := execLookPath(m.name); err != nil {
+			continue
+		}
+		for _, args := range m.args {
+			if err := provisionUFWCommandFunc(ctx, m.name, args...); err != nil {
+				return fmt.Errorf("install ufw via %s: %w", m.name, err)
+			}
+		}
+		if _, err := execLookPath("ufw"); err == nil {
+			return nil
+		}
+		return fmt.Errorf("ufw installation via %s completed but the ufw command is not in PATH", m.name)
+	}
+	return fmt.Errorf("the install plan requires ufw to open panel/ACME ports, but ufw is not installed and no supported package manager was found; install ufw (for example `apt-get install -y ufw`) or configure the firewall manually and re-run")
 }
 
 func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommendedProfile, opts ruRecommendedInstallOptions) error {
@@ -347,7 +440,29 @@ func issueLEIPCertForProfile(ctx context.Context, profile *installer.RURecommend
 	}
 	profile.PanelTLSCertPEM = string(certPEM)
 	profile.PanelTLSKeyPEM = string(keyPEM)
+
+	// The issued certificate names the public IP, not the configured hostname
+	// (audit #299). Point the panel domain — already persisted in state.json —
+	// at the covered identity so client links, the printed endpoint, and the
+	// readiness check all present a URL the certificate validates for.
+	if ipText := resolvedIP.String(); profile.Domain != ipText {
+		if err := updateInstalledStateDomain(opts, ipText); err != nil {
+			return fmt.Errorf("update panel domain to issued IP identity: %w", err)
+		}
+		profile.Domain = ipText
+	}
 	return nil
+}
+
+func updateInstalledStateDomain(opts ruRecommendedInstallOptions, domain string) error {
+	_, err := statecommit.Update(statecommit.UpdateOptions{
+		StatePath: filepath.Join(opts.VarDir, "state.json"),
+		KeyPath:   filepath.Join(opts.EtcDir, "state.key"),
+	}, func(current *model.ManagementSnapshot) error {
+		current.Settings.Domain = domain
+		return nil
+	})
+	return err
 }
 
 func parsePort(s string) (int, error) {
@@ -381,10 +496,7 @@ func waitForInstalledPanelReady(cmd *cobra.Command, profile installer.RURecommen
 	serverName := ""
 	if profile.PanelTLSEnabled {
 		certPath = filepath.Join(opts.EtcDir, "panel", "tls.crt")
-		serverName = profile.Domain
-		if serverName == "" {
-			serverName = "localhost"
-		}
+		serverName = readinessServerName(certPath, profile.Domain)
 	}
 	contract := statusflow.ContractFromServe(profile.PanelListen, profile.PanelTLSEnabled, profile.WebBasePath, certPath, serverName)
 	ticker := time.NewTicker(250 * time.Millisecond)
@@ -408,6 +520,62 @@ func waitForInstalledPanelReady(cmd *cobra.Command, profile installer.RURecommen
 		case <-ticker.C:
 		}
 	}
+}
+
+// readinessServerName picks a TLS identity the installed certificate actually
+// covers for the local post-install health probe (audit #299). profile.Domain
+// is panel metadata: in direct mode with an issued IP certificate the cert
+// names the public IP, not the domain, and a self-signed cert generated before
+// public-IP detection does not contain the backfilled domain at all. Verifying
+// against profile.Domain then fails a healthy panel. Identities valid for the
+// loopback probe are preferred, then any SAN on the cert.
+func readinessServerName(certPath, configuredDomain string) string {
+	fallback := configuredDomain
+	if fallback == "" {
+		fallback = "localhost"
+	}
+	pemBytes, err := os.ReadFile(certPath)
+	if err != nil {
+		return fallback
+	}
+	var cert *x509.Certificate
+	rest := pemBytes
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		if parsed, parseErr := x509.ParseCertificate(block.Bytes); parseErr == nil {
+			cert = parsed
+			break
+		}
+	}
+	if cert == nil {
+		return fallback
+	}
+	candidates := []string{"localhost", "127.0.0.1", "::1"}
+	if ip := net.ParseIP(strings.TrimSpace(configuredDomain)); ip != nil {
+		candidates = append(candidates, ip.String())
+	}
+	for _, ipSAN := range cert.IPAddresses {
+		candidates = append(candidates, ipSAN.String())
+	}
+	for _, candidate := range candidates {
+		if cert.VerifyHostname(candidate) == nil {
+			return candidate
+		}
+	}
+	if configuredDomain != "" && cert.VerifyHostname(configuredDomain) == nil {
+		return configuredDomain
+	}
+	if len(cert.DNSNames) > 0 {
+		return cert.DNSNames[0]
+	}
+	return fallback
 }
 
 func helperSocketReady() error {
