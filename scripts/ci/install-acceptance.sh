@@ -170,16 +170,32 @@ TOKEN="$(${SUDO} grep '^VEIL_API_TOKEN=' /etc/veil/veil.env | cut -d= -f2- | tr 
 API="https://127.0.0.1:${PANEL_PORT}${BASE_PATH%/}"
 
 api_code() { # method path [body] -> http code; response body in /tmp/ia-resp.json
-  local method="$1" path="$2" body="${3:-}"
+  local method="$1" path="$2" body="${3:-}" timeout=60
+  # Mutations are serialized behind live validation plus a synchronous
+  # auto-apply; give POSTs a generous ceiling.
+  [ "${method}" = "POST" ] && timeout=300
   if [ -n "${body}" ]; then
-    curl --http1.1 -sk --max-time 60 -o /tmp/ia-resp.json -w '%{http_code}' -X "${method}" \
+    curl --http1.1 -sk --max-time "${timeout}" -o /tmp/ia-resp.json -w '%{http_code}' -X "${method}" \
       -H "X-Veil-Token: ${TOKEN}" -H 'Content-Type: application/json' \
       -d "${body}" "${API}${path}"
   else
-    curl --http1.1 -sk --max-time 60 -o /tmp/ia-resp.json -w '%{http_code}' -X "${method}" \
+    curl --http1.1 -sk --max-time "${timeout}" -o /tmp/ia-resp.json -w '%{http_code}' -X "${method}" \
       -H "X-Veil-Token: ${TOKEN}" "${API}${path}"
   fi
 }
+
+# The panel's startup reconcile can hold the mutation lock right after
+# install; wait for a management read to succeed before posting mutations.
+api_ready=1
+for _ in $(seq 1 24); do
+  ready_code="$(api_code GET /api/apply/state || true)"
+  if [ "${ready_code}" = "200" ]; then
+    api_ready=0
+    break
+  fi
+  sleep 5
+done
+[ "${api_ready}" -eq 0 ] || ci_die "management API did not become ready (last code ${ready_code:-none})"
 
 create_inbound() { # label body
   local label="$1" code
@@ -203,7 +219,7 @@ create_inbound ci-olc '{"name":"ci-olc","protocol":"olcrtc","transport":"udp","p
 # Durable idempotency contract: replaying the same mutation with the same
 # Idempotency-Key must return the original response, not a duplicate-name 409.
 idem_code() { # body
-  curl --http1.1 -sk --max-time 60 -o /tmp/ia-resp.json -w '%{http_code}' -X POST \
+  curl --http1.1 -sk --max-time "${timeout}" -o /tmp/ia-resp.json -w '%{http_code}' -X POST \
     -H "X-Veil-Token: ${TOKEN}" -H 'Content-Type: application/json' \
     -H "Idempotency-Key: ci-acceptance-mieru-idem" -d "$1" "${API}/api/inbounds"
 }
