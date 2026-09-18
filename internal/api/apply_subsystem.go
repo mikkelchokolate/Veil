@@ -272,6 +272,19 @@ func (s *managementState) buildTrafficProvidersLocked() ([]client.TrafficProvide
 		bindings := hysteria2TrafficIdentityMap(inbound.Name, inbound.Profiles, allBindings, allClients)
 		endpoint := fmt.Sprintf("http://127.0.0.1:%d/traffic", inbound.Port)
 		secret := hysteria2.TrafficStatsSecret(settings, inbound)
+		// The unit authenticates with the trafficStats block of its published
+		// rendered config, which can belong to a newer revision than the last
+		// applied snapshot (a partially failed apply still restarts units with
+		// what it already rendered). Read the live artifact so the provider
+		// sends the credential the runtime actually serves; keep the
+		// snapshot-derived values when nothing is published yet.
+		liveConfig := filepath.Join(s.liveRoot, "hysteria2", inbound.Name+".yaml")
+		if listen, renderedSecret, ok, err := hysteria2.RenderedTrafficStats(liveConfig); err != nil {
+			log.Printf("traffic: cannot read rendered hysteria2 config for inbound %s, using snapshot credential: %v", inbound.Name, err)
+		} else if ok {
+			endpoint = "http://" + listen + "/traffic"
+			secret = renderedSecret
+		}
 		provider := hysteria2.NewAuthenticatedStatsProvider("hysteria2:"+inbound.Name, endpoint, secret, bindings)
 		providers = append(providers, provider)
 		log.Printf("traffic: registered authenticated hysteria2 provider for inbound %s", inbound.Name)

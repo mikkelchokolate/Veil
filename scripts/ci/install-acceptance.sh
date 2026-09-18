@@ -284,6 +284,83 @@ for proto in hysteria2 mieru olcrtc; do
     || ci_die "client-links missing protocol ${proto}: $(cat "${CI_ARTIFACT_DIR}/client-links.json")"
 done
 
+# --- Traffic telemetry contract (all protocols) --------------------------------
+# The collector polls real runtime accounting; hysteria2 is the only
+# accounting-capable protocol in this matrix. Assert that (a) a provider is
+# registered for ci-hy2 and reaches healthy — proving the management plane
+# authenticates with the credential the running unit actually serves
+# (regression: deriving the secret from the applied snapshot left telemetry
+# at a permanent HTTP 401 after a partially failed apply), and (b) clients on
+# non-accounting protocols honestly report unsupported instead of fake zeros.
+ci_step "traffic telemetry contract (all protocols)"
+
+# Clients bound to each first inbound exercise the whole pipeline: binding
+# identities land in the rendered configs and in the provider's attribution
+# map through the same auto-apply a panel mutation would run.
+create_client() { # label body -> response in /tmp/ia-resp.json
+  local label="$1" code
+  code="$(api_code POST /api/v1/clients "$2")"
+  [ "${code}" = "201" ] || ci_die "create client ${label}: HTTP ${code}: $(cat /tmp/ia-resp.json)"
+}
+create_client ci-traffic-hy2 '{"name":"ci-traffic-hy2","bindings":[{"inboundId":"ci-hy2"}]}'
+hy2_client="$(grep -o '"id":"[^"]*"' /tmp/ia-resp.json | head -1 | cut -d'"' -f4)"
+[ -n "${hy2_client}" ] || ci_die "hy2 traffic client id missing: $(cat /tmp/ia-resp.json)"
+create_client ci-traffic-mieru '{"name":"ci-traffic-mieru","bindings":[{"inboundId":"ci-mieru-tcp"}]}'
+mieru_client="$(grep -o '"id":"[^"]*"' /tmp/ia-resp.json | head -1 | cut -d'"' -f4)"
+[ -n "${mieru_client}" ] || ci_die "mieru traffic client id missing: $(cat /tmp/ia-resp.json)"
+create_client ci-traffic-olc '{"name":"ci-traffic-olc","bindings":[{"inboundId":"ci-olc"}]}'
+olc_client="$(grep -o '"id":"[^"]*"' /tmp/ia-resp.json | head -1 | cut -d'"' -f4)"
+[ -n "${olc_client}" ] || ci_die "olc traffic client id missing: $(cat /tmp/ia-resp.json)"
+
+# The collector polls every 30s; give the first observation plus the provider
+# rebuild after the client-mutation applies room to land.
+telemetry=1
+summary=""
+for _ in $(seq 1 45); do
+  code="$(api_code GET /api/v1/traffic/summary || true)"
+  if [ "${code}" = "200" ]; then
+    summary="$(cat /tmp/ia-resp.json)"
+    case "${summary}" in
+      *'"state":"healthy"'*) telemetry=0; break ;;
+      *'"state":"degraded"'*) break ;;
+    esac
+  fi
+  sleep 2
+done
+printf '%s\n' "${summary}" > "${CI_ARTIFACT_DIR}/traffic-summary.json"
+[ "${telemetry}" -eq 0 ] || ci_die "traffic summary did not reach healthy: ${summary}"
+grep -q '"providerCount":1' "${CI_ARTIFACT_DIR}/traffic-summary.json" \
+  || ci_die "expected exactly the hysteria2 provider to be registered: ${summary}"
+grep -q '"key":"hysteria2:ci-hy2"' "${CI_ARTIFACT_DIR}/traffic-summary.json" \
+  || ci_die "hysteria2:ci-hy2 provider not registered: ${summary}"
+if grep -q '"state":"degraded"' "${CI_ARTIFACT_DIR}/traffic-summary.json"; then
+  ci_die "a traffic provider is degraded: ${summary}"
+fi
+if grep -q '401' "${CI_ARTIFACT_DIR}/traffic-summary.json"; then
+  ci_die "a traffic provider hit an auth failure: ${summary}"
+fi
+
+# Per-client report state: the hysteria2 binding supports accounting (pending
+# until first real traffic; healthy once observed), while mieru/olcRTC have no
+# runtime accounting and must say so instead of reporting fake health.
+client_state() { # client-id -> the "state" value of the traffic report
+  local code
+  code="$(api_code GET "/api/v1/traffic/$1")"
+  [ "${code}" = "200" ] || ci_die "traffic report for $1: HTTP ${code}: $(cat /tmp/ia-resp.json)"
+  grep -o '"state":"[^"]*"' /tmp/ia-resp.json | head -1 | cut -d'"' -f4
+}
+hy2_state="$(client_state "${hy2_client}")"
+case "${hy2_state}" in
+  pending|healthy) ;;
+  *) ci_die "hysteria2 client traffic state = '${hy2_state}', want pending|healthy" ;;
+esac
+mieru_state="$(client_state "${mieru_client}")"
+[ "${mieru_state}" = "unsupported" ] \
+  || ci_die "mieru client traffic state = '${mieru_state}', want unsupported"
+olc_state="$(client_state "${olc_client}")"
+[ "${olc_state}" = "unsupported" ] \
+  || ci_die "olcRTC client traffic state = '${olc_state}', want unsupported"
+
 # --- 5. Reinstall idempotency -------------------------------------------------
 ci_step "idempotent reinstall (existing state reused)"
 ci_run veil-reinstall ${SUDO} /usr/local/bin/veil install "${INSTALL_FLAGS[@]}"
