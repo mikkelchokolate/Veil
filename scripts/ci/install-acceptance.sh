@@ -366,12 +366,18 @@ systemctl is-enabled --quiet veil-caddy.service || ci_die "veil-caddy.service is
 # down) proves the request reached the panel through the public route.
 caddy_route=1
 route_code=000
+# The chain caddy serves is issued by the root pebble GENERATES at startup,
+# not by the static minica that signs pebble's API TLS certificate — fetch
+# the live issuing root from pebble's management interface.
+pebble_issuing_root="${CI_ARTIFACT_DIR}/pebble-issuing-root.pem"
+curl -sf --cacert "${pebble_mod}/test/certs/pebble.minica.pem"   "https://127.0.0.1:15000/roots/0" -o "${pebble_issuing_root}"   || ci_die "could not fetch pebble issuing root from the management API"
 for _ in $(seq 1 60); do
-  route_code="$(curl --http1.1 -s --cacert /etc/veil/acme-root.pem     --resolve "${CADDY_CI_DOMAIN}:443:127.0.0.1" --max-time 15     -o /tmp/ia-caddy-route.out -w '%{http_code}' "https://${CADDY_CI_DOMAIN}${BASE_PATH}" 2>/dev/null || true)"
+  route_code="$(curl --http1.1 -s --cacert "${pebble_issuing_root}"     --resolve "${CADDY_CI_DOMAIN}:443:127.0.0.1" --max-time 15     -o /tmp/ia-caddy-route.out -w '%{http_code}' "https://${CADDY_CI_DOMAIN}${BASE_PATH}" 2>/tmp/ia-caddy-route.err || true)"
   case "${route_code}" in 000|404|502) ;; *) caddy_route=0; break ;; esac
   sleep 2
 done
 cp /tmp/ia-caddy-route.out "${CI_ARTIFACT_DIR}/caddy-route.out" 2>/dev/null || true
+cp /tmp/ia-caddy-route.err "${CI_ARTIFACT_DIR}/caddy-route.err" 2>/dev/null || true
 [ "${caddy_route}" -eq 0 ] || ci_die "public caddy route https://${CADDY_CI_DOMAIN}${BASE_PATH} did not serve the panel (last HTTP ${route_code})"
 
 uninstall_leg
