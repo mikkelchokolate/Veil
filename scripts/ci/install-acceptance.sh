@@ -303,13 +303,13 @@ create_client() { # label body -> response in /tmp/ia-resp.json
   [ "${code}" = "201" ] || ci_die "create client ${label}: HTTP ${code}: $(cat /tmp/ia-resp.json)"
 }
 create_client ci-traffic-hy2 '{"name":"ci-traffic-hy2","bindings":[{"inboundId":"ci-hy2"}]}'
-hy2_client="$(grep -o '"id":"[^"]*"' /tmp/ia-resp.json | head -1 | cut -d'"' -f4)"
+hy2_client="$(grep -o '"client":{"id":"[^"]*"' /tmp/ia-resp.json | head -1 | cut -d'"' -f6)"
 [ -n "${hy2_client}" ] || ci_die "hy2 traffic client id missing: $(cat /tmp/ia-resp.json)"
 create_client ci-traffic-mieru '{"name":"ci-traffic-mieru","bindings":[{"inboundId":"ci-mieru-tcp"}]}'
-mieru_client="$(grep -o '"id":"[^"]*"' /tmp/ia-resp.json | head -1 | cut -d'"' -f4)"
+mieru_client="$(grep -o '"client":{"id":"[^"]*"' /tmp/ia-resp.json | head -1 | cut -d'"' -f6)"
 [ -n "${mieru_client}" ] || ci_die "mieru traffic client id missing: $(cat /tmp/ia-resp.json)"
 create_client ci-traffic-olc '{"name":"ci-traffic-olc","bindings":[{"inboundId":"ci-olc"}]}'
-olc_client="$(grep -o '"id":"[^"]*"' /tmp/ia-resp.json | head -1 | cut -d'"' -f4)"
+olc_client="$(grep -o '"client":{"id":"[^"]*"' /tmp/ia-resp.json | head -1 | cut -d'"' -f6)"
 [ -n "${olc_client}" ] || ci_die "olc traffic client id missing: $(cat /tmp/ia-resp.json)"
 
 # The collector polls every 30s; give the first observation plus the provider
