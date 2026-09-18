@@ -4,7 +4,61 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.7.2] - 2026-09-18
+
+Patch release: clean-host install acceptance now gates every merge, and the
+audit it enabled produced installer/runtime fixes for Caddy-mode installs,
+generated-config permissions, controlled ACME CAs, state-key rotation, and
+protocol credential/export contracts.
+
+### Changed
+
+- New required CI gate install-acceptance (amd64 and arm64): a real
+  `veil install` on a clean VM, firewall/panel-readiness checks, a first
+  inbound per protocol through the management API, controlled ACME
+  issuance via Pebble, a Caddy-mode public-route leg, and
+  reboot/reinstall persistence. Runtime downloads retry on transient
+  registry errors.
+- web-dependencies group bump (9 updates).
+
 ### Fixed
+
+- `veil install --panel-access caddy` on an existing install re-rendered
+  the previous mode's Caddy JSON, so caddy started with no panel server,
+  bound nothing on :443, and the installer still reported success for an
+  unreachable URL. The snapshot render now uses the new profile's panel
+  settings, and install verifies the public route (unit active, :443
+  listener, TLS answer, DNS-vs-public-IP advisory) before printing
+  credentials.
+- Generated protocol configs (/etc/veil/generated/**) and panel TLS
+  material are readable by the veil-proxy runtime user; Hysteria2/Mieru/
+  olcRTC units no longer crash-loop on config permission denied after
+  install, which previously stalled synchronous API applies.
+- VEIL_ACME_CA_URL/VEIL_ACME_INSECURE propagate into acme.sh issuance, and
+  VEIL_ACME_CA_URL/VEIL_ACME_CA_ROOT configure the Caddy ACME issuer
+  (ca, trusted_roots_pem_files) persisted via veil.env — enabling
+  controlled/private ACME CAs.
+- #307/#310/#312: rollback restores only the promoted artifacts, stops and
+  disables units whose just-created configs were removed, persists the
+  attempted-operation diagnostics on recovery-pending transitions, and
+  inbound create sends an Idempotency-Key so timed-out requests replay
+  safely.
+- #296/#297/#302: GOROOT resolves through the selected Go binary, the
+  toolchain cache publishes by atomic rename and rejects partial
+  extractions, and rate-limited runtime fetches fall back to the
+  expanded-assets page.
+- #311/#122: one credential-byte contract for the Mieru fallback password
+  across render/export/policy; olcRTC Autofill persists the effective
+  encryption key; PerClientCredentialEnforcer separates link rendering
+  from runtime enforcement.
+- #174/#166/#155/#197/#208: protocol log units resolve to live template
+  instances, PATCH counts as mutating in the rate limiter, event/traffic
+  SSE streams get dedicated limits with Retry-After, loopback/link-local
+  ping and DNS targets are rejected, and IPv6 listeners are parsed from
+  /proc/net/*6.
+- #162: state key rotation re-encrypts every live AES-GCM blob
+  (subscription tokens and durable secret envelopes), so Panel Reveal and
+  in-window idempotency replays keep working after rotation.
 
 - Fresh-host `veil install --panel-access caddy` aborted with
   `caddy list-modules failed: executable file not found in $PATH` because
