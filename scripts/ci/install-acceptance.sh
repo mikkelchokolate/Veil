@@ -367,7 +367,7 @@ systemctl is-enabled --quiet veil-caddy.service || ci_die "veil-caddy.service is
 caddy_route=1
 route_code=000
 for _ in $(seq 1 60); do
-  route_code="$(curl --http1.1 -sk --cacert /etc/veil/acme-root.pem     --resolve "${CADDY_CI_DOMAIN}:443:127.0.0.1" --max-time 15     -o /tmp/ia-caddy-route.out -w '%{http_code}' "https://${CADDY_CI_DOMAIN}${BASE_PATH}" 2>/dev/null || true)"
+  route_code="$(curl --http1.1 -s --cacert /etc/veil/acme-root.pem     --resolve "${CADDY_CI_DOMAIN}:443:127.0.0.1" --max-time 15     -o /tmp/ia-caddy-route.out -w '%{http_code}' "https://${CADDY_CI_DOMAIN}${BASE_PATH}" 2>/dev/null || true)"
   case "${route_code}" in 000|404|502) ;; *) caddy_route=0; break ;; esac
   sleep 2
 done

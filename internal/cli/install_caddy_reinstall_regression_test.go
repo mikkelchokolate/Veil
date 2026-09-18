@@ -66,6 +66,54 @@ func TestRetainCaddyJSONOnReinstallKeepsNaiveRoutes(t *testing.T) {
 	}
 }
 
+// Reinstall switching direct → caddy must render the NEW profile's panel
+// server, not the stale direct-mode snapshot settings: PanelAccess=direct
+// produces no panel server at all, so caddy starts, logs "serving initial
+// configuration", and binds nothing on :443 (audit #304 caddy leg — the
+// user-facing install reported success for an unreachable URL).
+func TestRetainCaddyJSONOnReinstallDirectToCaddySwitch(t *testing.T) {
+	etc := t.TempDir()
+	profile := installer.RURecommendedProfile{
+		InstallPanelCaddy: true,
+		CaddyJSON:         `{"apps":{"http":{"servers":{"panel":{"listen":[":443"]}}}}}`,
+		Domain:            "veil-ci.test",
+		Email:             "ci@veil-ci.test",
+		WebBasePath:       "/panel/",
+		PanelListen:       "127.0.0.1:36228",
+	}
+	snapshot := model.ManagementSnapshot{
+		Settings: model.Settings{
+			PanelAccess:     "direct",
+			Domain:          "127.0.0.1",
+			PanelListen:     "0.0.0.0:2096",
+			PanelPublicPort: 2096,
+			WebBasePath:     "/panel/",
+		},
+		Inbounds: []model.Inbound{{
+			Name:     "ci-hy2",
+			Protocol: "hysteria2",
+			Enabled:  true,
+			Profiles: []model.ClientProfile{{Name: "default", Username: "u", Password: "p", Enabled: true}},
+			ProtocolFields: map[string]any{
+				"domain":     "hy2.example.com",
+				"transport":  "udp",
+				"publicPort": 34443,
+			},
+		}},
+	}
+
+	got := retainCaddyJSONOnReinstall(profile, snapshot, etc)
+	if !strings.Contains(got, "veil-ci.test") {
+		t.Fatalf("retained Caddy JSON missing the new panel domain:\n%s", got)
+	}
+	if !strings.Contains(got, `":443"`) {
+		t.Fatalf("retained Caddy JSON has no :443 listener — caddy would serve nothing:\n%s", got)
+	}
+	if !strings.Contains(got, "127.0.0.1:36228") {
+		t.Fatalf("retained Caddy JSON must proxy to the new panel listen address:\n%s", got)
+	}
+}
+
 func TestApplyRURecommendedInstallDoesNotOverwriteLiveCaddyInbounds(t *testing.T) {
 	withMockedInstallRuntimes(t)
 

@@ -706,8 +706,8 @@ func verifyInstalledCaddyRoute(cmd *cobra.Command, profile installer.RURecommend
 	}
 
 	// TLS probe through the public route: SNI=<domain> against loopback :443.
-	// InsecureSkipVerify is intentional — the panel may still be serving a
-	// pending-cert fallback while ACME issuance is in flight.
+	// A pending/self-signed cert fails verification and lands in the warn path,
+	// which is exactly the signal that ACME issuance is still in flight.
 	base := profile.WebBasePath
 	if base == "" {
 		base = "/"
@@ -752,8 +752,17 @@ var caddyPublicRouteProbeFunc = func(ctx context.Context, domain, basePath strin
 		return err
 	}
 	req.Host = domain
+	roots, err := x509.SystemCertPool()
+	if err != nil {
+		roots = x509.NewCertPool()
+	}
+	if caRoot := strings.TrimSpace(os.Getenv("VEIL_ACME_CA_ROOT")); caRoot != "" {
+		if pemBody, readErr := os.ReadFile(caRoot); readErr == nil {
+			roots.AppendCertsFromPEM(pemBody)
+		}
+	}
 	client := &http.Client{Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{ServerName: domain, InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{ServerName: domain, RootCAs: roots, MinVersion: tls.VersionTLS12},
 	}}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -790,27 +799,37 @@ func retainCaddyJSONOnReinstall(profile installer.RURecommendedProfile, snapshot
 
 func renderCaddyJSONFromSnapshot(snapshot model.ManagementSnapshot, profile installer.RURecommendedProfile) (string, error) {
 	settings := snapshot.Settings
-	if settings.PanelAccess == "" {
-		settings.PanelAccess = "caddy"
-	}
-	if settings.WebBasePath == "" {
+	// This render only runs when the operator just requested caddy mode — the
+	// snapshot still carries the previous install's settings. Trusting them
+	// verbatim renders the old mode's config (e.g. PanelAccess=direct produces
+	// no panel server at all): caddy then starts, reports "serving initial
+	// configuration", and binds nothing on :443 (audit #304 caddy leg).
+	settings.PanelAccess = "caddy"
+	if profile.WebBasePath != "" {
 		settings.WebBasePath = profile.WebBasePath
 	}
-	if settings.Domain == "" {
+	if profile.Domain != "" {
 		settings.Domain = profile.Domain
-	}
-	if settings.Email == "" {
-		settings.Email = profile.Email
+		settings.PanelDomain = profile.Domain
 	}
 	if settings.PanelDomain == "" {
 		settings.PanelDomain = settings.Domain
 	}
+	if profile.Email != "" {
+		settings.Email = profile.Email
+		settings.PanelEmail = profile.Email
+	}
 	if settings.PanelEmail == "" {
 		settings.PanelEmail = settings.Email
 	}
-	if settings.PanelListen == "" {
+	if profile.PanelListen != "" {
 		settings.PanelListen = profile.PanelListen
 	}
+	// Caddy always terminates the panel on :443 via tls-alpn-01 — mirroring
+	// panelaccess.Profile.Build; a stale direct-mode snapshot carries the old
+	// panel port and an empty/http-01 challenge mode.
+	settings.PanelPublicPort = 443
+	settings.AcmeChallengeMode = "tls-alpn-01"
 	plan, _, _, err := caddyassembly.BuildFinalRenderPlan(settings, snapshot.Inbounds)
 	if err != nil {
 		return "", err
