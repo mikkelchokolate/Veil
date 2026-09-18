@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
@@ -185,6 +186,12 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		profile.Domain = resolvedIP.String()
 	}
 
+	// Persist the controlled-CA configuration into veil.env so the running
+	// panel keeps rendering Caddy issuers against the same ACME directory
+	// (audit #304 controlled-CA leg).
+	profile.ACMECAURL = strings.TrimSpace(os.Getenv("VEIL_ACME_CA_URL"))
+	profile.ACMECARoot = strings.TrimSpace(os.Getenv("VEIL_ACME_CA_ROOT"))
+
 	// 2. Initialize state.key and encrypted state.json with generated credentials
 	resolvedKeyPath := filepath.Join(opts.EtcDir, "state.key")
 	resolvedStatePath := filepath.Join(opts.VarDir, "state.json")
@@ -341,6 +348,16 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		if err := installWaitPanelReadyFunc(cmd, profile, opts); err != nil {
 			_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
 			return fmt.Errorf("panel did not become ready: %w", err)
+		}
+		// The loopback panel probe does not cover the Caddy leg: a dead
+		// veil-caddy.service or a :443 listener that never came up still prints
+		// credentials for an unreachable URL (audit #304 — verify the public
+		// reverse-proxy route, not only its loopback backend).
+		if profile.InstallPanelCaddy {
+			if err := installVerifyCaddyRouteFunc(cmd, profile); err != nil {
+				_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), result.WrittenFiles)
+				return fmt.Errorf("caddy panel proxy did not become ready: %w", err)
+			}
 		}
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "Written files:")
@@ -635,6 +652,134 @@ func probeInstalledPanel(ctx context.Context, contract statusflow.ContainerHealt
 
 var installProbeCaddyCapabilities = caddycapabilities.Probe
 
+// installVerifyCaddyRouteFunc is a seam so install tests can stub the live
+// service/socket checks without a real systemd host.
+var installVerifyCaddyRouteFunc = verifyInstalledCaddyRoute
+
+// installCaddyUnitActiveFunc reports whether veil-caddy.service is active.
+var installCaddyUnitActiveFunc = func(ctx context.Context) error {
+	return exec.CommandContext(ctx, "systemctl", "is-active", "--quiet", "veil-caddy.service").Run()
+}
+
+// verifyInstalledCaddyRoute proves the public reverse-proxy leg after a caddy
+// install: the unit is running, something is listening on TCP :443, and TLS
+// answers for the configured domain. A still-pending ACME certificate or a
+// DNS record pointing elsewhere is reported as an actionable warning instead
+// of a silent success (audit #304).
+func verifyInstalledCaddyRoute(cmd *cobra.Command, profile installer.RURecommendedProfile) error {
+	ctx := context.Background()
+	if cmd != nil && cmd.Context() != nil {
+		ctx = cmd.Context()
+	}
+	deadline, cancel := context.WithTimeout(ctx, installPanelReadyTimeout)
+	defer cancel()
+
+	// veil-caddy.service may still be in a restart loop right after the apply;
+	// give it the same readiness window as the panel before declaring failure.
+	var lastErr error
+	for {
+		if err := installCaddyUnitActiveFunc(deadline); err == nil {
+			conn, dialErr := caddyRouteDialer(deadline, "tcp", "127.0.0.1:443")
+			if dialErr == nil {
+				conn.Close()
+				break
+			}
+			lastErr = fmt.Errorf("veil-caddy.service is active but nothing listens on 127.0.0.1:443: %w", dialErr)
+		} else {
+			lastErr = fmt.Errorf("veil-caddy.service is not active: %w", err)
+		}
+		select {
+		case <-deadline.Done():
+			return fmt.Errorf("%w; check journalctl -u veil-caddy.service", lastErr)
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+
+	domain := strings.TrimSpace(profile.Domain)
+	if domain == "" {
+		return nil
+	}
+	warnf := func(format string, args ...any) {
+		if cmd != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: "+format+"\n", args...)
+		}
+	}
+
+	// TLS probe through the public route: SNI=<domain> against loopback :443.
+	// A pending/self-signed cert fails verification and lands in the warn path,
+	// which is exactly the signal that ACME issuance is still in flight.
+	base := profile.WebBasePath
+	if base == "" {
+		base = "/"
+	}
+	if probeErr := caddyPublicRouteProbeFunc(ctx, domain, base); probeErr != nil {
+		warnf("the panel route https://%s%s is not serving TLS yet: %v\n  If this persists, check that %s resolves to this host and that TCP :443 is reachable from the internet (cloud firewall/security group), and see journalctl -u veil-caddy.service for ACME errors.", domain, base, probeErr, domain)
+	}
+
+	// DNS advisory: a domain that does not resolve to this host's public IP
+	// makes the panel unreachable no matter how healthy caddy is locally.
+	if ips, err := caddyDomainLookupFunc(ctx, domain); err == nil && len(ips) > 0 {
+		if publicIP, err := installPublicIPResolveFunc(ctx); err == nil && publicIP != nil {
+			match := false
+			for _, ip := range ips {
+				if ip == publicIP.String() {
+					match = true
+					break
+				}
+			}
+			if !match {
+				warnf("domain %s resolves to %s but this host's public IP is %s — the panel will be unreachable until DNS is updated (or an upstream proxy forwards the traffic).", domain, strings.Join(ips, ", "), publicIP.String())
+			}
+		}
+	} else if err != nil {
+		warnf("domain %s does not resolve (%v) — the panel will be unreachable until DNS is configured.", domain, err)
+	}
+	return nil
+}
+
+var caddyRouteDialer = func(ctx context.Context, network, addr string) (net.Conn, error) {
+	return (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, network, addr)
+}
+
+// caddyPublicRouteProbeFunc issues an HTTPS request through caddy's public
+// :443 listener with SNI/Host set to the panel domain — proving the public
+// reverse-proxy route, not only the loopback backend.
+var caddyPublicRouteProbeFunc = func(ctx context.Context, domain, basePath string) error {
+	probeCtx, probeCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer probeCancel()
+	req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, "https://127.0.0.1:443"+basePath, nil)
+	if err != nil {
+		return err
+	}
+	req.Host = domain
+	roots, err := x509.SystemCertPool()
+	if err != nil {
+		roots = x509.NewCertPool()
+	}
+	if caRoot := strings.TrimSpace(os.Getenv("VEIL_ACME_CA_ROOT")); caRoot != "" {
+		if pemBody, readErr := os.ReadFile(caRoot); readErr == nil {
+			roots.AppendCertsFromPEM(pemBody)
+		}
+	}
+	client := &http.Client{Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{ServerName: domain, RootCAs: roots, MinVersion: tls.VersionTLS12},
+	}}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	return nil
+}
+
+var caddyDomainLookupFunc = func(ctx context.Context, domain string) ([]string, error) {
+	return net.DefaultResolver.LookupHost(ctx, domain)
+}
+
+var installPublicIPResolveFunc = func(ctx context.Context) (net.IP, error) {
+	return hostenv.ResolvePublicIP(ctx, "auto", installPublicIPClient, installPublicIPEndpoints)
+}
+
 func retainCaddyJSONOnReinstall(profile installer.RURecommendedProfile, snapshot model.ManagementSnapshot, etcDir string) string {
 	livePath := filepath.Join(etcDir, "generated", "caddy", "config.json")
 	live := ""
@@ -654,27 +799,37 @@ func retainCaddyJSONOnReinstall(profile installer.RURecommendedProfile, snapshot
 
 func renderCaddyJSONFromSnapshot(snapshot model.ManagementSnapshot, profile installer.RURecommendedProfile) (string, error) {
 	settings := snapshot.Settings
-	if settings.PanelAccess == "" {
-		settings.PanelAccess = "caddy"
-	}
-	if settings.WebBasePath == "" {
+	// This render only runs when the operator just requested caddy mode — the
+	// snapshot still carries the previous install's settings. Trusting them
+	// verbatim renders the old mode's config (e.g. PanelAccess=direct produces
+	// no panel server at all): caddy then starts, reports "serving initial
+	// configuration", and binds nothing on :443 (audit #304 caddy leg).
+	settings.PanelAccess = "caddy"
+	if profile.WebBasePath != "" {
 		settings.WebBasePath = profile.WebBasePath
 	}
-	if settings.Domain == "" {
+	if profile.Domain != "" {
 		settings.Domain = profile.Domain
-	}
-	if settings.Email == "" {
-		settings.Email = profile.Email
+		settings.PanelDomain = profile.Domain
 	}
 	if settings.PanelDomain == "" {
 		settings.PanelDomain = settings.Domain
 	}
+	if profile.Email != "" {
+		settings.Email = profile.Email
+		settings.PanelEmail = profile.Email
+	}
 	if settings.PanelEmail == "" {
 		settings.PanelEmail = settings.Email
 	}
-	if settings.PanelListen == "" {
+	if profile.PanelListen != "" {
 		settings.PanelListen = profile.PanelListen
 	}
+	// Caddy always terminates the panel on :443 via tls-alpn-01 — mirroring
+	// panelaccess.Profile.Build; a stale direct-mode snapshot carries the old
+	// panel port and an empty/http-01 challenge mode.
+	settings.PanelPublicPort = 443
+	settings.AcmeChallengeMode = "tls-alpn-01"
 	plan, _, _, err := caddyassembly.BuildFinalRenderPlan(settings, snapshot.Inbounds)
 	if err != nil {
 		return "", err
