@@ -25,7 +25,18 @@ func BuildRepairPlan(profile RURecommendedProfile, paths ApplyPaths) (RepairPlan
 }
 
 func ApplyRepairPlan(plan RepairPlan) (RepairResult, error) {
-	return managedfiles.Apply(plan)
+	result, err := managedfiles.Apply(plan)
+	if err != nil {
+		return RepairResult{}, err
+	}
+	// Repaired files land as root:root with the plan mode; restore the install
+	// ownership contract (veil.env/state keys → root:veil 0640, generated and
+	// panel TLS → root:veil-proxy 0640) so the runtime units can read them
+	// again (audit #379).
+	if err := chownSecretsForVeilGroup(result.WrittenFiles); err != nil {
+		return result, err
+	}
+	return result, nil
 }
 
 type managedFile = managedfiles.File
