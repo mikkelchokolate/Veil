@@ -33,7 +33,7 @@ RestrictSUIDSGID=true
 LockPersonality=true
 RestrictRealtime=true
 MemoryDenyWriteExecute=true
-UMask=0077
+UMask=0007
 InaccessiblePaths=/run/veil/helper.sock /var/lib/veil
 
 [Install]
