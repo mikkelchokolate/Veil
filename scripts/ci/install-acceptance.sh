@@ -336,7 +336,9 @@ grep -q '"key":"hysteria2:ci-hy2"' "${CI_ARTIFACT_DIR}/traffic-summary.json" \
 if grep -q '"state":"degraded"' "${CI_ARTIFACT_DIR}/traffic-summary.json"; then
   ci_die "a traffic provider is degraded: ${summary}"
 fi
-if grep -q '401' "${CI_ARTIFACT_DIR}/traffic-summary.json"; then
+# Scope 401 to lastError values: a bare grep would match any unix timestamp
+# ending in 401 (e.g. lastSuccessfulObservationAt) and false-positive the leg.
+if grep -q '"lastError":"[^"]*401[^"]*"' "${CI_ARTIFACT_DIR}/traffic-summary.json"; then
   ci_die "a traffic provider hit an auth failure: ${summary}"
 fi
 
