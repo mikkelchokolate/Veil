@@ -33,6 +33,9 @@ Options:
 
 By default uninstall removes configuration and state in /etc/veil and /var/lib/veil
 so a later install starts fresh with a new password. The veil system account is preserved.
+Purge also removes the Caddy/Mita state dirs (/var/lib/caddy, /var/lib/mita);
+if those are shared with a system Caddy/mita outside Veil, use --keep-data or
+override VEIL_CADDY_STATE_DIR / VEIL_MITA_STATE_DIR.
 USAGE
 }
 
