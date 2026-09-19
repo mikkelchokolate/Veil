@@ -373,7 +373,10 @@ olc_client="$(grep -o '"client":{"id":"[^"]*"' /tmp/ia-resp.json | head -1 | cut
 [ -n "${olc_client}" ] || ci_die "olc traffic client id missing: $(cat /tmp/ia-resp.json)"
 
 # The collector polls every 30s; give the first observation plus the provider
-# rebuild after the client-mutation applies room to land.
+# rebuild after the client-mutation applies room to land. A provider's first
+# observation can race the unit's traffic listener coming back after the apply
+# restart — a transient degraded must not end the poll; the post-loop checks
+# still fail the leg on a persistent degraded or a 401.
 telemetry=1
 summary=""
 for _ in $(seq 1 45); do
@@ -382,7 +385,6 @@ for _ in $(seq 1 45); do
     summary="$(cat /tmp/ia-resp.json)"
     case "${summary}" in
       *'"state":"healthy"'*) telemetry=0; break ;;
-      *'"state":"degraded"'*) break ;;
     esac
   fi
   sleep 2
