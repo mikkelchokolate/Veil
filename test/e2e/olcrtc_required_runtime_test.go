@@ -138,12 +138,13 @@ func TestRequiredOlcRTCRuntimeContract(t *testing.T) {
 	}
 	// Corroboration must add evidence BEYOND the room marker: signaling-stage
 	// vocabulary proves the process progressed past config load toward the
-	// (deliberately unreachable) Jitsi endpoint. Room-URL substrings
-	// ("veil-required-e2e", "127.0.0.1") are excluded — they are already
-	// implied by the mandatory check above and would make this loop a no-op.
+	// (deliberately unreachable) Jitsi endpoint. Config/URI-derived words are
+	// excluded — "veil-required-e2e" and "127.0.0.1" come from the room URL,
+	// and "jitsi" appears in Auth.Provider and the exported URI, so a mere
+	// config echo cannot satisfy this stage.
 	signalingEvidence := []string{
 		"signal", "signaling", "websocket", "dial", "connect",
-		"refused", "handshake", "tls", "jitsi",
+		"refused", "handshake", "tls",
 	}
 	proven := false
 	for _, marker := range signalingEvidence {
