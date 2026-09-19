@@ -47,6 +47,8 @@ export type BackupRestoreJobStatus = typeof BackupRestoreJobStatus[keyof typeof 
 export const BackupRestoreJobStatus = {
   queued: 'queued',
   running: 'running',
+  pending: 'pending',
   succeeded: 'succeeded',
   failed: 'failed',
+  degraded: 'degraded',
 } as const;

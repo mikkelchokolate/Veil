@@ -62,7 +62,9 @@ import type {
 import type {
   BadRequestResponse,
   ConflictResponse,
+  DeleteApiRoutingRulesName200,
   LockedResponse,
+  MutationOutcome,
   NotFoundResponse,
   RoutingPresetResponse,
   RoutingRule,
@@ -178,7 +180,7 @@ export const useGetApiRoutingRules = <TError = unknown,
       return useMutation(getGetApiRoutingRulesMutationOptions(options), queryClient);
     }
     export type postApiRoutingRulesResponse201 = {
-  data: RoutingRule
+  data: RoutingRule & MutationOutcome
   status: 201
 }
 
@@ -423,7 +425,7 @@ export const useGetApiRoutingRulesName = <TError = NotFoundResponse,
       return useMutation(getGetApiRoutingRulesNameMutationOptions(options), queryClient);
     }
     export type putApiRoutingRulesNameResponse200 = {
-  data: RoutingRule
+  data: RoutingRule & MutationOutcome
   status: 200
 }
 
@@ -588,7 +590,7 @@ export function usePutApiRoutingRulesName<TData = Awaited<ReturnType<typeof putA
 
 
 export type deleteApiRoutingRulesNameResponse200 = {
-  data: void
+  data: DeleteApiRoutingRulesName200
   status: 200
 }
 
@@ -812,7 +814,7 @@ export const useGetApiRoutingPresets = <TError = unknown,
       return useMutation(getGetApiRoutingPresetsMutationOptions(options), queryClient);
     }
     export type postApiRoutingPresetsNameResponse200 = {
-  data: RoutingPresetResponse
+  data: RoutingPresetResponse & MutationOutcome
   status: 200
 }
 

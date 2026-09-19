@@ -60,6 +60,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AuditListResponse,
   BadRequestResponse,
   ClientCreateRequest,
   ClientCreateResponse,
@@ -68,6 +69,7 @@ import type {
   ClientView,
   ConflictResponse,
   ForbiddenResponse,
+  GetApiV1ClientsIdAuditParams,
   GetApiV1ClientsIdLinks200,
   LockedResponse,
   NotFoundResponse,
@@ -1883,7 +1885,124 @@ export function useDeleteApiV1ClientsId<TData = Awaited<ReturnType<typeof delete
 
 
 
-export type getApiV1ClientsIdLinksResponse200 = {
+export type getApiV1ClientsIdAuditResponse200 = {
+  data: AuditListResponse
+  status: 200
+}
+
+export type getApiV1ClientsIdAuditResponse400 = {
+  data: BadRequestResponse
+  status: 400
+}
+
+export type getApiV1ClientsIdAuditResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getApiV1ClientsIdAuditResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getApiV1ClientsIdAuditResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getApiV1ClientsIdAuditResponseSuccess = (getApiV1ClientsIdAuditResponse200) & {
+  headers: Headers;
+};
+export type getApiV1ClientsIdAuditResponseError = (getApiV1ClientsIdAuditResponse400 | getApiV1ClientsIdAuditResponse401 | getApiV1ClientsIdAuditResponse403 | getApiV1ClientsIdAuditResponse404) & {
+  headers: Headers;
+};
+
+export type getApiV1ClientsIdAuditResponse = (getApiV1ClientsIdAuditResponseSuccess | getApiV1ClientsIdAuditResponseError)
+
+export const getGetApiV1ClientsIdAuditUrl = (id: string,
+    params?: GetApiV1ClientsIdAuditParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/clients/${id}/audit?${stringifiedParams}` : `/api/v1/clients/${id}/audit`
+}
+
+/**
+ * Newest-first audit records targeting this client. Records matching the immutable client ID are always included; legacy name-targeted records are included only for known client actions. Admin role required.
+ * @summary Audit history scoped to one client
+ */
+export const getApiV1ClientsIdAudit = async (id: string,
+    params?: GetApiV1ClientsIdAuditParams, options?: Parameters<typeof apiFetch>[1]): Promise<getApiV1ClientsIdAuditResponse> => {
+
+  return apiFetch<getApiV1ClientsIdAuditResponse>(getGetApiV1ClientsIdAuditUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1ClientsIdAuditMutationKey = () => ['getApiV1ClientsIdAudit'] as const;
+
+export const getGetApiV1ClientsIdAuditMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>, TError,GetApiV1ClientsIdAuditMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>, TError,GetApiV1ClientsIdAuditMutationVariables, TContext> => {
+
+const mutationKey = getGetApiV1ClientsIdAuditMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>, GetApiV1ClientsIdAuditMutationVariables> = (props) => {
+          const {id,params} = props ?? {};
+
+          return  getApiV1ClientsIdAudit(id,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1ClientsIdAuditMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>>
+
+    export type GetApiV1ClientsIdAuditMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+    export type GetApiV1ClientsIdAuditMutationVariables = {id: string;params?: GetApiV1ClientsIdAuditParams}
+
+    /**
+ * @summary Audit history scoped to one client
+ */
+export const useGetApiV1ClientsIdAudit = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>, TError,GetApiV1ClientsIdAuditMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>,
+        TError,
+        GetApiV1ClientsIdAuditMutationVariables,
+        TContext
+      > => {
+      return useMutation(getGetApiV1ClientsIdAuditMutationOptions(options), queryClient);
+    }
+    export type getApiV1ClientsIdLinksResponse200 = {
   data: GetApiV1ClientsIdLinks200
   status: 200
 }

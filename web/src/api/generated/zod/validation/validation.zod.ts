@@ -112,6 +112,7 @@ export const PostApiValidationBody = zod.object({
   "naiveUsername": zod.string().optional(),
   "naivePassword": zod.string().optional(),
   "hysteria2Password": zod.string().optional(),
+  "hysteria2Insecure": zod.boolean().optional().describe('Allow self-signed server certificates for this hysteria2 inbound.'),
   "masqueradeURL": zod.string().optional(),
   "fallbackRoot": zod.string().optional(),
   "olcrtcAuth": zod.string().optional(),

@@ -46,8 +46,15 @@ export type ApplyJobStatus = typeof ApplyJobStatus[keyof typeof ApplyJobStatus];
 
 export const ApplyJobStatus = {
   pending: 'pending',
-  running: 'running',
-  success: 'success',
+  planning: 'planning',
+  validating: 'validating',
+  applying: 'applying',
+  health_check: 'health_check',
+  staged: 'staged',
+  recovery_pending: 'recovery_pending',
+  succeeded: 'succeeded',
   failed: 'failed',
+  rolling_back: 'rolling_back',
   rolled_back: 'rolled_back',
+  rollback_failed: 'rollback_failed',
 } as const;

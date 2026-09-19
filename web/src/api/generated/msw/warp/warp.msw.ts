@@ -63,6 +63,7 @@ import type {
   BadRequestResponse,
   ConflictResponse,
   LockedResponse,
+  MutationOutcome,
   ServiceUnavailableResponse,
   ValidationFailedResponse,
   WarpConfig
@@ -203,7 +204,7 @@ export function useGetApiWarp<TData = Awaited<ReturnType<typeof getApiWarp>>, TE
 
 
 export type putApiWarpResponse200 = {
-  data: WarpConfig
+  data: WarpConfig & MutationOutcome
   status: 200
 }
 

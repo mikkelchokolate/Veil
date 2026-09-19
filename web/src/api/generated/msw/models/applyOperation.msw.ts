@@ -44,6 +44,7 @@ import type { ApplyOperationInterruptionRisk } from './applyOperationInterruptio
 import type { ApplyOperationType } from './applyOperationType.msw.ts';
 
 export interface ApplyOperation {
+  /** Operation kinds emitted by the apply planner. */
   type: ApplyOperationType;
   source?: string;
   destination?: string;
