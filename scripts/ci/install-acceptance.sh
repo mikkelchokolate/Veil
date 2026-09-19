@@ -329,10 +329,12 @@ for _ in $(seq 1 45); do
 done
 printf '%s\n' "${summary}" > "${CI_ARTIFACT_DIR}/traffic-summary.json"
 [ "${telemetry}" -eq 0 ] || ci_die "traffic summary did not reach healthy: ${summary}"
-grep -q '"providerCount":1' "${CI_ARTIFACT_DIR}/traffic-summary.json" \
-  || ci_die "expected exactly the hysteria2 provider to be registered: ${summary}"
+grep -q '"providerCount":2' "${CI_ARTIFACT_DIR}/traffic-summary.json" \
+  || ci_die "expected hysteria2 and mieru providers to be registered: ${summary}"
 grep -q '"key":"hysteria2:ci-hy2"' "${CI_ARTIFACT_DIR}/traffic-summary.json" \
   || ci_die "hysteria2:ci-hy2 provider not registered: ${summary}"
+grep -q '"key":"mieru:server"' "${CI_ARTIFACT_DIR}/traffic-summary.json" \
+  || ci_die "mieru:server provider not registered: ${summary}"
 if grep -q '"state":"degraded"' "${CI_ARTIFACT_DIR}/traffic-summary.json"; then
   ci_die "a traffic provider is degraded: ${summary}"
 fi
@@ -340,9 +342,9 @@ if grep -q '401' "${CI_ARTIFACT_DIR}/traffic-summary.json"; then
   ci_die "a traffic provider hit an auth failure: ${summary}"
 fi
 
-# Per-client report state: the hysteria2 binding supports accounting (pending
-# until first real traffic; healthy once observed), while mieru/olcRTC have no
-# runtime accounting and must say so instead of reporting fake health.
+# Per-client report state: the hysteria2 and mieru bindings support
+# accounting (pending until first real traffic; healthy once observed), while
+# olcRTC has no runtime accounting and must say so instead of fake health.
 client_state() { # client-id -> the "state" value of the traffic report
   local code
   code="$(api_code GET "/api/v1/traffic/$1")"
@@ -355,8 +357,10 @@ case "${hy2_state}" in
   *) ci_die "hysteria2 client traffic state = '${hy2_state}', want pending|healthy" ;;
 esac
 mieru_state="$(client_state "${mieru_client}")"
-[ "${mieru_state}" = "unsupported" ] \
-  || ci_die "mieru client traffic state = '${mieru_state}', want unsupported"
+case "${mieru_state}" in
+  pending|healthy) ;;
+  *) ci_die "mieru client traffic state = '${mieru_state}', want pending|healthy" ;;
+esac
 olc_state="$(client_state "${olc_client}")"
 [ "${olc_state}" = "unsupported" ] \
   || ci_die "olcRTC client traffic state = '${olc_state}', want unsupported"

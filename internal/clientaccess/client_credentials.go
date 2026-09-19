@@ -1,5 +1,7 @@
 package clientaccess
 
+import "math"
+
 // ClientCredential carries per-client credential material resolved from the
 // normalized Client+Binding+Credential store or legacy inbound profiles.
 type ClientCredential struct {
@@ -26,7 +28,7 @@ func BuildClientCredentials(inbound Inbound) ([]ClientCredential, error) {
 	for _, credential := range inbound.RuntimeCredentials {
 		overrides[credential.Username] = struct{}{}
 	}
-	merged := make([]ClientCredential, 0, len(credentials)+len(inbound.RuntimeCredentials))
+	merged := make([]ClientCredential, 0, safeCredentialCapHint(len(credentials), len(inbound.RuntimeCredentials)))
 	for _, credential := range credentials {
 		if _, replaced := overrides[credential.Username]; !replaced {
 			merged = append(merged, credential)
@@ -36,4 +38,14 @@ func BuildClientCredentials(inbound Inbound) ([]ClientCredential, error) {
 		merged = append(merged, ClientCredential{Name: credential.Name, Username: credential.Username, Password: credential.Password})
 	}
 	return merged, nil
+}
+
+// safeCredentialCapHint sums two input-derived lengths for a capacity hint;
+// the guard keeps the allocation size computation itself from overflowing
+// (CodeQL go/allocation-size-overflow).
+func safeCredentialCapHint(a, b int) int {
+	if b > math.MaxInt-a {
+		return a
+	}
+	return a + b
 }
