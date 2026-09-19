@@ -175,6 +175,11 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, name))
 		w.Header().Set("Cache-Control", "no-store")
+		// Large archives are streamed in 1MiB helper chunks over a window the
+		// helper bounds at ~2h; the global 120s WriteTimeout would otherwise
+		// kill long/slow client transfers mid-body (same deadline clear as
+		// the SSE handler).
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 		var offset, expectedSize int64
 		expectedCreatedAt, transactionID, contentDigest, inodeGeneration := "", "", "", ""
 		for {
