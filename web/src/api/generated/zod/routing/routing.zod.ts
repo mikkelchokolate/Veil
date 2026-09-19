@@ -79,7 +79,35 @@ export const PostApiRoutingRulesResponse = zod.object({
   "match": zod.string(),
   "outbound": zod.string(),
   "enabled": zod.boolean()
-})
+}).and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.'))
 
 /**
  * @summary Read a routing rule
@@ -130,7 +158,35 @@ export const PutApiRoutingRulesNameResponse = zod.object({
   "match": zod.string(),
   "outbound": zod.string(),
   "enabled": zod.boolean()
-})
+}).and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.'))
 
 /**
  * @summary Delete a routing rule
@@ -152,7 +208,37 @@ export const DeleteApiRoutingRulesNameHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(deleteApiRoutingRulesNameHeaderIdempotencyKeyMax).regex(deleteApiRoutingRulesNameHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
-export const DeleteApiRoutingRulesNameResponse = zod.unknown()
+export const DeleteApiRoutingRulesNameResponse = zod.object({
+  "name": zod.string()
+}).and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.'))
 
 /**
  * @summary List routing presets and source material
@@ -261,12 +347,12 @@ export const PostApiRoutingPresetsNameHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(postApiRoutingPresetsNameHeaderIdempotencyKeyMax).regex(postApiRoutingPresetsNameHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
-export const postApiRoutingPresetsNameResponseSourceFilesItemOnePinnedSha256RegExp = new RegExp('^[0-9a-f]{64}$');
-export const postApiRoutingPresetsNameResponseSourceFilesItemTwoPinnedSha256RegExp = new RegExp('^[0-9a-f]{64}$');
-export const postApiRoutingPresetsNameResponseSourceFilesItemThreePinnedSha256RegExp = new RegExp('^[0-9a-f]{64}$');
-export const postApiRoutingPresetsNameResponsePresetsItemSourceFilesItemOnePinnedSha256RegExp = new RegExp('^[0-9a-f]{64}$');
-export const postApiRoutingPresetsNameResponsePresetsItemSourceFilesItemTwoPinnedSha256RegExp = new RegExp('^[0-9a-f]{64}$');
-export const postApiRoutingPresetsNameResponsePresetsItemSourceFilesItemThreePinnedSha256RegExp = new RegExp('^[0-9a-f]{64}$');
+export const postApiRoutingPresetsNameResponseOneSourceFilesItemOnePinnedSha256RegExp = new RegExp('^[0-9a-f]{64}$');
+export const postApiRoutingPresetsNameResponseOneSourceFilesItemTwoPinnedSha256RegExp = new RegExp('^[0-9a-f]{64}$');
+export const postApiRoutingPresetsNameResponseOneSourceFilesItemThreePinnedSha256RegExp = new RegExp('^[0-9a-f]{64}$');
+export const postApiRoutingPresetsNameResponseOnePresetsItemSourceFilesItemOnePinnedSha256RegExp = new RegExp('^[0-9a-f]{64}$');
+export const postApiRoutingPresetsNameResponseOnePresetsItemSourceFilesItemTwoPinnedSha256RegExp = new RegExp('^[0-9a-f]{64}$');
+export const postApiRoutingPresetsNameResponseOnePresetsItemSourceFilesItemThreePinnedSha256RegExp = new RegExp('^[0-9a-f]{64}$');
 
 
 export const PostApiRoutingPresetsNameResponse = zod.object({
@@ -277,7 +363,7 @@ export const PostApiRoutingPresetsNameResponse = zod.object({
   "name": zod.string().optional(),
   "url": zod.url().optional(),
   "sha256Url": zod.url().optional(),
-  "pinnedSha256": zod.string().regex(postApiRoutingPresetsNameResponseSourceFilesItemOnePinnedSha256RegExp).describe('Exact digest anchored in the reviewed Veil source for immutable built-in assets.'),
+  "pinnedSha256": zod.string().regex(postApiRoutingPresetsNameResponseOneSourceFilesItemOnePinnedSha256RegExp).describe('Exact digest anchored in the reviewed Veil source for immutable built-in assets.'),
   "signatureUrl": zod.url().optional().describe('Sigstore bundle URL for an updateable external source.'),
   "certificateIdentity": zod.string().optional().describe('Exact expected Sigstore signing certificate identity.'),
   "certificateOidcIssuer": zod.url().optional().describe('Exact expected Sigstore certificate OIDC issuer.')
@@ -285,7 +371,7 @@ export const PostApiRoutingPresetsNameResponse = zod.object({
   "name": zod.string().optional(),
   "url": zod.url().optional(),
   "sha256Url": zod.url().optional(),
-  "pinnedSha256": zod.string().regex(postApiRoutingPresetsNameResponseSourceFilesItemTwoPinnedSha256RegExp).optional().describe('Exact digest anchored in the reviewed Veil source for immutable built-in assets.'),
+  "pinnedSha256": zod.string().regex(postApiRoutingPresetsNameResponseOneSourceFilesItemTwoPinnedSha256RegExp).optional().describe('Exact digest anchored in the reviewed Veil source for immutable built-in assets.'),
   "signatureUrl": zod.url().describe('Sigstore bundle URL for an updateable external source.'),
   "certificateIdentity": zod.string().describe('Exact expected Sigstore signing certificate identity.'),
   "certificateOidcIssuer": zod.url().describe('Exact expected Sigstore certificate OIDC issuer.')
@@ -293,7 +379,7 @@ export const PostApiRoutingPresetsNameResponse = zod.object({
   "name": zod.string(),
   "url": zod.url(),
   "sha256Url": zod.url(),
-  "pinnedSha256": zod.string().regex(postApiRoutingPresetsNameResponseSourceFilesItemThreePinnedSha256RegExp).optional().describe('Exact digest anchored in the reviewed Veil source for immutable built-in assets.'),
+  "pinnedSha256": zod.string().regex(postApiRoutingPresetsNameResponseOneSourceFilesItemThreePinnedSha256RegExp).optional().describe('Exact digest anchored in the reviewed Veil source for immutable built-in assets.'),
   "signatureUrl": zod.url().optional().describe('Sigstore bundle URL for an updateable external source.'),
   "certificateIdentity": zod.string().optional().describe('Exact expected Sigstore signing certificate identity.'),
   "certificateOidcIssuer": zod.url().optional().describe('Exact expected Sigstore certificate OIDC issuer.')
@@ -314,7 +400,7 @@ export const PostApiRoutingPresetsNameResponse = zod.object({
   "name": zod.string().optional(),
   "url": zod.url().optional(),
   "sha256Url": zod.url().optional(),
-  "pinnedSha256": zod.string().regex(postApiRoutingPresetsNameResponsePresetsItemSourceFilesItemOnePinnedSha256RegExp).describe('Exact digest anchored in the reviewed Veil source for immutable built-in assets.'),
+  "pinnedSha256": zod.string().regex(postApiRoutingPresetsNameResponseOnePresetsItemSourceFilesItemOnePinnedSha256RegExp).describe('Exact digest anchored in the reviewed Veil source for immutable built-in assets.'),
   "signatureUrl": zod.url().optional().describe('Sigstore bundle URL for an updateable external source.'),
   "certificateIdentity": zod.string().optional().describe('Exact expected Sigstore signing certificate identity.'),
   "certificateOidcIssuer": zod.url().optional().describe('Exact expected Sigstore certificate OIDC issuer.')
@@ -322,7 +408,7 @@ export const PostApiRoutingPresetsNameResponse = zod.object({
   "name": zod.string().optional(),
   "url": zod.url().optional(),
   "sha256Url": zod.url().optional(),
-  "pinnedSha256": zod.string().regex(postApiRoutingPresetsNameResponsePresetsItemSourceFilesItemTwoPinnedSha256RegExp).optional().describe('Exact digest anchored in the reviewed Veil source for immutable built-in assets.'),
+  "pinnedSha256": zod.string().regex(postApiRoutingPresetsNameResponseOnePresetsItemSourceFilesItemTwoPinnedSha256RegExp).optional().describe('Exact digest anchored in the reviewed Veil source for immutable built-in assets.'),
   "signatureUrl": zod.url().describe('Sigstore bundle URL for an updateable external source.'),
   "certificateIdentity": zod.string().describe('Exact expected Sigstore signing certificate identity.'),
   "certificateOidcIssuer": zod.url().describe('Exact expected Sigstore certificate OIDC issuer.')
@@ -330,7 +416,7 @@ export const PostApiRoutingPresetsNameResponse = zod.object({
   "name": zod.string(),
   "url": zod.url(),
   "sha256Url": zod.url(),
-  "pinnedSha256": zod.string().regex(postApiRoutingPresetsNameResponsePresetsItemSourceFilesItemThreePinnedSha256RegExp).optional().describe('Exact digest anchored in the reviewed Veil source for immutable built-in assets.'),
+  "pinnedSha256": zod.string().regex(postApiRoutingPresetsNameResponseOnePresetsItemSourceFilesItemThreePinnedSha256RegExp).optional().describe('Exact digest anchored in the reviewed Veil source for immutable built-in assets.'),
   "signatureUrl": zod.url().optional().describe('Sigstore bundle URL for an updateable external source.'),
   "certificateIdentity": zod.string().optional().describe('Exact expected Sigstore signing certificate identity.'),
   "certificateOidcIssuer": zod.url().optional().describe('Exact expected Sigstore certificate OIDC issuer.')
@@ -343,5 +429,33 @@ export const PostApiRoutingPresetsNameResponse = zod.object({
   "enabled": zod.boolean()
 }))
 })).optional()
-})
+}).and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.'))
 

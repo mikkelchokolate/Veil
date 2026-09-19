@@ -72,7 +72,7 @@ function installFetchMock(state: MockState) {
 		}
 		if (url.endsWith("/api/apply/jobs")) {
 			const status =
-				state.jobStatus === undefined ? "running" : state.jobStatus;
+				state.jobStatus === undefined ? "applying" : state.jobStatus;
 			return respond({
 				items:
 					status === null
@@ -168,7 +168,7 @@ describe("createInbound recovery", () => {
 	// Regression for #380: reconcile must derive success from the attached job
 	// like the server does — anything other than succeeded means saved-but-not-
 	// live, never a green "saved".
-	it.each(["running", "failed", "recovery_pending"])(
+	it.each(["applying", "failed", "recovery_pending"])(
 		"reports success:false when the reconciled job is %s",
 		async (jobStatus) => {
 			vi.useFakeTimers();

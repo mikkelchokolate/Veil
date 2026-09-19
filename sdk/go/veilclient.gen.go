@@ -21,25 +21,46 @@ import (
 
 // Defines values for ApplyJobStatus.
 const (
-	ApplyJobStatusFailed     ApplyJobStatus = "failed"
-	ApplyJobStatusPending    ApplyJobStatus = "pending"
-	ApplyJobStatusRolledBack ApplyJobStatus = "rolled_back"
-	ApplyJobStatusRunning    ApplyJobStatus = "running"
-	ApplyJobStatusSuccess    ApplyJobStatus = "success"
+	ApplyJobStatusApplying        ApplyJobStatus = "applying"
+	ApplyJobStatusFailed          ApplyJobStatus = "failed"
+	ApplyJobStatusHealthCheck     ApplyJobStatus = "health_check"
+	ApplyJobStatusPending         ApplyJobStatus = "pending"
+	ApplyJobStatusPlanning        ApplyJobStatus = "planning"
+	ApplyJobStatusRecoveryPending ApplyJobStatus = "recovery_pending"
+	ApplyJobStatusRollbackFailed  ApplyJobStatus = "rollback_failed"
+	ApplyJobStatusRolledBack      ApplyJobStatus = "rolled_back"
+	ApplyJobStatusRollingBack     ApplyJobStatus = "rolling_back"
+	ApplyJobStatusStaged          ApplyJobStatus = "staged"
+	ApplyJobStatusSucceeded       ApplyJobStatus = "succeeded"
+	ApplyJobStatusValidating      ApplyJobStatus = "validating"
 )
 
 // Valid indicates whether the value is a known member of the ApplyJobStatus enum.
 func (e ApplyJobStatus) Valid() bool {
 	switch e {
+	case ApplyJobStatusApplying:
+		return true
 	case ApplyJobStatusFailed:
+		return true
+	case ApplyJobStatusHealthCheck:
 		return true
 	case ApplyJobStatusPending:
 		return true
+	case ApplyJobStatusPlanning:
+		return true
+	case ApplyJobStatusRecoveryPending:
+		return true
+	case ApplyJobStatusRollbackFailed:
+		return true
 	case ApplyJobStatusRolledBack:
 		return true
-	case ApplyJobStatusRunning:
+	case ApplyJobStatusRollingBack:
 		return true
-	case ApplyJobStatusSuccess:
+	case ApplyJobStatusStaged:
+		return true
+	case ApplyJobStatusSucceeded:
+		return true
+	case ApplyJobStatusValidating:
 		return true
 	default:
 		return false
@@ -72,28 +93,85 @@ func (e ApplyOperationInterruptionRisk) Valid() bool {
 
 // Defines values for ApplyOperationType.
 const (
-	DisableService ApplyOperationType = "disable_service"
 	PromoteFile    ApplyOperationType = "promote_file"
 	ReloadService  ApplyOperationType = "reload_service"
-	RemoveFile     ApplyOperationType = "remove_file"
 	RestartService ApplyOperationType = "restart_service"
-	UpdateFirewall ApplyOperationType = "update_firewall"
 )
 
 // Valid indicates whether the value is a known member of the ApplyOperationType enum.
 func (e ApplyOperationType) Valid() bool {
 	switch e {
-	case DisableService:
-		return true
 	case PromoteFile:
 		return true
 	case ReloadService:
 		return true
-	case RemoveFile:
-		return true
 	case RestartService:
 		return true
-	case UpdateFirewall:
+	default:
+		return false
+	}
+}
+
+// Defines values for ApplyRequestConfirm.
+const (
+	ApplyRequestConfirmTrue ApplyRequestConfirm = true
+)
+
+// Valid indicates whether the value is a known member of the ApplyRequestConfirm enum.
+func (e ApplyRequestConfirm) Valid() bool {
+	switch e {
+	case ApplyRequestConfirmTrue:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ApplyStateResponseState.
+const (
+	ApplyStateResponseStateApplying    ApplyStateResponseState = "applying"
+	ApplyStateResponseStateDegraded    ApplyStateResponseState = "degraded"
+	ApplyStateResponseStateFailed      ApplyStateResponseState = "failed"
+	ApplyStateResponseStatePending     ApplyStateResponseState = "pending"
+	ApplyStateResponseStateRolledBack  ApplyStateResponseState = "rolled_back"
+	ApplyStateResponseStateRollingBack ApplyStateResponseState = "rolling_back"
+	ApplyStateResponseStateSynced      ApplyStateResponseState = "synced"
+)
+
+// Valid indicates whether the value is a known member of the ApplyStateResponseState enum.
+func (e ApplyStateResponseState) Valid() bool {
+	switch e {
+	case ApplyStateResponseStateApplying:
+		return true
+	case ApplyStateResponseStateDegraded:
+		return true
+	case ApplyStateResponseStateFailed:
+		return true
+	case ApplyStateResponseStatePending:
+		return true
+	case ApplyStateResponseStateRolledBack:
+		return true
+	case ApplyStateResponseStateRollingBack:
+		return true
+	case ApplyStateResponseStateSynced:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AuthStatusResponseAuthMethod.
+const (
+	DevAnonymous AuthStatusResponseAuthMethod = "dev-anonymous"
+	StaticToken  AuthStatusResponseAuthMethod = "static-token"
+)
+
+// Valid indicates whether the value is a known member of the AuthStatusResponseAuthMethod enum.
+func (e AuthStatusResponseAuthMethod) Valid() bool {
+	switch e {
+	case DevAnonymous:
+		return true
+	case StaticToken:
 		return true
 	default:
 		return false
@@ -123,7 +201,9 @@ func (e BackupArchiveFileName) Valid() bool {
 
 // Defines values for BackupRestoreJobStatus.
 const (
+	BackupRestoreJobStatusDegraded  BackupRestoreJobStatus = "degraded"
 	BackupRestoreJobStatusFailed    BackupRestoreJobStatus = "failed"
+	BackupRestoreJobStatusPending   BackupRestoreJobStatus = "pending"
 	BackupRestoreJobStatusQueued    BackupRestoreJobStatus = "queued"
 	BackupRestoreJobStatusRunning   BackupRestoreJobStatus = "running"
 	BackupRestoreJobStatusSucceeded BackupRestoreJobStatus = "succeeded"
@@ -132,7 +212,11 @@ const (
 // Valid indicates whether the value is a known member of the BackupRestoreJobStatus enum.
 func (e BackupRestoreJobStatus) Valid() bool {
 	switch e {
+	case BackupRestoreJobStatusDegraded:
+		return true
 	case BackupRestoreJobStatusFailed:
+		return true
+	case BackupRestoreJobStatusPending:
 		return true
 	case BackupRestoreJobStatusQueued:
 		return true
@@ -348,22 +432,22 @@ func (e HealthResponseStatus) Valid() bool {
 
 // Defines values for InboundProtocol.
 const (
-	Hysteria2  InboundProtocol = "hysteria2"
-	Mieru      InboundProtocol = "mieru"
-	Naiveproxy InboundProtocol = "naiveproxy"
-	Olcrtc     InboundProtocol = "olcrtc"
+	InboundProtocolHysteria2  InboundProtocol = "hysteria2"
+	InboundProtocolMieru      InboundProtocol = "mieru"
+	InboundProtocolNaiveproxy InboundProtocol = "naiveproxy"
+	InboundProtocolOlcrtc     InboundProtocol = "olcrtc"
 )
 
 // Valid indicates whether the value is a known member of the InboundProtocol enum.
 func (e InboundProtocol) Valid() bool {
 	switch e {
-	case Hysteria2:
+	case InboundProtocolHysteria2:
 		return true
-	case Mieru:
+	case InboundProtocolMieru:
 		return true
-	case Naiveproxy:
+	case InboundProtocolNaiveproxy:
 		return true
-	case Olcrtc:
+	case InboundProtocolOlcrtc:
 		return true
 	default:
 		return false
@@ -483,17 +567,29 @@ func (e ReadyzResponseStatus) Valid() bool {
 
 // Defines values for RevisionViewState.
 const (
-	RevisionViewStateFailed  RevisionViewState = "failed"
-	RevisionViewStatePending RevisionViewState = "pending"
-	RevisionViewStateSynced  RevisionViewState = "synced"
+	RevisionViewStateApplying    RevisionViewState = "applying"
+	RevisionViewStateDegraded    RevisionViewState = "degraded"
+	RevisionViewStateFailed      RevisionViewState = "failed"
+	RevisionViewStatePending     RevisionViewState = "pending"
+	RevisionViewStateRolledBack  RevisionViewState = "rolled_back"
+	RevisionViewStateRollingBack RevisionViewState = "rolling_back"
+	RevisionViewStateSynced      RevisionViewState = "synced"
 )
 
 // Valid indicates whether the value is a known member of the RevisionViewState enum.
 func (e RevisionViewState) Valid() bool {
 	switch e {
+	case RevisionViewStateApplying:
+		return true
+	case RevisionViewStateDegraded:
+		return true
 	case RevisionViewStateFailed:
 		return true
 	case RevisionViewStatePending:
+		return true
+	case RevisionViewStateRolledBack:
+		return true
+	case RevisionViewStateRollingBack:
 		return true
 	case RevisionViewStateSynced:
 		return true
@@ -504,16 +600,16 @@ func (e RevisionViewState) Valid() bool {
 
 // Defines values for SettingsAcmeChallengeMode.
 const (
-	Http01    SettingsAcmeChallengeMode = "http-01"
-	TlsAlpn01 SettingsAcmeChallengeMode = "tls-alpn-01"
+	SettingsAcmeChallengeModeHttp01    SettingsAcmeChallengeMode = "http-01"
+	SettingsAcmeChallengeModeTlsAlpn01 SettingsAcmeChallengeMode = "tls-alpn-01"
 )
 
 // Valid indicates whether the value is a known member of the SettingsAcmeChallengeMode enum.
 func (e SettingsAcmeChallengeMode) Valid() bool {
 	switch e {
-	case Http01:
+	case SettingsAcmeChallengeModeHttp01:
 		return true
-	case TlsAlpn01:
+	case SettingsAcmeChallengeModeTlsAlpn01:
 		return true
 	default:
 		return false
@@ -598,15 +694,15 @@ func (e SetupStatusResponsePanelAccess) Valid() bool {
 	}
 }
 
-// Defines values for UpdateResponseSuccess.
+// Defines values for UpdateResponseStatus.
 const (
-	UpdateResponseSuccessTrue UpdateResponseSuccess = true
+	RestartPending UpdateResponseStatus = "restart_pending"
 )
 
-// Valid indicates whether the value is a known member of the UpdateResponseSuccess enum.
-func (e UpdateResponseSuccess) Valid() bool {
+// Valid indicates whether the value is a known member of the UpdateResponseStatus enum.
+func (e UpdateResponseStatus) Valid() bool {
 	switch e {
-	case UpdateResponseSuccessTrue:
+	case RestartPending:
 		return true
 	default:
 		return false
@@ -709,6 +805,132 @@ func (e GetApiClientLinksSubscriptionParamsFormat) Valid() bool {
 	}
 }
 
+// Defines values for PostApiInbounds201JSONResponseBodyProtocol.
+const (
+	PostApiInbounds201JSONResponseBodyProtocolHysteria2  PostApiInbounds201JSONResponseBodyProtocol = "hysteria2"
+	PostApiInbounds201JSONResponseBodyProtocolMieru      PostApiInbounds201JSONResponseBodyProtocol = "mieru"
+	PostApiInbounds201JSONResponseBodyProtocolNaiveproxy PostApiInbounds201JSONResponseBodyProtocol = "naiveproxy"
+	PostApiInbounds201JSONResponseBodyProtocolOlcrtc     PostApiInbounds201JSONResponseBodyProtocol = "olcrtc"
+)
+
+// Valid indicates whether the value is a known member of the PostApiInbounds201JSONResponseBodyProtocol enum.
+func (e PostApiInbounds201JSONResponseBodyProtocol) Valid() bool {
+	switch e {
+	case PostApiInbounds201JSONResponseBodyProtocolHysteria2:
+		return true
+	case PostApiInbounds201JSONResponseBodyProtocolMieru:
+		return true
+	case PostApiInbounds201JSONResponseBodyProtocolNaiveproxy:
+		return true
+	case PostApiInbounds201JSONResponseBodyProtocolOlcrtc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PostApiInbounds201JSONResponseBodyTransport.
+const (
+	PostApiInbounds201JSONResponseBodyTransportTcp PostApiInbounds201JSONResponseBodyTransport = "tcp"
+	PostApiInbounds201JSONResponseBodyTransportUdp PostApiInbounds201JSONResponseBodyTransport = "udp"
+)
+
+// Valid indicates whether the value is a known member of the PostApiInbounds201JSONResponseBodyTransport enum.
+func (e PostApiInbounds201JSONResponseBodyTransport) Valid() bool {
+	switch e {
+	case PostApiInbounds201JSONResponseBodyTransportTcp:
+		return true
+	case PostApiInbounds201JSONResponseBodyTransportUdp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PutApiInboundsName200JSONResponseBodyProtocol.
+const (
+	PutApiInboundsName200JSONResponseBodyProtocolHysteria2  PutApiInboundsName200JSONResponseBodyProtocol = "hysteria2"
+	PutApiInboundsName200JSONResponseBodyProtocolMieru      PutApiInboundsName200JSONResponseBodyProtocol = "mieru"
+	PutApiInboundsName200JSONResponseBodyProtocolNaiveproxy PutApiInboundsName200JSONResponseBodyProtocol = "naiveproxy"
+	PutApiInboundsName200JSONResponseBodyProtocolOlcrtc     PutApiInboundsName200JSONResponseBodyProtocol = "olcrtc"
+)
+
+// Valid indicates whether the value is a known member of the PutApiInboundsName200JSONResponseBodyProtocol enum.
+func (e PutApiInboundsName200JSONResponseBodyProtocol) Valid() bool {
+	switch e {
+	case PutApiInboundsName200JSONResponseBodyProtocolHysteria2:
+		return true
+	case PutApiInboundsName200JSONResponseBodyProtocolMieru:
+		return true
+	case PutApiInboundsName200JSONResponseBodyProtocolNaiveproxy:
+		return true
+	case PutApiInboundsName200JSONResponseBodyProtocolOlcrtc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PutApiInboundsName200JSONResponseBodyTransport.
+const (
+	PutApiInboundsName200JSONResponseBodyTransportTcp PutApiInboundsName200JSONResponseBodyTransport = "tcp"
+	PutApiInboundsName200JSONResponseBodyTransportUdp PutApiInboundsName200JSONResponseBodyTransport = "udp"
+)
+
+// Valid indicates whether the value is a known member of the PutApiInboundsName200JSONResponseBodyTransport enum.
+func (e PutApiInboundsName200JSONResponseBodyTransport) Valid() bool {
+	switch e {
+	case PutApiInboundsName200JSONResponseBodyTransportTcp:
+		return true
+	case PutApiInboundsName200JSONResponseBodyTransportUdp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PutApiSettings200JSONResponseBodyAcmeChallengeMode.
+const (
+	PutApiSettings200JSONResponseBodyAcmeChallengeModeHttp01    PutApiSettings200JSONResponseBodyAcmeChallengeMode = "http-01"
+	PutApiSettings200JSONResponseBodyAcmeChallengeModeTlsAlpn01 PutApiSettings200JSONResponseBodyAcmeChallengeMode = "tls-alpn-01"
+)
+
+// Valid indicates whether the value is a known member of the PutApiSettings200JSONResponseBodyAcmeChallengeMode enum.
+func (e PutApiSettings200JSONResponseBodyAcmeChallengeMode) Valid() bool {
+	switch e {
+	case PutApiSettings200JSONResponseBodyAcmeChallengeModeHttp01:
+		return true
+	case PutApiSettings200JSONResponseBodyAcmeChallengeModeTlsAlpn01:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PutApiSettings200JSONResponseBodyPanelAccess.
+const (
+	PutApiSettings200JSONResponseBodyPanelAccessCaddy  PutApiSettings200JSONResponseBodyPanelAccess = "caddy"
+	PutApiSettings200JSONResponseBodyPanelAccessDirect PutApiSettings200JSONResponseBodyPanelAccess = "direct"
+	PutApiSettings200JSONResponseBodyPanelAccessEmpty  PutApiSettings200JSONResponseBodyPanelAccess = ""
+	PutApiSettings200JSONResponseBodyPanelAccessLocal  PutApiSettings200JSONResponseBodyPanelAccess = "local"
+)
+
+// Valid indicates whether the value is a known member of the PutApiSettings200JSONResponseBodyPanelAccess enum.
+func (e PutApiSettings200JSONResponseBodyPanelAccess) Valid() bool {
+	switch e {
+	case PutApiSettings200JSONResponseBodyPanelAccessCaddy:
+		return true
+	case PutApiSettings200JSONResponseBodyPanelAccessDirect:
+		return true
+	case PutApiSettings200JSONResponseBodyPanelAccessEmpty:
+		return true
+	case PutApiSettings200JSONResponseBodyPanelAccessLocal:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PostApiV1ClientsBulkJSONBodyAction.
 const (
 	AttachInbound PostApiV1ClientsBulkJSONBodyAction = "attach_inbound"
@@ -783,38 +1005,62 @@ func (e HeadSTokenParamsFormat) Valid() bool {
 
 // ApplyHistoryEntry defines model for ApplyHistoryEntry.
 type ApplyHistoryEntry struct {
-	Applied         bool                      `json:"applied"`
-	BackupFiles     *[]string                 `json:"backupFiles,omitempty"`
-	HealthChecks    *[]ServiceHealthResult    `json:"healthChecks,omitempty"`
-	Id              string                    `json:"id"`
-	LiveApplied     bool                      `json:"liveApplied"`
-	LiveFiles       *[]string                 `json:"liveFiles,omitempty"`
-	Plan            ApplyPlanResponse         `json:"plan"`
-	RollbackActions *[]ServiceActionResult    `json:"rollbackActions,omitempty"`
-	RollbackFiles   *[]string                 `json:"rollbackFiles,omitempty"`
-	RolledBack      *bool                     `json:"rolledBack,omitempty"`
-	ServiceActions  *[]ServiceActionResult    `json:"serviceActions,omitempty"`
-	ServicesApplied bool                      `json:"servicesApplied"`
-	Stage           string                    `json:"stage"`
-	Success         bool                      `json:"success"`
-	Timestamp       string                    `json:"timestamp"`
-	Validations     *[]ConfigValidationResult `json:"validations,omitempty"`
-	WrittenFiles    []string                  `json:"writtenFiles"`
+	// Ambiguous True when runtime evidence cannot prove whether mutation or rollback converged; clients must not treat the response as authoritative.
+	Ambiguous         *bool                  `json:"ambiguous,omitempty"`
+	Applied           bool                   `json:"applied"`
+	ArtifactsChanged  *bool                  `json:"artifactsChanged,omitempty"`
+	ArtifactsRestored *bool                  `json:"artifactsRestored,omitempty"`
+	BackupFiles       *[]string              `json:"backupFiles,omitempty"`
+	FirewallChanged   *bool                  `json:"firewallChanged,omitempty"`
+	FirewallRestored  *bool                  `json:"firewallRestored,omitempty"`
+	HealthChecks      *[]ServiceHealthResult `json:"healthChecks,omitempty"`
+	Id                string                 `json:"id"`
+	LiveApplied       bool                   `json:"liveApplied"`
+	LiveFiles         *[]string              `json:"liveFiles,omitempty"`
+
+	// MutationStarted True once the apply began changing runtime artifacts or services; absent on a plan/stage-only response.
+	MutationStarted        *bool                  `json:"mutationStarted,omitempty"`
+	Plan                   ApplyPlanResponse      `json:"plan"`
+	PostRollbackHealthPass *bool                  `json:"postRollbackHealthPass,omitempty"`
+	RollbackActions        *[]ServiceActionResult `json:"rollbackActions,omitempty"`
+
+	// RollbackComplete Honest signal that rollback evidence is complete; absence means a rolled_back flag alone is not proof of restoration.
+	RollbackComplete *bool                     `json:"rollbackComplete,omitempty"`
+	RollbackFiles    *[]string                 `json:"rollbackFiles,omitempty"`
+	RolledBack       *bool                     `json:"rolledBack,omitempty"`
+	ServiceActions   *[]ServiceActionResult    `json:"serviceActions,omitempty"`
+	ServicesApplied  bool                      `json:"servicesApplied"`
+	ServicesChanged  *bool                     `json:"servicesChanged,omitempty"`
+	ServicesRestored *bool                     `json:"servicesRestored,omitempty"`
+	Stage            string                    `json:"stage"`
+	Success          bool                      `json:"success"`
+	Timestamp        string                    `json:"timestamp"`
+	Validations      *[]ConfigValidationResult `json:"validations,omitempty"`
+	WrittenFiles     []string                  `json:"writtenFiles"`
 }
 
 // ApplyJob defines model for ApplyJob.
 type ApplyJob struct {
-	ActorId         *string        `json:"actorId,omitempty"`
-	BaseRevision    int            `json:"baseRevision"`
-	CreatedAt       int            `json:"createdAt"`
-	DesiredRevision int            `json:"desiredRevision"`
-	ErrorCode       *string        `json:"errorCode,omitempty"`
-	ErrorMessage    *string        `json:"errorMessage,omitempty"`
-	FinishedAt      *int           `json:"finishedAt,omitempty"`
-	Id              string         `json:"id"`
-	StartedAt       *int           `json:"startedAt,omitempty"`
-	Status          ApplyJobStatus `json:"status"`
-	Trigger         string         `json:"trigger"`
+	ActorId         *string `json:"actorId,omitempty"`
+	BaseRevision    int     `json:"baseRevision"`
+	CreatedAt       int     `json:"createdAt"`
+	DesiredRevision int     `json:"desiredRevision"`
+	ErrorCode       *string `json:"errorCode,omitempty"`
+	ErrorMessage    *string `json:"errorMessage,omitempty"`
+	FinishedAt      *int    `json:"finishedAt,omitempty"`
+	Id              string  `json:"id"`
+
+	// LeaseGeneration Fencing generation of the apply lease held while the job ran.
+	LeaseGeneration *int64 `json:"leaseGeneration,omitempty"`
+
+	// Operations Concrete runtime changes attempted by this job.
+	Operations *[]ApplyOperationResult `json:"operations,omitempty"`
+
+	// OwnerProcess Lease owner identity of the process that ran the job.
+	OwnerProcess *string        `json:"ownerProcess,omitempty"`
+	StartedAt    *int           `json:"startedAt,omitempty"`
+	Status       ApplyJobStatus `json:"status"`
+	Trigger      string         `json:"trigger"`
 }
 
 // ApplyJobStatus defines model for ApplyJob.Status.
@@ -826,16 +1072,28 @@ type ApplyOperation struct {
 	InterruptionRisk  ApplyOperationInterruptionRisk `json:"interruptionRisk"`
 	RollbackAvailable bool                           `json:"rollbackAvailable"`
 	Source            *string                        `json:"source,omitempty"`
-	Type              ApplyOperationType             `json:"type"`
-	Unit              *string                        `json:"unit,omitempty"`
-	ValidationSource  string                         `json:"validationSource"`
+
+	// Type Operation kinds emitted by the apply planner.
+	Type             ApplyOperationType `json:"type"`
+	Unit             *string            `json:"unit,omitempty"`
+	ValidationSource string             `json:"validationSource"`
 }
 
 // ApplyOperationInterruptionRisk defines model for ApplyOperation.InterruptionRisk.
 type ApplyOperationInterruptionRisk string
 
-// ApplyOperationType defines model for ApplyOperation.Type.
+// ApplyOperationType Operation kinds emitted by the apply planner.
 type ApplyOperationType string
+
+// ApplyOperationResult defines model for ApplyOperationResult.
+type ApplyOperationResult struct {
+	Detail  *string `json:"detail,omitempty"`
+	Success bool    `json:"success"`
+	Target  *string `json:"target,omitempty"`
+
+	// Type Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).
+	Type string `json:"type"`
+}
 
 // ApplyPlanResponse defines model for ApplyPlanResponse.
 type ApplyPlanResponse struct {
@@ -848,29 +1106,98 @@ type ApplyPlanResponse struct {
 	Valid      bool              `json:"valid"`
 }
 
+// ApplyReconcileResponse defines model for ApplyReconcileResponse.
+type ApplyReconcileResponse struct {
+	ApplyJob *ApplyJob `json:"applyJob,omitempty"`
+
+	// Reconciled False when desired already equaled applied (no-op) or when the apply job failed; inspect applyJob/state for evidence.
+	Reconciled bool `json:"reconciled"`
+	Revision   *struct {
+		Applied *int64 `json:"applied,omitempty"`
+		Desired *int64 `json:"desired,omitempty"`
+	} `json:"revision,omitempty"`
+	State *ApplyStateResponse `json:"state,omitempty"`
+}
+
 // ApplyRequest defines model for ApplyRequest.
 type ApplyRequest struct {
-	ApplyLive     bool `json:"applyLive"`
-	ApplyServices bool `json:"applyServices"`
-	Confirm       bool `json:"confirm"`
+	ApplyLive *bool `json:"applyLive,omitempty"`
+
+	// ApplyServices Requires applyLive; applying services without promoting live artifacts is rejected with 400/422.
+	ApplyServices *bool               `json:"applyServices,omitempty"`
+	Confirm       ApplyRequestConfirm `json:"confirm"`
 }
+
+// ApplyRequestConfirm defines model for ApplyRequest.Confirm.
+type ApplyRequestConfirm bool
 
 // ApplyResponse defines model for ApplyResponse.
 type ApplyResponse struct {
-	Applied         bool                      `json:"applied"`
-	BackupFiles     *[]string                 `json:"backupFiles,omitempty"`
-	HealthChecks    *[]ServiceHealthResult    `json:"healthChecks,omitempty"`
-	LiveApplied     bool                      `json:"liveApplied"`
-	LiveFiles       *[]string                 `json:"liveFiles,omitempty"`
-	Plan            ApplyPlanResponse         `json:"plan"`
-	RollbackActions *[]ServiceActionResult    `json:"rollbackActions,omitempty"`
-	RollbackFiles   *[]string                 `json:"rollbackFiles,omitempty"`
-	RolledBack      *bool                     `json:"rolledBack,omitempty"`
-	ServiceActions  *[]ServiceActionResult    `json:"serviceActions,omitempty"`
-	ServicesApplied bool                      `json:"servicesApplied"`
-	Validations     *[]ConfigValidationResult `json:"validations,omitempty"`
-	WrittenFiles    []string                  `json:"writtenFiles"`
+	// Ambiguous True when runtime evidence cannot prove whether mutation or rollback converged; clients must not treat the response as authoritative.
+	Ambiguous         *bool                  `json:"ambiguous,omitempty"`
+	Applied           bool                   `json:"applied"`
+	ArtifactsChanged  *bool                  `json:"artifactsChanged,omitempty"`
+	ArtifactsRestored *bool                  `json:"artifactsRestored,omitempty"`
+	BackupFiles       *[]string              `json:"backupFiles,omitempty"`
+	FirewallChanged   *bool                  `json:"firewallChanged,omitempty"`
+	FirewallRestored  *bool                  `json:"firewallRestored,omitempty"`
+	HealthChecks      *[]ServiceHealthResult `json:"healthChecks,omitempty"`
+	LiveApplied       bool                   `json:"liveApplied"`
+	LiveFiles         *[]string              `json:"liveFiles,omitempty"`
+
+	// MutationStarted True once the apply began changing runtime artifacts or services; absent on a plan/stage-only response.
+	MutationStarted        *bool                  `json:"mutationStarted,omitempty"`
+	Plan                   ApplyPlanResponse      `json:"plan"`
+	PostRollbackHealthPass *bool                  `json:"postRollbackHealthPass,omitempty"`
+	RollbackActions        *[]ServiceActionResult `json:"rollbackActions,omitempty"`
+
+	// RollbackComplete Honest signal that rollback evidence is complete; absence means a rolled_back flag alone is not proof of restoration.
+	RollbackComplete *bool                     `json:"rollbackComplete,omitempty"`
+	RollbackFiles    *[]string                 `json:"rollbackFiles,omitempty"`
+	RolledBack       *bool                     `json:"rolledBack,omitempty"`
+	ServiceActions   *[]ServiceActionResult    `json:"serviceActions,omitempty"`
+	ServicesApplied  bool                      `json:"servicesApplied"`
+	ServicesChanged  *bool                     `json:"servicesChanged,omitempty"`
+	ServicesRestored *bool                     `json:"servicesRestored,omitempty"`
+	Validations      *[]ConfigValidationResult `json:"validations,omitempty"`
+	WrittenFiles     []string                  `json:"writtenFiles"`
 }
+
+// ApplyRetryResponse defines model for ApplyRetryResponse.
+type ApplyRetryResponse struct {
+	ApplyJob ApplyJob     `json:"applyJob"`
+	Revision RevisionView `json:"revision"`
+}
+
+// ApplyRollbackResponse defines model for ApplyRollbackResponse.
+type ApplyRollbackResponse struct {
+	ApplyJob *ApplyJob `json:"applyJob,omitempty"`
+
+	// DesiredRevision Newly created immutable desired revision pointing at the selected snapshot; revisions never decrement.
+	DesiredRevision  int64        `json:"desiredRevision"`
+	Revision         RevisionView `json:"revision"`
+	SelectedRevision int64        `json:"selectedRevision"`
+
+	// Success False means the rollback revision committed (desired advanced) but the apply job for it did not finish cleanly.
+	Success bool `json:"success"`
+}
+
+// ApplyStateResponse defines model for ApplyStateResponse.
+type ApplyStateResponse struct {
+	ActiveJobId     *string `json:"activeJobId,omitempty"`
+	AppliedRevision int64   `json:"appliedRevision"`
+	DesiredRevision int64   `json:"desiredRevision"`
+	LastError       *struct {
+		Code    *string `json:"code,omitempty"`
+		Message *string `json:"message,omitempty"`
+	} `json:"lastError,omitempty"`
+	LastFailedJobId     *string                 `json:"lastFailedJobId,omitempty"`
+	LastSuccessfulJobId *string                 `json:"lastSuccessfulJobId,omitempty"`
+	State               ApplyStateResponseState `json:"state"`
+}
+
+// ApplyStateResponseState defines model for ApplyStateResponse.State.
+type ApplyStateResponseState string
 
 // AuditListResponse defines model for AuditListResponse.
 type AuditListResponse struct {
@@ -895,14 +1222,19 @@ type AuditRecord struct {
 
 // AuthStatusResponse defines model for AuthStatusResponse.
 type AuthStatusResponse struct {
-	Authenticated bool    `json:"authenticated"`
-	CsrfToken     *string `json:"csrfToken,omitempty"`
+	// AuthMethod How the request was authenticated; absent for cookie-session responses.
+	AuthMethod    *AuthStatusResponseAuthMethod `json:"authMethod,omitempty"`
+	Authenticated bool                          `json:"authenticated"`
+	CsrfToken     *string                       `json:"csrfToken,omitempty"`
 
 	// Locale Persisted Panel display language.
 	Locale   *Locale   `json:"locale,omitempty"`
 	Role     *UserRole `json:"role,omitempty"`
 	Username *string   `json:"username,omitempty"`
 }
+
+// AuthStatusResponseAuthMethod How the request was authenticated; absent for cookie-session responses.
+type AuthStatusResponseAuthMethod string
 
 // BackupArchive defines model for BackupArchive.
 type BackupArchive struct {
@@ -938,6 +1270,9 @@ type BackupCreateResponse struct {
 	Archive      BackupArchive            `json:"archive"`
 	Prune        *BackupPruneResult       `json:"prune,omitempty"`
 	Verification BackupVerificationReport `json:"verification"`
+
+	// Warning Non-fatal warning (for example a retention prune failure after a successful archive).
+	Warning *string `json:"warning,omitempty"`
 }
 
 // BackupPruneRequest defines model for BackupPruneRequest.
@@ -956,11 +1291,23 @@ type BackupPruneResult struct {
 
 // BackupRestoreJob defines model for BackupRestoreJob.
 type BackupRestoreJob struct {
-	Archive            string                 `json:"archive"`
-	CreatedAt          time.Time              `json:"createdAt"`
-	Error              *string                `json:"error,omitempty"`
-	FinishedAt         *time.Time             `json:"finishedAt,omitempty"`
-	Id                 string                 `json:"id"`
+	Archive    string     `json:"archive"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	Error      *string    `json:"error,omitempty"`
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+
+	// HttpStatus HTTP status that mirrors the job outcome for pollers.
+	HttpStatus int    `json:"httpStatus"`
+	Id         string `json:"id"`
+
+	// Outcome Restore outcome classification. Known values: pending (job accepted or awaiting key publication), pending_key_publication, restored, not_restored.
+	Outcome string `json:"outcome"`
+
+	// Phase Last restore pipeline phase reached (for example queued, key_publication_pending, completed, revalidation_failed, finalization_failed, restore_failed, fence_acquire_failed).
+	Phase string `json:"phase"`
+
+	// Restored True only when the backup content was actually restored.
+	Restored           bool                   `json:"restored"`
 	SafetyDatabasePath *string                `json:"safetyDatabasePath,omitempty"`
 	SafetyKeyPath      *string                `json:"safetyKeyPath,omitempty"`
 	SafetyStatePath    *string                `json:"safetyStatePath,omitempty"`
@@ -1294,8 +1641,11 @@ type HealthResponseStatus string
 
 // Inbound defines model for Inbound.
 type Inbound struct {
-	Enabled           bool             `json:"enabled"`
-	FallbackRoot      *string          `json:"fallbackRoot,omitempty"`
+	Enabled      bool    `json:"enabled"`
+	FallbackRoot *string `json:"fallbackRoot,omitempty"`
+
+	// Hysteria2Insecure Allow self-signed server certificates for this hysteria2 inbound.
+	Hysteria2Insecure *bool            `json:"hysteria2Insecure,omitempty"`
 	Hysteria2Password *string          `json:"hysteria2Password,omitempty"`
 	MasqueradeURL     *string          `json:"masqueradeURL,omitempty"`
 	NaivePassword     *string          `json:"naivePassword,omitempty"`
@@ -1382,6 +1732,13 @@ type LoginResponse struct {
 	Role     UserRole `json:"role"`
 	Success  bool     `json:"success"`
 	Username string   `json:"username"`
+}
+
+// MutationOutcome Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.
+type MutationOutcome struct {
+	ApplyJob *ApplyJob    `json:"applyJob,omitempty"`
+	Revision RevisionView `json:"revision"`
+	Success  bool         `json:"success"`
 }
 
 // NetworkInterface defines model for NetworkInterface.
@@ -1483,8 +1840,8 @@ type ReadyzResponseStatus string
 
 // RevisionView defines model for RevisionView.
 type RevisionView struct {
-	Applied int               `json:"applied"`
-	Desired int               `json:"desired"`
+	Applied int64             `json:"applied"`
+	Desired int64             `json:"desired"`
 	State   RevisionViewState `json:"state"`
 }
 
@@ -1593,11 +1950,16 @@ type ServiceHealthResult struct {
 
 // ServiceStatus defines model for ServiceStatus.
 type ServiceStatus struct {
+	// ActionName Service action identifier used by POST /api/services/{name}/restart when the unit supports one.
+	ActionName  *string `json:"actionName,omitempty"`
 	ActiveState *string `json:"activeState,omitempty"`
 	Error       *string `json:"error,omitempty"`
 	LoadState   *string `json:"loadState,omitempty"`
 	Managed     bool    `json:"managed"`
 	Name        string  `json:"name"`
+
+	// Restartable True when the service can be restarted through the API.
+	Restartable *bool   `json:"restartable,omitempty"`
 	SubState    *string `json:"subState,omitempty"`
 	Transport   *string `json:"transport,omitempty"`
 	Unit        *string `json:"unit,omitempty"`
@@ -1821,17 +2183,20 @@ type TrafficTotals struct {
 	UploadBytes    int64  `json:"uploadBytes"`
 }
 
-// UpdateResponse defines model for UpdateResponse.
+// UpdateResponse Durable update job accepted by POST /api/version/update. The panel restarts asynchronously; poll /api/version to confirm the new version.
 type UpdateResponse struct {
-	Installed bool                  `json:"installed"`
-	Message   string                `json:"message"`
-	Staged    bool                  `json:"staged"`
-	Success   UpdateResponseSuccess `json:"success"`
-	Version   string                `json:"version"`
+	Installed bool `json:"installed"`
+
+	// JobId Durable panel update job identifier.
+	JobId   string               `json:"jobId"`
+	Message string               `json:"message"`
+	Staged  bool                 `json:"staged"`
+	Status  UpdateResponseStatus `json:"status"`
+	Version string               `json:"version"`
 }
 
-// UpdateResponseSuccess defines model for UpdateResponse.Success.
-type UpdateResponseSuccess bool
+// UpdateResponseStatus defines model for UpdateResponse.Status.
+type UpdateResponseStatus string
 
 // UserCreateRequest defines model for UserCreateRequest.
 type UserCreateRequest struct {
@@ -1983,6 +2348,16 @@ type PostApiApplyParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// PostApiApply400JSONResponseBody defines parameters for PostApiApply.
+type PostApiApply400JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// PostApiApply422JSONResponseBody defines parameters for PostApiApply.
+type PostApiApply422JSONResponseBody struct {
+	union json.RawMessage
+}
+
 // PostApiApplyJobsIdRetryParams defines parameters for PostApiApplyJobsIdRetry.
 type PostApiApplyJobsIdRetryParams struct {
 	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
@@ -2086,6 +2461,12 @@ type PostApiInboundsParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// PostApiInbounds201JSONResponseBodyProtocol defines parameters for PostApiInbounds.
+type PostApiInbounds201JSONResponseBodyProtocol string
+
+// PostApiInbounds201JSONResponseBodyTransport defines parameters for PostApiInbounds.
+type PostApiInbounds201JSONResponseBodyTransport string
+
 // DeleteApiInboundsNameParams defines parameters for DeleteApiInboundsName.
 type DeleteApiInboundsNameParams struct {
 	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
@@ -2097,6 +2478,12 @@ type PutApiInboundsNameParams struct {
 	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
+
+// PutApiInboundsName200JSONResponseBodyProtocol defines parameters for PutApiInboundsName.
+type PutApiInboundsName200JSONResponseBodyProtocol string
+
+// PutApiInboundsName200JSONResponseBodyTransport defines parameters for PutApiInboundsName.
+type PutApiInboundsName200JSONResponseBodyTransport string
 
 // GetApiInboundsNameClientsParams defines parameters for GetApiInboundsNameClients.
 type GetApiInboundsNameClientsParams struct {
@@ -2165,6 +2552,12 @@ type PutApiSettingsParams struct {
 	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
+
+// PutApiSettings200JSONResponseBodyAcmeChallengeMode defines parameters for PutApiSettings.
+type PutApiSettings200JSONResponseBodyAcmeChallengeMode string
+
+// PutApiSettings200JSONResponseBodyPanelAccess defines parameters for PutApiSettings.
+type PutApiSettings200JSONResponseBodyPanelAccess string
 
 // PostApiSetupCompleteParams defines parameters for PostApiSetupComplete.
 type PostApiSetupCompleteParams struct {
@@ -2248,6 +2641,14 @@ type DeleteApiV1ClientsIdParams struct {
 type PatchApiV1ClientsIdParams struct {
 	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// GetApiV1ClientsIdAuditParams defines parameters for GetApiV1ClientsIdAudit.
+type GetApiV1ClientsIdAuditParams struct {
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Before Return records strictly older than this RFC3339 timestamp.
+	Before *time.Time `form:"before,omitempty" json:"before,omitempty"`
 }
 
 // PostApiV1ClientsIdBindingsJSONBody defines parameters for PostApiV1ClientsIdBindings.
@@ -2677,6 +3078,130 @@ func (t *RoutingSourceFile) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// AsApplyResponse returns the union data inside the PostApiApply400JSONResponseBody as a ApplyResponse
+func (t PostApiApply400JSONResponseBody) AsApplyResponse() (ApplyResponse, error) {
+	var body ApplyResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromApplyResponse overwrites any union data inside the PostApiApply400JSONResponseBody as the provided ApplyResponse
+func (t *PostApiApply400JSONResponseBody) FromApplyResponse(v ApplyResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeApplyResponse performs a merge with any union data inside the PostApiApply400JSONResponseBody, using the provided ApplyResponse
+func (t *PostApiApply400JSONResponseBody) MergeApplyResponse(v ApplyResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorEnvelope returns the union data inside the PostApiApply400JSONResponseBody as a ErrorEnvelope
+func (t PostApiApply400JSONResponseBody) AsErrorEnvelope() (ErrorEnvelope, error) {
+	var body ErrorEnvelope
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorEnvelope overwrites any union data inside the PostApiApply400JSONResponseBody as the provided ErrorEnvelope
+func (t *PostApiApply400JSONResponseBody) FromErrorEnvelope(v ErrorEnvelope) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorEnvelope performs a merge with any union data inside the PostApiApply400JSONResponseBody, using the provided ErrorEnvelope
+func (t *PostApiApply400JSONResponseBody) MergeErrorEnvelope(v ErrorEnvelope) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t PostApiApply400JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *PostApiApply400JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsApplyResponse returns the union data inside the PostApiApply422JSONResponseBody as a ApplyResponse
+func (t PostApiApply422JSONResponseBody) AsApplyResponse() (ApplyResponse, error) {
+	var body ApplyResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromApplyResponse overwrites any union data inside the PostApiApply422JSONResponseBody as the provided ApplyResponse
+func (t *PostApiApply422JSONResponseBody) FromApplyResponse(v ApplyResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeApplyResponse performs a merge with any union data inside the PostApiApply422JSONResponseBody, using the provided ApplyResponse
+func (t *PostApiApply422JSONResponseBody) MergeApplyResponse(v ApplyResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorEnvelope returns the union data inside the PostApiApply422JSONResponseBody as a ErrorEnvelope
+func (t PostApiApply422JSONResponseBody) AsErrorEnvelope() (ErrorEnvelope, error) {
+	var body ErrorEnvelope
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorEnvelope overwrites any union data inside the PostApiApply422JSONResponseBody as the provided ErrorEnvelope
+func (t *PostApiApply422JSONResponseBody) FromErrorEnvelope(v ErrorEnvelope) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorEnvelope performs a merge with any union data inside the PostApiApply422JSONResponseBody, using the provided ErrorEnvelope
+func (t *PostApiApply422JSONResponseBody) MergeErrorEnvelope(v ErrorEnvelope) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t PostApiApply422JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *PostApiApply422JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
 
@@ -3075,6 +3600,13 @@ type ClientInterface interface {
 	// Corresponds with GET /api/firewall (the `GetApiFirewall` operationId).
 	GetApiFirewall(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetApiHealth Panel health component snapshot
+	//
+	// Viewer-facing component health snapshot; the same diagnostic payload that /readyz reports to orchestrators. Always returns 200 — inspect `status` and `components` for degradation.
+	//
+	// Corresponds with GET /api/health (the `GetApiHealth` operationId).
+	GetApiHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiInbounds List inbounds
 	//
 	// Corresponds with GET /api/inbounds (the `GetApiInbounds` operationId).
@@ -3456,6 +3988,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
 	PatchApiV1ClientsId(ctx context.Context, id ClientId, params *PatchApiV1ClientsIdParams, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1ClientsIdAudit Audit history scoped to one client
+	//
+	// Newest-first audit records targeting this client. Records matching the immutable client ID are always included; legacy name-targeted records are included only for known client actions. Admin role required.
+	//
+	// Corresponds with GET /api/v1/clients/{id}/audit (the `GetApiV1ClientsIdAudit` operationId).
+	GetApiV1ClientsIdAudit(ctx context.Context, id ClientId, params *GetApiV1ClientsIdAuditParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1ClientsIdBindings List client bindings
 	//
@@ -4464,6 +5003,23 @@ func (c *Client) GetApiFirewall(ctx context.Context, reqEditors ...RequestEditor
 	return c.Client.Do(req)
 }
 
+// GetApiHealth Panel health component snapshot
+//
+// Viewer-facing component health snapshot; the same diagnostic payload that /readyz reports to orchestrators. Always returns 200 — inspect `status` and `components` for degradation.
+//
+// Corresponds with GET /api/health (the `GetApiHealth` operationId).
+func (c *Client) GetApiHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiHealthRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetApiInbounds List inbounds
 //
 // Corresponds with GET /api/inbounds (the `GetApiInbounds` operationId).
@@ -5436,6 +5992,23 @@ func (c *Client) PatchApiV1ClientsIdWithBody(ctx context.Context, id ClientId, p
 // Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
 func (c *Client) PatchApiV1ClientsId(ctx context.Context, id ClientId, params *PatchApiV1ClientsIdParams, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPatchApiV1ClientsIdRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetApiV1ClientsIdAudit Audit history scoped to one client
+//
+// Newest-first audit records targeting this client. Records matching the immutable client ID are always included; legacy name-targeted records are included only for known client actions. Admin role required.
+//
+// Corresponds with GET /api/v1/clients/{id}/audit (the `GetApiV1ClientsIdAudit` operationId).
+func (c *Client) GetApiV1ClientsIdAudit(ctx context.Context, id ClientId, params *GetApiV1ClientsIdAuditParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ClientsIdAuditRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -7394,6 +7967,33 @@ func NewGetApiFirewallRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewGetApiHealthRequest constructs an http.Request for the GetApiHealth method
+func NewGetApiHealthRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/health")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetApiInboundsRequest constructs an http.Request for the GetApiInbounds method
 func NewGetApiInboundsRequest(server string) (*http.Request, error) {
 	var err error
@@ -9328,6 +9928,79 @@ func NewPatchApiV1ClientsIdRequestWithBody(server string, id ClientId, params *P
 	return req, nil
 }
 
+// NewGetApiV1ClientsIdAuditRequest constructs an http.Request for the GetApiV1ClientsIdAudit method
+func NewGetApiV1ClientsIdAuditRequest(server string, id ClientId, params *GetApiV1ClientsIdAuditParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s/audit", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Before != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "before", *params.Before, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetApiV1ClientsIdBindingsRequest constructs an http.Request for the GetApiV1ClientsIdBindings method
 func NewGetApiV1ClientsIdBindingsRequest(server string, id ClientId) (*http.Request, error) {
 	var err error
@@ -11106,6 +11779,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/firewall (the `GetApiFirewall` operationId).
 	GetApiFirewallWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiFirewallResponse, error)
 
+	// GetApiHealthWithResponse Panel health component snapshot
+	//
+	// Viewer-facing component health snapshot; the same diagnostic payload that /readyz reports to orchestrators. Always returns 200 — inspect `status` and `components` for degradation.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/health (the `GetApiHealth` operationId).
+	GetApiHealthWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiHealthResponse, error)
+
 	// GetApiInboundsWithResponse List inbounds
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -11540,6 +12222,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PATCH /api/v1/clients/{id} (the `PatchApiV1ClientsId` operationId).
 	PatchApiV1ClientsIdWithResponse(ctx context.Context, id ClientId, params *PatchApiV1ClientsIdParams, body PatchApiV1ClientsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1ClientsIdResponse, error)
 
+	// GetApiV1ClientsIdAuditWithResponse Audit history scoped to one client
+	//
+	// Newest-first audit records targeting this client. Records matching the immutable client ID are always included; legacy name-targeted records are included only for known client actions. Admin role required.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/clients/{id}/audit (the `GetApiV1ClientsIdAudit` operationId).
+	GetApiV1ClientsIdAuditWithResponse(ctx context.Context, id ClientId, params *GetApiV1ClientsIdAuditParams, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdAuditResponse, error)
+
 	// GetApiV1ClientsIdBindingsWithResponse List client bindings
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -11953,11 +12644,11 @@ type PostApiApplyResponse struct {
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *ApplyResponse
 	// JSON400 the response for an HTTP 400 `application/json` response
-	JSON400 *BadRequest
+	JSON400 *PostApiApply400JSONResponseBody
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
-	JSON422 *ValidationFailed
+	JSON422 *PostApiApply422JSONResponseBody
 	// JSON423 the response for an HTTP 423 `application/json` response
 	JSON423 *Locked
 	// JSON503 the response for an HTTP 503 `application/json` response
@@ -11970,7 +12661,7 @@ func (r PostApiApplyResponse) GetJSON200() *ApplyResponse {
 }
 
 // GetJSON400 returns the response for an HTTP 400 `application/json` response
-func (r PostApiApplyResponse) GetJSON400() *BadRequest {
+func (r PostApiApplyResponse) GetJSON400() *PostApiApply400JSONResponseBody {
 	return r.JSON400
 }
 
@@ -11980,7 +12671,7 @@ func (r PostApiApplyResponse) GetJSON409() *Conflict {
 }
 
 // GetJSON422 returns the response for an HTTP 422 `application/json` response
-func (r PostApiApplyResponse) GetJSON422() *ValidationFailed {
+func (r PostApiApplyResponse) GetJSON422() *PostApiApply422JSONResponseBody {
 	return r.JSON422
 }
 
@@ -12112,6 +12803,20 @@ func (r GetApiApplyJobsResponse) ContentType() string {
 type GetApiApplyJobsIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ApplyJob
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiApplyJobsIdResponse) GetJSON200() *ApplyJob {
+	return r.JSON200
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetApiApplyJobsIdResponse) GetJSON404() *NotFound {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -12146,6 +12851,10 @@ func (r GetApiApplyJobsIdResponse) ContentType() string {
 type PostApiApplyJobsIdRetryResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ApplyRetryResponse
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
@@ -12154,6 +12863,16 @@ type PostApiApplyJobsIdRetryResponse struct {
 	JSON423 *Locked
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *ServiceUnavailable
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostApiApplyJobsIdRetryResponse) GetJSON200() *ApplyRetryResponse {
+	return r.JSON200
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r PostApiApplyJobsIdRetryResponse) GetJSON404() *NotFound {
+	return r.JSON404
 }
 
 // GetJSON409 returns the response for an HTTP 409 `application/json` response
@@ -12277,6 +12996,8 @@ func (r PostApiApplyPlanResponse) ContentType() string {
 type PostApiApplyReconcileResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ApplyReconcileResponse
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
@@ -12285,6 +13006,11 @@ type PostApiApplyReconcileResponse struct {
 	JSON423 *Locked
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *ServiceUnavailable
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostApiApplyReconcileResponse) GetJSON200() *ApplyReconcileResponse {
+	return r.JSON200
 }
 
 // GetJSON409 returns the response for an HTTP 409 `application/json` response
@@ -12339,6 +13065,8 @@ func (r PostApiApplyReconcileResponse) ContentType() string {
 type PostApiApplyRollbackResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ApplyRollbackResponse
 	// JSON400 the response for an HTTP 400 `application/json` response
 	JSON400 *BadRequest
 	// JSON409 the response for an HTTP 409 `application/json` response
@@ -12349,6 +13077,11 @@ type PostApiApplyRollbackResponse struct {
 	JSON423 *Locked
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *ServiceUnavailable
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostApiApplyRollbackResponse) GetJSON200() *ApplyRollbackResponse {
+	return r.JSON200
 }
 
 // GetJSON400 returns the response for an HTTP 400 `application/json` response
@@ -12408,6 +13141,13 @@ func (r PostApiApplyRollbackResponse) ContentType() string {
 type GetApiApplyStateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ApplyStateResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiApplyStateResponse) GetJSON200() *ApplyStateResponse {
+	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
@@ -13990,6 +14730,61 @@ func (r GetApiFirewallResponse) ContentType() string {
 	return ""
 }
 
+// GetApiHealthResponse401Headers the declared response headers of an HTTP 401 response for GetApiHealth
+type GetApiHealthResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type GetApiHealthResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ReadyzResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetApiHealthResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiHealthResponse) GetJSON200() *ReadyzResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiHealthResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiHealthResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiHealthResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiHealthResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiHealthResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // GetApiInboundsResponse401Headers the declared response headers of an HTTP 401 response for GetApiInbounds
 type GetApiInboundsResponse401Headers struct {
 	WWWAuthenticate *string
@@ -14049,7 +14844,32 @@ type PostApiInboundsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *Inbound
+	JSON201 *struct {
+		ApplyJob     *ApplyJob `json:"applyJob,omitempty"`
+		Enabled      bool      `json:"enabled"`
+		FallbackRoot *string   `json:"fallbackRoot,omitempty"`
+
+		// Hysteria2Insecure Allow self-signed server certificates for this hysteria2 inbound.
+		Hysteria2Insecure *bool                                      `json:"hysteria2Insecure,omitempty"`
+		Hysteria2Password *string                                    `json:"hysteria2Password,omitempty"`
+		MasqueradeURL     *string                                    `json:"masqueradeURL,omitempty"`
+		NaivePassword     *string                                    `json:"naivePassword,omitempty"`
+		NaiveUsername     *string                                    `json:"naiveUsername,omitempty"`
+		Name              string                                     `json:"name"`
+		OlcrtcAuth        *string                                    `json:"olcrtcAuth,omitempty"`
+		OlcrtcRoomID      *string                                    `json:"olcrtcRoomID,omitempty"`
+		OlcrtcTransport   *string                                    `json:"olcrtcTransport,omitempty"`
+		Password          *string                                    `json:"password,omitempty"`
+		Port              int                                        `json:"port"`
+		Profiles          *[]ClientProfile                           `json:"profiles,omitempty"`
+		Protocol          PostApiInbounds201JSONResponseBodyProtocol `json:"protocol"`
+
+		// ProtocolFields Protocol-specific inbound fields keyed by field identifier.
+		ProtocolFields *map[string]interface{}                     `json:"protocolFields,omitempty"`
+		Revision       RevisionView                                `json:"revision"`
+		Success        bool                                        `json:"success"`
+		Transport      PostApiInbounds201JSONResponseBodyTransport `json:"transport"`
+	}
 	// JSON400 the response for an HTTP 400 `application/json` response
 	JSON400 *BadRequest
 	// JSON403 the response for an HTTP 403 `application/json` response
@@ -14065,7 +14885,32 @@ type PostApiInboundsResponse struct {
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r PostApiInboundsResponse) GetJSON201() *Inbound {
+func (r PostApiInboundsResponse) GetJSON201() *struct {
+	ApplyJob     *ApplyJob `json:"applyJob,omitempty"`
+	Enabled      bool      `json:"enabled"`
+	FallbackRoot *string   `json:"fallbackRoot,omitempty"`
+
+	// Hysteria2Insecure Allow self-signed server certificates for this hysteria2 inbound.
+	Hysteria2Insecure *bool                                      `json:"hysteria2Insecure,omitempty"`
+	Hysteria2Password *string                                    `json:"hysteria2Password,omitempty"`
+	MasqueradeURL     *string                                    `json:"masqueradeURL,omitempty"`
+	NaivePassword     *string                                    `json:"naivePassword,omitempty"`
+	NaiveUsername     *string                                    `json:"naiveUsername,omitempty"`
+	Name              string                                     `json:"name"`
+	OlcrtcAuth        *string                                    `json:"olcrtcAuth,omitempty"`
+	OlcrtcRoomID      *string                                    `json:"olcrtcRoomID,omitempty"`
+	OlcrtcTransport   *string                                    `json:"olcrtcTransport,omitempty"`
+	Password          *string                                    `json:"password,omitempty"`
+	Port              int                                        `json:"port"`
+	Profiles          *[]ClientProfile                           `json:"profiles,omitempty"`
+	Protocol          PostApiInbounds201JSONResponseBodyProtocol `json:"protocol"`
+
+	// ProtocolFields Protocol-specific inbound fields keyed by field identifier.
+	ProtocolFields *map[string]interface{}                     `json:"protocolFields,omitempty"`
+	Revision       RevisionView                                `json:"revision"`
+	Success        bool                                        `json:"success"`
+	Transport      PostApiInbounds201JSONResponseBodyTransport `json:"transport"`
+} {
 	return r.JSON201
 }
 
@@ -14131,6 +14976,13 @@ func (r PostApiInboundsResponse) ContentType() string {
 type DeleteApiInboundsNameResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		ApplyJob *ApplyJob    `json:"applyJob,omitempty"`
+		Name     string       `json:"name"`
+		Revision RevisionView `json:"revision"`
+		Success  bool         `json:"success"`
+	}
 	// JSON403 the response for an HTTP 403 `application/json` response
 	JSON403 *Forbidden
 	// JSON404 the response for an HTTP 404 `application/json` response
@@ -14143,6 +14995,16 @@ type DeleteApiInboundsNameResponse struct {
 	JSON423 *Locked
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *ServiceUnavailable
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DeleteApiInboundsNameResponse) GetJSON200() *struct {
+	ApplyJob *ApplyJob    `json:"applyJob,omitempty"`
+	Name     string       `json:"name"`
+	Revision RevisionView `json:"revision"`
+	Success  bool         `json:"success"`
+} {
+	return r.JSON200
 }
 
 // GetJSON403 returns the response for an HTTP 403 `application/json` response
@@ -14256,7 +15118,32 @@ type PutApiInboundsNameResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Inbound
+	JSON200 *struct {
+		ApplyJob     *ApplyJob `json:"applyJob,omitempty"`
+		Enabled      bool      `json:"enabled"`
+		FallbackRoot *string   `json:"fallbackRoot,omitempty"`
+
+		// Hysteria2Insecure Allow self-signed server certificates for this hysteria2 inbound.
+		Hysteria2Insecure *bool                                         `json:"hysteria2Insecure,omitempty"`
+		Hysteria2Password *string                                       `json:"hysteria2Password,omitempty"`
+		MasqueradeURL     *string                                       `json:"masqueradeURL,omitempty"`
+		NaivePassword     *string                                       `json:"naivePassword,omitempty"`
+		NaiveUsername     *string                                       `json:"naiveUsername,omitempty"`
+		Name              string                                        `json:"name"`
+		OlcrtcAuth        *string                                       `json:"olcrtcAuth,omitempty"`
+		OlcrtcRoomID      *string                                       `json:"olcrtcRoomID,omitempty"`
+		OlcrtcTransport   *string                                       `json:"olcrtcTransport,omitempty"`
+		Password          *string                                       `json:"password,omitempty"`
+		Port              int                                           `json:"port"`
+		Profiles          *[]ClientProfile                              `json:"profiles,omitempty"`
+		Protocol          PutApiInboundsName200JSONResponseBodyProtocol `json:"protocol"`
+
+		// ProtocolFields Protocol-specific inbound fields keyed by field identifier.
+		ProtocolFields *map[string]interface{}                        `json:"protocolFields,omitempty"`
+		Revision       RevisionView                                   `json:"revision"`
+		Success        bool                                           `json:"success"`
+		Transport      PutApiInboundsName200JSONResponseBodyTransport `json:"transport"`
+	}
 	// JSON400 the response for an HTTP 400 `application/json` response
 	JSON400 *BadRequest
 	// JSON403 the response for an HTTP 403 `application/json` response
@@ -14274,7 +15161,32 @@ type PutApiInboundsNameResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r PutApiInboundsNameResponse) GetJSON200() *Inbound {
+func (r PutApiInboundsNameResponse) GetJSON200() *struct {
+	ApplyJob     *ApplyJob `json:"applyJob,omitempty"`
+	Enabled      bool      `json:"enabled"`
+	FallbackRoot *string   `json:"fallbackRoot,omitempty"`
+
+	// Hysteria2Insecure Allow self-signed server certificates for this hysteria2 inbound.
+	Hysteria2Insecure *bool                                         `json:"hysteria2Insecure,omitempty"`
+	Hysteria2Password *string                                       `json:"hysteria2Password,omitempty"`
+	MasqueradeURL     *string                                       `json:"masqueradeURL,omitempty"`
+	NaivePassword     *string                                       `json:"naivePassword,omitempty"`
+	NaiveUsername     *string                                       `json:"naiveUsername,omitempty"`
+	Name              string                                        `json:"name"`
+	OlcrtcAuth        *string                                       `json:"olcrtcAuth,omitempty"`
+	OlcrtcRoomID      *string                                       `json:"olcrtcRoomID,omitempty"`
+	OlcrtcTransport   *string                                       `json:"olcrtcTransport,omitempty"`
+	Password          *string                                       `json:"password,omitempty"`
+	Port              int                                           `json:"port"`
+	Profiles          *[]ClientProfile                              `json:"profiles,omitempty"`
+	Protocol          PutApiInboundsName200JSONResponseBodyProtocol `json:"protocol"`
+
+	// ProtocolFields Protocol-specific inbound fields keyed by field identifier.
+	ProtocolFields *map[string]interface{}                        `json:"protocolFields,omitempty"`
+	Revision       RevisionView                                   `json:"revision"`
+	Success        bool                                           `json:"success"`
+	Transport      PutApiInboundsName200JSONResponseBodyTransport `json:"transport"`
+} {
 	return r.JSON200
 }
 
@@ -14778,7 +15690,15 @@ type PostApiRoutingPresetsNameResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *RoutingPresetResponse
+	JSON200 *struct {
+		ActivePreset *string          `json:"activePreset,omitempty"`
+		ApplyJob     *ApplyJob        `json:"applyJob,omitempty"`
+		Presets      *[]RoutingPreset `json:"presets,omitempty"`
+		Revision     RevisionView     `json:"revision"`
+		Rules        []RoutingRule    `json:"rules"`
+		Source       RoutingSource    `json:"source"`
+		Success      bool             `json:"success"`
+	}
 	// JSON404 the response for an HTTP 404 `application/json` response
 	JSON404 *NotFound
 	// JSON409 the response for an HTTP 409 `application/json` response
@@ -14792,7 +15712,15 @@ type PostApiRoutingPresetsNameResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r PostApiRoutingPresetsNameResponse) GetJSON200() *RoutingPresetResponse {
+func (r PostApiRoutingPresetsNameResponse) GetJSON200() *struct {
+	ActivePreset *string          `json:"activePreset,omitempty"`
+	ApplyJob     *ApplyJob        `json:"applyJob,omitempty"`
+	Presets      *[]RoutingPreset `json:"presets,omitempty"`
+	Revision     RevisionView     `json:"revision"`
+	Rules        []RoutingRule    `json:"rules"`
+	Source       RoutingSource    `json:"source"`
+	Success      bool             `json:"success"`
+} {
 	return r.JSON200
 }
 
@@ -14895,7 +15823,17 @@ type PostApiRoutingRulesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *RoutingRule
+	JSON201 *struct {
+		ApplyJob *ApplyJob `json:"applyJob,omitempty"`
+		Enabled  bool      `json:"enabled"`
+		Match    string    `json:"match"`
+		Name     string    `json:"name"`
+
+		// Outbound Examples: direct, warp, proxy
+		Outbound string       `json:"outbound"`
+		Revision RevisionView `json:"revision"`
+		Success  bool         `json:"success"`
+	}
 	// JSON400 the response for an HTTP 400 `application/json` response
 	JSON400 *BadRequest
 	// JSON409 the response for an HTTP 409 `application/json` response
@@ -14909,7 +15847,17 @@ type PostApiRoutingRulesResponse struct {
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r PostApiRoutingRulesResponse) GetJSON201() *RoutingRule {
+func (r PostApiRoutingRulesResponse) GetJSON201() *struct {
+	ApplyJob *ApplyJob `json:"applyJob,omitempty"`
+	Enabled  bool      `json:"enabled"`
+	Match    string    `json:"match"`
+	Name     string    `json:"name"`
+
+	// Outbound Examples: direct, warp, proxy
+	Outbound string       `json:"outbound"`
+	Revision RevisionView `json:"revision"`
+	Success  bool         `json:"success"`
+} {
 	return r.JSON201
 }
 
@@ -14970,6 +15918,13 @@ func (r PostApiRoutingRulesResponse) ContentType() string {
 type DeleteApiRoutingRulesNameResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		ApplyJob *ApplyJob    `json:"applyJob,omitempty"`
+		Name     string       `json:"name"`
+		Revision RevisionView `json:"revision"`
+		Success  bool         `json:"success"`
+	}
 	// JSON404 the response for an HTTP 404 `application/json` response
 	JSON404 *NotFound
 	// JSON409 the response for an HTTP 409 `application/json` response
@@ -14980,6 +15935,16 @@ type DeleteApiRoutingRulesNameResponse struct {
 	JSON423 *Locked
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *ServiceUnavailable
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DeleteApiRoutingRulesNameResponse) GetJSON200() *struct {
+	ApplyJob *ApplyJob    `json:"applyJob,omitempty"`
+	Name     string       `json:"name"`
+	Revision RevisionView `json:"revision"`
+	Success  bool         `json:"success"`
+} {
+	return r.JSON200
 }
 
 // GetJSON404 returns the response for an HTTP 404 `application/json` response
@@ -15088,7 +16053,17 @@ type PutApiRoutingRulesNameResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *RoutingRule
+	JSON200 *struct {
+		ApplyJob *ApplyJob `json:"applyJob,omitempty"`
+		Enabled  bool      `json:"enabled"`
+		Match    string    `json:"match"`
+		Name     string    `json:"name"`
+
+		// Outbound Examples: direct, warp, proxy
+		Outbound string       `json:"outbound"`
+		Revision RevisionView `json:"revision"`
+		Success  bool         `json:"success"`
+	}
 	// JSON400 the response for an HTTP 400 `application/json` response
 	JSON400 *BadRequest
 	// JSON404 the response for an HTTP 404 `application/json` response
@@ -15104,7 +16079,17 @@ type PutApiRoutingRulesNameResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r PutApiRoutingRulesNameResponse) GetJSON200() *RoutingRule {
+func (r PutApiRoutingRulesNameResponse) GetJSON200() *struct {
+	ApplyJob *ApplyJob `json:"applyJob,omitempty"`
+	Enabled  bool      `json:"enabled"`
+	Match    string    `json:"match"`
+	Name     string    `json:"name"`
+
+	// Outbound Examples: direct, warp, proxy
+	Outbound string       `json:"outbound"`
+	Revision RevisionView `json:"revision"`
+	Success  bool         `json:"success"`
+} {
 	return r.JSON200
 }
 
@@ -15419,7 +16404,59 @@ type PutApiSettingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Settings
+	JSON200 *struct {
+		// AcmeChallengeMode ACME challenge mode used for inbound certificates.
+		AcmeChallengeMode *PutApiSettings200JSONResponseBodyAcmeChallengeMode `json:"acmeChallengeMode,omitempty"`
+		ApplyJob          *ApplyJob                                           `json:"applyJob,omitempty"`
+
+		// DefaultAcmeEmail Default ACME contact email for inbound certificates.
+		DefaultAcmeEmail *openapi_types.Email `json:"defaultAcmeEmail,omitempty"`
+
+		// DefaultInboundPublicPort Default public port for new inbounds. Falls back to 443 when zero.
+		DefaultInboundPublicPort *int                 `json:"defaultInboundPublicPort,omitempty"`
+		Domain                   *string              `json:"domain,omitempty"`
+		Email                    *openapi_types.Email `json:"email,omitempty"`
+		FallbackRoot             *string              `json:"fallbackRoot,omitempty"`
+
+		// FirewallManagement When null (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply. Set false to disable firewall synchronization, true to force it.
+		FirewallManagement nullable.Nullable[bool] `json:"firewallManagement,omitempty"`
+
+		// Hysteria2Insecure Allow self-signed server certificates for hysteria2 inbounds.
+		Hysteria2Insecure *bool   `json:"hysteria2Insecure,omitempty"`
+		Hysteria2Password *string `json:"hysteria2Password,omitempty"`
+		MasqueradeURL     *string `json:"masqueradeURL,omitempty"`
+
+		// Mode Examples: server
+		Mode string `json:"mode"`
+
+		// NaivePassword Plain value on write; redacted as `[REDACTED]` on read when present.
+		NaivePassword   *string                                       `json:"naivePassword,omitempty"`
+		NaiveUsername   *string                                       `json:"naiveUsername,omitempty"`
+		OlcrtcAuth      *string                                       `json:"olcrtcAuth,omitempty"`
+		OlcrtcRoomID    *string                                       `json:"olcrtcRoomID,omitempty"`
+		OlcrtcTransport *string                                       `json:"olcrtcTransport,omitempty"`
+		PanelAccess     *PutApiSettings200JSONResponseBodyPanelAccess `json:"panelAccess,omitempty"`
+
+		// PanelDomain Public domain for the panel when served through Caddy.
+		PanelDomain *string `json:"panelDomain,omitempty"`
+
+		// PanelEmail ACME contact email for the panel domain.
+		PanelEmail *openapi_types.Email `json:"panelEmail,omitempty"`
+
+		// PanelListen Examples: 127.0.0.1:2096
+		PanelListen string `json:"panelListen"`
+
+		// PanelPublicPort Public port for the panel when served through Caddy. Defaults to 443 when zero.
+		PanelPublicPort *int `json:"panelPublicPort,omitempty"`
+
+		// ProtocolFields Protocol-specific settings keyed by field identifier. Schema fields that also have a top-level flat counterpart (e.g. hysteria2Insecure, panelPublicPort, panelDomain) must be echoed in BOTH places: the flat value wins the server-side precedence check, so a stale protocolFields copy can silently revert an edit made through the flat field (and vice versa). Clients that only submit the protocolFields copy (legacy panel) rely on the flat zero value being treated as "not provided".
+		ProtocolFields *map[string]interface{} `json:"protocolFields,omitempty"`
+		Revision       RevisionView            `json:"revision"`
+		Success        bool                    `json:"success"`
+
+		// WebBasePath Examples: /a1b2c3d4e5f6/
+		WebBasePath *string `json:"webBasePath,omitempty"`
+	}
 	// JSON400 the response for an HTTP 400 `application/json` response
 	JSON400 *BadRequest
 	// JSON403 the response for an HTTP 403 `application/json` response
@@ -15435,7 +16472,59 @@ type PutApiSettingsResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r PutApiSettingsResponse) GetJSON200() *Settings {
+func (r PutApiSettingsResponse) GetJSON200() *struct {
+	// AcmeChallengeMode ACME challenge mode used for inbound certificates.
+	AcmeChallengeMode *PutApiSettings200JSONResponseBodyAcmeChallengeMode `json:"acmeChallengeMode,omitempty"`
+	ApplyJob          *ApplyJob                                           `json:"applyJob,omitempty"`
+
+	// DefaultAcmeEmail Default ACME contact email for inbound certificates.
+	DefaultAcmeEmail *openapi_types.Email `json:"defaultAcmeEmail,omitempty"`
+
+	// DefaultInboundPublicPort Default public port for new inbounds. Falls back to 443 when zero.
+	DefaultInboundPublicPort *int                 `json:"defaultInboundPublicPort,omitempty"`
+	Domain                   *string              `json:"domain,omitempty"`
+	Email                    *openapi_types.Email `json:"email,omitempty"`
+	FallbackRoot             *string              `json:"fallbackRoot,omitempty"`
+
+	// FirewallManagement When null (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply. Set false to disable firewall synchronization, true to force it.
+	FirewallManagement nullable.Nullable[bool] `json:"firewallManagement,omitempty"`
+
+	// Hysteria2Insecure Allow self-signed server certificates for hysteria2 inbounds.
+	Hysteria2Insecure *bool   `json:"hysteria2Insecure,omitempty"`
+	Hysteria2Password *string `json:"hysteria2Password,omitempty"`
+	MasqueradeURL     *string `json:"masqueradeURL,omitempty"`
+
+	// Mode Examples: server
+	Mode string `json:"mode"`
+
+	// NaivePassword Plain value on write; redacted as `[REDACTED]` on read when present.
+	NaivePassword   *string                                       `json:"naivePassword,omitempty"`
+	NaiveUsername   *string                                       `json:"naiveUsername,omitempty"`
+	OlcrtcAuth      *string                                       `json:"olcrtcAuth,omitempty"`
+	OlcrtcRoomID    *string                                       `json:"olcrtcRoomID,omitempty"`
+	OlcrtcTransport *string                                       `json:"olcrtcTransport,omitempty"`
+	PanelAccess     *PutApiSettings200JSONResponseBodyPanelAccess `json:"panelAccess,omitempty"`
+
+	// PanelDomain Public domain for the panel when served through Caddy.
+	PanelDomain *string `json:"panelDomain,omitempty"`
+
+	// PanelEmail ACME contact email for the panel domain.
+	PanelEmail *openapi_types.Email `json:"panelEmail,omitempty"`
+
+	// PanelListen Examples: 127.0.0.1:2096
+	PanelListen string `json:"panelListen"`
+
+	// PanelPublicPort Public port for the panel when served through Caddy. Defaults to 443 when zero.
+	PanelPublicPort *int `json:"panelPublicPort,omitempty"`
+
+	// ProtocolFields Protocol-specific settings keyed by field identifier. Schema fields that also have a top-level flat counterpart (e.g. hysteria2Insecure, panelPublicPort, panelDomain) must be echoed in BOTH places: the flat value wins the server-side precedence check, so a stale protocolFields copy can silently revert an edit made through the flat field (and vice versa). Clients that only submit the protocolFields copy (legacy panel) rely on the flat zero value being treated as "not provided".
+	ProtocolFields *map[string]interface{} `json:"protocolFields,omitempty"`
+	Revision       RevisionView            `json:"revision"`
+	Success        bool                    `json:"success"`
+
+	// WebBasePath Examples: /a1b2c3d4e5f6/
+	WebBasePath *string `json:"webBasePath,omitempty"`
+} {
 	return r.JSON200
 }
 
@@ -16727,6 +17816,82 @@ func (r PatchApiV1ClientsIdResponse) ContentType() string {
 	return ""
 }
 
+// GetApiV1ClientsIdAuditResponse401Headers the declared response headers of an HTTP 401 response for GetApiV1ClientsIdAudit
+type GetApiV1ClientsIdAuditResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type GetApiV1ClientsIdAuditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AuditListResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetApiV1ClientsIdAuditResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiV1ClientsIdAuditResponse) GetJSON200() *AuditListResponse {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r GetApiV1ClientsIdAuditResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiV1ClientsIdAuditResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetApiV1ClientsIdAuditResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetApiV1ClientsIdAuditResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiV1ClientsIdAuditResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ClientsIdAuditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ClientsIdAuditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiV1ClientsIdAuditResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetApiV1ClientsIdBindingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -17841,8 +19006,8 @@ func (r GetApiVersionResponse) ContentType() string {
 type PostApiVersionUpdateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *UpdateResponse
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *UpdateResponse
 	// JSON400 the response for an HTTP 400 `application/json` response
 	JSON400 *BadRequest
 	// JSON409 the response for an HTTP 409 `application/json` response
@@ -17859,9 +19024,9 @@ type PostApiVersionUpdateResponse struct {
 	JSON503 *ServiceUnavailable
 }
 
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r PostApiVersionUpdateResponse) GetJSON200() *UpdateResponse {
-	return r.JSON200
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r PostApiVersionUpdateResponse) GetJSON202() *UpdateResponse {
+	return r.JSON202
 }
 
 // GetJSON400 returns the response for an HTTP 400 `application/json` response
@@ -17973,7 +19138,23 @@ type PutApiWarpResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *WarpConfig
+	JSON200 *struct {
+		ApplyJob *ApplyJob `json:"applyJob,omitempty"`
+		Enabled  bool      `json:"enabled"`
+
+		// Endpoint Examples: engage.cloudflareclient.com:2408
+		Endpoint      string       `json:"endpoint"`
+		LicenseKey    *string      `json:"licenseKey,omitempty"`
+		LocalAddress  *string      `json:"localAddress,omitempty"`
+		Mtu           *int         `json:"mtu,omitempty"`
+		PeerPublicKey *string      `json:"peerPublicKey,omitempty"`
+		PrivateKey    *string      `json:"privateKey,omitempty"`
+		Reserved      *[]int       `json:"reserved,omitempty"`
+		Revision      RevisionView `json:"revision"`
+		SocksListen   *string      `json:"socksListen,omitempty"`
+		SocksPort     *int         `json:"socksPort,omitempty"`
+		Success       bool         `json:"success"`
+	}
 	// JSON400 the response for an HTTP 400 `application/json` response
 	JSON400 *BadRequest
 	// JSON409 the response for an HTTP 409 `application/json` response
@@ -17987,7 +19168,23 @@ type PutApiWarpResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r PutApiWarpResponse) GetJSON200() *WarpConfig {
+func (r PutApiWarpResponse) GetJSON200() *struct {
+	ApplyJob *ApplyJob `json:"applyJob,omitempty"`
+	Enabled  bool      `json:"enabled"`
+
+	// Endpoint Examples: engage.cloudflareclient.com:2408
+	Endpoint      string       `json:"endpoint"`
+	LicenseKey    *string      `json:"licenseKey,omitempty"`
+	LocalAddress  *string      `json:"localAddress,omitempty"`
+	Mtu           *int         `json:"mtu,omitempty"`
+	PeerPublicKey *string      `json:"peerPublicKey,omitempty"`
+	PrivateKey    *string      `json:"privateKey,omitempty"`
+	Reserved      *[]int       `json:"reserved,omitempty"`
+	Revision      RevisionView `json:"revision"`
+	SocksListen   *string      `json:"socksListen,omitempty"`
+	SocksPort     *int         `json:"socksPort,omitempty"`
+	Success       bool         `json:"success"`
+} {
 	return r.JSON200
 }
 
@@ -18956,6 +20153,21 @@ func (c *ClientWithResponses) GetApiFirewallWithResponse(ctx context.Context, re
 	return ParseGetApiFirewallResponse(rsp)
 }
 
+// GetApiHealthWithResponse Panel health component snapshot
+//
+// Viewer-facing component health snapshot; the same diagnostic payload that /readyz reports to orchestrators. Always returns 200 — inspect `status` and `components` for degradation.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/health (the `GetApiHealth` operationId).
+func (c *ClientWithResponses) GetApiHealthWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiHealthResponse, error) {
+	rsp, err := c.GetApiHealth(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiHealthResponse(rsp)
+}
+
 // GetApiInboundsWithResponse List inbounds
 //
 // Returns a wrapper object for the known response body format(s).
@@ -19750,6 +20962,21 @@ func (c *ClientWithResponses) PatchApiV1ClientsIdWithResponse(ctx context.Contex
 	return ParsePatchApiV1ClientsIdResponse(rsp)
 }
 
+// GetApiV1ClientsIdAuditWithResponse Audit history scoped to one client
+//
+// Newest-first audit records targeting this client. Records matching the immutable client ID are always included; legacy name-targeted records are included only for known client actions. Admin role required.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/clients/{id}/audit (the `GetApiV1ClientsIdAudit` operationId).
+func (c *ClientWithResponses) GetApiV1ClientsIdAuditWithResponse(ctx context.Context, id ClientId, params *GetApiV1ClientsIdAuditParams, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdAuditResponse, error) {
+	rsp, err := c.GetApiV1ClientsIdAudit(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ClientsIdAuditResponse(rsp)
+}
+
 // GetApiV1ClientsIdBindingsWithResponse List client bindings
 //
 // Returns a wrapper object for the known response body format(s).
@@ -20398,7 +21625,7 @@ func ParsePostApiApplyResponse(rsp *http.Response) (*PostApiApplyResponse, error
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest BadRequest
+		var dest PostApiApply400JSONResponseBody
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -20412,7 +21639,7 @@ func ParsePostApiApplyResponse(rsp *http.Response) (*PostApiApplyResponse, error
 		response.JSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
-		var dest ValidationFailed
+		var dest PostApiApply422JSONResponseBody
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -20504,6 +21731,23 @@ func ParseGetApiApplyJobsIdResponse(rsp *http.Response) (*GetApiApplyJobsIdRespo
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ApplyJob
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
 	return response, nil
 }
 
@@ -20521,11 +21765,19 @@ func ParsePostApiApplyJobsIdRetryResponse(rsp *http.Response) (*PostApiApplyJobs
 	}
 
 	switch {
-	case rsp.StatusCode == 200:
-		break // No content-type
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ApplyRetryResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
-	case rsp.StatusCode == 404:
-		break // No content-type
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Conflict
@@ -20628,8 +21880,12 @@ func ParsePostApiApplyReconcileResponse(rsp *http.Response) (*PostApiApplyReconc
 	}
 
 	switch {
-	case rsp.StatusCode == 200:
-		break // No content-type
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ApplyReconcileResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Conflict
@@ -20678,8 +21934,12 @@ func ParsePostApiApplyRollbackResponse(rsp *http.Response) (*PostApiApplyRollbac
 	}
 
 	switch {
-	case rsp.StatusCode == 200:
-		break // No content-type
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ApplyRollbackResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
@@ -20735,6 +21995,16 @@ func ParseGetApiApplyStateResponse(rsp *http.Response) (*GetApiApplyStateRespons
 	response := &GetApiApplyStateResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ApplyStateResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	}
 
 	return response, nil
@@ -22064,6 +23334,52 @@ func ParseGetApiFirewallResponse(rsp *http.Response) (*GetApiFirewallResponse, e
 	return response, nil
 }
 
+// ParseGetApiHealthResponse parses an HTTP response from a GetApiHealthWithResponse call
+func ParseGetApiHealthResponse(rsp *http.Response) (*GetApiHealthResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiHealthResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ReadyzResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetApiHealthResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseGetApiInboundsResponse parses an HTTP response from a GetApiInboundsWithResponse call
 func ParseGetApiInboundsResponse(rsp *http.Response) (*GetApiInboundsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -22125,7 +23441,32 @@ func ParsePostApiInboundsResponse(rsp *http.Response) (*PostApiInboundsResponse,
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest Inbound
+		var dest struct {
+			ApplyJob     *ApplyJob `json:"applyJob,omitempty"`
+			Enabled      bool      `json:"enabled"`
+			FallbackRoot *string   `json:"fallbackRoot,omitempty"`
+
+			// Hysteria2Insecure Allow self-signed server certificates for this hysteria2 inbound.
+			Hysteria2Insecure *bool                                      `json:"hysteria2Insecure,omitempty"`
+			Hysteria2Password *string                                    `json:"hysteria2Password,omitempty"`
+			MasqueradeURL     *string                                    `json:"masqueradeURL,omitempty"`
+			NaivePassword     *string                                    `json:"naivePassword,omitempty"`
+			NaiveUsername     *string                                    `json:"naiveUsername,omitempty"`
+			Name              string                                     `json:"name"`
+			OlcrtcAuth        *string                                    `json:"olcrtcAuth,omitempty"`
+			OlcrtcRoomID      *string                                    `json:"olcrtcRoomID,omitempty"`
+			OlcrtcTransport   *string                                    `json:"olcrtcTransport,omitempty"`
+			Password          *string                                    `json:"password,omitempty"`
+			Port              int                                        `json:"port"`
+			Profiles          *[]ClientProfile                           `json:"profiles,omitempty"`
+			Protocol          PostApiInbounds201JSONResponseBodyProtocol `json:"protocol"`
+
+			// ProtocolFields Protocol-specific inbound fields keyed by field identifier.
+			ProtocolFields *map[string]interface{}                     `json:"protocolFields,omitempty"`
+			Revision       RevisionView                                `json:"revision"`
+			Success        bool                                        `json:"success"`
+			Transport      PostApiInbounds201JSONResponseBodyTransport `json:"transport"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -22192,8 +23533,17 @@ func ParseDeleteApiInboundsNameResponse(rsp *http.Response) (*DeleteApiInboundsN
 	}
 
 	switch {
-	case rsp.StatusCode == 200:
-		break // No content-type
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			ApplyJob *ApplyJob    `json:"applyJob,omitempty"`
+			Name     string       `json:"name"`
+			Revision RevisionView `json:"revision"`
+			Success  bool         `json:"success"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest Forbidden
@@ -22290,7 +23640,32 @@ func ParsePutApiInboundsNameResponse(rsp *http.Response) (*PutApiInboundsNameRes
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Inbound
+		var dest struct {
+			ApplyJob     *ApplyJob `json:"applyJob,omitempty"`
+			Enabled      bool      `json:"enabled"`
+			FallbackRoot *string   `json:"fallbackRoot,omitempty"`
+
+			// Hysteria2Insecure Allow self-signed server certificates for this hysteria2 inbound.
+			Hysteria2Insecure *bool                                         `json:"hysteria2Insecure,omitempty"`
+			Hysteria2Password *string                                       `json:"hysteria2Password,omitempty"`
+			MasqueradeURL     *string                                       `json:"masqueradeURL,omitempty"`
+			NaivePassword     *string                                       `json:"naivePassword,omitempty"`
+			NaiveUsername     *string                                       `json:"naiveUsername,omitempty"`
+			Name              string                                        `json:"name"`
+			OlcrtcAuth        *string                                       `json:"olcrtcAuth,omitempty"`
+			OlcrtcRoomID      *string                                       `json:"olcrtcRoomID,omitempty"`
+			OlcrtcTransport   *string                                       `json:"olcrtcTransport,omitempty"`
+			Password          *string                                       `json:"password,omitempty"`
+			Port              int                                           `json:"port"`
+			Profiles          *[]ClientProfile                              `json:"profiles,omitempty"`
+			Protocol          PutApiInboundsName200JSONResponseBodyProtocol `json:"protocol"`
+
+			// ProtocolFields Protocol-specific inbound fields keyed by field identifier.
+			ProtocolFields *map[string]interface{}                        `json:"protocolFields,omitempty"`
+			Revision       RevisionView                                   `json:"revision"`
+			Success        bool                                           `json:"success"`
+			Transport      PutApiInboundsName200JSONResponseBodyTransport `json:"transport"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -22692,7 +24067,15 @@ func ParsePostApiRoutingPresetsNameResponse(rsp *http.Response) (*PostApiRouting
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RoutingPresetResponse
+		var dest struct {
+			ActivePreset *string          `json:"activePreset,omitempty"`
+			ApplyJob     *ApplyJob        `json:"applyJob,omitempty"`
+			Presets      *[]RoutingPreset `json:"presets,omitempty"`
+			Revision     RevisionView     `json:"revision"`
+			Rules        []RoutingRule    `json:"rules"`
+			Source       RoutingSource    `json:"source"`
+			Success      bool             `json:"success"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -22779,7 +24162,17 @@ func ParsePostApiRoutingRulesResponse(rsp *http.Response) (*PostApiRoutingRulesR
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest RoutingRule
+		var dest struct {
+			ApplyJob *ApplyJob `json:"applyJob,omitempty"`
+			Enabled  bool      `json:"enabled"`
+			Match    string    `json:"match"`
+			Name     string    `json:"name"`
+
+			// Outbound Examples: direct, warp, proxy
+			Outbound string       `json:"outbound"`
+			Revision RevisionView `json:"revision"`
+			Success  bool         `json:"success"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -22839,8 +24232,17 @@ func ParseDeleteApiRoutingRulesNameResponse(rsp *http.Response) (*DeleteApiRouti
 	}
 
 	switch {
-	case rsp.StatusCode == 200:
-		break // No content-type
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			ApplyJob *ApplyJob    `json:"applyJob,omitempty"`
+			Name     string       `json:"name"`
+			Revision RevisionView `json:"revision"`
+			Success  bool         `json:"success"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NotFound
@@ -22930,7 +24332,17 @@ func ParsePutApiRoutingRulesNameResponse(rsp *http.Response) (*PutApiRoutingRule
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RoutingRule
+		var dest struct {
+			ApplyJob *ApplyJob `json:"applyJob,omitempty"`
+			Enabled  bool      `json:"enabled"`
+			Match    string    `json:"match"`
+			Name     string    `json:"name"`
+
+			// Outbound Examples: direct, warp, proxy
+			Outbound string       `json:"outbound"`
+			Revision RevisionView `json:"revision"`
+			Success  bool         `json:"success"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -23198,7 +24610,59 @@ func ParsePutApiSettingsResponse(rsp *http.Response) (*PutApiSettingsResponse, e
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Settings
+		var dest struct {
+			// AcmeChallengeMode ACME challenge mode used for inbound certificates.
+			AcmeChallengeMode *PutApiSettings200JSONResponseBodyAcmeChallengeMode `json:"acmeChallengeMode,omitempty"`
+			ApplyJob          *ApplyJob                                           `json:"applyJob,omitempty"`
+
+			// DefaultAcmeEmail Default ACME contact email for inbound certificates.
+			DefaultAcmeEmail *openapi_types.Email `json:"defaultAcmeEmail,omitempty"`
+
+			// DefaultInboundPublicPort Default public port for new inbounds. Falls back to 443 when zero.
+			DefaultInboundPublicPort *int                 `json:"defaultInboundPublicPort,omitempty"`
+			Domain                   *string              `json:"domain,omitempty"`
+			Email                    *openapi_types.Email `json:"email,omitempty"`
+			FallbackRoot             *string              `json:"fallbackRoot,omitempty"`
+
+			// FirewallManagement When null (default), Veil synchronizes UFW rules for the panel and enabled inbounds during apply. Set false to disable firewall synchronization, true to force it.
+			FirewallManagement nullable.Nullable[bool] `json:"firewallManagement,omitempty"`
+
+			// Hysteria2Insecure Allow self-signed server certificates for hysteria2 inbounds.
+			Hysteria2Insecure *bool   `json:"hysteria2Insecure,omitempty"`
+			Hysteria2Password *string `json:"hysteria2Password,omitempty"`
+			MasqueradeURL     *string `json:"masqueradeURL,omitempty"`
+
+			// Mode Examples: server
+			Mode string `json:"mode"`
+
+			// NaivePassword Plain value on write; redacted as `[REDACTED]` on read when present.
+			NaivePassword   *string                                       `json:"naivePassword,omitempty"`
+			NaiveUsername   *string                                       `json:"naiveUsername,omitempty"`
+			OlcrtcAuth      *string                                       `json:"olcrtcAuth,omitempty"`
+			OlcrtcRoomID    *string                                       `json:"olcrtcRoomID,omitempty"`
+			OlcrtcTransport *string                                       `json:"olcrtcTransport,omitempty"`
+			PanelAccess     *PutApiSettings200JSONResponseBodyPanelAccess `json:"panelAccess,omitempty"`
+
+			// PanelDomain Public domain for the panel when served through Caddy.
+			PanelDomain *string `json:"panelDomain,omitempty"`
+
+			// PanelEmail ACME contact email for the panel domain.
+			PanelEmail *openapi_types.Email `json:"panelEmail,omitempty"`
+
+			// PanelListen Examples: 127.0.0.1:2096
+			PanelListen string `json:"panelListen"`
+
+			// PanelPublicPort Public port for the panel when served through Caddy. Defaults to 443 when zero.
+			PanelPublicPort *int `json:"panelPublicPort,omitempty"`
+
+			// ProtocolFields Protocol-specific settings keyed by field identifier. Schema fields that also have a top-level flat counterpart (e.g. hysteria2Insecure, panelPublicPort, panelDomain) must be echoed in BOTH places: the flat value wins the server-side precedence check, so a stale protocolFields copy can silently revert an edit made through the flat field (and vice versa). Clients that only submit the protocolFields copy (legacy panel) rely on the flat zero value being treated as "not provided".
+			ProtocolFields *map[string]interface{} `json:"protocolFields,omitempty"`
+			Revision       RevisionView            `json:"revision"`
+			Success        bool                    `json:"success"`
+
+			// WebBasePath Examples: /a1b2c3d4e5f6/
+			WebBasePath *string `json:"webBasePath,omitempty"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -24249,6 +25713,73 @@ func ParsePatchApiV1ClientsIdResponse(rsp *http.Response) (*PatchApiV1ClientsIdR
 	return response, nil
 }
 
+// ParseGetApiV1ClientsIdAuditResponse parses an HTTP response from a GetApiV1ClientsIdAuditWithResponse call
+func ParseGetApiV1ClientsIdAuditResponse(rsp *http.Response) (*GetApiV1ClientsIdAuditResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ClientsIdAuditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AuditListResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetApiV1ClientsIdAuditResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseGetApiV1ClientsIdBindingsResponse parses an HTTP response from a GetApiV1ClientsIdBindingsWithResponse call
 func ParseGetApiV1ClientsIdBindingsResponse(rsp *http.Response) (*GetApiV1ClientsIdBindingsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -25111,12 +26642,12 @@ func ParsePostApiVersionUpdateResponse(rsp *http.Response) (*PostApiVersionUpdat
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
 		var dest UpdateResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.JSON200 = &dest
+		response.JSON202 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
@@ -25213,7 +26744,23 @@ func ParsePutApiWarpResponse(rsp *http.Response) (*PutApiWarpResponse, error) {
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest WarpConfig
+		var dest struct {
+			ApplyJob *ApplyJob `json:"applyJob,omitempty"`
+			Enabled  bool      `json:"enabled"`
+
+			// Endpoint Examples: engage.cloudflareclient.com:2408
+			Endpoint      string       `json:"endpoint"`
+			LicenseKey    *string      `json:"licenseKey,omitempty"`
+			LocalAddress  *string      `json:"localAddress,omitempty"`
+			Mtu           *int         `json:"mtu,omitempty"`
+			PeerPublicKey *string      `json:"peerPublicKey,omitempty"`
+			PrivateKey    *string      `json:"privateKey,omitempty"`
+			Reserved      *[]int       `json:"reserved,omitempty"`
+			Revision      RevisionView `json:"revision"`
+			SocksListen   *string      `json:"socksListen,omitempty"`
+			SocksPort     *int         `json:"socksPort,omitempty"`
+			Success       bool         `json:"success"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

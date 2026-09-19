@@ -75,20 +75,28 @@ export const PostApiAdminRotateKeyResponse = zod.object({
   "revision": zod.object({
   "desired": zod.int(),
   "applied": zod.int(),
-  "state": zod.enum(['synced', 'pending', 'failed'])
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded'])
 }).optional(),
   "applyJob": zod.object({
   "id": zod.string(),
   "desiredRevision": zod.int(),
   "baseRevision": zod.int(),
-  "status": zod.enum(['pending', 'running', 'success', 'failed', 'rolled_back']),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
   "trigger": zod.string(),
   "actorId": zod.string().optional(),
   "createdAt": zod.int(),
   "startedAt": zod.int().optional(),
   "finishedAt": zod.int().optional(),
   "errorCode": zod.string().optional(),
-  "errorMessage": zod.string().optional()
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
 }).optional()
 }).describe('Key rotation envelope: sessions except the caller were revoked.\nsuccess=false means the key and state were committed (desired advanced)\nbut the apply job for that revision did not finish cleanly.\n')
 

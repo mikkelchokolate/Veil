@@ -61,13 +61,20 @@ import type {
 
 import type {
   ApplyHistoryEntry,
+  ApplyJob,
   ApplyPlanResponse,
+  ApplyReconcileResponse,
   ApplyRequest,
   ApplyResponse,
+  ApplyRetryResponse,
+  ApplyRollbackResponse,
+  ApplyStateResponse,
   BadRequestResponse,
   ConflictResponse,
+  ErrorEnvelope,
   GetApiApplyJobs200,
   LockedResponse,
+  NotFoundResponse,
   PostApiApplyRollbackBody,
   RURecommendedPreviewRequest,
   RURecommendedPreviewResponse,
@@ -98,7 +105,7 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
 };
 
 export type getApiApplyStateResponse200 = {
-  data: void
+  data: ApplyStateResponse
   status: 200
 }
 
@@ -268,12 +275,12 @@ export const useGetApiApplyJobs = <TError = unknown,
       return useMutation(getGetApiApplyJobsMutationOptions(options), queryClient);
     }
     export type getApiApplyJobsIdResponse200 = {
-  data: void
+  data: ApplyJob
   status: 200
 }
 
 export type getApiApplyJobsIdResponse404 = {
-  data: void
+  data: NotFoundResponse
   status: 404
 }
 
@@ -314,7 +321,7 @@ export const getApiApplyJobsId = async (id: string, options?: Parameters<typeof 
 
 export const getGetApiApplyJobsIdMutationKey = () => ['getApiApplyJobsId'] as const;
 
-export const getGetApiApplyJobsIdMutationOptions = <TError = void,
+export const getGetApiApplyJobsIdMutationOptions = <TError = NotFoundResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError,GetApiApplyJobsIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError,GetApiApplyJobsIdMutationVariables, TContext> => {
 
@@ -343,13 +350,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type GetApiApplyJobsIdMutationResult = NonNullable<Awaited<ReturnType<typeof getApiApplyJobsId>>>
 
-    export type GetApiApplyJobsIdMutationError = void
+    export type GetApiApplyJobsIdMutationError = NotFoundResponse
     export type GetApiApplyJobsIdMutationVariables = {id: string}
 
     /**
  * @summary Get one apply job
  */
-export const useGetApiApplyJobsId = <TError = void,
+export const useGetApiApplyJobsId = <TError = NotFoundResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError,GetApiApplyJobsIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof getApiApplyJobsId>>,
@@ -360,12 +367,12 @@ export const useGetApiApplyJobsId = <TError = void,
       return useMutation(getGetApiApplyJobsIdMutationOptions(options), queryClient);
     }
     export type postApiApplyJobsIdRetryResponse200 = {
-  data: void
+  data: ApplyRetryResponse
   status: 200
 }
 
 export type postApiApplyJobsIdRetryResponse404 = {
-  data: void
+  data: NotFoundResponse
   status: 404
 }
 
@@ -431,7 +438,7 @@ export const getPostApiApplyJobsIdRetryQueryKey = (id: string,) => {
     }
 
 
-export const getPostApiApplyJobsIdRetryQueryOptions = <TData = Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiApplyJobsIdRetryQueryOptions = <TData = Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -450,10 +457,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiApplyJobsIdRetryQueryResult = NonNullable<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>>
-export type PostApiApplyJobsIdRetryQueryError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+export type PostApiApplyJobsIdRetryQueryError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
+export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>,
@@ -463,7 +470,7 @@ export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof pos
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
+export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>,
@@ -473,7 +480,7 @@ export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof pos
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
+export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -481,7 +488,7 @@ export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof pos
  * @summary Create a NEW apply job for the same desired revision
  */
 
-export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
+export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -499,7 +506,7 @@ export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof pos
 
 
 export type postApiApplyReconcileResponse200 = {
-  data: void
+  data: ApplyReconcileResponse
   status: 200
 }
 
@@ -633,7 +640,7 @@ export function usePostApiApplyReconcile<TData = Awaited<ReturnType<typeof postA
 
 
 export type postApiApplyRollbackResponse200 = {
-  data: void
+  data: ApplyRollbackResponse
   status: 200
 }
 
@@ -797,7 +804,7 @@ export type postApiApplyResponse200 = {
 }
 
 export type postApiApplyResponse400 = {
-  data: BadRequestResponse
+  data: ApplyResponse | ErrorEnvelope
   status: 400
 }
 
@@ -807,7 +814,7 @@ export type postApiApplyResponse409 = {
 }
 
 export type postApiApplyResponse422 = {
-  data: ValidationFailedResponse
+  data: ApplyResponse | ErrorEnvelope
   status: 422
 }
 
@@ -877,7 +884,7 @@ export const getPostApiApplyQueryKey = (applyRequest?: ApplyRequest,) => {
     }
 
 
-export const getPostApiApplyQueryOptions = <TData = Awaited<ReturnType<typeof postApiApply>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(applyRequest: ApplyRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApply>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiApplyQueryOptions = <TData = Awaited<ReturnType<typeof postApiApply>>, TError = ApplyResponse | ErrorEnvelope | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(applyRequest: ApplyRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApply>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -896,10 +903,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiApplyQueryResult = NonNullable<Awaited<ReturnType<typeof postApiApply>>>
-export type PostApiApplyQueryError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+export type PostApiApplyQueryError = ApplyResponse | ErrorEnvelope | ConflictResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiApply<TData = Awaited<ReturnType<typeof postApiApply>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
+export function usePostApiApply<TData = Awaited<ReturnType<typeof postApiApply>>, TError = ApplyResponse | ErrorEnvelope | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(
  applyRequest: ApplyRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApply>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiApply>>,
@@ -909,7 +916,7 @@ export function usePostApiApply<TData = Awaited<ReturnType<typeof postApiApply>>
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiApply<TData = Awaited<ReturnType<typeof postApiApply>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
+export function usePostApiApply<TData = Awaited<ReturnType<typeof postApiApply>>, TError = ApplyResponse | ErrorEnvelope | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(
  applyRequest: ApplyRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApply>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiApply>>,
@@ -919,7 +926,7 @@ export function usePostApiApply<TData = Awaited<ReturnType<typeof postApiApply>>
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiApply<TData = Awaited<ReturnType<typeof postApiApply>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
+export function usePostApiApply<TData = Awaited<ReturnType<typeof postApiApply>>, TError = ApplyResponse | ErrorEnvelope | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(
  applyRequest: ApplyRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApply>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -927,7 +934,7 @@ export function usePostApiApply<TData = Awaited<ReturnType<typeof postApiApply>>
  * @summary Stage and optionally promote current management state
  */
 
-export function usePostApiApply<TData = Awaited<ReturnType<typeof postApiApply>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
+export function usePostApiApply<TData = Awaited<ReturnType<typeof postApiApply>>, TError = ApplyResponse | ErrorEnvelope | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(
  applyRequest: ApplyRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiApply>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

@@ -40,9 +40,15 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import type { UpdateResponseStatus } from './updateResponseStatus.msw.ts';
 
+/**
+ * Durable update job accepted by POST /api/version/update. The panel restarts asynchronously; poll /api/version to confirm the new version.
+ */
 export interface UpdateResponse {
-  success: true;
+  /** Durable panel update job identifier. */
+  jobId: string;
+  status: UpdateResponseStatus;
   staged: boolean;
   installed: boolean;
   version: string;

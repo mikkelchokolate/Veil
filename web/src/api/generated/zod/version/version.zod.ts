@@ -70,10 +70,11 @@ export const PostApiVersionUpdateBody = zod.object({
 })
 
 export const PostApiVersionUpdateResponse = zod.object({
-  "success": zod.literal(true),
+  "jobId": zod.string().describe('Durable panel update job identifier.'),
+  "status": zod.enum(['restart_pending']),
   "staged": zod.boolean(),
   "installed": zod.boolean(),
   "version": zod.string(),
   "message": zod.string()
-})
+}).describe('Durable update job accepted by POST /api/version/update. The panel restarts asynchronously; poll /api/version to confirm the new version.')
 

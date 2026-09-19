@@ -60,6 +60,8 @@ export interface Inbound {
   naiveUsername?: string;
   naivePassword?: string;
   hysteria2Password?: string;
+  /** Allow self-signed server certificates for this hysteria2 inbound. */
+  hysteria2Insecure?: boolean;
   masqueradeURL?: string;
   fallbackRoot?: string;
   olcrtcAuth?: string;

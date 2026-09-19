@@ -452,6 +452,99 @@ export const useGetMetrics = <TError = UnauthorizedResponse,
       > => {
       return useMutation(getGetMetricsMutationOptions(options), queryClient);
     }
+    export type getApiHealthResponse200 = {
+  data: ReadyzResponse
+  status: 200
+}
+
+export type getApiHealthResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getApiHealthResponseSuccess = (getApiHealthResponse200) & {
+  headers: Headers;
+};
+export type getApiHealthResponseError = (getApiHealthResponse401) & {
+  headers: Headers;
+};
+
+export type getApiHealthResponse = (getApiHealthResponseSuccess | getApiHealthResponseError)
+
+export const getGetApiHealthUrl = () => {
+
+
+
+
+  return `/api/health`
+}
+
+/**
+ * Viewer-facing component health snapshot; the same diagnostic payload that /readyz reports to orchestrators. Always returns 200 — inspect `status` and `components` for degradation.
+ * @summary Panel health component snapshot
+ */
+export const getApiHealth = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiHealthResponse> => {
+
+  return apiFetch<getApiHealthResponse>(getGetApiHealthUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiHealthMutationKey = () => ['getApiHealth'] as const;
+
+export const getGetApiHealthMutationOptions = <TError = UnauthorizedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiHealth>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiHealth>>, TError,void, TContext> => {
+
+const mutationKey = getGetApiHealthMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiHealth>>, void> = () => {
+
+
+          return  getApiHealth(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiHealthMutationResult = NonNullable<Awaited<ReturnType<typeof getApiHealth>>>
+
+    export type GetApiHealthMutationError = UnauthorizedResponse
+
+
+    /**
+ * @summary Panel health component snapshot
+ */
+export const useGetApiHealth = <TError = UnauthorizedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiHealth>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiHealth>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiHealthMutationOptions(options), queryClient);
+    }
     export type getApiStatusResponse200 = {
   data: StatusResponse
   status: 200
