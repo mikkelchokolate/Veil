@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -124,6 +125,91 @@ func TestBuildRepairPlanFromOptionsUsesResolvedCaddyBinaryForNaiveRuntime(t *tes
 	unit := repairActionContent(plan, "veil-caddy.service")
 	if !strings.Contains(unit, "ExecStart=/usr/sbin/caddy run --config") {
 		t.Fatalf("repair should render veil-caddy.service with resolved caddy path:\n%s", unit)
+	}
+}
+
+// Regression for #339: on a Caddy-mode install the first-install profile stages
+// a Panel-only generated/caddy/config.json placeholder. The state-derived
+// render must replace it so a Hysteria2-only ACME subject survives repair.
+func TestBuildRepairPlanFromOptionsKeepsHysteria2ACMEInCaddyJSON(t *testing.T) {
+	dir := t.TempDir()
+	varDir := filepath.Join(dir, "var", "lib", "veil")
+	statePath := filepath.Join(varDir, "state.json")
+	if err := os.MkdirAll(varDir, 0o755); err != nil {
+		t.Fatalf("mkdir state dir: %v", err)
+	}
+	state := `{
+  "settings": {"panelListen":"127.0.0.1:2096","panelAccess":"caddy","webBasePath":"/panel-secret/","mode":"server","domain":"panel.example.com","email":"admin@example.com","defaultAcmeEmail":"admin@example.com"},
+  "inbounds": [
+    {"name":"hy2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true,"password":"hy2-pass","protocolFields":{"domain":"hy2.example.com","email":"admin@example.com"}}
+  ],
+  "routingRules": [],
+  "warp": {"endpoint":"engage.cloudflareclient.com:2408"}
+}`
+	if err := os.WriteFile(statePath, []byte(state), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+
+	plan, err := buildRepairPlanFromOptions(Options{Profile: "ru-recommended", EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: varDir, SystemdDir: filepath.Join(dir, "systemd")})
+	if err != nil {
+		t.Fatalf("buildRepairPlanFromOptions: %v", err)
+	}
+	caddyJSON := repairActionContent(plan, "config.json")
+	if !strings.Contains(caddyJSON, "hy2.example.com") {
+		t.Fatalf("repair staged Panel-only Caddy JSON, dropping the Hysteria2 ACME subject:\n%s", caddyJSON)
+	}
+	if !strings.Contains(caddyJSON, "panel.example.com") {
+		t.Fatalf("state-derived Caddy JSON lost the Panel route:\n%s", caddyJSON)
+	}
+}
+
+// Regression for #339: same placeholder overwrite, exercised with a live Naive
+// route that only exists in the state-derived render.
+func TestBuildRepairPlanFromOptionsKeepsNaiveRouteInCaddyJSON(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("requires a POSIX caddy probe stub")
+	}
+	dir := t.TempDir()
+	// naiveproxy.RenderConfig probes `caddy list-modules --json` on PATH; stub a
+	// forward_proxy-capable binary so the consolidated config can render.
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fakeCaddy := filepath.Join(binDir, "caddy")
+	stub := "#!/bin/sh\nprintf '%s' '[{\"module_name\":\"http\"},{\"module_name\":\"http.handlers.forward_proxy\"}]'\n"
+	if err := os.WriteFile(fakeCaddy, []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	varDir := filepath.Join(dir, "var", "lib", "veil")
+	statePath := filepath.Join(varDir, "state.json")
+	if err := os.MkdirAll(varDir, 0o755); err != nil {
+		t.Fatalf("mkdir state dir: %v", err)
+	}
+	state := `{
+  "settings": {"panelListen":"127.0.0.1:2096","panelAccess":"caddy","webBasePath":"/panel-secret/","mode":"server","domain":"panel.example.com","email":"admin@example.com","defaultAcmeEmail":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret"},
+  "inbounds": [
+    {"name":"naive","protocol":"naiveproxy","transport":"tcp","port":8443,"enabled":true,"protocolFields":{"domain":"naive.example.com","email":"admin@example.com"}}
+  ],
+  "routingRules": [],
+  "warp": {"endpoint":"engage.cloudflareclient.com:2408"}
+}`
+	if err := os.WriteFile(statePath, []byte(state), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+
+	plan, err := buildRepairPlanFromOptions(Options{Profile: "ru-recommended", EtcDir: filepath.Join(dir, "etc", "veil"), VarDir: varDir, SystemdDir: filepath.Join(dir, "systemd")})
+	if err != nil {
+		t.Fatalf("buildRepairPlanFromOptions: %v", err)
+	}
+	caddyJSON := repairActionContent(plan, "config.json")
+	if !strings.Contains(caddyJSON, "naive.example.com") {
+		t.Fatalf("repair staged Panel-only Caddy JSON, dropping the Naive route:\n%s", caddyJSON)
+	}
+	if !strings.Contains(caddyJSON, "panel.example.com") {
+		t.Fatalf("state-derived Caddy JSON lost the Panel route:\n%s", caddyJSON)
 	}
 }
 
