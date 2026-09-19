@@ -11,15 +11,16 @@ import (
 
 func TestQuotaConfigurationRequiresRealProtocolTrafficProvider(t *testing.T) {
 	protocols := []struct {
-		name             string
-		protocol         string
-		transport        string
-		port             int
-		quotaEnforcement bool
+		name              string
+		protocol          string
+		transport         string
+		port              int
+		trafficAccounting bool
+		quotaEnforcement  bool
 	}{
-		{name: "hysteria2", protocol: "hysteria2", transport: "udp", port: 25443, quotaEnforcement: true},
-		{name: "mieru", protocol: "mieru", transport: "tcp", port: 25444, quotaEnforcement: false},
-		{name: "naiveproxy", protocol: "naiveproxy", transport: "tcp", port: 443, quotaEnforcement: false},
+		{name: "hysteria2", protocol: "hysteria2", transport: "udp", port: 25443, trafficAccounting: true, quotaEnforcement: true},
+		{name: "mieru", protocol: "mieru", transport: "tcp", port: 25444, trafficAccounting: true, quotaEnforcement: false},
+		{name: "naiveproxy", protocol: "naiveproxy", transport: "tcp", port: 443, trafficAccounting: false, quotaEnforcement: false},
 	}
 
 	for _, protocol := range protocols {
@@ -53,8 +54,8 @@ func TestQuotaConfigurationRequiresRealProtocolTrafficProvider(t *testing.T) {
 			}
 			binding, _ := bindings[0].(map[string]any)
 			capability, _ := binding["capability"].(map[string]any)
-			if got, ok := capability["trafficAccounting"].(bool); !ok || got != protocol.quotaEnforcement {
-				t.Errorf("trafficAccounting = %v (present=%v), want %v", capability["trafficAccounting"], ok, protocol.quotaEnforcement)
+			if got, ok := capability["trafficAccounting"].(bool); !ok || got != protocol.trafficAccounting {
+				t.Errorf("trafficAccounting = %v (present=%v), want %v", capability["trafficAccounting"], ok, protocol.trafficAccounting)
 			}
 			if got, ok := capability["quotaEnforcement"].(bool); !ok || got != protocol.quotaEnforcement {
 				t.Errorf("quotaEnforcement = %v (present=%v), want %v", capability["quotaEnforcement"], ok, protocol.quotaEnforcement)
