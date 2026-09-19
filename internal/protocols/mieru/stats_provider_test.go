@@ -95,14 +95,13 @@ func TestStatsProviderRejectsMalformedJSON(t *testing.T) {
 		[]byte("{\"users\": {\"u\": {"),
 		[]byte("prefix only, no object"),
 	} {
-		stub := NewStatsProvider("mieru:server", map[string]string{"u": "b1"})
-		original := execGetMetrics
-		execGetMetrics = func(ctx context.Context, mitaPath, sockPath string) ([]byte, error) { return output, nil }
-		_, err := stub.Read()
-		execGetMetrics = original
-		if err == nil {
-			t.Fatalf("expected error for output %q", output)
-		}
+		t.Run(string(output[:12]), func(t *testing.T) {
+			stubMitaExec(t, output, nil)
+			stub := NewStatsProvider("mieru:server", map[string]string{"u": "b1"})
+			if _, err := stub.Read(); err == nil {
+				t.Fatalf("expected error for output %q", output)
+			}
+		})
 	}
 }
 

@@ -305,9 +305,11 @@ func (s *managementState) buildTrafficProvidersLocked() ([]client.TrafficProvide
 		}
 		mieruEnabled = true
 		for identity, bindingID := range trafficIdentityMap(inbound.Name, inbound.Profiles, allBindings, allClients) {
-			if _, exists := mieruIdentities[identity]; !exists {
-				mieruIdentities[identity] = bindingID
+			if prev, exists := mieruIdentities[identity]; exists && prev != bindingID {
+				log.Printf("traffic: mieru runtime identity %q claimed by bindings %s and %s — keeping first", identity, prev, bindingID)
+				continue
 			}
+			mieruIdentities[identity] = bindingID
 		}
 	}
 	if mieruEnabled {
