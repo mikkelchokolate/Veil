@@ -24,6 +24,7 @@ func TestPanelBackupRestorePollingRetriesUntilTerminalState(t *testing.T) {
 		`continue;`,
 		`Invalid backup restore status response.`,
 		`clearStoredPanelIdentity();`,
+		`job.status === 'failed' || job.status === 'degraded' || job.status === 'pending'`,
 	} {
 		if !strings.Contains(reliability, want) {
 			t.Fatalf("backup restore polling reliability missing %q", want)

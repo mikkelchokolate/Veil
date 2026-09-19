@@ -164,16 +164,24 @@ func addPanelDirectBindOwner(settings Settings, owners map[bindregistry.BindKey]
 	if settings.PanelAccess != "direct" {
 		return nil
 	}
+	owner := bindregistry.BindOwner{Kind: bindregistry.BindOwnerPanelDirect, ServiceName: "veil.service"}
 	host, portText, err := net.SplitHostPort(settings.PanelListen)
 	if err != nil {
-		return nil
+		// An unparsable listen string must not silently skip bind ownership:
+		// the panel port would be invisible to occupancy/conflict checks.
+		return []bindregistry.Conflict{{
+			Owners:  []bindregistry.BindOwner{owner},
+			Message: fmt.Sprintf("Panel direct listener has invalid panelListen %q: %v", settings.PanelListen, err),
+		}}
 	}
 	port, err := strconv.Atoi(portText)
 	if err != nil || port <= 0 || port > 65535 {
-		return nil
+		return []bindregistry.Conflict{{
+			Owners:  []bindregistry.BindOwner{owner},
+			Message: fmt.Sprintf("Panel direct listener has invalid port in panelListen %q", settings.PanelListen),
+		}}
 	}
 	key := bindregistry.BindKey{Address: host, Port: port, Network: bindregistry.ListenTCP}
-	owner := bindregistry.BindOwner{Kind: bindregistry.BindOwnerPanelDirect, ServiceName: "veil.service"}
 	if existing, ok := owners[key]; ok && existing != owner {
 		return []bindregistry.Conflict{{
 			Key:     key,

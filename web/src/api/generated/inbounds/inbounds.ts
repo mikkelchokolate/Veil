@@ -63,10 +63,12 @@ import type {
   BadRequestResponse,
   ClientListResponse,
   ConflictResponse,
+  DeleteApiInboundsName200,
   ForbiddenResponse,
   GetApiInboundsNameClientsParams,
   Inbound,
   LockedResponse,
+  MutationOutcome,
   NotFoundResponse,
   ServiceUnavailableResponse,
   UnauthorizedResponse,
@@ -188,7 +190,7 @@ export const useGetApiInbounds = <TError = UnauthorizedResponse,
       return useMutation(getGetApiInboundsMutationOptions(options), queryClient);
     }
     export type postApiInboundsResponse201 = {
-  data: Inbound
+  data: Inbound & MutationOutcome
   status: 201
 }
 
@@ -438,7 +440,7 @@ export const useGetApiInboundsName = <TError = NotFoundResponse,
       return useMutation(getGetApiInboundsNameMutationOptions(options), queryClient);
     }
     export type putApiInboundsNameResponse200 = {
-  data: Inbound
+  data: Inbound & MutationOutcome
   status: 200
 }
 
@@ -608,7 +610,7 @@ export function usePutApiInboundsName<TData = Awaited<ReturnType<typeof putApiIn
 
 
 export type deleteApiInboundsNameResponse200 = {
-  data: void
+  data: DeleteApiInboundsName200
   status: 200
 }
 

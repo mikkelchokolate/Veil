@@ -95,6 +95,16 @@ export async function waitForPanelVersion(
 	const previousIdentity = options.previousVersion
 		? panelVersionIdentity(options.previousVersion)
 		: undefined;
+	// When the caller staged a specific target, only that version identity is
+	// success — a version change to an unexpected binary is not.
+	const expectedIdentity = options.expectedVersion
+		? panelVersionIdentity(options.expectedVersion)
+		: undefined;
+	const isExpectedBinary = (current: VersionResponse): boolean => {
+		const currentIdentity = panelVersionIdentity(current.version);
+		if (expectedIdentity) return currentIdentity === expectedIdentity;
+		return !previousIdentity || currentIdentity !== previousIdentity;
+	};
 
 	await sleep(delayMs);
 	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -109,15 +119,20 @@ export async function waitForPanelVersion(
 						);
 					}
 					if (job.status === "succeeded") {
-						return await fetchVersion();
+						const current = await fetchVersion();
+						if (!isExpectedBinary(current)) {
+							throw new PanelUpdateFailedError(
+								`panel restarted at ${current.version}, expected ${options.expectedVersion}`,
+							);
+						}
+						return current;
 					}
 				} catch (error) {
 					if (error instanceof PanelUpdateFailedError) throw error;
 				}
 			}
 			const current = await fetchVersion();
-			const currentIdentity = panelVersionIdentity(current.version);
-			if (!previousIdentity || currentIdentity !== previousIdentity) {
+			if (isExpectedBinary(current)) {
 				return current;
 			}
 		} catch (error) {

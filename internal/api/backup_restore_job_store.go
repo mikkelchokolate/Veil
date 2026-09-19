@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -83,13 +84,14 @@ func (s *managementState) loadBackupRestoreJobs() error {
 		s.backupJobs[job.ID] = job
 	}
 	if changed {
+		var clearErr error
 		if root := s.restoreStateRoot(); root != "" {
-			_ = backup.ClearRestoreCommitReceipt(root)
+			clearErr = backup.ClearRestoreCommitReceipt(root)
 		}
 		s.backupJobsMu.Lock()
-		err = s.persistBackupRestoreJobsLocked()
+		persistErr := s.persistBackupRestoreJobsLocked()
 		s.backupJobsMu.Unlock()
-		return err
+		return errors.Join(persistErr, clearErr)
 	}
 	return nil
 }

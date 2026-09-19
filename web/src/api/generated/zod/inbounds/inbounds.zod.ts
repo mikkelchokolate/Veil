@@ -66,6 +66,7 @@ export const GetApiInboundsResponseItem = zod.object({
   "naiveUsername": zod.string().optional(),
   "naivePassword": zod.string().optional(),
   "hysteria2Password": zod.string().optional(),
+  "hysteria2Insecure": zod.boolean().optional().describe('Allow self-signed server certificates for this hysteria2 inbound.'),
   "masqueradeURL": zod.string().optional(),
   "fallbackRoot": zod.string().optional(),
   "olcrtcAuth": zod.string().optional(),
@@ -108,6 +109,7 @@ export const PostApiInboundsBody = zod.object({
   "naiveUsername": zod.string().optional(),
   "naivePassword": zod.string().optional(),
   "hysteria2Password": zod.string().optional(),
+  "hysteria2Insecure": zod.boolean().optional().describe('Allow self-signed server certificates for this hysteria2 inbound.'),
   "masqueradeURL": zod.string().optional(),
   "fallbackRoot": zod.string().optional(),
   "olcrtcAuth": zod.string().optional(),
@@ -116,7 +118,7 @@ export const PostApiInboundsBody = zod.object({
   "protocolFields": zod.record(zod.string(), zod.unknown()).optional().describe('Protocol-specific inbound fields keyed by field identifier.')
 })
 
-export const postApiInboundsResponsePortMax = 65535;
+export const postApiInboundsResponseOnePortMax = 65535;
 
 
 
@@ -124,7 +126,7 @@ export const PostApiInboundsResponse = zod.object({
   "name": zod.string(),
   "protocol": zod.enum(['naiveproxy', 'hysteria2', 'olcrtc', 'mieru']),
   "transport": zod.enum(['tcp', 'udp']),
-  "port": zod.int().min(1).max(postApiInboundsResponsePortMax),
+  "port": zod.int().min(1).max(postApiInboundsResponseOnePortMax),
   "enabled": zod.boolean(),
   "password": zod.string().optional(),
   "profiles": zod.array(zod.object({
@@ -136,13 +138,42 @@ export const PostApiInboundsResponse = zod.object({
   "naiveUsername": zod.string().optional(),
   "naivePassword": zod.string().optional(),
   "hysteria2Password": zod.string().optional(),
+  "hysteria2Insecure": zod.boolean().optional().describe('Allow self-signed server certificates for this hysteria2 inbound.'),
   "masqueradeURL": zod.string().optional(),
   "fallbackRoot": zod.string().optional(),
   "olcrtcAuth": zod.string().optional(),
   "olcrtcTransport": zod.string().optional(),
   "olcrtcRoomID": zod.string().optional(),
   "protocolFields": zod.record(zod.string(), zod.unknown()).optional().describe('Protocol-specific inbound fields keyed by field identifier.')
-})
+}).and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.'))
 
 /**
  * @summary Read one inbound
@@ -174,6 +205,7 @@ export const GetApiInboundsNameResponse = zod.object({
   "naiveUsername": zod.string().optional(),
   "naivePassword": zod.string().optional(),
   "hysteria2Password": zod.string().optional(),
+  "hysteria2Insecure": zod.boolean().optional().describe('Allow self-signed server certificates for this hysteria2 inbound.'),
   "masqueradeURL": zod.string().optional(),
   "fallbackRoot": zod.string().optional(),
   "olcrtcAuth": zod.string().optional(),
@@ -222,6 +254,7 @@ export const PutApiInboundsNameBody = zod.object({
   "naiveUsername": zod.string().optional(),
   "naivePassword": zod.string().optional(),
   "hysteria2Password": zod.string().optional(),
+  "hysteria2Insecure": zod.boolean().optional().describe('Allow self-signed server certificates for this hysteria2 inbound.'),
   "masqueradeURL": zod.string().optional(),
   "fallbackRoot": zod.string().optional(),
   "olcrtcAuth": zod.string().optional(),
@@ -230,7 +263,7 @@ export const PutApiInboundsNameBody = zod.object({
   "protocolFields": zod.record(zod.string(), zod.unknown()).optional().describe('Protocol-specific inbound fields keyed by field identifier.')
 })
 
-export const putApiInboundsNameResponsePortMax = 65535;
+export const putApiInboundsNameResponseOnePortMax = 65535;
 
 
 
@@ -238,7 +271,7 @@ export const PutApiInboundsNameResponse = zod.object({
   "name": zod.string(),
   "protocol": zod.enum(['naiveproxy', 'hysteria2', 'olcrtc', 'mieru']),
   "transport": zod.enum(['tcp', 'udp']),
-  "port": zod.int().min(1).max(putApiInboundsNameResponsePortMax),
+  "port": zod.int().min(1).max(putApiInboundsNameResponseOnePortMax),
   "enabled": zod.boolean(),
   "password": zod.string().optional(),
   "profiles": zod.array(zod.object({
@@ -250,13 +283,42 @@ export const PutApiInboundsNameResponse = zod.object({
   "naiveUsername": zod.string().optional(),
   "naivePassword": zod.string().optional(),
   "hysteria2Password": zod.string().optional(),
+  "hysteria2Insecure": zod.boolean().optional().describe('Allow self-signed server certificates for this hysteria2 inbound.'),
   "masqueradeURL": zod.string().optional(),
   "fallbackRoot": zod.string().optional(),
   "olcrtcAuth": zod.string().optional(),
   "olcrtcTransport": zod.string().optional(),
   "olcrtcRoomID": zod.string().optional(),
   "protocolFields": zod.record(zod.string(), zod.unknown()).optional().describe('Protocol-specific inbound fields keyed by field identifier.')
-})
+}).and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.'))
 
 /**
  * @summary Delete an inbound
@@ -278,7 +340,37 @@ export const DeleteApiInboundsNameHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(deleteApiInboundsNameHeaderIdempotencyKeyMax).regex(deleteApiInboundsNameHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
-export const DeleteApiInboundsNameResponse = zod.unknown()
+export const DeleteApiInboundsNameResponse = zod.object({
+  "name": zod.string()
+}).and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.'))
 
 /**
  * @summary List clients attached to one inbound

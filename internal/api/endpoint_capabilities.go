@@ -82,7 +82,6 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodGet, "/api/audit", capabilityAdminMetadata},
 	{http.MethodGet, "/api/auth/sessions", capabilityAdminMetadata},
 	{http.MethodGet, "/api/users", capabilityAdminMetadata},
-	{http.MethodGet, "/api/users/{username}", capabilityAdminMetadata},
 	{http.MethodGet, "/api/backups", capabilityAdminMetadata},
 	{http.MethodGet, "/api/backups/{name}/verify", capabilityAdminMetadata},
 	{http.MethodGet, "/api/backup-restore-jobs/{id}", capabilitySelfService},

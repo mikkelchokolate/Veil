@@ -1,6 +1,7 @@
 package clientaccess
 
 import (
+	"math"
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -38,7 +39,7 @@ func BuildClientCredentials(inbound Inbound) ([]ClientCredential, error) {
 		}
 		overrides[strings.TrimSpace(credential.Username)] = struct{}{}
 	}
-	merged := make([]ClientCredential, 0, len(credentials)+len(inbound.RuntimeCredentials))
+	merged := make([]ClientCredential, 0, safeCredentialCapHint(len(credentials), len(inbound.RuntimeCredentials)))
 	for _, credential := range credentials {
 		if _, replaced := overrides[strings.TrimSpace(credential.Username)]; !replaced {
 			merged = append(merged, credential)
@@ -58,4 +59,14 @@ func BuildClientCredentials(inbound Inbound) ([]ClientCredential, error) {
 // and must not be advertised to clients.
 func usableRuntimeCredential(credential model.RuntimeCredential) bool {
 	return strings.TrimSpace(credential.Username) != "" && strings.TrimSpace(credential.Password) != ""
+}
+
+// safeCredentialCapHint sums two input-derived lengths for a capacity hint;
+// the guard keeps the allocation size computation itself from overflowing
+// (CodeQL go/allocation-size-overflow).
+func safeCredentialCapHint(a, b int) int {
+	if b > math.MaxInt-a {
+		return a
+	}
+	return a + b
 }

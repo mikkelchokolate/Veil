@@ -58,7 +58,7 @@ func mergeCredentials(base, extra []ClientCredential) []ClientCredential {
 	for _, e := range extra {
 		seen[e.Username] = true
 	}
-	out := make([]ClientCredential, 0, len(base)+len(extra))
+	out := make([]ClientCredential, 0, safeCredentialCapHint(len(base), len(extra)))
 	for _, b := range base {
 		if !seen[b.Username] {
 			out = append(out, b)

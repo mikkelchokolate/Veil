@@ -161,6 +161,82 @@ describe("waitForPanelVersion", () => {
 		);
 	});
 
+	// Regression for #345: expectedVersion is the staged target — a drift to
+	// any other version identity must not be reported as success.
+	it("waits for the expected version instead of any version change", async () => {
+		const fetchVersion = vi
+			.fn()
+			.mockResolvedValueOnce({
+				version: "v0.6.9",
+				runtime: "linux/amd64",
+				name: "Veil",
+			})
+			.mockResolvedValueOnce({
+				version: "v0.6.4 (deadbeef)",
+				runtime: "linux/amd64",
+				name: "Veil",
+			});
+
+		const result = await waitForPanelVersion({
+			delayMs: 0,
+			intervalMs: 0,
+			maxAttempts: 3,
+			previousVersion: "v0.6.3",
+			expectedVersion: "v0.6.4",
+			fetchVersion,
+			sleep: async () => undefined,
+		});
+
+		expect(result.version).toBe("v0.6.4 (deadbeef)");
+		expect(fetchVersion).toHaveBeenCalledTimes(2);
+	});
+
+	it("times out when the version drifts to an unexpected identity", async () => {
+		await expect(
+			waitForPanelVersion({
+				delayMs: 0,
+				intervalMs: 0,
+				maxAttempts: 2,
+				previousVersion: "v0.6.3",
+				expectedVersion: "v0.6.4",
+				fetchVersion: async () => ({
+					version: "v0.6.9",
+					runtime: "linux/amd64",
+					name: "Veil",
+				}),
+				sleep: async () => undefined,
+			}),
+		).rejects.toBeInstanceOf(PanelRestartTimeoutError);
+	});
+
+	it("fails a succeeded job whose running binary is not the expected version", async () => {
+		await expect(
+			waitForPanelVersion({
+				delayMs: 0,
+				intervalMs: 0,
+				maxAttempts: 2,
+				previousVersion: "v0.6.3",
+				expectedVersion: "v0.6.4",
+				jobId: "job-1",
+				fetchVersion: async () => ({
+					version: "v0.6.9",
+					runtime: "linux/amd64",
+					name: "Veil",
+				}),
+				fetchJob: async () => ({
+					id: "job-1",
+					status: "succeeded",
+					version: "v0.6.4",
+				}),
+				sleep: async () => undefined,
+			}),
+		).rejects.toSatisfy(
+			(error: unknown) =>
+				error instanceof PanelUpdateFailedError &&
+				error.message.includes("expected v0.6.4"),
+		);
+	});
+
 	it("times out after the last failed poll", async () => {
 		await expect(
 			waitForPanelVersion({
