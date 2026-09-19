@@ -166,6 +166,48 @@ func TestMigrateMakesPanelTLSGroupReadable(t *testing.T) {
 	assertMode(t, filepath.Join(panelDir, "tls.crt"), 0o640)
 }
 
+// Regression for #354: the panel TLS tree is shared with protocol units
+// (User=veil-proxy), so Migrate must group it veil-proxy like generated/ and
+// tls/ — not the panel-only veil group.
+func TestMigrateGroupsPanelTLSForProxyReaders(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX ownership and mode test")
+	}
+	root := t.TempDir()
+	etcDir := filepath.Join(root, "etc", "veil")
+	varDir := filepath.Join(root, "var", "lib", "veil")
+	panelDir := filepath.Join(etcDir, "panel")
+	if err := os.MkdirAll(panelDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(panelDir, "tls.key"), []byte("key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	uid, gid := os.Getuid(), os.Getgid()
+	proxyGID := gid + 1
+
+	originalChown := testHooks.chown
+	defer func() { testHooks.chown = originalChown }()
+	gids := map[string]int{}
+	testHooks.chown = func(path string, _, g int) error {
+		gids[path] = g
+		return nil
+	}
+
+	if err := Migrate(
+		Paths{EtcDir: etcDir, VarDir: varDir, RootUID: uid, RootGID: gid},
+		Identity{UID: uid, GID: gid, ProxyGID: proxyGID},
+		time.Now,
+	); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	for _, path := range []string{panelDir, filepath.Join(panelDir, "tls.key")} {
+		if g, ok := gids[path]; !ok || g != proxyGID {
+			t.Fatalf("panel path %s chown gid=%d ok=%v, want proxy gid %d", path, g, ok, proxyGID)
+		}
+	}
+}
+
 func assertMode(t *testing.T, path string, want os.FileMode) {
 	t.Helper()
 	info, err := os.Stat(path)

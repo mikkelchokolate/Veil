@@ -124,7 +124,9 @@ for dir in /etc/veil/generated /etc/veil/tls; do
     fi
 done
 if [ -d /etc/veil/panel ] && [ ! -L /etc/veil/panel ]; then
-    chown -R root:veil /etc/veil/panel
+    # Panel TLS is shared with the protocol units (User=veil-proxy): group must
+    # be veil-proxy like generated/ and tls/ so those units can read the key.
+    chown -R root:veil-proxy /etc/veil/panel
     find /etc/veil/panel -type d -exec chmod 0750 {} \;
     find /etc/veil/panel -type f -exec chmod 0640 {} \;
 fi
