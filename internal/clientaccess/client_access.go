@@ -35,7 +35,12 @@ func BuildClientAccess(settings Settings, inbound Inbound, opts ...ClientAccessO
 	extra := cfg.extra
 	// Auto-merge any runtime credentials resolved from the normalized client
 	// store into this inbound (renderer populates Inbound.RuntimeCredentials).
+	// The same eligibility rule the server renderers apply keeps unusable
+	// whitespace-only credentials out of every exported user set (audit #334).
 	for _, rc := range inbound.RuntimeCredentials {
+		if !usableRuntimeCredential(rc) {
+			continue
+		}
 		extra = append(extra, ClientCredential{Name: rc.Name, Username: rc.Username, Password: rc.Password})
 	}
 	credentials = mergeCredentials(credentials, extra)
