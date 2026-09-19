@@ -60,7 +60,7 @@ Since Veil runtimes run as systemd services, their standard output is captured b
 journalctl -u veil.service -n 100 --no-pager
 
 # Specific protocol runtime logs
-journalctl -u veil-caddy@<inbound>.service -n 100 --no-pager
+journalctl -u veil-caddy.service -n 100 --no-pager
 journalctl -u veil-hysteria2@<inbound>.service -n 100 --no-pager
 journalctl -u veil-mieru.service -n 100 --no-pager
 ```

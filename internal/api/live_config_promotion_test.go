@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
 
 func TestLiveConfigPromotionPromotesMieruConfig(t *testing.T) {
@@ -136,7 +137,11 @@ func TestLiveConfigOrphanDirsComeFromTemplateAndAggregateProtocolPlugins(t *test
 	got := liveConfigOrphanDirs()
 	want := []liveConfigOrphanDir{
 		{subpath: "caddy", ext: ".Caddyfile"},
-		{subpath: "caddy", ext: ".json", exclude: "config.json"},
+		// NaiveProxy/Caddy is a single consolidated veil-caddy.service backed
+		// by caddy/config.json — an aggregate artifact, not a per-inbound
+		// template, so the JSON dir scans without an excluded base name
+		// (config.json itself is cleaned once no runtime needs it).
+		{subpath: "caddy", ext: ".json"},
 		{subpath: "hysteria2", ext: ".yaml", exclude: "server.yaml"},
 		{subpath: "mieru", ext: ".json"},
 		{subpath: "olcrtc", ext: ".yaml", exclude: "server.yaml"},
@@ -148,6 +153,32 @@ func TestLiveConfigOrphanDirsComeFromTemplateAndAggregateProtocolPlugins(t *test
 		if got[i] != want[i] {
 			t.Fatalf("liveConfigOrphanDirs[%d] = %+v, want %+v", i, got[i], want[i])
 		}
+	}
+}
+
+// The consolidated veil-caddy.service is not a systemd template: naiveproxy
+// must not be classified as a per-inbound template protocol, and stray
+// caddy/<name>.json files must not be promotable as template instances.
+func TestNaiveProxyIsNotATemplateRuntime(t *testing.T) {
+	registry := protocols.NewRegistry()
+	naive, ok := registry.Get("naiveproxy")
+	if !ok {
+		t.Fatal("naiveproxy plugin not registered")
+	}
+	if hasTemplateRuntime(naive) {
+		t.Fatal("naiveproxy must not be treated as a template runtime")
+	}
+	cr, ok := protocols.AsConfigRenderer(naive)
+	if !ok {
+		t.Fatal("naiveproxy must render config")
+	}
+	sub := cr.ArtifactSpec().Subpath
+	if isPromotableDynamicProtocolArtifact(naive, sub, "caddy/foo.json") {
+		t.Fatal("stray caddy/<name>.json must not be a promotable per-inbound artifact")
+	}
+	// The real consolidated artifact stays resolvable to veil-caddy.service.
+	if unit, ok := UnitForArtifactID("caddy/config.json"); !ok || unit != unitCaddy {
+		t.Fatalf("caddy/config.json unit = %q ok=%v, want %q", unit, ok, unitCaddy)
 	}
 }
 
