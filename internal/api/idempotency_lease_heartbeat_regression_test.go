@@ -80,16 +80,42 @@ func TestExpiredIdempotencyReservationCannotRunReplacementConcurrently(t *testin
 	}
 }
 
+// lockedLogBuffer guards the captured log stream while the heartbeat
+// goroutine writes to it; log.SetOutput is process-global and the goroutine
+// outlives the read loop, so a plain bytes.Buffer races under -race.
+type lockedLogBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedLogBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func captureHeartbeatLogs(t *testing.T) *lockedLogBuffer {
+	t.Helper()
+	logBuf := &lockedLogBuffer{}
+	previousWriter := log.Writer()
+	log.SetOutput(logBuf)
+	t.Cleanup(func() { log.SetOutput(previousWriter) })
+	return logBuf
+}
+
 func TestDurableHeartbeatSurfacesExecFailure(t *testing.T) {
 	db := openApplyTestDB(t)
 	store := newIdempotencyStore(db)
 	defer store.Close()
 	store.reservationTTL = 150 * time.Millisecond
 
-	var logBuf bytes.Buffer
-	previousWriter := log.Writer()
-	log.SetOutput(&logBuf)
-	t.Cleanup(func() { log.SetOutput(previousWriter) })
+	logBuf := captureHeartbeatLogs(t)
 
 	stop := store.startDurableHeartbeat("scope", "fingerprint", durableIdempotencyRecord{Generation: 1})
 	defer stop()
@@ -115,10 +141,7 @@ func TestDurableHeartbeatStopsAfterOwnershipLoss(t *testing.T) {
 	defer store.Close()
 	store.reservationTTL = 150 * time.Millisecond
 
-	var logBuf bytes.Buffer
-	previousWriter := log.Writer()
-	log.SetOutput(&logBuf)
-	t.Cleanup(func() { log.SetOutput(previousWriter) })
+	logBuf := captureHeartbeatLogs(t)
 
 	// No matching reserved row exists, so the UPDATE affects zero rows: the
 	// reservation was taken over or removed and the heartbeat must stop
