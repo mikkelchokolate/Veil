@@ -71,7 +71,8 @@ function installFetchMock(state: MockState) {
 			);
 		}
 		if (url.endsWith("/api/apply/jobs")) {
-			const status = state.jobStatus === undefined ? "running" : state.jobStatus;
+			const status =
+				state.jobStatus === undefined ? "running" : state.jobStatus;
 			return respond({
 				items:
 					status === null
