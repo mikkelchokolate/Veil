@@ -84,7 +84,7 @@ func TestPrivilegedApplyUsesLogicalArtifactIDsAndOpaqueRollback(t *testing.T) {
 		BackupID:         "20260605T120000.000000000Z",
 		WrittenArtifacts: []string{"caddy/config.json"},
 	}
-	rollbackFiles, _ := context.rollbackPromotedConfigs(records, liveFiles)
+	rollbackFiles, _, _ := context.rollbackPromotedConfigs(records, liveFiles)
 	if len(client.promotions) != 2 || client.promotions[1].RestoreBackupID != "20260605T120000.000000000Z" {
 		t.Fatalf("rollback promotions=%+v", client.promotions)
 	}

@@ -10,7 +10,7 @@ type applyWorkflowState interface {
 	writeApplyStageLocked(ApplyPlanResponse) ([]string, []ConfigValidationResult, []string, error)
 	promoteStagedConfigs([]string) ([]string, []string, []livePromotionRecord, error)
 	reloadPromotedServices([]string) []ServiceActionResult
-	rollbackPromotedConfigs([]livePromotionRecord, []string) ([]string, []ServiceActionResult)
+	rollbackPromotedConfigs([]livePromotionRecord, []string) ([]string, []string, []ServiceActionResult)
 	appendApplyHistoryLocked(string, bool, ApplyResponse) error
 }
 
@@ -56,7 +56,7 @@ func (a applyWorkflowStateAdapter) ReloadPromotedServicesLocked(liveFiles []stri
 	return a.state.reloadPromotedServices(liveFiles)
 }
 
-func (a applyWorkflowStateAdapter) RollbackPromotedConfigsLocked(records []applyflow.PromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {
+func (a applyWorkflowStateAdapter) RollbackPromotedConfigsLocked(records []applyflow.PromotionRecord, liveFiles []string) ([]string, []string, []ServiceActionResult) {
 	return a.state.rollbackPromotedConfigs(records, liveFiles)
 }
 
