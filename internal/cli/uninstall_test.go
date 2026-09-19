@@ -314,6 +314,54 @@ func TestUninstallPurgeRemovesState(t *testing.T) {
 	}
 }
 
+func TestUninstallCaddyMitaStateDirOverrides(t *testing.T) {
+	origStop := uninstallServiceStopper
+	origRemove := uninstallFileRemover
+	origReload := uninstallSystemdReloader
+	t.Cleanup(func() {
+		uninstallServiceStopper = origStop
+		uninstallFileRemover = origRemove
+		uninstallSystemdReloader = origReload
+	})
+	var removed []string
+	uninstallServiceStopper = func(string) error { return nil }
+	uninstallFileRemover = func(path string) error {
+		removed = append(removed, filepath.ToSlash(path))
+		return nil
+	}
+	uninstallSystemdReloader = func() error { return nil }
+
+	// Env seeds the dirs the shell fallback contract advertises.
+	t.Setenv("VEIL_CADDY_STATE_DIR", "/srv/shared-caddy")
+	t.Setenv("VEIL_MITA_STATE_DIR", "/srv/shared-mita")
+	cmd := NewRootCommand("test")
+	cmd.SetArgs([]string{"uninstall", "--yes", "--purge"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"/srv/shared-caddy", "/srv/shared-mita"} {
+		if !contains(removed, want) {
+			t.Fatalf("env-seeded state dir %s not removed: %v", want, removed)
+		}
+	}
+	if contains(removed, "/var/lib/caddy") || contains(removed, "/var/lib/mita") {
+		t.Fatalf("default state dirs must not be removed when env overrides them: %v", removed)
+	}
+
+	// Explicit flags win over env.
+	removed = nil
+	cmd = NewRootCommand("test")
+	cmd.SetArgs([]string{"uninstall", "--yes", "--purge", "--caddy-state-dir", "/flag/caddy", "--mita-state-dir", "/flag/mita"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"/flag/caddy", "/flag/mita"} {
+		if !contains(removed, want) {
+			t.Fatalf("flag-provided state dir %s not removed: %v", want, removed)
+		}
+	}
+}
+
 func TestUninstallServiceStopperStopsAndDisablesReal(t *testing.T) {
 	// Test that the real implementation calls systemctl stop and disable
 	origLookPath := commandLookPath
