@@ -30,12 +30,24 @@ func validateDiagnosticTargetScope(ctx context.Context, target string) error {
 		// Resolution failures surface through the tool's own error path.
 		return nil
 	}
+	// A hostname is only allowed when EVERY resolved address is allowed: the
+	// OS may pick any of them when the tool runs, so a single forbidden
+	// address (link-local/metadata) in a mixed answer is enough to reject.
+	usable := 0
 	for _, ip := range ips {
-		if addr, ok := netip.AddrFromSlice(ip); ok && diagnosticIPAllowed(addr) {
-			return nil
+		addr, ok := netip.AddrFromSlice(ip)
+		if !ok {
+			continue
+		}
+		usable++
+		if !diagnosticIPAllowed(addr) {
+			return reject
 		}
 	}
-	return reject
+	if usable == 0 {
+		return reject
+	}
+	return nil
 }
 
 func diagnosticIPAllowed(addr netip.Addr) bool {
