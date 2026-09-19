@@ -2481,7 +2481,7 @@ paths:
                     email: admin@example.com
                     panelAccess: caddy
                     panelUrl: https://vpn.example.com/4f10dbe4/
-                    caddyfile: "vpn.example.com {\n  reverse_proxy 127.0.0.1:2096\n}\n"
+                    caddyfile: '{"admin":{"listen":"127.0.0.1:2019"},"apps":{"http":{"servers":{"veil-panel":{"listen":[":443"],"routes":[{"handle":[{"handler":"reverse_proxy","upstreams":[{"dial":"127.0.0.1:2096"}]}]}]}}}}}'
         '400':
           $ref: '#/components/responses/BadRequest'
         '409':
