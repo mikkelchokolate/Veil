@@ -46,7 +46,18 @@ import * as zod from 'zod';
 /**
  * @summary Desired/applied revisions and derived system state
  */
-export const GetApiApplyStateResponse = zod.unknown()
+export const GetApiApplyStateResponse = zod.object({
+  "desiredRevision": zod.int(),
+  "appliedRevision": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded']),
+  "activeJobId": zod.string().optional(),
+  "lastSuccessfulJobId": zod.string().optional(),
+  "lastFailedJobId": zod.string().optional(),
+  "lastError": zod.object({
+  "code": zod.string().optional(),
+  "message": zod.string().optional()
+}).optional()
+})
 
 /**
  * @summary List apply jobs (newest first)
@@ -56,14 +67,22 @@ export const GetApiApplyJobsResponse = zod.object({
   "id": zod.string(),
   "desiredRevision": zod.int(),
   "baseRevision": zod.int(),
-  "status": zod.enum(['pending', 'running', 'success', 'failed', 'rolled_back']),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
   "trigger": zod.string(),
   "actorId": zod.string().optional(),
   "createdAt": zod.int(),
   "startedAt": zod.int().optional(),
   "finishedAt": zod.int().optional(),
   "errorCode": zod.string().optional(),
-  "errorMessage": zod.string().optional()
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
 }))
 })
 
@@ -74,7 +93,27 @@ export const GetApiApplyJobsIdParams = zod.object({
   "id": zod.string()
 })
 
-export const GetApiApplyJobsIdResponse = zod.unknown()
+export const GetApiApplyJobsIdResponse = zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+})
 
 /**
  * @summary Create a NEW apply job for the same desired revision
@@ -93,7 +132,34 @@ export const PostApiApplyJobsIdRetryHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(postApiApplyJobsIdRetryHeaderIdempotencyKeyMax).regex(postApiApplyJobsIdRetryHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
-export const PostApiApplyJobsIdRetryResponse = zod.unknown()
+export const PostApiApplyJobsIdRetryResponse = zod.object({
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded'])
+})
+})
 
 /**
  * @summary Apply current desired revision if ahead of applied (idempotent)
@@ -108,7 +174,46 @@ export const PostApiApplyReconcileHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(postApiApplyReconcileHeaderIdempotencyKeyMax).regex(postApiApplyReconcileHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
-export const PostApiApplyReconcileResponse = zod.unknown()
+export const PostApiApplyReconcileResponse = zod.object({
+  "reconciled": zod.boolean().describe('False when desired already equaled applied (no-op) or when the apply job failed; inspect applyJob/state for evidence.'),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional(),
+  "revision": zod.object({
+  "desired": zod.int().optional(),
+  "applied": zod.int().optional()
+}).optional(),
+  "state": zod.object({
+  "desiredRevision": zod.int(),
+  "appliedRevision": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded']),
+  "activeJobId": zod.string().optional(),
+  "lastSuccessfulJobId": zod.string().optional(),
+  "lastFailedJobId": zod.string().optional(),
+  "lastError": zod.object({
+  "code": zod.string().optional(),
+  "message": zod.string().optional()
+}).optional()
+}).optional()
+})
 
 /**
  * Intentional rollback. Never decrements desired or applied revisions; creates a new immutable desired revision and audit record.
@@ -132,7 +237,37 @@ export const PostApiApplyRollbackBody = zod.object({
   "confirm": zod.literal(true)
 })
 
-export const PostApiApplyRollbackResponse = zod.unknown()
+export const PostApiApplyRollbackResponse = zod.object({
+  "selectedRevision": zod.int(),
+  "desiredRevision": zod.int().describe('Newly created immutable desired revision pointing at the selected snapshot; revisions never decrement.'),
+  "success": zod.boolean().describe('False means the rollback revision committed (desired advanced) but the apply job for it did not finish cleanly.'),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+})
 
 /**
  * @summary Stage and optionally promote current management state
@@ -147,10 +282,13 @@ export const PostApiApplyHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(postApiApplyHeaderIdempotencyKeyMax).regex(postApiApplyHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
+export const postApiApplyBodyApplyLiveDefault = false;
+export const postApiApplyBodyApplyServicesDefault = false;
+
 export const PostApiApplyBody = zod.object({
-  "confirm": zod.boolean(),
-  "applyLive": zod.boolean(),
-  "applyServices": zod.boolean()
+  "confirm": zod.literal(true),
+  "applyLive": zod.boolean().default(postApiApplyBodyApplyLiveDefault),
+  "applyServices": zod.boolean().default(postApiApplyBodyApplyServicesDefault).describe('Requires applyLive; applying services without promoting live artifacts is rejected with 400/422.')
 })
 
 export const PostApiApplyResponse = zod.object({
@@ -174,7 +312,7 @@ export const PostApiApplyResponse = zod.object({
   "source": zod.enum(['candidate', 'live-host', 'render', 'managed-unit-catalog'])
 })),
   "operations": zod.array(zod.object({
-  "type": zod.enum(['promote_file', 'remove_file', 'reload_service', 'restart_service', 'disable_service', 'update_firewall']),
+  "type": zod.enum(['promote_file', 'reload_service', 'restart_service']).describe('Operation kinds emitted by the apply planner.'),
   "source": zod.string().optional(),
   "destination": zod.string().optional(),
   "unit": zod.string().optional(),
@@ -216,7 +354,17 @@ export const PostApiApplyResponse = zod.object({
   "success": zod.boolean(),
   "output": zod.string().optional(),
   "error": zod.string().optional()
-})).optional()
+})).optional(),
+  "mutationStarted": zod.boolean().optional().describe('True once the apply began changing runtime artifacts or services; absent on a plan/stage-only response.'),
+  "artifactsChanged": zod.boolean().optional(),
+  "servicesChanged": zod.boolean().optional(),
+  "firewallChanged": zod.boolean().optional(),
+  "artifactsRestored": zod.boolean().optional(),
+  "servicesRestored": zod.boolean().optional(),
+  "firewallRestored": zod.boolean().optional(),
+  "postRollbackHealthPass": zod.boolean().optional(),
+  "rollbackComplete": zod.boolean().optional().describe('Honest signal that rollback evidence is complete; absence means a rolled_back flag alone is not proof of restoration.'),
+  "ambiguous": zod.boolean().optional().describe('True when runtime evidence cannot prove whether mutation or rollback converged; clients must not treat the response as authoritative.')
 })
 
 /**
@@ -248,7 +396,7 @@ export const PostApiApplyPlanResponse = zod.object({
   "source": zod.enum(['candidate', 'live-host', 'render', 'managed-unit-catalog'])
 })),
   "operations": zod.array(zod.object({
-  "type": zod.enum(['promote_file', 'remove_file', 'reload_service', 'restart_service', 'disable_service', 'update_firewall']),
+  "type": zod.enum(['promote_file', 'reload_service', 'restart_service']).describe('Operation kinds emitted by the apply planner.'),
   "source": zod.string().optional(),
   "destination": zod.string().optional(),
   "unit": zod.string().optional(),
@@ -282,7 +430,7 @@ export const GetApiApplyHistoryResponseItem = zod.object({
   "source": zod.enum(['candidate', 'live-host', 'render', 'managed-unit-catalog'])
 })),
   "operations": zod.array(zod.object({
-  "type": zod.enum(['promote_file', 'remove_file', 'reload_service', 'restart_service', 'disable_service', 'update_firewall']),
+  "type": zod.enum(['promote_file', 'reload_service', 'restart_service']).describe('Operation kinds emitted by the apply planner.'),
   "source": zod.string().optional(),
   "destination": zod.string().optional(),
   "unit": zod.string().optional(),
@@ -324,7 +472,17 @@ export const GetApiApplyHistoryResponseItem = zod.object({
   "success": zod.boolean(),
   "output": zod.string().optional(),
   "error": zod.string().optional()
-})).optional()
+})).optional(),
+  "mutationStarted": zod.boolean().optional().describe('True once the apply began changing runtime artifacts or services; absent on a plan/stage-only response.'),
+  "artifactsChanged": zod.boolean().optional(),
+  "servicesChanged": zod.boolean().optional(),
+  "firewallChanged": zod.boolean().optional(),
+  "artifactsRestored": zod.boolean().optional(),
+  "servicesRestored": zod.boolean().optional(),
+  "firewallRestored": zod.boolean().optional(),
+  "postRollbackHealthPass": zod.boolean().optional(),
+  "rollbackComplete": zod.boolean().optional().describe('Honest signal that rollback evidence is complete; absence means a rolled_back flag alone is not proof of restoration.'),
+  "ambiguous": zod.boolean().optional().describe('True when runtime evidence cannot prove whether mutation or rollback converged; clients must not treat the response as authoritative.')
 }).and(zod.object({
   "id": zod.string(),
   "timestamp": zod.string(),

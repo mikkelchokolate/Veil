@@ -64,6 +64,7 @@ import type {
   ConflictResponse,
   ForbiddenResponse,
   LockedResponse,
+  MutationOutcome,
   ServiceUnavailableResponse,
   Settings,
   UnauthorizedResponse,
@@ -185,7 +186,7 @@ export const useGetApiSettings = <TError = UnauthorizedResponse,
       return useMutation(getGetApiSettingsMutationOptions(options), queryClient);
     }
     export type putApiSettingsResponse200 = {
-  data: Settings
+  data: Settings & MutationOutcome
   status: 200
 }
 

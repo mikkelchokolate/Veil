@@ -140,7 +140,8 @@ export const PostApiBackupsResponse = zod.object({
   "kept": zod.array(zod.string()),
   "deleted": zod.array(zod.string()),
   "dryRun": zod.boolean()
-}).optional()
+}).optional(),
+  "warning": zod.string().optional().describe('Non-fatal warning (for example a retention prune failure after a successful archive).')
 })
 
 /**
@@ -307,7 +308,11 @@ export const postApiBackupsNameRestoreResponseIdRegExp = new RegExp('^[0-9a-f]{3
 export const PostApiBackupsNameRestoreResponse = zod.object({
   "id": zod.string().regex(postApiBackupsNameRestoreResponseIdRegExp),
   "archive": zod.string(),
-  "status": zod.enum(['queued', 'running', 'succeeded', 'failed']),
+  "status": zod.enum(['queued', 'running', 'pending', 'succeeded', 'failed', 'degraded']),
+  "outcome": zod.string().describe('Restore outcome classification. Known values: pending (job accepted or awaiting key publication), pending_key_publication, restored, not_restored.'),
+  "phase": zod.string().describe('Last restore pipeline phase reached (for example queued, key_publication_pending, completed, revalidation_failed, finalization_failed, restore_failed, fence_acquire_failed).'),
+  "restored": zod.boolean().describe('True only when the backup content was actually restored.'),
+  "httpStatus": zod.int().describe('HTTP status that mirrors the job outcome for pollers.'),
   "createdAt": zod.iso.datetime({"offset":true}),
   "startedAt": zod.iso.datetime({"offset":true}).optional(),
   "finishedAt": zod.iso.datetime({"offset":true}).optional(),
@@ -334,7 +339,11 @@ export const getApiBackupRestoreJobsIdResponseIdRegExp = new RegExp('^[0-9a-f]{3
 export const GetApiBackupRestoreJobsIdResponse = zod.object({
   "id": zod.string().regex(getApiBackupRestoreJobsIdResponseIdRegExp),
   "archive": zod.string(),
-  "status": zod.enum(['queued', 'running', 'succeeded', 'failed']),
+  "status": zod.enum(['queued', 'running', 'pending', 'succeeded', 'failed', 'degraded']),
+  "outcome": zod.string().describe('Restore outcome classification. Known values: pending (job accepted or awaiting key publication), pending_key_publication, restored, not_restored.'),
+  "phase": zod.string().describe('Last restore pipeline phase reached (for example queued, key_publication_pending, completed, revalidation_failed, finalization_failed, restore_failed, fence_acquire_failed).'),
+  "restored": zod.boolean().describe('True only when the backup content was actually restored.'),
+  "httpStatus": zod.int().describe('HTTP status that mirrors the job outcome for pollers.'),
   "createdAt": zod.iso.datetime({"offset":true}),
   "startedAt": zod.iso.datetime({"offset":true}).optional(),
   "finishedAt": zod.iso.datetime({"offset":true}).optional(),

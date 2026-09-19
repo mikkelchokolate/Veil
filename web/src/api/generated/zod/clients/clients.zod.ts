@@ -188,20 +188,28 @@ export const PostApiV1ClientsResponse = zod.object({
   "revision": zod.object({
   "desired": zod.int(),
   "applied": zod.int(),
-  "state": zod.enum(['synced', 'pending', 'failed'])
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded'])
 }),
   "applyJob": zod.object({
   "id": zod.string(),
   "desiredRevision": zod.int(),
   "baseRevision": zod.int(),
-  "status": zod.enum(['pending', 'running', 'success', 'failed', 'rolled_back']),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
   "trigger": zod.string(),
   "actorId": zod.string().optional(),
   "createdAt": zod.int(),
   "startedAt": zod.int().optional(),
   "finishedAt": zod.int().optional(),
   "errorCode": zod.string().optional(),
-  "errorMessage": zod.string().optional()
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
 }).optional(),
   "success": zod.boolean()
 }).describe('Atomic create envelope: the committed client, any server-generated credentials (plaintext shown exactly once), the new desired revision, and the apply job that ran for that revision. success=false means the client committed but the apply did not finish cleanly.')
@@ -559,6 +567,44 @@ export const DeleteApiV1ClientsIdHeader = zod.object({
 })
 
 export const DeleteApiV1ClientsIdResponse = zod.unknown()
+
+/**
+ * Newest-first audit records targeting this client. Records matching the immutable client ID are always included; legacy name-targeted records are included only for known client actions. Admin role required.
+ * @summary Audit history scoped to one client
+ */
+
+
+
+export const GetApiV1ClientsIdAuditParams = zod.object({
+  "id": zod.string().min(1)
+})
+
+export const getApiV1ClientsIdAuditQueryLimitDefault = 100;
+export const getApiV1ClientsIdAuditQueryLimitMax = 500;
+
+
+
+export const GetApiV1ClientsIdAuditQueryParams = zod.object({
+  "limit": zod.int().min(1).max(getApiV1ClientsIdAuditQueryLimitMax).default(getApiV1ClientsIdAuditQueryLimitDefault),
+  "before": zod.iso.datetime({"offset":true}).optional().describe('Return records strictly older than this RFC3339 timestamp.')
+})
+
+export const GetApiV1ClientsIdAuditResponse = zod.object({
+  "items": zod.array(zod.object({
+  "timestamp": zod.iso.datetime({"offset":true}),
+  "actor": zod.string(),
+  "role": zod.string().optional(),
+  "action": zod.string(),
+  "target": zod.string().optional(),
+  "ip": zod.string().optional(),
+  "userAgent": zod.string().optional(),
+  "requestId": zod.string().optional(),
+  "success": zod.boolean(),
+  "error": zod.string().optional(),
+  "details": zod.record(zod.string(), zod.unknown()).optional()
+})),
+  "nextBefore": zod.iso.datetime({"offset":true}).optional()
+})
 
 /**
  * Rebuilds protocol URIs from stored credentials so the panel can show link and QR after creation.

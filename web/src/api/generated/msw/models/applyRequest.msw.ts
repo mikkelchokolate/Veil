@@ -42,7 +42,8 @@
  */
 
 export interface ApplyRequest {
-  confirm: boolean;
-  applyLive: boolean;
-  applyServices: boolean;
+  confirm: true;
+  applyLive?: boolean;
+  /** Requires applyLive; applying services without promoting live artifacts is rejected with 400/422. */
+  applyServices?: boolean;
 }
