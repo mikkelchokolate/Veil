@@ -74,9 +74,11 @@ WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND state<>'
 		if err != nil {
 			s.mu.Unlock()
 			if errors.Is(err, client.ErrVersionConflict) {
-				_, _ = s.db.Exec(`UPDATE quota_enforcement SET state='superseded',updated_at=?
+				if _, persistErr := s.db.Exec(`UPDATE quota_enforcement SET state='superseded',updated_at=?
 WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND state<>'superseded'`,
-					time.Now().UTC().Unix(), mutation.ClientID, mutation.TargetGeneration, mutation.TargetPayloadHash)
+					time.Now().UTC().Unix(), mutation.ClientID, mutation.TargetGeneration, mutation.TargetPayloadHash); persistErr != nil {
+					return errors.Join(err, persistErr)
+				}
 			}
 			return err
 		}

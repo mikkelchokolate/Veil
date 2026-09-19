@@ -21,6 +21,8 @@ func DefaultRateLimitPolicy() RateLimitPolicy {
 			"/api/v1/traffic/stream": {RatePerMinute: 12, Burst: 4},
 			"/s/":                    {RatePerMinute: 30, Burst: 6},
 			"/api/logs":              {RatePerMinute: 10, Burst: 3},
+			"/api/client-links":      {RatePerMinute: 10, Burst: 3},
+			"/api/backups/":          {RatePerMinute: 10, Burst: 3},
 			"/api/apply/plan":        {RatePerMinute: 6, Burst: 2},
 		},
 	}

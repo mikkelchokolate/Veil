@@ -2,8 +2,10 @@ package api
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/bindregistry"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
@@ -35,6 +37,19 @@ func TestBuildApplyPlanUsesApplyRootForStructuredOperations(t *testing.T) {
 	}
 	if !reflect.DeepEqual(plan.Operations, want) {
 		t.Fatalf("operations:\n got: %#v\nwant: %#v", plan.Operations, want)
+	}
+}
+
+func TestAddPanelDirectBindOwnerSurfacesInvalidPanelListen(t *testing.T) {
+	for _, listen := range []string{"not-a-valid-address", "127.0.0.1:abc", "127.0.0.1:70000"} {
+		owners := map[bindregistry.BindKey]bindregistry.BindOwner{}
+		conflicts := addPanelDirectBindOwner(Settings{PanelAccess: "direct", PanelListen: listen}, owners)
+		if len(conflicts) != 1 || !strings.Contains(conflicts[0].Message, "panelListen") {
+			t.Fatalf("panelListen %q: expected surfaced conflict, got %+v", listen, conflicts)
+		}
+		if len(owners) != 0 {
+			t.Fatalf("panelListen %q: invalid listen registered bind owner %+v", listen, owners)
+		}
 	}
 }
 

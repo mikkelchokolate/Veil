@@ -3,7 +3,9 @@ package api
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"regexp"
@@ -151,9 +153,14 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie("veil_session")
 			if err == nil {
 				if session, ok := routes.State.sessionRegistry().Get(cookie.Value); ok {
+					csrf, _, csrfErr := routes.State.sessionRegistry().EnsureCSRFPersisted(cookie.Value)
+					if csrfErr != nil {
+						writeError(w, "failed to refresh session", http.StatusInternalServerError)
+						return
+					}
 					authenticated = true
 					locale = panel.ResolveLocale(routes.State.storedUserLocale(session.Username), r)
-					csrfToken, _, _ = routes.State.sessionRegistry().EnsureCSRF(cookie.Value)
+					csrfToken = csrf
 				}
 			}
 			if !authenticated {
@@ -273,17 +280,26 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 	}
 	result, applyJob, err := routes.State.installPanelUpdate(r.Context(), version)
 	if err != nil {
-		routes.State.updatePanelUpdateJob(updateJob.ID, "failed", applyJob.ID, "", err)
+		if updateErr := routes.State.updatePanelUpdateJob(updateJob.ID, "failed", applyJob.ID, "", err); updateErr != nil {
+			log.Printf("panel update job %s: record failure status: %v", updateJob.ID, updateErr)
+		}
 		writePrivilegedError(w, err)
 		return
 	}
 	if !result.Installed {
+		installErr := errors.New("privileged helper did not install the staged update")
+		if updateErr := routes.State.updatePanelUpdateJob(updateJob.ID, "failed", applyJob.ID, "", installErr); updateErr != nil {
+			log.Printf("panel update job %s: record failure status: %v", updateJob.ID, updateErr)
+		}
 		writePrivilegedError(w, &privileged.Error{
-			Code: privileged.ErrorOperationFailed, Message: "privileged helper did not install the staged update",
+			Code: privileged.ErrorOperationFailed, Message: installErr.Error(),
 		})
 		return
 	}
-	routes.State.updatePanelUpdateJob(updateJob.ID, "restart_pending", applyJob.ID, "", nil)
+	if err := routes.State.updatePanelUpdateJob(updateJob.ID, "restart_pending", applyJob.ID, "", nil); err != nil {
+		writeError(w, "record update job state", http.StatusInternalServerError)
+		return
+	}
 	releaseLocks = false
 	routes.State.updateWG.Add(1)
 	go func() {
