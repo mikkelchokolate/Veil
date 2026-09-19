@@ -28,6 +28,7 @@ import (
 // load/validation time.
 func TestRequiredOlcRTCRuntimeContract(t *testing.T) {
 	olcrtcPath := requiredBinary(t, "olcrtc")
+	requireRealOlcRTCBinary(t, olcrtcPath)
 	key := strings.Repeat("ab", 32)
 	room := fmt.Sprintf("https://127.0.0.1:%d/veil-required-e2e", freePort(t))
 
@@ -106,16 +107,67 @@ func TestRequiredOlcRTCRuntimeContract(t *testing.T) {
 	cmd.Stdout = &runtimeLog
 	cmd.Stderr = &runtimeLog
 	err = cmd.Run()
-	lowerLog := strings.ToLower(runtimeLog.String())
-	if strings.Contains(lowerLog, "load config:") || strings.Contains(lowerLog, "validate config:") {
-		t.Fatalf("real pinned olcRTC rejected panel-generated config: %v\n%s", err, runtimeLog.String())
+	log := runtimeLog.String()
+	lowerLog := strings.ToLower(log)
+	for _, rejection := range []string{"load config:", "validate config:"} {
+		if strings.Contains(lowerLog, rejection) {
+			t.Fatalf("real pinned olcRTC rejected panel-generated config: %v\n%s", err, log)
+		}
 	}
 	// A still-running process is killed by the context after successfully
 	// entering runtime setup; an early failure is acceptable only after config
 	// loading/validation, because the loopback signaling endpoint is deliberately
 	// unavailable and external-provider reachability is not a deterministic CI
 	// dependency.
-	if err == nil && ctx.Err() == nil {
+	if ctx.Err() != nil {
+		return
+	}
+	if err == nil {
 		t.Fatal("olcRTC exited cleanly even though the required server session should remain active")
+	}
+	// Early exit must carry positive evidence that the process consumed the
+	// generated config and reached the signaling stage — otherwise a stub, a
+	// flag-parse failure, or any unrelated crash would satisfy the contract.
+	// The unique room path is mandatory: only it proves THIS generated config
+	// was loaded; generic networking words can appear in unrelated failures.
+	if strings.TrimSpace(log) == "" {
+		t.Fatalf("olcRTC exited early (%v) with no output — cannot prove it loaded the panel config", err)
+	}
+	if !strings.Contains(log, "veil-required-e2e") {
+		t.Fatalf("olcRTC exited early (%v) without echoing the unique room marker — cannot prove it consumed the generated config:\n%s", err, log)
+	}
+	// Corroboration must add evidence BEYOND the room marker: signaling-stage
+	// vocabulary proves the process progressed past config load toward the
+	// (deliberately unreachable) Jitsi endpoint. Config/URI-derived words are
+	// excluded — "veil-required-e2e" and "127.0.0.1" come from the room URL,
+	// and "jitsi" appears in Auth.Provider and the exported URI, so a mere
+	// config echo cannot satisfy this stage.
+	signalingEvidence := []string{
+		"signal", "signaling", "websocket", "dial", "connect",
+		"refused", "handshake", "tls",
+	}
+	proven := false
+	for _, marker := range signalingEvidence {
+		if strings.Contains(lowerLog, marker) {
+			proven = true
+			break
+		}
+	}
+	if !proven {
+		t.Fatalf("olcRTC exited early (%v) without evidence of reaching signaling setup — not a config-acceptance signal:\n%s", err, log)
+	}
+}
+
+// requireRealOlcRTCBinary proves the binary under test is the pinned upstream
+// olcRTC build — not a stub script, not a symlink to veil, not another daemon.
+// scripts/ci/e2e.sh resolves the module version the same way.
+func requireRealOlcRTCBinary(t *testing.T, path string) {
+	t.Helper()
+	out, err := exec.Command("go", "version", "-m", path).CombinedOutput()
+	if err != nil {
+		t.Fatalf("olcRTC binary %s is not a Go module binary (stub or symlink?): %v\n%s", path, err, out)
+	}
+	if !strings.Contains(string(out), "github.com/openlibrecommunity/olcrtc") {
+		t.Fatalf("olcRTC binary %s does not carry the openlibrecommunity/olcrtc module identity:\n%s", path, out)
 	}
 }

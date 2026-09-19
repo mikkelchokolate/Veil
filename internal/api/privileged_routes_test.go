@@ -33,7 +33,12 @@ type recordingPrivilegedClient struct {
 	recoverRotationCalls  int
 	restartCalls          atomic.Int32
 	restartErr            error
+	reachableErr          error
 	err                   error
+}
+
+func (c *recordingPrivilegedClient) Reachable(context.Context) error {
+	return c.reachableErr
 }
 
 func (c *recordingPrivilegedClient) Promote(_ context.Context, request privileged.PromoteRequest) (privileged.PromoteResult, error) {

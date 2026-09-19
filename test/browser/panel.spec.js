@@ -101,6 +101,8 @@ test.describe('Veil Panel — React SPA', () => {
     await page.getByRole('button', { name: /^generate$/i }).click();
     // The CSPRNG fills the field with a 32-char hex value.
     await expect(passwordField).toHaveValue(/^[0-9a-f]{32}$/, { timeout: 10_000 });
+    const generatedPassword = await passwordField.inputValue();
+    expect(generatedPassword).toMatch(/^[0-9a-f]{32}$/);
 
     // hysteria2 needs a public domain to run; the browser-e2e panel has none,
     // so disable the inbound before creating it (same convention as the API
@@ -125,6 +127,14 @@ test.describe('Veil Panel — React SPA', () => {
     expect(found.protocol).toBe('hysteria2');
     expect(found.port).toBe(port);
     expect(found.enabled).toBe(false);
+
+    // The generated credential must actually persist server-side: the API
+    // masks stored secrets as "[REDACTED]" and returns "" for absent ones, so
+    // the sentinel is proof of a non-empty persisted value — while never
+    // echoing the plaintext back.
+    const persisted = found.hysteria2Password ?? found.protocolFields?.hysteria2Password;
+    expect(persisted, 'generated password must persist (redacted view, non-empty)').toBe('[REDACTED]');
+    expect(persisted).not.toBe(generatedPassword);
   });
 
   test('traffic lazy chunks load without runtime errors', async ({ page }) => {

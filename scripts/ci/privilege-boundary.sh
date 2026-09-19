@@ -14,7 +14,9 @@ ci_step "web/dist (embedded into the binary)"
 bash "${CI_SCRIPTS_DIR}/prepare-frontend-dist.sh"
 
 ci_step "systemd socket activation (linuxintegration)"
-go test -tags linuxintegration ./internal/privileged -run TestSystemdSocketActivationAdoptsFD3 -count=1 -v
+ci_run privilege-socket-activation \
+  go test -tags linuxintegration ./internal/privileged -run TestSystemdSocketActivationAdoptsFD3 -count=1 -v
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/privilege-socket-activation.log"
 
 ci_step "helper socket and filesystem access matrix (root)"
 if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
@@ -32,10 +34,13 @@ if ! getent passwd veil-proxy >/dev/null; then
 fi
 ${SUDO} usermod -aG veil-proxy veil >/dev/null 2>&1 || true
 if [ "$(id -u)" -eq 0 ]; then
-  go test -tags linuxintegration ./test/linuxintegration/... -count=1 -v
+  ci_run privilege-access-matrix \
+    go test -tags linuxintegration ./test/linuxintegration/... -count=1 -v
 else
-  sudo env "PATH=${PATH}" "HOME=${HOME}" go test -tags linuxintegration ./test/linuxintegration/... -count=1 -v
+  ci_run privilege-access-matrix \
+    sudo env "PATH=${PATH}" "HOME=${HOME}" go test -tags linuxintegration ./test/linuxintegration/... -count=1 -v
 fi
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/privilege-access-matrix.log"
 
 ci_step "hardened systemd units"
 go build -o /tmp/veil-unit-verify ./cmd/veil
