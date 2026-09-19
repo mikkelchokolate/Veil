@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { ApiError, apiFetch } from "../api/fetcher";
-import type { ApplyJob } from "../api/generated/models";
+import type { ApplyJob, ApplyJobStatus } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -39,10 +39,29 @@ const STATUS_VARIANT: Record<
 > = {
 	succeeded: "success",
 	failed: "danger",
-	running: "warning",
+	rollback_failed: "danger",
 	pending: "warning",
+	planning: "warning",
+	validating: "warning",
+	applying: "warning",
+	health_check: "warning",
+	staged: "warning",
+	recovery_pending: "warning",
+	rolling_back: "warning",
 	rolled_back: "warning",
 };
+
+/** Job statuses that mean the retry is still in flight (non-terminal). */
+const IN_FLIGHT_STATUSES: ReadonlySet<ApplyJobStatus> = new Set([
+	"pending",
+	"planning",
+	"validating",
+	"applying",
+	"health_check",
+	"staged",
+	"recovery_pending",
+	"rolling_back",
+]);
 
 /** S5: apply job detail — full operation/validation/service/health/rollback
  * breakdown, synchronous retry, plus the rendered plan and the legacy apply
@@ -217,7 +236,6 @@ export function ApplyJobDetailPage() {
 	const statusMap: Record<string, string> = {
 		succeeded: t("applyJob.status.succeeded"),
 		failed: t("applyJob.status.failed"),
-		running: t("applyJob.status.running"),
 		pending: t("applyJob.status.pending"),
 		planning: t("applyJob.status.planning"),
 		validating: t("applyJob.status.validating"),
@@ -300,8 +318,7 @@ export function ApplyJobDetailPage() {
 							</FormMessage>
 						) : null}
 						{isAdmin &&
-						(j.status === "failed" ||
-							(j.status as string) === "rollback_failed") ? (
+						(j.status === "failed" || j.status === "rollback_failed") ? (
 							<Button
 								variant="primary"
 								disabled={retry.isPending}
@@ -321,9 +338,7 @@ export function ApplyJobDetailPage() {
 						) : null}
 						{retry.isSuccess &&
 						retry.data?.applyJob?.id === jobId &&
-						(retry.data.applyJob.status === "pending" ||
-							retry.data.applyJob.status === "running" ||
-							(retry.data.applyJob.status as string) === "applying") ? (
+						IN_FLIGHT_STATUSES.has(retry.data.applyJob.status) ? (
 							<p className="muted">{t("applyJob.retryQueued")}</p>
 						) : null}
 					</>
