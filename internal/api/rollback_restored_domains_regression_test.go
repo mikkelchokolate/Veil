@@ -48,7 +48,7 @@ func TestRollbackSyncsRestoredHysteria2Domain(t *testing.T) {
 		LivePath:    livePath,
 		HadPrevious: true,
 	}}
-	_, actions := ctx.rollbackPromotedConfigs(records, []string{livePath})
+	_, _, actions := ctx.rollbackPromotedConfigs(records, []string{livePath})
 
 	if len(client.syncCaddyCertRequests) != 1 {
 		t.Fatalf("expected exactly one cert sync, got %+v (actions=%+v)", client.syncCaddyCertRequests, actions)
@@ -83,10 +83,13 @@ func TestRollbackSkipsCertSyncForDeletedNewConfig(t *testing.T) {
 		BackupID:   "20260716T120000.000000000Z",
 		LivePath:   livePath,
 	}}
-	rollbackFiles, _ := ctx.rollbackPromotedConfigs(records, []string{livePath})
+	rollbackFiles, removedFiles, _ := ctx.rollbackPromotedConfigs(records, []string{livePath})
 
 	if len(rollbackFiles) != 0 {
 		t.Fatalf("deleted new config must not be reported as restored: %v", rollbackFiles)
+	}
+	if len(removedFiles) != 1 || removedFiles[0] != livePath {
+		t.Fatalf("deleted new config must be reported as removed: %v", removedFiles)
 	}
 	if len(client.syncCaddyCertRequests) != 0 {
 		t.Fatalf("cert sync must not run for a deleted new config: %+v", client.syncCaddyCertRequests)

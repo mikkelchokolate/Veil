@@ -412,20 +412,24 @@ func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []S
 	return results
 }
 
-func (ctx ManagementApplyContext) rollbackPromotedConfigs(records []livePromotionRecord, liveFiles []string) ([]string, []ServiceActionResult) {
+func (ctx ManagementApplyContext) rollbackPromotedConfigs(records []livePromotionRecord, liveFiles []string) ([]string, []string, []ServiceActionResult) {
 	if len(records) == 0 || records[0].BackupID == "" || ctx.state.privileged == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	result, err := ctx.state.privileged.Promote(ctx.operationContext(), privileged.PromoteRequest{
 		RestoreBackupID: records[0].BackupID, Fence: ctx.fenceToken(),
 	})
 	if err != nil {
-		return nil, []ServiceActionResult{{
+		return nil, nil, []ServiceActionResult{{
 			Name: "promotion-rollback", Command: []string{"helper", "promote", "restore"},
 			Success: false, Error: err.Error(),
 		}}
 	}
 	rollbackFiles := livePathsForArtifactIDs(ctx.state.liveRoot, result.WrittenArtifacts)
+	// Newly added configs have no previous generation: the restore deletes them
+	// instead. They are reported separately from restored files so callers can
+	// count the successful deletion without treating it as a restored write.
+	removedFiles := livePathsForArtifactIDs(ctx.state.liveRoot, result.RemovedArtifacts)
 	// The units removed during the failed apply are about to be restored; do not
 	// stop/disable them again while reloading services for the restored state.
 	ctx.state.orphanedUnits = nil
@@ -474,12 +478,12 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigs(records []livePromotio
 		stop := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionStop)
 		rollbackActions = append(rollbackActions, stop)
 		if !stop.Success {
-			return rollbackFiles, rollbackActions
+			return rollbackFiles, removedFiles, rollbackActions
 		}
 		disable := ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionDisable)
 		rollbackActions = append(rollbackActions, disable)
 		if !disable.Success {
-			return rollbackFiles, rollbackActions
+			return rollbackFiles, removedFiles, rollbackActions
 		}
 	}
 	if len(restoredUnits) > 0 {
@@ -497,12 +501,12 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigs(records []livePromotio
 			stop := ctx.runPrivilegedServiceAction(renderer.UnitCaddy, privileged.ServiceActionStop)
 			rollbackActions = append(rollbackActions, stop)
 			if !stop.Success {
-				return rollbackFiles, rollbackActions
+				return rollbackFiles, removedFiles, rollbackActions
 			}
 			disable := ctx.runPrivilegedServiceAction(renderer.UnitCaddy, privileged.ServiceActionDisable)
 			rollbackActions = append(rollbackActions, disable)
 			if !disable.Success {
-				return rollbackFiles, rollbackActions
+				return rollbackFiles, removedFiles, rollbackActions
 			}
 		}
 		for _, unit := range restoredUnits {
@@ -512,7 +516,7 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigs(records []livePromotio
 			)
 		}
 	}
-	return rollbackFiles, rollbackActions
+	return rollbackFiles, removedFiles, rollbackActions
 }
 
 // hysteria2CertDomainsFromConfigs extracts the Caddy-managed certificate
