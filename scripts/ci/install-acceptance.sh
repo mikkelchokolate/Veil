@@ -64,6 +64,20 @@ uninstall_leg() {
     > "${CI_ARTIFACT_DIR}/veil-units-journal.txt" 2>&1 || true
 }
 
+# The protocol units rendered by the first-inbound leg must survive panel
+# restarts, reinstalls, and reboots — assert them as a group so each leg
+# re-proves the whole contract, not just veil.service. olcRTC needs an
+# external conferencing provider at runtime, so its contract is the enabled
+# instance rather than an active process.
+assert_protocol_units() { # $1 = leg context for diagnostics
+  systemctl is-active --quiet veil-hysteria2@ci-hy2.service \
+    || ci_die "veil-hysteria2@ci-hy2 not active $1"
+  systemctl is-active --quiet veil-mieru.service \
+    || ci_die "veil-mieru not active $1"
+  systemctl is-enabled --quiet veil-olcrtc@ci-olc.service \
+    || ci_die "veil-olcrtc@ci-olc not enabled $1"
+}
+
 # Reboot persistence (audit #304): only the smolvm system VM stages
 # /exchange/systemd-run-request, which re-enters this job after a guest reboot.
 # On the GitHub runner and the docker backend there is no marker path, so the
@@ -85,9 +99,10 @@ if [ -n "${IA_PHASE_MARKER}" ] && [ -f "${IA_PHASE_MARKER}" ]; then
   done
   [ "${booted}" -eq 0 ] || ci_die "veil.service did not come back after guest reboot"
   systemctl is-active --quiet veil-helper.socket || ci_die "veil-helper.socket inactive after reboot"
-  systemctl is-active --quiet veil-hysteria2@ci-hy2.service || ci_die "veil-hysteria2@ci-hy2 inactive after reboot"
-  systemctl is-active --quiet veil-mieru.service || ci_die "veil-mieru inactive after reboot"
-  ${SUDO} test -f /etc/veil/generated/hysteria2/ci-hy2.yaml || ci_die "generated config lost after reboot"
+  assert_protocol_units "after reboot"
+  ${SUDO} test -f /etc/veil/generated/hysteria2/ci-hy2.yaml || ci_die "hysteria2 generated config lost after reboot"
+  ${SUDO} test -f /etc/veil/generated/mieru/server_config.json || ci_die "mieru generated config lost after reboot"
+  ${SUDO} test -f /etc/veil/generated/olcrtc/ci-olc.yaml || ci_die "olcrtc generated config lost after reboot"
   ${SUDO} test -s /var/lib/veil/state.json || ci_die "state.json lost after reboot"
   ready=1
   for _ in $(seq 1 60); do
@@ -184,14 +199,23 @@ TOKEN="$(${SUDO} grep '^VEIL_API_TOKEN=' /etc/veil/veil.env | cut -d= -f2- | tr 
 BASE_PATH="$(${SUDO} grep '^VEIL_WEB_BASE_PATH=' /etc/veil/veil.env | cut -d= -f2- | tr -d '[:space:]')"
 health_code="$(curl --http1.1 -sk --max-time 60 -o /tmp/ia-health.json -w '%{http_code}' -H "X-Veil-Token: ${TOKEN}" "https://127.0.0.1:${PANEL_PORT}${BASE_PATH}healthz")"
 [ "${health_code}" = "200" ] || ci_die "panel /healthz returned HTTP ${health_code}"
-grep -q '"status"' /tmp/ia-health.json || ci_die "panel /healthz payload unexpected: $(cat /tmp/ia-health.json)"
+# The payload must honestly report ok — an unhealthy panel still carries a
+# "status" field, so matching the bare key would green a 200-lying response.
+grep -q '"status":"ok"' /tmp/ia-health.json \
+  || ci_die "panel /healthz did not report status ok: $(cat /tmp/ia-health.json)"
 
 # --- 4. First-inbound acceptance per protocol (audit #313) ---------------------
 # Create the first inbound of every protocol feasible on a direct install
 # through the real management API, apply it, then verify the rendered config,
 # the systemd unit, the apply revision, and the export/client-link shape.
-# naiveproxy is intentionally absent here: it rides the panel Caddy forward
-# proxy and belongs to the caddy-mode install matrix leg (controlled ACME CA).
+# naiveproxy is intentionally absent from this leg: it rides the panel Caddy
+# forward proxy, so it cannot run on a direct-mode install. The caddy-mode leg
+# at the end of this script owns only the caddy install, real ACME issuance,
+# and the public :443 panel route — it does NOT create a naiveproxy inbound.
+# NaiveProxy protocol/data-path coverage is owned by scripts/ci/e2e.sh
+# (TestRequiredNaiveProxyDataPath). A narrow naive create+apply cohabitation
+# check on the caddy leg is a possible future extension, not coverage this
+# job claims today (issue #351).
 ci_step "first-inbound acceptance via the management API"
 TOKEN="$(${SUDO} grep '^VEIL_API_TOKEN=' /etc/veil/veil.env | cut -d= -f2- | tr -d '[:space:]')"
 [ -n "${TOKEN}" ] || ci_die "VEIL_API_TOKEN missing from /etc/veil/veil.env"
@@ -236,8 +260,13 @@ apply_panel() {
   local code
   code="$(api_code POST /api/apply/plan)"
   [ "${code}" = "200" ] || ci_die "apply plan: HTTP ${code}: $(cat /tmp/ia-resp.json)"
-  code="$(api_code POST /api/apply '{"confirm":true}')"
+  # Drive the full live+services apply through the explicit endpoint — the
+  # same path the panel's apply button takes — instead of stage-only confirm,
+  # and require the response to honestly report the apply happened.
+  code="$(api_code POST /api/apply '{"confirm":true,"applyLive":true,"applyServices":true}')"
   [ "${code}" = "200" ] || ci_die "apply confirm: HTTP ${code}: $(cat /tmp/ia-resp.json)"
+  grep -q '"applied":true' /tmp/ia-resp.json \
+    || ci_die "apply confirm did not report applied=true: $(cat /tmp/ia-resp.json)"
 }
 
 create_inbound ci-hy2 '{"name":"ci-hy2","protocol":"hysteria2","transport":"udp","port":34443,"enabled":true,"password":"ci-pass"}'
@@ -246,23 +275,50 @@ create_inbound ci-mieru-udp '{"name":"ci-mieru-udp","protocol":"mieru","transpor
 create_inbound ci-olc '{"name":"ci-olc","protocol":"olcrtc","transport":"udp","port":34446,"enabled":true,"protocolFields":{"password":"abababababababababababababababababababababababababababababababab","olcrtcAuth":"jitsi","olcrtcTransport":"datachannel","olcrtcRoomID":"https://127.0.0.1:1/veil-ci"}}'
 
 # Durable idempotency contract: replaying the same mutation with the same
-# Idempotency-Key must return the original response, not a duplicate-name 409.
-idem_code() { # body
+# Idempotency-Key must return the original response, not a duplicate-name 409
+# and not a divergent 201 — the stored response is replayed byte-for-byte.
+idem_code() { # body [headers-file]
+  local extra=()
+  [ -n "${2:-}" ] && extra=(-D "$2")
   curl --http1.1 -sk --max-time 300 -o /tmp/ia-resp.json -w '%{http_code}' -X POST \
     -H "X-Veil-Token: ${TOKEN}" -H 'Content-Type: application/json' \
-    -H "Idempotency-Key: ci-acceptance-mieru-idem" -d "$1" "${API}/api/inbounds"
+    -H "Idempotency-Key: ci-acceptance-mieru-idem" "${extra[@]}" -d "$1" "${API}/api/inbounds"
 }
 idem_body='{"name":"ci-mieru-idem","protocol":"mieru","transport":"tcp","port":34447,"enabled":true,"password":"idem-pass"}'
 first="$(idem_code "${idem_body}")"
-second="$(idem_code "${idem_body}")"
-[ "${first}" = "201" ] || ci_die "idempotent create: first HTTP ${first}: $(cat /tmp/ia-resp.json)"
-[ "${second}" = "201" ] || ci_die "idempotent replay did not return the original 201 (got ${second})"
+cp /tmp/ia-resp.json /tmp/ia-idem-first.json
+second="$(idem_code "${idem_body}" /tmp/ia-idem-second.headers)"
+cp /tmp/ia-resp.json /tmp/ia-idem-second.json
+[ "${first}" = "201" ] || ci_die "idempotent create: first HTTP ${first}: $(cat /tmp/ia-idem-first.json)"
+[ "${second}" = "201" ] || ci_die "idempotent replay did not return the original 201 (got ${second}): $(cat /tmp/ia-idem-second.json)"
+cmp -s /tmp/ia-idem-first.json /tmp/ia-idem-second.json \
+  || ci_die "idempotent replay body diverged: first=$(cat /tmp/ia-idem-first.json) second=$(cat /tmp/ia-idem-second.json)"
+grep -qi 'idempotency-replayed: true' /tmp/ia-idem-second.headers \
+  || ci_die "idempotent replay did not set the Idempotency-Replayed header: $(cat /tmp/ia-idem-second.headers)"
 
 apply_panel
 api_code GET /api/apply/state
 cp /tmp/ia-resp.json "${CI_ARTIFACT_DIR}/apply-state-after-inbounds.json"
 grep -q '"state":"synced"' "${CI_ARTIFACT_DIR}/apply-state-after-inbounds.json" \
   || ci_die "apply state did not reach synced: $(cat "${CI_ARTIFACT_DIR}/apply-state-after-inbounds.json")"
+# synced is derived as desired <= applied — prove the applied revision really
+# caught up to the desired revision the mutations produced, not merely that
+# the state string looks healthy.
+desired_rev="$(grep -o -m1 '"desiredRevision":[0-9]*' "${CI_ARTIFACT_DIR}/apply-state-after-inbounds.json" | cut -d: -f2 || true)"
+applied_rev="$(grep -o -m1 '"appliedRevision":[0-9]*' "${CI_ARTIFACT_DIR}/apply-state-after-inbounds.json" | cut -d: -f2 || true)"
+{ [ -n "${desired_rev}" ] && [ "${desired_rev}" = "${applied_rev}" ]; } \
+  || ci_die "applied revision did not catch up to desired (applied=${applied_rev:-none} desired=${desired_rev:-none})"
+
+ci_step "firewall inbound contract (ufw carries the applied inbound ports)"
+# The apply's firewall transaction must leave ufw allow rules for every
+# applied inbound port — the panel-port check above cannot see a missing
+# inbound hole. olcRTC has no runtime listener (its FirewallService is empty:
+# the panel side terminates the datachannel), so port 34446 expects no rule.
+${SUDO} ufw status | tee "${CI_ARTIFACT_DIR}/ufw-status-after-inbounds.txt"
+for port_spec in 34443/udp 34444/tcp 34445/udp 34447/tcp; do
+  grep -q "${port_spec}" "${CI_ARTIFACT_DIR}/ufw-status-after-inbounds.txt" \
+    || ci_die "ufw has no allow rule for inbound ${port_spec}: $(cat "${CI_ARTIFACT_DIR}/ufw-status-after-inbounds.txt")"
+done
 
 ci_step "rendered configs"
 ${SUDO} test -f /etc/veil/generated/hysteria2/ci-hy2.yaml || ci_die "hysteria2 config not rendered"
@@ -275,6 +331,11 @@ systemctl is-active --quiet veil-mieru.service || ci_die "veil-mieru not active"
 # olcRTC needs an external conferencing provider at runtime; the contract is
 # that the panel-generated config validates and the instance is enabled.
 systemctl is-enabled --quiet veil-olcrtc@ci-olc.service || ci_die "veil-olcrtc@ci-olc not enabled"
+# veil-helper.service is a static socket-activated unit (no [Install]) — the
+# correct contract is "running once the socket was used", and the apply legs
+# above provably drove privileged ops (service actions, ufw) through it.
+systemctl is-active --quiet veil-helper.service \
+  || ci_die "veil-helper.service not active after privileged apply traffic"
 
 ci_step "export/client-link shape"
 api_code GET /api/client-links
@@ -313,17 +374,25 @@ olc_client="$(grep -o '"client":{"id":"[^"]*"' /tmp/ia-resp.json | head -1 | cut
 [ -n "${olc_client}" ] || ci_die "olc traffic client id missing: $(cat /tmp/ia-resp.json)"
 
 # The collector polls every 30s; give the first observation plus the provider
-# rebuild after the client-mutation applies room to land.
+# rebuild after the client-mutation applies room to land. A provider's first
+# observation can race the unit's traffic listener coming back after the apply
+# restart — a transient degraded must not end the poll; the post-loop checks
+# still fail the leg on a persistent degraded or a 401.
 telemetry=1
 summary=""
 for _ in $(seq 1 45); do
   code="$(api_code GET /api/v1/traffic/summary || true)"
   if [ "${code}" = "200" ]; then
     summary="$(cat /tmp/ia-resp.json)"
-    case "${summary}" in
-      *'"state":"healthy"'*) telemetry=0; break ;;
-      *'"state":"degraded"'*) break ;;
-    esac
+    # The TOP-LEVEL summary state is authoritative: Go marshals the response
+    # map with "state" after the providers array, so it is the last "state"
+    # field. A substring match would let a nested provider's healthy state
+    # end the wait while another provider is still degraded.
+    summary_state="$(grep -o '"state":"[^"]*"' /tmp/ia-resp.json | tail -1 || true)"
+    if [ "${summary_state}" = '"state":"healthy"' ]; then
+      telemetry=0
+      break
+    fi
   fi
   sleep 2
 done
@@ -371,6 +440,9 @@ ci_run veil-reinstall ${SUDO} /usr/local/bin/veil install "${INSTALL_FLAGS[@]}"
 grep -q "Reused the existing admin login" "${CI_ARTIFACT_DIR}/veil-reinstall.log" \
   || ci_die "reinstall did not reuse the existing state"
 systemctl is-active --quiet veil.service || ci_die "veil.service not active after reinstall"
+# The reused-state install must leave the first-inbound units standing — a
+# reinstall that kills protocol units would still green the veil.service check.
+assert_protocol_units "after reinstall"
 ci_run veil-status-after-reinstall ${SUDO} /usr/local/bin/veil status --json
 
 # --- 6. Controlled ACME CA issuance (audit #304) -------------------------------
@@ -412,6 +484,9 @@ openssl s_client -connect "127.0.0.1:${PANEL_PORT}" -servername 127.0.0.1 </dev/
 grep -qi "pebble" "${CI_ARTIFACT_DIR}/panel-served-issuer.txt" \
   || ci_die "panel is not serving the pebble-issued certificate"
 systemctl is-active --quiet veil.service || ci_die "veil.service not active after controlled-CA reinstall"
+# The ACME reinstall restarted the panel; the protocol units from the
+# first-inbound leg must still be standing as well.
+assert_protocol_units "after controlled-CA reinstall"
 
 # --- 7. Reboot persistence (smolvm system VM only) ---------------------------
 if [ -n "${IA_PHASE_MARKER}" ]; then
@@ -429,6 +504,8 @@ fi
 # issuance for the panel domain via caddy's tls-alpn-01 against the pebble CA,
 # and an HTTPS request through the public :443 route to the panel — the
 # failure mode where install reports success but nothing serves the URL.
+# Scope honesty: this leg does not exercise naiveproxy; its data-path coverage
+# is owned by the e2e job (TestRequiredNaiveProxyDataPath), see issue #351.
 ci_step "caddy-mode install: real ACME issuance + public route"
 CADDY_CI_DOMAIN="veil-ci.test"
 # Both the pebble VA (its system resolver honours /etc/hosts) and the local
@@ -440,6 +517,11 @@ ${SUDO} install -m 0644 "${pebble_mod}/test/certs/pebble.minica.pem" /etc/veil/a
 ci_run veil-install-caddy ${SUDO} env   VEIL_ACME_CA_URL="https://127.0.0.1:14000/dir" VEIL_ACME_CA_ROOT=/etc/veil/acme-root.pem   /usr/local/bin/veil install --yes --panel-access caddy --domain "${CADDY_CI_DOMAIN}" --email "ci@veil-ci.test"
 systemctl is-active --quiet veil-caddy.service || ci_die "veil-caddy.service is not active after caddy-mode install"
 systemctl is-enabled --quiet veil-caddy.service || ci_die "veil-caddy.service is not enabled"
+# Re-read the base path THIS install wrote — the probe must verify the URL
+# the panel actually serves now, not the value cached during the direct-mode
+# leg (reinstall reuses state today, but the contract is the env on disk).
+BASE_PATH="$(${SUDO} grep '^VEIL_WEB_BASE_PATH=' /etc/veil/veil.env | cut -d= -f2- | tr -d '[:space:]' || true)"
+[ -n "${BASE_PATH}" ] || ci_die "VEIL_WEB_BASE_PATH missing from /etc/veil/veil.env after caddy-mode install"
 # tls-alpn-01 issuance completes on the first TLS handshake; poll the public
 # route until caddy serves a pebble-issued certificate and proxies the panel.
 # --cacert success proves the cert chain; any HTTP status other than the
@@ -460,6 +542,12 @@ done
 cp /tmp/ia-caddy-route.out "${CI_ARTIFACT_DIR}/caddy-route.out" 2>/dev/null || true
 cp /tmp/ia-caddy-route.err "${CI_ARTIFACT_DIR}/caddy-route.err" 2>/dev/null || true
 [ "${caddy_route}" -eq 0 ] || ci_die "public caddy route https://${CADDY_CI_DOMAIN}${BASE_PATH} did not serve the panel (last HTTP ${route_code})"
+# --cacert proved the chain verifies; also assert the served certificate's
+# issuer explicitly, at the same strength as the direct IP-cert leg above.
+openssl s_client -connect "127.0.0.1:443" -servername "${CADDY_CI_DOMAIN}" </dev/null 2>/dev/null \
+  | openssl x509 -noout -issuer | tee "${CI_ARTIFACT_DIR}/caddy-served-issuer.txt" || true
+grep -qi "pebble" "${CI_ARTIFACT_DIR}/caddy-served-issuer.txt" \
+  || ci_die "public route is not serving a pebble-issued certificate: $(cat "${CI_ARTIFACT_DIR}/caddy-served-issuer.txt")"
 
 uninstall_leg
 
