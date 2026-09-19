@@ -149,8 +149,38 @@ func TestRootMountSessionCookieKeepsOriginPath(t *testing.T) {
 	}
 }
 
+// Settings may drift webBasePath/panelAccess ahead of `veil repair`, but the
+// session cookie must stay on the mount/access the running process actually
+// serves — otherwise the browser drops it and the operator appears logged out.
+func TestSessionCookieFollowsServeIdentityNotDriftedSettings(t *testing.T) {
+	state := &managementState{
+		// Pending settings saved by the operator; the process still serves
+		// plain HTTP at "/" until repair rewrites veil.env and restarts.
+		settings: Settings{PanelAccess: "caddy", WebBasePath: "/new-base/"},
+		// Serve identity is empty/root: this process is NOT Caddy-backed.
+	}
+	path, secure := state.panelCookieAttrs(httptest.NewRequest(http.MethodGet, "http://panel.local/api/auth/status", nil))
+	if path != "/" {
+		t.Fatalf("cookie path=%q, want live mount /", path)
+	}
+	if secure {
+		t.Fatal("cookie must not be Secure while the process serves plain HTTP at /")
+	}
+
+	state.serveWebBasePath = "/panel-secret/"
+	state.servePanelAccess = "caddy"
+	path, secure = state.panelCookieAttrs(httptest.NewRequest(http.MethodGet, "http://panel.local/api/auth/status", nil))
+	if path != "/panel-secret/" || !secure {
+		t.Fatalf("caddy-mounted cookie path=%q secure=%v, want /panel-secret/ + Secure", path, secure)
+	}
+}
+
 func TestLogoutCookieRepeatsLoginSameSite(t *testing.T) {
-	state := &managementState{settings: Settings{PanelAccess: "caddy", WebBasePath: "/panel-secret/"}}
+	state := &managementState{
+		settings:         Settings{PanelAccess: "caddy", WebBasePath: "/panel-secret/"},
+		serveWebBasePath: "/panel-secret/",
+		servePanelAccess: "caddy",
+	}
 	mux := http.NewServeMux()
 	state.register(mux)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
