@@ -198,6 +198,9 @@ func TestIsRateLimitedReadPath(t *testing.T) {
 		{"/api/logs?unit=caddy&lines=50", true},
 		{"/api/v1/events", true},
 		{"/api/v1/traffic/stream", true},
+		// Public subscription feed: the DefaultRateLimitPolicy "/s/" entry
+		// (30/min) must actually gate it.
+		{"/s/some-feed-token", true},
 		{"/api/v1/traffic/top", false},
 		{"/api/status", false},
 		{"/metrics", false},
