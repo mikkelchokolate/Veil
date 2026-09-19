@@ -83,6 +83,18 @@ export const GetReadyzResponse = zod.object({
 export const GetMetricsResponse = zod.string()
 
 /**
+ * Viewer-facing component health snapshot; the same diagnostic payload that /readyz reports to orchestrators. Always returns 200 — inspect `status` and `components` for degradation.
+ * @summary Panel health component snapshot
+ */
+export const GetApiHealthResponse = zod.object({
+  "status": zod.enum(['ok', 'degraded']),
+  "components": zod.record(zod.string(), zod.object({
+  "status": zod.string(),
+  "reason": zod.string().optional()
+})).optional()
+})
+
+/**
  * @summary Service status snapshot for managed systemd units
  */
 export const GetApiStatusResponse = zod.object({
@@ -92,7 +104,9 @@ export const GetApiStatusResponse = zod.object({
   "mode": zod.string(),
   "services": zod.array(zod.object({
   "name": zod.string(),
+  "actionName": zod.string().optional().describe('Service action identifier used by POST /api/services/{name}/restart when the unit supports one.'),
   "managed": zod.boolean(),
+  "restartable": zod.boolean().optional().describe('True when the service can be restarted through the API.'),
   "transport": zod.string().optional(),
   "unit": zod.string().optional(),
   "loadState": zod.string().optional(),

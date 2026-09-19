@@ -40,6 +40,7 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import type { AuthStatusResponseAuthMethod } from './authStatusResponseAuthMethod.ts';
 import type { Locale } from './locale.ts';
 import type { UserRole } from './userRole.ts';
 
@@ -49,4 +50,6 @@ export interface AuthStatusResponse {
   role?: UserRole;
   locale?: Locale;
   csrfToken?: string;
+  /** How the request was authenticated; absent for cookie-session responses. */
+  authMethod?: AuthStatusResponseAuthMethod;
 }

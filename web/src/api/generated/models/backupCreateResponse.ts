@@ -48,4 +48,6 @@ export interface BackupCreateResponse {
   archive: BackupArchive;
   verification: BackupVerificationReport;
   prune?: BackupPruneResult;
+  /** Non-fatal warning (for example a retention prune failure after a successful archive). */
+  warning?: string;
 }

@@ -47,5 +47,9 @@ export type RevisionViewState = typeof RevisionViewState[keyof typeof RevisionVi
 export const RevisionViewState = {
   synced: 'synced',
   pending: 'pending',
+  applying: 'applying',
   failed: 'failed',
+  rolling_back: 'rolling_back',
+  rolled_back: 'rolled_back',
+  degraded: 'degraded',
 } as const;
