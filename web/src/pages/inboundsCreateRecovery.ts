@@ -51,9 +51,17 @@ async function reconcileCommittedCreate(
 	} catch {
 		// The job id is best-effort; the committed inbound is the evidence.
 	}
-	return applyJob
-		? { success: true, reconciled: true, applyJob }
-		: { success: true, reconciled: true };
+	// Match the server contract (management_operational_routes.go): with an
+	// attached job the object is only honestly "saved and live" when the job
+	// succeeded; running/failed/recovery_pending must not paint green.
+	if (applyJob) {
+		return {
+			success: applyJob.status === "succeeded",
+			reconciled: true,
+			applyJob,
+		};
+	}
+	return { success: true, reconciled: true };
 }
 
 // createInbound posts a new inbound and resolves an unknown response outcome.
