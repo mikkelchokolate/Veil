@@ -188,6 +188,10 @@ func TestPackageScriptsExist(t *testing.T) {
 	if !strings.Contains(postinstallScript, "/etc/veil/panel") {
 		t.Fatal("postinstall.sh must migrate Panel TLS material under /etc/veil/panel")
 	}
+	if strings.Contains(postinstallScript, "usermod -aG veil-proxy veil || true") ||
+		strings.Contains(postinstallScript, "addgroup veil veil-proxy || true") {
+		t.Fatal("postinstall.sh must not swallow veil-proxy group membership failures")
+	}
 }
 
 func TestDockerEntrypointKeepsApplyRootOffLiveGeneratedTree(t *testing.T) {

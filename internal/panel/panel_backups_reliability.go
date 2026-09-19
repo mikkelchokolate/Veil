@@ -45,7 +45,7 @@ func panelBackupsReliabilityJS() string {
             window.location.reload();
             return job;
           }
-          if (job.status === 'failed') return job;
+          if (job.status === 'failed' || job.status === 'degraded' || job.status === 'pending') return job;
         } catch (error) {
           if (generation !== backupRestorePollGeneration) return null;
           lastError = String(error && error.message ? error.message : error);

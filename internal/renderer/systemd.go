@@ -237,9 +237,11 @@ Wants=network-online.target
 Type=simple
 User=veil
 Group=veil
-# Caddy binds :80/:443 with CAP_NET_BIND_SERVICE and reads 0640 root:veil
-# config as group veil. ACME material stays in StateDirectory=caddy
-# (/var/lib/caddy); /etc/veil and /var/lib/veil stay read-only.
+# Caddy binds :80/:443 with CAP_NET_BIND_SERVICE and reads 0640
+# root:veil-proxy config under /etc/veil/generated and /etc/veil/tls through
+# the veil-proxy supplementary group. ACME material stays in
+# StateDirectory=caddy (/var/lib/caddy); /etc/veil and /var/lib/veil stay
+# read-only.
 StateDirectory=caddy
 Environment=HOME=/var/lib/caddy XDG_DATA_HOME=/var/lib/caddy XDG_CONFIG_HOME=/var/lib/caddy
 ExecStart=` + caddyBin + ` run --config ` + caddyConfig + `

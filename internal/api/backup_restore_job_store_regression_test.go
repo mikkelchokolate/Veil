@@ -100,6 +100,54 @@ func TestBackupRestoreJobsFailUncommittedHelperJournalAcrossRestart(t *testing.T
 	}
 }
 
+func TestUpdateBackupRestoreJobFailsWhenCommitReceiptCannotClear(t *testing.T) {
+	root := t.TempDir()
+	// A non-empty directory at the receipt path makes os.Remove fail, which
+	// must propagate instead of advancing the job bookkeeping on a stale
+	// commit receipt.
+	if err := os.MkdirAll(filepath.Join(root, ".veil-restore-committed", "nested"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	state := &managementState{
+		statePath: filepath.Join(root, "state.json"),
+		backupJobs: map[string]BackupRestoreJob{
+			"job-1": {ID: "job-1", Status: "running"},
+		},
+	}
+	err := state.updateBackupRestoreJob("job-1", func(job *BackupRestoreJob) {
+		job.Status = "succeeded"
+	})
+	if err == nil {
+		t.Fatal("commit receipt clear failure was discarded")
+	}
+	if got := state.backupJobs["job-1"].Status; got != "running" {
+		t.Fatalf("job bookkeeping advanced to %q despite receipt clear failure", got)
+	}
+}
+
+func TestLoadBackupRestoreJobsSurfacesCommitReceiptClearFailure(t *testing.T) {
+	root := t.TempDir()
+	jobsPath := filepath.Join(root, "backup-restore-jobs.json")
+	statePath := filepath.Join(root, "state.json")
+	keyPath := filepath.Join(root, "state.key")
+	if err := os.WriteFile(statePath, []byte("live-state"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, []byte("live-key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	created := time.Now().UTC().Add(-time.Minute)
+	persistRunningRestoreJob(t, jobsPath, BackupRestoreJob{ID: "job-open", Archive: "veil_backup_20260728_120000.tar.gz.enc", Status: "running", CreatedAt: created, StartedAt: created})
+	if err := os.MkdirAll(filepath.Join(root, ".veil-restore-committed", "nested"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	state := &managementState{backupJobsPath: jobsPath, backupJobs: make(map[string]BackupRestoreJob), statePath: statePath, keyPath: keyPath}
+	if err := state.loadBackupRestoreJobs(); err == nil {
+		t.Fatal("commit receipt clear failure was discarded during job history load")
+	}
+}
+
 func persistRunningRestoreJob(t *testing.T, path string, job BackupRestoreJob) {
 	t.Helper()
 	state := &managementState{backupJobsPath: path, backupJobs: map[string]BackupRestoreJob{job.ID: job}}

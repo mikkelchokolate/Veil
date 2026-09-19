@@ -33,7 +33,13 @@ func (s *managementState) pruneBackupRestoreJobs() {
 	}
 	candidates := make([]candidate, 0, len(s.backupJobs))
 	for id, job := range s.backupJobs {
-		if job.Status != "succeeded" && job.Status != "failed" {
+		// Every terminal status is prunable: degraded marks a restore that
+		// committed but failed revalidation/finalization, and pending marks a
+		// restore whose key publication is outstanding — neither advances
+		// further once recorded, so they must not accumulate forever.
+		switch job.Status {
+		case "succeeded", "failed", "degraded", "pending":
+		default:
 			continue
 		}
 		when := job.FinishedAt

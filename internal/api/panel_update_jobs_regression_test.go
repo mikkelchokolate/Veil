@@ -1,6 +1,8 @@
 package api
 
 import (
+	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -81,5 +83,46 @@ func TestReconcilePanelUpdateJobsMatchesReleaseDisplayVersion(t *testing.T) {
 				t.Fatalf("succeeded job has error %q", job.Error)
 			}
 		})
+	}
+}
+
+func TestReconcilePanelUpdateJobsPrunesTerminalHistory(t *testing.T) {
+	state := &managementState{db: testdb.Open(t)}
+	now := time.Now().UTC().Unix()
+	expired := now - panelUpdateJobRetentionSeconds - 60
+	recent := now - 60
+	insert := func(id, status string, updatedAt int64) {
+		t.Helper()
+		if _, err := state.db.Exec(
+			`INSERT INTO panel_update_jobs(id,target_version,status,created_at,updated_at) VALUES(?,?,?,?,?)`,
+			id, "v0.6.3", status, updatedAt, updatedAt,
+		); err != nil {
+			t.Fatalf("insert job %s: %v", id, err)
+		}
+	}
+	insert("expired-succeeded", "succeeded", expired)
+	insert("expired-failed", "failed", expired)
+	insert("recent-succeeded", "succeeded", recent)
+	insert("recent-failed", "failed", recent)
+	// A stale in-flight job must be reconciled to a terminal status before it
+	// becomes eligible for pruning; it is not deleted outright.
+	insert("expired-staging", "staging", expired)
+
+	state.reconcilePanelUpdateJobs("v0.6.2")
+
+	for _, id := range []string{"expired-succeeded", "expired-failed"} {
+		_, err := state.getPanelUpdateJob(id)
+		if !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("job %s: expected pruned row, got err=%v", id, err)
+		}
+	}
+	for _, id := range []string{"recent-succeeded", "recent-failed", "expired-staging"} {
+		if _, err := state.getPanelUpdateJob(id); err != nil {
+			t.Fatalf("job %s: expected retained row: %v", id, err)
+		}
+	}
+	job, err := state.getPanelUpdateJob("expired-staging")
+	if err != nil || job.Status != "failed" {
+		t.Fatalf("expired-staging: status=%q err=%v", job.Status, err)
 	}
 }
