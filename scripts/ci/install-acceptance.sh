@@ -101,6 +101,7 @@ if [ -n "${IA_PHASE_MARKER}" ] && [ -f "${IA_PHASE_MARKER}" ]; then
   systemctl is-active --quiet veil-helper.socket || ci_die "veil-helper.socket inactive after reboot"
   assert_protocol_units "after reboot"
   ${SUDO} test -f /etc/veil/generated/hysteria2/ci-hy2.yaml || ci_die "hysteria2 generated config lost after reboot"
+  ${SUDO} test -f /etc/veil/generated/mieru/server_config.json || ci_die "mieru generated config lost after reboot"
   ${SUDO} test -f /etc/veil/generated/olcrtc/ci-olc.yaml || ci_die "olcrtc generated config lost after reboot"
   ${SUDO} test -s /var/lib/veil/state.json || ci_die "state.json lost after reboot"
   ready=1
@@ -383,9 +384,15 @@ for _ in $(seq 1 45); do
   code="$(api_code GET /api/v1/traffic/summary || true)"
   if [ "${code}" = "200" ]; then
     summary="$(cat /tmp/ia-resp.json)"
-    case "${summary}" in
-      *'"state":"healthy"'*) telemetry=0; break ;;
-    esac
+    # The TOP-LEVEL summary state is authoritative: Go marshals the response
+    # map with "state" after the providers array, so it is the last "state"
+    # field. A substring match would let a nested provider's healthy state
+    # end the wait while another provider is still degraded.
+    summary_state="$(grep -o '"state":"[^"]*"' /tmp/ia-resp.json | tail -1 || true)"
+    if [ "${summary_state}" = '"state":"healthy"' ]; then
+      telemetry=0
+      break
+    fi
   fi
   sleep 2
 done
