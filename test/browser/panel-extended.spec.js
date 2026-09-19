@@ -246,10 +246,12 @@ test.describe('Veil Panel — extended critical flows', () => {
     expect(failed.status, 'apply must fail after the browser helper alias is detached').toBe('failed');
     // The failure must attribute to the detached privileged helper; a generic
     // failure elsewhere would pass the status check while proving nothing.
+    // Attribution is honest either as the explicit "privileged helper" phrase
+    // or as a unix-dial failure against a helper-named socket path.
     expect(
       `${failed.errorCode ?? ''} ${failed.errorMessage ?? ''}`,
       `failure must name the privileged helper: ${JSON.stringify(failed)}`,
-    ).toMatch(/privileged helper/i);
+    ).toMatch(/privileged helper|dial unix .*helper.*\.sock/i);
 
     // Retry creates a NEW job for the same desired revision; the old record
     // is immutable history.

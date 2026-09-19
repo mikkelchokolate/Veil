@@ -128,13 +128,17 @@ func TestRequiredOlcRTCRuntimeContract(t *testing.T) {
 	// Early exit must carry positive evidence that the process consumed the
 	// generated config and reached the signaling stage — otherwise a stub, a
 	// flag-parse failure, or any unrelated crash would satisfy the contract.
+	// The unique room path is mandatory: only it proves THIS generated config
+	// was loaded; generic networking words can appear in unrelated failures.
 	if strings.TrimSpace(log) == "" {
 		t.Fatalf("olcRTC exited early (%v) with no output — cannot prove it loaded the panel config", err)
 	}
+	if !strings.Contains(log, "veil-required-e2e") {
+		t.Fatalf("olcRTC exited early (%v) without echoing the unique room marker — cannot prove it consumed the generated config:\n%s", err, log)
+	}
 	signalingEvidence := []string{
-		"veil-required-e2e", // unique room path from the generated config
 		"127.0.0.1", "signal", "signaling", "websocket", "dial", "connect",
-		"refused", "handshake", "tls", "jitsi",
+		"refused", "handshake", "tls", "jitsi", "veil-required-e2e",
 	}
 	proven := false
 	for _, marker := range signalingEvidence {

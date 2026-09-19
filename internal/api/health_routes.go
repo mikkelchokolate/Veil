@@ -136,13 +136,11 @@ func (routes HealthRoutes) snapshot(parent context.Context) (healthResponse, boo
 		if helperClient == nil {
 			components["privileged_helper"] = healthComponent{Status: "degraded", Reason: "unavailable"}
 			ready = false
-		} else if probe, ok := helperClient.(interface {
-			Reachable(context.Context) error
-		}); ok {
+		} else {
 			// The client object survives socket detachment; only an actual dial
 			// proves the helper is still reachable.
 			probeCtx, cancel := context.WithTimeout(parent, 200*time.Millisecond)
-			reachErr := probe.Reachable(probeCtx)
+			reachErr := helperClient.Reachable(probeCtx)
 			cancel()
 			if reachErr != nil {
 				components["privileged_helper"] = healthComponent{Status: "degraded", Reason: "unreachable"}
