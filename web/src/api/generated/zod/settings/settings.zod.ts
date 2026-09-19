@@ -127,11 +127,11 @@ export const PutApiSettingsBody = zod.object({
   "acmeChallengeMode": zod.enum(['http-01', 'tls-alpn-01']).optional().describe('ACME challenge mode used for inbound certificates.')
 })
 
-export const putApiSettingsResponsePanelPublicPortMin = 0;
-export const putApiSettingsResponsePanelPublicPortMax = 65535;
+export const putApiSettingsResponseOnePanelPublicPortMin = 0;
+export const putApiSettingsResponseOnePanelPublicPortMax = 65535;
 
-export const putApiSettingsResponseDefaultInboundPublicPortMin = 0;
-export const putApiSettingsResponseDefaultInboundPublicPortMax = 65535;
+export const putApiSettingsResponseOneDefaultInboundPublicPortMin = 0;
+export const putApiSettingsResponseOneDefaultInboundPublicPortMax = 65535;
 
 
 
@@ -155,9 +155,37 @@ export const PutApiSettingsResponse = zod.object({
   "hysteria2Insecure": zod.boolean().optional().describe('Allow self-signed server certificates for hysteria2 inbounds.'),
   "panelDomain": zod.string().optional().describe('Public domain for the panel when served through Caddy.'),
   "panelEmail": zod.email().optional().describe('ACME contact email for the panel domain.'),
-  "panelPublicPort": zod.int().min(putApiSettingsResponsePanelPublicPortMin).max(putApiSettingsResponsePanelPublicPortMax).optional().describe('Public port for the panel when served through Caddy. Defaults to 443 when zero.'),
-  "defaultInboundPublicPort": zod.int().min(putApiSettingsResponseDefaultInboundPublicPortMin).max(putApiSettingsResponseDefaultInboundPublicPortMax).optional().describe('Default public port for new inbounds. Falls back to 443 when zero.'),
+  "panelPublicPort": zod.int().min(putApiSettingsResponseOnePanelPublicPortMin).max(putApiSettingsResponseOnePanelPublicPortMax).optional().describe('Public port for the panel when served through Caddy. Defaults to 443 when zero.'),
+  "defaultInboundPublicPort": zod.int().min(putApiSettingsResponseOneDefaultInboundPublicPortMin).max(putApiSettingsResponseOneDefaultInboundPublicPortMax).optional().describe('Default public port for new inbounds. Falls back to 443 when zero.'),
   "defaultAcmeEmail": zod.email().optional().describe('Default ACME contact email for inbound certificates.'),
   "acmeChallengeMode": zod.enum(['http-01', 'tls-alpn-01']).optional().describe('ACME challenge mode used for inbound certificates.')
-})
+}).and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.'))
 

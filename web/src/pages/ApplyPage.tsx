@@ -52,9 +52,19 @@ const STATUS_VARIANT: Record<
 	"success" | "danger" | "warning" | "default"
 > = {
 	succeeded: "success",
+	synced: "success",
 	failed: "danger",
-	running: "warning",
+	rollback_failed: "danger",
+	degraded: "danger",
 	pending: "warning",
+	planning: "warning",
+	validating: "warning",
+	applying: "warning",
+	health_check: "warning",
+	staged: "warning",
+	recovery_pending: "warning",
+	rolling_back: "warning",
+	rolled_back: "warning",
 };
 
 /** B5: honest synchronous apply semantics — desired vs applied revision,
@@ -257,7 +267,7 @@ export function ApplyPage() {
 										{isAdmin ? (
 											<TableCell>
 												{(j.status === "failed" ||
-													(j.status as string) === "rollback_failed") &&
+													j.status === "rollback_failed") &&
 												!isSupersededRecoveryJob(j) ? (
 													<Button
 														size="sm"

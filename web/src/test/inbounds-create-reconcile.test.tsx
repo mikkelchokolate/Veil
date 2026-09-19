@@ -74,7 +74,7 @@ function installFetchMock(state: MockState) {
 						id: "job-1",
 						desiredRevision: 2,
 						baseRevision: 1,
-						status: "running",
+						status: "applying",
 						trigger: "mutation",
 						createdAt: 1,
 					},

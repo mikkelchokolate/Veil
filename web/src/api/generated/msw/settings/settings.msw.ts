@@ -64,6 +64,7 @@ import type {
   ConflictResponse,
   ForbiddenResponse,
   LockedResponse,
+  MutationOutcome,
   ServiceUnavailableResponse,
   Settings,
   UnauthorizedResponse,
@@ -212,7 +213,7 @@ export function useGetApiSettings<TData = Awaited<ReturnType<typeof getApiSettin
 
 
 export type putApiSettingsResponse200 = {
-  data: Settings
+  data: Settings & MutationOutcome
   status: 200
 }
 

@@ -59,4 +59,17 @@ export interface ApplyResponse {
   serviceActions?: ServiceActionResult[];
   healthChecks?: ServiceHealthResult[];
   rollbackActions?: ServiceActionResult[];
+  /** True once the apply began changing runtime artifacts or services; absent on a plan/stage-only response. */
+  mutationStarted?: boolean;
+  artifactsChanged?: boolean;
+  servicesChanged?: boolean;
+  firewallChanged?: boolean;
+  artifactsRestored?: boolean;
+  servicesRestored?: boolean;
+  firewallRestored?: boolean;
+  postRollbackHealthPass?: boolean;
+  /** Honest signal that rollback evidence is complete; absence means a rolled_back flag alone is not proof of restoration. */
+  rollbackComplete?: boolean;
+  /** True when runtime evidence cannot prove whether mutation or rollback converged; clients must not treat the response as authoritative. */
+  ambiguous?: boolean;
 }

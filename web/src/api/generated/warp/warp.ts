@@ -63,6 +63,7 @@ import type {
   BadRequestResponse,
   ConflictResponse,
   LockedResponse,
+  MutationOutcome,
   ServiceUnavailableResponse,
   ValidationFailedResponse,
   WarpConfig
@@ -176,7 +177,7 @@ export const useGetApiWarp = <TError = unknown,
       return useMutation(getGetApiWarpMutationOptions(options), queryClient);
     }
     export type putApiWarpResponse200 = {
-  data: WarpConfig
+  data: WarpConfig & MutationOutcome
   status: 200
 }
 

@@ -47,6 +47,14 @@ export interface BackupRestoreJob {
   id: string;
   archive: string;
   status: BackupRestoreJobStatus;
+  /** Restore outcome classification. Known values: pending (job accepted or awaiting key publication), pending_key_publication, restored, not_restored. */
+  outcome: string;
+  /** Last restore pipeline phase reached (for example queued, key_publication_pending, completed, revalidation_failed, finalization_failed, restore_failed, fence_acquire_failed). */
+  phase: string;
+  /** True only when the backup content was actually restored. */
+  restored: boolean;
+  /** HTTP status that mirrors the job outcome for pollers. */
+  httpStatus: number;
   createdAt: string;
   startedAt?: string;
   finishedAt?: string;

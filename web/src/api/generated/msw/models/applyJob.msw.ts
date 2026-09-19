@@ -41,6 +41,7 @@
  * OpenAPI spec version: 0.6.3
  */
 import type { ApplyJobStatus } from './applyJobStatus.msw.ts';
+import type { ApplyOperationResult } from './applyOperationResult.msw.ts';
 
 export interface ApplyJob {
   id: string;
@@ -54,4 +55,10 @@ export interface ApplyJob {
   finishedAt?: number;
   errorCode?: string;
   errorMessage?: string;
+  /** Concrete runtime changes attempted by this job. */
+  operations?: ApplyOperationResult[];
+  /** Lease owner identity of the process that ran the job. */
+  ownerProcess?: string;
+  /** Fencing generation of the apply lease held while the job ran. */
+  leaseGeneration?: number;
 }

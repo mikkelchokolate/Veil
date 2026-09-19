@@ -6,15 +6,17 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/client"
 )
 
-// hysteria2TrafficIdentityMap maps every username still accepted by a live
-// Hysteria2 inbound onto the binding that should receive its counters.
+// trafficIdentityMap maps every username still accepted by a live
+// per-user inbound (hysteria2, mieru) onto the binding that should receive
+// its counters.
 //
 // RuntimeIdentity is canonical. After legacy-profile migration the rendered
-// auth table still includes the original username so existing URIs keep
-// working; Hysteria2 then reports that username in Traffic Stats. Alias it
-// (and the current client name) onto the migrated binding so accounting is
-// not marked degraded for identities the panel itself still serves.
-func hysteria2TrafficIdentityMap(inboundName string, profiles []ClientProfile, bindings []client.Binding, clients []client.Client) map[string]string {
+// user table still includes the original username so existing URIs keep
+// working; the runtime then reports that username in its per-user stats.
+// Alias it (and the current client name) onto the migrated binding so
+// accounting is not marked degraded for identities the panel itself still
+// serves.
+func trafficIdentityMap(inboundName string, profiles []ClientProfile, bindings []client.Binding, clients []client.Client) map[string]string {
 	identities := make(map[string]string)
 	inboundBindings := make([]client.Binding, 0, len(bindings))
 	for _, binding := range bindings {
