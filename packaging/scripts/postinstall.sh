@@ -42,10 +42,18 @@ ensure_system_account() {
 
 ensure_system_account veil
 ensure_system_account veil-proxy
-if command -v usermod >/dev/null 2>&1; then
-    usermod -aG veil-proxy veil >/dev/null 2>&1 || true
-elif command -v addgroup >/dev/null 2>&1; then
-    addgroup veil veil-proxy >/dev/null 2>&1 || true
+# Caddy runs as veil and reads /etc/veil/generated and /etc/veil/tls through
+# the veil-proxy supplementary group. A silent failure here would leave those
+# directories unreadable after the ownership pass below, so stop loudly.
+if ! id -nG veil 2>/dev/null | tr ' ' '\n' | grep -qx veil-proxy; then
+    if command -v usermod >/dev/null 2>&1; then
+        usermod -aG veil-proxy veil
+    elif command -v addgroup >/dev/null 2>&1; then
+        addgroup veil veil-proxy
+    else
+        echo "Cannot add user veil to group veil-proxy: neither usermod nor addgroup is installed" >&2
+        exit 1
+    fi
 fi
 
 if [ -f /etc/sysctl.d/99-veil-quic.conf ]; then

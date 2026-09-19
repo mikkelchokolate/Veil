@@ -61,13 +61,20 @@ import type {
 
 import type {
   ApplyHistoryEntry,
+  ApplyJob,
   ApplyPlanResponse,
+  ApplyReconcileResponse,
   ApplyRequest,
   ApplyResponse,
+  ApplyRetryResponse,
+  ApplyRollbackResponse,
+  ApplyStateResponse,
   BadRequestResponse,
   ConflictResponse,
+  ErrorEnvelope,
   GetApiApplyJobs200,
   LockedResponse,
+  NotFoundResponse,
   PostApiApplyRollbackBody,
   RURecommendedPreviewRequest,
   RURecommendedPreviewResponse,
@@ -98,7 +105,7 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
 };
 
 export type getApiApplyStateResponse200 = {
-  data: void
+  data: ApplyStateResponse
   status: 200
 }
 
@@ -322,12 +329,12 @@ export function useGetApiApplyJobs<TData = Awaited<ReturnType<typeof getApiApply
 
 
 export type getApiApplyJobsIdResponse200 = {
-  data: void
+  data: ApplyJob
   status: 200
 }
 
 export type getApiApplyJobsIdResponse404 = {
-  data: void
+  data: NotFoundResponse
   status: 404
 }
 
@@ -373,7 +380,7 @@ export const getGetApiApplyJobsIdQueryKey = (id: string,) => {
     }
 
 
-export const getGetApiApplyJobsIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiApplyJobsId>>, TError = void>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getGetApiApplyJobsIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiApplyJobsId>>, TError = NotFoundResponse>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -392,10 +399,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetApiApplyJobsIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiApplyJobsId>>>
-export type GetApiApplyJobsIdQueryError = void
+export type GetApiApplyJobsIdQueryError = NotFoundResponse
 
 
-export function useGetApiApplyJobsId<TData = Awaited<ReturnType<typeof getApiApplyJobsId>>, TError = void>(
+export function useGetApiApplyJobsId<TData = Awaited<ReturnType<typeof getApiApplyJobsId>>, TError = NotFoundResponse>(
  id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getApiApplyJobsId>>,
@@ -405,7 +412,7 @@ export function useGetApiApplyJobsId<TData = Awaited<ReturnType<typeof getApiApp
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiApplyJobsId<TData = Awaited<ReturnType<typeof getApiApplyJobsId>>, TError = void>(
+export function useGetApiApplyJobsId<TData = Awaited<ReturnType<typeof getApiApplyJobsId>>, TError = NotFoundResponse>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getApiApplyJobsId>>,
@@ -415,7 +422,7 @@ export function useGetApiApplyJobsId<TData = Awaited<ReturnType<typeof getApiApp
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiApplyJobsId<TData = Awaited<ReturnType<typeof getApiApplyJobsId>>, TError = void>(
+export function useGetApiApplyJobsId<TData = Awaited<ReturnType<typeof getApiApplyJobsId>>, TError = NotFoundResponse>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -423,7 +430,7 @@ export function useGetApiApplyJobsId<TData = Awaited<ReturnType<typeof getApiApp
  * @summary Get one apply job
  */
 
-export function useGetApiApplyJobsId<TData = Awaited<ReturnType<typeof getApiApplyJobsId>>, TError = void>(
+export function useGetApiApplyJobsId<TData = Awaited<ReturnType<typeof getApiApplyJobsId>>, TError = NotFoundResponse>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiApplyJobsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -441,12 +448,12 @@ export function useGetApiApplyJobsId<TData = Awaited<ReturnType<typeof getApiApp
 
 
 export type postApiApplyJobsIdRetryResponse200 = {
-  data: void
+  data: ApplyRetryResponse
   status: 200
 }
 
 export type postApiApplyJobsIdRetryResponse404 = {
-  data: void
+  data: NotFoundResponse
   status: 404
 }
 
@@ -507,7 +514,7 @@ export const postApiApplyJobsIdRetry = async (id: string, options?: Parameters<t
 
 export const getPostApiApplyJobsIdRetryMutationKey = () => ['postApiApplyJobsIdRetry'] as const;
 
-export const getPostApiApplyJobsIdRetryMutationOptions = <TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+export const getPostApiApplyJobsIdRetryMutationOptions = <TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError,PostApiApplyJobsIdRetryMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError,PostApiApplyJobsIdRetryMutationVariables, TContext> => {
 
@@ -536,13 +543,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiApplyJobsIdRetryMutationResult = NonNullable<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>>
 
-    export type PostApiApplyJobsIdRetryMutationError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiApplyJobsIdRetryMutationError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
     export type PostApiApplyJobsIdRetryMutationVariables = {id: string}
 
     /**
  * @summary Create a NEW apply job for the same desired revision
  */
-export const usePostApiApplyJobsIdRetry = <TError = void | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+export const usePostApiApplyJobsIdRetry = <TError = NotFoundResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>, TError,PostApiApplyJobsIdRetryMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiApplyJobsIdRetry>>,
@@ -553,7 +560,7 @@ export const usePostApiApplyJobsIdRetry = <TError = void | ConflictResponse | Va
       return useMutation(getPostApiApplyJobsIdRetryMutationOptions(options), queryClient);
     }
     export type postApiApplyReconcileResponse200 = {
-  data: void
+  data: ApplyReconcileResponse
   status: 200
 }
 
@@ -660,7 +667,7 @@ export const usePostApiApplyReconcile = <TError = ConflictResponse | ValidationF
       return useMutation(getPostApiApplyReconcileMutationOptions(options), queryClient);
     }
     export type postApiApplyRollbackResponse200 = {
-  data: void
+  data: ApplyRollbackResponse
   status: 200
 }
 
@@ -797,7 +804,7 @@ export const usePostApiApplyRollback = <TError = BadRequestResponse | void | Con
 }
 
 export type postApiApplyResponse400 = {
-  data: BadRequestResponse
+  data: ApplyResponse | ErrorEnvelope
   status: 400
 }
 
@@ -807,7 +814,7 @@ export type postApiApplyResponse409 = {
 }
 
 export type postApiApplyResponse422 = {
-  data: ValidationFailedResponse
+  data: ApplyResponse | ErrorEnvelope
   status: 422
 }
 
@@ -872,7 +879,7 @@ return apiFetch<postApiApplyResponse>(getPostApiApplyUrl(),
 
 export const getPostApiApplyMutationKey = () => ['postApiApply'] as const;
 
-export const getPostApiApplyMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+export const getPostApiApplyMutationOptions = <TError = ApplyResponse | ErrorEnvelope | ConflictResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApply>>, TError,PostApiApplyMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiApply>>, TError,PostApiApplyMutationVariables, TContext> => {
 
@@ -901,13 +908,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiApplyMutationResult = NonNullable<Awaited<ReturnType<typeof postApiApply>>>
     export type PostApiApplyMutationBody = ApplyRequest
-    export type PostApiApplyMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiApplyMutationError = ApplyResponse | ErrorEnvelope | ConflictResponse | LockedResponse | ServiceUnavailableResponse
     export type PostApiApplyMutationVariables = {data: ApplyRequest}
 
     /**
  * @summary Stage and optionally promote current management state
  */
-export const usePostApiApply = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+export const usePostApiApply = <TError = ApplyResponse | ErrorEnvelope | ConflictResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiApply>>, TError,PostApiApplyMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiApply>>,

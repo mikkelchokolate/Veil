@@ -214,9 +214,9 @@ export function useGetApiVersion<TData = Awaited<ReturnType<typeof getApiVersion
 
 
 
-export type postApiVersionUpdateResponse200 = {
+export type postApiVersionUpdateResponse202 = {
   data: UpdateResponse
-  status: 200
+  status: 202
 }
 
 export type postApiVersionUpdateResponse400 = {
@@ -254,7 +254,7 @@ export type postApiVersionUpdateResponse503 = {
   status: 503
 }
 
-export type postApiVersionUpdateResponseSuccess = (postApiVersionUpdateResponse200) & {
+export type postApiVersionUpdateResponseSuccess = (postApiVersionUpdateResponse202) & {
   headers: Headers;
 };
 export type postApiVersionUpdateResponseError = (postApiVersionUpdateResponse400 | postApiVersionUpdateResponse409 | postApiVersionUpdateResponse422 | postApiVersionUpdateResponse423 | postApiVersionUpdateResponse500 | postApiVersionUpdateResponse502 | postApiVersionUpdateResponse503) & {

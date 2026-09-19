@@ -188,6 +188,10 @@ func TestPackageScriptsExist(t *testing.T) {
 	if !strings.Contains(postinstallScript, "/etc/veil/panel") {
 		t.Fatal("postinstall.sh must migrate Panel TLS material under /etc/veil/panel")
 	}
+	if strings.Contains(postinstallScript, "usermod -aG veil-proxy veil || true") ||
+		strings.Contains(postinstallScript, "addgroup veil veil-proxy || true") {
+		t.Fatal("postinstall.sh must not swallow veil-proxy group membership failures")
+	}
 }
 
 func TestDockerEntrypointKeepsApplyRootOffLiveGeneratedTree(t *testing.T) {
@@ -234,11 +238,18 @@ func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 			"LockPersonality=true",
 			"RestrictRealtime=true",
 			"MemoryDenyWriteExecute=true",
-			"UMask=0077",
 		} {
 			if !strings.Contains(config, want) {
 				t.Fatalf("systemd unit %s missing hardening directive %q:\n%s", unit, want, config)
 			}
+		}
+		wantUMask := "UMask=0077"
+		if strings.HasSuffix(unit, "veil-mieru.service") {
+			// mita's appctl UDS must stay group-writable for the veil panel.
+			wantUMask = "UMask=0007"
+		}
+		if !strings.Contains(config, wantUMask) {
+			t.Fatalf("systemd unit %s missing %q:\n%s", unit, wantUMask, config)
 		}
 	}
 	protocolUnits := []string{

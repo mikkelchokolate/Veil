@@ -74,7 +74,8 @@ export const GetApiAuthStatusResponse = zod.object({
   "username": zod.string().optional(),
   "role": zod.enum(['admin', 'viewer']).optional(),
   "locale": zod.enum(['en', 'ru']).optional().describe('Persisted Panel display language.'),
-  "csrfToken": zod.string().optional()
+  "csrfToken": zod.string().optional(),
+  "authMethod": zod.enum(['static-token', 'dev-anonymous']).optional().describe('How the request was authenticated; absent for cookie-session responses.')
 })
 
 /**

@@ -89,6 +89,38 @@ func TestAtomicUserUpdateStopsWhenSessionPersistenceFails(t *testing.T) {
 	}
 }
 
+// Regression for #597: the residual handleUserByNameRoute PUT path discarded
+// the session-revocation error and still recorded a successful update. It must
+// fail the request and leave the user untouched, like handleAtomicUserUpdate.
+func TestLegacyUserUpdateStopsWhenSessionPersistenceFails(t *testing.T) {
+	registry, session := sessionRegistryWithFailingPersistence(t)
+	state := &managementState{
+		sessions: registry,
+		users: []User{
+			{Username: "admin", PasswordHash: "admin-hash", Role: "admin", Locale: "en"},
+			{Username: session.Username, PasswordHash: "alice-hash", Role: "viewer", Locale: "en"},
+		},
+	}
+	req := httptest.NewRequest(http.MethodPut, "/api/users/alice", strings.NewReader(`{"role":"admin","locale":"ru"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(context.WithValue(req.Context(), contextKeyRole, "admin"))
+	rec := httptest.NewRecorder()
+
+	state.handleUserByNameRoute(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	for _, user := range state.users {
+		if user.Username == "alice" && (user.Role != "viewer" || user.Locale != "en") {
+			t.Fatalf("user changed despite revocation failure: %+v", user)
+		}
+	}
+	if !sessionPresentInMemory(registry, session.Token) {
+		t.Fatal("session disappeared despite rollback")
+	}
+}
+
 func TestBackupOwnerRevocationKeepsRetryTokenOnPersistenceFailure(t *testing.T) {
 	registry, session := sessionRegistryWithFailingPersistence(t)
 	state := &managementState{
