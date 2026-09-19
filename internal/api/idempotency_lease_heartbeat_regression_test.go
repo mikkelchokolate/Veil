@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -76,4 +78,59 @@ func TestExpiredIdempotencyReservationCannotRunReplacementConcurrently(t *testin
 	if got := maxActive.Load(); got != 1 {
 		t.Fatalf("concurrent domain mutations=%d calls=%d, want exactly one owner", got, calls.Load())
 	}
+}
+
+func TestDurableHeartbeatSurfacesExecFailure(t *testing.T) {
+	db := openApplyTestDB(t)
+	store := newIdempotencyStore(db)
+	defer store.Close()
+	store.reservationTTL = 150 * time.Millisecond
+
+	var logBuf bytes.Buffer
+	previousWriter := log.Writer()
+	log.SetOutput(&logBuf)
+	t.Cleanup(func() { log.SetOutput(previousWriter) })
+
+	stop := store.startDurableHeartbeat("scope", "fingerprint", durableIdempotencyRecord{Generation: 1})
+	defer stop()
+	// Close the database underneath the heartbeat: a discarded Exec error would
+	// leave the lease silently expiring while the caller assumes it is live.
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(logBuf.String(), "idempotency heartbeat") {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("heartbeat Exec failure was discarded instead of logged")
+}
+
+func TestDurableHeartbeatStopsAfterOwnershipLoss(t *testing.T) {
+	db := openApplyTestDB(t)
+	defer db.Close()
+	store := newIdempotencyStore(db)
+	defer store.Close()
+	store.reservationTTL = 150 * time.Millisecond
+
+	var logBuf bytes.Buffer
+	previousWriter := log.Writer()
+	log.SetOutput(&logBuf)
+	t.Cleanup(func() { log.SetOutput(previousWriter) })
+
+	// No matching reserved row exists, so the UPDATE affects zero rows: the
+	// reservation was taken over or removed and the heartbeat must stop
+	// instead of reporting a live lease.
+	stop := store.startDurableHeartbeat("scope", "fingerprint", durableIdempotencyRecord{Generation: 1})
+	defer stop()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(logBuf.String(), "ownership lost") {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("heartbeat kept running after reservation ownership was lost")
 }
