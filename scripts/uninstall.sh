@@ -5,6 +5,8 @@ INSTALL_DIR="${VEIL_INSTALL_DIR:-/usr/local/bin}"
 ETC_DIR="${VEIL_ETC_DIR:-/etc/veil}"
 VAR_DIR="${VEIL_VAR_DIR:-/var/lib/veil}"
 SYSTEMD_DIR="${VEIL_SYSTEMD_DIR:-/etc/systemd/system}"
+CADDY_STATE_DIR="${VEIL_CADDY_STATE_DIR:-/var/lib/caddy}"
+MITA_STATE_DIR="${VEIL_MITA_STATE_DIR:-/var/lib/mita}"
 YES=""
 DRY_RUN=""
 PURGE=""
@@ -73,9 +75,12 @@ if [[ -n "${KEEP_DATA}" ]]; then args+=(--keep-data); fi
 
 has_leftover_state() {
   [[ -e "${ETC_DIR}" || -e "${VAR_DIR}" ]] && return 0
+  [[ -e "${CADDY_STATE_DIR}" || -e "${MITA_STATE_DIR}" ]] && return 0
+  [[ -d "${SYSTEMD_DIR}/veil-backup.service.d" ]] && return 0
   local unit
-  for unit in "${SYSTEMD_DIR}"/veil*.service "${SYSTEMD_DIR}"/veil*.socket "${SYSTEMD_DIR}"/veil*.timer; do
-    if [[ -e "${unit}" ]]; then
+  for unit in "${SYSTEMD_DIR}"/veil*.service "${SYSTEMD_DIR}"/veil*.socket "${SYSTEMD_DIR}"/veil*.timer \
+    "${SYSTEMD_DIR}"/multi-user.target.wants/veil-*@*.service; do
+    if [[ -e "${unit}" || -L "${unit}" ]]; then
       return 0
     fi
   done
@@ -87,26 +92,41 @@ print_leftover_plan() {
   if [[ -z "${KEEP_DATA}" ]]; then
     echo "  - ${ETC_DIR}"
     echo "  - ${VAR_DIR}"
+    echo "  - ${CADDY_STATE_DIR}"
+    echo "  - ${MITA_STATE_DIR}"
   else
     echo "  - keep ${ETC_DIR}"
     echo "  - keep ${VAR_DIR}"
+    echo "  - keep ${CADDY_STATE_DIR}"
+    echo "  - keep ${MITA_STATE_DIR}"
   fi
   echo "  - ${SYSTEMD_DIR}/veil*.service"
   echo "  - ${SYSTEMD_DIR}/veil*.socket"
   echo "  - ${SYSTEMD_DIR}/veil*.timer"
+  echo "  - ${SYSTEMD_DIR}/veil-backup.service.d"
+  echo "  - ${SYSTEMD_DIR}/multi-user.target.wants/veil-*@*.service"
 }
 
 remove_leftover_state() {
   if command -v systemctl >/dev/null 2>&1; then
-    systemctl stop veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.timer >/dev/null 2>&1 || true
-    systemctl disable veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.timer >/dev/null 2>&1 || true
+    systemctl stop veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.service veil-backup.timer >/dev/null 2>&1 || true
+    systemctl disable veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.service veil-backup.timer >/dev/null 2>&1 || true
     systemctl stop 'veil-hysteria2@*' 'veil-olcrtc@*' >/dev/null 2>&1 || true
-    systemctl disable 'veil-hysteria2@*.service' 'veil-olcrtc@*.service' >/dev/null 2>&1 || true
+    # Template-glob disable cannot clear per-instance wants links (audit #176);
+    # stop/disable each concrete instance found under multi-user.target.wants.
+    local instance
+    for instance in "${SYSTEMD_DIR}"/multi-user.target.wants/veil-*@*.service; do
+      [[ -e "${instance}" || -L "${instance}" ]] || continue
+      systemctl stop "$(basename "${instance}")" >/dev/null 2>&1 || true
+      systemctl disable "$(basename "${instance}")" >/dev/null 2>&1 || true
+    done
   fi
   if [[ -z "${KEEP_DATA}" ]]; then
-    rm -rf "${ETC_DIR}" "${VAR_DIR}"
+    rm -rf "${ETC_DIR}" "${VAR_DIR}" "${CADDY_STATE_DIR}" "${MITA_STATE_DIR}"
   fi
+  rm -rf "${SYSTEMD_DIR}/veil-backup.service.d"
   rm -f "${SYSTEMD_DIR}"/veil*.service "${SYSTEMD_DIR}"/veil*.socket "${SYSTEMD_DIR}"/veil*.timer
+  rm -f "${SYSTEMD_DIR}"/multi-user.target.wants/veil-*@*.service
   if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload >/dev/null 2>&1 || true
   fi
