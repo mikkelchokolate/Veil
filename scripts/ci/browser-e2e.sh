@@ -161,8 +161,8 @@ pw_status=0
 ) || pw_status=$?
 
 # Preserve diagnostics even when Playwright fails (set -e would skip this).
-cp -rf test/browser/playwright-report "${WORK}/" 2>/dev/null || true
-cp -rf test/browser/test-results "${WORK}/" 2>/dev/null || true
+cp -Rf test/browser/playwright-report "${WORK}/" 2>/dev/null || true
+cp -Rf test/browser/test-results "${WORK}/" 2>/dev/null || true
 
 if [ "${pw_status}" -ne 0 ]; then
   exit "${pw_status}"

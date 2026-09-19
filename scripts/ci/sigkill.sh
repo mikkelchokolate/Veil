@@ -9,12 +9,16 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${CI_ROOT}"
 
 ci_run sigkill-sqlite-durability \
-  go test ./internal/storage -run '^TestSQLiteCommittedDesiredSnapshotSurvivesImmediateProcessKill$' -count=1 -timeout=60s
+  go test ./internal/storage -run '^TestSQLiteCommittedDesiredSnapshotSurvivesImmediateProcessKill$' -count=1 -v -timeout=60s
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/sigkill-sqlite-durability.log"
 ci_run sigkill-promotion \
-  go test ./internal/privileged -run '^(TestPromotionRecoversSIGKILLAfterEveryArtifactPublication|TestPromotionRollbackRecoversSIGKILLAfterEveryArtifactPublication)$' -count=1 -timeout=2m
+  go test ./internal/privileged -run '^(TestPromotionRecoversSIGKILLAfterEveryArtifactPublication|TestPromotionRollbackRecoversSIGKILLAfterEveryArtifactPublication)$' -count=1 -v -timeout=2m
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/sigkill-promotion.log"
 ci_run sigkill-firewall \
-  go test ./internal/privileged -run '^TestFirewallTransactionRecoversExactStateAfterSIGKILL$' -count=1 -timeout=60s
+  go test ./internal/privileged -run '^TestFirewallTransactionRecoversExactStateAfterSIGKILL$' -count=1 -v -timeout=60s
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/sigkill-firewall.log"
 ci_run sigkill-restore \
-  go test ./internal/backup -run '^TestRestoreRecoversSIGKILLAfterEveryFilePublication$' -count=1 -timeout=2m
+  go test ./internal/backup -run '^TestRestoreRecoversSIGKILLAfterEveryFilePublication$' -count=1 -v -timeout=2m
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/sigkill-restore.log"
 
 ci_log "sigkill job passed"
