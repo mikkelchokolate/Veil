@@ -136,9 +136,14 @@ func TestRequiredOlcRTCRuntimeContract(t *testing.T) {
 	if !strings.Contains(log, "veil-required-e2e") {
 		t.Fatalf("olcRTC exited early (%v) without echoing the unique room marker — cannot prove it consumed the generated config:\n%s", err, log)
 	}
+	// Corroboration must add evidence BEYOND the room marker: signaling-stage
+	// vocabulary proves the process progressed past config load toward the
+	// (deliberately unreachable) Jitsi endpoint. Room-URL substrings
+	// ("veil-required-e2e", "127.0.0.1") are excluded — they are already
+	// implied by the mandatory check above and would make this loop a no-op.
 	signalingEvidence := []string{
-		"127.0.0.1", "signal", "signaling", "websocket", "dial", "connect",
-		"refused", "handshake", "tls", "jitsi", "veil-required-e2e",
+		"signal", "signaling", "websocket", "dial", "connect",
+		"refused", "handshake", "tls", "jitsi",
 	}
 	proven := false
 	for _, marker := range signalingEvidence {
