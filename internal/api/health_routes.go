@@ -98,7 +98,7 @@ func (routes HealthRoutes) snapshot(parent context.Context) (healthResponse, boo
 	sessionRegistry := state.sessions
 	sessionsAvailable := sessionRegistry != nil
 	requireHelper := state.requirePrivilegedHelper
-	helperAvailable := state.privileged != nil
+	helperClient := state.privileged
 	state.mu.Unlock()
 	if stateLoadFailed {
 		components["state_store"] = healthComponent{Status: "degraded", Reason: "load_or_integrity_failed"}
@@ -132,9 +132,23 @@ func (routes HealthRoutes) snapshot(parent context.Context) (healthResponse, boo
 		components["apply_lease"] = healthComponent{Status: "degraded", Reason: "runner_unavailable"}
 		ready = false
 	}
-	if requireHelper && !helperAvailable {
-		components["privileged_helper"] = healthComponent{Status: "degraded", Reason: "unavailable"}
-		ready = false
+	if requireHelper {
+		if helperClient == nil {
+			components["privileged_helper"] = healthComponent{Status: "degraded", Reason: "unavailable"}
+			ready = false
+		} else if probe, ok := helperClient.(interface {
+			Reachable(context.Context) error
+		}); ok {
+			// The client object survives socket detachment; only an actual dial
+			// proves the helper is still reachable.
+			probeCtx, cancel := context.WithTimeout(parent, 200*time.Millisecond)
+			reachErr := probe.Reachable(probeCtx)
+			cancel()
+			if reachErr != nil {
+				components["privileged_helper"] = healthComponent{Status: "degraded", Reason: "unreachable"}
+				ready = false
+			}
+		}
 	}
 	if !sessionsAvailable {
 		components["session_store"] = healthComponent{Status: "degraded", Reason: "unavailable"}

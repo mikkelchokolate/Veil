@@ -230,7 +230,7 @@ test.describe('Veil Panel — extended critical flows', () => {
     ).json();
     const helperComponent = health.components?.privileged_helper;
     expect(
-      helperComponent?.status === 'degraded' && helperComponent?.reason === 'unavailable',
+      helperComponent?.status === 'degraded' && ['unavailable', 'unreachable'].includes(helperComponent?.reason),
       `privileged helper must be reported detached before the failure contract runs: ${JSON.stringify(helperComponent)}`,
     ).toBe(true);
 
