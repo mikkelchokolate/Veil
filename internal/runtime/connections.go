@@ -40,20 +40,43 @@ func findInodeByPort(proto, hexPort string) string {
 	}
 	defer f.Close()
 
+	var lines []string
 	scanner := bufio.NewScanner(f)
-	first := true
 	for scanner.Scan() {
-		if first {
-			first = false
+		lines = append(lines, scanner.Text())
+	}
+	return findInodeByPortInSocketLines(proto, hexPort, lines)
+}
+
+// findInodeByPortInSocketLines locates the inode of the socket LISTENING on
+// hexPort. The port must match the row's local address field only — a
+// substring match could otherwise pick a connected socket whose *remote* port
+// happens to equal the listen port and steal process attribution. The same
+// listener filter as ConnectionSocketRowParser applies (TCP state 0A, UDP
+// all-zero remote).
+func findInodeByPortInSocketLines(proto, hexPort string, lines []string) string {
+	for i, line := range lines {
+		if i == 0 {
 			continue
 		}
-		line := scanner.Text()
-		if strings.Contains(line, ":"+hexPort+" ") {
-			fields := strings.Fields(line)
-			if len(fields) >= 10 {
-				return fields[9]
+		fields := strings.Fields(line)
+		if len(fields) < 10 {
+			continue
+		}
+		localParts := strings.SplitN(fields[1], ":", 2)
+		if len(localParts) != 2 || !strings.EqualFold(localParts[1], hexPort) {
+			continue
+		}
+		if proto == "tcp" || proto == "tcp6" {
+			if fields[3] != "0A" {
+				continue
+			}
+		} else if proto == "udp" || proto == "udp6" {
+			if !isAllZeroProcNetAddress(fields[2]) {
+				continue
 			}
 		}
+		return fields[9]
 	}
 	return ""
 }
