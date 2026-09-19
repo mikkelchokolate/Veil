@@ -33,7 +33,9 @@ RestrictSUIDSGID=true
 LockPersonality=true
 RestrictRealtime=true
 MemoryDenyWriteExecute=true
-UMask=0077
+# appctl UDS stays group-writable so the veil panel (supplementary
+# veil-proxy member) can connect; unix connect needs write on the socket.
+UMask=0007
 InaccessiblePaths=/run/veil/helper.sock /var/lib/veil
 
 [Install]
