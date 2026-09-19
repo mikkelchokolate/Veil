@@ -50,6 +50,19 @@ var systemdHardeningBlockOlcrtc = strings.Replace(
 	1,
 )
 
+// mita's appctl UDS must stay connectable by the veil panel: connecting to a
+// unix socket needs write permission, so the daemon creates it group-writable
+// for veil-proxy (the panel account is a supplementary veil-proxy member).
+// UMask 0007 deliberately widens every file mita creates under its
+// RuntimeDirectory/StateDirectory to group scope — acceptable because the
+// panel is already in veil-proxy — and keeps world access at none.
+var systemdHardeningBlockMieru = strings.Replace(
+	systemdHardeningBlock,
+	"UMask=0077",
+	"# appctl UDS stays group-writable so the veil panel (supplementary\n# veil-proxy member) can connect; unix connect needs write on the socket.\nUMask=0007",
+	1,
+)
+
 func systemdQuote(p string) string {
 	if p == "" || !strings.ContainsAny(p, " \t\"'\\") {
 		return p
@@ -345,7 +358,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlock + `InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
+` + systemdHardeningBlockMieru + `InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
 
 [Install]
 WantedBy=multi-user.target
