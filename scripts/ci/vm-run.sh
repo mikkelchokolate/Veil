@@ -64,7 +64,7 @@ ACTIVE_SMOLVM_MACHINE=""
 ROOTFS_EXPORT_CONTAINER=""
 ROOTFS_EXPORT_TMP=""
 
-# shellcheck disable=SC2317  # invoked indirectly via trap
+# shellcheck disable=SC2317,SC2329  # invoked indirectly via trap
 cleanup() {
   rc=$?
   if [ -n "${ACTIVE_SMOLVM_MACHINE}" ]; then
@@ -75,7 +75,7 @@ cleanup() {
   [ -z "${ROOTFS_EXPORT_TMP}" ] || rm -rf "${ROOTFS_EXPORT_TMP}"
   # Merge guest artifacts into the run's artifact dir (success and failure).
   if [ -d "${EXCHANGE}/artifacts" ]; then
-    cp -rf "${EXCHANGE}/artifacts/." "${CI_ARTIFACT_DIR}/" 2>/dev/null || true
+    cp -Rf "${EXCHANGE}/artifacts/." "${CI_ARTIFACT_DIR}/" 2>/dev/null || true
   fi
   rm -rf "${EXCHANGE}"
   if [ "${CACHE_EPHEMERAL:-0}" = "1" ] && [ -n "${CACHE_ROOT:-}" ]; then
@@ -220,7 +220,7 @@ run_job_docker_systemd() {
 
   local booted=1
   for _ in $(seq 1 60); do
-    if docker exec "${ctr}" systemctl is-system-running 2>/dev/null | grep -Eq 'running|degraded'; then
+    if grep -Eq 'running|degraded' < <(docker exec "${ctr}" systemctl is-system-running 2>/dev/null); then
       booted=0; break
     fi
     sleep 1

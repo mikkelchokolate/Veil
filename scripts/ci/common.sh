@@ -35,6 +35,18 @@ ci_step() { printf '\n[ci] === %s ===\n' "$*"; }
 ci_warn() { printf '[ci] WARNING: %s\n' "$*" >&2; }
 ci_die()  { printf '[ci] ERROR: %s\n' "$*" >&2; exit 1; }
 
+# ci_assert_tests_ran <log-file>: fail when a verbose `go test` log shows that
+# zero tests executed. `go test -run <pattern>` exits 0 when the pattern matches
+# nothing, so a targeted CI gate must prove its tests actually ran.
+ci_assert_tests_ran() {
+  local log="$1"
+  if grep -qE '^(=== RUN[[:space:]]|--- (PASS|FAIL|SKIP):)' "${log}"; then
+    return 0
+  fi
+  ci_warn "zero tests executed (see ${log}) — refusing to pass on an empty selection"
+  return 1
+}
+
 # Run a command, tee its output to a job log, preserve the command's exit code
 # (tee must never mask failures).
 ci_run() {
