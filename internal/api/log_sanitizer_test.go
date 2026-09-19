@@ -70,6 +70,33 @@ func TestSanitizeServiceLogOutputSecretFormats(t *testing.T) {
 			wantClean: true,
 		},
 		{
+			// audit: the generic authorization matcher only consumed the
+			// "Basic" scheme token and left the credential visible.
+			name:      "authorization basic header",
+			in:        "Authorization: Basic " + secret,
+			wantClean: true,
+		},
+		{
+			name:      "proxy-authorization basic header",
+			in:        "Proxy-Authorization: Basic " + secret,
+			wantClean: true,
+		},
+		{
+			// journalctl -o short-iso prefixes renderer YAML lines; the
+			// olcRTC crypto "key:" secret must still be redacted (same
+			// tolerance the userpass block already had).
+			name: "journalctl-prefixed olcrtc YAML crypto key",
+			in: "2026-08-13T10:00:00Z host olcrtc[1]: crypto:\n" +
+				"2026-08-13T10:00:00Z host olcrtc[1]:   key: " + secret + "\n" +
+				"2026-08-13T10:00:00Z host olcrtc[1]:   cipher: aes256",
+			wantClean: true,
+		},
+		{
+			name:      "journalctl-prefixed YAML password",
+			in:        "2026-08-13T10:00:00Z host hysteria[1]:   password: " + secret,
+			wantClean: true,
+		},
+		{
 			// audit #186: snake_case JSON key used by Caddy
 			name:      "caddy JSON auth_pass snake_case",
 			in:        `{"auth_pass":"` + secret + `","username":"alice"}`,
