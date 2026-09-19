@@ -13,10 +13,13 @@ if [ ! -f web/dist/index.html ]; then
 fi
 
 ci_run multiprocess-apply \
-  go test ./internal/apply -run '^TestApplyFencingAcrossOSProcesses$' -count=1 -timeout=60s
+  go test ./internal/apply -run '^TestApplyFencingAcrossOSProcesses$' -count=1 -v -timeout=60s
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/multiprocess-apply.log"
 ci_run multiprocess-idempotency \
-  go test ./internal/api -run '^TestIdempotencyReservationIsSharedAcrossOSProcesses$' -count=1 -timeout=60s
+  go test ./internal/api -run '^TestIdempotencyReservationIsSharedAcrossOSProcesses$' -count=1 -v -timeout=60s
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/multiprocess-idempotency.log"
 ci_run multiprocess-promotion-lock \
-  go test ./internal/privileged -run '^TestPromotionLockCoversPreflightThroughPublicationAcrossProcesses$' -count=1 -timeout=60s
+  go test ./internal/privileged -run '^TestPromotionLockCoversPreflightThroughPublicationAcrossProcesses$' -count=1 -v -timeout=60s
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/multiprocess-promotion-lock.log"
 
 ci_log "multi-process job passed"

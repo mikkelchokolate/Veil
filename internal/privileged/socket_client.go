@@ -97,6 +97,18 @@ func (c *SocketClient) CaddyLoad(ctx context.Context, request CaddyLoadRequest) 
 	return c.call(ctx, RequestEnvelope{Operation: OperationCaddyLoad, CaddyLoad: &request}, nil)
 }
 
+// Reachable reports whether the helper socket currently accepts a unix
+// connection. The client object persists after the socket disappears (e.g. a
+// detached alias or a stopped helper), so health reporting must probe
+// reachability instead of trusting client presence.
+func (c *SocketClient) Reachable(ctx context.Context) error {
+	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", c.path)
+	if err != nil {
+		return err
+	}
+	return conn.Close()
+}
+
 func (c *SocketClient) call(ctx context.Context, request RequestEnvelope, result any) error {
 	request.Version = ProtocolVersion
 	request.RequestID = newRequestID()

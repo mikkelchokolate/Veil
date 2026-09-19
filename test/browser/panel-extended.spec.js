@@ -222,28 +222,34 @@ test.describe('Veil Panel — extended critical flows', () => {
   test('failed apply job can be retried and produces a NEW job record', async ({ request }) => {
     // The browser-gate Panel uses a helper alias for startup recovery, then
     // the harness removes that alias. Every later apply therefore fails
-    // honestly at the privileged boundary. A plain client mutation is enough
-    // to enqueue one.
-    const stamp = Date.now();
-    await createClientAPI(request, `e2e-apply-${stamp}`);
+    // honestly at the privileged boundary — but first PROVE the helper is
+    // actually detached, otherwise any unrelated apply failure would satisfy
+    // this test for the wrong reason.
+    const health = await (
+      await request.get('/api/health', { headers: tokenHeaders })
+    ).json();
+    const helperComponent = health.components?.privileged_helper;
+    expect(
+      helperComponent?.status === 'degraded' && ['unavailable', 'unreachable'].includes(helperComponent?.reason),
+      `privileged helper must be reported detached before the failure contract runs: ${JSON.stringify(helperComponent)}`,
+    ).toBe(true);
 
-    // Wait for the auto-apply job to reach a terminal state.
-    let latest;
-    await expect
-      .poll(
-        async () => {
-          const jobs = await (
-            await request.get('/api/apply/jobs', { headers: tokenHeaders })
-          ).json();
-          latest = jobs.items?.[0];
-          return latest && !['queued', 'running', 'applying', 'rolling_back'].includes(latest.status)
-            ? latest.status
-            : null;
-        },
-        { timeout: 30_000, intervals: [500, 1000, 2000] },
-      )
-      .not.toBeNull();
-    expect(latest.status, 'apply must fail after the browser helper alias is detached').toBe('failed');
+    // A plain client mutation is enough to enqueue one apply job.
+    const stamp = Date.now();
+    const mutation = await createClientMutation(request, `e2e-apply-${stamp}`);
+    const latest = mutation.applyJob;
+    expect(latest, 'client mutation returns an apply job').toBeTruthy();
+
+    // Wait for THAT job — not "whatever is newest in history" — to reach a
+    // terminal state.
+    const failed = await waitForApplyJob(request, latest.id);
+    expect(failed.status, 'apply must fail after the browser helper alias is detached').toBe('failed');
+    // The failure must attribute to the detached privileged helper; a generic
+    // failure elsewhere would pass the status check while proving nothing.
+    expect(
+      `${failed.errorCode ?? ''} ${failed.errorMessage ?? ''}`,
+      `failure must name the privileged helper: ${JSON.stringify(failed)}`,
+    ).toMatch(/privileged helper/i);
 
     // Retry creates a NEW job for the same desired revision; the old record
     // is immutable history.
