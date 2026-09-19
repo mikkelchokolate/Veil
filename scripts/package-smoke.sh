@@ -107,8 +107,8 @@ EOF
       test "$(stat -c "%U:%G %a" /var/lib/veil/sessions.json)" = "veil:veil 600"
       test "$(stat -c "%U:%G %a" /etc/veil/state.key)" = "root:veil 640"
       test "$(stat -c "%U:%G %a" /etc/veil/veil.env)" = "root:veil 640"
-      test "$(stat -c "%U:%G %a" /etc/veil/panel)" = "root:veil 750"
-      test "$(stat -c "%U:%G %a" /etc/veil/panel/tls.key)" = "root:veil 640"
+      test "$(stat -c "%U:%G %a" /etc/veil/panel)" = "root:veil-proxy 750"
+      test "$(stat -c "%U:%G %a" /etc/veil/panel/tls.key)" = "root:veil-proxy 640"
       test "$(cat /etc/veil/panel/tls.key)" = panel-tls-key
       for file in state.json sessions.json state.key veil.env; do
         find /var/lib/veil/migration-backups -type f -name "$file" -print -quit | grep .
