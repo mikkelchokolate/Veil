@@ -188,8 +188,9 @@ func TestFirewallEndpoint(t *testing.T) {
 
 	r, _ := newTestRouter(ServerInfo{Version: "test"})
 
-	// Configure settings with a panel port
-	settingsBody := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"server"}`)
+	// Configure settings with a public panel port — a loopback listen would
+	// produce no UFW rule at all (audit #356).
+	settingsBody := strings.NewReader(`{"panelListen":"0.0.0.0:2096","mode":"server"}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/settings", settingsBody)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
