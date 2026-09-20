@@ -19,3 +19,7 @@ github.com/mikkelchokolate/Veil/internal/apply	TestUpdateRecoveryAcceptsOnlyExac
 github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestRuntimeVersionProbeExecutesProtectedHomeBinaryThroughSystemdBind
 github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestMaliciousRuntimeProbeCannotReadHostSecretsEnvironmentDescriptorsOrNetwork
 github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestRuntimeProbeMaliciousHelper
+# Windows-only by design: the rename-failure simulation uses CreateFile
+# sharing modes (admin_rotate_test_windows.go); unix has no equivalent
+# mandatory lock, so the test intentionally skips off-Windows.
+github.com/mikkelchokolate/Veil/internal/cli	TestAdminRotateKeyRollbackOnFailure
