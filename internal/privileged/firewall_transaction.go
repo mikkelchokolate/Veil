@@ -52,7 +52,12 @@ func reconcileUFW(ctx context.Context, runner CommandRunner, request ResolvedFir
 	if err != nil {
 		return FirewallResult{}, fmt.Errorf("parse preflight ufw status: %w", err)
 	}
-	if len(desired) > 0 && !containsManagementAccessRule(desired) && !hasExistingManagementAccess(initial) {
+	// The enable transition is the dangerous step: once UFW is active its
+	// default-deny policy can cut off the management channel used to reach
+	// the host. Only demand management-access evidence before enabling —
+	// reconciling an already-active firewall cannot create new lockout
+	// exposure (stale deletion skips protected SSH/ACME comments).
+	if len(desired) > 0 && !initial.Enabled && !containsManagementAccessRule(desired) && !hasExistingManagementAccess(initial) {
 		return FirewallResult{}, errors.New("refusing to enable UFW without a staged SSH or Panel management access rule")
 	}
 
@@ -173,12 +178,16 @@ func containsManagementAccessRule(rules []ufwDesiredRule) bool {
 	return false
 }
 
+// hasExistingManagementAccess reports whether the current ruleset already
+// preserves an SSH management channel. A leftover "Veil panel" allow does NOT
+// qualify: the panel may now bind loopback only, so a stale panel rule can be
+// an open port with nothing reachable behind it — treating it as management
+// access would enable UFW with no working way back in (#356).
 func hasExistingManagementAccess(state ufwState) bool {
 	for target, comment := range state.Rules {
 		lowerTarget := strings.ToLower(target)
 		lowerComment := strings.ToLower(comment)
-		if strings.HasPrefix(lowerTarget, "22/") || strings.Contains(lowerComment, "openssh") ||
-			strings.Contains(lowerComment, "management ssh") || strings.Contains(lowerComment, "panel") {
+		if strings.HasPrefix(lowerTarget, "22/") || strings.Contains(lowerComment, "ssh") {
 			return true
 		}
 	}
