@@ -1,6 +1,7 @@
 package hysteria2
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -79,7 +80,7 @@ func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.
 		if socksPort == 0 {
 			socksPort = 40000
 		}
-		hystConfig.Upstream = "127.0.0.1:" + strconv.Itoa(socksPort)
+		hystConfig.Upstream = net.JoinHostPort(warp.SocksDialAddr(), strconv.Itoa(socksPort))
 		hystConfig.GeoIPPath = routingDatPath(paths, "geoip.dat")
 		hystConfig.GeoSitePath = routingDatPath(paths, "geosite.dat")
 		for _, rule := range rules {

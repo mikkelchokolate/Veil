@@ -195,6 +195,27 @@ func TestValidationDetectsInboundConflictWithWarp(t *testing.T) {
 	}
 }
 
+// #359: the WARP SOCKS listener is TCP-only. A UDP inbound sharing the port
+// number is not a real bind conflict and must validate cleanly; the TCP
+// reservation must still fire.
+func TestValidationWarpSocksPortDoesNotReserveUDP(t *testing.T) {
+	udpBody := []byte(`{
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"},
+		"inbounds":[
+			{"name":"hy2","protocol":"hysteria2","transport":"udp","port":40000,"enabled":true}
+		],
+		"routingRules":[],
+		"warp":{"enabled":true}
+	}`)
+	result, err := NewValidation().ValidateBytes(udpBody)
+	if err != nil {
+		t.Fatalf("ValidateBytes: %v", err)
+	}
+	if containsError(result.Errors, "conflicts with warp") {
+		t.Fatalf("UDP inbound on socksPort must not conflict with TCP-only WARP listener, got %+v", result)
+	}
+}
+
 func TestValidationChecksRoutingRules(t *testing.T) {
 	body := []byte(`{
 		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"},
@@ -238,7 +259,7 @@ func TestValidateSnapshotPortsAndWarpDefault(t *testing.T) {
 	if !containsError(errs, "inbounds[1]: duplicate transport/port tcp:443") {
 		t.Fatalf("expected duplicate port error, got %+v", errs)
 	}
-	// warp default port 40000 should be recorded for udp and tcp.
+	// warp default port 40000 is reserved for tcp only (#359).
 	if !containsError(errs, "inbounds[0]: port 443 conflicts with warp") {
 		// 443 != 40000, so no warp conflict expected; this branch is unreachable but left for clarity.
 	}

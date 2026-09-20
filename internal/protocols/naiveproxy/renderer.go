@@ -2,6 +2,7 @@ package naiveproxy
 
 import (
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 
@@ -33,7 +34,7 @@ func (Plugin) RenderConfig(input generatedconfig.ProtocolRenderInput) ([]generat
 		}
 		for key, owner := range plan.Servers {
 			if owner.Kind == caddyassembly.CaddyOwnerNaive {
-				owner.Upstream = "socks5://127.0.0.1:" + strconv.Itoa(socksPort)
+				owner.Upstream = "socks5://" + net.JoinHostPort(input.Warp.SocksDialAddr(), strconv.Itoa(socksPort))
 				plan.Servers[key] = owner
 			}
 		}
