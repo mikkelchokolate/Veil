@@ -18,7 +18,8 @@ const NAV_SMOKE = [
   { link: /^warp$/i, url: /\/warp$/, heading: /^warp outbound$/i },
   { link: /^system$/i, url: /\/system$/, heading: /^system$/i },
   { link: /^backups$/i, url: /\/backups$/, heading: /^backups$/i },
-  { link: /^users$/i, url: /\/users$/, heading: /^users$/i },
+  // Admins get the management view (users.panelUsers); viewers get users.title.
+  { link: /^users$/i, url: /\/users$/, heading: /panel users|^users$/i },
   { link: /^settings$/i, url: /\/settings$/, heading: /^settings$/i },
   { link: /^apply$/i, url: /\/apply$/, heading: /^apply state$/i },
 ];
