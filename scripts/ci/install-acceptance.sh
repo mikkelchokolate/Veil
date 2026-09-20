@@ -582,6 +582,15 @@ id veil >/dev/null || ci_die "veil user missing after package install"
 id veil-proxy >/dev/null || ci_die "veil-proxy user missing after package install"
 id -nG veil | tr ' ' '\n' | grep -qx veil-proxy || ci_die "veil not in veil-proxy group"
 
+# Legacy pre-consolidation per-inbound Caddy leftovers (issue #375): a unit
+# file plus its enablement wants link must not survive package removal —
+# preremove stops/disables the instance and sweeps the want, postremove clears
+# the vendor-dir unit file.
+${SUDO} install -m 0644 /dev/null /lib/systemd/system/veil-caddy@legacy.service
+${SUDO} mkdir -p /etc/systemd/system/multi-user.target.wants
+${SUDO} ln -sf /lib/systemd/system/veil-caddy@legacy.service \
+  /etc/systemd/system/multi-user.target.wants/veil-caddy@legacy.service
+
 ${SUDO} apt-get purge -y veil
 # Remove+purge must leave no packaged payload — the units and sysctl drop-in
 # are package-owned, not conffiles (issues #475, #485).
@@ -590,6 +599,10 @@ for unit in veil.service veil-helper.service veil-helper.socket veil-backup.serv
 done
 test ! -e /etc/sysctl.d/99-veil-quic.conf || ci_die "sysctl drop-in left after purge"
 test ! -e /usr/local/bin/veil || ci_die "veil binary left after purge"
+test ! -e /lib/systemd/system/veil-caddy@legacy.service \
+  || ci_die "legacy veil-caddy@ unit file left in vendor dir after purge"
+test ! -e /etc/systemd/system/multi-user.target.wants/veil-caddy@legacy.service \
+  || ci_die "legacy veil-caddy@ wants link left after purge"
 if systemctl is-enabled --quiet veil-helper.socket 2>/dev/null; then
   ci_die "veil-helper.socket still enabled after purge"
 fi

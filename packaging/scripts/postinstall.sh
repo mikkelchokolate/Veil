@@ -42,9 +42,10 @@ ensure_system_account() {
 
 ensure_system_account veil
 ensure_system_account veil-proxy
-# Caddy runs as veil and reads /etc/veil/generated and /etc/veil/tls through
-# the veil-proxy supplementary group. A silent failure here would leave those
-# directories unreadable after the ownership pass below, so stop loudly.
+# The panel (User=veil) reads /etc/veil/generated, /etc/veil/tls, and the mita
+# appctl socket through the veil-proxy supplementary group; the protocol units
+# run AS veil-proxy. A silent failure here would leave those directories
+# unreadable after the ownership pass below, so stop loudly.
 if ! id -nG veil 2>/dev/null | tr ' ' '\n' | grep -qx veil-proxy; then
     if command -v usermod >/dev/null 2>&1; then
         usermod -aG veil-proxy veil
@@ -147,6 +148,12 @@ if [ -d /etc/veil/panel ] && [ ! -L /etc/veil/panel ]; then
     chown -R root:veil-proxy /etc/veil/panel
     find /etc/veil/panel -type d -exec chmod 0750 {} \;
     find /etc/veil/panel -type f -exec chmod 0640 {} \;
+fi
+if [ -d /var/lib/caddy ] && [ ! -L /var/lib/caddy ]; then
+    # veil-caddy.service switched from User=veil to User=veil-proxy (#497).
+    # systemd does not re-own an existing StateDirectory, so an ACME data dir
+    # left at veil:veil would be unwritable for the new account — re-own it.
+    chown -R veil-proxy:veil-proxy /var/lib/caddy
 fi
 for file in /etc/veil/state.key /etc/veil/veil.env; do
     if [ -f "$file" ] && [ ! -L "$file" ]; then

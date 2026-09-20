@@ -185,6 +185,12 @@ runbook.
   It can read the root-owned configuration under `/etc/veil` and write only
   Panel-owned state, staging, updates, sessions, and audit data under
   `/var/lib/veil`.
+- **Protocol-unit privilege boundary.** Internet-facing runtime units —
+  Hysteria2, olcRTC, WARP, Mieru, and the NaiveProxy/Caddy unit — run as
+  `User=veil-proxy`/`Group=veil-proxy`, not as the panel account. They read
+  the `root:veil-proxy` generated configuration but cannot read
+  `veil.env`/`state.key` (`root:veil`), and `InaccessiblePaths` keeps
+  `/run/veil/helper.sock` and `/var/lib/veil` out of reach entirely.
 - **Privileged helper.** Root-only operations are exposed by
   `veil-helper.socket` at `/run/veil/helper.sock`. The socket is
   `root:veil 0660`; the helper verifies the caller with `SO_PEERCRED`, accepts
