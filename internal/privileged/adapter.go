@@ -12,6 +12,11 @@ func NewLocalAdapter(policy Policy, executor Executor) *LocalAdapter {
 	return &LocalAdapter{policy: policy, executor: executor, fence: newFenceGuard(policy.FencePath, policy.RequireFence)}
 }
 
+func (a *LocalAdapter) Reachable(context.Context) error {
+	// In-process execution has no transport that can detach.
+	return nil
+}
+
 func (a *LocalAdapter) Promote(ctx context.Context, request PromoteRequest) (PromoteResult, error) {
 	resolved, err := a.policy.ResolvePromotion(request)
 	if err != nil {

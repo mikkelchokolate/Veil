@@ -28,8 +28,8 @@ func (f *fakeApplyWorkflowState) reloadPromotedServices(files []string) []Servic
 	return nil
 }
 
-func (f *fakeApplyWorkflowState) rollbackPromotedConfigs(records []livePromotionRecord, files []string) ([]string, []ServiceActionResult) {
-	return nil, nil
+func (f *fakeApplyWorkflowState) rollbackPromotedConfigs(records []livePromotionRecord, files []string) ([]string, []string, []ServiceActionResult) {
+	return nil, nil, nil
 }
 
 func (f *fakeApplyWorkflowState) appendApplyHistoryLocked(stage string, success bool, response ApplyResponse) error {

@@ -20,10 +20,11 @@ func TestDockerWorkflowsInjectAndVerifyBuildVersion(t *testing.T) {
 			`grep -F "${version}"`,
 		},
 		"../../.github/workflows/release.yml": {
-			`--build-arg "VERSION=${GITHUB_REF_NAME}"`,
 			`VERSION=${{ github.ref_name }}`,
-			`docker run --rm veil:release-check version`,
+			`docker run --rm "${image}" version`,
 			`grep -F "${GITHUB_REF_NAME}"`,
+			`grep -F "linux/amd64"`,
+			`grep -F "linux/arm64"`,
 		},
 	}
 

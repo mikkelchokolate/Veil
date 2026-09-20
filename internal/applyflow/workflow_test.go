@@ -27,6 +27,7 @@ type fakeState struct {
 	serviceActions []model.ServiceActionResult
 
 	rollbackFiles   []string
+	removedFiles    []string
 	rollbackActions []model.ServiceActionResult
 	rolledBack      bool
 
@@ -45,9 +46,9 @@ func (s *fakeState) PromoteStagedConfigsLocked(paths []string) ([]string, []stri
 func (s *fakeState) ReloadPromotedServicesLocked([]string) []model.ServiceActionResult {
 	return s.serviceActions
 }
-func (s *fakeState) RollbackPromotedConfigsLocked([]PromotionRecord, []string) ([]string, []model.ServiceActionResult) {
+func (s *fakeState) RollbackPromotedConfigsLocked([]PromotionRecord, []string) ([]string, []string, []model.ServiceActionResult) {
 	s.rolledBack = true
-	return s.rollbackFiles, s.rollbackActions
+	return s.rollbackFiles, s.removedFiles, s.rollbackActions
 }
 func (s *fakeState) AppendApplyHistoryLocked(stage string, _ bool, _ model.ApplyResponse) error {
 	s.history = append(s.history, stage)
@@ -224,6 +225,37 @@ func TestWorkflowRollsBackOnHealthFailure(t *testing.T) {
 	}
 	if resp.RolledBack || !resp.Ambiguous {
 		t.Fatalf("unhealthy rollback must remain recovery-pending, got %+v", resp)
+	}
+}
+
+// Regression for #343: a first-create config has no previous generation to
+// restore — the rollback deletes it instead. A successful deletion plus
+// stop/disable must complete the rollback (terminal failed apply), not strand
+// the job as recovery_pending.
+func TestWorkflowCompletesRollbackWhenNewConfigIsDeleted(t *testing.T) {
+	calls := 0
+	health := func([]model.ServiceActionResult) []model.ServiceHealthResult {
+		calls++
+		// First call covers the failed candidate services; the second covers
+		// the restored state, which is healthy again.
+		return []model.ServiceHealthResult{{Name: "veil-hysteria2@edge.service", Healthy: calls > 1}}
+	}
+	state := &fakeState{
+		plan:           model.ApplyPlanResponse{Valid: true},
+		liveFiles:      []string{"/live/hysteria2/edge.yaml"},
+		serviceActions: []model.ServiceActionResult{{Name: "veil-hysteria2@edge.service", Success: true}},
+		removedFiles:   []string{"/live/hysteria2/edge.yaml"},
+		rollbackActions: []model.ServiceActionResult{
+			{Name: "veil-hysteria2@edge.service", Success: true},
+			{Name: "veil-hysteria2@edge.service", Success: true},
+		},
+	}
+	resp, status, _ := NewWorkflow(state, health).RunLocked(model.ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
+	if status != http.StatusBadRequest {
+		t.Fatalf("health failure must 400, got %d", status)
+	}
+	if !resp.ArtifactsRestored || !resp.RollbackComplete || !resp.RolledBack || resp.Ambiguous {
+		t.Fatalf("successful first-create rollback must complete: %+v", resp)
 	}
 }
 

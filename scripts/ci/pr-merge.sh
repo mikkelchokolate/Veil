@@ -33,7 +33,7 @@ fi
 WORKTREE="$(mktemp -d "${CI_ARTIFACT_DIR}/pr-worktree.XXXXXX")"
 rmdir "${WORKTREE}"  # git worktree add wants to create the dir itself
 
-# shellcheck disable=SC2317  # invoked indirectly via trap
+# shellcheck disable=SC2317,SC2329  # invoked indirectly via trap
 cleanup() {
   rc=$?
   git worktree remove --force "${WORKTREE}" >/dev/null 2>&1 || true

@@ -464,7 +464,7 @@ sed 's/"tlsPort": 5001/"tlsPort": 443/' "${pebble_mod}/test/config/pebble-config
 (cd "${pebble_mod}" && PEBBLE_VA_NOSLEEP=1 "${pebble_bin}" -config "${CI_ARTIFACT_DIR}/pebble-config.json"   > "${CI_ARTIFACT_DIR}/pebble.log" 2>&1 &)
 pebble_up=1
 for _ in $(seq 1 60); do
-  if curl --http1.1 -sk --max-time 60 https://127.0.0.1:14000/dir | grep -q newOrder; then
+  if grep -q newOrder < <(curl --http1.1 -sk --max-time 60 https://127.0.0.1:14000/dir); then
     pebble_up=0
     break
   fi
