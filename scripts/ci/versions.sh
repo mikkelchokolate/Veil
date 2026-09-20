@@ -113,6 +113,10 @@ CI_SMOLVM_MIN_VERSION="1.6.13"
 
 # --- Test parameters -----------------------------------------------------------
 CI_COVERAGE_THRESHOLD="70.0"
+# sdk/go is merged into the coverprofile so it is measured (#438), but it is a
+# thin client surface outside the 70% product contract — it gates on its own
+# floor instead (the suite must produce real coverage, not just run).
+CI_SDK_COVERAGE_FLOOR="1.0"
 
 # --- Locale / timezone (parity contract) ---------------------------------------
 export LANG="C.UTF-8"

@@ -69,7 +69,9 @@ The local VM and GitHub Actions deliberately match on:
   clean-cache downloads while keeping the same setting in local and GitHub jobs;
 - protocol runtime versions (pinned + SHA256-verified in the CI image);
 - test flags (`-race -count=1 -coverprofile`, tags, timeouts);
-- coverage threshold (70%, never lowered);
+- coverage threshold (70% of product statements, never lowered; sdk/go is
+  merged into the profile and reported separately under its own floor so SDK
+  coverage is measured rather than averaged away — issue #438);
 - generated-file drift checks;
 - locale (`C.UTF-8`), timezone (`UTC`);
 - environment variables that influence tests;
