@@ -52,4 +52,6 @@ export const RevisionViewState = {
   rolling_back: 'rolling_back',
   rolled_back: 'rolled_back',
   degraded: 'degraded',
+  recovering: 'recovering',
+  untracked: 'untracked',
 } as const;

@@ -77,6 +77,18 @@ if [ "${JOB}" = "full" ]; then
   esac
 fi
 
+# The VM cache volumes are mounted at /home/ci/go/pkg/mod and
+# /home/ci/.cache/go-build (vm-run.sh). A root job's default GOPATH/GOCACHE
+# live under /root, so `go` under root would bypass the warm mounts and do a
+# cold module/build-cache run every time (#473). Point root's go env at the
+# mounted paths; the ci user's HOME=/home/ci already resolves there.
+if [ "${JOB_USER}" = "root" ]; then
+  mkdir -p /home/ci/go/pkg/mod /home/ci/.cache/go-build
+  export GOPATH="${GOPATH:-/home/ci/go}"
+  export GOMODCACHE="${GOMODCACHE:-/home/ci/go/pkg/mod}"
+  export GOCACHE="${GOCACHE:-/home/ci/.cache/go-build}"
+fi
+
 export CI_ARTIFACT_DIR="${ARTIFACTS_GUEST}"
 export CI_REPO_ROOT="${WORKSPACE}"
 export CI_EXCHANGE_DIR="${EXCHANGE}"
@@ -118,6 +130,13 @@ fi
 
 rc=0
 run_as "${JOB_USER}" bash "${WORKSPACE}/scripts/ci/${JOB}.sh" "$@" || rc=$?
+
+# A root job can leave root-owned entries in the ci-owned Go cache mounts —
+# restore ownership so the next unprivileged job on the same warm cache does
+# not trip over them.
+if [ "${JOB_USER}" = "root" ]; then
+  chown -R ci:ci /home/ci/go /home/ci/.cache/go-build 2>/dev/null || true
+fi
 
 echo "[guest] job=${JOB} exit=${rc}"
 exit "${rc}"

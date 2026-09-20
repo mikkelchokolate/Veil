@@ -133,9 +133,11 @@ const (
 	ApplyStateResponseStateDegraded    ApplyStateResponseState = "degraded"
 	ApplyStateResponseStateFailed      ApplyStateResponseState = "failed"
 	ApplyStateResponseStatePending     ApplyStateResponseState = "pending"
+	ApplyStateResponseStateRecovering  ApplyStateResponseState = "recovering"
 	ApplyStateResponseStateRolledBack  ApplyStateResponseState = "rolled_back"
 	ApplyStateResponseStateRollingBack ApplyStateResponseState = "rolling_back"
 	ApplyStateResponseStateSynced      ApplyStateResponseState = "synced"
+	ApplyStateResponseStateUntracked   ApplyStateResponseState = "untracked"
 )
 
 // Valid indicates whether the value is a known member of the ApplyStateResponseState enum.
@@ -149,11 +151,15 @@ func (e ApplyStateResponseState) Valid() bool {
 		return true
 	case ApplyStateResponseStatePending:
 		return true
+	case ApplyStateResponseStateRecovering:
+		return true
 	case ApplyStateResponseStateRolledBack:
 		return true
 	case ApplyStateResponseStateRollingBack:
 		return true
 	case ApplyStateResponseStateSynced:
+		return true
+	case ApplyStateResponseStateUntracked:
 		return true
 	default:
 		return false
@@ -571,9 +577,11 @@ const (
 	RevisionViewStateDegraded    RevisionViewState = "degraded"
 	RevisionViewStateFailed      RevisionViewState = "failed"
 	RevisionViewStatePending     RevisionViewState = "pending"
+	RevisionViewStateRecovering  RevisionViewState = "recovering"
 	RevisionViewStateRolledBack  RevisionViewState = "rolled_back"
 	RevisionViewStateRollingBack RevisionViewState = "rolling_back"
 	RevisionViewStateSynced      RevisionViewState = "synced"
+	RevisionViewStateUntracked   RevisionViewState = "untracked"
 )
 
 // Valid indicates whether the value is a known member of the RevisionViewState enum.
@@ -587,11 +595,15 @@ func (e RevisionViewState) Valid() bool {
 		return true
 	case RevisionViewStatePending:
 		return true
+	case RevisionViewStateRecovering:
+		return true
 	case RevisionViewStateRolledBack:
 		return true
 	case RevisionViewStateRollingBack:
 		return true
 	case RevisionViewStateSynced:
+		return true
+	case RevisionViewStateUntracked:
 		return true
 	default:
 		return false
@@ -1165,8 +1177,14 @@ type ApplyResponse struct {
 
 // ApplyRetryResponse defines model for ApplyRetryResponse.
 type ApplyRetryResponse struct {
-	ApplyJob ApplyJob     `json:"applyJob"`
+	ApplyJob ApplyJob `json:"applyJob"`
+
+	// Error Execution error message; present when success=false.
+	Error    *string      `json:"error,omitempty"`
 	Revision RevisionView `json:"revision"`
+
+	// Success False when the retry job itself failed to converge (the durable job record still exists — inspect applyJob). A 200 with success=false is an explicit execution failure, not a successful retry.
+	Success bool `json:"success"`
 }
 
 // ApplyRollbackResponse defines model for ApplyRollbackResponse.

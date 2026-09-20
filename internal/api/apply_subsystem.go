@@ -367,12 +367,70 @@ func (s *managementState) convergeRevisionForSideEffect(ctx context.Context, rev
 	if err != nil {
 		return apply.Result{}, err
 	}
-	if revisions.Applied == revision {
-		return apply.Result{
-			Success: true, Disposition: apply.ApplyDispositionRuntimeConverged, MarkRevisionLive: true,
-		}, nil
+	if revisions.Applied != revision {
+		return s.executeApplyRevisionContext(ctx, revision)
 	}
-	return s.executeApplyRevisionContext(ctx, revision)
+	// Revision equality is not runtime evidence (#545): a unit may have died
+	// or drifted after the revision was marked applied. Before reporting the
+	// revision live, probe the units its snapshot expects to be active. When
+	// the probe cannot prove convergence — no evidence path or an unhealthy
+	// unit — fall through to a real apply instead of a false Success.
+	healthy, err := s.revisionRuntimeHealthy(ctx, revision)
+	if err != nil {
+		return apply.Result{}, err
+	}
+	if !healthy {
+		return s.executeApplyRevisionContext(ctx, revision)
+	}
+	return apply.Result{
+		Success: true, Disposition: apply.ApplyDispositionRuntimeConverged, MarkRevisionLive: true,
+	}, nil
+}
+
+// revisionRuntimeHealthy probes the health-checked runtime units of the
+// revision's pinned snapshot against the live service manager. It returns
+// true only when every expected unit reports active — real evidence that the
+// applied revision is still converged. A missing snapshot, missing privileged
+// helper, or any non-active unit reports false so the caller runs a real
+// apply rather than trusting revision equality (#545).
+func (s *managementState) revisionRuntimeHealthy(ctx context.Context, revision uint64) (bool, error) {
+	s.mu.Lock()
+	snapshot, err := s.loadRevisionSnapshotLocked(revision)
+	s.mu.Unlock()
+	if err != nil {
+		return false, nil
+	}
+	var units []string
+	for _, runtime := range NewManagedRuntimeCatalogForSnapshot(
+		snapshot.Settings, snapshot.Inbounds, snapshot.Warp).Runtimes() {
+		if runtime.HealthCheckAfter && runtime.Unit != "" {
+			units = append(units, runtime.Unit)
+		}
+	}
+	if len(units) == 0 {
+		// The revision declares no health-checked runtime units — nothing to
+		// converge, so the applied marker is the only state to maintain.
+		return true, nil
+	}
+	if s.privileged == nil && !s.privilegedLocal {
+		return false, nil
+	}
+	actions := make([]ServiceActionResult, 0, len(units))
+	for _, unit := range units {
+		actions = append(actions, ServiceActionResult{
+			Name: unit, Command: []string{"systemctl", "restart", unit}, Success: true,
+		})
+	}
+	checks := NewManagementApplyContextWithContext(s, ctx).checkServiceHealth(actions)
+	if len(checks) == 0 {
+		return false, nil
+	}
+	for _, check := range checks {
+		if !check.Healthy {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func completeSideEffectPublication(ctx context.Context, details apply.PublicationDetails) error {

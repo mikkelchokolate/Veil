@@ -26,7 +26,8 @@ export function useApplyState() {
 			if (
 				state === "pending" ||
 				state === "applying" ||
-				state === "rolling_back"
+				state === "rolling_back" ||
+				state === "recovering"
 			) {
 				return 1000;
 			}
@@ -43,6 +44,10 @@ const STATE_CLS: Record<string, string> = {
 	rolling_back: "badge-warning",
 	rolled_back: "badge-warning",
 	degraded: "badge-danger",
+	// recovering = a recovery_pending job is active; untracked = no durable
+	// apply tracking, so "synced" cannot be proven. Neither may render green.
+	recovering: "badge-danger",
+	untracked: "badge-warning",
 };
 
 /** Global apply-status indicator shown on every authenticated page (B5). */

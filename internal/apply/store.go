@@ -189,7 +189,7 @@ func (s *JobStore) LatestWithStatus(status string) (Job, bool, error) {
 func (s *JobStore) LatestFailed() (Job, bool, error) {
 	job, err := scanJob(s.db.QueryRow(`SELECT id, desired_revision, base_revision, status, trigger, actor_id,
   created_at, started_at, finished_at, error_code, error_message, operations, owner_process, lease_generation
-  FROM apply_jobs WHERE status IN ('failed','rolled_back','rollback_failed') AND error_code<>'PUBLICATION_RECOVERY_TRANSFERRED' ORDER BY created_at DESC,rowid DESC LIMIT 1`))
+  FROM apply_jobs WHERE status IN ('failed','rolled_back','rollback_failed','recovery_pending') AND error_code<>'PUBLICATION_RECOVERY_TRANSFERRED' ORDER BY created_at DESC,rowid DESC LIMIT 1`))
 	if err == sql.ErrNoRows {
 		return Job{}, false, nil
 	}

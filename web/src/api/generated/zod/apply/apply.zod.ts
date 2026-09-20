@@ -49,7 +49,7 @@ import * as zod from 'zod';
 export const GetApiApplyStateResponse = zod.object({
   "desiredRevision": zod.int(),
   "appliedRevision": zod.int(),
-  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded']),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded', 'recovering', 'untracked']),
   "activeJobId": zod.string().optional(),
   "lastSuccessfulJobId": zod.string().optional(),
   "lastFailedJobId": zod.string().optional(),
@@ -157,8 +157,10 @@ export const PostApiApplyJobsIdRetryResponse = zod.object({
   "revision": zod.object({
   "desired": zod.int(),
   "applied": zod.int(),
-  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded'])
-})
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded', 'recovering', 'untracked'])
+}),
+  "success": zod.boolean().describe('False when the retry job itself failed to converge (the durable job record still exists — inspect applyJob). A 200 with success=false is an explicit execution failure, not a successful retry.'),
+  "error": zod.string().optional().describe('Execution error message; present when success=false.')
 })
 
 /**
@@ -204,7 +206,7 @@ export const PostApiApplyReconcileResponse = zod.object({
   "state": zod.object({
   "desiredRevision": zod.int(),
   "appliedRevision": zod.int(),
-  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded']),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded', 'recovering', 'untracked']),
   "activeJobId": zod.string().optional(),
   "lastSuccessfulJobId": zod.string().optional(),
   "lastFailedJobId": zod.string().optional(),
@@ -244,7 +246,7 @@ export const PostApiApplyRollbackResponse = zod.object({
   "revision": zod.object({
   "desired": zod.int(),
   "applied": zod.int(),
-  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded'])
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded', 'recovering', 'untracked'])
 }),
   "applyJob": zod.object({
   "id": zod.string(),

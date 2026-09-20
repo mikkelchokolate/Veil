@@ -107,6 +107,36 @@ func boolPtr(v bool) *bool {
 // allow left behind by a public -> local switch) are pruned instead of
 // stranded in ufw forever. It also keeps the apply honest: an unavailable
 // helper still fails the apply instead of silently skipping the boundary.
+// #538: the local/dev apply path mutates UFW directly via ApplySafely — no
+// privileged staged transaction exists. PrepareFirewallLocked records the
+// mutation with the "local" sentinel so the workflow counts the firewall as
+// changed, and RollbackFirewallLocked must refuse to claim an undo that
+// never ran (which would have reported FirewallRestored vacuously).
+func TestLocalFirewallSyncSentinelCannotBeRolledBack(t *testing.T) {
+	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: t.TempDir()})
+	state.settings.FirewallManagement = boolPtr(true)
+	state.inbounds = []Inbound{{Name: "h", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
+
+	old := currentFirewallApplier()
+	swapFirewallApplier(&recordingFirewallApplier{})
+	t.Cleanup(func() { swapFirewallApplier(old) })
+
+	ctx := NewManagementApplyContext(state)
+	txID, err := ctx.PrepareFirewallLocked()
+	if err != nil {
+		t.Fatalf("PrepareFirewallLocked: %v", err)
+	}
+	if txID != localFirewallSyncTransactionID {
+		t.Fatalf("local sync transaction = %q, want %q", txID, localFirewallSyncTransactionID)
+	}
+	if err := ctx.RollbackFirewallLocked(txID); err == nil {
+		t.Fatal("rollback of a non-transactional local sync must not report success")
+	}
+	if err := ctx.RollbackFirewallLocked(""); err != nil {
+		t.Fatalf("empty transaction must remain a no-op: %v", err)
+	}
+}
+
 func TestPrepareFirewallLockedReconcilesEmptyDesired(t *testing.T) {
 	state := newManagementState(ServerInfo{Mode: "dev"})
 	state.settings.PanelAccess = "local"
