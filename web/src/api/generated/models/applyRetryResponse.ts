@@ -46,4 +46,8 @@ import type { RevisionView } from './revisionView.ts';
 export interface ApplyRetryResponse {
   applyJob: ApplyJob;
   revision: RevisionView;
+  /** False when the retry job itself failed to converge (the durable job record still exists — inspect applyJob). A 200 with success=false is an explicit execution failure, not a successful retry. */
+  success: boolean;
+  /** Execution error message; present when success=false. */
+  error?: string;
 }

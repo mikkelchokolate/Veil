@@ -5636,6 +5636,8 @@ components:
           - rolling_back
           - rolled_back
           - degraded
+          - recovering
+          - untracked
         activeJobId:
           type: string
         lastSuccessfulJobId:
@@ -5654,11 +5656,22 @@ components:
       required:
       - applyJob
       - revision
+      - success
       properties:
         applyJob:
           $ref: '#/components/schemas/ApplyJob'
         revision:
           $ref: '#/components/schemas/RevisionView'
+        success:
+          type: boolean
+          description: >-
+            False when the retry job itself failed to converge (the durable
+            job record still exists — inspect applyJob). A 200 with
+            success=false is an explicit execution failure, not a successful
+            retry.
+        error:
+          type: string
+          description: Execution error message; present when success=false.
     ApplyReconcileResponse:
       type: object
       required:
@@ -6317,6 +6330,8 @@ components:
           - rolling_back
           - rolled_back
           - degraded
+          - recovering
+          - untracked
     MutationOutcome:
       type: object
       required:

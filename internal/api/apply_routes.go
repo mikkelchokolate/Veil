@@ -118,10 +118,14 @@ func (s *managementState) handleApplyJobRetry(w http.ResponseWriter, r *http.Req
 		writeError(w, "another apply job is active", http.StatusConflict)
 		return
 	case runErr != nil:
-		// The job failed; report it honestly with the final job record.
+		// The job failed; report it honestly with an explicit failure flag —
+		// status-only clients must not treat a 200 as success (#544).
+		resp["success"] = false
+		resp["error"] = runErr.Error()
 		writeJSONStatus(w, http.StatusOK, resp)
 		return
 	}
+	resp["success"] = true
 	writeJSONStatus(w, http.StatusOK, resp)
 }
 

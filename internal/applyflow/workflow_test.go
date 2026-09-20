@@ -313,3 +313,105 @@ func TestWorkflowReturns500OnPromoteError(t *testing.T) {
 		t.Fatalf("promote error must 500: status=%d err=%v", status, err)
 	}
 }
+
+// #542: when the plan declares service work (reload_service) but no service
+// action ran, promotion alone is not runtime convergence — Applied must stay
+// false so the durable layer keeps desired>applied instead of marking the
+// revision live.
+func TestWorkflowAppliedRequiresServiceEvidence(t *testing.T) {
+	state := &fakeState{
+		plan: model.ApplyPlanResponse{
+			Valid: true,
+			Operations: []model.ApplyOperation{
+				{Type: "promote_file", Source: "/g/x", Destination: "/live/x"},
+				{Type: "reload_service", Unit: "veil-x.service"},
+			},
+		},
+		liveFiles:      []string{"/live/x"},
+		serviceActions: nil, // plan expected a reload, none ran
+	}
+	resp, status, err := NewWorkflow(state, healthAllHealthy).RunLocked(model.ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
+	if err != nil || status != http.StatusOK {
+		t.Fatalf("status=%d err=%v", status, err)
+	}
+	if resp.Applied || resp.ServicesApplied {
+		t.Fatalf("Applied must stay false when planned service work did not run: %+v", resp)
+	}
+}
+
+// #542 complement: artifacts that no runtime unit reloads (plan has no
+// *_service operation) converge on promotion alone.
+func TestWorkflowAppliedForPromotionOnlyRevision(t *testing.T) {
+	state := &fakeState{
+		plan: model.ApplyPlanResponse{
+			Valid: true,
+			Operations: []model.ApplyOperation{
+				{Type: "promote_file", Source: "/g/sub.json", Destination: "/live/sub.json"},
+			},
+		},
+		liveFiles: []string{"/live/sub.json"},
+	}
+	resp, status, err := NewWorkflow(state, nil).RunLocked(model.ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
+	if err != nil || status != http.StatusOK {
+		t.Fatalf("status=%d err=%v", status, err)
+	}
+	if !resp.Applied {
+		t.Fatalf("promotion-only revision should report applied: %+v", resp)
+	}
+}
+
+// #541: an activation action (systemctl restart) that produced zero health
+// checks is not convergence evidence — the apply must roll back and the
+// rollback must stay ambiguous rather than reporting a vacuous health pass.
+func TestWorkflowEmptyHealthEvidenceIsNotConvergence(t *testing.T) {
+	noChecks := func([]model.ServiceActionResult) []model.ServiceHealthResult { return nil }
+	state := &fakeState{
+		plan:      model.ApplyPlanResponse{Valid: true},
+		liveFiles: []string{"/live/x"},
+		serviceActions: []model.ServiceActionResult{
+			{Name: "veil-x.service", Command: []string{"systemctl", "restart", "veil-x.service"}, Success: true},
+		},
+		rollbackFiles: []string{"/live/x"},
+		rollbackActions: []model.ServiceActionResult{
+			{Name: "veil-x.service", Command: []string{"systemctl", "restart", "veil-x.service"}, Success: true},
+		},
+	}
+	resp, status, _ := NewWorkflow(state, noChecks).RunLocked(model.ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
+	if status != http.StatusBadRequest {
+		t.Fatalf("empty health evidence after activation must fail: status=%d", status)
+	}
+	if resp.Applied {
+		t.Fatal("Applied must stay false without health evidence")
+	}
+	if resp.PostRollbackHealthPass || resp.RollbackComplete || !resp.Ambiguous {
+		t.Fatalf("rollback with unproven restored health was reported complete: %+v", resp)
+	}
+}
+
+// #541 complement: a pure teardown rollback (stop/disable only, nothing
+// re-activated) legitimately has no health evidence — it must still be able
+// to complete; the flag itself stays false because no check ran.
+func TestWorkflowTeardownRollbackCompletesWithoutHealthEvidence(t *testing.T) {
+	noChecks := func([]model.ServiceActionResult) []model.ServiceHealthResult { return nil }
+	state := &fakeState{
+		plan:      model.ApplyPlanResponse{Valid: true},
+		liveFiles: []string{"/live/x"},
+		serviceActions: []model.ServiceActionResult{
+			{Name: "veil-x.service", Command: []string{"systemctl", "restart", "veil-x.service"}, Success: false, Error: "start failed"},
+		},
+		rollbackFiles: []string{"/live/x"},
+		rollbackActions: []model.ServiceActionResult{
+			{Name: "veil-x.service", Command: []string{"systemctl", "stop", "veil-x.service"}, Success: true},
+		},
+	}
+	resp, status, _ := NewWorkflow(state, noChecks).RunLocked(model.ApplyRequest{Confirm: true, ApplyLive: true, ApplyServices: true})
+	if status != http.StatusBadRequest {
+		t.Fatalf("service failure must 400, got %d", status)
+	}
+	if resp.PostRollbackHealthPass {
+		t.Fatal("PostRollbackHealthPass must stay false when no check ran")
+	}
+	if !resp.RollbackComplete || !resp.RolledBack || resp.Ambiguous {
+		t.Fatalf("teardown rollback should complete: %+v", resp)
+	}
+}

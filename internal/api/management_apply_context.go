@@ -33,8 +33,9 @@ var caddyAdminLoader = func(configJSON []byte) error {
 // firewallApplier is the UFW rule applier used by apply. Tests can override it
 // to avoid running real ufw commands.
 type firewallApplier interface {
-	EnsureActive() error
-	ApplyRules(rules []firewall.Rule) error
+	// ApplySafely stages rules, refuses to enable an inactive firewall with
+	// no SSH management access, and rolls back its own mutation on failure.
+	ApplySafely(rules []firewall.Rule) error
 }
 
 var (
@@ -592,6 +593,13 @@ func (ctx ManagementApplyContext) syncCaddyCertForHysteria2(domain string) Servi
 	return result
 }
 
+// localFirewallSyncTransactionID marks a firewall sync that was applied
+// directly by the local/dev path (no privileged staged transaction). It lets
+// the workflow record FirewallChanged instead of reporting "no firewall
+// change" for a sync that really did mutate UFW, and it lets rollback answer
+// honestly that a direct sync cannot be undone (#538).
+const localFirewallSyncTransactionID = "local"
+
 func (ctx ManagementApplyContext) PrepareFirewallLocked() (string, error) {
 	if ctx.state.settings.FirewallManagement != nil && !*ctx.state.settings.FirewallManagement {
 		return "", nil
@@ -602,6 +610,9 @@ func (ctx ManagementApplyContext) PrepareFirewallLocked() (string, error) {
 			if !result.Success {
 				return "", errors.New(result.Error)
 			}
+		}
+		if len(results) > 0 {
+			return localFirewallSyncTransactionID, nil
 		}
 		return "", nil
 	}
@@ -638,8 +649,15 @@ func (ctx ManagementApplyContext) CommitFirewallLocked(transactionID string) err
 }
 
 func (ctx ManagementApplyContext) RollbackFirewallLocked(transactionID string) error {
-	if transactionID == "" || ctx.state.privileged == nil || ctx.state.privilegedLocal {
+	if transactionID == "" {
 		return nil
+	}
+	if ctx.state.privileged == nil || ctx.state.privilegedLocal {
+		// The local path applied rules directly via ApplySafely — there is no
+		// staged transaction to undo. Answering nil here would let the
+		// workflow report FirewallRestored for an undo that never ran (#538);
+		// the error marks the rollback ambiguous instead.
+		return errors.New("firewall rules were applied without a staged transaction and cannot be rolled back")
 	}
 	_, err := ctx.state.privileged.FirewallApply(ctx.operationContext(), privileged.FirewallRequest{
 		Action: privileged.FirewallActionRollback, TransactionID: transactionID, Fence: ctx.fenceToken(),
@@ -674,12 +692,11 @@ func (ctx ManagementApplyContext) syncFirewall() []ServiceActionResult {
 			return []ServiceActionResult{result}
 		}
 	} else {
+		// ApplySafely refuses to enable an inactive UFW that has no SSH
+		// management access — enabling there would lock the operator out —
+		// and rolls staged rules back on any failure.
 		applier := currentFirewallApplier()
-		if err := applier.EnsureActive(); err != nil {
-			result.Error = err.Error()
-			return []ServiceActionResult{result}
-		}
-		if err := applier.ApplyRules(rules); err != nil {
+		if err := applier.ApplySafely(rules); err != nil {
 			result.Error = err.Error()
 			return []ServiceActionResult{result}
 		}

@@ -20,12 +20,13 @@ type fakeFirewallApplier struct {
 	applyErr     error
 }
 
-func (f *fakeFirewallApplier) EnsureActive() error {
+// ApplySafely mirrors the real implementation's two phases: ensure active
+// first, then apply the staged rules.
+func (f *fakeFirewallApplier) ApplySafely(rules []firewall.Rule) error {
 	f.enableCalled = true
-	return f.enableErr
-}
-
-func (f *fakeFirewallApplier) ApplyRules(rules []firewall.Rule) error {
+	if f.enableErr != nil {
+		return f.enableErr
+	}
 	f.applyCalled = true
 	f.gotRules = rules
 	return f.applyErr

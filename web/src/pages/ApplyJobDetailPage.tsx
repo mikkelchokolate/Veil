@@ -214,10 +214,26 @@ export function ApplyJobDetailPage() {
 		: (history.data?.items ?? []);
 
 	const retry = useMutation({
-		mutationFn: () =>
-			apiFetch<{ applyJob?: ApplyJob }>(`/api/apply/jobs/${jobId}/retry`, {
+		mutationFn: async () => {
+			const data = await apiFetch<{
+				applyJob?: ApplyJob;
+				success?: boolean;
+				error?: string;
+			}>(`/api/apply/jobs/${jobId}/retry`, {
 				method: "POST",
-			}),
+			});
+			// A 200 with success=false is an explicit execution failure — the
+			// retry ran but did not converge; surface it as a mutation error
+			// instead of treating the HTTP status as success (#544).
+			if (data.success === false) {
+				throw new ApiError(
+					200,
+					data.error || data.applyJob?.errorMessage || "apply retry failed",
+					data.applyJob?.errorCode,
+				);
+			}
+			return data;
+		},
 		onSuccess: (data) => {
 			const nextId = data.applyJob?.id;
 			void qc.invalidateQueries({ queryKey: ["apply"] });

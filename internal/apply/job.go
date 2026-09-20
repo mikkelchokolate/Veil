@@ -26,6 +26,8 @@ const (
 )
 
 // System states derived from desired/applied revisions and the latest job.
+// Every value here is part of the public API contract (docs/openapi.yaml,
+// generated SDKs, and the panel status badge all consume it).
 const (
 	StateSynced      = "synced"
 	StatePending     = "pending"
@@ -34,6 +36,14 @@ const (
 	StateRollingBack = "rolling_back"
 	StateRolledBack  = "rolled_back"
 	StateDegraded    = "degraded"
+	// StateRecovering is reported while a recovery_pending job exists: the
+	// last apply could not fully roll back and a recovery attempt is queued
+	// or in flight. It is never a healthy state.
+	StateRecovering = "recovering"
+	// StateUntracked is reported when durable apply tracking is disabled (no
+	// StatePath / database). The panel cannot prove the runtime matches the
+	// desired configuration, so it must not claim "synced".
+	StateUntracked = "untracked"
 )
 
 // OperationResult records one concrete runtime change attempted by a job.

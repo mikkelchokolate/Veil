@@ -56,6 +56,10 @@ const STATUS_VARIANT: Record<
 	failed: "danger",
 	rollback_failed: "danger",
 	degraded: "danger",
+	// System states that must never render green: a recovery_pending job is
+	// still active (recovering), and untracked means there is no durable
+	// evidence the runtime matches the desired configuration.
+	recovering: "danger",
 	pending: "warning",
 	planning: "warning",
 	validating: "warning",
@@ -65,6 +69,7 @@ const STATUS_VARIANT: Record<
 	recovery_pending: "warning",
 	rolling_back: "warning",
 	rolled_back: "warning",
+	untracked: "default",
 };
 
 /** B5: honest synchronous apply semantics — desired vs applied revision,
@@ -85,8 +90,22 @@ export function ApplyPage() {
 	});
 
 	const retry = useMutation({
-		mutationFn: (jobId: string) =>
-			apiFetch(`/api/apply/jobs/${jobId}/retry`, { method: "POST" }),
+		mutationFn: async (jobId: string) => {
+			const data = await apiFetch<{
+				applyJob?: { id?: string; errorMessage?: string; errorCode?: string };
+				success?: boolean;
+				error?: string;
+			}>(`/api/apply/jobs/${jobId}/retry`, { method: "POST" });
+			// success=false in a 200 is an explicit execution failure (#544).
+			if (data.success === false) {
+				throw new ApiError(
+					200,
+					data.error || data.applyJob?.errorMessage || "apply retry failed",
+					data.applyJob?.errorCode,
+				);
+			}
+			return data;
+		},
 		onSuccess: () => void qc.invalidateQueries({ queryKey: ["apply"] }),
 	});
 
