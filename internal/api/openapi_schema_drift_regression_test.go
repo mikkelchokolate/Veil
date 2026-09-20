@@ -101,7 +101,7 @@ func TestOpenAPIApplySchemasMatchRuntime(t *testing.T) {
 
 	// #547: full derived system-state vocabulary.
 	wantStates := []string{
-		"applying", "degraded", "failed", "pending", "rolled_back", "rolling_back", "synced",
+		"applying", "degraded", "failed", "pending", "recovering", "rolled_back", "rolling_back", "synced", "untracked",
 	}
 	if got := propertyEnum(t, "RevisionView", "state"); !equalStrings(got, wantStates) {
 		t.Errorf("RevisionView.state enum = %v, want %v", got, wantStates)

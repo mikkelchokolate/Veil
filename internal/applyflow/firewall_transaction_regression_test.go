@@ -160,3 +160,58 @@ func TestWorkflowCommitsFirewallOnlyAfterHealthyRuntime(t *testing.T) {
 		t.Fatalf("phase order=%v want=%v", state.events, want)
 	}
 }
+
+// firewallPrepareErrorState fails in PrepareFirewallLocked; prepareErr
+// controls whether the prepare's own self-rollback reported failure via the
+// "restore previous UFW state" marker the apply paths embed (#540).
+type firewallPrepareErrorState struct {
+	firewallTransactionalWorkflowState
+	prepareErr error
+}
+
+func (s *firewallPrepareErrorState) PrepareFirewallLocked() (string, error) {
+	s.events = append(s.events, "firewall-prepare")
+	return "", s.prepareErr
+}
+
+// #540: a prepare error whose self-rollback failed must not claim firewall
+// restoration — the firewall may still carry the half-applied ruleset.
+func TestWorkflowPrepareFirewallErrorDoesNotClaimRestoreWhenSelfRollbackFailed(t *testing.T) {
+	state := &firewallPrepareErrorState{
+		prepareErr: errors.New("ufw reload failed; restore previous UFW state: command timed out"),
+	}
+	response, status, err := NewWorkflow(state, healthAllHealthy).RunLocked(model.ApplyRequest{
+		Confirm: true, ApplyLive: true, ApplyServices: true,
+	})
+	if err == nil || status != http.StatusInternalServerError {
+		t.Fatalf("prepare failure must surface: status=%d err=%v", status, err)
+	}
+	if response.FirewallRestored {
+		t.Fatalf("failed self-rollback reported FirewallRestored: %+v", response)
+	}
+	if response.RollbackComplete || response.RolledBack || !response.Ambiguous {
+		t.Fatalf("unproven firewall restore was reported complete: %+v", response)
+	}
+}
+
+// #540: when the failed prepare's own self-rollback completed (no
+// restore-failure marker in the error), firewall restoration may be claimed.
+func TestWorkflowPrepareFirewallErrorCleanSelfRollbackMayClaimRestore(t *testing.T) {
+	state := &firewallPrepareErrorState{
+		prepareErr: errors.New("ufw dry-run rejected rule"),
+	}
+	response, status, err := NewWorkflow(state, healthAllHealthy).RunLocked(model.ApplyRequest{
+		Confirm: true, ApplyLive: true, ApplyServices: true,
+	})
+	if err == nil || status != http.StatusInternalServerError {
+		t.Fatalf("prepare failure must surface: status=%d err=%v", status, err)
+	}
+	if !response.FirewallRestored {
+		t.Fatalf("clean self-rollback must report FirewallRestored: %+v", response)
+	}
+	// Artifacts restored and nothing service-side ran: the rollback is
+	// complete, so the job is terminal failed rather than recovery_pending.
+	if !response.RollbackComplete || !response.RolledBack || response.Ambiguous {
+		t.Fatalf("clean rollback was reported ambiguous: %+v", response)
+	}
+}

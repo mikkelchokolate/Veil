@@ -1113,7 +1113,13 @@ func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config 
 	}
 	pair, err := findCaddyCertWithRetry(ctx, request.Domain)
 	if err != nil {
-		return SyncCaddyCertResult{Found: false}, nil
+		// Only a genuine not-found maps to Found:false — permission,
+		// cancellation, and other lookup failures must propagate so the
+		// caller does not misreport them as an ACME miss (#537).
+		if errors.Is(err, caddycert.ErrCertificateNotFound) {
+			return SyncCaddyCertResult{Found: false}, nil
+		}
+		return SyncCaddyCertResult{}, fmt.Errorf("locate Caddy certificate for %q: %w", request.Domain, err)
 	}
 	certData, err := os.ReadFile(pair.CertPath)
 	if err != nil {
@@ -1158,8 +1164,14 @@ func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config 
 
 func findCaddyCertWithRetry(ctx context.Context, domain string) (caddycert.Pair, error) {
 	// Fast path: cert already exists.
-	if pair, err := findCaddyCertPair(caddyDataDir, domain); err == nil {
+	pair, err := findCaddyCertPair(caddyDataDir, domain)
+	switch {
+	case err == nil:
 		return pair, nil
+	case !errors.Is(err, caddycert.ErrCertificateNotFound):
+		// A real lookup failure (EACCES, I/O) is not "still issuing" —
+		// retrying cannot fix it and the caller must see it (#537).
+		return caddycert.Pair{}, err
 	}
 	// Caddy may still be issuing; poll briefly.
 	ticker := time.NewTicker(caddyRetryInterval)
@@ -1176,8 +1188,12 @@ func findCaddyCertWithRetry(ctx context.Context, domain string) (caddycert.Pair,
 		case <-ctx.Done():
 			return caddycert.Pair{}, ctx.Err()
 		case <-ticker.C:
-			if pair, err := findCaddyCertPair(caddyDataDir, domain); err == nil {
+			pair, err := findCaddyCertPair(caddyDataDir, domain)
+			switch {
+			case err == nil:
 				return pair, nil
+			case !errors.Is(err, caddycert.ErrCertificateNotFound):
+				return caddycert.Pair{}, err
 			}
 			if time.Now().After(deadline.Add(-500 * time.Millisecond)) {
 				return caddycert.Pair{}, caddycert.ErrCertificateNotFound

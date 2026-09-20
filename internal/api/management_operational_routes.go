@@ -241,6 +241,7 @@ func (s *managementState) autoApplyResultLocked(r *http.Request, actor string) a
 	if !autoApplyAfterMutation {
 		return outcome
 	}
+	outcome.attempted = true
 	if !s.applyTrackingEnabled() {
 		_, ok := s.autoApplyLocked(r)
 		outcome.legacy = true
@@ -281,10 +282,11 @@ func (s *managementState) autoApplyResultLocked(r *http.Request, actor string) a
 
 // autoApplyOutcome carries the apply result surfaced to the HTTP client.
 type autoApplyOutcome struct {
-	revision apply.Revisions
-	job      *apply.Job
-	success  bool
-	legacy   bool // true when the legacy (untracked) synchronous path was used
+	revision  apply.Revisions
+	job       *apply.Job
+	success   bool
+	legacy    bool // true when the legacy (untracked) synchronous path was used
+	attempted bool // true when an apply was required and attempted; success is only meaningful then
 }
 
 // applyStateView derives the public system state (synced/pending/applying/...)
@@ -292,6 +294,10 @@ type autoApplyOutcome struct {
 func (s *managementState) applyStateViewLocked() applyStateResponse {
 	resp := applyStateResponse{State: apply.StateSynced}
 	if !s.applyTrackingEnabled() {
+		// Without durable revision/job tracking there is no evidence the
+		// runtime matches the desired configuration — report untracked instead
+		// of a false-green "synced" (#539).
+		resp.State = apply.StateUntracked
 		return resp
 	}
 	rev, err := s.applyRevisions.Get()
@@ -323,11 +329,12 @@ func (s *managementState) applyStateViewLocked() applyStateResponse {
 		resp.LastFailedJobID = lastFail.ID
 	}
 	if len(jobs) > 0 {
+		// Surface the latest job's error whenever it carries one: operators
+		// must see why the last apply failed or why recovery is pending even
+		// when the derived state is not literally "failed" (#535/#543).
 		latest := jobs[0]
-		if resp.State == apply.StateFailed || resp.State == apply.StateRolledBack {
-			if latest.Status == apply.StatusFailed || latest.Status == apply.StatusRolledBack || latest.Status == apply.StatusRollbackFailed {
-				resp.LastError = &applyErrorView{Code: latest.ErrorCode, Message: latest.ErrorMessage}
-			}
+		if latest.ErrorCode != "" || latest.ErrorMessage != "" {
+			resp.LastError = &applyErrorView{Code: latest.ErrorCode, Message: latest.ErrorMessage}
 		}
 	}
 	return resp
@@ -345,10 +352,18 @@ func deriveSystemState(rev apply.Revisions, latest *apply.Job) string {
 			return apply.StateRollingBack
 		case apply.StatusRolledBack:
 			return apply.StateRolledBack
+		case apply.StatusRecoveryPending:
+			// The job is still active (not terminal): the last apply could
+			// not fully roll back and recovery is queued or in flight. This
+			// is never "synced", even when desired==applied (#534).
+			return apply.StateRecovering
 		case apply.StatusFailed, apply.StatusRollbackFailed:
 			if rev.Desired > rev.Applied {
 				return apply.StateFailed
 			}
+			// A failed job is unresolved evidence even when the revisions
+			// happen to match — reporting synced here would hide it (#543).
+			return apply.StateDegraded
 		}
 	}
 	if rev.Desired > rev.Applied {

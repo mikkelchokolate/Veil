@@ -78,6 +78,8 @@ export const ru: Record<string, string> = {
 	"applyState.rolling_back": "Откат",
 	"applyState.rolled_back": "Откачено",
 	"applyState.degraded": "Деградировано",
+	"applyState.recovering": "Восстановление",
+	"applyState.untracked": "Не отслеживается",
 	"applyState.unavailable": "состояние применения недоступно",
 	"applyState.loading": "применение…",
 

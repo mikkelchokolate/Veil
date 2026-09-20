@@ -422,3 +422,59 @@ func TestFindCaddyCertWithRetryTimesOutWithoutDeadline(t *testing.T) {
 		t.Fatalf("expected ErrCertificateNotFound, got %v", err)
 	}
 }
+
+// #537: a lookup failure that is not ErrCertificateNotFound (permission,
+// I/O, …) is not an ACME "still issuing" miss — it must propagate, on both
+// the fast path and inside the poll loop, instead of collapsing to
+// Found:false.
+func TestRunSyncCaddyCertPropagatesLookupError(t *testing.T) {
+	original := findCaddyCertPair
+	originalRoot := caddyCertRoot
+	defer func() {
+		findCaddyCertPair = original
+		caddyCertRoot = originalRoot
+	}()
+
+	caddyCertRoot = t.TempDir()
+	findCaddyCertPair = func(_, _ string) (caddycert.Pair, error) {
+		return caddycert.Pair{}, errors.New("permission denied")
+	}
+
+	result, err := runSyncCaddyCert(context.Background(), SyncCaddyCertRequest{Domain: "example.com", OutDir: caddyCertRoot}, ProductionConfig{})
+	if err == nil {
+		t.Fatalf("expected lookup error to propagate, got Found=%v", result.Found)
+	}
+	if !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("error = %v, want underlying permission cause", err)
+	}
+}
+
+func TestFindCaddyCertWithRetryPropagatesNonNotFoundError(t *testing.T) {
+	originalFinder := findCaddyCertPair
+	originalInterval := caddyRetryInterval
+	defer func() {
+		findCaddyCertPair = originalFinder
+		caddyRetryInterval = originalInterval
+	}()
+	caddyRetryInterval = time.Millisecond
+
+	// First call is a genuine miss (enters the poll loop), second call fails
+	// hard — the loop must surface it instead of retrying or reporting
+	// not-found.
+	calls := 0
+	findCaddyCertPair = func(_, _ string) (caddycert.Pair, error) {
+		calls++
+		if calls == 1 {
+			return caddycert.Pair{}, caddycert.ErrCertificateNotFound
+		}
+		return caddycert.Pair{}, errors.New("i/o error reading cert dir")
+	}
+
+	_, err := findCaddyCertWithRetry(context.Background(), "flaky.example.com")
+	if err == nil || errors.Is(err, caddycert.ErrCertificateNotFound) {
+		t.Fatalf("expected the I/O error to propagate, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "i/o error") {
+		t.Fatalf("error = %v, want underlying cause", err)
+	}
+}
