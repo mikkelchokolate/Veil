@@ -1,8 +1,8 @@
+import { rmSync } from "node:fs";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { playwright } from "@vitest/browser-playwright";
-import { rmSync } from "node:fs";
 import { defineConfig } from "vite";
 
 // The SPA is served both at "/" and under a secret WebBasePath ("/<secret>/").

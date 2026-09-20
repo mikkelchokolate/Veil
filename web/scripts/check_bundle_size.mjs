@@ -46,6 +46,26 @@ for (const marker of ['id="login-username"', 'id="login-password"']) {
 	}
 }
 
+// Production entry contract (issue #481): the built document must boot from a
+// hashed ./assets/*.js bundle. A "./src/*" reference only resolves under the
+// dev server — in the embedded production dist it 404s, leaving a dead shell.
+const moduleEntry = indexHtml.match(
+	/<script[^>]*type="module"[^>]*src="([^"]+)"/,
+);
+if (!moduleEntry) {
+	throw new Error("dist/index.html has no module script entry");
+}
+if (!/^\.\/assets\/[\w.-]+\.js$/.test(moduleEntry[1])) {
+	throw new Error(
+		`dist/index.html module entry is not a hashed production asset: ${moduleEntry[1]}`,
+	);
+}
+if (indexHtml.includes('src="./src/')) {
+	throw new Error(
+		"dist/index.html still references a source-tree entry (./src/…); production must reference hashed ./assets/ bundles",
+	);
+}
+
 async function walk(dir) {
 	const entries = await readdir(dir, { withFileTypes: true });
 	const paths = [];

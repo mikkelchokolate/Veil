@@ -1,10 +1,15 @@
 // Gating Lighthouse run against the shipped production first-load (login).
 // Drives the real Lighthouse CLI (default mobile + default categories).
+// Scope honesty (issue #482): the 100-gate scores the deferred-boot STATIC
+// login shell only. The sibling "served bundle" test below proves the same
+// URL ships hashed production assets and actually boots the SPA — a broken
+// bundle cannot hide behind static-shell scores.
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { test, expect } = require("@playwright/test");
+const { waitForSpa } = require("./spa-boot");
 
 function lighthouseBin() {
 	const local = path.join(__dirname, "node_modules", ".bin", "lighthouse");
@@ -91,17 +96,22 @@ function failedAudits(report) {
 	return failed;
 }
 
-test.describe("Lighthouse first-load", () => {
+function targetUrl() {
+	const url = (
+		process.env.VEIL_LH_URL || process.env.VEIL_BROWSER_BASE_URL || ""
+	).replace(/\/+$/, "");
+	if (!url) {
+		throw new Error(
+			"VEIL_LH_URL or VEIL_BROWSER_BASE_URL must point at veil serve (not a stub static server)",
+		);
+	}
+	return url;
+}
+
+test.describe("Lighthouse static login shell", () => {
 	test.describe.configure({ timeout: 240_000 });
 	test("scores 100 in Performance, Accessibility, Best Practices, and SEO twice", () => {
-		const url = (
-			process.env.VEIL_LH_URL || process.env.VEIL_BROWSER_BASE_URL || ""
-		).replace(/\/+$/, "");
-		if (!url) {
-			throw new Error(
-				"VEIL_LH_URL or VEIL_BROWSER_BASE_URL must point at veil serve (not a stub static server)",
-			);
-		}
+		const url = targetUrl();
 		const outDir =
 			process.env.VEIL_LH_OUT_DIR ||
 			fs.mkdtempSync(path.join(os.tmpdir(), "veil-lh-"));
@@ -126,5 +136,37 @@ test.describe("Lighthouse first-load", () => {
 			second,
 			`run 2 ${JSON.stringify(second)} failed=${failedAudits(report2).join(",")}`,
 		).toEqual(want);
+	});
+});
+
+test.describe("served production bundle", () => {
+	// The 100-gate above scores the static shell only; this test proves the
+	// same URL serves hashed production assets and that the deferred boot
+	// actually mounts the SPA (issue #482).
+	test("serves a hashed module entry and boots the SPA", async ({ page }) => {
+		const url = targetUrl();
+		const response = await page.goto(`${url}/`);
+		expect(response?.ok(), "panel index did not load").toBeTruthy();
+		const html = await page.content();
+		const entry = /<script[^>]*type="module"[^>]*src="([^"]+)"/.exec(html);
+		expect(entry, "served index.html has no module script entry").toBeTruthy();
+		expect(entry[1]).toMatch(/^\.\/assets\/[\w.-]+\.js$/);
+		expect(html).not.toContain('src="./src/');
+
+		// Deferred boot loads the hashed main chunk and mounts the App —
+		// __VEIL_READY is only set by the production bundle's main module.
+		await waitForSpa(page);
+		const loadedAssets = await page.evaluate(() =>
+			performance
+				.getEntriesByType("resource")
+				.map((e) => e.name)
+				.filter((name) => /\/assets\/[\w.-]+\.js/.test(name)),
+		);
+		expect(
+			loadedAssets.length,
+			"no hashed production JS asset was fetched after boot",
+		).toBeGreaterThan(1);
+		// The SPA owns the login form now (React-mounted LoginView).
+		await expect(page.locator("#login-username")).toBeVisible();
 	});
 });
