@@ -57,6 +57,27 @@ func TestReconcilePanelUpdateJobsMatchesReleaseDisplayVersion(t *testing.T) {
 			updatedAt:  now - 5,
 			wantStatus: "succeeded",
 		},
+		{
+			// #585: a job left in staging (Installed=false, or a crash
+			// mid-install) must reach a terminal state at startup reconcile —
+			// otherwise the SPA polls a status that never settles. Reconcile
+			// only runs at startup, so even a fresh staging row is an
+			// interrupted update, not a live one.
+			name:            "stuck staging fails at startup reconcile",
+			status:          "staging",
+			running:         "v0.6.2 (" + sha + ")",
+			updatedAt:       now - 400,
+			wantStatus:      "failed",
+			wantErrorSubstr: "interrupted before the staged version was installed",
+		},
+		{
+			name:            "fresh staging also fails at startup reconcile",
+			status:          "staging",
+			running:         "v0.6.2 (" + sha + ")",
+			updatedAt:       now - 10,
+			wantStatus:      "failed",
+			wantErrorSubstr: "interrupted before the staged version was installed",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

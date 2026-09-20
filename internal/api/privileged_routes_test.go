@@ -35,6 +35,7 @@ type recordingPrivilegedClient struct {
 	recoverRotationCalls  int
 	restartCalls          atomic.Int32
 	restartErr            error
+	stageUpdate           func(privileged.UpdateRequest) (privileged.UpdateResult, error)
 	reachableErr          error
 	err                   error
 }
@@ -318,6 +319,9 @@ func (c *recordingPrivilegedClient) FirewallApply(_ context.Context, request pri
 
 func (c *recordingPrivilegedClient) StageUpdate(_ context.Context, request privileged.UpdateRequest) (privileged.UpdateResult, error) {
 	c.updates = append(c.updates, request)
+	if c.stageUpdate != nil {
+		return c.stageUpdate(request)
+	}
 	return privileged.UpdateResult{
 		ArtifactID: request.ArtifactID, Staged: c.err == nil, Installed: c.err == nil, Version: request.Version,
 	}, c.err
@@ -448,6 +452,42 @@ func TestPrivilegedUpdateStagesArtifactAndRestartsPanel(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("durable update job did not enter restarting state")
+}
+
+// #585: when the helper returns Installed=false without an error the durable
+// job must be marked failed — leaving it in "staging" strands the row and the
+// job poll never reaches a terminal state.
+func TestPanelUpdateNotInstalledMarksJobFailed(t *testing.T) {
+	client := &recordingPrivilegedClient{
+		stageUpdate: func(request privileged.UpdateRequest) (privileged.UpdateResult, error) {
+			return privileged.UpdateResult{ArtifactID: request.ArtifactID, Staged: true, Installed: false, Version: request.Version}, nil
+		},
+	}
+	_, state := newApplyTrackedRouterWithState(t)
+	state.privileged = client
+	state.updateStager = func(context.Context) (string, error) { return "v0.6.0", nil }
+	routes := PanelRoutes{Info: ServerInfo{Version: "0.5.0"}, State: state}
+	response := httptest.NewRecorder()
+	routes.handleUpdateVersion(response, httptest.NewRequest(http.MethodPost, "/api/version/update", nil))
+	if response.Code == http.StatusAccepted {
+		t.Fatalf("not-installed update returned 202: %s", response.Body.String())
+	}
+
+	var jobID, status string
+	err := state.db.QueryRow(`SELECT id,status FROM panel_update_jobs ORDER BY created_at DESC LIMIT 1`).Scan(&jobID, &status)
+	if err != nil {
+		t.Fatalf("query job: %v", err)
+	}
+	if status != "failed" {
+		t.Fatalf("durable job status=%q, want failed after Installed=false", status)
+	}
+	job, err := state.getPanelUpdateJob(jobID)
+	if err != nil {
+		t.Fatalf("get job: %v", err)
+	}
+	if !strings.Contains(job.Error, "did not install") {
+		t.Fatalf("job error=%q", job.Error)
+	}
 }
 
 func TestPanelUpdateRestartFailureIsDurablyReported(t *testing.T) {

@@ -118,15 +118,20 @@ func (Environment) MetricsAccess(flagValue string) (access string, source string
 	return "auto", "default"
 }
 
-func (Environment) MetricsAuthRequired(access string, publicListen bool, tokenSource string, sessionAuthConfigured bool) (bool, error) {
+// MetricsAuthRequired resolves whether /metrics requires authentication.
+// exposed reports whether the Panel is publicly reachable — a non-loopback
+// listen OR a public panel access mode (direct/caddy proxies panel paths,
+// including /metrics, onto the public listener even when PanelListen itself
+// stays loopback) — not merely a non-loopback listen (#580).
+func (Environment) MetricsAuthRequired(access string, exposed bool, tokenSource string, sessionAuthConfigured bool) (bool, error) {
 	switch access {
 	case "auto":
-		return publicListen || tokenSource != "disabled" || sessionAuthConfigured, nil
+		return exposed || tokenSource != "disabled" || sessionAuthConfigured, nil
 	case "authenticated":
 		return true, nil
 	case "public":
-		if publicListen {
-			return false, fmt.Errorf("/metrics cannot be public on non-loopback Panel listen; use --metrics-access authenticated")
+		if exposed {
+			return false, fmt.Errorf("/metrics cannot be public while the Panel is publicly reachable (non-loopback listen or direct/caddy panel access); use --metrics-access authenticated")
 		}
 		return false, nil
 	default:

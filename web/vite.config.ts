@@ -1,3 +1,4 @@
+import { rmSync } from "node:fs";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
@@ -15,6 +16,19 @@ export default defineConfig({
 		tanstackRouter({ target: "react", autoCodeSplitting: true }),
 		react(),
 		tailwindcss(),
+		{
+			// public/mockServiceWorker.js is a test-only fixture (msw/browser for
+			// the Chromium suite). Vite would copy it into dist/ and go:embed
+			// would ship it in the production binary — strip it at the end of
+			// every build (issues #483, #496).
+			name: "veil-strip-msw-worker",
+			apply: "build",
+			closeBundle() {
+				rmSync(new URL("./dist/mockServiceWorker.js", import.meta.url), {
+					force: true,
+				});
+			},
+		},
 	],
 	test: {
 		// Two projects (blocker W8): the default jsdom suite, and a real-browser

@@ -30,43 +30,39 @@ contents:
     dst: /usr/local/bin/veil
     file_info:
       mode: 0755
+  # Vendor systemd units and the QUIC sysctl drop-in are package-owned files,
+  # NOT conffiles: `dpkg -r`/`rpm -e`/`apk del` must remove them (type: config
+  # would leave them behind until purge — issue #475). Operators customize via
+  # systemd drop-ins, never by editing these vendor files.
   - src: packaging/systemd/veil.service
     dst: /lib/systemd/system/veil.service
-    type: config
   - src: packaging/systemd/veil-helper.service
     dst: /lib/systemd/system/veil-helper.service
-    type: config
   - src: packaging/systemd/veil-helper.socket
     dst: /lib/systemd/system/veil-helper.socket
-    type: config
   - src: packaging/systemd/veil-backup.service
     dst: /lib/systemd/system/veil-backup.service
-    type: config
   - src: packaging/systemd/veil-backup.timer
     dst: /lib/systemd/system/veil-backup.timer
-    type: config
   - src: packaging/systemd/veil-caddy.service
     dst: /lib/systemd/system/veil-caddy.service
-    type: config
   - src: packaging/systemd/veil-hysteria2@.service
     dst: /lib/systemd/system/veil-hysteria2@.service
-    type: config
   - src: packaging/systemd/veil-mieru.service
     dst: /lib/systemd/system/veil-mieru.service
-    type: config
   - src: packaging/systemd/veil-olcrtc@.service
     dst: /lib/systemd/system/veil-olcrtc@.service
-    type: config
   - src: packaging/systemd/veil-warp.service
     dst: /lib/systemd/system/veil-warp.service
-    type: config
   - src: packaging/sysctl/99-veil-quic.conf
     dst: /etc/sysctl.d/99-veil-quic.conf
-    type: config
   - dst: /etc/veil
     type: dir
     file_info:
-      mode: 0750
+      # 0751 root:veil matches postinstall.sh and internal/hostaccess: the
+      # protocol units (User=veil-proxy) traverse /etc/veil via the other
+      # execute bit to reach the veil-proxy-grouped generated/tls/panel dirs.
+      mode: 0751
 
 # Alpine invokes a distinct hook for package upgrades. Reuse the hardened
 # post-install migration and ownership repair logic so APK upgrades receive the

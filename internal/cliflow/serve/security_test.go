@@ -226,6 +226,36 @@ func TestServeSecurityRejectsPublicMetrics(t *testing.T) {
 	}
 }
 
+// #580: "public" metrics must also be refused when the Panel stays on
+// loopback but a direct/caddy panel-access mode proxies panel paths —
+// /metrics included — onto a public listener. The old predicate only looked
+// at the listen address.
+func TestServeSecurityRejectsPublicMetricsOnLoopbackWithDirectPanelAccess(t *testing.T) {
+	for _, panelAccess := range []string{"direct", "caddy"} {
+		t.Run(panelAccess, func(t *testing.T) {
+			t.Setenv("VEIL_PANEL_ACCESS", panelAccess)
+			statePath := filepath.Join(t.TempDir(), "state.json")
+			if err := managementstate.NewStore(statePath, nil).Save(model.ManagementSnapshot{
+				Users: []model.User{{Username: "admin", PasswordHash: "hash", Role: "admin"}},
+			}); err != nil {
+				t.Fatalf("save state: %v", err)
+			}
+
+			_, err := NewSecurity(SecurityOptions{
+				Listen:        "127.0.0.1:2096",
+				AuthToken:     "secret",
+				StatePath:     statePath,
+				TLSCert:       "/tmp/panel.crt",
+				TLSKey:        "/tmp/panel.key",
+				MetricsAccess: "public",
+			}).Resolve()
+			if err == nil || !strings.Contains(err.Error(), "/metrics") {
+				t.Fatalf("expected public metrics error, got %v", err)
+			}
+		})
+	}
+}
+
 func TestServeSecurityHandlesSessionAuthCheckError(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte("not valid json"), 0600); err != nil {

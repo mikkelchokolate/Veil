@@ -348,6 +348,36 @@ func TestRenderConfigWithWarpUpstream(t *testing.T) {
 	}
 }
 
+// #576: the upstream dial address must follow the configured WARP socksListen,
+// not a hardcoded 127.0.0.1 that can diverge from the sing-box bind.
+func TestRenderConfigWithWarpUpstreamUsesConfiguredListen(t *testing.T) {
+	p := New()
+	paths := generatedconfig.NewPaths("/tmp/veil")
+	artifacts, _, err := p.RenderConfig(generatedconfig.ProtocolRenderInput{
+		Settings: model.Settings{
+			Domain:            "example.com",
+			Hysteria2Password: "secret",
+		},
+		Paths: paths,
+		Inbounds: []model.Inbound{
+			{
+				Name:      "h2-1",
+				Protocol:  "hysteria2",
+				Transport: "udp",
+				Port:      8443,
+				Enabled:   true,
+			},
+		},
+		Warp: model.WarpConfig{Enabled: true, SocksListen: "127.0.0.2", SocksPort: 40001},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(artifacts[0].Body, "addr: 127.0.0.2:40001") {
+		t.Errorf("expected warp upstream on configured listen, got:\n%s", artifacts[0].Body)
+	}
+}
+
 func TestRenderConfigReturnsErrorForInvalidInbound(t *testing.T) {
 	p := New()
 	paths := generatedconfig.NewPaths("/tmp/veil")

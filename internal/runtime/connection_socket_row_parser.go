@@ -20,10 +20,11 @@ func (ConnectionSocketRowParser) Parse(proto string, line string) (ConnectionSoc
 	if (proto == "tcp" || proto == "tcp6") && fields[3] != "0A" {
 		return ConnectionSocketRow{}, false
 	}
-	// UDP has no LISTEN state; a bound (unconnected) socket is identified by
-	// an all-zero remote address. Connected UDP rows are clients or
-	// established peers, not listeners.
-	if (proto == "udp" || proto == "udp6") && !isAllZeroProcNetAddress(fields[2]) {
+	if (proto == "udp" || proto == "udp6") && !procNetRemoteIsWildcard(fields[2]) {
+		// UDP rows carry no LISTEN state: a bound socket shows a wildcard
+		// remote while a connected one carries its peer address. Reporting
+		// connected rows would list outbound sessions as listeners (#336,
+		// twin of the livevalidation occupancy fix #584).
 		return ConnectionSocketRow{}, false
 	}
 	addr, port := parseHexAddress(fields[1])
@@ -33,17 +34,9 @@ func (ConnectionSocketRowParser) Parse(proto string, line string) (ConnectionSoc
 	return ConnectionSocketRow{Proto: proto, Address: addr, Port: port}, true
 }
 
-// isAllZeroProcNetAddress reports whether a /proc/net/{tcp,udp}* address field
-// (ADDR:PORT hex) is entirely zero — the bound-socket convention for an
-// unconnected endpoint.
-func isAllZeroProcNetAddress(field string) bool {
-	if field == "" {
-		return false
-	}
-	for _, r := range field {
-		if r != '0' && r != ':' {
-			return false
-		}
-	}
-	return true
+// procNetRemoteIsWildcard reports whether a /proc/net rem_address column is
+// the all-zeros wildcard (00000000:0000 or its 32-hex IPv6 form), which marks
+// an unconnected — i.e. bound/listening — socket.
+func procNetRemoteIsWildcard(remoteAddress string) bool {
+	return strings.Trim(remoteAddress, "0:") == ""
 }

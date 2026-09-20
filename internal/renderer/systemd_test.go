@@ -159,8 +159,10 @@ func TestRenderSystemdUnits(t *testing.T) {
 	if !strings.Contains(units["veil-caddy.service"], "/etc/veil/generated/caddy/config.json") {
 		t.Fatalf("bad caddy unit:\n%s", units["veil-caddy.service"])
 	}
-	if !strings.Contains(units["veil-caddy.service"], "User=veil") || !strings.Contains(units["veil-caddy.service"], "Group=veil") {
-		t.Fatalf("caddy unit must run as veil:\n%s", units["veil-caddy.service"])
+	// Internet-facing caddy shares the veil-proxy privilege boundary with the
+	// other protocol units, not the panel account (issue #497).
+	if !strings.Contains(units["veil-caddy.service"], "User=veil-proxy") || !strings.Contains(units["veil-caddy.service"], "Group=veil-proxy") {
+		t.Fatalf("caddy unit must run as veil-proxy:\n%s", units["veil-caddy.service"])
 	}
 	if strings.Contains(units["veil-caddy.service"], "ReadWritePaths=") {
 		t.Fatalf("caddy unit must not remount Veil state writable:\n%s", units["veil-caddy.service"])
@@ -294,7 +296,7 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 		}
 	}
 	caddy := units[UnitCaddy]
-	for _, want := range []string{"User=veil\n", "Group=veil\n", "PrivateDevices=true", "ReadOnlyPaths=/etc/veil"} {
+	for _, want := range []string{"User=veil-proxy\n", "Group=veil-proxy\n", "PrivateDevices=true", "ReadOnlyPaths=/etc/veil", "InaccessiblePaths=/run/veil/helper.sock /var/lib/veil"} {
 		if !strings.Contains(caddy, want) {
 			t.Fatalf("veil-caddy.service missing %q:\n%s", want, caddy)
 		}
@@ -308,7 +310,7 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 			t.Fatalf("%s is missing User=:\n%s", name, unit)
 		}
 	}
-	for _, name := range []string{UnitHysteria2, UnitOlcrtc, UnitWarp, UnitMieru} {
+	for _, name := range []string{UnitHysteria2, UnitOlcrtc, UnitWarp, UnitMieru, UnitCaddy} {
 		unit := units[name]
 		if !strings.Contains(unit, "User=veil-proxy") || !strings.Contains(unit, "Group=veil-proxy") {
 			t.Fatalf("%s must run as veil-proxy:\n%s", name, unit)

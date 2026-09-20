@@ -2,6 +2,9 @@ package runtime
 
 import (
 	"bufio"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 )
 
@@ -30,7 +33,17 @@ func (d ConnectionDiscovery) Read() (ConnectionsStats, error) {
 	// Dual-stack sockets (e.g. Hysteria2 listen :<port>) appear only in the
 	// tcp6/udp6 tables, so all four /proc tables must be scanned.
 	for _, proto := range []string{"tcp", "tcp6", "udp", "udp6"} {
-		listeners, _ := d.listeningSockets(proto)
+		listeners, err := d.listeningSockets(proto)
+		if err != nil {
+			// A missing table means the kernel lacks that stack — there are
+			// genuinely no listeners to report. Any other read failure
+			// (EACCES, IO) must surface: pretending the table was empty
+			// would silently under-report IPv6/dual-stack listeners (#587).
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return stats, fmt.Errorf("read %s socket table: %w", proto, err)
+		}
 		stats.Listeners = append(stats.Listeners, listeners...)
 	}
 	return stats, nil

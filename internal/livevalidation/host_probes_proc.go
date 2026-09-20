@@ -34,7 +34,7 @@ func (p HostPortProbe) procNetBound(transport string, port int) (bool, error) {
 		read = readHostProcNet
 	}
 
-	names, listenOnly, err := procNetTables(transport)
+	names, proto, err := procNetTables(transport)
 	if err != nil {
 		return false, err
 	}
@@ -51,7 +51,7 @@ func (p HostPortProbe) procNetBound(transport string, port int) (bool, error) {
 			continue
 		}
 		foundTable = true
-		if procNetContainsPort(data, port, listenOnly) {
+		if procNetContainsPort(data, port, proto) {
 			return true, nil
 		}
 	}
@@ -64,14 +64,14 @@ func (p HostPortProbe) procNetBound(transport string, port int) (bool, error) {
 	return false, nil
 }
 
-func procNetTables(transport string) ([]string, bool, error) {
+func procNetTables(transport string) ([]string, string, error) {
 	switch strings.ToLower(strings.TrimSpace(transport)) {
 	case "tcp":
-		return []string{"tcp", "tcp6"}, true, nil
+		return []string{"tcp", "tcp6"}, "tcp", nil
 	case "udp":
-		return []string{"udp", "udp6"}, false, nil
+		return []string{"udp", "udp6"}, "udp", nil
 	default:
-		return nil, false, fmt.Errorf("unsupported transport %q", transport)
+		return nil, "", fmt.Errorf("unsupported transport %q", transport)
 	}
 }
 
@@ -88,7 +88,7 @@ func readHostProcNet(name string) ([]byte, error) {
 	}
 }
 
-func procNetContainsPort(data []byte, port int, listenOnly bool) bool {
+func procNetContainsPort(data []byte, port int, proto string) bool {
 	lines := strings.Split(string(data), "\n")
 	for i, line := range lines {
 		if i == 0 {
@@ -98,8 +98,21 @@ func procNetContainsPort(data []byte, port int, listenOnly bool) bool {
 		if len(fields) < 4 {
 			continue
 		}
-		if listenOnly && !strings.EqualFold(fields[3], "0A") {
-			continue
+		switch proto {
+		case "tcp":
+			// Only LISTEN rows (st 0A) hold a TCP port.
+			if !strings.EqualFold(fields[3], "0A") {
+				continue
+			}
+		case "udp":
+			// UDP has no LISTEN state: a bound socket shows a wildcard remote
+			// while a connected one carries the peer address. Counting
+			// connected rows as busy would reject a free inbound port
+			// whenever an outbound session happens to share its number (#584,
+			// twin of the listening-ports fix #336).
+			if !procNetRemoteIsWildcard(fields[2]) {
+				continue
+			}
 		}
 		localPort, ok := procNetLocalPort(fields[1])
 		if ok && localPort == port {
@@ -107,6 +120,13 @@ func procNetContainsPort(data []byte, port int, listenOnly bool) bool {
 		}
 	}
 	return false
+}
+
+// procNetRemoteIsWildcard reports whether a /proc/net rem_address column is
+// the all-zeros wildcard (00000000:0000 or its 32-hex IPv6 form), which marks
+// an unconnected — i.e. bound/listening — socket.
+func procNetRemoteIsWildcard(remoteAddress string) bool {
+	return strings.Trim(remoteAddress, "0:") == ""
 }
 
 func procNetLocalPort(localAddress string) (int, bool) {

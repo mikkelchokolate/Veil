@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
@@ -100,9 +101,13 @@ func (w Workflow) RunLocked(req model.ApplyRequest) (model.ApplyResponse, int, e
 					response.RollbackActions = rollbackActions
 					response.ArtifactsRestored = !response.ArtifactsChanged || len(rollbackFiles) > 0 || len(removedFiles) > 0
 					response.ServicesRestored = allServiceActionsSuccessful(rollbackActions)
-					response.FirewallRestored = true
+					// Both prepare implementations roll their own mutation back
+					// on error (ApplySafely restore / journal rollback); claim
+					// firewall restoration only when that self-rollback did not
+					// itself report failure (#540).
+					response.FirewallRestored = !firewallSelfRestoreFailed(err)
 					response.PostRollbackHealthPass = true
-					response.RollbackComplete = response.ArtifactsRestored && response.ServicesRestored
+					response.RollbackComplete = response.ArtifactsRestored && response.ServicesRestored && response.FirewallRestored
 					response.RolledBack = response.RollbackComplete
 					response.Ambiguous = !response.RollbackComplete
 					if historyErr := s.AppendApplyHistoryLocked("rollback", false, response); historyErr != nil {
@@ -202,6 +207,17 @@ func (w Workflow) RunLocked(req model.ApplyRequest) (model.ApplyResponse, int, e
 		return response, http.StatusInternalServerError, fmt.Errorf("persist apply history: %w", err)
 	}
 	return response, http.StatusOK, nil
+}
+
+// firewallSelfRestoreFailed reports whether a failed firewall prepare left
+// the firewall mutated: the apply paths embed a restore failure marker in the
+// returned error when their self-rollback could not complete.
+func firewallSelfRestoreFailed(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "restore previous UFW state") || strings.Contains(msg, "firewall rollback failed")
 }
 
 func allServiceActionsSuccessful(actions []model.ServiceActionResult) bool {

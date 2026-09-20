@@ -56,7 +56,7 @@ func renderOlcrtc(settings model.Settings, inbound model.Inbound, warp model.War
 		if port == 0 {
 			port = 40000
 		}
-		cfg.SocksAddr = "127.0.0.1"
+		cfg.SocksAddr = warp.SocksDialAddr()
 		cfg.SocksPort = port
 	}
 	return renderer.RenderOlcrtc(cfg)

@@ -362,6 +362,10 @@ export const ru: Record<string, string> = {
 	"backups.encrypted": "зашифрован",
 	"backups.size": "Размер",
 	"backups.restoreJobTitle": "Задача восстановления",
+	"backups.restoreJobOutcome": "Результат: {outcome}.",
+	"backups.restoreJobPhase": "Этап: {phase}.",
+	"backups.restoreJobDegraded":
+		"Бэкап восстановлен, но последующий шаг завершился ошибкой — состояние уже зафиксировано.",
 	"backups.restoreConfirmTitle": "Восстановить бэкап?",
 	"backups.restoreConfirmDescription":
 		"Восстановление {name} заменит текущее состояние. После завершения вас может вывести из системы.",
