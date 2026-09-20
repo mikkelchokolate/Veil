@@ -137,6 +137,58 @@ test.describe('Veil Panel — React SPA', () => {
     expect(persisted).not.toBe(generatedPassword);
   });
 
+  // #350: a second protocol through the same form. mieru exercises the
+  // schema-driven dynamic field path (protocolFields.password with a generate
+  // action) rather than the dedicated hysteria2 widget.
+  test('admin creates a mieru inbound through the UI form', async ({ page, request }) => {
+    const apiToken = process.env.VEIL_BROWSER_API_TOKEN || 'browser-e2e-token';
+    const stamp = Date.now();
+    const name = `e2e-ui-mieru-${stamp}`;
+    const port = 41000 + (stamp % 20000);
+
+    await login(page, adminUsername, adminPassword);
+    await page.getByRole('link', { name: /inbounds/i }).first().click();
+    await page.getByRole('button', { name: /new inbound/i }).click();
+
+    await page.locator('#ib-name').fill(name);
+    await page.locator('#ib-proto').selectOption('mieru');
+    await page.locator('#ib-trans').selectOption('tcp');
+    await page.locator('#ib-port').fill(String(port));
+
+    // Dynamic control: the mieru aggregate password is a schema field with a
+    // generate action; the CSPRNG fills a 16-byte hex value.
+    const passwordField = page.locator('#ib-field-password');
+    await expect(passwordField).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: /^generate$/i }).click();
+    await expect(passwordField).toHaveValue(/^[0-9a-f]{32}$/, { timeout: 10_000 });
+    const generatedPassword = await passwordField.inputValue();
+    expect(generatedPassword).toMatch(/^[0-9a-f]{32}$/);
+
+    await page.locator('#ib-enabled').uncheck();
+    await page.getByRole('button', { name: /^create$/i }).click();
+
+    await expect(
+      page.getByRole('row', { name: new RegExp(name) }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const list = await request.get('/api/inbounds', {
+      headers: { 'X-Veil-Token': apiToken },
+    });
+    expect(list.status()).toBe(200);
+    const body = await list.json();
+    const found = body.find((i) => i.name === name);
+    expect(found, `created inbound ${name} missing from API list`).toBeTruthy();
+    expect(found.protocol).toBe('mieru');
+    expect(found.transport).toBe('tcp');
+    expect(found.port).toBe(port);
+    expect(found.enabled).toBe(false);
+
+    // The generated credential must persist server-side (redacted API view).
+    const persisted = found.password ?? found.protocolFields?.password;
+    expect(persisted, 'generated mieru password must persist (redacted view)').toBe('[REDACTED]');
+    expect(persisted).not.toBe(generatedPassword);
+  });
+
   test('traffic lazy chunks load without runtime errors', async ({ page }) => {
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
