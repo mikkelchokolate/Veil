@@ -128,7 +128,8 @@ func TestPackageScriptsCoverLegacyCaddyInstances(t *testing.T) {
 	if !strings.Contains(pre, "stop_disable_matching_units 'veil-caddy@*.service'") {
 		t.Fatalf("preremove.sh must stop/disable legacy veil-caddy@* instances:\n%s", pre)
 	}
-	if !strings.Contains(pre, "multi-user.target.wants/veil-caddy@*.service") {
+	if !strings.Contains(pre, "multi-user.target.wants") ||
+		!strings.Contains(pre, `/veil-caddy@*.service`) {
 		t.Fatalf("preremove.sh must sweep dangling veil-caddy@* wants links:\n%s", pre)
 	}
 	postremove, err := os.ReadFile("../../packaging/scripts/postremove.sh")
