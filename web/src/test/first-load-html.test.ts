@@ -7,7 +7,12 @@ const html = readFileSync(
 	"utf8",
 );
 
-describe("shipped first-load document", () => {
+// Source-template contract only: this asserts on the Vite INPUT template. The
+// shipped/production document is verified against web/dist/index.html by
+// scripts/check_bundle_size.mjs at the end of every `pnpm build` — including
+// the hashed-asset existence checks (#468). Nothing in the jsdom suite may
+// claim production coverage: `pnpm test` runs before the build.
+describe("first-load HTML template (source)", () => {
 	it("declares lang, title, viewport, description, and the login shell", () => {
 		expect(html).toContain('<html lang="en">');
 		expect(html).toContain("<title>Veil</title>");
@@ -17,7 +22,6 @@ describe("shipped first-load document", () => {
 		expect(html).toContain('id="login-username"');
 		expect(html).toContain('id="login-password"');
 		expect(html).toContain('rel="icon"');
-		expect(html).toContain('src="./src/boot.ts"');
 		expect(html).not.toMatch(/noindex/i);
 	});
 });

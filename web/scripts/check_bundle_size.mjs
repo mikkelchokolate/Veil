@@ -33,17 +33,33 @@ if (oversized.length > 0) {
 	);
 }
 
-// Post-build content contract (issue #496): the production dist that gets
-// go:embed'd into the binary must keep the static login shell (first paint
-// before the React bundle executes) and must NEVER ship the test-only MSW
-// service worker.
+// Post-build content contract (issues #468, #496): the production dist that
+// gets go:embed'd into the binary must keep the static login shell (first
+// paint before the React bundle executes) and the first-load document markers,
+// and must NEVER ship the test-only MSW service worker. These assertions run
+// against the REAL build output — the vitest source-template test
+// (src/test/first-load-html.test.ts) covers the pre-build input, this covers
+// the shipped artifact.
 const indexHtml = await readFile(new URL("index.html", distDir), "utf8");
-for (const marker of ['id="login-username"', 'id="login-password"']) {
+for (const marker of [
+	'<html lang="en">',
+	"<title>Veil</title>",
+	'name="viewport"',
+	'name="description"',
+	'<base href="/"',
+	'<main class="center-screen">',
+	'id="login-username"',
+	'id="login-password"',
+	'rel="icon"',
+]) {
 	if (!indexHtml.includes(marker)) {
 		throw new Error(
-			`dist/index.html lost the static login shell marker ${marker}`,
+			`dist/index.html lost a first-load document marker: ${marker}`,
 		);
 	}
+}
+if (/noindex/i.test(indexHtml)) {
+	throw new Error("dist/index.html must not declare noindex");
 }
 
 // Production entry contract (issue #481): the built document must boot from a
@@ -64,6 +80,30 @@ if (indexHtml.includes('src="./src/')) {
 	throw new Error(
 		"dist/index.html still references a source-tree entry (./src/…); production must reference hashed ./assets/ bundles",
 	);
+}
+
+// Referenced assets must exist on disk — a document naming a bundle that was
+// not emitted would first-paint the shell and then fail to boot (#468).
+const assetRefs = [
+	moduleEntry[1],
+	...[
+		...indexHtml.matchAll(/<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"/g),
+	].map((m) => m[1]),
+	...[...indexHtml.matchAll(/<link[^>]*rel="icon"[^>]*href="([^"]+)"/g)].map(
+		(m) => m[1],
+	),
+];
+for (const ref of assetRefs) {
+	if (!/^\.\//.test(ref)) {
+		throw new Error(
+			`dist/index.html references a non-relative asset (breaks secret WebBasePath mounts): ${ref}`,
+		);
+	}
+	try {
+		await stat(join(fileURLToPath(distDir), ref));
+	} catch {
+		throw new Error(`dist/index.html references a missing asset: ${ref}`);
+	}
 }
 
 async function walk(dir) {
