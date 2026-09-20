@@ -137,12 +137,51 @@ func TestFirewallStagesManagementAccessBeforeEnableAndDeletesStaleManagedRules(t
 
 func TestFirewallRefusesToEnableWithoutRequiredManagementAccess(t *testing.T) {
 	model := &transactionalUFWModel{rules: map[string]string{}}
-	request := ResolvedFirewall{Rules: []FirewallRule{{Command: "ufw", Args: []string{"allow", "4315/udp", "comment", "Veil Hysteria2"}}}}
+	request := ResolvedFirewall{
+		RuleIDs: []string{"inbound-hy2"},
+		Rules:   []FirewallRule{{Command: "ufw", Args: []string{"allow", "4315/udp", "comment", "Veil Hysteria2"}}},
+	}
 	if _, err := runFirewallRules(context.Background(), model.runner, request); err == nil {
 		t.Fatal("inactive ufw was enabled without SSH or Panel management access rule")
 	}
 	if model.enabled {
 		t.Fatal("management lockout preflight failure still enabled ufw")
+	}
+}
+
+// #356: a stale "Veil panel" allow is NOT management-access evidence — the
+// panel may now bind loopback only, so enabling UFW on its strength can lock
+// the operator out with no reachable management channel.
+func TestFirewallRefusesToEnableOnStalePanelRuleAlone(t *testing.T) {
+	model := &transactionalUFWModel{rules: map[string]string{"2096/tcp": "Veil panel"}}
+	request := ResolvedFirewall{
+		RuleIDs: []string{"inbound-hy2"},
+		Rules:   []FirewallRule{{Command: "ufw", Args: []string{"allow", "4315/udp", "comment", "Veil Hysteria2"}}},
+	}
+	if _, err := runFirewallRules(context.Background(), model.runner, request); err == nil {
+		t.Fatal("inactive ufw was enabled on a stale Veil panel rule alone")
+	}
+	if model.enabled {
+		t.Fatal("management lockout preflight failure still enabled ufw")
+	}
+}
+
+// #356: the enable transition is the dangerous step — reconciling an
+// already-active UFW cannot create new lockout exposure, so a ruleset
+// without management access still reconciles.
+func TestFirewallReconcilesActiveUFWWithoutManagementAccess(t *testing.T) {
+	model := &transactionalUFWModel{enabled: true, rules: map[string]string{"4315/udp": "Veil Hysteria2"}}
+	request := ResolvedFirewall{
+		RuleIDs: []string{"inbound-hy2"},
+		Rules:   []FirewallRule{{Command: "ufw", Args: []string{"allow", "4315/udp", "comment", "Veil Hysteria2"}}},
+	}
+	if _, err := runFirewallRules(context.Background(), model.runner, request); err != nil {
+		t.Fatalf("active ufw reconcile refused without management access: %v", err)
+	}
+	for _, mutation := range model.mutations {
+		if mutation == "enable" {
+			t.Fatalf("already-active ufw was re-enabled: %v", model.mutations)
+		}
 	}
 }
 
