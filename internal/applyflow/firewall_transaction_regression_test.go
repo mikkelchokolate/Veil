@@ -103,6 +103,48 @@ func TestWorkflowRollsBackPreparedFirewallOnDownstreamFailure(t *testing.T) {
 	}
 }
 
+type firewallPrepareFailingState struct {
+	firewallTransactionalWorkflowState
+	prepareErr error
+}
+
+func (s *firewallPrepareFailingState) PrepareFirewallLocked() (string, error) {
+	s.events = append(s.events, "firewall-prepare")
+	return "", s.prepareErr
+}
+
+// #540: a prepare error whose self-rollback failed must NOT claim firewall
+// restoration — RollbackComplete/RolledBack stay false and Ambiguous is set.
+func TestWorkflowPrepareErrorDoesNotClaimRestorationWhenSelfRollbackFailed(t *testing.T) {
+	state := &firewallPrepareFailingState{prepareErr: errors.New("enable ufw: boom; restore previous UFW state: boom")}
+	state.reloadOK = true
+	response, status, err := NewWorkflow(state, healthAllHealthy).RunLocked(model.ApplyRequest{
+		Confirm: true, ApplyLive: true, ApplyServices: true,
+	})
+	if status != http.StatusInternalServerError || err == nil {
+		t.Fatalf("status=%d err=%v", status, err)
+	}
+	if response.FirewallRestored || response.RollbackComplete || response.RolledBack || !response.Ambiguous {
+		t.Fatalf("response falsely claimed restoration: %+v", response)
+	}
+}
+
+// #540: a prepare error before/without a leftover mutation still counts as
+// restored — the firewall genuinely is back at its prior state.
+func TestWorkflowPrepareErrorAfterCleanSelfRollbackReportsRestored(t *testing.T) {
+	state := &firewallPrepareFailingState{prepareErr: errors.New("refusing to enable UFW without a staged SSH or Panel management access rule")}
+	state.reloadOK = true
+	response, status, err := NewWorkflow(state, healthAllHealthy).RunLocked(model.ApplyRequest{
+		Confirm: true, ApplyLive: true, ApplyServices: true,
+	})
+	if status != http.StatusInternalServerError || err == nil {
+		t.Fatalf("status=%d err=%v", status, err)
+	}
+	if !response.FirewallRestored {
+		t.Fatalf("expected FirewallRestored for a clean self-rollback, got %+v", response)
+	}
+}
+
 func TestWorkflowCommitsFirewallOnlyAfterHealthyRuntime(t *testing.T) {
 	state := &firewallTransactionalWorkflowState{reloadOK: true}
 	workflow := NewWorkflow(state, func([]model.ServiceActionResult) []model.ServiceHealthResult {

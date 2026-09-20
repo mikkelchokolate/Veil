@@ -16,7 +16,7 @@ go mod tidy
 git diff --exit-code -- go.mod go.sum
 
 ci_step "gofmt"
-unformatted="$(git ls-files '*.go' | xargs gofmt -l)"
+unformatted="$(git ls-files -z '*.go' | xargs -0 -r gofmt -l)"
 [ -z "${unformatted}" ] || { printf 'not gofmt-clean:\n%s\n' "${unformatted}" >&2; exit 1; }
 
 ci_run go-vet go vet ./...
@@ -35,8 +35,8 @@ ci_step "fast Go unit tests (short mode, no race)"
 go test ./... -short -count=1 -timeout=20m
 
 ci_step "shell syntax"
-bash -n scripts/*.sh scripts/ci/*.sh
-sh -n packaging/scripts/*.sh
+bash -n scripts/*.sh scripts/ci/*.sh ci/vm/*.sh ci/vm/systemd/*.sh
+sh -n packaging/scripts/*.sh packaging/docker/entrypoint.sh
 
 ci_step "git diff --check"
 git diff --check

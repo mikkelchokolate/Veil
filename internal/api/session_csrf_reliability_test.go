@@ -89,3 +89,33 @@ func TestEffectiveAuthStatusReportsCSRFPersistenceFailure(t *testing.T) {
 		t.Fatalf("auth status left a changed CSRF hash: got %q want %q", got, original.CSRFHash)
 	}
 }
+
+// #578 (call-site twin of #377): the legacy panel route must not discard the
+// CSRF persistence error — on failure it fails closed instead of embedding an
+// empty token next to a stale CSRF hash.
+func TestLegacyPanelReportsCSRFPersistenceFailure(t *testing.T) {
+	registry, session, original := csrfPersistenceFailureRegistry(t)
+	state := &managementState{
+		sessions: registry,
+		users:    []User{{Username: "alice", Role: "admin", Locale: "en"}},
+	}
+	routes := PanelRoutes{Info: ServerInfo{Version: "test"}, State: state}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "veil_session", Value: session.Token})
+	rec := httptest.NewRecorder()
+
+	routes.handlePanel(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	tokenHash := hashSessionSecret(session.Token)
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	if got := registry.sessions[tokenHash].CSRFHash; got != original.CSRFHash {
+		t.Fatalf("legacy panel left a changed CSRF hash: got %q want %q", got, original.CSRFHash)
+	}
+	if got := registry.rawCSRF[tokenHash]; got != "" {
+		t.Fatalf("raw CSRF token leaked after failed persistence: %q", got)
+	}
+}

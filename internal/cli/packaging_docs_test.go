@@ -253,6 +253,7 @@ func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 		}
 	}
 	protocolUnits := []string{
+		"../../packaging/systemd/veil-caddy.service",
 		"../../packaging/systemd/veil-hysteria2@.service",
 		"../../packaging/systemd/veil-olcrtc@.service",
 		"../../packaging/systemd/veil-mieru.service",
@@ -298,12 +299,15 @@ func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 			}
 		}
 	}
+	// veil-caddy.service is asserted with the other veil-proxy protocol units
+	// above (issue #497); it additionally needs ReadOnlyPaths for /etc/veil
+	// because its live config lives under /etc/veil/generated/caddy.
 	caddyBody, err := os.ReadFile("../../packaging/systemd/veil-caddy.service")
 	if err != nil {
 		t.Fatal(err)
 	}
 	caddyConfig := strings.ReplaceAll(string(caddyBody), "\r\n", "\n")
-	for _, want := range []string{"User=veil\n", "Group=veil\n", "PrivateDevices=true"} {
+	for _, want := range []string{"PrivateDevices=true", "ReadOnlyPaths=/etc/veil"} {
 		if !strings.Contains(caddyConfig, want) {
 			t.Fatalf("veil-caddy.service missing %q:\n%s", want, caddyConfig)
 		}

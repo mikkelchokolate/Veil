@@ -128,6 +128,11 @@ run_job_smolvm() {
   fi
   ci_step "smolvm run ${IMAGE_TARGET} job=${JOB}"
   if [ "${IMAGE_TARGET}" != "system" ]; then
+    # smolvm does not forward host env and has no -e flag; stage CI_FULL_PHASE
+    # through the exchange volume exactly like the system path does so a
+    # `full` base/browser phase does not die on a missing phase marker (#397).
+    printf '%s\n' "${CI_FULL_PHASE:-}" > "${EXCHANGE}/full-phase"
+    printf '%s\n' "${CI_SOURCE_SHA}" > "${EXCHANGE}/source-sha"
     timeout "${CI_VM_TIMEOUT}" smolvm machine run \
       --image "${image_rootfs}" \
       --name "veil-ci-${IMAGE_TARGET}-$$" \

@@ -56,9 +56,19 @@ INSTALL_FLAGS=(--yes --panel-access direct --le-ip-cert=false --public-ip 127.0.
 uninstall_leg() {
   ci_step "uninstall --keep-data"
   ci_run veil-uninstall ${SUDO} /usr/local/bin/veil uninstall --yes --keep-data
-  if systemctl is-active --quiet veil.service; then
-    ci_die "veil.service still active after uninstall"
-  fi
+  # veil.service alone cannot prove teardown: the helper socket, the caddy
+  # unit (when the caddy leg installed it) and every protocol unit started by
+  # the first-inbound leg must also be down and disabled (#407).
+  local unit
+  for unit in veil.service veil-helper.service veil-helper.socket veil-caddy.service \
+              veil-hysteria2@ci-hy2.service veil-mieru.service veil-olcrtc@ci-olc.service; do
+    if systemctl is-active --quiet "${unit}"; then
+      ci_die "${unit} still active after uninstall"
+    fi
+    if systemctl is-enabled --quiet "${unit}" 2>/dev/null; then
+      ci_die "${unit} still enabled after uninstall"
+    fi
+  done
   ${SUDO} test -s /var/lib/veil/state.json || ci_die "--keep-data removed state.json"
   ${SUDO} journalctl --no-pager -u veil.service -u veil-helper.service -u veil-helper.socket \
     > "${CI_ARTIFACT_DIR}/veil-units-journal.txt" 2>&1 || true
@@ -76,6 +86,107 @@ assert_protocol_units() { # $1 = leg context for diagnostics
     || ci_die "veil-mieru not active $1"
   systemctl is-enabled --quiet veil-olcrtc@ci-olc.service \
     || ci_die "veil-olcrtc@ci-olc not enabled $1"
+  # is-enabled alone can green a unit that failed to start (or was never
+  # rendered): require the unit file to exist, the binary it executes to be
+  # installed, and the unit to not be in the failed state (#408).
+  systemctl cat veil-olcrtc@ci-olc.service >/dev/null 2>&1 \
+    || ci_die "veil-olcrtc@ci-olc unit file missing $1"
+  if systemctl is-failed --quiet veil-olcrtc@ci-olc.service; then
+    ci_die "veil-olcrtc@ci-olc is in failed state $1"
+  fi
+  ${SUDO} test -x /usr/local/bin/olcrtc \
+    || ci_die "olcrtc runtime binary missing/non-executable $1"
+}
+
+# Pinned pebble test CA. Always installed at CI_PEBBLE_VERSION — a stale
+# preinstalled binary is not evidence (#454) — and patched to validate
+# tls-alpn-01 against Caddy's real :443 listener. This is a function because
+# phase B re-enters the job after a guest reboot: the CA process does not
+# survive reboot and must be restarted (#405).
+PEBBLE_MOD=""
+PEBBLE_ISSUING_ROOT=""
+start_pebble() {
+  local pebble_bin
+  pebble_bin="$(go env GOPATH)/bin/pebble"
+  GOBIN="$(go env GOPATH)/bin" go install "github.com/letsencrypt/pebble/v2/cmd/pebble@${CI_PEBBLE_VERSION}"
+  [ -x "${pebble_bin}" ] || ci_die "pinned pebble install produced no ${pebble_bin}"
+  PEBBLE_MOD="$(go env GOMODCACHE)/github.com/letsencrypt/pebble/v2@${CI_PEBBLE_VERSION}"
+  [ -f "${PEBBLE_MOD}/test/config/pebble-config.json" ] \
+    || ci_die "pebble module cache has no test config at ${PEBBLE_MOD}"
+  sed 's/"tlsPort": 5001/"tlsPort": 443/' "${PEBBLE_MOD}/test/config/pebble-config.json" \
+    > "${CI_ARTIFACT_DIR}/pebble-config.json"
+  (cd "${PEBBLE_MOD}" && PEBBLE_VA_NOSLEEP=1 "${pebble_bin}" -config "${CI_ARTIFACT_DIR}/pebble-config.json" \
+    > "${CI_ARTIFACT_DIR}/pebble.log" 2>&1 &)
+  for _ in $(seq 1 60); do
+    if grep -q newOrder < <(curl --http1.1 -sk --max-time 60 https://127.0.0.1:14000/dir); then
+      break
+    fi
+    sleep 1
+  done
+  grep -q newOrder < <(curl --http1.1 -sk --max-time 60 https://127.0.0.1:14000/dir) \
+    || ci_die "pebble ACME directory did not come up (see pebble.log)"
+  # The chain caddy serves is issued by the root pebble GENERATES at startup,
+  # not by the static minica that signs pebble's API TLS certificate — fetch
+  # the live issuing root from the management interface.
+  PEBBLE_ISSUING_ROOT="${CI_ARTIFACT_DIR}/pebble-issuing-root.pem"
+  curl -sf --cacert "${PEBBLE_MOD}/test/certs/pebble.minica.pem" \
+    "https://127.0.0.1:15000/roots/0" -o "${PEBBLE_ISSUING_ROOT}" \
+    || ci_die "could not fetch pebble issuing root from the management API"
+}
+
+# Caddy panel-proxy leg: real caddy-mode install, real tls-alpn-01 issuance
+# for the panel domain against pebble, then an HTTPS request through the
+# public :443 route that must return the panel SPA — HTTP 200 plus the
+# rendered app shell, not merely "not a caddy fallback status" (#406).
+# Scope honesty: this leg does not exercise naiveproxy; its data-path coverage
+# is owned by the e2e job (TestRequiredNaiveProxyDataPath), see issue #351.
+caddy_route_leg() {
+  ci_step "caddy-mode install: real ACME issuance + public route"
+  local domain="veil-ci.test"
+  # Both the pebble VA (its system resolver honours /etc/hosts) and the local
+  # route probe must resolve the panel domain to this host.
+  grep -q " ${domain}" /etc/hosts || echo "127.0.0.1 ${domain}" | ${SUDO} tee -a /etc/hosts >/dev/null
+  # Trust anchor for Caddy's ACME client; readable by the veil user through
+  # the unit's ReadOnlyPaths=/etc/veil.
+  ${SUDO} install -m 0644 "${PEBBLE_MOD}/test/certs/pebble.minica.pem" /etc/veil/acme-root.pem
+  ci_run veil-install-caddy ${SUDO} env \
+    VEIL_ACME_CA_URL="https://127.0.0.1:14000/dir" VEIL_ACME_CA_ROOT=/etc/veil/acme-root.pem \
+    /usr/local/bin/veil install --yes --panel-access caddy --domain "${domain}" --email "ci@veil-ci.test"
+  systemctl is-active --quiet veil-caddy.service || ci_die "veil-caddy.service is not active after caddy-mode install"
+  systemctl is-enabled --quiet veil-caddy.service || ci_die "veil-caddy.service is not enabled"
+  # Re-read the base path THIS install wrote — the probe must verify the URL
+  # the panel actually serves now, not the value cached during the
+  # direct-mode leg (reinstall reuses state today, but the contract is the
+  # env on disk).
+  local base_path
+  base_path="$(${SUDO} grep '^VEIL_WEB_BASE_PATH=' /etc/veil/veil.env | cut -d= -f2- | tr -d '[:space:]' || true)"
+  [ -n "${base_path}" ] || ci_die "VEIL_WEB_BASE_PATH missing from /etc/veil/veil.env after caddy-mode install"
+  # tls-alpn-01 issuance completes on the first TLS handshake; poll the public
+  # route until caddy serves a pebble-issued certificate and proxies the
+  # panel. Only HTTP 200 proves the request reached the panel — 301/401/403/
+  # 500/503 all previously greened a broken route (#406).
+  local route_code=000
+  for _ in $(seq 1 60); do
+    route_code="$(curl --http1.1 -s --cacert "${PEBBLE_ISSUING_ROOT}" \
+      --resolve "${domain}:443:127.0.0.1" --max-time 15 \
+      -o /tmp/ia-caddy-route.out -w '%{http_code}' "https://${domain}${base_path}" 2>/tmp/ia-caddy-route.err || true)"
+    [ "${route_code}" = "200" ] && break
+    sleep 2
+  done
+  cp /tmp/ia-caddy-route.out "${CI_ARTIFACT_DIR}/caddy-route.out" 2>/dev/null || true
+  cp /tmp/ia-caddy-route.err "${CI_ARTIFACT_DIR}/caddy-route.err" 2>/dev/null || true
+  [ "${route_code}" = "200" ] \
+    || ci_die "public caddy route https://${domain}${base_path} did not serve HTTP 200 (last ${route_code})"
+  # A 200 could still be an error page — the route must serve the actual
+  # panel SPA shell.
+  grep -q 'id="root"' "${CI_ARTIFACT_DIR}/caddy-route.out" \
+    || ci_die "public route returned 200 but not the panel SPA: $(head -c 400 "${CI_ARTIFACT_DIR}/caddy-route.out" 2>/dev/null)"
+  # --cacert proved the chain verifies; also assert the served certificate's
+  # issuer explicitly, at the same strength as the direct IP-cert leg.
+  openssl s_client -connect "127.0.0.1:443" -servername "${domain}" </dev/null 2>/dev/null \
+    | openssl x509 -noout -issuer | tee "${CI_ARTIFACT_DIR}/caddy-served-issuer.txt" || true
+  grep -qi "pebble" "${CI_ARTIFACT_DIR}/caddy-served-issuer.txt" \
+    || ci_die "public route is not serving a pebble-issued certificate: $(cat "${CI_ARTIFACT_DIR}/caddy-served-issuer.txt")"
 }
 
 # Reboot persistence (audit #304): only the smolvm system VM stages
@@ -114,6 +225,12 @@ if [ -n "${IA_PHASE_MARKER}" ] && [ -f "${IA_PHASE_MARKER}" ]; then
   done
   [ "${ready}" -eq 0 ] || ci_die "panel did not become ready after reboot"
   ci_run veil-status-post-reboot ${SUDO} /usr/local/bin/veil status --json
+  # The reboot leg previously skipped the entire caddy/ACME/public-route
+  # contract — phase B exited right after the persistence checks. The CA
+  # process does not survive reboot, so restart pebble here and run the same
+  # caddy route leg before the shared uninstall leg (#405).
+  start_pebble
+  caddy_route_leg
   uninstall_leg
   ci_log "install-acceptance job passed (post-reboot)"
   exit 0
@@ -151,6 +268,20 @@ for _ in $(seq 1 4); do
   sleep 10
 done
 [ "${runtime_ok}" -eq 0 ] || ci_die "runtime download failed after retries"
+# A green `runtime install` is not evidence the binaries landed: skipped or
+# partially-failed runtimes must not green the first-inbound leg (#409).
+# This is the SERVER set the installer owns (hysteria2->hysteria,
+# mieru->mita, naiveproxy->caddy, olcrtc->olcrtc, warp->sing-box); the
+# mieru/naive CLIENT binaries are e2e tooling, not runtime-install output.
+for bin in hysteria mita caddy olcrtc sing-box; do
+  ${SUDO} test -x "/usr/local/bin/${bin}" \
+    || ci_die "runtime install left ${bin} missing/non-executable in /usr/local/bin"
+done
+# Presence alone is not the pin contract: the installed sing-box must report
+# the version verify_versions.py binds to CI_SINGBOX_TAG.
+singbox_version="$(/usr/local/bin/sing-box version 2>/dev/null | grep -o '[0-9][0-9.]*' | head -1 || true)"
+[ "v${singbox_version}" = "${CI_SINGBOX_TAG}" ] \
+  || ci_die "sing-box reports version '${singbox_version:-none}', want ${CI_SINGBOX_TAG}"
 
 # --- 1. Capability report: read-only, exit 0 on a supported host --------------
 ci_step "install --check capability report (must not mutate)"
@@ -452,25 +583,10 @@ ci_run veil-status-after-reinstall ${SUDO} /usr/local/bin/veil status --json
 # Let's Encrypt. VEIL_ACME_CA_URL switches the acme.sh --server value and
 # VEIL_ACME_INSECURE skips TLS verification of pebble's self-signed endpoint.
 ci_step "controlled ACME CA (pebble) real issuance"
-pebble_bin="$(go env GOPATH)/bin/pebble"
-if [ ! -x "${pebble_bin}" ]; then
-  GOBIN="$(go env GOPATH)/bin" go install "github.com/letsencrypt/pebble/v2/cmd/pebble@${CI_PEBBLE_VERSION}"
-fi
-pebble_mod="$(go env GOMODCACHE)/github.com/letsencrypt/pebble/v2@${CI_PEBBLE_VERSION}"
-# Patch tlsPort to 443 so the pebble VA validates tls-alpn-01 against Caddy's
-# real public listener in the caddy-mode leg below (the stock test config
-# targets 5001, which nothing here listens on).
-sed 's/"tlsPort": 5001/"tlsPort": 443/' "${pebble_mod}/test/config/pebble-config.json"   > "${CI_ARTIFACT_DIR}/pebble-config.json"
-(cd "${pebble_mod}" && PEBBLE_VA_NOSLEEP=1 "${pebble_bin}" -config "${CI_ARTIFACT_DIR}/pebble-config.json"   > "${CI_ARTIFACT_DIR}/pebble.log" 2>&1 &)
-pebble_up=1
-for _ in $(seq 1 60); do
-  if grep -q newOrder < <(curl --http1.1 -sk --max-time 60 https://127.0.0.1:14000/dir); then
-    pebble_up=0
-    break
-  fi
-  sleep 1
-done
-[ "${pebble_up}" -eq 0 ] || ci_die "pebble ACME directory did not come up (see pebble.log)"
+# start_pebble always installs the pinned version (#454) and is shared with
+# the post-reboot phase (#405). PEBBLE_MOD / PEBBLE_ISSUING_ROOT are set for
+# the caddy leg below.
+start_pebble
 # Pebble's VA validates HTTP-01 against httpPort 5002 (test/config).
 ci_run veil-install-pebble ${SUDO} env \
   VEIL_ACME_CA_URL=https://127.0.0.1:14000/dir VEIL_ACME_INSECURE=1 \
@@ -502,55 +618,79 @@ fi
 
 # --- 8. Caddy panel proxy leg (audit #304: verify the public route) ----------
 # The legs above install with --panel-access direct; this leg proves the caddy
-# reverse-proxy path on the same host: a real caddy-mode install, real ACME
-# issuance for the panel domain via caddy's tls-alpn-01 against the pebble CA,
-# and an HTTPS request through the public :443 route to the panel — the
-# failure mode where install reports success but nothing serves the URL.
-# Scope honesty: this leg does not exercise naiveproxy; its data-path coverage
-# is owned by the e2e job (TestRequiredNaiveProxyDataPath), see issue #351.
-ci_step "caddy-mode install: real ACME issuance + public route"
-CADDY_CI_DOMAIN="veil-ci.test"
-# Both the pebble VA (its system resolver honours /etc/hosts) and the local
-# route probe must resolve the panel domain to this host.
-grep -q " ${CADDY_CI_DOMAIN}" /etc/hosts || echo "127.0.0.1 ${CADDY_CI_DOMAIN}" | ${SUDO} tee -a /etc/hosts >/dev/null
-# Trust anchor for Caddy's ACME client; readable by the veil user through the
-# unit's ReadOnlyPaths=/etc/veil.
-${SUDO} install -m 0644 "${pebble_mod}/test/certs/pebble.minica.pem" /etc/veil/acme-root.pem
-ci_run veil-install-caddy ${SUDO} env   VEIL_ACME_CA_URL="https://127.0.0.1:14000/dir" VEIL_ACME_CA_ROOT=/etc/veil/acme-root.pem   /usr/local/bin/veil install --yes --panel-access caddy --domain "${CADDY_CI_DOMAIN}" --email "ci@veil-ci.test"
-systemctl is-active --quiet veil-caddy.service || ci_die "veil-caddy.service is not active after caddy-mode install"
-systemctl is-enabled --quiet veil-caddy.service || ci_die "veil-caddy.service is not enabled"
-# Re-read the base path THIS install wrote — the probe must verify the URL
-# the panel actually serves now, not the value cached during the direct-mode
-# leg (reinstall reuses state today, but the contract is the env on disk).
-BASE_PATH="$(${SUDO} grep '^VEIL_WEB_BASE_PATH=' /etc/veil/veil.env | cut -d= -f2- | tr -d '[:space:]' || true)"
-[ -n "${BASE_PATH}" ] || ci_die "VEIL_WEB_BASE_PATH missing from /etc/veil/veil.env after caddy-mode install"
-# tls-alpn-01 issuance completes on the first TLS handshake; poll the public
-# route until caddy serves a pebble-issued certificate and proxies the panel.
-# --cacert success proves the cert chain; any HTTP status other than the
-# caddy-generated fallbacks (000 connect failure, 404 route miss, 502 backend
-# down) proves the request reached the panel through the public route.
-caddy_route=1
-route_code=000
-# The chain caddy serves is issued by the root pebble GENERATES at startup,
-# not by the static minica that signs pebble's API TLS certificate — fetch
-# the live issuing root from pebble's management interface.
-pebble_issuing_root="${CI_ARTIFACT_DIR}/pebble-issuing-root.pem"
-curl -sf --cacert "${pebble_mod}/test/certs/pebble.minica.pem"   "https://127.0.0.1:15000/roots/0" -o "${pebble_issuing_root}"   || ci_die "could not fetch pebble issuing root from the management API"
-for _ in $(seq 1 60); do
-  route_code="$(curl --http1.1 -s --cacert "${pebble_issuing_root}"     --resolve "${CADDY_CI_DOMAIN}:443:127.0.0.1" --max-time 15     -o /tmp/ia-caddy-route.out -w '%{http_code}' "https://${CADDY_CI_DOMAIN}${BASE_PATH}" 2>/tmp/ia-caddy-route.err || true)"
-  case "${route_code}" in 000|404|502) ;; *) caddy_route=0; break ;; esac
-  sleep 2
-done
-cp /tmp/ia-caddy-route.out "${CI_ARTIFACT_DIR}/caddy-route.out" 2>/dev/null || true
-cp /tmp/ia-caddy-route.err "${CI_ARTIFACT_DIR}/caddy-route.err" 2>/dev/null || true
-[ "${caddy_route}" -eq 0 ] || ci_die "public caddy route https://${CADDY_CI_DOMAIN}${BASE_PATH} did not serve the panel (last HTTP ${route_code})"
-# --cacert proved the chain verifies; also assert the served certificate's
-# issuer explicitly, at the same strength as the direct IP-cert leg above.
-openssl s_client -connect "127.0.0.1:443" -servername "${CADDY_CI_DOMAIN}" </dev/null 2>/dev/null \
-  | openssl x509 -noout -issuer | tee "${CI_ARTIFACT_DIR}/caddy-served-issuer.txt" || true
-grep -qi "pebble" "${CI_ARTIFACT_DIR}/caddy-served-issuer.txt" \
-  || ci_die "public route is not serving a pebble-issued certificate: $(cat "${CI_ARTIFACT_DIR}/caddy-served-issuer.txt")"
+# reverse-proxy path on the same host. It runs identically in the post-reboot
+# phase (smolvm) so the reboot leg no longer skips the public-route contract
+# (#405); see caddy_route_leg for the probe semantics.
+caddy_route_leg
 
 uninstall_leg
+
+# --- 9. Native package lifecycle on live systemd (issue #503) -----------------
+# The legs above install through the binary/curl-style path, which never
+# exercises the packaged maintainer scripts, the /lib vendor units, or the
+# sysctl drop-in. Install the real .deb here, prove the packaged contract under
+# REAL systemd, purge, and finish through the leftover-path uninstaller — the
+# same cleanup an operator gets after `apt remove veil`.
+ci_step "native package lifecycle (nfpm .deb on live systemd)"
+nfpm_bin="$(go env GOPATH)/bin/nfpm"
+if [ ! -x "${nfpm_bin}" ]; then
+  GOBIN="$(go env GOPATH)/bin" go install "github.com/goreleaser/nfpm/v2/cmd/nfpm@${CI_NFPM_VERSION}"
+fi
+# The acceptance binary was built earlier; nfpm packages dist/veil.
+mkdir -p dist /tmp/veil-pkg
+cp /tmp/veil-install-acceptance dist/veil
+# The .deb arch must match the runner (the arm64 leg cannot install an amd64
+# package — issue #503 exercises this job on both architectures).
+pkg_arch="$(dpkg --print-architecture)"
+export VEIL_VERSION="9.9.9" VEIL_ARCH="${pkg_arch}" VEIL_MAINTAINER="Veil CI <veil@users.noreply.github.com>"
+"${nfpm_bin}" package --config packaging/nfpm.yaml --packager deb --target /tmp/veil-pkg
+
+${SUDO} apt-get install -y /tmp/veil-pkg/*.deb
+test -f /lib/systemd/system/veil.service || ci_die "packaged veil.service missing from /lib/systemd/system"
+test -f /lib/systemd/system/veil-helper.socket || ci_die "packaged veil-helper.socket missing"
+test -f /etc/sysctl.d/99-veil-quic.conf || ci_die "QUIC sysctl drop-in missing after package install"
+# postinstall ran under REAL systemd: the helper socket enable must have
+# produced an actual wants symlink, and the packaged accounts exist.
+systemctl is-enabled --quiet veil-helper.socket \
+  || ci_die "postinstall did not enable veil-helper.socket on live systemd"
+id veil >/dev/null || ci_die "veil user missing after package install"
+id veil-proxy >/dev/null || ci_die "veil-proxy user missing after package install"
+id -nG veil | tr ' ' '\n' | grep -qx veil-proxy || ci_die "veil not in veil-proxy group"
+
+# Legacy pre-consolidation per-inbound Caddy leftovers (issue #375): a unit
+# file plus its enablement wants link must not survive package removal —
+# preremove stops/disables the instance and sweeps the want, postremove clears
+# the vendor-dir unit file.
+${SUDO} install -m 0644 /dev/null /lib/systemd/system/veil-caddy@legacy.service
+${SUDO} mkdir -p /etc/systemd/system/multi-user.target.wants
+${SUDO} ln -sf /lib/systemd/system/veil-caddy@legacy.service \
+  /etc/systemd/system/multi-user.target.wants/veil-caddy@legacy.service
+
+${SUDO} apt-get purge -y veil
+# Remove+purge must leave no packaged payload — the units and sysctl drop-in
+# are package-owned, not conffiles (issues #475, #485).
+for unit in veil.service veil-helper.service veil-helper.socket veil-backup.service veil-backup.timer veil-caddy.service veil-hysteria2@.service veil-mieru.service veil-olcrtc@.service veil-warp.service; do
+  test ! -e "/lib/systemd/system/${unit}" || ci_die "packaged unit ${unit} left after purge"
+done
+test ! -e /etc/sysctl.d/99-veil-quic.conf || ci_die "sysctl drop-in left after purge"
+test ! -e /usr/local/bin/veil || ci_die "veil binary left after purge"
+test ! -e /lib/systemd/system/veil-caddy@legacy.service \
+  || ci_die "legacy veil-caddy@ unit file left in vendor dir after purge"
+test ! -e /etc/systemd/system/multi-user.target.wants/veil-caddy@legacy.service \
+  || ci_die "legacy veil-caddy@ wants link left after purge"
+if systemctl is-enabled --quiet veil-helper.socket 2>/dev/null; then
+  ci_die "veil-helper.socket still enabled after purge"
+fi
+
+# The package purge preserves /etc/veil and /var/lib/veil (operator state).
+# Finish through the standalone leftover-path uninstaller — it must detect and
+# clear them, and report a clean host on a second pass (issues #500, #501).
+ci_step "leftover-state uninstaller after package purge"
+ci_run veil-uninstall-leftover ${SUDO} bash scripts/uninstall.sh --yes
+${SUDO} test ! -e /etc/veil || ci_die "/etc/veil left after leftover uninstall"
+${SUDO} test ! -e /var/lib/veil || ci_die "/var/lib/veil left after leftover uninstall"
+bash scripts/uninstall.sh --yes 2>&1 | tee "${CI_ARTIFACT_DIR}/uninstall-second-pass.log"
+grep -q "Nothing to uninstall" "${CI_ARTIFACT_DIR}/uninstall-second-pass.log" \
+  || ci_die "second uninstall pass still finds leftover state"
 
 ci_log "install-acceptance job passed"

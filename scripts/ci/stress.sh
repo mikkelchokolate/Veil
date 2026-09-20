@@ -26,9 +26,16 @@ ci_step "stress: full internal/api x20 (-race -shuffle=on)"
 # -timeout: the go test default (10m) is calibrated for -count=1; multiplied
 # -race runs legitimately need more. This is a harness budget, not a retry.
 ci_run stress-api-x20 go test ./internal/api -race -count=20 -shuffle=on -timeout 60m -v
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/stress-api-x20.log"
 
 ci_step "stress: historically flaky tests x50 (-race -shuffle=on)"
 ci_run stress-flaky-x50 go test ./internal/api -race -count=50 -shuffle=on -timeout 60m \
   -run 'TestApplyStateTracksDesiredVsApplied|TestMutationResponseIncludesRevisionAndApplyJob|TestStartupMigrateLegacyRestoredStateMigratesNewProfiles|TestClientMutationOrchestration' -v
+# A -run pattern that matches nothing exits 0 — prove the flaky lane actually
+# executed its named tests rather than greening an empty selection (#412).
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/stress-flaky-x50.log"
+for t in TestApplyStateTracksDesiredVsApplied TestMutationResponseIncludesRevisionAndApplyJob TestStartupMigrateLegacyRestoredStateMigratesNewProfiles TestClientMutationOrchestration; do
+  ci_assert_test_passed "${CI_ARTIFACT_DIR}/stress-flaky-x50.log" "${t}"
+done
 
 ci_log "stress job passed"

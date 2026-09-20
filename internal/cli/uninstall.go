@@ -29,6 +29,11 @@ func newUninstallCommand() *cobra.Command {
 	if mitaStateDir == "" {
 		mitaStateDir = "/var/lib/mita"
 	}
+	// Packaged vendor unit dirs and the QUIC sysctl drop-in are cleaned by
+	// default (issues #492, #486); the env overrides exist for the same
+	// test/alternate-layout flexibility as scripts/uninstall.sh.
+	vendorSystemdDirs := strings.Fields(os.Getenv("VEIL_VENDOR_SYSTEMD_DIRS"))
+	sysctlConfPath := strings.TrimSpace(os.Getenv("VEIL_SYSCTL_CONF"))
 
 	cmd := &cobra.Command{
 		Use:   "uninstall",
@@ -42,7 +47,7 @@ func newUninstallCommand() *cobra.Command {
 			"/var/lib/mita); use --keep-data if they are shared with a system Caddy/mita.\n" +
 			"The veil system account is always preserved.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return uninstallflow.Run(uninstallflow.Options{DryRun: dryRun, Yes: yes, Purge: purge, KeepData: keepData, EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, InstallDir: installDir, CaddyStateDir: caddyStateDir, MitaStateDir: mitaStateDir}, cmd.OutOrStdout(), cmd.ErrOrStderr(), uninstallflow.Dependencies{
+			return uninstallflow.Run(uninstallflow.Options{DryRun: dryRun, Yes: yes, Purge: purge, KeepData: keepData, EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, InstallDir: installDir, CaddyStateDir: caddyStateDir, MitaStateDir: mitaStateDir, VendorSystemdDirs: vendorSystemdDirs, SysctlConfPath: sysctlConfPath}, cmd.OutOrStdout(), cmd.ErrOrStderr(), uninstallflow.Dependencies{
 				ServiceStopper:  uninstallServiceStopper,
 				FileRemover:     uninstallFileRemover,
 				SystemdReloader: uninstallSystemdReloader,

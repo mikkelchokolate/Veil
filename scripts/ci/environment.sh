@@ -20,7 +20,9 @@ manifest="${CI_ARTIFACT_DIR}/environment-${JOB}.txt"
   echo; echo "## id";         id || true
   echo; echo "## umask";      umask || true
   echo; echo "## go";         go version 2>/dev/null || echo "go: not installed"
-  go env 2>/dev/null || true
+  # go env can carry credentials (GOAUTH, GOPRIVATE proxies, -ldflags secrets):
+  # route it through the same redaction as `env` below (#435).
+  go env 2>/dev/null | sed -E 's/^([^=]*(TOKEN|SECRET|PASSWORD|AUTH|COOKIE|KEY|CREDENTIAL|PRIVATE|SESSION)[^=]*)=.*/\1=<redacted>/I' || true
   echo; echo "## node";       node --version 2>/dev/null || echo "node: not installed"
   echo; echo "## pnpm";       pnpm --version 2>/dev/null || echo "pnpm: not installed"
   echo; echo "## git";        git --version || true

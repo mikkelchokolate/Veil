@@ -52,7 +52,7 @@ func (r InboundRenderer) RenderNaive(inbound Inbound, includePanel bool) (string
 		if socksPort == 0 {
 			socksPort = 40000
 		}
-		naiveConfig.Upstream = fmt.Sprintf("socks5://127.0.0.1:%d", socksPort)
+		naiveConfig.Upstream = "socks5://" + net.JoinHostPort(r.warp.SocksDialAddr(), strconv.Itoa(socksPort))
 	}
 	if includePanel && r.settings.PanelAccess == "caddy" {
 		if route, ok, err := panelCaddyRoute(r.settings); err == nil && ok {
@@ -126,7 +126,7 @@ func (r InboundRenderer) RenderHysteria2(inbound Inbound) (string, error) {
 		if socksPort == 0 {
 			socksPort = 40000
 		}
-		hystConfig.Upstream = fmt.Sprintf("127.0.0.1:%d", socksPort)
+		hystConfig.Upstream = net.JoinHostPort(r.warp.SocksDialAddr(), strconv.Itoa(socksPort))
 	}
 	return renderer.RenderHysteria2(hystConfig)
 }

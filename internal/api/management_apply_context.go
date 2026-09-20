@@ -34,7 +34,7 @@ var caddyAdminLoader = func(configJSON []byte) error {
 // to avoid running real ufw commands.
 type firewallApplier interface {
 	// ApplySafely stages rules, refuses to enable an inactive firewall with
-	// no SSH management access, and rolls back its own mutation on failure.
+	// no SSH management access, and rolls back on failure.
 	ApplySafely(rules []firewall.Rule) error
 }
 
@@ -184,12 +184,10 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 		removeIDs = append(removeIDs, generatedconfig.WarpConfigSubpath)
 	}
 	// Same teardown contract for Caddy: when no naive inbound and no
-	// panel-via-caddy remain, the live caddy/config.json must go or
-	// veil-caddy.service would keep serving the STALE auth_credentials
-	// forever (audit #123). The aggregate-dir orphan scan already collects
-	// config.json whenever it is absent from the promote set; this explicit
-	// check keeps the teardown tied to a running unit and covers scan gaps
-	// (unreadable directory, out-of-tree live root). Removing the artifact
+	// panel-via-caddy remain, the live caddy/config.json must go or the
+	// orphan scan will never touch it (config.json is excluded as a shared
+	// singleton artifact) and veil-caddy.service would keep serving the
+	// STALE auth_credentials forever (audit #123). Removing the artifact
 	// stops and disables the unit via UnitForArtifactID.
 	if !caddyRequired(ctx.state.settings, ctx.state.inbounds) && ctx.caddyUnitActiveLocked() &&
 		!slices.Contains(removeIDs, generatedconfig.CaddyJSONConfigSubpath) {
@@ -596,8 +594,8 @@ func (ctx ManagementApplyContext) syncCaddyCertForHysteria2(domain string) Servi
 // localFirewallSyncTransactionID marks a firewall sync that was applied
 // directly by the local/dev path (no privileged staged transaction). It lets
 // the workflow record FirewallChanged instead of reporting "no firewall
-// change" for a sync that really did mutate UFW, and it lets rollback answer
-// honestly that a direct sync cannot be undone (#538).
+// change" for a sync that really did mutate UFW (#582), and it lets rollback
+// answer honestly that a direct sync cannot be undone (#538).
 const localFirewallSyncTransactionID = "local"
 
 func (ctx ManagementApplyContext) PrepareFirewallLocked() (string, error) {
@@ -618,10 +616,10 @@ func (ctx ManagementApplyContext) PrepareFirewallLocked() (string, error) {
 	}
 	responses := firewall.BuildRuleResponses(ctx.state.settings, ctx.state.inbounds)
 	rules := firewall.UFWRulesFromResponses(responses)
-	// An empty desired set is still reconciled: the helper prunes stale
-	// Veil-managed rules left behind by earlier applies (for example the
-	// panel allow after a public -> loopback switch). Skipping the call
-	// would strand those rules in ufw forever.
+	// An empty desired set is still reconciled through the privileged
+	// transaction: the helper prunes stale Veil-managed rules left behind by
+	// earlier applies, and skipping the call would silently bypass the
+	// privileged boundary entirely.
 	reqRules := make([]privileged.FirewallRule, len(rules))
 	for index, rule := range rules {
 		reqRules[index] = privileged.FirewallRule{Command: rule.Command, Args: rule.Args}

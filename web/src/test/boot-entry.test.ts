@@ -6,7 +6,10 @@ const dir = dirname(fileURLToPath(import.meta.url));
 const boot = readFileSync(join(dir, "../boot.ts"), "utf8");
 const html = readFileSync(join(dir, "../../index.html"), "utf8");
 
-describe("first-load boot entry", () => {
+// Source-tree entry contract only: production dist coverage lives in
+// scripts/check_bundle_size.mjs, which asserts the built index.html references
+// the hashed ./assets/ module (issue #481) — dist never ships ./src/* paths.
+describe("first-load boot entry (source)", () => {
 	it("is the HTML module entry and only dynamically imports main", () => {
 		expect(html).toContain('src="./src/boot.ts"');
 		expect(html).not.toContain('src="./src/main.tsx"');

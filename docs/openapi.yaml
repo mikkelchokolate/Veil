@@ -220,13 +220,9 @@ paths:
                     '
         '401':
           $ref: '#/components/responses/Unauthorized'
-      security:
-      - sessionCookie: []
-      - bearerAuth: []
-      - veilToken: []
+      security: []
       x-roles:
-      - admin
-      - viewer
+      - public
   /api/setup/status:
     get:
       x-veil-role: public

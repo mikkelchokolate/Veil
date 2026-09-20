@@ -10,8 +10,12 @@ updates:
         patterns:
           - "*"
 
+  # directories covers the root Dockerfile AND ci/vm/Containerfile, whose
+  # digest-pinned base images feed the local-CI image chain (#427).
   - package-ecosystem: docker
-    directory: /
+    directories:
+      - /
+      - /ci/vm
     schedule:
       interval: weekly
     open-pull-requests-limit: 1

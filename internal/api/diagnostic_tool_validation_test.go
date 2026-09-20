@@ -2,7 +2,9 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,6 +21,11 @@ func TestPingRouteNormalizesTargetAndDefaultsCount(t *testing.T) {
 		return PingResult{Host: host, Transmitted: count}
 	}
 	t.Cleanup(func() { pingRunner = old })
+	oldLookup := diagnosticTargetLookup
+	diagnosticTargetLookup = func(ctx context.Context, host string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("203.0.113.10")}, nil
+	}
+	t.Cleanup(func() { diagnosticTargetLookup = oldLookup })
 
 	request := diagnosticJSONRequest(t, "/api/tools/ping", map[string]any{
 		"host":  "  example.com  ",
@@ -29,7 +36,8 @@ func TestPingRouteNormalizesTargetAndDefaultsCount(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
-	if gotHost != "example.com" || gotCount != 3 {
+	// The probe is pinned to the resolved, scope-approved literal (#575).
+	if gotHost != "203.0.113.10" || gotCount != 3 {
 		t.Fatalf("pingRunner host=%q count=%d", gotHost, gotCount)
 	}
 }
@@ -42,6 +50,11 @@ func TestPingRouteRejectsOptionLikeTargetsAndInvalidCounts(t *testing.T) {
 		return PingResult{}
 	}
 	t.Cleanup(func() { pingRunner = old })
+	oldLookup := diagnosticTargetLookup
+	diagnosticTargetLookup = func(ctx context.Context, host string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("203.0.113.10")}, nil
+	}
+	t.Cleanup(func() { diagnosticTargetLookup = oldLookup })
 
 	for _, tc := range []struct {
 		name string
@@ -75,6 +88,11 @@ func TestDNSLookupRouteNormalizesAndValidatesTarget(t *testing.T) {
 		return []string{"203.0.113.1"}, "", nil
 	}
 	t.Cleanup(func() { dnsLookuper = old })
+	oldLookup := diagnosticTargetLookup
+	diagnosticTargetLookup = func(ctx context.Context, host string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("203.0.113.1")}, nil
+	}
+	t.Cleanup(func() { diagnosticTargetLookup = oldLookup })
 
 	request := diagnosticJSONRequest(t, "/api/tools/dns-lookup", map[string]any{"hostname": " example.com "})
 	response := httptest.NewRecorder()

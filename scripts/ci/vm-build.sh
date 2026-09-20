@@ -23,7 +23,9 @@ ci_image_key() {
     cat "${VM_DIR}/entrypoint.sh"
     cat "${VM_DIR}/guest-run.sh"
     cat "${VM_DIR}/prepare-workspace.sh"
-    find "${VM_DIR}/systemd" -type f -exec cat {} + 2>/dev/null || true
+    # Readdir order is not stable across hosts/filesystems — an unsorted find
+    # produces a different key for identical content (#450).
+    find "${VM_DIR}/systemd" -type f -print0 2>/dev/null | LC_ALL=C sort -z | xargs -0 -r cat
   } | sha256sum | cut -c1-16
 }
 
@@ -60,10 +62,12 @@ build_target() {
     --build-arg "UBUNTU_BASE=ubuntu:24.04@${UBUNTU_24_04_DIGEST}" \
     --build-arg "CI_GO_VERSION=${CI_GO_VERSION}" \
     --build-arg "CI_GO_TARBALL_SHA256=${CI_GO_TARBALL_SHA256}" \
+    --build-arg "CI_GO_TARBALL_SHA256_ARM64=${CI_GO_TARBALL_SHA256_ARM64}" \
     --build-arg "CI_GO_GODEBUG=${CI_GO_GODEBUG}" \
     --build-arg "CI_GO_GOPROXY=${CI_GO_GOPROXY}" \
     --build-arg "CI_NODE_VERSION=${CI_NODE_VERSION}" \
     --build-arg "CI_NODE_TARBALL_SHA256=${CI_NODE_TARBALL_SHA256}" \
+    --build-arg "CI_NODE_TARBALL_SHA256_ARM64=${CI_NODE_TARBALL_SHA256_ARM64}" \
     --build-arg "CI_NPM_VERSION=${CI_NPM_VERSION}" \
     --build-arg "CI_PNPM_VERSION=${CI_PNPM_VERSION}" \
     --build-arg "CI_STATICCHECK_VERSION=${CI_STATICCHECK_VERSION}" \

@@ -32,7 +32,9 @@ fi
 
 if [ "${1:-}" = "--images" ]; then
   ci_step "CI images and exported archives"
-  docker images --format '{{.Repository}}:{{.Tag}}' | grep '^veil-ci-' | xargs -r docker rmi >/dev/null 2>&1 || true
+  # veil:ci is the product image tag written by image-build.sh — it is not
+  # matched by the ^veil-ci- prefix (#434).
+  docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^(veil-ci-|veil:ci$)' | xargs -r docker rmi >/dev/null 2>&1 || true
   rm -f "${HOME}/.cache/veil-ci"/veil-ci-*.tar
 fi
 

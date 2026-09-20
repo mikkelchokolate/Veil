@@ -2,6 +2,8 @@ package uninstall
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -107,6 +109,107 @@ func TestRunPurgeRemovesConfigurationAndState(t *testing.T) {
 	}
 	if !contains(removed, "/tmp/etc") || !contains(removed, "/tmp/var") {
 		t.Fatalf("purge removed=%v", removed)
+	}
+}
+
+// Issues #492/#486: uninstall must also clear the packaged vendor units under
+// /lib + /usr/lib systemd dirs and the QUIC sysctl drop-in — a `dpkg -r` that
+// left conffile leftovers (pre-#475 packages) must not survive `veil
+// uninstall`.
+func TestPathsCoverVendorUnitsAndSysctl(t *testing.T) {
+	var out, errOut bytes.Buffer
+	removed := []string{}
+	err := Run(Options{Yes: true, EtcDir: "/tmp/etc", VarDir: "/tmp/var", SystemdDir: "/tmp/systemd", InstallDir: "/tmp/bin"}, &out, &errOut, Dependencies{
+		ServiceStopper:  func(string) error { return nil },
+		FileRemover:     func(path string) error { removed = append(removed, path); return nil },
+		SystemdReloader: func() error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, want := range []string{
+		"/lib/systemd/system/veil.service",
+		"/lib/systemd/system/veil-backup.service",
+		"/usr/lib/systemd/system/veil.service",
+		"/usr/lib/systemd/system/veil-helper.socket",
+		"/etc/sysctl.d/99-veil-quic.conf",
+	} {
+		if !contains(removed, want) {
+			t.Fatalf("uninstall did not remove %s, removed=%v", want, removed)
+		}
+	}
+	// Keep-data still clears vendor units + sysctl: they are package-owned
+	// host files, not operator credentials.
+	removed = nil
+	out.Reset()
+	err = Run(Options{Yes: true, KeepData: true, EtcDir: "/tmp/etc", VarDir: "/tmp/var", SystemdDir: "/tmp/systemd", InstallDir: "/tmp/bin"}, &out, &errOut, Dependencies{
+		ServiceStopper:  func(string) error { return nil },
+		FileRemover:     func(path string) error { removed = append(removed, path); return nil },
+		SystemdReloader: func() error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("Run keep-data: %v", err)
+	}
+	for _, want := range []string{
+		"/lib/systemd/system/veil.service",
+		"/etc/sysctl.d/99-veil-quic.conf",
+	} {
+		if !contains(removed, want) {
+			t.Fatalf("--keep-data uninstall did not remove %s, removed=%v", want, removed)
+		}
+	}
+	// The dry-run plan must name the vendor and sysctl paths (issue #501).
+	plan := Plan(Options{EtcDir: "/tmp/etc", VarDir: "/tmp/var", SystemdDir: "/tmp/systemd", InstallDir: "/tmp/bin"})
+	for _, want := range []string{"/lib/systemd/system/veil.service", "/usr/lib/systemd/system/veil.service", "/etc/sysctl.d/99-veil-quic.conf"} {
+		if !strings.Contains(plan, want) {
+			t.Fatalf("plan missing %s:\n%s", want, plan)
+		}
+	}
+}
+
+// Issue #375: legacy pre-consolidation veil-caddy@<name>.service instances are
+// not in the runtime catalog, so catalog-only scans never see them. Uninstall
+// must stop/disable the instance and remove both its enablement wants link and
+// a stray per-instance unit file.
+func TestRunRemovesLegacyCaddyInstances(t *testing.T) {
+	systemdDir := t.TempDir()
+	wantsDir := filepath.Join(systemdDir, "multi-user.target.wants")
+	if err := os.MkdirAll(wantsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	unitFile := filepath.Join(systemdDir, "veil-caddy@legacy.service")
+	if err := os.WriteFile(unitFile, []byte("[Service]\nExecStart=/usr/local/bin/caddy\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wantLink := filepath.Join(wantsDir, "veil-caddy@legacy.service")
+	if err := os.Symlink(unitFile, wantLink); err != nil {
+		// Windows test hosts may forbid symlinks; fall back to a regular file —
+		// the leftover glob treats both the same.
+		if werr := os.WriteFile(wantLink, []byte("x"), 0o644); werr != nil {
+			t.Fatalf("plant wants link: %v / %v", err, werr)
+		}
+	}
+	var out, errOut bytes.Buffer
+	var stopped, removed []string
+	err := Run(Options{
+		Yes: true, EtcDir: "/tmp/etc", VarDir: "/tmp/var",
+		SystemdDir: systemdDir, InstallDir: "/tmp/bin",
+		VendorSystemdDirs: []string{filepath.Join(systemdDir, "vendor")},
+	}, &out, &errOut, Dependencies{
+		ServiceStopper:  func(service string) error { stopped = append(stopped, service); return nil },
+		FileRemover:     func(path string) error { removed = append(removed, path); return nil },
+		SystemdReloader: func() error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	slashedWant := filepath.ToSlash(wantLink)
+	slashedUnit := filepath.ToSlash(unitFile)
+	if !contains(stopped, "veil-caddy@legacy.service") {
+		t.Fatalf("uninstall did not stop/disable veil-caddy@legacy.service, stopped=%v", stopped)
+	}
+	if !contains(removed, slashedWant) || !contains(removed, slashedUnit) {
+		t.Fatalf("uninstall did not remove legacy caddy want/unit, removed=%v", removed)
 	}
 }
 

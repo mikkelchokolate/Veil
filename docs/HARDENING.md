@@ -94,9 +94,11 @@ X-Veil-Token: <token>
 - Management state secrets (Inbound passwords, Client profile credentials, WARP
   secrets) are encrypted at rest by the State store and redacted in API
   responses and previews per the Credential disclosure rules.
-- The `/etc/veil` directory is created `0750` and should be owned by root (or
-  the dedicated `veil` user in container deployments). Do not loosen these
-  permissions.
+- The `/etc/veil` directory is created `0751` and owned by `root:veil` (or
+  the dedicated `veil` user in container deployments). The world execute bit
+  is intentional: the `veil-proxy` protocol units traverse `/etc/veil` to reach
+  the `root:veil-proxy` `generated/`, `tls/`, and `panel/` subdirectories
+  without being able to list it. Do not loosen these permissions.
 - Never commit `veil.env` or generated config to version control. Treat backups
   produced by the Backup lifecycle as sensitive — they contain managed material.
 
@@ -183,6 +185,12 @@ runbook.
   It can read the root-owned configuration under `/etc/veil` and write only
   Panel-owned state, staging, updates, sessions, and audit data under
   `/var/lib/veil`.
+- **Protocol-unit privilege boundary.** Internet-facing runtime units —
+  Hysteria2, olcRTC, WARP, Mieru, and the NaiveProxy/Caddy unit — run as
+  `User=veil-proxy`/`Group=veil-proxy`, not as the panel account. They read
+  the `root:veil-proxy` generated configuration but cannot read
+  `veil.env`/`state.key` (`root:veil`), and `InaccessiblePaths` keeps
+  `/run/veil/helper.sock` and `/var/lib/veil` out of reach entirely.
 - **Privileged helper.** Root-only operations are exposed by
   `veil-helper.socket` at `/run/veil/helper.sock`. The socket is
   `root:veil 0660`; the helper verifies the caller with `SO_PEERCRED`, accepts

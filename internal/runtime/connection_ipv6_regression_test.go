@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"errors"
+	"io/fs"
 	"testing"
 )
 
@@ -63,7 +64,9 @@ func (s scriptedConnectionSource) SocketLines(proto string) ([]string, error) {
 	}
 	lines, ok := s.lines[proto]
 	if !ok {
-		return nil, errors.New("no such proc table")
+		// Matches the real proc source: a kernel without this stack yields
+		// fs.ErrNotExist, which Read treats as "no listeners on this table".
+		return nil, fs.ErrNotExist
 	}
 	return lines, nil
 }
@@ -118,5 +121,15 @@ func TestConnectionDiscoverySkipsMissingIPv6Tables(t *testing.T) {
 	}
 	if len(stats.Listeners) != 1 || stats.Listeners[0].Proto != "udp" || stats.Listeners[0].Port != 53 {
 		t.Fatalf("listeners = %+v", stats.Listeners)
+	}
+}
+
+// Issue #587: a failed table read (EACCES, IO) must not be reported as an
+// empty listener set — Read surfaces the error instead of pretending the
+// IPv6/dual-stack stack has no sockets.
+func TestConnectionDiscoverySurfacesSocketTableReadErrors(t *testing.T) {
+	source := scriptedConnectionSource{err: errors.New("read tcp6: permission denied")}
+	if _, err := newConnectionDiscoveryWithSource(source).Read(); err == nil {
+		t.Fatal("expected Read to surface the socket table read failure")
 	}
 }

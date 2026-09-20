@@ -17,6 +17,11 @@ case "${phase}" in
     ci_job_run frontend
     ci_job_run test
     ci_job_run lint
+    # These are separate required jobs in ci.yml — a local "full" run that
+    # omits them does not prove what a PR gate proves (#386).
+    ci_job_run multi-process
+    ci_job_run sigkill
+    ci_job_run filesystem-faults
     ;;
   browser)
     ci_job_run browser-e2e

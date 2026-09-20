@@ -107,7 +107,7 @@ func (w Workflow) RunLocked(req model.ApplyRequest) (model.ApplyResponse, int, e
 					// Failed rollback actions still report false (#540).
 					response.ServicesRestored = allServiceActionsSuccessful(rollbackActions)
 					// Both prepare implementations roll their own mutation back
-					// on error (ApplySafely restore / journaled rollback); claim
+					// on error (ApplySafely restore / journal rollback); claim
 					// firewall restoration only when that self-rollback did not
 					// itself report failure (#540).
 					response.FirewallRestored = !firewallSelfRestoreFailed(err)

@@ -48,7 +48,7 @@ func TestSyncFirewallLocked(t *testing.T) {
 		t.Fatalf("expected firewall success, got %+v", results)
 	}
 
-	swapFirewallApplier(&recordingFirewallApplier{ensureErr: errors.New("ufw not found")})
+	swapFirewallApplier(&recordingFirewallApplier{applySafelyErr: errors.New("ufw not found")})
 	results = ctx.syncFirewall()
 	if len(results) != 1 || results[0].Success {
 		t.Fatalf("expected firewall failure, got %+v", results)
@@ -89,16 +89,12 @@ func TestHysteria2CertDomainsIgnoresMissingAndNonHysteria2Files(t *testing.T) {
 }
 
 type recordingFirewallApplier struct {
-	ensureErr error
-	applyErr  error
+	applySafelyErr error
 }
 
 func (f *recordingFirewallApplier) ApplySafely(rules []firewall.Rule) error {
 	_ = rules
-	if f.ensureErr != nil {
-		return f.ensureErr
-	}
-	return f.applyErr
+	return f.applySafelyErr
 }
 
 func boolPtr(v bool) *bool {

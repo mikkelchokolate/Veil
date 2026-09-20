@@ -13,23 +13,15 @@ import (
 )
 
 type fakeFirewallApplier struct {
-	enableCalled bool
-	applyCalled  bool
-	gotRules     []firewall.Rule
-	enableErr    error
-	applyErr     error
+	applySafelyCalled bool
+	gotRules          []firewall.Rule
+	applySafelyErr    error
 }
 
-// ApplySafely mirrors the real implementation's two phases: ensure active
-// first, then apply the staged rules.
 func (f *fakeFirewallApplier) ApplySafely(rules []firewall.Rule) error {
-	f.enableCalled = true
-	if f.enableErr != nil {
-		return f.enableErr
-	}
-	f.applyCalled = true
+	f.applySafelyCalled = true
 	f.gotRules = rules
-	return f.applyErr
+	return f.applySafelyErr
 }
 
 func TestManagementApplyContextBuildsApplyPlanFromState(t *testing.T) {
@@ -113,11 +105,8 @@ func TestSyncFirewallLockedOpensPanelPortByDefault(t *testing.T) {
 	if len(results) != 1 || !results[0].Success {
 		t.Fatalf("expected one successful firewall sync, got %+v", results)
 	}
-	if !fake.enableCalled {
-		t.Fatal("expected EnsureActive to be called")
-	}
-	if !fake.applyCalled {
-		t.Fatal("expected ApplyRules to be called")
+	if !fake.applySafelyCalled {
+		t.Fatal("expected ApplySafely to be called")
 	}
 	if len(fake.gotRules) == 0 {
 		t.Fatal("expected at least one firewall rule")
@@ -152,8 +141,62 @@ func TestSyncFirewallLockedDisabledBySetting(t *testing.T) {
 	if len(results) != 0 {
 		t.Fatalf("expected no firewall results when disabled, got %+v", results)
 	}
-	if fake.enableCalled || fake.applyCalled {
+	if fake.applySafelyCalled {
 		t.Fatal("expected no firewall calls when disabled")
+	}
+}
+
+// #582: a direct local sync that applied rules must surface a transaction
+// marker so the workflow reports FirewallChanged; an empty sync must not.
+func TestPrepareFirewallLockedReturnsSentinelAfterLocalSync(t *testing.T) {
+	state := newManagementState(ServerInfo{Version: "test", Mode: "dev"})
+	state.settings.PanelListen = "0.0.0.0:3000"
+	state.settings.PanelAccess = "direct"
+
+	fake := &fakeFirewallApplier{}
+	old := currentFirewallApplier()
+	swapFirewallApplier(fake)
+	t.Cleanup(func() { swapFirewallApplier(old) })
+
+	ctx := NewManagementApplyContext(state)
+	txn, err := ctx.PrepareFirewallLocked()
+	if err != nil {
+		t.Fatalf("PrepareFirewallLocked: %v", err)
+	}
+	if txn != localFirewallSyncTransactionID {
+		t.Fatalf("transaction = %q, want %q", txn, localFirewallSyncTransactionID)
+	}
+
+	// Commit is a no-op locally; rollback must honestly refuse because the
+	// direct sync has no staged transaction to undo (#538).
+	if err := ctx.CommitFirewallLocked(txn); err != nil {
+		t.Fatalf("CommitFirewallLocked: %v", err)
+	}
+	if err := ctx.RollbackFirewallLocked(txn); err == nil {
+		t.Fatal("expected local rollback to report that a direct sync cannot be undone")
+	}
+}
+
+func TestPrepareFirewallLockedReturnsEmptyWhenNothingApplied(t *testing.T) {
+	state := newManagementState(ServerInfo{Version: "test", Mode: "dev"})
+	// Loopback panel + no inbounds → no firewall rules → no sync ran.
+	state.settings.PanelListen = "127.0.0.1:2096"
+
+	fake := &fakeFirewallApplier{}
+	old := currentFirewallApplier()
+	swapFirewallApplier(fake)
+	t.Cleanup(func() { swapFirewallApplier(old) })
+
+	ctx := NewManagementApplyContext(state)
+	txn, err := ctx.PrepareFirewallLocked()
+	if err != nil {
+		t.Fatalf("PrepareFirewallLocked: %v", err)
+	}
+	if txn != "" {
+		t.Fatalf("transaction = %q, want empty for a no-op sync", txn)
+	}
+	if err := ctx.RollbackFirewallLocked(""); err != nil {
+		t.Fatalf("empty rollback should be a no-op, got %v", err)
 	}
 }
 
@@ -162,7 +205,7 @@ func TestSyncFirewallLockedReportsNonFatalErrors(t *testing.T) {
 	state.settings.PanelListen = "0.0.0.0:3000"
 	state.settings.PanelAccess = "direct"
 
-	fake := &fakeFirewallApplier{enableErr: errors.New("ufw not found")}
+	fake := &fakeFirewallApplier{applySafelyErr: errors.New("ufw not found")}
 	old := currentFirewallApplier()
 	swapFirewallApplier(fake)
 	t.Cleanup(func() { swapFirewallApplier(old) })

@@ -27,9 +27,19 @@ EOF
 script="${CI_SCRIPTS_DIR}/${JOB}.sh"
 [ -f "${script}" ] || ci_die "unknown CI job '${JOB}' (no ${script})"
 rc=0
-bash "${script}" "$@" || rc=$?
-# Mirror the run-job.sh composite for the standard set on the host.
-if [ "${JOB}" = "standard" ] && [ "${rc}" -eq 0 ]; then
-  bash "${CI_SCRIPTS_DIR}/image-build.sh" || rc=$?
+# Mirror the run-job.sh composites on the host: `full` is a phased set —
+# full.sh dies without CI_FULL_PHASE, so run every phase sequentially the
+# same way run-job.sh does (#399). `standard` follows with image-build.
+if [ "${JOB}" = "full" ]; then
+  for phase in base browser system docker; do
+    if [ "${rc}" -eq 0 ]; then
+      CI_FULL_PHASE="${phase}" bash "${script}" "$@" || rc=$?
+    fi
+  done
+else
+  bash "${script}" "$@" || rc=$?
+  if [ "${JOB}" = "standard" ] && [ "${rc}" -eq 0 ]; then
+    bash "${CI_SCRIPTS_DIR}/image-build.sh" || rc=$?
+  fi
 fi
 exit "${rc}"
