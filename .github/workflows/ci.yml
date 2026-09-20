@@ -8,7 +8,17 @@ on:
     branches: [main]
   pull_request:
     types: [opened, synchronize, reopened]
+  # Merge queue runs the same required gates as PR CI — without this trigger a
+  # queued merge would run no ci.yml checks at all (issue #416).
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
+
+# Cancel superseded PR runs instead of stacking them; main/merge-group runs
+# are never cancelled mid-flight (issue #461).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -70,10 +80,16 @@ jobs:
       - id: versions
         run: |
           source scripts/ci/versions.sh
-          echo "go_version=${CI_GO_VERSION}" >> "$GITHUB_OUTPUT"
+          { echo "go_version=${CI_GO_VERSION}"; echo "node_version=${CI_NODE_VERSION}"; } >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ steps.versions.outputs.go_version }}
+      # test.sh runs `make verify-openapi` (npx redocly) and the panel JS
+      # syntax test — Node must be the pinned version, not the runner's
+      # ambient one (#422, #432).
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ steps.versions.outputs.node_version }}
       - name: Cache pinned Caddy test runtime
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -346,7 +362,7 @@ jobs:
       - name: Provision Chromium (runner-side provisioning, pinned version)
         working-directory: test/browser
         run: |
-          npm install --ignore-scripts
+          npm ci --ignore-scripts
           npx playwright install --with-deps chromium
       - name: browser-e2e job
         run: bash scripts/ci/browser-e2e.sh

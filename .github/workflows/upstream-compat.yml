@@ -19,6 +19,10 @@ jobs:
   latest-runtimes:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      # Unauthenticated api.github.com calls share a ~60/hr rate limit that
+      # makes scheduled runs flaky/empty — use the Actions token (#465).
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: versions
@@ -48,7 +52,7 @@ jobs:
             echo "| runtime | pinned | latest |"
             echo "|---|---|---|"
             for repo in apernet/hysteria enfein/mieru klzgrad/naiveproxy SagerNet/sing-box; do
-              latest="$(curl --fail --silent --show-error --location "https://api.github.com/repos/${repo}/releases/latest" | jq -r .tag_name)"
+              latest="$(gh api "repos/${repo}/releases/latest" --jq .tag_name)"
               case "${repo}" in
                 apernet/hysteria)    pinned="${CI_HYSTERIA_TAG}" ;;
                 enfein/mieru)        pinned="${CI_MITA_TAG}" ;;
@@ -71,22 +75,50 @@ jobs:
           go build -o /tmp/veil-compat ./cmd/veil
           sudo install -m 0755 /tmp/veil-compat /usr/local/bin/veil
 
-      - name: Install LATEST server protocol runtimes via product installer
+      # This job's purpose is upstream-drift signal, so the SERVER runtimes
+      # must be the latest upstream releases — `veil runtime install` installs
+      # the pinned versions.sh catalog, which is precisely the baseline this
+      # job tests drift against (#458).
+      - name: Install LATEST hysteria2 server
         run: |
           set -euo pipefail
-          sudo veil runtime install --only hysteria2
-          sudo veil runtime install --only naiveproxy
-          sudo veil runtime install --only mieru
+          gh release download --repo apernet/hysteria \
+            --pattern 'hysteria-linux-amd64' --dir /tmp/hysteria-latest --clobber
+          sudo install -m 0755 /tmp/hysteria-latest/hysteria-linux-amd64 /usr/local/bin/hysteria
+          hysteria version
+
+      - name: Install LATEST mieru server (mita)
+        run: |
+          set -euo pipefail
+          gh release download --repo enfein/mieru \
+            --pattern 'mita_*_linux_amd64.tar.gz' --dir /tmp/mita --clobber
+          tar -xzf /tmp/mita/mita_*_linux_amd64.tar.gz -C /tmp/mita
+          mita_bin="$(find /tmp/mita -type f -name mita -perm -u+x | head -n1)"
+          sudo install -m 0755 "$mita_bin" /usr/local/bin/mita
+          mita -version 2>/dev/null || mita --version 2>/dev/null || true
+
+      # naiveproxy's server side is caddy + the klzgrad forwardproxy fork,
+      # source-built — "latest" means caddy@latest + forwardproxy@master, not
+      # the versions.sh pins (same build recipe as ci/vm/Containerfile).
+      - name: Build LATEST caddy+forward_proxy (naiveproxy server)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/caddy-latest && cd /tmp/caddy-latest
+          printf 'package main\n\nimport (\n\tcaddycmd "github.com/caddyserver/caddy/v2/cmd"\n\t_ "github.com/caddyserver/caddy/v2/modules/standard"\n\t_ "github.com/caddyserver/forwardproxy"\n)\n\nfunc main() {\n\tcaddycmd.Main()\n}\n' > main.go
+          go mod init caddy >/dev/null
+          go mod edit -require "github.com/caddyserver/caddy/v2@latest"
+          go mod edit -replace "github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@master"
+          go mod tidy
+          CGO_ENABLED=0 go build -o /tmp/caddy-latest/caddy -trimpath .
+          sudo install -m 0755 /tmp/caddy-latest/caddy /usr/local/bin/caddy
           /usr/local/bin/caddy list-modules | grep -Fx http.handlers.forward_proxy
 
       - name: Install LATEST Mieru client
         run: |
           set -euo pipefail
-          release_json="$(curl --fail --silent --show-error --location https://api.github.com/repos/enfein/mieru/releases/latest)"
-          asset_url="$(jq -er '.assets[] | select(.name | test("^mieru_.*_linux_amd64\\.tar\\.gz$")) | .browser_download_url' <<<"$release_json" | head -n1)"
-          curl --fail --silent --show-error --location "$asset_url" -o /tmp/mieru-client.tar.gz
-          rm -rf /tmp/mieru-client && mkdir -p /tmp/mieru-client
-          tar -xzf /tmp/mieru-client.tar.gz -C /tmp/mieru-client
+          gh release download --repo enfein/mieru \
+            --pattern 'mieru_*_linux_amd64.tar.gz' --dir /tmp/mieru-client --clobber
+          tar -xzf /tmp/mieru-client/mieru_*_linux_amd64.tar.gz -C /tmp/mieru-client
           client_bin="$(find /tmp/mieru-client -type f -name mieru -perm -u+x | head -n1)"
           sudo install -m 0755 "$client_bin" /usr/local/bin/mieru
           mieru version
@@ -94,24 +126,36 @@ jobs:
       - name: Install LATEST NaiveProxy client
         run: |
           set -euo pipefail
-          release_json="$(curl --fail --silent --show-error --location https://api.github.com/repos/klzgrad/naiveproxy/releases/latest)"
-          asset_url="$(jq -er '.assets[] | select(.name | test("^naiveproxy-v.*-linux-x64\\.tar\\.xz$")) | .browser_download_url' <<<"$release_json" | head -n1)"
-          curl --fail --silent --show-error --location "$asset_url" -o /tmp/naiveproxy.tar.xz
-          rm -rf /tmp/naiveproxy && mkdir -p /tmp/naiveproxy
-          tar -xJf /tmp/naiveproxy.tar.xz -C /tmp/naiveproxy
+          gh release download --repo klzgrad/naiveproxy \
+            --pattern 'naiveproxy-v*-linux-x64.tar.xz' --dir /tmp/naiveproxy --clobber
+          tar -xJf /tmp/naiveproxy/naiveproxy-v*-linux-x64.tar.xz -C /tmp/naiveproxy
           naive_bin="$(find /tmp/naiveproxy -type f -name naive -perm -u+x | head -n1)"
           sudo install -m 0755 "$naive_bin" /usr/local/bin/naive
           naive --version
 
       - name: "Compatibility: protocol data paths against latest runtimes"
         run: |
-          set -o pipefail
-          {
-            go test -tags e2e ./test/e2e/... -run '^TestRequiredHysteria2DataPath$' -count=1 -v -timeout=90s
-            go test -tags e2e ./test/e2e/... -run '^TestRequiredMieruTCPDataPath$' -count=1 -v -timeout=90s
-            go test -tags e2e ./test/e2e/... -run '^TestRequiredMieruUDPDataPath$' -count=1 -v -timeout=90s
-            go test -tags e2e ./test/e2e/... -run '^TestRequiredNaiveProxyDataPath$' -count=1 -v -timeout=90s
-          } 2>&1 | tee upstream-compat.log
+          set -uo pipefail
+          : > upstream-compat.log
+          fail=0
+          for t in \
+            TestRequiredHysteria2DataPath \
+            TestRequiredMieruTCPDataPath \
+            TestRequiredMieruUDPDataPath \
+            TestRequiredNaiveProxyDataPath; do
+            # Every required test must actually run and pass: a zero-match
+            # -run exits 0 with "[no tests to run]", so exit status alone is
+            # not evidence — require the --- PASS line (#460). All tests still
+            # run when an earlier one fails; the collected status fails the
+            # step at the end instead of masking failures mid-list (#459).
+            if go test -tags e2e ./test/e2e/... -run "^${t}\$" -count=1 -v -timeout=90s 2>&1 | tee -a upstream-compat.log; then
+              grep -q -- "--- PASS: ${t} " upstream-compat.log \
+                || { echo "::error::${t} produced no --- PASS line (zero match or skip)" | tee -a upstream-compat.log; fail=1; }
+            else
+              fail=1
+            fi
+          done
+          exit "${fail}"
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

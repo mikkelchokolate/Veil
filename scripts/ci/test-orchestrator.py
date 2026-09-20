@@ -71,12 +71,20 @@ def load_roots(repo: Path, package: str) -> list[str]:
 
 
 def load_manifest(path: Path | None) -> dict[tuple[str, str], int]:
-    if not path or not path.exists():
+    # Equal-weight fallback is only legitimate when no manifest was requested
+    # at all. An explicitly supplied manifest that is missing or corrupt must
+    # fail closed — silently degrading to equal weights breaks the scheduling
+    # contract while looking like a normal run (issue #456).
+    if path is None:
         return {}
+    if not path.exists():
+        raise SystemExit(f"timing manifest does not exist: {path}")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"timing manifest is not valid JSON: {path}: {exc}") from exc
+    if not isinstance(data, (list, dict)):
+        raise SystemExit(f"timing manifest has an unexpected shape: {path}")
     rows = data if isinstance(data, list) else data.get("roots", []) + [
         {"package": row.get("package"), "root": "__package__", "elapsedMs": row.get("processWallMs", 0)}
         for row in data.get("packages", [])
@@ -267,6 +275,16 @@ def main() -> int:
         if result.rc != 0:
             print(f"[ci] failed task {result.task}: rc={result.rc} log={result.log}", file=sys.stderr)
             return 1
+
+    # Every scheduled task must have produced its coverprofile — merging a
+    # subset would silently inflate the coverage gate (issue #439).
+    missing_profiles = [
+        result.task for result in results
+        if not Path(result.profile).is_file() or Path(result.profile).stat().st_size == 0
+    ]
+    if missing_profiles:
+        print(f"[ci] tasks produced no coverprofile: {', '.join(sorted(missing_profiles))}", file=sys.stderr)
+        return 1
 
     (artifact / "task-timings.json").write_text(json.dumps([asdict(result) for result in sorted(results, key=lambda item: item.elapsed_ms, reverse=True)], indent=2, sort_keys=True) + "\n", encoding="utf-8")
     (artifact / "test-task-logs.txt").write_text("\n".join(result.log for result in sorted(results, key=lambda item: item.task)) + "\n", encoding="utf-8")

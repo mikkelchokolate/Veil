@@ -88,11 +88,23 @@ fi
 go_ok() {
   command -v go >/dev/null 2>&1 || return 1
   ver="$(go env GOVERSION 2>/dev/null || true)"
+  ver="${ver#go}"
   [ -n "$ver" ] || return 1
-  case "$ver" in
-    go"${CI_GO_VERSION}"*|go1.2[7-9]*|go1.[3-9]*|go[2-9]*) return 0 ;;
-    *) return 1 ;;
-  esac
+  # Numeric >= CI_GO_VERSION compare — a go1.[3-9]* glob accepts ancient
+  # 1.3–1.9 and accidentally matches 1.30+ while rejecting 1.10–1.26 (#447).
+  major="${ver%%.*}"
+  rest="${ver#*.}"
+  minor="${rest%%.*}"
+  case "$major" in ''|*[!0-9]*) return 1 ;; esac
+  case "$minor" in ''|*[!0-9]*) return 1 ;; esac
+  min_major="${CI_GO_VERSION%%.*}"
+  min_rest="${CI_GO_VERSION#*.}"
+  min_minor="${min_rest%%.*}"
+  case "$min_major" in ''|*[!0-9]*) return 1 ;; esac
+  case "$min_minor" in ''|*[!0-9]*) return 1 ;; esac
+  if [ "$major" -gt "$min_major" ]; then return 0; fi
+  if [ "$major" -eq "$min_major" ] && [ "$minor" -ge "$min_minor" ]; then return 0; fi
+  return 1
 }
 
 # BEGIN_NODE_HELPERS

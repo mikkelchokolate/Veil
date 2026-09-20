@@ -25,6 +25,13 @@ git config user.email local-ci@invalid
 git add -A
 git commit -qm "CI snapshot"
 
-chown -R ci:ci /workspace
+# The workspace is not always /workspace/veil: the docker-systemd backend
+# relocates it under the exchange dir via CI_WORKSPACE_OVERRIDE. Chown the
+# real workspace (and /workspace for the artifacts dir) so root-extracted
+# files are writable by the ci user (#462).
+chown -R ci:ci "${WORKSPACE}"
+if [ -d /workspace ] && [ "${WORKSPACE}" != "/workspace" ]; then
+  chown -R ci:ci /workspace || true
+fi
 
 echo "workspace ready: ${WORKSPACE} ($(du -sh "${WORKSPACE}" | cut -f1), native fs: $(stat -f -c %T "${WORKSPACE}"))"

@@ -12,6 +12,12 @@ import (
 func TestRenderedPanelJavaScriptParsesWithNode(t *testing.T) {
 	node, err := exec.LookPath("node")
 	if err != nil {
+		// The required `test` job provisions pinned Node via setup-node — a
+		// missing node there means provisioning broke, and skipping would
+		// no-op the gate entirely (#432). Offline local runs may still skip.
+		if os.Getenv("CI") != "" {
+			t.Fatal("node is unavailable on CI; the rendered JavaScript syntax gate cannot soft-skip")
+		}
 		t.Skip("node is unavailable; skipping rendered JavaScript syntax gate")
 	}
 

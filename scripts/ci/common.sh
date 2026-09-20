@@ -47,16 +47,45 @@ ci_assert_tests_ran() {
   return 1
 }
 
+# ci_assert_tests_passed <log-file>: fail when a verbose `go test -v` log shows
+# that no test actually passed. ci_assert_tests_ran only proves the -run
+# selection was non-empty; a suite where every test reported --- SKIP still
+# satisfies it, which silently greens an unprivileged-only suite that never
+# executed on the CI host (issue #411).
+ci_assert_tests_passed() {
+  local log="$1"
+  if grep -qE '^--- PASS:' "${log}"; then
+    return 0
+  fi
+  ci_warn "no test passed (see ${log}) — refusing to pass on an all-skip suite"
+  return 1
+}
+
+# ci_assert_test_passed <log-file> <TestName>: fail when a specific test did
+# not report `--- PASS: <name>` in a verbose `go test -v` log. Used for
+# security-contract tests that must RUN (not skip) on the CI host — a skipped
+# assertion is not evidence (issues #428).
+ci_assert_test_passed() {
+  local log="$1" name="$2"
+  if grep -qE "^--- PASS: ${name}( |$)" "${log}"; then
+    return 0
+  fi
+  ci_warn "required test ${name} did not pass (see ${log}) — a skip is not evidence"
+  return 1
+}
+
 # Run a command, tee its output to a job log, preserve the command's exit code
-# (tee must never mask failures).
+# (tee must never mask failures). The pipeline runs in a subshell so the
+# caller's shell options — notably pipefail — are left untouched; toggling
+# pipefail in the caller's shell would leak `set +o pipefail` into every
+# subsequent pipeline and silently false-green them (issue #451).
 ci_run() {
   local name="$1"; shift
   local log="${CI_ARTIFACT_DIR}/${name}.log"
   ci_step "${name}: $*"
-  set -o pipefail
-  "$@" 2>&1 | tee "${log}"
-  local rc=${PIPESTATUS[0]}
-  set +o pipefail
+  local rc
+  ( set -o pipefail; "$@" 2>&1 | tee "${log}" )
+  rc=$?
   if [ "${rc}" -ne 0 ]; then
     ci_warn "${name} failed with exit code ${rc} (log: ${log})"
   fi

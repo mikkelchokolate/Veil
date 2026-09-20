@@ -16,9 +16,15 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${CI_ROOT}"
 
 # Refuse dirty trees so the archived tree and the tested tree are identical.
-# CI_TREEISH is set for the detached ci-pr merge and is already deterministic.
-if [ -z "${CI_TREEISH:-}" ] && [ -n "$(git status --porcelain)" ]; then
-  ci_die "working tree is dirty — commit first"
+# A non-HEAD tree-ish (the detached ci-pr merge SHA) is deterministic and
+# independent of the worktree, so it may be archived from a dirty checkout.
+# But CI_TREEISH=HEAD — or any tree-ish resolving to HEAD — still archives the
+# checked-out commit while the user's actual tree is dirty: refuse (#446).
+if [ -n "$(git status --porcelain)" ]; then
+  treeish_sha="$(git rev-parse --verify "${TREEISH}^{commit}" 2>/dev/null || true)"
+  if [ -z "${treeish_sha}" ] || [ "${treeish_sha}" = "$(git rev-parse HEAD)" ]; then
+    ci_die "working tree is dirty — commit first"
+  fi
 fi
 
 git archive --format=tar "${TREEISH}" > "${OUT}"

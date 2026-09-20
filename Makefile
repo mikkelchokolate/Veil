@@ -26,7 +26,9 @@ generate-sdk:
 
 verify-sdk:
 	go generate ./sdk/go
-	git diff --exit-code -- sdk/go/veilclient.gen.go
+	@test -z "$$(git status --porcelain -- sdk/go/)" \
+		|| (echo "sdk/go drifted from generated output:" >&2; git status --short -- sdk/go/ >&2; exit 1)
+	go test ./sdk/go/... -count=1
 
 build:
 	mkdir -p bin

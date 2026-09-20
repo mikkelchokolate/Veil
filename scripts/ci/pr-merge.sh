@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # scripts/ci/pr-merge.sh — `make ci-pr`: build the temporary merge of the
-# current HEAD with origin/main (exactly what GitHub Actions checks out for a
-# pull_request) and run the full CI on that merge tree.
+# current HEAD with the pull request's base branch (exactly what GitHub
+# Actions checks out for a pull_request) and run the full CI on that merge
+# tree.
+#
+# Base branch resolution order (#463): $1 > GITHUB_BASE_REF > "main".
 #
 # Guarantees:
 #   - never modifies the user's branch or working copy;
@@ -16,18 +19,22 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "${CI_ROOT}"
 
+# The merge target is the PR's base branch, not always main (#463): explicit
+# argument first, then the GitHub pull_request context, then main.
+BASE_REF="${1:-${GITHUB_BASE_REF:-main}}"
+
 head_sha="$(git rev-parse HEAD)"
 branch="$(git rev-parse --abbrev-ref HEAD)"
 
-ci_step "fetch origin main"
-git fetch origin main
+ci_step "fetch origin ${BASE_REF}"
+git fetch origin "${BASE_REF}"
 
-base_sha="$(git rev-parse origin/main)"
-if [ "$(git merge-base origin/main HEAD)" = "${base_sha}" ]; then
-  ci_log "HEAD is already up to date with origin/main — testing HEAD directly"
+base_sha="$(git rev-parse "origin/${BASE_REF}")"
+if [ "$(git merge-base "origin/${BASE_REF}" HEAD)" = "${base_sha}" ]; then
+  ci_log "HEAD is already up to date with origin/${BASE_REF} — testing HEAD directly"
   merge_ref="${head_sha}"
 else
-  ci_step "temporary merge: ${branch} (${head_sha:0:8}) into origin/main (${base_sha:0:8})"
+  ci_step "temporary merge: ${branch} (${head_sha:0:8}) into origin/${BASE_REF} (${base_sha:0:8})"
 fi
 
 WORKTREE="$(mktemp -d "${CI_ARTIFACT_DIR}/pr-worktree.XXXXXX")"
@@ -41,13 +48,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-git worktree add --detach "${WORKTREE}" origin/main >/dev/null 2>&1
+git worktree add --detach "${WORKTREE}" "origin/${BASE_REF}" >/dev/null 2>&1
 
 if [ "${merge_ref:-}" = "${head_sha}" ]; then
   git -C "${WORKTREE}" checkout --detach "${head_sha}" >/dev/null 2>&1
 else
   if ! git -C "${WORKTREE}" merge --no-ff --no-edit "${head_sha}" >/dev/null 2>&1; then
-    echo "Merge conflicts with origin/main:" >&2
+    echo "Merge conflicts with origin/${BASE_REF}:" >&2
     git -C "${WORKTREE}" diff --name-only --diff-filter=U >&2
     git -C "${WORKTREE}" merge --abort >/dev/null 2>&1 || true
     exit 1

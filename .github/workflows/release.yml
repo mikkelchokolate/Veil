@@ -23,16 +23,20 @@ jobs:
           test "${tag_commit}" = "${GITHUB_SHA}"
           git checkout --detach "${GITHUB_SHA}"
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
+      # The release toolchain is pinned from versions.sh exactly like required
+      # PR CI — go.mod is a floor, not the shipped toolchain (issue #455).
       - id: versions
         run: |
           source scripts/ci/versions.sh
           {
+            echo "go_version=${CI_GO_VERSION}"
             echo "node_version=${CI_NODE_VERSION}"
             echo "pnpm_version=${CI_PNPM_VERSION}"
+            echo "shellcheck_version=${CI_SHELLCHECK_VERSION}"
           } >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ steps.versions.outputs.go_version }}
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: ${{ steps.versions.outputs.pnpm_version }}
@@ -72,11 +76,17 @@ jobs:
           go_path="$(go env GOPATH)"
           export PATH="${go_path}/bin:${PATH}"
           govulncheck ./...
-      - name: shellcheck
+      - name: Unstick Ubuntu apt mirrors
+        run: bash scripts/ci/apt-bootstrap.sh
+      - name: shellcheck (pinned upstream release via versions.sh)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
-          shellcheck scripts/*.sh scripts/ci/*.sh packaging/scripts/*.sh
+          sc_ver="${{ steps.versions.outputs.shellcheck_version }}"
+          # apt's shellcheck package lags the pin; fetch the version-bound
+          # upstream static binary so the lint gate cannot silently drift (#420).
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${sc_ver}/shellcheck-v${sc_ver}.linux.x86_64.tar.xz" \
+            | sudo tar -xJ -C /usr/local/bin --strip-components=1 "shellcheck-v${sc_ver}/shellcheck"
+          shellcheck --version | grep -F "version: ${sc_ver}"
+          shellcheck scripts/*.sh scripts/ci/*.sh packaging/scripts/*.sh ci/vm/*.sh ci/vm/systemd/*.sh packaging/docker/entrypoint.sh
       - run: make build
       - run: make dist
       - name: Validate packaged systemd units
@@ -122,16 +132,17 @@ jobs:
           test "${tag_commit}" = "${GITHUB_SHA}"
           git checkout --detach "${GITHUB_SHA}"
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
       - id: versions
         run: |
           source scripts/ci/versions.sh
           {
+            echo "go_version=${CI_GO_VERSION}"
             echo "node_version=${CI_NODE_VERSION}"
             echo "pnpm_version=${CI_PNPM_VERSION}"
           } >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ steps.versions.outputs.go_version }}
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: ${{ steps.versions.outputs.pnpm_version }}
@@ -183,16 +194,17 @@ jobs:
           test "${tag_commit}" = "${GITHUB_SHA}"
           git checkout --detach "${GITHUB_SHA}"
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
       - id: versions
         run: |
           source scripts/ci/versions.sh
           {
+            echo "go_version=${CI_GO_VERSION}"
             echo "node_version=${CI_NODE_VERSION}"
             echo "pnpm_version=${CI_PNPM_VERSION}"
           } >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ steps.versions.outputs.go_version }}
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: ${{ steps.versions.outputs.pnpm_version }}
@@ -242,16 +254,17 @@ jobs:
           test "${tag_commit}" = "${GITHUB_SHA}"
           git checkout --detach "${GITHUB_SHA}"
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
       - id: versions
         run: |
           source scripts/ci/versions.sh
           {
+            echo "go_version=${CI_GO_VERSION}"
             echo "node_version=${CI_NODE_VERSION}"
             echo "pnpm_version=${CI_PNPM_VERSION}"
           } >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ steps.versions.outputs.go_version }}
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: ${{ steps.versions.outputs.pnpm_version }}
@@ -386,14 +399,43 @@ jobs:
           test "${tag_commit}" = "${GITHUB_SHA}"
           git checkout --detach "${GITHUB_SHA}"
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          {
+            echo "go_version=${CI_GO_VERSION}"
+            echo "node_version=${CI_NODE_VERSION}"
+            echo "pnpm_version=${CI_PNPM_VERSION}"
+            echo "syft_version=${CI_SYFT_VERSION}"
+          } >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          go-version: ${{ steps.versions.outputs.go_version }}
+      # Provenance records the Node/pnpm versions that built the release — they
+      # must be the pinned toolchain, not the runner's ambient one (#423).
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ steps.versions.outputs.pnpm_version }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ steps.versions.outputs.node_version }}
+      # Scan the clean source tree BEFORE dist/ is populated with release
+      # artifacts — otherwise the signed SPDX lists downloaded package blobs as
+      # dependencies (#445). The pin keeps parity with `make sbom` (#424).
+      - name: Generate SBOM
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          path: .
+          format: spdx-json
+          syft-version: ${{ steps.versions.outputs.syft_version }}
+          output-file: ${{ runner.temp }}/veil.sbom.spdx.json
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: dist
           pattern: veil*
           merge-multiple: true
+      - name: Stage SBOM into dist
+        run: mv "${{ runner.temp }}/veil.sbom.spdx.json" dist/veil.sbom.spdx.json
       - name: Create checksums
         run: |
           set -euo pipefail
@@ -401,18 +443,12 @@ jobs:
           sha256sum veil_linux_amd64.tar.gz veil_linux_arm64.tar.gz \
             *.deb *.rpm *.apk install.sh install-privileged.sh > checksums.txt
           cat checksums.txt
-      - name: Generate SBOM
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
-        with:
-          path: .
-          format: spdx-json
-          output-file: dist/veil.sbom.spdx.json
       - name: Generate SLSA v1 release provenance
         run: |
           set -euo pipefail
           go_version="$(go version | awk '{print $3}')"
           node_version="$(node --version | sed 's/^v//')"
-          pnpm_version="$(corepack pnpm --version)"
+          pnpm_version="$(pnpm --version)"
           python3 scripts/release-provenance.py \
             --dist dist \
             --repository "${GITHUB_REPOSITORY}" \
@@ -435,7 +471,7 @@ jobs:
       - name: Sign checksums and SBOM (keyless)
         run: |
           set -euo pipefail
-          for f in dist/checksums.txt dist/veil.sbom.spdx.json dist/veil.provenance.json dist/install-privileged.sh; do
+          for f in dist/checksums.txt dist/veil.sbom.spdx.json dist/veil.provenance.json dist/install.sh dist/install-privileged.sh; do
             cosign sign-blob --yes \
               --bundle "${f}.bundle" \
               "${f}"

@@ -434,7 +434,9 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 		"go test ./sdk/go -race -count=1",
 		"go list ./... | grep -v '/sdk/go$'",
 		"${CI_SCRIPTS_DIR}/prepare-frontend-dist.sh",
-		"${CI_SCRIPTS_DIR}/api-shards.sh",
+		"${CI_SCRIPTS_DIR}/test-orchestrator.py",
+		"${CI_SCRIPTS_DIR}/verify-test-shards.py",
+		"${CI_SCRIPTS_DIR}/test-inventory.py",
 		"coverage.out",
 		"go vet ./...",
 		"make build",
@@ -458,20 +460,20 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 		}
 	}
 
-	apiShardScript := read("../../scripts/ci/api-shards.sh")
+	// The live API shard path is test-orchestrator.py (bounded LPT scheduler)
+	// verified by verify-test-shards.py — the retired api-shards.sh was a dead
+	// comment contract (issue #429).
+	orchestrator := read("../../scripts/ci/test-orchestrator.py")
 	for _, want := range []string{
-		"CI_API_SHARDS",
-		"CI_API_SERIAL_ROOTS",
-		"${CI_API_SERIAL_ROOTS:-TestRollbackPreservesRuntimeIdentityAndProtocolConfigBytes}",
-		"go test \"${package}\" -race -count=1 -timeout \"${CI_API_SHARD_TIMEOUT}\"",
-		"-coverprofile=\"${shard_dir}/coverage-${i}.out\"",
-		"coverage-serial.out",
-		"serial.regex",
-		"verify-test-shards.py",
-		"merge-coverprofiles.py",
+		"--api-shards",
+		"--serial-roots",
+		"TestRollbackPreservesRuntimeIdentityAndProtocolConfigBytes",
+		"-coverprofile=",
+		"coverage-api-serial.out",
+		"missing_profiles",
 	} {
-		if !strings.Contains(apiShardScript, want) {
-			t.Fatalf("scripts/ci/api-shards.sh missing required gate %q", want)
+		if !strings.Contains(orchestrator, want) {
+			t.Fatalf("scripts/ci/test-orchestrator.py missing required gate %q", want)
 		}
 	}
 
