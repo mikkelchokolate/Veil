@@ -256,20 +256,26 @@ func protocolsForTransport(transport string) ([]string, error) {
 }
 
 // resolveNaiveFallbackRoot validates and normalizes the naive fallback root.
-// It must be a strict subdirectory of /var/lib/veil: serving exactly
-// /var/lib/veil would expose state.json, audit/ and backups/ to anonymous
-// naive-port visitors (audit #77 F1). Relative paths are resolved against
-// /var/lib/veil.
+// The managed tree is /etc/veil/www; legacy /var/lib/veil subtrees stay
+// accepted, but exactly /var/lib/veil would expose state.json, audit/ and
+// backups/ to anonymous naive-port visitors (audit #77 F1). Relative paths
+// resolve under /etc/veil/www; an explicit ".." segment is a traversal
+// attempt and fails closed instead of clamping back inside the root.
 func resolveNaiveFallbackRoot(input string) (string, error) {
 	if input == "" {
-		return "/var/lib/veil/www", nil
+		return NaiveDefaultFallbackRoot, nil
 	}
 	root := filepath.ToSlash(filepath.Clean(input))
 	if !strings.HasPrefix(root, "/") {
-		root = filepath.ToSlash(filepath.Clean("/var/lib/veil/" + root))
+		for _, seg := range strings.Split(root, "/") {
+			if seg == ".." {
+				return "", fmt.Errorf("fallback root must not contain '..' path traversal: %s", input)
+			}
+		}
+		root = filepath.ToSlash(filepath.Clean(NaiveDefaultFallbackRoot + "/" + root))
 	}
-	if root == "/var/lib/veil" || !strings.HasPrefix(root, "/var/lib/veil/") {
-		return "", fmt.Errorf("fallback root must be a subdirectory of /var/lib/veil: %s", root)
+	if !NaiveFallbackRootAllowed(root) {
+		return "", fmt.Errorf("fallback root must be within /etc/veil/www or a subdirectory of /var/lib/veil: %s", root)
 	}
 	return root, nil
 }

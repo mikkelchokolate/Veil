@@ -88,12 +88,16 @@ assert_protocol_units() { # $1 = leg context for diagnostics
     || ci_die "veil-olcrtc@ci-olc not enabled $1"
   # is-enabled alone can green a unit that failed to start (or was never
   # rendered): require the unit file to exist, the binary it executes to be
-  # installed, and the unit to not be in the failed state (#408).
+  # installed, and systemd to have reached ExecStart at least once (#408).
   systemctl cat veil-olcrtc@ci-olc.service >/dev/null 2>&1 \
     || ci_die "veil-olcrtc@ci-olc unit file missing $1"
-  if systemctl is-failed --quiet veil-olcrtc@ci-olc.service; then
-    ci_die "veil-olcrtc@ci-olc is in failed state $1"
-  fi
+  # ci-olc dials a deliberately dead room (127.0.0.1:1), so the unit
+  # crash-loops and can hit StartLimitBurst exactly when a leg restart packs
+  # two attempts together — terminal "failed" is a fixture property, not a
+  # regression. The deterministic contract is that systemd spawned ExecStart
+  # at least once (#408); ExecMainStartTimestamp survives later crashes.
+  [ -n "$(${SUDO} systemctl show -P ExecMainStartTimestamp veil-olcrtc@ci-olc.service 2>/dev/null)" ] \
+    || ci_die "veil-olcrtc@ci-olc never reached ExecStart $1"
   ${SUDO} test -x /usr/local/bin/olcrtc \
     || ci_die "olcrtc runtime binary missing/non-executable $1"
 }

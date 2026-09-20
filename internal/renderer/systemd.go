@@ -136,9 +136,9 @@ Requires=veil-helper.socket
 Type=simple
 User=veil
 Group=veil
-RuntimeDirectory=veil
-RuntimeDirectoryMode=0750
-RuntimeDirectoryPreserve=yes
+# The panel must not own /run/veil: veil-helper.socket owns it root:root 0711
+# so no veil-uid process can replace or shadow the helper socket. The panel
+# only needs to connect to the socket, which the group-owned node allows.
 EnvironmentFile=-` + envFile + `
 Environment=VEIL_HELPER_SOCKET=/run/veil/helper.sock
 Environment=` + systemdAssign("VEIL_STATE_PATH", statePath) + `
@@ -211,7 +211,7 @@ Environment=` + systemdAssign("VEIL_STATE_PATH", statePath) + `
 Environment=` + systemdAssign("VEIL_KEY_PATH", keyPath) + `
 Environment=` + systemdAssign("VEIL_APPLY_ROOT", applyRoot) + `
 Environment=` + systemdAssign("VEIL_LIVE_ROOT", path.Join(cfg.EtcDir, "generated")) + `
-ReadWritePaths=` + etcDir + ` ` + varDir + ` /usr/local/bin /etc/ufw /run /var/run
+ReadWritePaths=` + etcDir + ` ` + varDir + ` /usr/local/bin /etc/ufw
 `,
 		UnitHelperSocket: `[Unit]
 Description=Veil privileged helper socket
@@ -222,7 +222,10 @@ Accept=no
 SocketUser=root
 SocketGroup=veil
 SocketMode=0660
-DirectoryMode=0750
+# The socket parent stays root-owned and traverse-only (0711): the panel needs
+# execute/search to connect but must never be able to list or replace entries
+# in the helper socket directory.
+DirectoryMode=0711
 RemoveOnStop=true
 
 [Install]
@@ -235,14 +238,15 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# Internet-facing like the other protocol units: run as veil-proxy (not the
-# panel account) so the 0640 root:veil-proxy generated/tls/panel material
-# stays readable while veil.env/state.key (root:veil) and the helper socket
-# stay out of reach (issue #497, same class as #224). ACME material lives in
-# StateDirectory=caddy (/var/lib/caddy); /etc/veil stays read-only and
-# /var/lib/veil is fully inaccessible.
+# Caddy is Internet-facing and must not share the panel's uid: it runs as
+# veil-proxy like the protocol units so a compromised edge process cannot
+# reach the root helper or the panel-owned state (audit #506).
 User=veil-proxy
 Group=veil-proxy
+# Caddy binds :80/:443 with CAP_NET_BIND_SERVICE and reads 0640
+# root:veil-proxy config under /etc/veil/generated and /etc/veil/tls. ACME
+# material stays in StateDirectory=caddy (/var/lib/caddy); /etc/veil stays
+# read-only while /var/lib/veil and the helper socket are fully unreachable.
 StateDirectory=caddy
 Environment=HOME=/var/lib/caddy XDG_DATA_HOME=/var/lib/caddy XDG_CONFIG_HOME=/var/lib/caddy
 ExecStart=` + caddyBin + ` run --config ` + caddyConfig + `
@@ -470,7 +474,7 @@ func dropInServiceOverrides(name string, cfg SystemdConfig) string {
 		b.WriteString("Environment=" + systemdAssign("VEIL_KEY_PATH", path.Join(cfg.EtcDir, "state.key")) + "\n")
 		b.WriteString("Environment=" + systemdAssign("VEIL_APPLY_ROOT", path.Join(cfg.VarDir, "staging")) + "\n")
 		b.WriteString("Environment=" + systemdAssign("VEIL_LIVE_ROOT", path.Join(cfg.EtcDir, "generated")) + "\n")
-		b.WriteString("ReadWritePaths=" + systemdQuote(cfg.EtcDir) + " " + systemdQuote(cfg.VarDir) + " /usr/local/bin /etc/ufw /run /var/run\n")
+		b.WriteString("ReadWritePaths=" + systemdQuote(cfg.EtcDir) + " " + systemdQuote(cfg.VarDir) + " /usr/local/bin /etc/ufw /run/veil\n")
 	case UnitBackupService:
 		b.WriteString("ExecStart=\n")
 		b.WriteString("ExecStart=" + systemdQuote(cfg.VeilBinary) + " backup create --state " + systemdQuote(path.Join(cfg.VarDir, "state.json")) + " --key-path " + systemdQuote(path.Join(cfg.EtcDir, "state.key")) + " --passphrase-file " + systemdQuote(path.Join(cfg.EtcDir, "backup.passphrase")) + " --output-dir " + systemdQuote(path.Join(cfg.VarDir, "backups")) + " --prune --daily 7 --weekly 4 --monthly 12\n")

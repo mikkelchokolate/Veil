@@ -185,16 +185,25 @@ runbook.
   It can read the root-owned configuration under `/etc/veil` and write only
   Panel-owned state, staging, updates, sessions, and audit data under
   `/var/lib/veil`.
-- **Protocol-unit privilege boundary.** Internet-facing runtime units —
-  Hysteria2, olcRTC, WARP, Mieru, and the NaiveProxy/Caddy unit — run as
-  `User=veil-proxy`/`Group=veil-proxy`, not as the panel account. They read
-  the `root:veil-proxy` generated configuration but cannot read
-  `veil.env`/`state.key` (`root:veil`), and `InaccessiblePaths` keeps
-  `/run/veil/helper.sock` and `/var/lib/veil` out of reach entirely.
+- **Runtime identity separation.** Internet-facing units —
+  `veil-caddy.service`, `veil-hysteria2@.service`, `veil-olcrtc@.service`,
+  `veil-warp.service`, `veil-mieru.service` — run as `User=veil-proxy`, a
+  separate identity from the Panel. They read only the runtime-shared material
+  under `/etc/veil/generated`, `/etc/veil/tls`, `/etc/veil/panel`,
+  `/etc/veil/certs`, and `/etc/veil/www` (`root:veil-proxy`, directories `0750`,
+  files `0640`) and carry `InaccessiblePaths=/run/veil/helper.sock
+  /var/lib/veil`, so they can neither reach the privileged helper socket nor
+  touch Panel state. The `veil` account is a supplementary `veil-proxy` group
+  member so the Panel can read the same generated material.
 - **Privileged helper.** Root-only operations are exposed by
   `veil-helper.socket` at `/run/veil/helper.sock`. The socket is
-  `root:veil 0660`; the helper verifies the caller with `SO_PEERCRED`, accepts
-  only an allowlisted protocol over `AF_UNIX`. It has no TCP or UDP listener.
+  `root:veil 0660` inside a root-owned traverse-only directory
+  (`/run/veil` is `root:root 0711`, so no `veil`-uid process can replace the
+  socket). The helper verifies the caller with `SO_PEERCRED`: the peer uid must
+  be `veil` (or root for recovery) AND the process must live in the
+  `veil.service` cgroup, so an unrelated service that merely shares the `veil`
+  uid cannot call it. It accepts only an allowlisted protocol over `AF_UNIX`
+  and has no TCP or UDP listener.
 - **Root operation allowlist.** The helper may promote or restore generated
   configuration, control allowlisted Managed systemd units, read bounded
   journald output, create/verify/restore encrypted backups, rotate the state
@@ -205,7 +214,9 @@ runbook.
   `/var/lib/veil/sessions.json`, `/var/lib/veil/audit`, staging, and updates.
   Root retains `/etc/veil/state.key`, backup passphrases, live generated
   configuration, systemd units, and migration safety copies under
-  `/var/lib/veil/migration-backups`.
+  `/var/lib/veil/migration-backups`. Caddy keeps its ACME state in
+  `/var/lib/caddy` owned by `veil-proxy`; the helper writes only
+  `/etc/veil`, `/var/lib/veil`, `/usr/local/bin`, and `/etc/ufw`.
 - **Containers run as a dedicated user.** The container image runs as the
   non-root `veil` user and relies on mounted state directories. A rootless
   container can provide local/read-only administration and staging, but full

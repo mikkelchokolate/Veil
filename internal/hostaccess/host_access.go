@@ -173,7 +173,25 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 			return err
 		}
 	}
-	if err := applyTreeOwnership(filepath.Join(paths.VarDir, "www"), 0o750, 0o640, panel.UID, panel.GID); err != nil {
+	// The naive fallback site moved to etcDir/www: veil-caddy runs as
+	// veil-proxy with the var-dir masked, so a legacy varDir/www tree is
+	// unreachable to it. Carry its content into the new root (regular files
+	// and directories only — symlinks never cross into a veil-proxy-readable
+	// tree) and leave the legacy directory veil-owned for the operator.
+	legacyWWW := filepath.Join(paths.VarDir, "www")
+	info, err := testHooks.lstat(legacyWWW)
+	switch {
+	case err == nil:
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return fmt.Errorf("refuse to migrate non-directory legacy fallback root %s", legacyWWW)
+		}
+		if err := copyLegacyWWWTree(legacyWWW, filepath.Join(paths.EtcDir, "www")); err != nil {
+			return err
+		}
+		if err := applyTreeOwnership(legacyWWW, 0o750, 0o640, panel.UID, panel.GID); err != nil {
+			return err
+		}
+	case !os.IsNotExist(err):
 		return err
 	}
 	for _, name := range []string{"state.json", "sessions.json"} {
@@ -191,11 +209,13 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 	if panel.ProxyGID != 0 {
 		generatedGID = panel.ProxyGID
 	}
-	if err := applyTreeOwnership(filepath.Join(paths.EtcDir, "generated"), 0o750, 0o640, paths.RootUID, generatedGID); err != nil {
-		return err
-	}
-	if err := applyTreeOwnership(filepath.Join(paths.EtcDir, "tls"), 0o750, 0o640, paths.RootUID, generatedGID); err != nil {
-		return err
+	// generated/, tls/, certs/ and www/ hold material the veil-proxy units
+	// read (rendered configs, synced ACME pairs, the naive fallback site):
+	// root-owned, veil-proxy group.
+	for _, dir := range []string{"generated", "tls", "certs", "www"} {
+		if err := applyTreeOwnership(filepath.Join(paths.EtcDir, dir), 0o750, 0o640, paths.RootUID, generatedGID); err != nil {
+			return err
+		}
 	}
 	// The panel's TLS material (local/direct access) lives here and is read by
 	// the veil-owned Panel process and by the protocol units (User=veil-proxy)
@@ -265,6 +285,49 @@ func createSafetyCopies(paths Paths, now time.Time) (string, error) {
 		}
 	}
 	return root, nil
+}
+
+// copyLegacyWWWTree copies regular files and directories from the legacy
+// fallback root into the new one, never overwriting existing destination
+// entries and never following or copying symlinks.
+func copyLegacyWWWTree(src, dst string) error {
+	return testHooks.walkDir(src, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		// DirEntry never follows links, so a symlink reports IsDir()==false;
+		// skip it outright rather than copying a link into a
+		// veil-proxy-readable tree.
+		if entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if _, err := testHooks.lstat(target); err == nil {
+			// Existing destination content wins over legacy content. A
+			// directory must still be descended so nested legacy files land.
+			return nil
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		if entry.IsDir() {
+			return os.MkdirAll(target, 0o750)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+			return err
+		}
+		return copyRegularFile(path, target)
+	})
 }
 
 func copyRegularFile(source, destination string) error {

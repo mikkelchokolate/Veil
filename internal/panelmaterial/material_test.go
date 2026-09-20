@@ -54,7 +54,7 @@ func TestManagedMaterialFilesIncludePanelCaddyAndSystemdMaterial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Files: %v", err)
 	}
-	wants := []string{"/etc/veil/generated/caddy/config.json", "/var/lib/veil/www/index.html", "/etc/veil/veil.env"}
+	wants := []string{"/etc/veil/generated/caddy/config.json", "/etc/veil/www/index.html", "/etc/veil/veil.env"}
 	for _, name := range systemdunits.Names() {
 		wants = append(wants, "/tmp/veil-systemd/"+name)
 	}

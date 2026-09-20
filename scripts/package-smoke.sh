@@ -173,6 +173,64 @@ assert_permissions() {
   [ "$(stat -c "%U:%G %a" /etc/veil/veil.env)" = "root:veil 640" ] || fail "veil.env owner/mode"
   [ "$(stat -c "%U:%G %a" /etc/veil/panel)" = "root:veil-proxy 750" ] || fail "panel dir owner/mode"
   [ "$(stat -c "%U:%G %a" /etc/veil/panel/tls.key)" = "root:veil-proxy 640" ] || fail "panel tls.key owner/mode"
+  # Helper socket parent: root-owned traverse-only so no veil-uid process can
+  # replace the socket (audit #514/#523).
+  [ "$(stat -c "%U:%G %a" /run/veil)" = "root:root 711" ] || fail "/run/veil owner/mode"
+  # Runtime-readable trees: root:veil-proxy 0750 (audit #466/#525/#531).
+  for dir in /etc/veil/generated /etc/veil/tls /etc/veil/certs /etc/veil/www; do
+    [ "$(stat -c "%U:%G %a" "$dir")" = "root:veil-proxy 750" ] || fail "$dir owner/mode"
+  done
+  # Caddy state directory re-owned for the veil-proxy unit (#497).
+  [ "$(stat -c "%U:%G" /var/lib/caddy)" = "veil-proxy:veil-proxy" ] || fail "/var/lib/caddy owner"
+}
+
+assert_unit_hardening() {
+  # Shipped units must carry the privilege-boundary contract, not just render
+  # it under test (audit #507/#508/#515).
+  local unitdir unit
+  for unitdir in /lib/systemd/system /usr/lib/systemd/system; do
+    [ -f "$unitdir/veil-caddy.service" ] && break
+  done
+  for unit in veil-caddy.service veil-hysteria2@.service veil-olcrtc@.service veil-warp.service veil-mieru.service; do
+    grep -q '^User=veil-proxy$' "$unitdir/$unit" || fail "$unit User"
+    grep -q '^Group=veil-proxy$' "$unitdir/$unit" || fail "$unit Group"
+    grep -q 'InaccessiblePaths=.*/run/veil/helper.sock' "$unitdir/$unit" || fail "$unit helper.sock mask"
+    grep -q 'InaccessiblePaths=.*/var/lib/veil' "$unitdir/$unit" || fail "$unit var/lib/veil mask"
+  done
+  grep -q '^User=veil$' "$unitdir/veil.service" || fail "veil.service User"
+  grep -q '^SocketUser=root$' "$unitdir/veil-helper.socket" || fail "socket user"
+  grep -q '^SocketGroup=veil$' "$unitdir/veil-helper.socket" || fail "socket group"
+  grep -q '^SocketMode=0660$' "$unitdir/veil-helper.socket" || fail "socket mode"
+  grep -q '^DirectoryMode=0711$' "$unitdir/veil-helper.socket" || fail "socket dir mode"
+  grep -q '^RemoveOnStop=true$' "$unitdir/veil-helper.socket" || fail "socket remove-on-stop"
+  if grep -Eq '^ReadWritePaths=.*[[:space:]](/run|/var/run)([[:space:]]|$)' "$unitdir/veil-helper.service"; then
+    fail "veil-helper.service still writes to /run"
+  fi
+}
+
+assert_runtime_readability() {
+  # Runtime readability matrix (audit #466): veil-proxy reads the shared
+  # material but never panel-only secrets or /var/lib/veil state.
+  su -s /bin/sh veil-proxy -c "test -r /etc/veil/panel/tls.key && test -r /etc/veil/www/index.html"     || fail "veil-proxy cannot read shared material"
+  if su -s /bin/sh veil-proxy -c "test -r /etc/veil/state.key"; then
+    fail "veil-proxy can read panel-only state.key"
+  fi
+  if su -s /bin/sh veil-proxy -c "test -r /etc/veil/veil.env"; then
+    fail "veil-proxy can read panel-only veil.env"
+  fi
+  if su -s /bin/sh veil-proxy -c "test -r /var/lib/veil/state.json"; then
+    fail "veil-proxy can read panel state.json"
+  fi
+  su -s /bin/sh veil -c "test -r /etc/veil/state.key && test -r /var/lib/veil/state.json && test -r /etc/veil/panel/tls.key"     || fail "veil cannot read its own state/shared material"
+}
+
+assert_legacy_www_migrated() {
+  # Fallback site moved /var/lib/veil/www -> /etc/veil/www; regular content is
+  # carried over, the planted symlink must not be (audit #525).
+  [ "$(cat /etc/veil/www/index.html)" = legacy-index ] || fail "legacy index not migrated"
+  [ "$(cat /etc/veil/www/assets/site.css)" = legacy-css ] || fail "legacy asset not migrated"
+  { [ ! -L /etc/veil/www/leak.key ] && [ ! -e /etc/veil/www/leak.key ]; }     || fail "legacy symlink leaked into /etc/veil/www"
+  [ "$(stat -c "%U:%G %a" /etc/veil/www/index.html)" = "root:veil-proxy 640" ]     || fail "migrated index owner/mode"
 }
 
 assert_migration_backups() {
@@ -208,10 +266,21 @@ case "$phase" in
     chmod 0644 /var/lib/veil/state.json /var/lib/veil/sessions.json /etc/veil/state.key /etc/veil/veil.env
     chmod 0700 /etc/veil/panel
     chmod 0600 /etc/veil/panel/tls.key
+    # Legacy layout: fallback site under /var/lib/veil/www (including a
+    # symlink that must never be copied into the veil-proxy-readable tree)
+    # and a veil-owned caddy state dir left by the pre-veil-proxy unit.
+    mkdir -p /var/lib/veil/www/assets
+    printf legacy-index > /var/lib/veil/www/index.html
+    printf legacy-css > /var/lib/veil/www/assets/site.css
+    ln -s /etc/veil/panel/tls.key /var/lib/veil/www/leak.key
+    mkdir -p /var/lib/caddy
+    chown -R veil:veil /var/lib/veil/www /var/lib/caddy
+    chmod -R a+r /var/lib/veil/www
     ;;
   post-install)
     assert_payload_present
     assert_accounts
+    assert_unit_hardening
     assert_version "${2:?expected binary version required}"
     assert_install_systemctl
     ;;
@@ -221,6 +290,9 @@ case "$phase" in
     assert_version "${2:?expected binary version required}"
     assert_state_sentinels
     assert_permissions
+    assert_unit_hardening
+    assert_runtime_readability
+    assert_legacy_www_migrated
     assert_migration_backups
     assert_upgrade_systemctl
     ;;
@@ -368,6 +440,7 @@ run_symlink_refusal_smoke() {
       grep -q "capability report" /tmp/install-check.out
       grep -q "init" /tmp/install-check.out
       test ! -e /var/lib/veil/state.json
+
 
       printf untouched > /tmp/state-target
       rm -f /var/lib/veil/state.json

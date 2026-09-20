@@ -16,7 +16,7 @@ import (
 
 var (
 	effectiveUID        = os.Geteuid
-	lookupUser          = user.Lookup
+	lookupGroup         = user.LookupGroup
 	chownPath           = os.Chown
 	chmodPath           = os.Chmod
 	applyQUICUDPBuffers = hostenv.ApplyQUICUDPBuffers
@@ -67,7 +67,7 @@ func (a InstallApply) Apply() (ApplyResult, error) {
 	result := ApplyResult{
 		CaddyfilePath:     filepath.Join(a.paths.EtcDir, "generated", "caddy", "config.json"),
 		Hysteria2Path:     filepath.Join(a.paths.EtcDir, "generated", "hysteria2", "server.yaml"),
-		FallbackIndexPath: filepath.Join(a.paths.VarDir, "www", "index.html"),
+		FallbackIndexPath: filepath.Join(a.paths.EtcDir, "www", "index.html"),
 	}
 	if a.paths.BackupDir != "" {
 		existingPaths := make([]string, 0, len(files))
@@ -117,37 +117,45 @@ func ApplyRURecommendedProfileWithPlan(profile RURecommendedProfile, paths Apply
 	return NewInstallApplyWithPlan(profile, paths, plan).Apply()
 }
 
+// chownSecretsForVeilGroup restores the post-#601 ownership contract on files
+// written by install/repair: root ownership everywhere, group veil for
+// panel-only secrets, group veil-proxy for runtime-shared material. It also
+// fixes every ancestor directory from the file up to and including the
+// outermost shared subtree (generated/, tls/, panel/, certs/, www/) so a tree
+// created without a prior Migrate stays traversable by veil-proxy
+// (audit #531).
 func chownSecretsForVeilGroup(paths []string) error {
 	if effectiveUID() != 0 {
+		// A non-root process cannot chown at all; on the packaged layout this
+		// would silently leave secrets unreadable, so fail closed there
+		// (audit #532). Scratch/test trees keep the historical skip because
+		// no production ownership contract applies to them.
+		for _, path := range paths {
+			if needsVeilGroupRead(path) && underProductionVeilRoot(path) {
+				return fmt.Errorf("cannot establish managed file ownership as non-root user (euid=%d): %s", effectiveUID(), path)
+			}
+		}
 		return nil
 	}
-	u, err := lookupUser("veil")
+	veilGID, err := resolveGroupGID("veil")
 	if err != nil {
-		return fmt.Errorf("resolve veil user: %w", err)
+		return err
 	}
-	uid, err := strconv.Atoi(u.Uid)
+	// Runtime-shared material must land in the veil-proxy group; a missing or
+	// unparseable veil-proxy account must not silently fall back to the veil
+	// group, which the protocol units cannot read (audit #532).
+	proxyGID, err := resolveGroupGID("veil-proxy")
 	if err != nil {
-		return fmt.Errorf("parse veil uid %q: %w", u.Uid, err)
-	}
-	gid, err := strconv.Atoi(u.Gid)
-	if err != nil {
-		return fmt.Errorf("parse veil gid %q: %w", u.Gid, err)
-	}
-	_ = uid // uid not needed; we keep root ownership and only grant group read
-	generatedGID := gid
-	if proxy, err := lookupUser("veil-proxy"); err == nil {
-		if parsed, err := strconv.Atoi(proxy.Gid); err == nil {
-			generatedGID = parsed
-		}
+		return err
 	}
 	seenDirs := map[string]struct{}{}
 	for _, path := range paths {
 		if !needsVeilGroupRead(path) {
 			continue
 		}
-		ownerGid := gid
+		ownerGid := veilGID
 		if isRuntimeSharedConfig(path) {
-			ownerGid = generatedGID
+			ownerGid = proxyGID
 		}
 		if err := chownPath(path, 0, ownerGid); err != nil {
 			return fmt.Errorf("chown %s for veil group: %w", path, err)
@@ -158,19 +166,73 @@ func chownSecretsForVeilGroup(paths []string) error {
 		if !isRuntimeSharedConfig(path) {
 			continue
 		}
-		dir := filepath.Dir(path)
-		if _, ok := seenDirs[dir]; ok {
-			continue
-		}
-		seenDirs[dir] = struct{}{}
-		if err := chownPath(dir, 0, ownerGid); err != nil {
-			return fmt.Errorf("chown %s for veil group: %w", dir, err)
-		}
-		if err := chmodPath(dir, 0o750); err != nil {
-			return fmt.Errorf("chmod %s for veil group: %w", dir, err)
+		for _, dir := range runtimeSharedParentDirs(path) {
+			if _, ok := seenDirs[dir]; ok {
+				continue
+			}
+			seenDirs[dir] = struct{}{}
+			if err := chownPath(dir, 0, ownerGid); err != nil {
+				return fmt.Errorf("chown %s for veil group: %w", dir, err)
+			}
+			if err := chmodPath(dir, 0o750); err != nil {
+				return fmt.Errorf("chmod %s for veil group: %w", dir, err)
+			}
 		}
 	}
 	return nil
+}
+
+// resolveGroupGID resolves a group name to its gid. Group lookup is used
+// rather than the user's primary gid: an account created with a different
+// primary group would otherwise silently pick the wrong owner group
+// (audit #532).
+func resolveGroupGID(name string) (int, error) {
+	g, err := lookupGroup(name)
+	if err != nil {
+		return 0, fmt.Errorf("resolve %s group: %w", name, err)
+	}
+	gid, err := strconv.Atoi(g.Gid)
+	if err != nil {
+		return 0, fmt.Errorf("parse %s gid %q: %w", name, g.Gid, err)
+	}
+	return gid, nil
+}
+
+// underProductionVeilRoot reports whether path lives inside the packaged
+// /etc/veil or /var/lib/veil trees, where the ownership contract applies.
+func underProductionVeilRoot(path string) bool {
+	slash := filepath.ToSlash(path)
+	return slash == "/etc/veil" || strings.HasPrefix(slash, "/etc/veil/") ||
+		slash == "/var/lib/veil" || strings.HasPrefix(slash, "/var/lib/veil/")
+}
+
+// runtimeSharedParentDirs returns the ancestor directories of path from the
+// file's directory up to and including the outermost runtime-shared subtree
+// component (generated, tls, panel, certs, www). The subtree root's parent
+// (e.g. /etc/veil, which stays root:veil) is deliberately excluded.
+func runtimeSharedParentDirs(path string) []string {
+	var dirs []string
+	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
+		dirs = append(dirs, dir)
+		parent := filepath.Dir(dir)
+		if sharedSubtreeName(filepath.Base(dir)) && !sharedSubtreeName(filepath.Base(parent)) {
+			break
+		}
+		if parent == dir {
+			break
+		}
+	}
+	return dirs
+}
+
+// sharedSubtreeName reports whether base names a managed runtime-shared
+// subtree directly under the Veil etc directory.
+func sharedSubtreeName(base string) bool {
+	switch base {
+	case "generated", "tls", "panel", "certs", "www":
+		return true
+	}
+	return false
 }
 
 func needsVeilGroupRead(path string) bool {
@@ -178,7 +240,9 @@ func needsVeilGroupRead(path string) bool {
 	if base == "veil.env" || strings.HasSuffix(base, ".key") || strings.HasSuffix(base, ".crt") {
 		return true
 	}
-	return isGeneratedConfig(path)
+	// Everything under a runtime-shared subtree must stay group-readable:
+	// that is what makes the subtree shared in the first place.
+	return isRuntimeSharedConfig(path)
 }
 
 func isGeneratedConfig(path string) bool {
@@ -192,7 +256,11 @@ func isGeneratedConfig(path string) bool {
 // stay in the veil group.
 func isRuntimeSharedConfig(path string) bool {
 	slash := filepath.ToSlash(path)
-	return isGeneratedConfig(path) || strings.Contains(slash, "/panel/")
+	return isGeneratedConfig(path) ||
+		strings.Contains(slash, "/panel/") ||
+		strings.Contains(slash, "/tls/") ||
+		strings.Contains(slash, "/certs/") ||
+		strings.Contains(slash, "/www/")
 }
 
 func writeManagedFile(path string, content string, mode os.FileMode) error {

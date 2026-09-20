@@ -9,6 +9,7 @@ import (
 )
 
 func TestInterruptedLegacyCaddyfileRemovalDoesNotBlockLaterPromote(t *testing.T) {
+	stubRuntimeArtifactOwnership(t)
 	policy := testPolicy(t)
 	backupRoot := filepath.Join(policy.StateRoot, "promotion-backups")
 	legacyID := "caddy/legacy.Caddyfile"
@@ -75,6 +76,7 @@ func TestInterruptedLegacyCaddyfileRemovalDoesNotBlockLaterPromote(t *testing.T)
 }
 
 func TestInterruptedLegacyCaddyfileRestoreRecovers(t *testing.T) {
+	stubRuntimeArtifactOwnership(t)
 	policy := testPolicy(t)
 	backupRoot := filepath.Join(policy.StateRoot, "promotion-backups")
 	legacyID := "caddy/legacy.Caddyfile"

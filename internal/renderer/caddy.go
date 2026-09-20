@@ -49,14 +49,19 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 		}
 	}
 	if cfg.FallbackRoot == "" {
-		cfg.FallbackRoot = "/var/lib/veil/www"
+		cfg.FallbackRoot = NaiveDefaultFallbackRoot
 	}
 	cfg.FallbackRoot = filepath.Clean(cfg.FallbackRoot)
-	if !strings.HasPrefix(filepath.ToSlash(cfg.FallbackRoot), "/var/lib/veil") {
-		cfg.FallbackRoot = filepath.Clean("/var/lib/veil/" + cfg.FallbackRoot)
+	if !strings.HasPrefix(filepath.ToSlash(cfg.FallbackRoot), "/") {
+		for _, seg := range strings.Split(filepath.ToSlash(cfg.FallbackRoot), "/") {
+			if seg == ".." {
+				return "", fmt.Errorf("fallback root must not contain '..' path traversal: %s", cfg.FallbackRoot)
+			}
+		}
+		cfg.FallbackRoot = filepath.Clean(NaiveDefaultFallbackRoot + "/" + cfg.FallbackRoot)
 	}
-	if !strings.HasPrefix(filepath.ToSlash(cfg.FallbackRoot), "/var/lib/veil") {
-		return "", fmt.Errorf("fallback root must be within /var/lib/veil: %s", cfg.FallbackRoot)
+	if !NaiveFallbackRootAllowed(filepath.ToSlash(cfg.FallbackRoot)) {
+		return "", fmt.Errorf("fallback root must be within /etc/veil/www or /var/lib/veil: %s", cfg.FallbackRoot)
 	}
 	cfg.FallbackRoot = filepath.ToSlash(cfg.FallbackRoot)
 
@@ -111,4 +116,25 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 		return "", err
 	}
 	return out.String(), nil
+}
+
+// NaiveDefaultFallbackRoot is the web root Caddy serves for naive fallback.
+// It lives under /etc/veil because the caddy unit runs as veil-proxy with
+// /var/lib/veil in InaccessiblePaths: a var-lib root would be unreachable
+// (audit #497). It is root:veil-proxy 0750/0640 like generated/.
+const NaiveDefaultFallbackRoot = "/etc/veil/www"
+
+// NaiveFallbackRootAllowed enforces the fallback-root boundary: exactly
+// /etc/veil/www or a subdirectory (never /etc/veil itself or siblings like
+// panel/, which hold keys readable by veil-proxy), or the legacy
+// /var/lib/veil subtree for configurations that still reference it
+// (audit #77 F1/F4 boundary, moved for the veil-proxy runtime).
+func NaiveFallbackRootAllowed(root string) bool {
+	if root == "/var/lib/veil" {
+		return false
+	}
+	if strings.HasPrefix(root, "/var/lib/veil/") {
+		return true
+	}
+	return root == NaiveDefaultFallbackRoot || strings.HasPrefix(root, NaiveDefaultFallbackRoot+"/")
 }

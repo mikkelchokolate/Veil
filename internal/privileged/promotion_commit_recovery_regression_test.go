@@ -22,7 +22,7 @@ func TestCommittedPromotionMarkerDeletionFailureFinalizesWithoutRollback(t *test
 	}
 	defer func() { promotionJournalRemove = originalRemove }()
 
-	withNonRootPromotionHooks(t, func() {
+	withStubbedArtifactOwnership(t, func() {
 		if _, err := promoteResolvedArtifacts(backupRoot, fixedPromotionNow, request); err == nil {
 			t.Fatal("expected injected marker deletion error")
 		}
@@ -30,7 +30,7 @@ func TestCommittedPromotionMarkerDeletionFailureFinalizesWithoutRollback(t *test
 	assertPromotionSet(t, request, "new")
 
 	promotionJournalRemove = originalRemove
-	withNonRootPromotionHooks(t, func() {
+	withStubbedArtifactOwnership(t, func() {
 		if _, err := promoteResolvedArtifacts(backupRoot, fixedPromotionNow, ResolvedPromotion{}); err != nil {
 			t.Fatalf("finalize committed promotion: %v", err)
 		}

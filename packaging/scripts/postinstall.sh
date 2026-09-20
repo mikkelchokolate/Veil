@@ -42,10 +42,11 @@ ensure_system_account() {
 
 ensure_system_account veil
 ensure_system_account veil-proxy
-# The panel (User=veil) reads /etc/veil/generated, /etc/veil/tls, and the mita
-# appctl socket through the veil-proxy supplementary group; the protocol units
-# run AS veil-proxy. A silent failure here would leave those directories
-# unreadable after the ownership pass below, so stop loudly.
+# The protocol units and veil-caddy.service run as veil-proxy and read
+# /etc/veil/generated, /etc/veil/tls, /etc/veil/panel, and /etc/veil/certs
+# directly. The panel account is a supplementary veil-proxy member so it can
+# keep previewing that material. A silent failure here would leave those
+# directories unreadable after the ownership pass below, so stop loudly.
 if ! id -nG veil 2>/dev/null | tr ' ' '\n' | grep -qx veil-proxy; then
     if command -v usermod >/dev/null 2>&1; then
         usermod -aG veil-proxy veil
@@ -103,10 +104,9 @@ for dir in audit staging updates autocert; do
     find "/var/lib/veil/$dir" -type d -exec chmod 0700 {} \;
     find "/var/lib/veil/$dir" -type f -exec chmod 0600 {} \;
 done
-install -d -m 0750 -o veil -g veil /var/lib/veil/www
-chown -R veil:veil /var/lib/veil/www
-find /var/lib/veil/www -type d -exec chmod 0750 {} \;
-find /var/lib/veil/www -type f -exec chmod 0640 {} \;
+# /var/lib/veil/www is no longer provisioned: veil-caddy.service runs as
+# veil-proxy with /var/lib/veil in InaccessiblePaths, so the old fallback root
+# is unreachable. Existing content is migrated to /etc/veil/www below.
 for dir in backups promotion-backups migration-backups; do
     install -d -m 0700 -o root -g root "/var/lib/veil/$dir"
     chown -R root:root "/var/lib/veil/$dir"
@@ -135,26 +135,36 @@ for file in /var/lib/veil/state.json /var/lib/veil/sessions.json; do
         chmod 0600 "$file"
     fi
 done
-for dir in /etc/veil/generated /etc/veil/tls; do
-    if [ -d "$dir" ] && [ ! -L "$dir" ]; then
-        chown -R root:veil-proxy "$dir"
-        find "$dir" -type d -exec chmod 0750 {} \;
-        find "$dir" -type f -exec chmod 0640 {} \;
+# The naive fallback site moved from /var/lib/veil/www to /etc/veil/www:
+# veil-caddy.service runs as veil-proxy with /var/lib/veil in
+# InaccessiblePaths, so the old location is unreadable to it. Carry over any
+# operator content not already present in the new root — regular files and
+# directories only; symlinks are never copied into a veil-proxy-readable tree.
+if [ -d /var/lib/veil/www ] && [ ! -L /var/lib/veil/www ]; then
+    install -d -m 0750 -o root -g veil-proxy /etc/veil/www
+    for item in /var/lib/veil/www/* /var/lib/veil/www/.[!.]* /var/lib/veil/www/..?*; do
+        [ -e "$item" ] || continue
+        [ -L "$item" ] && continue
+        base=${item##*/}
+        if [ ! -e "/etc/veil/www/$base" ]; then
+            cp -Rp "$item" "/etc/veil/www/$base"
+        fi
+    done
+    find /etc/veil/www -type l -delete
+fi
+for dir in /etc/veil/generated /etc/veil/tls /etc/veil/certs /etc/veil/www /etc/veil/panel; do
+    if [ -L "$dir" ]; then
+        echo "Refusing to repair symlinked managed directory: $dir" >&2
+        exit 1
     fi
+    # Runtime-shared material is root:veil-proxy 0750/0640 so the protocol
+    # units (User=veil-proxy) and the panel (supplementary veil-proxy member)
+    # can read generated config, TLS keys, and ACME output (audit #525/#531).
+    install -d -m 0750 -o root -g veil-proxy "$dir"
+    chown -R root:veil-proxy "$dir"
+    find "$dir" -type d -exec chmod 0750 {} \;
+    find "$dir" -type f -exec chmod 0640 {} \;
 done
-if [ -d /etc/veil/panel ] && [ ! -L /etc/veil/panel ]; then
-    # Panel TLS is shared with the protocol units (User=veil-proxy): group must
-    # be veil-proxy like generated/ and tls/ so those units can read the key.
-    chown -R root:veil-proxy /etc/veil/panel
-    find /etc/veil/panel -type d -exec chmod 0750 {} \;
-    find /etc/veil/panel -type f -exec chmod 0640 {} \;
-fi
-if [ -d /var/lib/caddy ] && [ ! -L /var/lib/caddy ]; then
-    # veil-caddy.service switched from User=veil to User=veil-proxy (#497).
-    # systemd does not re-own an existing StateDirectory, so an ACME data dir
-    # left at veil:veil would be unwritable for the new account — re-own it.
-    chown -R veil-proxy:veil-proxy /var/lib/caddy
-fi
 for file in /etc/veil/state.key /etc/veil/veil.env; do
     if [ -f "$file" ] && [ ! -L "$file" ]; then
         chown root:veil "$file"
@@ -164,6 +174,18 @@ done
 if [ -f /etc/veil/backup.passphrase ] && [ ! -L /etc/veil/backup.passphrase ]; then
     chown root:root /etc/veil/backup.passphrase
     chmod 0600 /etc/veil/backup.passphrase
+fi
+
+# The helper socket parent must be root-owned and traverse-only. Older units
+# created it via the panel's RuntimeDirectory=veil (veil:veil 0750), which let
+# any veil-uid process replace the helper socket; normalize on upgrade.
+install -d -m 0711 -o root -g root /run/veil
+
+# veil-caddy.service switched from User=veil to User=veil-proxy (#497).
+# systemd does not re-own an existing StateDirectory, so an ACME data dir
+# left at veil:veil would be unwritable for the new account — re-own it.
+if [ -d /var/lib/caddy ] && [ ! -L /var/lib/caddy ]; then
+    chown -R veil-proxy:veil-proxy /var/lib/caddy
 fi
 
 # Only drive systemd when it is the running init. Containers building images

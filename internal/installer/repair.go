@@ -65,5 +65,40 @@ func desiredManagedFiles(profile RURecommendedProfile, paths ApplyPaths) ([]mana
 	for _, file := range files {
 		managed = append(managed, managedFile{Path: file.Path, Content: file.Content, Mode: file.Mode})
 	}
+	if effectiveUID() != 0 {
+		// Non-root processes cannot inspect or restore the ownership contract;
+		// plan without it (Apply would fail closed on the packaged layout).
+		return managed, nil
+	}
+	// Attach the ownership contract so Plan() flags ownership-only drift —
+	// root:root or veil-grouped secrets must be repaired, not silently kept
+	// (audit #518). Unresolvable runtime accounts fail the plan closed: the
+	// apply step would be unable to restore ownership anyway (audit #532).
+	veilGID, err := resolveGroupGID("veil")
+	if err != nil {
+		return nil, err
+	}
+	proxyGID, err := resolveGroupGID("veil-proxy")
+	if err != nil {
+		return nil, err
+	}
+	for i := range managed {
+		managed[i].Owner = desiredFileOwner(managed[i].Path, veilGID, proxyGID)
+	}
 	return managed, nil
+}
+
+// desiredFileOwner maps a managed file onto the post-#601 ownership contract:
+// runtime-shared material (generated/, tls/, panel/, certs/, www/) is
+// root:veil-proxy, panel-only secrets are root:veil, and everything else
+// (systemd units) stays root:root.
+func desiredFileOwner(path string, veilGID, proxyGID int) *managedfiles.FileOwner {
+	switch {
+	case isRuntimeSharedConfig(path):
+		return &managedfiles.FileOwner{UID: 0, GID: proxyGID}
+	case needsVeilGroupRead(path):
+		return &managedfiles.FileOwner{UID: 0, GID: veilGID}
+	default:
+		return &managedfiles.FileOwner{UID: 0, GID: 0}
+	}
 }

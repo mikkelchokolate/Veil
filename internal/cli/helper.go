@@ -17,8 +17,8 @@ type helperCommandDependencies struct {
 	GOOS           string
 	EffectiveUID   func() int
 	LookupUID      func(string) (uint32, error)
-	Serve          func(context.Context, string, uint32, bool) error
-	ServeActivated func(context.Context, uint32, bool) error
+	Serve          func(context.Context, string, privileged.PeerPolicy) error
+	ServeActivated func(context.Context, privileged.PeerPolicy) error
 }
 
 func newHelperCommand(version string) *cobra.Command {
@@ -37,6 +37,7 @@ func newHelperCommand(version string) *cobra.Command {
 func newHelperCommandWithDependencies(deps helperCommandDependencies) *cobra.Command {
 	var socketPath string
 	var systemdSocketActivation bool
+	var peerUnit string
 	helper := &cobra.Command{
 		Use:    "helper",
 		Short:  "Run Veil privileged helper operations",
@@ -56,17 +57,22 @@ func newHelperCommandWithDependencies(deps helperCommandDependencies) *cobra.Com
 			if err != nil {
 				return fmt.Errorf("resolve veil user: %w", err)
 			}
+			// Only the Panel unit may use the helper: uid alone is shared with
+			// other software, so peers must also live in the veil.service cgroup
+			// (audit #506). --peer-unit can relax it for manual debugging only.
+			policy := privileged.PeerPolicy{AllowedUID: uid, AllowRoot: false, AllowedUnit: peerUnit}
 			if systemdSocketActivation {
 				if deps.ServeActivated == nil {
 					return fmt.Errorf("systemd socket activation is unavailable")
 				}
-				return deps.ServeActivated(cmd.Context(), uid, false)
+				return deps.ServeActivated(cmd.Context(), policy)
 			}
-			return deps.Serve(cmd.Context(), socketPath, uid, false)
+			return deps.Serve(cmd.Context(), socketPath, policy)
 		},
 	}
 	serve.Flags().StringVar(&socketPath, "socket", privileged.DefaultSocketPath, "absolute Unix socket path")
 	serve.Flags().BoolVar(&systemdSocketActivation, "systemd-socket-activation", false, "accept the helper socket from systemd")
+	serve.Flags().StringVar(&peerUnit, "peer-unit", "veil.service", "systemd unit a non-root helper peer must belong to (empty disables the unit check)")
 	helper.AddCommand(serve)
 	return helper
 }

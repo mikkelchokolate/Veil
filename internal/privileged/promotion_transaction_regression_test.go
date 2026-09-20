@@ -20,7 +20,7 @@ func TestPromotionOrdinaryErrorRollsBackEveryPreviouslyChangedArtifact(t *testin
 	root := t.TempDir()
 	request := preparePromotionFixture(t, root, 3)
 	request.Artifacts[1].Source = filepath.Join(root, "missing-second-source")
-	withNonRootPromotionHooks(t, func() {
+	withStubbedArtifactOwnership(t, func() {
 		if _, err := promoteResolvedArtifacts(filepath.Join(root, "backups"), fixedPromotionNow, request); err == nil {
 			t.Fatal("expected injected second-artifact error")
 		}
@@ -37,7 +37,7 @@ func TestPromotionRecoversSIGKILLAfterEveryArtifactPublication(t *testing.T) {
 
 			// Re-entering the privileged promotion subsystem represents helper
 			// startup/recovery before another operation is accepted.
-			withNonRootPromotionHooks(t, func() {
+			withStubbedArtifactOwnership(t, func() {
 				if _, err := promoteResolvedArtifacts(filepath.Join(root, "backups"), fixedPromotionNow, ResolvedPromotion{}); err != nil {
 					t.Fatalf("recover interrupted promotion: %v", err)
 				}
@@ -62,7 +62,7 @@ func TestPromotionRollbackRecoversSIGKILLAfterEveryArtifactPublication(t *testin
 			root := t.TempDir()
 			request := preparePromotionFixture(t, root, 3)
 			var promoted PromoteResult
-			withNonRootPromotionHooks(t, func() {
+			withStubbedArtifactOwnership(t, func() {
 				var err error
 				promoted, err = promoteResolvedArtifacts(filepath.Join(root, "backups"), fixedPromotionNow, request)
 				if err != nil {
@@ -72,7 +72,7 @@ func TestPromotionRollbackRecoversSIGKILLAfterEveryArtifactPublication(t *testin
 			assertPromotionSet(t, request, "new")
 
 			runPromotionCrashHelper(t, root, "rollback", promoted.BackupID, faultArtifact)
-			withNonRootPromotionHooks(t, func() {
+			withStubbedArtifactOwnership(t, func() {
 				if _, err := promoteResolvedArtifacts(filepath.Join(root, "backups"), fixedPromotionNow, ResolvedPromotion{}); err != nil {
 					t.Fatalf("recover interrupted rollback: %v", err)
 				}
@@ -88,7 +88,7 @@ func TestPromotionManifestContainsDurableTransactionEvidence(t *testing.T) {
 	root := t.TempDir()
 	request := preparePromotionFixture(t, root, 2)
 	var result PromoteResult
-	withNonRootPromotionHooks(t, func() {
+	withStubbedArtifactOwnership(t, func() {
 		var err error
 		result, err = promoteResolvedArtifacts(filepath.Join(root, "backups"), fixedPromotionNow, request)
 		if err != nil {
@@ -271,11 +271,27 @@ func fixedPromotionBackupID() string {
 	return fixedPromotionNow().UTC().Format("20060102T150405.000000000Z")
 }
 
-func withNonRootPromotionHooks(t *testing.T, run func()) {
+// withStubbedArtifactOwnership runs the promotion transaction machinery with
+// the runtime-artifact ownership contract applied against recorded no-op
+// hooks: the process reports root and veil/veil-proxy resolve so the fail-
+// closed ownership enforcement (audit #522) is exercised end to end without
+// real chown/chmod on the host.
+func withStubbedArtifactOwnership(t *testing.T, run func()) {
 	t.Helper()
-	original := effectiveUID
-	effectiveUID = func() int { return 1000 }
-	defer func() { effectiveUID = original }()
+	originalEffectiveUID := effectiveUID
+	originalLookupUser := lookupUser
+	originalChownPath := chownPath
+	originalChmodPath := chmodPath
+	effectiveUID = func() int { return 0 }
+	lookupUser = func(string) (*user.User, error) { return &user.User{Uid: "0", Gid: "0"}, nil }
+	chownPath = func(string, int, int) error { return nil }
+	chmodPath = func(string, os.FileMode) error { return nil }
+	defer func() {
+		effectiveUID = originalEffectiveUID
+		lookupUser = originalLookupUser
+		chownPath = originalChownPath
+		chmodPath = originalChmodPath
+	}()
 	run()
 }
 

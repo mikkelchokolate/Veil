@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
 func TestHelperCommandIsHiddenButServeHelpIsAvailable(t *testing.T) {
@@ -32,7 +34,7 @@ func TestHelperServeRejectsRelativeSocketPath(t *testing.T) {
 		GOOS:         "linux",
 		EffectiveUID: func() int { return 0 },
 		LookupUID:    func(string) (uint32, error) { return 1000, nil },
-		Serve:        func(context.Context, string, uint32, bool) error { return nil },
+		Serve:        func(context.Context, string, privileged.PeerPolicy) error { return nil },
 	})
 	cmd.SetArgs([]string{"serve", "--socket", "helper.sock"})
 	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "absolute") {
@@ -45,7 +47,7 @@ func TestHelperServeRejectsNonRootOnLinux(t *testing.T) {
 		GOOS:         "linux",
 		EffectiveUID: func() int { return 1000 },
 		LookupUID:    func(string) (uint32, error) { return 1000, nil },
-		Serve:        func(context.Context, string, uint32, bool) error { return nil },
+		Serve:        func(context.Context, string, privileged.PeerPolicy) error { return nil },
 	})
 	cmd.SetArgs([]string{"serve", "--socket", filepath.Join(t.TempDir(), "helper.sock")})
 	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "root") {
@@ -65,11 +67,14 @@ func TestHelperServeResolvesVeilUIDAndStartsSocketServer(t *testing.T) {
 			}
 			return 4242, nil
 		},
-		Serve: func(_ context.Context, path string, uid uint32, allowRoot bool) error {
+		Serve: func(_ context.Context, path string, policy privileged.PeerPolicy) error {
 			gotPath = path
-			gotUID = uid
-			if allowRoot {
+			gotUID = policy.AllowedUID
+			if policy.AllowRoot {
 				t.Fatal("production helper must not allow root peers")
+			}
+			if policy.AllowedUnit != "veil.service" {
+				t.Fatalf("helper peers must be bound to veil.service, got %q", policy.AllowedUnit)
 			}
 			return errors.New("stop")
 		},
@@ -93,14 +98,17 @@ func TestHelperServeUsesSystemdSocketActivation(t *testing.T) {
 		GOOS:         "linux",
 		EffectiveUID: func() int { return 0 },
 		LookupUID:    func(string) (uint32, error) { return 4242, nil },
-		Serve: func(context.Context, string, uint32, bool) error {
+		Serve: func(context.Context, string, privileged.PeerPolicy) error {
 			t.Fatal("path listener must not be used with socket activation")
 			return nil
 		},
-		ServeActivated: func(_ context.Context, uid uint32, allowRoot bool) error {
+		ServeActivated: func(_ context.Context, policy privileged.PeerPolicy) error {
 			activated = true
-			if uid != 4242 || allowRoot {
-				t.Fatalf("activated arguments: uid=%d allowRoot=%t", uid, allowRoot)
+			if policy.AllowedUID != 4242 || policy.AllowRoot {
+				t.Fatalf("activated arguments: uid=%d allowRoot=%t", policy.AllowedUID, policy.AllowRoot)
+			}
+			if policy.AllowedUnit != "veil.service" {
+				t.Fatalf("activated helper must bind peers to veil.service, got %q", policy.AllowedUnit)
 			}
 			return errors.New("stop")
 		},

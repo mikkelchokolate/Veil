@@ -105,7 +105,7 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	}
 
 	masqueradeURL := "https://www.bing.com/"
-	fallbackRoot := "/var/lib/veil/www"
+	fallbackRoot := "/etc/veil/www"
 	panelAccess, err := panelaccess.NewProfile(panelaccess.ProfileInput{PanelAccess: input.PanelAccess, Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort}).Build()
 	if err != nil {
 		return RURecommendedProfile{}, err

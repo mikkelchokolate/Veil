@@ -140,12 +140,13 @@ func TestBuildRepairPlanNoChangesWhenFilesMatch(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(caddyPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(caddyPath, []byte("{}"), 0o600); err != nil {
+	if err := os.WriteFile(caddyPath, []byte("{}"), 0o640); err != nil {
 		t.Fatalf("write caddy: %v", err)
 	}
 
-	// Pre-create fallback index with matching content
-	indexPath := filepath.Join(varDir, "www", "index.html")
+	// Pre-create fallback index with matching content (post-#601: the fallback
+	// root lives under /etc/veil/www, root:veil-proxy 0640)
+	indexPath := filepath.Join(etcDir, "www", "index.html")
 	indexContent := ""
 	desiredFiles, err := desiredManagedFiles(profile, paths)
 	if err != nil {
@@ -159,7 +160,7 @@ func TestBuildRepairPlanNoChangesWhenFilesMatch(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(indexPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(indexPath, []byte(indexContent), 0o644); err != nil {
+	if err := os.WriteFile(indexPath, []byte(indexContent), 0o640); err != nil {
 		t.Fatalf("write index: %v", err)
 	}
 

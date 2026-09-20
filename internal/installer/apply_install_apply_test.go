@@ -91,10 +91,10 @@ func TestApplyRURecommendedProfileRejectsMissingPaths(t *testing.T) {
 func TestApplyRURecommendedProfileChownsSecretsForVeilGroup(t *testing.T) {
 	// Hermetic: run as if root so the chown path is exercised regardless of the
 	// CI runner's euid, and stub the user lookup so no real 'veil' account is needed.
-	oldUID, oldLookup := effectiveUID, lookupUser
-	defer func() { effectiveUID, lookupUser = oldUID, oldLookup }()
+	oldUID, oldLookupG := effectiveUID, lookupGroup
+	defer func() { effectiveUID, lookupGroup = oldUID, oldLookupG }()
 	effectiveUID = func() int { return 0 }
-	lookupUser = func(string) (*user.User, error) { return &user.User{Uid: "0", Gid: "0"}, nil }
+	lookupGroup = func(string) (*user.Group, error) { return &user.Group{Gid: "0"}, nil }
 	// A non-root CI runner cannot os.Chown to another group (EPERM). Force the
 	// group-read bit directly; this is exactly the permission the production
 	// chown+chmod grants.

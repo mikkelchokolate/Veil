@@ -14,7 +14,15 @@ import (
 
 func TestServeSystemdAdoptsListenerAndHandlesRequest(t *testing.T) {
 	original := newSystemdUnixListener
-	defer func() { newSystemdUnixListener = original }()
+	oldReadPeerCgroup := readPeerCgroup
+	defer func() {
+		newSystemdUnixListener = original
+		readPeerCgroup = oldReadPeerCgroup
+	}()
+	// ServeSystemd binds peers to veil.service; stand in for the test process.
+	readPeerCgroup = func(int32) ([]byte, error) {
+		return []byte("0::/system.slice/veil.service\n"), nil
+	}
 
 	path := filepath.Join(t.TempDir(), "activated.sock")
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
@@ -42,7 +50,7 @@ func TestServeSystemdAdoptsListenerAndHandlesRequest(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- server.ServeSystemd(ctx, uint32(os.Getuid()), false)
+		done <- server.ServeSystemd(ctx, PeerPolicy{AllowedUID: uint32(os.Getuid())})
 	}()
 
 	select {
@@ -86,7 +94,7 @@ func TestServeSystemdPropagatesListenerError(t *testing.T) {
 		return nil, net.ErrClosed
 	}
 	server := NewServer(nil)
-	if err := server.ServeSystemd(context.Background(), 0, false); err == nil {
+	if err := server.ServeSystemd(context.Background(), PeerPolicy{}); err == nil {
 		t.Fatal("expected listener error to propagate")
 	}
 }

@@ -238,6 +238,8 @@ When installed natively on a Linux host, Veil manages the following directories 
 | `/var/lib/veil/updates/` | `0700 veil:veil` | Downloaded release archive and checksum material awaiting helper verification. |
 | `/var/lib/veil/migration-backups/` | `0700 root:root` | Root-owned safety copies created before ownership or permission migration. |
 | `/var/lib/veil/sessions.json` | `0600 veil:veil` | Hashed browser session and CSRF state; raw bearer values are never persisted. |
+| `/etc/veil/generated/`, `/etc/veil/tls/`, `/etc/veil/panel/`, `/etc/veil/certs/`, `/etc/veil/www/` | `0750 root:veil-proxy` dirs, `0640 root:veil-proxy` files | Runtime-readable material shared with the `veil-proxy` services (Caddy, protocol units): rendered configuration, Panel TLS, ACME output, and the naive fallback site. |
+| `/run/veil/` | `0711 root:root` | Helper socket parent: traverse-only so no `veil`-uid process can replace `/run/veil/helper.sock` (`root:veil 0660`). |
 | `/var/lib/veil/audit/panel.jsonl` | `0600 veil:veil` | Rotated, redacted Panel authentication and mutation audit history. |
 | `/var/log/veil/audit.jsonl` | `0600` | Append-only audit trail logging all install, repair, and rollback events. |
 | `/etc/systemd/system/veil.service` | `0644` | Hardened non-root Panel service running as the `veil` account. |

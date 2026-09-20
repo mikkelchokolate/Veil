@@ -14,9 +14,7 @@ import (
 // RemovedArtifacts); merging them makes the API reload a service against a
 // config that no longer exists and skip stopping the newly added unit.
 func TestRestorePromotedArtifactsSeparatesRestoredAndRemoved(t *testing.T) {
-	oldEffectiveUID := effectiveUID
-	defer func() { effectiveUID = oldEffectiveUID }()
-	effectiveUID = func() int { return 1000 }
+	stubRuntimeArtifactOwnership(t)
 
 	root := t.TempDir()
 	backupRoot := filepath.Join(root, "backups")

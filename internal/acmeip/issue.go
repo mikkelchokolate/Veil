@@ -278,11 +278,15 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 // command restores group readability BEFORE restarting the panel — otherwise
 // veil.service (User=veil) and the protocol units (User=veil-proxy) can no
 // longer read tls.key after renewal (audit #120). chgrp prefers veil-proxy —
-// the group both readers share — and falls back to veil; both are
-// best-effort for hosts without the accounts.
+// the group both readers share — and falls back to veil when veil-proxy is
+// absent; every step fails closed so a renewal can never "succeed" leaving an
+// unreadable key or an unrestarted consumer (audit #526).
 func renewReloadCmd(certPath, keyPath string) string {
-	return fmt.Sprintf("chmod 0644 %s && chmod 0640 %s && (chgrp veil-proxy %s %s 2>/dev/null || chgrp veil %s %s 2>/dev/null || true) && systemctl restart veil || true",
-		shellQuote(certPath), shellQuote(keyPath), shellQuote(certPath), shellQuote(keyPath), shellQuote(certPath), shellQuote(keyPath))
+	dir := filepath.Dir(certPath)
+	return fmt.Sprintf("chmod 0644 %s && chmod 0640 %s && (chgrp veil-proxy %s %s || chgrp veil %s %s) && (chgrp veil-proxy %s || chgrp veil %s) && chmod 0750 %s && systemctl restart veil.service && for u in $(systemctl list-units --all --no-legend 'veil-hysteria2@*.service' | awk '{print $1}'); do systemctl restart \"$u\" || exit 1; done",
+		shellQuote(certPath), shellQuote(keyPath),
+		shellQuote(certPath), shellQuote(keyPath), shellQuote(certPath), shellQuote(keyPath),
+		shellQuote(dir), shellQuote(dir), shellQuote(dir))
 }
 
 // shellQuote wraps a path in single quotes for embedding in the acme.sh
@@ -412,6 +416,10 @@ func ensureCertDirs(sys System, certPath, keyPath string) error {
 // process owner.
 var getuidFunc = os.Getuid
 
+// lookupGroupIDFunc allows tests to mock group resolution: running as root in
+// an environment without the veil groups must still fail closed.
+var lookupGroupIDFunc = lookupGroupID
+
 // chownFunc allows tests to mock file ownership changes.
 var chownFunc = os.Chown
 
@@ -419,28 +427,43 @@ func (defaultSystem) Chown(name string, uid, gid int) error {
 	return chownFunc(name, uid, gid)
 }
 
+// fixCertOwnership makes issued panel cert material readable by the runtime
+// group and keeps the cert directory traversable. Protocol units run as
+// veil-proxy and share the panel certificate (the panel account is a
+// supplementary veil-proxy member), so veil-proxy is preferred and veil is
+// the fallback. Every failure propagates: a "successful" install that leaves
+// the key unreadable by its consumers is worse than a loud one (audit #528).
 func fixCertOwnership(sys System, certPath, keyPath string) error {
 	if err := sys.Chmod(certPath, 0o644); err != nil {
-		return err
+		return fmt.Errorf("chmod %s: %w", certPath, err)
 	}
 	if err := sys.Chmod(keyPath, 0o640); err != nil {
-		return err
+		return fmt.Errorf("chmod %s: %w", keyPath, err)
 	}
-	// Protocol units run as veil-proxy and share the panel certificate (the
-	// panel account is a supplementary veil-proxy member). If we are root and
-	// the veil-proxy group exists — falling back to veil — make the material
-	// readable by that group and keep the cert directory traversable.
-	if uid := getuidFunc(); uid == 0 {
-		gid := lookupGroupID("veil-proxy")
-		if gid < 0 {
-			gid = lookupGroupID("veil")
-		}
-		if gid >= 0 {
-			_ = sys.Chown(filepath.Dir(certPath), 0, gid)
-			_ = sys.Chmod(filepath.Dir(certPath), 0o750)
-			_ = sys.Chown(certPath, 0, gid)
-			_ = sys.Chown(keyPath, 0, gid)
-		}
+	if uid := getuidFunc(); uid != 0 {
+		// Without root there is no ownership contract to enforce: the files
+		// stay owned by the issuing user with the modes set above.
+		return nil
+	}
+	gid := lookupGroupIDFunc("veil-proxy")
+	if gid < 0 {
+		gid = lookupGroupIDFunc("veil")
+	}
+	if gid < 0 {
+		return fmt.Errorf("resolve veil-proxy or veil group for cert ownership")
+	}
+	dir := filepath.Dir(certPath)
+	if err := sys.Chown(dir, 0, gid); err != nil {
+		return fmt.Errorf("chown %s: %w", dir, err)
+	}
+	if err := sys.Chmod(dir, 0o750); err != nil {
+		return fmt.Errorf("chmod %s: %w", dir, err)
+	}
+	if err := sys.Chown(certPath, 0, gid); err != nil {
+		return fmt.Errorf("chown %s: %w", certPath, err)
+	}
+	if err := sys.Chown(keyPath, 0, gid); err != nil {
+		return fmt.Errorf("chown %s: %w", keyPath, err)
 	}
 	return nil
 }

@@ -224,7 +224,7 @@ func naiveFallbackRoot(inbound model.Inbound, settings model.Settings) string {
 	if settings.FallbackRoot != "" {
 		return settings.FallbackRoot
 	}
-	return "/var/lib/veil/www"
+	return "/etc/veil/www"
 }
 
 // naiveUsers builds the Caddy forward_auth user list. Stored credential bytes

@@ -80,7 +80,7 @@ func TestRenderSystemdUnitsPropagatesCustomEtcAndVarDir(t *testing.T) {
 		}
 	}
 	helper := units[UnitHelperService]
-	if !strings.Contains(helper, "ReadWritePaths=/opt/veil/etc /opt/veil/var /usr/local/bin /etc/ufw /run /var/run") {
+	if !strings.Contains(helper, "ReadWritePaths=/opt/veil/etc /opt/veil/var /usr/local/bin /etc/ufw\n") {
 		t.Fatalf("helper ReadWritePaths should include custom trees:\n%s", helper)
 	}
 	backup := units[UnitBackupService]
@@ -160,9 +160,12 @@ func TestRenderSystemdUnits(t *testing.T) {
 		t.Fatalf("bad caddy unit:\n%s", units["veil-caddy.service"])
 	}
 	// Internet-facing caddy shares the veil-proxy privilege boundary with the
-	// other protocol units, not the panel account (issue #497).
-	if !strings.Contains(units["veil-caddy.service"], "User=veil-proxy") || !strings.Contains(units["veil-caddy.service"], "Group=veil-proxy") {
+	// other protocol units, not the panel account (issue #497, audit #506).
+	if !strings.Contains(units["veil-caddy.service"], "User=veil-proxy\n") || !strings.Contains(units["veil-caddy.service"], "Group=veil-proxy\n") {
 		t.Fatalf("caddy unit must run as veil-proxy:\n%s", units["veil-caddy.service"])
+	}
+	if strings.Contains(units["veil-caddy.service"], "User=veil\n") {
+		t.Fatalf("caddy unit must not share the panel uid:\n%s", units["veil-caddy.service"])
 	}
 	if strings.Contains(units["veil-caddy.service"], "ReadWritePaths=") {
 		t.Fatalf("caddy unit must not remount Veil state writable:\n%s", units["veil-caddy.service"])
@@ -257,6 +260,11 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 			t.Fatalf("veil.service missing %q:\n%s", want, panel)
 		}
 	}
+	// The panel must not own /run/veil: veil-helper.socket creates it
+	// root:root 0711 so no veil-uid process can replace the helper socket.
+	if strings.Contains(panel, "RuntimeDirectory=") {
+		t.Fatalf("veil.service must not claim a RuntimeDirectory (helper socket dir is root-owned):\n%s", panel)
+	}
 	helper := units[UnitHelperService]
 	for _, want := range []string{
 		"User=root",
@@ -265,7 +273,7 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 		"CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_NET_ADMIN CAP_NET_RAW\n",
 		"AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW",
 		"Environment=\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"",
-		"ReadWritePaths=/etc/veil /var/lib/veil /usr/local/bin /etc/ufw /run /var/run",
+		"ReadWritePaths=/etc/veil /var/lib/veil /usr/local/bin /etc/ufw\n",
 	} {
 		if !strings.Contains(helper, want) {
 			t.Fatalf("veil-helper.service missing %q:\n%s", want, helper)
@@ -289,6 +297,7 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 		"SocketUser=root",
 		"SocketGroup=veil",
 		"SocketMode=0660",
+		"DirectoryMode=0711",
 		"RemoveOnStop=true",
 	} {
 		if !strings.Contains(socket, want) {
@@ -300,6 +309,9 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 		if !strings.Contains(caddy, want) {
 			t.Fatalf("veil-caddy.service missing %q:\n%s", want, caddy)
 		}
+	}
+	if strings.Contains(caddy, "User=veil\n") || strings.Contains(caddy, "Group=veil\n") {
+		t.Fatalf("veil-caddy.service must not share the panel identity:\n%s", caddy)
 	}
 	if strings.Contains(caddy, "ReadWritePaths=") {
 		t.Fatalf("veil-caddy.service must not remount Veil paths writable:\n%s", caddy)

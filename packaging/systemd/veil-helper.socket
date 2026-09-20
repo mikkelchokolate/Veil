@@ -7,7 +7,10 @@ Accept=no
 SocketUser=root
 SocketGroup=veil
 SocketMode=0660
-DirectoryMode=0750
+# The socket parent stays root-owned and traverse-only (0711): the panel needs
+# execute/search to connect but must never be able to list or replace entries
+# in the helper socket directory.
+DirectoryMode=0711
 RemoveOnStop=true
 
 [Install]

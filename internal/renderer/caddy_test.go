@@ -128,7 +128,7 @@ func TestRenderNaiveCaddyfileDefaultsFallbackRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(cfg, "root * /var/lib/veil/www") {
+	if !strings.Contains(cfg, "root * /etc/veil/www") {
 		t.Fatalf("expected default fallback root, got:\n%s", cfg)
 	}
 }
@@ -154,9 +154,13 @@ func TestRenderNaiveCaddyfileNormalizesPaths(t *testing.T) {
 		fallbackRoot string
 		wantOk       bool
 	}{
-		{"FallbackRoot=/etc/passwd normalizes into /var/lib/veil", "/etc/passwd", true},
-		{"FallbackRoot=/var/lib/veil/../../../etc/passwd normalizes into /var/lib/veil", "/var/lib/veil/../../../etc/passwd", true},
-		{"FallbackRoot=/var/lib/veil/www unchanged", "/var/lib/veil/www", true},
+		{"FallbackRoot=/etc/passwd escapes the managed root", "/etc/passwd", false},
+		{"FallbackRoot=/var/lib/veil/../../../etc/passwd escapes via traversal", "/var/lib/veil/../../../etc/passwd", false},
+		{"FallbackRoot=/var/lib/veil itself exposes state", "/var/lib/veil", false},
+		{"FallbackRoot=/var/lib/veil/www accepted (legacy)", "/var/lib/veil/www", true},
+		{"FallbackRoot=/etc/veil/www accepted", "/etc/veil/www", true},
+		{"FallbackRoot=/etc/veil/panel holds secrets", "/etc/veil/panel", false},
+		{"FallbackRoot=site resolves under /etc/veil/www", "site", true},
 		{"FallbackRoot empty uses default", "", true},
 	}
 	for _, tt := range tests {

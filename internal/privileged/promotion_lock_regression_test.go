@@ -114,6 +114,7 @@ func TestPromotionLockSubprocessHelper(t *testing.T) {
 	if os.Getenv("VEIL_PROMOTION_LOCK_HELPER") != "1" {
 		t.Skip("subprocess helper")
 	}
+	stubRuntimeArtifactOwnership(t)
 	if os.Getenv("VEIL_PROMOTION_LOCK_READY") == "1" {
 		ready := os.NewFile(3, "promotion-lock-ready")
 		if ready == nil {
