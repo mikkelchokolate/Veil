@@ -49,10 +49,28 @@ func TestManualApplyWithoutConfirmDoesNotCreateJob(t *testing.T) {
 
 func TestDeriveSystemStateFailedJobWhenAlreadyApplied(t *testing.T) {
 	failed := &veilapply.Job{Status: veilapply.StatusFailed, ErrorCode: "APPLY_ERROR", ErrorMessage: "confirm=true is required to write staged apply files"}
-	if got := deriveSystemState(veilapply.Revisions{Desired: 82, Applied: 82}, failed); got != veilapply.StateSynced {
-		t.Fatalf("synced revisions with failed no-op job: state=%q want=%q", got, veilapply.StateSynced)
+	// A failed job is unresolved evidence even when the revisions happen to
+	// match — reporting "synced" would hide the failure (#543).
+	if got := deriveSystemState(veilapply.Revisions{Desired: 82, Applied: 82}, failed); got != veilapply.StateDegraded {
+		t.Fatalf("synced revisions with failed no-op job: state=%q want=%q", got, veilapply.StateDegraded)
 	}
 	if got := deriveSystemState(veilapply.Revisions{Desired: 83, Applied: 82}, failed); got != veilapply.StateFailed {
 		t.Fatalf("pending revisions with failed job: state=%q want=%q", got, veilapply.StateFailed)
+	}
+}
+
+func TestDeriveSystemStateRecoveryPendingIsNotSynced(t *testing.T) {
+	pending := &veilapply.Job{Status: veilapply.StatusRecoveryPending, ErrorCode: "ROLLBACK_FAILED", ErrorMessage: "firewall rollback failed"}
+	// Recovery-pending jobs are still active — never "synced", even when
+	// desired==applied (#534).
+	if got := deriveSystemState(veilapply.Revisions{Desired: 82, Applied: 82}, pending); got != veilapply.StateRecovering {
+		t.Fatalf("synced revisions with recovery_pending job: state=%q want=%q", got, veilapply.StateRecovering)
+	}
+	if got := deriveSystemState(veilapply.Revisions{Desired: 83, Applied: 82}, pending); got != veilapply.StateRecovering {
+		t.Fatalf("pending revisions with recovery_pending job: state=%q want=%q", got, veilapply.StateRecovering)
+	}
+	rollbackFailed := &veilapply.Job{Status: veilapply.StatusRollbackFailed, ErrorCode: "RB", ErrorMessage: "boom"}
+	if got := deriveSystemState(veilapply.Revisions{Desired: 82, Applied: 82}, rollbackFailed); got != veilapply.StateDegraded {
+		t.Fatalf("synced revisions with rollback_failed job: state=%q want=%q", got, veilapply.StateDegraded)
 	}
 }

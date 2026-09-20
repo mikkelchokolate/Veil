@@ -127,6 +127,8 @@ export const en: Record<string, string> = {
 	"applyState.rolling_back": "Rolling back",
 	"applyState.rolled_back": "Rolled back",
 	"applyState.degraded": "Degraded",
+	"applyState.recovering": "Recovering",
+	"applyState.untracked": "Not tracked",
 	"applyState.unavailable": "apply state unavailable",
 	"applyState.loading": "apply…",
 

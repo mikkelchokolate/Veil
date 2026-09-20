@@ -38,12 +38,13 @@ func (s *managementState) writeMutationResponse(w http.ResponseWriter, status in
 	obj["revision"] = s.mergedRevisionView(outcome)
 	if outcome.job != nil {
 		obj["applyJob"] = outcome.job
-		// An apply ran: report its outcome honestly. success=false means the
-		// object was saved (desired) but is NOT yet live (applied).
-		obj["success"] = outcome.success
-	} else {
-		obj["success"] = true
 	}
+	// success means "the mutation is reflected in the runtime". An apply was
+	// attempted only when auto-apply ran; its outcome decides the flag. When
+	// no apply was required (auto-apply off) or the mutation needed none,
+	// success stays true — but a failed apply is never reported as success
+	// just because no durable job record exists (#536).
+	obj["success"] = !outcome.attempted || outcome.success
 	writeJSONStatus(w, status, obj)
 }
 
@@ -53,16 +54,18 @@ func (s *managementState) mergeOutcomeInto(obj map[string]any, outcome autoApply
 	obj["revision"] = s.mergedRevisionView(outcome)
 	if outcome.job != nil {
 		obj["applyJob"] = outcome.job
-		obj["success"] = outcome.success
-	} else {
-		obj["success"] = true
 	}
+	// Same contract as writeMutationResponse: success is only forced true
+	// when no apply was attempted (#536).
+	obj["success"] = !outcome.attempted || outcome.success
 }
 
 // mergedRevisionView resolves the revision view for a mutation response.
 func (s *managementState) mergedRevisionView(outcome autoApplyOutcome) revisionView {
 	if !s.applyTrackingEnabled() {
-		return revisionView{State: apply.StateSynced}
+		// Tracking is off: there is no durable evidence the runtime converged
+		// — report untracked rather than a false-green "synced" (#539).
+		return revisionView{State: apply.StateUntracked}
 	}
 	rev := outcome.revision
 	if rev.Desired == 0 && rev.Applied == 0 {

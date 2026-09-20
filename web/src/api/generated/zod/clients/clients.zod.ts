@@ -188,7 +188,7 @@ export const PostApiV1ClientsResponse = zod.object({
   "revision": zod.object({
   "desired": zod.int(),
   "applied": zod.int(),
-  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded'])
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded', 'recovering', 'untracked'])
 }),
   "applyJob": zod.object({
   "id": zod.string(),
