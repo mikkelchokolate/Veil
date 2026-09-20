@@ -22,7 +22,7 @@ func TestRateLimitDecisionModuleKeepsMutationsOffReadLimits(t *testing.T) {
 	module := NewRateLimitDecisionModule(60, 5, nil, map[string]EndpointLimit{
 		"/api/v1/clients": {RatePerMinute: 6, Burst: 1},
 	})
-	read := module.Decide(http.MethodGet, "/api/v1/clients/c-1/token", "203.0.113.10")
+	read := module.Decide(http.MethodGet, "/api/v1/clients/c-1/tokens/t-1", "203.0.113.10")
 	if !read.Limited || read.Key != "/api/v1/clients:203.0.113.10" || read.Burst != 1 {
 		t.Fatalf("read decision = %+v", read)
 	}

@@ -289,7 +289,7 @@ export function BackupsPage() {
 								job.status === "succeeded"
 									? "success"
 									: job.status === "failed" ||
-										  (job.status === "degraded" && !job.restored)
+											(job.status === "degraded" && !job.restored)
 										? "danger"
 										: "warning"
 							}
