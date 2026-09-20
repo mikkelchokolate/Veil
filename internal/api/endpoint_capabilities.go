@@ -28,6 +28,11 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodGet, "/healthz", capabilityPublic},
 	{http.MethodGet, "/livez", capabilityPublic},
 	{http.MethodGet, "/readyz", capabilityPublic},
+	// Base capability is public, matching /healthz: the auth middleware
+	// elevates it to viewer when ProtectMetrics is set (public listener or
+	// --metrics-access auto/authenticated). Keep this in sync with the
+	// OpenAPI /metrics operation, which documents the same conditional
+	// exposure (#581).
 	{http.MethodGet, "/metrics", capabilityPublic},
 	{http.MethodGet, "/s/{token}", capabilityPublic},
 	{http.MethodPost, "/api/auth/login", capabilityPublic},
