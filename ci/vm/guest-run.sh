@@ -131,5 +131,12 @@ fi
 rc=0
 run_as "${JOB_USER}" bash "${WORKSPACE}/scripts/ci/${JOB}.sh" "$@" || rc=$?
 
+# A root job can leave root-owned entries in the ci-owned Go cache mounts —
+# restore ownership so the next unprivileged job on the same warm cache does
+# not trip over them.
+if [ "${JOB_USER}" = "root" ]; then
+  chown -R ci:ci /home/ci/go /home/ci/.cache/go-build 2>/dev/null || true
+fi
+
 echo "[guest] job=${JOB} exit=${rc}"
 exit "${rc}"
