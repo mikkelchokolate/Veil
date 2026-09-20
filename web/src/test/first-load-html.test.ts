@@ -22,6 +22,9 @@ describe("first-load HTML template (source)", () => {
 		expect(html).toContain('id="login-username"');
 		expect(html).toContain('id="login-password"');
 		expect(html).toContain('rel="icon"');
+		// The source module entry — the post-build contract asserts it became a
+		// hashed ./assets/ bundle.
+		expect(html).toContain('src="./src/boot.ts"');
 		expect(html).not.toMatch(/noindex/i);
 	});
 });

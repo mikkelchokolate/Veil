@@ -84,14 +84,18 @@ if (indexHtml.includes('src="./src/')) {
 
 // Referenced assets must exist on disk — a document naming a bundle that was
 // not emitted would first-paint the shell and then fail to boot (#468).
+// <link> attributes are matched order-agnostically: a future Vite reorder
+// must not silently drop these existence checks.
+const linkTags = indexHtml.match(/<link\b[^>]*>/g) ?? [];
+const hrefFor = (rel) =>
+	linkTags
+		.filter((tag) => tag.includes(`rel="${rel}"`))
+		.map((tag) => tag.match(/href="([^"]+)"/)?.[1])
+		.filter(Boolean);
 const assetRefs = [
 	moduleEntry[1],
-	...[
-		...indexHtml.matchAll(/<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"/g),
-	].map((m) => m[1]),
-	...[...indexHtml.matchAll(/<link[^>]*rel="icon"[^>]*href="([^"]+)"/g)].map(
-		(m) => m[1],
-	),
+	...hrefFor("stylesheet"),
+	...hrefFor("icon"),
 ];
 for (const ref of assetRefs) {
 	if (!/^\.\//.test(ref)) {
