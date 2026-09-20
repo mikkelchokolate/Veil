@@ -57,7 +57,7 @@ func reconcileUFW(ctx context.Context, runner CommandRunner, request ResolvedFir
 	// the host. Only demand management-access evidence before enabling —
 	// reconciling an already-active firewall cannot create new lockout
 	// exposure (stale deletion skips protected SSH/ACME comments).
-	if !initial.Enabled && !containsManagementAccessRule(desired) && !hasExistingManagementAccess(initial) {
+	if len(desired) > 0 && !initial.Enabled && !containsManagementAccessRule(desired) && !hasExistingManagementAccess(initial) {
 		return FirewallResult{}, errors.New("refusing to enable UFW without a staged SSH or Panel management access rule")
 	}
 
@@ -101,8 +101,12 @@ func reconcileUFW(ctx context.Context, runner CommandRunner, request ResolvedFir
 		}
 	}
 	if !initial.Enabled {
-		if _, err := runUFW(ctx, runner, 20*time.Second, "--force", "enable"); err != nil {
-			return FirewallResult{}, rollback(fmt.Errorf("enable ufw: %w", err))
+		// An empty desired set only prunes stale Veil-managed rules; it must
+		// never enable UFW, because no management access rule is staged.
+		if len(desired) > 0 {
+			if _, err := runUFW(ctx, runner, 20*time.Second, "--force", "enable"); err != nil {
+				return FirewallResult{}, rollback(fmt.Errorf("enable ufw: %w", err))
+			}
 		}
 	} else {
 		if _, err := runUFW(ctx, runner, 20*time.Second, "reload"); err != nil {
@@ -117,7 +121,7 @@ func reconcileUFW(ctx context.Context, runner CommandRunner, request ResolvedFir
 	if err != nil {
 		return FirewallResult{}, rollback(fmt.Errorf("parse final ufw status: %w", err))
 	}
-	if !finalState.Enabled {
+	if !finalState.Enabled && (initial.Enabled || len(desired) > 0) {
 		return FirewallResult{}, rollback(errors.New("ufw remained disabled after reconciliation"))
 	}
 	for _, rule := range desired {
@@ -134,7 +138,7 @@ func reconcileUFW(ctx context.Context, runner CommandRunner, request ResolvedFir
 }
 
 func parseDesiredUFWRules(request ResolvedFirewall) ([]ufwDesiredRule, error) {
-	if len(request.Rules) == 0 || len(request.Rules) != len(request.RuleIDs) {
+	if len(request.Rules) != len(request.RuleIDs) {
 		return nil, errors.New("firewall request must contain matching rule IDs and commands")
 	}
 	rules := make([]ufwDesiredRule, 0, len(request.Rules))

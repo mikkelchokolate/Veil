@@ -616,9 +616,10 @@ func (ctx ManagementApplyContext) PrepareFirewallLocked() (string, error) {
 	}
 	responses := firewall.BuildRuleResponses(ctx.state.settings, ctx.state.inbounds)
 	rules := firewall.UFWRulesFromResponses(responses)
-	if len(rules) == 0 {
-		return "", nil
-	}
+	// An empty desired set is still reconciled through the privileged
+	// transaction: the helper prunes stale Veil-managed rules left behind by
+	// earlier applies, and skipping the call would silently bypass the
+	// privileged boundary entirely.
 	reqRules := make([]privileged.FirewallRule, len(rules))
 	for index, rule := range rules {
 		reqRules[index] = privileged.FirewallRule{Command: rule.Command, Args: rule.Args}
