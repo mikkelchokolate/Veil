@@ -190,7 +190,18 @@ func TestIntegrationHelperSocketRejectsProxyUID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	command := exec.Command(binary, "-test.run=^TestIntegrationHelperSocketRejectsProxyUID$", "-test.count=1", "-test.v")
+	// The test binary lives under the root-owned 0700 go-build tree, so
+	// veil-proxy cannot exec it in place. Copy it into the traversable probe
+	// dir (0711) as a 0755 file and re-exec the copy instead.
+	probeBinary := filepath.Join(dir, "probe.test")
+	binaryBytes, err := os.ReadFile(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(probeBinary, binaryBytes, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(probeBinary, "-test.run=^TestIntegrationHelperSocketRejectsProxyUID$", "-test.count=1", "-test.v")
 	command.Env = append(os.Environ(),
 		helperProbeChildEnv+"=1",
 		"VEIL_HELPER_PROBE_SOCK="+socketPath,

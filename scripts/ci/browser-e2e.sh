@@ -115,7 +115,9 @@ run_as_veil ./dist/veil admin set --username browser-admin --password 'Browser-E
 # 16 GiB, while verify preflight conservatively reserves the configured policy
 # limit plus its workspace reserve; that does not fit every CI container.
 ${SUDO} env VEIL_BACKUP_MAX_BYTES=8388608 \
-  ./dist/veil helper serve --socket /run/veil/helper.sock >"${WORK}/helper.log" 2>&1 &
+  # --peer-unit "": this harness spawns the panel directly, not inside a
+  # veil.service cgroup, so the unit-membership peer check cannot pass here.
+  ./dist/veil helper serve --socket /run/veil/helper.sock --peer-unit "" >"${WORK}/helper.log" 2>&1 &
 PIDS+=($!)
 for _ in $(seq 1 30); do [ -S /run/veil/helper.sock ] && break; sleep 1; done
 if [ ! -S /run/veil/helper.sock ]; then

@@ -159,7 +159,7 @@ func TestRenderSystemdUnits(t *testing.T) {
 	if !strings.Contains(units["veil-caddy.service"], "/etc/veil/generated/caddy/config.json") {
 		t.Fatalf("bad caddy unit:\n%s", units["veil-caddy.service"])
 	}
-// Internet-facing caddy shares the veil-proxy privilege boundary with the
+	// Internet-facing caddy shares the veil-proxy privilege boundary with the
 	// other protocol units, not the panel account (issue #497, audit #506).
 	if !strings.Contains(units["veil-caddy.service"], "User=veil-proxy\n") || !strings.Contains(units["veil-caddy.service"], "Group=veil-proxy\n") {
 		t.Fatalf("caddy unit must run as veil-proxy:\n%s", units["veil-caddy.service"])

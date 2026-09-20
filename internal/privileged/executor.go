@@ -720,11 +720,23 @@ func ensureRuntimeArtifactParentOwnership(artifactID, path string, gid int) erro
 // (all User=veil-proxy) can load them. The panel account is a supplementary
 // veil-proxy member, so the single group covers the panel preview path too.
 // The configs contain credentials, so they must not be world-readable. When
-// ownership work is required but the process is not root the function fails
-// closed instead of reporting success for an unreadable artifact (#522).
+// the process is not root, ownership work is only possible — and only
+// required — where the privilege boundary exists: a host that resolves the
+// veil/veil-proxy accounts has a proxy consumer to strand, so failing to chown
+// there fails closed (#522). Single-user dev/e2e layouts have no such
+// consumer; the artifact merely has to be readable by the current uid, which
+// an open() probe doubles as a parent-traversal check for.
 func ensureRuntimeArtifactOwnership(artifactID, path string) error {
 	if effectiveUID() != 0 {
-		return fmt.Errorf("set runtime artifact ownership for %s: requires root", artifactID)
+		if _, err := runtimeArtifactGID(); err == nil {
+			return fmt.Errorf("set runtime artifact ownership for %s: requires root", artifactID)
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return fmt.Errorf("runtime artifact %s is unreadable and cannot be repaired without root", artifactID)
+		}
+		_ = f.Close()
+		return nil
 	}
 	gid, err := runtimeArtifactGID()
 	if err != nil {
@@ -745,7 +757,16 @@ func ensureRuntimeArtifactOwnership(artifactID, path string) error {
 // veil-proxy (audit #524).
 func ensureRuntimeArtifactSymlinkParents(artifactID, path string) error {
 	if effectiveUID() != 0 {
-		return fmt.Errorf("set runtime artifact directory ownership for %s: requires root", artifactID)
+		// Same contract as ensureRuntimeArtifactOwnership: the boundary must
+		// exist for ownership work to be required; without it Lstat doubles as
+		// the parent-traversal probe for the single-user consumer (#522, #524).
+		if _, err := runtimeArtifactGID(); err == nil {
+			return fmt.Errorf("set runtime artifact directory ownership for %s: requires root", artifactID)
+		}
+		if _, err := os.Lstat(path); err != nil {
+			return fmt.Errorf("runtime artifact %s is unreachable and cannot be repaired without root", artifactID)
+		}
+		return nil
 	}
 	gid, err := runtimeArtifactGID()
 	if err != nil {

@@ -254,8 +254,18 @@ func TestProductionExecutorPublishesCaddyArtifactReadableByVeilProxy(t *testing.
 // root-owned 0600 files the veil-proxy units cannot read (audit #522).
 func TestProductionExecutorPromotionFailsClosedWithoutRoot(t *testing.T) {
 	oldEffectiveUID := effectiveUID
-	defer func() { effectiveUID = oldEffectiveUID }()
+	oldLookupUser := lookupUser
+	defer func() {
+		effectiveUID = oldEffectiveUID
+		lookupUser = oldLookupUser
+	}()
 	effectiveUID = func() int { return 1000 }
+	// The privilege boundary exists on this host — a non-root helper cannot
+	// enforce artifact ownership for the veil-proxy consumer, so it must fail
+	// closed instead of silently leaving the artifact unreadable (#522).
+	lookupUser = func(name string) (*user.User, error) {
+		return &user.User{Uid: "123", Gid: "456"}, nil
+	}
 
 	root := t.TempDir()
 	source := filepath.Join(root, "staging", "hysteria2", "edge.yaml")
