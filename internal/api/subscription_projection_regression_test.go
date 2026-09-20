@@ -82,18 +82,25 @@ func TestConcurrentPublicSubscriptionsDoNotRaceCachedProjection(t *testing.T) {
 	tokens := []string{firstToken, tok.Plaintext, firstToken}
 	var wg sync.WaitGroup
 	errCh := make(chan error, 48)
+	seq := 0
 	for i := 0; i < 16; i++ {
 		for _, token := range tokens {
+			seq++
 			wg.Add(1)
-			go func(token string) {
+			go func(token string, source int) {
 				defer wg.Done()
 				req := httptest.NewRequest(http.MethodGet, "/s/"+token+"?format=raw", nil)
+				// Each request carries a distinct source IP so the shared /s/
+				// read-path budget (30/min + burst 6, audit #337) is not what
+				// this race test exercises — the per-token/source subscription
+				// limiter (60/300 per minute) stays far above the fan-out too.
+				req.RemoteAddr = fmt.Sprintf("198.51.100.%d:40000", source)
 				w := httptest.NewRecorder()
 				router.ServeHTTP(w, req)
 				if w.Code != http.StatusOK {
 					errCh <- fmt.Errorf("subscription status=%d body=%s", w.Code, w.Body.String())
 				}
-			}(token)
+			}(token, seq)
 		}
 	}
 	wg.Wait()

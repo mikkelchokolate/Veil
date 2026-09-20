@@ -244,10 +244,24 @@ func legacyCaddyArtifactPath(id string) (ArtifactPath, bool) {
 		return ArtifactPath{}, false
 	}
 	rest := strings.TrimPrefix(clean, "caddy/")
-	if strings.Contains(rest, "/") || !strings.HasSuffix(rest, ".Caddyfile") {
+	if strings.Contains(rest, "/") {
 		return ArtifactPath{}, false
 	}
-	name := strings.TrimSuffix(rest, ".Caddyfile")
+	// Retired per-inbound Caddy artifacts exist in two generations: the
+	// veil-caddy@<name> era wrote caddy/<name>.Caddyfile, and the window in
+	// which the consolidated veil-caddy.service masqueraded as a template
+	// (#352) could stage caddy/<name>.json. Both are dead ends for promotion
+	// but must stay removable so the apply-time orphan scan can actually
+	// delete the leftover files instead of failing with "unknown artifact id".
+	var name string
+	switch {
+	case strings.HasSuffix(rest, ".Caddyfile"):
+		name = strings.TrimSuffix(rest, ".Caddyfile")
+	case strings.HasSuffix(rest, ".json") && rest != "config.json":
+		name = strings.TrimSuffix(rest, ".json")
+	default:
+		return ArtifactPath{}, false
+	}
 	if !artifactNamePattern.MatchString(name) {
 		return ArtifactPath{}, false
 	}
@@ -417,7 +431,10 @@ func (p Policy) ResolveFirewall(request FirewallRequest) (ResolvedFirewall, erro
 		return ResolvedFirewall{RuleIDs: append([]string(nil), request.RuleIDs...), Rules: request.Rules, Action: action, Fence: request.Fence}, nil
 	}
 	if len(request.RuleIDs) == 0 {
-		return ResolvedFirewall{}, newError(ErrorInvalidRequest, "at least one firewall rule is required")
+		// An empty desired set is meaningful: the reconcile still runs so
+		// stale Veil-managed rules are pruned when nothing should remain
+		// staged (for example after the panel switches to loopback-only).
+		return ResolvedFirewall{Action: action, Fence: request.Fence}, nil
 	}
 	rules := make([]string, 0, len(request.RuleIDs))
 	for _, id := range request.RuleIDs {

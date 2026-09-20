@@ -7,7 +7,7 @@ import (
 )
 
 func TestBuildRuleResponsesSkipsDisabledAndUnsupportedTransports(t *testing.T) {
-	settings := model.Settings{PanelListen: "127.0.0.1:2096"}
+	settings := model.Settings{PanelListen: "0.0.0.0:2096", PanelAccess: "direct"}
 	inbounds := []model.Inbound{
 		{Name: "disabled", Protocol: "hysteria2", Transport: "udp", Port: 1000, Enabled: false},
 		{Name: "unsupported-transport", Protocol: "hysteria2", Transport: "tcp", Port: 2000, Enabled: true},

@@ -207,6 +207,9 @@ func TestIsRateLimitedReadPath(t *testing.T) {
 		{"/api/v1/clients", false},
 		{"/api/v1/clients/client-1", false},
 		{"/api/v1/clients/client-1/tokens", false},
+		// Public subscription feed: the DefaultRateLimitPolicy "/s/" entry
+		// (30/min) must actually gate it.
+		{"/s/some-feed-token", true},
 		{"/api/v1/traffic/top", false},
 		{"/api/status", false},
 		{"/metrics", false},

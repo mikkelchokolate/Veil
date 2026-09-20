@@ -60,10 +60,12 @@ func isMutatingMethod(method string) bool {
 }
 
 // isRateLimitedReadPath returns true for GET paths that should be rate-limited
-// (expensive queries like log reading, long-lived SSE stream opens, and
+// (expensive queries like log reading, long-lived SSE stream opens, the
+// public subscription feed, which carries its own 30/min policy budget, and
 // admin-secret credential/export reads that must not be unlimited).
 func isRateLimitedReadPath(path string) bool {
 	if strings.HasPrefix(path, "/api/logs") ||
+		strings.HasPrefix(path, "/s/") ||
 		path == "/api/v1/events" ||
 		path == "/api/v1/traffic/stream" ||
 		strings.HasPrefix(path, "/api/client-links") {

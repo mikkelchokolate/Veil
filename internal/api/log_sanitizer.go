@@ -27,10 +27,17 @@ var (
 	logPEMPrivateKeyPattern    = regexp.MustCompile(`(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----`)
 	// Caddyfile basic_auth <user> <hash>: redact the credential hash.
 	logBasicAuthPattern = regexp.MustCompile(`(?i)(\bbasic_auth\s+[A-Za-z0-9_.-]+\s+)[^ 	\n{]+`)
+	// HTTP Authorization / Proxy-Authorization "Basic <credential>": redact the
+	// credential after the scheme token. The generic authorization matcher in
+	// logSecretPattern only consumes the word "Basic" and leaves the secret.
+	logBasicAuthHeaderPattern = regexp.MustCompile(`(?i)(\b(?:proxy-)?authorization\b["']?[ 	]*(?::|=)[ 	]*["']?basic[ 	]+)[^ 	,\"'};]+`)
 	// Multi-line YAML secret values: redact only the value on the key's line,
 	// never the rest of the document (audit #179/#186: a greedy \s* pattern
 	// crossing newlines ate "type: password" and left the secret in place).
-	logYAMLSecretPattern = regexp.MustCompile(`(?m)^(\s*(?:password|passwd|token|secret|private[_-]?key|license[_-]?key|auth_pass|auth_credentials|key)\s*:\s*)([^#\n][^\n]*)$`)
+	// The journalctl short-iso prefix is optional so GET /api/logs redacts the
+	// same keys (olcRTC crypto "key:", ...) when lines carry TIMESTAMP HOST
+	// IDENT: prefixes — matching the userpass block handling below.
+	logYAMLSecretPattern = regexp.MustCompile(`(?m)^(` + logJournalctlPrefix + `\s*(?:password|passwd|token|secret|private[_-]?key|license[_-]?key|auth_pass|auth_credentials|key)\s*:\s*)([^#\n][^\n]*)$`)
 	// hysteria2 userpass map: "alice: SECRET" entries nested directly under a
 	// "userpass:" key. The block pattern captures userpass: plus ALL following
 	// entries, and each entry line is redacted inside the callback — anchoring
@@ -52,6 +59,10 @@ func sanitizeServiceLogOutput(output string) string {
 	// basic_auth must run before logSecretPattern, which would otherwise
 	// redact the username ("basic_auth alice <hash>") and leave the hash.
 	output = logBasicAuthPattern.ReplaceAllString(output, `${1}`+settings.RedactedSecret)
+	// Basic-auth headers must run before logSecretPattern, which would
+	// otherwise redact only the "Basic" scheme token and leave the
+	// credential behind.
+	output = logBasicAuthHeaderPattern.ReplaceAllString(output, `${1}`+settings.RedactedSecret)
 	output = logSecretPattern.ReplaceAllString(output, `${1}`+settings.RedactedSecret)
 	output = logYAMLSecretPattern.ReplaceAllString(output, `${1}`+settings.RedactedSecret)
 	output = logUserPassBlockPattern.ReplaceAllStringFunc(output, func(block string) string {

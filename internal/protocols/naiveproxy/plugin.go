@@ -1,8 +1,6 @@
 package naiveproxy
 
 import (
-	"strings"
-
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
@@ -23,53 +21,19 @@ func (Plugin) MaxEnabled() int         { return 0 }
 // authenticates each client with its own credential (audit #309).
 func (Plugin) EnforcesPerClientCredentials() bool { return true }
 
-func protocolString(m map[string]any, key, fallback string) string {
-	if m == nil {
-		return fallback
-	}
-	v, ok := m[key]
-	if !ok {
-		return fallback
-	}
-	s, ok := v.(string)
-	if !ok {
-		return fallback
-	}
-	return strings.TrimSpace(s)
-}
-
 func naiveUsername(settings model.Settings, inbound model.Inbound) string {
-	username := protocolString(inbound.ProtocolFields, "naiveUsername", "")
-	if username == "" {
-		username = inbound.NaiveUsername
-	}
-	if username == "" {
-		username = protocolString(settings.ProtocolFields, "naiveUsername", "")
-	}
-	if username == "" {
-		username = settings.NaiveUsername
-	}
+	username := model.EffectiveProtocolString(inbound, settings, "naiveUsername", inbound.NaiveUsername, settings.NaiveUsername)
 	if username == "" {
 		username = model.DefaultNaiveUsername
 	}
 	return username
 }
 
+// naivePassword resolves the effective fallback password. The winning value is
+// preserved byte-for-byte so the rendered Caddy user list and every exported
+// client link carry identical credential bytes (audit #331).
 func naivePassword(settings model.Settings, inbound model.Inbound) string {
-	password := strings.TrimSpace(inbound.Password)
-	if password == "" {
-		password = protocolString(inbound.ProtocolFields, "naivePassword", "")
-	}
-	if password == "" {
-		password = inbound.NaivePassword
-	}
-	if password == "" {
-		password = protocolString(settings.ProtocolFields, "naivePassword", "")
-	}
-	if password == "" {
-		password = settings.NaivePassword
-	}
-	return password
+	return model.EffectiveProtocolPassword(inbound, settings, "naivePassword", inbound.NaivePassword, settings.NaivePassword)
 }
 
 // NaiveDomain returns the public domain for the inbound, preferring the inbound

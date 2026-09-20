@@ -55,21 +55,11 @@ func protocolBool(m map[string]any, key string, fallback bool) bool {
 	return b
 }
 
+// hysteria2Password resolves the effective fallback password. The winning
+// value is preserved byte-for-byte so the rendered server config and every
+// exported client link carry identical credential bytes (audit #331).
 func hysteria2Password(settings model.Settings, inbound model.Inbound) string {
-	password := strings.TrimSpace(inbound.Password)
-	if password == "" {
-		password = protocolString(inbound.ProtocolFields, "hysteria2Password", "")
-	}
-	if password == "" {
-		password = inbound.Hysteria2Password
-	}
-	if password == "" {
-		password = protocolString(settings.ProtocolFields, "hysteria2Password", "")
-	}
-	if password == "" {
-		password = settings.Hysteria2Password
-	}
-	return password
+	return model.EffectiveProtocolPassword(inbound, settings, "hysteria2Password", inbound.Hysteria2Password, settings.Hysteria2Password)
 }
 
 func hysteria2Insecure(settings model.Settings, inbound model.Inbound) bool {
