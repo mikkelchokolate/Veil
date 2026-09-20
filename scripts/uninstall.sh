@@ -37,7 +37,7 @@ Options:
 
 By default uninstall removes configuration and state in /etc/veil and /var/lib/veil
 so a later install starts fresh with a new password. The veil system account is preserved.
-Units written by `veil install` (SYSTEMD_DIR) and packaged units under
+Units written by 'veil install' (SYSTEMD_DIR) and packaged units under
 /lib/systemd/system + /usr/lib/systemd/system (VEIL_VENDOR_SYSTEMD_DIRS) are
 always removed, as is the QUIC sysctl drop-in (VEIL_SYSCTL_CONF).
 Purge also removes the Caddy/Mita state dirs (/var/lib/caddy, /var/lib/mita);
