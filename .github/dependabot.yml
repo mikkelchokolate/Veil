@@ -10,25 +10,17 @@ updates:
         patterns:
           - "*"
 
+  # directories covers the root Dockerfile AND ci/vm/Containerfile, whose
+  # digest-pinned base images feed the local-CI image chain (#427).
   - package-ecosystem: docker
-    directory: /
+    directories:
+      - /
+      - /ci/vm
     schedule:
       interval: weekly
     open-pull-requests-limit: 1
     groups:
       container-images:
-        patterns:
-          - "*"
-
-  # ci/vm/Containerfile carries digest-pinned base images for the local-CI
-  # image chain — the root docker entry does not watch it (#427).
-  - package-ecosystem: docker
-    directory: /ci/vm
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 1
-    groups:
-      ci-container-images:
         patterns:
           - "*"
 

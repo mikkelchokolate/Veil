@@ -39,20 +39,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # The CodeQL Go toolchain must match the pinned CI toolchain, not whatever
-      # go.mod's `go` directive happens to name (issue #421).
-      - name: Read pinned Go version
-        if: matrix.language == 'go'
-        id: versions
-        run: |
-          source scripts/ci/versions.sh
-          echo "go_version=${CI_GO_VERSION}" >> "$GITHUB_OUTPUT"
-
+      # go-version-file keeps CodeQL on the same Go as required CI:
+      # verify_versions.py fails when go.mod's directive diverges from
+      # CI_GO_VERSION, so go.mod IS the pinned source of truth (#421).
       - name: Set up Go
         if: matrix.language == 'go'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: ${{ steps.versions.outputs.go_version }}
+          go-version-file: go.mod
           cache: true
 
       - name: Prepare embedded web assets

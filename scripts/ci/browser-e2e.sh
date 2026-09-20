@@ -47,7 +47,10 @@ ci_step "pinned Playwright (${CI_PLAYWRIGHT_VERSION})"
 # provisioned by the workflow before this script runs — never provision at
 # run time. `playwright install --dry-run` exits 0 even when nothing is
 # installed, so assert the real Chromium executable exists instead (#384).
-chromium_path="$(cd test/browser && node -e 'console.log(require("@playwright/test").chromium.executablePath())' 2>/dev/null || true)"
+chromium_path=""
+if probe_out="$(cd test/browser && node -e 'console.log(require("@playwright/test").chromium.executablePath())' 2>/dev/null)"; then
+  chromium_path="${probe_out}"
+fi
 if [ -z "${chromium_path}" ] || [ ! -x "${chromium_path}" ]; then
   ci_die "chromium executable missing (${chromium_path:-unresolved}) — rebuild veil-ci-browser / provision the runner (no runtime provisioning allowed)"
 fi

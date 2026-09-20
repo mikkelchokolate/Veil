@@ -112,7 +112,9 @@ run_as() {
 # workspace may be relocated by CI_WORKSPACE_OVERRIDE (docker-systemd puts it
 # under the exchange dir) — chown the real path, not a hardcoded one (#462).
 chown -R ci:ci "${ARTIFACTS_GUEST}" "${WORKSPACE}" 2>/dev/null || true
-[ -d /workspace ] && chown -R ci:ci /workspace 2>/dev/null || true
+if [ -d /workspace ] && [ "${WORKSPACE}" != "/workspace" ]; then
+  chown -R ci:ci /workspace 2>/dev/null || true
+fi
 
 rc=0
 run_as "${JOB_USER}" bash "${WORKSPACE}/scripts/ci/${JOB}.sh" "$@" || rc=$?

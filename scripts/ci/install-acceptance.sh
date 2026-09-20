@@ -270,10 +270,18 @@ done
 [ "${runtime_ok}" -eq 0 ] || ci_die "runtime download failed after retries"
 # A green `runtime install` is not evidence the binaries landed: skipped or
 # partially-failed runtimes must not green the first-inbound leg (#409).
-for bin in hysteria mita caddy mieru naive olcrtc sing-box; do
+# This is the SERVER set the installer owns (hysteria2->hysteria,
+# mieru->mita, naiveproxy->caddy, olcrtc->olcrtc, warp->sing-box); the
+# mieru/naive CLIENT binaries are e2e tooling, not runtime-install output.
+for bin in hysteria mita caddy olcrtc sing-box; do
   ${SUDO} test -x "/usr/local/bin/${bin}" \
     || ci_die "runtime install left ${bin} missing/non-executable in /usr/local/bin"
 done
+# Presence alone is not the pin contract: the installed sing-box must report
+# the version verify_versions.py binds to CI_SINGBOX_TAG.
+singbox_version="$(/usr/local/bin/sing-box version 2>/dev/null | grep -o '[0-9][0-9.]*' | head -1 || true)"
+[ "v${singbox_version}" = "${CI_SINGBOX_TAG}" ] \
+  || ci_die "sing-box reports version '${singbox_version:-none}', want ${CI_SINGBOX_TAG}"
 
 # --- 1. Capability report: read-only, exit 0 on a supported host --------------
 ci_step "install --check capability report (must not mutate)"

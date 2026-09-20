@@ -30,6 +30,8 @@ git commit -qm "CI snapshot"
 # real workspace (and /workspace for the artifacts dir) so root-extracted
 # files are writable by the ci user (#462).
 chown -R ci:ci "${WORKSPACE}"
-{ [ -d /workspace ] && chown -R ci:ci /workspace; } || true
+if [ -d /workspace ] && [ "${WORKSPACE}" != "/workspace" ]; then
+  chown -R ci:ci /workspace || true
+fi
 
 echo "workspace ready: ${WORKSPACE} ($(du -sh "${WORKSPACE}" | cut -f1), native fs: $(stat -f -c %T "${WORKSPACE}"))"
