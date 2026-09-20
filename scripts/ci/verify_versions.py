@@ -147,12 +147,35 @@ for label, value in (
         fail(f"runtime installer does not contain the {label} pin {value}")
 
 docker_entrypoint = (ROOT / "packaging/docker/entrypoint.sh").read_text()
+# Assert the full VAR:-default marker, not a bare path substring — "/etc/veil"
+# alone would false-green on the KEY_PATH line without verifying APPLY_ROOT
+# at all (issue #393).
 for label, value in (
-    ("state", "/var/lib/veil/state.json"),
-    ("apply", "/etc/veil"),
-    ("key", "/etc/veil/state.key"),
+    ("state", "VEIL_STATE_PATH:-/var/lib/veil/state.json"),
+    ("apply", "VEIL_APPLY_ROOT:-/var/lib/veil/staging"),
+    ("key", "VEIL_KEY_PATH:-/etc/veil/state.key"),
 ):
     if value not in docker_entrypoint:
-        fail(f"Docker entrypoint does not contain the {label} path {value}")
+        fail(f"Docker entrypoint does not contain the {label} default {value}")
+
+# package-smoke must run against the digest-pinned distro images declared here,
+# never floating tags (issue #394), and the Alpine smoke base must stay
+# identical to the shipped container's runtime base.
+smoke = (ROOT / "scripts/package-smoke.sh").read_text()
+for var in ("CI_SMOKE_DEBIAN_IMAGE", "CI_SMOKE_ROCKYLINUX_IMAGE", "CI_SMOKE_ALPINE_IMAGE"):
+    if var not in versions:
+        fail(f"versions.sh is missing {var}")
+    if "@" not in versions[var]:
+        fail(f"{var} must be pinned by digest (image@sha256:...)")
+    if var not in smoke:
+        fail(f"scripts/package-smoke.sh does not use the pinned ${var}")
+expect(
+    "smoke Alpine image == Dockerfile ALPINE_IMAGE",
+    versions["CI_SMOKE_ALPINE_IMAGE"],
+    match(r"^ARG ALPINE_IMAGE=(\S+)$", dockerfile, "Dockerfile Alpine image"),
+)
+for floating in ("debian:", "rockylinux:", "alpine:"):
+    if floating in smoke:
+        fail(f"scripts/package-smoke.sh contains floating distro reference {floating!r}")
 
 print("version pins are consistent")

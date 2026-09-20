@@ -164,7 +164,11 @@ jobs:
             ${{ runner.temp }}/veil-browser.log
           if-no-files-found: ignore
 
+  # package-smoke runs AFTER the release job and installs the exact nfpm
+  # artifacts that job built — green smoke means the packages about to be
+  # published actually install/upgrade/remove (issue #396).
   package-smoke:
+    needs: [release]
     strategy:
       fail-fast: false
       matrix:
@@ -199,23 +203,28 @@ jobs:
           cache-dependency-path: web/pnpm-lock.yaml
       - name: Build frontend dist
         run: bash scripts/ci/prepare-frontend-dist.sh
-      - name: Build package payload
-        run: |
-          mkdir -p dist
-          go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME} -X main.commit=${GITHUB_SHA}" -o dist/veil ./cmd/veil
       - name: Install pinned nfpm
         run: |
           . scripts/ci/versions.sh
           go install "github.com/goreleaser/nfpm/v2/cmd/nfpm@${CI_NFPM_VERSION}"
+      - name: Download the shipped native packages built by the release job
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: veil-linux-${{ matrix.arch }}
+          path: dist-shipped
       - name: Install and upgrade native packages in clean distributions
         env:
           VEIL_GOARCH: ${{ matrix.arch }}
           VEIL_ARCH: ${{ matrix.arch }}
+          # The NEW packages are the shipped artifacts; the locally built
+          # binary only fills the fake-version OLD upgrade-source package.
+          VEIL_SMOKE_PREBUILT_DIR: dist-shipped
+          VEIL_SMOKE_EXPECTED_BINARY_VERSION: ${{ github.ref_name }}
         run: bash scripts/package-smoke.sh
 
   release:
     runs-on: ubuntu-24.04
-    needs: [quality, browser-e2e, package-smoke]
+    needs: [quality, browser-e2e]
     strategy:
       matrix:
         include:
