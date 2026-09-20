@@ -157,7 +157,30 @@ def parse_logs(paths: list[Path]) -> tuple[dict[tuple[str, str], dict[str, Any]]
     return timings, observed
 
 
-def write_report(repo: Path, artifact: Path, roots: list[dict[str, Any]], logs: list[Path]) -> None:
+def load_skip_allowlist(path: Path | None) -> set[tuple[str, str]]:
+    """Read the explicit skip allowlist (`package<TAB>root` lines).
+
+    Roots on this list may report `skip` in the CI test job without failing
+    the inventory — the list exists so that a *new* or *unexpected* skip is a
+    hard failure instead of silent false-green evidence (issue #430).
+    """
+    allowed: set[tuple[str, str]] = set()
+    if not path:
+        return allowed
+    if not path.exists():
+        raise SystemExit(f"skip allowlist does not exist: {path}")
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        package, _, root = line.partition("\t")
+        if not package or not root:
+            raise SystemExit(f"skip allowlist line is not 'package<TAB>root': {line!r}")
+        allowed.add((package.strip(), root.strip()))
+    return allowed
+
+
+def write_report(repo: Path, artifact: Path, roots: list[dict[str, Any]], logs: list[Path], skip_allowlist: set[tuple[str, str]] | None = None) -> None:
     artifact.mkdir(parents=True, exist_ok=True)
     by_key = {(row["package"], row["root"]): row for row in roots}
     timing_map, observed = parse_logs(logs)
@@ -235,12 +258,28 @@ def write_report(repo: Path, artifact: Path, roots: list[dict[str, Any]], logs: 
     balance_path.write_text(old_balance.rstrip() + actual + "\n", encoding="utf-8")
     missing = sorted(set(by_key) - observed)
     unexpected = sorted(observed - set(by_key))
-    if missing or unexpected:
-        print(f"inventory verification failed: missing={len(missing)} unexpected={len(unexpected)}", file=sys.stderr)
+    # A skipped root was *selected* but produced no assertion — it is not
+    # execution evidence. Only roots on the explicit allowlist (declared
+    # environment conditions such as "requires root" in this unprivileged
+    # job) may skip; anything else fails the gate (issue #430).
+    allowed = skip_allowlist or set()
+    skipped = sorted(key for key, row in by_key.items() if row.get("status") == "skip")
+    disallowed_skips = [key for key in skipped if key not in allowed]
+    (artifact / "skipped-roots.txt").write_text(
+        "\n".join(f"{p}\t{r}" for p, r in skipped) + ("\n" if skipped else ""), encoding="utf-8")
+    if missing or unexpected or disallowed_skips:
+        print(
+            f"inventory verification failed: missing={len(missing)} unexpected={len(unexpected)} disallowed-skips={len(disallowed_skips)}",
+            file=sys.stderr,
+        )
         if missing:
             print("missing: " + ", ".join(f"{p}:{r}" for p, r in missing[:20]), file=sys.stderr)
+        if unexpected:
+            print("unexpected: " + ", ".join(f"{p}:{r}" for p, r in unexpected[:20]), file=sys.stderr)
+        if disallowed_skips:
+            print("skipped (not on allowlist): " + ", ".join(f"{p}:{r}" for p, r in disallowed_skips[:20]), file=sys.stderr)
         raise SystemExit(1)
-    print(f"inventory verified: {len(roots)} expected roots, {len(observed)} executed roots")
+    print(f"inventory verified: {len(roots)} expected roots, {len(observed)} executed roots, {len(skipped)} allowed skips")
 
 
 def main() -> int:
@@ -249,6 +288,7 @@ def main() -> int:
     parser.add_argument("--artifact-dir", type=Path, required=True)
     parser.add_argument("--packages-file", type=Path)
     parser.add_argument("--roots-json", type=Path)
+    parser.add_argument("--skip-allowlist", type=Path)
     parser.add_argument("--log", type=Path, action="append", default=[])
     args = parser.parse_args()
     repo = args.repo.resolve()
@@ -262,7 +302,7 @@ def main() -> int:
             packages = run(["go", "list", "./..."], repo).splitlines()
         roots = discover(repo, packages)
     if args.log:
-        write_report(repo, args.artifact_dir, roots, args.log)
+        write_report(repo, args.artifact_dir, roots, args.log, load_skip_allowlist(args.skip_allowlist))
     else:
         args.artifact_dir.mkdir(parents=True, exist_ok=True)
         (args.artifact_dir / "test-roots.json").write_text(json.dumps(roots, indent=2, sort_keys=True) + "\n", encoding="utf-8")

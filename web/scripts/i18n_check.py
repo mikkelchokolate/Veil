@@ -3,8 +3,11 @@
 
 Checks:
  1. en/ru catalogs contain exactly the same keys.
- 2. Every t("key") referenced in src exists in the en catalog (dynamic
-    t(`ns.${var}`) templates are checked by prefix against catalog keys).
+ 2. Every t("key") or t('key') referenced in src exists in the en catalog
+    (dynamic t(`ns.${var}`) templates are checked by prefix against catalog
+    keys). Single-quoted calls previously escaped the scan entirely (#418).
+    Non-literal calls like t(variable) cannot be resolved statically — keep
+    them out of the codebase; they are not detected here.
 
 Hardcoded-string leak detection lives in scripts/i18n_leaks.mjs (AST-based,
 @babel/parser): the regex approach used here previously matched only
@@ -23,7 +26,7 @@ from pathlib import Path
 SRC = Path(__file__).resolve().parent.parent / "src"
 
 def load_catalog(path: Path) -> set[str]:
-    return set(re.findall(r'^\s*"([^"]+)":', path.read_text(), re.M))
+    return set(re.findall(r'^\s*"([^"]+)":', path.read_text(encoding="utf-8"), re.M))
 
 def iter_tsx():
     for p in sorted(SRC.rglob("*.tsx")) + sorted(SRC.rglob("*.ts")):
@@ -50,9 +53,11 @@ def main():
     referenced = set()
     dynamic_prefixes = set()
     for p in iter_tsx():
-        src = p.read_text()
+        src = p.read_text(encoding="utf-8")
         referenced |= set(re.findall(r'\bt\("([^"]+)"', src))
+        referenced |= set(re.findall(r"\bt\('([^']+)'", src))
         dynamic_prefixes |= set(re.findall(r'\bt\(`([a-zA-Z]+)\.\$\{', src))
+        dynamic_prefixes |= set(re.findall(r"\bt\('([a-zA-Z]+)\.'\s*\+", src))
     missing = referenced - en
     if missing:
         problems += 1

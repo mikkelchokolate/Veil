@@ -43,11 +43,15 @@ go build -trimpath -ldflags "-s -w -X main.version=browser-e2e" -o dist/veil ./c
 
 ci_step "pinned Playwright (${CI_PLAYWRIGHT_VERSION})"
 (cd test/browser && npm ci --ignore-scripts)
-# Browsers are baked into the CI image (PLAYWRIGHT_BROWSERS_PATH); never
-# provision at run time — fail loudly if the image is missing them.
-if ! (cd test/browser && npx playwright install --dry-run chromium >/dev/null 2>&1); then
-  ci_die "chromium not present in image — rebuild veil-ci-browser (no runtime provisioning allowed)"
+# Browsers are baked into the CI image (PLAYWRIGHT_BROWSERS_PATH) or
+# provisioned by the workflow before this script runs — never provision at
+# run time. `playwright install --dry-run` exits 0 even when nothing is
+# installed, so assert the real Chromium executable exists instead (#384).
+chromium_path="$(cd test/browser && node -e 'console.log(require("@playwright/test").chromium.executablePath())' 2>/dev/null || true)"
+if [ -z "${chromium_path}" ] || [ ! -x "${chromium_path}" ]; then
+  ci_die "chromium executable missing (${chromium_path:-unresolved}) — rebuild veil-ci-browser / provision the runner (no runtime provisioning allowed)"
 fi
+ci_log "chromium present: ${chromium_path}"
 
 wait_health() { # <url> <log>
   local url="$1" log="$2"

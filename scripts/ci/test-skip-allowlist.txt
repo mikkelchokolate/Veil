@@ -1,0 +1,21 @@
+# test-skip-allowlist.txt — roots allowed to report `skip` in the `test` job.
+#
+# The test job runs as the unprivileged `ci` user on Linux. A root-level test
+# that reports Action=skip is *observed* by test-inventory.py, but skip is not
+# execution evidence: a required gate that soft-skips still produced no
+# assertion (issue #430). Any skip outside this list fails the inventory.
+#
+# Add an entry only when the skip is a declared, intentional environment
+# condition for THIS job — e.g. requires root or live systemd, which the base
+# image deliberately does not grant. Do not add entries for "tool missing" or
+# "network unavailable" skips: CI provides node/caddy/network, so those tests
+# must run (their absence is the false-green this file exists to catch).
+#
+# Format: <package><TAB><root>   (one per line; # comments allowed)
+
+github.com/mikkelchokolate/Veil/internal/hostaccess	TestPrepare
+github.com/mikkelchokolate/Veil/internal/cli	TestPrivilegedInstallFailureRestoresPreviousBinary
+github.com/mikkelchokolate/Veil/internal/apply	TestUpdateRecoveryAcceptsOnlyExactHelperCommittedEvidence
+github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestRuntimeVersionProbeExecutesProtectedHomeBinaryThroughSystemdBind
+github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestMaliciousRuntimeProbeCannotReadHostSecretsEnvironmentDescriptorsOrNetwork
+github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestRuntimeProbeMaliciousHelper

@@ -28,7 +28,9 @@ frontend_stage() { bash "${CI_SCRIPTS_DIR}/prepare-frontend-dist.sh"; }
 tidy_stage() { go mod tidy; git diff --exit-code -- go.mod go.sum; }
 gofmt_stage() {
   local unformatted
-  unformatted="$(git ls-files '*.go' | xargs gofmt -l)"
+  # Null-delimited file list: spaced paths must not be split, and -r keeps an
+  # empty list from hanging gofmt on stdin (same pattern as release.yml, #444).
+  unformatted="$(git ls-files -z '*.go' | xargs -0 -r gofmt -l)"
   if [ -n "${unformatted}" ]; then
     printf 'These files are not gofmt-clean:\n%s\n' "${unformatted}" >&2
     return 1
@@ -61,10 +63,18 @@ ci_test_stage "OpenAPI verification" ci_run verify-openapi make verify-openapi
 ci_test_stage "SDK verification" ci_run verify-sdk make verify-sdk
 ci_test_stage build ci_run build make build
 ci_test_stage "Caddy preparation" caddy_stage
-ci_test_stage "SDK tests" ci_run sdk-tests go test ./sdk/go -race -count=1 -json
 
-# The legacy ${CI_SCRIPTS_DIR}/api-shards.sh remains the documented API gate;
-# test-orchestrator.py now provides the bounded implementation used below.
+# The SDK suite is part of the coverage gate like every other package — a
+# separate run without -coverprofile would keep sdk/go invisible to the
+# threshold (#438).
+rm -rf "${CI_ARTIFACT_DIR}/coverage-tasks"
+mkdir -p "${CI_ARTIFACT_DIR}/coverage-tasks"
+ci_test_stage "SDK tests" ci_run sdk-tests go test ./sdk/go -race -count=1 -json \
+  "-coverprofile=${CI_ARTIFACT_DIR}/coverage-tasks/coverage-sdk.out"
+
+# test-orchestrator.py is the live bounded scheduler for package + API shard
+# tasks; verify-test-shards.py then proves every API root executed exactly
+# once across the shard logs (the retired api-shards.sh did this inline).
 packages="$(go list ./... | grep -v '/sdk/go$')"
 api_package="$(go list ./internal/api)"
 non_api_packages="$(printf '%s\n' "${packages}" | grep -v "^${api_package}$")"
@@ -73,8 +83,6 @@ printf '%s\n' "${non_api_packages}" > "${CI_ARTIFACT_DIR}/product-packages.txt"
 ci_test_stage "test discovery" python3 "${CI_SCRIPTS_DIR}/test-inventory.py" \
   --repo "${CI_ROOT}" --artifact-dir "${CI_ARTIFACT_DIR}"
 
-rm -rf "${CI_ARTIFACT_DIR}/coverage-tasks"
-mkdir -p "${CI_ARTIFACT_DIR}/coverage-tasks"
 test_workers="${CI_TEST_WORKERS:-}"
 if [ -z "${test_workers}" ]; then
   test_workers="$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc)"
@@ -105,19 +113,54 @@ if [ "${orchestrator_rc}" -ne 0 ]; then
   exit "${orchestrator_rc}"
 fi
 
+# Shard verification (issue #429): every discovered API root must appear
+# exactly once across the shard + serial JSON logs the orchestrator produced.
+# A dropped lane or a -run regex that silently matched nothing is a gate
+# failure, not a green run. Read the discovered inventory (test-roots.json,
+# written by the discovery stage above) — expected-roots.txt only exists
+# after the report stage below, so reading it here would be stale data.
+python3 - "${CI_ARTIFACT_DIR}/test-roots.json" "${api_package}" \
+  > "${CI_ARTIFACT_DIR}/api-expected-roots.txt" <<'PY'
+import json, sys
+rows = json.load(open(sys.argv[1], encoding="utf-8"))
+print("\n".join(sorted(r["root"] for r in rows if r["package"] == sys.argv[2])))
+PY
+[ -s "${CI_ARTIFACT_DIR}/api-expected-roots.txt" ] \
+  || ci_die "test discovery found no API roots for ${api_package}"
+mapfile -t api_task_logs < <(grep -E '/api-(shard-[0-9]+|serial)\.json$' "${CI_ARTIFACT_DIR}/test-task-logs.txt")
+[ "${#api_task_logs[@]}" -gt 0 ] || ci_die "orchestrator produced no API shard task logs"
+ci_test_stage "API shard root verification" \
+  python3 "${CI_SCRIPTS_DIR}/verify-test-shards.py" \
+    "${CI_ARTIFACT_DIR}/api-expected-roots.txt" "${api_task_logs[@]}"
+
 mapfile -t task_logs < "${CI_ARTIFACT_DIR}/test-task-logs.txt"
-report_args=(--repo "${CI_ROOT}" --artifact-dir "${CI_ARTIFACT_DIR}")
+report_args=(--repo "${CI_ROOT}" --artifact-dir "${CI_ARTIFACT_DIR}"
+  --skip-allowlist "${CI_SCRIPTS_DIR}/test-skip-allowlist.txt")
 for log in "${CI_ARTIFACT_DIR}/sdk-tests.log" "${task_logs[@]}"; do
   [ -f "${log}" ] && report_args+=(--log "${log}")
 done
 coverage_merge_stage() {
   local profiles=("${CI_ARTIFACT_DIR}/coverage-tasks/"*.out)
   [ -f "${profiles[0]}" ]
+  # Every scheduled task (packages + API shards + optional serial lane) must
+  # have left a coverprofile, plus the SDK profile written above — merging a
+  # subset inflates the coverage figure (#439).
+  local expected
+  expected=$(( $(wc -l < "${CI_ARTIFACT_DIR}/test-task-logs.txt") + 1 ))
+  if [ "${#profiles[@]}" -ne "${expected}" ]; then
+    printf 'expected %s coverage profiles, found %s\n' "${expected}" "${#profiles[@]}" >&2
+    return 1
+  fi
   python3 "${CI_SCRIPTS_DIR}/merge-coverprofiles.py" coverage.out "${profiles[@]}"
 }
 coverage_check_stage() {
   local total_coverage
-  total_coverage="$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')"
+  [ -n "${CI_COVERAGE_THRESHOLD:-}" ] || { echo 'CI_COVERAGE_THRESHOLD is unset' >&2; return 1; }
+  # `go tool cover -func` prints one summary row "total:"; a bare substring
+  # grep can match a *function* named e.g. totalUpload and read the wrong
+  # percentage, false-greening the threshold (#415).
+  total_coverage="$(go tool cover -func=coverage.out | awk '$1 == "total:" {print $NF}' | tr -d '%')"
+  [ -n "${total_coverage}" ] || { echo 'no total coverage row in coverage.out' >&2; return 1; }
   printf 'Total statement coverage is %s%%\n' "${total_coverage}" | tee "${CI_ARTIFACT_DIR}/coverage-summary.txt"
   awk -v cov="${total_coverage}" -v min="${CI_COVERAGE_THRESHOLD}" \
     'BEGIN { if (cov+0 < min+0) { print "Error: coverage " cov "% is below threshold (" min "%)"; exit 1 } }'
@@ -157,5 +200,5 @@ if os_path := __import__("os").environ.get("GITHUB_STEP_SUMMARY"):
         stream.write(summary)
 PY
 
-total_coverage="$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')"
+total_coverage="$(go tool cover -func=coverage.out | awk '$1 == "total:" {print $NF}' | tr -d '%')"
 ci_log "test job passed (coverage ${total_coverage}%, workers ${CI_TEST_WORKERS:-auto})"
