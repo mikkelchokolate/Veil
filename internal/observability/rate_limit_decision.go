@@ -71,17 +71,27 @@ func isMutatingMethod(method string) bool {
 		method == http.MethodDelete || method == http.MethodPatch
 }
 
-// isRateLimitedReadPath returns true for GET/HEAD paths that must be
-// rate-limited: expensive queries (log reads), long-lived SSE stream opens,
-// public subscription fetches, and credential/export reads that must not be
-// scraped unboundedly with an admin secret (#337/#583/#594). Keep this in
-// sync with the DefaultRateLimitPolicy endpoint limits.
+// isRateLimitedReadPath returns true for GET/HEAD paths that should be
+// rate-limited (expensive queries like log reading, long-lived SSE stream
+// opens, public subscription fetches, and admin-secret credential/export
+// reads that must not be unlimited). Keep this in sync with the
+// DefaultRateLimitPolicy endpoint limits (#337).
 func isRateLimitedReadPath(path string) bool {
-	return strings.HasPrefix(path, "/api/logs") ||
-		strings.HasPrefix(path, "/s/") ||
-		strings.HasPrefix(path, "/api/client-links") ||
-		strings.HasPrefix(path, "/api/v1/clients") ||
-		strings.HasPrefix(path, "/api/backups") ||
+	if strings.HasPrefix(path, "/api/logs") ||
 		path == "/api/v1/events" ||
-		path == "/api/v1/traffic/stream"
+		path == "/api/v1/traffic/stream" ||
+		strings.HasPrefix(path, "/api/client-links") ||
+		strings.HasPrefix(path, "/s/") {
+		return true
+	}
+	// Per-resource credential reads: link bundles and token-by-id GETs return
+	// admin-secret material and need the same throttle as /api/logs.
+	if strings.HasPrefix(path, "/api/v1/clients/") {
+		return strings.HasSuffix(path, "/links") || strings.Contains(path, "/tokens/")
+	}
+	// Backup downloads export the full encrypted state archive.
+	if strings.HasPrefix(path, "/api/backups/") {
+		return strings.HasSuffix(path, "/download")
+	}
+	return false
 }

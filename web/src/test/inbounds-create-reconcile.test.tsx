@@ -33,6 +33,9 @@ interface MockState {
 	secondPostHangs: boolean;
 	committed: boolean;
 	idempotencyKeys: Array<string | null>;
+	// jobStatus is the latest apply job status returned by /api/apply/jobs;
+	// null means the jobs list comes back empty.
+	jobStatus?: string | null;
 }
 
 function installFetchMock(state: MockState) {
@@ -68,17 +71,22 @@ function installFetchMock(state: MockState) {
 			);
 		}
 		if (url.endsWith("/api/apply/jobs")) {
+			const status =
+				state.jobStatus === undefined ? "applying" : state.jobStatus;
 			return respond({
-				items: [
-					{
-						id: "job-1",
-						desiredRevision: 2,
-						baseRevision: 1,
-						status: "running",
-						trigger: "mutation",
-						createdAt: 1,
-					},
-				],
+				items:
+					status === null
+						? []
+						: [
+								{
+									id: "job-1",
+									desiredRevision: 2,
+									baseRevision: 1,
+									status,
+									trigger: "mutation",
+									createdAt: 1,
+								},
+							],
 			});
 		}
 		return respond({});
@@ -144,6 +152,7 @@ describe("createInbound recovery", () => {
 			secondPostHangs: true,
 			committed: true,
 			idempotencyKeys: [],
+			jobStatus: "succeeded",
 		};
 		vi.stubGlobal("fetch", installFetchMock(state));
 		const pending = settle(createInbound({ name: "edge" }, "edge"));
@@ -154,6 +163,52 @@ describe("createInbound recovery", () => {
 		expect(value?.reconciled).toBe(true);
 		expect(value?.applyJob?.id).toBe("job-1");
 		expect(state.posts).toBe(2);
+	});
+
+	// Regression for #380: reconcile must derive success from the attached job
+	// like the server does — anything other than succeeded means saved-but-not-
+	// live, never a green "saved".
+	it.each(["applying", "failed", "recovery_pending"])(
+		"reports success:false when the reconciled job is %s",
+		async (jobStatus) => {
+			vi.useFakeTimers();
+			const state: MockState = {
+				posts: 0,
+				firstPostHangs: true,
+				secondPostHangs: true,
+				committed: true,
+				idempotencyKeys: [],
+				jobStatus,
+			};
+			vi.stubGlobal("fetch", installFetchMock(state));
+			const pending = settle(createInbound({ name: "edge" }, "edge"));
+			await vi.advanceTimersByTimeAsync(120_000);
+			const { value, error } = await pending;
+			expect(error).toBeUndefined();
+			expect(value?.success).toBe(false);
+			expect(value?.reconciled).toBe(true);
+			expect(value?.applyJob?.status).toBe(jobStatus);
+		},
+	);
+
+	it("reports success:true when the committed inbound has no apply job", async () => {
+		vi.useFakeTimers();
+		const state: MockState = {
+			posts: 0,
+			firstPostHangs: true,
+			secondPostHangs: true,
+			committed: true,
+			idempotencyKeys: [],
+			jobStatus: null,
+		};
+		vi.stubGlobal("fetch", installFetchMock(state));
+		const pending = settle(createInbound({ name: "edge" }, "edge"));
+		await vi.advanceTimersByTimeAsync(120_000);
+		const { value, error } = await pending;
+		expect(error).toBeUndefined();
+		expect(value?.success).toBe(true);
+		expect(value?.reconciled).toBe(true);
+		expect(value?.applyJob).toBeUndefined();
 	});
 
 	it("propagates a replayed rejection instead of falsely claiming a commit", async () => {

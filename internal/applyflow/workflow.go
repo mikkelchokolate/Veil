@@ -22,7 +22,7 @@ type State interface {
 	WriteApplyStageLocked(model.ApplyPlanResponse) ([]string, []model.ConfigValidationResult, []string, error)
 	PromoteStagedConfigsLocked([]string) ([]string, []string, []PromotionRecord, error)
 	ReloadPromotedServicesLocked([]string) []model.ServiceActionResult
-	RollbackPromotedConfigsLocked([]PromotionRecord, []string) ([]string, []model.ServiceActionResult)
+	RollbackPromotedConfigsLocked([]PromotionRecord, []string) ([]string, []string, []model.ServiceActionResult)
 	AppendApplyHistoryLocked(string, bool, model.ApplyResponse) error
 }
 
@@ -96,10 +96,10 @@ func (w Workflow) RunLocked(req model.ApplyRequest) (model.ApplyResponse, int, e
 			if hasFirewallTransaction {
 				firewallTransactionID, err = firewallState.PrepareFirewallLocked()
 				if err != nil {
-					rollbackFiles, rollbackActions := s.RollbackPromotedConfigsLocked(promotionRecords, liveFiles)
+					rollbackFiles, removedFiles, rollbackActions := s.RollbackPromotedConfigsLocked(promotionRecords, liveFiles)
 					response.RollbackFiles = rollbackFiles
 					response.RollbackActions = rollbackActions
-					response.ArtifactsRestored = !response.ArtifactsChanged || len(rollbackFiles) > 0
+					response.ArtifactsRestored = !response.ArtifactsChanged || len(rollbackFiles) > 0 || len(removedFiles) > 0
 					response.ServicesRestored = allServiceActionsSuccessful(rollbackActions)
 					// Both prepare implementations roll their own mutation back
 					// on error (ApplySafely restore / journal rollback); claim
@@ -127,10 +127,14 @@ func (w Workflow) RunLocked(req model.ApplyRequest) (model.ApplyResponse, int, e
 				} else {
 					response.FirewallRestored = true
 				}
-				rollbackFiles, rollbackActions := s.RollbackPromotedConfigsLocked(promotionRecords, liveFiles)
+				rollbackFiles, removedFiles, rollbackActions := s.RollbackPromotedConfigsLocked(promotionRecords, liveFiles)
 				response.RollbackFiles = rollbackFiles
 				response.RollbackActions = rollbackActions
-				response.ArtifactsRestored = !response.ArtifactsChanged || len(rollbackFiles) > 0
+				// A first-create config leaves no restored file: its artifact is
+				// removed by the restore instead. Count successful deletions toward
+				// restoration so a clean first-inbound rollback is not stranded as
+				// recovery_pending (audit #343).
+				response.ArtifactsRestored = !response.ArtifactsChanged || len(rollbackFiles) > 0 || len(removedFiles) > 0
 				response.ServicesRestored = !response.ServicesChanged ||
 					(len(rollbackActions) > 0 && allServiceActionsSuccessful(rollbackActions))
 				response.PostRollbackHealthPass = true

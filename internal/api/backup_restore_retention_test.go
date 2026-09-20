@@ -15,6 +15,21 @@ func TestBeginBackupMutationPrunesOldTerminalJobs(t *testing.T) {
 		Status:    "running",
 		CreatedAt: base.Add(-time.Hour),
 	}
+	// Degraded and pending restores are terminal for retention purposes: the
+	// job goroutine has exited and nothing advances them, so they must not
+	// accumulate outside the prunable set.
+	state.backupJobs["degraded-oldest"] = BackupRestoreJob{
+		ID:         "degraded-oldest",
+		Status:     "degraded",
+		CreatedAt:  base.Add(-2 * time.Hour),
+		FinishedAt: base.Add(-2 * time.Hour),
+	}
+	state.backupJobs["pending-oldest"] = BackupRestoreJob{
+		ID:         "pending-oldest",
+		Status:     "pending",
+		CreatedAt:  base.Add(-90 * time.Minute),
+		FinishedAt: base.Add(-90 * time.Minute),
+	}
 	for i := 0; i < maxRetainedBackupRestoreJobs-1; i++ {
 		id := fmt.Sprintf("job-%03d", i)
 		state.backupJobs[id] = BackupRestoreJob{
@@ -37,8 +52,14 @@ func TestBeginBackupMutationPrunesOldTerminalJobs(t *testing.T) {
 	if _, ok := state.backupJobs["running"]; !ok {
 		t.Fatal("active restore job was pruned")
 	}
+	if _, ok := state.backupJobs["degraded-oldest"]; ok {
+		t.Fatal("oldest degraded restore job was not pruned")
+	}
+	if _, ok := state.backupJobs["pending-oldest"]; ok {
+		t.Fatal("oldest pending restore job was not pruned")
+	}
 	if _, ok := state.backupJobs["job-000"]; ok {
-		t.Fatal("oldest terminal restore job was not pruned")
+		t.Fatal("next-oldest terminal restore job was not pruned")
 	}
 	if _, ok := state.backupJobs[fmt.Sprintf("job-%03d", maxRetainedBackupRestoreJobs-2)]; !ok {
 		t.Fatal("newest terminal restore job was pruned")

@@ -16,6 +16,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/protocols/hysteria2"
+	"github.com/mikkelchokolate/Veil/internal/protocols/mieru"
 	"github.com/mikkelchokolate/Veil/internal/storage"
 )
 
@@ -152,11 +153,14 @@ func (s *managementState) bindingCapabilityForInbound(inboundID string) *client.
 	// (audit #309).
 	perClient := protocols.EnforcesPerClientCredentials(p)
 	return &client.BindingCapability{
-		Protocol:              meta.Protocol,
-		Transports:            meta.Transports,
-		PerClientCredentials:  perClient,
-		RequiresCaddy:         meta.RequiresCaddy,
-		TrafficAccounting:     meta.Protocol == "hysteria2",
+		Protocol:             meta.Protocol,
+		Transports:           meta.Transports,
+		PerClientCredentials: perClient,
+		RequiresCaddy:        meta.RequiresCaddy,
+		// Hysteria2 and mieru expose per-user counters the collector can read;
+		// quota enforcement stays hysteria2-only until mieru limits are wired
+		// into its rendered user table.
+		TrafficAccounting:     meta.Protocol == "hysteria2" || meta.Protocol == "mieru",
 		QuotaEnforcement:      meta.Protocol == "hysteria2",
 		CredentialKinds:       []string{"password"},
 		ExpirationEnforcement: perClient,
@@ -269,7 +273,7 @@ func (s *managementState) buildTrafficProvidersLocked() ([]client.TrafficProvide
 		if inbound.Protocol != "hysteria2" || !inbound.Enabled {
 			continue
 		}
-		bindings := hysteria2TrafficIdentityMap(inbound.Name, inbound.Profiles, allBindings, allClients)
+		bindings := trafficIdentityMap(inbound.Name, inbound.Profiles, allBindings, allClients)
 		endpoint := fmt.Sprintf("http://127.0.0.1:%d/traffic", inbound.Port)
 		secret := hysteria2.TrafficStatsSecret(settings, inbound)
 		// The unit authenticates with the trafficStats block of its published
@@ -288,6 +292,29 @@ func (s *managementState) buildTrafficProvidersLocked() ([]client.TrafficProvide
 		provider := hysteria2.NewAuthenticatedStatsProvider("hysteria2:"+inbound.Name, endpoint, secret, bindings)
 		providers = append(providers, provider)
 		log.Printf("traffic: registered authenticated hysteria2 provider for inbound %s", inbound.Name)
+	}
+	// One mieru daemon serves every mieru inbound, so a single provider reads
+	// `mita get metrics` and maps the whole users table. Rendered usernames
+	// are unique across mieru inbounds (the config builder rejects
+	// duplicates), so the merged identity map cannot collide.
+	mieruIdentities := make(map[string]string)
+	mieruEnabled := false
+	for _, inbound := range inbounds {
+		if inbound.Protocol != "mieru" || !inbound.Enabled {
+			continue
+		}
+		mieruEnabled = true
+		for identity, bindingID := range trafficIdentityMap(inbound.Name, inbound.Profiles, allBindings, allClients) {
+			if prev, exists := mieruIdentities[identity]; exists && prev != bindingID {
+				log.Printf("traffic: mieru runtime identity %q claimed by bindings %s and %s — keeping first", identity, prev, bindingID)
+				continue
+			}
+			mieruIdentities[identity] = bindingID
+		}
+	}
+	if mieruEnabled {
+		providers = append(providers, mieru.NewStatsProvider("mieru:server", mieruIdentities))
+		log.Printf("traffic: registered mieru metrics provider for shared daemon")
 	}
 	return providers, nil
 }

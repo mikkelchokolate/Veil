@@ -252,7 +252,7 @@ func TestRollbackPromotedConfigsDoesNotRestartNewlyAddedInbound(t *testing.T) {
 		BackupID:         "20260608T120000.000000000Z",
 		WrittenArtifacts: []string{},
 	}
-	rollbackFiles, rollbackActions := ctx.rollbackPromotedConfigs(records, liveFiles)
+	rollbackFiles, _, rollbackActions := ctx.rollbackPromotedConfigs(records, liveFiles)
 	if len(rollbackFiles) != 0 {
 		t.Fatalf("expected no rollback files for newly added inbound, got %+v", rollbackFiles)
 	}
@@ -304,7 +304,7 @@ func TestRollbackStopsUnitWhoseConfigWasNewlyAdded(t *testing.T) {
 		WrittenArtifacts: []string{},
 	}
 
-	_, _ = ctx.rollbackPromotedConfigs(records, liveFiles)
+	_, _, _ = ctx.rollbackPromotedConfigs(records, liveFiles)
 
 	var got []string
 	for _, a := range client.serviceActions {
@@ -355,7 +355,7 @@ func TestRollbackStopsSingletonBeforeRestoringLegacyCaddy(t *testing.T) {
 	}}
 	newConfig := filepath.Join(liveRoot, "caddy", "config.json")
 
-	_, _ = ctx.rollbackPromotedConfigs(records, []string{newConfig})
+	_, _, _ = ctx.rollbackPromotedConfigs(records, []string{newConfig})
 
 	var got []string
 	for _, action := range client.serviceActions {

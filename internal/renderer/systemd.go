@@ -50,6 +50,19 @@ var systemdHardeningBlockOlcrtc = strings.Replace(
 	1,
 )
 
+// mita's appctl UDS must stay connectable by the veil panel: connecting to a
+// unix socket needs write permission, so the daemon creates it group-writable
+// for veil-proxy (the panel account is a supplementary veil-proxy member).
+// UMask 0007 deliberately widens every file mita creates under its
+// RuntimeDirectory/StateDirectory to group scope — acceptable because the
+// panel is already in veil-proxy — and keeps world access at none.
+var systemdHardeningBlockMieru = strings.Replace(
+	systemdHardeningBlock,
+	"UMask=0077",
+	"# appctl UDS stays group-writable so the veil panel (supplementary\n# veil-proxy member) can connect; unix connect needs write on the socket.\nUMask=0007",
+	1,
+)
+
 func systemdQuote(p string) string {
 	if p == "" || !strings.ContainsAny(p, " \t\"'\\") {
 		return p
@@ -224,9 +237,11 @@ Wants=network-online.target
 Type=simple
 User=veil
 Group=veil
-# Caddy binds :80/:443 with CAP_NET_BIND_SERVICE and reads 0640 root:veil
-# config as group veil. ACME material stays in StateDirectory=caddy
-# (/var/lib/caddy); /etc/veil and /var/lib/veil stay read-only.
+# Caddy binds :80/:443 with CAP_NET_BIND_SERVICE and reads 0640
+# root:veil-proxy config under /etc/veil/generated and /etc/veil/tls through
+# the veil-proxy supplementary group. ACME material stays in
+# StateDirectory=caddy (/var/lib/caddy); /etc/veil and /var/lib/veil stay
+# read-only.
 StateDirectory=caddy
 Environment=HOME=/var/lib/caddy XDG_DATA_HOME=/var/lib/caddy XDG_CONFIG_HOME=/var/lib/caddy
 ExecStart=` + caddyBin + ` run --config ` + caddyConfig + `
@@ -345,7 +360,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlock + `InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
+` + systemdHardeningBlockMieru + `InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
 
 [Install]
 WantedBy=multi-user.target

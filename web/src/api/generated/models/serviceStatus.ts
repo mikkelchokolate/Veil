@@ -43,7 +43,11 @@
 
 export interface ServiceStatus {
   name: string;
+  /** Service action identifier used by POST /api/services/{name}/restart when the unit supports one. */
+  actionName?: string;
   managed: boolean;
+  /** True when the service can be restarted through the API. */
+  restartable?: boolean;
   transport?: string;
   unit?: string;
   loadState?: string;

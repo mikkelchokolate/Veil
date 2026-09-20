@@ -3,7 +3,9 @@ package api
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"regexp"
@@ -293,23 +295,26 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 	}
 	result, applyJob, err := routes.State.installPanelUpdate(r.Context(), version)
 	if err != nil {
-		routes.State.updatePanelUpdateJob(updateJob.ID, "failed", applyJob.ID, "", err)
+		if updateErr := routes.State.updatePanelUpdateJob(updateJob.ID, "failed", applyJob.ID, "", err); updateErr != nil {
+			log.Printf("panel update job %s: record failure status: %v", updateJob.ID, updateErr)
+		}
 		writePrivilegedError(w, err)
 		return
 	}
 	if !result.Installed {
-		// The durable job must reach a terminal state too: leaving it in
-		// "staging" strands the row forever — reconcile only watches
-		// restart_pending/restarting — and the SPA would poll a job that
-		// never settles (#585).
-		installErr := &privileged.Error{
-			Code: privileged.ErrorOperationFailed, Message: "privileged helper did not install the staged update",
+		installErr := errors.New("privileged helper did not install the staged update")
+		if updateErr := routes.State.updatePanelUpdateJob(updateJob.ID, "failed", applyJob.ID, "", installErr); updateErr != nil {
+			log.Printf("panel update job %s: record failure status: %v", updateJob.ID, updateErr)
 		}
-		routes.State.updatePanelUpdateJob(updateJob.ID, "failed", applyJob.ID, "", installErr)
-		writePrivilegedError(w, installErr)
+		writePrivilegedError(w, &privileged.Error{
+			Code: privileged.ErrorOperationFailed, Message: installErr.Error(),
+		})
 		return
 	}
-	routes.State.updatePanelUpdateJob(updateJob.ID, "restart_pending", applyJob.ID, "", nil)
+	if err := routes.State.updatePanelUpdateJob(updateJob.ID, "restart_pending", applyJob.ID, "", nil); err != nil {
+		writeError(w, "record update job state", http.StatusInternalServerError)
+		return
+	}
 	releaseLocks = false
 	routes.State.updateWG.Add(1)
 	go func() {

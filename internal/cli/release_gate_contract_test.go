@@ -40,11 +40,20 @@ func TestReleaseWorkflowBuildsFrontendDistBeforeCompile(t *testing.T) {
 		t.Fatalf("frontend dist must be built before go vet so //go:embed all:dist succeeds")
 	}
 	for _, want := range []string{
-		"useradd --system --user-group --no-create-home --shell /usr/sbin/nologin veil",
+		"scripts/ci/e2e.sh",
 		"scripts/ci/browser-e2e.sh",
 	} {
 		if !strings.Contains(workflow, want) {
 			t.Errorf("release workflow missing %q", want)
 		}
+	}
+	// The veil system user is created by the shared e2e script (single source
+	// of truth for PR CI and release) — the workflow no longer needs its own.
+	e2eBody, err := os.ReadFile("../../scripts/ci/e2e.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.ReplaceAll(string(e2eBody), "\r\n", "\n"), "useradd --system --user-group --no-create-home --shell /usr/sbin/nologin veil") {
+		t.Error("scripts/ci/e2e.sh missing veil system user creation")
 	}
 }

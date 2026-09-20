@@ -1031,6 +1031,10 @@ paths:
                     id: 0123456789abcdef0123456789abcdef
                     archive: veil_backup_20260605_020000.tar.gz.enc
                     status: succeeded
+                    outcome: restored
+                    phase: completed
+                    restored: true
+                    httpStatus: 200
                     createdAt: '2026-06-05T02:10:00Z'
                     startedAt: '2026-06-05T02:10:00Z'
                     finishedAt: '2026-06-05T02:10:01Z'
@@ -1197,6 +1201,43 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
       x-roles:
       - admin
+  /api/health:
+    get:
+      x-veil-role: viewer
+      tags:
+      - status
+      summary: Panel health component snapshot
+      description: >-
+        Viewer-facing component health snapshot; the same diagnostic payload
+        that /readyz reports to orchestrators. Always returns 200 — inspect
+        `status` and `components` for degradation.
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      responses:
+        '200':
+          description: Component health snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyzResponse'
+              examples:
+                ok:
+                  value:
+                    status: ok
+                    components:
+                      state_store:
+                        status: ok
+                      sqlite:
+                        status: ok
+                      runtime_services:
+                        status: unknown
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+      x-roles:
+      - admin
+      - viewer
   /api/status:
     get:
       x-veil-role: viewer
@@ -1275,20 +1316,21 @@ paths:
             schema:
               $ref: '#/components/schemas/EmptyObject'
       responses:
-        '200':
-          description: Release archive was staged, re-verified by the helper, installed, and a Panel restart was scheduled.
+        '202':
+          description: Release archive was staged, re-verified by the helper, installed, and a durable update job now drives the Panel restart.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/UpdateResponse'
               examples:
-                installed:
+                accepted:
                   value:
-                    success: true
+                    jobId: 8f7b4a2e-1c3d-4e5f-9a0b-1c2d3e4f5a6b
+                    status: restart_pending
                     staged: true
                     installed: true
                     version: v0.6.0
-                    message: Update staged successfully. Restarting panel service...
+                    message: Update installed; durable restart verification is pending.
         '400':
           $ref: '#/components/responses/BadRequest'
         '500':
@@ -1360,11 +1402,13 @@ paths:
               $ref: '#/components/schemas/Settings'
       responses:
         '200':
-          description: Updated settings.
+          description: Updated settings merged with the apply outcome (success/revision/applyJob).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Settings'
+                allOf:
+                - $ref: '#/components/schemas/Settings'
+                - $ref: '#/components/schemas/MutationOutcome'
         '400':
           $ref: '#/components/responses/BadRequest'
         '403':
@@ -1513,11 +1557,13 @@ paths:
                   enabled: true
       responses:
         '201':
-          description: Created inbound.
+          description: Created inbound merged with the apply outcome (success/revision/applyJob).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Inbound'
+                allOf:
+                - $ref: '#/components/schemas/Inbound'
+                - $ref: '#/components/schemas/MutationOutcome'
         '400':
           $ref: '#/components/responses/BadRequest'
         '403':
@@ -1576,11 +1622,13 @@ paths:
               $ref: '#/components/schemas/Inbound'
       responses:
         '200':
-          description: Updated inbound.
+          description: Updated inbound merged with the apply outcome (success/revision/applyJob).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Inbound'
+                allOf:
+                - $ref: '#/components/schemas/Inbound'
+                - $ref: '#/components/schemas/MutationOutcome'
         '400':
           $ref: '#/components/responses/BadRequest'
         '403':
@@ -1612,6 +1660,17 @@ paths:
       responses:
         '200':
           description: Deletion applied; response carries the apply outcome (revision+job).
+          content:
+            application/json:
+              schema:
+                allOf:
+                - type: object
+                  required:
+                  - name
+                  properties:
+                    name:
+                      type: string
+                - $ref: '#/components/schemas/MutationOutcome'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -1721,11 +1780,13 @@ paths:
                   enabled: true
       responses:
         '201':
-          description: Created rule.
+          description: Created rule merged with the apply outcome (success/revision/applyJob).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RoutingRule'
+                allOf:
+                - $ref: '#/components/schemas/RoutingRule'
+                - $ref: '#/components/schemas/MutationOutcome'
         '400':
           $ref: '#/components/responses/BadRequest'
         '409':
@@ -1782,11 +1843,13 @@ paths:
               $ref: '#/components/schemas/RoutingRule'
       responses:
         '200':
-          description: Updated rule.
+          description: Updated rule merged with the apply outcome (success/revision/applyJob).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RoutingRule'
+                allOf:
+                - $ref: '#/components/schemas/RoutingRule'
+                - $ref: '#/components/schemas/MutationOutcome'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -1816,6 +1879,17 @@ paths:
       responses:
         '200':
           description: Deletion applied; response carries the apply outcome (revision+job).
+          content:
+            application/json:
+              schema:
+                allOf:
+                - type: object
+                  required:
+                  - name
+                  properties:
+                    name:
+                      type: string
+                - $ref: '#/components/schemas/MutationOutcome'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -1865,11 +1939,13 @@ paths:
         csrfToken: []
       responses:
         '200':
-          description: Applied preset result.
+          description: Applied preset result merged with the apply outcome (success/revision/applyJob).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RoutingPresetResponse'
+                allOf:
+                - $ref: '#/components/schemas/RoutingPresetResponse'
+                - $ref: '#/components/schemas/MutationOutcome'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -1922,11 +1998,13 @@ paths:
               $ref: '#/components/schemas/WarpConfig'
       responses:
         '200':
-          description: Updated WARP state.
+          description: Updated WARP state merged with the apply outcome (success/revision/applyJob).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WarpConfig'
+                allOf:
+                - $ref: '#/components/schemas/WarpConfig'
+                - $ref: '#/components/schemas/MutationOutcome'
         '400':
           $ref: '#/components/responses/BadRequest'
         '409':
@@ -2079,6 +2157,10 @@ paths:
       responses:
         '200':
           description: Revision and system state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyStateResponse'
       x-roles:
       - admin
       - viewer
@@ -2128,8 +2210,12 @@ paths:
       responses:
         '200':
           description: Apply job.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyJob'
         '404':
-          description: Not found.
+          $ref: '#/components/responses/NotFound'
       x-roles:
       - admin
       - viewer
@@ -2153,9 +2239,13 @@ paths:
           type: string
       responses:
         '200':
-          description: '{"applyJob": ..., "revision": ...}'
+          description: New apply job for the same desired revision plus post-run revision state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyRetryResponse'
         '404':
-          description: Not found.
+          $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
@@ -2181,7 +2271,11 @@ paths:
       - veilToken: []
       responses:
         '200':
-          description: '{"reconciled": ..., "applyJob": ..., "revision": ..., "state": ...}'
+          description: Reconcile outcome; reconciled=false is a no-op when already synced.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyReconcileResponse'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
@@ -2226,6 +2320,10 @@ paths:
       responses:
         '200':
           description: New desired revision and its apply outcome.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyRollbackResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -2273,11 +2371,54 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApplyResponse'
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: >-
+            Invalid request. Returns an ApplyResponse body (with plan/issues and
+            honesty fields) when the workflow rejected the apply, or an
+            ErrorEnvelope for malformed input such as a missing confirm=true.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - $ref: '#/components/schemas/ApplyResponse'
+                - $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                missing-confirm:
+                  value:
+                    error:
+                      code: invalid_request
+                      message: confirm=true is required to write staged apply files
+                      requestId: req_example
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
-          $ref: '#/components/responses/ValidationFailed'
+          description: >-
+            Candidate failed validation. Returns an ApplyResponse body carrying
+            plan.issues plus rollback/ambiguity evidence; ErrorEnvelope is only
+            used for non-workflow failures.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - $ref: '#/components/schemas/ApplyResponse'
+                - $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                validation-failed:
+                  value:
+                    applied: false
+                    liveApplied: false
+                    servicesApplied: false
+                    plan:
+                      valid: false
+                      configs: []
+                      actions: []
+                      issues:
+                      - code: port_in_use
+                        severity: error
+                        field: port
+                        message: TCP port 443 is already in use
+                        source: live-host
+                      operations: []
+                    writtenFiles: []
         '423':
           $ref: '#/components/responses/Locked'
         '503':
@@ -3286,6 +3427,55 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
       x-roles:
       - admin
+  /api/v1/clients/{id}/audit:
+    get:
+      x-veil-role: admin-metadata
+      tags:
+      - clients
+      - audit
+      summary: Audit history scoped to one client
+      description: >-
+        Newest-first audit records targeting this client. Records matching the
+        immutable client ID are always included; legacy name-targeted records
+        are included only for known client actions. Admin role required.
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      parameters:
+      - $ref: '#/components/parameters/ClientId'
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 100
+      - name: before
+        in: query
+        required: false
+        description: Return records strictly older than this RFC3339 timestamp.
+        schema:
+          type: string
+          format: date-time
+      responses:
+        '200':
+          description: Client-scoped audit history and an optional backward-pagination cursor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      x-roles:
+      - admin
   /api/v1/clients/{id}/links:
     get:
       x-veil-role: admin-secret
@@ -4132,6 +4322,12 @@ components:
           $ref: '#/components/schemas/Locale'
         csrfToken:
           type: string
+        authMethod:
+          type: string
+          description: How the request was authenticated; absent for cookie-session responses.
+          enum:
+          - static-token
+          - dev-anonymous
     Locale:
       type: string
       enum:
@@ -4412,6 +4608,9 @@ components:
           $ref: '#/components/schemas/BackupVerificationReport'
         prune:
           $ref: '#/components/schemas/BackupPruneResult'
+        warning:
+          type: string
+          description: Non-fatal warning (for example a retention prune failure after a successful archive).
     BackupRestoreRequest:
       type: object
       required:
@@ -4427,6 +4626,10 @@ components:
       - id
       - archive
       - status
+      - outcome
+      - phase
+      - restored
+      - httpStatus
       - createdAt
       properties:
         id:
@@ -4439,8 +4642,28 @@ components:
           enum:
           - queued
           - running
+          - pending
           - succeeded
           - failed
+          - degraded
+        outcome:
+          type: string
+          description: >-
+            Restore outcome classification. Known values: pending (job accepted
+            or awaiting key publication), pending_key_publication, restored,
+            not_restored.
+        phase:
+          type: string
+          description: >-
+            Last restore pipeline phase reached (for example queued,
+            key_publication_pending, completed, revalidation_failed,
+            finalization_failed, restore_failed, fence_acquire_failed).
+        restored:
+          type: boolean
+          description: True only when the backup content was actually restored.
+        httpStatus:
+          type: integer
+          description: HTTP status that mirrors the job outcome for pollers.
         createdAt:
           type: string
           format: date-time
@@ -4653,6 +4876,9 @@ components:
           type: string
         hysteria2Password:
           type: string
+        hysteria2Insecure:
+          type: boolean
+          description: Allow self-signed server certificates for this hysteria2 inbound.
         masqueradeURL:
           type: string
         fallbackRoot:
@@ -5084,13 +5310,11 @@ components:
       properties:
         type:
           type: string
+          description: Operation kinds emitted by the apply planner.
           enum:
           - promote_file
-          - remove_file
           - reload_service
           - restart_service
-          - disable_service
-          - update_firewall
         source:
           type: string
         destination:
@@ -5147,16 +5371,18 @@ components:
       type: object
       required:
       - confirm
-      - applyLive
-      - applyServices
       additionalProperties: false
       properties:
         confirm:
           type: boolean
+          const: true
         applyLive:
           type: boolean
+          default: false
         applyServices:
           type: boolean
+          default: false
+          description: Requires applyLive; applying services without promoting live artifacts is rejected with 400/422.
     ConfigValidationResult:
       type: object
       required:
@@ -5270,6 +5496,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ServiceActionResult'
+        mutationStarted:
+          type: boolean
+          description: True once the apply began changing runtime artifacts or services; absent on a plan/stage-only response.
+        artifactsChanged:
+          type: boolean
+        servicesChanged:
+          type: boolean
+        firewallChanged:
+          type: boolean
+        artifactsRestored:
+          type: boolean
+        servicesRestored:
+          type: boolean
+        firewallRestored:
+          type: boolean
+        postRollbackHealthPass:
+          type: boolean
+        rollbackComplete:
+          type: boolean
+          description: Honest signal that rollback evidence is complete; absence means a rolled_back flag alone is not proof of restoration.
+        ambiguous:
+          type: boolean
+          description: True when runtime evidence cannot prove whether mutation or rollback converged; clients must not treat the response as authoritative.
     ApplyHistoryEntry:
       allOf:
       - $ref: '#/components/schemas/ApplyResponse'
@@ -5308,10 +5557,17 @@ components:
           type: string
           enum:
           - pending
-          - running
-          - success
+          - planning
+          - validating
+          - applying
+          - health_check
+          - staged
+          - recovery_pending
+          - succeeded
           - failed
+          - rolling_back
           - rolled_back
+          - rollback_failed
         trigger:
           type: string
         actorId:
@@ -5326,6 +5582,122 @@ components:
           type: string
         errorMessage:
           type: string
+        operations:
+          type: array
+          description: Concrete runtime changes attempted by this job.
+          items:
+            $ref: '#/components/schemas/ApplyOperationResult'
+        ownerProcess:
+          type: string
+          description: Lease owner identity of the process that ran the job.
+        leaseGeneration:
+          type: integer
+          format: int64
+          description: Fencing generation of the apply lease held while the job ran.
+    ApplyOperationResult:
+      type: object
+      required:
+      - type
+      - success
+      properties:
+        type:
+          type: string
+          description: Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).
+        target:
+          type: string
+        success:
+          type: boolean
+        detail:
+          type: string
+    ApplyStateResponse:
+      type: object
+      required:
+      - desiredRevision
+      - appliedRevision
+      - state
+      properties:
+        desiredRevision:
+          type: integer
+          format: int64
+        appliedRevision:
+          type: integer
+          format: int64
+        state:
+          type: string
+          enum:
+          - synced
+          - pending
+          - applying
+          - failed
+          - rolling_back
+          - rolled_back
+          - degraded
+        activeJobId:
+          type: string
+        lastSuccessfulJobId:
+          type: string
+        lastFailedJobId:
+          type: string
+        lastError:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    ApplyRetryResponse:
+      type: object
+      required:
+      - applyJob
+      - revision
+      properties:
+        applyJob:
+          $ref: '#/components/schemas/ApplyJob'
+        revision:
+          $ref: '#/components/schemas/RevisionView'
+    ApplyReconcileResponse:
+      type: object
+      required:
+      - reconciled
+      properties:
+        reconciled:
+          type: boolean
+          description: False when desired already equaled applied (no-op) or when the apply job failed; inspect applyJob/state for evidence.
+        applyJob:
+          $ref: '#/components/schemas/ApplyJob'
+        revision:
+          type: object
+          properties:
+            desired:
+              type: integer
+              format: int64
+            applied:
+              type: integer
+              format: int64
+        state:
+          $ref: '#/components/schemas/ApplyStateResponse'
+    ApplyRollbackResponse:
+      type: object
+      required:
+      - selectedRevision
+      - desiredRevision
+      - success
+      - revision
+      properties:
+        selectedRevision:
+          type: integer
+          format: int64
+        desiredRevision:
+          type: integer
+          format: int64
+          description: Newly created immutable desired revision pointing at the selected snapshot; revisions never decrement.
+        success:
+          type: boolean
+          description: False means the rollback revision committed (desired advanced) but the apply job for it did not finish cleanly.
+        revision:
+          $ref: '#/components/schemas/RevisionView'
+        applyJob:
+          $ref: '#/components/schemas/ApplyJob'
     ServiceActionRequest:
       type: object
       required:
@@ -5380,8 +5752,14 @@ components:
       properties:
         name:
           type: string
+        actionName:
+          type: string
+          description: Service action identifier used by POST /api/services/{name}/restart when the unit supports one.
         managed:
           type: boolean
+        restartable:
+          type: boolean
+          description: True when the service can be restarted through the API.
         transport:
           type: string
         unit:
@@ -5410,16 +5788,24 @@ components:
     UpdateResponse:
       type: object
       required:
-      - success
+      - jobId
+      - status
       - staged
       - installed
       - version
       - message
       additionalProperties: false
+      description: >-
+        Durable update job accepted by POST /api/version/update. The panel
+        restarts asynchronously; poll /api/version to confirm the new version.
       properties:
-        success:
-          type: boolean
-          const: true
+        jobId:
+          type: string
+          description: Durable panel update job identifier.
+        status:
+          type: string
+          enum:
+          - restart_pending
         staged:
           type: boolean
         installed:
@@ -5913,14 +6299,36 @@ components:
       properties:
         desired:
           type: integer
+          format: int64
         applied:
           type: integer
+          format: int64
         state:
           type: string
           enum:
           - synced
           - pending
+          - applying
           - failed
+          - rolling_back
+          - rolled_back
+          - degraded
+    MutationOutcome:
+      type: object
+      required:
+      - success
+      - revision
+      description: >-
+        Apply outcome merged into admin mutation responses. success=false means
+        the change committed (desired revision advanced) but the apply job for
+        that revision did not finish cleanly; inspect applyJob for evidence.
+      properties:
+        success:
+          type: boolean
+        revision:
+          $ref: '#/components/schemas/RevisionView'
+        applyJob:
+          $ref: '#/components/schemas/ApplyJob'
     ClientCreateResponse:
       type: object
       required:

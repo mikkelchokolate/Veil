@@ -7,14 +7,14 @@ import (
 )
 
 // #337/#583/#594: GET on public subscriptions and sensitive credential/export
-// reads must hit the dedicated endpoint limit; mutations stay on the shared
-// default mutation budget.
+// reads must hit a dedicated limit; cheap reads and mutations on shared
+// prefixes stay on their own budgets. /api/client-links and /api/backups/
+// carry dedicated all-method limits in DefaultRateLimitPolicy, so the
+// GET/HEAD-only map only needs the per-resource client link/token reads.
 func TestSensitiveReadPathsUseDedicatedLimits(t *testing.T) {
 	for _, path := range []string{
 		"/s/abc123",
 		"/api/client-links",
-		"/api/v1/clients",
-		"/api/v1/clients/c-1",
 		"/api/v1/clients/c-1/links",
 		"/api/v1/clients/c-1/tokens/t-1",
 		"/api/backups/veil_backup_1.tar.gz.enc/download",
@@ -27,6 +27,9 @@ func TestSensitiveReadPathsUseDedicatedLimits(t *testing.T) {
 		}
 	}
 	for _, path := range []string{
+		"/api/v1/clients",
+		"/api/v1/clients/c-1",
+		"/api/backups",
 		"/api/settings",
 		"/api/status",
 		"/metrics",
@@ -42,12 +45,12 @@ func TestSensitiveReadRequestsGetThrottled(t *testing.T) {
 		DefaultRatePerMinute: 6000,
 		DefaultBurst:         100,
 		readLimits: map[string]EndpointLimit{
-			"/api/client-links": {RatePerMinute: 30, Burst: 1},
-			"/api/v1/clients":   {RatePerMinute: 60, Burst: 1},
-			"/api/backups":      {RatePerMinute: 30, Burst: 1},
+			"/api/v1/clients": {RatePerMinute: 60, Burst: 1},
 		},
 		limits: map[string]EndpointLimit{
-			"/s/": {RatePerMinute: 30, Burst: 1},
+			"/s/":               {RatePerMinute: 30, Burst: 1},
+			"/api/client-links": {RatePerMinute: 30, Burst: 1},
+			"/api/backups/":     {RatePerMinute: 30, Burst: 1},
 		},
 	}
 	limiter := policy.NewLimiter()

@@ -65,12 +65,8 @@ for bin in caddy naive mita mieru hysteria olcrtc; do
 done
 
 run_proto() {
-  local name="$1" testname="$2"
-  set -o pipefail
-  go test -tags e2e ./test/e2e/... -run "^${testname}\$" -count=1 -v -timeout=90s 2>&1 | tee "${CI_ARTIFACT_DIR}/e2e-${name}.log"
-  local rc=${PIPESTATUS[0]}
-  set +o pipefail
-  return "${rc}"
+  local testname="$1"
+  go test -tags e2e ./test/e2e/... -run "^${testname}\$" -count=1 -v -timeout=90s
 }
 
 # The real olcRTC process needs an external conferencing provider for its normal
@@ -106,11 +102,17 @@ run_olcrtc_upstream_local() {
   )
 }
 
-ci_run e2e-hysteria2 run_proto hysteria2 TestRequiredHysteria2DataPath
-ci_run e2e-mieru-tcp run_proto mieru-tcp TestRequiredMieruTCPDataPath
-ci_run e2e-mieru-udp run_proto mieru-udp TestRequiredMieruUDPDataPath
-ci_run e2e-naiveproxy run_proto naiveproxy TestRequiredNaiveProxyDataPath
-ci_run e2e-olcrtc-contract run_proto olcrtc TestRequiredOlcRTCRuntimeContract
+ci_run e2e-hysteria2 run_proto TestRequiredHysteria2DataPath
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-hysteria2.log"
+ci_run e2e-mieru-tcp run_proto TestRequiredMieruTCPDataPath
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-mieru-tcp.log"
+ci_run e2e-mieru-udp run_proto TestRequiredMieruUDPDataPath
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-mieru-udp.log"
+ci_run e2e-naiveproxy run_proto TestRequiredNaiveProxyDataPath
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-naiveproxy.log"
+ci_run e2e-olcrtc-contract run_proto TestRequiredOlcRTCRuntimeContract
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-olcrtc-contract.log"
 ci_run e2e-olcrtc-local-data-path run_olcrtc_upstream_local
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-olcrtc-local-data-path.log"
 
 ci_log "e2e job passed"

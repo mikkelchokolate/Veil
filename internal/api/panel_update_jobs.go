@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -34,7 +35,14 @@ func (s *managementState) createPanelUpdateJob(version string) (panelUpdateJob, 
 	return job, err
 }
 
-func (s *managementState) updatePanelUpdateJob(id, status, stageJobID, restartJobID string, operationErr error) {
+// panelUpdateJobRetentionSeconds bounds how long terminal update jobs are
+// kept before reconcile prunes them; the table otherwise grows without bound.
+const panelUpdateJobRetentionSeconds int64 = 30 * 24 * 60 * 60
+
+// updatePanelUpdateJob persists a durable status transition. The error is
+// returned so callers can fail the request (or at least log) instead of
+// leaving the SPA polling a stale status forever.
+func (s *managementState) updatePanelUpdateJob(id, status, stageJobID, restartJobID string, operationErr error) error {
 	message := ""
 	if operationErr != nil {
 		message = operationErr.Error()
@@ -42,9 +50,10 @@ func (s *managementState) updatePanelUpdateJob(id, status, stageJobID, restartJo
 			message = message[:1024]
 		}
 	}
-	_, _ = s.db.Exec(`UPDATE panel_update_jobs SET status=?,stage_apply_job_id=CASE WHEN ?<>'' THEN ? ELSE stage_apply_job_id END,
+	_, err := s.db.Exec(`UPDATE panel_update_jobs SET status=?,stage_apply_job_id=CASE WHEN ?<>'' THEN ? ELSE stage_apply_job_id END,
  restart_apply_job_id=CASE WHEN ?<>'' THEN ? ELSE restart_apply_job_id END,error_message=?,updated_at=? WHERE id=?`,
 		status, stageJobID, stageJobID, restartJobID, restartJobID, message, time.Now().UTC().Unix(), id)
+	return err
 }
 
 func (s *managementState) getPanelUpdateJob(id string) (panelUpdateJob, error) {
@@ -57,9 +66,11 @@ FROM panel_update_jobs WHERE id=?`, id).Scan(&job.ID, &job.Version, &job.Status,
 
 func (s *managementState) reconcilePanelUpdateJobs(runningVersion string) {
 	now := time.Now().UTC().Unix()
-	// "staging" rows are included: a job that died mid-install (or returned
-	// Installed=false without a terminal update) would otherwise linger
-	// forever and the job poll would never settle (#585).
+	// Retention: terminal jobs older than the window are deleted so the table
+	// does not grow across updates.
+	if _, err := s.db.Exec(`DELETE FROM panel_update_jobs WHERE status IN ('succeeded','failed') AND updated_at<?`, now-panelUpdateJobRetentionSeconds); err != nil {
+		log.Printf("panel update jobs: prune terminal history: %v", err)
+	}
 	rows, err := s.db.Query(`SELECT id,target_version,status,updated_at FROM panel_update_jobs WHERE status IN ('staging','restart_pending','restarting')`)
 	if err != nil {
 		return
@@ -81,19 +92,20 @@ func (s *managementState) reconcilePanelUpdateJobs(runningVersion string) {
 		return
 	}
 	for _, job := range pending {
+		var updateErr error
 		switch {
-		case versionflow.ReleaseTag(job.version) == versionflow.ReleaseTag(runningVersion):
-			s.updatePanelUpdateJob(job.id, "succeeded", "", "", nil)
-		case now-job.updated <= 300:
-			// Still within the in-flight window.
 		case job.status == "staging":
-			// Reconcile only runs at startup, so a staging row is a leftover
-			// from a dead install attempt (or an Installed=false return that
-			// never reached a terminal state) — fail it so the job poll can
-			// settle (#585).
-			s.updatePanelUpdateJob(job.id, "failed", "", "", fmt.Errorf("panel update to %s did not finish staging", job.version))
-		default:
-			s.updatePanelUpdateJob(job.id, "failed", "", "", fmt.Errorf("panel restarted without expected version %s", job.version))
+			// A staging row can only be written by a process that has since
+			// exited: the install runs inside the update request, so anything
+			// left here at startup is an interrupted update, not a live one.
+			updateErr = s.updatePanelUpdateJob(job.id, "failed", "", "", errors.New("panel update was interrupted before the staged version was installed"))
+		case versionflow.ReleaseTag(job.version) == versionflow.ReleaseTag(runningVersion):
+			updateErr = s.updatePanelUpdateJob(job.id, "succeeded", "", "", nil)
+		case now-job.updated > 300:
+			updateErr = s.updatePanelUpdateJob(job.id, "failed", "", "", fmt.Errorf("panel restarted without expected version %s", job.version))
+		}
+		if updateErr != nil {
+			log.Printf("panel update job %s: reconcile status failed: %v", job.id, updateErr)
 		}
 	}
 }
@@ -151,12 +163,16 @@ func (s *managementState) installPanelUpdate(ctx context.Context, version string
 func (s *managementState) restartPanelForUpdate(updateJobID string) {
 	defer s.endPanelUpdate()
 	if !s.applyTrackingEnabled() || s.applyRunner == nil {
-		s.updatePanelUpdateJob(updateJobID, "failed", "", "", errors.New("durable apply runner is unavailable"))
+		if err := s.updatePanelUpdateJob(updateJobID, "failed", "", "", errors.New("durable apply runner is unavailable")); err != nil {
+			log.Printf("panel update job %s: record failure status: %v", updateJobID, err)
+		}
 		return
 	}
 	revision, err := s.ensureRunnableRevision()
 	if err != nil {
-		s.updatePanelUpdateJob(updateJobID, "failed", "", "", err)
+		if updateErr := s.updatePanelUpdateJob(updateJobID, "failed", "", "", err); updateErr != nil {
+			log.Printf("panel update job %s: record failure status: %v", updateJobID, updateErr)
+		}
 		return
 	}
 	job, runErr := s.applyRunner.RunOperationContext(s.lifecycleContext(), revision, "panel-update-restart", "system",
@@ -195,10 +211,14 @@ func (s *managementState) restartPanelForUpdate(updateJobID string) {
 			return result, err
 		}))
 	if runErr != nil {
-		s.updatePanelUpdateJob(updateJobID, "failed", "", job.ID, runErr)
+		if err := s.updatePanelUpdateJob(updateJobID, "failed", "", job.ID, runErr); err != nil {
+			log.Printf("panel update job %s: record failure status: %v", updateJobID, err)
+		}
 		return
 	}
-	s.updatePanelUpdateJob(updateJobID, "restarting", "", job.ID, nil)
+	if err := s.updatePanelUpdateJob(updateJobID, "restarting", "", job.ID, nil); err != nil {
+		log.Printf("panel update job %s: record restarting status: %v", updateJobID, err)
+	}
 }
 
 func (routes PanelRoutes) handlePanelUpdateJob(w http.ResponseWriter, r *http.Request) {

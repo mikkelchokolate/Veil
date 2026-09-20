@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -360,10 +361,12 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 			if leaseErr != nil {
 				message = leaseErr.Error()
 			}
-			_ = s.updateBackupRestoreJob(id, func(job *BackupRestoreJob) {
+			if updateErr := s.updateBackupRestoreJob(id, func(job *BackupRestoreJob) {
 				job.Status, job.Outcome, job.Phase, job.HTTPStatus = "failed", "not_restored", "fence_acquire_failed", http.StatusLocked
 				job.Error, job.FinishedAt = message, time.Now().UTC()
-			})
+			}); updateErr != nil {
+				log.Printf("backup restore job %s: persist fence failure status: %v", id, updateErr)
+			}
 			return
 		}
 		restoreLease = lease
@@ -573,13 +576,18 @@ func (s *managementState) updateBackupRestoreJob(id string, update func(*BackupR
 		return fmt.Errorf("restore job not found")
 	}
 	update(&job)
-	s.backupJobs[id] = job
 	if root := s.restoreStateRoot(); root != "" {
 		switch job.Status {
 		case "running", "succeeded", "failed", "degraded", "pending":
-			_ = backup.ClearRestoreCommitReceipt(root)
+			// A leftover commit receipt would make a later interrupted restore
+			// report committed, so the job bookkeeping must not advance while
+			// the receipt cannot be cleared.
+			if err := backup.ClearRestoreCommitReceipt(root); err != nil {
+				return fmt.Errorf("clear restore commit receipt: %w", err)
+			}
 		}
 	}
+	s.backupJobs[id] = job
 	return s.persistBackupRestoreJobsLocked()
 }
 

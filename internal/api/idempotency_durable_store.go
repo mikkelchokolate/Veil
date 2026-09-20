@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -382,9 +383,20 @@ func (s *idempotencyStore) startDurableHeartbeat(scope, fingerprint string, reco
 				return
 			case <-ticker.C:
 				now := s.now().UTC()
-				_, _ = s.db.Exec(`UPDATE idempotency_records SET heartbeat_at=?,reserved_until=?,updated_at=?
+				result, err := s.db.Exec(`UPDATE idempotency_records SET heartbeat_at=?,reserved_until=?,updated_at=?
 WHERE scope=? AND payload_hash=? AND owner_process=? AND operation_generation=? AND state='reserved'`,
 					now.Unix(), now.Add(leaseTTL).Unix(), now.Unix(), scope, fingerprint, s.owner, record.Generation)
+				if err != nil {
+					// The reservation silently stops extending while callers
+					// assume it is live; surface it so operators can correlate
+					// a later ownership-lost completion failure.
+					log.Printf("idempotency heartbeat for reserved operation failed: %v", err)
+					continue
+				}
+				if rows, err := result.RowsAffected(); err == nil && rows == 0 {
+					log.Printf("idempotency heartbeat: reservation ownership lost; stopping heartbeat")
+					return
+				}
 			}
 		}
 	}()

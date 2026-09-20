@@ -360,7 +360,7 @@ func panelBackupsActionsJS() string {
             window.location.reload();
             return;
           }
-          if (job.status === 'failed') return;
+          if (job.status === 'failed' || job.status === 'degraded' || job.status === 'pending') return;
         } catch (err) {
           setBackupOutput(veilT('status.loadFailed', { error: String(err) }));
           return;

@@ -246,7 +246,7 @@ func (s *managementState) handleAuthStatus(w http.ResponseWriter, r *http.Reques
 	cookie, err := r.Cookie("veil_session")
 	if err == nil {
 		if sess, ok := s.sessionRegistry().Get(cookie.Value); ok {
-			csrf, csrfOK, csrfErr := s.sessionRegistry().EnsureCSRF(cookie.Value)
+			csrf, csrfOK, csrfErr := s.sessionRegistry().EnsureCSRFPersisted(cookie.Value)
 			if csrfErr != nil {
 				writeError(w, "failed to refresh session", http.StatusInternalServerError)
 				return
@@ -570,6 +570,19 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 		}
 
 		_ = s.withMutation(func(mutation managementstate.Mutation) error {
+			// Persisted session revocation happens before the user mutation is
+			// committed, mirroring the live atomic update path: a revocation
+			// failure must not be reported as a successful update.
+			if _, revokeErr := s.sessionRegistry().DeleteUsernamePersisted(username); revokeErr != nil {
+				s.recordRequestAudit(r, audit.Record{
+					Action:  "user.update",
+					Target:  username,
+					Success: false,
+					Error:   revokeErr.Error(),
+				})
+				writeError(w, errSessionRevocationPersistence.Error(), http.StatusInternalServerError)
+				return nil
+			}
 			updated, mErr := mutation.UpdateUser(username, update)
 			if mErr != nil {
 				s.recordRequestAudit(r, audit.Record{
@@ -586,7 +599,6 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 				"role":     updated.Role,
 				"locale":   panel.NormalizeLocale(updated.Locale),
 			})
-			_, _ = s.sessionRegistry().DeleteByUsername(username)
 			s.recordRequestAudit(r, audit.Record{
 				Action:  "user.update",
 				Target:  username,

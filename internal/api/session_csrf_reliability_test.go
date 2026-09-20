@@ -44,6 +44,26 @@ func TestEnsureCSRFPersistedRollsBackHashOnSaveFailure(t *testing.T) {
 	}
 }
 
+func TestEnsureCSRFPersistedKeepsOriginalCSRFValidOnSaveFailure(t *testing.T) {
+	registry, session, original := csrfPersistenceFailureRegistry(t)
+
+	csrf, ok, err := registry.EnsureCSRFPersisted(session.Token)
+	if err == nil || ok || csrf != "" {
+		t.Fatalf("EnsureCSRFPersisted csrf=%q ok=%v err=%v", csrf, ok, err)
+	}
+	// The pre-failure login CSRF must still validate: a transient store write
+	// failure must not permanently invalidate the in-memory session CSRF.
+	if !registry.ValidateCSRF(session.Token, session.CSRFToken) {
+		t.Fatal("login CSRF stopped validating after failed CSRF persistence")
+	}
+	tokenHash := hashSessionSecret(session.Token)
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	if got := registry.sessions[tokenHash].CSRFHash; got != original.CSRFHash {
+		t.Fatalf("CSRF hash changed after failed persistence: got %q want %q", got, original.CSRFHash)
+	}
+}
+
 func TestEffectiveAuthStatusReportsCSRFPersistenceFailure(t *testing.T) {
 	registry, session, original := csrfPersistenceFailureRegistry(t)
 	state := &managementState{

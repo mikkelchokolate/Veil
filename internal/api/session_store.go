@@ -321,31 +321,6 @@ func (r *SessionRegistry) Get(token string) (Session, bool) {
 	return publicSession(record, token, r.rawCSRF[tokenHash]), true
 }
 
-func (r *SessionRegistry) EnsureCSRF(token string) (string, bool, error) {
-	tokenHash := hashSessionSecret(token)
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	record, ok := r.sessions[tokenHash]
-	if !ok || sessionExpired(record, r.now().UTC()) {
-		return "", false, nil
-	}
-	if csrf := r.rawCSRF[tokenHash]; csrf != "" {
-		return csrf, true, nil
-	}
-	csrf, err := generateRandomHex(32)
-	if err != nil {
-		return "", false, err
-	}
-	record.CSRFHash = hashSessionSecret(csrf)
-	r.sessions[tokenHash] = record
-	r.rawCSRF[tokenHash] = csrf
-	if err := r.persistUpsertLocked(record); err != nil {
-		delete(r.rawCSRF, tokenHash)
-		return "", false, err
-	}
-	return csrf, true, nil
-}
-
 func (r *SessionRegistry) ValidateCSRF(token, provided string) bool {
 	if token == "" || provided == "" {
 		return false

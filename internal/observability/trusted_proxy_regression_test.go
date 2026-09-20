@@ -38,9 +38,10 @@ func TestDefaultRatePolicyCoversEveryExpensiveAndAbusableSurface(t *testing.T) {
 			t.Errorf("invalid dedicated limit for %s: %+v", prefix, limit)
 		}
 	}
-	// Sensitive credential/export reads get a GET/HEAD-only budget (#583/#594).
+	// Per-resource client credential reads get a GET/HEAD-only budget so the
+	// shared mutation budget on the prefix is not tightened (#583/#594).
 	readLimits := DefaultRateLimitPolicy().ReadEndpointLimits()
-	for _, prefix := range []string{"/api/client-links", "/api/v1/clients", "/api/backups"} {
+	for _, prefix := range []string{"/api/v1/clients"} {
 		limit, ok := readLimits[prefix]
 		if !ok {
 			t.Errorf("rate policy has no dedicated read limit for %s", prefix)

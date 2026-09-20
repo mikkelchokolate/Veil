@@ -30,9 +30,9 @@ func (s *firewallTransactionalWorkflowState) ReloadPromotedServicesLocked([]stri
 	s.events = append(s.events, "reload")
 	return []model.ServiceActionResult{{Name: "runtime", Success: s.reloadOK}}
 }
-func (s *firewallTransactionalWorkflowState) RollbackPromotedConfigsLocked([]PromotionRecord, []string) ([]string, []model.ServiceActionResult) {
+func (s *firewallTransactionalWorkflowState) RollbackPromotedConfigsLocked([]PromotionRecord, []string) ([]string, []string, []model.ServiceActionResult) {
 	s.events = append(s.events, "rollback-config")
-	return []string{"live"}, nil
+	return []string{"live"}, nil, nil
 }
 func (*firewallTransactionalWorkflowState) AppendApplyHistoryLocked(string, bool, model.ApplyResponse) error {
 	return nil

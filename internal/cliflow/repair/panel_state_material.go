@@ -47,6 +47,13 @@ func (m panelStateRepairMaterial) addGeneratedConfigActions(plan *installer.Repa
 		return err
 	}
 	for path, body := range configs {
+		// The first-install profile already staged a panel-only placeholder for
+		// generated/caddy/config.json (no inbound state was loaded yet). The
+		// state-derived render is authoritative: drop that action and let
+		// addRepairFileAction re-evaluate the live file against this content so
+		// repair keeps Naive routes and Hysteria2-only ACME subjects (audit
+		// #339).
+		removeRepairActions(plan, path)
 		if err := addRepairFileAction(plan, path, body, 0o600); err != nil {
 			return err
 		}

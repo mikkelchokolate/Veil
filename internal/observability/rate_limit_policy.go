@@ -25,13 +25,16 @@ func DefaultRateLimitPolicy() RateLimitPolicy {
 			"/api/v1/traffic/stream": {RatePerMinute: 12, Burst: 4},
 			"/s/":                    {RatePerMinute: 30, Burst: 6},
 			"/api/logs":              {RatePerMinute: 10, Burst: 3},
+			"/api/client-links":      {RatePerMinute: 10, Burst: 3},
+			"/api/backups/":          {RatePerMinute: 10, Burst: 3},
 			"/api/apply/plan":        {RatePerMinute: 6, Burst: 2},
 		},
 		readLimits: map[string]EndpointLimit{
-			// Credential/export reads gated by isRateLimitedReadPath (#583/#594).
-			"/api/client-links": {RatePerMinute: 30, Burst: 6},
-			"/api/v1/clients":   {RatePerMinute: 60, Burst: 12},
-			"/api/backups":      {RatePerMinute: 30, Burst: 6},
+			// Credential reads gated by isRateLimitedReadPath (#583/#594).
+			// /api/client-links and /api/backups/ already carry tighter
+			// dedicated limits in the all-method map above, so only the
+			// per-resource client link/token GETs need a read-only budget here.
+			"/api/v1/clients": {RatePerMinute: 60, Burst: 12},
 		},
 	}
 }

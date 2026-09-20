@@ -60,6 +60,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AuditListResponse,
   BadRequestResponse,
   ClientCreateRequest,
   ClientCreateResponse,
@@ -68,6 +69,7 @@ import type {
   ClientView,
   ConflictResponse,
   ForbiddenResponse,
+  GetApiV1ClientsIdAuditParams,
   GetApiV1ClientsIdLinks200,
   LockedResponse,
   NotFoundResponse,
@@ -1640,7 +1642,157 @@ export const useDeleteApiV1ClientsId = <TError = void | ConflictResponse | Valid
       > => {
       return useMutation(getDeleteApiV1ClientsIdMutationOptions(options), queryClient);
     }
-    export type getApiV1ClientsIdLinksResponse200 = {
+    export type getApiV1ClientsIdAuditResponse200 = {
+  data: AuditListResponse
+  status: 200
+}
+
+export type getApiV1ClientsIdAuditResponse400 = {
+  data: BadRequestResponse
+  status: 400
+}
+
+export type getApiV1ClientsIdAuditResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getApiV1ClientsIdAuditResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getApiV1ClientsIdAuditResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getApiV1ClientsIdAuditResponseSuccess = (getApiV1ClientsIdAuditResponse200) & {
+  headers: Headers;
+};
+export type getApiV1ClientsIdAuditResponseError = (getApiV1ClientsIdAuditResponse400 | getApiV1ClientsIdAuditResponse401 | getApiV1ClientsIdAuditResponse403 | getApiV1ClientsIdAuditResponse404) & {
+  headers: Headers;
+};
+
+export type getApiV1ClientsIdAuditResponse = (getApiV1ClientsIdAuditResponseSuccess | getApiV1ClientsIdAuditResponseError)
+
+export const getGetApiV1ClientsIdAuditUrl = (id: string,
+    params?: GetApiV1ClientsIdAuditParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/clients/${id}/audit?${stringifiedParams}` : `/api/v1/clients/${id}/audit`
+}
+
+/**
+ * Newest-first audit records targeting this client. Records matching the immutable client ID are always included; legacy name-targeted records are included only for known client actions. Admin role required.
+ * @summary Audit history scoped to one client
+ */
+export const getApiV1ClientsIdAudit = async (id: string,
+    params?: GetApiV1ClientsIdAuditParams, options?: Parameters<typeof apiFetch>[1]): Promise<getApiV1ClientsIdAuditResponse> => {
+
+  return apiFetch<getApiV1ClientsIdAuditResponse>(getGetApiV1ClientsIdAuditUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1ClientsIdAuditQueryKey = (id: string,
+    params?: GetApiV1ClientsIdAuditParams,) => {
+    return [
+    `/api/v1/clients/${id}/audit`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiV1ClientsIdAuditQueryOptions = <TData = Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(id: string,
+    params?: GetApiV1ClientsIdAuditParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiV1ClientsIdAuditQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>> = ({ signal }) => getApiV1ClientsIdAudit(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiV1ClientsIdAuditQueryResult = NonNullable<Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>>
+export type GetApiV1ClientsIdAuditQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+
+
+export function useGetApiV1ClientsIdAudit<TData = Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ id: string,
+    params: undefined |  GetApiV1ClientsIdAuditParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1ClientsIdAudit<TData = Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ id: string,
+    params?: GetApiV1ClientsIdAuditParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1ClientsIdAudit<TData = Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ id: string,
+    params?: GetApiV1ClientsIdAuditParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Audit history scoped to one client
+ */
+
+export function useGetApiV1ClientsIdAudit<TData = Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ id: string,
+    params?: GetApiV1ClientsIdAuditParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdAudit>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiV1ClientsIdAuditQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiV1ClientsIdLinksResponse200 = {
   data: GetApiV1ClientsIdLinks200
   status: 200
 }

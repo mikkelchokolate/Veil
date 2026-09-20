@@ -34,7 +34,12 @@ type recordingPrivilegedClient struct {
 	restartCalls          atomic.Int32
 	restartErr            error
 	stageUpdate           func(privileged.UpdateRequest) (privileged.UpdateResult, error)
+	reachableErr          error
 	err                   error
+}
+
+func (c *recordingPrivilegedClient) Reachable(context.Context) error {
+	return c.reachableErr
 }
 
 func (c *recordingPrivilegedClient) Promote(_ context.Context, request privileged.PromoteRequest) (privileged.PromoteResult, error) {
@@ -80,7 +85,7 @@ func TestPrivilegedApplyUsesLogicalArtifactIDsAndOpaqueRollback(t *testing.T) {
 		BackupID:         "20260605T120000.000000000Z",
 		WrittenArtifacts: []string{"caddy/config.json"},
 	}
-	rollbackFiles, _ := context.rollbackPromotedConfigs(records, liveFiles)
+	rollbackFiles, _, _ := context.rollbackPromotedConfigs(records, liveFiles)
 	if len(client.promotions) != 2 || client.promotions[1].RestoreBackupID != "20260605T120000.000000000Z" {
 		t.Fatalf("rollback promotions=%+v", client.promotions)
 	}
