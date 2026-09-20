@@ -147,13 +147,33 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 		csrfToken := ""
 		locale := panel.ResolveLocale("", r)
 		if routes.State != nil {
+			// Mirror handleEffectiveAuthStatus: when session storage is
+			// unavailable the panel cannot authenticate anyone — fail closed
+			// instead of rendering a login page that can never succeed (#578).
+			if err := routes.State.sessionRegistry().Healthy(); err != nil {
+				writeError(w, "session storage unavailable", http.StatusInternalServerError)
+				return
+			}
 			var authenticated bool
 			cookie, err := r.Cookie("veil_session")
 			if err == nil {
 				if session, ok := routes.State.sessionRegistry().Get(cookie.Value); ok {
-					authenticated = true
-					locale = panel.ResolveLocale(routes.State.storedUserLocale(session.Username), r)
-					csrfToken, _, _ = routes.State.sessionRegistry().EnsureCSRF(cookie.Value)
+					// EnsureCSRFPersisted rolls the session record AND the
+					// in-memory token back together on a persist failure —
+					// EnsureCSRF could clear rawCSRF while leaving the stored
+					// hash, embedding an empty token into the page for a
+					// session that still carries a CSRF hash (#578, call-site
+					// twin of #377). The error is not discarded: fail closed.
+					token, csrfOK, csrfErr := routes.State.sessionRegistry().EnsureCSRFPersisted(cookie.Value)
+					if csrfErr != nil {
+						writeError(w, "failed to refresh session", http.StatusInternalServerError)
+						return
+					}
+					if csrfOK {
+						authenticated = true
+						csrfToken = token
+						locale = panel.ResolveLocale(routes.State.storedUserLocale(session.Username), r)
+					}
 				}
 			}
 			if !authenticated {

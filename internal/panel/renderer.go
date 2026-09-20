@@ -33,6 +33,10 @@ func (r Renderer) HTML(basePath string, csrfToken string, locale string) string 
 		`'/healthz`, `'`+bp+`/healthz`,
 		`"/metrics`, `"`+bp+`/metrics`,
 		`'/metrics`, `'`+bp+`/metrics`,
+		// Keep JS-written cookies (veil_locale) on the same Path scope the
+		// server uses for veil_session so a mounted base path does not split
+		// the cookie jar (#577).
+		`'; Path=/;`, `'; Path=`+veilPanelCookiePath(basePath)+`;`,
 	)
 	return replacer.Replace(html)
 }

@@ -17,8 +17,24 @@ func LoginHTML(basePath string, locale string) string {
 	replacer := strings.NewReplacer(
 		`"/api/`, `"`+bp+`/api/`,
 		`'/api/`, `'`+bp+`/api/`,
+		// The JS-written veil_locale cookie must be scoped to the same Path
+		// the server uses for veil_session (panelCookieAttrs); a Path=/
+		// preference cookie under a mounted base path splits the cookie jar
+		// (#577).
+		`'; Path=/;`, `'; Path=`+veilPanelCookiePath(basePath)+`;`,
 	)
 	return replacer.Replace(html)
+}
+
+// veilPanelCookiePath returns the cookie Path scope matching the server's
+// panelCookieAttrs for a given panel base path: "/" for a root mount, the
+// normalized mount (with trailing slash) otherwise.
+func veilPanelCookiePath(basePath string) string {
+	trimmed := strings.Trim(basePath, "/")
+	if trimmed == "" {
+		return "/"
+	}
+	return "/" + trimmed + "/"
 }
 
 // loginHTMLTemplate shares the design tokens, fonts, and card component
