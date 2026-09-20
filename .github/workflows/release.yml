@@ -78,11 +78,14 @@ jobs:
           govulncheck ./...
       - name: Unstick Ubuntu apt mirrors
         run: bash scripts/ci/apt-bootstrap.sh
-      - name: shellcheck (pinned via versions.sh)
+      - name: shellcheck (pinned upstream release via versions.sh)
         run: |
-          sudo DEBIAN_FRONTEND=noninteractive apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends shellcheck
-          shellcheck --version | grep -F "version: ${{ steps.versions.outputs.shellcheck_version }}"
+          sc_ver="${{ steps.versions.outputs.shellcheck_version }}"
+          # apt's shellcheck package lags the pin; fetch the version-bound
+          # upstream static binary so the lint gate cannot silently drift (#420).
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${sc_ver}/shellcheck-v${sc_ver}.linux.x86_64.tar.xz" \
+            | sudo tar -xJ -C /usr/local/bin --strip-components=1 "shellcheck-v${sc_ver}/shellcheck"
+          shellcheck --version | grep -F "version: ${sc_ver}"
           shellcheck scripts/*.sh scripts/ci/*.sh packaging/scripts/*.sh ci/vm/*.sh ci/vm/systemd/*.sh packaging/docker/entrypoint.sh
       - run: make build
       - run: make dist
