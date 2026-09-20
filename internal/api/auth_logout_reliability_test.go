@@ -57,7 +57,9 @@ func TestRegisteredLogoutReadsPanelAccessUnderStateLock(t *testing.T) {
 }
 
 func TestLogoutSnapshotKeepsCaddyCookieSecure(t *testing.T) {
-	state := &managementState{settings: Settings{PanelAccess: "caddy"}}
+	// Cookie attributes follow the running process's serve identity, so a
+	// Caddy-served panel keeps Secure on the logout expiry cookie.
+	state := &managementState{settings: Settings{PanelAccess: "caddy"}, servePanelAccess: "caddy"}
 	mux := http.NewServeMux()
 	state.register(mux)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)

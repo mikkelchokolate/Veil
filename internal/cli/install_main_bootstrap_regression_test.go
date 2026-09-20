@@ -412,6 +412,79 @@ ensure_runtime_libs "$1"
 	}
 }
 
+// The pinned Node.js tarball is .tar.xz, so a host missing xz must have it
+// provisioned through the package manager (apt: xz-utils, others: xz) before
+// the tarball is downloaded and unpacked.
+func TestMainInstallerProvisionsXzBeforeNodeExtract(t *testing.T) {
+	script := readInstallerScript(t, "install-main.sh")
+	xzAt := strings.Index(script, "ensure_xz || exit 1")
+	untarAt := strings.Index(script, `tar -xJf "$work/$node_tarball"`)
+	if xzAt < 0 || untarAt < 0 || xzAt > untarAt {
+		t.Fatal("install-main.sh must provision xz before unpacking the Node.js tarball")
+	}
+
+	helpers := extractRegion(t, script, "# BEGIN_DEPS_HELPERS", "# END_DEPS_HELPERS")
+	dir := t.TempDir()
+	stubDir := filepath.Join(dir, "stub")
+	if err := os.Mkdir(stubDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeExec(t, stubDir, "apt-get", `
+echo "apt-get $*" >> "$HOME/apt.log"
+case "$1" in
+  install) touch "$XZ_FLAG" ;;
+esac
+exit 0
+`)
+	writeExec(t, stubDir, "id", `echo 0`)
+
+	for _, mapping := range []struct{ manager, want string }{
+		{"apt-get", "xz-utils"},
+		{"dnf", "xz"},
+		{"yum", "xz"},
+		{"apk", "xz"},
+		{"pacman", "xz"},
+		{"zypper", "xz"},
+	} {
+		t.Run("map-"+mapping.manager, func(t *testing.T) {
+			harness := "#!/bin/sh\nset -eu\n" + helpers + "\nxz_package_name " + mapping.manager + "\n"
+			out, err := runBashScript(t, dir, []string{"PATH=/bin:/usr/bin", "HOME=" + dir}, harness)
+			if err != nil {
+				t.Fatalf("xz_package_name harness failed: %v\n%s", err, out)
+			}
+			if strings.TrimSpace(out) != mapping.want {
+				t.Fatalf("xz_package_name %s = %q, want %q", mapping.manager, out, mapping.want)
+			}
+		})
+	}
+
+	// Host lacks xz (flag file absent): ensure_xz must install the package and
+	// re-probe; the apt-get stub marks xz present via XZ_FLAG.
+	harness := "#!/bin/sh\nset -eu\n" + helpers + `
+have_xz() { [ -f "$XZ_FLAG" ]; }
+if ensure_xz; then echo OK; else echo FAILED; fi
+`
+	env := []string{
+		"PATH=" + stubDir + string(os.PathListSeparator) + "/bin" + string(os.PathListSeparator) + "/usr/bin",
+		"HOME=" + dir,
+		"XZ_FLAG=" + filepath.Join(dir, "xz.flag"),
+	}
+	out, err := runBashScript(t, dir, env, harness)
+	if err != nil {
+		t.Fatalf("ensure_xz harness failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "OK") {
+		t.Fatalf("ensure_xz did not provision xz:\n%s", out)
+	}
+	aptLog, err := os.ReadFile(filepath.Join(dir, "apt.log"))
+	if err != nil {
+		t.Fatalf("apt-get was not invoked:\n%s", out)
+	}
+	if !strings.Contains(string(aptLog), "install -y xz-utils") {
+		t.Fatalf("expected xz-utils install, got:\n%s", aptLog)
+	}
+}
+
 func TestMainInstallerReportsUnresolvableRuntimeLibs(t *testing.T) {
 	script := readInstallerScript(t, "install-main.sh")
 	helpers := extractRegion(t, script, "# BEGIN_DEPS_HELPERS", "# END_DEPS_HELPERS")

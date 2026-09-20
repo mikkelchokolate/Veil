@@ -153,6 +153,8 @@ func isOneOf(value string, candidates ...string) bool {
 func (Plugin) NeedsEmail(model.Settings, model.Inbound) bool { return false }
 
 // HasCredential reports whether the inbound has a usable olcRTC credential.
+// The resolved key is preserved byte-for-byte for rendering/export, but a
+// value that trims to empty is unusable and counts as missing.
 func (Plugin) HasCredential(_ model.Settings, inbound model.Inbound) bool {
-	return olcrtcKey(inbound) != ""
+	return strings.TrimSpace(olcrtcKey(inbound)) != ""
 }

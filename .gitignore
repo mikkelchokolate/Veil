@@ -34,3 +34,6 @@ test/browser/playwright-report/
 # Runtime artifacts written by api package tests (apply history/state fixtures)
 internal/api/generated/
 .artifacts/
+
+# pnpm content-addressable store — never a source artifact.
+.pnpm-store/

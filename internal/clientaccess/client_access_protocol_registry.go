@@ -198,17 +198,10 @@ func naiveFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
 		return ClientLink{}, false
 	}
 	link := newProtocolClientLink(input)
-	password := input.Inbound.Password
-	if password == "" {
-		password = protocolString(input.Inbound.ProtocolFields, "naivePassword", input.Inbound.NaivePassword)
-		if password == "" {
-			password = protocolString(input.Settings.ProtocolFields, "naivePassword", input.Settings.NaivePassword)
-		}
-	}
-	username := protocolString(input.Inbound.ProtocolFields, "naiveUsername", input.Inbound.NaiveUsername)
-	if username == "" {
-		username = protocolString(input.Settings.ProtocolFields, "naiveUsername", input.Settings.NaiveUsername)
-	}
+	// Share the canonical model resolvers so the exported credential is
+	// byte-for-byte identical to what the server renders (audit #331).
+	password := model.EffectiveProtocolPassword(input.Inbound, input.Settings, "naivePassword", input.Inbound.NaivePassword, input.Settings.NaivePassword)
+	username := model.EffectiveProtocolString(input.Inbound, input.Settings, "naiveUsername", input.Inbound.NaiveUsername, input.Settings.NaiveUsername)
 	if username == "" {
 		username = model.DefaultNaiveUsername
 	}
@@ -243,13 +236,9 @@ func hysteria2FallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool)
 		return ClientLink{}, false
 	}
 	link := newProtocolClientLink(input)
-	password := input.Inbound.Password
-	if password == "" {
-		password = protocolString(input.Inbound.ProtocolFields, "hysteria2Password", input.Inbound.Hysteria2Password)
-		if password == "" {
-			password = protocolString(input.Settings.ProtocolFields, "hysteria2Password", input.Settings.Hysteria2Password)
-		}
-	}
+	// Share the canonical model resolver so the exported credential is
+	// byte-for-byte identical to what the server renders (audit #331).
+	password := model.EffectiveProtocolPassword(input.Inbound, input.Settings, "hysteria2Password", input.Inbound.Hysteria2Password, input.Settings.Hysteria2Password)
 	link.URI = Hysteria2ClientURI(model.ResolveInboundDomain(input.Inbound, input.Settings), input.Inbound.Port, password, input.Inbound.Name, hysteria2Insecure(input))
 	return link, true
 }

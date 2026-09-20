@@ -227,59 +227,41 @@ func naiveFallbackRoot(inbound model.Inbound, settings model.Settings) string {
 	return "/var/lib/veil/www"
 }
 
+// naiveUsers builds the Caddy forward_auth user list. Stored credential bytes
+// are emitted as-is so the server authenticates exactly what client export
+// advertises; usernames match on trimmed bytes so a normalized credential
+// overrides a legacy profile with the same effective name (audit #331/#334).
 func naiveUsers(inbound model.Inbound, settings model.Settings) []CaddyNaiveUser {
 	var users []CaddyNaiveUser
 	runtimeUsers := make(map[string]CaddyNaiveUser, len(inbound.RuntimeCredentials))
 	for _, credential := range inbound.RuntimeCredentials {
-		username := strings.TrimSpace(credential.Username)
-		password := strings.TrimSpace(credential.Password)
-		if username != "" && password != "" {
-			runtimeUsers[username] = CaddyNaiveUser{Username: username, Password: password}
+		if strings.TrimSpace(credential.Username) == "" || strings.TrimSpace(credential.Password) == "" {
+			continue
 		}
+		runtimeUsers[strings.TrimSpace(credential.Username)] = CaddyNaiveUser{Username: credential.Username, Password: credential.Password}
 	}
 	for _, p := range inbound.Profiles {
 		if !p.Enabled || strings.TrimSpace(p.Username) == "" || strings.TrimSpace(p.Password) == "" {
 			continue
 		}
-		if _, replaced := runtimeUsers[p.Username]; !replaced {
+		if _, replaced := runtimeUsers[strings.TrimSpace(p.Username)]; !replaced {
 			users = append(users, CaddyNaiveUser{Username: p.Username, Password: p.Password})
 		}
 	}
 	for _, credential := range inbound.RuntimeCredentials {
 		if user, ok := runtimeUsers[strings.TrimSpace(credential.Username)]; ok {
 			users = append(users, user)
-			delete(runtimeUsers, user.Username)
+			delete(runtimeUsers, strings.TrimSpace(credential.Username))
 		}
 	}
 	if len(users) > 0 {
 		return users
 	}
-	username := stringField(inbound.ProtocolFields, "naiveUsername")
-	if username == "" {
-		username = strings.TrimSpace(inbound.NaiveUsername)
-	}
-	if username == "" {
-		username = stringField(settings.ProtocolFields, "naiveUsername")
-	}
-	if username == "" {
-		username = strings.TrimSpace(settings.NaiveUsername)
-	}
+	username := model.EffectiveProtocolString(inbound, settings, "naiveUsername", inbound.NaiveUsername, settings.NaiveUsername)
 	if username == "" {
 		username = model.DefaultNaiveUsername
 	}
-	password := strings.TrimSpace(inbound.Password)
-	if password == "" {
-		password = stringField(inbound.ProtocolFields, "naivePassword")
-	}
-	if password == "" {
-		password = strings.TrimSpace(inbound.NaivePassword)
-	}
-	if password == "" {
-		password = stringField(settings.ProtocolFields, "naivePassword")
-	}
-	if password == "" {
-		password = settings.NaivePassword
-	}
+	password := model.EffectiveProtocolPassword(inbound, settings, "naivePassword", inbound.NaivePassword, settings.NaivePassword)
 	if username != "" && password != "" {
 		return []CaddyNaiveUser{{Username: username, Password: password}}
 	}

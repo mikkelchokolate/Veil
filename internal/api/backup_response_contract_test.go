@@ -168,6 +168,51 @@ func TestBackupDownloadStreamsHelperChunks(t *testing.T) {
 	}
 }
 
+// deadlineTrackingWriter records whether the handler cleared the per-response
+// write deadline before streaming (the global 120s WriteTimeout would
+// otherwise truncate long downloads).
+type deadlineTrackingWriter struct {
+	*httptest.ResponseRecorder
+	deadlineCleared bool
+}
+
+func (w *deadlineTrackingWriter) SetWriteDeadline(d time.Time) error {
+	if d.IsZero() {
+		w.deadlineCleared = true
+	}
+	return nil
+}
+
+// The archive stream can outlive http.Server.WriteTimeout (the helper bounds
+// reads at ~2h), so the download handler must clear the write deadline the
+// same way the SSE handler does.
+func TestBackupDownloadClearsWriteDeadline(t *testing.T) {
+	state := newPanelBackupState(t)
+	body := []byte(strings.Repeat("deadline-payload-", 100))
+	digestBytes := sha256.Sum256(body)
+	contentDigest := hex.EncodeToString(digestBytes[:])
+	const transactionID = "0123456789abcdef0123456789abcdef"
+	state.privileged = backupStubClient{backup: func(_ context.Context, request privileged.BackupRequest) (privileged.BackupResult, error) {
+		if request.Action != privileged.BackupActionRead {
+			t.Fatalf("unexpected backup action %q", request.Action)
+		}
+		return privileged.BackupResult{
+			Archives: []privileged.BackupArchive{{Name: "deadline.enc", Size: int64(len(body)), CreatedAt: "2026-08-01T00:00:00Z"}},
+			Data:     body, More: false, TransactionID: transactionID,
+			ContentDigest: contentDigest, InodeGeneration: "1:2:3", BoundSize: int64(len(body)),
+		}, nil
+	}}
+
+	writer := &deadlineTrackingWriter{ResponseRecorder: httptest.NewRecorder()}
+	state.handleBackupByName(writer, adminJSONRequest(http.MethodGet, "/api/backups/deadline.enc/download", ""))
+	if writer.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", writer.Code, writer.Body.String())
+	}
+	if !writer.deadlineCleared {
+		t.Fatal("download handler did not clear the per-response write deadline")
+	}
+}
+
 type failingDownloadWriter struct {
 	header http.Header
 	writes int

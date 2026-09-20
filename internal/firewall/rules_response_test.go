@@ -7,7 +7,9 @@ import (
 )
 
 func TestRuleResponsesIncludePanelAndEnabledInbounds(t *testing.T) {
-	rules := BuildRuleResponses(model.Settings{PanelListen: "127.0.0.1:2096"}, []model.Inbound{{Name: "hy2", Protocol: "hysteria2", Transport: "udp", Port: 8443, Enabled: true}})
+	// A public direct panel listener earns its UFW rule; a loopback listener
+	// would not (audit #356).
+	rules := BuildRuleResponses(model.Settings{PanelAccess: "direct", PanelListen: "0.0.0.0:2096"}, []model.Inbound{{Name: "hy2", Protocol: "hysteria2", Transport: "udp", Port: 8443, Enabled: true}})
 	if len(rules) != 2 {
 		t.Fatalf("rules = %+v", rules)
 	}
