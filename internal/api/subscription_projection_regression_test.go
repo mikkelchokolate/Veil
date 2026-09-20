@@ -91,9 +91,8 @@ func TestConcurrentPublicSubscriptionsDoNotRaceCachedProjection(t *testing.T) {
 				defer wg.Done()
 				req := httptest.NewRequest(http.MethodGet, "/s/"+token+"?format=raw", nil)
 				// Each request carries a distinct source IP so the shared /s/
-				// read-path budget (30/min + burst 6, audit #337) is not what
-				// this race test exercises — the per-token/source subscription
-				// limiter (60/300 per minute) stays far above the fan-out too.
+				// read-path budget (audit #337) is not what this race test
+				// exercises.
 				req.RemoteAddr = fmt.Sprintf("198.51.100.%d:40000", source)
 				w := httptest.NewRecorder()
 				router.ServeHTTP(w, req)

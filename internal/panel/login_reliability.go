@@ -7,13 +7,16 @@ import "strings"
 // the Panel; failure to persist it must not trap the user on the login form.
 func ReliableLoginHTML(basePath string, locale string) string {
 	html := LoginHTML(basePath, locale)
+	// LoginHTML already rewrote the locale-cookie Path to the panel scope —
+	// match the effective path, not a hardcoded Path=/ (#577).
+	cookiePath := veilPanelCookiePath(basePath)
 	return strings.Replace(html, `        authenticated = true;
         localStorage.setItem('veil_csrf_token', data.csrfToken);
         localStorage.setItem('veil_username', data.username);
         localStorage.setItem('veil_user_role', data.role || '');
         localStorage.removeItem('veil_api_token');
         if (data.locale) {
-          document.cookie = 'veil_locale=' + encodeURIComponent(data.locale) + '; Path=/; Max-Age=31536000; SameSite=Lax';
+          document.cookie = 'veil_locale=' + encodeURIComponent(data.locale) + '; Path=`+cookiePath+`; Max-Age=31536000; SameSite=Lax';
         }`, `        authenticated = true;
         try {
           localStorage.setItem('veil_csrf_token', data.csrfToken);
@@ -25,7 +28,7 @@ func ReliableLoginHTML(basePath string, locale string) string {
         }
         if (data.locale) {
           try {
-            document.cookie = 'veil_locale=' + encodeURIComponent(data.locale) + '; Path=/; Max-Age=31536000; SameSite=Lax';
+            document.cookie = 'veil_locale=' + encodeURIComponent(data.locale) + '; Path=`+cookiePath+`; Max-Age=31536000; SameSite=Lax';
           } catch (cookieError) {
             console.warn('Could not persist login locale.', cookieError);
           }

@@ -27,17 +27,18 @@ func init() {
 
 // RateLimiter is a per-IP token bucket rate limiter.
 type RateLimiter struct {
-	buckets        sync.Map
-	engine         *RateLimiterEngine
-	rate           float64
-	burst          int
-	endpointLimits map[string]EndpointLimit
-	mu             sync.RWMutex
-	stopCh         chan struct{}
-	doneCh         chan struct{}
-	stopOnce       sync.Once
-	resolver       clientaddr.Resolver
-	onRateLimited  func() // called when a request is rate-limited
+	buckets            sync.Map
+	engine             *RateLimiterEngine
+	rate               float64
+	burst              int
+	endpointLimits     map[string]EndpointLimit
+	readEndpointLimits map[string]EndpointLimit
+	mu                 sync.RWMutex
+	stopCh             chan struct{}
+	doneCh             chan struct{}
+	stopOnce           sync.Once
+	resolver           clientaddr.Resolver
+	onRateLimited      func() // called when a request is rate-limited
 }
 
 // NewRateLimiter creates a new rate limiter with the given default rate and burst.
@@ -61,6 +62,15 @@ func (rl *RateLimiter) SetEndpointLimits(limits map[string]EndpointLimit) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 	rl.endpointLimits = limits
+}
+
+// SetReadEndpointLimits configures per-endpoint rate limits that apply to
+// GET/HEAD requests only. Prefixes hosting both reads and mutations keep
+// their mutations on the shared default budget.
+func (rl *RateLimiter) SetReadEndpointLimits(limits map[string]EndpointLimit) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	rl.readEndpointLimits = limits
 }
 
 // Stop shuts down the background cleanup goroutine.
@@ -98,6 +108,7 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 		rl.mu.RLock()
 		resolver := rl.resolver
 		limits := rl.endpointLimits
+		readLimits := rl.readEndpointLimits
 		rl.mu.RUnlock()
 		ip, err := resolver.Resolve(r)
 		if err != nil {
@@ -108,7 +119,7 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 		}
 		r = clientaddr.WithContext(r, ip)
 
-		decision := NewRateLimitDecisionModule(int(rl.rate*60), rl.burst, limits).Decide(r.Method, r.URL.Path, ip)
+		decision := NewRateLimitDecisionModule(int(rl.rate*60), rl.burst, limits, readLimits).Decide(r.Method, r.URL.Path, ip)
 		if !decision.Limited {
 			next.ServeHTTP(w, r)
 			return
@@ -125,14 +136,6 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-func extractClientIP(r *http.Request) string {
-	address, err := (clientaddr.Resolver{}).Resolve(r)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return address
 }
 
 func (rl *RateLimiter) cleanupLoop() {

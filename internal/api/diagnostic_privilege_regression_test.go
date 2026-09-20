@@ -28,6 +28,23 @@ func TestPublicMetricsAlwaysRequireAuthentication(t *testing.T) {
 	}
 }
 
+// #581: the capability table, OpenAPI role, and runtime must agree — on a
+// loopback listener with metrics-access public the endpoint is anonymous,
+// matching x-veil-role: public and capabilityPublic.
+func TestLocalMetricsStayPublicWhenNotProtected(t *testing.T) {
+	router, _ := newTestRouter(ServerInfo{
+		Version:             "test",
+		Mode:                "production",
+		PublicListen:        false,
+		MetricsAuthRequired: false,
+	})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("loopback metrics status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestProductionDiagnosticsFailClosedWithoutRootHelper(t *testing.T) {
 	router, _ := newTestRouter(ServerInfo{
 		Version:                 "test",

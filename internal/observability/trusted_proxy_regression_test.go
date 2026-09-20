@@ -3,14 +3,17 @@ package observability
 import (
 	"net/http/httptest"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/clientaddr"
 )
 
 func TestUntrustedRemoteCannotForgeForwardedAddress(t *testing.T) {
 	req := httptest.NewRequest("POST", "http://panel/api/auth/login", nil)
 	req.RemoteAddr = "198.51.100.20:54321"
 	req.Header.Set("X-Forwarded-For", "203.0.113.99")
-	if got := extractClientIP(req); got != "198.51.100.20" {
-		t.Fatalf("untrusted X-Forwarded-For selected as canonical address: got %q", got)
+	got, err := (clientaddr.Resolver{}).Resolve(req)
+	if err != nil || got != "198.51.100.20" {
+		t.Fatalf("untrusted X-Forwarded-For selected as canonical address: got %q, err=%v", got, err)
 	}
 }
 
@@ -36,6 +39,19 @@ func TestDefaultRatePolicyCoversEveryExpensiveAndAbusableSurface(t *testing.T) {
 		}
 		if limit.RatePerMinute <= 0 || limit.Burst <= 0 {
 			t.Errorf("invalid dedicated limit for %s: %+v", prefix, limit)
+		}
+	}
+	// Per-resource client credential reads get a GET/HEAD-only budget so the
+	// shared mutation budget on the prefix is not tightened (#583/#594).
+	readLimits := DefaultRateLimitPolicy().ReadEndpointLimits()
+	for _, prefix := range []string{"/api/v1/clients"} {
+		limit, ok := readLimits[prefix]
+		if !ok {
+			t.Errorf("rate policy has no dedicated read limit for %s", prefix)
+			continue
+		}
+		if limit.RatePerMinute <= 0 || limit.Burst <= 0 {
+			t.Errorf("invalid dedicated read limit for %s: %+v", prefix, limit)
 		}
 	}
 }

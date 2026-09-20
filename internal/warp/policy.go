@@ -3,7 +3,9 @@ package warp
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
+	"strconv"
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -49,16 +51,11 @@ func Validate(warp Config) error {
 	if warp.SocksPort < 1 || warp.SocksPort > 65535 {
 		return errors.New("WARP SOCKS port must be between 1 and 65535")
 	}
-	// The sing-box WARP inbound is an unauthenticated SOCKS listener and
-	// every protocol upstream dials it on loopback — a non-loopback listen
-	// address would expose an open proxy to the network without helping any
-	// consumer (audit #358). Empty is fine: SetDefaults/rendering fill in
-	// 127.0.0.1.
-	if listen := strings.TrimSpace(warp.SocksListen); listen != "" {
-		addr, err := netip.ParseAddr(listen)
-		if err != nil || !addr.IsLoopback() {
-			return fmt.Errorf("WARP SOCKS listen address must be a loopback IP, got %q", warp.SocksListen)
-		}
+	if err := validateSocksListen(warp.SocksListen); err != nil {
+		return err
+	}
+	if err := validateEndpoint(warp.Endpoint); err != nil {
+		return err
 	}
 	if warp.MTU < 576 || warp.MTU > 9000 {
 		return errors.New("WARP MTU must be between 576 and 9000")
@@ -70,6 +67,44 @@ func Validate(warp Config) error {
 		if value < 0 || value > 255 {
 			return fmt.Errorf("WARP reserved byte %d must be between 0 and 255", index)
 		}
+	}
+	return nil
+}
+
+// validateSocksListen requires a loopback IP literal. sing-box emits an
+// unauthenticated SOCKS listener on this address, so any non-loopback value
+// would expose an open proxy to the network (#358). Hostnames are rejected:
+// the bind must be deterministic, not resolver-dependent.
+func validateSocksListen(listen string) error {
+	listen = strings.TrimSpace(listen)
+	if listen == "" {
+		return nil // normalized to 127.0.0.1 by SetDefaults and the renderer
+	}
+	addr, err := netip.ParseAddr(listen)
+	if err != nil {
+		return errors.New("WARP SOCKS listen must be a loopback IP literal")
+	}
+	if !addr.IsLoopback() {
+		return errors.New("WARP SOCKS listen must be a loopback address")
+	}
+	return nil
+}
+
+// validateEndpoint applies the same host:port shape check the renderer
+// enforces so a bad endpoint fails at persist time, not at render/apply
+// (#579).
+func validateEndpoint(endpoint string) error {
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == "" {
+		return nil // defaults to engage.cloudflareclient.com:2408 downstream
+	}
+	_, portText, err := net.SplitHostPort(endpoint)
+	if err != nil {
+		return fmt.Errorf("WARP endpoint must be host:port: %w", err)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil || port < 1 || port > 65535 {
+		return errors.New("WARP endpoint port must be between 1 and 65535")
 	}
 	return nil
 }

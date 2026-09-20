@@ -38,6 +38,12 @@ interface RestoreJob {
 	id: string;
 	archive: string;
 	status: string;
+	// Restore pipeline detail emitted by the API (#586): a degraded job with
+	// restored=true committed state and must not look like a hard failure.
+	outcome?: string;
+	phase?: string;
+	restored?: boolean;
+	httpStatus?: number;
 	createdAt: string;
 	finishedAt?: string;
 	error?: string;
@@ -105,9 +111,11 @@ export function BackupsPage() {
 	});
 	const job = jobQuery.data ?? activeJob;
 	const jobStatusKey = job ? `backups.status.${job.status}` : "";
+	// A malformed poll payload (no status) must not crash the render — fall
+	// back to an empty label instead of calling replaceAll on undefined.
 	const jobStatusLabel =
 		job && t(jobStatusKey) === jobStatusKey
-			? job.status.replaceAll("_", " ")
+			? (job.status ?? "").replaceAll("_", " ")
 			: job
 				? t(jobStatusKey)
 				: "";
@@ -280,7 +288,8 @@ export function BackupsPage() {
 							variant={
 								job.status === "succeeded"
 									? "success"
-									: job.status === "failed" || job.status === "degraded"
+									: job.status === "failed" ||
+											(job.status === "degraded" && !job.restored)
 										? "danger"
 										: "warning"
 							}
@@ -289,6 +298,25 @@ export function BackupsPage() {
 						</Badge>{" "}
 						<span className="mono">{job.archive}</span>
 					</p>
+					{/* A degraded restore that still committed state must surface
+					    as a warning success, not a hard fail (#586). */}
+					{job.outcome || job.phase ? (
+						<p className="muted">
+							{job.outcome
+								? t("backups.restoreJobOutcome", {
+										outcome: job.outcome.replaceAll("_", " "),
+									})
+								: null}
+							{job.phase
+								? ` ${t("backups.restoreJobPhase", {
+										phase: job.phase.replaceAll("_", " "),
+									})}`
+								: null}
+						</p>
+					) : null}
+					{job.restored && job.status === "degraded" ? (
+						<p className="muted">{t("backups.restoreJobDegraded")}</p>
+					) : null}
 					{jobQuery.isError ? (
 						<FormMessage>
 							{jobQuery.error instanceof ApiError

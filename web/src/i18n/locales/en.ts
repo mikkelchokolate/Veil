@@ -408,6 +408,10 @@ export const en: Record<string, string> = {
 	"backups.encrypted": "encrypted",
 	"backups.size": "Size",
 	"backups.restoreJobTitle": "Restore job",
+	"backups.restoreJobOutcome": "Outcome: {outcome}.",
+	"backups.restoreJobPhase": "Phase: {phase}.",
+	"backups.restoreJobDegraded":
+		"The backup was restored, but a follow-up step failed — the restored state is committed.",
 	"backups.restoreConfirmTitle": "Restore backup?",
 	"backups.restoreConfirmDescription":
 		"Restoring {name} replaces the current state. You may be logged out when it finishes.",
