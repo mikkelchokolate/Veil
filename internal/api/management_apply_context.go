@@ -183,10 +183,12 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 		removeIDs = append(removeIDs, generatedconfig.WarpConfigSubpath)
 	}
 	// Same teardown contract for Caddy: when no naive inbound and no
-	// panel-via-caddy remain, the live caddy/config.json must go or the
-	// orphan scan will never touch it (config.json is excluded as a shared
-	// singleton artifact) and veil-caddy.service would keep serving the
-	// STALE auth_credentials forever (audit #123). Removing the artifact
+	// panel-via-caddy remain, the live caddy/config.json must go or
+	// veil-caddy.service would keep serving the STALE auth_credentials
+	// forever (audit #123). The aggregate-dir orphan scan already collects
+	// config.json whenever it is absent from the promote set; this explicit
+	// check keeps the teardown tied to a running unit and covers scan gaps
+	// (unreadable directory, out-of-tree live root). Removing the artifact
 	// stops and disables the unit via UnitForArtifactID.
 	if !caddyRequired(ctx.state.settings, ctx.state.inbounds) && ctx.caddyUnitActiveLocked() &&
 		!slices.Contains(removeIDs, generatedconfig.CaddyJSONConfigSubpath) {

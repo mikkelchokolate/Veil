@@ -244,10 +244,24 @@ func legacyCaddyArtifactPath(id string) (ArtifactPath, bool) {
 		return ArtifactPath{}, false
 	}
 	rest := strings.TrimPrefix(clean, "caddy/")
-	if strings.Contains(rest, "/") || !strings.HasSuffix(rest, ".Caddyfile") {
+	if strings.Contains(rest, "/") {
 		return ArtifactPath{}, false
 	}
-	name := strings.TrimSuffix(rest, ".Caddyfile")
+	// Retired per-inbound Caddy artifacts exist in two generations: the
+	// veil-caddy@<name> era wrote caddy/<name>.Caddyfile, and the window in
+	// which the consolidated veil-caddy.service masqueraded as a template
+	// (#352) could stage caddy/<name>.json. Both are dead ends for promotion
+	// but must stay removable so the apply-time orphan scan can actually
+	// delete the leftover files instead of failing with "unknown artifact id".
+	var name string
+	switch {
+	case strings.HasSuffix(rest, ".Caddyfile"):
+		name = strings.TrimSuffix(rest, ".Caddyfile")
+	case strings.HasSuffix(rest, ".json") && rest != "config.json":
+		name = strings.TrimSuffix(rest, ".json")
+	default:
+		return ArtifactPath{}, false
+	}
 	if !artifactNamePattern.MatchString(name) {
 		return ArtifactPath{}, false
 	}

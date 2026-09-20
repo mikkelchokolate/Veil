@@ -66,7 +66,7 @@ func TestLiveConfigPromotionOrphans(t *testing.T) {
 	orphanCaddy := filepath.Join(root, "live", "caddy", "orphan.json")
 	legacyCaddy := filepath.Join(root, "live", "caddy", "legacy.Caddyfile")
 	orphanHysteria2 := filepath.Join(root, "live", "hysteria2", "orphan.yaml")
-	nonOrphanCaddy := filepath.Join(root, "live", "caddy", "config.json")
+	staleCaddySingleton := filepath.Join(root, "live", "caddy", "config.json")
 	aggregateOnlyMieruSidecar := filepath.Join(root, "live", "mieru", "sidecar.json")
 
 	if err := atomicfile.Write(orphanCaddy, []byte("orphan caddy content"), 0o600, 0o700); err != nil {
@@ -78,8 +78,8 @@ func TestLiveConfigPromotionOrphans(t *testing.T) {
 	if err := atomicfile.Write(orphanHysteria2, []byte("orphan hysteria2 content"), 0o600, 0o700); err != nil {
 		t.Fatalf("write orphan hysteria2: %v", err)
 	}
-	if err := atomicfile.Write(nonOrphanCaddy, []byte("non-orphan caddy"), 0o600, 0o700); err != nil {
-		t.Fatalf("write non-orphan caddy: %v", err)
+	if err := atomicfile.Write(staleCaddySingleton, []byte("stale consolidated caddy"), 0o600, 0o700); err != nil {
+		t.Fatalf("write stale caddy singleton: %v", err)
 	}
 	if err := atomicfile.Write(aggregateOnlyMieruSidecar, []byte("do not scan aggregate-only dir"), 0o600, 0o700); err != nil {
 		t.Fatalf("write mieru sidecar: %v", err)
@@ -97,10 +97,12 @@ func TestLiveConfigPromotionOrphans(t *testing.T) {
 		t.Fatalf("unexpected liveFiles: %+v", liveFiles)
 	}
 
-	// Four backups: orphan consolidated Caddy JSON, legacy per-inbound
-	// Caddyfile, orphan hysteria2, and the aggregate Mieru sidecar.
-	if len(backupFiles) != 4 {
-		t.Fatalf("expected 4 backup files, got %+v", backupFiles)
+	// Five backups: the retired per-inbound Caddy JSON, the legacy Caddyfile,
+	// the stale consolidated config.json (no runtime needs it in this apply —
+	// the aggregate caddy dir scan deliberately carries no excluded base
+	// name), the orphan hysteria2, and the aggregate Mieru sidecar.
+	if len(backupFiles) != 5 {
+		t.Fatalf("expected 5 backup files, got %+v", backupFiles)
 	}
 
 	if _, err := os.Stat(orphanCaddy); !os.IsNotExist(err) {
@@ -117,16 +119,21 @@ func TestLiveConfigPromotionOrphans(t *testing.T) {
 	if _, err := os.Stat(aggregateOnlyMieruSidecar); !os.IsNotExist(err) {
 		t.Fatalf("aggregate-only mieru sidecar should be removed as orphan, but stat got: %v", err)
 	}
-	assertFileBody(t, nonOrphanCaddy, "non-orphan caddy")
+	// The consolidated singleton is orphaned too when no runtime needs it:
+	// leaving it would keep stale auth_credentials on disk (audit #123).
+	if _, err := os.Stat(staleCaddySingleton); !os.IsNotExist(err) {
+		t.Fatalf("stale caddy singleton should be removed as orphan, but stat got: %v", err)
+	}
 
 	rollbackFiles, _ := promotion.Rollback(records, liveFiles)
-	if len(rollbackFiles) != 5 {
-		t.Fatalf("expected 5 rollback files, got %+v", rollbackFiles)
+	if len(rollbackFiles) != 6 {
+		t.Fatalf("expected 6 rollback files, got %+v", rollbackFiles)
 	}
 
 	assertFileBody(t, orphanCaddy, "orphan caddy content")
 	assertFileBody(t, legacyCaddy, "legacy caddy content")
 	assertFileBody(t, orphanHysteria2, "orphan hysteria2 content")
+	assertFileBody(t, staleCaddySingleton, "stale consolidated caddy")
 	assertFileBody(t, aggregateOnlyMieruSidecar, "do not scan aggregate-only dir")
 	if _, err := os.Stat(liveMieru); !os.IsNotExist(err) {
 		t.Fatalf("new live file should be removed on rollback, stat got: %v", err)
