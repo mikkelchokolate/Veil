@@ -41,6 +41,7 @@ ${SUDO} install -m 0755 "${runtime_dir}/mita" /usr/local/bin/mita
 ${SUDO} install -m 0755 "${runtime_dir}/caddy" /usr/local/bin/caddy
 ${SUDO} install -m 0755 "${runtime_dir}/mieru" /usr/local/bin/mieru
 ${SUDO} install -m 0755 "${runtime_dir}/naive" /usr/local/bin/naive
+${SUDO} install -m 0755 "${runtime_dir}/sing-box" /usr/local/bin/sing-box
 
 # olcRTC is source-built and its immutable commit/integrity policy lives in the
 # product runtime descriptor. Provision it through Veil itself instead of
@@ -56,10 +57,10 @@ else
 fi
 
 /usr/local/bin/caddy list-modules | grep -Fx http.handlers.forward_proxy
-command -v hysteria caddy mita mieru naive olcrtc
+command -v hysteria caddy mita mieru naive sing-box olcrtc
 
 ci_step "assert protocol binaries are real (not veil shims)"
-for bin in caddy naive mita mieru hysteria olcrtc; do
+for bin in caddy naive mita mieru hysteria sing-box olcrtc; do
   command -v "${bin}" >/dev/null
   [ "$(readlink -f "$(command -v "${bin}")")" != /usr/local/bin/veil ]
 done
@@ -110,6 +111,10 @@ ci_run e2e-mieru-udp run_proto TestRequiredMieruUDPDataPath
 ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-mieru-udp.log"
 ci_run e2e-naiveproxy run_proto TestRequiredNaiveProxyDataPath
 ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-naiveproxy.log"
+# WARP outbound runtime: the pinned sing-box must accept the exact config Veil
+# renders — schema drift is the breakage class upstream-compat tracks (#470).
+ci_run e2e-warp-singbox run_proto TestRequiredWarpSingBoxConfig
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-warp-singbox.log"
 ci_run e2e-olcrtc-contract run_proto TestRequiredOlcRTCRuntimeContract
 ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-olcrtc-contract.log"
 ci_run e2e-olcrtc-local-data-path run_olcrtc_upstream_local

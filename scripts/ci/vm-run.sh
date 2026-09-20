@@ -149,6 +149,14 @@ run_job_smolvm() {
   local machine="veil-ci-system-$$"
   local rc=0
   printf '%s\n' "${JOB}" > "${EXCHANGE}/job"
+  # smolvm cannot inject argv into a systemd guest: persist JOB_ARGS on the
+  # exchange (one per line, so args containing spaces survive) for run-job.sh
+  # to forward to guest-run unchanged (#474).
+  if [ "${#JOB_ARGS[@]}" -gt 0 ]; then
+    printf '%s\n' "${JOB_ARGS[@]}" > "${EXCHANGE}/job-args"
+  else
+    : > "${EXCHANGE}/job-args"
+  fi
   printf '%s\n' "${CI_FULL_PHASE:-system}" > "${EXCHANGE}/full-phase"
   printf '%s\n' "${CI_SOURCE_SHA}" > "${EXCHANGE}/source-sha"
   : > "${EXCHANGE}/systemd-run-request"
