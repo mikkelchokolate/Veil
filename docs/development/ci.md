@@ -134,7 +134,11 @@ ubuntu:24.04@sha256:<pinned>
                               (hysteria2, mita, mieru, naive, sing-box, caddy)
 ```
 
-- `base` runs: frontend, test, lint, stress.
+- `base` runs: frontend, test, lint, multi-process, sigkill, and
+  filesystem-faults. The last three are separate required jobs in
+  `.github/workflows/ci.yml`; local `full`/`ci-job` runs must cover them to
+  claim PR-gate parity. `stress` is NOT in this set — `make ci-stress` is a
+  separate, non-gating flake hunt.
 - `browser` runs: browser-e2e.
 - `system` runs in a booted systemd smolvm guest: privilege-boundary, e2e, and
   install-acceptance (real `veil install` + unit/panel/firewall assertions,
@@ -167,7 +171,7 @@ make ci-fast    # quick host checks (seconds). NOT a full CI.
 make ci         # optional smolvm jobs plus host-Docker image build
 make ci-full    # optional browser/systemd VM jobs plus host-Docker package smoke
 make ci-pr      # optional ci-full on the temporary merge with origin/main
-make ci-stress  # race/shuffle stress for historically flaky tests
+make ci-stress  # optional, non-gating: race/shuffle stress for historically flaky tests
 
 make ci-job JOB=test            # one job in a VM
 make ci-job JOB=e2e

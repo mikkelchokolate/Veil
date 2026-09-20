@@ -1,7 +1,7 @@
 # Ubuntu 24.04 amd64 package manifest.
 # Captured from the repository-pinned ubuntu:24.04 digest after apt-get update.
-# The image installs package names (not brittle apt=version constraints); this file
-# records the expected candidates and is refreshed when the base digest changes.
+# The image installs locked name=version pairs (apt-get install pkg=version);
+# refresh this file when the base digest or an intended package set changes.
 
 [target:base]
 bash 5.2.21-2ubuntu4

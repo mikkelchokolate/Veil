@@ -12,21 +12,29 @@ import (
 // toolchain checksum, which silently breaks `veil runtime install` on a
 // fresh server with no system Go (the installer provisions Go itself, then
 // rejects the download as a checksum mismatch). It queries the go.dev
-// release index and skips if the network is unavailable so it never flakes
-// offline.
+// release index. In the required `test` job (non-short mode) fetch, HTTP and
+// decode failures are fatal — a soft skip would green the pin gate on a
+// registry outage or API change (#431). `go test -short` is the only escape,
+// reserved for offline local development.
 func TestPinnedGoChecksumsMatchUpstream(t *testing.T) {
+	skipOrFail := func(format string, args ...any) {
+		if testing.Short() {
+			t.Skipf(format, args...)
+		}
+		t.Fatalf(format, args...)
+	}
 	client := &http.Client{Timeout: 20 * time.Second}
 	resp, err := client.Get("https://go.dev/dl/?mode=json&include=all")
 	if err != nil {
-		t.Skipf("network unavailable, skipping checksum verification: %v", err)
+		skipOrFail("cannot reach go.dev release index (required-job checksum gate must not soft-skip): %v", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Skipf("go.dev returned HTTP %d, skipping", resp.StatusCode)
+		skipOrFail("go.dev returned HTTP %d (required-job checksum gate must not soft-skip)", resp.StatusCode)
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		t.Skipf("read go.dev index failed, skipping: %v", err)
+		skipOrFail("read go.dev index failed (required-job checksum gate must not soft-skip): %v", err)
 	}
 
 	type goFile struct {
@@ -42,7 +50,7 @@ func TestPinnedGoChecksumsMatchUpstream(t *testing.T) {
 	}
 	var releases []goRelease
 	if err := json.Unmarshal(body, &releases); err != nil {
-		t.Skipf("decode go.dev index failed, skipping: %v", err)
+		skipOrFail("decode go.dev index failed (required-job checksum gate must not soft-skip): %v", err)
 	}
 
 	// platform key (e.g. "linux-amd64") -> upstream sha256

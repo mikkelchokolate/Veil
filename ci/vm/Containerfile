@@ -40,26 +40,43 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GOPROXY=${CI_GO_GOPROXY} \
     PATH=/usr/local/go/bin:/usr/local/node/bin:/root/go/bin:/home/ci/go/bin:$PATH
 
-# --- System packages (list locked in packages.lock [target:base]) ------------
+# --- System packages (name=version pairs locked in packages.lock [target:base])
 COPY packages.lock /tmp/packages.lock
 RUN set -euo pipefail; \
     printf 'path-include=/usr/share/man/man1/*\npath-include=/usr/share/man/*/man1/*\n' >/etc/dpkg/dpkg.cfg.d/zz-veil-man1; \
     apt-get update; \
-    awk '/^\[target:base\]/{f=1;next} /^\[/{f=0} f && !/^#/ && NF {print $1}' /tmp/packages.lock \
+    # Locked name=version pairs are enforced at install time — names alone let
+    # rebuilds silently pull newer packages while the lock is ignored (#464).
+    awk '/^\[target:base\]/{f=1;next} /^\[/{f=0} f && !/^#/ && NF {print $1 "=" $2}' /tmp/packages.lock \
       | xargs apt-get install -y --no-install-recommends; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
 
-# --- Go toolchain (checksum-verified) -----------------------------------------
+# --- Go toolchain (checksum-verified, arch-aware) ------------------------------
+# TARGETARCH is set by BuildKit; linux-<arch> tarballs and the matching
+# CI_GO_TARBALL_SHA256{,_ARM64} pin are selected per arch (#453).
+ARG TARGETARCH
+ARG CI_GO_TARBALL_SHA256_ARM64
 RUN set -euo pipefail; \
-    curl --fail --location "https://dl.google.com/go/go${CI_GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tgz; \
-    echo "${CI_GO_TARBALL_SHA256}  /tmp/go.tgz" | sha256sum --check -; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) go_sha="${CI_GO_TARBALL_SHA256}" ;; \
+      arm64) go_sha="${CI_GO_TARBALL_SHA256_ARM64}" ;; \
+      *) echo "unsupported TARGETARCH '${TARGETARCH}' for Go toolchain" >&2; exit 1 ;; \
+    esac; \
+    curl --fail --location "https://dl.google.com/go/go${CI_GO_VERSION}.linux-${TARGETARCH:-amd64}.tar.gz" -o /tmp/go.tgz; \
+    echo "${go_sha}  /tmp/go.tgz" | sha256sum --check -; \
     tar -C /usr/local -xzf /tmp/go.tgz; \
     rm -f /tmp/go.tgz
 
-# --- Node + pnpm (checksum-verified) -------------------------------------------
+# --- Node + pnpm (checksum-verified, arch-aware) --------------------------------
+ARG CI_NODE_TARBALL_SHA256_ARM64
 RUN set -euo pipefail; \
-    curl --fail --location "https://nodejs.org/dist/v${CI_NODE_VERSION}/node-v${CI_NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz; \
-    echo "${CI_NODE_TARBALL_SHA256}  /tmp/node.tar.xz" | sha256sum --check -; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) node_arch="x64"; node_sha="${CI_NODE_TARBALL_SHA256}" ;; \
+      arm64) node_arch="arm64"; node_sha="${CI_NODE_TARBALL_SHA256_ARM64}" ;; \
+      *) echo "unsupported TARGETARCH '${TARGETARCH}' for Node toolchain" >&2; exit 1 ;; \
+    esac; \
+    curl --fail --location "https://nodejs.org/dist/v${CI_NODE_VERSION}/node-v${CI_NODE_VERSION}-linux-${node_arch}.tar.xz" -o /tmp/node.tar.xz; \
+    echo "${node_sha}  /tmp/node.tar.xz" | sha256sum --check -; \
     mkdir -p /usr/local/node; \
     tar -C /usr/local/node --strip-components=1 -xJf /tmp/node.tar.xz; \
     rm -f /tmp/node.tar.xz; \
@@ -107,6 +124,15 @@ RUN chmod +x /opt/ci/*.sh
 # defined before the stage that copies from them, so this sits between the
 # toolchain and base stages.
 FROM toolchain AS runtimebuild
+
+# The protocol-runtime asset pins in versions.sh are amd64-only — an arm64
+# build must fail loudly here instead of silently installing amd64 binaries
+# into an arm64 image (#453).
+ARG TARGETARCH
+RUN [ "${TARGETARCH:-amd64}" = "amd64" ] || { \
+      echo "protocol runtime asset pins are amd64-only; arm64 runtimebuild is unsupported" >&2; \
+      exit 1; \
+    }
 
 ARG CI_HYSTERIA_TAG
 ARG CI_HYSTERIA_ASSET
@@ -184,7 +210,7 @@ ARG CI_PLAYWRIGHT_VERSION
 COPY packages.lock /tmp/packages.lock
 RUN set -euo pipefail; \
     apt-get update; \
-    awk '/^\[target:browser\]/{f=1;next} /^\[/{f=0} f && !/^#/ && NF {print $1}' /tmp/packages.lock \
+    awk '/^\[target:browser\]/{f=1;next} /^\[/{f=0} f && !/^#/ && NF {print $1 "=" $2}' /tmp/packages.lock \
       | xargs apt-get install -y --no-install-recommends; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
 
@@ -203,6 +229,14 @@ RUN set -euo pipefail; \
 # ==============================================================================
 FROM base AS system
 
+# Docker CLI/Buildx pins are amd64-only (x86_64 tarball, linux-amd64 plugin);
+# fail loudly on other arches rather than hardcoding amd64 binaries (#453).
+ARG TARGETARCH
+RUN [ "${TARGETARCH:-amd64}" = "amd64" ] || { \
+      echo "Docker CLI/Buildx pins are amd64-only; arm64 system image is unsupported" >&2; \
+      exit 1; \
+    }
+
 ARG CI_DOCKER_CLI_VERSION
 ARG CI_DOCKER_CLI_SHA256
 ARG CI_DOCKER_BUILDX_VERSION
@@ -211,7 +245,7 @@ ARG CI_DOCKER_BUILDX_SHA256
 COPY packages.lock /tmp/packages.lock
 RUN set -euo pipefail; \
     apt-get update; \
-    awk '/^\[target:system\]/{f=1;next} /^\[/{f=0} f && !/^#/ && NF {print $1}' /tmp/packages.lock \
+    awk '/^\[target:system\]/{f=1;next} /^\[/{f=0} f && !/^#/ && NF {print $1 "=" $2}' /tmp/packages.lock \
       | xargs apt-get install -y --no-install-recommends; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
 
