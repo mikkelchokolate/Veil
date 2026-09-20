@@ -29,6 +29,12 @@ jobs:
         run: |
           source scripts/ci/versions.sh
           { echo "go_version=${CI_GO_VERSION}"; echo "node_version=${CI_NODE_VERSION}"; echo "pnpm_version=${CI_PNPM_VERSION}"; } >> "$GITHUB_OUTPUT"
+          # Pin the Go module transport exactly like scripts/ci/common.sh does
+          # for every required job — otherwise `go build`, `go mod tidy`
+          # (caddy/forwardproxy) and `go test` here silently diverge from gated
+          # CI's http2client=0/proxy behavior (#469). $GITHUB_ENV reaches every
+          # later step; no go invocation in this job runs under sudo.
+          { echo "GODEBUG=${CI_GO_GODEBUG}"; echo "GOPROXY=${CI_GO_GOPROXY}"; } >> "$GITHUB_ENV"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ steps.versions.outputs.go_version }}
@@ -47,21 +53,31 @@ jobs:
           source scripts/ci/versions.sh
           {
             echo "Pinned baseline:"
-            echo "  hysteria ${CI_HYSTERIA_TAG} | mita ${CI_MITA_TAG} | naiveproxy-client ${CI_NAIVE_CLIENT_TAG} | sing-box ${CI_SINGBOX_TAG}"
+            echo "  hysteria ${CI_HYSTERIA_TAG} | mita/mieru ${CI_MITA_TAG} | naiveproxy-client ${CI_NAIVE_CLIENT_TAG} | sing-box ${CI_SINGBOX_TAG}"
+            echo "  naiveproxy server: caddy ${CI_CADDY_VERSION} | forwardproxy ${CI_FORWARDPROXY_VERSION}"
             echo ""
             echo "| runtime | pinned | latest |"
             echo "|---|---|---|"
-            for repo in apernet/hysteria enfein/mieru klzgrad/naiveproxy SagerNet/sing-box; do
+            for repo in apernet/hysteria enfein/mieru klzgrad/naiveproxy SagerNet/sing-box caddyserver/caddy; do
               latest="$(gh api "repos/${repo}/releases/latest" --jq .tag_name)"
+              label="${repo}"
               case "${repo}" in
                 apernet/hysteria)    pinned="${CI_HYSTERIA_TAG}" ;;
                 enfein/mieru)        pinned="${CI_MITA_TAG}" ;;
-                klzgrad/naiveproxy)  pinned="${CI_NAIVE_CLIENT_TAG}" ;;
+                klzgrad/naiveproxy)  pinned="${CI_NAIVE_CLIENT_TAG}"; label="klzgrad/naiveproxy (client)" ;;
                 SagerNet/sing-box)   pinned="${CI_SINGBOX_TAG}" ;;
+                caddyserver/caddy)   pinned="${CI_CADDY_VERSION}"; label="caddyserver/caddy (naiveproxy server)" ;;
               esac
               mark=""; [ "${pinned}" != "${latest}" ] && mark=" (drift)"
-              echo "| ${repo} | ${pinned} | ${latest}${mark} |"
+              echo "| ${label} | ${pinned} | ${latest}${mark} |"
             done
+            # The naiveproxy server module pins a forwardproxy COMMIT (go.mod
+            # replace), not a release tag — compare it against master HEAD so
+            # server-side pin drift is visible too (#471).
+            fp_latest="$(gh api repos/klzgrad/forwardproxy/commits/master --jq .sha)"
+            mark=""
+            if [ "${CI_FORWARDPROXY_VERSION}" != "${fp_latest}" ]; then mark=" (drift)"; fi
+            echo "| klzgrad/forwardproxy@master (naiveproxy server) | ${CI_FORWARDPROXY_VERSION:0:12} | ${fp_latest:0:12}${mark} |"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Build web/dist (embedded into the binary)
@@ -82,16 +98,16 @@ jobs:
       - name: Install LATEST hysteria2 server
         run: |
           set -euo pipefail
-          gh release download --repo apernet/hysteria \
-            --pattern 'hysteria-linux-amd64' --dir /tmp/hysteria-latest --clobber
+          source scripts/ci/gh-release-verify.sh
+          gh_release_download_verified apernet/hysteria 'hysteria-linux-amd64' 'hysteria-linux-amd64' /tmp/hysteria-latest
           sudo install -m 0755 /tmp/hysteria-latest/hysteria-linux-amd64 /usr/local/bin/hysteria
           hysteria version
 
       - name: Install LATEST mieru server (mita)
         run: |
           set -euo pipefail
-          gh release download --repo enfein/mieru \
-            --pattern 'mita_*_linux_amd64.tar.gz' --dir /tmp/mita --clobber
+          source scripts/ci/gh-release-verify.sh
+          gh_release_download_verified enfein/mieru 'mita_' '_linux_amd64.tar.gz' /tmp/mita
           tar -xzf /tmp/mita/mita_*_linux_amd64.tar.gz -C /tmp/mita
           mita_bin="$(find /tmp/mita -type f -name mita -perm -u+x | head -n1)"
           sudo install -m 0755 "$mita_bin" /usr/local/bin/mita
@@ -116,8 +132,8 @@ jobs:
       - name: Install LATEST Mieru client
         run: |
           set -euo pipefail
-          gh release download --repo enfein/mieru \
-            --pattern 'mieru_*_linux_amd64.tar.gz' --dir /tmp/mieru-client --clobber
+          source scripts/ci/gh-release-verify.sh
+          gh_release_download_verified enfein/mieru 'mieru_' '_linux_amd64.tar.gz' /tmp/mieru-client
           tar -xzf /tmp/mieru-client/mieru_*_linux_amd64.tar.gz -C /tmp/mieru-client
           client_bin="$(find /tmp/mieru-client -type f -name mieru -perm -u+x | head -n1)"
           sudo install -m 0755 "$client_bin" /usr/local/bin/mieru
@@ -126,12 +142,25 @@ jobs:
       - name: Install LATEST NaiveProxy client
         run: |
           set -euo pipefail
-          gh release download --repo klzgrad/naiveproxy \
-            --pattern 'naiveproxy-v*-linux-x64.tar.xz' --dir /tmp/naiveproxy --clobber
+          source scripts/ci/gh-release-verify.sh
+          gh_release_download_verified klzgrad/naiveproxy 'naiveproxy-v' '-linux-x64.tar.xz' /tmp/naiveproxy
           tar -xJf /tmp/naiveproxy/naiveproxy-v*-linux-x64.tar.xz -C /tmp/naiveproxy
           naive_bin="$(find /tmp/naiveproxy -type f -name naive -perm -u+x | head -n1)"
           sudo install -m 0755 "$naive_bin" /usr/local/bin/naive
           naive --version
+
+      # sing-box is Veil's WARP outbound runtime — it is in the drift table, so
+      # install the latest release and actually exercise it: the compat test
+      # below asserts the sing-box config Veil renders still passes
+      # `sing-box check` on the latest upstream schema (#470).
+      - name: Install LATEST sing-box (warp outbound runtime)
+        run: |
+          set -euo pipefail
+          source scripts/ci/gh-release-verify.sh
+          gh_release_download_verified SagerNet/sing-box 'sing-box-' '-linux-amd64.tar.gz' /tmp/sing-box
+          tar -xzf /tmp/sing-box/sing-box-*-linux-amd64.tar.gz -C /tmp/sing-box
+          sudo install -m 0755 "$(find /tmp/sing-box -type f -name sing-box | head -n1)" /usr/local/bin/sing-box
+          sing-box version
 
       - name: "Compatibility: protocol data paths against latest runtimes"
         run: |
@@ -142,7 +171,8 @@ jobs:
             TestRequiredHysteria2DataPath \
             TestRequiredMieruTCPDataPath \
             TestRequiredMieruUDPDataPath \
-            TestRequiredNaiveProxyDataPath; do
+            TestRequiredNaiveProxyDataPath \
+            TestRequiredWarpSingBoxConfig; do
             # Every required test must actually run and pass: a zero-match
             # -run exits 0 with "[no tests to run]", so exit status alone is
             # not evidence — require the --- PASS line (#460). All tests still
