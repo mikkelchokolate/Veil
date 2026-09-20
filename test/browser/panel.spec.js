@@ -53,9 +53,21 @@ test.describe('Veil Panel — React SPA', () => {
     await page.locator('#login-username').fill(adminUsername);
     await page.locator('#login-password').fill(adminPassword);
     await page.getByRole('button', { name: /^sign in$/i }).click();
-    await expect(page.getByRole('link', { name: /clients/i }).first()).toBeVisible({
-      timeout: 20_000,
-    });
+    const nav = page.getByRole('link', { name: /clients/i }).first();
+    try {
+      await expect(nav).toBeVisible({ timeout: 20_000 });
+    } catch {
+      // Same rate-limit tolerance as login(): a 429 bursts the static-form
+      // pending-login submit onto a transient alert — wait out the window and
+      // resubmit through the now-mounted SPA form.
+      if (await page.locator('[role="alert"]').isVisible().catch(() => false)) {
+        await page.waitForTimeout(15_000);
+        await page.locator('#login-username').fill(adminUsername);
+        await page.locator('#login-password').fill(adminPassword);
+        await page.getByRole('button', { name: /^sign in$/i }).click();
+      }
+      await expect(nav).toBeVisible({ timeout: 20_000 });
+    }
   });
 
   test('admin can sign in and reach the clients page', async ({ page }) => {

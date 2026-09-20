@@ -567,7 +567,10 @@ fi
 # The acceptance binary was built earlier; nfpm packages dist/veil.
 mkdir -p dist /tmp/veil-pkg
 cp /tmp/veil-install-acceptance dist/veil
-export VEIL_VERSION="9.9.9" VEIL_ARCH="amd64" VEIL_MAINTAINER="Veil CI <veil@users.noreply.github.com>"
+# The .deb arch must match the runner (the arm64 leg cannot install an amd64
+# package — issue #503 exercises this job on both architectures).
+pkg_arch="$(dpkg --print-architecture)"
+export VEIL_VERSION="9.9.9" VEIL_ARCH="${pkg_arch}" VEIL_MAINTAINER="Veil CI <veil@users.noreply.github.com>"
 "${nfpm_bin}" package --config packaging/nfpm.yaml --packager deb --target /tmp/veil-pkg
 
 ${SUDO} apt-get install -y /tmp/veil-pkg/*.deb
