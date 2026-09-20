@@ -361,8 +361,15 @@ func TestPolicyResolveFirewall(t *testing.T) {
 	_, err = policy.ResolveFirewall(FirewallRequest{RuleIDs: []string{"allow-unknown"}})
 	assertOperationErrorCode(t, err, ErrorForbiddenOperation)
 
-	_, err = policy.ResolveFirewall(FirewallRequest{})
-	assertOperationErrorCode(t, err, ErrorInvalidRequest)
+	// An empty request is a valid prune-only reconcile: stale Veil-managed
+	// rules are removed and nothing is staged.
+	resolved, err = policy.ResolveFirewall(FirewallRequest{})
+	if err != nil {
+		t.Fatalf("empty firewall request must resolve as prune-only: %v", err)
+	}
+	if len(resolved.Rules) != 0 || len(resolved.RuleIDs) != 0 {
+		t.Fatalf("empty request resolved to %+v", resolved)
+	}
 
 	resolved, err = policy.ResolveFirewall(FirewallRequest{Rules: []FirewallRule{{Command: "ufw", Args: []string{"allow", "443/tcp", "comment", "HTTPS"}}}})
 	if err != nil {
