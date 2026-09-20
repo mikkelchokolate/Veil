@@ -108,9 +108,9 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 		if panelCaddyActive && port == panelCaddyPort {
 			errs = append(errs, fmt.Sprintf("warp.socksPort: TCP port %d conflicts with the Caddy public panel listener", port))
 		}
-		// The sing-box WARP SOCKS inbound is TCP-only; reserving the UDP port
-		// as well falsely conflicts with Hysteria2/Mieru UDP listeners on the
-		// same port number.
+		// The WARP SOCKS listener is TCP-only — reserving the UDP port too
+		// would falsely reject a UDP inbound (e.g. hysteria2) that merely
+		// shares the port number (#359).
 		seenPorts["tcp:"+itoa(port)] = "warp"
 	}
 

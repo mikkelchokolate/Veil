@@ -199,6 +199,20 @@ func TestRenderConfigWithWarp(t *testing.T) {
 	if !strings.Contains(artifacts[0].Body, `"upstream": "socks5://127.0.0.1:40001"`) {
 		t.Fatalf("WARP upstream is missing from Caddy JSON: %s", artifacts[0].Body)
 	}
+
+	// #576: the caddy upstream must dial the configured socksListen, not a
+	// hardcoded 127.0.0.1 that can diverge from the sing-box bind.
+	input.Warp.SocksListen = "127.0.0.2"
+	artifacts, ok, err = p.RenderConfig(input)
+	if err != nil {
+		t.Fatalf("RenderConfig error: %v", err)
+	}
+	if !ok || len(artifacts) != 1 {
+		t.Fatalf("RenderConfig ok=%v len=%d, want true/1", ok, len(artifacts))
+	}
+	if !strings.Contains(artifacts[0].Body, `"upstream": "socks5://127.0.0.2:40001"`) {
+		t.Fatalf("WARP upstream did not use configured socksListen: %s", artifacts[0].Body)
+	}
 }
 
 func TestRenderConfigInboundProtocolFieldsOverride(t *testing.T) {

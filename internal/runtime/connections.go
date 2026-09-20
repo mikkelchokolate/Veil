@@ -72,7 +72,7 @@ func findInodeByPortInSocketLines(proto, hexPort string, lines []string) string 
 				continue
 			}
 		} else if proto == "udp" || proto == "udp6" {
-			if !isAllZeroProcNetAddress(fields[2]) {
+			if !procNetRemoteIsWildcard(fields[2]) {
 				continue
 			}
 		}

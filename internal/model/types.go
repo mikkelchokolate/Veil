@@ -127,6 +127,17 @@ type WarpConfig struct {
 	MTU           int    `json:"mtu,omitempty"`
 }
 
+// SocksDialAddr is the address protocol upstreams dial to reach the local
+// WARP SOCKS listener. It defaults to 127.0.0.1 so renderers never diverge
+// from the configured sing-box bind (#576). Validate restricts SocksListen to
+// loopback literals, so this is always a safe local dial target.
+func (c WarpConfig) SocksDialAddr() string {
+	if c.SocksListen == "" {
+		return "127.0.0.1"
+	}
+	return c.SocksListen
+}
+
 type ClientLinksResponse struct {
 	SchemaVersion              string           `json:"schemaVersion"`
 	Domain                     string           `json:"domain"`
