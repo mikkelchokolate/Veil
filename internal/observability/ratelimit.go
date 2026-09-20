@@ -138,14 +138,6 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-func extractClientIP(r *http.Request) string {
-	address, err := (clientaddr.Resolver{}).Resolve(r)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return address
-}
-
 func (rl *RateLimiter) cleanupLoop() {
 	defer close(rl.doneCh)
 	ticker := time.NewTicker(time.Duration(cleanupInterval.Load()))

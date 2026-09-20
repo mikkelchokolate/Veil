@@ -43,7 +43,7 @@ func TestRateLimitDecisionModuleSkipsCheapReads(t *testing.T) {
 // subscription feed are gated by isRateLimitedReadPath, so Decide has to
 // return limited with the /s/ budget, not an unlimited pass.
 func TestRateLimitDecisionModuleAppliesSubscriptionFeedLimit(t *testing.T) {
-	module := NewRateLimitDecisionModule(100, 20, map[string]EndpointLimit{
+	module := NewRateLimitDecisionModule(100, 20, nil, map[string]EndpointLimit{
 		"/s/": {RatePerMinute: 30, Burst: 6},
 	})
 	decision := module.Decide(http.MethodGet, "/s/feed-token-abc", "203.0.113.10")

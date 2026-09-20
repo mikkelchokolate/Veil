@@ -3,14 +3,17 @@ package observability
 import (
 	"net/http/httptest"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/clientaddr"
 )
 
 func TestUntrustedRemoteCannotForgeForwardedAddress(t *testing.T) {
 	req := httptest.NewRequest("POST", "http://panel/api/auth/login", nil)
 	req.RemoteAddr = "198.51.100.20:54321"
 	req.Header.Set("X-Forwarded-For", "203.0.113.99")
-	if got := extractClientIP(req); got != "198.51.100.20" {
-		t.Fatalf("untrusted X-Forwarded-For selected as canonical address: got %q", got)
+	got, err := (clientaddr.Resolver{}).Resolve(req)
+	if err != nil || got != "198.51.100.20" {
+		t.Fatalf("untrusted X-Forwarded-For selected as canonical address: got %q, err=%v", got, err)
 	}
 }
 
