@@ -1,11 +1,13 @@
 package firewall
 
 import (
+	"log"
 	"net"
-	"net/netip"
+	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/bindregistry"
 	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
@@ -52,43 +54,57 @@ func BuildRuleResponses(settings model.Settings, inbounds []model.Inbound) []Rul
 		}
 		builder.Add(port, "tcp", "Veil panel HTTPS")
 	} else if host, portStr, err := net.SplitHostPort(settings.PanelListen); err == nil {
-		// A loopback or explicitly local panel is unreachable through the
-		// firewall, so publishing a "Veil panel" allow only punches a useless
-		// hole — and worse, the reconcile path can count it as management
-		// access and enable UFW with no SSH allow at all (#356). Skip it the
-		// same way the install-time UFWPlan skips local panels.
-		if settings.PanelAccess != "local" && !isLoopbackPanelHost(host) {
-			if port, err := strconv.Atoi(portStr); err == nil {
-				builder.Add(port, "tcp", "Veil panel")
-			}
+		// A loopback-only panel must not appear in the public firewall set:
+		// it would punch a useless external allow and be mistaken for
+		// management access when UFW is enabled (install's UFWPlan skips the
+		// panel rule entirely for local access — audit #356).
+		if port, err := strconv.Atoi(portStr); err == nil && !panelListenIsLoopbackOnly(settings.PanelAccess, host) {
+			builder.Add(port, "tcp", "Veil panel")
 		}
 	}
-	// Planned ACME challenge binds are part of the desired set, not only
-	// preserved install leftovers: caddy installs leave no :80 rule, and a
-	// hysteria2-only domain is switched to HTTP-01 on :80 at challenge time,
-	// so apply must open the port for issuance to succeed (#341).
+	// ACME challenge binds planned by caddyassembly — http-01 on :80 for a
+	// hysteria2-only domain, or tls-alpn-01 on :443 when no Caddy listener
+	// already owns it — need matching firewall openings or issuance can never
+	// complete (audit #341). When a compatible Caddy listener already owns the
+	// port the plan adds no challenge bind, and that owner's rule covers it.
 	if plan, _, _, err := caddyassembly.BuildFinalRenderPlan(settings, inbounds); err == nil {
-		for key, owner := range plan.ACMEChallenges {
-			comment := "Veil ACME HTTP-01"
-			if owner.ChallengeMode == "tls-alpn-01" {
-				comment = "Veil ACME TLS-ALPN-01"
+		challengePorts := make([]int, 0, len(plan.ACMEChallenges))
+		for key := range plan.ACMEChallenges {
+			if key.Network == bindregistry.ListenTCP {
+				challengePorts = append(challengePorts, key.Port)
 			}
-			builder.Add(key.Port, string(key.Network), comment)
 		}
+		sort.Ints(challengePorts)
+		for _, port := range challengePorts {
+			builder.Add(port, "tcp", "Veil ACME challenge")
+		}
+	} else {
+		// Fail-closed for openings is deliberate — never punch a port the plan
+		// did not name — but surface the failure so a transient plan-build
+		// error is not silently mistaken for "no challenges planned" (#341).
+		log.Printf("firewall: cannot enumerate ACME challenge binds: %v", err)
 	}
 	return builder.Rules()
 }
 
-// isLoopbackPanelHost reports whether a PanelListen host is loopback-only.
-// Non-IP hosts (empty wildcard binds, hostnames) are conservatively treated
-// as publicly reachable so the panel rule is not dropped by accident.
-func isLoopbackPanelHost(host string) bool {
+// panelListenIsLoopbackOnly reports whether the panel is reachable on
+// loopback only: either explicitly configured local access or a loopback
+// listen host. A wildcard/empty host or a public address keeps the rule.
+func panelListenIsLoopbackOnly(panelAccess, host string) bool {
+	if strings.EqualFold(strings.TrimSpace(panelAccess), "local") {
+		return true
+	}
 	host = strings.TrimSpace(host)
+	if host == "" {
+		return false
+	}
 	if strings.EqualFold(host, "localhost") {
 		return true
 	}
-	addr, err := netip.ParseAddr(host)
-	return err == nil && addr.IsLoopback()
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }
 
 func BuildFirewallRuleResponses(settings model.Settings, inbounds []model.Inbound) []RuleResponse {

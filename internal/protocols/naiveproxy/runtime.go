@@ -7,7 +7,10 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
-const templateUnit = "veil-caddy.service"
+// veil-caddy.service is a single consolidated unit, NOT a systemd template:
+// TemplateUnit must stay empty so hasTemplateRuntime/protocolHasTemplateRuntime
+// classify NaiveProxy as an aggregate runtime (like mieru) instead of a
+// per-inbound template protocol.
 
 // RuntimeDescriptors returns the single veil-caddy.service runtime for all
 // naiveproxy inbounds. The inbound/Caddy redesign consolidates Caddy into one
@@ -24,7 +27,6 @@ func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.Ma
 			ActionName:       "caddy",
 			Transport:        "tcp",
 			Unit:             "veil-caddy.service",
-			TemplateUnit:     templateUnit,
 			PromotedSubpath:  generatedconfig.CaddyJSONConfigSubpath,
 			PromotedVerb:     "reload",
 			ManualRestart:    true,
@@ -39,7 +41,6 @@ func (p Plugin) RuntimeDescriptors(enabledInbounds []model.Inbound) []service.Ma
 				Protocol:         p.Protocol(),
 				Transport:        "tcp",
 				Unit:             "veil-caddy.service",
-				TemplateUnit:     templateUnit,
 				PromotedSubpath:  generatedconfig.CaddyJSONConfigSubpath,
 				PromotedVerb:     "reload",
 				ManualRestart:    true,

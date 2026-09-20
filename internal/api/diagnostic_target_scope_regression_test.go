@@ -76,6 +76,37 @@ func TestPingRouteRejectsHostnameResolvingOnlyToForbiddenTargets(t *testing.T) {
 	}
 }
 
+// A hostname resolving to a mix of allowed and forbidden addresses must be
+// rejected: the OS may still pick the forbidden one when the tool runs
+// (residual of #197).
+func TestPingRouteRejectsHostnameResolvingToMixedPublicAndForbidden(t *testing.T) {
+	old := pingRunner
+	pingCalled := false
+	pingRunner = func(host string, count int) PingResult {
+		pingCalled = true
+		return PingResult{}
+	}
+	t.Cleanup(func() { pingRunner = old })
+	oldLookup := diagnosticTargetLookup
+	diagnosticTargetLookup = func(ctx context.Context, host string) ([]net.IP, error) {
+		if host == "evil.example" {
+			return []net.IP{net.ParseIP("203.0.113.10"), net.ParseIP("169.254.169.254")}, nil
+		}
+		return nil, &net.DNSError{IsNotFound: true}
+	}
+	t.Cleanup(func() { diagnosticTargetLookup = oldLookup })
+
+	request := diagnosticJSONRequest(t, "/api/tools/ping", map[string]any{"host": "evil.example", "count": 1})
+	response := httptest.NewRecorder()
+	DiagnosticToolRoutes{}.handlePing(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if pingCalled {
+		t.Fatal("ping runner invoked for mixed-resolution hostname")
+	}
+}
+
 func TestDNSLookupRouteRejectsForbiddenTargets(t *testing.T) {
 	old := dnsLookuper
 	called := false

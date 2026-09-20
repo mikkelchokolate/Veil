@@ -100,3 +100,39 @@ func (f *recordingFirewallApplier) ApplySafely(rules []firewall.Rule) error {
 func boolPtr(v bool) *bool {
 	return &v
 }
+
+// TestPrepareFirewallLockedReconcilesEmptyDesired is the #356 follow-up: a
+// local/loopback panel produces zero desired UFW rules, but the privileged
+// reconcile must still run so stale Veil-managed rules (for example a panel
+// allow left behind by a public -> local switch) are pruned instead of
+// stranded in ufw forever. It also keeps the apply honest: an unavailable
+// helper still fails the apply instead of silently skipping the boundary.
+func TestPrepareFirewallLockedReconcilesEmptyDesired(t *testing.T) {
+	state := newManagementState(ServerInfo{Mode: "dev"})
+	state.settings.PanelAccess = "local"
+	state.settings.PanelListen = "127.0.0.1:2096"
+	client := &recordingPrivilegedClient{
+		firewallResult: privileged.FirewallResult{Prepared: true, TransactionID: "tx-1"},
+	}
+	state.privileged = client
+	state.privilegedLocal = false
+
+	ctx := NewManagementApplyContext(state)
+	transactionID, err := ctx.PrepareFirewallLocked()
+	if err != nil {
+		t.Fatalf("PrepareFirewallLocked: %v", err)
+	}
+	if transactionID != "tx-1" {
+		t.Fatalf("transaction id = %q, want tx-1", transactionID)
+	}
+	if len(client.firewallRequests) != 1 {
+		t.Fatalf("expected one firewall prepare, got %+v", client.firewallRequests)
+	}
+	request := client.firewallRequests[0]
+	if request.Action != privileged.FirewallActionPrepare {
+		t.Fatalf("action = %q, want prepare", request.Action)
+	}
+	if len(request.Rules) != 0 {
+		t.Fatalf("local panel must produce an empty desired set, got %+v", request.Rules)
+	}
+}

@@ -159,6 +159,10 @@ func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts Options, s
 	if listen == "" {
 		listen = "127.0.0.1:2096"
 	}
+	// The rewritten veil.env must keep the controlled-CA configuration that
+	// install persisted; dropping it would silently move the running panel's
+	// Caddy issuers back to Let's Encrypt (audit #340).
+	acmeCAURL, acmeCARoot := repairACMEEnv(opts.EtcDir)
 	material := panelmaterial.NewManagedMaterial(panelmaterial.Input{
 		Paths:           panelmaterial.Paths{EtcDir: opts.EtcDir},
 		PanelAuthToken:  repairPanelAuthToken(*plan, opts.EtcDir, secret),
@@ -168,6 +172,8 @@ func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts Options, s
 		Email:           settings.Email,
 		WebBasePath:     settings.WebBasePath,
 		PanelTLSEnabled: settings.PanelAccess != "caddy",
+		ACMECAURL:       acmeCAURL,
+		ACMECARoot:      acmeCARoot,
 	})
 	if settings.PanelAccess == "caddy" {
 		removeRepairActions(plan, material.PanelTLSCertPath(), material.PanelTLSKeyPath())
@@ -209,6 +215,10 @@ func preserveExistingPanelRepairMaterial(profile *installer.RURecommendedProfile
 	if webBasePath := values["VEIL_WEB_BASE_PATH"]; webBasePath != "" {
 		profile.WebBasePath = webBasePath
 	}
+	// Preserve the controlled-CA configuration install persisted so the
+	// regenerated veil.env keeps pointing the running panel's Caddy issuers at
+	// the same ACME directory (audit #340).
+	profile.ACMECAURL, profile.ACMECARoot = repairACMEEnv(etcDir)
 	if profile.PanelAccess == "caddy" {
 		profile.PanelTLSEnabled = false
 		profile.PanelTLSCertPEM = ""
@@ -267,6 +277,24 @@ func panelPortFromListen(listen string) int {
 		return 0
 	}
 	return port
+}
+
+// repairACMEEnv resolves the controlled-CA configuration for repair-time
+// ACME issuance and veil.env regeneration. An explicit environment override
+// wins; otherwise the values install persisted in veil.env are preserved so
+// repair does not silently move the panel's issuers back to Let's Encrypt
+// (audit #338/#340).
+func repairACMEEnv(etcDir string) (caURL, caRoot string) {
+	values := readRepairEnv(filepath.Join(etcDir, "veil.env"))
+	caURL = strings.TrimSpace(os.Getenv("VEIL_ACME_CA_URL"))
+	if caURL == "" {
+		caURL = values["VEIL_ACME_CA_URL"]
+	}
+	caRoot = strings.TrimSpace(os.Getenv("VEIL_ACME_CA_ROOT"))
+	if caRoot == "" {
+		caRoot = values["VEIL_ACME_CA_ROOT"]
+	}
+	return caURL, caRoot
 }
 
 func readRepairEnv(path string) map[string]string {
@@ -404,12 +432,19 @@ func maybeIssueLEIPCert(ctx context.Context, profile *installer.RURecommendedPro
 	}
 
 	keyPath := filepath.Join(opts.EtcDir, "panel", "tls.key")
+	// Honour the same controlled-CA knobs install used: the persisted
+	// VEIL_ACME_CA_URL points issuance at the operator's ACME directory and
+	// VEIL_ACME_INSECURE skips endpoint TLS verification for controlled CAs
+	// (audit #338).
+	acmeCAURL, _ := repairACMEEnv(opts.EtcDir)
 	cert, err := leIPCertIssueFunc(ctx, acmeip.IssueOptions{
 		PublicIPv4: resolvedIP.String(),
 		HTTPPort:   opts.LEIPCertPort,
 		Email:      profile.Email,
 		CertPath:   certPath,
 		KeyPath:    keyPath,
+		CAServer:   acmeCAURL,
+		Insecure:   strings.TrimSpace(os.Getenv("VEIL_ACME_INSECURE")) != "",
 	})
 	if err != nil {
 		return err

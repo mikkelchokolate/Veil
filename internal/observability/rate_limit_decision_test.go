@@ -39,6 +39,19 @@ func TestRateLimitDecisionModuleSkipsCheapReads(t *testing.T) {
 	}
 }
 
+// The "/s/" endpoint policy (30/min) must be reachable: GETs on the public
+// subscription feed are gated by isRateLimitedReadPath, so Decide has to
+// return limited with the /s/ budget, not an unlimited pass.
+func TestRateLimitDecisionModuleAppliesSubscriptionFeedLimit(t *testing.T) {
+	module := NewRateLimitDecisionModule(100, 20, map[string]EndpointLimit{
+		"/s/": {RatePerMinute: 30, Burst: 6},
+	})
+	decision := module.Decide(http.MethodGet, "/s/feed-token-abc", "203.0.113.10")
+	if !decision.Limited || decision.Key != "/s/:203.0.113.10" || decision.RatePerSecond != 30.0/60.0 || decision.Burst != 6 {
+		t.Fatalf("decision = %+v", decision)
+	}
+}
+
 func TestRateLimitDecisionModuleUsesDefaultForMutations(t *testing.T) {
 	decision := NewRateLimitDecisionModule(60, 5, nil, nil).Decide(http.MethodPost, "/api/settings", "203.0.113.10")
 	if !decision.Limited || decision.Key != "203.0.113.10" || decision.RatePerSecond != 1 || decision.Burst != 5 {

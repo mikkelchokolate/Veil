@@ -43,11 +43,14 @@ func cookiePathForWebBase(webBasePath string) string {
 }
 
 func (s *managementState) panelCookieAttrs(r *http.Request) (path string, secure bool) {
-	s.mu.Lock()
-	panelAccess := s.settings.PanelAccess
-	webBasePath := s.settings.WebBasePath
-	s.mu.Unlock()
-	return cookiePathForWebBase(webBasePath), (r != nil && r.TLS != nil) || panelAccess == "caddy"
+	// Cookie Path must track the mount the running process actually serves
+	// (serveWebBasePath), not the mutable settings value: a settings save
+	// that drifts webBasePath before `veil repair` rewrites veil.env would
+	// otherwise emit cookies the browser never sends back. Secure likewise
+	// follows the real edge — TLS on this request or the process's own
+	// Caddy access mode — not a pending settings value.
+	return cookiePathForWebBase(s.serveWebBasePath),
+		(r != nil && r.TLS != nil) || strings.EqualFold(strings.TrimSpace(s.servePanelAccess), "caddy")
 }
 
 func (s *managementState) setSessionCookie(w http.ResponseWriter, r *http.Request, token string, maxAge int) {

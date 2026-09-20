@@ -108,6 +108,52 @@ func TestValidationRejectsNonCaddyRuntimeOnPanelCaddyPublicPort(t *testing.T) {
 	}
 }
 
+// The sing-box WARP SOCKS inbound is TCP-only: a Hysteria2/Mieru UDP listener
+// on the same port number is a valid co-existence, not a conflict.
+func TestValidationAllowsUDPInboundOnWarpSocksPort(t *testing.T) {
+	settings := runtimeBindSettings()
+	snapshot := model.ManagementSnapshot{
+		Settings: settings,
+		Warp:     model.WarpConfig{Enabled: true, SocksPort: 40000},
+		Inbounds: []model.Inbound{
+			{Name: "hy", Protocol: "hysteria2", Transport: "udp", Port: 40000, Enabled: true},
+		},
+	}
+	fields := map[string]json.RawMessage{
+		"settings": json.RawMessage(`{}`),
+		"inbounds": json.RawMessage(`[]`),
+		"warp":     json.RawMessage(`{}`),
+	}
+	errs := NewValidation().ValidateSnapshot(snapshot, fields)
+	for _, err := range errs {
+		if strings.Contains(err, "conflicts with warp") || strings.Contains(err, "udp:40000") {
+			t.Fatalf("valid WARP-TCP + Hy2-UDP co-existence was rejected: %v", errs)
+		}
+	}
+}
+
+// The TCP reservation must still hold: a TCP inbound on the WARP socks port
+// is a real collision.
+func TestValidationRejectsTCPInboundOnWarpSocksPort(t *testing.T) {
+	settings := runtimeBindSettings()
+	snapshot := model.ManagementSnapshot{
+		Settings: settings,
+		Warp:     model.WarpConfig{Enabled: true, SocksPort: 40000},
+		Inbounds: []model.Inbound{
+			{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 40000, Enabled: true},
+		},
+	}
+	fields := map[string]json.RawMessage{
+		"settings": json.RawMessage(`{}`),
+		"inbounds": json.RawMessage(`[]`),
+		"warp":     json.RawMessage(`{}`),
+	}
+	errs := NewValidation().ValidateSnapshot(snapshot, fields)
+	if !validationContains(errs, "conflicts with warp") {
+		t.Fatalf("TCP inbound on the WARP socks port was accepted: %v", errs)
+	}
+}
+
 func TestValidationAllowsNaiveToSharePanelCaddyPublicPort(t *testing.T) {
 	settings := runtimeBindSettings()
 	settings.PanelAccess = "caddy"

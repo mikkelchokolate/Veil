@@ -135,6 +135,48 @@ func TestFirewallStagesManagementAccessBeforeEnableAndDeletesStaleManagedRules(t
 	}
 }
 
+func TestFirewallEmptyDesiredPrunesStaleManagedRules(t *testing.T) {
+	model := &transactionalUFWModel{enabled: true, rules: map[string]string{
+		"22/tcp":   "OpenSSH",
+		"80/tcp":   "Veil ACME challenge",
+		"443/tcp":  "Veil panel",
+		"9999/tcp": "Veil stale",
+	}}
+	if _, err := runFirewallRules(context.Background(), model.runner, ResolvedFirewall{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := model.rules["9999/tcp"]; exists {
+		t.Fatalf("stale Veil-managed rule was not pruned: %v", model.rules)
+	}
+	if _, exists := model.rules["443/tcp"]; exists {
+		t.Fatalf("stale Veil panel rule was not pruned: %v", model.rules)
+	}
+	if model.rules["22/tcp"] != "OpenSSH" {
+		t.Fatalf("foreign management rule was touched: %v", model.rules)
+	}
+	if model.rules["80/tcp"] != "Veil ACME challenge" {
+		t.Fatalf("protected Veil ACME rule was pruned: %v", model.rules)
+	}
+	if !model.enabled {
+		t.Fatal("reconcile disabled an active ufw")
+	}
+}
+
+func TestFirewallEmptyDesiredNeverEnablesInactiveUFW(t *testing.T) {
+	model := &transactionalUFWModel{rules: map[string]string{
+		"9999/tcp": "Veil stale",
+	}}
+	if _, err := runFirewallRules(context.Background(), model.runner, ResolvedFirewall{}); err != nil {
+		t.Fatal(err)
+	}
+	if model.enabled {
+		t.Fatal("empty desired set enabled ufw without a management access rule")
+	}
+	if _, exists := model.rules["9999/tcp"]; exists {
+		t.Fatalf("stale Veil-managed rule was not pruned: %v", model.rules)
+	}
+}
+
 func TestFirewallRefusesToEnableWithoutRequiredManagementAccess(t *testing.T) {
 	model := &transactionalUFWModel{rules: map[string]string{}}
 	request := ResolvedFirewall{

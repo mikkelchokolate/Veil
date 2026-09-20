@@ -103,8 +103,12 @@ func setCredentialQ(q DBTX, cipher *secrets.Cipher, bindingID, kind, plaintext s
 }
 
 // insertCredentialQ is the querier-based insert shared by the autocommit store
-// and the transactional Tx path.
+// and the transactional Tx path. Plaintext is normalized once at the storage
+// boundary — surrounding whitespace is trimmed — so the stored credential,
+// the rendered server config and every exported client link carry identical
+// bytes (audit #334).
 func insertCredentialQ(q DBTX, cipher *secrets.Cipher, bindingID, kind, plaintext string, version int) (Credential, error) {
+	plaintext = strings.TrimSpace(plaintext)
 	enc, err := cipher.Encrypt(plaintext)
 	if err != nil {
 		return Credential{}, fmt.Errorf("client: encrypt credential: %w", err)

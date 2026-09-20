@@ -120,7 +120,7 @@ func TestPolicyResolvesManagedDynamicArtifactIDs(t *testing.T) {
 	policy := testPolicy(t)
 	resolved, err := policy.ResolvePromotion(PromoteRequest{
 		ArtifactIDs: []string{
-			"caddy/edge.json",
+			"caddy/config.json",
 			"hysteria2/udp-edge.yaml",
 			"olcrtc/rtc-edge.yaml",
 			"mieru/server_config.json",
@@ -146,27 +146,34 @@ func TestPolicyAllowsLegacyCaddyfileOnlyForRemoval(t *testing.T) {
 	}
 
 	resolved, err := policy.ResolvePromotion(PromoteRequest{
-		RemoveArtifactIDs: []string{"caddy/legacy.Caddyfile"},
+		RemoveArtifactIDs: []string{"caddy/legacy.Caddyfile", "caddy/orphan.json"},
 	})
 	if err != nil {
-		t.Fatalf("resolve legacy Caddyfile removal: %v", err)
+		t.Fatalf("resolve retired caddy artifact removal: %v", err)
 	}
-	if len(resolved.RemoveArtifacts) != 1 || resolved.RemoveArtifacts[0].ID != "caddy/legacy.Caddyfile" {
+	if len(resolved.RemoveArtifacts) != 2 ||
+		resolved.RemoveArtifacts[0].ID != "caddy/legacy.Caddyfile" ||
+		resolved.RemoveArtifacts[1].ID != "caddy/orphan.json" {
 		t.Fatalf("resolved removal = %+v", resolved.RemoveArtifacts)
 	}
-	if !policy.promotionDestinationAllowed(resolved.RemoveArtifacts[0].ID, resolved.RemoveArtifacts[0].Destination) {
-		t.Fatal("recovery must accept leftover Caddyfile destinations already in a v1 journal")
+	for _, artifact := range resolved.RemoveArtifacts {
+		if !policy.promotionDestinationAllowed(artifact.ID, artifact.Destination) {
+			t.Fatalf("recovery must accept retired caddy destinations already in a v1 journal: %s", artifact.ID)
+		}
 	}
 
-	_, err = policy.ResolvePromotion(PromoteRequest{
-		ArtifactIDs: []string{"caddy/legacy.Caddyfile"},
-	})
-	assertOperationErrorCode(t, err, ErrorNotFound)
+	for _, id := range []string{"caddy/legacy.Caddyfile", "caddy/orphan.json"} {
+		_, err := policy.ResolvePromotion(PromoteRequest{ArtifactIDs: []string{id}})
+		assertOperationErrorCode(t, err, ErrorNotFound)
+	}
 
 	for _, id := range []string{
 		"caddy/bad.name.Caddyfile",
 		"caddy/../escape.Caddyfile",
 		"caddy/sub/escape.Caddyfile",
+		"caddy/bad.name.json",
+		"caddy/../escape.json",
+		"caddy/sub/escape.json",
 	} {
 		_, err := policy.ResolvePromotion(PromoteRequest{RemoveArtifactIDs: []string{id}})
 		assertOperationErrorCode(t, err, ErrorNotFound)
@@ -294,7 +301,8 @@ func TestPolicyManagedArtifactPathEdgeCases(t *testing.T) {
 		id      string
 		allowed bool
 	}{
-		{"caddy/edge.json", true},
+		{"caddy/config.json", true},
+		{"caddy/edge.json", false},
 		{"hysteria2/udp.yaml", true},
 		{"olcrtc/rtc.yaml", true},
 		{"mieru/server_config.json", true},
@@ -361,14 +369,14 @@ func TestPolicyResolveFirewall(t *testing.T) {
 	_, err = policy.ResolveFirewall(FirewallRequest{RuleIDs: []string{"allow-unknown"}})
 	assertOperationErrorCode(t, err, ErrorForbiddenOperation)
 
-	// An empty request is a valid prune-only reconcile: stale Veil-managed
-	// rules are removed and nothing is staged.
+	// An empty desired set is valid: reconcile still runs to prune stale
+	// Veil-managed rules (for example after a public -> loopback switch).
 	resolved, err = policy.ResolveFirewall(FirewallRequest{})
 	if err != nil {
-		t.Fatalf("empty firewall request must resolve as prune-only: %v", err)
+		t.Fatalf("empty firewall request should resolve as prune-only reconcile: %v", err)
 	}
 	if len(resolved.Rules) != 0 || len(resolved.RuleIDs) != 0 {
-		t.Fatalf("empty request resolved to %+v", resolved)
+		t.Fatalf("empty request resolved with rules: %+v", resolved)
 	}
 
 	resolved, err = policy.ResolveFirewall(FirewallRequest{Rules: []FirewallRule{{Command: "ufw", Args: []string{"allow", "443/tcp", "comment", "HTTPS"}}}})

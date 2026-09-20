@@ -43,13 +43,17 @@ func protocolString(m map[string]any, key, fallback string) string {
 // olcrtcKey resolves the effective encryption key using the same precedence
 // as the dynamic inbound form: a non-empty protocolFields value wins over the
 // legacy flat field. An empty or redacted dynamic value counts as unset so it
-// can never hide a valid stored flat key (audit #122). Validation, server
-// rendering and client export must agree on this value.
+// can never hide a valid stored flat key (audit #122). The winning value is
+// preserved byte-for-byte, matching model.EffectiveInboundPassword, so
+// validation, server rendering and client export all agree on this value
+// (audit #344).
 func olcrtcKey(inbound model.Inbound) string {
-	if key := protocolString(inbound.ProtocolFields, "password", ""); key != "" && key != veilsettings.RedactedSecret {
-		return key
+	if raw, ok := inbound.ProtocolFields["password"].(string); ok {
+		if key := strings.TrimSpace(raw); key != "" && key != veilsettings.RedactedSecret {
+			return raw
+		}
 	}
-	return strings.TrimSpace(inbound.Password)
+	return inbound.Password
 }
 
 func olcrtcAuth(settings model.Settings, inbound model.Inbound) string {

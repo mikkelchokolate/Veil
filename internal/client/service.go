@@ -368,16 +368,21 @@ func (s *Service) RemoveBindingTx(tx *Tx, bindingID, clientID string) error {
 	return nil
 }
 
-// SetCredentialTx is the transactional variant of SetCredential.
+// SetCredentialTx is the transactional variant of SetCredential. The stored
+// plaintext is normalized once at write: surrounding whitespace is trimmed so
+// the server renderers and client export consume identical bytes (audit #334).
 func (s *Service) SetCredentialTx(tx *Tx, bindingID, kind, plaintext string) (Credential, error) {
+	plaintext = strings.TrimSpace(plaintext)
 	if plaintext == "" {
 		return Credential{}, fmt.Errorf("%w: credential value is required", ErrValidation)
 	}
 	return tx.SetCredential(s.creds, bindingID, kind, plaintext)
 }
 
-// RotateCredentialTx is the transactional variant of RotateCredential.
+// RotateCredentialTx is the transactional variant of RotateCredential. The
+// stored plaintext is normalized once at write, matching SetCredentialTx.
 func (s *Service) RotateCredentialTx(tx *Tx, bindingID, kind, plaintext string) (Credential, error) {
+	plaintext = strings.TrimSpace(plaintext)
 	if plaintext == "" {
 		return Credential{}, fmt.Errorf("%w: credential value is required", ErrValidation)
 	}
@@ -472,16 +477,21 @@ func (s *Service) RemoveBinding(bindingID, clientID string) error {
 	return s.repo.DeleteBinding(bindingID)
 }
 
-// SetCredential encrypts and stores a credential for a binding.
+// SetCredential encrypts and stores a credential for a binding. The stored
+// plaintext is normalized once at write: surrounding whitespace is trimmed so
+// the server renderers and client export consume identical bytes (audit #334).
 func (s *Service) SetCredential(bindingID, kind, plaintext string) (Credential, error) {
+	plaintext = strings.TrimSpace(plaintext)
 	if plaintext == "" {
 		return Credential{}, fmt.Errorf("%w: credential value is required", ErrValidation)
 	}
 	return s.creds.Set(bindingID, kind, plaintext)
 }
 
-// RotateCredential rotates a binding's credential to a new version.
+// RotateCredential rotates a binding's credential to a new version. The stored
+// plaintext is normalized once at write, matching SetCredential.
 func (s *Service) RotateCredential(bindingID, kind, plaintext string) (Credential, error) {
+	plaintext = strings.TrimSpace(plaintext)
 	if plaintext == "" {
 		return Credential{}, fmt.Errorf("%w: credential value is required", ErrValidation)
 	}

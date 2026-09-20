@@ -216,34 +216,11 @@ func protocolString(m map[string]any, key, fallback string) string {
 }
 
 func naiveUsername(settings Settings, inbound Inbound) string {
-	username := protocolString(inbound.ProtocolFields, "naiveUsername", "")
-	if username == "" {
-		username = inbound.NaiveUsername
-	}
-	if username == "" {
-		username = protocolString(settings.ProtocolFields, "naiveUsername", "")
-	}
-	if username == "" {
-		username = settings.NaiveUsername
-	}
-	return username
+	return model.EffectiveProtocolString(inbound, settings, "naiveUsername", inbound.NaiveUsername, settings.NaiveUsername)
 }
 
 func naivePassword(settings Settings, inbound Inbound) string {
-	password := strings.TrimSpace(inbound.Password)
-	if password == "" {
-		password = protocolString(inbound.ProtocolFields, "naivePassword", "")
-	}
-	if password == "" {
-		password = inbound.NaivePassword
-	}
-	if password == "" {
-		password = protocolString(settings.ProtocolFields, "naivePassword", "")
-	}
-	if password == "" {
-		password = settings.NaivePassword
-	}
-	return password
+	return model.EffectiveProtocolPassword(inbound, settings, "naivePassword", inbound.NaivePassword, settings.NaivePassword)
 }
 
 func fallbackRoot(settings Settings, inbound Inbound) string {
@@ -261,20 +238,7 @@ func fallbackRoot(settings Settings, inbound Inbound) string {
 }
 
 func hysteria2Password(settings Settings, inbound Inbound) string {
-	password := strings.TrimSpace(inbound.Password)
-	if password == "" {
-		password = protocolString(inbound.ProtocolFields, "hysteria2Password", "")
-	}
-	if password == "" {
-		password = inbound.Hysteria2Password
-	}
-	if password == "" {
-		password = protocolString(settings.ProtocolFields, "hysteria2Password", "")
-	}
-	if password == "" {
-		password = settings.Hysteria2Password
-	}
-	return password
+	return model.EffectiveProtocolPassword(inbound, settings, "hysteria2Password", inbound.Hysteria2Password, settings.Hysteria2Password)
 }
 
 func masqueradeURL(settings Settings, inbound Inbound) string {

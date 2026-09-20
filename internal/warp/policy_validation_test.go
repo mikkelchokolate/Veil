@@ -38,7 +38,7 @@ func TestValidateRejectsNonLoopbackSocksListen(t *testing.T) {
 	base := Config{SocksPort: 40000, MTU: 1280, Reserved: []int{1, 2, 3}}
 	for _, listen := range []string{
 		"0.0.0.0", "::", "192.168.1.10", "203.0.113.5", "10.0.0.2",
-		"169.254.1.1", "fe80::1", "localhost", "example.com", "not-an-ip",
+		"169.254.1.1", "fe80::1", "localhost", "example.com", "not-an-ip", "127.0.0.1:40000",
 	} {
 		cfg := base
 		cfg.SocksListen = listen
