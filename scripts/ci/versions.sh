@@ -14,6 +14,13 @@
 # ubuntu:24.04 manifest digest (linux/amd64). Also mirrored in ci/vm/image.lock.
 CI_UBUNTU_BASE="ubuntu:24.04@sha256:a61567bd31828687156d735ea8eb01ba4e37636e225dd6a48ba94136a70d9d61"
 
+# --- Release Dockerfile base images (digest-pinned; asserted by verify_versions) ---
+# These mirror the ARG defaults in the root Dockerfile exactly — tag AND digest.
+CI_NODE_IMAGE_DIGEST="sha256:ef24c5053d50fdc3e4e56eb4e7ddb7861874ab0fdc797046ba897581deb8e868" # node:26.8.2-alpine
+CI_GO_IMAGE_DIGEST="sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125"   # golang:1.27.1-alpine
+CI_ALPINE_VERSION="3.24"
+CI_ALPINE_IMAGE_DIGEST="sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"   # alpine:3.24
+
 # --- Core toolchain ---------------------------------------------------------
 CI_GO_VERSION="1.27.1"
 CI_GO_TARBALL_SHA256="63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445" # go1.27.1.linux-amd64.tar.gz
@@ -39,6 +46,9 @@ CI_STATICCHECK_VERSION="2026.2.1" # honnef.co/go/tools/cmd/staticcheck@2026.2.1
 CI_GOVULNCHECK_VERSION="v1.7.0"   # golang.org/x/vuln/cmd/govulncheck
 CI_NFPM_VERSION="v2.47.0"         # github.com/goreleaser/nfpm/v2/cmd/nfpm
 CI_REDOCLY_VERSION="2.52.1"       # @redocly/cli (OpenAPI lint)
+CI_OAPI_CODEGEN_VERSION="v2.8.0"  # github.com/oapi-codegen/oapi-codegen/v2 (sdk/go generate)
+CI_SHELLCHECK_VERSION="0.9.0"     # shellcheck (apt package on ubuntu-24.04 / CI image)
+CI_SYFT_VERSION="v1.52.0"         # anchore/syft — make sbom + release sbom-action
 
 # Docker CLI and Buildx used by the system image to talk to the mounted host daemon.
 CI_DOCKER_CLI_VERSION="29.8.0"
