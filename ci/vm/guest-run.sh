@@ -16,6 +16,18 @@ EXCHANGE="${CI_EXCHANGE_DIR:-/exchange}"
 WORKSPACE="${CI_WORKSPACE_OVERRIDE:-/workspace/veil}"
 ARTIFACTS_GUEST="/workspace/artifacts"
 
+# Backends that cannot inject env (plain `smolvm machine run`) stage the full
+# phase through the exchange volume instead — read it when the env var is
+# unset (#397). An explicit env var always wins over the staged file.
+if [ -z "${CI_FULL_PHASE:-}" ] && [ -f "${EXCHANGE}/full-phase" ]; then
+  CI_FULL_PHASE="$(tr -d '\r\n' < "${EXCHANGE}/full-phase")"
+  export CI_FULL_PHASE
+fi
+if [ -z "${CI_SOURCE_SHA:-}" ] && [ -f "${EXCHANGE}/source-sha" ]; then
+  CI_SOURCE_SHA="$(tr -d '\r\n' < "${EXCHANGE}/source-sha")"
+  export CI_SOURCE_SHA
+fi
+
 mkdir -p "${ARTIFACTS_GUEST}"
 
 # shellcheck disable=SC2317 # invoked by the EXIT trap below.
@@ -96,8 +108,11 @@ run_as() {
   fi
 }
 
-# Ensure the ci user owns artifact dirs even when jobs run as root.
-chown -R ci:ci "${ARTIFACTS_GUEST}" /workspace 2>/dev/null || true
+# Ensure the ci user owns artifact dirs even when jobs run as root. The
+# workspace may be relocated by CI_WORKSPACE_OVERRIDE (docker-systemd puts it
+# under the exchange dir) — chown the real path, not a hardcoded one (#462).
+chown -R ci:ci "${ARTIFACTS_GUEST}" "${WORKSPACE}" 2>/dev/null || true
+[ -d /workspace ] && chown -R ci:ci /workspace 2>/dev/null || true
 
 rc=0
 run_as "${JOB_USER}" bash "${WORKSPACE}/scripts/ci/${JOB}.sh" "$@" || rc=$?
