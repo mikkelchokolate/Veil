@@ -98,28 +98,32 @@ func applyNaiveLiveUsers(plan caddyassembly.CaddyRenderPlan, settings model.Sett
 	}
 }
 
+// liveNaiveUsers renders the effective Caddy forward_auth user list. Stored
+// credential bytes are emitted as-is so the server authenticates exactly what
+// client export advertises; usernames match on trimmed bytes so a normalized
+// credential overrides a legacy profile with the same effective name
+// (audit #334).
 func liveNaiveUsers(settings model.Settings, inbound model.Inbound) []caddyassembly.CaddyNaiveUser {
 	var users []caddyassembly.CaddyNaiveUser
 	runtimeUsers := make(map[string]caddyassembly.CaddyNaiveUser, len(inbound.RuntimeCredentials))
 	for _, credential := range inbound.RuntimeCredentials {
-		username := strings.TrimSpace(credential.Username)
-		password := strings.TrimSpace(credential.Password)
-		if username != "" && password != "" {
-			runtimeUsers[username] = caddyassembly.CaddyNaiveUser{Username: username, Password: password}
+		if strings.TrimSpace(credential.Username) == "" || strings.TrimSpace(credential.Password) == "" {
+			continue
 		}
+		runtimeUsers[strings.TrimSpace(credential.Username)] = caddyassembly.CaddyNaiveUser{Username: credential.Username, Password: credential.Password}
 	}
 	for _, profile := range inbound.Profiles {
 		if !profile.Enabled || strings.TrimSpace(profile.Username) == "" || strings.TrimSpace(profile.Password) == "" {
 			continue
 		}
-		if _, replaced := runtimeUsers[profile.Username]; !replaced {
+		if _, replaced := runtimeUsers[strings.TrimSpace(profile.Username)]; !replaced {
 			users = append(users, caddyassembly.CaddyNaiveUser{Username: profile.Username, Password: profile.Password})
 		}
 	}
 	for _, credential := range inbound.RuntimeCredentials {
 		if user, ok := runtimeUsers[strings.TrimSpace(credential.Username)]; ok {
 			users = append(users, user)
-			delete(runtimeUsers, user.Username)
+			delete(runtimeUsers, strings.TrimSpace(credential.Username))
 		}
 	}
 	if len(users) > 0 || len(inbound.Profiles) > 0 {

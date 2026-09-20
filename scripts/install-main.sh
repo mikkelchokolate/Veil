@@ -283,6 +283,40 @@ ensure_runtime_libs() {
   # shellcheck disable=SC2086 # package list is intentionally word-split
   pkg_install "$manager" $packages
 }
+
+# have_xz reports whether xz is on PATH; kept as a function so installs can be
+# re-probed after provisioning.
+have_xz() {
+  command -v xz >/dev/null 2>&1
+}
+
+# xz_package_name maps the xz CLI to the distro package providing it (apt
+# ships it as xz-utils; everyone else as xz).
+xz_package_name() {
+  case "$1" in
+    apt-get) echo "xz-utils" ;;
+    *)       echo "xz" ;;
+  esac
+}
+
+# ensure_xz provisions xz through the detected package manager when the host
+# lacks it — the pinned Node.js tarball is .tar.xz and cannot be unpacked
+# without it.
+ensure_xz() {
+  have_xz && return 0
+  manager="$(detect_pkg_manager || true)"
+  if [ -z "$manager" ]; then
+    echo "Required command not found: xz (needed to unpack Node.js)" >&2
+    echo "No supported package manager found; install xz and re-run." >&2
+    return 1
+  fi
+  echo "Installing xz (needed to unpack the Node.js tarball)..."
+  pkg_install "$manager" "$(xz_package_name "$manager")" || return 1
+  have_xz || {
+    echo "xz is still not on PATH after package install" >&2
+    return 1
+  }
+}
 # END_DEPS_HELPERS
 
 if ! go_ok; then
@@ -314,10 +348,7 @@ if ! node_ok; then
     echo "Node.js ${CI_NODE_VERSION}+ is required to build the Panel; install it first (no pinned bootstrap checksum for linux-${node_arch})." >&2
     exit 1
   fi
-  command -v xz >/dev/null 2>&1 || {
-    echo "Required command not found: xz (needed to unpack Node.js)" >&2
-    exit 1
-  }
+  ensure_xz || exit 1
   echo "Installing Node.js ${CI_NODE_VERSION}..."
   node_suffix=""
   if [ -e /lib/ld-musl-x86_64.so.1 ] || [ -e /lib/ld-musl-aarch64.so.1 ]; then

@@ -158,7 +158,7 @@ Veil's managed systemd units invoke external runtime binaries:
 
 | Protocol | Binary | Unit | Source |
 |---|---|---|---|
-| NaiveProxy | `caddy` | `veil-caddy@.service` | `caddyserver/caddy` GitHub release |
+| NaiveProxy | `caddy` | `veil-caddy.service` | `caddyserver/caddy` GitHub release |
 | Hysteria2 | `hysteria` | `veil-hysteria2@.service` | `apernet/hysteria` GitHub release |
 | Mieru | `mita` | `veil-mieru.service` | `enfein/mieru` GitHub release |
 | WARP | `sing-box` | `veil-warp.service` | `SagerNet/sing-box` GitHub release |

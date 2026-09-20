@@ -27,7 +27,7 @@ func TestBuildFirewallRuleResponsesIncludesMieruTransportBindings(t *testing.T) 
 
 func TestBuildFirewallRuleResponsesUsesPanelAndEnabledInboundProtocols(t *testing.T) {
 	rules := BuildFirewallRuleResponses(
-		Settings{PanelListen: "127.0.0.1:2096"},
+		Settings{PanelListen: "0.0.0.0:2096", PanelAccess: "direct"},
 		[]Inbound{
 			{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true},
 			{Name: "hy2", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true},

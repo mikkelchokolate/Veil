@@ -54,10 +54,27 @@ func parseSSHConfigPorts(data []byte) []int {
 			continue
 		}
 		fields := strings.Fields(line)
-		if len(fields) < 2 || !strings.EqualFold(fields[0], "Port") {
+		if len(fields) < 2 {
 			continue
 		}
-		port, err := strconv.Atoi(fields[1])
+		// sshd binds ports two ways: a bare "Port" directive and a
+		// "ListenAddress" form carrying an explicit port (host:port or
+		// [v6addr]:port). A config that only sets ListenAddress …:port and
+		// no Port directive must still yield its port, otherwise the caller
+		// defaults to 22 and UFW can lock the operator out (audit #355).
+		var portText string
+		switch {
+		case strings.EqualFold(fields[0], "Port"):
+			portText = fields[1]
+		case strings.EqualFold(fields[0], "ListenAddress"):
+			portText = sshListenAddressPort(fields[1])
+		default:
+			continue
+		}
+		if portText == "" {
+			continue
+		}
+		port, err := strconv.Atoi(portText)
 		if err != nil || port <= 0 || port > 65535 {
 			continue
 		}
@@ -68,4 +85,24 @@ func parseSSHConfigPorts(data []byte) []int {
 		ports = append(ports, port)
 	}
 	return ports
+}
+
+// sshListenAddressPort extracts the explicit port from an OpenSSH
+// ListenAddress value: "host:port", "ipv4:port", or "[v6addr]:port". A bare
+// address carries no port — sshd then falls back to the Port directives — and
+// an unbracketed IPv6 literal is an address, not address:port.
+func sshListenAddressPort(addr string) string {
+	if strings.HasPrefix(addr, "[") {
+		end := strings.LastIndex(addr, "]")
+		if end < 0 || end+2 > len(addr) || addr[end+1] != ':' {
+			return ""
+		}
+		return addr[end+2:]
+	}
+	// Exactly one colon separates address from port; zero colons is a bare
+	// host/IPv4 and more than one is an unbracketed IPv6 literal.
+	if strings.Count(addr, ":") != 1 {
+		return ""
+	}
+	return addr[strings.LastIndex(addr, ":")+1:]
 }

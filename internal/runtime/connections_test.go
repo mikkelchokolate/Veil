@@ -30,3 +30,32 @@ func TestReadListeningSocketsParsesTCPFile(t *testing.T) {
 		t.Fatalf("second listener = %+v", listeners[1])
 	}
 }
+
+// A connected socket whose remote port equals the listen port must not steal
+// process attribution from the real listener (audit #335).
+func TestFindInodeByPortPrefersListenRowOverConnectedRemotePort(t *testing.T) {
+	lines := []string{
+		"sl local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode",
+		// connected outbound socket to :443 (remote port 01BB), listed first
+		"0: 0100007F:C000 08080808:01BB 01 00000000:00000000 00:00000000 00000000 0 0 999",
+		// the actual listener on :443
+		"1: 00000000:01BB 00000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 111",
+	}
+	if inode := findInodeByPortInSocketLines("tcp", "01BB", lines); inode != "111" {
+		t.Fatalf("inode = %q, want listener inode 111", inode)
+	}
+}
+
+// For UDP the same attribution must ignore connected rows (non-zero remote).
+func TestFindInodeByPortSkipsConnectedUDPRows(t *testing.T) {
+	lines := []string{
+		"sl local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode",
+		// connected UDP socket locally bound to :40000 talking to a peer
+		"0: 0100007F:9C40 08080808:9C40 07 00000000:00000000 00:00000000 00000000 0 0 999",
+		// the real bound UDP listener on :40000
+		"1: 00000000:9C40 00000000:0000 07 00000000:00000000 00:00000000 00000000 0 0 111",
+	}
+	if inode := findInodeByPortInSocketLines("udp", "9C40", lines); inode != "111" {
+		t.Fatalf("inode = %q, want listener inode 111", inode)
+	}
+}

@@ -111,6 +111,15 @@ func TestRURecommendedPreviewCaddyAccessMatchesOpenAPICaddyfileField(t *testing.
 	if contract.CaddyJSON != "" {
 		t.Fatalf("handler must not emit caddyJSON: %s", w.Body.String())
 	}
+	// The caddyfile field carries the Caddy JSON document, not Caddyfile
+	// syntax — the OpenAPI example and consumers must agree on the format.
+	var caddyDoc map[string]any
+	if err := json.Unmarshal([]byte(contract.Caddyfile), &caddyDoc); err != nil {
+		t.Fatalf("caddyfile field is not a JSON document: %v\n%s", err, contract.Caddyfile)
+	}
+	if _, ok := caddyDoc["apps"]; !ok {
+		t.Fatalf("caddyfile JSON missing apps: %s", contract.Caddyfile)
+	}
 }
 
 func TestRURecommendedPreviewEndpointRejectsRemovedStackField(t *testing.T) {
