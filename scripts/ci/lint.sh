@@ -42,9 +42,11 @@ ensure_pinned_tool govulncheck "${CI_GOVULNCHECK_VERSION}" \
   "golang.org/x/vuln/cmd/govulncheck@${CI_GOVULNCHECK_VERSION}"
 ci_run govulncheck govulncheck ./...
 
-# shellcheck is pinned in versions.sh (CI_SHELLCHECK_VERSION); the GHA job and
-# the CI image install the matching apt package. Fail closed on drift (issue
-# #420) rather than linting with whatever happens to be on PATH.
+# The shellcheck binary is pinned in versions.sh (CI_SHELLCHECK_VERSION); the
+# GHA job and the CI image install the matching apt package. Fail closed on
+# drift (issue #420) rather than linting with whatever happens to be on PATH.
+# NB: keep the word "shellcheck" out of the comment lead — a `# shellcheck`
+# prefix is parsed as a shellcheck directive (SC1072/SC1073).
 command -v shellcheck >/dev/null 2>&1 \
   || ci_die "shellcheck ${CI_SHELLCHECK_VERSION} is required (runner job / CI image installs it)"
 shellcheck --version | grep -qF "version: ${CI_SHELLCHECK_VERSION}" \

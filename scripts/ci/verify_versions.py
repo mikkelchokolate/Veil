@@ -216,7 +216,9 @@ expect(
 )
 expect(
     "sing-box amd64 digest",
-    match(r'"amd64":\s*"([0-9a-f]{64})"', runtime_install, "sing-box amd64 digest"),
+    # Scope to the singBoxDigests map so an unrelated amd64 digest elsewhere in
+    # the file cannot satisfy the check by accident.
+    match(r'singBoxDigests[^}]*"amd64":\s*"([0-9a-f]{64})"', runtime_install, "sing-box amd64 digest"),
     versions["CI_SINGBOX_SHA256"],
 )
 

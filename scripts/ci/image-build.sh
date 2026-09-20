@@ -47,10 +47,15 @@ cleanup_image_check() {
   docker rm -f "${check_name}" >/dev/null 2>&1 || true
 }
 trap cleanup_image_check EXIT
+# serve requires --auth-token for non-loopback listeners; without it the
+# container exits immediately and no port is ever published.
 docker run -d --name "${check_name}" -p 127.0.0.1::2096 \
-  veil:ci serve --listen 0.0.0.0:2096 >/dev/null
+  veil:ci serve --listen 0.0.0.0:2096 --auth-token ci-image-check-token >/dev/null
 image_port="$(docker port "${check_name}" 2096/tcp | head -1 | rev | cut -d: -f1 | rev)"
-[ -n "${image_port}" ] || ci_die "could not resolve published port for ${check_name}"
+if [ -z "${image_port}" ]; then
+  docker logs "${check_name}" >"${CI_ARTIFACT_DIR}/image-panel.log" 2>&1 || true
+  ci_die "could not resolve published port for ${check_name} — container exited early (see image-panel.log)"
+fi
 spa_up=1
 for _ in $(seq 1 60); do
   if curl -sfL --max-time 10 "http://127.0.0.1:${image_port}/" -o "${CI_ARTIFACT_DIR}/image-index.html" 2>/dev/null \

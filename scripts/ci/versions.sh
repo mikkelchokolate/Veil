@@ -47,7 +47,7 @@ CI_GOVULNCHECK_VERSION="v1.7.0"   # golang.org/x/vuln/cmd/govulncheck
 CI_NFPM_VERSION="v2.47.0"         # github.com/goreleaser/nfpm/v2/cmd/nfpm
 CI_REDOCLY_VERSION="2.52.1"       # @redocly/cli (OpenAPI lint)
 CI_OAPI_CODEGEN_VERSION="v2.8.0"  # github.com/oapi-codegen/oapi-codegen/v2 (sdk/go generate)
-CI_SHELLCHECK_VERSION="0.9.0"     # shellcheck (apt package on ubuntu-24.04 / CI image)
+CI_SHELLCHECK_VERSION="0.9.0"     # apt package on ubuntu-24.04 / CI image (never write "# shellcheck" — that parses as a directive, SC1126)
 CI_SYFT_VERSION="v1.52.0"         # anchore/syft — make sbom + release sbom-action
 
 # Docker CLI and Buildx used by the system image to talk to the mounted host daemon.
