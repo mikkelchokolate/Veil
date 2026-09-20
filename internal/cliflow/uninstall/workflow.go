@@ -13,7 +13,17 @@ const (
 	backupScheduleDropInDir = "veil-backup.service.d"
 	caddyStateDirDefault    = "/var/lib/caddy"
 	mitaStateDirDefault     = "/var/lib/mita"
+	// quicSysctlConfDefault is the packaged QUIC buffer drop-in. Uninstall
+	// removes it so the host does not keep Veil's sysctl overrides after the
+	// software is gone (issue #486).
+	quicSysctlConfDefault = "/etc/sysctl.d/99-veil-quic.conf"
 )
+
+// defaultVendorSystemdDirs are the packaged (vendor) unit directories the
+// nfpm packages install into — distinct from Options.SystemdDir, which holds
+// the units `veil install` writes. /lib/systemd is a symlink to /usr/lib on
+// usrmerge distros, but listing both keeps removal honest everywhere (#492).
+var defaultVendorSystemdDirs = []string{"/lib/systemd/system", "/usr/lib/systemd/system"}
 
 type Options struct {
 	DryRun        bool
@@ -26,6 +36,11 @@ type Options struct {
 	InstallDir    string
 	CaddyStateDir string
 	MitaStateDir  string
+	// VendorSystemdDirs lists packaged unit directories to also clean
+	// (defaults to /lib/systemd/system and /usr/lib/systemd/system).
+	VendorSystemdDirs []string
+	// SysctlConfPath is the QUIC sysctl drop-in removed on uninstall.
+	SysctlConfPath string
 }
 
 // PreservesData reports whether configuration and state directories are kept.
@@ -105,6 +120,8 @@ func Plan(opts Options) string {
 	for _, path := range SystemdUnitPaths(opts) {
 		b.WriteString(fmt.Sprintf("  - %s\n", path))
 	}
+	b.WriteString("Remove sysctl drop-in:\n")
+	b.WriteString(fmt.Sprintf("  - %s\n", filepath.ToSlash(opts.SysctlConfPath)))
 	b.WriteString("Remove binary:\n")
 	b.WriteString(fmt.Sprintf("  - %s\n", BinaryPath(opts)))
 	return b.String()
@@ -133,6 +150,12 @@ func (opts Options) WithDefaults() Options {
 	if opts.MitaStateDir == "" {
 		opts.MitaStateDir = mitaStateDirDefault
 	}
+	if len(opts.VendorSystemdDirs) == 0 {
+		opts.VendorSystemdDirs = defaultVendorSystemdDirs
+	}
+	if opts.SysctlConfPath == "" {
+		opts.SysctlConfPath = quicSysctlConfDefault
+	}
 	return opts
 }
 
@@ -143,6 +166,9 @@ func Paths(opts Options) []string {
 		paths = append(paths, stateDataPaths(opts)...)
 	}
 	paths = append(paths, SystemdUnitPaths(opts)...)
+	// The packaged QUIC sysctl drop-in is host-level, not user state — it is
+	// removed even under --keep-data (issue #486).
+	paths = append(paths, filepath.ToSlash(opts.SysctlConfPath))
 	paths = append(paths, BinaryPath(opts))
 	return paths
 }
@@ -160,18 +186,32 @@ func stateDataPaths(opts Options) []string {
 func SystemdUnitPaths(opts Options) []string {
 	opts = opts.WithDefaults()
 	units := systemdunits.Names()
-	paths := make([]string, 0, len(units)+2)
-	for _, name := range units {
-		paths = append(paths, filepath.ToSlash(filepath.Join(opts.SystemdDir, name)))
+	// Clean both the installer's unit directory and the packaged vendor
+	// directories — `dpkg -r` leftovers or a partially removed package must not
+	// survive `veil uninstall` (issue #492).
+	dirs := append([]string{opts.SystemdDir}, opts.VendorSystemdDirs...)
+	paths := make([]string, 0, len(dirs)*(len(units)+1))
+	for _, dir := range dirs {
+		for _, name := range units {
+			paths = append(paths, filepath.ToSlash(filepath.Join(dir, name)))
+		}
+		paths = append(paths, filepath.ToSlash(filepath.Join(dir, backupScheduleDropInDir)))
+		paths = append(paths, templateInstancePaths(dir)...)
 	}
-	paths = append(paths, filepath.ToSlash(filepath.Join(opts.SystemdDir, backupScheduleDropInDir)))
-	paths = append(paths, TemplateInstancePaths(opts)...)
 	return paths
 }
 
 func TemplateInstancePaths(opts Options) []string {
 	opts = opts.WithDefaults()
-	wantsDir := filepath.Join(opts.SystemdDir, "multi-user.target.wants")
+	var paths []string
+	for _, dir := range append([]string{opts.SystemdDir}, opts.VendorSystemdDirs...) {
+		paths = append(paths, templateInstancePaths(dir)...)
+	}
+	return paths
+}
+
+func templateInstancePaths(systemdDir string) []string {
+	wantsDir := filepath.Join(systemdDir, "multi-user.target.wants")
 	var paths []string
 	for _, name := range systemdunits.Names() {
 		glob := templateInstanceWantsGlob(name)

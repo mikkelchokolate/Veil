@@ -47,7 +47,11 @@ stop_disable_matching_units() {
 }
 
 if command -v systemctl >/dev/null 2>&1; then
+    # The timer does not imply the service: a running/on-enabled
+    # veil-backup.service must be stopped and disabled like every other unit
+    # (issue #480).
     stop_disable_unit veil-backup.timer
+    stop_disable_unit veil-backup.service
     stop_disable_unit veil.service
     stop_disable_unit veil-helper.service
     stop_disable_unit veil-helper.socket

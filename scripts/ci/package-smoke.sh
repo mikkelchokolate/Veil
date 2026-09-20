@@ -19,12 +19,14 @@ go build -trimpath -ldflags "-s -w -X main.version=package-smoke" -o dist/veil .
 
 GOBIN_PATH="$(go env GOPATH)/bin"
 export PATH="${GOBIN_PATH}:${PATH}"
-if ! command -v nfpm >/dev/null 2>&1; then
-  ci_run install-nfpm go install "github.com/goreleaser/nfpm/v2/cmd/nfpm@${CI_NFPM_VERSION}"
-fi
+# Always install the pinned nfpm — an arbitrary nfpm already on PATH (stale CI
+# image, host tool) must never satisfy the pin silently (issue #391).
+ci_run install-nfpm go install "github.com/goreleaser/nfpm/v2/cmd/nfpm@${CI_NFPM_VERSION}"
+nfpm --version | grep -F "${CI_NFPM_VERSION#v}" \
+  || ci_die "nfpm on PATH is not the pinned ${CI_NFPM_VERSION}: $(nfpm --version 2>&1 | head -1)"
 
+# ci_run already tees the smoke output to ${CI_ARTIFACT_DIR}/package-smoke.log;
+# there is no second log file to copy (issue #392).
 ci_run package-smoke bash scripts/package-smoke.sh
-
-cp -f package-smoke.log "${CI_ARTIFACT_DIR}/" 2>/dev/null || true
 
 ci_log "package-smoke job passed"

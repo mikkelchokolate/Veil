@@ -5,6 +5,10 @@ INSTALL_DIR="${VEIL_INSTALL_DIR:-/usr/local/bin}"
 ETC_DIR="${VEIL_ETC_DIR:-/etc/veil}"
 VAR_DIR="${VEIL_VAR_DIR:-/var/lib/veil}"
 SYSTEMD_DIR="${VEIL_SYSTEMD_DIR:-/etc/systemd/system}"
+# Packaged (vendor) unit directories the nfpm packages install into — distinct
+# from SYSTEMD_DIR, which holds units written by `veil install` (#492).
+VENDOR_SYSTEMD_DIRS="${VEIL_VENDOR_SYSTEMD_DIRS:-/lib/systemd/system /usr/lib/systemd/system}"
+SYSCTL_CONF="${VEIL_SYSCTL_CONF:-/etc/sysctl.d/99-veil-quic.conf}"
 CADDY_STATE_DIR="${VEIL_CADDY_STATE_DIR:-/var/lib/caddy}"
 MITA_STATE_DIR="${VEIL_MITA_STATE_DIR:-/var/lib/mita}"
 YES=""
@@ -33,6 +37,9 @@ Options:
 
 By default uninstall removes configuration and state in /etc/veil and /var/lib/veil
 so a later install starts fresh with a new password. The veil system account is preserved.
+Units written by `veil install` (SYSTEMD_DIR) and packaged units under
+/lib/systemd/system + /usr/lib/systemd/system (VEIL_VENDOR_SYSTEMD_DIRS) are
+always removed, as is the QUIC sysctl drop-in (VEIL_SYSCTL_CONF).
 Purge also removes the Caddy/Mita state dirs (/var/lib/caddy, /var/lib/mita);
 if those are shared with a system Caddy/mita outside Veil, use --keep-data or
 override VEIL_CADDY_STATE_DIR / VEIL_MITA_STATE_DIR.
@@ -79,13 +86,17 @@ if [[ -n "${KEEP_DATA}" ]]; then args+=(--keep-data); fi
 has_leftover_state() {
   [[ -e "${ETC_DIR}" || -e "${VAR_DIR}" ]] && return 0
   [[ -e "${CADDY_STATE_DIR}" || -e "${MITA_STATE_DIR}" ]] && return 0
-  [[ -d "${SYSTEMD_DIR}/veil-backup.service.d" ]] && return 0
-  local unit
-  for unit in "${SYSTEMD_DIR}"/veil*.service "${SYSTEMD_DIR}"/veil*.socket "${SYSTEMD_DIR}"/veil*.timer \
-    "${SYSTEMD_DIR}"/multi-user.target.wants/veil-*@*.service; do
-    if [[ -e "${unit}" || -L "${unit}" ]]; then
-      return 0
-    fi
+  [[ -e "${SYSCTL_CONF}" ]] && return 0
+  local dir unit
+  # shellcheck disable=SC2086 # VENDOR_SYSTEMD_DIRS is a space-separated list.
+  for dir in "${SYSTEMD_DIR}" ${VENDOR_SYSTEMD_DIRS}; do
+    [[ -d "${dir}/veil-backup.service.d" ]] && return 0
+    for unit in "${dir}"/veil*.service "${dir}"/veil*.socket "${dir}"/veil*.timer \
+      "${dir}"/multi-user.target.wants/veil-*@*.service; do
+      if [[ -e "${unit}" || -L "${unit}" ]]; then
+        return 0
+      fi
+    done
   done
   return 1
 }
@@ -103,11 +114,16 @@ print_leftover_plan() {
     echo "  - keep ${CADDY_STATE_DIR}"
     echo "  - keep ${MITA_STATE_DIR}"
   fi
-  echo "  - ${SYSTEMD_DIR}/veil*.service"
-  echo "  - ${SYSTEMD_DIR}/veil*.socket"
-  echo "  - ${SYSTEMD_DIR}/veil*.timer"
-  echo "  - ${SYSTEMD_DIR}/veil-backup.service.d"
-  echo "  - ${SYSTEMD_DIR}/multi-user.target.wants/veil-*@*.service"
+  local dir
+  # shellcheck disable=SC2086 # VENDOR_SYSTEMD_DIRS is a space-separated list.
+  for dir in "${SYSTEMD_DIR}" ${VENDOR_SYSTEMD_DIRS}; do
+    echo "  - ${dir}/veil*.service"
+    echo "  - ${dir}/veil*.socket"
+    echo "  - ${dir}/veil*.timer"
+    echo "  - ${dir}/veil-backup.service.d"
+    echo "  - ${dir}/multi-user.target.wants/veil-*@*.service"
+  done
+  echo "  - ${SYSCTL_CONF}"
 }
 
 remove_leftover_state() {
@@ -127,9 +143,17 @@ remove_leftover_state() {
   if [[ -z "${KEEP_DATA}" ]]; then
     rm -rf "${ETC_DIR}" "${VAR_DIR}" "${CADDY_STATE_DIR}" "${MITA_STATE_DIR}"
   fi
-  rm -rf "${SYSTEMD_DIR}/veil-backup.service.d"
-  rm -f "${SYSTEMD_DIR}"/veil*.service "${SYSTEMD_DIR}"/veil*.socket "${SYSTEMD_DIR}"/veil*.timer
-  rm -f "${SYSTEMD_DIR}"/multi-user.target.wants/veil-*@*.service
+  local dir
+  # shellcheck disable=SC2086 # VENDOR_SYSTEMD_DIRS is a space-separated list.
+  for dir in "${SYSTEMD_DIR}" ${VENDOR_SYSTEMD_DIRS}; do
+    rm -rf "${dir}/veil-backup.service.d"
+    rm -f "${dir}"/veil*.service "${dir}"/veil*.socket "${dir}"/veil*.timer
+    rm -f "${dir}"/multi-user.target.wants/veil-*@*.service
+  done
+  if [[ -e "${SYSCTL_CONF}" ]]; then
+    rm -f "${SYSCTL_CONF}"
+    echo "Removed ${SYSCTL_CONF}; live kernel values reset at next boot (or via 'sysctl --system')."
+  fi
   if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload >/dev/null 2>&1 || true
   fi

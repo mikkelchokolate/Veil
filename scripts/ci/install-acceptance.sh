@@ -553,4 +553,56 @@ grep -qi "pebble" "${CI_ARTIFACT_DIR}/caddy-served-issuer.txt" \
 
 uninstall_leg
 
+# --- 9. Native package lifecycle on live systemd (issue #503) -----------------
+# The legs above install through the binary/curl-style path, which never
+# exercises the packaged maintainer scripts, the /lib vendor units, or the
+# sysctl drop-in. Install the real .deb here, prove the packaged contract under
+# REAL systemd, purge, and finish through the leftover-path uninstaller — the
+# same cleanup an operator gets after `apt remove veil`.
+ci_step "native package lifecycle (nfpm .deb on live systemd)"
+nfpm_bin="$(go env GOPATH)/bin/nfpm"
+if [ ! -x "${nfpm_bin}" ]; then
+  GOBIN="$(go env GOPATH)/bin" go install "github.com/goreleaser/nfpm/v2/cmd/nfpm@${CI_NFPM_VERSION}"
+fi
+# The acceptance binary was built earlier; nfpm packages dist/veil.
+mkdir -p dist /tmp/veil-pkg
+cp /tmp/veil-install-acceptance dist/veil
+export VEIL_VERSION="9.9.9" VEIL_ARCH="amd64" VEIL_MAINTAINER="Veil CI <veil@users.noreply.github.com>"
+"${nfpm_bin}" package --config packaging/nfpm.yaml --packager deb --target /tmp/veil-pkg
+
+${SUDO} apt-get install -y /tmp/veil-pkg/*.deb
+test -f /lib/systemd/system/veil.service || ci_die "packaged veil.service missing from /lib/systemd/system"
+test -f /lib/systemd/system/veil-helper.socket || ci_die "packaged veil-helper.socket missing"
+test -f /etc/sysctl.d/99-veil-quic.conf || ci_die "QUIC sysctl drop-in missing after package install"
+# postinstall ran under REAL systemd: the helper socket enable must have
+# produced an actual wants symlink, and the packaged accounts exist.
+systemctl is-enabled --quiet veil-helper.socket \
+  || ci_die "postinstall did not enable veil-helper.socket on live systemd"
+id veil >/dev/null || ci_die "veil user missing after package install"
+id veil-proxy >/dev/null || ci_die "veil-proxy user missing after package install"
+id -nG veil | tr ' ' '\n' | grep -qx veil-proxy || ci_die "veil not in veil-proxy group"
+
+${SUDO} apt-get purge -y veil
+# Remove+purge must leave no packaged payload — the units and sysctl drop-in
+# are package-owned, not conffiles (issues #475, #485).
+for unit in veil.service veil-helper.service veil-helper.socket veil-backup.service veil-backup.timer veil-caddy.service veil-hysteria2@.service veil-mieru.service veil-olcrtc@.service veil-warp.service; do
+  test ! -e "/lib/systemd/system/${unit}" || ci_die "packaged unit ${unit} left after purge"
+done
+test ! -e /etc/sysctl.d/99-veil-quic.conf || ci_die "sysctl drop-in left after purge"
+test ! -e /usr/local/bin/veil || ci_die "veil binary left after purge"
+if systemctl is-enabled --quiet veil-helper.socket 2>/dev/null; then
+  ci_die "veil-helper.socket still enabled after purge"
+fi
+
+# The package purge preserves /etc/veil and /var/lib/veil (operator state).
+# Finish through the standalone leftover-path uninstaller — it must detect and
+# clear them, and report a clean host on a second pass (issues #500, #501).
+ci_step "leftover-state uninstaller after package purge"
+ci_run veil-uninstall-leftover ${SUDO} bash scripts/uninstall.sh --yes
+${SUDO} test ! -e /etc/veil || ci_die "/etc/veil left after leftover uninstall"
+${SUDO} test ! -e /var/lib/veil || ci_die "/var/lib/veil left after leftover uninstall"
+bash scripts/uninstall.sh --yes 2>&1 | tee "${CI_ARTIFACT_DIR}/uninstall-second-pass.log"
+grep -q "Nothing to uninstall" "${CI_ARTIFACT_DIR}/uninstall-second-pass.log" \
+  || ci_die "second uninstall pass still finds leftover state"
+
 ci_log "install-acceptance job passed"

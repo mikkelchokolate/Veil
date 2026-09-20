@@ -87,6 +87,16 @@ CI_FORWARDPROXY_VERSION="d62c80d3dd2c706b6b87579844d2397bddd18317"
 # availability or rate limits.
 CI_PEBBLE_VERSION="v2.10.1"
 
+# --- package-smoke distro images -------------------------------------------------
+# Pinned by manifest-list (multi-arch index) digest: floating tags would let the
+# package gate drift from what was actually verified, and the release smoke runs
+# on both amd64 and arm64 (issue #394). CI_SMOKE_ALPINE_IMAGE must stay identical
+# to the Dockerfile runtime base (ARG ALPINE_IMAGE) — verify_versions.py enforces
+# the match.
+CI_SMOKE_DEBIAN_IMAGE="debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251"
+CI_SMOKE_ROCKYLINUX_IMAGE="rockylinux:9@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6"
+CI_SMOKE_ALPINE_IMAGE="alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"
+
 # --- Local VM runtime ---------------------------------------------------------
 # Minimum smolvm version required for the local VM backend.
 CI_SMOLVM_MIN_VERSION="1.6.13"

@@ -228,7 +228,7 @@ When installed natively on a Linux host, Veil manages the following directories 
 | Path | Mode | Description |
 |---|---|---|
 | `/usr/local/bin/veil` | `0755` | The compiled Veil management daemon binary. |
-| `/etc/veil/` | `0750` | Configuration root, owned by root/veil. Contains environment files, keys, and generated runtime material. |
+| `/etc/veil/` | `0751` | Configuration root, owned by root/veil. Contains environment files, keys, and generated runtime material. The world execute bit lets `veil-proxy` protocol units traverse into the `root:veil-proxy` subdirectories without listing the root. |
 | `/etc/veil/veil.env` | `0640 root:veil` | Environment variables, Panel listen settings, and authentication tokens readable by the Panel service. |
 | `/var/lib/veil/state.json` | `0600 veil:veil` | Persisted Management state containing settings and configured Inbounds. |
 | `/etc/veil/state.key` | `0640 root:veil` | AES-256-GCM encryption key readable by the Panel but writable only through the privileged helper. |
@@ -263,9 +263,12 @@ systemctl list-timers veil-backup.timer
 See [Disaster Recovery And Key Lifecycle](disaster-recovery.md) before relying
 on local backups or performing a restore.
 
-By default, removal stops and removes managed units, the binary, **and** the
-configuration and state in `/etc/veil` and `/var/lib/veil` (including encrypted
-backups), so a later install starts fresh with a new password and panel path.
+By default, removal stops and removes managed units — both the units `veil
+install` writes under `/etc/systemd/system` and any packaged units left under
+`/lib`/`/usr/lib/systemd/system` — the binary, the QUIC sysctl drop-in
+(`/etc/sysctl.d/99-veil-quic.conf`), **and** the configuration and state in
+`/etc/veil` and `/var/lib/veil` (including encrypted backups), so a later
+install starts fresh with a new password and panel path.
 The locked `veil` account is preserved. Review and export backups first:
 
 ```bash

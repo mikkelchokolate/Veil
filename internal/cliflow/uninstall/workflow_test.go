@@ -110,6 +110,61 @@ func TestRunPurgeRemovesConfigurationAndState(t *testing.T) {
 	}
 }
 
+// Issues #492/#486: uninstall must also clear the packaged vendor units under
+// /lib + /usr/lib systemd dirs and the QUIC sysctl drop-in — a `dpkg -r` that
+// left conffile leftovers (pre-#475 packages) must not survive `veil
+// uninstall`.
+func TestPathsCoverVendorUnitsAndSysctl(t *testing.T) {
+	var out, errOut bytes.Buffer
+	removed := []string{}
+	err := Run(Options{Yes: true, EtcDir: "/tmp/etc", VarDir: "/tmp/var", SystemdDir: "/tmp/systemd", InstallDir: "/tmp/bin"}, &out, &errOut, Dependencies{
+		ServiceStopper:  func(string) error { return nil },
+		FileRemover:     func(path string) error { removed = append(removed, path); return nil },
+		SystemdReloader: func() error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, want := range []string{
+		"/lib/systemd/system/veil.service",
+		"/lib/systemd/system/veil-backup.service",
+		"/usr/lib/systemd/system/veil.service",
+		"/usr/lib/systemd/system/veil-helper.socket",
+		"/etc/sysctl.d/99-veil-quic.conf",
+	} {
+		if !contains(removed, want) {
+			t.Fatalf("uninstall did not remove %s, removed=%v", want, removed)
+		}
+	}
+	// Keep-data still clears vendor units + sysctl: they are package-owned
+	// host files, not operator credentials.
+	removed = nil
+	out.Reset()
+	err = Run(Options{Yes: true, KeepData: true, EtcDir: "/tmp/etc", VarDir: "/tmp/var", SystemdDir: "/tmp/systemd", InstallDir: "/tmp/bin"}, &out, &errOut, Dependencies{
+		ServiceStopper:  func(string) error { return nil },
+		FileRemover:     func(path string) error { removed = append(removed, path); return nil },
+		SystemdReloader: func() error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("Run keep-data: %v", err)
+	}
+	for _, want := range []string{
+		"/lib/systemd/system/veil.service",
+		"/etc/sysctl.d/99-veil-quic.conf",
+	} {
+		if !contains(removed, want) {
+			t.Fatalf("--keep-data uninstall did not remove %s, removed=%v", want, removed)
+		}
+	}
+	// The dry-run plan must name the vendor and sysctl paths (issue #501).
+	plan := Plan(Options{EtcDir: "/tmp/etc", VarDir: "/tmp/var", SystemdDir: "/tmp/systemd", InstallDir: "/tmp/bin"})
+	for _, want := range []string{"/lib/systemd/system/veil.service", "/usr/lib/systemd/system/veil.service", "/etc/sysctl.d/99-veil-quic.conf"} {
+		if !strings.Contains(plan, want) {
+			t.Fatalf("plan missing %s:\n%s", want, plan)
+		}
+	}
+}
+
 func contains(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {

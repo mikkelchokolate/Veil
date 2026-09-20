@@ -1,13 +1,41 @@
 #!/usr/bin/env bash
+# scripts/package-smoke.sh — native package (.deb/.rpm/.apk) lifecycle smoke.
+#
+# Each distro leg installs the OLD package, upgrades to the NEW one, removes,
+# and reinstalls — asserting the real maintainer-script contract each step:
+#   - payload files (binary, packaged units, QUIC sysctl drop-in) land/leave
+#   - service accounts (veil, veil-proxy, veil ∈ veil-proxy) exist
+#   - postinstall's systemctl calls are observed via a stub (daemon-reload,
+#     enable veil-helper.socket on install; try-restart — no disable — on
+#     upgrade)
+#   - state, credentials, and permissions survive upgrade/remove
+#   - DEB additionally covers dpkg -P purge; a fail-closed leg proves
+#     postinstall aborts when a live systemctl call fails and stays quiet
+#     when systemd is not the running init
+#
+# Distro images are pinned by manifest digest in scripts/ci/versions.sh so the
+# smoke cannot drift (issue #394).
+#
+# Release mode: VEIL_SMOKE_PREBUILT_DIR points at the shipped nfpm artifacts
+# (downloaded from the release job's artifact); those become the NEW packages
+# so the smoke validates exactly what will be published (issue #396).
 set -euo pipefail
 
 version_old="${VEIL_SMOKE_OLD_VERSION:-0.0.1}"
 version_new="${VEIL_SMOKE_NEW_VERSION:-0.0.2}"
 binary_version="${VEIL_SMOKE_BINARY_VERSION:-package-smoke}"
+# What `veil version` must print for the NEW packages. In release mode the
+# shipped binary carries the tag; locally both packages carry binary_version.
+expected_binary_version="${VEIL_SMOKE_EXPECTED_BINARY_VERSION:-${binary_version}}"
 goarch="${VEIL_GOARCH:-amd64}"
 arch="${VEIL_ARCH:-amd64}"
 maintainer="${VEIL_MAINTAINER:-Veil CI <veil@users.noreply.github.com>}"
 root="${VEIL_SMOKE_ROOT:-dist/package-smoke}"
+prebuilt_dir="${VEIL_SMOKE_PREBUILT_DIR:-}"
+
+_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/ci/versions.sh
+. "${_script_dir}/ci/versions.sh"
 
 command -v docker >/dev/null 2>&1 || { echo 'docker is required' >&2; exit 1; }
 command -v nfpm >/dev/null 2>&1 || { echo 'nfpm is required' >&2; exit 1; }
@@ -23,6 +51,178 @@ CGO_ENABLED=0 GOOS=linux GOARCH="${goarch}" \
 rm -rf "${root}"
 mkdir -p "${root}/old" "${root}/new"
 
+# Shared in-container assertions and fixtures. Kept in ONE file mounted into
+# every distro leg so DEB/RPM/APK cannot silently drift to weaker coverage
+# (issues #395, #505). POSIX sh — must also run under busybox ash.
+cat > "${root}/smoke-asserts.sh" <<'ASSERTS'
+#!/bin/sh
+# package-smoke shared helpers — runs INSIDE the target distro container.
+# Usage: smoke-asserts.sh <phase> [expected-binary-version]
+# Phases:
+#   setup-systemd-stub       write recording systemctl stub + /run marker
+#   setup-systemd-stub-fail  same, but the stub fails every call
+#   write-fixtures           sentinel state files + permissions to migrate
+#   post-install VERSION     payload, accounts, version, install systemctl log
+#   post-upgrade VERSION     payload, version, sentinels, perms, backups, log
+#   post-remove|post-purge   payload gone, operator state kept
+set -eu
+phase="${1:?phase required}"
+fail() { echo "package-smoke assert failed (${phase}): $*" >&2; exit 1; }
+
+UNITS="veil.service veil-helper.service veil-helper.socket veil-backup.service veil-backup.timer veil-caddy.service veil-hysteria2@.service veil-mieru.service veil-olcrtc@.service veil-warp.service"
+SYSTEMCTL_LOG=/tmp/systemctl.log
+
+write_stub() {
+  rc="$1"
+  cat > /usr/bin/systemctl <<EOF
+#!/bin/sh
+echo "systemctl \$*" >> ${SYSTEMCTL_LOG}
+exit ${rc}
+EOF
+  chmod +x /usr/bin/systemctl
+  : > "${SYSTEMCTL_LOG}"
+}
+
+assert_payload_present() {
+  [ -x /usr/local/bin/veil ] || fail "veil binary missing or not executable"
+  for unit in $UNITS; do
+    [ -f "/lib/systemd/system/$unit" ] || fail "packaged unit $unit missing"
+  done
+  [ -f /etc/sysctl.d/99-veil-quic.conf ] || fail "QUIC sysctl drop-in missing"
+}
+
+assert_payload_absent() {
+  [ ! -e /usr/local/bin/veil ] || fail "veil binary still present after remove"
+  for dir in /lib/systemd/system /usr/lib/systemd/system /etc/systemd/system; do
+    for unit in $UNITS; do
+      [ ! -e "$dir/$unit" ] || fail "unit $unit left in $dir after remove"
+    done
+  done
+  [ ! -e /etc/sysctl.d/99-veil-quic.conf ] || fail "QUIC sysctl drop-in left after remove"
+}
+
+assert_accounts() {
+  # The package owns the service accounts AND the veil-proxy group membership
+  # (issues #324/#325); the smoke must see all of them, not just `id veil`
+  # (issue #478).
+  id veil >/dev/null 2>&1 || fail "veil user missing"
+  id veil-proxy >/dev/null 2>&1 || fail "veil-proxy user missing"
+  id -nG veil 2>/dev/null | tr ' ' '\n' | grep -qx veil-proxy \
+    || fail "veil is not a member of the veil-proxy group"
+}
+
+assert_version() {
+  /usr/local/bin/veil version | grep -F "$1" >/dev/null \
+    || fail "veil version does not contain '$1'"
+}
+
+assert_install_systemctl() {
+  # postinstall must daemon-reload and enable the helper socket on every
+  # install path (issue #499).
+  [ -f "$SYSTEMCTL_LOG" ] || fail "systemctl stub log missing"
+  grep -q 'daemon-reload' "$SYSTEMCTL_LOG" || fail "postinstall did not daemon-reload"
+  grep -Eq '(^|[[:space:]])enable veil-helper\.socket([[:space:]]|$)' "$SYSTEMCTL_LOG" \
+    || fail "postinstall did not enable veil-helper.socket"
+}
+
+assert_upgrade_systemctl() {
+  # Upgrade must reload and restart units so the new binary takes over, and
+  # must never disable them (issues #479, #494).
+  [ -f "$SYSTEMCTL_LOG" ] || fail "systemctl stub log missing"
+  grep -q 'daemon-reload' "$SYSTEMCTL_LOG" || fail "upgrade postinstall did not daemon-reload"
+  grep -q 'try-restart .*veil\.service' "$SYSTEMCTL_LOG" \
+    || fail "upgrade postinstall did not try-restart veil.service"
+  grep -q 'try-restart .*veil-backup\.service' "$SYSTEMCTL_LOG" \
+    || fail "upgrade postinstall did not try-restart veil-backup.service"
+  grep -q 'enable veil-helper\.socket' "$SYSTEMCTL_LOG" \
+    || fail "upgrade postinstall did not re-enable veil-helper.socket"
+  if grep -E "(^|[[:space:]])disable veil(\.service)?([[:space:]]|$)" "$SYSTEMCTL_LOG"; then
+    echo "package upgrade disabled veil.service" >&2
+    cat "$SYSTEMCTL_LOG" >&2
+    exit 1
+  fi
+  if grep -E "(^|[[:space:]])disable veil-helper\.socket([[:space:]]|$)" "$SYSTEMCTL_LOG"; then
+    echo "package upgrade disabled veil-helper.socket" >&2
+    cat "$SYSTEMCTL_LOG" >&2
+    exit 1
+  fi
+}
+
+assert_state_sentinels() {
+  [ "$(cat /var/lib/veil/state.json)" = state-before-upgrade ] || fail "state.json changed"
+  [ "$(cat /var/lib/veil/sessions.json)" = sessions-before-upgrade ] || fail "sessions.json changed"
+  [ "$(cat /etc/veil/state.key)" = key-before-upgrade ] || fail "state.key changed"
+  [ "$(cat /etc/veil/veil.env)" = env-before-upgrade ] || fail "veil.env changed"
+  [ "$(cat /etc/veil/panel/tls.key)" = panel-tls-key ] || fail "panel tls.key changed"
+}
+
+assert_permissions() {
+  [ "$(stat -c "%U:%G %a" /etc/veil)" = "root:veil 751" ] || fail "/etc/veil owner/mode"
+  [ "$(stat -c "%U:%G %a" /var/lib/veil)" = "veil:veil 750" ] || fail "/var/lib/veil owner/mode"
+  [ "$(stat -c "%U:%G %a" /var/lib/veil/state.json)" = "veil:veil 600" ] || fail "state.json owner/mode"
+  [ "$(stat -c "%U:%G %a" /var/lib/veil/sessions.json)" = "veil:veil 600" ] || fail "sessions.json owner/mode"
+  [ "$(stat -c "%U:%G %a" /etc/veil/state.key)" = "root:veil 640" ] || fail "state.key owner/mode"
+  [ "$(stat -c "%U:%G %a" /etc/veil/veil.env)" = "root:veil 640" ] || fail "veil.env owner/mode"
+  [ "$(stat -c "%U:%G %a" /etc/veil/panel)" = "root:veil-proxy 750" ] || fail "panel dir owner/mode"
+  [ "$(stat -c "%U:%G %a" /etc/veil/panel/tls.key)" = "root:veil-proxy 640" ] || fail "panel tls.key owner/mode"
+}
+
+assert_migration_backups() {
+  for file in state.json sessions.json state.key veil.env; do
+    find /var/lib/veil/migration-backups -type f -name "$file" 2>/dev/null | grep -q . \
+      || fail "no migration-backup copy of $file"
+  done
+}
+
+case "$phase" in
+  setup-systemd-stub)
+    write_stub 0
+    mkdir -p /run/systemd/system
+    ;;
+  setup-systemd-stub-fail)
+    write_stub 1
+    ;;
+  write-fixtures)
+    printf state-before-upgrade > /var/lib/veil/state.json
+    printf sessions-before-upgrade > /var/lib/veil/sessions.json
+    printf key-before-upgrade > /etc/veil/state.key
+    printf env-before-upgrade > /etc/veil/veil.env
+    mkdir -p /etc/veil/panel
+    printf panel-tls-key > /etc/veil/panel/tls.key
+    chmod 0644 /var/lib/veil/state.json /var/lib/veil/sessions.json /etc/veil/state.key /etc/veil/veil.env
+    chmod 0700 /etc/veil/panel
+    chmod 0600 /etc/veil/panel/tls.key
+    ;;
+  post-install)
+    assert_payload_present
+    assert_accounts
+    assert_version "${2:?expected binary version required}"
+    assert_install_systemctl
+    ;;
+  post-upgrade)
+    assert_payload_present
+    assert_accounts
+    assert_version "${2:?expected binary version required}"
+    assert_state_sentinels
+    assert_permissions
+    assert_migration_backups
+    assert_upgrade_systemctl
+    ;;
+  post-remove|post-purge)
+    # Remove AND purge must both leave no packaged payload behind — the units
+    # and sysctl drop-in are package-owned, not conffiles (issues #476, #495,
+    # #505). Operator state under /etc/veil + /var/lib/veil is NOT
+    # package-managed and must survive.
+    assert_payload_absent
+    [ "$(cat /var/lib/veil/state.json)" = state-before-upgrade ] || fail "state.json lost on $phase"
+    [ "$(cat /etc/veil/state.key)" = key-before-upgrade ] || fail "state.key lost on $phase"
+    ;;
+  *)
+    fail "unknown phase"
+    ;;
+esac
+ASSERTS
+
 build_packages() {
   local version="$1"
   local target="$2"
@@ -36,32 +236,108 @@ build_packages() {
 }
 
 build_packages "${version_old}" "${root}/old"
-build_packages "${version_new}" "${root}/new"
+if [ -n "${prebuilt_dir}" ]; then
+  # Release mode: smoke the exact artifacts the release job built instead of a
+  # throwaway rebuild (issue #396).
+  cp "${prebuilt_dir}"/*.deb "${prebuilt_dir}"/*.rpm "${prebuilt_dir}"/*.apk "${root}/new/"
+else
+  build_packages "${version_new}" "${root}/new"
+fi
 
 repo="$(pwd)"
 
 run_deb_smoke() {
   docker run --rm \
-    -e EXPECTED_BINARY_VERSION="${binary_version}" \
+    -e EXPECTED_BINARY_VERSION="${expected_binary_version}" \
+    -e OLD_BINARY_VERSION="${binary_version}" \
     -v "${repo}/${root}:/packages:ro" \
-    debian:bookworm-slim sh -euxc '
+    "${CI_SMOKE_DEBIAN_IMAGE}" sh -euxc '
       apt-get update
       apt-get install -y ca-certificates
-      cat > /usr/bin/systemctl <<'"'"'EOF'"'"'
-#!/bin/sh
-echo "systemctl $*" >> /tmp/systemctl.log
-exit 0
-EOF
-      chmod +x /usr/bin/systemctl
-      : > /tmp/systemctl.log
+      sh /packages/smoke-asserts.sh setup-systemd-stub
       dpkg -i /packages/old/*.deb
-      test -x /usr/local/bin/veil
-      for unit in veil.service veil-helper.service veil-helper.socket veil-backup.service veil-backup.timer veil-caddy.service veil-hysteria2@.service veil-mieru.service veil-olcrtc@.service veil-warp.service; do
-        test -f "/lib/systemd/system/$unit"
-      done
-      test -f /etc/sysctl.d/99-veil-quic.conf
-      id veil
-      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
+      sh /packages/smoke-asserts.sh post-install "$OLD_BINARY_VERSION"
+
+      sh /packages/smoke-asserts.sh write-fixtures
+      systemctl enable veil.service veil-helper.socket
+      : > /tmp/systemctl.log
+      dpkg -i /packages/new/*.deb
+      sh /packages/smoke-asserts.sh post-upgrade "$EXPECTED_BINARY_VERSION"
+
+      : > /tmp/systemctl.log
+      dpkg -r veil
+      sh /packages/smoke-asserts.sh post-remove
+      # Purge exercises the conffile/cleanup path too (issue #495).
+      dpkg -P veil
+      sh /packages/smoke-asserts.sh post-purge
+
+      : > /tmp/systemctl.log
+      dpkg -i /packages/new/*.deb
+      sh /packages/smoke-asserts.sh post-install "$EXPECTED_BINARY_VERSION"
+    '
+}
+
+run_rpm_smoke() {
+  docker run --rm \
+    -e EXPECTED_BINARY_VERSION="${expected_binary_version}" \
+    -e OLD_BINARY_VERSION="${binary_version}" \
+    -v "${repo}/${root}:/packages:ro" \
+    "${CI_SMOKE_ROCKYLINUX_IMAGE}" sh -euxc '
+      sh /packages/smoke-asserts.sh setup-systemd-stub
+      dnf install -y /packages/old/*.rpm
+      sh /packages/smoke-asserts.sh post-install "$OLD_BINARY_VERSION"
+
+      sh /packages/smoke-asserts.sh write-fixtures
+      systemctl enable veil.service veil-helper.socket
+      : > /tmp/systemctl.log
+      dnf upgrade -y /packages/new/*.rpm
+      sh /packages/smoke-asserts.sh post-upgrade "$EXPECTED_BINARY_VERSION"
+
+      dnf remove -y veil
+      sh /packages/smoke-asserts.sh post-remove
+
+      : > /tmp/systemctl.log
+      dnf install -y /packages/new/*.rpm
+      sh /packages/smoke-asserts.sh post-install "$EXPECTED_BINARY_VERSION"
+    '
+}
+
+run_apk_smoke() {
+  docker run --rm \
+    -e EXPECTED_BINARY_VERSION="${expected_binary_version}" \
+    -e OLD_BINARY_VERSION="${binary_version}" \
+    -v "${repo}/${root}:/packages:ro" \
+    "${CI_SMOKE_ALPINE_IMAGE}" sh -euxc '
+      sh /packages/smoke-asserts.sh setup-systemd-stub
+      apk add --allow-untrusted /packages/old/*.apk
+      sh /packages/smoke-asserts.sh post-install "$OLD_BINARY_VERSION"
+
+      sh /packages/smoke-asserts.sh write-fixtures
+      systemctl enable veil.service veil-helper.socket
+      : > /tmp/systemctl.log
+      apk add --allow-untrusted --upgrade /packages/new/*.apk
+      sh /packages/smoke-asserts.sh post-upgrade "$EXPECTED_BINARY_VERSION"
+
+      apk del veil
+      sh /packages/smoke-asserts.sh post-remove
+
+      : > /tmp/systemctl.log
+      apk add --allow-untrusted /packages/new/*.apk
+      sh /packages/smoke-asserts.sh post-install "$EXPECTED_BINARY_VERSION"
+    '
+}
+
+# Symlink-refusal + real installer contract leg. Intentionally NO systemctl
+# stub and NO /run/systemd/system marker: this is the honest non-systemd
+# container where `veil install --check` must refuse, and postinstall must
+# skip systemd silently instead of failing (image-build compatibility).
+run_symlink_refusal_smoke() {
+  docker run --rm \
+    -v "${repo}/${root}:/packages:ro" \
+    "${CI_SMOKE_DEBIAN_IMAGE}" sh -euxc '
+      apt-get update
+      apt-get install -y ca-certificates
+      dpkg -i /packages/old/*.deb
 
       # Real installer contract of the packaged binary (audit #304): on this
       # non-systemd container `veil install --check` must print the capability
@@ -74,125 +350,6 @@ EOF
       grep -q "init" /tmp/install-check.out
       test ! -e /var/lib/veil/state.json
 
-      printf state-before-upgrade > /var/lib/veil/state.json
-      printf sessions-before-upgrade > /var/lib/veil/sessions.json
-      printf key-before-upgrade > /etc/veil/state.key
-      printf env-before-upgrade > /etc/veil/veil.env
-      mkdir -p /etc/veil/panel
-      printf panel-tls-key > /etc/veil/panel/tls.key
-      chmod 0644 /var/lib/veil/state.json /var/lib/veil/sessions.json /etc/veil/state.key /etc/veil/veil.env
-      chmod 0700 /etc/veil/panel
-      chmod 0600 /etc/veil/panel/tls.key
-
-      systemctl enable veil.service veil-helper.socket
-      : > /tmp/systemctl.log
-      dpkg -i /packages/new/*.deb
-      if grep -E "(^|[[:space:]])disable veil(\.service)?($|[[:space:]])" /tmp/systemctl.log; then
-        echo "package upgrade disabled veil.service" >&2
-        cat /tmp/systemctl.log >&2
-        exit 1
-      fi
-      if grep -E "(^|[[:space:]])disable veil-helper.socket($|[[:space:]])" /tmp/systemctl.log; then
-        echo "package upgrade disabled veil-helper.socket" >&2
-        cat /tmp/systemctl.log >&2
-        exit 1
-      fi
-      test "$(cat /var/lib/veil/state.json)" = state-before-upgrade
-      test "$(cat /var/lib/veil/sessions.json)" = sessions-before-upgrade
-      test "$(cat /etc/veil/state.key)" = key-before-upgrade
-      test "$(cat /etc/veil/veil.env)" = env-before-upgrade
-      test "$(stat -c "%U:%G %a" /etc/veil)" = "root:veil 751"
-      test "$(stat -c "%U:%G %a" /var/lib/veil)" = "veil:veil 750"
-      test "$(stat -c "%U:%G %a" /var/lib/veil/state.json)" = "veil:veil 600"
-      test "$(stat -c "%U:%G %a" /var/lib/veil/sessions.json)" = "veil:veil 600"
-      test "$(stat -c "%U:%G %a" /etc/veil/state.key)" = "root:veil 640"
-      test "$(stat -c "%U:%G %a" /etc/veil/veil.env)" = "root:veil 640"
-      test "$(stat -c "%U:%G %a" /etc/veil/panel)" = "root:veil-proxy 750"
-      test "$(stat -c "%U:%G %a" /etc/veil/panel/tls.key)" = "root:veil-proxy 640"
-      test "$(cat /etc/veil/panel/tls.key)" = panel-tls-key
-      for file in state.json sessions.json state.key veil.env; do
-        find /var/lib/veil/migration-backups -type f -name "$file" -print -quit | grep .
-      done
-      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
-
-      dpkg -r veil
-      test ! -e /usr/local/bin/veil
-      test "$(cat /var/lib/veil/state.json)" = state-before-upgrade
-      test "$(cat /etc/veil/state.key)" = key-before-upgrade
-      dpkg -i /packages/new/*.deb
-      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
-    '
-}
-
-run_rpm_smoke() {
-  docker run --rm \
-    -e EXPECTED_BINARY_VERSION="${binary_version}" \
-    -v "${repo}/${root}:/packages:ro" \
-    rockylinux:9 sh -euxc '
-      dnf install -y /packages/old/*.rpm
-      test -x /usr/local/bin/veil
-      test -f /lib/systemd/system/veil.service
-      test -f /etc/sysctl.d/99-veil-quic.conf
-      id veil
-      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
-
-      printf state-before-upgrade > /var/lib/veil/state.json
-      printf key-before-upgrade > /etc/veil/state.key
-      chmod 0644 /var/lib/veil/state.json /etc/veil/state.key
-      dnf upgrade -y /packages/new/*.rpm
-      test "$(cat /var/lib/veil/state.json)" = state-before-upgrade
-      test "$(cat /etc/veil/state.key)" = key-before-upgrade
-      test "$(stat -c "%U:%G %a" /var/lib/veil/state.json)" = "veil:veil 600"
-      test "$(stat -c "%U:%G %a" /etc/veil/state.key)" = "root:veil 640"
-      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
-
-      dnf remove -y veil
-      test ! -e /usr/local/bin/veil
-      test "$(cat /var/lib/veil/state.json)" = state-before-upgrade
-      test "$(cat /etc/veil/state.key)" = key-before-upgrade
-      dnf install -y /packages/new/*.rpm
-      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
-    '
-}
-
-run_apk_smoke() {
-  docker run --rm \
-    -e EXPECTED_BINARY_VERSION="${binary_version}" \
-    -v "${repo}/${root}:/packages:ro" \
-    alpine:3.23 sh -euxc '
-      apk add --allow-untrusted /packages/old/*.apk
-      test -x /usr/local/bin/veil
-      test -f /lib/systemd/system/veil.service
-      test -f /etc/sysctl.d/99-veil-quic.conf
-      id veil
-      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
-
-      printf state-before-upgrade > /var/lib/veil/state.json
-      printf key-before-upgrade > /etc/veil/state.key
-      chmod 0644 /var/lib/veil/state.json /etc/veil/state.key
-      apk add --allow-untrusted --upgrade /packages/new/*.apk
-      test "$(cat /var/lib/veil/state.json)" = state-before-upgrade
-      test "$(cat /etc/veil/state.key)" = key-before-upgrade
-      test "$(stat -c "%U:%G %a" /var/lib/veil/state.json)" = "veil:veil 600"
-      test "$(stat -c "%U:%G %a" /etc/veil/state.key)" = "root:veil 640"
-      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
-
-      apk del veil
-      test ! -e /usr/local/bin/veil
-      test "$(cat /var/lib/veil/state.json)" = state-before-upgrade
-      test "$(cat /etc/veil/state.key)" = key-before-upgrade
-      apk add --allow-untrusted /packages/new/*.apk
-      /usr/local/bin/veil version | grep -F "$EXPECTED_BINARY_VERSION"
-    '
-}
-
-run_symlink_refusal_smoke() {
-  docker run --rm \
-    -v "${repo}/${root}:/packages:ro" \
-    debian:bookworm-slim sh -euxc '
-      apt-get update
-      apt-get install -y ca-certificates
-      dpkg -i /packages/old/*.deb
       printf untouched > /tmp/state-target
       rm -f /var/lib/veil/state.json
       ln -s /tmp/state-target /var/lib/veil/state.json
@@ -205,9 +362,42 @@ run_symlink_refusal_smoke() {
     '
 }
 
+# Fail-closed leg (issues #477/#498/#504): with systemd marked as running, a
+# failing systemctl must abort postinstall — and without the marker the same
+# failing systemctl must never be invoked at all.
+run_fail_closed_smoke() {
+  docker run --rm \
+    -v "${repo}/${root}:/packages:ro" \
+    "${CI_SMOKE_DEBIAN_IMAGE}" sh -euxc '
+      apt-get update
+      apt-get install -y ca-certificates
+      sh /packages/smoke-asserts.sh setup-systemd-stub-fail
+
+      # Container/image-build path: systemd is not init, postinstall must not
+      # call systemctl at all — a permanently failing stub proves the gate.
+      dpkg -i /packages/old/*.deb
+      if [ -s /tmp/systemctl.log ]; then
+        echo "postinstall invoked systemctl without a running systemd" >&2
+        cat /tmp/systemctl.log >&2
+        exit 1
+      fi
+
+      # Live-systemd path: daemon-reload failure must fail the install.
+      mkdir -p /run/systemd/system
+      dpkg -r veil
+      : > /tmp/systemctl.log
+      if dpkg -i /packages/old/*.deb; then
+        echo "postinstall succeeded despite failing systemctl daemon-reload" >&2
+        exit 1
+      fi
+      grep -q "systemctl daemon-reload" /tmp/systemctl.log
+    '
+}
+
 run_deb_smoke
 run_rpm_smoke
 run_apk_smoke
 run_symlink_refusal_smoke
+run_fail_closed_smoke
 
-echo 'Native package install, upgrade, reinstall, permissions, and migration safety smoke tests passed.'
+echo 'Native package install, upgrade, purge, reinstall, permissions, migration safety, and fail-closed smoke tests passed.'
