@@ -29,6 +29,8 @@ type recordingPrivilegedClient struct {
 	backups               []privileged.BackupRequest
 	updates               []privileged.UpdateRequest
 	syncCaddyCertRequests []privileged.SyncCaddyCertRequest
+	firewallRequests      []privileged.FirewallRequest
+	firewallResult        privileged.FirewallResult
 	rotateCalls           int
 	recoverRotationCalls  int
 	restartCalls          atomic.Int32
@@ -309,8 +311,9 @@ func (c *recordingPrivilegedClient) RecoverKeyRotation(context.Context, privileg
 	return c.err
 }
 
-func (c *recordingPrivilegedClient) FirewallApply(context.Context, privileged.FirewallRequest) (privileged.FirewallResult, error) {
-	return privileged.FirewallResult{}, c.err
+func (c *recordingPrivilegedClient) FirewallApply(_ context.Context, request privileged.FirewallRequest) (privileged.FirewallResult, error) {
+	c.firewallRequests = append(c.firewallRequests, request)
+	return c.firewallResult, c.err
 }
 
 func (c *recordingPrivilegedClient) StageUpdate(_ context.Context, request privileged.UpdateRequest) (privileged.UpdateResult, error) {

@@ -431,7 +431,10 @@ func (p Policy) ResolveFirewall(request FirewallRequest) (ResolvedFirewall, erro
 		return ResolvedFirewall{RuleIDs: append([]string(nil), request.RuleIDs...), Rules: request.Rules, Action: action, Fence: request.Fence}, nil
 	}
 	if len(request.RuleIDs) == 0 {
-		return ResolvedFirewall{}, newError(ErrorInvalidRequest, "at least one firewall rule is required")
+		// An empty desired set is meaningful: the reconcile still runs so
+		// stale Veil-managed rules are pruned when nothing should remain
+		// staged (for example after the panel switches to loopback-only).
+		return ResolvedFirewall{Action: action, Fence: request.Fence}, nil
 	}
 	rules := make([]string, 0, len(request.RuleIDs))
 	for _, id := range request.RuleIDs {
