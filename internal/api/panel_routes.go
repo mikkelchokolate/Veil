@@ -298,9 +298,15 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if !result.Installed {
-		writePrivilegedError(w, &privileged.Error{
+		// The durable job must reach a terminal state too: leaving it in
+		// "staging" strands the row forever — reconcile only watches
+		// restart_pending/restarting — and the SPA would poll a job that
+		// never settles (#585).
+		installErr := &privileged.Error{
 			Code: privileged.ErrorOperationFailed, Message: "privileged helper did not install the staged update",
-		})
+		}
+		routes.State.updatePanelUpdateJob(updateJob.ID, "failed", applyJob.ID, "", installErr)
+		writePrivilegedError(w, installErr)
 		return
 	}
 	routes.State.updatePanelUpdateJob(updateJob.ID, "restart_pending", applyJob.ID, "", nil)

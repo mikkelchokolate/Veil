@@ -57,18 +57,21 @@ FROM panel_update_jobs WHERE id=?`, id).Scan(&job.ID, &job.Version, &job.Status,
 
 func (s *managementState) reconcilePanelUpdateJobs(runningVersion string) {
 	now := time.Now().UTC().Unix()
-	rows, err := s.db.Query(`SELECT id,target_version,updated_at FROM panel_update_jobs WHERE status IN ('restart_pending','restarting')`)
+	// "staging" rows are included: a job that died mid-install (or returned
+	// Installed=false without a terminal update) would otherwise linger
+	// forever and the job poll would never settle (#585).
+	rows, err := s.db.Query(`SELECT id,target_version,status,updated_at FROM panel_update_jobs WHERE status IN ('staging','restart_pending','restarting')`)
 	if err != nil {
 		return
 	}
 	type pendingJob struct {
-		id, version string
-		updated     int64
+		id, version, status string
+		updated             int64
 	}
 	var pending []pendingJob
 	for rows.Next() {
 		var job pendingJob
-		if rows.Scan(&job.id, &job.version, &job.updated) == nil {
+		if rows.Scan(&job.id, &job.version, &job.status, &job.updated) == nil {
 			pending = append(pending, job)
 		}
 	}
@@ -81,7 +84,15 @@ func (s *managementState) reconcilePanelUpdateJobs(runningVersion string) {
 		switch {
 		case versionflow.ReleaseTag(job.version) == versionflow.ReleaseTag(runningVersion):
 			s.updatePanelUpdateJob(job.id, "succeeded", "", "", nil)
-		case now-job.updated > 300:
+		case now-job.updated <= 300:
+			// Still within the in-flight window.
+		case job.status == "staging":
+			// Reconcile only runs at startup, so a staging row is a leftover
+			// from a dead install attempt (or an Installed=false return that
+			// never reached a terminal state) — fail it so the job poll can
+			// settle (#585).
+			s.updatePanelUpdateJob(job.id, "failed", "", "", fmt.Errorf("panel update to %s did not finish staging", job.version))
+		default:
 			s.updatePanelUpdateJob(job.id, "failed", "", "", fmt.Errorf("panel restarted without expected version %s", job.version))
 		}
 	}

@@ -55,6 +55,31 @@ func TestReconcilePanelUpdateJobsMatchesReleaseDisplayVersion(t *testing.T) {
 			updatedAt:  now - 5,
 			wantStatus: "succeeded",
 		},
+		{
+			// #585: a job left in staging (Installed=false, or a crash
+			// mid-install) must reach a terminal state past the deadline —
+			// otherwise the SPA polls a status that never settles.
+			name:            "stuck staging times out",
+			status:          "staging",
+			running:         "v0.6.2 (" + sha + ")",
+			updatedAt:       now - 400,
+			wantStatus:      "failed",
+			wantErrorSubstr: "did not finish staging",
+		},
+		{
+			name:       "fresh staging stays in flight",
+			status:     "staging",
+			running:    "v0.6.2 (" + sha + ")",
+			updatedAt:  now - 10,
+			wantStatus: "staging",
+		},
+		{
+			name:       "staging row on the running version succeeded",
+			status:     "staging",
+			running:    "v0.6.3 (" + sha + ")",
+			updatedAt:  now - 400,
+			wantStatus: "succeeded",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
