@@ -57,6 +57,7 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodGet, "/api/apply/state", capabilityViewer},
 	{http.MethodGet, "/api/apply/jobs", capabilityViewer},
 	{http.MethodGet, "/api/apply/jobs/{id}", capabilityViewer},
+	{http.MethodGet, "/api/version/update/jobs/{id}", capabilityViewer},
 	{http.MethodPost, "/api/tools/dns-lookup", capabilityViewer},
 	{http.MethodPost, "/api/tools/ping", capabilityViewer},
 	{http.MethodPost, "/api/tools/speedtest", capabilityViewer},
