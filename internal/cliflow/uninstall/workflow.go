@@ -25,6 +25,12 @@ const (
 // usrmerge distros, but listing both keeps removal honest everywhere (#492).
 var defaultVendorSystemdDirs = []string{"/lib/systemd/system", "/usr/lib/systemd/system"}
 
+// legacyInstanceUnitGlobs cover pre-consolidation per-instance units that are
+// no longer in the runtime catalog but stay stopped-enabled on hosts upgraded
+// from per-inbound Caddy — the apply orphan scan covers the same "veil-caddy@"
+// prefix, and uninstall must match it (issue #375).
+var legacyInstanceUnitGlobs = []string{"veil-caddy@*.service"}
+
 type Options struct {
 	DryRun        bool
 	Yes           bool
@@ -191,12 +197,25 @@ func SystemdUnitPaths(opts Options) []string {
 	// survive `veil uninstall` (issue #492).
 	dirs := append([]string{opts.SystemdDir}, opts.VendorSystemdDirs...)
 	paths := make([]string, 0, len(dirs)*(len(units)+1))
+	seen := map[string]bool{}
+	add := func(path string) {
+		if seen[path] {
+			return
+		}
+		seen[path] = true
+		paths = append(paths, path)
+	}
 	for _, dir := range dirs {
 		for _, name := range units {
-			paths = append(paths, filepath.ToSlash(filepath.Join(dir, name)))
+			add(filepath.ToSlash(filepath.Join(dir, name)))
 		}
-		paths = append(paths, filepath.ToSlash(filepath.Join(dir, backupScheduleDropInDir)))
-		paths = append(paths, templateInstancePaths(dir)...)
+		add(filepath.ToSlash(filepath.Join(dir, backupScheduleDropInDir)))
+		// Dir-level template globs can re-match the catalog template file
+		// itself (e.g. veil-hysteria2@.service); dedupe keeps the plan and the
+		// removal list honest.
+		for _, path := range templateInstancePaths(dir) {
+			add(path)
+		}
 	}
 	return paths
 }
@@ -212,19 +231,35 @@ func TemplateInstancePaths(opts Options) []string {
 
 func templateInstancePaths(systemdDir string) []string {
 	wantsDir := filepath.Join(systemdDir, "multi-user.target.wants")
-	var paths []string
+	var globs []string
 	for _, name := range systemdunits.Names() {
-		glob := templateInstanceWantsGlob(name)
-		if glob == "" {
-			continue
+		if glob := templateInstanceWantsGlob(name); glob != "" {
+			globs = append(globs, glob)
 		}
-		matches, err := filepath.Glob(filepath.Join(wantsDir, glob))
+	}
+	globs = append(globs, legacyInstanceUnitGlobs...)
+	var paths []string
+	seen := map[string]bool{}
+	addMatches := func(pattern string) {
+		matches, err := filepath.Glob(pattern)
 		if err != nil {
-			continue
+			return
 		}
 		for _, match := range matches {
-			paths = append(paths, filepath.ToSlash(match))
+			slashed := filepath.ToSlash(match)
+			if seen[slashed] {
+				continue
+			}
+			seen[slashed] = true
+			paths = append(paths, slashed)
 		}
+	}
+	for _, glob := range globs {
+		// Enablement wants links AND concrete per-instance unit files: legacy
+		// veil-caddy@ hosts can carry either, and a dangling wants link or a
+		// stray instance file must not survive uninstall (issue #375).
+		addMatches(filepath.Join(wantsDir, glob))
+		addMatches(filepath.Join(systemdDir, glob))
 	}
 	return paths
 }

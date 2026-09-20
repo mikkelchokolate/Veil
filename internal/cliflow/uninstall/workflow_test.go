@@ -2,6 +2,8 @@ package uninstall
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -162,6 +164,52 @@ func TestPathsCoverVendorUnitsAndSysctl(t *testing.T) {
 		if !strings.Contains(plan, want) {
 			t.Fatalf("plan missing %s:\n%s", want, plan)
 		}
+	}
+}
+
+// Issue #375: legacy pre-consolidation veil-caddy@<name>.service instances are
+// not in the runtime catalog, so catalog-only scans never see them. Uninstall
+// must stop/disable the instance and remove both its enablement wants link and
+// a stray per-instance unit file.
+func TestRunRemovesLegacyCaddyInstances(t *testing.T) {
+	systemdDir := t.TempDir()
+	wantsDir := filepath.Join(systemdDir, "multi-user.target.wants")
+	if err := os.MkdirAll(wantsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	unitFile := filepath.Join(systemdDir, "veil-caddy@legacy.service")
+	if err := os.WriteFile(unitFile, []byte("[Service]\nExecStart=/usr/local/bin/caddy\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wantLink := filepath.Join(wantsDir, "veil-caddy@legacy.service")
+	if err := os.Symlink(unitFile, wantLink); err != nil {
+		// Windows test hosts may forbid symlinks; fall back to a regular file —
+		// the leftover glob treats both the same.
+		if werr := os.WriteFile(wantLink, []byte("x"), 0o644); werr != nil {
+			t.Fatalf("plant wants link: %v / %v", err, werr)
+		}
+	}
+	var out, errOut bytes.Buffer
+	var stopped, removed []string
+	err := Run(Options{
+		Yes: true, EtcDir: "/tmp/etc", VarDir: "/tmp/var",
+		SystemdDir: systemdDir, InstallDir: "/tmp/bin",
+		VendorSystemdDirs: []string{filepath.Join(systemdDir, "vendor")},
+	}, &out, &errOut, Dependencies{
+		ServiceStopper:  func(service string) error { stopped = append(stopped, service); return nil },
+		FileRemover:     func(path string) error { removed = append(removed, path); return nil },
+		SystemdReloader: func() error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	slashedWant := filepath.ToSlash(wantLink)
+	slashedUnit := filepath.ToSlash(unitFile)
+	if !contains(stopped, "veil-caddy@legacy.service") {
+		t.Fatalf("uninstall did not stop/disable veil-caddy@legacy.service, stopped=%v", stopped)
+	}
+	if !contains(removed, slashedWant) || !contains(removed, slashedUnit) {
+		t.Fatalf("uninstall did not remove legacy caddy want/unit, removed=%v", removed)
 	}
 }
 

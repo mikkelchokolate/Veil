@@ -62,6 +62,7 @@ cat > "${root}/smoke-asserts.sh" <<'ASSERTS'
 #   setup-systemd-stub       write recording systemctl stub + /run marker
 #   setup-systemd-stub-fail  same, but the stub fails every call
 #   write-fixtures           sentinel state files + permissions to migrate
+#   plant-legacy-caddy       pre-consolidation veil-caddy@ instance + want
 #   post-install VERSION     payload, accounts, version, install systemctl log
 #   post-upgrade VERSION     payload, version, sentinels, perms, backups, log
 #   post-remove|post-purge   payload gone, operator state kept
@@ -96,6 +97,13 @@ assert_payload_absent() {
   for dir in /lib/systemd/system /usr/lib/systemd/system /etc/systemd/system; do
     for unit in $UNITS; do
       [ ! -e "$dir/$unit" ] || fail "unit $unit left in $dir after remove"
+    done
+    # Legacy per-inbound Caddy leftovers must not survive remove either
+    # (issue #375): unit files in vendor dirs and enablement wants links.
+    for leftover in "$dir"/veil-caddy@*.service "$dir"/multi-user.target.wants/veil-caddy@*.service; do
+      if [ -e "$leftover" ] || [ -L "$leftover" ]; then
+        fail "legacy caddy instance left at $leftover after remove"
+      fi
     done
   done
   [ ! -e /etc/sysctl.d/99-veil-quic.conf ] || fail "QUIC sysctl drop-in left after remove"
@@ -182,6 +190,14 @@ case "$phase" in
   setup-systemd-stub-fail)
     write_stub 1
     ;;
+  plant-legacy-caddy)
+    # Issue #375: a pre-consolidation per-inbound Caddy unit file (vendor dir)
+    # plus its enablement wants link must be removed by preremove/postremove.
+    mkdir -p /etc/systemd/system/multi-user.target.wants
+    printf '[Service]\nExecStart=/usr/local/bin/caddy\n' > /lib/systemd/system/veil-caddy@legacy.service
+    ln -sf /lib/systemd/system/veil-caddy@legacy.service \
+      /etc/systemd/system/multi-user.target.wants/veil-caddy@legacy.service
+    ;;
   write-fixtures)
     printf state-before-upgrade > /var/lib/veil/state.json
     printf sessions-before-upgrade > /var/lib/veil/sessions.json
@@ -265,6 +281,7 @@ run_deb_smoke() {
       sh /packages/smoke-asserts.sh post-upgrade "$EXPECTED_BINARY_VERSION"
 
       : > /tmp/systemctl.log
+      sh /packages/smoke-asserts.sh plant-legacy-caddy
       dpkg -r veil
       sh /packages/smoke-asserts.sh post-remove
       # Purge exercises the conffile/cleanup path too (issue #495).
@@ -293,6 +310,7 @@ run_rpm_smoke() {
       dnf upgrade -y /packages/new/*.rpm
       sh /packages/smoke-asserts.sh post-upgrade "$EXPECTED_BINARY_VERSION"
 
+      sh /packages/smoke-asserts.sh plant-legacy-caddy
       dnf remove -y veil
       sh /packages/smoke-asserts.sh post-remove
 
@@ -318,6 +336,7 @@ run_apk_smoke() {
       apk add --allow-untrusted --upgrade /packages/new/*.apk
       sh /packages/smoke-asserts.sh post-upgrade "$EXPECTED_BINARY_VERSION"
 
+      sh /packages/smoke-asserts.sh plant-legacy-caddy
       apk del veil
       sh /packages/smoke-asserts.sh post-remove
 

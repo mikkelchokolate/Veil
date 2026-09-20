@@ -61,4 +61,23 @@ if command -v systemctl >/dev/null 2>&1; then
     stop_disable_unit veil-caddy.service
     stop_disable_matching_units 'veil-hysteria2@*.service'
     stop_disable_matching_units 'veil-olcrtc@*.service'
+    # Legacy pre-consolidation per-inbound Caddy instances are not in the
+    # current unit catalog (apply cleans them via the orphan prefix scan);
+    # package removal must stop/disable them the same way (issue #375).
+    stop_disable_matching_units 'veil-caddy@*.service'
 fi
+
+# A dangling multi-user.target.wants link survives `systemctl disable` when the
+# instance's unit file is already gone — and with no running systemd the
+# disable above never ran at all. Sweep legacy caddy wants links explicitly so
+# package removal cannot leave them enabled (issue #375).
+for wants_dir in /etc/systemd/system/multi-user.target.wants \
+    /lib/systemd/system/multi-user.target.wants \
+    /usr/lib/systemd/system/multi-user.target.wants; do
+    [ -d "$wants_dir" ] || continue
+    for link in "$wants_dir"/veil-caddy@*.service; do
+        if [ -e "$link" ] || [ -L "$link" ]; then
+            rm -f "$link"
+        fi
+    done
+done

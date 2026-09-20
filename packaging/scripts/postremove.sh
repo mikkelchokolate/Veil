@@ -43,6 +43,19 @@ for dir in /lib/systemd/system /usr/lib/systemd/system; do
         [ -f "$unit" ] || continue
         rm -f "$unit"
     done
+    # Legacy per-inbound Caddy instances shipped by pre-consolidation packages
+    # are not in the current unit list; sweep them from vendor dirs too
+    # (issue #375).
+    for unit in "$dir"/veil-caddy@*.service; do
+        if [ -f "$unit" ] || [ -L "$unit" ]; then
+            rm -f "$unit"
+        fi
+    done
+    for link in "$dir"/multi-user.target.wants/veil-caddy@*.service; do
+        if [ -e "$link" ] || [ -L "$link" ]; then
+            rm -f "$link"
+        fi
+    done
 done
 rm -f /etc/sysctl.d/99-veil-quic.conf
 

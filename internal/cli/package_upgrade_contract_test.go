@@ -114,6 +114,41 @@ func TestPackageScriptsCoverBackupService(t *testing.T) {
 	}
 }
 
+// TestPackageScriptsCoverLegacyCaddyInstances locks issue #375: legacy
+// pre-consolidation veil-caddy@<name>.service units are not in the current
+// catalog, so package remove must match them explicitly — preremove
+// stops/disables them and sweeps their wants links, postremove clears stray
+// vendor-dir unit files.
+func TestPackageScriptsCoverLegacyCaddyInstances(t *testing.T) {
+	preremove, err := os.ReadFile("../../packaging/scripts/preremove.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pre := strings.ReplaceAll(string(preremove), "\r\n", "\n")
+	if !strings.Contains(pre, "stop_disable_matching_units 'veil-caddy@*.service'") {
+		t.Fatalf("preremove.sh must stop/disable legacy veil-caddy@* instances:\n%s", pre)
+	}
+	if !strings.Contains(pre, "multi-user.target.wants/veil-caddy@*.service") {
+		t.Fatalf("preremove.sh must sweep dangling veil-caddy@* wants links:\n%s", pre)
+	}
+	postremove, err := os.ReadFile("../../packaging/scripts/postremove.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	post := strings.ReplaceAll(string(postremove), "\r\n", "\n")
+	if !strings.Contains(post, `"$dir"/veil-caddy@*.service`) {
+		t.Fatalf("postremove.sh must sweep legacy veil-caddy@* vendor unit files:\n%s", post)
+	}
+	uninstallSh, err := os.ReadFile("../../scripts/uninstall.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sh := strings.ReplaceAll(string(uninstallSh), "\r\n", "\n")
+	if !strings.Contains(sh, "'veil-caddy@*'") {
+		t.Fatalf("uninstall.sh leftover path must stop legacy veil-caddy@* instances:\n%s", sh)
+	}
+}
+
 // TestPostremoveCleansPackagedLeftovers locks issue #485: postremove cannot
 // assume the package manager removed unit/sysctl files (conffile leftovers
 // from pre-#475 packages survive plain remove), so it sweeps vendor paths on

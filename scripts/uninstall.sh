@@ -130,14 +130,20 @@ remove_leftover_state() {
   if command -v systemctl >/dev/null 2>&1; then
     systemctl stop veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.service veil-backup.timer >/dev/null 2>&1 || true
     systemctl disable veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.service veil-backup.timer >/dev/null 2>&1 || true
-    systemctl stop 'veil-hysteria2@*' 'veil-olcrtc@*' >/dev/null 2>&1 || true
+    # veil-caddy@* covers legacy pre-consolidation per-inbound Caddy instances
+    # that never enter the current unit catalog (issue #375).
+    systemctl stop 'veil-hysteria2@*' 'veil-olcrtc@*' 'veil-caddy@*' >/dev/null 2>&1 || true
     # Template-glob disable cannot clear per-instance wants links (audit #176);
-    # stop/disable each concrete instance found under multi-user.target.wants.
-    local instance
-    for instance in "${SYSTEMD_DIR}"/multi-user.target.wants/veil-*@*.service; do
-      [[ -e "${instance}" || -L "${instance}" ]] || continue
-      systemctl stop "$(basename "${instance}")" >/dev/null 2>&1 || true
-      systemctl disable "$(basename "${instance}")" >/dev/null 2>&1 || true
+    # stop/disable each concrete instance found under multi-user.target.wants —
+    # in the installer unit dir and the packaged vendor dirs alike (#375).
+    local dir instance
+    # shellcheck disable=SC2086 # VENDOR_SYSTEMD_DIRS is a space-separated list.
+    for dir in "${SYSTEMD_DIR}" ${VENDOR_SYSTEMD_DIRS}; do
+      for instance in "${dir}"/multi-user.target.wants/veil-*@*.service; do
+        [[ -e "${instance}" || -L "${instance}" ]] || continue
+        systemctl stop "$(basename "${instance}")" >/dev/null 2>&1 || true
+        systemctl disable "$(basename "${instance}")" >/dev/null 2>&1 || true
+      done
     done
   fi
   if [[ -z "${KEEP_DATA}" ]]; then
