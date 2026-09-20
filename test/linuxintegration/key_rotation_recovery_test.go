@@ -86,7 +86,7 @@ func TestIntegrationPrivilegedKeyRotationRecoveryAcrossDurablePhases(t *testing.
 			ctx, cancel := context.WithCancel(context.Background())
 			done := make(chan error, 1)
 			go func() {
-				done <- server.ServeUnix(ctx, fixture.socketPath, uint32(panelUID), true)
+				done <- server.ServeUnix(ctx, fixture.socketPath, privileged.PeerPolicy{AllowedUID: uint32(panelUID), AllowRoot: true})
 			}()
 			waitForPath(t, fixture.socketPath)
 			if err := os.Chown(fixture.socketPath, 0, panelGID); err != nil {

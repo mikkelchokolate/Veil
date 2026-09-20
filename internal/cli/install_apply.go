@@ -172,7 +172,10 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	if err := os.MkdirAll(opts.EtcDir, 0755); err != nil {
 		return fmt.Errorf("create etc directory: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Join(opts.EtcDir, "certs"), 0700); err != nil {
+	// 0750 (not 0700): the helper publishes synced ACME pairs here and the
+	// veil-proxy protocol units must traverse it to read them (audit #525).
+	// hostaccess.Migrate assigns root:veil-proxy ownership on packaged hosts.
+	if err := os.MkdirAll(filepath.Join(opts.EtcDir, "certs"), 0750); err != nil {
 		return fmt.Errorf("create certs directory: %w", err)
 	}
 	if err := os.MkdirAll(opts.VarDir, 0755); err != nil {

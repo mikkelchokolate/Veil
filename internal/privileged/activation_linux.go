@@ -18,13 +18,19 @@ const systemdListenFD = 3
 // without taking over the real file descriptor 3.
 var newSystemdUnixListener = systemdUnixListener
 
-func (s *Server) ServeSystemd(ctx context.Context, allowedUID uint32, allowRoot bool) error {
+func (s *Server) ServeSystemd(ctx context.Context, policy PeerPolicy) error {
+	// The socket-activated helper is the production privilege boundary: peers
+	// must always come from veil.service, so the unit binding cannot be
+	// accidentally omitted by the caller (audit #506).
+	if policy.AllowedUnit == "" {
+		policy.AllowedUnit = panelUnitName
+	}
 	listener, err := newSystemdUnixListener()
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
-	return s.serveUnixListener(ctx, listener, allowedUID, allowRoot)
+	return s.serveUnixListener(ctx, listener, policy)
 }
 
 func validateSystemdListenFD(fd int) error {

@@ -158,11 +158,11 @@ func TestFilesIncludesTLSAndOmitsSystemd(t *testing.T) {
 	for _, f := range files {
 		switch f.Path {
 		case filepath.Join(etcDir, "panel", "tls.crt"):
-			if f.Content != "cert-content" || f.Mode != 0o644 {
+			if f.Content != "cert-content" || f.Mode != 0o640 {
 				t.Fatalf("unexpected cert file: %+v", f)
 			}
 		case filepath.Join(etcDir, "panel", "tls.key"):
-			if f.Content != "key-content" || f.Mode != 0o600 {
+			if f.Content != "key-content" || f.Mode != 0o640 {
 				t.Fatalf("unexpected key file: %+v", f)
 			}
 		}

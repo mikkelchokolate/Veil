@@ -1062,3 +1062,86 @@ func TestIssueIPCertCustomCAServerWithoutInsecure(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// TestMain stubs the group lookup so Issue paths running as root (CI
+// containers) get a deterministic veil-proxy gid; individual tests that need
+// real or failing lookups override lookupGroupIDFunc themselves.
+func TestMain(m *testing.M) {
+	orig := lookupGroupIDFunc
+	lookupGroupIDFunc = func(name string) int {
+		if name == "veil-proxy" {
+			return 995
+		}
+		if name == "veil" {
+			return 996
+		}
+		return -1
+	}
+	code := m.Run()
+	lookupGroupIDFunc = orig
+	os.Exit(code)
+}
+
+func TestFixCertOwnershipPropagatesFailures(t *testing.T) {
+	// audit #528: chown/chmod errors must not be discarded — a "successful"
+	// install that leaves tls.key unreadable by veil-proxy is worse than a
+	// loud failure.
+	sys := newFakeSystem()
+	sys.files["/etc/veil/panel/tls.crt"] = &fakeFileInfo{name: "tls.crt", mode: 0o644}
+	sys.files["/etc/veil/panel/tls.key"] = &fakeFileInfo{name: "tls.key", mode: 0o640}
+	sys.chmodErrFor = map[string]error{"/etc/veil/panel/tls.crt": errors.New("chmod boom")}
+	if err := fixCertOwnership(sys, "/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key"); err == nil {
+		t.Fatal("expected chmod error to propagate")
+	}
+}
+
+func TestFixCertOwnershipAppliesProxyGroupAndDir(t *testing.T) {
+	orig := getuidFunc
+	getuidFunc = func() int { return 0 }
+	defer func() { getuidFunc = orig }()
+
+	sys := newFakeSystem()
+	sys.files["/etc/veil/panel/tls.crt"] = &fakeFileInfo{name: "tls.crt", mode: 0o600}
+	sys.files["/etc/veil/panel/tls.key"] = &fakeFileInfo{name: "tls.key", mode: 0o600}
+	sys.files["/etc/veil/panel"] = &fakeFileInfo{name: "panel", mode: os.ModeDir | 0o700}
+
+	if err := fixCertOwnership(sys, "/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key"); err != nil {
+		t.Fatalf("fixCertOwnership: %v", err)
+	}
+	want := map[string]int{
+		"/etc/veil/panel":         995,
+		"/etc/veil/panel/tls.crt": 995,
+		"/etc/veil/panel/tls.key": 995,
+	}
+	got := map[string]int{}
+	for _, c := range sys.chownCalls {
+		got[c.name] = c.gid
+		if c.uid != 0 {
+			t.Fatalf("chown %s used uid %d, want 0", c.name, c.uid)
+		}
+	}
+	for path, gid := range want {
+		if got[path] != gid {
+			t.Fatalf("chownCalls[%s] gid=%d, want %d (all: %+v)", path, got[path], gid, sys.chownCalls)
+		}
+	}
+	if sys.files["/etc/veil/panel"].mode.Perm() != 0o750 {
+		t.Fatalf("panel dir mode = %o, want 0750", sys.files["/etc/veil/panel"].mode.Perm())
+	}
+}
+
+func TestFixCertOwnershipFailsWhenNoRuntimeGroup(t *testing.T) {
+	orig := getuidFunc
+	getuidFunc = func() int { return 0 }
+	defer func() { getuidFunc = orig }()
+	origLookup := lookupGroupIDFunc
+	lookupGroupIDFunc = func(string) int { return -1 }
+	defer func() { lookupGroupIDFunc = origLookup }()
+
+	sys := newFakeSystem()
+	sys.files["/etc/veil/panel/tls.crt"] = &fakeFileInfo{name: "tls.crt", mode: 0o644}
+	sys.files["/etc/veil/panel/tls.key"] = &fakeFileInfo{name: "tls.key", mode: 0o640}
+	if err := fixCertOwnership(sys, "/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key"); err == nil {
+		t.Fatal("expected error when neither veil-proxy nor veil group resolves")
+	}
+}

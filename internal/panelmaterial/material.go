@@ -116,18 +116,24 @@ func (m ManagedMaterial) Files() ([]File, error) {
 		return nil, fmt.Errorf("var dir is required")
 	}
 	files := []File{}
+	// Declared modes are the post-ownership contract modes (root:<group> 0640):
+	// install/repair chowns these files to their runtime group and chmods them
+	// to 0640, so the plan must expect 0640 or it would flag perpetual drift.
 	if input.InstallPanelCaddy {
-		files = append(files, File{Path: filepath.Join(paths.EtcDir, "generated", "caddy", "config.json"), Content: input.CaddyJSON, Mode: 0o600})
-		files = append(files, File{Path: filepath.Join(paths.VarDir, "www", "index.html"), Content: fallbackIndexHTML(input.Domain), Mode: 0o644})
+		files = append(files, File{Path: filepath.Join(paths.EtcDir, "generated", "caddy", "config.json"), Content: input.CaddyJSON, Mode: 0o640})
+		// The naive fallback site lives under /etc/veil/www: Caddy runs as
+		// veil-proxy and /var/lib/veil is InaccessiblePaths-masked for it, so a
+		// var-lib web root would be unreadable (audit #497).
+		files = append(files, File{Path: filepath.Join(paths.EtcDir, "www", "index.html"), Content: fallbackIndexHTML(input.Domain), Mode: 0o640})
 	}
 	if input.PanelTLSEnabled {
 		files = append(files,
-			File{Path: m.PanelTLSCertPath(), Content: input.PanelTLSCertPEM, Mode: 0o644},
-			File{Path: m.PanelTLSKeyPath(), Content: input.PanelTLSKeyPEM, Mode: 0o600},
+			File{Path: m.PanelTLSCertPath(), Content: input.PanelTLSCertPEM, Mode: 0o640},
+			File{Path: m.PanelTLSKeyPath(), Content: input.PanelTLSKeyPEM, Mode: 0o640},
 		)
 	}
 	if envContent := m.EnvContent(); envContent != "" {
-		files = append(files, File{Path: filepath.Join(paths.EtcDir, "veil.env"), Content: envContent, Mode: 0o600})
+		files = append(files, File{Path: filepath.Join(paths.EtcDir, "veil.env"), Content: envContent, Mode: 0o640})
 	}
 	if paths.SystemdDir != "" {
 		cfg := renderer.SystemdConfig{EtcDir: paths.EtcDir, VarDir: paths.VarDir, VeilBinary: paths.VeilBinary, CaddyBinary: paths.CaddyBinary}

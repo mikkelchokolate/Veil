@@ -79,8 +79,11 @@ func TestPromotionRollbackReappliesRuntimeArtifactOwnership(t *testing.T) {
 	if !hasChown(afterFail, protocol1Dst, 0, 457) {
 		t.Fatalf("restored protocol artifact was not chowned root:veil-proxy: %+v", afterFail)
 	}
-	if !hasChown(afterFail, caddyDst, 0, 456) {
-		t.Fatalf("restored caddy artifact was not chowned root:veil: %+v", afterFail)
+	if !hasChown(afterFail, caddyDst, 0, 457) {
+		t.Fatalf("restored caddy artifact was not chowned root:veil-proxy: %+v", afterFail)
+	}
+	if !hasChown(afterFail, filepath.Dir(caddyDst), 0, 457) || !hasChown(afterFail, filepath.Dir(filepath.Dir(caddyDst)), 0, 457) {
+		t.Fatalf("restored caddy artifact parents were not chowned root:veil-proxy: %+v", afterFail)
 	}
 }
 
@@ -161,8 +164,11 @@ func TestPromotionRecoveryReappliesRuntimeArtifactOwnership(t *testing.T) {
 	if !hasChown(chowns, protocolDst, 0, 457) {
 		t.Fatalf("recovered protocol artifact was not chowned root:veil-proxy: %+v", chowns)
 	}
-	if !hasChown(chowns, caddyDst, 0, 456) {
-		t.Fatalf("recovered caddy artifact was not chowned root:veil: %+v", chowns)
+	if !hasChown(chowns, caddyDst, 0, 457) {
+		t.Fatalf("recovered caddy artifact was not chowned root:veil-proxy: %+v", chowns)
+	}
+	if !hasChown(chowns, filepath.Dir(caddyDst), 0, 457) || !hasChown(chowns, filepath.Dir(filepath.Dir(caddyDst)), 0, 457) {
+		t.Fatalf("recovered caddy artifact parents were not chowned root:veil-proxy: %+v", chowns)
 	}
 }
 

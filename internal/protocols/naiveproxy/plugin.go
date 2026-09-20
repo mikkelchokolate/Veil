@@ -80,7 +80,7 @@ func NaiveFallbackRoot(settings model.Settings, inbound model.Inbound) string {
 		root = settings.FallbackRoot
 	}
 	if root == "" {
-		root = "/var/lib/veil/www"
+		root = "/etc/veil/www"
 	}
 	return root
 }

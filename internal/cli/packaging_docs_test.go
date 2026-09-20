@@ -307,13 +307,20 @@ func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	caddyConfig := strings.ReplaceAll(string(caddyBody), "\r\n", "\n")
-	for _, want := range []string{"PrivateDevices=true", "ReadOnlyPaths=/etc/veil"} {
+	for _, want := range []string{"User=veil-proxy\n", "Group=veil-proxy\n", "PrivateDevices=true", "ReadOnlyPaths=/etc/veil"} {
 		if !strings.Contains(caddyConfig, want) {
 			t.Fatalf("veil-caddy.service missing %q:\n%s", want, caddyConfig)
 		}
 	}
 	if strings.Contains(caddyConfig, "ReadWritePaths=/etc/veil") || strings.Contains(caddyConfig, "ReadWritePaths=/var/lib/veil") {
 		t.Fatalf("veil-caddy.service must not remount Veil paths writable:\n%s", caddyConfig)
+	}
+	// Caddy is internet-facing: it must not reach the helper socket or the
+	// panel state tree (audit #507/#508).
+	for _, want := range []string{"InaccessiblePaths=/run/veil/helper.sock /var/lib/veil"} {
+		if !strings.Contains(caddyConfig, want) {
+			t.Fatalf("veil-caddy.service missing %q:\n%s", want, caddyConfig)
+		}
 	}
 	for _, unit := range runtimeUnits {
 		body, err := os.ReadFile(unit)

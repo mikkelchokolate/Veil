@@ -557,7 +557,7 @@ func TestRenderCaddyJSONNaiveFallbackRootDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), `"root": "/var/lib/veil/www"`) {
+	if !strings.Contains(string(data), `"root": "/etc/veil/www"`) {
 		t.Errorf("expected default fallback root, got %s", string(data))
 	}
 }
@@ -594,6 +594,12 @@ func TestRenderCaddyJSONNaiveFallbackRootRejectsOutsideVeil(t *testing.T) {
 		// and backups/ to anonymous naive-port visitors (audit #77 F1).
 		"/var/lib/veil",
 		"/var/lib/veil/",
+		// /etc/veil itself and its secret-bearing siblings (panel/, tls/)
+		// must never become a public file-server root.
+		"/etc/veil",
+		"/etc/veil/panel",
+		"/etc/veil/tls",
+		"/etc/veil/panel/tls.key",
 	}
 	for _, root := range cases {
 		t.Run(root, func(t *testing.T) {
@@ -624,6 +630,11 @@ func TestRenderCaddyJSONNaiveFallbackRootAcceptsWithinVeil(t *testing.T) {
 		input string
 		want  string
 	}{
+		// The managed tree under /etc/veil/www is the post-#601 home.
+		{"/etc/veil/www", "/etc/veil/www"},
+		{"/etc/veil/www/custom", "/etc/veil/www/custom"},
+		// Legacy /var/lib/veil subtrees stay accepted so configurations that
+		// still reference them render instead of hard-failing.
 		{"/var/lib/veil/custom", "/var/lib/veil/custom"},
 		{"/var/lib/veil/www", "/var/lib/veil/www"},
 	}
@@ -674,7 +685,7 @@ func TestRenderCaddyJSONNaiveFallbackRootResolvesRelativePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), `"root": "/var/lib/veil/custom"`) {
+	if !strings.Contains(string(data), `"root": "/etc/veil/www/custom"`) {
 		t.Errorf("expected resolved fallback root, got %s", string(data))
 	}
 }

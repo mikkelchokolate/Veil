@@ -25,7 +25,7 @@ func TestSettingsValidationPreservesRedactedSecretsAndNormalizesFallbackRoot(t *
 	if settings.ProtocolFields["naivePassword"] != "old-naive" || settings.ProtocolFields["hysteria2Password"] != "old-hy" {
 		t.Fatalf("secrets = %+v", settings)
 	}
-	if settings.ProtocolFields["fallbackRoot"] != "/var/lib/veil/www" {
+	if settings.ProtocolFields["fallbackRoot"] != "/etc/veil/www/www" {
 		t.Fatalf("fallbackRoot = %q", settings.ProtocolFields["fallbackRoot"])
 	}
 }

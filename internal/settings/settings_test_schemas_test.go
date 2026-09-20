@@ -7,7 +7,7 @@ func testSettingsFieldSchemas() []schema.FieldSchema {
 		// naiveproxy
 		{Key: "naiveUsername", Label: "Naive Username", Type: schema.FieldText, Default: "veil", Scope: "settings"},
 		{Key: "naivePassword", Label: "Naive Password", Type: schema.FieldPassword, Scope: "settings"},
-		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Default: "/var/lib/veil/www", Scope: "settings"},
+		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Default: "/etc/veil/www", Scope: "settings"},
 		// hysteria2
 		{Key: "hysteria2Password", Label: "Hysteria2 Password", Type: schema.FieldPassword, Scope: "settings"},
 		{Key: "masqueradeURL", Label: "Masquerade URL", Type: schema.FieldText, Default: "https://example.com", Scope: "settings"},

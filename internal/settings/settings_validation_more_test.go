@@ -115,7 +115,7 @@ func TestSettingsValidationPanelListenErrors(t *testing.T) {
 func TestSettingsValidationFallbackRootEscapesVarLibVeil(t *testing.T) {
 	settings := Settings{PanelListen: "127.0.0.1:2096", Mode: "server", FallbackRoot: "../../etc/passwd"}
 	err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{})
-	if err == nil || err.Error() != "fallbackRoot must be within /var/lib/veil" {
+	if err == nil || err.Error() != "fallbackRoot must not contain '..' path traversal" {
 		t.Fatalf("err = %v", err)
 	}
 }

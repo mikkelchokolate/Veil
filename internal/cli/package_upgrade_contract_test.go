@@ -15,8 +15,13 @@ func TestPostinstallGroupsPanelTLSForProxyReaders(t *testing.T) {
 		t.Fatal(err)
 	}
 	script := strings.ReplaceAll(string(body), "\r\n", "\n")
-	if !strings.Contains(script, "chown -R root:veil-proxy /etc/veil/panel") {
-		t.Fatalf("postinstall.sh must group /etc/veil/panel as veil-proxy:\n%s", script)
+	// /etc/veil/panel is normalized inside the runtime-shared dir loop with the
+	// same root:veil-proxy contract as generated/ and tls/.
+	if !strings.Contains(script, "/etc/veil/panel; do") && !strings.Contains(script, "/etc/veil/panel ") {
+		t.Fatalf("postinstall.sh must include /etc/veil/panel in the runtime-shared ownership pass:\n%s", script)
+	}
+	if !strings.Contains(script, `chown -R root:veil-proxy "$dir"`) {
+		t.Fatalf("postinstall.sh must chown runtime-shared dirs to root:veil-proxy:\n%s", script)
 	}
 	if strings.Contains(script, "chown -R root:veil /etc/veil/panel") {
 		t.Fatal("postinstall.sh must not regroup /etc/veil/panel back to the panel-only veil group")

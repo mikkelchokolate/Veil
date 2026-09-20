@@ -188,7 +188,7 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 				result.RemovedArtifacts = append(result.RemovedArtifacts, operation.artifact.ID)
 			}
 		} else if operation.symlinkTarget != "" {
-			err = writePromotionSymlink(operation.artifact.Destination, operation.symlinkTarget)
+			err = writePromotionSymlink(operation.artifact.ID, operation.artifact.Destination, operation.symlinkTarget)
 			if err == nil {
 				result.WrittenArtifacts = append(result.WrittenArtifacts, operation.artifact.ID)
 			}
@@ -346,7 +346,7 @@ func restorePromotionPreTransaction(root string, journal *promotionTransactionJo
 				if record.OldDigest != "" && promotionDigest([]byte(record.OldLinkTarget)) != record.OldDigest {
 					return fmt.Errorf("promotion symlink metadata digest mismatch for %s", record.ArtifactID)
 				}
-				if err := writePromotionSymlink(record.Destination, record.OldLinkTarget); err != nil {
+				if err := writePromotionSymlink(record.ArtifactID, record.Destination, record.OldLinkTarget); err != nil {
 					return err
 				}
 			} else {
@@ -415,7 +415,7 @@ func removePromotionDestination(path string) error {
 	return syncPromotionParent(path)
 }
 
-func writePromotionSymlink(path, target string) error {
+func writePromotionSymlink(artifactID, path, target string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
@@ -423,6 +423,11 @@ func writePromotionSymlink(path, target string) error {
 		return err
 	}
 	if err := os.Symlink(target, path); err != nil {
+		return err
+	}
+	// MkdirAll leaves fresh parents root:root 0700; restore the veil-proxy
+	// traversal contract for the generated tree (audit #524).
+	if err := ensureRuntimeArtifactSymlinkParents(artifactID, path); err != nil {
 		return err
 	}
 	return syncPromotionParent(path)

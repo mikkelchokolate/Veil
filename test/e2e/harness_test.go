@@ -228,7 +228,7 @@ func startRecoveryHelper(t *testing.T, dir, statePath string) string {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- server.ServeUnix(ctx, socketPath, uint32(os.Getuid()), true)
+		done <- server.ServeUnix(ctx, socketPath, privileged.PeerPolicy{AllowedUID: uint32(os.Getuid()), AllowRoot: true})
 	}()
 	t.Cleanup(func() {
 		cancel()

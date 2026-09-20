@@ -5,14 +5,15 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# Internet-facing like the other protocol units: run as veil-proxy (not the
-# panel account) so the 0640 root:veil-proxy generated/tls/panel material
-# stays readable while veil.env/state.key (root:veil) and the helper socket
-# stay out of reach (issue #497, same class as #224). ACME material lives in
-# StateDirectory=caddy (/var/lib/caddy); /etc/veil stays read-only and
-# /var/lib/veil is fully inaccessible.
+# Caddy is Internet-facing and must not share the panel's uid: it runs as
+# veil-proxy like the protocol units so a compromised edge process cannot
+# reach the root helper or the panel-owned state (audit #506).
 User=veil-proxy
 Group=veil-proxy
+# Caddy binds :80/:443 with CAP_NET_BIND_SERVICE and reads 0640
+# root:veil-proxy config under /etc/veil/generated and /etc/veil/tls. ACME
+# material stays in StateDirectory=caddy (/var/lib/caddy); /etc/veil stays
+# read-only while /var/lib/veil and the helper socket are fully unreachable.
 StateDirectory=caddy
 Environment=HOME=/var/lib/caddy XDG_DATA_HOME=/var/lib/caddy XDG_CONFIG_HOME=/var/lib/caddy
 ExecStart=/usr/local/bin/caddy run --config /etc/veil/generated/caddy/config.json

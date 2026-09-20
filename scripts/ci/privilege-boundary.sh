@@ -62,4 +62,33 @@ done
 # the socket-activation test above plus the systemd PoC in ci/vm/systemd/.
 systemd-analyze verify packaging/systemd/*.service packaging/systemd/*.socket packaging/systemd/*.timer
 
+ci_step "packaged unit hardening contract"
+# Static guard rail: the shipped units must carry the privilege-boundary
+# contract, not just render it under test. Fail loudly if a unit regresses.
+assert_unit() { # unit regex
+  grep -Eq "$2" "packaging/systemd/$1" || {
+    echo "unit contract violation: $1 missing /$2/" >&2
+    exit 1
+  }
+}
+assert_unit veil.service '^User=veil$'
+assert_unit veil.service '^Group=veil$'
+for unit in veil-caddy.service veil-hysteria2@.service veil-olcrtc@.service veil-warp.service veil-mieru.service; do
+  assert_unit "$unit" '^User=veil-proxy$'
+  assert_unit "$unit" '^Group=veil-proxy$'
+  assert_unit "$unit" '^InaccessiblePaths=.*[[:space:]/]run/veil/helper\.sock'
+  assert_unit "$unit" '^InaccessiblePaths=.*[[:space:]/]var/lib/veil'
+done
+assert_unit veil-helper.socket '^SocketUser=root$'
+assert_unit veil-helper.socket '^SocketGroup=veil$'
+assert_unit veil-helper.socket '^SocketMode=0660$'
+assert_unit veil-helper.socket '^DirectoryMode=0711$'
+assert_unit veil-helper.socket '^RemoveOnStop=true$'
+assert_unit veil-helper.service '^User=root$'
+# The helper must not be able to write the runtime dir holding its own socket.
+if grep -Eq '^ReadWritePaths=.*[[:space:]](/run|/var/run)([[:space:]]|$)' packaging/systemd/veil-helper.service; then
+  echo "veil-helper.service still has a writable /run path" >&2
+  exit 1
+fi
+
 ci_log "privilege-boundary job passed"

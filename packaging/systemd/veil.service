@@ -8,9 +8,9 @@ Requires=veil-helper.socket
 Type=simple
 User=veil
 Group=veil
-RuntimeDirectory=veil
-RuntimeDirectoryMode=0750
-RuntimeDirectoryPreserve=yes
+# The panel must not own /run/veil: veil-helper.socket owns it root:root 0711
+# so no veil-uid process can replace or shadow the helper socket. The panel
+# only needs to connect to the socket, which the group-owned node allows.
 EnvironmentFile=-/etc/veil/veil.env
 Environment=VEIL_HELPER_SOCKET=/run/veil/helper.sock
 Environment=VEIL_STATE_PATH=/var/lib/veil/state.json

@@ -23,7 +23,7 @@ func TestValidationPreservesRedactedSecretsAndNormalizesFallbackRoot(t *testing.
 	if err := NewValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&update, current); err != nil {
 		t.Fatalf("NormalizeAndValidate: %v", err)
 	}
-	if update.ProtocolFields["naivePassword"] != "old" || update.ProtocolFields["hysteria2Password"] != "old-h2" || update.FallbackRoot != "/var/lib/veil/site" {
+	if update.ProtocolFields["naivePassword"] != "old" || update.ProtocolFields["hysteria2Password"] != "old-h2" || update.FallbackRoot != "/etc/veil/www/site" {
 		t.Fatalf("settings = %+v", update)
 	}
 }

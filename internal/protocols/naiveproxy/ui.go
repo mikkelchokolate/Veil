@@ -15,7 +15,7 @@ func (Plugin) InboundFieldSchema() []schema.FieldSchema {
 		{Key: "transport", Label: "Transport", Type: schema.FieldSelect, Required: true, Default: "tcp", Options: []schema.FieldOption{{Label: "tcp", Value: "tcp"}}, Placeholder: "tcp=HTTPS/H2.", Scope: "inbound"},
 		{Key: "naiveUsername", Label: "Naive Username", Type: schema.FieldText, Default: model.DefaultNaiveUsername, Scope: "inbound"},
 		{Key: "naivePassword", Label: "Naive Password", Type: schema.FieldPassword, GenerateAction: "password", Scope: "inbound"},
-		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Default: "/var/lib/veil/www", Scope: "inbound"},
+		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Default: "/etc/veil/www", Scope: "inbound"},
 	}
 }
 
@@ -24,7 +24,7 @@ func (Plugin) SettingsFieldSchema() []schema.FieldSchema {
 	return []schema.FieldSchema{
 		{Key: "naiveUsername", Label: "Naive Username", Type: schema.FieldText, Default: model.DefaultNaiveUsername, Scope: "settings"},
 		{Key: "naivePassword", Label: "Naive Password", Type: schema.FieldPassword, Scope: "settings"},
-		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Default: "/var/lib/veil/www", Scope: "settings"},
+		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Default: "/etc/veil/www", Scope: "settings"},
 		{Key: "panelAccess", Label: "Panel Access", Type: schema.FieldSelect, Default: "local", Options: []schema.FieldOption{{Label: "local", Value: "local"}, {Label: "direct", Value: "direct"}, {Label: "caddy", Value: "caddy"}}, Scope: "settings"},
 		{Key: "panelDomain", Label: "Panel Domain", Type: schema.FieldText, Scope: "settings", Placeholder: "Public domain used for Panel Caddy TLS/SNI."},
 		{Key: "panelEmail", Label: "Panel ACME Email", Type: schema.FieldText, Scope: "settings", Placeholder: "ACME contact email for Panel Caddy certificate."},

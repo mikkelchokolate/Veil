@@ -31,15 +31,68 @@ func TestLinuxPeerCredentialsAcceptConfiguredUIDAndRejectAnother(t *testing.T) {
 	}
 	defer serverConn.Close()
 
-	if err := verifyPeerUID(serverConn, uint32(os.Getuid()), false); err != nil {
+	if err := verifyPeer(serverConn, PeerPolicy{AllowedUID: uint32(os.Getuid())}); err != nil {
 		t.Fatalf("configured UID rejected: %v", err)
 	}
-	if err := verifyPeerUID(serverConn, uint32(os.Getuid()+1), false); err == nil {
+	if err := verifyPeer(serverConn, PeerPolicy{AllowedUID: uint32(os.Getuid() + 1)}); err == nil {
 		t.Fatal("unexpected UID accepted")
 	}
 }
 
+// A peer with the panel uid but outside the panel unit must be rejected when
+// the policy binds authorization to veil.service (audit #506).
+func TestLinuxPeerCredentialsRejectsUIDOutsideAllowedUnit(t *testing.T) {
+	socketPath := filepath.Join(t.TempDir(), "peer-unit.sock")
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socketPath, Net: "unix"})
+	if err != nil {
+		t.Fatalf("listen unix: %v", err)
+	}
+	defer listener.Close()
+
+	client, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: socketPath, Net: "unix"})
+	if err != nil {
+		t.Fatalf("dial unix: %v", err)
+	}
+	defer client.Close()
+	serverConn, err := listener.AcceptUnix()
+	if err != nil {
+		t.Fatalf("accept unix: %v", err)
+	}
+	defer serverConn.Close()
+
+	oldRead := readPeerCgroup
+	defer func() { readPeerCgroup = oldRead }()
+	policy := PeerPolicy{AllowedUID: uint32(os.Getuid()), AllowedUnit: "veil.service"}
+
+	readPeerCgroup = func(int32) ([]byte, error) {
+		return []byte("0::/user.slice/user-1000.slice/app.slice/some-other.service\n"), nil
+	}
+	if err := verifyPeer(serverConn, policy); err == nil {
+		t.Fatal("peer outside veil.service was accepted")
+	}
+
+	readPeerCgroup = func(int32) ([]byte, error) {
+		return []byte("0::/system.slice/veil.service\n"), nil
+	}
+	if err := verifyPeer(serverConn, policy); err != nil {
+		t.Fatalf("peer inside veil.service rejected: %v", err)
+	}
+
+	// A similarly-named unit must not satisfy the check.
+	readPeerCgroup = func(int32) ([]byte, error) {
+		return []byte("0::/system.slice/veil.service.evil\n"), nil
+	}
+	if err := verifyPeer(serverConn, policy); err == nil {
+		t.Fatal("peer in veil.service.evil was accepted")
+	}
+}
+
 func TestLinuxServeUnixRejectsPeerBeforeExecution(t *testing.T) {
+	// Run as a non-root helper so the socket ownership normalization branch is
+	// skipped; peer rejection is exercised below.
+	oldUID := effectiveUID
+	defer func() { effectiveUID = oldUID }()
+	effectiveUID = func() int { return os.Getuid() + 1 }
 	var calls atomic.Int32
 	server := NewServer(NewLocalAdapter(testPolicy(t), Executor{
 		RestartPanel: func(context.Context) error {
@@ -52,7 +105,7 @@ func TestLinuxServeUnixRejectsPeerBeforeExecution(t *testing.T) {
 	socketPath := filepath.Join(t.TempDir(), "helper.sock")
 	done := make(chan error, 1)
 	go func() {
-		done <- server.ServeUnix(ctx, socketPath, uint32(os.Getuid()+1), false)
+		done <- server.ServeUnix(ctx, socketPath, PeerPolicy{AllowedUID: uint32(os.Getuid() + 1)})
 	}()
 	deadline := time.Now().Add(time.Second)
 	for {

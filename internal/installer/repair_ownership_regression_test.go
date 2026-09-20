@@ -14,17 +14,17 @@ import (
 // root:veil-proxy 0640 (dir 0750) so User=veil-proxy units and Caddy can read
 // them again.
 func TestApplyRepairPlanRestoresRuntimeSharedOwnership(t *testing.T) {
-	oldUID, oldLookup := effectiveUID, lookupUser
-	defer func() { effectiveUID, lookupUser = oldUID, oldLookup }()
+	oldUID, oldLookupG := effectiveUID, lookupGroup
+	defer func() { effectiveUID, lookupGroup = oldUID, oldLookupG }()
 	effectiveUID = func() int { return 0 }
-	lookupUser = func(name string) (*user.User, error) {
+	lookupGroup = func(name string) (*user.Group, error) {
 		switch name {
 		case "veil":
-			return &user.User{Uid: "100", Gid: "100"}, nil
+			return &user.Group{Gid: "100"}, nil
 		case "veil-proxy":
-			return &user.User{Uid: "101", Gid: "101"}, nil
+			return &user.Group{Gid: "101"}, nil
 		}
-		return nil, fmt.Errorf("unknown user %s", name)
+		return nil, fmt.Errorf("unknown group %s", name)
 	}
 	oldChown, oldChmod := chownPath, chmodPath
 	defer func() { chownPath, chmodPath = oldChown, oldChmod }()

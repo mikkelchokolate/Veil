@@ -45,7 +45,7 @@ func TestRenderNaiveCaddyfileRejectsPathTraversal(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for path traversal fallback root")
 	}
-	if !strings.Contains(err.Error(), "fallback root must be within /var/lib/veil") {
+	if !strings.Contains(err.Error(), "path traversal") {
 		t.Fatalf("expected path traversal error, got: %v", err)
 	}
 }

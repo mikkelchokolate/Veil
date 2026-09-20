@@ -292,30 +292,37 @@ func StructFieldName(key string) string {
 func normalizeFallbackRoot(root *string) error {
 	*root = filepath.Clean(*root)
 	slash := filepath.ToSlash(*root)
-	if !strings.HasPrefix(slash, "/var/lib/veil/") {
-		// Exactly /var/lib/veil and unrelated paths are invalid: serving the
-		// state directory itself would expose state.json, audit/ and backups/
-		// to anonymous naive-port visitors (audit #77 F1). The prefix check
-		// uses a trailing slash so /var/lib/veilfoo is rejected too (F4).
-		if slash == "/var/lib/veil" {
-			return errors.New("fallbackRoot must be a subdirectory of /var/lib/veil, not the state directory itself")
+	if !strings.HasPrefix(slash, "/") {
+		// Relative roots resolve under the managed fallback tree, but an
+		// explicit ".." segment is a traversal attempt — fail closed rather
+		// than silently clamping it back inside the root.
+		for _, seg := range strings.Split(slash, "/") {
+			if seg == ".." {
+				return errors.New("fallbackRoot must not contain '..' path traversal")
+			}
 		}
-		if strings.HasPrefix(slash, "/") {
-			return errors.New("fallbackRoot must be within /var/lib/veil")
-		}
-		*root = filepath.Clean("/var/lib/veil/" + *root)
+		*root = filepath.Clean("/etc/veil/www/" + *root)
+		slash = filepath.ToSlash(*root)
 	}
-	// Re-check the boundary after the relative prepend: a "../www" input
-	// cleans to /var/lib/www, which escapes /var/lib/veil even though the
-	// pre-check saw a relative path (code-review P2, audit #77 F4).
-	if !strings.HasPrefix(filepath.ToSlash(*root), "/var/lib/veil/") {
-		return errors.New("fallbackRoot must be within /var/lib/veil")
-	}
-	if filepath.ToSlash(*root) == "/var/lib/veil" {
+	// Allowed roots: the managed fallback tree /etc/veil/www (caddy runs as
+	// veil-proxy and /var/lib/veil is InaccessiblePaths-masked for it), or the
+	// legacy /var/lib/veil subtree for configurations that still reference it.
+	// Exactly /var/lib/veil is invalid: serving the state directory itself
+	// would expose state.json, audit/ and backups/ to anonymous naive-port
+	// visitors (audit #77 F1). Other /etc/veil subtrees (panel/, tls/) hold
+	// keys readable by veil-proxy and must stay out of the public file server.
+	if slash == "/var/lib/veil" {
 		return errors.New("fallbackRoot must be a subdirectory of /var/lib/veil, not the state directory itself")
 	}
-	*root = filepath.ToSlash(*root)
-	return nil
+	if strings.HasPrefix(slash, "/var/lib/veil/") {
+		*root = slash
+		return nil
+	}
+	if slash == "/etc/veil/www" || strings.HasPrefix(slash, "/etc/veil/www/") {
+		*root = slash
+		return nil
+	}
+	return errors.New("fallbackRoot must be within /etc/veil/www or a subdirectory of /var/lib/veil")
 }
 
 // NormalizeWebBasePath is retained for generated-config callers that cannot

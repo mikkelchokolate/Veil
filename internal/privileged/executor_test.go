@@ -38,6 +38,7 @@ func createBackupTestDatabase(t *testing.T, root string) {
 }
 
 func TestProductionExecutorPromotesResolvedArtifactsWithSafetyCopy(t *testing.T) {
+	stubRuntimeArtifactOwnership(t)
 	root := t.TempDir()
 	source := filepath.Join(root, "staging", "mieru.json")
 	destination := filepath.Join(root, "generated", "mieru.json")
@@ -162,7 +163,11 @@ func TestProductionExecutorDoesNotBackupSymlinkTargetOnRemoval(t *testing.T) {
 	}
 }
 
-func TestProductionExecutorGrantsPanelReadAccessToCaddyConfig(t *testing.T) {
+// veil-caddy.service runs as veil-proxy, so a promoted caddy artifact and the
+// whole generated/ parent chain must land root:veil-proxy 0750/0640 — not the
+// historical veil group — or the unit cannot traverse/read its config (audit
+// #509, #516, #517).
+func TestProductionExecutorPublishesCaddyArtifactReadableByVeilProxy(t *testing.T) {
 	oldEffectiveUID := effectiveUID
 	oldLookupUser := lookupUser
 	oldChownPath := chownPath
@@ -176,10 +181,15 @@ func TestProductionExecutorGrantsPanelReadAccessToCaddyConfig(t *testing.T) {
 
 	effectiveUID = func() int { return 0 }
 	lookupUser = func(name string) (*user.User, error) {
-		if name != "veil" {
-			t.Fatalf("lookup user = %q, want veil", name)
+		switch name {
+		case "veil":
+			return &user.User{Uid: "123", Gid: "456"}, nil
+		case "veil-proxy":
+			return &user.User{Uid: "124", Gid: "457"}, nil
+		default:
+			t.Fatalf("lookup user = %q, want veil or veil-proxy", name)
+			return nil, nil
 		}
-		return &user.User{Uid: "123", Gid: "456"}, nil
 	}
 	type chownCall struct {
 		path     string
@@ -219,12 +229,16 @@ func TestProductionExecutorGrantsPanelReadAccessToCaddyConfig(t *testing.T) {
 		t.Fatalf("promote: %v", err)
 	}
 
+	caddyDir := filepath.Dir(destination)
+	generatedRoot := filepath.Dir(caddyDir)
 	wantChowns := []chownCall{
-		{path: filepath.Dir(destination), uid: 0, gid: 456},
-		{path: destination, uid: 0, gid: 456},
+		{path: caddyDir, uid: 0, gid: 457},
+		{path: generatedRoot, uid: 0, gid: 457},
+		{path: destination, uid: 0, gid: 457},
 	}
 	wantChmods := []chmodCall{
-		{path: filepath.Dir(destination), mode: 0o750},
+		{path: caddyDir, mode: 0o750},
+		{path: generatedRoot, mode: 0o750},
 		{path: destination, mode: 0o640},
 	}
 	if !reflect.DeepEqual(chowns, wantChowns) {
@@ -235,7 +249,39 @@ func TestProductionExecutorGrantsPanelReadAccessToCaddyConfig(t *testing.T) {
 	}
 }
 
+// Without root the helper cannot enforce the runtime-artifact ownership
+// contract; promotion must fail closed instead of silently publishing
+// root-owned 0600 files the veil-proxy units cannot read (audit #522).
+func TestProductionExecutorPromotionFailsClosedWithoutRoot(t *testing.T) {
+	oldEffectiveUID := effectiveUID
+	defer func() { effectiveUID = oldEffectiveUID }()
+	effectiveUID = func() int { return 1000 }
+
+	root := t.TempDir()
+	source := filepath.Join(root, "staging", "hysteria2", "edge.yaml")
+	destination := filepath.Join(root, "generated", "hysteria2", "edge.yaml")
+	if err := os.MkdirAll(filepath.Dir(source), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, []byte("listen: :443"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	executor := NewProductionExecutor(ProductionConfig{PromotionBackupRoot: filepath.Join(root, "backups")})
+	if _, err := executor.Promote(context.Background(), ResolvedPromotion{Artifacts: []ResolvedArtifact{{
+		ID:          "hysteria2/edge.yaml",
+		Source:      source,
+		Destination: destination,
+	}}}); err == nil {
+		t.Fatal("expected non-root promotion to fail closed")
+	}
+	if _, statErr := os.Stat(destination); statErr != nil && !os.IsNotExist(statErr) {
+		t.Fatalf("stat destination: %v", statErr)
+	}
+}
+
 func TestProductionExecutorRestoresPromotionByOpaqueBackupID(t *testing.T) {
+	stubRuntimeArtifactOwnership(t)
 	root := t.TempDir()
 	source := filepath.Join(root, "staging", "edge.Caddyfile")
 	destination := filepath.Join(root, "generated", "edge.Caddyfile")

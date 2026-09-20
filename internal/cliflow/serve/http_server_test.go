@@ -25,7 +25,9 @@ func startRecoveryTestHelper(t *testing.T) string {
 	}))
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- server.ServeUnix(ctx, path, uint32(os.Getuid()), true) }()
+	go func() {
+		done <- server.ServeUnix(ctx, path, privileged.PeerPolicy{AllowedUID: uint32(os.Getuid()), AllowRoot: true})
+	}()
 	deadline := time.Now().Add(time.Second)
 	for {
 		if _, err := os.Stat(path); err == nil {

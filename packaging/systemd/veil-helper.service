@@ -33,4 +33,4 @@ Environment=VEIL_STATE_PATH=/var/lib/veil/state.json
 Environment=VEIL_KEY_PATH=/etc/veil/state.key
 Environment=VEIL_APPLY_ROOT=/var/lib/veil/staging
 Environment=VEIL_LIVE_ROOT=/etc/veil/generated
-ReadWritePaths=/etc/veil /var/lib/veil /usr/local/bin /etc/ufw /run /var/run
+ReadWritePaths=/etc/veil /var/lib/veil /usr/local/bin /etc/ufw
