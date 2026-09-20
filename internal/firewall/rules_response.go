@@ -1,6 +1,7 @@
 package firewall
 
 import (
+	"log"
 	"net"
 	"sort"
 	"strconv"
@@ -77,6 +78,11 @@ func BuildRuleResponses(settings model.Settings, inbounds []model.Inbound) []Rul
 		for _, port := range challengePorts {
 			builder.Add(port, "tcp", "Veil ACME challenge")
 		}
+	} else {
+		// Fail-closed for openings is deliberate — never punch a port the plan
+		// did not name — but surface the failure so a transient plan-build
+		// error is not silently mistaken for "no challenges planned" (#341).
+		log.Printf("firewall: cannot enumerate ACME challenge binds: %v", err)
 	}
 	return builder.Rules()
 }
