@@ -359,4 +359,75 @@ describe("BackupsPage", () => {
 		expect(await screen.findByText("revalidation failed")).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
 	});
+
+	// #586: a degraded job with restored=true committed state — it must
+	// surface as a warning success with the outcome/phase visible, not a
+	// hard failure that invites a second restore.
+	it("treats a degraded-but-restored job as a warning, not a failure", async () => {
+		fetcherMocks.apiFetch.mockImplementation(
+			(path: string, init?: RequestInit) => {
+				if (path === "/api/backups") {
+					return Promise.resolve([
+						{
+							name: "veil-backup.enc",
+							size: 42,
+							createdAt: "2026-08-17T03:39:09Z",
+							encrypted: true,
+						},
+					]);
+				}
+				if (
+					path === "/api/backups/veil-backup.enc/restore" &&
+					init?.method === "POST"
+				) {
+					return Promise.resolve({
+						id: "job-1",
+						archive: "veil-backup.enc",
+						status: "queued",
+					});
+				}
+				if (path === "/api/backup-restore-jobs/job-1") {
+					return Promise.resolve({
+						id: "job-1",
+						archive: "veil-backup.enc",
+						status: "degraded",
+						outcome: "restored",
+						phase: "finalization_failed",
+						restored: true,
+						httpStatus: 500,
+						error: "finalization failed",
+					});
+				}
+				return Promise.resolve({});
+			},
+		);
+
+		const queryClient = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={queryClient}>
+				<I18nProvider>
+					<BackupsPage />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+
+		fireEvent.click(await screen.findByRole("button", { name: "Restore" }));
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Confirm restore" }),
+		);
+
+		const badge = await screen.findByText(/^degraded$/i);
+		expect(badge.className).toContain("--warning");
+		expect(badge.className).not.toContain("--danger");
+		expect(await screen.findByText(/outcome: restored/i)).toBeInTheDocument();
+		expect(
+			await screen.findByText(/phase: finalization failed/i),
+		).toBeInTheDocument();
+		expect(
+			await screen.findByText(/restored state is committed/i),
+		).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
+	});
 });
