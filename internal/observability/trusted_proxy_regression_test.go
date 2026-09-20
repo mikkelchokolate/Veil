@@ -38,4 +38,16 @@ func TestDefaultRatePolicyCoversEveryExpensiveAndAbusableSurface(t *testing.T) {
 			t.Errorf("invalid dedicated limit for %s: %+v", prefix, limit)
 		}
 	}
+	// Sensitive credential/export reads get a GET/HEAD-only budget (#583/#594).
+	readLimits := DefaultRateLimitPolicy().ReadEndpointLimits()
+	for _, prefix := range []string{"/api/client-links", "/api/v1/clients", "/api/backups"} {
+		limit, ok := readLimits[prefix]
+		if !ok {
+			t.Errorf("rate policy has no dedicated read limit for %s", prefix)
+			continue
+		}
+		if limit.RatePerMinute <= 0 || limit.Burst <= 0 {
+			t.Errorf("invalid dedicated read limit for %s: %+v", prefix, limit)
+		}
+	}
 }

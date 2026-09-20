@@ -4,6 +4,10 @@ type RateLimitPolicy struct {
 	DefaultRatePerMinute int
 	DefaultBurst         int
 	limits               map[string]EndpointLimit
+	// readLimits apply to GET/HEAD only so credential/export reads are
+	// throttled without tightening the mutation budget on the same prefix
+	// (#583/#594).
+	readLimits map[string]EndpointLimit
 }
 
 func DefaultRateLimitPolicy() RateLimitPolicy {
@@ -23,6 +27,12 @@ func DefaultRateLimitPolicy() RateLimitPolicy {
 			"/api/logs":              {RatePerMinute: 10, Burst: 3},
 			"/api/apply/plan":        {RatePerMinute: 6, Burst: 2},
 		},
+		readLimits: map[string]EndpointLimit{
+			// Credential/export reads gated by isRateLimitedReadPath (#583/#594).
+			"/api/client-links": {RatePerMinute: 30, Burst: 6},
+			"/api/v1/clients":   {RatePerMinute: 60, Burst: 12},
+			"/api/backups":      {RatePerMinute: 30, Burst: 6},
+		},
 	}
 }
 
@@ -34,8 +44,18 @@ func (p RateLimitPolicy) EndpointLimits() map[string]EndpointLimit {
 	return limits
 }
 
+// ReadEndpointLimits returns the GET/HEAD-only endpoint limits.
+func (p RateLimitPolicy) ReadEndpointLimits() map[string]EndpointLimit {
+	limits := make(map[string]EndpointLimit, len(p.readLimits))
+	for path, limit := range p.readLimits {
+		limits[path] = limit
+	}
+	return limits
+}
+
 func (p RateLimitPolicy) NewLimiter() *RateLimiter {
 	limiter := NewRateLimiter(p.DefaultRatePerMinute, p.DefaultBurst)
 	limiter.SetEndpointLimits(p.EndpointLimits())
+	limiter.SetReadEndpointLimits(p.ReadEndpointLimits())
 	return limiter
 }
