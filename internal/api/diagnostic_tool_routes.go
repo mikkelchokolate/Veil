@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"net/netip"
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/diagnostics"
@@ -57,11 +58,24 @@ func (DiagnosticToolRoutes) handleDNSLookup(w http.ResponseWriter, r *http.Reque
 		writeError(w, "hostname: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := validateDiagnosticTargetScope(r.Context(), req.Hostname); err != nil {
+	resolved, err := resolveDiagnosticTarget(r.Context(), req.Hostname)
+	if err != nil {
 		writeError(w, "hostname: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	addrs, cname, err := dnsLookuper(req.Hostname)
+	lookupTarget := req.Hostname
+	if resolved.literal {
+		// Canonicalize IP literals (including inet_aton shorthand) so the tool
+		// receives the same approved literal the policy checked.
+		lookupTarget = resolved.probe
+	}
+	addrs, cname, err := dnsLookuper(lookupTarget)
+	if err == nil && !resolved.literal {
+		// Pin the reported addresses to the scope-approved resolution so a
+		// rebind between this check and the tool's own lookup cannot surface
+		// unvalidated (e.g. link-local/metadata) addresses (#575).
+		addrs = diagnosticAddrStrings(resolved.addrs)
+	}
 	writeJSON(w, diagnostics.NewDNSLookupResult(req.Hostname, addrs, cname, err).Map())
 }
 
@@ -86,7 +100,8 @@ func (DiagnosticToolRoutes) handlePing(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "host: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := validateDiagnosticTargetScope(r.Context(), req.Host); err != nil {
+	resolved, err := resolveDiagnosticTarget(r.Context(), req.Host)
+	if err != nil {
 		writeError(w, "host: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -97,7 +112,19 @@ func (DiagnosticToolRoutes) handlePing(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "count must be 1-10", http.StatusBadRequest)
 		return
 	}
-	writeJSON(w, pingRunner(req.Host, req.Count))
+	// Probe the pinned literal only — never the raw hostname — so a rebind
+	// between the scope check and the probe cannot redirect ping to a
+	// forbidden destination (#575).
+	writeJSON(w, pingRunner(resolved.probe, req.Count))
+}
+
+// diagnosticAddrStrings formats approved resolved addresses for display.
+func diagnosticAddrStrings(addrs []netip.Addr) []string {
+	out := make([]string, 0, len(addrs))
+	for _, addr := range addrs {
+		out = append(out, addr.String())
+	}
+	return out
 }
 
 func (DiagnosticToolRoutes) handleSpeedtest(w http.ResponseWriter, r *http.Request) {

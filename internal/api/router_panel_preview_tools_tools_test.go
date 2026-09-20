@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -79,6 +81,16 @@ func TestSpeedtestEndpointRejectsInvalidContentType(t *testing.T) {
 func TestDNSLookupEndpoint(t *testing.T) {
 	orig := dnsLookuper
 	defer func() { dnsLookuper = orig }()
+	origLookup := diagnosticTargetLookup
+	defer func() { diagnosticTargetLookup = origLookup }()
+	diagnosticTargetLookup = func(ctx context.Context, host string) ([]net.IP, error) {
+		switch host {
+		case "example.com":
+			return []net.IP{net.ParseIP("93.184.216.34"), net.ParseIP("2606:2800:220:1:248:1893:25c8:1946")}, nil
+		default:
+			return nil, errors.New("lookup " + host + ": no such host")
+		}
+	}
 
 	t.Run("POST resolves hostname", func(t *testing.T) {
 		r, _ := newTestRouter(ServerInfo{Version: "test"})
@@ -117,7 +129,7 @@ func TestDNSLookupEndpoint(t *testing.T) {
 		}
 	})
 
-	t.Run("POST returns error for NXDOMAIN", func(t *testing.T) {
+	t.Run("POST fails closed for NXDOMAIN", func(t *testing.T) {
 		r, _ := newTestRouter(ServerInfo{Version: "test"})
 		dnsLookuper = func(host string) ([]string, string, error) {
 			return nil, "", errors.New("lookup none.such.invalid: no such host")
@@ -128,19 +140,9 @@ func TestDNSLookupEndpoint(t *testing.T) {
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
-		}
-		var result struct {
-			Hostname  string   `json:"hostname"`
-			Addresses []string `json:"addresses"`
-			Error     string   `json:"error,omitempty"`
-		}
-		if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
-			t.Fatalf("decode body: %v", err)
-		}
-		if result.Error == "" {
-			t.Error("expected error for NXDOMAIN")
+		// Scope resolution fails closed (#374): the tool is never invoked.
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 		}
 	})
 
@@ -188,8 +190,9 @@ func TestFirewallEndpoint(t *testing.T) {
 
 	r, _ := newTestRouter(ServerInfo{Version: "test"})
 
-	// Configure settings with a panel port
-	settingsBody := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"server"}`)
+	// Configure settings with a publicly bound panel port — a loopback or
+	// local-access panel must NOT produce a "Veil panel" allow rule (#356).
+	settingsBody := strings.NewReader(`{"panelListen":"0.0.0.0:2096","panelAccess":"direct","mode":"server"}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/settings", settingsBody)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
