@@ -87,7 +87,9 @@ systemctl list-timers veil-backup.timer
 ```
 
 The command installs the root-owned passphrase at
-`/etc/veil/backup.passphrase` with mode `0600`. The timer writes verified
+`/etc/veil/backup.passphrase` with mode `0600` (at `<etc-dir>/backup.passphrase`
+on installs that used custom `--etc-dir`/`--var-dir`, or wherever
+`--passphrase-path` points). The timer writes verified
 archives to `/var/lib/veil/backups` and applies the default 7 daily, 4 weekly,
 and 12 monthly retention policy.
 

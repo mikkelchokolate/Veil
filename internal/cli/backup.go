@@ -301,6 +301,12 @@ func newBackupCommand(version string) *cobra.Command {
 			if len(resolvedPass) < 16 {
 				return errors.New("scheduled backup passphrase must be at least 16 characters")
 			}
+			if !cmd.Flags().Changed("passphrase-path") {
+				// The flag default is the packaged path; a custom-path install
+				// configures its own --passphrase-file, so the stored secret
+				// must land where the effective unit reads it (issue #627).
+				schedulePassphrasePath = scheduledBackupPassphraseDestination(backupSystemdDir, schedulePassphrasePath)
+			}
 			schedulePassphrasePath, err = normalizeScheduledPassphrasePath(schedulePassphrasePath)
 			if err != nil {
 				return err
@@ -343,6 +349,12 @@ func newBackupCommand(version string) *cobra.Command {
 			if !cmd.Flags().Changed("passphrase-path") {
 				if fromDropIn := scheduledPassphrasePathFromDropIn(backupSystemdDir); fromDropIn != "" {
 					schedulePassphrasePath = fromDropIn
+				} else {
+					// No schedule drop-in: resolve the path the effective
+					// unit reads so --remove-passphrase deletes the real
+					// secret on a custom-path install, not the packaged
+					// default (issue #627).
+					schedulePassphrasePath = scheduledBackupPassphraseDestination(backupSystemdDir, schedulePassphrasePath)
 				}
 			} else {
 				var err error

@@ -156,17 +156,29 @@ done
 # InaccessiblePaths, so the old location is unreadable to it. Carry over any
 # operator content not already present in the new root — regular files and
 # directories only; symlinks are never copied into a veil-proxy-readable tree.
+# The copy is idempotent and never touches destination entries: unlike the
+# old `cp -Rp` + `find -type l -delete` pass it neither clones symlinks nor
+# sweeps operator-created links under /etc/veil/www on every upgrade while
+# the legacy tree exists (issue #622). Matches hostaccess.copyLegacyWWWTree.
 if [ -d /var/lib/veil/www ] && [ ! -L /var/lib/veil/www ]; then
     install -d -m 0750 -o root -g veil-proxy /etc/veil/www
-    for item in /var/lib/veil/www/* /var/lib/veil/www/.[!.]* /var/lib/veil/www/..?*; do
-        [ -e "$item" ] || continue
-        [ -L "$item" ] && continue
-        base=${item##*/}
-        if [ ! -e "/etc/veil/www/$base" ]; then
-            cp -Rp "$item" "/etc/veil/www/$base"
-        fi
-    done
-    find /etc/veil/www -type l -delete
+    find /var/lib/veil/www -mindepth 1 \( -type f -o -type d \) -exec sh -c '
+        for src do
+            rel=${src#/var/lib/veil/www/}
+            dst=/etc/veil/www/$rel
+            # Existing destination entries (including symlinks) win over
+            # legacy content — never overwrite or remove operator material.
+            if [ -e "$dst" ] || [ -L "$dst" ]; then
+                continue
+            fi
+            if [ -d "$src" ]; then
+                mkdir -p "$dst"
+            else
+                mkdir -p "${dst%/*}"
+                cp -p "$src" "$dst"
+            fi
+        done
+    ' _ {} +
 fi
 for dir in /etc/veil/generated /etc/veil/tls /etc/veil/certs /etc/veil/www /etc/veil/panel; do
     if [ -L "$dir" ]; then
@@ -213,6 +225,7 @@ if [ -d /var/lib/mita ] && [ ! -L /var/lib/mita ]; then
     chown -R veil-mita:veil-mita /var/lib/mita
     find /var/lib/mita -type d -exec chmod 0700 {} +
     find /var/lib/mita -type f -exec chmod 0600 {} +
+
 fi
 
 # Only drive systemd when it is the running init. Containers building images

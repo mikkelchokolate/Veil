@@ -217,6 +217,20 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 	case !os.IsNotExist(err):
 		return err
 	}
+	// veil-caddy.service and veil-mieru.service moved to User=veil-proxy
+	// (#497/#615). systemd never re-owns an existing StateDirectory, so a
+	// /var/lib/caddy or /var/lib/mita left behind by the previous identity
+	// stays unwritable to the new unit — mirror the package postinstall and
+	// re-own existing real directories to the proxy identity (issue #623).
+	// StateDirectory names always resolve under /var/lib regardless of the
+	// configured VarDir, hence the fixed paths.
+	if panel.ProxyUID != 0 || panel.ProxyGID != 0 {
+		for _, dir := range proxyStateDirs {
+			if err := reownProxyStateDir(dir, panel.ProxyUID, panel.ProxyGID); err != nil {
+				return err
+			}
+		}
+	}
 	for _, name := range []string{"state.json", "sessions.json"} {
 		if err := setOptionalFile(filepath.Join(paths.VarDir, name), 0o600, panel.UID, panel.GID); err != nil {
 			return err
@@ -393,6 +407,41 @@ func copyRegularFile(source, destination string) error {
 		return errors.Join(err, output.Close())
 	}
 	return output.Close()
+}
+
+// proxyStateDirs are the fixed StateDirectory trees that must belong to the
+// veil-proxy identity (veil-caddy.service StateDirectory=caddy,
+// veil-mieru.service StateDirectory=mita). It is a variable so tests can
+// point it at a scratch tree.
+var proxyStateDirs = []string{"/var/lib/caddy", "/var/lib/mita"}
+
+// reownProxyStateDir mirrors the package postinstall `chown -R
+// veil-proxy:veil-proxy` repair: an existing real directory tree is re-owned
+// to the proxy identity, contents included. A symlinked or non-directory
+// path is operator-managed and left alone, and symlinks inside the tree are
+// never followed — matching `chown -R` semantics.
+func reownProxyStateDir(root string, uid, gid int) error {
+	info, err := testHooks.lstat(root)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return nil
+	}
+	return testHooks.walkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			// Never chown through a link: only the tree's own entries are
+			// re-owned, like `chown -R` without -L.
+			return nil
+		}
+		return testHooks.chown(path, uid, gid)
+	})
 }
 
 func ensureOwnedDirectory(path string, mode os.FileMode, uid, gid int) error {

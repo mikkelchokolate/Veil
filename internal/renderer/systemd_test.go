@@ -239,6 +239,109 @@ func TestRenderSystemdUnitsDefaults(t *testing.T) {
 	}
 }
 
+// Issues #625/#626/#639/#650: on a packaged host a custom --etc-dir/--var-dir
+// install must override every path-carrying directive the vendor units set —
+// for ALL packaged service units, not just the panel/helper/backup trio. List
+// directives (EnvironmentFile, ReadOnlyPaths, ReadWritePaths,
+// InaccessiblePaths, ConditionPathExists) accumulate across drop-ins, so each
+// must be cleared with an empty assignment before the custom value.
+func TestRenderInstallDropInOverridesPackagedUnits(t *testing.T) {
+	cfg := SystemdConfig{EtcDir: "/opt/veil/etc", VarDir: "/opt/veil/var"}
+
+	t.Run("protocol units get ExecStart and InaccessiblePaths drop-ins", func(t *testing.T) {
+		for name, want := range map[string][]string{
+			UnitHysteria2: {"ExecStart=\n", "ExecStart=/usr/local/bin/hysteria server --config /opt/veil/etc/generated/hysteria2/%i.yaml"},
+			UnitOlcrtc:    {"ExecStart=\n", "ExecStart=/usr/local/bin/olcrtc /opt/veil/etc/generated/olcrtc/%i.yaml"},
+			UnitWarp:      {"ExecStart=\n", "ExecStart=/usr/local/bin/sing-box run -c /opt/veil/etc/generated/sing-box/warp.json", "ExecReload=\n", "ExecReload=/usr/local/bin/sing-box check -c /opt/veil/etc/generated/sing-box/warp.json"},
+			UnitMieru:     {"ExecStart=\n", "ExecStart=/usr/local/bin/mita run", "ExecStartPost=\n", "/opt/veil/etc/generated/mieru/server_config.json", "ExecStop=\n", "ExecStop=/usr/local/bin/mita stop"},
+		} {
+			dropIn, ok := RenderInstallDropIn(name, cfg)
+			if !ok {
+				t.Fatalf("%s: expected install drop-in for custom paths", name)
+			}
+			for _, wantLine := range want {
+				if !strings.Contains(dropIn, wantLine) {
+					t.Fatalf("%s drop-in missing %q:\n%s", name, wantLine, dropIn)
+				}
+			}
+			// The #615 mask must follow the custom VarDir instead of staying
+			// stuck on the packaged default, and the abandoned default tree
+			// stays masked as defense-in-depth.
+			if !strings.Contains(dropIn, "InaccessiblePaths=\nInaccessiblePaths=/run/veil/helper.sock /opt/veil/var /var/lib/veil") {
+				t.Fatalf("%s drop-in must reset InaccessiblePaths to the custom VarDir (keeping /var/lib/veil masked):\n%s", name, dropIn)
+			}
+		}
+	})
+
+	t.Run("caddy drop-in follows custom etc and masks custom var", func(t *testing.T) {
+		dropIn, ok := RenderInstallDropIn(UnitCaddy, cfg)
+		if !ok {
+			t.Fatal("expected caddy drop-in")
+		}
+		for _, want := range []string{
+			"ExecStart=\nExecStart=/usr/local/bin/caddy run --config /opt/veil/etc/generated/caddy/config.json",
+			"ExecReload=\nExecReload=/usr/local/bin/caddy reload --config /opt/veil/etc/generated/caddy/config.json",
+			"ReadOnlyPaths=\nReadOnlyPaths=/opt/veil/etc",
+			"InaccessiblePaths=\nInaccessiblePaths=/run/veil/helper.sock /opt/veil/var /var/lib/veil",
+		} {
+			if !strings.Contains(dropIn, want) {
+				t.Fatalf("caddy drop-in missing %q:\n%s", want, dropIn)
+			}
+		}
+	})
+
+	t.Run("backup drop-in resets the packaged condition and env file", func(t *testing.T) {
+		dropIn, ok := RenderInstallDropIn(UnitBackupService, cfg)
+		if !ok {
+			t.Fatal("expected backup drop-in")
+		}
+		for _, want := range []string{
+			"[Unit]\nConditionPathExists=\nConditionPathExists=/opt/veil/etc/backup.passphrase\n\n[Service]\n",
+			"ExecStart=\nExecStart=/usr/local/bin/veil backup create --state /opt/veil/var/state.json --key-path /opt/veil/etc/state.key --passphrase-file /opt/veil/etc/backup.passphrase --output-dir /opt/veil/var/backups",
+			"EnvironmentFile=\nEnvironmentFile=-/opt/veil/etc/veil.env",
+			"ReadWritePaths=\nReadWritePaths=/opt/veil/var",
+		} {
+			if !strings.Contains(dropIn, want) {
+				t.Fatalf("backup drop-in missing %q:\n%s", want, dropIn)
+			}
+		}
+	})
+
+	t.Run("panel and helper drop-ins clear packaged path grants", func(t *testing.T) {
+		veil, ok := RenderInstallDropIn(UnitVeil, cfg)
+		if !ok {
+			t.Fatal("expected veil drop-in")
+		}
+		for _, want := range []string{
+			"EnvironmentFile=\nEnvironmentFile=-/opt/veil/etc/veil.env",
+			"ReadOnlyPaths=\nReadOnlyPaths=/opt/veil/etc",
+			"ReadWritePaths=\nReadWritePaths=/opt/veil/var",
+		} {
+			if !strings.Contains(veil, want) {
+				t.Fatalf("veil drop-in missing %q:\n%s", want, veil)
+			}
+		}
+		helper, ok := RenderInstallDropIn(UnitHelperService, cfg)
+		if !ok {
+			t.Fatal("expected helper drop-in")
+		}
+		if !strings.Contains(helper, "ReadWritePaths=\nReadWritePaths=/opt/veil/etc /opt/veil/var /usr/local/bin /etc/ufw /run/veil") {
+			t.Fatalf("helper drop-in must reset ReadWritePaths before the custom list:\n%s", helper)
+		}
+	})
+
+	t.Run("no drop-in without custom paths or for units without path overrides", func(t *testing.T) {
+		if _, ok := RenderInstallDropIn(UnitVeil, SystemdConfig{}); ok {
+			t.Fatal("default install must not render a drop-in")
+		}
+		for _, name := range []string{UnitHelperSocket, UnitBackupTimer} {
+			if _, ok := RenderInstallDropIn(name, cfg); ok {
+				t.Fatalf("%s has no path-carrying directives to override", name)
+			}
+		}
+	})
+}
+
 func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 	units := RenderSystemdUnits(SystemdConfig{})
 	panel := units[UnitVeil]

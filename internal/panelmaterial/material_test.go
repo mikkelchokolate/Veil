@@ -112,6 +112,62 @@ func TestManagedMaterialSkipsPackagedUnitsAndWritesDropIns(t *testing.T) {
 	}
 }
 
+// Issue #625: on a packaged host a custom --etc-dir/--var-dir install must
+// drop in overrides for the protocol units too — not only panel/helper/
+// backup/caddy — or they keep reading /etc/veil/generated and masking the
+// wrong state tree.
+func TestManagedMaterialCustomPathsWriteProtocolDropIns(t *testing.T) {
+	vendor := t.TempDir()
+	etcSystemd := filepath.Join(t.TempDir(), "etc", "systemd", "system")
+	for _, name := range systemdunits.Names() {
+		if err := os.WriteFile(filepath.Join(vendor, name), []byte("[Unit]\nDescription=vendor\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	material := NewManagedMaterial(Input{
+		Paths: Paths{
+			EtcDir:           "/opt/veil/etc",
+			VarDir:           "/opt/veil/var",
+			SystemdDir:       etcSystemd,
+			VendorSystemdDir: vendor,
+			VeilBinary:       "/usr/local/bin/veil",
+		},
+		PanelAuthToken: "token",
+		PanelListen:    "127.0.0.1:2096",
+	})
+	files, err := material.Files()
+	if err != nil {
+		t.Fatalf("Files: %v", err)
+	}
+	wantConfig := map[string]string{
+		"veil-hysteria2@.service": "/opt/veil/etc/generated/hysteria2/%i.yaml",
+		"veil-olcrtc@.service":    "/opt/veil/etc/generated/olcrtc/%i.yaml",
+		"veil-warp.service":       "/opt/veil/etc/generated/sing-box/warp.json",
+		"veil-mieru.service":      "/opt/veil/etc/generated/mieru/server_config.json",
+	}
+	for name, config := range wantConfig {
+		dropIn := filepath.Join(etcSystemd, name+".d", "10-veil-install.conf")
+		if !hasFile(files, dropIn) {
+			t.Fatalf("protocol unit %s got no install drop-in: %+v", name, files)
+		}
+		body := fileContent(files, dropIn)
+		if !strings.Contains(body, "ExecStart=\n") || !strings.Contains(body, config) {
+			t.Fatalf("%s drop-in must reset ExecStart and point at %s:\n%s", name, config, body)
+		}
+		if !strings.Contains(body, "InaccessiblePaths=\nInaccessiblePaths=/run/veil/helper.sock /opt/veil/var /var/lib/veil") {
+			t.Fatalf("%s drop-in must reset InaccessiblePaths to the custom VarDir:\n%s", name, body)
+		}
+	}
+	caddyDropIn := filepath.Join(etcSystemd, "veil-caddy.service.d", "10-veil-install.conf")
+	if body := fileContent(files, caddyDropIn); !strings.Contains(body, "InaccessiblePaths=/run/veil/helper.sock /opt/veil/var /var/lib/veil") {
+		t.Fatalf("caddy drop-in must follow the custom VarDir mask:\n%s", body)
+	}
+	backupDropIn := filepath.Join(etcSystemd, "veil-backup.service.d", "10-veil-install.conf")
+	if body := fileContent(files, backupDropIn); !strings.Contains(body, "ConditionPathExists=\nConditionPathExists=/opt/veil/etc/backup.passphrase") {
+		t.Fatalf("backup drop-in must reset the packaged ConditionPathExists (#626):\n%s", body)
+	}
+}
+
 func TestManagedMaterialDefaultPackagedInstallWritesNoEtcUnits(t *testing.T) {
 	vendor := t.TempDir()
 	etcSystemd := filepath.Join(t.TempDir(), "etc", "systemd", "system")

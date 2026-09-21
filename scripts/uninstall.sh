@@ -87,10 +87,15 @@ has_leftover_state() {
   [[ -e "${ETC_DIR}" || -e "${VAR_DIR}" ]] && return 0
   [[ -e "${CADDY_STATE_DIR}" || -e "${MITA_STATE_DIR}" ]] && return 0
   [[ -e "${SYSCTL_CONF}" ]] && return 0
-  local dir unit
+  local dir unit dropin
   # shellcheck disable=SC2086 # VENDOR_SYSTEMD_DIRS is a space-separated list.
   for dir in "${SYSTEMD_DIR}" ${VENDOR_SYSTEMD_DIRS}; do
-    [[ -d "${dir}/veil-backup.service.d" ]] && return 0
+    # veil*.service.d/veil*.socket.d/veil*.timer.d hold the custom-path install
+    # drop-ins (10-veil-install.conf) and the schedule drop-in — they are
+    # leftovers even when the unit file itself is already gone (issue #642).
+    for dropin in "${dir}"/veil*.service.d "${dir}"/veil*.socket.d "${dir}"/veil*.timer.d; do
+      [[ -d "${dropin}" ]] && return 0
+    done
     for unit in "${dir}"/veil*.service "${dir}"/veil*.socket "${dir}"/veil*.timer \
       "${dir}"/multi-user.target.wants/veil-*@*.service; do
       if [[ -e "${unit}" || -L "${unit}" ]]; then
@@ -120,7 +125,9 @@ print_leftover_plan() {
     echo "  - ${dir}/veil*.service"
     echo "  - ${dir}/veil*.socket"
     echo "  - ${dir}/veil*.timer"
-    echo "  - ${dir}/veil-backup.service.d"
+    echo "  - ${dir}/veil*.service.d"
+    echo "  - ${dir}/veil*.socket.d"
+    echo "  - ${dir}/veil*.timer.d"
     echo "  - ${dir}/multi-user.target.wants/veil-*@*.service"
   done
   echo "  - ${SYSCTL_CONF}"
@@ -152,7 +159,10 @@ remove_leftover_state() {
   local dir
   # shellcheck disable=SC2086 # VENDOR_SYSTEMD_DIRS is a space-separated list.
   for dir in "${SYSTEMD_DIR}" ${VENDOR_SYSTEMD_DIRS}; do
-    rm -rf "${dir}/veil-backup.service.d"
+    # Drop-in dirs hold the custom-path install drop-ins (10-veil-install.conf)
+    # and the schedule drop-in (passphrase-path.conf): left behind they merge
+    # into the next package install and point units at deleted trees (#642).
+    rm -rf "${dir}"/veil*.service.d "${dir}"/veil*.socket.d "${dir}"/veil*.timer.d
     rm -f "${dir}"/veil*.service "${dir}"/veil*.socket "${dir}"/veil*.timer
     rm -f "${dir}"/multi-user.target.wants/veil-*@*.service
   done
