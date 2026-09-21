@@ -206,9 +206,13 @@ fi
 
 # veil-mieru.service switched from User=veil-proxy to the dedicated veil-mita
 # identity (#624): a mita StateDirectory left at veil-proxy:veil-proxy would
-# be unwritable for the daemon — same re-own as caddy above.
+# be unwritable for the daemon — same re-own as caddy above. Match the
+# hostaccess.Migrate mode contract too (dirs 0700, files 0600): find does not
+# follow symlinks, so a planted link is skipped rather than tightened.
 if [ -d /var/lib/mita ] && [ ! -L /var/lib/mita ]; then
     chown -R veil-mita:veil-mita /var/lib/mita
+    find /var/lib/mita -type d -exec chmod 0700 {} +
+    find /var/lib/mita -type f -exec chmod 0600 {} +
 fi
 
 # Only drive systemd when it is the running init. Containers building images
