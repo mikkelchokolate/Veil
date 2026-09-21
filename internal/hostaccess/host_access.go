@@ -39,6 +39,12 @@ type Identity struct {
 	GID      int
 	ProxyUID int
 	ProxyGID int
+	// MitaUID/MitaGID identify the dedicated veil-mita runtime account that
+	// owns veil-mieru.service's appctl socket and state dir (issue #624).
+	// Zero means the caller has no mita identity — callers that did not run
+	// EnsureAccount leave it unset and Migrate skips the mita state dir.
+	MitaUID int
+	MitaGID int
 }
 
 type Paths struct {
@@ -46,6 +52,9 @@ type Paths struct {
 	VarDir  string
 	RootUID int
 	RootGID int
+	// MitaDir is the mieru daemon StateDirectory (/var/lib/mita). Empty
+	// resolves to the sibling "mita" directory next to VarDir.
+	MitaDir string
 }
 
 type AccountDependencies struct {
@@ -84,11 +93,25 @@ func EnsureAccount(deps AccountDependencies) (Identity, error) {
 	if err != nil {
 		return Identity{}, err
 	}
+	// veil-mita is the dedicated mieru daemon identity: the appctl UDS is a
+	// control plane, so it must NOT share the veil-proxy edge uid/group —
+	// any compromised veil-proxy unit could otherwise drive it (issue #624).
+	mita, err := ensureNamedAccount(deps, "veil-mita")
+	if err != nil {
+		return Identity{}, err
+	}
 	if err := addSupplementaryGroup(deps, "veil", "veil-proxy"); err != nil {
+		return Identity{}, err
+	}
+	// The panel connects to the appctl socket through the veil-mita group;
+	// veil-proxy units are deliberately NOT members.
+	if err := addSupplementaryGroup(deps, "veil", "veil-mita"); err != nil {
 		return Identity{}, err
 	}
 	panel.ProxyUID = proxy.UID
 	panel.ProxyGID = proxy.GID
+	panel.MitaUID = mita.UID
+	panel.MitaGID = mita.GID
 	return panel, nil
 }
 
@@ -243,7 +266,33 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 			return err
 		}
 	}
-	return setOptionalFile(filepath.Join(paths.EtcDir, "backup.passphrase"), 0o600, paths.RootUID, paths.RootGID)
+	if err := setOptionalFile(filepath.Join(paths.EtcDir, "backup.passphrase"), 0o600, paths.RootUID, paths.RootGID); err != nil {
+		return err
+	}
+	// veil-mieru.service moved to the dedicated veil-mita identity (issue
+	// #624). systemd does not re-own an existing StateDirectory, so a mita
+	// state tree left at veil-proxy:veil-proxy would be unwritable for the
+	// daemon — re-own it like the packaged postinstall does.
+	if panel.MitaUID != 0 && panel.MitaGID != 0 {
+		mitaDir := paths.MitaDir
+		if mitaDir == "" {
+			mitaDir = filepath.Join(filepath.Dir(paths.VarDir), "mita")
+		}
+		info, err := testHooks.lstat(mitaDir)
+		switch {
+		case os.IsNotExist(err):
+			// No daemon state yet — systemd creates it veil-mita-owned.
+		case err != nil:
+			return err
+		case info.Mode()&os.ModeSymlink != 0 || !info.IsDir():
+			return fmt.Errorf("refuse to migrate non-directory mita state dir %s", mitaDir)
+		default:
+			if err := applyTreeOwnership(mitaDir, 0o700, 0o600, panel.MitaUID, panel.MitaGID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func createSafetyCopies(paths Paths, now time.Time) (string, error) {

@@ -281,9 +281,15 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 // the group both readers share — and falls back to veil when veil-proxy is
 // absent; every step fails closed so a renewal can never "succeed" leaving an
 // unreadable key or an unrestarted consumer (audit #526).
+//
+// The hysteria2 loop mirrors postinstall: --plain keeps a status glyph out of
+// $1, --state=active skips instances the apply path already stopped/disabled
+// (or whose unit file was removed), and try-restart never revives an instance
+// that went inactive between listing and restarting — while a genuine restart
+// failure on an active unit still aborts the renewal (issue #620).
 func renewReloadCmd(certPath, keyPath string) string {
 	dir := filepath.Dir(certPath)
-	return fmt.Sprintf("chmod 0644 %s && chmod 0640 %s && (chgrp veil-proxy %s %s || chgrp veil %s %s) && (chgrp veil-proxy %s || chgrp veil %s) && chmod 0750 %s && systemctl restart veil.service && for u in $(systemctl list-units --all --no-legend 'veil-hysteria2@*.service' | awk '{print $1}'); do systemctl restart \"$u\" || exit 1; done",
+	return fmt.Sprintf("chmod 0644 %s && chmod 0640 %s && (chgrp veil-proxy %s %s || chgrp veil %s %s) && (chgrp veil-proxy %s || chgrp veil %s) && chmod 0750 %s && systemctl restart veil.service && for u in $(systemctl list-units --plain --no-legend --state=active 'veil-hysteria2@*.service' | awk '{print $1}'); do systemctl try-restart \"$u\" || exit 1; done",
 		shellQuote(certPath), shellQuote(keyPath),
 		shellQuote(certPath), shellQuote(keyPath), shellQuote(certPath), shellQuote(keyPath),
 		shellQuote(dir), shellQuote(dir), shellQuote(dir))

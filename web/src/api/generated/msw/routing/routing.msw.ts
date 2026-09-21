@@ -94,18 +94,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getApiRoutingRulesResponse200 = {
-  data: RoutingRule[]
-  status: 200
-}
-
-export type getApiRoutingRulesResponseSuccess = (getApiRoutingRulesResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiRoutingRulesResponse = (getApiRoutingRulesResponseSuccess)
-
 export const getGetApiRoutingRulesUrl = () => {
 
 
@@ -117,9 +105,9 @@ export const getGetApiRoutingRulesUrl = () => {
 /**
  * @summary List routing rules
  */
-export const getApiRoutingRules = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiRoutingRulesResponse> => {
+export const getApiRoutingRules = async ( options?: Parameters<typeof apiFetch>[1]): Promise<RoutingRule[]> => {
 
-  return apiFetch<getApiRoutingRulesResponse>(getGetApiRoutingRulesUrl(),
+  return apiFetch<RoutingRule[]>(getGetApiRoutingRulesUrl(),
   {
     ...options,
     method: 'GET'
@@ -206,45 +194,6 @@ export function useGetApiRoutingRules<TData = Awaited<ReturnType<typeof getApiRo
 
 
 
-export type postApiRoutingRulesResponse201 = {
-  data: RoutingRule & MutationOutcome
-  status: 201
-}
-
-export type postApiRoutingRulesResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiRoutingRulesResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiRoutingRulesResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiRoutingRulesResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiRoutingRulesResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiRoutingRulesResponseSuccess = (postApiRoutingRulesResponse201) & {
-  headers: Headers;
-};
-export type postApiRoutingRulesResponseError = (postApiRoutingRulesResponse400 | postApiRoutingRulesResponse409 | postApiRoutingRulesResponse422 | postApiRoutingRulesResponse423 | postApiRoutingRulesResponse503) & {
-  headers: Headers;
-};
-
-export type postApiRoutingRulesResponse = (postApiRoutingRulesResponseSuccess | postApiRoutingRulesResponseError)
-
 export const getPostApiRoutingRulesUrl = () => {
 
 
@@ -256,7 +205,7 @@ export const getPostApiRoutingRulesUrl = () => {
 /**
  * @summary Create a routing rule
  */
-export const postApiRoutingRules = async (routingRule: RoutingRule, options?: Parameters<typeof apiFetch>[1]): Promise<postApiRoutingRulesResponse> => {
+export const postApiRoutingRules = async (routingRule: RoutingRule, options?: Parameters<typeof apiFetch>[1]): Promise<RoutingRule & MutationOutcome> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -272,7 +221,7 @@ export const postApiRoutingRules = async (routingRule: RoutingRule, options?: Pa
     }
     return headers;
   };
-return apiFetch<postApiRoutingRulesResponse>(getPostApiRoutingRulesUrl(),
+return apiFetch<RoutingRule & MutationOutcome>(getPostApiRoutingRulesUrl(),
   {
     ...options,
     method: 'POST',
@@ -332,26 +281,7 @@ export const usePostApiRoutingRules = <TError = BadRequestResponse | ConflictRes
       > => {
       return useMutation(getPostApiRoutingRulesMutationOptions(options), queryClient);
     }
-    export type getApiRoutingRulesNameResponse200 = {
-  data: RoutingRule
-  status: 200
-}
-
-export type getApiRoutingRulesNameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type getApiRoutingRulesNameResponseSuccess = (getApiRoutingRulesNameResponse200) & {
-  headers: Headers;
-};
-export type getApiRoutingRulesNameResponseError = (getApiRoutingRulesNameResponse404) & {
-  headers: Headers;
-};
-
-export type getApiRoutingRulesNameResponse = (getApiRoutingRulesNameResponseSuccess | getApiRoutingRulesNameResponseError)
-
-export const getGetApiRoutingRulesNameUrl = (name: string,) => {
+    export const getGetApiRoutingRulesNameUrl = (name: string,) => {
 
 
 
@@ -362,9 +292,9 @@ export const getGetApiRoutingRulesNameUrl = (name: string,) => {
 /**
  * @summary Read a routing rule
  */
-export const getApiRoutingRulesName = async (name: string, options?: Parameters<typeof apiFetch>[1]): Promise<getApiRoutingRulesNameResponse> => {
+export const getApiRoutingRulesName = async (name: string, options?: Parameters<typeof apiFetch>[1]): Promise<RoutingRule> => {
 
-  return apiFetch<getApiRoutingRulesNameResponse>(getGetApiRoutingRulesNameUrl(name),
+  return apiFetch<RoutingRule>(getGetApiRoutingRulesNameUrl(name),
   {
     ...options,
     method: 'GET'
@@ -451,50 +381,6 @@ export function useGetApiRoutingRulesName<TData = Awaited<ReturnType<typeof getA
 
 
 
-export type putApiRoutingRulesNameResponse200 = {
-  data: RoutingRule & MutationOutcome
-  status: 200
-}
-
-export type putApiRoutingRulesNameResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type putApiRoutingRulesNameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type putApiRoutingRulesNameResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type putApiRoutingRulesNameResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type putApiRoutingRulesNameResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type putApiRoutingRulesNameResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type putApiRoutingRulesNameResponseSuccess = (putApiRoutingRulesNameResponse200) & {
-  headers: Headers;
-};
-export type putApiRoutingRulesNameResponseError = (putApiRoutingRulesNameResponse400 | putApiRoutingRulesNameResponse404 | putApiRoutingRulesNameResponse409 | putApiRoutingRulesNameResponse422 | putApiRoutingRulesNameResponse423 | putApiRoutingRulesNameResponse503) & {
-  headers: Headers;
-};
-
-export type putApiRoutingRulesNameResponse = (putApiRoutingRulesNameResponseSuccess | putApiRoutingRulesNameResponseError)
-
 export const getPutApiRoutingRulesNameUrl = (name: string,) => {
 
 
@@ -507,7 +393,7 @@ export const getPutApiRoutingRulesNameUrl = (name: string,) => {
  * @summary Update a routing rule
  */
 export const putApiRoutingRulesName = async (name: string,
-    routingRule: RoutingRule, options?: Parameters<typeof apiFetch>[1]): Promise<putApiRoutingRulesNameResponse> => {
+    routingRule: RoutingRule, options?: Parameters<typeof apiFetch>[1]): Promise<RoutingRule & MutationOutcome> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -523,7 +409,7 @@ export const putApiRoutingRulesName = async (name: string,
     }
     return headers;
   };
-return apiFetch<putApiRoutingRulesNameResponse>(getPutApiRoutingRulesNameUrl(name),
+return apiFetch<RoutingRule & MutationOutcome>(getPutApiRoutingRulesNameUrl(name),
   {
     ...options,
     method: 'PUT',
@@ -583,46 +469,7 @@ export const usePutApiRoutingRulesName = <TError = BadRequestResponse | NotFound
       > => {
       return useMutation(getPutApiRoutingRulesNameMutationOptions(options), queryClient);
     }
-    export type deleteApiRoutingRulesNameResponse200 = {
-  data: DeleteApiRoutingRulesName200
-  status: 200
-}
-
-export type deleteApiRoutingRulesNameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type deleteApiRoutingRulesNameResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type deleteApiRoutingRulesNameResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type deleteApiRoutingRulesNameResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type deleteApiRoutingRulesNameResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type deleteApiRoutingRulesNameResponseSuccess = (deleteApiRoutingRulesNameResponse200) & {
-  headers: Headers;
-};
-export type deleteApiRoutingRulesNameResponseError = (deleteApiRoutingRulesNameResponse404 | deleteApiRoutingRulesNameResponse409 | deleteApiRoutingRulesNameResponse422 | deleteApiRoutingRulesNameResponse423 | deleteApiRoutingRulesNameResponse503) & {
-  headers: Headers;
-};
-
-export type deleteApiRoutingRulesNameResponse = (deleteApiRoutingRulesNameResponseSuccess | deleteApiRoutingRulesNameResponseError)
-
-export const getDeleteApiRoutingRulesNameUrl = (name: string,) => {
+    export const getDeleteApiRoutingRulesNameUrl = (name: string,) => {
 
 
 
@@ -633,9 +480,9 @@ export const getDeleteApiRoutingRulesNameUrl = (name: string,) => {
 /**
  * @summary Delete a routing rule
  */
-export const deleteApiRoutingRulesName = async (name: string, options?: Parameters<typeof apiFetch>[1]): Promise<deleteApiRoutingRulesNameResponse> => {
+export const deleteApiRoutingRulesName = async (name: string, options?: Parameters<typeof apiFetch>[1]): Promise<DeleteApiRoutingRulesName200> => {
 
-  return apiFetch<deleteApiRoutingRulesNameResponse>(getDeleteApiRoutingRulesNameUrl(name),
+  return apiFetch<DeleteApiRoutingRulesName200>(getDeleteApiRoutingRulesNameUrl(name),
   {
     ...options,
     method: 'DELETE'
@@ -695,19 +542,7 @@ export const useDeleteApiRoutingRulesName = <TError = NotFoundResponse | Conflic
       > => {
       return useMutation(getDeleteApiRoutingRulesNameMutationOptions(options), queryClient);
     }
-    export type getApiRoutingPresetsResponse200 = {
-  data: RoutingPresetResponse
-  status: 200
-}
-
-export type getApiRoutingPresetsResponseSuccess = (getApiRoutingPresetsResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiRoutingPresetsResponse = (getApiRoutingPresetsResponseSuccess)
-
-export const getGetApiRoutingPresetsUrl = () => {
+    export const getGetApiRoutingPresetsUrl = () => {
 
 
 
@@ -718,9 +553,9 @@ export const getGetApiRoutingPresetsUrl = () => {
 /**
  * @summary List routing presets and source material
  */
-export const getApiRoutingPresets = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiRoutingPresetsResponse> => {
+export const getApiRoutingPresets = async ( options?: Parameters<typeof apiFetch>[1]): Promise<RoutingPresetResponse> => {
 
-  return apiFetch<getApiRoutingPresetsResponse>(getGetApiRoutingPresetsUrl(),
+  return apiFetch<RoutingPresetResponse>(getGetApiRoutingPresetsUrl(),
   {
     ...options,
     method: 'GET'
@@ -807,45 +642,6 @@ export function useGetApiRoutingPresets<TData = Awaited<ReturnType<typeof getApi
 
 
 
-export type postApiRoutingPresetsNameResponse200 = {
-  data: RoutingPresetResponse & MutationOutcome
-  status: 200
-}
-
-export type postApiRoutingPresetsNameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type postApiRoutingPresetsNameResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiRoutingPresetsNameResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiRoutingPresetsNameResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiRoutingPresetsNameResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiRoutingPresetsNameResponseSuccess = (postApiRoutingPresetsNameResponse200) & {
-  headers: Headers;
-};
-export type postApiRoutingPresetsNameResponseError = (postApiRoutingPresetsNameResponse404 | postApiRoutingPresetsNameResponse409 | postApiRoutingPresetsNameResponse422 | postApiRoutingPresetsNameResponse423 | postApiRoutingPresetsNameResponse503) & {
-  headers: Headers;
-};
-
-export type postApiRoutingPresetsNameResponse = (postApiRoutingPresetsNameResponseSuccess | postApiRoutingPresetsNameResponseError)
-
 export const getPostApiRoutingPresetsNameUrl = (name: string,) => {
 
 
@@ -857,9 +653,9 @@ export const getPostApiRoutingPresetsNameUrl = (name: string,) => {
 /**
  * @summary Apply a routing preset
  */
-export const postApiRoutingPresetsName = async (name: string, options?: Parameters<typeof apiFetch>[1]): Promise<postApiRoutingPresetsNameResponse> => {
+export const postApiRoutingPresetsName = async (name: string, options?: Parameters<typeof apiFetch>[1]): Promise<RoutingPresetResponse & MutationOutcome> => {
 
-  return apiFetch<postApiRoutingPresetsNameResponse>(getPostApiRoutingPresetsNameUrl(name),
+  return apiFetch<RoutingPresetResponse & MutationOutcome>(getPostApiRoutingPresetsNameUrl(name),
   {
     ...options,
     method: 'POST'

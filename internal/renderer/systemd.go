@@ -51,15 +51,17 @@ var systemdHardeningBlockOlcrtc = strings.Replace(
 )
 
 // mita's appctl UDS must stay connectable by the veil panel: connecting to a
-// unix socket needs write permission, so the daemon creates it group-writable
-// for veil-proxy (the panel account is a supplementary veil-proxy member).
-// UMask 0007 deliberately widens every file mita creates under its
-// RuntimeDirectory/StateDirectory to group scope — acceptable because the
-// panel is already in veil-proxy — and keeps world access at none.
+// unix socket needs write permission, so the daemon creates it group-writable.
+// The socket group is veil-mita — the daemon's dedicated identity, NOT the
+// shared veil-proxy edge account — so group scope covers only the daemon and
+// the panel (a supplementary veil-mita member), and a compromised veil-proxy
+// peer cannot traverse /run/veil-mieru (RuntimeDirectoryMode=0750), connect to
+// mita.sock, or even signal the daemon (issue #624). UMask 0007 deliberately
+// widens mita's own files to group scope and keeps world access at none.
 var systemdHardeningBlockMieru = strings.Replace(
 	systemdHardeningBlock,
 	"UMask=0077",
-	"# appctl UDS stays group-writable so the veil panel (supplementary\n# veil-proxy member) can connect; unix connect needs write on the socket.\nUMask=0007",
+	"# appctl UDS stays group-writable so the veil panel (supplementary\n# veil-mita member) can connect; unix connect needs write on the socket.\nUMask=0007",
 	1,
 )
 
@@ -356,13 +358,23 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=veil-proxy
-Group=veil-proxy
+# Mieru runs as its own veil-mita identity, not the shared veil-proxy edge
+# account: the appctl UDS is a control plane (apply/start/stop/user table),
+# and a shared uid+group let ANY compromised veil-proxy unit drive it
+# (issue #624). veil-proxy stays a supplementary group so the daemon keeps
+# reading the root:veil-proxy generated config.
+User=veil-mita
+Group=veil-mita
+SupplementaryGroups=veil-proxy
 Environment=MITA_CONFIG_FILE=/run/veil-mieru/server.conf.pb
 Environment=MITA_UDS_PATH=/run/veil-mieru/mita.sock
 Environment=MITA_INSECURE_UDS=1
 Environment=MITA_LOG_NO_TIMESTAMP=true
+# 0750 keeps non-group members (including every veil-proxy peer) from even
+# traversing the socket directory; the socket itself lands 0770 veil-mita
+# via UMask=0007, and only the veil panel is a supplementary veil-mita member.
 RuntimeDirectory=veil-mieru
+RuntimeDirectoryMode=0750
 StateDirectory=mita
 ExecStart=` + mieruBin + ` run
 ExecStartPost=` + mieruActivationExecStartPost(mieruBin, mieruConfig) + `

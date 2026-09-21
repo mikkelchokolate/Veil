@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { apiFetch, mutationErrorMessage } from "../api/fetcher";
-import type { WarpConfig } from "../api/generated/models";
+import type { MutationOutcome, WarpConfig } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -19,18 +20,26 @@ export function WarpPage() {
 		queryFn: () => apiFetch("/api/warp"),
 	});
 
+	// Set when the PUT committed but the auto-apply failed (success=false in
+	// the mutation envelope); cleared on the next attempt (#643).
+	const [applyFailed, setApplyFailed] = useState(false);
+
 	const toggle = useMutation({
 		mutationFn: (enabled: boolean) => {
 			const current = warp.data;
 			if (!current) throw new Error("warp config not loaded");
 			// Echo the GET snapshot, including redacted secrets, so omitted
 			// privateKey is not treated as empty and does not re-register.
-			return apiFetch("/api/warp", {
+			return apiFetch<WarpConfig & MutationOutcome>("/api/warp", {
 				method: "PUT",
 				body: JSON.stringify({ ...current, enabled }),
 			});
 		},
-		onSuccess: () => void qc.invalidateQueries({ queryKey: ["warp"] }),
+		onSuccess: (data) => {
+			setApplyFailed(data?.success === false);
+			void qc.invalidateQueries({ queryKey: ["warp"] });
+			void qc.invalidateQueries({ queryKey: ["apply"] });
+		},
 	});
 
 	if (warp.isLoading) {
@@ -104,6 +113,9 @@ export function WarpPage() {
 				<FormMessage>
 					{mutationErrorMessage(toggle.error, t("warp.toggleFailed"))}
 				</FormMessage>
+			) : null}
+			{applyFailed && !toggle.isError ? (
+				<FormMessage>{t("warp.applyFailed")}</FormMessage>
 			) : null}
 			<p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
 				{t("warp.provisionNotice")}

@@ -1,7 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ApiError, apiFetch, mutationErrorMessage } from "../api/fetcher";
-import type { Settings } from "../api/generated/models";
+import type {
+	KeyRotationResponse,
+	MutationOutcome,
+	Settings,
+} from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import {
 	AlertDialog,
@@ -129,11 +133,21 @@ export function SettingsPage() {
 
 	const save = useMutation({
 		mutationFn: (patch: Record<string, unknown>) =>
-			apiFetch("/api/settings", { method: "PUT", body: JSON.stringify(patch) }),
-		onSuccess: () => {
+			apiFetch<Settings & MutationOutcome>("/api/settings", {
+				method: "PUT",
+				body: JSON.stringify(patch),
+			}),
+		onSuccess: (body) => {
 			setEditing(false);
 			setError(null);
-			setNotice(t("settings.saved"));
+			// A committed PUT can still fail the auto-apply (desired advanced but
+			// the apply job did not converge) — surface that instead of claiming
+			// a clean save (#631).
+			setNotice(
+				body?.success === false
+					? t("settings.savedApplyFailed")
+					: t("settings.saved"),
+			);
 			void qc.invalidateQueries({ queryKey: ["settings"] });
 			void qc.invalidateQueries({ queryKey: ["apply"] });
 		},
@@ -142,7 +156,7 @@ export function SettingsPage() {
 
 	const rotateKey = useMutation({
 		mutationFn: () =>
-			apiFetch("/api/admin/rotate-key", {
+			apiFetch<KeyRotationResponse>("/api/admin/rotate-key", {
 				method: "POST",
 				body: JSON.stringify({}),
 			}),
@@ -150,8 +164,7 @@ export function SettingsPage() {
 			setConfirmRotate(false);
 			setError(null);
 			void qc.invalidateQueries({ queryKey: ["apply"] });
-			const envelope = body as { success?: boolean };
-			if (envelope.success === false) {
+			if (body?.success === false) {
 				setNotice(t("settings.rotatedApplyFailed"));
 				return;
 			}

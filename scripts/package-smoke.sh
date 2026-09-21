@@ -4,7 +4,7 @@
 # Each distro leg installs the OLD package, upgrades to the NEW one, removes,
 # and reinstalls — asserting the real maintainer-script contract each step:
 #   - payload files (binary, packaged units, QUIC sysctl drop-in) land/leave
-#   - service accounts (veil, veil-proxy, veil ∈ veil-proxy) exist
+#   - service accounts (veil, veil-proxy, veil-mita, veil ∈ veil-proxy ∩ veil-mita) exist
 #   - postinstall's systemctl calls are observed via a stub (daemon-reload,
 #     enable veil-helper.socket on install; try-restart — no disable — on
 #     upgrade)
@@ -115,8 +115,17 @@ assert_accounts() {
   # (issue #478).
   id veil >/dev/null 2>&1 || fail "veil user missing"
   id veil-proxy >/dev/null 2>&1 || fail "veil-proxy user missing"
+  id veil-mita >/dev/null 2>&1 || fail "veil-mita user missing"
   id -nG veil 2>/dev/null | tr ' ' '\n' | grep -qx veil-proxy \
     || fail "veil is not a member of the veil-proxy group"
+  # The panel reaches the mita appctl UDS through the veil-mita group; the
+  # shared edge account must NOT be a member or the isolation is meaningless
+  # (issue #624).
+  id -nG veil 2>/dev/null | tr ' ' '\n' | grep -qx veil-mita \
+    || fail "veil is not a member of the veil-mita group"
+  if id -nG veil-proxy 2>/dev/null | tr ' ' '\n' | grep -qx veil-mita; then
+    fail "veil-proxy must not be a member of the veil-mita group"
+  fi
 }
 
 assert_version() {
@@ -193,11 +202,19 @@ assert_unit_hardening() {
   for unitdir in /lib/systemd/system /usr/lib/systemd/system; do
     [ -f "$unitdir/veil-caddy.service" ] && break
   done
-  for unit in veil-caddy.service veil-hysteria2@.service veil-olcrtc@.service veil-warp.service veil-mieru.service; do
+  for unit in veil-caddy.service veil-hysteria2@.service veil-olcrtc@.service veil-warp.service; do
     grep -q '^User=veil-proxy$' "$unitdir/$unit" || fail "$unit User"
     grep -q '^Group=veil-proxy$' "$unitdir/$unit" || fail "$unit Group"
     grep -q 'InaccessiblePaths=.*/run/veil/helper.sock' "$unitdir/$unit" || fail "$unit helper.sock mask"
     grep -q 'InaccessiblePaths=.*/var/lib/veil' "$unitdir/$unit" || fail "$unit var/lib/veil mask"
+  done
+  # veil-mieru.service runs as the dedicated veil-mita identity (issue #624):
+  # its appctl UDS is a control plane, so it must not share the veil-proxy
+  # edge uid/gid — only the supplementary group for generated-config reads.
+  for want in '^User=veil-mita$' '^Group=veil-mita$' '^SupplementaryGroups=.*veil-proxy' \
+      '^RuntimeDirectory=veil-mieru$' '^RuntimeDirectoryMode=0750$' '^UMask=0007$' \
+      'InaccessiblePaths=.*/run/veil/helper.sock' 'InaccessiblePaths=.*/var/lib/veil'; do
+    grep -Eq "$want" "$unitdir/veil-mieru.service" || fail "veil-mieru.service missing /$want/"
   done
   grep -q '^User=veil$' "$unitdir/veil.service" || fail "veil.service User"
   grep -q '^SocketUser=root$' "$unitdir/veil-helper.socket" || fail "socket user"

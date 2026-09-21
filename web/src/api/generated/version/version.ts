@@ -95,25 +95,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getApiVersionResponse200 = {
-  data: VersionResponse
-  status: 200
-}
-
-export type getApiVersionResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiVersionResponseSuccess = (getApiVersionResponse200) & {
-  headers: Headers;
-};
-export type getApiVersionResponseError = (getApiVersionResponse401) & {
-  headers: Headers;
-};
-
-export type getApiVersionResponse = (getApiVersionResponseSuccess | getApiVersionResponseError)
-
 export const getGetApiVersionUrl = () => {
 
 
@@ -125,9 +106,9 @@ export const getGetApiVersionUrl = () => {
 /**
  * @summary Current Veil version
  */
-export const getApiVersion = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiVersionResponse> => {
+export const getApiVersion = async ( options?: Parameters<typeof apiFetch>[1]): Promise<VersionResponse> => {
 
-  return apiFetch<getApiVersionResponse>(getGetApiVersionUrl(),
+  return apiFetch<VersionResponse>(getGetApiVersionUrl(),
   {
     ...options,
     method: 'GET'
@@ -187,56 +168,7 @@ export const useGetApiVersion = <TError = UnauthorizedResponse,
       > => {
       return useMutation(getGetApiVersionMutationOptions(options), queryClient);
     }
-    export type postApiVersionUpdateResponse202 = {
-  data: UpdateResponse
-  status: 202
-}
-
-export type postApiVersionUpdateResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiVersionUpdateResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiVersionUpdateResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiVersionUpdateResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiVersionUpdateResponse500 = {
-  data: PrivilegedFailureResponse
-  status: 500
-}
-
-export type postApiVersionUpdateResponse502 = {
-  data: ErrorEnvelope
-  status: 502
-}
-
-export type postApiVersionUpdateResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiVersionUpdateResponseSuccess = (postApiVersionUpdateResponse202) & {
-  headers: Headers;
-};
-export type postApiVersionUpdateResponseError = (postApiVersionUpdateResponse400 | postApiVersionUpdateResponse409 | postApiVersionUpdateResponse422 | postApiVersionUpdateResponse423 | postApiVersionUpdateResponse500 | postApiVersionUpdateResponse502 | postApiVersionUpdateResponse503) & {
-  headers: Headers;
-};
-
-export type postApiVersionUpdateResponse = (postApiVersionUpdateResponseSuccess | postApiVersionUpdateResponseError)
-
-export const getPostApiVersionUpdateUrl = () => {
+    export const getPostApiVersionUpdateUrl = () => {
 
 
 
@@ -247,7 +179,7 @@ export const getPostApiVersionUpdateUrl = () => {
 /**
  * @summary Trigger a staged self-update to the latest release
  */
-export const postApiVersionUpdate = async (emptyObject?: EmptyObject, options?: Parameters<typeof apiFetch>[1]): Promise<postApiVersionUpdateResponse> => {
+export const postApiVersionUpdate = async (emptyObject?: EmptyObject, options?: Parameters<typeof apiFetch>[1]): Promise<UpdateResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -263,7 +195,7 @@ export const postApiVersionUpdate = async (emptyObject?: EmptyObject, options?: 
     }
     return headers;
   };
-return apiFetch<postApiVersionUpdateResponse>(getPostApiVersionUpdateUrl(),
+return apiFetch<UpdateResponse>(getPostApiVersionUpdateUrl(),
   {
     ...options,
     method: 'POST',

@@ -659,7 +659,9 @@ systemctl is-enabled --quiet veil-helper.socket \
   || ci_die "postinstall did not enable veil-helper.socket on live systemd"
 id veil >/dev/null || ci_die "veil user missing after package install"
 id veil-proxy >/dev/null || ci_die "veil-proxy user missing after package install"
+id veil-mita >/dev/null || ci_die "veil-mita user missing after package install"
 id -nG veil | tr ' ' '\n' | grep -qx veil-proxy || ci_die "veil not in veil-proxy group"
+id -nG veil | tr ' ' '\n' | grep -qx veil-mita || ci_die "veil not in veil-mita group"
 
 # Legacy pre-consolidation per-inbound Caddy leftovers (issue #375): a unit
 # file plus its enablement wants link must not survive package removal —

@@ -297,4 +297,57 @@ describe("ClientsPage", () => {
 		await waitFor(() => expect(bulkBodies).toHaveLength(1));
 		expect(bulkBodies[0]?.clientIds).toEqual(["p2a", "p2b"]);
 	});
+
+	// #647: the bulk endpoint reports per-client results AND a top-level
+	// mutation outcome — success=false means the action committed but the
+	// auto-apply failed, which must be surfaced separately.
+	it("surfaces a committed-but-unapplied bulk action as a warning", async () => {
+		const user = userEvent.setup();
+		server.use(
+			http.get("/api/v1/clients", () =>
+				HttpResponse.json({
+					items: [
+						{
+							id: "c1",
+							name: "Alice",
+							status: "active",
+							enabled: true,
+							createdAt: 1700000000,
+						},
+					],
+					total: 1,
+					page: 1,
+					pageSize: 25,
+				}),
+			),
+			http.post("/api/v1/clients/bulk", () =>
+				HttpResponse.json({
+					action: "enable",
+					total: 1,
+					succeeded: 1,
+					skipped: 0,
+					failed: 0,
+					results: [{ id: "c1", ok: true }],
+					success: false,
+					revision: { desired: 2, applied: 1, state: "drift" },
+					applyJob: {
+						id: "job-9",
+						desiredRevision: 2,
+						baseRevision: 1,
+						status: "failed",
+						trigger: "mutation",
+						createdAt: 1700000000,
+					},
+				}),
+			),
+		);
+		renderClients();
+		await screen.findByText("Alice");
+		await user.click(screen.getByRole("checkbox", { name: /select all/i }));
+		await user.click(screen.getByRole("button", { name: /^enable$/i }));
+		expect(await screen.findByText(/applying it failed/i)).toBeInTheDocument();
+		expect(screen.getByText(/apply job job-9/i)).toBeInTheDocument();
+		// The per-client result row still renders under the warning.
+		expect(screen.getByText("c1")).toBeInTheDocument();
+	});
 });

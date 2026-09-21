@@ -71,45 +71,6 @@ type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 
 
-export type postApiToolsDnsLookupResponse200 = {
-  data: DNSLookupResult
-  status: 200
-}
-
-export type postApiToolsDnsLookupResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiToolsDnsLookupResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiToolsDnsLookupResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiToolsDnsLookupResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiToolsDnsLookupResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiToolsDnsLookupResponseSuccess = (postApiToolsDnsLookupResponse200) & {
-  headers: Headers;
-};
-export type postApiToolsDnsLookupResponseError = (postApiToolsDnsLookupResponse400 | postApiToolsDnsLookupResponse409 | postApiToolsDnsLookupResponse422 | postApiToolsDnsLookupResponse423 | postApiToolsDnsLookupResponse503) & {
-  headers: Headers;
-};
-
-export type postApiToolsDnsLookupResponse = (postApiToolsDnsLookupResponseSuccess | postApiToolsDnsLookupResponseError)
-
 export const getPostApiToolsDnsLookupUrl = () => {
 
 
@@ -121,7 +82,7 @@ export const getPostApiToolsDnsLookupUrl = () => {
 /**
  * @summary DNS lookup diagnostic
  */
-export const postApiToolsDnsLookup = async (dNSLookupRequest: DNSLookupRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiToolsDnsLookupResponse> => {
+export const postApiToolsDnsLookup = async (dNSLookupRequest: DNSLookupRequest, options?: Parameters<typeof apiFetch>[1]): Promise<DNSLookupResult> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -137,7 +98,7 @@ export const postApiToolsDnsLookup = async (dNSLookupRequest: DNSLookupRequest, 
     }
     return headers;
   };
-return apiFetch<postApiToolsDnsLookupResponse>(getPostApiToolsDnsLookupUrl(),
+return apiFetch<DNSLookupResult>(getPostApiToolsDnsLookupUrl(),
   {
     ...options,
     method: 'POST',
@@ -197,46 +158,7 @@ export const usePostApiToolsDnsLookup = <TError = BadRequestResponse | ConflictR
       > => {
       return useMutation(getPostApiToolsDnsLookupMutationOptions(options), queryClient);
     }
-    export type postApiToolsPingResponse200 = {
-  data: PingResult
-  status: 200
-}
-
-export type postApiToolsPingResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiToolsPingResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiToolsPingResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiToolsPingResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiToolsPingResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiToolsPingResponseSuccess = (postApiToolsPingResponse200) & {
-  headers: Headers;
-};
-export type postApiToolsPingResponseError = (postApiToolsPingResponse400 | postApiToolsPingResponse409 | postApiToolsPingResponse422 | postApiToolsPingResponse423 | postApiToolsPingResponse503) & {
-  headers: Headers;
-};
-
-export type postApiToolsPingResponse = (postApiToolsPingResponseSuccess | postApiToolsPingResponseError)
-
-export const getPostApiToolsPingUrl = () => {
+    export const getPostApiToolsPingUrl = () => {
 
 
 
@@ -247,7 +169,7 @@ export const getPostApiToolsPingUrl = () => {
 /**
  * @summary Ping diagnostic
  */
-export const postApiToolsPing = async (pingRequest: PingRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiToolsPingResponse> => {
+export const postApiToolsPing = async (pingRequest: PingRequest, options?: Parameters<typeof apiFetch>[1]): Promise<PingResult> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -263,7 +185,7 @@ export const postApiToolsPing = async (pingRequest: PingRequest, options?: Param
     }
     return headers;
   };
-return apiFetch<postApiToolsPingResponse>(getPostApiToolsPingUrl(),
+return apiFetch<PingResult>(getPostApiToolsPingUrl(),
   {
     ...options,
     method: 'POST',
@@ -323,46 +245,7 @@ export const usePostApiToolsPing = <TError = BadRequestResponse | ConflictRespon
       > => {
       return useMutation(getPostApiToolsPingMutationOptions(options), queryClient);
     }
-    export type postApiToolsSpeedtestResponse200 = {
-  data: SpeedtestResult
-  status: 200
-}
-
-export type postApiToolsSpeedtestResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiToolsSpeedtestResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiToolsSpeedtestResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiToolsSpeedtestResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiToolsSpeedtestResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiToolsSpeedtestResponseSuccess = (postApiToolsSpeedtestResponse200) & {
-  headers: Headers;
-};
-export type postApiToolsSpeedtestResponseError = (postApiToolsSpeedtestResponse400 | postApiToolsSpeedtestResponse409 | postApiToolsSpeedtestResponse422 | postApiToolsSpeedtestResponse423 | postApiToolsSpeedtestResponse503) & {
-  headers: Headers;
-};
-
-export type postApiToolsSpeedtestResponse = (postApiToolsSpeedtestResponseSuccess | postApiToolsSpeedtestResponseError)
-
-export const getPostApiToolsSpeedtestUrl = () => {
+    export const getPostApiToolsSpeedtestUrl = () => {
 
 
 
@@ -373,7 +256,7 @@ export const getPostApiToolsSpeedtestUrl = () => {
 /**
  * @summary Speedtest diagnostic
  */
-export const postApiToolsSpeedtest = async (emptyObject?: EmptyObject, options?: Parameters<typeof apiFetch>[1]): Promise<postApiToolsSpeedtestResponse> => {
+export const postApiToolsSpeedtest = async (emptyObject?: EmptyObject, options?: Parameters<typeof apiFetch>[1]): Promise<SpeedtestResult> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -389,7 +272,7 @@ export const postApiToolsSpeedtest = async (emptyObject?: EmptyObject, options?:
     }
     return headers;
   };
-return apiFetch<postApiToolsSpeedtestResponse>(getPostApiToolsSpeedtestUrl(),
+return apiFetch<SpeedtestResult>(getPostApiToolsSpeedtestUrl(),
   {
     ...options,
     method: 'POST',

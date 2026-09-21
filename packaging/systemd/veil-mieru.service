@@ -5,13 +5,23 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=veil-proxy
-Group=veil-proxy
+# Mieru runs as its own veil-mita identity, not the shared veil-proxy edge
+# account: the appctl UDS is a control plane (apply/start/stop/user table),
+# and a shared uid+group let ANY compromised veil-proxy unit drive it
+# (issue #624). veil-proxy stays a supplementary group so the daemon keeps
+# reading the root:veil-proxy generated config.
+User=veil-mita
+Group=veil-mita
+SupplementaryGroups=veil-proxy
 Environment=MITA_CONFIG_FILE=/run/veil-mieru/server.conf.pb
 Environment=MITA_UDS_PATH=/run/veil-mieru/mita.sock
 Environment=MITA_INSECURE_UDS=1
 Environment=MITA_LOG_NO_TIMESTAMP=true
+# 0750 keeps non-group members (including every veil-proxy peer) from even
+# traversing the socket directory; the socket itself lands 0770 veil-mita
+# via UMask=0007, and only the veil panel is a supplementary veil-mita member.
 RuntimeDirectory=veil-mieru
+RuntimeDirectoryMode=0750
 StateDirectory=mita
 ExecStart=/usr/local/bin/mita run
 ExecStartPost=/bin/sh -c 'i=0; while [ $$i -lt 50 ]; do if [ -S /run/veil-mieru/mita.sock ]; then /usr/local/bin/mita apply config /etc/veil/generated/mieru/server_config.json && /usr/local/bin/mita start && exit 0; fi; i=$$((i+1)); sleep 0.2; done; echo "mita activation timed out" >&2; exit 1'
@@ -34,7 +44,7 @@ LockPersonality=true
 RestrictRealtime=true
 MemoryDenyWriteExecute=true
 # appctl UDS stays group-writable so the veil panel (supplementary
-# veil-proxy member) can connect; unix connect needs write on the socket.
+# veil-mita member) can connect; unix connect needs write on the socket.
 UMask=0007
 InaccessiblePaths=/run/veil/helper.sock /var/lib/veil
 

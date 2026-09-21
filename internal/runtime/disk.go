@@ -19,11 +19,13 @@ type DiskStats struct {
 	Dirs []DirSizeInfo `json:"dirs"`
 }
 
-// veilDirs lists Veil-managed directories to measure.
+// veilDirs lists Veil-managed directories to measure. System log roots like
+// /var/log are deliberately excluded: they are not Veil-managed, they mix
+// unrelated log volume into the Veil disk card, and a full recursive walk of
+// them made every GET /api/disk disproportionately expensive (#641).
 var veilDirs = []string{
 	"/var/lib/veil",
 	"/etc/veil",
-	"/var/log",
 }
 
 // readDirDiskStats returns disk usage for Veil-managed directories.

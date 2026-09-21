@@ -240,7 +240,54 @@ export const PostApiV1ClientsBulkBody = zod.object({
   "inboundId": zod.string().optional()
 })
 
-export const PostApiV1ClientsBulkResponse = zod.unknown()
+export const PostApiV1ClientsBulkResponse = zod.object({
+  "action": zod.string(),
+  "total": zod.int(),
+  "succeeded": zod.int(),
+  "skipped": zod.int(),
+  "failed": zod.int(),
+  "results": zod.array(zod.object({
+  "id": zod.string(),
+  "ok": zod.boolean(),
+  "message": zod.string().optional(),
+  "bindingId": zod.string().optional(),
+  "plaintext": zod.string().optional().describe('One-time server-generated secret for attach_inbound results.'),
+  "issuedCredentials": zod.array(zod.object({
+  "bindingId": zod.string(),
+  "inboundId": zod.string(),
+  "kind": zod.string(),
+  "plaintext": zod.string()
+}).describe('Server-generated credential returned exactly once at creation time. Only the encrypted form is persisted; the plaintext is never stored.')).optional()
+}))
+}).and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded', 'recovering', 'untracked'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.'))
 
 /**
  * @summary List client bindings
@@ -280,7 +327,53 @@ export const PostApiV1ClientsIdBindingsBody = zod.object({
   "enabled": zod.boolean().optional()
 })
 
-export const PostApiV1ClientsIdBindingsResponse = zod.void()
+export const PostApiV1ClientsIdBindingsResponse = zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "inboundId": zod.string(),
+  "runtimeIdentity": zod.string(),
+  "enabled": zod.boolean(),
+  "protocolSettings": zod.string().optional().describe('JSON object string with per-binding protocol options.'),
+  "createdAt": zod.int(),
+  "updatedAt": zod.int(),
+  "version": zod.int()
+}).describe('Durable client↔inbound binding as stored (write responses).').and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded', 'recovering', 'untracked'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.')).and(zod.object({
+  "plaintext": zod.string().optional().describe('One-time server-generated secret; present only when the server generated the credential.'),
+  "issuedCredentials": zod.array(zod.object({
+  "bindingId": zod.string(),
+  "inboundId": zod.string(),
+  "kind": zod.string(),
+  "plaintext": zod.string()
+}).describe('Server-generated credential returned exactly once at creation time. Only the encrypted form is persisted; the plaintext is never stored.')).optional()
+}))
 
 /**
  * @summary Update a binding (toggle enabled, optimistic locking)
@@ -308,7 +401,45 @@ export const PatchApiV1ClientsIdBindingsBindingIdBody = zod.object({
   "version": zod.int().optional()
 })
 
-export const PatchApiV1ClientsIdBindingsBindingIdResponse = zod.unknown()
+export const PatchApiV1ClientsIdBindingsBindingIdResponse = zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "inboundId": zod.string(),
+  "runtimeIdentity": zod.string(),
+  "enabled": zod.boolean(),
+  "protocolSettings": zod.string().optional().describe('JSON object string with per-binding protocol options.'),
+  "createdAt": zod.int(),
+  "updatedAt": zod.int(),
+  "version": zod.int()
+}).describe('Durable client↔inbound binding as stored (write responses).').and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded', 'recovering', 'untracked'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.'))
 
 /**
  * @summary Remove a binding
@@ -331,7 +462,37 @@ export const DeleteApiV1ClientsIdBindingsBindingIdHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(deleteApiV1ClientsIdBindingsBindingIdHeaderIdempotencyKeyMax).regex(deleteApiV1ClientsIdBindingsBindingIdHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
-export const DeleteApiV1ClientsIdBindingsBindingIdResponse = zod.unknown()
+export const DeleteApiV1ClientsIdBindingsBindingIdResponse = zod.object({
+  "id": zod.string()
+}).and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded', 'recovering', 'untracked'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.'))
 
 /**
  * @summary Set a binding credential
@@ -359,7 +520,44 @@ export const PostApiV1ClientsIdCredentialsBindingIdBody = zod.object({
   "value": zod.string().optional()
 })
 
-export const PostApiV1ClientsIdCredentialsBindingIdResponse = zod.void()
+export const PostApiV1ClientsIdCredentialsBindingIdResponse = zod.object({
+  "id": zod.string(),
+  "bindingId": zod.string(),
+  "kind": zod.string(),
+  "keyVersion": zod.int(),
+  "credentialVersion": zod.int(),
+  "createdAt": zod.int(),
+  "rotatedAt": zod.int().optional(),
+  "revokedAt": zod.int().optional()
+}).describe('Credential metadata for a binding; the secret itself is never returned.').and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded', 'recovering', 'untracked'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.'))
 
 /**
  * @summary Rotate a binding credential
@@ -387,7 +585,55 @@ export const PostApiV1ClientsIdCredentialsBindingIdRotateBody = zod.object({
   "value": zod.string().optional().describe('Optional; when empty the server generates a high-entropy secret returned once.')
 })
 
-export const PostApiV1ClientsIdCredentialsBindingIdRotateResponse = zod.unknown()
+export const PostApiV1ClientsIdCredentialsBindingIdRotateResponse = zod.object({
+  "credential": zod.object({
+  "id": zod.string(),
+  "bindingId": zod.string(),
+  "kind": zod.string(),
+  "keyVersion": zod.int(),
+  "credentialVersion": zod.int(),
+  "createdAt": zod.int(),
+  "rotatedAt": zod.int().optional(),
+  "revokedAt": zod.int().optional()
+}).optional().describe('Credential metadata for a binding; the secret itself is never returned.'),
+  "plaintext": zod.string().optional().describe('One-time plaintext; only for server-generated rotates.'),
+  "id": zod.string().optional(),
+  "bindingId": zod.string().optional(),
+  "kind": zod.string().optional(),
+  "keyVersion": zod.int().optional(),
+  "credentialVersion": zod.int().optional(),
+  "createdAt": zod.int().optional(),
+  "rotatedAt": zod.int().optional(),
+  "revokedAt": zod.int().optional()
+}).describe('Credential rotate result. A server-generated rotate (empty value) returns {credential, plaintext} — the plaintext is shown exactly once. A caller-supplied value returns the credential fields at top level.').and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded', 'recovering', 'untracked'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.'))
 
 /**
  * @summary Convert legacy inbound-embedded profiles to normalized clients (idempotent)
@@ -402,7 +648,44 @@ export const PostApiV1ClientsMigrateLegacyHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(postApiV1ClientsMigrateLegacyHeaderIdempotencyKeyMax).regex(postApiV1ClientsMigrateLegacyHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
-export const PostApiV1ClientsMigrateLegacyResponse = zod.unknown()
+export const PostApiV1ClientsMigrateLegacyResponse = zod.object({
+  "clientsCreated": zod.int(),
+  "results": zod.array(zod.object({
+  "inbound": zod.string().optional(),
+  "clientsCreated": zod.int().optional(),
+  "bindingsCreated": zod.int().optional(),
+  "credentialsCreated": zod.int().optional(),
+  "skipped": zod.int().optional()
+}))
+}).and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded', 'recovering', 'untracked'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.'))
 
 /**
  * @summary Get a client with bindings and effective status
@@ -501,8 +784,8 @@ export const PatchApiV1ClientsIdBody = zod.object({
   "notes": zod.string().nullish()
 }).describe('Presence-aware patch. Omitted fields are preserved, explicit null clears nullable/defaultable fields, and supplied values replace them.')
 
-export const patchApiV1ClientsIdResponseQuotaBytesMin = 0;
-export const patchApiV1ClientsIdResponseQuotaBytesMax = 9007199254740991;
+export const patchApiV1ClientsIdResponseOneQuotaBytesMin = 0;
+export const patchApiV1ClientsIdResponseOneQuotaBytesMax = 9007199254740991;
 
 
 
@@ -512,7 +795,7 @@ export const PatchApiV1ClientsIdResponse = zod.object({
   "email": zod.string().optional(),
   "enabled": zod.boolean().optional(),
   "groupId": zod.string().optional(),
-  "quotaBytes": zod.int().min(patchApiV1ClientsIdResponseQuotaBytesMin).max(patchApiV1ClientsIdResponseQuotaBytesMax).optional(),
+  "quotaBytes": zod.int().min(patchApiV1ClientsIdResponseOneQuotaBytesMin).max(patchApiV1ClientsIdResponseOneQuotaBytesMax).optional(),
   "quotaResetPolicy": zod.string().optional(),
   "quotaResetAt": zod.int().optional(),
   "expiresAt": zod.int().optional(),
@@ -544,7 +827,35 @@ export const PatchApiV1ClientsIdResponse = zod.object({
   "rotatedAt": zod.int().optional()
 }).optional()
 })).optional()
-})
+}).and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded', 'recovering', 'untracked'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.'))
 
 /**
  * @summary Delete a client
@@ -566,7 +877,37 @@ export const DeleteApiV1ClientsIdHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(deleteApiV1ClientsIdHeaderIdempotencyKeyMax).regex(deleteApiV1ClientsIdHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
-export const DeleteApiV1ClientsIdResponse = zod.unknown()
+export const DeleteApiV1ClientsIdResponse = zod.object({
+  "id": zod.string()
+}).and(zod.object({
+  "success": zod.boolean(),
+  "revision": zod.object({
+  "desired": zod.int(),
+  "applied": zod.int(),
+  "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded', 'recovering', 'untracked'])
+}),
+  "applyJob": zod.object({
+  "id": zod.string(),
+  "desiredRevision": zod.int(),
+  "baseRevision": zod.int(),
+  "status": zod.enum(['pending', 'planning', 'validating', 'applying', 'health_check', 'staged', 'recovery_pending', 'succeeded', 'failed', 'rolling_back', 'rolled_back', 'rollback_failed']),
+  "trigger": zod.string(),
+  "actorId": zod.string().optional(),
+  "createdAt": zod.int(),
+  "startedAt": zod.int().optional(),
+  "finishedAt": zod.int().optional(),
+  "errorCode": zod.string().optional(),
+  "errorMessage": zod.string().optional(),
+  "operations": zod.array(zod.object({
+  "type": zod.string().describe('Runtime operation kind attempted by the job (for example promote_file, reload_service, restart_service, panel-update-install, panel-update-restart).'),
+  "target": zod.string().optional(),
+  "success": zod.boolean(),
+  "detail": zod.string().optional()
+})).optional().describe('Concrete runtime changes attempted by this job.'),
+  "ownerProcess": zod.string().optional().describe('Lease owner identity of the process that ran the job.'),
+  "leaseGeneration": zod.int().optional().describe('Fencing generation of the apply lease held while the job ran.')
+}).optional()
+}).describe('Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.'))
 
 /**
  * Newest-first audit records targeting this client. Records matching the immutable client ID are always included; legacy name-targeted records are included only for known client actions. Admin role required.
@@ -629,7 +970,7 @@ export const GetApiV1ClientsIdLinksResponse = zod.object({
 })
 
 /**
- * @summary List a client's subscription tokens (redacted)
+ * @summary List a client's subscription tokens with recoverable subscription URLs
  */
 
 

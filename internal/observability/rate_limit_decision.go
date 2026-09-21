@@ -73,9 +73,9 @@ func isMutatingMethod(method string) bool {
 
 // isRateLimitedReadPath returns true for GET/HEAD paths that should be
 // rate-limited (expensive queries like log reading, long-lived SSE stream
-// opens, public subscription fetches, and admin-secret credential/export
-// reads that must not be unlimited). Keep this in sync with the
-// DefaultRateLimitPolicy endpoint limits (#337).
+// opens, public subscription fetches, host diagnostic scans, and
+// admin-secret credential/export reads that must not be unlimited). Keep
+// this in sync with the DefaultRateLimitPolicy endpoint limits (#337).
 func isRateLimitedReadPath(path string) bool {
 	if strings.HasPrefix(path, "/api/logs") ||
 		path == "/api/v1/events" ||
@@ -84,10 +84,24 @@ func isRateLimitedReadPath(path string) bool {
 		strings.HasPrefix(path, "/s/") {
 		return true
 	}
-	// Per-resource credential reads: link bundles and token-by-id GETs return
-	// admin-secret material and need the same throttle as /api/logs.
+	// /api/warp returns the full WARP privateKey/licenseKey to admin readers
+	// (#617). Expensive host diagnostics: /api/disk walks Veil state trees
+	// recursively (#641), /api/connections attributes every listener through
+	// per-pid /proc/*/fd scans (#645), and /api/runtime/observation pays all
+	// of those plus a process scan in a single request (#648).
+	if path == "/api/warp" ||
+		path == "/api/disk" ||
+		path == "/api/connections" ||
+		path == "/api/runtime/observation" {
+		return true
+	}
+	// Per-resource credential reads: link bundles, the token list (which
+	// embeds every recoverable /s/ subscription URL), and token-by-id GETs
+	// return admin-secret material and need the same throttle as /api/logs.
 	if strings.HasPrefix(path, "/api/v1/clients/") {
-		return strings.HasSuffix(path, "/links") || strings.Contains(path, "/tokens/")
+		return strings.HasSuffix(path, "/links") ||
+			strings.HasSuffix(path, "/tokens") ||
+			strings.Contains(path, "/tokens/")
 	}
 	// Backup downloads export the full encrypted state archive.
 	if strings.HasPrefix(path, "/api/backups/") {

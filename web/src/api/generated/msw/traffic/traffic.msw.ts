@@ -85,18 +85,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getApiV1TrafficSummaryResponse200 = {
-  data: void
-  status: 200
-}
-
-export type getApiV1TrafficSummaryResponseSuccess = (getApiV1TrafficSummaryResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiV1TrafficSummaryResponse = (getApiV1TrafficSummaryResponseSuccess)
-
 export const getGetApiV1TrafficSummaryUrl = () => {
 
 
@@ -108,9 +96,9 @@ export const getGetApiV1TrafficSummaryUrl = () => {
 /**
  * @summary Aggregate traffic totals + honest telemetry provider state
  */
-export const getApiV1TrafficSummary = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiV1TrafficSummaryResponse> => {
+export const getApiV1TrafficSummary = async ( options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
 
-  return apiFetch<getApiV1TrafficSummaryResponse>(getGetApiV1TrafficSummaryUrl(),
+  return apiFetch<void>(getGetApiV1TrafficSummaryUrl(),
   {
     ...options,
     method: 'GET'
@@ -197,18 +185,6 @@ export function useGetApiV1TrafficSummary<TData = Awaited<ReturnType<typeof getA
 
 
 
-export type getApiV1TrafficTopResponse200 = {
-  data: TrafficTopResponse
-  status: 200
-}
-
-export type getApiV1TrafficTopResponseSuccess = (getApiV1TrafficTopResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiV1TrafficTopResponse = (getApiV1TrafficTopResponseSuccess)
-
 export const getGetApiV1TrafficTopUrl = () => {
 
 
@@ -220,9 +196,9 @@ export const getGetApiV1TrafficTopUrl = () => {
 /**
  * @summary Top talkers ranked by cumulative usage
  */
-export const getApiV1TrafficTop = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiV1TrafficTopResponse> => {
+export const getApiV1TrafficTop = async ( options?: Parameters<typeof apiFetch>[1]): Promise<TrafficTopResponse> => {
 
-  return apiFetch<getApiV1TrafficTopResponse>(getGetApiV1TrafficTopUrl(),
+  return apiFetch<TrafficTopResponse>(getGetApiV1TrafficTopUrl(),
   {
     ...options,
     method: 'GET'
@@ -309,25 +285,6 @@ export function useGetApiV1TrafficTop<TData = Awaited<ReturnType<typeof getApiV1
 
 
 
-export type getApiV1TrafficIdResponse200 = {
-  data: TrafficTotals
-  status: 200
-}
-
-export type getApiV1TrafficIdResponse404 = {
-  data: void
-  status: 404
-}
-
-export type getApiV1TrafficIdResponseSuccess = (getApiV1TrafficIdResponse200) & {
-  headers: Headers;
-};
-export type getApiV1TrafficIdResponseError = (getApiV1TrafficIdResponse404) & {
-  headers: Headers;
-};
-
-export type getApiV1TrafficIdResponse = (getApiV1TrafficIdResponseSuccess | getApiV1TrafficIdResponseError)
-
 export const getGetApiV1TrafficIdUrl = (id: string,) => {
 
 
@@ -339,9 +296,9 @@ export const getGetApiV1TrafficIdUrl = (id: string,) => {
 /**
  * @summary Per-client cumulative traffic totals
  */
-export const getApiV1TrafficId = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getApiV1TrafficIdResponse> => {
+export const getApiV1TrafficId = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<TrafficTotals> => {
 
-  return apiFetch<getApiV1TrafficIdResponse>(getGetApiV1TrafficIdUrl(id),
+  return apiFetch<TrafficTotals>(getGetApiV1TrafficIdUrl(id),
   {
     ...options,
     method: 'GET'
@@ -428,18 +385,6 @@ export function useGetApiV1TrafficId<TData = Awaited<ReturnType<typeof getApiV1T
 
 
 
-export type getApiV1TrafficIdHistoryResponse200 = {
-  data: TrafficHistoryResponse
-  status: 200
-}
-
-export type getApiV1TrafficIdHistoryResponseSuccess = (getApiV1TrafficIdHistoryResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiV1TrafficIdHistoryResponse = (getApiV1TrafficIdHistoryResponseSuccess)
-
 export const getGetApiV1TrafficIdHistoryUrl = (id: string,
     params?: GetApiV1TrafficIdHistoryParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -460,9 +405,9 @@ export const getGetApiV1TrafficIdHistoryUrl = (id: string,
  * @summary Per-client bucketed traffic samples over a window
  */
 export const getApiV1TrafficIdHistory = async (id: string,
-    params?: GetApiV1TrafficIdHistoryParams, options?: Parameters<typeof apiFetch>[1]): Promise<getApiV1TrafficIdHistoryResponse> => {
+    params?: GetApiV1TrafficIdHistoryParams, options?: Parameters<typeof apiFetch>[1]): Promise<TrafficHistoryResponse> => {
 
-  return apiFetch<getApiV1TrafficIdHistoryResponse>(getGetApiV1TrafficIdHistoryUrl(id,params),
+  return apiFetch<TrafficHistoryResponse>(getGetApiV1TrafficIdHistoryUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -555,18 +500,6 @@ export function useGetApiV1TrafficIdHistory<TData = Awaited<ReturnType<typeof ge
 
 
 
-export type getApiV1TrafficStreamResponse200 = {
-  data: string
-  status: 200
-}
-
-export type getApiV1TrafficStreamResponseSuccess = (getApiV1TrafficStreamResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiV1TrafficStreamResponse = (getApiV1TrafficStreamResponseSuccess)
-
 export const getGetApiV1TrafficStreamUrl = () => {
 
 
@@ -579,9 +512,9 @@ export const getGetApiV1TrafficStreamUrl = () => {
  * Emits a JSON snapshot per client every ~5s as SSE data frames.
  * @summary Server-sent stream of live traffic snapshots
  */
-export const getApiV1TrafficStream = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiV1TrafficStreamResponse> => {
+export const getApiV1TrafficStream = async ( options?: Parameters<typeof apiFetch>[1]): Promise<string> => {
 
-  return apiFetch<getApiV1TrafficStreamResponse>(getGetApiV1TrafficStreamUrl(),
+  return apiFetch<string>(getGetApiV1TrafficStreamUrl(),
   {
     ...options,
     method: 'GET'
@@ -668,25 +601,6 @@ export function useGetApiV1TrafficStream<TData = Awaited<ReturnType<typeof getAp
 
 
 
-export type getApiV1EventsResponse200 = {
-  data: string
-  status: 200
-}
-
-export type getApiV1EventsResponse429 = {
-  data: void
-  status: 429
-}
-
-export type getApiV1EventsResponseSuccess = (getApiV1EventsResponse200) & {
-  headers: Headers;
-};
-export type getApiV1EventsResponseError = (getApiV1EventsResponse429) & {
-  headers: Headers;
-};
-
-export type getApiV1EventsResponse = (getApiV1EventsResponseSuccess | getApiV1EventsResponseError)
-
 export const getGetApiV1EventsUrl = (params?: GetApiV1EventsParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -709,9 +623,9 @@ export const getGetApiV1EventsUrl = (params?: GetApiV1EventsParams,) => {
  * Filter by event type via ?types=traffic,apply (comma-separated).
  * @summary Unified Server-Sent Events stream (A10)
  */
-export const getApiV1Events = async (params?: GetApiV1EventsParams, options?: Parameters<typeof apiFetch>[1]): Promise<getApiV1EventsResponse> => {
+export const getApiV1Events = async (params?: GetApiV1EventsParams, options?: Parameters<typeof apiFetch>[1]): Promise<string> => {
 
-  return apiFetch<getApiV1EventsResponse>(getGetApiV1EventsUrl(params),
+  return apiFetch<string>(getGetApiV1EventsUrl(params),
   {
     ...options,
     method: 'GET'

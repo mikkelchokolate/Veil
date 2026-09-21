@@ -425,7 +425,7 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 			t.Fatalf("%s is missing User=:\n%s", name, unit)
 		}
 	}
-	for _, name := range []string{UnitHysteria2, UnitOlcrtc, UnitWarp, UnitMieru, UnitCaddy} {
+	for _, name := range []string{UnitHysteria2, UnitOlcrtc, UnitWarp, UnitCaddy} {
 		unit := units[name]
 		if !strings.Contains(unit, "User=veil-proxy") || !strings.Contains(unit, "Group=veil-proxy") {
 			t.Fatalf("%s must run as veil-proxy:\n%s", name, unit)
@@ -439,5 +439,33 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 		if !strings.Contains(unit, "InaccessiblePaths=/run/veil/helper.sock /var/lib/veil") {
 			t.Fatalf("%s missing helper/state InaccessiblePaths:\n%s", name, unit)
 		}
+	}
+	// veil-mieru.service runs as the dedicated veil-mita identity (issue #624):
+	// the appctl UDS is a control plane, so it must not share the veil-proxy
+	// uid/gid that every other edge unit uses.
+	mieru := units[UnitMieru]
+	for _, want := range []string{
+		"User=veil-mita\n",
+		"Group=veil-mita\n",
+		"SupplementaryGroups=veil-proxy",
+		"RuntimeDirectory=veil-mieru\n",
+		"RuntimeDirectoryMode=0750",
+		"UMask=0007",
+	} {
+		if !strings.Contains(mieru, want) {
+			t.Fatalf("veil-mieru.service missing %q:\n%s", want, mieru)
+		}
+	}
+	if strings.Contains(mieru, "User=veil-proxy") || strings.Contains(mieru, "Group=veil-proxy\n") {
+		t.Fatalf("veil-mieru.service must not run as the shared veil-proxy identity:\n%s", mieru)
+	}
+	if strings.Contains(mieru, "User=veil\n") {
+		t.Fatalf("veil-mieru.service must not share User=veil with veil.service:\n%s", mieru)
+	}
+	if strings.Contains(mieru, "ReadWritePaths=/var/lib/veil") || strings.Contains(mieru, "ReadWritePaths=/etc/veil") {
+		t.Fatalf("veil-mieru.service must not remount Panel state writable:\n%s", mieru)
+	}
+	if !strings.Contains(mieru, "InaccessiblePaths=/run/veil/helper.sock /var/lib/veil") {
+		t.Fatalf("veil-mieru.service missing helper/state InaccessiblePaths:\n%s", mieru)
 	}
 }
