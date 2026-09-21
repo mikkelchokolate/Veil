@@ -39,6 +39,12 @@ type Identity struct {
 	GID      int
 	ProxyUID int
 	ProxyGID int
+	// MitaUID/MitaGID identify the dedicated veil-mita runtime account that
+	// owns veil-mieru.service's appctl socket and state dir (issue #624).
+	// Zero means the caller has no mita identity — callers that did not run
+	// EnsureAccount leave it unset and Migrate skips the mita state dir.
+	MitaUID int
+	MitaGID int
 }
 
 type Paths struct {
@@ -46,6 +52,9 @@ type Paths struct {
 	VarDir  string
 	RootUID int
 	RootGID int
+	// MitaDir is the mieru daemon StateDirectory (/var/lib/mita). Empty
+	// resolves to the sibling "mita" directory next to VarDir.
+	MitaDir string
 }
 
 type AccountDependencies struct {
@@ -84,11 +93,25 @@ func EnsureAccount(deps AccountDependencies) (Identity, error) {
 	if err != nil {
 		return Identity{}, err
 	}
+	// veil-mita is the dedicated mieru daemon identity: the appctl UDS is a
+	// control plane, so it must NOT share the veil-proxy edge uid/group —
+	// any compromised veil-proxy unit could otherwise drive it (issue #624).
+	mita, err := ensureNamedAccount(deps, "veil-mita")
+	if err != nil {
+		return Identity{}, err
+	}
 	if err := addSupplementaryGroup(deps, "veil", "veil-proxy"); err != nil {
+		return Identity{}, err
+	}
+	// The panel connects to the appctl socket through the veil-mita group;
+	// veil-proxy units are deliberately NOT members.
+	if err := addSupplementaryGroup(deps, "veil", "veil-mita"); err != nil {
 		return Identity{}, err
 	}
 	panel.ProxyUID = proxy.UID
 	panel.ProxyGID = proxy.GID
+	panel.MitaUID = mita.UID
+	panel.MitaGID = mita.GID
 	return panel, nil
 }
 
@@ -194,6 +217,20 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 	case !os.IsNotExist(err):
 		return err
 	}
+	// veil-caddy.service and veil-mieru.service moved to User=veil-proxy
+	// (#497/#615). systemd never re-owns an existing StateDirectory, so a
+	// /var/lib/caddy or /var/lib/mita left behind by the previous identity
+	// stays unwritable to the new unit — mirror the package postinstall and
+	// re-own existing real directories to the proxy identity (issue #623).
+	// StateDirectory names always resolve under /var/lib regardless of the
+	// configured VarDir, hence the fixed paths.
+	if panel.ProxyUID != 0 || panel.ProxyGID != 0 {
+		for _, dir := range proxyStateDirs {
+			if err := reownProxyStateDir(dir, panel.ProxyUID, panel.ProxyGID); err != nil {
+				return err
+			}
+		}
+	}
 	for _, name := range []string{"state.json", "sessions.json"} {
 		if err := setOptionalFile(filepath.Join(paths.VarDir, name), 0o600, panel.UID, panel.GID); err != nil {
 			return err
@@ -229,7 +266,33 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 			return err
 		}
 	}
-	return setOptionalFile(filepath.Join(paths.EtcDir, "backup.passphrase"), 0o600, paths.RootUID, paths.RootGID)
+	if err := setOptionalFile(filepath.Join(paths.EtcDir, "backup.passphrase"), 0o600, paths.RootUID, paths.RootGID); err != nil {
+		return err
+	}
+	// veil-mieru.service moved to the dedicated veil-mita identity (issue
+	// #624). systemd does not re-own an existing StateDirectory, so a mita
+	// state tree left at veil-proxy:veil-proxy would be unwritable for the
+	// daemon — re-own it like the packaged postinstall does.
+	if panel.MitaUID != 0 && panel.MitaGID != 0 {
+		mitaDir := paths.MitaDir
+		if mitaDir == "" {
+			mitaDir = filepath.Join(filepath.Dir(paths.VarDir), "mita")
+		}
+		info, err := testHooks.lstat(mitaDir)
+		switch {
+		case os.IsNotExist(err):
+			// No daemon state yet — systemd creates it veil-mita-owned.
+		case err != nil:
+			return err
+		case info.Mode()&os.ModeSymlink != 0 || !info.IsDir():
+			return fmt.Errorf("refuse to migrate non-directory mita state dir %s", mitaDir)
+		default:
+			if err := applyTreeOwnership(mitaDir, 0o700, 0o600, panel.MitaUID, panel.MitaGID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func createSafetyCopies(paths Paths, now time.Time) (string, error) {
@@ -344,6 +407,41 @@ func copyRegularFile(source, destination string) error {
 		return errors.Join(err, output.Close())
 	}
 	return output.Close()
+}
+
+// proxyStateDirs are the fixed StateDirectory trees that must belong to the
+// veil-proxy identity (veil-caddy.service StateDirectory=caddy,
+// veil-mieru.service StateDirectory=mita). It is a variable so tests can
+// point it at a scratch tree.
+var proxyStateDirs = []string{"/var/lib/caddy", "/var/lib/mita"}
+
+// reownProxyStateDir mirrors the package postinstall `chown -R
+// veil-proxy:veil-proxy` repair: an existing real directory tree is re-owned
+// to the proxy identity, contents included. A symlinked or non-directory
+// path is operator-managed and left alone, and symlinks inside the tree are
+// never followed — matching `chown -R` semantics.
+func reownProxyStateDir(root string, uid, gid int) error {
+	info, err := testHooks.lstat(root)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return nil
+	}
+	return testHooks.walkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			// Never chown through a link: only the tree's own entries are
+			// re-owned, like `chown -R` without -L.
+			return nil
+		}
+		return testHooks.chown(path, uid, gid)
+	})
 }
 
 func ensureOwnedDirectory(path string, mode os.FileMode, uid, gid int) error {

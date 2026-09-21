@@ -97,25 +97,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getApiInboundsResponse200 = {
-  data: Inbound[]
-  status: 200
-}
-
-export type getApiInboundsResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiInboundsResponseSuccess = (getApiInboundsResponse200) & {
-  headers: Headers;
-};
-export type getApiInboundsResponseError = (getApiInboundsResponse401) & {
-  headers: Headers;
-};
-
-export type getApiInboundsResponse = (getApiInboundsResponseSuccess | getApiInboundsResponseError)
-
 export const getGetApiInboundsUrl = () => {
 
 
@@ -127,9 +108,9 @@ export const getGetApiInboundsUrl = () => {
 /**
  * @summary List inbounds
  */
-export const getApiInbounds = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiInboundsResponse> => {
+export const getApiInbounds = async ( options?: Parameters<typeof apiFetch>[1]): Promise<Inbound[]> => {
 
-  return apiFetch<getApiInboundsResponse>(getGetApiInboundsUrl(),
+  return apiFetch<Inbound[]>(getGetApiInboundsUrl(),
   {
     ...options,
     method: 'GET'
@@ -216,50 +197,6 @@ export function useGetApiInbounds<TData = Awaited<ReturnType<typeof getApiInboun
 
 
 
-export type postApiInboundsResponse201 = {
-  data: Inbound & MutationOutcome
-  status: 201
-}
-
-export type postApiInboundsResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiInboundsResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type postApiInboundsResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiInboundsResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiInboundsResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiInboundsResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiInboundsResponseSuccess = (postApiInboundsResponse201) & {
-  headers: Headers;
-};
-export type postApiInboundsResponseError = (postApiInboundsResponse400 | postApiInboundsResponse403 | postApiInboundsResponse409 | postApiInboundsResponse422 | postApiInboundsResponse423 | postApiInboundsResponse503) & {
-  headers: Headers;
-};
-
-export type postApiInboundsResponse = (postApiInboundsResponseSuccess | postApiInboundsResponseError)
-
 export const getPostApiInboundsUrl = () => {
 
 
@@ -271,7 +208,7 @@ export const getPostApiInboundsUrl = () => {
 /**
  * @summary Create an inbound
  */
-export const postApiInbounds = async (inbound: Inbound, options?: Parameters<typeof apiFetch>[1]): Promise<postApiInboundsResponse> => {
+export const postApiInbounds = async (inbound: Inbound, options?: Parameters<typeof apiFetch>[1]): Promise<Inbound & MutationOutcome> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -287,7 +224,7 @@ export const postApiInbounds = async (inbound: Inbound, options?: Parameters<typ
     }
     return headers;
   };
-return apiFetch<postApiInboundsResponse>(getPostApiInboundsUrl(),
+return apiFetch<Inbound & MutationOutcome>(getPostApiInboundsUrl(),
   {
     ...options,
     method: 'POST',
@@ -347,26 +284,7 @@ export const usePostApiInbounds = <TError = BadRequestResponse | ForbiddenRespon
       > => {
       return useMutation(getPostApiInboundsMutationOptions(options), queryClient);
     }
-    export type getApiInboundsNameResponse200 = {
-  data: Inbound
-  status: 200
-}
-
-export type getApiInboundsNameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type getApiInboundsNameResponseSuccess = (getApiInboundsNameResponse200) & {
-  headers: Headers;
-};
-export type getApiInboundsNameResponseError = (getApiInboundsNameResponse404) & {
-  headers: Headers;
-};
-
-export type getApiInboundsNameResponse = (getApiInboundsNameResponseSuccess | getApiInboundsNameResponseError)
-
-export const getGetApiInboundsNameUrl = (name: string,) => {
+    export const getGetApiInboundsNameUrl = (name: string,) => {
 
 
 
@@ -377,9 +295,9 @@ export const getGetApiInboundsNameUrl = (name: string,) => {
 /**
  * @summary Read one inbound
  */
-export const getApiInboundsName = async (name: string, options?: Parameters<typeof apiFetch>[1]): Promise<getApiInboundsNameResponse> => {
+export const getApiInboundsName = async (name: string, options?: Parameters<typeof apiFetch>[1]): Promise<Inbound> => {
 
-  return apiFetch<getApiInboundsNameResponse>(getGetApiInboundsNameUrl(name),
+  return apiFetch<Inbound>(getGetApiInboundsNameUrl(name),
   {
     ...options,
     method: 'GET'
@@ -466,55 +384,6 @@ export function useGetApiInboundsName<TData = Awaited<ReturnType<typeof getApiIn
 
 
 
-export type putApiInboundsNameResponse200 = {
-  data: Inbound & MutationOutcome
-  status: 200
-}
-
-export type putApiInboundsNameResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type putApiInboundsNameResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type putApiInboundsNameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type putApiInboundsNameResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type putApiInboundsNameResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type putApiInboundsNameResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type putApiInboundsNameResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type putApiInboundsNameResponseSuccess = (putApiInboundsNameResponse200) & {
-  headers: Headers;
-};
-export type putApiInboundsNameResponseError = (putApiInboundsNameResponse400 | putApiInboundsNameResponse403 | putApiInboundsNameResponse404 | putApiInboundsNameResponse409 | putApiInboundsNameResponse422 | putApiInboundsNameResponse423 | putApiInboundsNameResponse503) & {
-  headers: Headers;
-};
-
-export type putApiInboundsNameResponse = (putApiInboundsNameResponseSuccess | putApiInboundsNameResponseError)
-
 export const getPutApiInboundsNameUrl = (name: string,) => {
 
 
@@ -527,7 +396,7 @@ export const getPutApiInboundsNameUrl = (name: string,) => {
  * @summary Update an inbound
  */
 export const putApiInboundsName = async (name: string,
-    inbound: Inbound, options?: Parameters<typeof apiFetch>[1]): Promise<putApiInboundsNameResponse> => {
+    inbound: Inbound, options?: Parameters<typeof apiFetch>[1]): Promise<Inbound & MutationOutcome> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -543,7 +412,7 @@ export const putApiInboundsName = async (name: string,
     }
     return headers;
   };
-return apiFetch<putApiInboundsNameResponse>(getPutApiInboundsNameUrl(name),
+return apiFetch<Inbound & MutationOutcome>(getPutApiInboundsNameUrl(name),
   {
     ...options,
     method: 'PUT',
@@ -603,51 +472,7 @@ export const usePutApiInboundsName = <TError = BadRequestResponse | ForbiddenRes
       > => {
       return useMutation(getPutApiInboundsNameMutationOptions(options), queryClient);
     }
-    export type deleteApiInboundsNameResponse200 = {
-  data: DeleteApiInboundsName200
-  status: 200
-}
-
-export type deleteApiInboundsNameResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type deleteApiInboundsNameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type deleteApiInboundsNameResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type deleteApiInboundsNameResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type deleteApiInboundsNameResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type deleteApiInboundsNameResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type deleteApiInboundsNameResponseSuccess = (deleteApiInboundsNameResponse200) & {
-  headers: Headers;
-};
-export type deleteApiInboundsNameResponseError = (deleteApiInboundsNameResponse403 | deleteApiInboundsNameResponse404 | deleteApiInboundsNameResponse409 | deleteApiInboundsNameResponse422 | deleteApiInboundsNameResponse423 | deleteApiInboundsNameResponse503) & {
-  headers: Headers;
-};
-
-export type deleteApiInboundsNameResponse = (deleteApiInboundsNameResponseSuccess | deleteApiInboundsNameResponseError)
-
-export const getDeleteApiInboundsNameUrl = (name: string,) => {
+    export const getDeleteApiInboundsNameUrl = (name: string,) => {
 
 
 
@@ -658,9 +483,9 @@ export const getDeleteApiInboundsNameUrl = (name: string,) => {
 /**
  * @summary Delete an inbound
  */
-export const deleteApiInboundsName = async (name: string, options?: Parameters<typeof apiFetch>[1]): Promise<deleteApiInboundsNameResponse> => {
+export const deleteApiInboundsName = async (name: string, options?: Parameters<typeof apiFetch>[1]): Promise<DeleteApiInboundsName200> => {
 
-  return apiFetch<deleteApiInboundsNameResponse>(getDeleteApiInboundsNameUrl(name),
+  return apiFetch<DeleteApiInboundsName200>(getDeleteApiInboundsNameUrl(name),
   {
     ...options,
     method: 'DELETE'
@@ -720,31 +545,7 @@ export const useDeleteApiInboundsName = <TError = ForbiddenResponse | NotFoundRe
       > => {
       return useMutation(getDeleteApiInboundsNameMutationOptions(options), queryClient);
     }
-    export type getApiInboundsNameClientsResponse200 = {
-  data: ClientListResponse
-  status: 200
-}
-
-export type getApiInboundsNameClientsResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type getApiInboundsNameClientsResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type getApiInboundsNameClientsResponseSuccess = (getApiInboundsNameClientsResponse200) & {
-  headers: Headers;
-};
-export type getApiInboundsNameClientsResponseError = (getApiInboundsNameClientsResponse404 | getApiInboundsNameClientsResponse503) & {
-  headers: Headers;
-};
-
-export type getApiInboundsNameClientsResponse = (getApiInboundsNameClientsResponseSuccess | getApiInboundsNameClientsResponseError)
-
-export const getGetApiInboundsNameClientsUrl = (name: string,
+    export const getGetApiInboundsNameClientsUrl = (name: string,
     params?: GetApiInboundsNameClientsParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -764,9 +565,9 @@ export const getGetApiInboundsNameClientsUrl = (name: string,
  * @summary List clients attached to one inbound
  */
 export const getApiInboundsNameClients = async (name: string,
-    params?: GetApiInboundsNameClientsParams, options?: Parameters<typeof apiFetch>[1]): Promise<getApiInboundsNameClientsResponse> => {
+    params?: GetApiInboundsNameClientsParams, options?: Parameters<typeof apiFetch>[1]): Promise<ClientListResponse> => {
 
-  return apiFetch<getApiInboundsNameClientsResponse>(getGetApiInboundsNameClientsUrl(name,params),
+  return apiFetch<ClientListResponse>(getGetApiInboundsNameClientsUrl(name,params),
   {
     ...options,
     method: 'GET'

@@ -90,6 +90,10 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 	return plan
 }
 
+// probeCaddyCapabilities is a seam so tests can simulate a host without a
+// Caddy binary — the production value is caddycapabilities.Probe.
+var probeCaddyCapabilities = caddycapabilities.Probe
+
 func buildCaddyMaterial(settings Settings, inbounds []Inbound, runtimeCatalog ManagedRuntimeCatalog, liveRoot string) applyplan.Material {
 	material := applyplan.Material{}
 	if !caddyRequired(settings, inbounds) {
@@ -155,10 +159,29 @@ func buildCaddyMaterial(settings Settings, inbounds []Inbound, runtimeCatalog Ma
 		material.Errors = append(material.Errors, conflict.Message)
 	}
 
-	caps, err := caddycapabilities.Probe("")
+	caps, err := probeCaddyCapabilities("")
+	if err != nil && caddycapabilities.IsMissingBinary(err) {
+		// Plan building can run before the packaged binary is on PATH (or
+		// before `veil runtime install` has placed it); the packaged install
+		// location is the other place a real Caddy can live (issue #637).
+		caps, err = probeCaddyCapabilities("/usr/local/bin/caddy")
+	}
 	if err != nil {
-		material.Errors = append(material.Errors, fmt.Sprintf("failed to probe Caddy capabilities: %v", err))
-		return material
+		if !caddycapabilities.IsMissingBinary(err) {
+			material.Errors = append(material.Errors, fmt.Sprintf("failed to probe Caddy capabilities: %v", err))
+			return material
+		}
+		// A missing binary is only fatal when an enabled naive inbound needs
+		// the forward_proxy module probed (audit #156). Hysteria2-with-domain
+		// plans render fine with empty capabilities — Caddy is installed by
+		// the apply that this plan describes (issue #637).
+		for _, inb := range inbounds {
+			if inb.Protocol == "naiveproxy" && inb.Enabled {
+				material.Errors = append(material.Errors, fmt.Sprintf("failed to probe Caddy capabilities: %v", err))
+				return material
+			}
+		}
+		caps = caddycapabilities.CaddyCapabilities{}
 	}
 	if _, err := renderer.RenderCaddyJSON(plan, caps); err != nil {
 		material.Errors = append(material.Errors, err.Error())

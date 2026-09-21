@@ -90,60 +90,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type postApiAdminRotateKeyResponse200 = {
-  data: KeyRotationResponse
-  status: 200
-}
-
-export type postApiAdminRotateKeyResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiAdminRotateKeyResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type postApiAdminRotateKeyResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type postApiAdminRotateKeyResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiAdminRotateKeyResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiAdminRotateKeyResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiAdminRotateKeyResponse500 = {
-  data: PrivilegedFailureResponse
-  status: 500
-}
-
-export type postApiAdminRotateKeyResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiAdminRotateKeyResponseSuccess = (postApiAdminRotateKeyResponse200) & {
-  headers: Headers;
-};
-export type postApiAdminRotateKeyResponseError = (postApiAdminRotateKeyResponse400 | postApiAdminRotateKeyResponse401 | postApiAdminRotateKeyResponse403 | postApiAdminRotateKeyResponse409 | postApiAdminRotateKeyResponse422 | postApiAdminRotateKeyResponse423 | postApiAdminRotateKeyResponse500 | postApiAdminRotateKeyResponse503) & {
-  headers: Headers;
-};
-
-export type postApiAdminRotateKeyResponse = (postApiAdminRotateKeyResponseSuccess | postApiAdminRotateKeyResponseError)
-
 export const getPostApiAdminRotateKeyUrl = () => {
 
 
@@ -160,7 +106,7 @@ export const getPostApiAdminRotateKeyUrl = () => {
  * envelope as other management mutations so the panel does not stay Pending.
  * @summary Rotate the state-encryption key
  */
-export const postApiAdminRotateKey = async (emptyObject?: EmptyObject, options?: Parameters<typeof apiFetch>[1]): Promise<postApiAdminRotateKeyResponse> => {
+export const postApiAdminRotateKey = async (emptyObject?: EmptyObject, options?: Parameters<typeof apiFetch>[1]): Promise<KeyRotationResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -176,7 +122,7 @@ export const postApiAdminRotateKey = async (emptyObject?: EmptyObject, options?:
     }
     return headers;
   };
-return apiFetch<postApiAdminRotateKeyResponse>(getPostApiAdminRotateKeyUrl(),
+return apiFetch<KeyRotationResponse>(getPostApiAdminRotateKeyUrl(),
   {
     ...options,
     method: 'POST',

@@ -4,6 +4,37 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+### Fixed
+
+- #622: package postinstall no longer sweeps every symlink under
+  /etc/veil/www on each upgrade — the legacy /var/lib/veil/www migration
+  copies only regular files and directories, skips source symlinks, and
+  never touches operator-created destination entries.
+- #623: package postinstall and `veil install` host migration re-own an
+  existing /var/lib/mita to veil-proxy like /var/lib/caddy — systemd never
+  re-owns an existing StateDirectory, so a veil-owned mita tree left the
+  veil-mieru.service unit unable to write its state.
+- #625/#639/#650: a custom `--etc-dir`/`--var-dir` install on a packaged
+  host now writes install drop-ins for the protocol units
+  (veil-hysteria2@, veil-olcrtc@, veil-warp, veil-mieru) too, and every
+  drop-in clears the vendor list directives before assigning custom values
+  — EnvironmentFile, ReadOnlyPaths, ReadWritePaths, and InaccessiblePaths
+  accumulate across fragments, so the packaged defaults no longer leak in
+  beside the custom layout.
+- #626: the custom-path veil-backup.service drop-in resets the packaged
+  `ConditionPathExists=/etc/veil/backup.passphrase` so the oneshot is not
+  silently skipped on custom `--etc-dir` installs.
+- #627: `veil backup schedule enable` writes its passphrase drop-in with
+  the effective unit's state/key/output paths instead of stomping the
+  ExecStart back onto the packaged defaults, and resolves the passphrase
+  destination from the configured `--passphrase-file` when the operator
+  does not pass `--passphrase-path`.
+- #642: `veil uninstall` and scripts/uninstall.sh now remove every managed
+  unit's drop-in directory (veil.service.d, veil-helper.service.d,
+  veil-caddy.service.d, the protocol units, and more) instead of only
+  veil-backup.service.d — stale 10-veil-install.conf overrides no longer
+  merge into the next package install.
+
 ## [v0.7.2] - 2026-09-18
 
 Patch release: clean-host install acceptance now gates every merge, and the
@@ -472,10 +503,11 @@ Clients, React Panel, backup/restore, protocol plugins, and isolated CI.
   never go live. Hysteria2, Mieru and olcRTC now skip pre-stage syntax
   validation (relying on the post-restart health check, which rolls back), and a
   skipped validation no longer blocks the apply.
-- Mieru's mita daemon now runs from an ephemeral `RuntimeDirectory` instead of a
-  persistent `StateDirectory`, so each apply starts mita fresh and binds the
-  inbound's configured port. Previously mita resumed a stale persisted config and
-  kept serving the old port after a port change.
+- Mieru's mita daemon now reads its config and RPC socket from an ephemeral
+  `RuntimeDirectory`, so each apply starts mita fresh and binds the inbound's
+  configured port; mita keeps its persistent `StateDirectory=mita` for daemon
+  state. Previously mita resumed a stale persisted config and kept serving the
+  old port after a port change.
 - A fresh install now defaults `settings.mode` to `server`. It was empty, and the
   settings validation requires a non-empty mode, so saving global settings (for
   example to set a `domain` for client connection links) failed with

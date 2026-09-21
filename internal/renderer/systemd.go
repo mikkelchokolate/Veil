@@ -51,15 +51,17 @@ var systemdHardeningBlockOlcrtc = strings.Replace(
 )
 
 // mita's appctl UDS must stay connectable by the veil panel: connecting to a
-// unix socket needs write permission, so the daemon creates it group-writable
-// for veil-proxy (the panel account is a supplementary veil-proxy member).
-// UMask 0007 deliberately widens every file mita creates under its
-// RuntimeDirectory/StateDirectory to group scope — acceptable because the
-// panel is already in veil-proxy — and keeps world access at none.
+// unix socket needs write permission, so the daemon creates it group-writable.
+// The socket group is veil-mita — the daemon's dedicated identity, NOT the
+// shared veil-proxy edge account — so group scope covers only the daemon and
+// the panel (a supplementary veil-mita member), and a compromised veil-proxy
+// peer cannot traverse /run/veil-mieru (RuntimeDirectoryMode=0750), connect to
+// mita.sock, or even signal the daemon (issue #624). UMask 0007 deliberately
+// widens mita's own files to group scope and keeps world access at none.
 var systemdHardeningBlockMieru = strings.Replace(
 	systemdHardeningBlock,
 	"UMask=0077",
-	"# appctl UDS stays group-writable so the veil panel (supplementary\n# veil-proxy member) can connect; unix connect needs write on the socket.\nUMask=0007",
+	"# appctl UDS stays group-writable so the veil panel (supplementary\n# veil-mita member) can connect; unix connect needs write on the socket.\nUMask=0007",
 	1,
 )
 
@@ -78,7 +80,9 @@ func systemdAssign(key, value string) string {
 	return key + "=" + systemdQuote(value)
 }
 
-func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
+// defaultSystemdConfig fills unset fields with the packaged defaults shared
+// by the full unit render and the install drop-ins.
+func defaultSystemdConfig(cfg SystemdConfig) SystemdConfig {
 	if cfg.VeilBinary == "" {
 		cfg.VeilBinary = "/usr/local/bin/veil"
 	}
@@ -103,6 +107,11 @@ func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 	if cfg.VarDir == "" {
 		cfg.VarDir = "/var/lib/veil"
 	}
+	return cfg
+}
+
+func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
+	cfg = defaultSystemdConfig(cfg)
 	applyRoot := path.Join(cfg.VarDir, "staging")
 	statePath := path.Join(cfg.VarDir, "state.json")
 	keyPath := path.Join(cfg.EtcDir, "state.key")
@@ -349,16 +358,26 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=veil-proxy
-Group=veil-proxy
+# Mieru runs as its own veil-mita identity, not the shared veil-proxy edge
+# account: the appctl UDS is a control plane (apply/start/stop/user table),
+# and a shared uid+group let ANY compromised veil-proxy unit drive it
+# (issue #624). veil-proxy stays a supplementary group so the daemon keeps
+# reading the root:veil-proxy generated config.
+User=veil-mita
+Group=veil-mita
+SupplementaryGroups=veil-proxy
 Environment=MITA_CONFIG_FILE=/run/veil-mieru/server.conf.pb
 Environment=MITA_UDS_PATH=/run/veil-mieru/mita.sock
 Environment=MITA_INSECURE_UDS=1
 Environment=MITA_LOG_NO_TIMESTAMP=true
+# 0750 keeps non-group members (including every veil-proxy peer) from even
+# traversing the socket directory; the socket itself lands 0770 veil-mita
+# via UMask=0007, and only the veil panel is a supplementary veil-mita member.
 RuntimeDirectory=veil-mieru
+RuntimeDirectoryMode=0750
 StateDirectory=mita
 ExecStart=` + mieruBin + ` run
-ExecStartPost=/bin/sh -c 'i=0; while [ $$i -lt 50 ]; do if [ -S /run/veil-mieru/mita.sock ]; then ` + mieruBin + ` apply config ` + mieruConfig + ` && ` + mieruBin + ` start && exit 0; fi; i=$$((i+1)); sleep 0.2; done; echo "mita activation timed out" >&2; exit 1'
+ExecStartPost=` + mieruActivationExecStartPost(mieruBin, mieruConfig) + `
 ExecStop=` + mieruBin + ` stop
 Restart=on-failure
 RestartSec=3
@@ -437,60 +456,129 @@ func RenderInstallDropIn(name string, cfg SystemdConfig) (string, bool) {
 	if !UsesCustomInstallPaths(cfg) {
 		return "", false
 	}
-	switch name {
-	case UnitVeil, UnitHelperService, UnitBackupService, UnitCaddy:
-		return "[Service]\n" + dropInServiceOverrides(name, cfg), true
-	default:
+	cfg = defaultSystemdConfig(cfg)
+	var b strings.Builder
+	if unit := dropInUnitOverrides(name, cfg); unit != "" {
+		b.WriteString("[Unit]\n" + unit + "\n")
+	}
+	service := dropInServiceOverrides(name, cfg)
+	if service == "" {
 		return "", false
 	}
+	b.WriteString("[Service]\n" + service)
+	return b.String(), true
 }
 
+// dropInUnitOverrides renders [Unit]-section resets for the packaged install
+// drop-in. The vendor veil-backup.service carries
+// ConditionPathExists=/etc/veil/backup.passphrase, which would silently skip
+// the oneshot on a custom --etc-dir install; reset and re-point it at the
+// custom passphrase file (issue #626).
+func dropInUnitOverrides(name string, cfg SystemdConfig) string {
+	if name != UnitBackupService {
+		return ""
+	}
+	return "ConditionPathExists=\nConditionPathExists=" + systemdQuote(path.Join(cfg.EtcDir, "backup.passphrase")) + "\n"
+}
+
+// dropInInaccessiblePaths resets the packaged helper-socket/state mask and
+// re-points it at the configured VarDir. The packaged /var/lib/veil stays
+// masked alongside a custom VarDir: an abandoned tree can still hold panel
+// state that veil-proxy units must never read (issues #615, #625).
+func dropInInaccessiblePaths(varDir string) string {
+	masked := "/run/veil/helper.sock " + systemdQuote(varDir)
+	if varDir != "/var/lib/veil" {
+		masked += " /var/lib/veil"
+	}
+	return "InaccessiblePaths=\nInaccessiblePaths=" + masked + "\n"
+}
+
+// mieruActivationExecStartPost is the ExecStartPost one-liner that waits for
+// the mita RPC socket, applies the generated config, and starts the daemon.
+// Shared by the full unit render and the install drop-in so the packaged unit
+// override cannot drift from it (issue #625).
+func mieruActivationExecStartPost(mieruBin, mieruConfig string) string {
+	return "/bin/sh -c 'i=0; while [ $$i -lt 50 ]; do if [ -S /run/veil-mieru/mita.sock ]; then " + mieruBin + " apply config " + mieruConfig + " && " + mieruBin + " start && exit 0; fi; i=$$((i+1)); sleep 0.2; done; echo \"mita activation timed out\" >&2; exit 1'"
+}
+
+// dropInServiceOverrides renders the [Service]-section overrides a packaged
+// unit needs when Veil is installed with custom paths. Every list-valued
+// directive the vendor unit sets is cleared first (`Key=`): systemd.exec
+// accumulates EnvironmentFile/ReadOnlyPaths/ReadWritePaths/InaccessiblePaths
+// across fragments, so without the empty assignment the packaged default
+// trees stay granted beside the custom ones (issues #639, #650). ExecStart
+// and friends are reset before their replacement the same way.
 func dropInServiceOverrides(name string, cfg SystemdConfig) string {
-	if cfg.EtcDir == "" {
-		cfg.EtcDir = "/etc/veil"
-	}
-	if cfg.VarDir == "" {
-		cfg.VarDir = "/var/lib/veil"
-	}
-	if cfg.VeilBinary == "" {
-		cfg.VeilBinary = "/usr/local/bin/veil"
-	}
 	var b strings.Builder
+	veilBin := systemdQuote(cfg.VeilBinary)
+	envFile := systemdQuote(path.Join(cfg.EtcDir, "veil.env"))
+	writePanelEnvironment := func() {
+		b.WriteString("Environment=" + systemdAssign("VEIL_STATE_PATH", path.Join(cfg.VarDir, "state.json")) + "\n")
+		b.WriteString("Environment=" + systemdAssign("VEIL_KEY_PATH", path.Join(cfg.EtcDir, "state.key")) + "\n")
+		b.WriteString("Environment=" + systemdAssign("VEIL_APPLY_ROOT", path.Join(cfg.VarDir, "staging")) + "\n")
+		b.WriteString("Environment=" + systemdAssign("VEIL_LIVE_ROOT", path.Join(cfg.EtcDir, "generated")) + "\n")
+	}
 	switch name {
 	case UnitVeil:
 		b.WriteString("ExecStart=\n")
-		b.WriteString("ExecStart=" + systemdQuote(cfg.VeilBinary) + " serve\n")
-		b.WriteString("EnvironmentFile=-" + systemdQuote(path.Join(cfg.EtcDir, "veil.env")) + "\n")
-		b.WriteString("Environment=" + systemdAssign("VEIL_STATE_PATH", path.Join(cfg.VarDir, "state.json")) + "\n")
-		b.WriteString("Environment=" + systemdAssign("VEIL_KEY_PATH", path.Join(cfg.EtcDir, "state.key")) + "\n")
-		b.WriteString("Environment=" + systemdAssign("VEIL_APPLY_ROOT", path.Join(cfg.VarDir, "staging")) + "\n")
-		b.WriteString("Environment=" + systemdAssign("VEIL_LIVE_ROOT", path.Join(cfg.EtcDir, "generated")) + "\n")
+		b.WriteString("ExecStart=" + veilBin + " serve\n")
+		b.WriteString("EnvironmentFile=\n")
+		b.WriteString("EnvironmentFile=-" + envFile + "\n")
+		writePanelEnvironment()
+		b.WriteString("ReadOnlyPaths=\n")
 		b.WriteString("ReadOnlyPaths=" + systemdQuote(cfg.EtcDir) + "\n")
+		b.WriteString("ReadWritePaths=\n")
 		b.WriteString("ReadWritePaths=" + systemdQuote(cfg.VarDir) + "\n")
 	case UnitHelperService:
 		b.WriteString("ExecStart=\n")
-		b.WriteString("ExecStart=" + systemdQuote(cfg.VeilBinary) + " helper serve --systemd-socket-activation\n")
-		b.WriteString("Environment=" + systemdAssign("VEIL_STATE_PATH", path.Join(cfg.VarDir, "state.json")) + "\n")
-		b.WriteString("Environment=" + systemdAssign("VEIL_KEY_PATH", path.Join(cfg.EtcDir, "state.key")) + "\n")
-		b.WriteString("Environment=" + systemdAssign("VEIL_APPLY_ROOT", path.Join(cfg.VarDir, "staging")) + "\n")
-		b.WriteString("Environment=" + systemdAssign("VEIL_LIVE_ROOT", path.Join(cfg.EtcDir, "generated")) + "\n")
+		b.WriteString("ExecStart=" + veilBin + " helper serve --systemd-socket-activation\n")
+		writePanelEnvironment()
+		b.WriteString("ReadWritePaths=\n")
 		b.WriteString("ReadWritePaths=" + systemdQuote(cfg.EtcDir) + " " + systemdQuote(cfg.VarDir) + " /usr/local/bin /etc/ufw /run/veil\n")
 	case UnitBackupService:
+		passphraseFile := systemdQuote(path.Join(cfg.EtcDir, "backup.passphrase"))
 		b.WriteString("ExecStart=\n")
-		b.WriteString("ExecStart=" + systemdQuote(cfg.VeilBinary) + " backup create --state " + systemdQuote(path.Join(cfg.VarDir, "state.json")) + " --key-path " + systemdQuote(path.Join(cfg.EtcDir, "state.key")) + " --passphrase-file " + systemdQuote(path.Join(cfg.EtcDir, "backup.passphrase")) + " --output-dir " + systemdQuote(path.Join(cfg.VarDir, "backups")) + " --prune --daily 7 --weekly 4 --monthly 12\n")
-		b.WriteString("EnvironmentFile=-" + systemdQuote(path.Join(cfg.EtcDir, "veil.env")) + "\n")
+		b.WriteString("ExecStart=" + veilBin + " backup create --state " + systemdQuote(path.Join(cfg.VarDir, "state.json")) + " --key-path " + systemdQuote(path.Join(cfg.EtcDir, "state.key")) + " --passphrase-file " + passphraseFile + " --output-dir " + systemdQuote(path.Join(cfg.VarDir, "backups")) + " --prune --daily 7 --weekly 4 --monthly 12\n")
+		b.WriteString("EnvironmentFile=\n")
+		b.WriteString("EnvironmentFile=-" + envFile + "\n")
+		b.WriteString("ReadWritePaths=\n")
 		b.WriteString("ReadWritePaths=" + systemdQuote(cfg.VarDir) + "\n")
 	case UnitCaddy:
-		caddyBin := cfg.CaddyBinary
-		if caddyBin == "" {
-			caddyBin = "/usr/local/bin/caddy"
-		}
-		config := path.Join(cfg.EtcDir, "generated", "caddy", "config.json")
+		config := systemdQuote(path.Join(cfg.EtcDir, "generated", "caddy", "config.json"))
+		caddyBin := systemdQuote(cfg.CaddyBinary)
 		b.WriteString("ExecStart=\n")
-		b.WriteString("ExecStart=" + systemdQuote(caddyBin) + " run --config " + systemdQuote(config) + "\n")
+		b.WriteString("ExecStart=" + caddyBin + " run --config " + config + "\n")
 		b.WriteString("ExecReload=\n")
-		b.WriteString("ExecReload=" + systemdQuote(caddyBin) + " reload --config " + systemdQuote(config) + "\n")
+		b.WriteString("ExecReload=" + caddyBin + " reload --config " + config + "\n")
+		b.WriteString("ReadOnlyPaths=\n")
 		b.WriteString("ReadOnlyPaths=" + systemdQuote(cfg.EtcDir) + "\n")
+		b.WriteString(dropInInaccessiblePaths(cfg.VarDir))
+	case UnitHysteria2:
+		b.WriteString("ExecStart=\n")
+		b.WriteString("ExecStart=" + systemdQuote(cfg.HysteriaBinary) + " server --config " + systemdQuote(path.Join(cfg.EtcDir, "generated", "hysteria2", "%i.yaml")) + "\n")
+		b.WriteString(dropInInaccessiblePaths(cfg.VarDir))
+	case UnitOlcrtc:
+		b.WriteString("ExecStart=\n")
+		b.WriteString("ExecStart=" + systemdQuote(cfg.OlcrtcBinary) + " " + systemdQuote(path.Join(cfg.EtcDir, "generated", "olcrtc", "%i.yaml")) + "\n")
+		b.WriteString(dropInInaccessiblePaths(cfg.VarDir))
+	case UnitWarp:
+		config := systemdQuote(path.Join(cfg.EtcDir, "generated", "sing-box", "warp.json"))
+		singBoxBin := systemdQuote(cfg.SingBoxBinary)
+		b.WriteString("ExecStart=\n")
+		b.WriteString("ExecStart=" + singBoxBin + " run -c " + config + "\n")
+		b.WriteString("ExecReload=\n")
+		b.WriteString("ExecReload=" + singBoxBin + " check -c " + config + "\n")
+		b.WriteString(dropInInaccessiblePaths(cfg.VarDir))
+	case UnitMieru:
+		mieruBin := systemdQuote(cfg.MieruBinary)
+		mieruConfig := systemdQuote(path.Join(cfg.EtcDir, "generated", "mieru", "server_config.json"))
+		b.WriteString("ExecStart=\n")
+		b.WriteString("ExecStart=" + mieruBin + " run\n")
+		b.WriteString("ExecStartPost=\n")
+		b.WriteString("ExecStartPost=" + mieruActivationExecStartPost(mieruBin, mieruConfig) + "\n")
+		b.WriteString("ExecStop=\n")
+		b.WriteString("ExecStop=" + mieruBin + " stop\n")
+		b.WriteString(dropInInaccessiblePaths(cfg.VarDir))
 	}
 	return b.String()
 }

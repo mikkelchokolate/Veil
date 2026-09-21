@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { ApiError, apiFetch } from "../api/fetcher";
-import type { ApplyJob } from "../api/generated/models";
+import type { ApplyJob, ApplyReconcileResponse } from "../api/generated/models";
 import { useApplyState } from "../apply/ApplyStatusIndicator";
 import {
 	isSupersededRecoveryJob,
@@ -83,7 +83,23 @@ export function ApplyPage() {
 	const [showTransferred, setShowTransferred] = useState(false);
 
 	const reconcile = useMutation({
-		mutationFn: () => apiFetch("/api/apply/reconcile", { method: "POST" }),
+		mutationFn: async () => {
+			const data = await apiFetch<ApplyReconcileResponse>(
+				"/api/apply/reconcile",
+				{ method: "POST" },
+			);
+			// reconciled=false WITH an applyJob is a failed converge — the 200
+			// is not a success signal (#651). A bare reconciled=false (no job)
+			// is the idempotent no-op "already synced" case.
+			if (data.reconciled === false && data.applyJob) {
+				throw new ApiError(
+					200,
+					data.applyJob.errorMessage || "apply reconcile failed",
+					data.applyJob.errorCode,
+				);
+			}
+			return data;
+		},
 		onSuccess: () => {
 			void qc.invalidateQueries({ queryKey: ["apply"] });
 		},

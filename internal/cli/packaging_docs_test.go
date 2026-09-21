@@ -282,7 +282,22 @@ func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 			t.Fatal(err)
 		}
 		config := strings.ReplaceAll(string(body), "\r\n", "\n")
-		if !strings.Contains(config, "User=veil-proxy") || !strings.Contains(config, "Group=veil-proxy") {
+		if strings.HasSuffix(unit, "veil-mieru.service") {
+			// mieru runs as the dedicated veil-mita identity (issue #624): the
+			// appctl UDS is a control plane, so it must not share the
+			// veil-proxy edge uid/gid other protocol units use.
+			for _, want := range []string{
+				"User=veil-mita\n", "Group=veil-mita\n",
+				"SupplementaryGroups=veil-proxy", "RuntimeDirectoryMode=0750",
+			} {
+				if !strings.Contains(config, want) {
+					t.Fatalf("veil-mieru.service missing %q:\n%s", want, config)
+				}
+			}
+			if strings.Contains(config, "User=veil-proxy") || strings.Contains(config, "Group=veil-proxy\n") {
+				t.Fatalf("veil-mieru.service must not run as the shared veil-proxy identity:\n%s", config)
+			}
+		} else if !strings.Contains(config, "User=veil-proxy") || !strings.Contains(config, "Group=veil-proxy") {
 			t.Fatalf("protocol unit %s must run as veil-proxy, not the Panel UID:\n%s", unit, config)
 		}
 		if strings.Contains(config, panelUser+"\n") {

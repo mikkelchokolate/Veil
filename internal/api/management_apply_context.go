@@ -67,6 +67,11 @@ func swapFirewallApplier(next firewallApplier) firewallApplier {
 	return prev
 }
 
+// detectSSHPorts returns the host SSH listen ports that must stay reachable
+// before UFW is enabled — the same detection install plans with. Tests
+// override it to keep the apply path deterministic.
+var detectSSHPorts = firewall.DetectSSHPorts
+
 type ManagementApplyContext struct {
 	state *managementState
 	ctx   context.Context
@@ -620,8 +625,7 @@ func (ctx ManagementApplyContext) PrepareFirewallLocked() (string, error) {
 		}
 		return "", nil
 	}
-	responses := firewall.BuildRuleResponses(ctx.state.settings, ctx.state.inbounds)
-	rules := firewall.UFWRulesFromResponses(responses)
+	rules := desiredFirewallUFWRules(ctx.state.settings, ctx.state.inbounds)
 	// An empty desired set is still reconciled through the privileged
 	// transaction: the helper prunes stale Veil-managed rules left behind by
 	// earlier applies, and skipping the call would silently bypass the
@@ -675,8 +679,7 @@ func (ctx ManagementApplyContext) syncFirewall() []ServiceActionResult {
 	if ctx.state.settings.FirewallManagement != nil && !*ctx.state.settings.FirewallManagement {
 		return nil
 	}
-	responses := firewall.BuildRuleResponses(ctx.state.settings, ctx.state.inbounds)
-	rules := firewall.UFWRulesFromResponses(responses)
+	rules := desiredFirewallUFWRules(ctx.state.settings, ctx.state.inbounds)
 	if len(rules) == 0 {
 		return nil
 	}
@@ -707,6 +710,31 @@ func (ctx ManagementApplyContext) syncFirewall() []ServiceActionResult {
 	}
 	result.Success = true
 	return []ServiceActionResult{result}
+}
+
+// desiredFirewallUFWRules builds the apply-time UFW desired set. Detected
+// host SSH listen ports are staged first with the same "Veil management SSH"
+// comment the installer's UFWPlan uses, so an apply that enables UFW can
+// never strand the operator's management channel (#629 — the privileged
+// enable gate only accepts SSH evidence). An empty service set stays empty:
+// the privileged reconcile still runs so stale Veil-managed rules are pruned
+// (#356), and an empty desired set can never enable UFW.
+func desiredFirewallUFWRules(settings Settings, inbounds []Inbound) []firewall.Rule {
+	responses := firewall.BuildRuleResponses(settings, inbounds)
+	if len(responses) == 0 {
+		return nil
+	}
+	// SSH first, mirroring UFWPlan's ordering; the builder dedupes by
+	// proto:port so an inbound already on an SSH port keeps the management
+	// comment (which is what the enable gate and ApplySafely look for).
+	builder := firewall.NewFirewallRuleResponseBuilder()
+	for _, port := range detectSSHPorts() {
+		builder.Add(port, "tcp", "Veil management SSH")
+	}
+	for _, response := range responses {
+		builder.Add(response.Port, response.Protocol, response.Service)
+	}
+	return firewall.UFWRulesFromResponses(builder.Rules())
 }
 
 func (ctx ManagementApplyContext) runPrivilegedServiceAction(unit string, action privileged.ServiceAction) ServiceActionResult {

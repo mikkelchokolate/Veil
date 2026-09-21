@@ -77,4 +77,33 @@ describe("SettingsPage web base path", () => {
 				?.naiveUsername,
 		).toBe("");
 	});
+
+	// #631: success=false on a committed PUT means the apply did not
+	// converge — the notice must say that instead of "Settings saved.".
+	it("surfaces a committed-but-unapplied save instead of claiming success", async () => {
+		server.use(
+			http.get("/api/settings", () =>
+				HttpResponse.json({
+					domain: "example.test",
+					mode: "dev",
+					panelListen: "127.0.0.1:2096",
+				}),
+			),
+			http.put("/api/settings", () =>
+				HttpResponse.json({
+					success: false,
+					revision: { desired: 2, applied: 1, state: "drift" },
+				}),
+			),
+		);
+		renderSettings();
+		fireEvent.click(await screen.findByRole("button", { name: /^edit$/i }));
+		const input = await screen.findByLabelText(/^domain$/i);
+		fireEvent.change(input, { target: { value: "changed.example.test" } });
+		fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+		expect(
+			await screen.findByText(/applying the new revision failed/i),
+		).toBeInTheDocument();
+		expect(screen.queryByText(/^settings saved\.$/i)).not.toBeInTheDocument();
+	});
 });

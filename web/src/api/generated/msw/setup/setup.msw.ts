@@ -93,18 +93,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getApiSetupStatusResponse200 = {
-  data: SetupStatusResponse
-  status: 200
-}
-
-export type getApiSetupStatusResponseSuccess = (getApiSetupStatusResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiSetupStatusResponse = (getApiSetupStatusResponseSuccess)
-
 export const getGetApiSetupStatusUrl = () => {
 
 
@@ -117,9 +105,9 @@ export const getGetApiSetupStatusUrl = () => {
  * Available without authentication only on a local loopback listener.
  * @summary Inspect first-run setup state
  */
-export const getApiSetupStatus = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiSetupStatusResponse> => {
+export const getApiSetupStatus = async ( options?: Parameters<typeof apiFetch>[1]): Promise<SetupStatusResponse> => {
 
-  return apiFetch<getApiSetupStatusResponse>(getGetApiSetupStatusUrl(),
+  return apiFetch<SetupStatusResponse>(getGetApiSetupStatusUrl(),
   {
     ...options,
     method: 'GET'
@@ -206,50 +194,6 @@ export function useGetApiSetupStatus<TData = Awaited<ReturnType<typeof getApiSet
 
 
 
-export type postApiSetupCompleteResponse201 = {
-  data: SetupCompleteResponse
-  status: 201
-}
-
-export type postApiSetupCompleteResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiSetupCompleteResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type postApiSetupCompleteResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiSetupCompleteResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiSetupCompleteResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiSetupCompleteResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiSetupCompleteResponseSuccess = (postApiSetupCompleteResponse201) & {
-  headers: Headers;
-};
-export type postApiSetupCompleteResponseError = (postApiSetupCompleteResponse400 | postApiSetupCompleteResponse403 | postApiSetupCompleteResponse409 | postApiSetupCompleteResponse422 | postApiSetupCompleteResponse423 | postApiSetupCompleteResponse503) & {
-  headers: Headers;
-};
-
-export type postApiSetupCompleteResponse = (postApiSetupCompleteResponseSuccess | postApiSetupCompleteResponseError)
-
 export const getPostApiSetupCompleteUrl = () => {
 
 
@@ -262,7 +206,7 @@ export const getPostApiSetupCompleteUrl = () => {
  * Single-use operation available only on an unconfigured local loopback listener.
  * @summary Create the initial administrator
  */
-export const postApiSetupComplete = async (setupCompleteRequest: SetupCompleteRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiSetupCompleteResponse> => {
+export const postApiSetupComplete = async (setupCompleteRequest: SetupCompleteRequest, options?: Parameters<typeof apiFetch>[1]): Promise<SetupCompleteResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -278,7 +222,7 @@ export const postApiSetupComplete = async (setupCompleteRequest: SetupCompleteRe
     }
     return headers;
   };
-return apiFetch<postApiSetupCompleteResponse>(getPostApiSetupCompleteUrl(),
+return apiFetch<SetupCompleteResponse>(getPostApiSetupCompleteUrl(),
   {
     ...options,
     method: 'POST',

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 )
 
 func TestDiskEndpointHasKnownPaths(t *testing.T) {
@@ -47,6 +49,24 @@ func TestDiskEndpointFieldsPresent(t *testing.T) {
 	}
 	if first.SizeBytes < 0 {
 		t.Errorf("expected non-negative size, got %d", first.SizeBytes)
+	}
+}
+
+// #641: /var/log is not Veil-managed; walking it on every GET /api/disk made
+// the endpoint expensive and mixed system log volume into the Veil disk card.
+// #638: the managed set follows the configured etc/var roots plus the
+// optional Caddy/Mita state dirs — nothing else may leak in.
+func TestVeilDirsOnlyCoversVeilManagedPaths(t *testing.T) {
+	allowed := map[string]bool{
+		hostenv.VarDir(): true,
+		hostenv.EtcDir(): true,
+		"/var/lib/caddy": true,
+		"/var/lib/mita":  true,
+	}
+	for _, dir := range veilDirs() {
+		if !allowed[dir] {
+			t.Fatalf("veilDirs contains non-Veil-managed path %q", dir)
+		}
 	}
 }
 

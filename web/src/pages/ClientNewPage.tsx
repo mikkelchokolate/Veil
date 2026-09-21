@@ -336,9 +336,29 @@ export function ClientNewPage() {
 						<div>
 							{create.isSuccess ? (
 								<>
-									<Badge variant="success">
-										{t("clientNew.clientCreated")}
-									</Badge>
+									{create.data?.success === false ? (
+										// The client committed but the auto-apply failed — do not
+										// present a clean "created" state; the client is not live
+										// until the apply job converges (#646). Issued credentials
+										// below are still valid and shown exactly once.
+										<>
+											<Badge variant="warning">
+												{t("clientNew.createdApplyFailed")}
+											</Badge>
+											{create.data?.applyJob?.id ? (
+												<FormDescription style={{ marginTop: 4 }}>
+													{t("clientNew.applyJob", {
+														id: create.data.applyJob.id,
+														status: create.data.applyJob.status,
+													})}
+												</FormDescription>
+											) : null}
+										</>
+									) : (
+										<Badge variant="success">
+											{t("clientNew.clientCreated")}
+										</Badge>
+									)}
 									<Dialog
 										open={issuedCreds.length > 0}
 										onOpenChange={(open) => {

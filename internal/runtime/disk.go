@@ -26,9 +26,12 @@ type DiskStats struct {
 // fallbacks) so a custom --etc-dir/--var-dir install reports its own tree
 // instead of the packaged /etc/veil + /var/lib/veil pair (issue #638). The
 // optional Caddy and Mita state directories are included when explicitly
-// configured or present on disk.
+// configured or present on disk. System log roots like /var/log are
+// deliberately excluded: they are not Veil-managed, they mix unrelated log
+// volume into the Veil disk card, and a full recursive walk of them made
+// every GET /api/disk disproportionately expensive (#641).
 func veilDirs() []string {
-	dirs := []string{hostenv.VarDir(), hostenv.EtcDir(), "/var/log"}
+	dirs := []string{hostenv.VarDir(), hostenv.EtcDir()}
 	for _, candidate := range []struct {
 		env      string
 		fallback string

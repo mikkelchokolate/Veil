@@ -4,7 +4,7 @@
 # Each distro leg installs the OLD package, upgrades to the NEW one, removes,
 # and reinstalls — asserting the real maintainer-script contract each step:
 #   - payload files (binary, packaged units, QUIC sysctl drop-in) land/leave
-#   - service accounts (veil, veil-proxy, veil ∈ veil-proxy) exist
+#   - service accounts (veil, veil-proxy, veil-mita, veil ∈ veil-proxy ∩ veil-mita) exist
 #   - postinstall's systemctl calls are observed via a stub (daemon-reload,
 #     enable veil-helper.socket on install; try-restart — no disable — on
 #     upgrade)
@@ -115,8 +115,17 @@ assert_accounts() {
   # (issue #478).
   id veil >/dev/null 2>&1 || fail "veil user missing"
   id veil-proxy >/dev/null 2>&1 || fail "veil-proxy user missing"
+  id veil-mita >/dev/null 2>&1 || fail "veil-mita user missing"
   id -nG veil 2>/dev/null | tr ' ' '\n' | grep -qx veil-proxy \
     || fail "veil is not a member of the veil-proxy group"
+  # The panel reaches the mita appctl UDS through the veil-mita group; the
+  # shared edge account must NOT be a member or the isolation is meaningless
+  # (issue #624).
+  id -nG veil 2>/dev/null | tr ' ' '\n' | grep -qx veil-mita \
+    || fail "veil is not a member of the veil-mita group"
+  if id -nG veil-proxy 2>/dev/null | tr ' ' '\n' | grep -qx veil-mita; then
+    fail "veil-proxy must not be a member of the veil-mita group"
+  fi
 }
 
 assert_version() {
@@ -180,8 +189,10 @@ assert_permissions() {
   for dir in /etc/veil/generated /etc/veil/tls /etc/veil/certs /etc/veil/www; do
     [ "$(stat -c "%U:%G %a" "$dir")" = "root:veil-proxy 750" ] || fail "$dir owner/mode"
   done
-  # Caddy state directory re-owned for the veil-proxy unit (#497).
+  # Caddy and Mita state directories re-owned for their service units
+  # (#497/#623/#624): systemd never re-owns an existing StateDirectory.
   [ "$(stat -c "%U:%G" /var/lib/caddy)" = "veil-proxy:veil-proxy" ] || fail "/var/lib/caddy owner"
+  [ "$(stat -c "%U:%G %a" /var/lib/mita)" = "veil-mita:veil-mita 700" ] || fail "/var/lib/mita owner/mode"
 }
 
 assert_unit_hardening() {
@@ -191,11 +202,19 @@ assert_unit_hardening() {
   for unitdir in /lib/systemd/system /usr/lib/systemd/system; do
     [ -f "$unitdir/veil-caddy.service" ] && break
   done
-  for unit in veil-caddy.service veil-hysteria2@.service veil-olcrtc@.service veil-warp.service veil-mieru.service; do
+  for unit in veil-caddy.service veil-hysteria2@.service veil-olcrtc@.service veil-warp.service; do
     grep -q '^User=veil-proxy$' "$unitdir/$unit" || fail "$unit User"
     grep -q '^Group=veil-proxy$' "$unitdir/$unit" || fail "$unit Group"
     grep -q 'InaccessiblePaths=.*/run/veil/helper.sock' "$unitdir/$unit" || fail "$unit helper.sock mask"
     grep -q 'InaccessiblePaths=.*/var/lib/veil' "$unitdir/$unit" || fail "$unit var/lib/veil mask"
+  done
+  # veil-mieru.service runs as the dedicated veil-mita identity (issue #624):
+  # its appctl UDS is a control plane, so it must not share the veil-proxy
+  # edge uid/gid — only the supplementary group for generated-config reads.
+  for want in '^User=veil-mita$' '^Group=veil-mita$' '^SupplementaryGroups=.*veil-proxy' \
+      '^RuntimeDirectory=veil-mieru$' '^RuntimeDirectoryMode=0750$' '^UMask=0007$' \
+      'InaccessiblePaths=.*/run/veil/helper.sock' 'InaccessiblePaths=.*/var/lib/veil'; do
+    grep -Eq "$want" "$unitdir/veil-mieru.service" || fail "veil-mieru.service missing /$want/"
   done
   grep -q '^User=veil$' "$unitdir/veil.service" || fail "veil.service User"
   grep -q '^SocketUser=root$' "$unitdir/veil-helper.socket" || fail "socket user"
@@ -226,10 +245,14 @@ assert_runtime_readability() {
 
 assert_legacy_www_migrated() {
   # Fallback site moved /var/lib/veil/www -> /etc/veil/www; regular content is
-  # carried over, the planted symlink must not be (audit #525).
+  # carried over, the planted symlink must not be (audit #525). A symlink the
+  # operator placed in the destination must survive the upgrade — the
+  # migration copies, it never sweeps the destination (issue #622).
   [ "$(cat /etc/veil/www/index.html)" = legacy-index ] || fail "legacy index not migrated"
   [ "$(cat /etc/veil/www/assets/site.css)" = legacy-css ] || fail "legacy asset not migrated"
   { [ ! -L /etc/veil/www/leak.key ] && [ ! -e /etc/veil/www/leak.key ]; }     || fail "legacy symlink leaked into /etc/veil/www"
+  [ -L /etc/veil/www/operator.link ] || fail "operator destination symlink swept by upgrade"
+  [ -d /var/lib/veil/www ] || fail "legacy /var/lib/veil/www removed on upgrade"
   [ "$(stat -c "%U:%G %a" /etc/veil/www/index.html)" = "root:veil-proxy 640" ]     || fail "migrated index owner/mode"
 }
 
@@ -268,13 +291,18 @@ case "$phase" in
     chmod 0600 /etc/veil/panel/tls.key
     # Legacy layout: fallback site under /var/lib/veil/www (including a
     # symlink that must never be copied into the veil-proxy-readable tree)
-    # and a veil-owned caddy state dir left by the pre-veil-proxy unit.
+    # plus veil-owned caddy/mita state dirs left by the pre-veil-proxy units
+    # (issues #497/#623).
     mkdir -p /var/lib/veil/www/assets
     printf legacy-index > /var/lib/veil/www/index.html
     printf legacy-css > /var/lib/veil/www/assets/site.css
     ln -s /etc/veil/panel/tls.key /var/lib/veil/www/leak.key
-    mkdir -p /var/lib/caddy
-    chown -R veil:veil /var/lib/veil/www /var/lib/caddy
+    # An operator-created symlink already in the destination must survive the
+    # upgrade migration — it is not the copy's to delete (issue #622).
+    mkdir -p /etc/veil/www
+    ln -s /etc/veil/panel/tls.key /etc/veil/www/operator.link
+    mkdir -p /var/lib/caddy /var/lib/mita
+    chown -R veil:veil /var/lib/veil/www /var/lib/caddy /var/lib/mita
     chmod -R a+r /var/lib/veil/www
     ;;
   post-install)
