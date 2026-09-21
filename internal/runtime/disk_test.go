@@ -3,6 +3,7 @@ package runtime
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -47,6 +48,16 @@ func TestDiskEndpointFieldsPresent(t *testing.T) {
 	}
 	if first.SizeBytes < 0 {
 		t.Errorf("expected non-negative size, got %d", first.SizeBytes)
+	}
+}
+
+// #641: /var/log is not Veil-managed; walking it on every GET /api/disk made
+// the endpoint expensive and mixed system log volume into the Veil disk card.
+func TestVeilDirsOnlyCoversVeilManagedPaths(t *testing.T) {
+	for _, dir := range veilDirs {
+		if dir == "/var/log" || !strings.HasPrefix(dir, "/var/lib/veil") && !strings.HasPrefix(dir, "/etc/veil") {
+			t.Fatalf("veilDirs contains non-Veil-managed path %q", dir)
+		}
 	}
 }
 

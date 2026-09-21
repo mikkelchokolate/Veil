@@ -208,6 +208,54 @@ func TestFirewallRefusesToEnableOnStalePanelRuleAlone(t *testing.T) {
 	}
 }
 
+// #629: a desired "Veil panel" rule is not management-access evidence either —
+// the panel may bind loopback only, so enabling UFW on its strength can lock
+// the operator out exactly like the stale-panel case above. The enable gate
+// accepts SSH evidence only (staged rule comment/id or a 22/* target),
+// matching the install-time ApplySafely contract.
+func TestFirewallRefusesToEnableOnDesiredPanelRuleWithoutSSH(t *testing.T) {
+	model := &transactionalUFWModel{rules: map[string]string{}}
+	request := ResolvedFirewall{
+		RuleIDs: []string{"management-panel", "panel-https"},
+		Rules: []FirewallRule{
+			{Command: "ufw", Args: []string{"allow", "2096/tcp", "comment", "Veil panel"}},
+			{Command: "ufw", Args: []string{"allow", "443/tcp", "comment", "Veil panel HTTPS"}},
+		},
+	}
+	if _, err := runFirewallRules(context.Background(), model.runner, request); err == nil {
+		t.Fatal("inactive ufw was enabled on desired Veil panel rules without SSH")
+	}
+	if model.enabled {
+		t.Fatal("management lockout preflight failure still enabled ufw")
+	}
+	if len(model.mutations) != 0 {
+		t.Fatalf("refused enable still mutated ufw: %v", model.mutations)
+	}
+}
+
+// #629: enable is allowed again once the desired set actually stages SSH —
+// here on the detected non-22 port, where only the comment carries the "ssh"
+// marker (the target is not 22/*).
+func TestFirewallEnablesWithStagedSSHRuleOnDetectedPort(t *testing.T) {
+	model := &transactionalUFWModel{rules: map[string]string{}}
+	request := ResolvedFirewall{
+		RuleIDs: []string{"management-ssh", "panel"},
+		Rules: []FirewallRule{
+			{Command: "ufw", Args: []string{"allow", "2222/tcp", "comment", "Veil management SSH"}},
+			{Command: "ufw", Args: []string{"allow", "2096/tcp", "comment", "Veil panel"}},
+		},
+	}
+	if _, err := runFirewallRules(context.Background(), model.runner, request); err != nil {
+		t.Fatalf("staged SSH rule should satisfy the enable gate: %v", err)
+	}
+	if !model.enabled {
+		t.Fatal("reconcile with staged SSH did not enable ufw")
+	}
+	if len(model.mutations) == 0 || model.mutations[0] == "enable" {
+		t.Fatalf("SSH management access was not staged before enable: %v", model.mutations)
+	}
+}
+
 // #356: the enable transition is the dangerous step — reconciling an
 // already-active UFW cannot create new lockout exposure, so a ruleset
 // without management access still reconciles.

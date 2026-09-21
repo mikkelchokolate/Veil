@@ -324,31 +324,31 @@ func (e ClientPatchRequestQuotaResetPolicy) Valid() bool {
 
 // Defines values for ClientViewStatus.
 const (
-	Active       ClientViewStatus = "active"
-	ApplyFailed  ClientViewStatus = "apply_failed"
-	Depleted     ClientViewStatus = "depleted"
-	Disabled     ClientViewStatus = "disabled"
-	Expired      ClientViewStatus = "expired"
-	Orphaned     ClientViewStatus = "orphaned"
-	PendingApply ClientViewStatus = "pending_apply"
+	ClientViewStatusActive       ClientViewStatus = "active"
+	ClientViewStatusApplyFailed  ClientViewStatus = "apply_failed"
+	ClientViewStatusDepleted     ClientViewStatus = "depleted"
+	ClientViewStatusDisabled     ClientViewStatus = "disabled"
+	ClientViewStatusExpired      ClientViewStatus = "expired"
+	ClientViewStatusOrphaned     ClientViewStatus = "orphaned"
+	ClientViewStatusPendingApply ClientViewStatus = "pending_apply"
 )
 
 // Valid indicates whether the value is a known member of the ClientViewStatus enum.
 func (e ClientViewStatus) Valid() bool {
 	switch e {
-	case Active:
+	case ClientViewStatusActive:
 		return true
-	case ApplyFailed:
+	case ClientViewStatusApplyFailed:
 		return true
-	case Depleted:
+	case ClientViewStatusDepleted:
 		return true
-	case Disabled:
+	case ClientViewStatusDisabled:
 		return true
-	case Expired:
+	case ClientViewStatusExpired:
 		return true
-	case Orphaned:
+	case ClientViewStatusOrphaned:
 		return true
-	case PendingApply:
+	case ClientViewStatusPendingApply:
 		return true
 	default:
 		return false
@@ -979,6 +979,39 @@ func (e PostApiV1ClientsBulkJSONBodyAction) Valid() bool {
 	}
 }
 
+// Defines values for PatchApiV1ClientsId200JSONResponseBodyStatus.
+const (
+	PatchApiV1ClientsId200JSONResponseBodyStatusActive       PatchApiV1ClientsId200JSONResponseBodyStatus = "active"
+	PatchApiV1ClientsId200JSONResponseBodyStatusApplyFailed  PatchApiV1ClientsId200JSONResponseBodyStatus = "apply_failed"
+	PatchApiV1ClientsId200JSONResponseBodyStatusDepleted     PatchApiV1ClientsId200JSONResponseBodyStatus = "depleted"
+	PatchApiV1ClientsId200JSONResponseBodyStatusDisabled     PatchApiV1ClientsId200JSONResponseBodyStatus = "disabled"
+	PatchApiV1ClientsId200JSONResponseBodyStatusExpired      PatchApiV1ClientsId200JSONResponseBodyStatus = "expired"
+	PatchApiV1ClientsId200JSONResponseBodyStatusOrphaned     PatchApiV1ClientsId200JSONResponseBodyStatus = "orphaned"
+	PatchApiV1ClientsId200JSONResponseBodyStatusPendingApply PatchApiV1ClientsId200JSONResponseBodyStatus = "pending_apply"
+)
+
+// Valid indicates whether the value is a known member of the PatchApiV1ClientsId200JSONResponseBodyStatus enum.
+func (e PatchApiV1ClientsId200JSONResponseBodyStatus) Valid() bool {
+	switch e {
+	case PatchApiV1ClientsId200JSONResponseBodyStatusActive:
+		return true
+	case PatchApiV1ClientsId200JSONResponseBodyStatusApplyFailed:
+		return true
+	case PatchApiV1ClientsId200JSONResponseBodyStatusDepleted:
+		return true
+	case PatchApiV1ClientsId200JSONResponseBodyStatusDisabled:
+		return true
+	case PatchApiV1ClientsId200JSONResponseBodyStatusExpired:
+		return true
+	case PatchApiV1ClientsId200JSONResponseBodyStatusOrphaned:
+		return true
+	case PatchApiV1ClientsId200JSONResponseBodyStatusPendingApply:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GetSTokenParamsFormat.
 const (
 	GetSTokenParamsFormatBase64 GetSTokenParamsFormat = "base64"
@@ -1394,6 +1427,43 @@ type ClientArtifact struct {
 	Protocol string `json:"protocol"`
 }
 
+// ClientBinding Durable client↔inbound binding as stored (write responses).
+type ClientBinding struct {
+	ClientId  string `json:"clientId"`
+	CreatedAt int64  `json:"createdAt"`
+	Enabled   bool   `json:"enabled"`
+	Id        string `json:"id"`
+	InboundId string `json:"inboundId"`
+
+	// ProtocolSettings JSON object string with per-binding protocol options.
+	ProtocolSettings *string `json:"protocolSettings,omitempty"`
+	RuntimeIdentity  string  `json:"runtimeIdentity"`
+	UpdatedAt        int64   `json:"updatedAt"`
+	Version          int     `json:"version"`
+}
+
+// ClientBindingCreateResponse defines model for ClientBindingCreateResponse.
+type ClientBindingCreateResponse struct {
+	ApplyJob          *ApplyJob           `json:"applyJob,omitempty"`
+	ClientId          string              `json:"clientId"`
+	CreatedAt         int64               `json:"createdAt"`
+	Enabled           bool                `json:"enabled"`
+	Id                string              `json:"id"`
+	InboundId         string              `json:"inboundId"`
+	IssuedCredentials *[]IssuedCredential `json:"issuedCredentials,omitempty"`
+
+	// Plaintext One-time server-generated secret; present only when the server generated the credential.
+	Plaintext *string `json:"plaintext,omitempty"`
+
+	// ProtocolSettings JSON object string with per-binding protocol options.
+	ProtocolSettings *string      `json:"protocolSettings,omitempty"`
+	Revision         RevisionView `json:"revision"`
+	RuntimeIdentity  string       `json:"runtimeIdentity"`
+	Success          bool         `json:"success"`
+	UpdatedAt        int64        `json:"updatedAt"`
+	Version          int          `json:"version"`
+}
+
 // ClientBindingInput defines model for ClientBindingInput.
 type ClientBindingInput struct {
 	// Credential Optional explicit credential; server-generated when empty.
@@ -1401,6 +1471,31 @@ type ClientBindingInput struct {
 	Enabled         *bool   `json:"enabled,omitempty"`
 	InboundId       string  `json:"inboundId"`
 	RuntimeIdentity *string `json:"runtimeIdentity,omitempty"`
+}
+
+// ClientBulkResponse defines model for ClientBulkResponse.
+type ClientBulkResponse struct {
+	Action    string             `json:"action"`
+	ApplyJob  *ApplyJob          `json:"applyJob,omitempty"`
+	Failed    int                `json:"failed"`
+	Results   []ClientBulkResult `json:"results"`
+	Revision  RevisionView       `json:"revision"`
+	Skipped   int                `json:"skipped"`
+	Succeeded int                `json:"succeeded"`
+	Success   bool               `json:"success"`
+	Total     int                `json:"total"`
+}
+
+// ClientBulkResult defines model for ClientBulkResult.
+type ClientBulkResult struct {
+	BindingId         *string             `json:"bindingId,omitempty"`
+	Id                string              `json:"id"`
+	IssuedCredentials *[]IssuedCredential `json:"issuedCredentials,omitempty"`
+	Message           *string             `json:"message,omitempty"`
+	Ok                bool                `json:"ok"`
+
+	// Plaintext One-time server-generated secret for attach_inbound results.
+	Plaintext *string `json:"plaintext,omitempty"`
 }
 
 // ClientCreateRequest defines model for ClientCreateRequest.
@@ -1429,6 +1524,18 @@ type ClientCreateResponse struct {
 	IssuedCredentials *[]IssuedCredential `json:"issuedCredentials,omitempty"`
 	Revision          RevisionView        `json:"revision"`
 	Success           bool                `json:"success"`
+}
+
+// ClientCredential Credential metadata for a binding; the secret itself is never returned.
+type ClientCredential struct {
+	BindingId         string `json:"bindingId"`
+	CreatedAt         int64  `json:"createdAt"`
+	CredentialVersion int    `json:"credentialVersion"`
+	Id                string `json:"id"`
+	KeyVersion        int    `json:"keyVersion"`
+	Kind              string `json:"kind"`
+	RevokedAt         *int64 `json:"revokedAt,omitempty"`
+	RotatedAt         *int64 `json:"rotatedAt,omitempty"`
 }
 
 // ClientLink defines model for ClientLink.
@@ -1468,6 +1575,21 @@ type ClientLinksResponse struct {
 type ClientListResponse struct {
 	Items []ClientView `json:"items"`
 	Total int          `json:"total"`
+}
+
+// ClientMigrateResponse defines model for ClientMigrateResponse.
+type ClientMigrateResponse struct {
+	ApplyJob       *ApplyJob `json:"applyJob,omitempty"`
+	ClientsCreated int       `json:"clientsCreated"`
+	Results        []struct {
+		BindingsCreated    *int    `json:"bindingsCreated,omitempty"`
+		ClientsCreated     *int    `json:"clientsCreated,omitempty"`
+		CredentialsCreated *int    `json:"credentialsCreated,omitempty"`
+		Inbound            *string `json:"inbound,omitempty"`
+		Skipped            *int    `json:"skipped,omitempty"`
+	} `json:"results"`
+	Revision RevisionView `json:"revision"`
+	Success  bool         `json:"success"`
 }
 
 // ClientPatchRequest Presence-aware patch. Omitted fields are preserved, explicit null clears nullable/defaultable fields, and supplied values replace them.
@@ -1865,6 +1987,24 @@ type RevisionView struct {
 
 // RevisionViewState defines model for RevisionView.State.
 type RevisionViewState string
+
+// RotatedCredential Credential rotate result. A server-generated rotate (empty value) returns {credential, plaintext} — the plaintext is shown exactly once. A caller-supplied value returns the credential fields at top level.
+type RotatedCredential struct {
+	BindingId *string `json:"bindingId,omitempty"`
+	CreatedAt *int64  `json:"createdAt,omitempty"`
+
+	// Credential Credential metadata for a binding; the secret itself is never returned.
+	Credential        *ClientCredential `json:"credential,omitempty"`
+	CredentialVersion *int              `json:"credentialVersion,omitempty"`
+	Id                *string           `json:"id,omitempty"`
+	KeyVersion        *int              `json:"keyVersion,omitempty"`
+	Kind              *string           `json:"kind,omitempty"`
+
+	// Plaintext One-time plaintext; only for server-generated rotates.
+	Plaintext *string `json:"plaintext,omitempty"`
+	RevokedAt *int64  `json:"revokedAt,omitempty"`
+	RotatedAt *int64  `json:"rotatedAt,omitempty"`
+}
 
 // RoutingPreset defines model for RoutingPreset.
 type RoutingPreset struct {
@@ -2660,6 +2800,9 @@ type PatchApiV1ClientsIdParams struct {
 	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
+
+// PatchApiV1ClientsId200JSONResponseBodyStatus defines parameters for PatchApiV1ClientsId.
+type PatchApiV1ClientsId200JSONResponseBodyStatus string
 
 // GetApiV1ClientsIdAuditParams defines parameters for GetApiV1ClientsIdAudit.
 type GetApiV1ClientsIdAuditParams struct {
@@ -4087,7 +4230,7 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/clients/{id}/links (the `GetApiV1ClientsIdLinks` operationId).
 	GetApiV1ClientsIdLinks(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetApiV1ClientsIdTokens List a client's subscription tokens (redacted)
+	// GetApiV1ClientsIdTokens List a client's subscription tokens with recoverable subscription URLs
 	//
 	// Corresponds with GET /api/v1/clients/{id}/tokens (the `GetApiV1ClientsIdTokens` operationId).
 	GetApiV1ClientsIdTokens(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -6220,7 +6363,7 @@ func (c *Client) GetApiV1ClientsIdLinks(ctx context.Context, id ClientId, reqEdi
 	return c.Client.Do(req)
 }
 
-// GetApiV1ClientsIdTokens List a client's subscription tokens (redacted)
+// GetApiV1ClientsIdTokens List a client's subscription tokens with recoverable subscription URLs
 //
 // Corresponds with GET /api/v1/clients/{id}/tokens (the `GetApiV1ClientsIdTokens` operationId).
 func (c *Client) GetApiV1ClientsIdTokens(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -12328,7 +12471,7 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/clients/{id}/links (the `GetApiV1ClientsIdLinks` operationId).
 	GetApiV1ClientsIdLinksWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdLinksResponse, error)
 
-	// GetApiV1ClientsIdTokensWithResponse List a client's subscription tokens (redacted)
+	// GetApiV1ClientsIdTokensWithResponse List a client's subscription tokens with recoverable subscription URLs
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -17533,6 +17676,8 @@ func (r PostApiV1ClientsResponse) ContentType() string {
 type PostApiV1ClientsBulkResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ClientBulkResponse
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
@@ -17541,6 +17686,11 @@ type PostApiV1ClientsBulkResponse struct {
 	JSON423 *Locked
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *ServiceUnavailable
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostApiV1ClientsBulkResponse) GetJSON200() *ClientBulkResponse {
+	return r.JSON200
 }
 
 // GetJSON409 returns the response for an HTTP 409 `application/json` response
@@ -17595,6 +17745,8 @@ func (r PostApiV1ClientsBulkResponse) ContentType() string {
 type PostApiV1ClientsMigrateLegacyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ClientMigrateResponse
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
@@ -17603,6 +17755,11 @@ type PostApiV1ClientsMigrateLegacyResponse struct {
 	JSON423 *Locked
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *ServiceUnavailable
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostApiV1ClientsMigrateLegacyResponse) GetJSON200() *ClientMigrateResponse {
+	return r.JSON200
 }
 
 // GetJSON409 returns the response for an HTTP 409 `application/json` response
@@ -17657,6 +17814,13 @@ func (r PostApiV1ClientsMigrateLegacyResponse) ContentType() string {
 type DeleteApiV1ClientsIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		ApplyJob *ApplyJob    `json:"applyJob,omitempty"`
+		Id       string       `json:"id"`
+		Revision RevisionView `json:"revision"`
+		Success  bool         `json:"success"`
+	}
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
@@ -17665,6 +17829,16 @@ type DeleteApiV1ClientsIdResponse struct {
 	JSON423 *Locked
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *ServiceUnavailable
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DeleteApiV1ClientsIdResponse) GetJSON200() *struct {
+	ApplyJob *ApplyJob    `json:"applyJob,omitempty"`
+	Id       string       `json:"id"`
+	Revision RevisionView `json:"revision"`
+	Success  bool         `json:"success"`
+} {
+	return r.JSON200
 }
 
 // GetJSON409 returns the response for an HTTP 409 `application/json` response
@@ -17767,7 +17941,32 @@ type PatchApiV1ClientsIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *ClientView
+	JSON200 *struct {
+		ApplyJob         *ApplyJob      `json:"applyJob,omitempty"`
+		Bindings         *[]BindingView `json:"bindings,omitempty"`
+		CreatedAt        *int64         `json:"createdAt,omitempty"`
+		Depleted         *bool          `json:"depleted,omitempty"`
+		DeviceLimit      *int           `json:"deviceLimit,omitempty"`
+		Email            *string        `json:"email,omitempty"`
+		Enabled          *bool          `json:"enabled,omitempty"`
+		ExpiresAt        *int64         `json:"expiresAt,omitempty"`
+		GroupId          *string        `json:"groupId,omitempty"`
+		HasCreds         *bool          `json:"hasCreds,omitempty"`
+		Id               string         `json:"id"`
+		InboundIds       *[]string      `json:"inboundIds,omitempty"`
+		Name             string         `json:"name"`
+		Notes            *string        `json:"notes,omitempty"`
+		QuotaBytes       *int64         `json:"quotaBytes,omitempty"`
+		QuotaResetAt     *int64         `json:"quotaResetAt,omitempty"`
+		QuotaResetPolicy *string        `json:"quotaResetPolicy,omitempty"`
+		Revision         RevisionView   `json:"revision"`
+
+		// Status Effective status.
+		Status    PatchApiV1ClientsId200JSONResponseBodyStatus `json:"status"`
+		Success   bool                                         `json:"success"`
+		UpdatedAt *int64                                       `json:"updatedAt,omitempty"`
+		Version   *int                                         `json:"version,omitempty"`
+	}
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
@@ -17781,7 +17980,32 @@ type PatchApiV1ClientsIdResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r PatchApiV1ClientsIdResponse) GetJSON200() *ClientView {
+func (r PatchApiV1ClientsIdResponse) GetJSON200() *struct {
+	ApplyJob         *ApplyJob      `json:"applyJob,omitempty"`
+	Bindings         *[]BindingView `json:"bindings,omitempty"`
+	CreatedAt        *int64         `json:"createdAt,omitempty"`
+	Depleted         *bool          `json:"depleted,omitempty"`
+	DeviceLimit      *int           `json:"deviceLimit,omitempty"`
+	Email            *string        `json:"email,omitempty"`
+	Enabled          *bool          `json:"enabled,omitempty"`
+	ExpiresAt        *int64         `json:"expiresAt,omitempty"`
+	GroupId          *string        `json:"groupId,omitempty"`
+	HasCreds         *bool          `json:"hasCreds,omitempty"`
+	Id               string         `json:"id"`
+	InboundIds       *[]string      `json:"inboundIds,omitempty"`
+	Name             string         `json:"name"`
+	Notes            *string        `json:"notes,omitempty"`
+	QuotaBytes       *int64         `json:"quotaBytes,omitempty"`
+	QuotaResetAt     *int64         `json:"quotaResetAt,omitempty"`
+	QuotaResetPolicy *string        `json:"quotaResetPolicy,omitempty"`
+	Revision         RevisionView   `json:"revision"`
+
+	// Status Effective status.
+	Status    PatchApiV1ClientsId200JSONResponseBodyStatus `json:"status"`
+	Success   bool                                         `json:"success"`
+	UpdatedAt *int64                                       `json:"updatedAt,omitempty"`
+	Version   *int                                         `json:"version,omitempty"`
+} {
 	return r.JSON200
 }
 
@@ -17947,6 +18171,8 @@ func (r GetApiV1ClientsIdBindingsResponse) ContentType() string {
 type PostApiV1ClientsIdBindingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *ClientBindingCreateResponse
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
@@ -17955,6 +18181,11 @@ type PostApiV1ClientsIdBindingsResponse struct {
 	JSON423 *Locked
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *ServiceUnavailable
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r PostApiV1ClientsIdBindingsResponse) GetJSON201() *ClientBindingCreateResponse {
+	return r.JSON201
 }
 
 // GetJSON409 returns the response for an HTTP 409 `application/json` response
@@ -18009,6 +18240,13 @@ func (r PostApiV1ClientsIdBindingsResponse) ContentType() string {
 type DeleteApiV1ClientsIdBindingsBindingIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		ApplyJob *ApplyJob    `json:"applyJob,omitempty"`
+		Id       string       `json:"id"`
+		Revision RevisionView `json:"revision"`
+		Success  bool         `json:"success"`
+	}
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
@@ -18017,6 +18255,16 @@ type DeleteApiV1ClientsIdBindingsBindingIdResponse struct {
 	JSON423 *Locked
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *ServiceUnavailable
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DeleteApiV1ClientsIdBindingsBindingIdResponse) GetJSON200() *struct {
+	ApplyJob *ApplyJob    `json:"applyJob,omitempty"`
+	Id       string       `json:"id"`
+	Revision RevisionView `json:"revision"`
+	Success  bool         `json:"success"`
+} {
+	return r.JSON200
 }
 
 // GetJSON409 returns the response for an HTTP 409 `application/json` response
@@ -18071,6 +18319,23 @@ func (r DeleteApiV1ClientsIdBindingsBindingIdResponse) ContentType() string {
 type PatchApiV1ClientsIdBindingsBindingIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		ApplyJob  *ApplyJob `json:"applyJob,omitempty"`
+		ClientId  string    `json:"clientId"`
+		CreatedAt int64     `json:"createdAt"`
+		Enabled   bool      `json:"enabled"`
+		Id        string    `json:"id"`
+		InboundId string    `json:"inboundId"`
+
+		// ProtocolSettings JSON object string with per-binding protocol options.
+		ProtocolSettings *string      `json:"protocolSettings,omitempty"`
+		Revision         RevisionView `json:"revision"`
+		RuntimeIdentity  string       `json:"runtimeIdentity"`
+		Success          bool         `json:"success"`
+		UpdatedAt        int64        `json:"updatedAt"`
+		Version          int          `json:"version"`
+	}
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
@@ -18079,6 +18344,26 @@ type PatchApiV1ClientsIdBindingsBindingIdResponse struct {
 	JSON423 *Locked
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *ServiceUnavailable
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PatchApiV1ClientsIdBindingsBindingIdResponse) GetJSON200() *struct {
+	ApplyJob  *ApplyJob `json:"applyJob,omitempty"`
+	ClientId  string    `json:"clientId"`
+	CreatedAt int64     `json:"createdAt"`
+	Enabled   bool      `json:"enabled"`
+	Id        string    `json:"id"`
+	InboundId string    `json:"inboundId"`
+
+	// ProtocolSettings JSON object string with per-binding protocol options.
+	ProtocolSettings *string      `json:"protocolSettings,omitempty"`
+	Revision         RevisionView `json:"revision"`
+	RuntimeIdentity  string       `json:"runtimeIdentity"`
+	Success          bool         `json:"success"`
+	UpdatedAt        int64        `json:"updatedAt"`
+	Version          int          `json:"version"`
+} {
+	return r.JSON200
 }
 
 // GetJSON409 returns the response for an HTTP 409 `application/json` response
@@ -18133,6 +18418,20 @@ func (r PatchApiV1ClientsIdBindingsBindingIdResponse) ContentType() string {
 type PostApiV1ClientsIdCredentialsBindingIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *struct {
+		ApplyJob          *ApplyJob    `json:"applyJob,omitempty"`
+		BindingId         string       `json:"bindingId"`
+		CreatedAt         int64        `json:"createdAt"`
+		CredentialVersion int          `json:"credentialVersion"`
+		Id                string       `json:"id"`
+		KeyVersion        int          `json:"keyVersion"`
+		Kind              string       `json:"kind"`
+		Revision          RevisionView `json:"revision"`
+		RevokedAt         *int64       `json:"revokedAt,omitempty"`
+		RotatedAt         *int64       `json:"rotatedAt,omitempty"`
+		Success           bool         `json:"success"`
+	}
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
@@ -18141,6 +18440,23 @@ type PostApiV1ClientsIdCredentialsBindingIdResponse struct {
 	JSON423 *Locked
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *ServiceUnavailable
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r PostApiV1ClientsIdCredentialsBindingIdResponse) GetJSON201() *struct {
+	ApplyJob          *ApplyJob    `json:"applyJob,omitempty"`
+	BindingId         string       `json:"bindingId"`
+	CreatedAt         int64        `json:"createdAt"`
+	CredentialVersion int          `json:"credentialVersion"`
+	Id                string       `json:"id"`
+	KeyVersion        int          `json:"keyVersion"`
+	Kind              string       `json:"kind"`
+	Revision          RevisionView `json:"revision"`
+	RevokedAt         *int64       `json:"revokedAt,omitempty"`
+	RotatedAt         *int64       `json:"rotatedAt,omitempty"`
+	Success           bool         `json:"success"`
+} {
+	return r.JSON201
 }
 
 // GetJSON409 returns the response for an HTTP 409 `application/json` response
@@ -18195,6 +18511,26 @@ func (r PostApiV1ClientsIdCredentialsBindingIdResponse) ContentType() string {
 type PostApiV1ClientsIdCredentialsBindingIdRotateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		ApplyJob  *ApplyJob `json:"applyJob,omitempty"`
+		BindingId *string   `json:"bindingId,omitempty"`
+		CreatedAt *int64    `json:"createdAt,omitempty"`
+
+		// Credential Credential metadata for a binding; the secret itself is never returned.
+		Credential        *ClientCredential `json:"credential,omitempty"`
+		CredentialVersion *int              `json:"credentialVersion,omitempty"`
+		Id                *string           `json:"id,omitempty"`
+		KeyVersion        *int              `json:"keyVersion,omitempty"`
+		Kind              *string           `json:"kind,omitempty"`
+
+		// Plaintext One-time plaintext; only for server-generated rotates.
+		Plaintext *string      `json:"plaintext,omitempty"`
+		Revision  RevisionView `json:"revision"`
+		RevokedAt *int64       `json:"revokedAt,omitempty"`
+		RotatedAt *int64       `json:"rotatedAt,omitempty"`
+		Success   bool         `json:"success"`
+	}
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
@@ -18203,6 +18539,29 @@ type PostApiV1ClientsIdCredentialsBindingIdRotateResponse struct {
 	JSON423 *Locked
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *ServiceUnavailable
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostApiV1ClientsIdCredentialsBindingIdRotateResponse) GetJSON200() *struct {
+	ApplyJob  *ApplyJob `json:"applyJob,omitempty"`
+	BindingId *string   `json:"bindingId,omitempty"`
+	CreatedAt *int64    `json:"createdAt,omitempty"`
+
+	// Credential Credential metadata for a binding; the secret itself is never returned.
+	Credential        *ClientCredential `json:"credential,omitempty"`
+	CredentialVersion *int              `json:"credentialVersion,omitempty"`
+	Id                *string           `json:"id,omitempty"`
+	KeyVersion        *int              `json:"keyVersion,omitempty"`
+	Kind              *string           `json:"kind,omitempty"`
+
+	// Plaintext One-time plaintext; only for server-generated rotates.
+	Plaintext *string      `json:"plaintext,omitempty"`
+	Revision  RevisionView `json:"revision"`
+	RevokedAt *int64       `json:"revokedAt,omitempty"`
+	RotatedAt *int64       `json:"rotatedAt,omitempty"`
+	Success   bool         `json:"success"`
+} {
+	return r.JSON200
 }
 
 // GetJSON409 returns the response for an HTTP 409 `application/json` response
@@ -21140,7 +21499,7 @@ func (c *ClientWithResponses) GetApiV1ClientsIdLinksWithResponse(ctx context.Con
 	return ParseGetApiV1ClientsIdLinksResponse(rsp)
 }
 
-// GetApiV1ClientsIdTokensWithResponse List a client's subscription tokens (redacted)
+// GetApiV1ClientsIdTokensWithResponse List a client's subscription tokens with recoverable subscription URLs
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -25489,8 +25848,12 @@ func ParsePostApiV1ClientsBulkResponse(rsp *http.Response) (*PostApiV1ClientsBul
 	}
 
 	switch {
-	case rsp.StatusCode == 200:
-		break // No content-type
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ClientBulkResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Conflict
@@ -25539,8 +25902,12 @@ func ParsePostApiV1ClientsMigrateLegacyResponse(rsp *http.Response) (*PostApiV1C
 	}
 
 	switch {
-	case rsp.StatusCode == 200:
-		break // No content-type
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ClientMigrateResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Conflict
@@ -25589,8 +25956,17 @@ func ParseDeleteApiV1ClientsIdResponse(rsp *http.Response) (*DeleteApiV1ClientsI
 	}
 
 	switch {
-	case rsp.StatusCode == 200:
-		break // No content-type
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			ApplyJob *ApplyJob    `json:"applyJob,omitempty"`
+			Id       string       `json:"id"`
+			Revision RevisionView `json:"revision"`
+			Success  bool         `json:"success"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case rsp.StatusCode == 404:
 		break // No content-type
@@ -25672,7 +26048,32 @@ func ParsePatchApiV1ClientsIdResponse(rsp *http.Response) (*PatchApiV1ClientsIdR
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ClientView
+		var dest struct {
+			ApplyJob         *ApplyJob      `json:"applyJob,omitempty"`
+			Bindings         *[]BindingView `json:"bindings,omitempty"`
+			CreatedAt        *int64         `json:"createdAt,omitempty"`
+			Depleted         *bool          `json:"depleted,omitempty"`
+			DeviceLimit      *int           `json:"deviceLimit,omitempty"`
+			Email            *string        `json:"email,omitempty"`
+			Enabled          *bool          `json:"enabled,omitempty"`
+			ExpiresAt        *int64         `json:"expiresAt,omitempty"`
+			GroupId          *string        `json:"groupId,omitempty"`
+			HasCreds         *bool          `json:"hasCreds,omitempty"`
+			Id               string         `json:"id"`
+			InboundIds       *[]string      `json:"inboundIds,omitempty"`
+			Name             string         `json:"name"`
+			Notes            *string        `json:"notes,omitempty"`
+			QuotaBytes       *int64         `json:"quotaBytes,omitempty"`
+			QuotaResetAt     *int64         `json:"quotaResetAt,omitempty"`
+			QuotaResetPolicy *string        `json:"quotaResetPolicy,omitempty"`
+			Revision         RevisionView   `json:"revision"`
+
+			// Status Effective status.
+			Status    PatchApiV1ClientsId200JSONResponseBodyStatus `json:"status"`
+			Success   bool                                         `json:"success"`
+			UpdatedAt *int64                                       `json:"updatedAt,omitempty"`
+			Version   *int                                         `json:"version,omitempty"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -25828,8 +26229,12 @@ func ParsePostApiV1ClientsIdBindingsResponse(rsp *http.Response) (*PostApiV1Clie
 	}
 
 	switch {
-	case rsp.StatusCode == 201:
-		break // No content-type
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest ClientBindingCreateResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Conflict
@@ -25878,8 +26283,17 @@ func ParseDeleteApiV1ClientsIdBindingsBindingIdResponse(rsp *http.Response) (*De
 	}
 
 	switch {
-	case rsp.StatusCode == 200:
-		break // No content-type
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			ApplyJob *ApplyJob    `json:"applyJob,omitempty"`
+			Id       string       `json:"id"`
+			Revision RevisionView `json:"revision"`
+			Success  bool         `json:"success"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Conflict
@@ -25928,8 +26342,27 @@ func ParsePatchApiV1ClientsIdBindingsBindingIdResponse(rsp *http.Response) (*Pat
 	}
 
 	switch {
-	case rsp.StatusCode == 200:
-		break // No content-type
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			ApplyJob  *ApplyJob `json:"applyJob,omitempty"`
+			ClientId  string    `json:"clientId"`
+			CreatedAt int64     `json:"createdAt"`
+			Enabled   bool      `json:"enabled"`
+			Id        string    `json:"id"`
+			InboundId string    `json:"inboundId"`
+
+			// ProtocolSettings JSON object string with per-binding protocol options.
+			ProtocolSettings *string      `json:"protocolSettings,omitempty"`
+			Revision         RevisionView `json:"revision"`
+			RuntimeIdentity  string       `json:"runtimeIdentity"`
+			Success          bool         `json:"success"`
+			UpdatedAt        int64        `json:"updatedAt"`
+			Version          int          `json:"version"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Conflict
@@ -25978,8 +26411,24 @@ func ParsePostApiV1ClientsIdCredentialsBindingIdResponse(rsp *http.Response) (*P
 	}
 
 	switch {
-	case rsp.StatusCode == 201:
-		break // No content-type
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest struct {
+			ApplyJob          *ApplyJob    `json:"applyJob,omitempty"`
+			BindingId         string       `json:"bindingId"`
+			CreatedAt         int64        `json:"createdAt"`
+			CredentialVersion int          `json:"credentialVersion"`
+			Id                string       `json:"id"`
+			KeyVersion        int          `json:"keyVersion"`
+			Kind              string       `json:"kind"`
+			Revision          RevisionView `json:"revision"`
+			RevokedAt         *int64       `json:"revokedAt,omitempty"`
+			RotatedAt         *int64       `json:"rotatedAt,omitempty"`
+			Success           bool         `json:"success"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Conflict
@@ -26028,8 +26477,30 @@ func ParsePostApiV1ClientsIdCredentialsBindingIdRotateResponse(rsp *http.Respons
 	}
 
 	switch {
-	case rsp.StatusCode == 200:
-		break // No content-type
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			ApplyJob  *ApplyJob `json:"applyJob,omitempty"`
+			BindingId *string   `json:"bindingId,omitempty"`
+			CreatedAt *int64    `json:"createdAt,omitempty"`
+
+			// Credential Credential metadata for a binding; the secret itself is never returned.
+			Credential        *ClientCredential `json:"credential,omitempty"`
+			CredentialVersion *int              `json:"credentialVersion,omitempty"`
+			Id                *string           `json:"id,omitempty"`
+			KeyVersion        *int              `json:"keyVersion,omitempty"`
+			Kind              *string           `json:"kind,omitempty"`
+
+			// Plaintext One-time plaintext; only for server-generated rotates.
+			Plaintext *string      `json:"plaintext,omitempty"`
+			Revision  RevisionView `json:"revision"`
+			RevokedAt *int64       `json:"revokedAt,omitempty"`
+			RotatedAt *int64       `json:"rotatedAt,omitempty"`
+			Success   bool         `json:"success"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Conflict

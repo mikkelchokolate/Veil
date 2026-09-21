@@ -93,25 +93,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getApiSettingsResponse200 = {
-  data: Settings
-  status: 200
-}
-
-export type getApiSettingsResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiSettingsResponseSuccess = (getApiSettingsResponse200) & {
-  headers: Headers;
-};
-export type getApiSettingsResponseError = (getApiSettingsResponse401) & {
-  headers: Headers;
-};
-
-export type getApiSettingsResponse = (getApiSettingsResponseSuccess | getApiSettingsResponseError)
-
 export const getGetApiSettingsUrl = () => {
 
 
@@ -123,9 +104,9 @@ export const getGetApiSettingsUrl = () => {
 /**
  * @summary Read Panel settings with secrets redacted
  */
-export const getApiSettings = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiSettingsResponse> => {
+export const getApiSettings = async ( options?: Parameters<typeof apiFetch>[1]): Promise<Settings> => {
 
-  return apiFetch<getApiSettingsResponse>(getGetApiSettingsUrl(),
+  return apiFetch<Settings>(getGetApiSettingsUrl(),
   {
     ...options,
     method: 'GET'
@@ -185,51 +166,7 @@ export const useGetApiSettings = <TError = UnauthorizedResponse,
       > => {
       return useMutation(getGetApiSettingsMutationOptions(options), queryClient);
     }
-    export type putApiSettingsResponse200 = {
-  data: Settings & MutationOutcome
-  status: 200
-}
-
-export type putApiSettingsResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type putApiSettingsResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type putApiSettingsResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type putApiSettingsResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type putApiSettingsResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type putApiSettingsResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type putApiSettingsResponseSuccess = (putApiSettingsResponse200) & {
-  headers: Headers;
-};
-export type putApiSettingsResponseError = (putApiSettingsResponse400 | putApiSettingsResponse403 | putApiSettingsResponse409 | putApiSettingsResponse422 | putApiSettingsResponse423 | putApiSettingsResponse503) & {
-  headers: Headers;
-};
-
-export type putApiSettingsResponse = (putApiSettingsResponseSuccess | putApiSettingsResponseError)
-
-export const getPutApiSettingsUrl = () => {
+    export const getPutApiSettingsUrl = () => {
 
 
 
@@ -240,7 +177,7 @@ export const getPutApiSettingsUrl = () => {
 /**
  * @summary Update Panel settings
  */
-export const putApiSettings = async (settings: Settings, options?: Parameters<typeof apiFetch>[1]): Promise<putApiSettingsResponse> => {
+export const putApiSettings = async (settings: Settings, options?: Parameters<typeof apiFetch>[1]): Promise<Settings & MutationOutcome> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -256,7 +193,7 @@ export const putApiSettings = async (settings: Settings, options?: Parameters<ty
     }
     return headers;
   };
-return apiFetch<putApiSettingsResponse>(getPutApiSettingsUrl(),
+return apiFetch<Settings & MutationOutcome>(getPutApiSettingsUrl(),
   {
     ...options,
     method: 'PUT',

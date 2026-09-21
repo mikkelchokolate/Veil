@@ -103,50 +103,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type postApiAuthLoginResponse200 = {
-  data: LoginResponse
-  status: 200
-}
-
-export type postApiAuthLoginResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiAuthLoginResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type postApiAuthLoginResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiAuthLoginResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiAuthLoginResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiAuthLoginResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiAuthLoginResponseSuccess = (postApiAuthLoginResponse200) & {
-  headers: Headers;
-};
-export type postApiAuthLoginResponseError = (postApiAuthLoginResponse400 | postApiAuthLoginResponse401 | postApiAuthLoginResponse409 | postApiAuthLoginResponse422 | postApiAuthLoginResponse423 | postApiAuthLoginResponse503) & {
-  headers: Headers;
-};
-
-export type postApiAuthLoginResponse = (postApiAuthLoginResponseSuccess | postApiAuthLoginResponseError)
-
 export const getPostApiAuthLoginUrl = () => {
 
 
@@ -158,7 +114,7 @@ export const getPostApiAuthLoginUrl = () => {
 /**
  * @summary Create a browser session
  */
-export const postApiAuthLogin = async (loginRequest: LoginRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiAuthLoginResponse> => {
+export const postApiAuthLogin = async (loginRequest: LoginRequest, options?: Parameters<typeof apiFetch>[1]): Promise<LoginResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -174,7 +130,7 @@ export const postApiAuthLogin = async (loginRequest: LoginRequest, options?: Par
     }
     return headers;
   };
-return apiFetch<postApiAuthLoginResponse>(getPostApiAuthLoginUrl(),
+return apiFetch<LoginResponse>(getPostApiAuthLoginUrl(),
   {
     ...options,
     method: 'POST',
@@ -234,41 +190,7 @@ export const usePostApiAuthLogin = <TError = BadRequestResponse | UnauthorizedRe
       > => {
       return useMutation(getPostApiAuthLoginMutationOptions(options), queryClient);
     }
-    export type postApiAuthLogoutResponse200 = {
-  data: SuccessResponse
-  status: 200
-}
-
-export type postApiAuthLogoutResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiAuthLogoutResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiAuthLogoutResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiAuthLogoutResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiAuthLogoutResponseSuccess = (postApiAuthLogoutResponse200) & {
-  headers: Headers;
-};
-export type postApiAuthLogoutResponseError = (postApiAuthLogoutResponse409 | postApiAuthLogoutResponse422 | postApiAuthLogoutResponse423 | postApiAuthLogoutResponse503) & {
-  headers: Headers;
-};
-
-export type postApiAuthLogoutResponse = (postApiAuthLogoutResponseSuccess | postApiAuthLogoutResponseError)
-
-export const getPostApiAuthLogoutUrl = () => {
+    export const getPostApiAuthLogoutUrl = () => {
 
 
 
@@ -279,9 +201,9 @@ export const getPostApiAuthLogoutUrl = () => {
 /**
  * @summary Delete the browser session cookie
  */
-export const postApiAuthLogout = async ( options?: Parameters<typeof apiFetch>[1]): Promise<postApiAuthLogoutResponse> => {
+export const postApiAuthLogout = async ( options?: Parameters<typeof apiFetch>[1]): Promise<SuccessResponse> => {
 
-  return apiFetch<postApiAuthLogoutResponse>(getPostApiAuthLogoutUrl(),
+  return apiFetch<SuccessResponse>(getPostApiAuthLogoutUrl(),
   {
     ...options,
     method: 'POST'
@@ -341,19 +263,7 @@ export const usePostApiAuthLogout = <TError = ConflictResponse | ValidationFaile
       > => {
       return useMutation(getPostApiAuthLogoutMutationOptions(options), queryClient);
     }
-    export type getApiAuthStatusResponse200 = {
-  data: AuthStatusResponse
-  status: 200
-}
-
-export type getApiAuthStatusResponseSuccess = (getApiAuthStatusResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiAuthStatusResponse = (getApiAuthStatusResponseSuccess)
-
-export const getGetApiAuthStatusUrl = () => {
+    export const getGetApiAuthStatusUrl = () => {
 
 
 
@@ -364,9 +274,9 @@ export const getGetApiAuthStatusUrl = () => {
 /**
  * @summary Inspect the current browser session
  */
-export const getApiAuthStatus = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiAuthStatusResponse> => {
+export const getApiAuthStatus = async ( options?: Parameters<typeof apiFetch>[1]): Promise<AuthStatusResponse> => {
 
-  return apiFetch<getApiAuthStatusResponse>(getGetApiAuthStatusUrl(),
+  return apiFetch<AuthStatusResponse>(getGetApiAuthStatusUrl(),
   {
     ...options,
     method: 'GET'
@@ -453,60 +363,6 @@ export function useGetApiAuthStatus<TData = Awaited<ReturnType<typeof getApiAuth
 
 
 
-export type postApiAuthLocaleResponse200 = {
-  data: LocaleResponse
-  status: 200
-}
-
-export type postApiAuthLocaleResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiAuthLocaleResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type postApiAuthLocaleResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type postApiAuthLocaleResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type postApiAuthLocaleResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiAuthLocaleResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiAuthLocaleResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiAuthLocaleResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiAuthLocaleResponseSuccess = (postApiAuthLocaleResponse200) & {
-  headers: Headers;
-};
-export type postApiAuthLocaleResponseError = (postApiAuthLocaleResponse400 | postApiAuthLocaleResponse401 | postApiAuthLocaleResponse403 | postApiAuthLocaleResponse404 | postApiAuthLocaleResponse409 | postApiAuthLocaleResponse422 | postApiAuthLocaleResponse423 | postApiAuthLocaleResponse503) & {
-  headers: Headers;
-};
-
-export type postApiAuthLocaleResponse = (postApiAuthLocaleResponseSuccess | postApiAuthLocaleResponseError)
-
 export const getPostApiAuthLocaleUrl = () => {
 
 
@@ -523,7 +379,7 @@ export const getPostApiAuthLocaleUrl = () => {
  * endpoint.
  * @summary Update the current browser user's locale
  */
-export const postApiAuthLocale = async (localeUpdateRequest: LocaleUpdateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiAuthLocaleResponse> => {
+export const postApiAuthLocale = async (localeUpdateRequest: LocaleUpdateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<LocaleResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -539,7 +395,7 @@ export const postApiAuthLocale = async (localeUpdateRequest: LocaleUpdateRequest
     }
     return headers;
   };
-return apiFetch<postApiAuthLocaleResponse>(getPostApiAuthLocaleUrl(),
+return apiFetch<LocaleResponse>(getPostApiAuthLocaleUrl(),
   {
     ...options,
     method: 'POST',
@@ -599,31 +455,7 @@ export const usePostApiAuthLocale = <TError = BadRequestResponse | UnauthorizedR
       > => {
       return useMutation(getPostApiAuthLocaleMutationOptions(options), queryClient);
     }
-    export type getApiAuthSessionsResponse200 = {
-  data: SessionInfo[]
-  status: 200
-}
-
-export type getApiAuthSessionsResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiAuthSessionsResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type getApiAuthSessionsResponseSuccess = (getApiAuthSessionsResponse200) & {
-  headers: Headers;
-};
-export type getApiAuthSessionsResponseError = (getApiAuthSessionsResponse401 | getApiAuthSessionsResponse403) & {
-  headers: Headers;
-};
-
-export type getApiAuthSessionsResponse = (getApiAuthSessionsResponseSuccess | getApiAuthSessionsResponseError)
-
-export const getGetApiAuthSessionsUrl = () => {
+    export const getGetApiAuthSessionsUrl = () => {
 
 
 
@@ -635,9 +467,9 @@ export const getGetApiAuthSessionsUrl = () => {
  * Requires an admin token or admin session.
  * @summary List active browser sessions
  */
-export const getApiAuthSessions = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiAuthSessionsResponse> => {
+export const getApiAuthSessions = async ( options?: Parameters<typeof apiFetch>[1]): Promise<SessionInfo[]> => {
 
-  return apiFetch<getApiAuthSessionsResponse>(getGetApiAuthSessionsUrl(),
+  return apiFetch<SessionInfo[]>(getGetApiAuthSessionsUrl(),
   {
     ...options,
     method: 'GET'
@@ -724,60 +556,6 @@ export function useGetApiAuthSessions<TData = Awaited<ReturnType<typeof getApiAu
 
 
 
-export type deleteApiAuthSessionsResponse200 = {
-  data: SuccessResponse
-  status: 200
-}
-
-export type deleteApiAuthSessionsResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type deleteApiAuthSessionsResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type deleteApiAuthSessionsResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type deleteApiAuthSessionsResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type deleteApiAuthSessionsResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type deleteApiAuthSessionsResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type deleteApiAuthSessionsResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type deleteApiAuthSessionsResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type deleteApiAuthSessionsResponseSuccess = (deleteApiAuthSessionsResponse200) & {
-  headers: Headers;
-};
-export type deleteApiAuthSessionsResponseError = (deleteApiAuthSessionsResponse400 | deleteApiAuthSessionsResponse401 | deleteApiAuthSessionsResponse403 | deleteApiAuthSessionsResponse404 | deleteApiAuthSessionsResponse409 | deleteApiAuthSessionsResponse422 | deleteApiAuthSessionsResponse423 | deleteApiAuthSessionsResponse503) & {
-  headers: Headers;
-};
-
-export type deleteApiAuthSessionsResponse = (deleteApiAuthSessionsResponseSuccess | deleteApiAuthSessionsResponseError)
-
 export const getDeleteApiAuthSessionsUrl = () => {
 
 
@@ -790,7 +568,7 @@ export const getDeleteApiAuthSessionsUrl = () => {
  * Requires an admin token or admin session. Cookie sessions must include `X-CSRF-Token`.
  * @summary Revoke an active browser session
  */
-export const deleteApiAuthSessions = async (sessionDeleteRequest: SessionDeleteRequest, options?: Parameters<typeof apiFetch>[1]): Promise<deleteApiAuthSessionsResponse> => {
+export const deleteApiAuthSessions = async (sessionDeleteRequest: SessionDeleteRequest, options?: Parameters<typeof apiFetch>[1]): Promise<SuccessResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -806,7 +584,7 @@ export const deleteApiAuthSessions = async (sessionDeleteRequest: SessionDeleteR
     }
     return headers;
   };
-return apiFetch<deleteApiAuthSessionsResponse>(getDeleteApiAuthSessionsUrl(),
+return apiFetch<SuccessResponse>(getDeleteApiAuthSessionsUrl(),
   {
     ...options,
     method: 'DELETE',
@@ -866,19 +644,7 @@ export const useDeleteApiAuthSessions = <TError = BadRequestResponse | Unauthori
       > => {
       return useMutation(getDeleteApiAuthSessionsMutationOptions(options), queryClient);
     }
-    export type getApiUsersResponse200 = {
-  data: UserResponse[]
-  status: 200
-}
-
-export type getApiUsersResponseSuccess = (getApiUsersResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiUsersResponse = (getApiUsersResponseSuccess)
-
-export const getGetApiUsersUrl = () => {
+    export const getGetApiUsersUrl = () => {
 
 
 
@@ -889,9 +655,9 @@ export const getGetApiUsersUrl = () => {
 /**
  * @summary List registered Panel users
  */
-export const getApiUsers = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiUsersResponse> => {
+export const getApiUsers = async ( options?: Parameters<typeof apiFetch>[1]): Promise<UserResponse[]> => {
 
-  return apiFetch<getApiUsersResponse>(getGetApiUsersUrl(),
+  return apiFetch<UserResponse[]>(getGetApiUsersUrl(),
   {
     ...options,
     method: 'GET'
@@ -978,55 +744,6 @@ export function useGetApiUsers<TData = Awaited<ReturnType<typeof getApiUsers>>, 
 
 
 
-export type postApiUsersResponse201 = {
-  data: UserResponse
-  status: 201
-}
-
-export type postApiUsersResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiUsersResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type postApiUsersResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type postApiUsersResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiUsersResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiUsersResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiUsersResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiUsersResponseSuccess = (postApiUsersResponse201) & {
-  headers: Headers;
-};
-export type postApiUsersResponseError = (postApiUsersResponse400 | postApiUsersResponse401 | postApiUsersResponse403 | postApiUsersResponse409 | postApiUsersResponse422 | postApiUsersResponse423 | postApiUsersResponse503) & {
-  headers: Headers;
-};
-
-export type postApiUsersResponse = (postApiUsersResponseSuccess | postApiUsersResponseError)
-
 export const getPostApiUsersUrl = () => {
 
 
@@ -1039,7 +756,7 @@ export const getPostApiUsersUrl = () => {
  * Requires an admin token or admin session. Cookie sessions must include `X-CSRF-Token`.
  * @summary Create a Panel user
  */
-export const postApiUsers = async (userCreateRequest: UserCreateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiUsersResponse> => {
+export const postApiUsers = async (userCreateRequest: UserCreateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<UserResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -1055,7 +772,7 @@ export const postApiUsers = async (userCreateRequest: UserCreateRequest, options
     }
     return headers;
   };
-return apiFetch<postApiUsersResponse>(getPostApiUsersUrl(),
+return apiFetch<UserResponse>(getPostApiUsersUrl(),
   {
     ...options,
     method: 'POST',
@@ -1115,56 +832,7 @@ export const usePostApiUsers = <TError = BadRequestResponse | UnauthorizedRespon
       > => {
       return useMutation(getPostApiUsersMutationOptions(options), queryClient);
     }
-    export type putApiUsersUsernameResponse200 = {
-  data: UserResponse
-  status: 200
-}
-
-export type putApiUsersUsernameResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type putApiUsersUsernameResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type putApiUsersUsernameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type putApiUsersUsernameResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type putApiUsersUsernameResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type putApiUsersUsernameResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type putApiUsersUsernameResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type putApiUsersUsernameResponseSuccess = (putApiUsersUsernameResponse200) & {
-  headers: Headers;
-};
-export type putApiUsersUsernameResponseError = (putApiUsersUsernameResponse400 | putApiUsersUsernameResponse403 | putApiUsersUsernameResponse404 | putApiUsersUsernameResponse409 | putApiUsersUsernameResponse422 | putApiUsersUsernameResponse423 | putApiUsersUsernameResponse503) & {
-  headers: Headers;
-};
-
-export type putApiUsersUsernameResponse = (putApiUsersUsernameResponseSuccess | putApiUsersUsernameResponseError)
-
-export const getPutApiUsersUsernameUrl = (username: string,) => {
+    export const getPutApiUsersUsernameUrl = (username: string,) => {
 
 
 
@@ -1176,7 +844,7 @@ export const getPutApiUsersUsernameUrl = (username: string,) => {
  * @summary Update a Panel user
  */
 export const putApiUsersUsername = async (username: string,
-    userUpdateRequest: UserUpdateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<putApiUsersUsernameResponse> => {
+    userUpdateRequest: UserUpdateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<UserResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -1192,7 +860,7 @@ export const putApiUsersUsername = async (username: string,
     }
     return headers;
   };
-return apiFetch<putApiUsersUsernameResponse>(getPutApiUsersUsernameUrl(username),
+return apiFetch<UserResponse>(getPutApiUsersUsernameUrl(username),
   {
     ...options,
     method: 'PUT',
@@ -1252,56 +920,7 @@ export const usePutApiUsersUsername = <TError = BadRequestResponse | ForbiddenRe
       > => {
       return useMutation(getPutApiUsersUsernameMutationOptions(options), queryClient);
     }
-    export type deleteApiUsersUsernameResponse204 = {
-  data: void
-  status: 204
-}
-
-export type deleteApiUsersUsernameResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type deleteApiUsersUsernameResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type deleteApiUsersUsernameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type deleteApiUsersUsernameResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type deleteApiUsersUsernameResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type deleteApiUsersUsernameResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type deleteApiUsersUsernameResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type deleteApiUsersUsernameResponseSuccess = (deleteApiUsersUsernameResponse204) & {
-  headers: Headers;
-};
-export type deleteApiUsersUsernameResponseError = (deleteApiUsersUsernameResponse400 | deleteApiUsersUsernameResponse403 | deleteApiUsersUsernameResponse404 | deleteApiUsersUsernameResponse409 | deleteApiUsersUsernameResponse422 | deleteApiUsersUsernameResponse423 | deleteApiUsersUsernameResponse503) & {
-  headers: Headers;
-};
-
-export type deleteApiUsersUsernameResponse = (deleteApiUsersUsernameResponseSuccess | deleteApiUsersUsernameResponseError)
-
-export const getDeleteApiUsersUsernameUrl = (username: string,) => {
+    export const getDeleteApiUsersUsernameUrl = (username: string,) => {
 
 
 
@@ -1312,9 +931,9 @@ export const getDeleteApiUsersUsernameUrl = (username: string,) => {
 /**
  * @summary Delete a Panel user
  */
-export const deleteApiUsersUsername = async (username: string, options?: Parameters<typeof apiFetch>[1]): Promise<deleteApiUsersUsernameResponse> => {
+export const deleteApiUsersUsername = async (username: string, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
 
-  return apiFetch<deleteApiUsersUsernameResponse>(getDeleteApiUsersUsernameUrl(username),
+  return apiFetch<void>(getDeleteApiUsersUsernameUrl(username),
   {
     ...options,
     method: 'DELETE'

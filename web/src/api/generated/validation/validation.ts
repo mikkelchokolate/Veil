@@ -89,55 +89,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type postApiValidationResponse200 = {
-  data: ValidationResponse
-  status: 200
-}
-
-export type postApiValidationResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiValidationResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type postApiValidationResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type postApiValidationResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiValidationResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiValidationResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiValidationResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiValidationResponseSuccess = (postApiValidationResponse200) & {
-  headers: Headers;
-};
-export type postApiValidationResponseError = (postApiValidationResponse400 | postApiValidationResponse401 | postApiValidationResponse403 | postApiValidationResponse409 | postApiValidationResponse422 | postApiValidationResponse423 | postApiValidationResponse503) & {
-  headers: Headers;
-};
-
-export type postApiValidationResponse = (postApiValidationResponseSuccess | postApiValidationResponseError)
-
 export const getPostApiValidationUrl = () => {
 
 
@@ -153,7 +104,7 @@ export const getPostApiValidationUrl = () => {
  * again immediately before mutation.
  * @summary Validate a candidate configuration against live host state
  */
-export const postApiValidation = async (validationRequest: ValidationRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiValidationResponse> => {
+export const postApiValidation = async (validationRequest: ValidationRequest, options?: Parameters<typeof apiFetch>[1]): Promise<ValidationResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -169,7 +120,7 @@ export const postApiValidation = async (validationRequest: ValidationRequest, op
     }
     return headers;
   };
-return apiFetch<postApiValidationResponse>(getPostApiValidationUrl(),
+return apiFetch<ValidationResponse>(getPostApiValidationUrl(),
   {
     ...options,
     method: 'POST',

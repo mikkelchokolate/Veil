@@ -86,30 +86,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getSTokenResponse200TextPlain = {
-  data: string
-  status: 200
-}
-
-export type getSTokenResponse200TextHtml = {
-  data: string
-  status: 200
-}
-
-export type getSTokenResponse404 = {
-  data: void
-  status: 404
-}
-
-export type getSTokenResponseSuccess = (getSTokenResponse200TextPlain | getSTokenResponse200TextHtml) & {
-  headers: Headers;
-};
-export type getSTokenResponseError = (getSTokenResponse404) & {
-  headers: Headers;
-};
-
-export type getSTokenResponse = (getSTokenResponseSuccess | getSTokenResponseError)
-
 export const getGetSTokenUrl = (token: string,
     params?: GetSTokenParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -134,9 +110,9 @@ export const getGetSTokenUrl = (token: string,
  * @summary Public subscription endpoint (token is the capability)
  */
 export const getSToken = async (token: string,
-    params?: GetSTokenParams, options?: Parameters<typeof apiFetch>[1]): Promise<getSTokenResponse> => {
+    params?: GetSTokenParams, options?: Parameters<typeof apiFetch>[1]): Promise<string> => {
 
-  return apiFetch<getSTokenResponse>(getGetSTokenUrl(token,params),
+  return apiFetch<string>(getGetSTokenUrl(token,params),
   {
     ...options,
     method: 'GET'
@@ -196,26 +172,7 @@ export const useGetSToken = <TError = void,
       > => {
       return useMutation(getGetSTokenMutationOptions(options), queryClient);
     }
-    export type headSTokenResponse200 = {
-  data: void
-  status: 200
-}
-
-export type headSTokenResponse404 = {
-  data: void
-  status: 404
-}
-
-export type headSTokenResponseSuccess = (headSTokenResponse200) & {
-  headers: Headers;
-};
-export type headSTokenResponseError = (headSTokenResponse404) & {
-  headers: Headers;
-};
-
-export type headSTokenResponse = (headSTokenResponseSuccess | headSTokenResponseError)
-
-export const getHeadSTokenUrl = (token: string,
+    export const getHeadSTokenUrl = (token: string,
     params?: HeadSTokenParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -235,9 +192,9 @@ export const getHeadSTokenUrl = (token: string,
  * @summary HEAD variant of the public subscription endpoint (headers only)
  */
 export const headSToken = async (token: string,
-    params?: HeadSTokenParams, options?: Parameters<typeof apiFetch>[1]): Promise<headSTokenResponse> => {
+    params?: HeadSTokenParams, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
 
-  return apiFetch<headSTokenResponse>(getHeadSTokenUrl(token,params),
+  return apiFetch<void>(getHeadSTokenUrl(token,params),
   {
     ...options,
     method: 'HEAD'

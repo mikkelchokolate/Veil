@@ -21,6 +21,13 @@ export default defineConfig({
 					path: "./src/api/fetcher.ts",
 					name: "apiFetch",
 				},
+				// apiFetch resolves the parsed body — not a {data,status,headers}
+				// envelope — so the generated typings must match that contract
+				// instead of forcing `as unknown as` casts at every call site
+				// (#652).
+				fetch: {
+					includeHttpResponseReturnType: false,
+				},
 				// S7: generate TanStack Query hooks from the OpenAPI contract.
 				// Zod schemas and MSW mocks live in their OWN projects below
 				// (veilZod / veilMsw) with separate output trees — this project
@@ -64,6 +71,9 @@ export default defineConfig({
 			prettier: false,
 			override: {
 				mutator: { path: "./src/api/fetcher.ts", name: "apiFetch" },
+				fetch: {
+					includeHttpResponseReturnType: false,
+				},
 				mock: { enabled: true, type: "msw", useExamples: true },
 			},
 		},

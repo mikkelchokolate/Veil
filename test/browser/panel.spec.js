@@ -123,8 +123,20 @@ test.describe('Veil Panel — React SPA', () => {
 
     await page.getByRole('button', { name: /^create$/i }).click();
 
-    // The inbound appears in the table and is readable via the API with the
-    // generated credential intact (redacted in the API view, present at rest).
+    // The sandboxed e2e panel cannot converge an apply, so the committed
+    // create returns success=false — the form stays open and reports the
+    // failed apply instead of dismissing as a clean create (#649).
+    await expect(
+      page.getByRole('dialog').getByText(/applying it failed/i),
+    ).toBeVisible({ timeout: 15_000 });
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: /^cancel$/i })
+      .click();
+
+    // Once the editor is dismissed, the committed inbound appears in the
+    // table and is readable via the API with the generated credential
+    // intact (redacted in the API view, present at rest).
     await expect(
       page.getByRole('row', { name: new RegExp(name) }),
     ).toBeVisible({ timeout: 15_000 });
@@ -178,6 +190,17 @@ test.describe('Veil Panel — React SPA', () => {
 
     await page.locator('#ib-enabled').uncheck();
     await page.getByRole('button', { name: /^create$/i }).click();
+
+    // Same as the hysteria2 case above: the sandboxed apply fails, the
+    // committed create keeps the dialog open with the failure shown, and
+    // dismissing the editor reveals the committed row (#649).
+    await expect(
+      page.getByRole('dialog').getByText(/applying it failed/i),
+    ).toBeVisible({ timeout: 15_000 });
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: /^cancel$/i })
+      .click();
 
     await expect(
       page.getByRole('row', { name: new RegExp(name) }),
