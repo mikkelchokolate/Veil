@@ -189,10 +189,10 @@ assert_permissions() {
   for dir in /etc/veil/generated /etc/veil/tls /etc/veil/certs /etc/veil/www; do
     [ "$(stat -c "%U:%G %a" "$dir")" = "root:veil-proxy 750" ] || fail "$dir owner/mode"
   done
-  # Caddy and Mita state directories re-owned for the veil-proxy units
-  # (#497/#623): systemd never re-owns an existing StateDirectory.
+  # Caddy and Mita state directories re-owned for their service units
+  # (#497/#623/#624): systemd never re-owns an existing StateDirectory.
   [ "$(stat -c "%U:%G" /var/lib/caddy)" = "veil-proxy:veil-proxy" ] || fail "/var/lib/caddy owner"
-  [ "$(stat -c "%U:%G" /var/lib/mita)" = "veil-proxy:veil-proxy" ] || fail "/var/lib/mita owner"
+  [ "$(stat -c "%U:%G" /var/lib/mita %a)" = "veil-mita:veil-mita 700" ] || fail "/var/lib/mita owner/mode"
 }
 
 assert_unit_hardening() {
