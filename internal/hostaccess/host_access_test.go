@@ -56,12 +56,18 @@ func TestEnsureAccountCreatesSystemGroupAndUser(t *testing.T) {
 	if identity.UID != 4242 || identity.GID != 4242 || identity.ProxyUID != 4243 || identity.ProxyGID != 4243 {
 		t.Fatalf("identity=%+v", identity)
 	}
+	if identity.MitaUID != 4242 || identity.MitaGID != 4242 {
+		t.Fatalf("identity mita fields=%+v", identity)
+	}
 	want := []string{
 		"groupadd --system veil",
 		"useradd --system --gid veil --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin veil",
 		"groupadd --system veil-proxy",
 		"useradd --system --gid veil-proxy --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin veil-proxy",
+		"groupadd --system veil-mita",
+		"useradd --system --gid veil-mita --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin veil-mita",
 		"usermod -aG veil-proxy veil",
+		"usermod -aG veil-mita veil",
 	}
 	if strings.Join(commands, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("commands=%v", commands)
@@ -208,6 +214,85 @@ func TestMigrateGroupsPanelTLSForProxyReaders(t *testing.T) {
 	}
 }
 
+// Regression for #624: veil-mieru.service now runs as the dedicated
+// veil-mita identity, but systemd does not re-own an existing StateDirectory
+// — a stale veil-proxy-owned mita tree would be unwritable for the daemon.
+// Migrate must re-own the sibling "mita" dir (or Paths.MitaDir) to the mita
+// uid/gid once EnsureAccount has established them.
+func TestMigrateReownsMitaStateDirForDedicatedIdentity(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX ownership and mode test")
+	}
+	root := t.TempDir()
+	etcDir := filepath.Join(root, "etc", "veil")
+	varDir := filepath.Join(root, "var", "lib", "veil")
+	mitaDir := filepath.Join(root, "var", "lib", "mita")
+	if err := os.MkdirAll(mitaDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mitaFile := filepath.Join(mitaDir, "state")
+	if err := os.WriteFile(mitaFile, []byte("s"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	uid, gid := os.Getuid(), os.Getgid()
+	mitaUID, mitaGID := uid+1, gid+1
+
+	originalChown := testHooks.chown
+	defer func() { testHooks.chown = originalChown }()
+	type owner struct{ uid, gid int }
+	owners := map[string]owner{}
+	testHooks.chown = func(path string, u, g int) error {
+		owners[path] = owner{u, g}
+		return nil
+	}
+
+	if err := Migrate(
+		Paths{EtcDir: etcDir, VarDir: varDir, RootUID: uid, RootGID: gid},
+		Identity{UID: uid, GID: gid, MitaUID: mitaUID, MitaGID: mitaGID},
+		time.Now,
+	); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	for _, path := range []string{mitaDir, mitaFile} {
+		got, ok := owners[path]
+		if !ok || got.uid != mitaUID || got.gid != mitaGID {
+			t.Fatalf("mita path %s chown=%+v ok=%v, want %d:%d", path, got, ok, mitaUID, mitaGID)
+		}
+	}
+	assertMode(t, mitaDir, 0o700)
+	assertMode(t, mitaFile, 0o600)
+}
+
+// A symlinked or non-directory mita state path must stop migration fail-closed
+// rather than being followed into a veil-mita-owned tree.
+func TestMigrateRefusesNonDirectoryMitaStateDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX ownership and mode test")
+	}
+	root := t.TempDir()
+	etcDir := filepath.Join(root, "etc", "veil")
+	varDir := filepath.Join(root, "var", "lib", "veil")
+	mitaDir := filepath.Join(root, "var", "lib", "mita")
+	if err := os.MkdirAll(varDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mitaDir, []byte("not a dir"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	uid, gid := os.Getuid(), os.Getgid()
+	// Nonzero mita ids — the refusal must fire before any ownership write, so
+	// these need not be real accounts. (Under Docker root uid==0 would
+	// otherwise disable the mita pass entirely.)
+	err := Migrate(
+		Paths{EtcDir: etcDir, VarDir: varDir, RootUID: uid, RootGID: gid},
+		Identity{UID: uid, GID: gid, MitaUID: uid + 1, MitaGID: gid + 1},
+		time.Now,
+	)
+	if err == nil || !strings.Contains(err.Error(), "refuse to migrate non-directory mita state dir") {
+		t.Fatalf("expected mita state dir refusal, got: %v", err)
+	}
+}
+
 func assertMode(t *testing.T, path string, want os.FileMode) {
 	t.Helper()
 	info, err := os.Stat(path)
@@ -285,7 +370,7 @@ func TestEnsureAccount(t *testing.T) {
 		if id.UID != 100 || id.GID != 100 || id.ProxyUID != 101 || id.ProxyGID != 101 {
 			t.Fatalf("identity=%+v", id)
 		}
-		if strings.Join(commands, "\n") != "usermod -aG veil-proxy veil" {
+		if strings.Join(commands, "\n") != "usermod -aG veil-proxy veil\nusermod -aG veil-mita veil" {
 			t.Fatalf("commands=%v", commands)
 		}
 	})
@@ -370,8 +455,14 @@ func TestEnsureAccount(t *testing.T) {
 			"addgroup -S veil-proxy",
 			"useradd --system --gid veil-proxy --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin veil-proxy",
 			"adduser -S -D -H -h /nonexistent -s /sbin/nologin -G veil-proxy veil-proxy",
+			"groupadd --system veil-mita",
+			"addgroup -S veil-mita",
+			"useradd --system --gid veil-mita --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin veil-mita",
+			"adduser -S -D -H -h /nonexistent -s /sbin/nologin -G veil-mita veil-mita",
 			"usermod -aG veil-proxy veil",
 			"addgroup veil veil-proxy",
+			"usermod -aG veil-mita veil",
+			"addgroup veil veil-mita",
 		}
 		if strings.Join(commands, "\n") != strings.Join(want, "\n") {
 			t.Fatalf("commands:\n%s\nwant:\n%s", strings.Join(commands, "\n"), strings.Join(want, "\n"))
