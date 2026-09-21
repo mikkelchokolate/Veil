@@ -380,3 +380,168 @@ func (e failingInfoEntry) Name() string               { return e.name }
 func (e failingInfoEntry) IsDir() bool                { return false }
 func (e failingInfoEntry) Type() fs.FileMode          { return 0 }
 func (e failingInfoEntry) Info() (fs.FileInfo, error) { return nil, errors.New("info error") }
+
+// Issue #623: veil-mieru.service declares StateDirectory=mita and runs as
+// veil-proxy, but systemd never re-owns an existing state dir — an old
+// veil-owned /var/lib/mita (like /var/lib/caddy before #497) stays
+// unwritable to the unit. Migrate must re-own both trees to the proxy
+// identity, mirroring the package postinstall chown -R repair.
+func TestMigrateReownsProxyStateDirs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX ownership test")
+	}
+	root := t.TempDir()
+	etcDir := filepath.Join(root, "etc", "veil")
+	varDir := filepath.Join(root, "var", "veil")
+	for _, dir := range []string{etcDir, varDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	caddyDir := filepath.Join(root, "var", "lib", "caddy")
+	mitaDir := filepath.Join(root, "var", "lib", "mita")
+	mitaFile := filepath.Join(mitaDir, "nested", "session.pb")
+	for _, dir := range []string{caddyDir, filepath.Dir(mitaFile)} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(mitaFile, []byte("session"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	originalDirs := proxyStateDirs
+	defer func() { proxyStateDirs = originalDirs }()
+	proxyStateDirs = []string{caddyDir, mitaDir}
+
+	type chownCall struct {
+		path     string
+		uid, gid int
+	}
+	var chowned []chownCall
+	originalChown := testHooks.chown
+	defer func() { testHooks.chown = originalChown }()
+	testHooks.chown = func(path string, uid, gid int) error {
+		chowned = append(chowned, chownCall{path, uid, gid})
+		return nil
+	}
+
+	uid, gid := os.Getuid(), os.Getgid()
+	err := Migrate(
+		Paths{EtcDir: etcDir, VarDir: varDir, RootUID: uid, RootGID: gid},
+		Identity{UID: uid, GID: gid, ProxyUID: 4242, ProxyGID: 4343},
+		time.Now,
+	)
+	if err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	for _, want := range []string{caddyDir, mitaDir, filepath.Dir(mitaFile), mitaFile} {
+		found := false
+		for _, call := range chowned {
+			if call.path == want && call.uid == 4242 && call.gid == 4343 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected proxy re-own of %s to 4242:4343, chowned=%+v", want, chowned)
+		}
+	}
+}
+
+// Issue #623: a symlinked or absent state dir is operator-managed — Migrate
+// leaves it alone rather than chowning through the link into foreign trees.
+func TestMigrateSkipsSymlinkedProxyStateDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX symlink test")
+	}
+	root := t.TempDir()
+	etcDir := filepath.Join(root, "etc", "veil")
+	varDir := filepath.Join(root, "var", "veil")
+	for _, dir := range []string{etcDir, varDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	realDir := filepath.Join(root, "real-mita")
+	if err := os.MkdirAll(realDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	linkDir := filepath.Join(root, "var", "lib", "mita")
+	if err := os.MkdirAll(filepath.Dir(linkDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(realDir, linkDir); err != nil {
+		t.Fatal(err)
+	}
+
+	originalDirs := proxyStateDirs
+	defer func() { proxyStateDirs = originalDirs }()
+	proxyStateDirs = []string{linkDir}
+
+	var chowned []string
+	originalChown := testHooks.chown
+	defer func() { testHooks.chown = originalChown }()
+	testHooks.chown = func(path string, uid, gid int) error {
+		chowned = append(chowned, path)
+		return nil
+	}
+
+	uid, gid := os.Getuid(), os.Getgid()
+	if err := Migrate(
+		Paths{EtcDir: etcDir, VarDir: varDir, RootUID: uid, RootGID: gid},
+		Identity{UID: uid, GID: gid, ProxyUID: 4242, ProxyGID: 4343},
+		time.Now,
+	); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	for _, path := range chowned {
+		if path == linkDir || strings.HasPrefix(path, realDir) {
+			t.Fatalf("must not chown through symlinked state dir: %s", path)
+		}
+	}
+}
+
+// Issue #623: a failed chown inside a proxy state dir must fail Migrate —
+// leaving half the tree unwritable while reporting success would be worse
+// than aborting.
+func TestMigrateProxyStateDirChownErrorFailsClosed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX ownership test")
+	}
+	root := t.TempDir()
+	etcDir := filepath.Join(root, "etc", "veil")
+	varDir := filepath.Join(root, "var", "veil")
+	for _, dir := range []string{etcDir, varDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mitaDir := filepath.Join(root, "var", "lib", "mita")
+	if err := os.MkdirAll(mitaDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	originalDirs := proxyStateDirs
+	defer func() { proxyStateDirs = originalDirs }()
+	proxyStateDirs = []string{mitaDir}
+
+	originalChown := testHooks.chown
+	defer func() { testHooks.chown = originalChown }()
+	testHooks.chown = func(path string, uid, gid int) error {
+		if path == mitaDir {
+			return errors.New("chown mita failed")
+		}
+		return nil
+	}
+
+	uid, gid := os.Getuid(), os.Getgid()
+	err := Migrate(
+		Paths{EtcDir: etcDir, VarDir: varDir, RootUID: uid, RootGID: gid},
+		Identity{UID: uid, GID: gid, ProxyUID: 4242, ProxyGID: 4343},
+		time.Now,
+	)
+	if err == nil || !strings.Contains(err.Error(), "chown mita failed") {
+		t.Fatalf("expected chown mita error, got: %v", err)
+	}
+}

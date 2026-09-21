@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/backup"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
 func TestBackupScheduleEnableWiresCustomPassphrasePathIntoSystemdService(t *testing.T) {
@@ -113,6 +114,138 @@ func TestBackupScheduleEnableWiresCustomPassphrasePathIntoSystemdService(t *test
 				}
 			}
 		})
+	}
+}
+
+// Issue #627: on a packaged custom --etc-dir/--var-dir install the schedule
+// drop-in sorts after 10-veil-install.conf, so a hardcoded ExecStart would
+// stomp the unit back onto the packaged defaults. The drop-in must preserve
+// the effective unit's state/key/output and substitute only --passphrase-file.
+func TestBackupScheduleEnablePreservesCustomInstallExecStart(t *testing.T) {
+	host := t.TempDir()
+	systemdDir := filepath.Join(host, "systemd")
+	vendorDir := filepath.Join(host, "vendor")
+	writeBackupServiceFixture(t, vendorDir, "/etc/veil/backup.passphrase")
+	customEtc := filepath.Join(host, "opt", "etc")
+	customVar := filepath.Join(host, "opt", "var")
+	writeBackupInstallDropIn(t, systemdDir, customEtc, customVar)
+	restore := stubBackupScheduleSystemdDirs(t, systemdDir, []string{vendorDir}, nil)
+	defer restore()
+
+	customPassPath := filepath.Join(host, "secrets", "backup.passphrase")
+	var out bytes.Buffer
+	cmd := NewRootCommand("test")
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"backup", "schedule", "enable",
+		"--passphrase", "custom-path-passphrase",
+		"--passphrase-path", customPassPath,
+	})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("schedule enable: %v\n%s", err, out.String())
+	}
+
+	dropInBody, err := os.ReadFile(backupScheduleDropInPath(systemdDir))
+	if err != nil {
+		t.Fatalf("expected schedule drop-in: %v", err)
+	}
+	execStart := effectiveSystemdDirective([]string{string(dropInBody)}, "ExecStart")
+	for _, want := range []string{
+		"--state " + filepath.ToSlash(filepath.Join(customVar, "state.json")),
+		"--key-path " + filepath.ToSlash(filepath.Join(customEtc, "state.key")),
+		"--output-dir " + filepath.ToSlash(filepath.Join(customVar, "backups")),
+		"--passphrase-file " + filepath.ToSlash(customPassPath),
+	} {
+		if !strings.Contains(execStart, want) {
+			t.Fatalf("drop-in ExecStart lost the custom install layout — missing %q:\n%s", want, dropInBody)
+		}
+	}
+	if strings.Contains(execStart, "/var/lib/veil") || strings.Contains(execStart, "/etc/veil/") {
+		t.Fatalf("drop-in ExecStart stomped the install back onto packaged defaults:\n%s", dropInBody)
+	}
+	if condition := effectiveSystemdDirective([]string{string(dropInBody)}, "ConditionPathExists"); !sameBackupPath(condition, customPassPath) {
+		t.Fatalf("ConditionPathExists = %q, want %q:\n%s", condition, customPassPath, dropInBody)
+	}
+	stored, err := os.ReadFile(customPassPath)
+	if err != nil || string(stored) != "custom-path-passphrase\n" {
+		t.Fatalf("custom passphrase = %q, err=%v", stored, err)
+	}
+}
+
+// Issue #627 related leg: on a custom-path install, `schedule enable` without
+// --passphrase-path must store the secret where the effective unit reads it —
+// not at the packaged default /etc/veil/backup.passphrase, which the unit
+// never consults (leaving the timer silently skipped on a missing condition).
+func TestBackupScheduleEnableDefaultFlagFollowsConfiguredPassphrasePath(t *testing.T) {
+	host := t.TempDir()
+	systemdDir := filepath.Join(host, "systemd")
+	vendorDir := filepath.Join(host, "vendor")
+	writeBackupServiceFixture(t, vendorDir, "/etc/veil/backup.passphrase")
+	customEtc := filepath.Join(host, "opt", "etc")
+	customVar := filepath.Join(host, "opt", "var")
+	writeBackupInstallDropIn(t, systemdDir, customEtc, customVar)
+	restore := stubBackupScheduleSystemdDirs(t, systemdDir, []string{vendorDir}, nil)
+	defer restore()
+
+	var out bytes.Buffer
+	cmd := NewRootCommand("test")
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"backup", "schedule", "enable", "--passphrase", "configured-path-passphrase"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("schedule enable: %v\n%s", err, out.String())
+	}
+
+	configured := filepath.Join(customEtc, "backup.passphrase")
+	stored, err := os.ReadFile(configured)
+	if err != nil {
+		t.Fatalf("passphrase must be stored at the configured path %s: %v", configured, err)
+	}
+	if string(stored) != "configured-path-passphrase\n" {
+		t.Fatalf("configured passphrase = %q", stored)
+	}
+	if !strings.Contains(out.String(), configured) {
+		t.Fatalf("enable output must report the configured destination %s:\n%s", configured, out.String())
+	}
+	// The install drop-in already points the unit at the configured path, so
+	// no extra schedule drop-in is needed.
+	if _, err := os.Stat(backupScheduleDropInPath(systemdDir)); !os.IsNotExist(err) {
+		t.Fatalf("schedule drop-in should not be written when the unit already targets the path, err=%v", err)
+	}
+}
+
+// writeBackupInstallDropIn plants the 10-veil-install.conf a packaged custom
+// install writes for veil-backup.service, rendered by the real renderer.
+func writeBackupInstallDropIn(t *testing.T, systemdDir, etcDir, varDir string) {
+	t.Helper()
+	dropIn, ok := renderer.RenderInstallDropIn(renderer.UnitBackupService, renderer.SystemdConfig{
+		EtcDir: filepath.ToSlash(etcDir),
+		VarDir: filepath.ToSlash(varDir),
+	})
+	if !ok {
+		t.Fatal("expected an install drop-in for the custom-path backup unit")
+	}
+	dir := filepath.Join(systemdDir, "veil-backup.service.d")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "10-veil-install.conf"), []byte(dropIn), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// stubBackupScheduleSystemdDirs extends stubBackupScheduleSystemd with a
+// stubbed auxiliary unit-dir list (vendor/runtime dirs the fragment reader
+// consults for the packaged base unit and lower-precedence drop-ins).
+func stubBackupScheduleSystemdDirs(t *testing.T, systemdDir string, auxDirs []string, hook func([]string) error) func() {
+	t.Helper()
+	restore := stubBackupScheduleSystemd(t, systemdDir, hook)
+	oldAux := backupAuxSystemdDirs
+	backupAuxSystemdDirs = auxDirs
+	return func() {
+		backupAuxSystemdDirs = oldAux
+		restore()
 	}
 }
 

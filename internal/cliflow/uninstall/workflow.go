@@ -10,9 +10,8 @@ import (
 )
 
 const (
-	backupScheduleDropInDir = "veil-backup.service.d"
-	caddyStateDirDefault    = "/var/lib/caddy"
-	mitaStateDirDefault     = "/var/lib/mita"
+	caddyStateDirDefault = "/var/lib/caddy"
+	mitaStateDirDefault  = "/var/lib/mita"
 	// quicSysctlConfDefault is the packaged QUIC buffer drop-in. Uninstall
 	// removes it so the host does not keep Veil's sysctl overrides after the
 	// software is gone (issue #486).
@@ -208,8 +207,14 @@ func SystemdUnitPaths(opts Options) []string {
 	for _, dir := range dirs {
 		for _, name := range units {
 			add(filepath.ToSlash(filepath.Join(dir, name)))
+			// Packaged installs with custom --etc-dir/--var-dir record the
+			// layout in <unit>.d/10-veil-install.conf drop-ins, and
+			// veil-backup.service.d also holds the schedule drop-in
+			// (passphrase-path.conf). Deleting the unit file while leaving
+			// its drop-in lets the stale override merge into the next
+			// package install — the whole drop-in dir goes (issue #642).
+			add(filepath.ToSlash(filepath.Join(dir, name+".d")))
 		}
-		add(filepath.ToSlash(filepath.Join(dir, backupScheduleDropInDir)))
 		// Dir-level template globs can re-match the catalog template file
 		// itself (e.g. veil-hysteria2@.service); dedupe keeps the plan and the
 		// removal list honest.

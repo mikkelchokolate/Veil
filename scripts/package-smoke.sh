@@ -180,8 +180,10 @@ assert_permissions() {
   for dir in /etc/veil/generated /etc/veil/tls /etc/veil/certs /etc/veil/www; do
     [ "$(stat -c "%U:%G %a" "$dir")" = "root:veil-proxy 750" ] || fail "$dir owner/mode"
   done
-  # Caddy state directory re-owned for the veil-proxy unit (#497).
+  # Caddy and Mita state directories re-owned for the veil-proxy units
+  # (#497/#623): systemd never re-owns an existing StateDirectory.
   [ "$(stat -c "%U:%G" /var/lib/caddy)" = "veil-proxy:veil-proxy" ] || fail "/var/lib/caddy owner"
+  [ "$(stat -c "%U:%G" /var/lib/mita)" = "veil-proxy:veil-proxy" ] || fail "/var/lib/mita owner"
 }
 
 assert_unit_hardening() {
@@ -226,10 +228,14 @@ assert_runtime_readability() {
 
 assert_legacy_www_migrated() {
   # Fallback site moved /var/lib/veil/www -> /etc/veil/www; regular content is
-  # carried over, the planted symlink must not be (audit #525).
+  # carried over, the planted symlink must not be (audit #525). A symlink the
+  # operator placed in the destination must survive the upgrade — the
+  # migration copies, it never sweeps the destination (issue #622).
   [ "$(cat /etc/veil/www/index.html)" = legacy-index ] || fail "legacy index not migrated"
   [ "$(cat /etc/veil/www/assets/site.css)" = legacy-css ] || fail "legacy asset not migrated"
   { [ ! -L /etc/veil/www/leak.key ] && [ ! -e /etc/veil/www/leak.key ]; }     || fail "legacy symlink leaked into /etc/veil/www"
+  [ -L /etc/veil/www/operator.link ] || fail "operator destination symlink swept by upgrade"
+  [ -d /var/lib/veil/www ] || fail "legacy /var/lib/veil/www removed on upgrade"
   [ "$(stat -c "%U:%G %a" /etc/veil/www/index.html)" = "root:veil-proxy 640" ]     || fail "migrated index owner/mode"
 }
 
@@ -268,13 +274,18 @@ case "$phase" in
     chmod 0600 /etc/veil/panel/tls.key
     # Legacy layout: fallback site under /var/lib/veil/www (including a
     # symlink that must never be copied into the veil-proxy-readable tree)
-    # and a veil-owned caddy state dir left by the pre-veil-proxy unit.
+    # plus veil-owned caddy/mita state dirs left by the pre-veil-proxy units
+    # (issues #497/#623).
     mkdir -p /var/lib/veil/www/assets
     printf legacy-index > /var/lib/veil/www/index.html
     printf legacy-css > /var/lib/veil/www/assets/site.css
     ln -s /etc/veil/panel/tls.key /var/lib/veil/www/leak.key
-    mkdir -p /var/lib/caddy
-    chown -R veil:veil /var/lib/veil/www /var/lib/caddy
+    # An operator-created symlink already in the destination must survive the
+    # upgrade migration — it is not the copy's to delete (issue #622).
+    mkdir -p /etc/veil/www
+    ln -s /etc/veil/panel/tls.key /etc/veil/www/operator.link
+    mkdir -p /var/lib/caddy /var/lib/mita
+    chown -R veil:veil /var/lib/veil/www /var/lib/caddy /var/lib/mita
     chmod -R a+r /var/lib/veil/www
     ;;
   post-install)

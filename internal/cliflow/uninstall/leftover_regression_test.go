@@ -67,6 +67,54 @@ func TestUninstallRemovesBackupDropInTemplateWantsAndRuntimeState(t *testing.T) 
 	}
 }
 
+// Issue #642: uninstall used to delete only veil-backup.service.d, leaving
+// 10-veil-install.conf drop-ins for veil.service / veil-helper.service /
+// veil-caddy.service / protocol units behind — where the next package
+// install would silently merge the stale custom-path overrides.
+func TestUninstallRemovesEveryManagedUnitDropInDir(t *testing.T) {
+	host := t.TempDir()
+	systemdDir := filepath.Join(host, "systemd")
+	vendorDir := filepath.Join(host, "vendor")
+	var dropInDirs []string
+	for _, dir := range []string{systemdDir, vendorDir} {
+		for _, unit := range Services() {
+			dropIn := filepath.Join(dir, unit+".d")
+			if err := os.MkdirAll(dropIn, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dropIn, "10-veil-install.conf"), []byte("[Service]\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			dropInDirs = append(dropInDirs, filepath.ToSlash(dropIn))
+		}
+	}
+	if len(dropInDirs) == 0 {
+		t.Fatal("expected at least one managed unit drop-in dir")
+	}
+
+	var removed []string
+	err := Run(Options{
+		Yes:    true,
+		EtcDir: filepath.Join(host, "etc", "veil"), VarDir: filepath.Join(host, "var", "lib", "veil"),
+		SystemdDir: systemdDir, InstallDir: filepath.Join(host, "bin"),
+		CaddyStateDir:     filepath.Join(host, "var", "lib", "caddy"),
+		MitaStateDir:      filepath.Join(host, "var", "lib", "mita"),
+		VendorSystemdDirs: []string{vendorDir},
+	}, new(bytes.Buffer), new(bytes.Buffer), Dependencies{
+		ServiceStopper:  func(string) error { return nil },
+		FileRemover:     func(path string) error { removed = append(removed, filepath.ToSlash(path)); return nil },
+		SystemdReloader: func() error { return nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range dropInDirs {
+		if !contains(removed, want) {
+			t.Fatalf("uninstall left drop-in dir %s behind, removed=%v", want, removed)
+		}
+	}
+}
+
 func TestUninstallKeepDataStillRemovesSystemdDropInAndInstanceWants(t *testing.T) {
 	host := t.TempDir()
 	systemdDir := filepath.Join(host, "systemd")
