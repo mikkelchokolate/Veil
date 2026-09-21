@@ -192,7 +192,7 @@ assert_permissions() {
   # Caddy and Mita state directories re-owned for their service units
   # (#497/#623/#624): systemd never re-owns an existing StateDirectory.
   [ "$(stat -c "%U:%G" /var/lib/caddy)" = "veil-proxy:veil-proxy" ] || fail "/var/lib/caddy owner"
-  [ "$(stat -c "%U:%G" /var/lib/mita %a)" = "veil-mita:veil-mita 700" ] || fail "/var/lib/mita owner/mode"
+  [ "$(stat -c "%U:%G %a" /var/lib/mita)" = "veil-mita:veil-mita 700" ] || fail "/var/lib/mita owner/mode"
 }
 
 assert_unit_hardening() {
