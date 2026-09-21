@@ -91,7 +91,9 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodGet, "/api/backups", capabilityAdminMetadata},
 	{http.MethodGet, "/api/backups/{name}/verify", capabilityAdminMetadata},
 	{http.MethodGet, "/api/backup-restore-jobs/{id}", capabilitySelfService},
-	{http.MethodGet, "/api/v1/clients/{id}/tokens", capabilityAdminMetadata},
+	// The token list embeds every recoverable /s/ subscription URL, so it is
+	// admin-secret material like the token-by-id reveal, not metadata (#619).
+	{http.MethodGet, "/api/v1/clients/{id}/tokens", capabilityAdminSecret},
 	{http.MethodGet, "/api/v1/clients/{id}/tokens/{tokenId}", capabilityAdminSecret},
 	{http.MethodGet, "/api/v1/clients/{id}/links", capabilityAdminSecret},
 	{http.MethodGet, "/api/v1/clients/{id}/audit", capabilityAdminMetadata},

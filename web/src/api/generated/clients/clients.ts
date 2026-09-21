@@ -2126,7 +2126,7 @@ export const getGetApiV1ClientsIdTokensUrl = (id: string,) => {
 }
 
 /**
- * @summary List a client's subscription tokens (redacted)
+ * @summary List a client's subscription tokens with recoverable subscription URLs
  */
 export const getApiV1ClientsIdTokens = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getApiV1ClientsIdTokensResponse> => {
 
@@ -2178,7 +2178,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type GetApiV1ClientsIdTokensMutationVariables = {id: string}
 
     /**
- * @summary List a client's subscription tokens (redacted)
+ * @summary List a client's subscription tokens with recoverable subscription URLs
  */
 export const useGetApiV1ClientsIdTokens = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>, TError,GetApiV1ClientsIdTokensMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
