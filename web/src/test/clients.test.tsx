@@ -345,9 +345,7 @@ describe("ClientsPage", () => {
 		await screen.findByText("Alice");
 		await user.click(screen.getByRole("checkbox", { name: /select all/i }));
 		await user.click(screen.getByRole("button", { name: /^enable$/i }));
-		expect(
-			await screen.findByText(/applying it failed/i),
-		).toBeInTheDocument();
+		expect(await screen.findByText(/applying it failed/i)).toBeInTheDocument();
 		expect(screen.getByText(/apply job job-9/i)).toBeInTheDocument();
 		// The per-client result row still renders under the warning.
 		expect(screen.getByText("c1")).toBeInTheDocument();

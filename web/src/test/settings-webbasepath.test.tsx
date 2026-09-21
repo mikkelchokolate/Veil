@@ -104,8 +104,6 @@ describe("SettingsPage web base path", () => {
 		expect(
 			await screen.findByText(/applying the new revision failed/i),
 		).toBeInTheDocument();
-		expect(
-			screen.queryByText(/^settings saved\.$/i),
-		).not.toBeInTheDocument();
+		expect(screen.queryByText(/^settings saved\.$/i)).not.toBeInTheDocument();
 	});
 });

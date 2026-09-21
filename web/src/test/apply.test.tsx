@@ -271,8 +271,6 @@ describe("ApplyPage", () => {
 				screen.getByRole("button", { name: /reconcile now/i }),
 			).toBeEnabled(),
 		);
-		expect(
-			screen.queryByText(/reconcile failed/i),
-		).not.toBeInTheDocument();
+		expect(screen.queryByText(/reconcile failed/i)).not.toBeInTheDocument();
 	});
 });

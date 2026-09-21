@@ -74,9 +74,7 @@ describe("ClientDetailPage delete apply outcome", () => {
 		await user.click(
 			await screen.findByRole("button", { name: /confirm delete/i }),
 		);
-		expect(
-			await screen.findByText(/^apply failed$/i),
-		).toBeInTheDocument();
+		expect(await screen.findByText(/^apply failed$/i)).toBeInTheDocument();
 		expect(router.state.location.pathname).toBe("/clients/c1");
 		// The detail query is NOT invalidated — the committed delete would
 		// 404 and hide the apply-failed feedback.

@@ -69,9 +69,7 @@ describe("RoutingPage delete errors", () => {
 		);
 		renderRouting();
 		fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
-		expect(
-			await screen.findByText(/applying it failed/i),
-		).toBeInTheDocument();
+		expect(await screen.findByText(/applying it failed/i)).toBeInTheDocument();
 	});
 
 	// #644: a committed-but-unapplied save keeps the editor open with the
@@ -103,11 +101,7 @@ describe("RoutingPage delete errors", () => {
 		renderRouting();
 		fireEvent.click(await screen.findByRole("button", { name: /^edit$/i }));
 		fireEvent.click(await screen.findByRole("button", { name: /^save$/i }));
-		expect(
-			await screen.findByText(/applying it failed/i),
-		).toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: /^save$/i }),
-		).toBeInTheDocument();
+		expect(await screen.findByText(/applying it failed/i)).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: /^save$/i })).toBeInTheDocument();
 	});
 });

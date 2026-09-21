@@ -301,8 +301,7 @@ export const en: Record<string, string> = {
 	"routing.enabled": "Enabled",
 	"routing.saving": "Saving…",
 	"routing.saveFailed": "Save failed",
-	"routing.applyFailed":
-		"Rule committed, but applying it failed. Check Apply.",
+	"routing.applyFailed": "Rule committed, but applying it failed. Check Apply.",
 	"routing.loadFailed": "Failed to load routing rules",
 	"routing.deleteFailed": "Failed to delete routing rule",
 	"routing.empty": "No routing rules configured.",

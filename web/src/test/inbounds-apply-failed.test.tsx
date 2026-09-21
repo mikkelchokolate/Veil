@@ -53,18 +53,16 @@ describe("InboundsPage apply-failed outcomes", () => {
 		});
 		fireEvent.click(screen.getByRole("button", { name: /^create$/i }));
 		// The editor stays open with the failure visible in context.
-		expect(
-			await screen.findAllByText(/applying it failed/i),
-		).not.toHaveLength(0);
+		expect(await screen.findAllByText(/applying it failed/i)).not.toHaveLength(
+			0,
+		);
 		expect(
 			screen.getByRole("button", { name: /^create$/i }),
 		).toBeInTheDocument();
 		// The committed outcome is still recorded in the feedback card —
 		// with the danger badge, not a green "saved".
 		await waitFor(() =>
-			expect(
-				screen.getAllByText(/^apply failed$/i).length,
-			).toBeGreaterThan(0),
+			expect(screen.getAllByText(/^apply failed$/i).length).toBeGreaterThan(0),
 		);
 	});
 
@@ -90,12 +88,10 @@ describe("InboundsPage apply-failed outcomes", () => {
 		renderInbounds();
 		fireEvent.click(await screen.findByRole("button", { name: /^edit$/i }));
 		fireEvent.click(await screen.findByRole("button", { name: /^save$/i }));
-		expect(
-			await screen.findAllByText(/applying it failed/i),
-		).not.toHaveLength(0);
-		expect(
-			screen.getByRole("button", { name: /^save$/i }),
-		).toBeInTheDocument();
+		expect(await screen.findAllByText(/applying it failed/i)).not.toHaveLength(
+			0,
+		);
+		expect(screen.getByRole("button", { name: /^save$/i })).toBeInTheDocument();
 	});
 
 	it("keeps the delete confirm open when the delete commits but apply fails", async () => {
@@ -121,9 +117,9 @@ describe("InboundsPage apply-failed outcomes", () => {
 		fireEvent.click(
 			await screen.findByRole("button", { name: /confirm delete/i }),
 		);
-		expect(
-			await screen.findAllByText(/applying it failed/i),
-		).not.toHaveLength(0);
+		expect(await screen.findAllByText(/applying it failed/i)).not.toHaveLength(
+			0,
+		);
 		// The confirm dialog is still open — the operator can see the
 		// committed delete did not converge before deciding what to do.
 		expect(

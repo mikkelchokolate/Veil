@@ -69,12 +69,8 @@ describe("ClientNewPage apply-failed outcome", () => {
 		await user.click(screen.getByRole("button", { name: /^next$/i }));
 		await user.click(screen.getByRole("button", { name: /^next$/i }));
 		await user.click(screen.getByRole("button", { name: /^review$/i }));
-		await user.click(
-			screen.getByRole("button", { name: /create client/i }),
-		);
-		expect(
-			await screen.findByText(/applying it failed/i),
-		).toBeInTheDocument();
+		await user.click(screen.getByRole("button", { name: /create client/i }));
+		expect(await screen.findByText(/applying it failed/i)).toBeInTheDocument();
 		expect(screen.getByText(/apply job job-1/i)).toBeInTheDocument();
 		// No green "Client created" — the exact-match query proves the
 		// success badge was not rendered.
@@ -110,12 +106,8 @@ describe("ClientNewPage apply-failed outcome", () => {
 		await user.click(screen.getByRole("button", { name: /^next$/i }));
 		await user.click(screen.getByRole("button", { name: /^next$/i }));
 		await user.click(screen.getByRole("button", { name: /^review$/i }));
-		await user.click(
-			screen.getByRole("button", { name: /create client/i }),
-		);
+		await user.click(screen.getByRole("button", { name: /create client/i }));
 		expect(await screen.findByText(/^client created$/i)).toBeInTheDocument();
-		expect(
-			screen.queryByText(/applying it failed/i),
-		).not.toBeInTheDocument();
+		expect(screen.queryByText(/applying it failed/i)).not.toBeInTheDocument();
 	});
 });
