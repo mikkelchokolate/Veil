@@ -970,7 +970,7 @@ export const GetApiV1ClientsIdLinksResponse = zod.object({
 })
 
 /**
- * @summary List a client's subscription tokens (redacted)
+ * @summary List a client's subscription tokens with recoverable subscription URLs
  */
 
 

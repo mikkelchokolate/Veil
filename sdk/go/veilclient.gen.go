@@ -4230,7 +4230,7 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/clients/{id}/links (the `GetApiV1ClientsIdLinks` operationId).
 	GetApiV1ClientsIdLinks(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetApiV1ClientsIdTokens List a client's subscription tokens (redacted)
+	// GetApiV1ClientsIdTokens List a client's subscription tokens with recoverable subscription URLs
 	//
 	// Corresponds with GET /api/v1/clients/{id}/tokens (the `GetApiV1ClientsIdTokens` operationId).
 	GetApiV1ClientsIdTokens(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -6363,7 +6363,7 @@ func (c *Client) GetApiV1ClientsIdLinks(ctx context.Context, id ClientId, reqEdi
 	return c.Client.Do(req)
 }
 
-// GetApiV1ClientsIdTokens List a client's subscription tokens (redacted)
+// GetApiV1ClientsIdTokens List a client's subscription tokens with recoverable subscription URLs
 //
 // Corresponds with GET /api/v1/clients/{id}/tokens (the `GetApiV1ClientsIdTokens` operationId).
 func (c *Client) GetApiV1ClientsIdTokens(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -12471,7 +12471,7 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/clients/{id}/links (the `GetApiV1ClientsIdLinks` operationId).
 	GetApiV1ClientsIdLinksWithResponse(ctx context.Context, id ClientId, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdLinksResponse, error)
 
-	// GetApiV1ClientsIdTokensWithResponse List a client's subscription tokens (redacted)
+	// GetApiV1ClientsIdTokensWithResponse List a client's subscription tokens with recoverable subscription URLs
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -21499,7 +21499,7 @@ func (c *ClientWithResponses) GetApiV1ClientsIdLinksWithResponse(ctx context.Con
 	return ParseGetApiV1ClientsIdLinksResponse(rsp)
 }
 
-// GetApiV1ClientsIdTokensWithResponse List a client's subscription tokens (redacted)
+// GetApiV1ClientsIdTokensWithResponse List a client's subscription tokens with recoverable subscription URLs
 //
 // Returns a wrapper object for the known response body format(s).
 //

@@ -113,7 +113,7 @@ func productionAuthorizationMatrix() []routeAuthorizationExpectation {
 		{http.MethodDelete, "/api/v1/clients/client-1/bindings/binding-1", false, false, "admin mutation"},
 		{http.MethodPost, "/api/v1/clients/client-1/credentials/binding-1", false, false, "admin secret write"},
 		{http.MethodPost, "/api/v1/clients/client-1/credentials/binding-1/rotate", false, false, "admin secret read/write"},
-		{http.MethodGet, "/api/v1/clients/client-1/tokens", false, false, "admin metadata"},
+		{http.MethodGet, "/api/v1/clients/client-1/tokens", false, false, "admin secret material"},
 		{http.MethodPost, "/api/v1/clients/client-1/tokens", false, false, "admin secret read/write"},
 		{http.MethodGet, "/api/v1/clients/client-1/tokens/token-1", false, false, "admin secret material"},
 		{http.MethodDelete, "/api/v1/clients/client-1/tokens/token-1", false, false, "admin mutation"},

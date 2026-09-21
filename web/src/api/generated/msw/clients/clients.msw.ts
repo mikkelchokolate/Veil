@@ -1484,7 +1484,7 @@ export const getGetApiV1ClientsIdTokensUrl = (id: string,) => {
 }
 
 /**
- * @summary List a client's subscription tokens (redacted)
+ * @summary List a client's subscription tokens with recoverable subscription URLs
  */
 export const getApiV1ClientsIdTokens = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
 
@@ -1555,7 +1555,7 @@ export function useGetApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof get
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary List a client's subscription tokens (redacted)
+ * @summary List a client's subscription tokens with recoverable subscription URLs
  */
 
 export function useGetApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof getApiV1ClientsIdTokens>>, TError = unknown>(

@@ -3565,20 +3565,19 @@ paths:
       - admin
   /api/v1/clients/{id}/tokens:
     get:
-      x-veil-role: admin-metadata
+      x-veil-role: admin-secret
       tags:
       - clients
-      summary: List a client's subscription tokens (redacted)
+      summary: List a client's subscription tokens with recoverable subscription URLs
       security:
       - sessionCookie: []
       parameters:
       - $ref: '#/components/parameters/ClientId'
       responses:
         '200':
-          description: Token metadata list (no plaintext).
+          description: Token list; every recoverable token includes its /s/ subscription URL.
       x-roles:
       - admin
-      - viewer
     post:
       x-veil-role: admin-secret
       tags:

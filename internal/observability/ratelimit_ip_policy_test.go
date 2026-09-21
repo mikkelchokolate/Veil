@@ -202,15 +202,31 @@ func TestIsRateLimitedReadPath(t *testing.T) {
 		{"/api/client-links/subscription", true},
 		{"/api/v1/clients/client-1/links", true},
 		{"/api/v1/clients/client-1/tokens/token-1", true},
+		// #619: the token list embeds every recoverable subscription URL, so
+		// it needs the same read throttle as the token-by-id reveal.
+		{"/api/v1/clients/client-1/tokens", true},
+		{"/api/v1/clients/client-1/tokens/token-1/rotate", true},
+		// #617: admin GET /api/warp returns privateKey/licenseKey.
+		{"/api/warp", true},
+		// #641/#645/#648: expensive host diagnostics (recursive dir walk,
+		// per-listener /proc/*/fd attribution, and the aggregate of both).
+		{"/api/disk", true},
+		{"/api/connections", true},
+		{"/api/runtime/observation", true},
 		{"/api/backups/veil_backup_20260101.tar.gz.enc/download", true},
 		{"/api/backups/veil_backup_20260101.tar.gz.enc/verify", false},
 		{"/api/v1/clients", false},
 		{"/api/v1/clients/client-1", false},
-		{"/api/v1/clients/client-1/tokens", false},
 		// Public subscription feed: the DefaultRateLimitPolicy "/s/" entry
 		// (30/min) must actually gate it.
 		{"/s/some-feed-token", true},
 		{"/api/v1/traffic/top", false},
+		// Cheap single-file diagnostics stay unlimited; only the expensive
+		// scans above are gated.
+		{"/api/system", false},
+		{"/api/network", false},
+		{"/api/processes", false},
+		{"/api/runtime/provenance", false},
 		{"/api/status", false},
 		{"/metrics", false},
 		{"/healthz", false},
