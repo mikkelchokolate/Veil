@@ -35,6 +35,20 @@ func DefaultRateLimitPolicy() RateLimitPolicy {
 			// dedicated limits in the all-method map above, so only the
 			// per-resource client link/token GETs need a read-only budget here.
 			"/api/v1/clients": {RatePerMinute: 60, Burst: 12},
+			// /api/warp GET returns the WARP privateKey/licenseKey to admins
+			// (#617): same credential-read tier as /api/logs. PUT /api/warp
+			// shares the path, so the budget lives here (GET/HEAD only) and
+			// mutations keep the shared default budget.
+			"/api/warp": {RatePerMinute: 10, Burst: 3},
+			// Expensive host diagnostics (#641/#645): recursive state-dir walk
+			// and per-listener /proc/*/fd attribution. Same tier as
+			// /api/diagnostics.
+			"/api/disk":        {RatePerMinute: 6, Burst: 2},
+			"/api/connections": {RatePerMinute: 6, Burst: 2},
+			// /api/runtime/observation (#648) pays the disk walk, the /proc fd
+			// attribution, and a process scan in one request, so it gets a
+			// stricter budget than the single-purpose diagnostics above.
+			"/api/runtime/observation": {RatePerMinute: 3, Burst: 1},
 		},
 	}
 }
