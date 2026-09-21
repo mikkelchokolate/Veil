@@ -51,11 +51,15 @@ type Policy struct {
 	BackupPassphrasePath string
 	BackupRoot           string
 	UpdateRoot           string
-	ManagedUnits         map[string]struct{}
-	ManagedUnitPrefixes  []string
-	Artifacts            map[string]ArtifactPath
-	UpdateArtifacts      map[string]string
-	FirewallRules        map[string]struct{}
+	// CertDirs are the directories the helper may sync Caddy-issued ACME
+	// certificate pairs into — the <etc>/certs tree of the configured install
+	// (custom --etc-dir installs resolve their own; issue #628).
+	CertDirs            []string
+	ManagedUnits        map[string]struct{}
+	ManagedUnitPrefixes []string
+	Artifacts           map[string]ArtifactPath
+	UpdateArtifacts     map[string]string
+	FirewallRules       map[string]struct{}
 	// AllowedArtifactNames restricts dynamically promoted artifact names to a
 	// known set. Static per-protocol artifacts and update artifacts are not
 	// constrained by this set. A nil or empty map means no extra restriction.
@@ -275,7 +279,9 @@ var (
 	updateVersionPattern     = regexp.MustCompile(`^v?[0-9][A-Za-z0-9._+-]*$`)
 	updateDigestPattern      = regexp.MustCompile(`^[a-f0-9]{64}$`)
 	dnsLabelPattern          = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
-	caddyCertRoot            = "/etc/veil/certs"
+	// caddyCertRoot is the packaged certificate sync root; it is only a
+	// fallback for executors constructed without a policy-derived CertDirs.
+	caddyCertRoot = "/etc/veil/certs"
 )
 
 func (p Policy) managedArtifactPath(id string) (ArtifactPath, bool) {

@@ -8,8 +8,9 @@ import (
 )
 
 func TestGeneratedConfigSetAllowsMultipleEnabledInboundsPerProtocol(t *testing.T) {
+	applyRoot := t.TempDir()
 	_, err := BuildGeneratedConfigSet(GeneratedConfigInput{
-		ApplyRoot: t.TempDir(),
+		ApplyRoot: applyRoot,
 		Settings: Settings{
 			Domain:            "vpn.example.com",
 			DefaultAcmeEmail:  "admin@example.com",
@@ -17,7 +18,9 @@ func TestGeneratedConfigSetAllowsMultipleEnabledInboundsPerProtocol(t *testing.T
 			NaivePassword:     "global-naive",
 			Hysteria2Password: "global-hy2",
 			MasqueradeURL:     "https://www.bing.com/",
-			FallbackRoot:      "/var/lib/veil/www",
+			// The managed fallback tree is <etc>/www of the render root;
+			// /var/lib/veil is unreachable to veil-caddy (issue #618).
+			FallbackRoot: filepath.Join(applyRoot, "www"),
 		},
 		Inbounds: []Inbound{
 			{Name: "naive-a", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true, Password: "a"},
@@ -40,7 +43,7 @@ func TestGeneratedConfigSetUsesClientProfiles(t *testing.T) {
 			NaivePassword:     "global-naive",
 			Hysteria2Password: "global-hy2",
 			MasqueradeURL:     "https://www.bing.com/",
-			FallbackRoot:      "/var/lib/veil/www",
+			FallbackRoot:      filepath.Join(applyRoot, "www"),
 		},
 		Inbounds: []Inbound{
 			{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true, Profiles: []ClientProfile{
@@ -85,7 +88,7 @@ func TestGeneratedConfigSetUsesPerInboundPasswords(t *testing.T) {
 			NaivePassword:     "global-naive",
 			Hysteria2Password: "global-hy2",
 			MasqueradeURL:     "https://www.bing.com/",
-			FallbackRoot:      "/var/lib/veil/www",
+			FallbackRoot:      filepath.Join(applyRoot, "www"),
 		},
 		Inbounds: []Inbound{
 			{Name: "naive-vip", Protocol: "naiveproxy", Transport: "tcp", Port: 8443, Enabled: true, Password: "vip-naive"},

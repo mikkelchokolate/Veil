@@ -28,24 +28,24 @@ func TestRunSyncCaddyCertCopiesPairToOutDir(t *testing.T) {
 	}
 	var chmods []chmodCall
 	oldEffectiveUID := effectiveUID
-	oldLookupUser := lookupUser
+	oldLookupGroup := lookupGroup
 	oldChownPath := chownPath
 	oldChmodPath := chmodPath
 	defer func() {
 		effectiveUID = oldEffectiveUID
-		lookupUser = oldLookupUser
+		lookupGroup = oldLookupGroup
 		chownPath = oldChownPath
 		chmodPath = oldChmodPath
 	}()
 	effectiveUID = func() int { return 0 }
-	lookupUser = func(name string) (*user.User, error) {
+	lookupGroup = func(name string) (*user.Group, error) {
 		switch name {
 		case "veil":
-			return &user.User{Uid: "123", Gid: "456"}, nil
+			return &user.Group{Gid: "456"}, nil
 		case "veil-proxy":
-			return &user.User{Uid: "124", Gid: "457"}, nil
+			return &user.Group{Gid: "457"}, nil
 		default:
-			t.Fatalf("lookup user = %q, want veil or veil-proxy", name)
+			t.Fatalf("lookup group = %q, want veil or veil-proxy", name)
 			return nil, nil
 		}
 	}
@@ -476,5 +476,46 @@ func TestFindCaddyCertWithRetryPropagatesNonNotFoundError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "i/o error") {
 		t.Fatalf("error = %v, want underlying cause", err)
+	}
+}
+
+// A custom --etc-dir install syncs Caddy certs into its own <etc>/certs tree:
+// the policy-derived CertDirs allow that root and still reject both the
+// packaged /etc/veil/certs and sibling escapes (issue #628).
+func TestRunSyncCaddyCertHonorsConfiguredCertDirs(t *testing.T) {
+	stubRuntimeArtifactOwnership(t)
+	originalFinder := findCaddyCertPair
+	defer func() { findCaddyCertPair = originalFinder }()
+
+	customRoot := t.TempDir()
+	certPath := filepath.Join(customRoot, "example.com.crt")
+	keyPath := filepath.Join(customRoot, "example.com.key")
+	findCaddyCertPair = func(_, _ string) (caddycert.Pair, error) {
+		return caddycert.Pair{CertPath: certPath, KeyPath: keyPath}, nil
+	}
+	if err := os.WriteFile(certPath, []byte("cert"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, []byte("key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	config := ProductionConfig{CertDirs: []string{customRoot}}
+	result, err := runSyncCaddyCert(context.Background(), SyncCaddyCertRequest{Domain: "example.com", OutDir: customRoot}, config)
+	if err != nil {
+		t.Fatalf("sync to configured cert dir: %v", err)
+	}
+	if !result.Found || !strings.HasPrefix(result.CertPath, customRoot) {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+
+	// The packaged default root is NOT implicitly allowed when the policy
+	// names a custom tree.
+	if _, err := runSyncCaddyCert(context.Background(), SyncCaddyCertRequest{Domain: "example.com", OutDir: "/etc/veil/certs"}, config); err == nil {
+		t.Fatal("expected packaged /etc/veil/certs to be rejected for a custom-etc policy")
+	}
+	// A sibling sharing the root's name prefix must not pass the boundary.
+	if _, err := runSyncCaddyCert(context.Background(), SyncCaddyCertRequest{Domain: "example.com", OutDir: customRoot + "-evil"}, config); err == nil {
+		t.Fatal("expected sibling-prefix escape to be rejected")
 	}
 }

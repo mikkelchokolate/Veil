@@ -107,6 +107,7 @@ func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
 	s := ctx.state
 	plan := NewManagementApplyIntent(ManagementApplyIntentInput{
 		ApplyRoot:     s.applyRoot,
+		LiveRoot:      s.liveRoot,
 		Settings:      s.settings,
 		Inbounds:      s.inbounds,
 		Rules:         s.rules,
@@ -574,9 +575,14 @@ func (ctx ManagementApplyContext) syncCaddyCertForHysteria2(domain string) Servi
 		result.Error = "privileged helper is unavailable"
 		return result
 	}
+	// The certificate tree lives under the install's etc root — the parent of
+	// the configured live root — so a custom --etc-dir install syncs into its
+	// own <etc>/certs (which the helper policy allows) rather than the packaged
+	// /etc/veil/certs it would reject (issue #628).
+	certDir := filepath.Join(filepath.Dir(ctx.state.liveRoot), "certs")
 	syncResult, err := ctx.state.privileged.SyncCaddyCert(ctx.operationContext(), privileged.SyncCaddyCertRequest{
 		Domain: domain,
-		OutDir: "/etc/veil/certs",
+		OutDir: certDir,
 		Fence:  ctx.fenceToken(),
 	})
 	if err != nil {

@@ -14,7 +14,7 @@ func TestInboundRendererRendersNaiveWithClientProfilesAndPanelCaddyRoute(t *test
 		WebBasePath:   "/panel-secret/",
 		NaiveUsername: "veil",
 		NaivePassword: "global-secret",
-		FallbackRoot:  "/var/lib/veil/www",
+		FallbackRoot:  "/etc/veil/www",
 	}, NewPaths("/etc/veil"), WarpConfig{})
 	body, err := renderer.RenderNaive(Inbound{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true, Profiles: []ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: true}}}, true)
 	if err != nil {
@@ -114,7 +114,7 @@ func TestInboundRendererNaiveReadsProtocolFields(t *testing.T) {
 		Email:         "admin@example.com",
 		NaiveUsername: "global-user",
 		NaivePassword: "global-secret",
-		FallbackRoot:  "/var/lib/veil/global",
+		FallbackRoot:  "/etc/veil/www/global",
 	}, NewPaths("/etc/veil"), WarpConfig{})
 	inbound := Inbound{
 		Name:      "naive",
@@ -125,7 +125,7 @@ func TestInboundRendererNaiveReadsProtocolFields(t *testing.T) {
 		ProtocolFields: map[string]any{
 			"naiveUsername": "fields-user",
 			"naivePassword": "fields-secret",
-			"fallbackRoot":  "/var/lib/veil/fields",
+			"fallbackRoot":  "/etc/veil/www/fields",
 		},
 	}
 	body, err := renderer.RenderNaive(inbound, false)
@@ -135,7 +135,7 @@ func TestInboundRendererNaiveReadsProtocolFields(t *testing.T) {
 	if !strings.Contains(body, "basic_auth fields-user fields-secret") {
 		t.Fatalf("expected ProtocolFields credentials, got:\n%s", body)
 	}
-	if !strings.Contains(body, "root * /var/lib/veil/fields") {
+	if !strings.Contains(body, "root * /etc/veil/www/fields") {
 		t.Fatalf("expected ProtocolFields fallback root, got:\n%s", body)
 	}
 }
@@ -311,7 +311,7 @@ func TestInboundRendererReadsSettingsProtocolFields(t *testing.T) {
 		ProtocolFields: map[string]any{
 			"naiveUsername":     "settings-user",
 			"naivePassword":     "settings-secret",
-			"fallbackRoot":      "/var/lib/veil/settings",
+			"fallbackRoot":      "/etc/veil/www/settings",
 			"hysteria2Password": "settings-hy-secret",
 			"masqueradeURL":     "https://settings.example.com/",
 			"olcrtcAuth":        "settings-auth",
@@ -327,7 +327,7 @@ func TestInboundRendererReadsSettingsProtocolFields(t *testing.T) {
 	if !strings.Contains(naiveBody, "basic_auth settings-user settings-secret") {
 		t.Fatalf("expected settings ProtocolFields naive credentials, got:\n%s", naiveBody)
 	}
-	if !strings.Contains(naiveBody, "root * /var/lib/veil/settings") {
+	if !strings.Contains(naiveBody, "root * /etc/veil/www/settings") {
 		t.Fatalf("expected settings ProtocolFields fallback root, got:\n%s", naiveBody)
 	}
 

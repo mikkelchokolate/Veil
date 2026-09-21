@@ -4,6 +4,9 @@ import "testing"
 
 func TestBuildApplyPlanIncludesMieruConfigAndReloadAction(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
+		// LiveRoot is what production serve resolves (VEIL_LIVE_ROOT or the
+		// /etc/veil/generated default); the preview anchors there (issue #636).
+		LiveRoot: "/etc/veil/generated",
 		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev"},
 		Inbounds: []Inbound{{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret"}},
 	})

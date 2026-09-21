@@ -190,7 +190,7 @@ func TestRenderCaddyJSONSharedPanelNaiveSameDomainKeepsSingleHostMatcher(t *test
 				BackendPort:  2096,
 				WebBasePath:  "/panel/",
 				NaiveUsers:   []caddyassembly.CaddyNaiveUser{{Username: "veil", Password: "secret"}},
-				FallbackRoot: "/var/lib/veil/www",
+				FallbackRoot: "/etc/veil/www",
 			},
 		},
 		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
@@ -284,7 +284,7 @@ func TestRenderCaddyJSONSharedPanelNaiveDoesNotBlockForwardProxy(t *testing.T) {
 				BackendPort:  2096,
 				WebBasePath:  "/panel/",
 				NaiveUsers:   []caddyassembly.CaddyNaiveUser{{Username: "veil", Password: "secret"}},
-				FallbackRoot: "/var/lib/veil/www",
+				FallbackRoot: "/etc/veil/www",
 			},
 		},
 		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
@@ -600,6 +600,10 @@ func TestRenderCaddyJSONNaiveFallbackRootRejectsOutsideVeil(t *testing.T) {
 		"/etc/veil/panel",
 		"/etc/veil/tls",
 		"/etc/veil/panel/tls.key",
+		// The legacy /var/lib/veil subtree is rejected outright: veil-caddy
+		// masks it via InaccessiblePaths (issues #618, #634).
+		"/var/lib/veil/www",
+		"/var/lib/veil/custom",
 	}
 	for _, root := range cases {
 		t.Run(root, func(t *testing.T) {
@@ -619,7 +623,7 @@ func TestRenderCaddyJSONNaiveFallbackRootRejectsOutsideVeil(t *testing.T) {
 			}
 			_, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
 			if err == nil {
-				t.Fatalf("expected error for fallback root %q outside /var/lib/veil", root)
+				t.Fatalf("expected error for fallback root %q outside the managed www tree", root)
 			}
 		})
 	}
@@ -633,10 +637,6 @@ func TestRenderCaddyJSONNaiveFallbackRootAcceptsWithinVeil(t *testing.T) {
 		// The managed tree under /etc/veil/www is the post-#601 home.
 		{"/etc/veil/www", "/etc/veil/www"},
 		{"/etc/veil/www/custom", "/etc/veil/www/custom"},
-		// Legacy /var/lib/veil subtrees stay accepted so configurations that
-		// still reference them render instead of hard-failing.
-		{"/var/lib/veil/custom", "/var/lib/veil/custom"},
-		{"/var/lib/veil/www", "/var/lib/veil/www"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.input, func(t *testing.T) {

@@ -26,6 +26,7 @@ func TestBuildApplyPlanRejectsPanelCaddyTCP443RuntimeConflict(t *testing.T) {
 
 func TestBuildApplyPlanIncludesPanelCaddyAccessWithoutNaiveInbound(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
+		LiveRoot: "/etc/veil/generated",
 		Settings: Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel-secret/", Mode: "server", PanelDomain: "panel.example.com", PanelEmail: "admin@example.com"},
 	})
 	if !plan.Valid {
@@ -38,6 +39,7 @@ func TestBuildApplyPlanIncludesPanelCaddyAccessWithoutNaiveInbound(t *testing.T)
 
 func TestBuildApplyPlanAcceptsLegacyPanelCaddyDomainEmail(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
+		LiveRoot: "/etc/veil/generated",
 		Settings: Settings{
 			PanelListen: "127.0.0.1:2096",
 			PanelAccess: "caddy",

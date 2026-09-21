@@ -789,7 +789,7 @@ func retainCaddyJSONOnReinstall(profile installer.RURecommendedProfile, snapshot
 	if body, err := os.ReadFile(livePath); err == nil {
 		live = strings.TrimSpace(string(body))
 	}
-	if rendered, err := renderCaddyJSONFromSnapshot(snapshot, profile); err == nil && strings.TrimSpace(rendered) != "" {
+	if rendered, err := renderCaddyJSONFromSnapshot(snapshot, profile, etcDir); err == nil && strings.TrimSpace(rendered) != "" {
 		if len(snapshot.Inbounds) > 0 || live == "" {
 			return rendered
 		}
@@ -800,7 +800,7 @@ func retainCaddyJSONOnReinstall(profile installer.RURecommendedProfile, snapshot
 	return profile.CaddyJSON
 }
 
-func renderCaddyJSONFromSnapshot(snapshot model.ManagementSnapshot, profile installer.RURecommendedProfile) (string, error) {
+func renderCaddyJSONFromSnapshot(snapshot model.ManagementSnapshot, profile installer.RURecommendedProfile, etcDir string) (string, error) {
 	settings := snapshot.Settings
 	// This render only runs when the operator just requested caddy mode — the
 	// snapshot still carries the previous install's settings. Trusting them
@@ -833,7 +833,10 @@ func renderCaddyJSONFromSnapshot(snapshot model.ManagementSnapshot, profile inst
 	// panel port and an empty/http-01 challenge mode.
 	settings.PanelPublicPort = 443
 	settings.AcmeChallengeMode = "tls-alpn-01"
-	plan, _, _, err := caddyassembly.BuildFinalRenderPlan(settings, snapshot.Inbounds)
+	// etcDir is threaded explicitly: `veil install` runs outside the unit's
+	// environment, so the fallback-root allowlist must be built from the
+	// install target rather than hostenv (issue #634).
+	plan, _, _, err := caddyassembly.BuildFinalRenderPlanForEtcDir(settings, snapshot.Inbounds, etcDir)
 	if err != nil {
 		return "", err
 	}

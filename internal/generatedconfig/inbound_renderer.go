@@ -5,10 +5,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/clientaccess"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
@@ -46,6 +48,11 @@ func (r InboundRenderer) RenderNaive(inbound Inbound, includePanel bool) (string
 		Password:     password,
 		Users:        access.NaiveUsers(),
 		FallbackRoot: root,
+		// The render paths' etc root (derived from the configured live root)
+		// is authoritative for the fallback tree: a custom --etc-dir install
+		// serves its own <etc>/www, not the packaged one (issue #634). When
+		// the paths carry no etc root the renderer resolves the host's.
+		FallbackBase: r.fallbackBase(),
 	}
 	if r.warp.Enabled {
 		socksPort := r.warp.SocksPort
@@ -162,7 +169,7 @@ func RenderNaiveInbound(settings Settings, inbound Inbound, warp WarpConfig, inc
 }
 
 func RenderHysteria2Inbound(settings Settings, inbound Inbound, warp WarpConfig) (string, error) {
-	return NewInboundRenderer(settings, NewPaths("/etc/veil"), warp).RenderHysteria2(inbound)
+	return NewInboundRenderer(settings, NewPaths(hostenv.EtcDir()), warp).RenderHysteria2(inbound)
 }
 
 func RenderOlcrtcInbound(settings Settings, inbound Inbound, warp WarpConfig) (string, error) {
@@ -171,6 +178,15 @@ func RenderOlcrtcInbound(settings Settings, inbound Inbound, warp WarpConfig) (s
 
 func (r InboundRenderer) Paths() Paths {
 	return r.paths
+}
+
+// fallbackBase resolves the managed naive fallback web root base from the
+// configured render paths. Empty means "resolve from the host environment".
+func (r InboundRenderer) fallbackBase() string {
+	if etcRoot := strings.TrimSpace(r.paths.etcRoot()); etcRoot != "" {
+		return filepath.Join(etcRoot, "www")
+	}
+	return ""
 }
 
 type caddyRoute struct {

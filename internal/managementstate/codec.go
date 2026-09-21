@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
-const CurrentSchemaVersion = 4
+const CurrentSchemaVersion = 5
 
 // settingsProtocolFieldKeys are legacy flat settings fields that are now kept
 // inside settings.protocolFields for dynamic UI/validation.
@@ -86,6 +88,71 @@ var migrations = map[int]func(map[string]interface{}) (map[string]interface{}, e
 		}
 		return raw, nil
 	},
+	4: func(raw map[string]interface{}) (map[string]interface{}, error) {
+		// Migration from version 4 to 5.
+		// The naive fallback root moved from /var/lib/veil/www to <etc>/www
+		// when veil-caddy.service switched to veil-proxy with /var/lib/veil in
+		// InaccessiblePaths. Stored roots under /var/lib/veil are dead
+		// configuration the renderer now rejects, so rewrite them here:
+		// /var/lib/veil/www and other var-lib roots fall back to the managed
+		// default; /var/lib/veil/www/<sub> survives as a relative root so it
+		// resolves under whichever <etc>/www the install uses (issue #618).
+		if settings, ok := raw["settings"].(map[string]interface{}); ok {
+			migrateFallbackRootValue(settings)
+		}
+		if inbounds, ok := raw["inbounds"].([]interface{}); ok {
+			for _, entry := range inbounds {
+				if inbound, ok := entry.(map[string]interface{}); ok {
+					migrateFallbackRootValue(inbound)
+				}
+			}
+		}
+		return raw, nil
+	},
+}
+
+// migrateFallbackRootValue rewrites a legacy /var/lib/veil fallbackRoot on a
+// settings or inbound object, covering both the flat field and the
+// protocolFields map the v3→v4 migration produces.
+func migrateFallbackRootValue(obj map[string]interface{}) {
+	rewrite := func(m map[string]interface{}, key string) {
+		value, ok := m[key].(string)
+		if !ok || strings.TrimSpace(value) == "" {
+			return
+		}
+		if migrated, keep := migratedFallbackRoot(value); keep {
+			m[key] = migrated
+		} else {
+			delete(m, key)
+		}
+	}
+	rewrite(obj, "fallbackRoot")
+	if pf, ok := obj["protocolFields"].(map[string]interface{}); ok {
+		rewrite(pf, "fallbackRoot")
+	}
+}
+
+// migratedFallbackRoot maps a stored fallbackRoot onto the post-/var/lib/veil
+// contract. It returns (value, false) when the key should be removed so the
+// managed <etc>/www default applies, and (relative, true) for subtrees of the
+// legacy www root so they resolve under the managed tree of whatever etc dir
+// the install uses. Values outside /var/lib/veil are left untouched.
+func migratedFallbackRoot(value string) (string, bool) {
+	clean := filepath.ToSlash(filepath.Clean(strings.TrimSpace(value)))
+	const legacyWWW = "/var/lib/veil/www"
+	switch {
+	case clean == legacyWWW:
+		// The packaged old root maps onto the packaged new default; dropping
+		// the key lets the renderer resolve <etc>/www for this install.
+		return "", false
+	case strings.HasPrefix(clean, legacyWWW+"/"):
+		return strings.TrimPrefix(clean, legacyWWW+"/"), true
+	case clean == "/var/lib/veil" || strings.HasPrefix(clean, "/var/lib/veil/"):
+		// Other var-lib roots have no valid destination: unreachable to Caddy
+		// and rejected by validation. Drop them so the managed default applies.
+		return "", false
+	}
+	return value, true
 }
 
 type ManagementStateCodec struct{}

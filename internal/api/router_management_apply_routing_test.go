@@ -79,7 +79,11 @@ func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
 
 	plan := httptest.NewRecorder()
 	r.ServeHTTP(plan, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
-	if plan.Code != http.StatusOK || !strings.Contains(plan.Body.String(), "/etc/veil/generated/rules/geoip.dat") || !strings.Contains(plan.Body.String(), "/etc/veil/generated/rules/geosite.dat") {
+	// Displayed config paths are anchored at the state's live root
+	// (<applyRoot>/live here; the packaged default is /etc/veil/generated)
+	// so the preview matches where the apply job promotes (issue #636).
+	liveRules := filepath.ToSlash(filepath.Join(applyRoot, "live", "rules"))
+	if plan.Code != http.StatusOK || !strings.Contains(plan.Body.String(), liveRules+"/geoip.dat") || !strings.Contains(plan.Body.String(), liveRules+"/geosite.dat") {
 		t.Fatalf("apply plan missing routing dat configs, status %d: %s", plan.Code, plan.Body.String())
 	}
 

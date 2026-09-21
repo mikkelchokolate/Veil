@@ -11,25 +11,25 @@ import (
 
 func TestPromotionRollbackReappliesRuntimeArtifactOwnership(t *testing.T) {
 	oldEffectiveUID := effectiveUID
-	oldLookupUser := lookupUser
+	oldLookupGroup := lookupGroup
 	oldChownPath := chownPath
 	oldChmodPath := chmodPath
 	defer func() {
 		effectiveUID = oldEffectiveUID
-		lookupUser = oldLookupUser
+		lookupGroup = oldLookupGroup
 		chownPath = oldChownPath
 		chmodPath = oldChmodPath
 	}()
 
 	effectiveUID = func() int { return 0 }
-	lookupUser = func(name string) (*user.User, error) {
+	lookupGroup = func(name string) (*user.Group, error) {
 		switch name {
 		case "veil":
-			return &user.User{Uid: "123", Gid: "456"}, nil
+			return &user.Group{Gid: "456"}, nil
 		case "veil-proxy":
-			return &user.User{Uid: "124", Gid: "457"}, nil
+			return &user.Group{Gid: "457"}, nil
 		default:
-			t.Fatalf("lookup user = %q, want veil or veil-proxy", name)
+			t.Fatalf("lookup group = %q, want veil or veil-proxy", name)
 			return nil, nil
 		}
 	}
@@ -89,25 +89,25 @@ func TestPromotionRollbackReappliesRuntimeArtifactOwnership(t *testing.T) {
 
 func TestPromotionRecoveryReappliesRuntimeArtifactOwnership(t *testing.T) {
 	oldEffectiveUID := effectiveUID
-	oldLookupUser := lookupUser
+	oldLookupGroup := lookupGroup
 	oldChownPath := chownPath
 	oldChmodPath := chmodPath
 	defer func() {
 		effectiveUID = oldEffectiveUID
-		lookupUser = oldLookupUser
+		lookupGroup = oldLookupGroup
 		chownPath = oldChownPath
 		chmodPath = oldChmodPath
 	}()
 
 	effectiveUID = func() int { return 0 }
-	lookupUser = func(name string) (*user.User, error) {
+	lookupGroup = func(name string) (*user.Group, error) {
 		switch name {
 		case "veil":
-			return &user.User{Uid: "123", Gid: "456"}, nil
+			return &user.Group{Gid: "456"}, nil
 		case "veil-proxy":
-			return &user.User{Uid: "124", Gid: "457"}, nil
+			return &user.Group{Gid: "457"}, nil
 		default:
-			t.Fatalf("lookup user = %q, want veil or veil-proxy", name)
+			t.Fatalf("lookup group = %q, want veil or veil-proxy", name)
 			return nil, nil
 		}
 	}

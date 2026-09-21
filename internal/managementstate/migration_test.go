@@ -139,10 +139,12 @@ func TestDecodeV3MigratesProtocolFields(t *testing.T) {
 		"naivePassword":     "secret",
 		"hysteria2Password": "hy-secret",
 		"masqueradeURL":     "https://example.com",
-		"fallbackRoot":      "/var/lib/veil/www",
 		"olcrtcAuth":        "jitsi",
 		"olcrtcTransport":   "datachannel",
 		"olcrtcRoomID":      "room-1",
+		// The legacy /var/lib/veil/www fallbackRoot is dropped by the v5
+		// migration: veil-caddy masks /var/lib/veil, so the managed <etc>/www
+		// default applies instead (issue #618).
 	}
 	if !reflect.DeepEqual(snapshot.Settings.ProtocolFields, wantSettingsPF) {
 		t.Errorf("settings protocolFields = %+v, want %+v", snapshot.Settings.ProtocolFields, wantSettingsPF)
@@ -161,6 +163,58 @@ func TestDecodeV3MigratesProtocolFields(t *testing.T) {
 	}
 	if !reflect.DeepEqual(snapshot.Inbounds[0].ProtocolFields, wantInboundPF) {
 		t.Errorf("inbound protocolFields = %+v, want %+v", snapshot.Inbounds[0].ProtocolFields, wantInboundPF)
+	}
+}
+
+// The v4→v5 migration rewrites stored /var/lib/veil fallback roots: the
+// managed www root maps to the <etc>/www default (key dropped), subtrees keep
+// their tail as a relative root, and other var-lib paths are dropped as dead
+// configuration (issue #618).
+func TestDecodeV4MigratesVarLibFallbackRoots(t *testing.T) {
+	inputJSON := `{
+		"schemaVersion": 4,
+		"settings": {
+			"panelListen": "127.0.0.1:2096",
+			"fallbackRoot": "/var/lib/veil/www",
+			"protocolFields": {"fallbackRoot": "/var/lib/veil/www/custom"}
+		},
+		"inbounds": [
+			{
+				"name": "naive", "protocol": "naiveproxy", "transport": "tcp", "port": 443, "enabled": true,
+				"fallbackRoot": "/var/lib/veil/other",
+				"protocolFields": {"fallbackRoot": "site"}
+			},
+			{
+				"name": "naive2", "protocol": "naiveproxy", "transport": "tcp", "port": 444, "enabled": true,
+				"fallbackRoot": "/etc/veil/www/kept"
+			}
+		],
+		"routingRules": [],
+		"warp": {},
+		"users": []
+	}`
+
+	snapshot, err := NewManagementStateCodec().Decode([]byte(inputJSON))
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if snapshot.SchemaVersion != CurrentSchemaVersion {
+		t.Fatalf("expected schema version %d, got %d", CurrentSchemaVersion, snapshot.SchemaVersion)
+	}
+	if snapshot.Settings.FallbackRoot != "" {
+		t.Errorf("settings fallbackRoot = %q, want dropped (managed <etc>/www applies)", snapshot.Settings.FallbackRoot)
+	}
+	if got := snapshot.Settings.ProtocolFields["fallbackRoot"]; got != "custom" {
+		t.Errorf("settings protocolFields.fallbackRoot = %v, want relative subtree %q", got, "custom")
+	}
+	if got := snapshot.Inbounds[0].FallbackRoot; got != "" {
+		t.Errorf("inbound fallbackRoot = %q, want dropped", got)
+	}
+	if got := snapshot.Inbounds[0].ProtocolFields["fallbackRoot"]; got != "site" {
+		t.Errorf("inbound protocolFields.fallbackRoot = %v, want untouched relative root %q", got, "site")
+	}
+	if got := snapshot.Inbounds[1].FallbackRoot; got != "/etc/veil/www/kept" {
+		t.Errorf("non-var-lib inbound fallbackRoot = %q, want untouched", got)
 	}
 }
 

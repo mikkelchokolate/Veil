@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
 
@@ -18,18 +19,28 @@ func pathFromEnv(key, fallback string) string {
 const DefaultSocketPath = "/run/veil/helper.sock"
 
 func DefaultPolicy() Policy {
-	statePath := pathFromEnv("VEIL_STATE_PATH", "/var/lib/veil/state.json")
-	keyPath := pathFromEnv("VEIL_KEY_PATH", "/etc/veil/state.key")
-	applyRoot := pathFromEnv("VEIL_APPLY_ROOT", "/var/lib/veil/staging")
-	liveRoot := pathFromEnv("VEIL_LIVE_ROOT", "/etc/veil/generated")
-	varDir := pathFromEnv("VEIL_VAR_DIR", filepath.Dir(statePath))
-	etcDir := pathFromEnv("VEIL_ETC_DIR", filepath.Dir(keyPath))
+	// Resolve the install roots first so every policy default follows the
+	// configured layout. The packaged helper unit does not export
+	// VEIL_ETC_DIR/VEIL_VAR_DIR — it exports VEIL_KEY_PATH=<etc>/state.key,
+	// VEIL_LIVE_ROOT=<etc>/generated, and VEIL_STATE_PATH=<var>/state.json —
+	// and a hand-rolled unit may export only VEIL_ETC_DIR/VEIL_VAR_DIR.
+	// Deriving the defaults from hostenv keeps all of them consistent under
+	// the configured roots instead of mixing packaged literals with custom
+	// paths (issue #628).
+	etcDir := hostenv.EtcDir()
+	varDir := hostenv.VarDir()
+	statePath := pathFromEnv("VEIL_STATE_PATH", filepath.Join(varDir, "state.json"))
+	keyPath := pathFromEnv("VEIL_KEY_PATH", filepath.Join(etcDir, "state.key"))
+	applyRoot := pathFromEnv("VEIL_APPLY_ROOT", filepath.Join(varDir, "staging"))
+	liveRoot := pathFromEnv("VEIL_LIVE_ROOT", filepath.Join(etcDir, "generated"))
+	varDir = pathFromEnv("VEIL_VAR_DIR", filepath.Dir(statePath))
 	return Policy{
 		StagingRoot:          filepath.Join(applyRoot, "generated"),
 		GeneratedRoot:        liveRoot,
 		StateRoot:            varDir,
 		StatePath:            statePath,
 		KeyPath:              keyPath,
+		CertDirs:             []string{filepath.Join(etcDir, "certs")},
 		BackupPassphrasePath: pathFromEnv("VEIL_BACKUP_PASSPHRASE", filepath.Join(etcDir, "backup.passphrase")),
 		BackupRoot:           pathFromEnv("VEIL_BACKUP_ROOT", filepath.Join(varDir, "backups")),
 		UpdateRoot:           filepath.Join(varDir, "updates"),

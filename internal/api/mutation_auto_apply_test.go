@@ -68,7 +68,9 @@ func TestSettingsUpdateTriggersAutoApply(t *testing.T) {
 	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", ApplyRoot: applyRoot})
 	seedInboundForAutoApplyTests(r, calls)
 
-	update := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:8080","mode":"dev","fallbackRoot":"/var/lib/veil/www","domain":"hy2.example.com"}`))
+	// Relative fallbackRoot resolves under the managed <etc>/www tree;
+	// /var/lib/veil is unreachable to veil-caddy and rejected (issue #618).
+	update := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:8080","mode":"dev","fallbackRoot":"site","domain":"hy2.example.com"}`))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, update)
 

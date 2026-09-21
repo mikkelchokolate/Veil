@@ -290,6 +290,10 @@ func StructFieldName(key string) string {
 }
 
 func normalizeFallbackRoot(root *string) error {
+	// The managed fallback tree is <etc>/www where <etc> honors
+	// VEIL_ETC_DIR/VEIL_LIVE_ROOT/VEIL_KEY_PATH so a custom --etc-dir install
+	// validates the tree it actually provisions (issue #634).
+	base := filepath.ToSlash(filepath.Join(hostenv.EtcDir(), "www"))
 	*root = filepath.Clean(*root)
 	slash := filepath.ToSlash(*root)
 	if !strings.HasPrefix(slash, "/") {
@@ -301,28 +305,20 @@ func normalizeFallbackRoot(root *string) error {
 				return errors.New("fallbackRoot must not contain '..' path traversal")
 			}
 		}
-		*root = filepath.Clean("/etc/veil/www/" + *root)
+		*root = filepath.Clean(base + "/" + *root)
 		slash = filepath.ToSlash(*root)
 	}
-	// Allowed roots: the managed fallback tree /etc/veil/www (caddy runs as
-	// veil-proxy and /var/lib/veil is InaccessiblePaths-masked for it), or the
-	// legacy /var/lib/veil subtree for configurations that still reference it.
-	// Exactly /var/lib/veil is invalid: serving the state directory itself
-	// would expose state.json, audit/ and backups/ to anonymous naive-port
-	// visitors (audit #77 F1). Other /etc/veil subtrees (panel/, tls/) hold
-	// keys readable by veil-proxy and must stay out of the public file server.
-	if slash == "/var/lib/veil" {
-		return errors.New("fallbackRoot must be a subdirectory of /var/lib/veil, not the state directory itself")
-	}
-	if strings.HasPrefix(slash, "/var/lib/veil/") {
+	// Allowed roots: exactly the managed fallback tree or a subdirectory.
+	// The legacy /var/lib/veil subtree is rejected outright — veil-caddy runs
+	// as veil-proxy with /var/lib/veil in InaccessiblePaths, so a fallback
+	// root there is unreachable dead configuration (issue #618). Other
+	// <etc> subtrees (panel/, tls/) hold keys readable by veil-proxy and must
+	// stay out of the public file server (audit #77 F1).
+	if slash == base || strings.HasPrefix(slash, base+"/") {
 		*root = slash
 		return nil
 	}
-	if slash == "/etc/veil/www" || strings.HasPrefix(slash, "/etc/veil/www/") {
-		*root = slash
-		return nil
-	}
-	return errors.New("fallbackRoot must be within /etc/veil/www or a subdirectory of /var/lib/veil")
+	return errors.New("fallbackRoot must be within " + base)
 }
 
 // NormalizeWebBasePath is retained for generated-config callers that cannot

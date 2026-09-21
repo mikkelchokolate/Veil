@@ -2,7 +2,9 @@ package installer
 
 import (
 	"encoding/hex"
+	"path/filepath"
 
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/panelaccess"
 )
 
@@ -14,6 +16,8 @@ type RURecommendedInput struct {
 	PanelAccess string
 	Secret      SecretFunc
 	PanelPort   int
+	// EtcDir is the install's configuration root; empty defaults to /etc/veil.
+	EtcDir string
 }
 
 type RURecommendedProfile struct {
@@ -45,6 +49,8 @@ type RURecommendedInstallInput struct {
 	PanelPort       int
 	Secret          SecretFunc
 	RandomPanelPort func() (int, error)
+	// EtcDir is the install's configuration root; empty defaults to /etc/veil.
+	EtcDir string
 }
 
 type RURecommendedInstall struct {
@@ -83,6 +89,7 @@ func BuildRURecommendedInstall(input RURecommendedInstallInput) (RURecommendedIn
 		PanelAccess: input.PanelAccess,
 		Secret:      input.Secret,
 		PanelPort:   panelPort,
+		EtcDir:      input.EtcDir,
 	})
 	if err != nil {
 		return RURecommendedInstall{}, err
@@ -105,7 +112,15 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	}
 
 	masqueradeURL := "https://www.bing.com/"
-	fallbackRoot := "/etc/veil/www"
+	// The fallback root must live in the tree this install actually provisions:
+	// a custom --etc-dir writes <etc>/www/index.html, so advertising the
+	// packaged /etc/veil/www would point Caddy at a nonexistent root
+	// (issue #634).
+	etcDir := input.EtcDir
+	if etcDir == "" {
+		etcDir = hostenv.DefaultEtcDir
+	}
+	fallbackRoot := filepath.ToSlash(filepath.Join(etcDir, "www"))
 	panelAccess, err := panelaccess.NewProfile(panelaccess.ProfileInput{PanelAccess: input.PanelAccess, Domain: input.Domain, Email: input.Email, PanelPort: input.PanelPort}).Build()
 	if err != nil {
 		return RURecommendedProfile{}, err

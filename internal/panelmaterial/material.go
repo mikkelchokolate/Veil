@@ -94,6 +94,10 @@ func (m ManagedMaterial) EnvContent() string {
 		env.WriteString("VEIL_VAR_DIR=" + filepath.ToSlash(paths.VarDir) + "\n")
 		env.WriteString("VEIL_STATE_PATH=" + filepath.ToSlash(filepath.Join(paths.VarDir, "state.json")) + "\n")
 		env.WriteString("VEIL_APPLY_ROOT=" + filepath.ToSlash(filepath.Join(paths.VarDir, "staging")) + "\n")
+		// Persist the autocert cache root too: VEIL_VAR_DIR already drives the
+		// default, but an explicit VEIL_AUTO_TLS_DIR keeps the resolved path
+		// visible and stable if the derivation ever changes (issue #640).
+		env.WriteString("VEIL_AUTO_TLS_DIR=" + filepath.ToSlash(filepath.Join(paths.VarDir, "autocert")) + "\n")
 	}
 	return env.String()
 }

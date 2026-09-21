@@ -22,7 +22,11 @@ func (Plugin) RenderConfig(input generatedconfig.ProtocolRenderInput) ([]generat
 		return nil, false, nil
 	}
 
-	plan, _, _, err := caddyassembly.BuildFinalRenderPlan(input.Settings, input.Inbounds)
+	// The configured etc root (derived from the render paths' live root) is
+	// authoritative here: a custom --etc-dir install must validate and serve
+	// its own <etc>/www fallback tree, not the packaged /etc/veil one
+	// (issue #634). An empty EtcRoot falls back to the host environment.
+	plan, _, _, err := caddyassembly.BuildFinalRenderPlanForEtcDir(input.Settings, input.Inbounds, input.Paths.EtcRoot)
 	if err != nil {
 		return nil, false, err
 	}

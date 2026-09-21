@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/routing"
 	"gopkg.in/yaml.v3"
 )
@@ -117,10 +119,10 @@ func RenderHysteria2(cfg Hysteria2Config) (string, error) {
 		cfg.MasqueradeURL = "https://www.bing.com/"
 	}
 	if cfg.CertPath == "" {
-		cfg.CertPath = "/etc/veil/panel/tls.crt"
+		cfg.CertPath = filepath.Join(hostenv.EtcDir(), "panel", "tls.crt")
 	}
 	if cfg.KeyPath == "" {
-		cfg.KeyPath = "/etc/veil/panel/tls.key"
+		cfg.KeyPath = filepath.Join(hostenv.EtcDir(), "panel", "tls.key")
 	}
 
 	var doc hysteria2YAML

@@ -20,7 +20,7 @@ func TestRenderCaddyJSON_NaiveTCP443HappyPath(t *testing.T) {
 				InboundName:  "test",
 				Transport:    "tcp",
 				NaiveUsers:   []caddyassembly.CaddyNaiveUser{{Username: "user", Password: "pass"}},
-				FallbackRoot: "/var/lib/veil/www",
+				FallbackRoot: "/etc/veil/www",
 			},
 		},
 		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
@@ -97,8 +97,8 @@ func TestRenderCaddyJSON_NaiveTCP443HappyPath(t *testing.T) {
 	if second["handler"] != "file_server" {
 		t.Errorf("second handler = %v, want file_server", second["handler"])
 	}
-	if second["root"] != "/var/lib/veil/www" {
-		t.Errorf("file_server root = %v, want /var/lib/veil/www", second["root"])
+	if second["root"] != "/etc/veil/www" {
+		t.Errorf("file_server root = %v, want /etc/veil/www", second["root"])
 	}
 
 	authCreds := first["auth_credentials"].([]any)

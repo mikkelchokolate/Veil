@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
@@ -46,6 +47,14 @@ type Input struct {
 }
 
 func Build(input Input) model.ApplyPlanResponse {
+	// Displayed config paths are anchored at the live generated root so the
+	// preview matches the promote destinations — including custom live roots
+	// (issue #636). Empty falls back to the configured etc dir's generated
+	// tree so zero-arg previews stay consistent with the install layout.
+	liveRoot := filepath.ToSlash(input.LiveRoot)
+	if liveRoot == "" {
+		liveRoot = filepath.ToSlash(filepath.Join(hostenv.EtcDir(), "generated"))
+	}
 	plan := model.ApplyPlanResponse{
 		Valid:      true,
 		Configs:    []string{},
@@ -112,7 +121,7 @@ func Build(input Input) model.ApplyPlanResponse {
 		plan.Runtimes = appendUnique(plan.Runtimes, unit)
 	}
 	if input.Warp.Enabled {
-		plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/sing-box/warp.json")
+		plan.Configs = appendUnique(plan.Configs, liveRoot+"/sing-box/warp.json")
 		if input.WarpAction != "" {
 			plan.Actions = appendUnique(plan.Actions, input.WarpAction)
 		}
@@ -145,7 +154,7 @@ func Build(input Input) model.ApplyPlanResponse {
 			plan.Errors = append(plan.Errors, "routing source files require name and URL")
 			continue
 		}
-		plan.Configs = appendUnique(plan.Configs, "/etc/veil/generated/rules/"+file.Name)
+		plan.Configs = appendUnique(plan.Configs, liveRoot+"/rules/"+file.Name)
 	}
 	if len(plan.Configs) > 0 {
 		plan.Actions = append([]string{"validate management state", "stage generated configs"}, plan.Actions[1:]...)
@@ -153,7 +162,7 @@ func Build(input Input) model.ApplyPlanResponse {
 	if len(plan.Errors) > 0 {
 		plan.Valid = false
 	}
-	plan.Operations = buildOperations(plan.Configs, plan.Actions, plan.Runtimes, input.GeneratedRoot, input.LiveRoot)
+	plan.Operations = buildOperations(plan.Configs, plan.Actions, plan.Runtimes, input.GeneratedRoot, liveRoot)
 	return plan
 }
 
@@ -162,7 +171,7 @@ func buildOperations(configs, actions, runtimes []string, generatedRoot, liveRoo
 	sortedConfigs := append([]string(nil), configs...)
 	sort.Strings(sortedConfigs)
 	for _, config := range sortedConfigs {
-		relative := generatedRelativePath(config)
+		relative := generatedRelativePath(config, liveRoot)
 		source := config
 		if generatedRoot != "" {
 			source = filepath.ToSlash(filepath.Join(generatedRoot, filepath.FromSlash(relative)))
@@ -207,8 +216,17 @@ func buildOperations(configs, actions, runtimes []string, generatedRoot, liveRoo
 	return operations
 }
 
-func generatedRelativePath(config string) string {
+func generatedRelativePath(config, liveRoot string) string {
 	slashPath := filepath.ToSlash(config)
+	if liveRoot != "" {
+		root := strings.TrimSuffix(filepath.ToSlash(liveRoot), "/")
+		if slashPath == root {
+			return ""
+		}
+		if strings.HasPrefix(slashPath, root+"/") {
+			return strings.TrimPrefix(slashPath, root+"/")
+		}
+	}
 	if index := strings.Index(slashPath, "/generated/"); index >= 0 {
 		return strings.TrimPrefix(slashPath[index+len("/generated/"):], "/")
 	}

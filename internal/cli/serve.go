@@ -61,7 +61,7 @@ func newServeCommand(version string) *cobra.Command {
 	cmd.Flags().StringVar(&tlsKey, "tls-key", "", "TLS private key file path; enables HTTPS when both --tls-cert and --tls-key are provided")
 	cmd.Flags().StringVar(&webBasePath, "web-base-path", "", "base path prefix for the web panel (e.g. /secret/); defaults to VEIL_WEB_BASE_PATH or /")
 	cmd.Flags().BoolVar(&autoTLS, "auto-tls", false, "auto-obtain Let's Encrypt TLS certificate using domain/email from state; requires state with domain and email set")
-	cmd.Flags().StringVar(&autoTLSDir, "auto-tls-dir", "", "directory for auto-tls certificate cache; defaults to VEIL_AUTO_TLS_DIR or /var/lib/veil/autocert")
+	cmd.Flags().StringVar(&autoTLSDir, "auto-tls-dir", "", "directory for auto-tls certificate cache; defaults to VEIL_AUTO_TLS_DIR or <var-dir>/autocert (/var/lib/veil/autocert on a default install)")
 	cmd.Flags().BoolVar(&allowUnsafePublicHTTP, "unsafe-allow-public-http", false, "allow unencrypted public Panel HTTP; defaults to VEIL_UNSAFE_ALLOW_PUBLIC_HTTP and is strongly discouraged")
 	return cmd
 }
