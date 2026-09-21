@@ -27,6 +27,7 @@ func TestBuildApplyPlanToleratesMissingCaddyForHysteria2Domain(t *testing.T) {
 	})
 
 	plan := BuildApplyPlan(ApplyPlanInput{
+		LiveRoot: "/etc/veil/generated",
 		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "server", DefaultAcmeEmail: "admin@example.com"},
 		Inbounds: []Inbound{{
 			Name:           "hy2",
