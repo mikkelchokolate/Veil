@@ -240,6 +240,8 @@ When installed natively on a Linux host, Veil manages the following directories 
 | `/var/lib/veil/sessions.json` | `0600 veil:veil` | Hashed browser session and CSRF state; raw bearer values are never persisted. |
 | `/etc/veil/generated/`, `/etc/veil/tls/`, `/etc/veil/panel/`, `/etc/veil/certs/`, `/etc/veil/www/` | `0750 root:veil-proxy` dirs, `0640 root:veil-proxy` files | Runtime-readable material shared with the `veil-proxy` services (Caddy, protocol units): rendered configuration, Panel TLS, ACME output, and the naive fallback site. |
 | `/run/veil/` | `0711 root:root` | Helper socket parent: traverse-only so no `veil`-uid process can replace `/run/veil/helper.sock` (`root:veil 0660`). |
+| `/run/veil-mieru/` | `0750 veil-mita:veil-mita` | mita runtime directory holding the appctl socket `mita.sock` (`0770 veil-mita:veil-mita` via `UMask=0007`): only the daemon and the `veil` panel account (a `veil-mita` group member) can connect — `veil-proxy` edge units cannot traverse it. |
+| `/var/lib/mita/` | `0700 veil-mita:veil-mita` | mieru daemon state directory owned by the dedicated `veil-mita` identity (`veil-mieru.service` runs `User=veil-mita`, not the shared `veil-proxy` account). |
 | `/var/lib/veil/audit/panel.jsonl` | `0600 veil:veil` | Rotated, redacted Panel authentication and mutation audit history. |
 | `/var/log/veil/audit.jsonl` | `0600` | Append-only audit trail logging all install, repair, and rollback events. |
 | `/etc/systemd/system/veil.service` | `0644` | Hardened non-root Panel service running as the `veil` account. |

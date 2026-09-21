@@ -42,21 +42,37 @@ ensure_system_account() {
 
 ensure_system_account veil
 ensure_system_account veil-proxy
+# veil-mita is the dedicated veil-mieru.service identity (issue #624): its
+# appctl socket is a control plane, so it must not share the veil-proxy edge
+# uid/group that every other internet-facing unit uses.
+ensure_system_account veil-mita
+
+# A silent membership failure would leave the managed directories unreadable
+# (veil-proxy) or the mita appctl socket unreachable (veil-mita) after the
+# ownership pass below, so stop loudly.
+ensure_group_member() {
+    member_user="$1"
+    member_group="$2"
+    if ! id -nG "$member_user" 2>/dev/null | tr ' ' '\n' | grep -qx "$member_group"; then
+        if command -v usermod >/dev/null 2>&1; then
+            usermod -aG "$member_group" "$member_user"
+        elif command -v addgroup >/dev/null 2>&1; then
+            addgroup "$member_user" "$member_group"
+        else
+            echo "Cannot add user $member_user to group $member_group: neither usermod nor addgroup is installed" >&2
+            exit 1
+        fi
+    fi
+}
 # The protocol units and veil-caddy.service run as veil-proxy and read
 # /etc/veil/generated, /etc/veil/tls, /etc/veil/panel, and /etc/veil/certs
 # directly. The panel account is a supplementary veil-proxy member so it can
-# keep previewing that material. A silent failure here would leave those
-# directories unreadable after the ownership pass below, so stop loudly.
-if ! id -nG veil 2>/dev/null | tr ' ' '\n' | grep -qx veil-proxy; then
-    if command -v usermod >/dev/null 2>&1; then
-        usermod -aG veil-proxy veil
-    elif command -v addgroup >/dev/null 2>&1; then
-        addgroup veil veil-proxy
-    else
-        echo "Cannot add user veil to group veil-proxy: neither usermod nor addgroup is installed" >&2
-        exit 1
-    fi
-fi
+# keep previewing that material.
+ensure_group_member veil veil-proxy
+# The panel is also the ONLY appctl client: it joins veil-mita so
+# `mita get metrics` can connect to /run/veil-mieru/mita.sock (0770
+# veil-mita). veil-proxy units are deliberately NOT members.
+ensure_group_member veil veil-mita
 
 if [ -f /etc/sysctl.d/99-veil-quic.conf ]; then
     # Live sysctl can be rejected on OpenVZ/LXC-style kernels where /proc/sys
@@ -186,6 +202,17 @@ install -d -m 0711 -o root -g root /run/veil
 # left at veil:veil would be unwritable for the new account — re-own it.
 if [ -d /var/lib/caddy ] && [ ! -L /var/lib/caddy ]; then
     chown -R veil-proxy:veil-proxy /var/lib/caddy
+fi
+
+# veil-mieru.service switched from User=veil-proxy to the dedicated veil-mita
+# identity (#624): a mita StateDirectory left at veil-proxy:veil-proxy would
+# be unwritable for the daemon — same re-own as caddy above. Match the
+# hostaccess.Migrate mode contract too (dirs 0700, files 0600): find does not
+# follow symlinks, so a planted link is skipped rather than tightened.
+if [ -d /var/lib/mita ] && [ ! -L /var/lib/mita ]; then
+    chown -R veil-mita:veil-mita /var/lib/mita
+    find /var/lib/mita -type d -exec chmod 0700 {} +
+    find /var/lib/mita -type f -exec chmod 0600 {} +
 fi
 
 # Only drive systemd when it is the running init. Containers building images

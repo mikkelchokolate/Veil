@@ -187,7 +187,7 @@ runbook.
   `/var/lib/veil`.
 - **Runtime identity separation.** Internet-facing units —
   `veil-caddy.service`, `veil-hysteria2@.service`, `veil-olcrtc@.service`,
-  `veil-warp.service`, `veil-mieru.service` — run as `User=veil-proxy`, a
+  `veil-warp.service` — run as `User=veil-proxy`, a
   separate identity from the Panel. They read only the runtime-shared material
   under `/etc/veil/generated`, `/etc/veil/tls`, `/etc/veil/panel`,
   `/etc/veil/certs`, and `/etc/veil/www` (`root:veil-proxy`, directories `0750`,
@@ -195,6 +195,16 @@ runbook.
   /var/lib/veil`, so they can neither reach the privileged helper socket nor
   touch Panel state. The `veil` account is a supplementary `veil-proxy` group
   member so the Panel can read the same generated material.
+- **Mieru runs on its own `veil-mita` identity.** `veil-mieru.service` uses
+  `User=veil-mita`/`Group=veil-mita` (with `veil-proxy` only as a
+  supplementary group for generated-config reads) because its appctl UDS at
+  `/run/veil-mieru/mita.sock` is a full control plane — `apply`, `start`,
+  `stop`, and the user table. Sharing the `veil-proxy` uid/gid would let any
+  compromised edge unit drive it. The socket directory is
+  `veil-mita:veil-mita 0750` and the socket lands `0770` via `UMask=0007`, so
+  only the daemon and the `veil` panel account (a supplementary `veil-mita`
+  member, needed for `mita get metrics`) can connect — `veil-proxy` peers are
+  denied and cannot even signal the daemon.
 - **Privileged helper.** Root-only operations are exposed by
   `veil-helper.socket` at `/run/veil/helper.sock`. The socket is
   `root:veil 0660` inside a root-owned traverse-only directory

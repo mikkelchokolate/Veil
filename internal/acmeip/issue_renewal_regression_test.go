@@ -46,6 +46,10 @@ func TestRenewReloadCmdPinsDirOwnershipAndProtocolRestart(t *testing.T) {
 		"chgrp veil '/etc/veil/panel'",
 		"chmod 0750 '/etc/veil/panel'",
 		"veil-hysteria2@*.service",
+		// Issue #620: --plain keeps the status glyph out of awk's $1, and
+		// --state=active keeps stopped/disabled/not-found instances out of
+		// the loop so renewal cannot fail on — or revive — them.
+		"list-units --plain --no-legend --state=active",
 	} {
 		if !strings.Contains(cmd, want) {
 			t.Fatalf("reloadcmd missing %q: %q", want, cmd)
@@ -78,8 +82,13 @@ func TestRenewReloadCmdFailsClosed(t *testing.T) {
 		t.Fatalf("veil.service restart must be a hard step: %q", cmd)
 	}
 	// Instance restarts must fail the command too (exit 1 on restart failure).
-	if !strings.Contains(cmd, `systemctl restart "$u" || exit 1`) {
+	// try-restart (not restart) so an instance that went inactive after being
+	// listed is skipped rather than revived (issue #620).
+	if !strings.Contains(cmd, `systemctl try-restart "$u" || exit 1`) {
 		t.Fatalf("protocol instance restart failures must propagate: %q", cmd)
+	}
+	if strings.Contains(cmd, `systemctl restart "$u"`) {
+		t.Fatalf("protocol instances must use try-restart, not restart: %q", cmd)
 	}
 }
 
