@@ -58,7 +58,7 @@ func reconcileUFW(ctx context.Context, runner CommandRunner, request ResolvedFir
 	// reconciling an already-active firewall cannot create new lockout
 	// exposure (stale deletion skips protected SSH/ACME comments).
 	if len(desired) > 0 && !initial.Enabled && !containsManagementAccessRule(desired) && !hasExistingManagementAccess(initial) {
-		return FirewallResult{}, errors.New("refusing to enable UFW without a staged SSH or Panel management access rule")
+		return FirewallResult{}, errors.New("refusing to enable UFW without a staged SSH management access rule")
 	}
 
 	rollback := func(cause error) error {
@@ -167,11 +167,19 @@ func parseDesiredUFWRules(request ResolvedFirewall) ([]ufwDesiredRule, error) {
 	return rules, nil
 }
 
+// containsManagementAccessRule reports whether the desired ruleset stages an
+// SSH management channel — the only evidence that enabling UFW cannot lock
+// the operator out. A "Veil panel" rule does NOT qualify: the panel may bind
+// loopback only, so it can be an open port with nothing reachable behind it.
+// #356 already refused enable on a stale existing panel rule for the same
+// reason; #629 closes the desired-rules equivalent. This mirrors the
+// install-time ApplySafely gate, which requires "ssh" in the staged args.
 func containsManagementAccessRule(rules []ufwDesiredRule) bool {
 	for _, rule := range rules {
 		id := strings.ToLower(rule.id)
 		comment := strings.ToLower(rule.comment)
-		if strings.Contains(id, "management") || strings.Contains(id, "panel") || strings.Contains(comment, "management ssh") || strings.Contains(comment, "panel") {
+		if strings.Contains(id, "ssh") || strings.Contains(comment, "ssh") ||
+			strings.HasPrefix(strings.ToLower(rule.target), "22/") {
 			return true
 		}
 	}
