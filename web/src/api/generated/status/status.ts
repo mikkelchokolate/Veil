@@ -66,30 +66,6 @@ type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 
 
-export type getHealthzResponse200 = {
-  data: HealthResponse
-  status: 200
-}
-
-export type getHealthzResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getHealthzResponse503 = {
-  data: HealthResponse
-  status: 503
-}
-
-export type getHealthzResponseSuccess = (getHealthzResponse200) & {
-  headers: Headers;
-};
-export type getHealthzResponseError = (getHealthzResponse401 | getHealthzResponse503) & {
-  headers: Headers;
-};
-
-export type getHealthzResponse = (getHealthzResponseSuccess | getHealthzResponseError)
-
 export const getGetHealthzUrl = () => {
 
 
@@ -102,9 +78,9 @@ export const getGetHealthzUrl = () => {
  * Authenticated on public Panel listeners; public on loopback-only development listeners.
  * @summary Liveness/readiness probe
  */
-export const getHealthz = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getHealthzResponse> => {
+export const getHealthz = async ( options?: Parameters<typeof apiFetch>[1]): Promise<HealthResponse> => {
 
-  return apiFetch<getHealthzResponse>(getGetHealthzUrl(),
+  return apiFetch<HealthResponse>(getGetHealthzUrl(),
   {
     ...options,
     method: 'GET'
@@ -164,26 +140,7 @@ export const useGetHealthz = <TError = UnauthorizedResponse | HealthResponse,
       > => {
       return useMutation(getGetHealthzMutationOptions(options), queryClient);
     }
-    export type getLivezResponse200 = {
-  data: LivezResponse
-  status: 200
-}
-
-export type getLivezResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getLivezResponseSuccess = (getLivezResponse200) & {
-  headers: Headers;
-};
-export type getLivezResponseError = (getLivezResponse401) & {
-  headers: Headers;
-};
-
-export type getLivezResponse = (getLivezResponseSuccess | getLivezResponseError)
-
-export const getGetLivezUrl = () => {
+    export const getGetLivezUrl = () => {
 
 
 
@@ -195,9 +152,9 @@ export const getGetLivezUrl = () => {
  * Authenticated on public Panel listeners; public on loopback-only development listeners. Returns a binary alive status without management health components.
  * @summary Process liveness probe
  */
-export const getLivez = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getLivezResponse> => {
+export const getLivez = async ( options?: Parameters<typeof apiFetch>[1]): Promise<LivezResponse> => {
 
-  return apiFetch<getLivezResponse>(getGetLivezUrl(),
+  return apiFetch<LivezResponse>(getGetLivezUrl(),
   {
     ...options,
     method: 'GET'
@@ -257,31 +214,7 @@ export const useGetLivez = <TError = UnauthorizedResponse,
       > => {
       return useMutation(getGetLivezMutationOptions(options), queryClient);
     }
-    export type getReadyzResponse200 = {
-  data: ReadyzResponse
-  status: 200
-}
-
-export type getReadyzResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getReadyzResponse503 = {
-  data: ReadyzResponse
-  status: 503
-}
-
-export type getReadyzResponseSuccess = (getReadyzResponse200) & {
-  headers: Headers;
-};
-export type getReadyzResponseError = (getReadyzResponse401 | getReadyzResponse503) & {
-  headers: Headers;
-};
-
-export type getReadyzResponse = (getReadyzResponseSuccess | getReadyzResponseError)
-
-export const getGetReadyzUrl = () => {
+    export const getGetReadyzUrl = () => {
 
 
 
@@ -293,9 +226,9 @@ export const getGetReadyzUrl = () => {
  * Authenticated on public Panel listeners; public on loopback-only development listeners. The component snapshot is the same viewer-only diagnostic as `/api/health` and is never returned to unauthenticated public listeners.
  * @summary Readiness probe
  */
-export const getReadyz = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getReadyzResponse> => {
+export const getReadyz = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ReadyzResponse> => {
 
-  return apiFetch<getReadyzResponse>(getGetReadyzUrl(),
+  return apiFetch<ReadyzResponse>(getGetReadyzUrl(),
   {
     ...options,
     method: 'GET'
@@ -355,26 +288,7 @@ export const useGetReadyz = <TError = UnauthorizedResponse | ReadyzResponse,
       > => {
       return useMutation(getGetReadyzMutationOptions(options), queryClient);
     }
-    export type getMetricsResponse200 = {
-  data: string
-  status: 200
-}
-
-export type getMetricsResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getMetricsResponseSuccess = (getMetricsResponse200) & {
-  headers: Headers;
-};
-export type getMetricsResponseError = (getMetricsResponse401) & {
-  headers: Headers;
-};
-
-export type getMetricsResponse = (getMetricsResponseSuccess | getMetricsResponseError)
-
-export const getGetMetricsUrl = () => {
+    export const getGetMetricsUrl = () => {
 
 
 
@@ -390,9 +304,9 @@ export const getGetMetricsUrl = () => {
  * only for loopback listeners.
  * @summary Prometheus metrics exposition
  */
-export const getMetrics = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getMetricsResponse> => {
+export const getMetrics = async ( options?: Parameters<typeof apiFetch>[1]): Promise<string> => {
 
-  return apiFetch<getMetricsResponse>(getGetMetricsUrl(),
+  return apiFetch<string>(getGetMetricsUrl(),
   {
     ...options,
     method: 'GET'
@@ -452,26 +366,7 @@ export const useGetMetrics = <TError = UnauthorizedResponse,
       > => {
       return useMutation(getGetMetricsMutationOptions(options), queryClient);
     }
-    export type getApiHealthResponse200 = {
-  data: ReadyzResponse
-  status: 200
-}
-
-export type getApiHealthResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiHealthResponseSuccess = (getApiHealthResponse200) & {
-  headers: Headers;
-};
-export type getApiHealthResponseError = (getApiHealthResponse401) & {
-  headers: Headers;
-};
-
-export type getApiHealthResponse = (getApiHealthResponseSuccess | getApiHealthResponseError)
-
-export const getGetApiHealthUrl = () => {
+    export const getGetApiHealthUrl = () => {
 
 
 
@@ -483,9 +378,9 @@ export const getGetApiHealthUrl = () => {
  * Viewer-facing component health snapshot; the same diagnostic payload that /readyz reports to orchestrators. Always returns 200 — inspect `status` and `components` for degradation.
  * @summary Panel health component snapshot
  */
-export const getApiHealth = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiHealthResponse> => {
+export const getApiHealth = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ReadyzResponse> => {
 
-  return apiFetch<getApiHealthResponse>(getGetApiHealthUrl(),
+  return apiFetch<ReadyzResponse>(getGetApiHealthUrl(),
   {
     ...options,
     method: 'GET'
@@ -545,26 +440,7 @@ export const useGetApiHealth = <TError = UnauthorizedResponse,
       > => {
       return useMutation(getGetApiHealthMutationOptions(options), queryClient);
     }
-    export type getApiStatusResponse200 = {
-  data: StatusResponse
-  status: 200
-}
-
-export type getApiStatusResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiStatusResponseSuccess = (getApiStatusResponse200) & {
-  headers: Headers;
-};
-export type getApiStatusResponseError = (getApiStatusResponse401) & {
-  headers: Headers;
-};
-
-export type getApiStatusResponse = (getApiStatusResponseSuccess | getApiStatusResponseError)
-
-export const getGetApiStatusUrl = () => {
+    export const getGetApiStatusUrl = () => {
 
 
 
@@ -575,9 +451,9 @@ export const getGetApiStatusUrl = () => {
 /**
  * @summary Service status snapshot for managed systemd units
  */
-export const getApiStatus = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiStatusResponse> => {
+export const getApiStatus = async ( options?: Parameters<typeof apiFetch>[1]): Promise<StatusResponse> => {
 
-  return apiFetch<getApiStatusResponse>(getGetApiStatusUrl(),
+  return apiFetch<StatusResponse>(getGetApiStatusUrl(),
   {
     ...options,
     method: 'GET'
@@ -637,19 +513,7 @@ export const useGetApiStatus = <TError = UnauthorizedResponse,
       > => {
       return useMutation(getGetApiStatusMutationOptions(options), queryClient);
     }
-    export type getApiFirewallResponse200 = {
-  data: FirewallRule[]
-  status: 200
-}
-
-export type getApiFirewallResponseSuccess = (getApiFirewallResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiFirewallResponse = (getApiFirewallResponseSuccess)
-
-export const getGetApiFirewallUrl = () => {
+    export const getGetApiFirewallUrl = () => {
 
 
 
@@ -660,9 +524,9 @@ export const getGetApiFirewallUrl = () => {
 /**
  * @summary Firewall rule plan and status
  */
-export const getApiFirewall = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiFirewallResponse> => {
+export const getApiFirewall = async ( options?: Parameters<typeof apiFetch>[1]): Promise<FirewallRule[]> => {
 
-  return apiFetch<getApiFirewallResponse>(getGetApiFirewallUrl(),
+  return apiFetch<FirewallRule[]>(getGetApiFirewallUrl(),
   {
     ...options,
     method: 'GET'

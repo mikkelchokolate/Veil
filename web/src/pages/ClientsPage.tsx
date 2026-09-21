@@ -15,7 +15,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { listClients } from "../api/clients";
 import { ApiError, mutationErrorMessage } from "../api/fetcher";
 import { postApiV1ClientsBulk } from "../api/generated/clients/clients";
-import type { ClientView } from "../api/generated/models";
+import type {
+	ClientBulkResponse,
+	ClientBulkResult,
+	ClientView,
+} from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import {
 	AlertDialog,
@@ -77,12 +81,6 @@ function fmtExpiry(ts?: number): string {
 }
 
 const DEBOUNCE_MS = 300;
-
-interface BulkResult {
-	id: string;
-	ok: boolean;
-	message?: string;
-}
 
 export function ClientsPage() {
 	const isAdmin = useIsAdmin();
@@ -156,7 +154,14 @@ export function ClientsPage() {
 
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [bulkError, setBulkError] = useState<string | null>(null);
-	const [bulkResults, setBulkResults] = useState<BulkResult[] | null>(null);
+	const [bulkResults, setBulkResults] = useState<ClientBulkResult[] | null>(
+		null,
+	);
+	// Set when the bulk action committed but the auto-apply failed
+	// (success=false) — the per-client results still render, but the banner
+	// must say the runtime did not converge (#647).
+	const [bulkApplyFailed, setBulkApplyFailed] =
+		useState<ClientBulkResponse | null>(null);
 	const [colVis, setColVis] = useState<Record<string, boolean>>({});
 	const [showColMenu, setShowColMenu] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState(false);
@@ -179,22 +184,17 @@ export function ClientsPage() {
 			setSelected(new Set());
 			setBulkError(null);
 			setConfirmDelete(false);
-			// apiFetch returns the parsed body directly.
-			const body = data as
-				| {
-						succeeded?: number;
-						skipped?: number;
-						failed?: number;
-						results?: BulkResult[];
-				  }
-				| undefined;
+			// apiFetch returns the parsed body directly; the generated type
+			// carries the mutation outcome envelope (#652).
 			// S3: per-client bulk result, not just an aggregate.
-			setBulkResults(body?.results ?? null);
+			setBulkResults(data?.results ?? null);
+			setBulkApplyFailed(data?.success === false ? data : null);
 			void qc.invalidateQueries({ queryKey: ["clients"] });
 			void qc.invalidateQueries({ queryKey: ["apply"] });
 		},
 		onError: (err) => {
 			setBulkResults(null);
+			setBulkApplyFailed(null);
 			setBulkError(mutationErrorMessage(err, t("clients.error.bulk")));
 		},
 	});
@@ -501,7 +501,20 @@ export function ClientsPage() {
 				</div>
 			) : null}
 
-			{/* S3: per-client bulk result */}
+			{/* S3: per-client bulk result + top-level apply outcome (#647) */}
+			{bulkApplyFailed ? (
+				<div className="card">
+					<FormMessage>{t("clients.bulkApplyFailed")}</FormMessage>
+					{bulkApplyFailed.applyJob?.id ? (
+						<p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+							{t("clients.bulkApplyJob", {
+								id: bulkApplyFailed.applyJob.id,
+								status: bulkApplyFailed.applyJob.status,
+							})}
+						</p>
+					) : null}
+				</div>
+			) : null}
 			{bulkResults && bulkResults.length > 0 ? (
 				<div className="card">
 					<h2 style={{ fontSize: 14 }}>{t("clients.bulkResult.title")}</h2>

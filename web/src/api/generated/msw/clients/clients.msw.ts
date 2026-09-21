@@ -62,16 +62,24 @@ import type {
 import type {
   AuditListResponse,
   BadRequestResponse,
+  ClientBinding,
+  ClientBindingCreateResponse,
+  ClientBulkResponse,
   ClientCreateRequest,
   ClientCreateResponse,
+  ClientCredential,
   ClientListResponse,
+  ClientMigrateResponse,
   ClientPatchRequest,
   ClientView,
   ConflictResponse,
+  DeleteApiV1ClientsId200,
+  DeleteApiV1ClientsIdBindingsBindingId200,
   ForbiddenResponse,
   GetApiV1ClientsIdAuditParams,
   GetApiV1ClientsIdLinks200,
   LockedResponse,
+  MutationOutcome,
   NotFoundResponse,
   PatchApiV1ClientsIdBindingsBindingIdBody,
   PostApiV1ClientsBulkBody,
@@ -80,6 +88,7 @@ import type {
   PostApiV1ClientsIdCredentialsBindingIdRotateBody,
   PostApiV1ClientsIdTokensBody,
   PostApiV1ClientsIdTokensTokenIdRotateBody,
+  RotatedCredential,
   ServiceUnavailableResponse,
   SubscriptionTokenResponse,
   UnauthorizedResponse,
@@ -108,18 +117,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getApiV1ClientsResponse200 = {
-  data: ClientListResponse
-  status: 200
-}
-
-export type getApiV1ClientsResponseSuccess = (getApiV1ClientsResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiV1ClientsResponse = (getApiV1ClientsResponseSuccess)
-
 export const getGetApiV1ClientsUrl = () => {
 
 
@@ -131,9 +128,9 @@ export const getGetApiV1ClientsUrl = () => {
 /**
  * @summary List clients with effective status
  */
-export const getApiV1Clients = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiV1ClientsResponse> => {
+export const getApiV1Clients = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ClientListResponse> => {
 
-  return apiFetch<getApiV1ClientsResponse>(getGetApiV1ClientsUrl(),
+  return apiFetch<ClientListResponse>(getGetApiV1ClientsUrl(),
   {
     ...options,
     method: 'GET'
@@ -220,45 +217,6 @@ export function useGetApiV1Clients<TData = Awaited<ReturnType<typeof getApiV1Cli
 
 
 
-export type postApiV1ClientsResponse201 = {
-  data: ClientCreateResponse
-  status: 201
-}
-
-export type postApiV1ClientsResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiV1ClientsResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiV1ClientsResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiV1ClientsResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiV1ClientsResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiV1ClientsResponseSuccess = (postApiV1ClientsResponse201) & {
-  headers: Headers;
-};
-export type postApiV1ClientsResponseError = (postApiV1ClientsResponse400 | postApiV1ClientsResponse409 | postApiV1ClientsResponse422 | postApiV1ClientsResponse423 | postApiV1ClientsResponse503) & {
-  headers: Headers;
-};
-
-export type postApiV1ClientsResponse = (postApiV1ClientsResponseSuccess | postApiV1ClientsResponseError)
-
 export const getPostApiV1ClientsUrl = () => {
 
 
@@ -270,7 +228,7 @@ export const getPostApiV1ClientsUrl = () => {
 /**
  * @summary Create a client
  */
-export const postApiV1Clients = async (clientCreateRequest: ClientCreateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsResponse> => {
+export const postApiV1Clients = async (clientCreateRequest: ClientCreateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<ClientCreateResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -286,7 +244,7 @@ export const postApiV1Clients = async (clientCreateRequest: ClientCreateRequest,
     }
     return headers;
   };
-return apiFetch<postApiV1ClientsResponse>(getPostApiV1ClientsUrl(),
+return apiFetch<ClientCreateResponse>(getPostApiV1ClientsUrl(),
   {
     ...options,
     method: 'POST',
@@ -346,41 +304,7 @@ export const usePostApiV1Clients = <TError = BadRequestResponse | ConflictRespon
       > => {
       return useMutation(getPostApiV1ClientsMutationOptions(options), queryClient);
     }
-    export type postApiV1ClientsBulkResponse200 = {
-  data: void
-  status: 200
-}
-
-export type postApiV1ClientsBulkResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiV1ClientsBulkResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiV1ClientsBulkResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiV1ClientsBulkResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiV1ClientsBulkResponseSuccess = (postApiV1ClientsBulkResponse200) & {
-  headers: Headers;
-};
-export type postApiV1ClientsBulkResponseError = (postApiV1ClientsBulkResponse409 | postApiV1ClientsBulkResponse422 | postApiV1ClientsBulkResponse423 | postApiV1ClientsBulkResponse503) & {
-  headers: Headers;
-};
-
-export type postApiV1ClientsBulkResponse = (postApiV1ClientsBulkResponseSuccess | postApiV1ClientsBulkResponseError)
-
-export const getPostApiV1ClientsBulkUrl = () => {
+    export const getPostApiV1ClientsBulkUrl = () => {
 
 
 
@@ -391,7 +315,7 @@ export const getPostApiV1ClientsBulkUrl = () => {
 /**
  * @summary Bulk action across clients; per-client results
  */
-export const postApiV1ClientsBulk = async (postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsBulkResponse> => {
+export const postApiV1ClientsBulk = async (postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: Parameters<typeof apiFetch>[1]): Promise<ClientBulkResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -407,7 +331,7 @@ export const postApiV1ClientsBulk = async (postApiV1ClientsBulkBody: PostApiV1Cl
     }
     return headers;
   };
-return apiFetch<postApiV1ClientsBulkResponse>(getPostApiV1ClientsBulkUrl(),
+return apiFetch<ClientBulkResponse>(getPostApiV1ClientsBulkUrl(),
   {
     ...options,
     method: 'POST',
@@ -467,19 +391,7 @@ export const usePostApiV1ClientsBulk = <TError = ConflictResponse | ValidationFa
       > => {
       return useMutation(getPostApiV1ClientsBulkMutationOptions(options), queryClient);
     }
-    export type getApiV1ClientsIdBindingsResponse200 = {
-  data: void
-  status: 200
-}
-
-export type getApiV1ClientsIdBindingsResponseSuccess = (getApiV1ClientsIdBindingsResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiV1ClientsIdBindingsResponse = (getApiV1ClientsIdBindingsResponseSuccess)
-
-export const getGetApiV1ClientsIdBindingsUrl = (id: string,) => {
+    export const getGetApiV1ClientsIdBindingsUrl = (id: string,) => {
 
 
 
@@ -490,9 +402,9 @@ export const getGetApiV1ClientsIdBindingsUrl = (id: string,) => {
 /**
  * @summary List client bindings
  */
-export const getApiV1ClientsIdBindings = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getApiV1ClientsIdBindingsResponse> => {
+export const getApiV1ClientsIdBindings = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
 
-  return apiFetch<getApiV1ClientsIdBindingsResponse>(getGetApiV1ClientsIdBindingsUrl(id),
+  return apiFetch<void>(getGetApiV1ClientsIdBindingsUrl(id),
   {
     ...options,
     method: 'GET'
@@ -579,40 +491,6 @@ export function useGetApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof g
 
 
 
-export type postApiV1ClientsIdBindingsResponse201 = {
-  data: void
-  status: 201
-}
-
-export type postApiV1ClientsIdBindingsResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiV1ClientsIdBindingsResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiV1ClientsIdBindingsResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiV1ClientsIdBindingsResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiV1ClientsIdBindingsResponseSuccess = (postApiV1ClientsIdBindingsResponse201) & {
-  headers: Headers;
-};
-export type postApiV1ClientsIdBindingsResponseError = (postApiV1ClientsIdBindingsResponse409 | postApiV1ClientsIdBindingsResponse422 | postApiV1ClientsIdBindingsResponse423 | postApiV1ClientsIdBindingsResponse503) & {
-  headers: Headers;
-};
-
-export type postApiV1ClientsIdBindingsResponse = (postApiV1ClientsIdBindingsResponseSuccess | postApiV1ClientsIdBindingsResponseError)
-
 export const getPostApiV1ClientsIdBindingsUrl = (id: string,) => {
 
 
@@ -625,7 +503,7 @@ export const getPostApiV1ClientsIdBindingsUrl = (id: string,) => {
  * @summary Add a binding; empty credential is generated once
  */
 export const postApiV1ClientsIdBindings = async (id: string,
-    postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdBindingsResponse> => {
+    postApiV1ClientsIdBindingsBody: PostApiV1ClientsIdBindingsBody, options?: Parameters<typeof apiFetch>[1]): Promise<ClientBindingCreateResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -641,7 +519,7 @@ export const postApiV1ClientsIdBindings = async (id: string,
     }
     return headers;
   };
-return apiFetch<postApiV1ClientsIdBindingsResponse>(getPostApiV1ClientsIdBindingsUrl(id),
+return apiFetch<ClientBindingCreateResponse>(getPostApiV1ClientsIdBindingsUrl(id),
   {
     ...options,
     method: 'POST',
@@ -701,41 +579,7 @@ export const usePostApiV1ClientsIdBindings = <TError = ConflictResponse | Valida
       > => {
       return useMutation(getPostApiV1ClientsIdBindingsMutationOptions(options), queryClient);
     }
-    export type patchApiV1ClientsIdBindingsBindingIdResponse200 = {
-  data: void
-  status: 200
-}
-
-export type patchApiV1ClientsIdBindingsBindingIdResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type patchApiV1ClientsIdBindingsBindingIdResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type patchApiV1ClientsIdBindingsBindingIdResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type patchApiV1ClientsIdBindingsBindingIdResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type patchApiV1ClientsIdBindingsBindingIdResponseSuccess = (patchApiV1ClientsIdBindingsBindingIdResponse200) & {
-  headers: Headers;
-};
-export type patchApiV1ClientsIdBindingsBindingIdResponseError = (patchApiV1ClientsIdBindingsBindingIdResponse409 | patchApiV1ClientsIdBindingsBindingIdResponse422 | patchApiV1ClientsIdBindingsBindingIdResponse423 | patchApiV1ClientsIdBindingsBindingIdResponse503) & {
-  headers: Headers;
-};
-
-export type patchApiV1ClientsIdBindingsBindingIdResponse = (patchApiV1ClientsIdBindingsBindingIdResponseSuccess | patchApiV1ClientsIdBindingsBindingIdResponseError)
-
-export const getPatchApiV1ClientsIdBindingsBindingIdUrl = (id: string,
+    export const getPatchApiV1ClientsIdBindingsBindingIdUrl = (id: string,
     bindingId: string,) => {
 
 
@@ -749,7 +593,7 @@ export const getPatchApiV1ClientsIdBindingsBindingIdUrl = (id: string,
  */
 export const patchApiV1ClientsIdBindingsBindingId = async (id: string,
     bindingId: string,
-    patchApiV1ClientsIdBindingsBindingIdBody: PatchApiV1ClientsIdBindingsBindingIdBody, options?: Parameters<typeof apiFetch>[1]): Promise<patchApiV1ClientsIdBindingsBindingIdResponse> => {
+    patchApiV1ClientsIdBindingsBindingIdBody: PatchApiV1ClientsIdBindingsBindingIdBody, options?: Parameters<typeof apiFetch>[1]): Promise<ClientBinding & MutationOutcome> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -765,7 +609,7 @@ export const patchApiV1ClientsIdBindingsBindingId = async (id: string,
     }
     return headers;
   };
-return apiFetch<patchApiV1ClientsIdBindingsBindingIdResponse>(getPatchApiV1ClientsIdBindingsBindingIdUrl(id,bindingId),
+return apiFetch<ClientBinding & MutationOutcome>(getPatchApiV1ClientsIdBindingsBindingIdUrl(id,bindingId),
   {
     ...options,
     method: 'PATCH',
@@ -825,41 +669,7 @@ export const usePatchApiV1ClientsIdBindingsBindingId = <TError = ConflictRespons
       > => {
       return useMutation(getPatchApiV1ClientsIdBindingsBindingIdMutationOptions(options), queryClient);
     }
-    export type deleteApiV1ClientsIdBindingsBindingIdResponse200 = {
-  data: void
-  status: 200
-}
-
-export type deleteApiV1ClientsIdBindingsBindingIdResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type deleteApiV1ClientsIdBindingsBindingIdResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type deleteApiV1ClientsIdBindingsBindingIdResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type deleteApiV1ClientsIdBindingsBindingIdResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type deleteApiV1ClientsIdBindingsBindingIdResponseSuccess = (deleteApiV1ClientsIdBindingsBindingIdResponse200) & {
-  headers: Headers;
-};
-export type deleteApiV1ClientsIdBindingsBindingIdResponseError = (deleteApiV1ClientsIdBindingsBindingIdResponse409 | deleteApiV1ClientsIdBindingsBindingIdResponse422 | deleteApiV1ClientsIdBindingsBindingIdResponse423 | deleteApiV1ClientsIdBindingsBindingIdResponse503) & {
-  headers: Headers;
-};
-
-export type deleteApiV1ClientsIdBindingsBindingIdResponse = (deleteApiV1ClientsIdBindingsBindingIdResponseSuccess | deleteApiV1ClientsIdBindingsBindingIdResponseError)
-
-export const getDeleteApiV1ClientsIdBindingsBindingIdUrl = (id: string,
+    export const getDeleteApiV1ClientsIdBindingsBindingIdUrl = (id: string,
     bindingId: string,) => {
 
 
@@ -872,9 +682,9 @@ export const getDeleteApiV1ClientsIdBindingsBindingIdUrl = (id: string,
  * @summary Remove a binding
  */
 export const deleteApiV1ClientsIdBindingsBindingId = async (id: string,
-    bindingId: string, options?: Parameters<typeof apiFetch>[1]): Promise<deleteApiV1ClientsIdBindingsBindingIdResponse> => {
+    bindingId: string, options?: Parameters<typeof apiFetch>[1]): Promise<DeleteApiV1ClientsIdBindingsBindingId200> => {
 
-  return apiFetch<deleteApiV1ClientsIdBindingsBindingIdResponse>(getDeleteApiV1ClientsIdBindingsBindingIdUrl(id,bindingId),
+  return apiFetch<DeleteApiV1ClientsIdBindingsBindingId200>(getDeleteApiV1ClientsIdBindingsBindingIdUrl(id,bindingId),
   {
     ...options,
     method: 'DELETE'
@@ -934,41 +744,7 @@ export const useDeleteApiV1ClientsIdBindingsBindingId = <TError = ConflictRespon
       > => {
       return useMutation(getDeleteApiV1ClientsIdBindingsBindingIdMutationOptions(options), queryClient);
     }
-    export type postApiV1ClientsIdCredentialsBindingIdResponse201 = {
-  data: void
-  status: 201
-}
-
-export type postApiV1ClientsIdCredentialsBindingIdResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiV1ClientsIdCredentialsBindingIdResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiV1ClientsIdCredentialsBindingIdResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiV1ClientsIdCredentialsBindingIdResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiV1ClientsIdCredentialsBindingIdResponseSuccess = (postApiV1ClientsIdCredentialsBindingIdResponse201) & {
-  headers: Headers;
-};
-export type postApiV1ClientsIdCredentialsBindingIdResponseError = (postApiV1ClientsIdCredentialsBindingIdResponse409 | postApiV1ClientsIdCredentialsBindingIdResponse422 | postApiV1ClientsIdCredentialsBindingIdResponse423 | postApiV1ClientsIdCredentialsBindingIdResponse503) & {
-  headers: Headers;
-};
-
-export type postApiV1ClientsIdCredentialsBindingIdResponse = (postApiV1ClientsIdCredentialsBindingIdResponseSuccess | postApiV1ClientsIdCredentialsBindingIdResponseError)
-
-export const getPostApiV1ClientsIdCredentialsBindingIdUrl = (id: string,
+    export const getPostApiV1ClientsIdCredentialsBindingIdUrl = (id: string,
     bindingId: string,) => {
 
 
@@ -982,7 +758,7 @@ export const getPostApiV1ClientsIdCredentialsBindingIdUrl = (id: string,
  */
 export const postApiV1ClientsIdCredentialsBindingId = async (id: string,
     bindingId: string,
-    postApiV1ClientsIdCredentialsBindingIdBody: PostApiV1ClientsIdCredentialsBindingIdBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdCredentialsBindingIdResponse> => {
+    postApiV1ClientsIdCredentialsBindingIdBody: PostApiV1ClientsIdCredentialsBindingIdBody, options?: Parameters<typeof apiFetch>[1]): Promise<ClientCredential & MutationOutcome> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -998,7 +774,7 @@ export const postApiV1ClientsIdCredentialsBindingId = async (id: string,
     }
     return headers;
   };
-return apiFetch<postApiV1ClientsIdCredentialsBindingIdResponse>(getPostApiV1ClientsIdCredentialsBindingIdUrl(id,bindingId),
+return apiFetch<ClientCredential & MutationOutcome>(getPostApiV1ClientsIdCredentialsBindingIdUrl(id,bindingId),
   {
     ...options,
     method: 'POST',
@@ -1058,41 +834,7 @@ export const usePostApiV1ClientsIdCredentialsBindingId = <TError = ConflictRespo
       > => {
       return useMutation(getPostApiV1ClientsIdCredentialsBindingIdMutationOptions(options), queryClient);
     }
-    export type postApiV1ClientsIdCredentialsBindingIdRotateResponse200 = {
-  data: void
-  status: 200
-}
-
-export type postApiV1ClientsIdCredentialsBindingIdRotateResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiV1ClientsIdCredentialsBindingIdRotateResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiV1ClientsIdCredentialsBindingIdRotateResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiV1ClientsIdCredentialsBindingIdRotateResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiV1ClientsIdCredentialsBindingIdRotateResponseSuccess = (postApiV1ClientsIdCredentialsBindingIdRotateResponse200) & {
-  headers: Headers;
-};
-export type postApiV1ClientsIdCredentialsBindingIdRotateResponseError = (postApiV1ClientsIdCredentialsBindingIdRotateResponse409 | postApiV1ClientsIdCredentialsBindingIdRotateResponse422 | postApiV1ClientsIdCredentialsBindingIdRotateResponse423 | postApiV1ClientsIdCredentialsBindingIdRotateResponse503) & {
-  headers: Headers;
-};
-
-export type postApiV1ClientsIdCredentialsBindingIdRotateResponse = (postApiV1ClientsIdCredentialsBindingIdRotateResponseSuccess | postApiV1ClientsIdCredentialsBindingIdRotateResponseError)
-
-export const getPostApiV1ClientsIdCredentialsBindingIdRotateUrl = (id: string,
+    export const getPostApiV1ClientsIdCredentialsBindingIdRotateUrl = (id: string,
     bindingId: string,) => {
 
 
@@ -1106,7 +848,7 @@ export const getPostApiV1ClientsIdCredentialsBindingIdRotateUrl = (id: string,
  */
 export const postApiV1ClientsIdCredentialsBindingIdRotate = async (id: string,
     bindingId: string,
-    postApiV1ClientsIdCredentialsBindingIdRotateBody: PostApiV1ClientsIdCredentialsBindingIdRotateBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdCredentialsBindingIdRotateResponse> => {
+    postApiV1ClientsIdCredentialsBindingIdRotateBody: PostApiV1ClientsIdCredentialsBindingIdRotateBody, options?: Parameters<typeof apiFetch>[1]): Promise<RotatedCredential & MutationOutcome> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -1122,7 +864,7 @@ export const postApiV1ClientsIdCredentialsBindingIdRotate = async (id: string,
     }
     return headers;
   };
-return apiFetch<postApiV1ClientsIdCredentialsBindingIdRotateResponse>(getPostApiV1ClientsIdCredentialsBindingIdRotateUrl(id,bindingId),
+return apiFetch<RotatedCredential & MutationOutcome>(getPostApiV1ClientsIdCredentialsBindingIdRotateUrl(id,bindingId),
   {
     ...options,
     method: 'POST',
@@ -1182,41 +924,7 @@ export const usePostApiV1ClientsIdCredentialsBindingIdRotate = <TError = Conflic
       > => {
       return useMutation(getPostApiV1ClientsIdCredentialsBindingIdRotateMutationOptions(options), queryClient);
     }
-    export type postApiV1ClientsMigrateLegacyResponse200 = {
-  data: void
-  status: 200
-}
-
-export type postApiV1ClientsMigrateLegacyResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiV1ClientsMigrateLegacyResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiV1ClientsMigrateLegacyResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiV1ClientsMigrateLegacyResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiV1ClientsMigrateLegacyResponseSuccess = (postApiV1ClientsMigrateLegacyResponse200) & {
-  headers: Headers;
-};
-export type postApiV1ClientsMigrateLegacyResponseError = (postApiV1ClientsMigrateLegacyResponse409 | postApiV1ClientsMigrateLegacyResponse422 | postApiV1ClientsMigrateLegacyResponse423 | postApiV1ClientsMigrateLegacyResponse503) & {
-  headers: Headers;
-};
-
-export type postApiV1ClientsMigrateLegacyResponse = (postApiV1ClientsMigrateLegacyResponseSuccess | postApiV1ClientsMigrateLegacyResponseError)
-
-export const getPostApiV1ClientsMigrateLegacyUrl = () => {
+    export const getPostApiV1ClientsMigrateLegacyUrl = () => {
 
 
 
@@ -1227,9 +935,9 @@ export const getPostApiV1ClientsMigrateLegacyUrl = () => {
 /**
  * @summary Convert legacy inbound-embedded profiles to normalized clients (idempotent)
  */
-export const postApiV1ClientsMigrateLegacy = async ( options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsMigrateLegacyResponse> => {
+export const postApiV1ClientsMigrateLegacy = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ClientMigrateResponse> => {
 
-  return apiFetch<postApiV1ClientsMigrateLegacyResponse>(getPostApiV1ClientsMigrateLegacyUrl(),
+  return apiFetch<ClientMigrateResponse>(getPostApiV1ClientsMigrateLegacyUrl(),
   {
     ...options,
     method: 'POST'
@@ -1289,26 +997,7 @@ export const usePostApiV1ClientsMigrateLegacy = <TError = ConflictResponse | Val
       > => {
       return useMutation(getPostApiV1ClientsMigrateLegacyMutationOptions(options), queryClient);
     }
-    export type getApiV1ClientsIdResponse200 = {
-  data: ClientView
-  status: 200
-}
-
-export type getApiV1ClientsIdResponse404 = {
-  data: void
-  status: 404
-}
-
-export type getApiV1ClientsIdResponseSuccess = (getApiV1ClientsIdResponse200) & {
-  headers: Headers;
-};
-export type getApiV1ClientsIdResponseError = (getApiV1ClientsIdResponse404) & {
-  headers: Headers;
-};
-
-export type getApiV1ClientsIdResponse = (getApiV1ClientsIdResponseSuccess | getApiV1ClientsIdResponseError)
-
-export const getGetApiV1ClientsIdUrl = (id: string,) => {
+    export const getGetApiV1ClientsIdUrl = (id: string,) => {
 
 
 
@@ -1319,9 +1008,9 @@ export const getGetApiV1ClientsIdUrl = (id: string,) => {
 /**
  * @summary Get a client with bindings and effective status
  */
-export const getApiV1ClientsId = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getApiV1ClientsIdResponse> => {
+export const getApiV1ClientsId = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<ClientView> => {
 
-  return apiFetch<getApiV1ClientsIdResponse>(getGetApiV1ClientsIdUrl(id),
+  return apiFetch<ClientView>(getGetApiV1ClientsIdUrl(id),
   {
     ...options,
     method: 'GET'
@@ -1408,40 +1097,6 @@ export function useGetApiV1ClientsId<TData = Awaited<ReturnType<typeof getApiV1C
 
 
 
-export type patchApiV1ClientsIdResponse200 = {
-  data: ClientView
-  status: 200
-}
-
-export type patchApiV1ClientsIdResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type patchApiV1ClientsIdResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type patchApiV1ClientsIdResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type patchApiV1ClientsIdResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type patchApiV1ClientsIdResponseSuccess = (patchApiV1ClientsIdResponse200) & {
-  headers: Headers;
-};
-export type patchApiV1ClientsIdResponseError = (patchApiV1ClientsIdResponse409 | patchApiV1ClientsIdResponse422 | patchApiV1ClientsIdResponse423 | patchApiV1ClientsIdResponse503) & {
-  headers: Headers;
-};
-
-export type patchApiV1ClientsIdResponse = (patchApiV1ClientsIdResponseSuccess | patchApiV1ClientsIdResponseError)
-
 export const getPatchApiV1ClientsIdUrl = (id: string,) => {
 
 
@@ -1454,7 +1109,7 @@ export const getPatchApiV1ClientsIdUrl = (id: string,) => {
  * @summary Patch explicitly supplied client fields without clearing omitted durable fields
  */
 export const patchApiV1ClientsId = async (id: string,
-    clientPatchRequest: ClientPatchRequest, options?: Parameters<typeof apiFetch>[1]): Promise<patchApiV1ClientsIdResponse> => {
+    clientPatchRequest: ClientPatchRequest, options?: Parameters<typeof apiFetch>[1]): Promise<ClientView & MutationOutcome> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -1470,7 +1125,7 @@ export const patchApiV1ClientsId = async (id: string,
     }
     return headers;
   };
-return apiFetch<patchApiV1ClientsIdResponse>(getPatchApiV1ClientsIdUrl(id),
+return apiFetch<ClientView & MutationOutcome>(getPatchApiV1ClientsIdUrl(id),
   {
     ...options,
     method: 'PATCH',
@@ -1530,46 +1185,7 @@ export const usePatchApiV1ClientsId = <TError = ConflictResponse | ValidationFai
       > => {
       return useMutation(getPatchApiV1ClientsIdMutationOptions(options), queryClient);
     }
-    export type deleteApiV1ClientsIdResponse200 = {
-  data: void
-  status: 200
-}
-
-export type deleteApiV1ClientsIdResponse404 = {
-  data: void
-  status: 404
-}
-
-export type deleteApiV1ClientsIdResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type deleteApiV1ClientsIdResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type deleteApiV1ClientsIdResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type deleteApiV1ClientsIdResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type deleteApiV1ClientsIdResponseSuccess = (deleteApiV1ClientsIdResponse200) & {
-  headers: Headers;
-};
-export type deleteApiV1ClientsIdResponseError = (deleteApiV1ClientsIdResponse404 | deleteApiV1ClientsIdResponse409 | deleteApiV1ClientsIdResponse422 | deleteApiV1ClientsIdResponse423 | deleteApiV1ClientsIdResponse503) & {
-  headers: Headers;
-};
-
-export type deleteApiV1ClientsIdResponse = (deleteApiV1ClientsIdResponseSuccess | deleteApiV1ClientsIdResponseError)
-
-export const getDeleteApiV1ClientsIdUrl = (id: string,) => {
+    export const getDeleteApiV1ClientsIdUrl = (id: string,) => {
 
 
 
@@ -1580,9 +1196,9 @@ export const getDeleteApiV1ClientsIdUrl = (id: string,) => {
 /**
  * @summary Delete a client
  */
-export const deleteApiV1ClientsId = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<deleteApiV1ClientsIdResponse> => {
+export const deleteApiV1ClientsId = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<DeleteApiV1ClientsId200> => {
 
-  return apiFetch<deleteApiV1ClientsIdResponse>(getDeleteApiV1ClientsIdUrl(id),
+  return apiFetch<DeleteApiV1ClientsId200>(getDeleteApiV1ClientsIdUrl(id),
   {
     ...options,
     method: 'DELETE'
@@ -1642,41 +1258,7 @@ export const useDeleteApiV1ClientsId = <TError = void | ConflictResponse | Valid
       > => {
       return useMutation(getDeleteApiV1ClientsIdMutationOptions(options), queryClient);
     }
-    export type getApiV1ClientsIdAuditResponse200 = {
-  data: AuditListResponse
-  status: 200
-}
-
-export type getApiV1ClientsIdAuditResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type getApiV1ClientsIdAuditResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiV1ClientsIdAuditResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type getApiV1ClientsIdAuditResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type getApiV1ClientsIdAuditResponseSuccess = (getApiV1ClientsIdAuditResponse200) & {
-  headers: Headers;
-};
-export type getApiV1ClientsIdAuditResponseError = (getApiV1ClientsIdAuditResponse400 | getApiV1ClientsIdAuditResponse401 | getApiV1ClientsIdAuditResponse403 | getApiV1ClientsIdAuditResponse404) & {
-  headers: Headers;
-};
-
-export type getApiV1ClientsIdAuditResponse = (getApiV1ClientsIdAuditResponseSuccess | getApiV1ClientsIdAuditResponseError)
-
-export const getGetApiV1ClientsIdAuditUrl = (id: string,
+    export const getGetApiV1ClientsIdAuditUrl = (id: string,
     params?: GetApiV1ClientsIdAuditParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -1697,9 +1279,9 @@ export const getGetApiV1ClientsIdAuditUrl = (id: string,
  * @summary Audit history scoped to one client
  */
 export const getApiV1ClientsIdAudit = async (id: string,
-    params?: GetApiV1ClientsIdAuditParams, options?: Parameters<typeof apiFetch>[1]): Promise<getApiV1ClientsIdAuditResponse> => {
+    params?: GetApiV1ClientsIdAuditParams, options?: Parameters<typeof apiFetch>[1]): Promise<AuditListResponse> => {
 
-  return apiFetch<getApiV1ClientsIdAuditResponse>(getGetApiV1ClientsIdAuditUrl(id,params),
+  return apiFetch<AuditListResponse>(getGetApiV1ClientsIdAuditUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -1792,35 +1374,6 @@ export function useGetApiV1ClientsIdAudit<TData = Awaited<ReturnType<typeof getA
 
 
 
-export type getApiV1ClientsIdLinksResponse200 = {
-  data: GetApiV1ClientsIdLinks200
-  status: 200
-}
-
-export type getApiV1ClientsIdLinksResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiV1ClientsIdLinksResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type getApiV1ClientsIdLinksResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type getApiV1ClientsIdLinksResponseSuccess = (getApiV1ClientsIdLinksResponse200) & {
-  headers: Headers;
-};
-export type getApiV1ClientsIdLinksResponseError = (getApiV1ClientsIdLinksResponse401 | getApiV1ClientsIdLinksResponse403 | getApiV1ClientsIdLinksResponse404) & {
-  headers: Headers;
-};
-
-export type getApiV1ClientsIdLinksResponse = (getApiV1ClientsIdLinksResponseSuccess | getApiV1ClientsIdLinksResponseError)
-
 export const getGetApiV1ClientsIdLinksUrl = (id: string,) => {
 
 
@@ -1833,9 +1386,9 @@ export const getGetApiV1ClientsIdLinksUrl = (id: string,) => {
  * Rebuilds protocol URIs from stored credentials so the panel can show link and QR after creation.
  * @summary Connection URIs and configs for one client
  */
-export const getApiV1ClientsIdLinks = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getApiV1ClientsIdLinksResponse> => {
+export const getApiV1ClientsIdLinks = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<GetApiV1ClientsIdLinks200> => {
 
-  return apiFetch<getApiV1ClientsIdLinksResponse>(getGetApiV1ClientsIdLinksUrl(id),
+  return apiFetch<GetApiV1ClientsIdLinks200>(getGetApiV1ClientsIdLinksUrl(id),
   {
     ...options,
     method: 'GET'
@@ -1922,18 +1475,6 @@ export function useGetApiV1ClientsIdLinks<TData = Awaited<ReturnType<typeof getA
 
 
 
-export type getApiV1ClientsIdTokensResponse200 = {
-  data: void
-  status: 200
-}
-
-export type getApiV1ClientsIdTokensResponseSuccess = (getApiV1ClientsIdTokensResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiV1ClientsIdTokensResponse = (getApiV1ClientsIdTokensResponseSuccess)
-
 export const getGetApiV1ClientsIdTokensUrl = (id: string,) => {
 
 
@@ -1945,9 +1486,9 @@ export const getGetApiV1ClientsIdTokensUrl = (id: string,) => {
 /**
  * @summary List a client's subscription tokens (redacted)
  */
-export const getApiV1ClientsIdTokens = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getApiV1ClientsIdTokensResponse> => {
+export const getApiV1ClientsIdTokens = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
 
-  return apiFetch<getApiV1ClientsIdTokensResponse>(getGetApiV1ClientsIdTokensUrl(id),
+  return apiFetch<void>(getGetApiV1ClientsIdTokensUrl(id),
   {
     ...options,
     method: 'GET'
@@ -2034,40 +1575,6 @@ export function useGetApiV1ClientsIdTokens<TData = Awaited<ReturnType<typeof get
 
 
 
-export type postApiV1ClientsIdTokensResponse201 = {
-  data: SubscriptionTokenResponse
-  status: 201
-}
-
-export type postApiV1ClientsIdTokensResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiV1ClientsIdTokensResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiV1ClientsIdTokensResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiV1ClientsIdTokensResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiV1ClientsIdTokensResponseSuccess = (postApiV1ClientsIdTokensResponse201) & {
-  headers: Headers;
-};
-export type postApiV1ClientsIdTokensResponseError = (postApiV1ClientsIdTokensResponse409 | postApiV1ClientsIdTokensResponse422 | postApiV1ClientsIdTokensResponse423 | postApiV1ClientsIdTokensResponse503) & {
-  headers: Headers;
-};
-
-export type postApiV1ClientsIdTokensResponse = (postApiV1ClientsIdTokensResponseSuccess | postApiV1ClientsIdTokensResponseError)
-
 export const getPostApiV1ClientsIdTokensUrl = (id: string,) => {
 
 
@@ -2080,7 +1587,7 @@ export const getPostApiV1ClientsIdTokensUrl = (id: string,) => {
  * @summary Issue a subscription token; plaintext returned once
  */
 export const postApiV1ClientsIdTokens = async (id: string,
-    postApiV1ClientsIdTokensBody: PostApiV1ClientsIdTokensBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdTokensResponse> => {
+    postApiV1ClientsIdTokensBody: PostApiV1ClientsIdTokensBody, options?: Parameters<typeof apiFetch>[1]): Promise<SubscriptionTokenResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -2096,7 +1603,7 @@ export const postApiV1ClientsIdTokens = async (id: string,
     }
     return headers;
   };
-return apiFetch<postApiV1ClientsIdTokensResponse>(getPostApiV1ClientsIdTokensUrl(id),
+return apiFetch<SubscriptionTokenResponse>(getPostApiV1ClientsIdTokensUrl(id),
   {
     ...options,
     method: 'POST',
@@ -2156,36 +1663,7 @@ export const usePostApiV1ClientsIdTokens = <TError = ConflictResponse | Validati
       > => {
       return useMutation(getPostApiV1ClientsIdTokensMutationOptions(options), queryClient);
     }
-    export type getApiV1ClientsIdTokensTokenIdResponse200 = {
-  data: SubscriptionTokenResponse
-  status: 200
-}
-
-export type getApiV1ClientsIdTokensTokenIdResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiV1ClientsIdTokensTokenIdResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type getApiV1ClientsIdTokensTokenIdResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type getApiV1ClientsIdTokensTokenIdResponseSuccess = (getApiV1ClientsIdTokensTokenIdResponse200) & {
-  headers: Headers;
-};
-export type getApiV1ClientsIdTokensTokenIdResponseError = (getApiV1ClientsIdTokensTokenIdResponse401 | getApiV1ClientsIdTokensTokenIdResponse403 | getApiV1ClientsIdTokensTokenIdResponse404) & {
-  headers: Headers;
-};
-
-export type getApiV1ClientsIdTokensTokenIdResponse = (getApiV1ClientsIdTokensTokenIdResponseSuccess | getApiV1ClientsIdTokensTokenIdResponseError)
-
-export const getGetApiV1ClientsIdTokensTokenIdUrl = (id: string,
+    export const getGetApiV1ClientsIdTokensTokenIdUrl = (id: string,
     tokenId: string,) => {
 
 
@@ -2198,9 +1676,9 @@ export const getGetApiV1ClientsIdTokensTokenIdUrl = (id: string,
  * @summary Rebuild the subscription URL for a stored token
  */
 export const getApiV1ClientsIdTokensTokenId = async (id: string,
-    tokenId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getApiV1ClientsIdTokensTokenIdResponse> => {
+    tokenId: string, options?: Parameters<typeof apiFetch>[1]): Promise<SubscriptionTokenResponse> => {
 
-  return apiFetch<getApiV1ClientsIdTokensTokenIdResponse>(getGetApiV1ClientsIdTokensTokenIdUrl(id,tokenId),
+  return apiFetch<SubscriptionTokenResponse>(getGetApiV1ClientsIdTokensTokenIdUrl(id,tokenId),
   {
     ...options,
     method: 'GET'
@@ -2293,40 +1771,6 @@ export function useGetApiV1ClientsIdTokensTokenId<TData = Awaited<ReturnType<typ
 
 
 
-export type deleteApiV1ClientsIdTokensTokenIdResponse200 = {
-  data: void
-  status: 200
-}
-
-export type deleteApiV1ClientsIdTokensTokenIdResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type deleteApiV1ClientsIdTokensTokenIdResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type deleteApiV1ClientsIdTokensTokenIdResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type deleteApiV1ClientsIdTokensTokenIdResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type deleteApiV1ClientsIdTokensTokenIdResponseSuccess = (deleteApiV1ClientsIdTokensTokenIdResponse200) & {
-  headers: Headers;
-};
-export type deleteApiV1ClientsIdTokensTokenIdResponseError = (deleteApiV1ClientsIdTokensTokenIdResponse409 | deleteApiV1ClientsIdTokensTokenIdResponse422 | deleteApiV1ClientsIdTokensTokenIdResponse423 | deleteApiV1ClientsIdTokensTokenIdResponse503) & {
-  headers: Headers;
-};
-
-export type deleteApiV1ClientsIdTokensTokenIdResponse = (deleteApiV1ClientsIdTokensTokenIdResponseSuccess | deleteApiV1ClientsIdTokensTokenIdResponseError)
-
 export const getDeleteApiV1ClientsIdTokensTokenIdUrl = (id: string,
     tokenId: string,) => {
 
@@ -2340,9 +1784,9 @@ export const getDeleteApiV1ClientsIdTokensTokenIdUrl = (id: string,
  * @summary Revoke a subscription token
  */
 export const deleteApiV1ClientsIdTokensTokenId = async (id: string,
-    tokenId: string, options?: Parameters<typeof apiFetch>[1]): Promise<deleteApiV1ClientsIdTokensTokenIdResponse> => {
+    tokenId: string, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
 
-  return apiFetch<deleteApiV1ClientsIdTokensTokenIdResponse>(getDeleteApiV1ClientsIdTokensTokenIdUrl(id,tokenId),
+  return apiFetch<void>(getDeleteApiV1ClientsIdTokensTokenIdUrl(id,tokenId),
   {
     ...options,
     method: 'DELETE'
@@ -2402,41 +1846,7 @@ export const useDeleteApiV1ClientsIdTokensTokenId = <TError = ConflictResponse |
       > => {
       return useMutation(getDeleteApiV1ClientsIdTokensTokenIdMutationOptions(options), queryClient);
     }
-    export type postApiV1ClientsIdTokensTokenIdRotateResponse200 = {
-  data: SubscriptionTokenResponse
-  status: 200
-}
-
-export type postApiV1ClientsIdTokensTokenIdRotateResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiV1ClientsIdTokensTokenIdRotateResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiV1ClientsIdTokensTokenIdRotateResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiV1ClientsIdTokensTokenIdRotateResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiV1ClientsIdTokensTokenIdRotateResponseSuccess = (postApiV1ClientsIdTokensTokenIdRotateResponse200) & {
-  headers: Headers;
-};
-export type postApiV1ClientsIdTokensTokenIdRotateResponseError = (postApiV1ClientsIdTokensTokenIdRotateResponse409 | postApiV1ClientsIdTokensTokenIdRotateResponse422 | postApiV1ClientsIdTokensTokenIdRotateResponse423 | postApiV1ClientsIdTokensTokenIdRotateResponse503) & {
-  headers: Headers;
-};
-
-export type postApiV1ClientsIdTokensTokenIdRotateResponse = (postApiV1ClientsIdTokensTokenIdRotateResponseSuccess | postApiV1ClientsIdTokensTokenIdRotateResponseError)
-
-export const getPostApiV1ClientsIdTokensTokenIdRotateUrl = (id: string,
+    export const getPostApiV1ClientsIdTokensTokenIdRotateUrl = (id: string,
     tokenId: string,) => {
 
 
@@ -2450,7 +1860,7 @@ export const getPostApiV1ClientsIdTokensTokenIdRotateUrl = (id: string,
  */
 export const postApiV1ClientsIdTokensTokenIdRotate = async (id: string,
     tokenId: string,
-    postApiV1ClientsIdTokensTokenIdRotateBody?: PostApiV1ClientsIdTokensTokenIdRotateBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiV1ClientsIdTokensTokenIdRotateResponse> => {
+    postApiV1ClientsIdTokensTokenIdRotateBody?: PostApiV1ClientsIdTokensTokenIdRotateBody, options?: Parameters<typeof apiFetch>[1]): Promise<SubscriptionTokenResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -2466,7 +1876,7 @@ export const postApiV1ClientsIdTokensTokenIdRotate = async (id: string,
     }
     return headers;
   };
-return apiFetch<postApiV1ClientsIdTokensTokenIdRotateResponse>(getPostApiV1ClientsIdTokensTokenIdRotateUrl(id,tokenId),
+return apiFetch<SubscriptionTokenResponse>(getPostApiV1ClientsIdTokensTokenIdRotateUrl(id,tokenId),
   {
     ...options,
     method: 'POST',

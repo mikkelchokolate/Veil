@@ -207,4 +207,72 @@ describe("ApplyPage", () => {
 		fireEvent.click(await screen.findByRole("button", { name: /^retry$/i }));
 		expect(await screen.findByText(/helper unavailable/i)).toBeInTheDocument();
 	});
+
+	// #651: POST /api/apply/reconcile returns 200 with reconciled=false plus
+	// the failed applyJob when the converge fails — that is an execution
+	// failure, not a successful reconcile.
+	it("treats a 200 reconcile carrying a failed apply job as an error", async () => {
+		server.use(
+			http.get("/api/apply/state", () =>
+				HttpResponse.json({
+					desiredRevision: 3,
+					appliedRevision: 1,
+					state: "drift",
+				}),
+			),
+			http.get("/api/apply/jobs", () => HttpResponse.json({ items: [] })),
+			http.post("/api/apply/reconcile", () =>
+				HttpResponse.json({
+					reconciled: false,
+					applyJob: {
+						id: "j-rec",
+						desiredRevision: 3,
+						baseRevision: 1,
+						status: "failed",
+						trigger: "reconcile",
+						createdAt: 1700000000,
+						errorMessage: "sing-box reload failed",
+					},
+					revision: { desired: 3, applied: 1 },
+				}),
+			),
+		);
+		renderApply();
+		fireEvent.click(
+			await screen.findByRole("button", { name: /reconcile now/i }),
+		);
+		expect(
+			await screen.findByText(/sing-box reload failed/i),
+		).toBeInTheDocument();
+	});
+
+	// #651 twin: a bare reconciled=false with no applyJob is the idempotent
+	// no-op "already synced" path — not an error.
+	it("does not treat a no-op reconcile without an applyJob as an error", async () => {
+		server.use(
+			http.get("/api/apply/state", () =>
+				HttpResponse.json({
+					desiredRevision: 2,
+					appliedRevision: 1,
+					state: "drift",
+				}),
+			),
+			http.get("/api/apply/jobs", () => HttpResponse.json({ items: [] })),
+			http.post("/api/apply/reconcile", () =>
+				HttpResponse.json({ reconciled: false }),
+			),
+		);
+		renderApply();
+		fireEvent.click(
+			await screen.findByRole("button", { name: /reconcile now/i }),
+		);
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: /reconcile now/i }),
+			).toBeEnabled(),
+		);
+		expect(
+			screen.queryByText(/reconcile failed/i),
+		).not.toBeInTheDocument();
+	});
 });

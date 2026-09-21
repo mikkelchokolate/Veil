@@ -100,6 +100,9 @@ export const en: Record<string, string> = {
 	"clients.bulkResult.failed": "failed",
 	"clients.error.load": "Failed to load clients",
 	"clients.error.bulk": "Bulk action failed",
+	"clients.bulkApplyFailed":
+		"Bulk action committed, but applying it failed — check Apply.",
+	"clients.bulkApplyJob": "apply job {id} ({status})",
 	"clients.empty": "No clients found.",
 	"clients.pagination.count_one": "{n} client",
 	"clients.pagination.count_other": "{n} clients",
@@ -242,6 +245,8 @@ export const en: Record<string, string> = {
 	"inbounds.error.updateFailed": "Update failed",
 	"inbounds.error.deleteFailed": "Delete failed",
 	"inbounds.error.loadFailed": "Failed to load inbounds",
+	"inbounds.error.applyFailed":
+		"Change committed, but applying it failed. Check Apply.",
 	"inbounds.empty": "No inbounds configured.",
 	"inbounds.attachedClients": "Attached clients",
 	"inbounds.clientsUnavailable": "Could not load attached clients.",
@@ -296,6 +301,8 @@ export const en: Record<string, string> = {
 	"routing.enabled": "Enabled",
 	"routing.saving": "Saving…",
 	"routing.saveFailed": "Save failed",
+	"routing.applyFailed":
+		"Rule committed, but applying it failed. Check Apply.",
 	"routing.loadFailed": "Failed to load routing rules",
 	"routing.deleteFailed": "Failed to delete routing rule",
 	"routing.empty": "No routing rules configured.",
@@ -319,6 +326,8 @@ export const en: Record<string, string> = {
 	"warp.disable": "Disable WARP",
 	"warp.unavailable": "WARP config unavailable",
 	"warp.toggleFailed": "Toggle failed",
+	"warp.applyFailed":
+		"WARP updated, but applying the change failed. Check Apply.",
 	"warp.provisionNotice":
 		"Enabling provisions a free Cloudflare WARP account server-side; changes apply on the next config apply.",
 
@@ -370,6 +379,8 @@ export const en: Record<string, string> = {
 	"settings.confirmRotation": "Confirm rotation",
 	"settings.rotating": "Rotating…",
 	"settings.saved": "Settings saved.",
+	"settings.savedApplyFailed":
+		"Settings saved, but applying the new revision failed. Check Apply.",
 	"settings.webBasePathRequired":
 		"Web base path cannot be cleared from this form.",
 	"settings.rotated": "State key rotated. Other sessions were revoked.",
@@ -646,6 +657,9 @@ export const en: Record<string, string> = {
 	"clientNew.inboundsUnavailable": "Could not load inbounds.",
 	"clientNew.credentialPlaceholder": "Credential (blank = server generates)",
 	"clientNew.clientCreated": "Client created",
+	"clientNew.createdApplyFailed":
+		"Client created, but applying it failed — check Apply.",
+	"clientNew.applyJob": "apply job {id} ({status})",
 	"clientNew.oneTimeCredentialsTitle": "One-time credentials",
 	"clientNew.oneTimeCredentialsDescription":
 		"Copy these now — they are shown only once and will be cleared when you close this dialog or after a few minutes.",

@@ -104,18 +104,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getApiApplyStateResponse200 = {
-  data: ApplyStateResponse
-  status: 200
-}
-
-export type getApiApplyStateResponseSuccess = (getApiApplyStateResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiApplyStateResponse = (getApiApplyStateResponseSuccess)
-
 export const getGetApiApplyStateUrl = () => {
 
 
@@ -127,9 +115,9 @@ export const getGetApiApplyStateUrl = () => {
 /**
  * @summary Desired/applied revisions and derived system state
  */
-export const getApiApplyState = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiApplyStateResponse> => {
+export const getApiApplyState = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ApplyStateResponse> => {
 
-  return apiFetch<getApiApplyStateResponse>(getGetApiApplyStateUrl(),
+  return apiFetch<ApplyStateResponse>(getGetApiApplyStateUrl(),
   {
     ...options,
     method: 'GET'
@@ -189,19 +177,7 @@ export const useGetApiApplyState = <TError = unknown,
       > => {
       return useMutation(getGetApiApplyStateMutationOptions(options), queryClient);
     }
-    export type getApiApplyJobsResponse200 = {
-  data: GetApiApplyJobs200
-  status: 200
-}
-
-export type getApiApplyJobsResponseSuccess = (getApiApplyJobsResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiApplyJobsResponse = (getApiApplyJobsResponseSuccess)
-
-export const getGetApiApplyJobsUrl = () => {
+    export const getGetApiApplyJobsUrl = () => {
 
 
 
@@ -212,9 +188,9 @@ export const getGetApiApplyJobsUrl = () => {
 /**
  * @summary List apply jobs (newest first)
  */
-export const getApiApplyJobs = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiApplyJobsResponse> => {
+export const getApiApplyJobs = async ( options?: Parameters<typeof apiFetch>[1]): Promise<GetApiApplyJobs200> => {
 
-  return apiFetch<getApiApplyJobsResponse>(getGetApiApplyJobsUrl(),
+  return apiFetch<GetApiApplyJobs200>(getGetApiApplyJobsUrl(),
   {
     ...options,
     method: 'GET'
@@ -274,26 +250,7 @@ export const useGetApiApplyJobs = <TError = unknown,
       > => {
       return useMutation(getGetApiApplyJobsMutationOptions(options), queryClient);
     }
-    export type getApiApplyJobsIdResponse200 = {
-  data: ApplyJob
-  status: 200
-}
-
-export type getApiApplyJobsIdResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type getApiApplyJobsIdResponseSuccess = (getApiApplyJobsIdResponse200) & {
-  headers: Headers;
-};
-export type getApiApplyJobsIdResponseError = (getApiApplyJobsIdResponse404) & {
-  headers: Headers;
-};
-
-export type getApiApplyJobsIdResponse = (getApiApplyJobsIdResponseSuccess | getApiApplyJobsIdResponseError)
-
-export const getGetApiApplyJobsIdUrl = (id: string,) => {
+    export const getGetApiApplyJobsIdUrl = (id: string,) => {
 
 
 
@@ -304,9 +261,9 @@ export const getGetApiApplyJobsIdUrl = (id: string,) => {
 /**
  * @summary Get one apply job
  */
-export const getApiApplyJobsId = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getApiApplyJobsIdResponse> => {
+export const getApiApplyJobsId = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<ApplyJob> => {
 
-  return apiFetch<getApiApplyJobsIdResponse>(getGetApiApplyJobsIdUrl(id),
+  return apiFetch<ApplyJob>(getGetApiApplyJobsIdUrl(id),
   {
     ...options,
     method: 'GET'
@@ -366,46 +323,7 @@ export const useGetApiApplyJobsId = <TError = NotFoundResponse,
       > => {
       return useMutation(getGetApiApplyJobsIdMutationOptions(options), queryClient);
     }
-    export type postApiApplyJobsIdRetryResponse200 = {
-  data: ApplyRetryResponse
-  status: 200
-}
-
-export type postApiApplyJobsIdRetryResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type postApiApplyJobsIdRetryResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiApplyJobsIdRetryResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiApplyJobsIdRetryResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiApplyJobsIdRetryResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiApplyJobsIdRetryResponseSuccess = (postApiApplyJobsIdRetryResponse200) & {
-  headers: Headers;
-};
-export type postApiApplyJobsIdRetryResponseError = (postApiApplyJobsIdRetryResponse404 | postApiApplyJobsIdRetryResponse409 | postApiApplyJobsIdRetryResponse422 | postApiApplyJobsIdRetryResponse423 | postApiApplyJobsIdRetryResponse503) & {
-  headers: Headers;
-};
-
-export type postApiApplyJobsIdRetryResponse = (postApiApplyJobsIdRetryResponseSuccess | postApiApplyJobsIdRetryResponseError)
-
-export const getPostApiApplyJobsIdRetryUrl = (id: string,) => {
+    export const getPostApiApplyJobsIdRetryUrl = (id: string,) => {
 
 
 
@@ -416,9 +334,9 @@ export const getPostApiApplyJobsIdRetryUrl = (id: string,) => {
 /**
  * @summary Create a NEW apply job for the same desired revision
  */
-export const postApiApplyJobsIdRetry = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<postApiApplyJobsIdRetryResponse> => {
+export const postApiApplyJobsIdRetry = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<ApplyRetryResponse> => {
 
-  return apiFetch<postApiApplyJobsIdRetryResponse>(getPostApiApplyJobsIdRetryUrl(id),
+  return apiFetch<ApplyRetryResponse>(getPostApiApplyJobsIdRetryUrl(id),
   {
     ...options,
     method: 'POST'
@@ -505,40 +423,6 @@ export function usePostApiApplyJobsIdRetry<TData = Awaited<ReturnType<typeof pos
 
 
 
-export type postApiApplyReconcileResponse200 = {
-  data: ApplyReconcileResponse
-  status: 200
-}
-
-export type postApiApplyReconcileResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiApplyReconcileResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiApplyReconcileResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiApplyReconcileResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiApplyReconcileResponseSuccess = (postApiApplyReconcileResponse200) & {
-  headers: Headers;
-};
-export type postApiApplyReconcileResponseError = (postApiApplyReconcileResponse409 | postApiApplyReconcileResponse422 | postApiApplyReconcileResponse423 | postApiApplyReconcileResponse503) & {
-  headers: Headers;
-};
-
-export type postApiApplyReconcileResponse = (postApiApplyReconcileResponseSuccess | postApiApplyReconcileResponseError)
-
 export const getPostApiApplyReconcileUrl = () => {
 
 
@@ -550,9 +434,9 @@ export const getPostApiApplyReconcileUrl = () => {
 /**
  * @summary Apply current desired revision if ahead of applied (idempotent)
  */
-export const postApiApplyReconcile = async ( options?: Parameters<typeof apiFetch>[1]): Promise<postApiApplyReconcileResponse> => {
+export const postApiApplyReconcile = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ApplyReconcileResponse> => {
 
-  return apiFetch<postApiApplyReconcileResponse>(getPostApiApplyReconcileUrl(),
+  return apiFetch<ApplyReconcileResponse>(getPostApiApplyReconcileUrl(),
   {
     ...options,
     method: 'POST'
@@ -639,50 +523,6 @@ export function usePostApiApplyReconcile<TData = Awaited<ReturnType<typeof postA
 
 
 
-export type postApiApplyRollbackResponse200 = {
-  data: ApplyRollbackResponse
-  status: 200
-}
-
-export type postApiApplyRollbackResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiApplyRollbackResponse404 = {
-  data: void
-  status: 404
-}
-
-export type postApiApplyRollbackResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiApplyRollbackResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiApplyRollbackResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiApplyRollbackResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiApplyRollbackResponseSuccess = (postApiApplyRollbackResponse200) & {
-  headers: Headers;
-};
-export type postApiApplyRollbackResponseError = (postApiApplyRollbackResponse400 | postApiApplyRollbackResponse404 | postApiApplyRollbackResponse409 | postApiApplyRollbackResponse422 | postApiApplyRollbackResponse423 | postApiApplyRollbackResponse503) & {
-  headers: Headers;
-};
-
-export type postApiApplyRollbackResponse = (postApiApplyRollbackResponseSuccess | postApiApplyRollbackResponseError)
-
 export const getPostApiApplyRollbackUrl = () => {
 
 
@@ -695,7 +535,7 @@ export const getPostApiApplyRollbackUrl = () => {
  * Intentional rollback. Never decrements desired or applied revisions; creates a new immutable desired revision and audit record.
  * @summary Create a new desired revision from an older immutable snapshot
  */
-export const postApiApplyRollback = async (postApiApplyRollbackBody: PostApiApplyRollbackBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiApplyRollbackResponse> => {
+export const postApiApplyRollback = async (postApiApplyRollbackBody: PostApiApplyRollbackBody, options?: Parameters<typeof apiFetch>[1]): Promise<ApplyRollbackResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -711,7 +551,7 @@ export const postApiApplyRollback = async (postApiApplyRollbackBody: PostApiAppl
     }
     return headers;
   };
-return apiFetch<postApiApplyRollbackResponse>(getPostApiApplyRollbackUrl(),
+return apiFetch<ApplyRollbackResponse>(getPostApiApplyRollbackUrl(),
   {
     ...options,
     method: 'POST',
@@ -798,45 +638,6 @@ export function usePostApiApplyRollback<TData = Awaited<ReturnType<typeof postAp
 
 
 
-export type postApiApplyResponse200 = {
-  data: ApplyResponse
-  status: 200
-}
-
-export type postApiApplyResponse400 = {
-  data: ApplyResponse | ErrorEnvelope
-  status: 400
-}
-
-export type postApiApplyResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiApplyResponse422 = {
-  data: ApplyResponse | ErrorEnvelope
-  status: 422
-}
-
-export type postApiApplyResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiApplyResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiApplyResponseSuccess = (postApiApplyResponse200) & {
-  headers: Headers;
-};
-export type postApiApplyResponseError = (postApiApplyResponse400 | postApiApplyResponse409 | postApiApplyResponse422 | postApiApplyResponse423 | postApiApplyResponse503) & {
-  headers: Headers;
-};
-
-export type postApiApplyResponse = (postApiApplyResponseSuccess | postApiApplyResponseError)
-
 export const getPostApiApplyUrl = () => {
 
 
@@ -848,7 +649,7 @@ export const getPostApiApplyUrl = () => {
 /**
  * @summary Stage and optionally promote current management state
  */
-export const postApiApply = async (applyRequest: ApplyRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiApplyResponse> => {
+export const postApiApply = async (applyRequest: ApplyRequest, options?: Parameters<typeof apiFetch>[1]): Promise<ApplyResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -864,7 +665,7 @@ export const postApiApply = async (applyRequest: ApplyRequest, options?: Paramet
     }
     return headers;
   };
-return apiFetch<postApiApplyResponse>(getPostApiApplyUrl(),
+return apiFetch<ApplyResponse>(getPostApiApplyUrl(),
   {
     ...options,
     method: 'POST',
@@ -951,40 +752,6 @@ export function usePostApiApply<TData = Awaited<ReturnType<typeof postApiApply>>
 
 
 
-export type postApiApplyPlanResponse200 = {
-  data: ApplyPlanResponse
-  status: 200
-}
-
-export type postApiApplyPlanResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiApplyPlanResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiApplyPlanResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiApplyPlanResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiApplyPlanResponseSuccess = (postApiApplyPlanResponse200) & {
-  headers: Headers;
-};
-export type postApiApplyPlanResponseError = (postApiApplyPlanResponse409 | postApiApplyPlanResponse422 | postApiApplyPlanResponse423 | postApiApplyPlanResponse503) & {
-  headers: Headers;
-};
-
-export type postApiApplyPlanResponse = (postApiApplyPlanResponseSuccess | postApiApplyPlanResponseError)
-
 export const getPostApiApplyPlanUrl = () => {
 
 
@@ -996,9 +763,9 @@ export const getPostApiApplyPlanUrl = () => {
 /**
  * @summary Preview the apply plan without writing live files
  */
-export const postApiApplyPlan = async ( options?: Parameters<typeof apiFetch>[1]): Promise<postApiApplyPlanResponse> => {
+export const postApiApplyPlan = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ApplyPlanResponse> => {
 
-  return apiFetch<postApiApplyPlanResponse>(getPostApiApplyPlanUrl(),
+  return apiFetch<ApplyPlanResponse>(getPostApiApplyPlanUrl(),
   {
     ...options,
     method: 'POST'
@@ -1085,18 +852,6 @@ export function usePostApiApplyPlan<TData = Awaited<ReturnType<typeof postApiApp
 
 
 
-export type getApiApplyHistoryResponse200 = {
-  data: ApplyHistoryEntry[]
-  status: 200
-}
-
-export type getApiApplyHistoryResponseSuccess = (getApiApplyHistoryResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiApplyHistoryResponse = (getApiApplyHistoryResponseSuccess)
-
 export const getGetApiApplyHistoryUrl = () => {
 
 
@@ -1108,9 +863,9 @@ export const getGetApiApplyHistoryUrl = () => {
 /**
  * @summary Apply workflow history
  */
-export const getApiApplyHistory = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiApplyHistoryResponse> => {
+export const getApiApplyHistory = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ApplyHistoryEntry[]> => {
 
-  return apiFetch<getApiApplyHistoryResponse>(getGetApiApplyHistoryUrl(),
+  return apiFetch<ApplyHistoryEntry[]>(getGetApiApplyHistoryUrl(),
   {
     ...options,
     method: 'GET'
@@ -1170,46 +925,7 @@ export const useGetApiApplyHistory = <TError = unknown,
       > => {
       return useMutation(getGetApiApplyHistoryMutationOptions(options), queryClient);
     }
-    export type postApiProfilesRuRecommendedPreviewResponse200 = {
-  data: RURecommendedPreviewResponse
-  status: 200
-}
-
-export type postApiProfilesRuRecommendedPreviewResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiProfilesRuRecommendedPreviewResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiProfilesRuRecommendedPreviewResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiProfilesRuRecommendedPreviewResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiProfilesRuRecommendedPreviewResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiProfilesRuRecommendedPreviewResponseSuccess = (postApiProfilesRuRecommendedPreviewResponse200) & {
-  headers: Headers;
-};
-export type postApiProfilesRuRecommendedPreviewResponseError = (postApiProfilesRuRecommendedPreviewResponse400 | postApiProfilesRuRecommendedPreviewResponse409 | postApiProfilesRuRecommendedPreviewResponse422 | postApiProfilesRuRecommendedPreviewResponse423 | postApiProfilesRuRecommendedPreviewResponse503) & {
-  headers: Headers;
-};
-
-export type postApiProfilesRuRecommendedPreviewResponse = (postApiProfilesRuRecommendedPreviewResponseSuccess | postApiProfilesRuRecommendedPreviewResponseError)
-
-export const getPostApiProfilesRuRecommendedPreviewUrl = () => {
+    export const getPostApiProfilesRuRecommendedPreviewUrl = () => {
 
 
 
@@ -1220,7 +936,7 @@ export const getPostApiProfilesRuRecommendedPreviewUrl = () => {
 /**
  * @summary Preview the ru-recommended install profile
  */
-export const postApiProfilesRuRecommendedPreview = async (rURecommendedPreviewRequest: RURecommendedPreviewRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiProfilesRuRecommendedPreviewResponse> => {
+export const postApiProfilesRuRecommendedPreview = async (rURecommendedPreviewRequest: RURecommendedPreviewRequest, options?: Parameters<typeof apiFetch>[1]): Promise<RURecommendedPreviewResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -1236,7 +952,7 @@ export const postApiProfilesRuRecommendedPreview = async (rURecommendedPreviewRe
     }
     return headers;
   };
-return apiFetch<postApiProfilesRuRecommendedPreviewResponse>(getPostApiProfilesRuRecommendedPreviewUrl(),
+return apiFetch<RURecommendedPreviewResponse>(getPostApiProfilesRuRecommendedPreviewUrl(),
   {
     ...options,
     method: 'POST',

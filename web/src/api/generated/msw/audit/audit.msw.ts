@@ -85,35 +85,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getApiAuditResponse200 = {
-  data: AuditListResponse
-  status: 200
-}
-
-export type getApiAuditResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type getApiAuditResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiAuditResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type getApiAuditResponseSuccess = (getApiAuditResponse200) & {
-  headers: Headers;
-};
-export type getApiAuditResponseError = (getApiAuditResponse400 | getApiAuditResponse401 | getApiAuditResponse403) & {
-  headers: Headers;
-};
-
-export type getApiAuditResponse = (getApiAuditResponseSuccess | getApiAuditResponseError)
-
 export const getGetApiAuditUrl = (params?: GetApiAuditParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -135,9 +106,9 @@ export const getGetApiAuditUrl = (params?: GetApiAuditParams,) => {
  * token, passwords, and authorization values are never returned.
  * @summary List structured Panel audit history
  */
-export const getApiAudit = async (params?: GetApiAuditParams, options?: Parameters<typeof apiFetch>[1]): Promise<getApiAuditResponse> => {
+export const getApiAudit = async (params?: GetApiAuditParams, options?: Parameters<typeof apiFetch>[1]): Promise<AuditListResponse> => {
 
-  return apiFetch<getApiAuditResponse>(getGetApiAuditUrl(params),
+  return apiFetch<AuditListResponse>(getGetApiAuditUrl(params),
   {
     ...options,
     method: 'GET'

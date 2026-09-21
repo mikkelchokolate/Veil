@@ -161,6 +161,8 @@ export const ru: Record<string, string> = {
 	"inbounds.error.updateFailed": "Ошибка обновления",
 	"inbounds.error.deleteFailed": "Ошибка удаления",
 	"inbounds.error.loadFailed": "Не удалось загрузить инбаунды",
+	"inbounds.error.applyFailed":
+		"Изменение сохранено, но применение не удалось. Проверьте Apply.",
 	"inbounds.empty": "Инбаунды не настроены.",
 	"inbounds.attachedClients": "Прикреплённые клиенты",
 	"inbounds.clientsUnavailable": "Не удалось загрузить прикреплённых клиентов.",
@@ -215,6 +217,8 @@ export const ru: Record<string, string> = {
 	"routing.enabled": "Включено",
 	"routing.saving": "Сохранение…",
 	"routing.saveFailed": "Не удалось сохранить",
+	"routing.applyFailed":
+		"Правило сохранено, но применение изменения не удалось. Проверьте Apply.",
 	"routing.loadFailed": "Не удалось загрузить правила маршрутизации",
 	"routing.deleteFailed": "Не удалось удалить правило маршрутизации",
 	"routing.empty": "Правила маршрутизации не настроены.",
@@ -238,6 +242,8 @@ export const ru: Record<string, string> = {
 	"warp.disable": "Отключить WARP",
 	"warp.unavailable": "Конфигурация WARP недоступна",
 	"warp.toggleFailed": "Не удалось переключить",
+	"warp.applyFailed":
+		"WARP обновлён, но применение изменения не удалось. Проверьте Apply.",
 	"warp.provisionNotice":
 		"Включение создаёт бесплатный аккаунт Cloudflare WARP на стороне сервера; изменения применятся при следующем применении конфигурации.",
 
@@ -290,6 +296,8 @@ export const ru: Record<string, string> = {
 	"settings.confirmRotation": "Подтвердить смену",
 	"settings.rotating": "Смена…",
 	"settings.saved": "Настройки сохранены.",
+	"settings.savedApplyFailed":
+		"Настройки сохранены, но применение новой ревизии не удалось. Проверьте Apply.",
 	"settings.webBasePathRequired":
 		"Базовый путь панели нельзя очистить в этой форме.",
 	"settings.rotated": "Ключ состояния изменён. Остальные сессии отозваны.",
@@ -472,6 +480,9 @@ export const ru: Record<string, string> = {
 	"clients.bulkResult.ok": "успешно",
 	"clients.bulkResult.failed": "ошибка",
 	"clients.error.bulk": "Ошибка массовой операции",
+	"clients.bulkApplyFailed":
+		"Массовая операция сохранена, но применение не удалось — проверьте Apply.",
+	"clients.bulkApplyJob": "задача применения {id} ({status})",
 	"clients.error.load": "Не удалось загрузить клиентов",
 	"clients.delete.title": "Удалить клиентов?",
 	"clients.delete.confirmation":
@@ -653,6 +664,9 @@ export const ru: Record<string, string> = {
 	"clientNew.inboundsUnavailable": "Не удалось загрузить инбаунды.",
 	"clientNew.credentialPlaceholder": "Креды (пусто = сервер сгенерирует)",
 	"clientNew.clientCreated": "Клиент создан",
+	"clientNew.createdApplyFailed":
+		"Клиент создан, но применение конфигурации не удалось — проверьте Apply.",
+	"clientNew.applyJob": "задача применения {id} ({status})",
 	"clientNew.oneTimeCredentialsTitle": "Одноразовые креды",
 	"clientNew.oneTimeCredentialsDescription":
 		"Скопируйте их сейчас — они показаны только один раз и будут стёрты, как только вы закроете это окно или через несколько минут.",
