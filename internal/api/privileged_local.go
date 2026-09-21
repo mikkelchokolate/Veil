@@ -26,9 +26,15 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 	if state.statePath == "" {
 		stateRoot = filepath.Join(state.applyRoot, "state")
 	}
+	// The certificate sync destination lives under the configuration root —
+	// the parent of the live generated tree — so a custom --etc-dir install
+	// accepts exactly its own <etc>/certs tree (issue #628).
+	etcRoot := filepath.Dir(state.liveRoot)
+	certDirs := []string{filepath.Join(etcRoot, "certs")}
 	policy := privileged.Policy{
 		StagingRoot:          filepath.Join(state.applyRoot, "generated"),
 		GeneratedRoot:        state.liveRoot,
+		CertDirs:             certDirs,
 		StateRoot:            stateRoot,
 		StatePath:            state.statePath,
 		KeyPath:              state.keyPath,
@@ -48,6 +54,7 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 		KeyPath:              state.keyPath,
 		BackupPassphrasePath: state.backupPassphrasePath,
 		BackupRoot:           state.backupDir,
+		CertDirs:             certDirs,
 		VeilVersion:          state.version,
 	})
 	caddyLoader := caddyAdminLoader

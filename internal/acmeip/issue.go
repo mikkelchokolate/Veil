@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 )
 
 // IssuedCert holds the on-disk paths of a successfully issued certificate.
@@ -162,11 +164,11 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 
 	certPath := opts.CertPath
 	if certPath == "" {
-		certPath = "/etc/veil/panel/tls.crt"
+		certPath = filepath.Join(hostenv.EtcDir(), "panel", "tls.crt")
 	}
 	keyPath := opts.KeyPath
 	if keyPath == "" {
-		keyPath = "/etc/veil/panel/tls.key"
+		keyPath = filepath.Join(hostenv.EtcDir(), "panel", "tls.key")
 	}
 	httpPort := opts.HTTPPort
 	if httpPort <= 0 {

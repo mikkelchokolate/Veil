@@ -163,3 +163,55 @@ func contains(values []string, want string) bool {
 	}
 	return false
 }
+
+// The preview must anchor displayed configs and promote destinations at the
+// configured live root — a custom install previews the same tree the apply
+// job promotes into, not /etc/veil/generated (issue #636).
+func TestPlannerUsesCustomLiveRootForConfigsAndDestinations(t *testing.T) {
+	plan := Build(Input{
+		GeneratedRoot: "/custom/var/staging/generated",
+		LiveRoot:      "/custom/etc/generated",
+		Warp:          model.WarpConfig{Enabled: true},
+		Inbounds: []model.Inbound{{
+			Name: "edge", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true,
+		}},
+		Capabilities: []ProtocolCapability{{
+			Protocol: "mieru",
+			Config:   "/custom/etc/generated/mieru/server_config.json",
+			Action:   "restart veil-mieru.service",
+		}},
+		RoutingSource: model.RoutingSource{Files: []model.RoutingSourceFile{{Name: "geo.dat", URL: "https://example.com/geo.dat"}}},
+	})
+	for _, want := range []string{
+		"/custom/etc/generated/mieru/server_config.json",
+		"/custom/etc/generated/sing-box/warp.json",
+		"/custom/etc/generated/rules/geo.dat",
+	} {
+		found := false
+		for _, config := range plan.Configs {
+			if config == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("plan.Configs missing %q: %v", want, plan.Configs)
+		}
+	}
+	for _, op := range plan.Operations {
+		if op.Type != "promote_file" {
+			continue
+		}
+		if !strings.HasPrefix(op.Destination, "/custom/etc/generated/") {
+			t.Fatalf("promote destination %q is not under the custom live root", op.Destination)
+		}
+		if !strings.HasPrefix(op.Source, "/custom/var/staging/generated/") {
+			t.Fatalf("promote source %q is not under the staged generated root", op.Source)
+		}
+		// The staged subpath must be preserved end-to-end — a basename
+		// fallback would collide with the live tree layout.
+		rel := strings.TrimPrefix(op.Destination, "/custom/etc/generated/")
+		if !strings.HasSuffix(op.Source, "/"+rel) {
+			t.Fatalf("source %q does not preserve subpath %q", op.Source, rel)
+		}
+	}
+}

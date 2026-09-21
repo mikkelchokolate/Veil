@@ -15,25 +15,25 @@ import (
 // the synchronous apply job never converges.
 func TestPromotionPublishesProtocolArtifactReadableByVeilProxy(t *testing.T) {
 	oldEffectiveUID := effectiveUID
-	oldLookupUser := lookupUser
+	oldLookupGroup := lookupGroup
 	oldChownPath := chownPath
 	oldChmodPath := chmodPath
 	defer func() {
 		effectiveUID = oldEffectiveUID
-		lookupUser = oldLookupUser
+		lookupGroup = oldLookupGroup
 		chownPath = oldChownPath
 		chmodPath = oldChmodPath
 	}()
 
 	effectiveUID = func() int { return 0 }
-	lookupUser = func(name string) (*user.User, error) {
+	lookupGroup = func(name string) (*user.Group, error) {
 		switch name {
 		case "veil":
-			return &user.User{Uid: "123", Gid: "456"}, nil
+			return &user.Group{Gid: "456"}, nil
 		case "veil-proxy":
-			return &user.User{Uid: "124", Gid: "457"}, nil
+			return &user.Group{Gid: "457"}, nil
 		default:
-			t.Fatalf("lookup user = %q, want veil or veil-proxy", name)
+			t.Fatalf("lookup group = %q, want veil or veil-proxy", name)
 			return nil, nil
 		}
 	}
@@ -103,14 +103,14 @@ func TestPromotionPublishesProtocolArtifactReadableByVeilProxy(t *testing.T) {
 	}
 }
 
-// Without a dedicated veil-proxy account the artifact must still become
+// Without a dedicated veil-proxy group the artifact must still become
 // readable through the veil group rather than failing or staying root-only.
 func TestRuntimeArtifactGIDFallsBackToVeilGroup(t *testing.T) {
-	oldLookupUser := lookupUser
-	defer func() { lookupUser = oldLookupUser }()
-	lookupUser = func(name string) (*user.User, error) {
+	oldLookupGroup := lookupGroup
+	defer func() { lookupGroup = oldLookupGroup }()
+	lookupGroup = func(name string) (*user.Group, error) {
 		if name == "veil" {
-			return &user.User{Uid: "123", Gid: "456"}, nil
+			return &user.Group{Gid: "456"}, nil
 		}
 		return nil, os.ErrNotExist
 	}
@@ -120,5 +120,82 @@ func TestRuntimeArtifactGIDFallsBackToVeilGroup(t *testing.T) {
 	}
 	if gid != 456 {
 		t.Fatalf("gid = %d, want veil group 456", gid)
+	}
+}
+
+// The runtime group must come from the *group* record, not the account's
+// primary gid: hosts where the veil-proxy user's primary group differs would
+// otherwise silently chown artifacts to a group the protocol units do not
+// share (issue #630).
+func TestRuntimeArtifactGIDUsesGroupLookupNotPrimaryGID(t *testing.T) {
+	oldLookupUser := lookupUser
+	oldLookupGroup := lookupGroup
+	defer func() {
+		lookupUser = oldLookupUser
+		lookupGroup = oldLookupGroup
+	}()
+	// The account's primary gid deliberately disagrees with the named group's
+	// gid; only the group record may win.
+	lookupUser = func(name string) (*user.User, error) {
+		return &user.User{Uid: "124", Gid: "999"}, nil
+	}
+	lookupGroup = func(name string) (*user.Group, error) {
+		switch name {
+		case "veil-proxy":
+			return &user.Group{Gid: "457"}, nil
+		case "veil":
+			return &user.Group{Gid: "456"}, nil
+		default:
+			return nil, os.ErrNotExist
+		}
+	}
+	gid, err := runtimeArtifactGID()
+	if err != nil {
+		t.Fatalf("runtimeArtifactGID: %v", err)
+	}
+	if gid != 457 {
+		t.Fatalf("gid = %d, want veil-proxy group gid 457 (not primary gid 999)", gid)
+	}
+}
+
+// A malformed veil-proxy group record must not silently produce a wrong
+// owner: the lookup falls through to the veil group, and when that is also
+// malformed the resolution fails closed (issue #630).
+func TestRuntimeArtifactGIDMalformedGroupIDs(t *testing.T) {
+	oldLookupGroup := lookupGroup
+	defer func() { lookupGroup = oldLookupGroup }()
+
+	// Malformed veil-proxy gid falls back to the veil group.
+	lookupGroup = func(name string) (*user.Group, error) {
+		switch name {
+		case "veil-proxy":
+			return &user.Group{Gid: "not-a-number"}, nil
+		case "veil":
+			return &user.Group{Gid: "456"}, nil
+		default:
+			return nil, os.ErrNotExist
+		}
+	}
+	gid, err := runtimeArtifactGID()
+	if err != nil {
+		t.Fatalf("runtimeArtifactGID: %v", err)
+	}
+	if gid != 456 {
+		t.Fatalf("gid = %d, want veil group fallback 456", gid)
+	}
+
+	// Both groups malformed/missing fails closed instead of publishing
+	// artifacts under a wrong group.
+	lookupGroup = func(name string) (*user.Group, error) {
+		return &user.Group{Gid: "abc"}, nil
+	}
+	if _, err := runtimeArtifactGID(); err == nil {
+		t.Fatal("expected error for malformed veil group gid")
+	}
+	lookupGroup = func(name string) (*user.Group, error) {
+		return nil, os.ErrNotExist
+	}
+	if _, err := runtimeArtifactGID(); err == nil {
+		t.Fatal("expected error when neither veil-proxy nor veil group exists")
 	}
 }

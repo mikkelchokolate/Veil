@@ -110,15 +110,17 @@ func (s *Server) ServeUnix(ctx context.Context, path string, policy PeerPolicy) 
 }
 
 // veilGroupGID resolves the numeric gid of the veil group (the group the helper
-// socket is shared with).
+// socket is shared with). It looks up the *group* — not the veil user's
+// primary gid — so hosts where the account's primary group differs still chgrp
+// the socket to the actual veil group (issue #630).
 func veilGroupGID() (int, error) {
-	u, err := lookupUser("veil")
+	g, err := lookupGroup("veil")
 	if err != nil {
-		return 0, fmt.Errorf("resolve veil user: %w", err)
+		return 0, fmt.Errorf("resolve veil group: %w", err)
 	}
-	gid, err := strconv.Atoi(u.Gid)
+	gid, err := strconv.Atoi(g.Gid)
 	if err != nil {
-		return 0, fmt.Errorf("parse veil gid %q: %w", u.Gid, err)
+		return 0, fmt.Errorf("parse veil gid %q: %w", g.Gid, err)
 	}
 	return gid, nil
 }

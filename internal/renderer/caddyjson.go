@@ -52,10 +52,14 @@ type caddyConfig struct {
 }
 
 func renderHTTPApp(plan caddyassembly.CaddyRenderPlan, caps caddycapabilities.CaddyCapabilities) (map[string]any, error) {
+	fallbackBase := plan.FallbackBase
+	if fallbackBase == "" {
+		fallbackBase = naiveFallbackBase()
+	}
 	servers := make(map[string]any)
 	for key, owner := range plan.Servers {
 		serverName := serverNameFor(key)
-		server, err := renderServer(key, owner, caps)
+		server, err := renderServer(key, owner, caps, fallbackBase)
 		if err != nil {
 			return nil, err
 		}
@@ -159,7 +163,7 @@ func renderACMEIssuer(email, mode string) (map[string]any, error) {
 var acmeIssuerCAURL = func() string { return strings.TrimSpace(os.Getenv("VEIL_ACME_CA_URL")) }
 var acmeIssuerCARoot = func() string { return strings.TrimSpace(os.Getenv("VEIL_ACME_CA_ROOT")) }
 
-func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, caps caddycapabilities.CaddyCapabilities) (map[string]any, error) {
+func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, caps caddycapabilities.CaddyCapabilities, fallbackBase string) (map[string]any, error) {
 	server := map[string]any{
 		"listen":                  []string{listenString(key)},
 		"automatic_https":         map[string]any{"disable_redirects": true},
@@ -192,7 +196,7 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 			basicValue := base64.StdEncoding.EncodeToString([]byte(user.Username + ":" + user.Password))
 			authCreds = append(authCreds, base64.StdEncoding.EncodeToString([]byte(basicValue)))
 		}
-		fallbackRoot, err := resolveNaiveFallbackRoot(owner.FallbackRoot)
+		fallbackRoot, err := resolveNaiveFallbackRoot(owner.FallbackRoot, fallbackBase)
 		if err != nil {
 			return nil, err
 		}
@@ -255,15 +259,17 @@ func protocolsForTransport(transport string) ([]string, error) {
 	}
 }
 
-// resolveNaiveFallbackRoot validates and normalizes the naive fallback root.
-// The managed tree is /etc/veil/www; legacy /var/lib/veil subtrees stay
-// accepted, but exactly /var/lib/veil would expose state.json, audit/ and
-// backups/ to anonymous naive-port visitors (audit #77 F1). Relative paths
-// resolve under /etc/veil/www; an explicit ".." segment is a traversal
-// attempt and fails closed instead of clamping back inside the root.
-func resolveNaiveFallbackRoot(input string) (string, error) {
+// resolveNaiveFallbackRoot validates and normalizes the naive fallback root
+// against base (the managed <etc>/www tree resolved for this install). The
+// legacy /var/lib/veil subtree is rejected outright: veil-caddy.service masks
+// /var/lib/veil via InaccessiblePaths, so serving from there is dead
+// configuration (issue #618). Relative paths resolve under base; an explicit
+// ".." segment is a traversal attempt and fails closed instead of clamping
+// back inside the root.
+func resolveNaiveFallbackRoot(input, base string) (string, error) {
+	base = filepath.ToSlash(filepath.Clean(base))
 	if input == "" {
-		return NaiveDefaultFallbackRoot, nil
+		return base, nil
 	}
 	root := filepath.ToSlash(filepath.Clean(input))
 	if !strings.HasPrefix(root, "/") {
@@ -272,10 +278,10 @@ func resolveNaiveFallbackRoot(input string) (string, error) {
 				return "", fmt.Errorf("fallback root must not contain '..' path traversal: %s", input)
 			}
 		}
-		root = filepath.ToSlash(filepath.Clean(NaiveDefaultFallbackRoot + "/" + root))
+		root = filepath.ToSlash(filepath.Clean(base + "/" + root))
 	}
-	if !NaiveFallbackRootAllowed(root) {
-		return "", fmt.Errorf("fallback root must be within /etc/veil/www or a subdirectory of /var/lib/veil: %s", root)
+	if !naiveFallbackRootAllowedUnder(root, base) {
+		return "", fmt.Errorf("fallback root must be within %s: %s", base, root)
 	}
 	return root, nil
 }

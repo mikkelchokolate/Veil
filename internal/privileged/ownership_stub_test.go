@@ -8,30 +8,30 @@ import (
 )
 
 // stubRuntimeArtifactOwnership makes promotion/runtime-artifact ownership tests
-// hermetic: the process reports root, account lookups resolve veil/veil-proxy,
+// hermetic: the process reports root, group lookups resolve veil/veil-proxy,
 // and chown/chmod are recorded no-ops. Tests that need to inspect or inject
 // failures should stub the individual hooks themselves instead.
 func stubRuntimeArtifactOwnership(t *testing.T) {
 	t.Helper()
 	oldEffectiveUID := effectiveUID
-	oldLookupUser := lookupUser
+	oldLookupGroup := lookupGroup
 	oldChownPath := chownPath
 	oldChmodPath := chmodPath
 	t.Cleanup(func() {
 		effectiveUID = oldEffectiveUID
-		lookupUser = oldLookupUser
+		lookupGroup = oldLookupGroup
 		chownPath = oldChownPath
 		chmodPath = oldChmodPath
 	})
 	effectiveUID = func() int { return 0 }
-	lookupUser = func(name string) (*user.User, error) {
+	lookupGroup = func(name string) (*user.Group, error) {
 		switch name {
 		case "veil":
-			return &user.User{Uid: "123", Gid: "456"}, nil
+			return &user.Group{Gid: "456"}, nil
 		case "veil-proxy":
-			return &user.User{Uid: "124", Gid: "457"}, nil
+			return &user.Group{Gid: "457"}, nil
 		default:
-			return nil, errors.New("unknown test account " + name)
+			return nil, errors.New("unknown test group " + name)
 		}
 	}
 	chownPath = func(string, int, int) error { return nil }

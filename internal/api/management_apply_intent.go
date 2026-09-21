@@ -1,7 +1,11 @@
 package api
 
 type ManagementApplyIntentInput struct {
-	ApplyRoot       string
+	ApplyRoot string
+	// LiveRoot is the production live generated root; threaded into both the
+	// render check and the plan preview so custom installs display and target
+	// the same destination (issue #636).
+	LiveRoot        string
 	Settings        Settings
 	Inbounds        []Inbound
 	Rules           []RoutingRule
@@ -22,6 +26,7 @@ func (i ManagementApplyIntent) BuildPlan() ApplyPlanResponse {
 	input := i.input
 	renderer := NewManagementConfigRenderer(ManagementConfigInput{
 		ApplyRoot: input.ApplyRoot,
+		LiveRoot:  input.LiveRoot,
 		Settings:  input.Settings,
 		Inbounds:  input.Inbounds,
 		Rules:     input.Rules,
@@ -29,6 +34,7 @@ func (i ManagementApplyIntent) BuildPlan() ApplyPlanResponse {
 	})
 	planInput := ApplyPlanInput{
 		ApplyRoot:               input.ApplyRoot,
+		LiveRoot:                input.LiveRoot,
 		Settings:                input.Settings,
 		Inbounds:                input.Inbounds,
 		Rules:                   input.Rules,

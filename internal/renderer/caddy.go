@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 )
 
 type NaiveUser struct {
@@ -22,6 +24,10 @@ type NaiveConfig struct {
 	Password     string
 	Users        []NaiveUser
 	FallbackRoot string
+	// FallbackBase is the managed fallback web-root base (the <etc>/www tree).
+	// When empty it resolves from the host environment (VEIL_ETC_DIR and
+	// friends) so custom --etc-dir installs serve the tree they provision.
+	FallbackBase string
 	PanelPort    int
 	WebBasePath  string
 	Upstream     string
@@ -48,8 +54,13 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 			return "", errors.New("naive username and password are required")
 		}
 	}
+	fallbackBase := cfg.FallbackBase
+	if fallbackBase == "" {
+		fallbackBase = naiveFallbackBase()
+	}
+	fallbackBase = filepath.ToSlash(filepath.Clean(fallbackBase))
 	if cfg.FallbackRoot == "" {
-		cfg.FallbackRoot = NaiveDefaultFallbackRoot
+		cfg.FallbackRoot = fallbackBase
 	}
 	cfg.FallbackRoot = filepath.Clean(cfg.FallbackRoot)
 	if !strings.HasPrefix(filepath.ToSlash(cfg.FallbackRoot), "/") {
@@ -58,10 +69,10 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 				return "", fmt.Errorf("fallback root must not contain '..' path traversal: %s", cfg.FallbackRoot)
 			}
 		}
-		cfg.FallbackRoot = filepath.Clean(NaiveDefaultFallbackRoot + "/" + cfg.FallbackRoot)
+		cfg.FallbackRoot = filepath.Clean(fallbackBase + "/" + cfg.FallbackRoot)
 	}
-	if !NaiveFallbackRootAllowed(filepath.ToSlash(cfg.FallbackRoot)) {
-		return "", fmt.Errorf("fallback root must be within /etc/veil/www or /var/lib/veil: %s", cfg.FallbackRoot)
+	if !naiveFallbackRootAllowedUnder(filepath.ToSlash(cfg.FallbackRoot), fallbackBase) {
+		return "", fmt.Errorf("fallback root must be within %s: %s", fallbackBase, cfg.FallbackRoot)
 	}
 	cfg.FallbackRoot = filepath.ToSlash(cfg.FallbackRoot)
 
@@ -118,23 +129,33 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 	return out.String(), nil
 }
 
-// NaiveDefaultFallbackRoot is the web root Caddy serves for naive fallback.
-// It lives under /etc/veil because the caddy unit runs as veil-proxy with
-// /var/lib/veil in InaccessiblePaths: a var-lib root would be unreachable
-// (audit #497). It is root:veil-proxy 0750/0640 like generated/.
+// NaiveDefaultFallbackRoot is the packaged web root Caddy serves for naive
+// fallback. It lives under /etc/veil because the caddy unit runs as
+// veil-proxy with /var/lib/veil in InaccessiblePaths: a var-lib root would
+// be unreachable (audit #497). Custom --etc-dir installs resolve their own
+// <etc>/www tree through naiveFallbackBase/hostenv.EtcDir instead.
 const NaiveDefaultFallbackRoot = "/etc/veil/www"
 
-// NaiveFallbackRootAllowed enforces the fallback-root boundary: exactly
-// /etc/veil/www or a subdirectory (never /etc/veil itself or siblings like
-// panel/, which hold keys readable by veil-proxy), or the legacy
-// /var/lib/veil subtree for configurations that still reference it
-// (audit #77 F1/F4 boundary, moved for the veil-proxy runtime).
+// naiveFallbackBase resolves the fallback web root for this process:
+// <etc>/www where <etc> honors VEIL_ETC_DIR/VEIL_LIVE_ROOT/VEIL_KEY_PATH and
+// defaults to /etc/veil.
+func naiveFallbackBase() string {
+	return filepath.ToSlash(filepath.Join(hostenv.EtcDir(), "www"))
+}
+
+// NaiveFallbackRootAllowed enforces the fallback-root boundary against the
+// host's resolved <etc>/www tree: exactly that root or a subdirectory (never
+// the etc root itself or siblings like panel/, which hold keys readable by
+// veil-proxy). The legacy /var/lib/veil subtree is no longer accepted: the
+// caddy unit masks it via InaccessiblePaths, so a root there silently serves
+// nothing (issues #618, #634).
 func NaiveFallbackRootAllowed(root string) bool {
-	if root == "/var/lib/veil" {
-		return false
-	}
-	if strings.HasPrefix(root, "/var/lib/veil/") {
-		return true
-	}
-	return root == NaiveDefaultFallbackRoot || strings.HasPrefix(root, NaiveDefaultFallbackRoot+"/")
+	return naiveFallbackRootAllowedUnder(root, naiveFallbackBase())
+}
+
+// naiveFallbackRootAllowedUnder reports whether root is exactly base or a
+// subdirectory of it. Both arguments are expected to be slash-normalized
+// absolute paths.
+func naiveFallbackRootAllowedUnder(root, base string) bool {
+	return root == base || strings.HasPrefix(root, base+"/")
 }

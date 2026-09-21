@@ -235,7 +235,7 @@ func preserveExistingPanelRepairMaterial(profile *installer.RURecommendedProfile
 			PanelPublicPort:   443,
 			AcmeChallengeMode: "tls-alpn-01",
 		}
-		plan, _, _, err := caddyassembly.BuildFinalRenderPlan(settings, nil)
+		plan, _, _, err := caddyassembly.BuildFinalRenderPlanForEtcDir(settings, nil, etcDir)
 		if err == nil {
 			caps, capErr := caddycapabilities.Probe("")
 			if capErr == nil {

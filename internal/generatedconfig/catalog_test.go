@@ -18,6 +18,12 @@ func TestArtifactCatalogOwnsGeneratedAndLivePaths(t *testing.T) {
 }
 
 func TestArtifactSpecDerivesStablePlanGeneratedAndLivePaths(t *testing.T) {
+	// PlanPath() with no explicit root resolves hostenv.EtcDir(); pin the
+	// packaged default by clearing the env overrides so the assertion stays
+	// hermetic when VEIL_ETC_DIR/VEIL_LIVE_ROOT leak into the test process.
+	for _, key := range []string{"VEIL_ETC_DIR", "VEIL_LIVE_ROOT", "VEIL_KEY_PATH"} {
+		t.Setenv(key, "")
+	}
 	artifact := ArtifactSpec{Subpath: MieruConfigSubpath}
 	if got := artifact.PlanPath(); got != "/etc/veil/generated/mieru/server_config.json" {
 		t.Fatalf("PlanPath() = %q", got)

@@ -81,7 +81,7 @@ func TestRenderConfigWithInbound(t *testing.T) {
 		ProtocolFields: map[string]any{
 			"naiveUsername": "user1",
 			"naivePassword": "pass1",
-			"fallbackRoot":  "/var/lib/veil/www",
+			"fallbackRoot":  "/tmp/veil/www",
 		},
 	}
 	input := generatedconfig.ProtocolRenderInput{
@@ -234,7 +234,7 @@ func TestRenderConfigInboundProtocolFieldsOverride(t *testing.T) {
 		ProtocolFields: map[string]any{
 			"domain":       "pf.example.com",
 			"publicPort":   9443,
-			"fallbackRoot": "/var/lib/veil/pf",
+			"fallbackRoot": "/tmp/veil/www/pf",
 		},
 	}
 
@@ -254,7 +254,7 @@ func TestRenderConfigInboundProtocolFieldsOverride(t *testing.T) {
 			t.Errorf("body missing %q:\n%s", want, body)
 		}
 	}
-	if !strings.Contains(body, `"root": "/var/lib/veil/pf"`) {
+	if !strings.Contains(body, `"root": "/tmp/veil/www/pf"`) {
 		t.Errorf("expected inbound fallback root in file_server, got:\n%s", body)
 	}
 	if strings.Contains(body, "settings.example.com") {
@@ -617,7 +617,7 @@ func TestHasCredential(t *testing.T) {
 }
 
 func TestNaiveProtocolFieldHelpers(t *testing.T) {
-	settings := model.Settings{DefaultInboundPublicPort: 8443, FallbackRoot: "/var/lib/veil/www"}
+	settings := model.Settings{DefaultInboundPublicPort: 8443, FallbackRoot: "/etc/veil/www"}
 	inbound := model.Inbound{
 		Protocol: "naiveproxy",
 		ProtocolFields: map[string]any{
@@ -651,7 +651,7 @@ func TestInboundFieldSchema(t *testing.T) {
 		{Key: "transport", Label: "Transport", Type: schema.FieldSelect, Required: true, Default: "tcp", Options: []schema.FieldOption{{Label: "tcp", Value: "tcp"}}, Placeholder: "tcp=HTTPS/H2.", Scope: "inbound"},
 		{Key: "naiveUsername", Label: "Naive Username", Type: schema.FieldText, Default: "veil", Scope: "inbound"},
 		{Key: "naivePassword", Label: "Naive Password", Type: schema.FieldPassword, GenerateAction: "password", Scope: "inbound"},
-		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Default: "/etc/veil/www", Scope: "inbound"},
+		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Placeholder: "Defaults to " + DefaultFallbackRoot(), Scope: "inbound"},
 	}
 	if !reflect.DeepEqual(fields, want) {
 		t.Errorf("InboundFieldSchema = %+v, want %+v", fields, want)
@@ -667,7 +667,7 @@ func TestSettingsFieldSchema(t *testing.T) {
 	want := []schema.FieldSchema{
 		{Key: "naiveUsername", Label: "Naive Username", Type: schema.FieldText, Default: "veil", Scope: "settings"},
 		{Key: "naivePassword", Label: "Naive Password", Type: schema.FieldPassword, Scope: "settings"},
-		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Default: "/etc/veil/www", Scope: "settings"},
+		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Placeholder: "Defaults to " + DefaultFallbackRoot(), Scope: "settings"},
 		{Key: "panelAccess", Label: "Panel Access", Type: schema.FieldSelect, Default: "local", Options: []schema.FieldOption{{Label: "local", Value: "local"}, {Label: "direct", Value: "direct"}, {Label: "caddy", Value: "caddy"}}, Scope: "settings"},
 		{Key: "panelDomain", Label: "Panel Domain", Type: schema.FieldText, Scope: "settings", Placeholder: "Public domain used for Panel Caddy TLS/SNI."},
 		{Key: "panelEmail", Label: "Panel ACME Email", Type: schema.FieldText, Scope: "settings", Placeholder: "ACME contact email for Panel Caddy certificate."},

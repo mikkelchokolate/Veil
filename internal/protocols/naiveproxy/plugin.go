@@ -1,6 +1,9 @@
 package naiveproxy
 
 import (
+	"path/filepath"
+
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
@@ -70,7 +73,7 @@ func NaiveTransport(inbound model.Inbound) string {
 
 // NaiveFallbackRoot returns the fallback web root for the inbound, falling back
 // to the inbound-level fallback root, the global fallback root, and finally the
-// built-in default.
+// managed <etc>/www default resolved for this install (issue #634).
 func NaiveFallbackRoot(settings model.Settings, inbound model.Inbound) string {
 	root := stringField(inbound.ProtocolFields, "fallbackRoot")
 	if root == "" {
@@ -80,9 +83,16 @@ func NaiveFallbackRoot(settings model.Settings, inbound model.Inbound) string {
 		root = settings.FallbackRoot
 	}
 	if root == "" {
-		root = "/etc/veil/www"
+		root = DefaultFallbackRoot()
 	}
 	return root
+}
+
+// DefaultFallbackRoot resolves the managed naive fallback web root for this
+// process: <etc>/www honoring VEIL_ETC_DIR/VEIL_LIVE_ROOT/VEIL_KEY_PATH with
+// the packaged /etc/veil default.
+func DefaultFallbackRoot() string {
+	return filepath.ToSlash(filepath.Join(hostenv.EtcDir(), "www"))
 }
 
 func stringField(m map[string]any, key string) string {

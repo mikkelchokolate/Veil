@@ -45,6 +45,7 @@ var (
 	osExecutable           = os.Executable
 	effectiveUID           = os.Geteuid
 	lookupUser             = user.Lookup
+	lookupGroup            = user.LookupGroup
 	chownPath              = chownNoFollow
 	chmodPath              = chmodNoFollow
 	openNoFollow           = openRegularNoFollow
@@ -109,9 +110,13 @@ type ProductionConfig struct {
 	RotateKeyWorkflow          func(context.Context) error
 	RecoverKeyRotationWorkflow func(context.Context) error
 	ReleaseVerifier            func(releaseverify.Evidence) error
-	CaddyAdminURL              string
-	HTTPClient                 *http.Client
-	Now                        func() time.Time
+	// CertDirs are the directories SyncCaddyCert may write into; derived from
+	// Policy.CertDirs so a custom --etc-dir install syncs to its own
+	// <etc>/certs tree (issue #628).
+	CertDirs      []string
+	CaddyAdminURL string
+	HTTPClient    *http.Client
+	Now           func() time.Time
 }
 
 func DefaultProductionConfig(policy Policy, version string) ProductionConfig {
@@ -121,6 +126,7 @@ func DefaultProductionConfig(policy Policy, version string) ProductionConfig {
 		KeyPath:              policy.KeyPath,
 		BackupPassphrasePath: policy.BackupPassphrasePath,
 		BackupRoot:           policy.BackupRoot,
+		CertDirs:             append([]string(nil), policy.CertDirs...),
 		VeilVersion:          version,
 	}
 }
@@ -664,18 +670,21 @@ func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
 // dedicated proxy account. A missing/invalid group is fatal so Apply can roll
 // back instead of reporting success for an unreadable runtime artifact.
 func runtimeArtifactGID() (int, error) {
-	if proxy, err := lookupUser("veil-proxy"); err == nil {
+	// Group lookup, not the account's primary gid: a veil-proxy user created
+	// with a different primary group would otherwise silently pick the wrong
+	// owner group (matching installer resolveGroupGID, issue #630).
+	if proxy, err := lookupGroup("veil-proxy"); err == nil {
 		if gid, err := strconv.Atoi(proxy.Gid); err == nil {
 			return gid, nil
 		}
 	}
-	u, err := lookupUser("veil")
+	g, err := lookupGroup("veil")
 	if err != nil {
 		return 0, fmt.Errorf("resolve veil group: %w", err)
 	}
-	gid, err := strconv.Atoi(u.Gid)
+	gid, err := strconv.Atoi(g.Gid)
 	if err != nil {
-		return 0, fmt.Errorf("parse veil gid %q: %w", u.Gid, err)
+		return 0, fmt.Errorf("parse veil gid %q: %w", g.Gid, err)
 	}
 	return gid, nil
 }
@@ -1098,17 +1107,28 @@ func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config 
 	if !dnsLabelPattern.MatchString(request.Domain) {
 		return SyncCaddyCertResult{}, newError(ErrorInvalidRequest, "domain must be a valid DNS label")
 	}
+	// The allowed output roots come from the policy the helper was started
+	// with, so a custom --etc-dir install accepts exactly its own <etc>/certs
+	// tree and nothing else (issue #628). The packaged root is the fallback
+	// for executors built without a policy.
+	certRoots := config.CertDirs
+	if len(certRoots) == 0 {
+		certRoots = []string{caddyCertRoot}
+	}
 	if request.OutDir == "" {
 		request.OutDir = defaultCaddyCertOutDir
+		if len(config.CertDirs) > 0 {
+			request.OutDir = config.CertDirs[0]
+		}
 	}
-	if filepath.IsAbs(request.OutDir) && !strings.HasPrefix(filepath.Clean(request.OutDir), caddyCertRoot) {
+	if !filepath.IsAbs(request.OutDir) {
 		return SyncCaddyCertResult{}, newError(ErrorForbiddenOperation, "certificate output directory is not allowed")
 	}
 	if strings.Contains(request.OutDir, "..") {
 		return SyncCaddyCertResult{}, newError(ErrorInvalidRequest, "certificate output directory must not contain '..'")
 	}
 	request.OutDir = filepath.Clean(request.OutDir)
-	if !strings.HasPrefix(request.OutDir, caddyCertRoot) {
+	if !caddyCertOutDirAllowed(request.OutDir, certRoots) {
 		return SyncCaddyCertResult{}, newError(ErrorForbiddenOperation, "certificate output directory is not allowed")
 	}
 	pair, err := findCaddyCertWithRetry(ctx, request.Domain)
@@ -1160,6 +1180,19 @@ func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config 
 		return SyncCaddyCertResult{}, fmt.Errorf("set certificate key ownership: %w", err)
 	}
 	return SyncCaddyCertResult{Found: true, CertPath: certOut, KeyPath: keyOut}, nil
+}
+
+// caddyCertOutDirAllowed reports whether dir is exactly one of the allowed
+// certificate output roots or a subdirectory of one. The boundary check uses
+// the separator so a sibling like <root>-evil cannot pass (issue #628).
+func caddyCertOutDirAllowed(dir string, roots []string) bool {
+	for _, root := range roots {
+		clean := filepath.Clean(root)
+		if dir == clean || strings.HasPrefix(dir, clean+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 func findCaddyCertWithRetry(ctx context.Context, domain string) (caddycert.Pair, error) {

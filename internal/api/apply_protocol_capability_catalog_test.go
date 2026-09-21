@@ -1,9 +1,18 @@
 package api
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
+)
 
 func TestApplyProtocolCapabilityCatalogOwnsConfigActionsAndValidation(t *testing.T) {
 	catalog := NewApplyProtocolCapabilityCatalog()
+	// The zero-arg catalog anchors displayed paths at the configured etc
+	// dir's generated tree — under the TestMain VEIL_LIVE_ROOT isolation that
+	// is the isolated test root, not the packaged /etc/veil literal.
+	genRoot := filepath.ToSlash(filepath.Join(hostenv.EtcDir(), "generated"))
 	cases := []struct {
 		protocol               string
 		config                 string
@@ -12,10 +21,10 @@ func TestApplyProtocolCapabilityCatalogOwnsConfigActionsAndValidation(t *testing
 		requiresRenderSettings bool
 		settingsError          bool
 	}{
-		{"naiveproxy", "/etc/veil/generated/caddy/config.json", "reload veil-caddy.service", true, false, false},
-		{"hysteria2", "/etc/veil/generated/hysteria2/server.yaml", "restart veil-hysteria2@.service", true, true, false},
-		{"mieru", "/etc/veil/generated/mieru/server_config.json", "restart veil-mieru.service", true, false, false},
-		{"olcrtc", "/etc/veil/generated/olcrtc/server.yaml", "restart veil-olcrtc@.service", true, false, false},
+		{"naiveproxy", genRoot + "/caddy/config.json", "reload veil-caddy.service", true, false, false},
+		{"hysteria2", genRoot + "/hysteria2/server.yaml", "restart veil-hysteria2@.service", true, true, false},
+		{"mieru", genRoot + "/mieru/server_config.json", "restart veil-mieru.service", true, false, false},
+		{"olcrtc", genRoot + "/olcrtc/server.yaml", "restart veil-olcrtc@.service", true, false, false},
 	}
 	for _, tc := range cases {
 		capability, ok := catalog.ForProtocol(tc.protocol)

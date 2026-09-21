@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 )
 
 // DirSizeInfo holds disk usage for a directory.
@@ -19,19 +21,51 @@ type DiskStats struct {
 	Dirs []DirSizeInfo `json:"dirs"`
 }
 
-// veilDirs lists Veil-managed directories to measure. System log roots like
-// /var/log are deliberately excluded: they are not Veil-managed, they mix
-// unrelated log volume into the Veil disk card, and a full recursive walk of
-// them made every GET /api/disk disproportionately expensive (#641).
-var veilDirs = []string{
-	"/var/lib/veil",
-	"/etc/veil",
+// veilDirs lists the Veil-managed directories to measure. The configuration
+// and state roots follow VEIL_ETC_DIR/VEIL_VAR_DIR (including their *_PATH
+// fallbacks) so a custom --etc-dir/--var-dir install reports its own tree
+// instead of the packaged /etc/veil + /var/lib/veil pair (issue #638). The
+// optional Caddy and Mita state directories are included when explicitly
+// configured or present on disk. System log roots like /var/log are
+// deliberately excluded: they are not Veil-managed, they mix unrelated log
+// volume into the Veil disk card, and a full recursive walk of them made
+// every GET /api/disk disproportionately expensive (#641).
+func veilDirs() []string {
+	dirs := []string{hostenv.VarDir(), hostenv.EtcDir()}
+	for _, candidate := range []struct {
+		env      string
+		fallback string
+	}{
+		{"VEIL_CADDY_STATE_DIR", "/var/lib/caddy"},
+		{"VEIL_MITA_STATE_DIR", "/var/lib/mita"},
+	} {
+		dir := strings.TrimSpace(os.Getenv(candidate.env))
+		configured := dir != ""
+		if !configured {
+			dir = candidate.fallback
+		}
+		if info, err := os.Stat(dir); !configured && (err != nil || !info.IsDir()) {
+			continue
+		}
+		dirs = append(dirs, dir)
+	}
+	seen := map[string]struct{}{}
+	out := dirs[:0]
+	for _, dir := range dirs {
+		clean := filepath.Clean(dir)
+		if _, ok := seen[clean]; ok {
+			continue
+		}
+		seen[clean] = struct{}{}
+		out = append(out, dir)
+	}
+	return out
 }
 
 // readDirDiskStats returns disk usage for Veil-managed directories.
 func readDirDiskStats() DiskStats {
 	stats := DiskStats{}
-	for _, dir := range veilDirs {
+	for _, dir := range veilDirs() {
 		d := DirSizeInfo{Path: dir}
 		d.SizeBytes = dirSizeRecursive(dir)
 		d.SizeHuman = formatBytes(d.SizeBytes)

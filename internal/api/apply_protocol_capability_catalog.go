@@ -18,6 +18,13 @@ type ApplyProtocolCapabilityCatalog struct {
 }
 
 func NewApplyProtocolCapabilityCatalog() ApplyProtocolCapabilityCatalog {
+	return NewApplyProtocolCapabilityCatalogForLiveRoot("")
+}
+
+// NewApplyProtocolCapabilityCatalogForLiveRoot builds the capability catalog
+// whose displayed config paths are anchored at the production live generated
+// root — including custom --live-root installs (issue #636).
+func NewApplyProtocolCapabilityCatalogForLiveRoot(liveRoot string) ApplyProtocolCapabilityCatalog {
 	byProtocol := map[string]ApplyProtocolCapability{}
 	registry := protocols.NewRegistry()
 	for _, p := range registry.All() {
@@ -26,7 +33,7 @@ func NewApplyProtocolCapabilityCatalog() ApplyProtocolCapabilityCatalog {
 			Protocol: meta.Protocol,
 		}
 		if cr, ok := protocols.AsConfigRenderer(p); ok {
-			cap.Config = cr.ArtifactSpec().PlanPath()
+			cap.Config = cr.ArtifactSpec().PlanPathForLiveRoot(liveRoot)
 			cap.ValidateInboundRender = true
 			cap.RequiresRenderSettings = requiresProtocolRenderSettings(p)
 		}

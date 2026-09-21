@@ -60,10 +60,13 @@ func TestBuildApplyPlanUsesPerInboundRuntimeActions(t *testing.T) {
 		Inbounds:  []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true, Password: "secret"}},
 	})
 
-	if containsApplyPlanString(plan.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
+	// Displayed config paths anchor at the state's live root
+	// (<applyRoot>/live here) so the preview matches the promote destination
+	// (issue #636).
+	if containsApplyPlanString(plan.Configs, "/srv/veil/live/hysteria2/server.yaml") {
 		t.Fatalf("plan configs should not target fallback config: %+v", plan.Configs)
 	}
-	if !containsApplyPlanString(plan.Configs, "/etc/veil/generated/hysteria2/edge.yaml") {
+	if !containsApplyPlanString(plan.Configs, "/srv/veil/live/hysteria2/edge.yaml") {
 		t.Fatalf("missing per-inbound generated config: %+v", plan.Configs)
 	}
 	if containsApplyPlanString(plan.Actions, "restart veil-hysteria2@.service") {

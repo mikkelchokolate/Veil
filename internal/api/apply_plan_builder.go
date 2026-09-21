@@ -19,7 +19,10 @@ import (
 )
 
 type ApplyPlanInput struct {
-	ApplyRoot               string
+	ApplyRoot string
+	// LiveRoot is the production live generated root the apply job promotes
+	// into; empty falls back to <applyRoot>/live to match managementState.
+	LiveRoot                string
 	Settings                Settings
 	Inbounds                []Inbound
 	Rules                   []RoutingRule
@@ -32,16 +35,25 @@ type ApplyPlanInput struct {
 
 func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 	applyRoot := defaultApplyRoot(input.ApplyRoot)
+	// The preview must display — and the promote operations must target — the
+	// live root the production state actually uses, not a fixed
+	// <applyRoot>/live or /etc/veil/generated (issue #636).
+	liveRoot := strings.TrimSpace(input.LiveRoot)
+	if liveRoot == "" {
+		liveRoot = filepath.Join(applyRoot, "live")
+	}
 	runtimeCatalog := NewManagedRuntimeCatalogFor(input.Settings, input.Inbounds, input.Warp)
-	caddyMaterial := buildCaddyMaterial(input.Settings, input.Inbounds, runtimeCatalog)
+	caddyMaterial := buildCaddyMaterial(input.Settings, input.Inbounds, runtimeCatalog, liveRoot)
 	capabilities := []applyplan.ProtocolCapability{}
-	catalog := NewApplyProtocolCapabilityCatalog()
+	catalog := NewApplyProtocolCapabilityCatalogForLiveRoot(liveRoot)
 	for _, protocolCapability := range catalog.All() {
 		capability := protocolCapability
 		capabilities = append(capabilities, applyplan.ProtocolCapability{
-			Protocol:               capability.Protocol,
-			Config:                 capability.Config,
-			ConfigForInbound:       configForInboundRuntime,
+			Protocol: capability.Protocol,
+			Config:   capability.Config,
+			ConfigForInbound: func(inbound Inbound) string {
+				return configForInboundRuntime(liveRoot, inbound)
+			},
 			Action:                 capability.Action,
 			ActionForInbound:       actionForInboundRuntime,
 			ValidateSettings:       capability.ValidateSettings,
@@ -72,7 +84,7 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		ValidateInboundRender: validateInboundRender,
 		ValidateWarpRender:    input.ValidateWarpRender,
 		GeneratedRoot:         filepath.Join(applyRoot, "generated"),
-		LiveRoot:              filepath.Join(applyRoot, "live"),
+		LiveRoot:              liveRoot,
 	})
 	appendProtocolInboundValidation(&plan, catalog, input.Settings, input.Inbounds)
 	return plan
@@ -82,7 +94,7 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 // Caddy binary — the production value is caddycapabilities.Probe.
 var probeCaddyCapabilities = caddycapabilities.Probe
 
-func buildCaddyMaterial(settings Settings, inbounds []Inbound, runtimeCatalog ManagedRuntimeCatalog) applyplan.Material {
+func buildCaddyMaterial(settings Settings, inbounds []Inbound, runtimeCatalog ManagedRuntimeCatalog, liveRoot string) applyplan.Material {
 	material := applyplan.Material{}
 	if !caddyRequired(settings, inbounds) {
 		return material
@@ -176,7 +188,7 @@ func buildCaddyMaterial(settings Settings, inbounds []Inbound, runtimeCatalog Ma
 		return material
 	}
 
-	path := generatedconfig.ArtifactSpec{Subpath: generatedconfig.CaddyJSONConfigSubpath}.PlanPath()
+	path := generatedconfig.ArtifactSpec{Subpath: generatedconfig.CaddyJSONConfigSubpath}.PlanPathForLiveRoot(liveRoot)
 	material.Configs = append(material.Configs, path)
 	material.Actions = append(material.Actions, "reload "+unitCaddy)
 	material.Runtimes = append(material.Runtimes, unitCaddy)
@@ -415,12 +427,12 @@ func appendUniqueApplyPlanError(errors []string, message string) []string {
 	return append(errors, message)
 }
 
-func configForInboundRuntime(inbound Inbound) string {
+func configForInboundRuntime(liveRoot string, inbound Inbound) string {
 	for _, descriptor := range runtimeDescriptorsForInbound(inbound) {
 		if descriptor.PromotedSubpath == "" {
 			continue
 		}
-		return filepath.ToSlash(filepath.Join("/etc/veil", "generated", filepath.FromSlash(descriptor.PromotedSubpath)))
+		return filepath.ToSlash(filepath.Join(liveRoot, filepath.FromSlash(descriptor.PromotedSubpath)))
 	}
 	return ""
 }

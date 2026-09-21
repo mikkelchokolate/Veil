@@ -12,7 +12,7 @@ func TestRenderNaiveCaddyfile(t *testing.T) {
 		ListenPort:   443,
 		Username:     "alice",
 		Password:     "secret",
-		FallbackRoot: "/var/lib/veil/www",
+		FallbackRoot: "/etc/veil/www",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -28,7 +28,7 @@ func TestRenderNaiveCaddyfile(t *testing.T) {
 		"hide_ip",
 		"hide_via",
 		"probe_resistance",
-		"root * /var/lib/veil/www",
+		"root * /etc/veil/www",
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Fatalf("rendered Caddyfile missing %q:\n%s", want, cfg)
@@ -157,7 +157,7 @@ func TestRenderNaiveCaddyfileNormalizesPaths(t *testing.T) {
 		{"FallbackRoot=/etc/passwd escapes the managed root", "/etc/passwd", false},
 		{"FallbackRoot=/var/lib/veil/../../../etc/passwd escapes via traversal", "/var/lib/veil/../../../etc/passwd", false},
 		{"FallbackRoot=/var/lib/veil itself exposes state", "/var/lib/veil", false},
-		{"FallbackRoot=/var/lib/veil/www accepted (legacy)", "/var/lib/veil/www", true},
+		{"FallbackRoot=/var/lib/veil/www rejected (caddy masks /var/lib/veil)", "/var/lib/veil/www", false},
 		{"FallbackRoot=/etc/veil/www accepted", "/etc/veil/www", true},
 		{"FallbackRoot=/etc/veil/panel holds secrets", "/etc/veil/panel", false},
 		{"FallbackRoot=site resolves under /etc/veil/www", "site", true},
@@ -190,7 +190,7 @@ func TestRenderNaiveCaddyfileWithPanelReverseProxy(t *testing.T) {
 		ListenPort:   443,
 		Username:     "alice",
 		Password:     "secret",
-		FallbackRoot: "/var/lib/veil/www",
+		FallbackRoot: "/etc/veil/www",
 		PanelPort:    2096,
 		WebBasePath:  "/a1b2c3d4e5f6/",
 	})

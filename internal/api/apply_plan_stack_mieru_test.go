@@ -4,6 +4,7 @@ import "testing"
 
 func TestBuildApplyPlanUsesMieruInboundWithoutInstallStack(t *testing.T) {
 	mieru := BuildApplyPlan(ApplyPlanInput{
+		LiveRoot: "/etc/veil/generated",
 		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev"},
 		Inbounds: []Inbound{{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret"}},
 	})

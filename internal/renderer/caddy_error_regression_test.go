@@ -15,6 +15,7 @@ func TestPanelCaddyServerHasBoundedDiagnosticErrorResponse(t *testing.T) {
 		bindregistry.BindKey{Network: bindregistry.ListenTCP, Address: "0.0.0.0", Port: 443},
 		caddyassembly.CaddyBindOwner{Kind: caddyassembly.CaddyOwnerPanel, Domain: "panel.example", BackendPort: 8080, WebBasePath: "/secret"},
 		caddycapabilities.CaddyCapabilities{},
+		NaiveDefaultFallbackRoot,
 	)
 	if err != nil {
 		t.Fatal(err)

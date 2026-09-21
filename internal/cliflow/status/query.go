@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/webbasepath"
 )
 
@@ -113,6 +114,10 @@ var (
 	installedEnvFile   string
 	installedStateFile string
 	panelTLSCertFile   string
+	// systemdSystemDir is a test seam: production scans the real systemd
+	// system directory for the installed veil.service drop-in that records a
+	// custom EnvironmentFile (issue #635).
+	systemdSystemDir = "/etc/systemd/system"
 )
 
 func ResolveListen(flagValue string) string {
@@ -136,7 +141,90 @@ func effectiveEnvFile() string {
 	if installedEnvFile != "" {
 		return installedEnvFile
 	}
-	return defaultVeilEnvPath()
+	candidates := envFileCandidates()
+	for _, candidate := range candidates[:len(candidates)-1] {
+		if fileExists(candidate) {
+			return candidate
+		}
+	}
+	// Nothing found: return the last (most generic) candidate so error paths
+	// still report a meaningful location.
+	return candidates[len(candidates)-1]
+}
+
+// envFileCandidates lists the locations a `veil status` probe may find the
+// installed EnvironmentFile, most specific first. VEIL_ETC_DIR is explicit
+// operator intent, so it short-circuits discovery; otherwise the root implied
+// by VEIL_LIVE_ROOT/VEIL_KEY_PATH, the EnvironmentFile recorded in the
+// installed systemd unit (custom --etc-dir installs), and finally the
+// packaged path are tried in order (issue #635).
+func envFileCandidates() []string {
+	if runtime.GOOS == "windows" {
+		return []string{defaultVeilEnvPath()}
+	}
+	if dir := strings.TrimSpace(os.Getenv("VEIL_ETC_DIR")); dir != "" {
+		return []string{filepath.Join(dir, "veil.env")}
+	}
+	candidates := []string{}
+	if etc := hostenv.EtcDir(); etc != hostenv.DefaultEtcDir {
+		candidates = append(candidates, filepath.Join(etc, "veil.env"))
+	}
+	if path := systemdEnvFilePath(); path != "" {
+		candidates = append(candidates, path)
+	}
+	candidates = append(candidates, defaultVeilEnvPath())
+	return candidates
+}
+
+// systemdEnvFilePath scans the installed veil.service drop-ins for an
+// EnvironmentFile override. Later drop-ins win under systemd semantics, so
+// the last assignment is used.
+func systemdEnvFilePath() string {
+	if runtime.GOOS == "windows" {
+		return ""
+	}
+	dropInDir := filepath.Join(systemdSystemDir, "veil.service.d")
+	entries, err := os.ReadDir(dropInDir)
+	if err != nil {
+		return ""
+	}
+	found := ""
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".conf") {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Join(dropInDir, entry.Name()))
+		if err != nil {
+			continue
+		}
+		if path := envFileDirective(body); path != "" {
+			found = path
+		}
+	}
+	return found
+}
+
+// envFileDirective extracts the EnvironmentFile= target from a systemd unit
+// fragment. A leading "-" (ignore-missing marker) and systemd-style quoting
+// are stripped.
+func envFileDirective(body []byte) string {
+	found := ""
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		name, value, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(name) != "EnvironmentFile" {
+			continue
+		}
+		// systemd applies every EnvironmentFile= line in order and an empty
+		// assignment resets the list; keep the last directive, matching the
+		// last-drop-in-wins ordering used across .conf fragments.
+		value = strings.TrimPrefix(strings.TrimSpace(value), "-")
+		found = strings.Trim(value, `"'`)
+	}
+	return found
 }
 
 func effectiveStateFile() string {
@@ -146,7 +234,40 @@ func effectiveStateFile() string {
 	if path := strings.TrimSpace(os.Getenv("VEIL_STATE_PATH")); path != "" {
 		return path
 	}
-	return defaultStatePath()
+	if dir := strings.TrimSpace(os.Getenv("VEIL_VAR_DIR")); dir != "" {
+		return filepath.Join(dir, "state.json")
+	}
+	candidates := stateFileCandidates()
+	for _, candidate := range candidates[:len(candidates)-1] {
+		if fileExists(candidate) {
+			return candidate
+		}
+	}
+	return candidates[len(candidates)-1]
+}
+
+// stateFileCandidates lists where the installed management state may live:
+// the VEIL_STATE_PATH recorded in the discovered env file first (it is the
+// authoritative installed location), then the VEIL_VAR_DIR-implied root, then
+// the packaged default (issue #635).
+func stateFileCandidates() []string {
+	if runtime.GOOS == "windows" {
+		return []string{defaultStatePath()}
+	}
+	candidates := []string{}
+	if path := strings.TrimSpace(installedEnvValue("VEIL_STATE_PATH")); path != "" {
+		candidates = append(candidates, path)
+	}
+	if dir := hostenv.VarDir(); dir != hostenv.DefaultVarDir {
+		candidates = append(candidates, filepath.Join(dir, "state.json"))
+	}
+	candidates = append(candidates, defaultStatePath())
+	return candidates
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 func defaultVeilEnvPath() string {
@@ -336,6 +457,20 @@ func effectivePanelTLSCertFile() string {
 	}
 	if panelTLSCertFile != "" {
 		return panelTLSCertFile
+	}
+	if runtime.GOOS != "windows" {
+		// A custom --etc-dir install stores the panel TLS pair under
+		// <etc>/panel; probe it before falling back to the packaged path
+		// (issue #635).
+		if dir := strings.TrimSpace(os.Getenv("VEIL_ETC_DIR")); dir != "" {
+			return filepath.Join(dir, "panel", "tls.crt")
+		}
+		if etc := hostenv.EtcDir(); etc != hostenv.DefaultEtcDir {
+			candidate := filepath.Join(etc, "panel", "tls.crt")
+			if fileExists(candidate) {
+				return candidate
+			}
+		}
 	}
 	return defaultPanelTLSCertPath()
 }

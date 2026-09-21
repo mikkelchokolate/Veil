@@ -72,6 +72,9 @@ func TestIdempotencyReservationIsSharedAcrossOSProcesses(t *testing.T) {
 			t.Fatal(err)
 		}
 		commands[index] = exec.Command(os.Args[0], "-test.run=^TestIdempotencyProcessHelper$")
+		// The marker also suppresses the package TestMain env isolation, so
+		// children inherit this process's VEIL_* roots verbatim and resolve
+		// the same hostenv bases as the seed request above (issue #634).
 		commands[index].Env = append(os.Environ(), "VEIL_IDEMPOTENCY_PROCESS="+string(raw))
 		commands[index].Stdout = &outputs[index]
 		commands[index].Stderr = &outputs[index]

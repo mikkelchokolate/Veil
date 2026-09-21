@@ -46,7 +46,9 @@ func TestNaiveGeneratedConfigPreservesPanelCaddyAccessRoute(t *testing.T) {
 			Email:         "admin@example.com",
 			NaiveUsername: "veil",
 			NaivePassword: "naive-secret",
-			FallbackRoot:  "/var/lib/veil/www",
+			// The managed fallback tree is <etc>/www of the render root;
+			// /var/lib/veil is unreachable to veil-caddy (issue #618).
+			FallbackRoot: filepath.Join(root, "www"),
 		},
 		Inbounds: []Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true}},
 	})
@@ -65,7 +67,7 @@ func TestNaiveGeneratedConfigWithoutPanelCaddyDoesNotExposePanelRoute(t *testing
 	root := t.TempDir()
 	configs, err := BuildGeneratedConfigSet(GeneratedConfigInput{
 		ApplyRoot: root,
-		Settings:  Settings{PanelListen: "127.0.0.1:2096", Mode: "server", Domain: "vpn.example.com", DefaultAcmeEmail: "admin@example.com", NaiveUsername: "veil", NaivePassword: "naive-secret", FallbackRoot: "/var/lib/veil/www"},
+		Settings:  Settings{PanelListen: "127.0.0.1:2096", Mode: "server", Domain: "vpn.example.com", DefaultAcmeEmail: "admin@example.com", NaiveUsername: "veil", NaivePassword: "naive-secret", FallbackRoot: filepath.Join(root, "www")},
 		Inbounds:  []Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true}},
 	})
 	if err != nil {

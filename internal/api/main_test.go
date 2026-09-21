@@ -31,6 +31,10 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic("create API test root: " + err.Error())
 	}
+	// Subprocess helpers (VEIL_IDEMPOTENCY_PROCESS) must inherit the parent's
+	// VEIL_* roots verbatim: they open the same state/database files, and
+	// hostenv-derived bases (e.g. the fallbackRoot allowlist under <etc>/www)
+	// must resolve identically in both processes.
 	isolatedEnv := map[string]string{
 		"VEIL_STATE_PATH":       testRoot + "/state.json",
 		"VEIL_KEY_PATH":         testRoot + "/state.key",
@@ -40,9 +44,11 @@ func TestMain(m *testing.M) {
 		"VEIL_AUTO_TLS_DIR":     testRoot + "/autocert",
 		"VEIL_BACKUP_MAX_BYTES": "8388608",
 	}
-	for name, value := range isolatedEnv {
-		if err := os.Setenv(name, value); err != nil {
-			panic("set API test environment " + name + ": " + err.Error())
+	if os.Getenv("VEIL_IDEMPOTENCY_PROCESS") == "" {
+		for name, value := range isolatedEnv {
+			if err := os.Setenv(name, value); err != nil {
+				panic("set API test environment " + name + ": " + err.Error())
+			}
 		}
 	}
 

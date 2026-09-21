@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
@@ -212,7 +213,10 @@ func loadSnapshotFromStateWithOK() (Settings, []Inbound, WarpConfig, bool) {
 			}
 			statePath = filepath.Join(pd, "Veil", "state.json")
 		} else {
-			statePath = "/var/lib/veil/state.json"
+			// Follow the configured state root (VEIL_VAR_DIR, then the
+			// VEIL_STATE_PATH directory) so a custom --var-dir install is
+			// discovered instead of only the packaged tree.
+			statePath = filepath.Join(hostenv.VarDir(), "state.json")
 		}
 		testguard.CheckProductionPath(statePath)
 	}
@@ -225,7 +229,7 @@ func loadSnapshotFromStateWithOK() (Settings, []Inbound, WarpConfig, bool) {
 			}
 			keyPath = filepath.Join(pd, "Veil", "state.key")
 		} else {
-			keyPath = "/etc/veil/state.key"
+			keyPath = filepath.Join(hostenv.EtcDir(), "state.key")
 		}
 		testguard.CheckProductionPath(keyPath)
 	}

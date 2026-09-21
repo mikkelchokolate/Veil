@@ -136,15 +136,15 @@ func TestPromotionCrashProcess(t *testing.T) {
 	marker := filepath.Join(root, "crash-marker")
 	request := promotionRequestForRoot(root, 3)
 	originalEffectiveUID := effectiveUID
-	originalLookupUser := lookupUser
+	originalLookupGroup := lookupGroup
 	originalChownPath := chownPath
 	defer func() {
 		effectiveUID = originalEffectiveUID
-		lookupUser = originalLookupUser
+		lookupGroup = originalLookupGroup
 		chownPath = originalChownPath
 	}()
 	effectiveUID = func() int { return 0 }
-	lookupUser = func(string) (*user.User, error) { return &user.User{Uid: "0", Gid: "0"}, nil }
+	lookupGroup = func(string) (*user.Group, error) { return &user.Group{Gid: "0"}, nil }
 	chownCalls := 0
 	chownPath = func(string, int, int) error {
 		chownCalls++
@@ -279,16 +279,16 @@ func fixedPromotionBackupID() string {
 func withStubbedArtifactOwnership(t *testing.T, run func()) {
 	t.Helper()
 	originalEffectiveUID := effectiveUID
-	originalLookupUser := lookupUser
+	originalLookupGroup := lookupGroup
 	originalChownPath := chownPath
 	originalChmodPath := chmodPath
 	effectiveUID = func() int { return 0 }
-	lookupUser = func(string) (*user.User, error) { return &user.User{Uid: "0", Gid: "0"}, nil }
+	lookupGroup = func(string) (*user.Group, error) { return &user.Group{Gid: "0"}, nil }
 	chownPath = func(string, int, int) error { return nil }
 	chmodPath = func(string, os.FileMode) error { return nil }
 	defer func() {
 		effectiveUID = originalEffectiveUID
-		lookupUser = originalLookupUser
+		lookupGroup = originalLookupGroup
 		chownPath = originalChownPath
 		chmodPath = originalChmodPath
 	}()

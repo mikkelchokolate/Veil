@@ -76,17 +76,17 @@ func TestProductionExecutorPromotesResolvedArtifactsWithSafetyCopy(t *testing.T)
 
 func TestProductionExecutorFailsWhenProtocolConfigOwnershipCannotBeSet(t *testing.T) {
 	oldEffectiveUID := effectiveUID
-	oldLookupUser := lookupUser
+	oldLookupGroup := lookupGroup
 	oldChownPath := chownPath
 	defer func() {
 		effectiveUID = oldEffectiveUID
-		lookupUser = oldLookupUser
+		lookupGroup = oldLookupGroup
 		chownPath = oldChownPath
 	}()
 
 	effectiveUID = func() int { return 0 }
-	lookupUser = func(string) (*user.User, error) {
-		return &user.User{Uid: "123", Gid: "456"}, nil
+	lookupGroup = func(string) (*user.Group, error) {
+		return &user.Group{Gid: "456"}, nil
 	}
 	ownershipErr := errors.New("injected chown failure")
 	chownPath = func(string, int, int) error { return ownershipErr }
@@ -169,25 +169,25 @@ func TestProductionExecutorDoesNotBackupSymlinkTargetOnRemoval(t *testing.T) {
 // #509, #516, #517).
 func TestProductionExecutorPublishesCaddyArtifactReadableByVeilProxy(t *testing.T) {
 	oldEffectiveUID := effectiveUID
-	oldLookupUser := lookupUser
+	oldLookupGroup := lookupGroup
 	oldChownPath := chownPath
 	oldChmodPath := chmodPath
 	defer func() {
 		effectiveUID = oldEffectiveUID
-		lookupUser = oldLookupUser
+		lookupGroup = oldLookupGroup
 		chownPath = oldChownPath
 		chmodPath = oldChmodPath
 	}()
 
 	effectiveUID = func() int { return 0 }
-	lookupUser = func(name string) (*user.User, error) {
+	lookupGroup = func(name string) (*user.Group, error) {
 		switch name {
 		case "veil":
-			return &user.User{Uid: "123", Gid: "456"}, nil
+			return &user.Group{Gid: "456"}, nil
 		case "veil-proxy":
-			return &user.User{Uid: "124", Gid: "457"}, nil
+			return &user.Group{Gid: "457"}, nil
 		default:
-			t.Fatalf("lookup user = %q, want veil or veil-proxy", name)
+			t.Fatalf("lookup group = %q, want veil or veil-proxy", name)
 			return nil, nil
 		}
 	}
@@ -254,17 +254,17 @@ func TestProductionExecutorPublishesCaddyArtifactReadableByVeilProxy(t *testing.
 // root-owned 0600 files the veil-proxy units cannot read (audit #522).
 func TestProductionExecutorPromotionFailsClosedWithoutRoot(t *testing.T) {
 	oldEffectiveUID := effectiveUID
-	oldLookupUser := lookupUser
+	oldLookupGroup := lookupGroup
 	defer func() {
 		effectiveUID = oldEffectiveUID
-		lookupUser = oldLookupUser
+		lookupGroup = oldLookupGroup
 	}()
 	effectiveUID = func() int { return 1000 }
 	// The privilege boundary exists on this host — a non-root helper cannot
 	// enforce artifact ownership for the veil-proxy consumer, so it must fail
 	// closed instead of silently leaving the artifact unreadable (#522).
-	lookupUser = func(name string) (*user.User, error) {
-		return &user.User{Uid: "123", Gid: "456"}, nil
+	lookupGroup = func(name string) (*user.Group, error) {
+		return &user.Group{Gid: "456"}, nil
 	}
 
 	root := t.TempDir()

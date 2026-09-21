@@ -56,7 +56,9 @@ func TestReloadPromotedServicesSyncsCaddyCertBeforeHysteria2(t *testing.T) {
 	if len(client.syncCaddyCertRequests) != 1 {
 		t.Fatalf("expected 1 sync request, got %+v", client.syncCaddyCertRequests)
 	}
-	want := privileged.SyncCaddyCertRequest{Domain: "hy2.example.com", OutDir: "/etc/veil/certs"}
+	// The cert-sync destination follows the configured etc root — the parent
+	// of the state's live generated tree — not a hardcoded /etc/veil (#628).
+	want := privileged.SyncCaddyCertRequest{Domain: "hy2.example.com", OutDir: filepath.Join(filepath.Dir(liveRoot), "certs")}
 	if !reflect.DeepEqual(client.syncCaddyCertRequests[0], want) {
 		t.Fatalf("sync request = %+v, want %+v", client.syncCaddyCertRequests[0], want)
 	}

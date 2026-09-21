@@ -4,12 +4,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
 
 func TestApplyPlanRejectsMultipleEnabledInboundsPerProtocol(t *testing.T) {
-	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
+	// Anchor the state's live root at the same VEIL_LIVE_ROOT the
+	// render-time fallbackRoot default resolves from (hostenv.EtcDir/www),
+	// so the render base and the effective root agree (issue #636).
+	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", LiveRoot: os.Getenv("VEIL_LIVE_ROOT")})
 	settingsBody := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","defaultAcmeEmail":"admin@example.com","naiveUsername":"veil","naivePassword":"naive-secret","hysteria2Password":"hy2-secret"}`)
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/settings", settingsBody))
 

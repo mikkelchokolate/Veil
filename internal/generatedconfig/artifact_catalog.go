@@ -3,6 +3,8 @@ package generatedconfig
 import (
 	"path/filepath"
 	"strings"
+
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 )
 
 const (
@@ -31,10 +33,22 @@ type ArtifactSpec struct {
 type GeneratedConfigArtifactSpec = ArtifactSpec
 
 func (s ArtifactSpec) PlanPath() string {
+	return s.PlanPathForLiveRoot("")
+}
+
+// PlanPathForLiveRoot renders the displayed plan path under the actual live
+// generated root, so a custom --live-root/--etc-dir install previews the same
+// destination the apply job will promote to (issue #636). An empty liveRoot
+// falls back to the configured etc dir's generated tree.
+func (s ArtifactSpec) PlanPathForLiveRoot(liveRoot string) string {
 	if s.Subpath == "" {
 		return ""
 	}
-	return filepath.ToSlash(filepath.Join("/etc/veil", "generated", filepath.FromSlash(s.Subpath)))
+	root := liveRoot
+	if root == "" {
+		root = filepath.Join(hostenv.EtcDir(), "generated")
+	}
+	return filepath.ToSlash(filepath.Join(root, filepath.FromSlash(s.Subpath)))
 }
 
 func (s ArtifactSpec) GeneratedPath(applyRoot string) string {

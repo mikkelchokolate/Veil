@@ -56,7 +56,7 @@ func TestRenderNaiveCaddyfileUpstream(t *testing.T) {
 		ListenPort:   443,
 		Username:     "alice",
 		Password:     "secret",
-		FallbackRoot: "/var/lib/veil/www",
+		FallbackRoot: "/etc/veil/www",
 		Upstream:     "socks5://127.0.0.1:1080",
 	})
 	if err != nil {

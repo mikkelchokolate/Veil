@@ -3,12 +3,14 @@ package panelaccess
 import (
 	"fmt"
 	"net"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
 	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
@@ -95,7 +97,7 @@ func (p PanelAccess) ApplyIntent(inbounds []model.Inbound) ApplyIntent {
 	} else if _, _, err := p.CaddyRoute(); err != nil {
 		intent.Errors = append(intent.Errors, err.Error())
 	} else {
-		intent.Configs = append(intent.Configs, "/etc/veil/generated/caddy/config.json")
+		intent.Configs = append(intent.Configs, filepath.ToSlash(filepath.Join(hostenv.EtcDir(), "generated", "caddy", "config.json")))
 		intent.Actions = append(intent.Actions, "reload veil-caddy.service")
 		intent.Runtimes = append(intent.Runtimes, "veil-caddy.service")
 	}

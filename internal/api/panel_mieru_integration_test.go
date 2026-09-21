@@ -78,7 +78,10 @@ func TestPanelManagementFlowForMieruInboundClientAccessAndApply(t *testing.T) {
 	if err := json.NewDecoder(planRecorder.Body).Decode(&plan); err != nil {
 		t.Fatalf("decode plan: %v", err)
 	}
-	if !plan.Valid || !containsString(plan.Configs, "/etc/veil/generated/mieru/server_config.json") || !containsString(plan.Actions, "restart veil-mieru.service") {
+	// Displayed configs anchor at the state's live root (<applyRoot>/live
+	// here) so the preview matches the promote destination (issue #636).
+	liveMieru := filepath.ToSlash(filepath.Join(applyRoot, "live", "mieru", "server_config.json"))
+	if !plan.Valid || !containsString(plan.Configs, liveMieru) || !containsString(plan.Actions, "restart veil-mieru.service") {
 		t.Fatalf("plan missing Mieru config/action: %+v", plan)
 	}
 

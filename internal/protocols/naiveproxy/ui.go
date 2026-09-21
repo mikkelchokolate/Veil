@@ -15,7 +15,12 @@ func (Plugin) InboundFieldSchema() []schema.FieldSchema {
 		{Key: "transport", Label: "Transport", Type: schema.FieldSelect, Required: true, Default: "tcp", Options: []schema.FieldOption{{Label: "tcp", Value: "tcp"}}, Placeholder: "tcp=HTTPS/H2.", Scope: "inbound"},
 		{Key: "naiveUsername", Label: "Naive Username", Type: schema.FieldText, Default: model.DefaultNaiveUsername, Scope: "inbound"},
 		{Key: "naivePassword", Label: "Naive Password", Type: schema.FieldPassword, GenerateAction: "password", Scope: "inbound"},
-		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Default: "/etc/veil/www", Scope: "inbound"},
+		// fallbackRoot deliberately carries no schema Default: persisting an
+		// env-derived absolute path as the default would couple state to the
+		// install layout at write time. An omitted value stays empty and
+		// NaiveFallbackRoot resolves the managed <etc>/www root at render.
+		// The Placeholder still surfaces the effective path to the user.
+		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Placeholder: "Defaults to " + DefaultFallbackRoot(), Scope: "inbound"},
 	}
 }
 
@@ -24,7 +29,7 @@ func (Plugin) SettingsFieldSchema() []schema.FieldSchema {
 	return []schema.FieldSchema{
 		{Key: "naiveUsername", Label: "Naive Username", Type: schema.FieldText, Default: model.DefaultNaiveUsername, Scope: "settings"},
 		{Key: "naivePassword", Label: "Naive Password", Type: schema.FieldPassword, Scope: "settings"},
-		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Default: "/etc/veil/www", Scope: "settings"},
+		{Key: "fallbackRoot", Label: "Fallback Root", Type: schema.FieldText, Placeholder: "Defaults to " + DefaultFallbackRoot(), Scope: "settings"},
 		{Key: "panelAccess", Label: "Panel Access", Type: schema.FieldSelect, Default: "local", Options: []schema.FieldOption{{Label: "local", Value: "local"}, {Label: "direct", Value: "direct"}, {Label: "caddy", Value: "caddy"}}, Scope: "settings"},
 		{Key: "panelDomain", Label: "Panel Domain", Type: schema.FieldText, Scope: "settings", Placeholder: "Public domain used for Panel Caddy TLS/SNI."},
 		{Key: "panelEmail", Label: "Panel ACME Email", Type: schema.FieldText, Scope: "settings", Placeholder: "ACME contact email for Panel Caddy certificate."},

@@ -3,10 +3,12 @@ package caddyassembly
 import (
 	"fmt"
 	"net"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/bindregistry"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
@@ -42,6 +44,22 @@ type CaddyRenderPlan struct {
 	ACMEChallenges       map[bindregistry.BindKey]AcmeChallengeOwner
 	Domains              map[string]CaddyDomainCertSpec
 	DefaultChallengeMode string
+	// FallbackBase is the managed naive fallback web-root base (the <etc>/www
+	// tree) every naive server in this plan was resolved against. The renderer
+	// validates owner.FallbackRoot against it so custom --etc-dir installs
+	// serve the tree they provisioned (issue #634).
+	FallbackBase string
+}
+
+// NaiveFallbackBaseForEtcDir resolves the managed naive fallback web root for
+// a given configuration root. An empty etcDir resolves from the host
+// environment (VEIL_ETC_DIR/VEIL_LIVE_ROOT/VEIL_KEY_PATH, defaulting to the
+// packaged /etc/veil).
+func NaiveFallbackBaseForEtcDir(etcDir string) string {
+	if strings.TrimSpace(etcDir) == "" {
+		etcDir = hostenv.EtcDir()
+	}
+	return filepath.ToSlash(filepath.Join(etcDir, "www"))
 }
 
 func BuildRenderPlan(
@@ -49,8 +67,21 @@ func BuildRenderPlan(
 	inbounds []model.Inbound,
 	challengeBinds map[bindregistry.BindKey]AcmeChallengeOwner,
 ) (CaddyRenderPlan, map[bindregistry.BindKey]bindregistry.BindOwner, error) {
+	return BuildRenderPlanForEtcDir(settings, inbounds, challengeBinds, "")
+}
+
+// BuildRenderPlanForEtcDir is BuildRenderPlan with an explicit configuration
+// root. Pass the install's etc dir when the host environment does not carry
+// it (for example `veil install --etc-dir` rendering from a snapshot).
+func BuildRenderPlanForEtcDir(
+	settings model.Settings,
+	inbounds []model.Inbound,
+	challengeBinds map[bindregistry.BindKey]AcmeChallengeOwner,
+	etcDir string,
+) (CaddyRenderPlan, map[bindregistry.BindKey]bindregistry.BindOwner, error) {
 	owners := make(map[bindregistry.BindKey]bindregistry.BindOwner)
 	servers := make(map[bindregistry.BindKey]CaddyBindOwner)
+	fallbackBase := NaiveFallbackBaseForEtcDir(etcDir)
 
 	if settings.PanelAccess == "caddy" {
 		panelDomain := settings.PanelDomain
@@ -88,7 +119,7 @@ func BuildRenderPlan(
 		port := naivePublicPort(settings, inb)
 		domain := naiveDomain(inb, settings)
 		users := naiveUsers(inb, settings)
-		fallbackRoot := naiveFallbackRoot(inb, settings)
+		fallbackRoot := naiveFallbackRoot(inb, settings, fallbackBase)
 		if err := addNaiveBinds(transport, port, domain, inb.Name, users, fallbackRoot, owners, servers); err != nil {
 			return CaddyRenderPlan{}, nil, err
 		}
@@ -104,6 +135,7 @@ func BuildRenderPlan(
 		ACMEChallenges:       challengeBinds,
 		Domains:              domains,
 		DefaultChallengeMode: settings.AcmeChallengeMode,
+		FallbackBase:         fallbackBase,
 	}, owners, nil
 }
 
@@ -116,7 +148,17 @@ func BuildFinalRenderPlan(
 	settings model.Settings,
 	inbounds []model.Inbound,
 ) (CaddyRenderPlan, map[bindregistry.BindKey]bindregistry.BindOwner, []model.ValidationIssue, error) {
-	plan, owners, err := BuildRenderPlan(settings, inbounds, nil)
+	return BuildFinalRenderPlanForEtcDir(settings, inbounds, "")
+}
+
+// BuildFinalRenderPlanForEtcDir is BuildFinalRenderPlan with an explicit
+// configuration root; see BuildRenderPlanForEtcDir.
+func BuildFinalRenderPlanForEtcDir(
+	settings model.Settings,
+	inbounds []model.Inbound,
+	etcDir string,
+) (CaddyRenderPlan, map[bindregistry.BindKey]bindregistry.BindOwner, []model.ValidationIssue, error) {
+	plan, owners, err := BuildRenderPlanForEtcDir(settings, inbounds, nil, etcDir)
 	if err != nil {
 		return CaddyRenderPlan{}, nil, nil, err
 	}
@@ -213,8 +255,9 @@ func naiveDomain(inbound model.Inbound, settings model.Settings) string {
 }
 
 // naiveFallbackRoot mirrors the naiveproxy plugin helper to avoid an import
-// cycle with the renderer. It falls back to the built-in default web root.
-func naiveFallbackRoot(inbound model.Inbound, settings model.Settings) string {
+// cycle with the renderer. It falls back to the plan's fallback base (the
+// managed <etc>/www tree) when no explicit root is configured.
+func naiveFallbackRoot(inbound model.Inbound, settings model.Settings, base string) string {
 	if root := stringField(inbound.ProtocolFields, "fallbackRoot"); root != "" {
 		return root
 	}
@@ -224,7 +267,7 @@ func naiveFallbackRoot(inbound model.Inbound, settings model.Settings) string {
 	if settings.FallbackRoot != "" {
 		return settings.FallbackRoot
 	}
-	return "/etc/veil/www"
+	return base
 }
 
 // naiveUsers builds the Caddy forward_auth user list. Stored credential bytes

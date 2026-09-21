@@ -368,6 +368,8 @@ func TestEnvironmentPathResolvers(t *testing.T) {
 	t.Setenv("VEIL_LIVE_ROOT", "")
 	t.Setenv("VEIL_KEY_PATH", "")
 	t.Setenv("VEIL_HELPER_SOCKET", "")
+	t.Setenv("VEIL_ETC_DIR", "")
+	t.Setenv("VEIL_VAR_DIR", "")
 
 	assertFlag := func(name string, flagValue, envName, got, source, want, wantSource string) {
 		t.Helper()
@@ -467,6 +469,33 @@ func TestEnvironmentPathResolvers(t *testing.T) {
 			assertDefault("KeyPath", path, source, filepath.Join(pd, "Veil", "state.key"), "default")
 		} else {
 			assertDefault("KeyPath", path, source, "/etc/veil/state.key", "default")
+		}
+	})
+
+	t.Run("custom etc/var dirs", func(t *testing.T) {
+		// With only VEIL_ETC_DIR/VEIL_VAR_DIR exported — as a hand-rolled
+		// custom install or container would — bare `veil serve` must resolve
+		// every runtime root inside those trees instead of the packaged
+		// /etc/veil and /var/lib/veil (issues #635, #636, #640).
+		if runtime.GOOS == "windows" {
+			t.Skip("windows defaults resolve under ProgramData")
+		}
+		etcDir := filepath.Join(root, "custom-etc")
+		varDir := filepath.Join(root, "custom-var")
+		t.Setenv("VEIL_ETC_DIR", etcDir)
+		t.Setenv("VEIL_VAR_DIR", varDir)
+
+		if path, _ := env.StatePath(""); path != filepath.Join(varDir, "state.json") {
+			t.Fatalf("StatePath default = %q, want %q", path, filepath.Join(varDir, "state.json"))
+		}
+		if path, _ := env.ApplyRoot(""); path != filepath.Join(varDir, "staging") {
+			t.Fatalf("ApplyRoot default = %q, want %q", path, filepath.Join(varDir, "staging"))
+		}
+		if path, _ := env.LiveRoot(""); path != filepath.Join(etcDir, "generated") {
+			t.Fatalf("LiveRoot default = %q, want %q", path, filepath.Join(etcDir, "generated"))
+		}
+		if path, _ := env.KeyPath(""); path != filepath.Join(etcDir, "state.key") {
+			t.Fatalf("KeyPath default = %q, want %q", path, filepath.Join(etcDir, "state.key"))
 		}
 	})
 
@@ -734,7 +763,10 @@ func TestEnvironmentAutoTLS(t *testing.T) {
 		t.Setenv("VEIL_AUTO_TLS_DIR", "")
 	})
 
-	t.Run("default cache dir", func(t *testing.T) {
+	t.Run("default cache dir follows state file dir", func(t *testing.T) {
+		// The autocert cache defaults to <state-dir>/autocert so a custom
+		// --state/--var-dir install caches under its own tree instead of
+		// /var/lib/veil/autocert (issue #640).
 		store := managementstate.NewStore(statePath, nil)
 		if err := store.Save(model.ManagementSnapshot{Settings: model.Settings{Domain: "example.com", Email: "admin@example.com"}}); err != nil {
 			t.Fatalf("save: %v", err)
@@ -743,7 +775,32 @@ func TestEnvironmentAutoTLS(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		want := "/var/lib/veil/autocert"
+		want := filepath.Join(root, "autocert")
+		if runtime.GOOS == "windows" {
+			pd := os.Getenv("ProgramData")
+			if pd == "" {
+				pd = `C:\ProgramData`
+			}
+			want = filepath.Join(pd, "Veil", "autocert")
+		}
+		if cfg.CacheDir != want {
+			t.Fatalf("cache dir = %q, want %q", cfg.CacheDir, want)
+		}
+	})
+
+	t.Run("var dir cache dir", func(t *testing.T) {
+		// VEIL_VAR_DIR wins over the state-file directory (issue #640).
+		store := managementstate.NewStore(statePath, nil)
+		if err := store.Save(model.ManagementSnapshot{Settings: model.Settings{Domain: "example.com", Email: "admin@example.com"}}); err != nil {
+			t.Fatalf("save: %v", err)
+		}
+		varDir := filepath.Join(root, "custom-var")
+		t.Setenv("VEIL_VAR_DIR", varDir)
+		cfg, err := env.AutoTLS(true, "", statePath, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := filepath.Join(varDir, "autocert")
 		if runtime.GOOS == "windows" {
 			pd := os.Getenv("ProgramData")
 			if pd == "" {

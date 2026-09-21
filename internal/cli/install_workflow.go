@@ -76,6 +76,7 @@ func buildRURecommendedInstallFromOptions(opts ruRecommendedInstallOptions) (ins
 		PanelPort:       opts.PanelPort,
 		Secret:          randomSecret,
 		RandomPanelPort: installer.RandomHighPort,
+		EtcDir:          opts.EtcDir,
 	})
 }
 

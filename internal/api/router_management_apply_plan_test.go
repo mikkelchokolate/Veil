@@ -109,10 +109,14 @@ func TestManagementApplyPlanUsesEnabledInboundsToSelectProtocols(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !containsString(response.Configs, "/etc/veil/generated/caddy/config.json") || !containsString(response.Configs, "/etc/veil/generated/hysteria2/hysteria2.yaml") {
+	// Displayed config paths anchor at the state's live root (here
+	// <stateDir>/staging/live) so the preview matches the promote destination
+	// (issue #636).
+	liveRoot := filepath.ToSlash(filepath.Join(filepath.Dir(statePath), "staging", "live"))
+	if !containsString(response.Configs, liveRoot+"/caddy/config.json") || !containsString(response.Configs, liveRoot+"/hysteria2/hysteria2.yaml") {
 		t.Fatalf("expected all enabled Inbound configs in apply plan: %+v", response.Configs)
 	}
-	if containsString(response.Configs, "/etc/veil/generated/caddy/panel.Caddyfile") || containsString(response.Configs, "/etc/veil/generated/hysteria2/server.yaml") {
+	if containsString(response.Configs, liveRoot+"/caddy/panel.Caddyfile") || containsString(response.Configs, liveRoot+"/hysteria2/server.yaml") {
 		t.Fatalf("apply plan should not target fallback configs for enabled inbounds: %+v", response.Configs)
 	}
 	if !containsString(response.Actions, "reload veil-caddy.service") || !containsString(response.Actions, "restart veil-hysteria2@hysteria2.service") {

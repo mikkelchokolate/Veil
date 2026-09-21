@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
@@ -153,7 +154,9 @@ func (Environment) StatePath(flagValue string) (path string, source string) {
 		}
 		return filepath.Join(pd, "Veil", "state.json"), "default"
 	}
-	return "/var/lib/veil/state.json", "default"
+	// hostenv.VarDir honours VEIL_VAR_DIR so a bare `veil serve` on a custom
+	// --var-dir install finds its own state tree (issues #635, #640).
+	return filepath.Join(hostenv.VarDir(), "state.json"), "default"
 }
 
 func (Environment) ApplyRoot(flagValue string) (path string, source string) {
@@ -170,7 +173,7 @@ func (Environment) ApplyRoot(flagValue string) (path string, source string) {
 		}
 		return filepath.Join(pd, "Veil"), "default"
 	}
-	return "/var/lib/veil/staging", "default"
+	return filepath.Join(hostenv.VarDir(), "staging"), "default"
 }
 
 func (Environment) LiveRoot(flagValue string) (path string, source string) {
@@ -187,7 +190,7 @@ func (Environment) LiveRoot(flagValue string) (path string, source string) {
 		}
 		return filepath.Join(pd, "Veil", "live"), "default"
 	}
-	return "/etc/veil/generated", "default"
+	return filepath.Join(hostenv.EtcDir(), "generated"), "default"
 }
 
 func (Environment) KeyPath(flagValue string) (path string, source string) {
@@ -204,7 +207,7 @@ func (Environment) KeyPath(flagValue string) (path string, source string) {
 		}
 		return filepath.Join(pd, "Veil", "state.key"), "default"
 	}
-	return "/etc/veil/state.key", "default"
+	return filepath.Join(hostenv.EtcDir(), "state.key"), "default"
 }
 
 func (Environment) HelperSocket(flagValue string) (path string, source string) {
@@ -288,17 +291,34 @@ func (e Environment) AutoTLS(autoTLS bool, autoTLSDir string, statePath string, 
 		autoTLSDir = strings.TrimSpace(os.Getenv("VEIL_AUTO_TLS_DIR"))
 	}
 	if autoTLSDir == "" {
-		if goos == "windows" {
-			pd := os.Getenv("ProgramData")
-			if pd == "" {
-				pd = `C:\ProgramData`
-			}
-			autoTLSDir = filepath.Join(pd, "Veil", "autocert")
-		} else {
-			autoTLSDir = "/var/lib/veil/autocert"
-		}
+		autoTLSDir = defaultAutoTLSDir(statePath)
 	}
 	return AutoTLSConfig{Enabled: true, Domain: domain, Email: email, CacheDir: autoTLSDir}, nil
+}
+
+// defaultAutoTLSDir resolves the autocert cache directory when neither
+// --auto-tls-dir nor VEIL_AUTO_TLS_DIR was given. On Linux it follows the
+// configured state root — VEIL_VAR_DIR, then the directory containing the
+// resolved state file — so a custom --var-dir install caches certificates
+// under its own tree instead of always /var/lib/veil/autocert (issue #640).
+func defaultAutoTLSDir(statePath string) string {
+	if goos == "windows" {
+		pd := os.Getenv("ProgramData")
+		if pd == "" {
+			pd = `C:\ProgramData`
+		}
+		return filepath.Join(pd, "Veil", "autocert")
+	}
+	varDir := strings.TrimSpace(os.Getenv("VEIL_VAR_DIR"))
+	if varDir == "" {
+		if dir := filepath.Clean(filepath.Dir(strings.TrimSpace(statePath))); dir != "." && dir != string(filepath.Separator) && dir != "" {
+			varDir = dir
+		}
+	}
+	if varDir == "" {
+		varDir = hostenv.DefaultVarDir
+	}
+	return filepath.Join(varDir, "autocert")
 }
 
 func (Environment) SettingsFromState(statePath, keyPath string) (domain, email string, err error) {
