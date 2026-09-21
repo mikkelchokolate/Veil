@@ -363,16 +363,13 @@ func passphraseFileFromExecStart(execStart string) string {
 				return ""
 			}
 		}
-		if rest[0] == '"' {
-			end := strings.IndexByte(rest[1:], '"')
-			if end < 0 {
-				return ""
-			}
-			return filepath.Clean(filepath.FromSlash(rest[1 : 1+end]))
+		// scanExecArgValue honors backslash escapes inside quoted tokens,
+		// so the parsed extent matches what rewriteExecStartPassphraseFile
+		// writes — the reader and the rewriter share one token grammar.
+		value, _ := scanExecArgValue(rest)
+		if value == "" {
+			return ""
 		}
-		if i := strings.IndexByte(rest, ' '); i >= 0 {
-			rest = rest[:i]
-		}
-		return filepath.Clean(filepath.FromSlash(rest))
+		return filepath.Clean(filepath.FromSlash(value))
 	}
 }
