@@ -4,12 +4,23 @@ import "strings"
 
 func SetupHTML(basePath string, locale string) string {
 	path := strings.TrimRight(basePath, "/")
-	if path == "" {
-		path = ""
-	}
 	html := strings.ReplaceAll(setupHTMLTemplate, "__VEIL_SETUP_API__", path+"/api/setup/complete")
 	html = strings.ReplaceAll(html, "__VEIL_LOCALE__", NormalizeLocale(locale))
-	return strings.ReplaceAll(html, "__VEIL_LOCALIZATION_RUNTIME__", LocalizationRuntimeJS())
+	html = strings.ReplaceAll(html, "__VEIL_LOCALIZATION_RUNTIME__", LocalizationRuntimeJS())
+	if basePath == "" || basePath == "/" {
+		return html
+	}
+	bp := strings.TrimRight(basePath, "/")
+	replacer := strings.NewReplacer(
+		`"/api/`, `"`+bp+`/api/`,
+		`'/api/`, `'`+bp+`/api/`,
+		// The JS-written veil_locale cookie must be scoped to the same Path
+		// the server uses for veil_session (panelCookieAttrs); a Path=/
+		// preference cookie under a mounted base path splits the cookie jar
+		// (#621 — same defect class as #577 on the login page).
+		`'; Path=/;`, `'; Path=`+veilPanelCookiePath(basePath)+`;`,
+	)
+	return replacer.Replace(html)
 }
 
 const setupHTMLTemplate = `<!doctype html>

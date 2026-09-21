@@ -91,18 +91,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getApiWarpResponse200 = {
-  data: WarpConfig
-  status: 200
-}
-
-export type getApiWarpResponseSuccess = (getApiWarpResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiWarpResponse = (getApiWarpResponseSuccess)
-
 export const getGetApiWarpUrl = () => {
 
 
@@ -114,9 +102,9 @@ export const getGetApiWarpUrl = () => {
 /**
  * @summary Read WARP state with secrets redacted
  */
-export const getApiWarp = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiWarpResponse> => {
+export const getApiWarp = async ( options?: Parameters<typeof apiFetch>[1]): Promise<WarpConfig> => {
 
-  return apiFetch<getApiWarpResponse>(getGetApiWarpUrl(),
+  return apiFetch<WarpConfig>(getGetApiWarpUrl(),
   {
     ...options,
     method: 'GET'
@@ -176,46 +164,7 @@ export const useGetApiWarp = <TError = unknown,
       > => {
       return useMutation(getGetApiWarpMutationOptions(options), queryClient);
     }
-    export type putApiWarpResponse200 = {
-  data: WarpConfig & MutationOutcome
-  status: 200
-}
-
-export type putApiWarpResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type putApiWarpResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type putApiWarpResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type putApiWarpResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type putApiWarpResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type putApiWarpResponseSuccess = (putApiWarpResponse200) & {
-  headers: Headers;
-};
-export type putApiWarpResponseError = (putApiWarpResponse400 | putApiWarpResponse409 | putApiWarpResponse422 | putApiWarpResponse423 | putApiWarpResponse503) & {
-  headers: Headers;
-};
-
-export type putApiWarpResponse = (putApiWarpResponseSuccess | putApiWarpResponseError)
-
-export const getPutApiWarpUrl = () => {
+    export const getPutApiWarpUrl = () => {
 
 
 
@@ -226,7 +175,7 @@ export const getPutApiWarpUrl = () => {
 /**
  * @summary Update WARP state
  */
-export const putApiWarp = async (warpConfig: WarpConfig, options?: Parameters<typeof apiFetch>[1]): Promise<putApiWarpResponse> => {
+export const putApiWarp = async (warpConfig: WarpConfig, options?: Parameters<typeof apiFetch>[1]): Promise<WarpConfig & MutationOutcome> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -242,7 +191,7 @@ export const putApiWarp = async (warpConfig: WarpConfig, options?: Parameters<ty
     }
     return headers;
   };
-return apiFetch<putApiWarpResponse>(getPutApiWarpUrl(),
+return apiFetch<WarpConfig & MutationOutcome>(getPutApiWarpUrl(),
   {
     ...options,
     method: 'PUT',

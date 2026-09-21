@@ -13,7 +13,11 @@ import {
 	postApiV1ClientsIdBindings,
 	postApiV1ClientsIdCredentialsBindingIdRotate,
 } from "../api/generated/clients/clients";
-import type { BindingView, ClientView } from "../api/generated/models";
+import type {
+	BindingView,
+	ClientView,
+	MutationOutcome,
+} from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import {
 	AlertDialog,
@@ -55,12 +59,9 @@ import { SubscriptionTokensPanel } from "../subscription/SubscriptionTokensPanel
 type ClientDetail = ClientView;
 type Tab = "overview" | "access" | "subscription" | "traffic" | "audit";
 
-/** S3: revision/apply feedback returned by every mutation envelope. */
-interface MutationFeedback {
-	revision?: { desired?: number; applied?: number; state?: string };
-	applyJob?: { id?: string; status?: string; desiredRevision?: number };
-	success?: boolean;
-}
+/** S3: revision/apply feedback returned by every mutation envelope. The
+ * generated MutationOutcome type (#652) covers the shape — success=false
+ * means the mutation committed but the auto-apply did not converge. */
 
 /** S3: client edit form — RHF + Zod. quotaBytes is kept as a decimal string in
  * the form and converted with integer parsing (never Number() on raw bytes)
@@ -130,7 +131,7 @@ export function ClientDetailPage() {
 	const [revealed, setRevealed] = useState<Record<string, string>>({});
 	const [error, setError] = useState<string | null>(null);
 	const [conflict, setConflict] = useState(false);
-	const [feedback, setFeedback] = useState<MutationFeedback | null>(null);
+	const [feedback, setFeedback] = useState<MutationOutcome | null>(null);
 	const [attachInbound, setAttachInbound] = useState("");
 	const { t } = useI18n();
 
@@ -159,10 +160,12 @@ export function ClientDetailPage() {
 		? audit.data
 		: (audit.data?.items ?? []);
 
-	function recordFeedback(body: unknown) {
-		const b = body as MutationFeedback | undefined;
-		if (b && (b.revision || b.applyJob || typeof b.success === "boolean")) {
-			setFeedback(b);
+	function recordFeedback(body: MutationOutcome | undefined) {
+		if (
+			body &&
+			(body.revision || body.applyJob || typeof body.success === "boolean")
+		) {
+			setFeedback(body);
 		}
 	}
 
@@ -264,7 +267,7 @@ export function ClientDetailPage() {
 					? { notes: v.notes || null }
 					: {}),
 			});
-			return res as unknown as MutationFeedback;
+			return res;
 		},
 		onSuccess: (data) => {
 			setError(null);
@@ -284,7 +287,7 @@ export function ClientDetailPage() {
 				enabled: !c.enabled,
 				version: c.version ?? 0,
 			});
-			return res as unknown as MutationFeedback;
+			return res;
 		},
 		onSuccess: (data) => {
 			setError(null);
@@ -295,11 +298,20 @@ export function ClientDetailPage() {
 	});
 
 	const remove = useMutation({
-		mutationFn: async () => {
-			const res = await deleteApiV1ClientsId(clientId);
-			return res as unknown as MutationFeedback;
-		},
-		onSuccess: () => {
+		mutationFn: () => deleteApiV1ClientsId(clientId),
+		onSuccess: (data) => {
+			if (data?.success === false) {
+				// The delete committed but the apply failed — navigating to the
+				// list would look like a clean delete. Stay on the page and
+				// surface the outcome instead (#653). Refresh the list/apply
+				// queries but NOT this detail query: the client no longer
+				// exists, so a detail refetch would 404 and hide the feedback.
+				recordFeedback(data);
+				setError(null);
+				void qc.invalidateQueries({ queryKey: ["clients", "list"] });
+				void qc.invalidateQueries({ queryKey: ["apply"] });
+				return;
+			}
 			void qc.invalidateQueries({ queryKey: ["clients"] });
 			void navigate({ to: "/clients" });
 		},
@@ -307,20 +319,15 @@ export function ClientDetailPage() {
 	});
 
 	const rotate = useMutation({
-		mutationFn: async (bindingId: string) => {
-			const res = await postApiV1ClientsIdCredentialsBindingIdRotate(
-				clientId,
-				bindingId,
-				{},
-			);
-			// The backend envelope merges plaintext + revision/applyJob/success.
-			return res as unknown as MutationFeedback & { plaintext?: string };
-		},
+		mutationFn: (bindingId: string) =>
+			// The generated type merges plaintext + revision/applyJob/success.
+			postApiV1ClientsIdCredentialsBindingIdRotate(clientId, bindingId, {}),
 		onSuccess: (res, bindingId) => {
-			if (res.plaintext) {
+			const plaintext = res.plaintext;
+			if (plaintext) {
 				setRevealed((prev) => ({
 					...prev,
-					[bindingId]: res.plaintext as string,
+					[bindingId]: plaintext,
 				}));
 			}
 			setError(null);
@@ -331,13 +338,11 @@ export function ClientDetailPage() {
 	});
 
 	const toggleBinding = useMutation({
-		mutationFn: async (b: BindingView) => {
-			const res = await patchApiV1ClientsIdBindingsBindingId(clientId, b.id, {
+		mutationFn: (b: BindingView) =>
+			patchApiV1ClientsIdBindingsBindingId(clientId, b.id, {
 				enabled: !b.enabled,
 				version: b.version ?? 0,
-			});
-			return res as unknown as MutationFeedback;
-		},
+			}),
 		onSuccess: (data) => {
 			setError(null);
 			recordFeedback(data);
@@ -347,18 +352,14 @@ export function ClientDetailPage() {
 	});
 
 	const attach = useMutation({
-		mutationFn: async (inboundId: string) => {
-			const res = await postApiV1ClientsIdBindings(clientId, { inboundId });
-			return res as unknown as MutationFeedback & {
-				id?: string;
-				plaintext?: string;
-			};
-		},
+		mutationFn: (inboundId: string) =>
+			postApiV1ClientsIdBindings(clientId, { inboundId }),
 		onSuccess: (data) => {
-			if (data.plaintext && data.id) {
+			const plaintext = data.plaintext;
+			if (plaintext && data.id) {
 				setRevealed((prev) => ({
 					...prev,
-					[data.id as string]: data.plaintext as string,
+					[data.id]: plaintext,
 				}));
 			}
 			setAttachInbound("");
@@ -370,13 +371,8 @@ export function ClientDetailPage() {
 	});
 
 	const detach = useMutation({
-		mutationFn: async (bindingId: string) => {
-			const res = await deleteApiV1ClientsIdBindingsBindingId(
-				clientId,
-				bindingId,
-			);
-			return res as unknown as MutationFeedback;
-		},
+		mutationFn: (bindingId: string) =>
+			deleteApiV1ClientsIdBindingsBindingId(clientId, bindingId),
 		onSuccess: (data) => {
 			setError(null);
 			recordFeedback(data);
@@ -526,7 +522,7 @@ export function ClientDetailPage() {
 							<FormDescription className="mono" style={{ fontSize: 12 }}>
 								{t("clientDetail.feedback.job", {
 									id: feedback.applyJob.id,
-									status: feedback.applyJob.status ?? "",
+									status: feedback.applyJob.status,
 								})}
 							</FormDescription>
 						) : null}

@@ -383,12 +383,19 @@ export function InboundsPage() {
 			// #312).
 			createInbound(toBody(f), f.name),
 		onSuccess: (data) => {
-			setCreating(false);
-			setForm(EMPTY);
-			setError(null);
 			setIssues(null);
 			record(data);
 			invalidate();
+			if (data?.success === false) {
+				// The inbound committed but the auto-apply failed — keep the
+				// editor open and say so instead of dismissing it as a clean
+				// create (#649).
+				setError(t("inbounds.error.applyFailed"));
+				return;
+			}
+			setCreating(false);
+			setForm(EMPTY);
+			setError(null);
 		},
 		onError: (e) => {
 			setIssues(e instanceof ApiError ? (e.issues ?? null) : null);
@@ -403,11 +410,17 @@ export function InboundsPage() {
 				body: JSON.stringify(toBody(f, f.original)),
 			}),
 		onSuccess: (data) => {
-			setEditing(null);
-			setError(null);
 			setIssues(null);
 			record(data);
 			invalidate();
+			if ((data as MutationFeedback | undefined)?.success === false) {
+				// Committed but apply failed — keep the editor open with the
+				// failure visible rather than dismissing it as a save (#649).
+				setError(t("inbounds.error.applyFailed"));
+				return;
+			}
+			setEditing(null);
+			setError(null);
 		},
 		onError: (e) => {
 			setIssues(e instanceof ApiError ? (e.issues ?? null) : null);
@@ -421,11 +434,18 @@ export function InboundsPage() {
 				method: "DELETE",
 			}),
 		onSuccess: (data) => {
-			setConfirmDelete(null);
-			setError(null);
 			setIssues(null);
 			record(data);
 			invalidate();
+			if ((data as MutationFeedback | undefined)?.success === false) {
+				// The delete committed but the apply failed — keep the confirm
+				// dialog open with the failure shown instead of dismissing it
+				// as a clean delete (#649).
+				setError(t("inbounds.error.applyFailed"));
+				return;
+			}
+			setConfirmDelete(null);
+			setError(null);
 		},
 		onError: (e) => {
 			setIssues(e instanceof ApiError ? (e.issues ?? null) : null);
@@ -760,6 +780,10 @@ export function InboundsPage() {
 					</Button>
 					<Button onClick={cancelEditor}>{t("common.cancel")}</Button>
 				</div>
+				{/* While this dialog is open the page-level error card is hidden
+					behind the overlay — repeat it here so a failed apply stays
+					visible in context (#649). */}
+				{error ? <p className="form-error">{error}</p> : null}
 			</div>
 		) : null;
 
@@ -1026,6 +1050,10 @@ export function InboundsPage() {
 							{t("inbounds.delete.description", { name: confirmDelete ?? "" })}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
+					{/* A committed-but-unapplied delete keeps this dialog open —
+						the failure must be visible here, not only behind the
+						overlay (#649). */}
+					{error ? <p className="form-error">{error}</p> : null}
 					<AlertDialogFooter>
 						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
 						<AlertDialogAction

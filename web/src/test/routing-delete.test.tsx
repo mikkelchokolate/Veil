@@ -43,4 +43,65 @@ describe("RoutingPage delete errors", () => {
 		fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
 		expect(await screen.findByText(/rule in use/i)).toBeInTheDocument();
 	});
+
+	// #644: a 200 with success=false means the delete committed but the
+	// auto-apply failed — the page must say so, not silently remove the row.
+	it("surfaces a committed-but-unapplied delete instead of silent removal", async () => {
+		server.use(
+			http.get("/api/warp", () => HttpResponse.json({ enabled: true })),
+			http.get("/api/routing/rules", () =>
+				HttpResponse.json([
+					{
+						name: "warp-out",
+						match: "geoip:cn",
+						outbound: "warp",
+						enabled: true,
+					},
+				]),
+			),
+			http.delete("/api/routing/rules/warp-out", () =>
+				HttpResponse.json({
+					name: "warp-out",
+					success: false,
+					revision: { desired: 2, applied: 1, state: "drift" },
+				}),
+			),
+		);
+		renderRouting();
+		fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+		expect(await screen.findByText(/applying it failed/i)).toBeInTheDocument();
+	});
+
+	// #644: a committed-but-unapplied save keeps the editor open with the
+	// failure visible instead of dismissing it as a clean save.
+	it("keeps the editor open when a rule save commits but the apply fails", async () => {
+		server.use(
+			http.get("/api/warp", () => HttpResponse.json({ enabled: true })),
+			http.get("/api/routing/rules", () =>
+				HttpResponse.json([
+					{
+						name: "warp-out",
+						match: "geoip:cn",
+						outbound: "warp",
+						enabled: true,
+					},
+				]),
+			),
+			http.put("/api/routing/rules/warp-out", () =>
+				HttpResponse.json({
+					name: "warp-out",
+					match: "geoip:cn",
+					outbound: "warp",
+					enabled: false,
+					success: false,
+					revision: { desired: 2, applied: 1, state: "drift" },
+				}),
+			),
+		);
+		renderRouting();
+		fireEvent.click(await screen.findByRole("button", { name: /^edit$/i }));
+		fireEvent.click(await screen.findByRole("button", { name: /^save$/i }));
+		expect(await screen.findByText(/applying it failed/i)).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: /^save$/i })).toBeInTheDocument();
+	});
 });

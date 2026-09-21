@@ -89,30 +89,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getApiProtocolsResponse200 = {
-  data: ProtocolInfo[]
-  status: 200
-}
-
-export type getApiProtocolsResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiProtocolsResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type getApiProtocolsResponseSuccess = (getApiProtocolsResponse200) & {
-  headers: Headers;
-};
-export type getApiProtocolsResponseError = (getApiProtocolsResponse401 | getApiProtocolsResponse403) & {
-  headers: Headers;
-};
-
-export type getApiProtocolsResponse = (getApiProtocolsResponseSuccess | getApiProtocolsResponseError)
-
 export const getGetApiProtocolsUrl = () => {
 
 
@@ -124,9 +100,9 @@ export const getGetApiProtocolsUrl = () => {
 /**
  * @summary List supported protocols and their UI/runtime metadata
  */
-export const getApiProtocols = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiProtocolsResponse> => {
+export const getApiProtocols = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ProtocolInfo[]> => {
 
-  return apiFetch<getApiProtocolsResponse>(getGetApiProtocolsUrl(),
+  return apiFetch<ProtocolInfo[]>(getGetApiProtocolsUrl(),
   {
     ...options,
     method: 'GET'
@@ -186,41 +162,7 @@ export const useGetApiProtocols = <TError = UnauthorizedResponse | ForbiddenResp
       > => {
       return useMutation(getGetApiProtocolsMutationOptions(options), queryClient);
     }
-    export type postApiProtocolsProtocolRoomResponse200 = {
-  data: PostApiProtocolsProtocolRoom200
-  status: 200
-}
-
-export type postApiProtocolsProtocolRoomResponse400 = {
-  data: void
-  status: 400
-}
-
-export type postApiProtocolsProtocolRoomResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type postApiProtocolsProtocolRoomResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type postApiProtocolsProtocolRoomResponse404 = {
-  data: void
-  status: 404
-}
-
-export type postApiProtocolsProtocolRoomResponseSuccess = (postApiProtocolsProtocolRoomResponse200) & {
-  headers: Headers;
-};
-export type postApiProtocolsProtocolRoomResponseError = (postApiProtocolsProtocolRoomResponse400 | postApiProtocolsProtocolRoomResponse401 | postApiProtocolsProtocolRoomResponse403 | postApiProtocolsProtocolRoomResponse404) & {
-  headers: Headers;
-};
-
-export type postApiProtocolsProtocolRoomResponse = (postApiProtocolsProtocolRoomResponseSuccess | postApiProtocolsProtocolRoomResponseError)
-
-export const getPostApiProtocolsProtocolRoomUrl = (protocol: string,) => {
+    export const getPostApiProtocolsProtocolRoomUrl = (protocol: string,) => {
 
 
 
@@ -233,7 +175,7 @@ export const getPostApiProtocolsProtocolRoomUrl = (protocol: string,) => {
  * @summary Generate a room id for a protocol that supports automatic room creation
  */
 export const postApiProtocolsProtocolRoom = async (protocol: string,
-    postApiProtocolsProtocolRoomBody?: PostApiProtocolsProtocolRoomBody, options?: Parameters<typeof apiFetch>[1]): Promise<postApiProtocolsProtocolRoomResponse> => {
+    postApiProtocolsProtocolRoomBody?: PostApiProtocolsProtocolRoomBody, options?: Parameters<typeof apiFetch>[1]): Promise<PostApiProtocolsProtocolRoom200> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -249,7 +191,7 @@ export const postApiProtocolsProtocolRoom = async (protocol: string,
     }
     return headers;
   };
-return apiFetch<postApiProtocolsProtocolRoomResponse>(getPostApiProtocolsProtocolRoomUrl(protocol),
+return apiFetch<PostApiProtocolsProtocolRoom200>(getPostApiProtocolsProtocolRoomUrl(protocol),
   {
     ...options,
     method: 'POST',

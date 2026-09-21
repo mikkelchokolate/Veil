@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiFetch, mutationErrorMessage } from "../api/fetcher";
-import type { RoutingRule } from "../api/generated/models";
+import type { MutationOutcome, RoutingRule } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -36,6 +36,10 @@ export function RoutingPage() {
 		outbound: "",
 		enabled: true,
 	});
+	// Set when a rule mutation committed but the auto-apply failed
+	// (success=false in the mutation envelope) — the UI must not report a
+	// clean save/delete in that case (#644).
+	const [applyFailed, setApplyFailed] = useState(false);
 
 	const rules = useQuery<RoutingRule[]>({
 		queryKey: ["routing", "rules"],
@@ -49,35 +53,56 @@ export function RoutingPage() {
 	const save = useMutation({
 		mutationFn: (rule: RoutingRule) => {
 			if (creating) {
-				return apiFetch("/api/routing/rules", {
+				return apiFetch<RoutingRule & MutationOutcome>("/api/routing/rules", {
 					method: "POST",
 					body: JSON.stringify(rule),
 				});
 			}
-			return apiFetch(`/api/routing/rules/${encodeURIComponent(rule.name)}`, {
-				method: "PUT",
-				body: JSON.stringify(rule),
-			});
+			return apiFetch<RoutingRule & MutationOutcome>(
+				`/api/routing/rules/${encodeURIComponent(rule.name)}`,
+				{
+					method: "PUT",
+					body: JSON.stringify(rule),
+				},
+			);
 		},
-		onSuccess: () => {
+		onSuccess: (data) => {
+			setApplyFailed(data?.success === false);
+			if (data?.success === false) {
+				// Committed but apply failed: keep the editor open so the
+				// failure stays in context instead of looking like a clean
+				// save (#644).
+				void qc.invalidateQueries({ queryKey: ["routing"] });
+				void qc.invalidateQueries({ queryKey: ["apply"] });
+				return;
+			}
 			setEditing(null);
 			setCreating(false);
 			setForm({ name: "", match: "", outbound: "", enabled: true });
 			void qc.invalidateQueries({ queryKey: ["routing"] });
+			void qc.invalidateQueries({ queryKey: ["apply"] });
 		},
 	});
 
 	const del = useMutation({
 		mutationFn: (name: string) =>
-			apiFetch(`/api/routing/rules/${encodeURIComponent(name)}`, {
-				method: "DELETE",
-			}),
-		onSuccess: () => void qc.invalidateQueries({ queryKey: ["routing"] }),
+			apiFetch<MutationOutcome>(
+				`/api/routing/rules/${encodeURIComponent(name)}`,
+				{
+					method: "DELETE",
+				},
+			),
+		onSuccess: (data) => {
+			setApplyFailed(data?.success === false);
+			void qc.invalidateQueries({ queryKey: ["routing"] });
+			void qc.invalidateQueries({ queryKey: ["apply"] });
+		},
 	});
 
 	function startEdit(r: RoutingRule) {
 		setEditing(r);
 		setCreating(false);
+		setApplyFailed(false);
 		setForm({
 			name: r.name,
 			match: r.match,
@@ -89,12 +114,16 @@ export function RoutingPage() {
 	function startCreate() {
 		setEditing(null);
 		setCreating(true);
+		setApplyFailed(false);
 		setForm({ name: "", match: "", outbound: "", enabled: true });
 	}
 
 	function cancel() {
 		setEditing(null);
 		setCreating(false);
+		// Deliberately do NOT clear applyFailed: closing the editor after a
+		// committed-but-unapplied save leaves the header banner as the only
+		// honest signal that the apply failed (#644).
 		setForm({ name: "", match: "", outbound: "", enabled: true });
 	}
 
@@ -118,6 +147,9 @@ export function RoutingPage() {
 					<FormMessage>
 						{mutationErrorMessage(del.error, t("routing.deleteFailed"))}
 					</FormMessage>
+				) : null}
+				{applyFailed && !(creating || editing !== null) ? (
+					<FormMessage>{t("routing.applyFailed")}</FormMessage>
 				) : null}
 			</div>
 
@@ -206,6 +238,9 @@ export function RoutingPage() {
 								<FormMessage>
 									{mutationErrorMessage(save.error, t("routing.saveFailed"))}
 								</FormMessage>
+							) : null}
+							{applyFailed ? (
+								<FormMessage>{t("routing.applyFailed")}</FormMessage>
 							) : null}
 						</div>
 					</div>

@@ -67,50 +67,6 @@ type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 
 
-export type postApiServicesNameRestartResponse200 = {
-  data: ServiceActionResponse
-  status: 200
-}
-
-export type postApiServicesNameRestartResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiServicesNameRestartResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiServicesNameRestartResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiServicesNameRestartResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiServicesNameRestartResponse500 = {
-  data: ServiceActionResponse
-  status: 500
-}
-
-export type postApiServicesNameRestartResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiServicesNameRestartResponseSuccess = (postApiServicesNameRestartResponse200) & {
-  headers: Headers;
-};
-export type postApiServicesNameRestartResponseError = (postApiServicesNameRestartResponse400 | postApiServicesNameRestartResponse409 | postApiServicesNameRestartResponse422 | postApiServicesNameRestartResponse423 | postApiServicesNameRestartResponse500 | postApiServicesNameRestartResponse503) & {
-  headers: Headers;
-};
-
-export type postApiServicesNameRestartResponse = (postApiServicesNameRestartResponseSuccess | postApiServicesNameRestartResponseError)
-
 export const getPostApiServicesNameRestartUrl = (name: string,) => {
 
 
@@ -123,7 +79,7 @@ export const getPostApiServicesNameRestartUrl = (name: string,) => {
  * @summary Restart a managed systemd unit
  */
 export const postApiServicesNameRestart = async (name: string,
-    serviceActionRequest: ServiceActionRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiServicesNameRestartResponse> => {
+    serviceActionRequest: ServiceActionRequest, options?: Parameters<typeof apiFetch>[1]): Promise<ServiceActionResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -139,7 +95,7 @@ export const postApiServicesNameRestart = async (name: string,
     }
     return headers;
   };
-return apiFetch<postApiServicesNameRestartResponse>(getPostApiServicesNameRestartUrl(name),
+return apiFetch<ServiceActionResponse>(getPostApiServicesNameRestartUrl(name),
   {
     ...options,
     method: 'POST',

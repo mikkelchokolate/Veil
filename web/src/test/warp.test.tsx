@@ -57,4 +57,35 @@ describe("WarpPage toggle", () => {
 		});
 		expect(puts[0]).not.toEqual({ enabled: false });
 	});
+
+	// #643: a 200 with success=false means the toggle committed but the
+	// auto-apply failed — the page must say so, not silently repaint.
+	it("surfaces a committed-but-unapplied toggle as an apply failure", async () => {
+		server.use(
+			http.get("/api/warp", () => HttpResponse.json(snapshot)),
+			http.put("/api/warp", () =>
+				HttpResponse.json({
+					...snapshot,
+					enabled: false,
+					success: false,
+					revision: { desired: 2, applied: 1, state: "drift" },
+					applyJob: {
+						id: "job-1",
+						desiredRevision: 2,
+						baseRevision: 1,
+						status: "failed",
+						trigger: "mutation",
+						createdAt: 1700000000,
+					},
+				}),
+			),
+		);
+		renderWarp();
+		fireEvent.click(
+			await screen.findByRole("button", { name: /disable warp/i }),
+		);
+		expect(
+			await screen.findByText(/applying the change failed/i),
+		).toBeInTheDocument();
+	});
 });

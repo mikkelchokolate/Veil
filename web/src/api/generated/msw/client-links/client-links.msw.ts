@@ -94,18 +94,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getApiClientLinksResponse200 = {
-  data: ClientLinksResponse
-  status: 200
-}
-
-export type getApiClientLinksResponseSuccess = (getApiClientLinksResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiClientLinksResponse = (getApiClientLinksResponseSuccess)
-
 export const getGetApiClientLinksUrl = () => {
 
 
@@ -117,9 +105,9 @@ export const getGetApiClientLinksUrl = () => {
 /**
  * @summary Client links derived from enabled inbounds and profiles
  */
-export const getApiClientLinks = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiClientLinksResponse> => {
+export const getApiClientLinks = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ClientLinksResponse> => {
 
-  return apiFetch<getApiClientLinksResponse>(getGetApiClientLinksUrl(),
+  return apiFetch<ClientLinksResponse>(getGetApiClientLinksUrl(),
   {
     ...options,
     method: 'GET'
@@ -206,23 +194,6 @@ export function useGetApiClientLinks<TData = Awaited<ReturnType<typeof getApiCli
 
 
 
-export type getApiClientLinksSubscriptionResponse200TextPlain = {
-  data: string
-  status: 200
-}
-
-export type getApiClientLinksSubscriptionResponse200ApplicationOctetStream = {
-  data: Blob
-  status: 200
-}
-
-export type getApiClientLinksSubscriptionResponseSuccess = (getApiClientLinksSubscriptionResponse200TextPlain | getApiClientLinksSubscriptionResponse200ApplicationOctetStream) & {
-  headers: Headers;
-};
-;
-
-export type getApiClientLinksSubscriptionResponse = (getApiClientLinksSubscriptionResponseSuccess)
-
 export const getGetApiClientLinksSubscriptionUrl = (params?: GetApiClientLinksSubscriptionParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -241,9 +212,9 @@ export const getGetApiClientLinksSubscriptionUrl = (params?: GetApiClientLinksSu
 /**
  * @summary Subscription-format client links
  */
-export const getApiClientLinksSubscription = async (params?: GetApiClientLinksSubscriptionParams, options?: Parameters<typeof apiFetch>[1]): Promise<getApiClientLinksSubscriptionResponse> => {
+export const getApiClientLinksSubscription = async (params?: GetApiClientLinksSubscriptionParams, options?: Parameters<typeof apiFetch>[1]): Promise<string | Blob> => {
 
-  return apiFetch<getApiClientLinksSubscriptionResponse>(getGetApiClientLinksSubscriptionUrl(params),
+  return apiFetch<string | Blob>(getGetApiClientLinksSubscriptionUrl(params),
   {
     ...options,
     method: 'GET'
@@ -330,55 +301,6 @@ export function useGetApiClientLinksSubscription<TData = Awaited<ReturnType<type
 
 
 
-export type postApiClientLinksQrResponse200 = {
-  data: Blob
-  status: 200
-}
-
-export type postApiClientLinksQrResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiClientLinksQrResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type postApiClientLinksQrResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiClientLinksQrResponse413 = {
-  data: ErrorEnvelope
-  status: 413
-}
-
-export type postApiClientLinksQrResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiClientLinksQrResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiClientLinksQrResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiClientLinksQrResponseSuccess = (postApiClientLinksQrResponse200) & {
-  headers: Headers;
-};
-export type postApiClientLinksQrResponseError = (postApiClientLinksQrResponse400 | postApiClientLinksQrResponse401 | postApiClientLinksQrResponse409 | postApiClientLinksQrResponse413 | postApiClientLinksQrResponse422 | postApiClientLinksQrResponse423 | postApiClientLinksQrResponse503) & {
-  headers: Headers;
-};
-
-export type postApiClientLinksQrResponse = (postApiClientLinksQrResponseSuccess | postApiClientLinksQrResponseError)
-
 export const getPostApiClientLinksQrUrl = () => {
 
 
@@ -391,7 +313,7 @@ export const getPostApiClientLinksQrUrl = () => {
  * Generates the QR image inside Veil so client URIs are not sent to a third-party QR service.
  * @summary Render a client URI as a local QR PNG
  */
-export const postApiClientLinksQr = async (clientLinkQRRequest: ClientLinkQRRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiClientLinksQrResponse> => {
+export const postApiClientLinksQr = async (clientLinkQRRequest: ClientLinkQRRequest, options?: Parameters<typeof apiFetch>[1]): Promise<Blob> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -407,7 +329,7 @@ export const postApiClientLinksQr = async (clientLinkQRRequest: ClientLinkQRRequ
     }
     return headers;
   };
-return apiFetch<postApiClientLinksQrResponse>(getPostApiClientLinksQrUrl(),
+return apiFetch<Blob>(getPostApiClientLinksQrUrl(),
   {
     ...options,
     method: 'POST',

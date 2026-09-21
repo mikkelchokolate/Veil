@@ -3083,7 +3083,11 @@ paths:
                   type: string
       responses:
         '200':
-          description: '{"action,total,succeeded,skipped,failed,results[],revision,applyJob,success}'
+          description: Per-client results merged with the apply outcome (success/revision/applyJob). success=false means the bulk action committed but the apply did not finish cleanly.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientBulkResponse'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
@@ -3140,7 +3144,11 @@ paths:
                   type: boolean
       responses:
         '201':
-          description: Created binding. When the server generated the password, plaintext and issuedCredentials are returned exactly once.
+          description: Created binding merged with the apply outcome (success/revision/applyJob). When the server generated the password, plaintext and issuedCredentials are returned exactly once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientBindingCreateResponse'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
@@ -3185,7 +3193,13 @@ paths:
                   type: integer
       responses:
         '200':
-          description: Updated binding with mutation envelope.
+          description: Updated binding merged with the apply outcome (success/revision/applyJob).
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/ClientBinding'
+                - $ref: '#/components/schemas/MutationOutcome'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
@@ -3216,7 +3230,18 @@ paths:
           type: string
       responses:
         '200':
-          description: '{"id": ...}'
+          description: Binding removed; response carries the apply outcome (revision+job).
+          content:
+            application/json:
+              schema:
+                allOf:
+                - type: object
+                  required:
+                  - id
+                  properties:
+                    id:
+                      type: string
+                - $ref: '#/components/schemas/MutationOutcome'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
@@ -3259,7 +3284,13 @@ paths:
                   type: string
       responses:
         '201':
-          description: Set credential.
+          description: Set credential merged with the apply outcome (success/revision/applyJob).
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/ClientCredential'
+                - $ref: '#/components/schemas/MutationOutcome'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
@@ -3303,7 +3334,13 @@ paths:
                   description: Optional; when empty the server generates a high-entropy secret returned once.
       responses:
         '200':
-          description: Rotated credential; server-generated rotate returns {credential,plaintext}.
+          description: Rotated credential merged with the apply outcome (success/revision/applyJob); server-generated rotate returns {credential,plaintext}.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/RotatedCredential'
+                - $ref: '#/components/schemas/MutationOutcome'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
@@ -3329,7 +3366,11 @@ paths:
       - veilToken: []
       responses:
         '200':
-          description: '{"migrated,inbounds[],revision,applyJob,success}'
+          description: Migration result merged with the apply outcome (success/revision/applyJob).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientMigrateResponse'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
@@ -3381,11 +3422,13 @@ paths:
               $ref: '#/components/schemas/ClientPatchRequest'
       responses:
         '200':
-          description: Updated client.
+          description: Updated client merged with the apply outcome (success/revision/applyJob).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ClientView'
+                allOf:
+                - $ref: '#/components/schemas/ClientView'
+                - $ref: '#/components/schemas/MutationOutcome'
           headers:
             ETag:
               $ref: '#/components/headers/ETag'
@@ -3414,7 +3457,18 @@ paths:
       - $ref: '#/components/parameters/ClientId'
       responses:
         '200':
-          description: 'Deleted (returns {"id": ...}).'
+          description: Client deleted; response carries the apply outcome (revision+job).
+          content:
+            application/json:
+              schema:
+                allOf:
+                - type: object
+                  required:
+                  - id
+                  properties:
+                    id:
+                      type: string
+                - $ref: '#/components/schemas/MutationOutcome'
         '404':
           description: Client not found.
         '409':
@@ -6496,6 +6550,186 @@ components:
             $ref: '#/components/schemas/ClientView'
         total:
           type: integer
+    ClientBinding:
+      type: object
+      required:
+      - id
+      - clientId
+      - inboundId
+      - runtimeIdentity
+      - enabled
+      - createdAt
+      - updatedAt
+      - version
+      description: Durable client↔inbound binding as stored (write responses).
+      properties:
+        id:
+          type: string
+        clientId:
+          type: string
+        inboundId:
+          type: string
+        runtimeIdentity:
+          type: string
+        enabled:
+          type: boolean
+        protocolSettings:
+          type: string
+          description: JSON object string with per-binding protocol options.
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
+        version:
+          type: integer
+    ClientBindingCreateResponse:
+      allOf:
+      - $ref: '#/components/schemas/ClientBinding'
+      - $ref: '#/components/schemas/MutationOutcome'
+      - type: object
+        properties:
+          plaintext:
+            type: string
+            description: One-time server-generated secret; present only when the server generated the credential.
+          issuedCredentials:
+            type: array
+            items:
+              $ref: '#/components/schemas/IssuedCredential'
+    ClientCredential:
+      type: object
+      required:
+      - id
+      - bindingId
+      - kind
+      - keyVersion
+      - credentialVersion
+      - createdAt
+      description: Credential metadata for a binding; the secret itself is never returned.
+      properties:
+        id:
+          type: string
+        bindingId:
+          type: string
+        kind:
+          type: string
+        keyVersion:
+          type: integer
+        credentialVersion:
+          type: integer
+        createdAt:
+          type: integer
+          format: int64
+        rotatedAt:
+          type: integer
+          format: int64
+        revokedAt:
+          type: integer
+          format: int64
+    RotatedCredential:
+      type: object
+      description: >-
+        Credential rotate result. A server-generated rotate (empty value)
+        returns {credential, plaintext} — the plaintext is shown exactly once.
+        A caller-supplied value returns the credential fields at top level.
+      properties:
+        credential:
+          $ref: '#/components/schemas/ClientCredential'
+        plaintext:
+          type: string
+          description: One-time plaintext; only for server-generated rotates.
+        id:
+          type: string
+        bindingId:
+          type: string
+        kind:
+          type: string
+        keyVersion:
+          type: integer
+        credentialVersion:
+          type: integer
+        createdAt:
+          type: integer
+          format: int64
+        rotatedAt:
+          type: integer
+          format: int64
+        revokedAt:
+          type: integer
+          format: int64
+    ClientBulkResult:
+      type: object
+      required:
+      - id
+      - ok
+      properties:
+        id:
+          type: string
+        ok:
+          type: boolean
+        message:
+          type: string
+        bindingId:
+          type: string
+        plaintext:
+          type: string
+          description: One-time server-generated secret for attach_inbound results.
+        issuedCredentials:
+          type: array
+          items:
+            $ref: '#/components/schemas/IssuedCredential'
+    ClientBulkResponse:
+      allOf:
+      - type: object
+        required:
+        - action
+        - total
+        - succeeded
+        - skipped
+        - failed
+        - results
+        properties:
+          action:
+            type: string
+          total:
+            type: integer
+          succeeded:
+            type: integer
+          skipped:
+            type: integer
+          failed:
+            type: integer
+          results:
+            type: array
+            items:
+              $ref: '#/components/schemas/ClientBulkResult'
+      - $ref: '#/components/schemas/MutationOutcome'
+    ClientMigrateResponse:
+      allOf:
+      - type: object
+        required:
+        - clientsCreated
+        - results
+        properties:
+          clientsCreated:
+            type: integer
+          results:
+            type: array
+            items:
+              type: object
+              properties:
+                inbound:
+                  type: string
+                clientsCreated:
+                  type: integer
+                bindingsCreated:
+                  type: integer
+                credentialsCreated:
+                  type: integer
+                skipped:
+                  type: integer
+      - $ref: '#/components/schemas/MutationOutcome'
     SubscriptionTokenResponse:
       type: object
       required:

@@ -94,18 +94,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getApiSystemResponse200 = {
-  data: SystemStats
-  status: 200
-}
-
-export type getApiSystemResponseSuccess = (getApiSystemResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiSystemResponse = (getApiSystemResponseSuccess)
-
 export const getGetApiSystemUrl = () => {
 
 
@@ -117,9 +105,9 @@ export const getGetApiSystemUrl = () => {
 /**
  * @summary System resource observation
  */
-export const getApiSystem = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiSystemResponse> => {
+export const getApiSystem = async ( options?: Parameters<typeof apiFetch>[1]): Promise<SystemStats> => {
 
-  return apiFetch<getApiSystemResponse>(getGetApiSystemUrl(),
+  return apiFetch<SystemStats>(getGetApiSystemUrl(),
   {
     ...options,
     method: 'GET'
@@ -206,18 +194,6 @@ export function useGetApiSystem<TData = Awaited<ReturnType<typeof getApiSystem>>
 
 
 
-export type getApiTlsResponse200 = {
-  data: TLSCertInfo
-  status: 200
-}
-
-export type getApiTlsResponseSuccess = (getApiTlsResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiTlsResponse = (getApiTlsResponseSuccess)
-
 export const getGetApiTlsUrl = () => {
 
 
@@ -229,9 +205,9 @@ export const getGetApiTlsUrl = () => {
 /**
  * @summary Panel TLS observation
  */
-export const getApiTls = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiTlsResponse> => {
+export const getApiTls = async ( options?: Parameters<typeof apiFetch>[1]): Promise<TLSCertInfo> => {
 
-  return apiFetch<getApiTlsResponse>(getGetApiTlsUrl(),
+  return apiFetch<TLSCertInfo>(getGetApiTlsUrl(),
   {
     ...options,
     method: 'GET'
@@ -318,18 +294,6 @@ export function useGetApiTls<TData = Awaited<ReturnType<typeof getApiTls>>, TErr
 
 
 
-export type getApiNetworkResponse200 = {
-  data: NetworkStats
-  status: 200
-}
-
-export type getApiNetworkResponseSuccess = (getApiNetworkResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiNetworkResponse = (getApiNetworkResponseSuccess)
-
 export const getGetApiNetworkUrl = () => {
 
 
@@ -341,9 +305,9 @@ export const getGetApiNetworkUrl = () => {
 /**
  * @summary Network counters observation
  */
-export const getApiNetwork = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiNetworkResponse> => {
+export const getApiNetwork = async ( options?: Parameters<typeof apiFetch>[1]): Promise<NetworkStats> => {
 
-  return apiFetch<getApiNetworkResponse>(getGetApiNetworkUrl(),
+  return apiFetch<NetworkStats>(getGetApiNetworkUrl(),
   {
     ...options,
     method: 'GET'
@@ -430,18 +394,6 @@ export function useGetApiNetwork<TData = Awaited<ReturnType<typeof getApiNetwork
 
 
 
-export type getApiConnectionsResponse200 = {
-  data: ConnectionsStats
-  status: 200
-}
-
-export type getApiConnectionsResponseSuccess = (getApiConnectionsResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiConnectionsResponse = (getApiConnectionsResponseSuccess)
-
 export const getGetApiConnectionsUrl = () => {
 
 
@@ -453,9 +405,9 @@ export const getGetApiConnectionsUrl = () => {
 /**
  * @summary Listening ports / connections observation
  */
-export const getApiConnections = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiConnectionsResponse> => {
+export const getApiConnections = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ConnectionsStats> => {
 
-  return apiFetch<getApiConnectionsResponse>(getGetApiConnectionsUrl(),
+  return apiFetch<ConnectionsStats>(getGetApiConnectionsUrl(),
   {
     ...options,
     method: 'GET'
@@ -542,18 +494,6 @@ export function useGetApiConnections<TData = Awaited<ReturnType<typeof getApiCon
 
 
 
-export type getApiProcessesResponse200 = {
-  data: ProcessesStats
-  status: 200
-}
-
-export type getApiProcessesResponseSuccess = (getApiProcessesResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiProcessesResponse = (getApiProcessesResponseSuccess)
-
 export const getGetApiProcessesUrl = () => {
 
 
@@ -565,9 +505,9 @@ export const getGetApiProcessesUrl = () => {
 /**
  * @summary Managed processes observation
  */
-export const getApiProcesses = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiProcessesResponse> => {
+export const getApiProcesses = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ProcessesStats> => {
 
-  return apiFetch<getApiProcessesResponse>(getGetApiProcessesUrl(),
+  return apiFetch<ProcessesStats>(getGetApiProcessesUrl(),
   {
     ...options,
     method: 'GET'
@@ -654,18 +594,6 @@ export function useGetApiProcesses<TData = Awaited<ReturnType<typeof getApiProce
 
 
 
-export type getApiDiskResponse200 = {
-  data: DiskStats
-  status: 200
-}
-
-export type getApiDiskResponseSuccess = (getApiDiskResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiDiskResponse = (getApiDiskResponseSuccess)
-
 export const getGetApiDiskUrl = () => {
 
 
@@ -677,9 +605,9 @@ export const getGetApiDiskUrl = () => {
 /**
  * @summary Disk usage observation
  */
-export const getApiDisk = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiDiskResponse> => {
+export const getApiDisk = async ( options?: Parameters<typeof apiFetch>[1]): Promise<DiskStats> => {
 
-  return apiFetch<getApiDiskResponse>(getGetApiDiskUrl(),
+  return apiFetch<DiskStats>(getGetApiDiskUrl(),
   {
     ...options,
     method: 'GET'
@@ -766,18 +694,6 @@ export function useGetApiDisk<TData = Awaited<ReturnType<typeof getApiDisk>>, TE
 
 
 
-export type getApiRuntimeObservationResponse200 = {
-  data: RuntimeObservation
-  status: 200
-}
-
-export type getApiRuntimeObservationResponseSuccess = (getApiRuntimeObservationResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getApiRuntimeObservationResponse = (getApiRuntimeObservationResponseSuccess)
-
 export const getGetApiRuntimeObservationUrl = () => {
 
 
@@ -789,9 +705,9 @@ export const getGetApiRuntimeObservationUrl = () => {
 /**
  * @summary Combined runtime observation
  */
-export const getApiRuntimeObservation = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiRuntimeObservationResponse> => {
+export const getApiRuntimeObservation = async ( options?: Parameters<typeof apiFetch>[1]): Promise<RuntimeObservation> => {
 
-  return apiFetch<getApiRuntimeObservationResponse>(getGetApiRuntimeObservationUrl(),
+  return apiFetch<RuntimeObservation>(getGetApiRuntimeObservationUrl(),
   {
     ...options,
     method: 'GET'
@@ -878,25 +794,6 @@ export function useGetApiRuntimeObservation<TData = Awaited<ReturnType<typeof ge
 
 
 
-export type getApiLogsResponse200 = {
-  data: LogResult
-  status: 200
-}
-
-export type getApiLogsResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type getApiLogsResponseSuccess = (getApiLogsResponse200) & {
-  headers: Headers;
-};
-export type getApiLogsResponseError = (getApiLogsResponse400) & {
-  headers: Headers;
-};
-
-export type getApiLogsResponse = (getApiLogsResponseSuccess | getApiLogsResponseError)
-
 export const getGetApiLogsUrl = (params?: GetApiLogsParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -915,9 +812,9 @@ export const getGetApiLogsUrl = (params?: GetApiLogsParams,) => {
 /**
  * @summary Bounded journald reads for managed units
  */
-export const getApiLogs = async (params?: GetApiLogsParams, options?: Parameters<typeof apiFetch>[1]): Promise<getApiLogsResponse> => {
+export const getApiLogs = async (params?: GetApiLogsParams, options?: Parameters<typeof apiFetch>[1]): Promise<LogResult> => {
 
-  return apiFetch<getApiLogsResponse>(getGetApiLogsUrl(params),
+  return apiFetch<LogResult>(getGetApiLogsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -1004,35 +901,6 @@ export function useGetApiLogs<TData = Awaited<ReturnType<typeof getApiLogs>>, TE
 
 
 
-export type getRuntimeProvenanceResponse200 = {
-  data: GetRuntimeProvenance200
-  status: 200
-}
-
-export type getRuntimeProvenanceResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getRuntimeProvenanceResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type getRuntimeProvenanceResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type getRuntimeProvenanceResponseSuccess = (getRuntimeProvenanceResponse200) & {
-  headers: Headers;
-};
-export type getRuntimeProvenanceResponseError = (getRuntimeProvenanceResponse401 | getRuntimeProvenanceResponse403 | getRuntimeProvenanceResponse503) & {
-  headers: Headers;
-};
-
-export type getRuntimeProvenanceResponse = (getRuntimeProvenanceResponseSuccess | getRuntimeProvenanceResponseError)
-
 export const getGetRuntimeProvenanceUrl = () => {
 
 
@@ -1044,9 +912,9 @@ export const getGetRuntimeProvenanceUrl = () => {
 /**
  * @summary Get verified installed runtime provenance
  */
-export const getRuntimeProvenance = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getRuntimeProvenanceResponse> => {
+export const getRuntimeProvenance = async ( options?: Parameters<typeof apiFetch>[1]): Promise<GetRuntimeProvenance200> => {
 
-  return apiFetch<getRuntimeProvenanceResponse>(getGetRuntimeProvenanceUrl(),
+  return apiFetch<GetRuntimeProvenance200>(getGetRuntimeProvenanceUrl(),
   {
     ...options,
     method: 'GET'

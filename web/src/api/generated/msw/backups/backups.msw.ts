@@ -102,30 +102,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getApiBackupsResponse200 = {
-  data: BackupArchive[]
-  status: 200
-}
-
-export type getApiBackupsResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiBackupsResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type getApiBackupsResponseSuccess = (getApiBackupsResponse200) & {
-  headers: Headers;
-};
-export type getApiBackupsResponseError = (getApiBackupsResponse401 | getApiBackupsResponse403) & {
-  headers: Headers;
-};
-
-export type getApiBackupsResponse = (getApiBackupsResponseSuccess | getApiBackupsResponseError)
-
 export const getGetApiBackupsUrl = () => {
 
 
@@ -138,9 +114,9 @@ export const getGetApiBackupsUrl = () => {
  * Requires an admin token or admin session.
  * @summary List managed disaster-recovery archives
  */
-export const getApiBackups = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getApiBackupsResponse> => {
+export const getApiBackups = async ( options?: Parameters<typeof apiFetch>[1]): Promise<BackupArchive[]> => {
 
-  return apiFetch<getApiBackupsResponse>(getGetApiBackupsUrl(),
+  return apiFetch<BackupArchive[]>(getGetApiBackupsUrl(),
   {
     ...options,
     method: 'GET'
@@ -227,55 +203,6 @@ export function useGetApiBackups<TData = Awaited<ReturnType<typeof getApiBackups
 
 
 
-export type postApiBackupsResponse201 = {
-  data: BackupCreateResponse
-  status: 201
-}
-
-export type postApiBackupsResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiBackupsResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type postApiBackupsResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type postApiBackupsResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiBackupsResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiBackupsResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiBackupsResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiBackupsResponseSuccess = (postApiBackupsResponse201) & {
-  headers: Headers;
-};
-export type postApiBackupsResponseError = (postApiBackupsResponse400 | postApiBackupsResponse401 | postApiBackupsResponse403 | postApiBackupsResponse409 | postApiBackupsResponse422 | postApiBackupsResponse423 | postApiBackupsResponse503) & {
-  headers: Headers;
-};
-
-export type postApiBackupsResponse = (postApiBackupsResponseSuccess | postApiBackupsResponseError)
-
 export const getPostApiBackupsUrl = () => {
 
 
@@ -290,7 +217,7 @@ export const getPostApiBackupsUrl = () => {
  * cookie session.
  * @summary Create and verify an encrypted archive
  */
-export const postApiBackups = async (backupCreateRequest: BackupCreateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiBackupsResponse> => {
+export const postApiBackups = async (backupCreateRequest: BackupCreateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<BackupCreateResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -306,7 +233,7 @@ export const postApiBackups = async (backupCreateRequest: BackupCreateRequest, o
     }
     return headers;
   };
-return apiFetch<postApiBackupsResponse>(getPostApiBackupsUrl(),
+return apiFetch<BackupCreateResponse>(getPostApiBackupsUrl(),
   {
     ...options,
     method: 'POST',
@@ -366,56 +293,7 @@ export const usePostApiBackups = <TError = BadRequestResponse | UnauthorizedResp
       > => {
       return useMutation(getPostApiBackupsMutationOptions(options), queryClient);
     }
-    export type postApiBackupsPruneResponse200 = {
-  data: BackupPruneResult
-  status: 200
-}
-
-export type postApiBackupsPruneResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiBackupsPruneResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type postApiBackupsPruneResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type postApiBackupsPruneResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiBackupsPruneResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiBackupsPruneResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiBackupsPruneResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiBackupsPruneResponseSuccess = (postApiBackupsPruneResponse200) & {
-  headers: Headers;
-};
-export type postApiBackupsPruneResponseError = (postApiBackupsPruneResponse400 | postApiBackupsPruneResponse401 | postApiBackupsPruneResponse403 | postApiBackupsPruneResponse409 | postApiBackupsPruneResponse422 | postApiBackupsPruneResponse423 | postApiBackupsPruneResponse503) & {
-  headers: Headers;
-};
-
-export type postApiBackupsPruneResponse = (postApiBackupsPruneResponseSuccess | postApiBackupsPruneResponseError)
-
-export const getPostApiBackupsPruneUrl = () => {
+    export const getPostApiBackupsPruneUrl = () => {
 
 
 
@@ -427,7 +305,7 @@ export const getPostApiBackupsPruneUrl = () => {
  * Requires admin and CSRF for a cookie session.
  * @summary Apply managed archive retention
  */
-export const postApiBackupsPrune = async (backupPruneRequest: BackupPruneRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiBackupsPruneResponse> => {
+export const postApiBackupsPrune = async (backupPruneRequest: BackupPruneRequest, options?: Parameters<typeof apiFetch>[1]): Promise<BackupPruneResult> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -443,7 +321,7 @@ export const postApiBackupsPrune = async (backupPruneRequest: BackupPruneRequest
     }
     return headers;
   };
-return apiFetch<postApiBackupsPruneResponse>(getPostApiBackupsPruneUrl(),
+return apiFetch<BackupPruneResult>(getPostApiBackupsPruneUrl(),
   {
     ...options,
     method: 'POST',
@@ -503,61 +381,7 @@ export const usePostApiBackupsPrune = <TError = BadRequestResponse | Unauthorize
       > => {
       return useMutation(getPostApiBackupsPruneMutationOptions(options), queryClient);
     }
-    export type deleteApiBackupsNameResponse200 = {
-  data: DeleteApiBackupsName200
-  status: 200
-}
-
-export type deleteApiBackupsNameResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type deleteApiBackupsNameResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type deleteApiBackupsNameResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type deleteApiBackupsNameResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type deleteApiBackupsNameResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type deleteApiBackupsNameResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type deleteApiBackupsNameResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type deleteApiBackupsNameResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type deleteApiBackupsNameResponseSuccess = (deleteApiBackupsNameResponse200) & {
-  headers: Headers;
-};
-export type deleteApiBackupsNameResponseError = (deleteApiBackupsNameResponse400 | deleteApiBackupsNameResponse401 | deleteApiBackupsNameResponse403 | deleteApiBackupsNameResponse404 | deleteApiBackupsNameResponse409 | deleteApiBackupsNameResponse422 | deleteApiBackupsNameResponse423 | deleteApiBackupsNameResponse503) & {
-  headers: Headers;
-};
-
-export type deleteApiBackupsNameResponse = (deleteApiBackupsNameResponseSuccess | deleteApiBackupsNameResponseError)
-
-export const getDeleteApiBackupsNameUrl = (name: string,) => {
+    export const getDeleteApiBackupsNameUrl = (name: string,) => {
 
 
 
@@ -569,9 +393,9 @@ export const getDeleteApiBackupsNameUrl = (name: string,) => {
  * Requires admin and CSRF for a cookie session.
  * @summary Delete one managed encrypted archive
  */
-export const deleteApiBackupsName = async (name: string, options?: Parameters<typeof apiFetch>[1]): Promise<deleteApiBackupsNameResponse> => {
+export const deleteApiBackupsName = async (name: string, options?: Parameters<typeof apiFetch>[1]): Promise<DeleteApiBackupsName200> => {
 
-  return apiFetch<deleteApiBackupsNameResponse>(getDeleteApiBackupsNameUrl(name),
+  return apiFetch<DeleteApiBackupsName200>(getDeleteApiBackupsNameUrl(name),
   {
     ...options,
     method: 'DELETE'
@@ -631,36 +455,7 @@ export const useDeleteApiBackupsName = <TError = BadRequestResponse | Unauthoriz
       > => {
       return useMutation(getDeleteApiBackupsNameMutationOptions(options), queryClient);
     }
-    export type getApiBackupsNameDownloadResponse200 = {
-  data: Blob
-  status: 200
-}
-
-export type getApiBackupsNameDownloadResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiBackupsNameDownloadResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type getApiBackupsNameDownloadResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type getApiBackupsNameDownloadResponseSuccess = (getApiBackupsNameDownloadResponse200) & {
-  headers: Headers;
-};
-export type getApiBackupsNameDownloadResponseError = (getApiBackupsNameDownloadResponse401 | getApiBackupsNameDownloadResponse403 | getApiBackupsNameDownloadResponse404) & {
-  headers: Headers;
-};
-
-export type getApiBackupsNameDownloadResponse = (getApiBackupsNameDownloadResponseSuccess | getApiBackupsNameDownloadResponseError)
-
-export const getGetApiBackupsNameDownloadUrl = (name: string,) => {
+    export const getGetApiBackupsNameDownloadUrl = (name: string,) => {
 
 
 
@@ -672,9 +467,9 @@ export const getGetApiBackupsNameDownloadUrl = (name: string,) => {
  * Requires an admin token or admin session.
  * @summary Download an encrypted archive
  */
-export const getApiBackupsNameDownload = async (name: string, options?: Parameters<typeof apiFetch>[1]): Promise<getApiBackupsNameDownloadResponse> => {
+export const getApiBackupsNameDownload = async (name: string, options?: Parameters<typeof apiFetch>[1]): Promise<Blob> => {
 
-  return apiFetch<getApiBackupsNameDownloadResponse>(getGetApiBackupsNameDownloadUrl(name),
+  return apiFetch<Blob>(getGetApiBackupsNameDownloadUrl(name),
   {
     ...options,
     method: 'GET'
@@ -761,55 +556,6 @@ export function useGetApiBackupsNameDownload<TData = Awaited<ReturnType<typeof g
 
 
 
-export type postApiBackupsNameVerifyResponse200 = {
-  data: BackupVerificationReport
-  status: 200
-}
-
-export type postApiBackupsNameVerifyResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type postApiBackupsNameVerifyResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type postApiBackupsNameVerifyResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type postApiBackupsNameVerifyResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiBackupsNameVerifyResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiBackupsNameVerifyResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiBackupsNameVerifyResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiBackupsNameVerifyResponseSuccess = (postApiBackupsNameVerifyResponse200) & {
-  headers: Headers;
-};
-export type postApiBackupsNameVerifyResponseError = (postApiBackupsNameVerifyResponse401 | postApiBackupsNameVerifyResponse403 | postApiBackupsNameVerifyResponse404 | postApiBackupsNameVerifyResponse409 | postApiBackupsNameVerifyResponse422 | postApiBackupsNameVerifyResponse423 | postApiBackupsNameVerifyResponse503) & {
-  headers: Headers;
-};
-
-export type postApiBackupsNameVerifyResponse = (postApiBackupsNameVerifyResponseSuccess | postApiBackupsNameVerifyResponseError)
-
 export const getPostApiBackupsNameVerifyUrl = (name: string,) => {
 
 
@@ -822,7 +568,7 @@ export const getPostApiBackupsNameVerifyUrl = (name: string,) => {
  * @summary Decrypt and verify an archive without writing state
  */
 export const postApiBackupsNameVerify = async (name: string,
-    emptyObject?: EmptyObject, options?: Parameters<typeof apiFetch>[1]): Promise<postApiBackupsNameVerifyResponse> => {
+    emptyObject?: EmptyObject, options?: Parameters<typeof apiFetch>[1]): Promise<BackupVerificationReport> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -838,7 +584,7 @@ export const postApiBackupsNameVerify = async (name: string,
     }
     return headers;
   };
-return apiFetch<postApiBackupsNameVerifyResponse>(getPostApiBackupsNameVerifyUrl(name),
+return apiFetch<BackupVerificationReport>(getPostApiBackupsNameVerifyUrl(name),
   {
     ...options,
     method: 'POST',
@@ -898,61 +644,7 @@ export const usePostApiBackupsNameVerify = <TError = UnauthorizedResponse | Forb
       > => {
       return useMutation(getPostApiBackupsNameVerifyMutationOptions(options), queryClient);
     }
-    export type postApiBackupsNameRestoreResponse202 = {
-  data: BackupRestoreJob
-  status: 202
-}
-
-export type postApiBackupsNameRestoreResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type postApiBackupsNameRestoreResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type postApiBackupsNameRestoreResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type postApiBackupsNameRestoreResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type postApiBackupsNameRestoreResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type postApiBackupsNameRestoreResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type postApiBackupsNameRestoreResponse423 = {
-  data: LockedResponse
-  status: 423
-}
-
-export type postApiBackupsNameRestoreResponse503 = {
-  data: ServiceUnavailableResponse
-  status: 503
-}
-
-export type postApiBackupsNameRestoreResponseSuccess = (postApiBackupsNameRestoreResponse202) & {
-  headers: Headers;
-};
-export type postApiBackupsNameRestoreResponseError = (postApiBackupsNameRestoreResponse400 | postApiBackupsNameRestoreResponse401 | postApiBackupsNameRestoreResponse403 | postApiBackupsNameRestoreResponse404 | postApiBackupsNameRestoreResponse409 | postApiBackupsNameRestoreResponse422 | postApiBackupsNameRestoreResponse423 | postApiBackupsNameRestoreResponse503) & {
-  headers: Headers;
-};
-
-export type postApiBackupsNameRestoreResponse = (postApiBackupsNameRestoreResponseSuccess | postApiBackupsNameRestoreResponseError)
-
-export const getPostApiBackupsNameRestoreUrl = (name: string,) => {
+    export const getPostApiBackupsNameRestoreUrl = (name: string,) => {
 
 
 
@@ -967,7 +659,7 @@ export const getPostApiBackupsNameRestoreUrl = (name: string,) => {
  * @summary Queue a verified state and key restore
  */
 export const postApiBackupsNameRestore = async (name: string,
-    backupRestoreRequest: BackupRestoreRequest, options?: Parameters<typeof apiFetch>[1]): Promise<postApiBackupsNameRestoreResponse> => {
+    backupRestoreRequest: BackupRestoreRequest, options?: Parameters<typeof apiFetch>[1]): Promise<BackupRestoreJob> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -983,7 +675,7 @@ export const postApiBackupsNameRestore = async (name: string,
     }
     return headers;
   };
-return apiFetch<postApiBackupsNameRestoreResponse>(getPostApiBackupsNameRestoreUrl(name),
+return apiFetch<BackupRestoreJob>(getPostApiBackupsNameRestoreUrl(name),
   {
     ...options,
     method: 'POST',
@@ -1043,41 +735,7 @@ export const usePostApiBackupsNameRestore = <TError = BadRequestResponse | Unaut
       > => {
       return useMutation(getPostApiBackupsNameRestoreMutationOptions(options), queryClient);
     }
-    export type getApiBackupRestoreJobsIdResponse200 = {
-  data: BackupRestoreJob
-  status: 200
-}
-
-export type getApiBackupRestoreJobsIdResponse400 = {
-  data: BadRequestResponse
-  status: 400
-}
-
-export type getApiBackupRestoreJobsIdResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getApiBackupRestoreJobsIdResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type getApiBackupRestoreJobsIdResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type getApiBackupRestoreJobsIdResponseSuccess = (getApiBackupRestoreJobsIdResponse200) & {
-  headers: Headers;
-};
-export type getApiBackupRestoreJobsIdResponseError = (getApiBackupRestoreJobsIdResponse400 | getApiBackupRestoreJobsIdResponse401 | getApiBackupRestoreJobsIdResponse403 | getApiBackupRestoreJobsIdResponse404) & {
-  headers: Headers;
-};
-
-export type getApiBackupRestoreJobsIdResponse = (getApiBackupRestoreJobsIdResponseSuccess | getApiBackupRestoreJobsIdResponseError)
-
-export const getGetApiBackupRestoreJobsIdUrl = (id: string,) => {
+    export const getGetApiBackupRestoreJobsIdUrl = (id: string,) => {
 
 
 
@@ -1089,9 +747,9 @@ export const getGetApiBackupRestoreJobsIdUrl = (id: string,) => {
  * Requires an admin session or the restore owner's one-time revalidated recovery session.
  * @summary Read queued restore progress
  */
-export const getApiBackupRestoreJobsId = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getApiBackupRestoreJobsIdResponse> => {
+export const getApiBackupRestoreJobsId = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<BackupRestoreJob> => {
 
-  return apiFetch<getApiBackupRestoreJobsIdResponse>(getGetApiBackupRestoreJobsIdUrl(id),
+  return apiFetch<BackupRestoreJob>(getGetApiBackupRestoreJobsIdUrl(id),
   {
     ...options,
     method: 'GET'
