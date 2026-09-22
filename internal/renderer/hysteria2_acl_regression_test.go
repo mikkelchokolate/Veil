@@ -156,11 +156,11 @@ func TestRenderHysteria2ACLCompilesUnderUpstreamGrammar(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg, err := RenderHysteria2(Hysteria2Config{
-		ListenPort:    443,
-		Password:      "secret",
-		Upstream:      "127.0.0.1:40000",
-		GeoIPPath:     geoip,
-		GeoSitePath:   geosite,
+		ListenPort:  443,
+		Password:    "secret",
+		Upstream:    "127.0.0.1:40000",
+		GeoIPPath:   geoip,
+		GeoSitePath: geosite,
 		RoutingRules: []Hysteria2RoutingRule{
 			{Match: "geosite:category-gov-ru,full:api.example.com", Outbound: "direct"},
 			{Match: "geoip:private,geoip:cn", Outbound: "direct"},
@@ -208,9 +208,9 @@ func TestHysteriaACLGateCatchesOldDialect(t *testing.T) {
 	// keyword:/regex:/domain: prefixes are not stripped upstream: they compile
 	// as wildcard/exact literal domains — silent wrong routing, no error.
 	for addr, want := range map[string]string{
-		"keyword:google":      "domain",
+		"keyword:google":         "domain",
 		"domain:api.example.com": "domain",
-		"regex:.*\\.ru$":      "wildcard",
+		"regex:.*\\.ru$":         "wildcard",
 	} {
 		kind, err := hysteriaACLCompileAddress(addr)
 		if err != nil {
@@ -234,9 +234,9 @@ func TestHysteriaACLGateCatchesOldDialect(t *testing.T) {
 // line grammar, are omitted — never emitted as fake prefixes.
 func TestRenderHysteria2ACLOmitsUnsupportedMatchers(t *testing.T) {
 	cfg, err := RenderHysteria2(Hysteria2Config{
-		ListenPort:    443,
-		Password:      "secret",
-		Upstream:      "127.0.0.1:40000",
+		ListenPort: 443,
+		Password:   "secret",
+		Upstream:   "127.0.0.1:40000",
 		RoutingRules: []Hysteria2RoutingRule{
 			{Match: `keyword:google,regexp:.*\.ru$,suffix:example.com`, Outbound: "direct"},
 			{Match: `full:bad#host,full:ok.example.com`, Outbound: "direct"},
