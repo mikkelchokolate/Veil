@@ -6,6 +6,7 @@ import {
 	RouterProvider,
 } from "@tanstack/react-router";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { delay } from "msw";
 import { AuthProvider } from "../auth/AuthContext";
 import { I18nProvider } from "../i18n/I18nContext";
 import { InboundsPage } from "../pages/InboundsPage";
@@ -87,6 +88,68 @@ describe("InboundsPage delete confirm", () => {
 		).not.toBeInTheDocument();
 		expect(screen.queryByText(/detaches its clients/i)).not.toBeInTheDocument();
 		expect(deletes).toBe(0);
+	});
+
+	// #712 follow-up: while the bindings query is still loading the count is
+	// unknown — the dialog must not expose Confirm on a stale empty read.
+	it("withholds Confirm while the bindings query is still loading", async () => {
+		server.use(
+			http.get("/api/inbounds", () =>
+				HttpResponse.json([
+					{
+						name: "free",
+						protocol: "hysteria2",
+						transport: "udp",
+						port: 443,
+						enabled: true,
+					},
+				]),
+			),
+			http.get("/api/protocols", () => HttpResponse.json([])),
+			http.get("/api/inbounds/:name/clients", async () => {
+				await delay("infinite");
+				return HttpResponse.json({ items: [], total: 0 });
+			}),
+		);
+		renderInbounds();
+		fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+		expect(
+			await screen.findByText(/checking for attached clients/i),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: /confirm delete/i }),
+		).not.toBeInTheDocument();
+	});
+
+	// #712 follow-up: an errored bindings query is equally unknown — the
+	// dialog shows the failure and still hides the destructive action.
+	it("withholds Confirm when bindings cannot be loaded", async () => {
+		server.use(
+			http.get("/api/inbounds", () =>
+				HttpResponse.json([
+					{
+						name: "free",
+						protocol: "hysteria2",
+						transport: "udp",
+						port: 443,
+						enabled: true,
+					},
+				]),
+			),
+			http.get("/api/protocols", () => HttpResponse.json([])),
+			http.get("/api/inbounds/:name/clients", () =>
+				HttpResponse.json({ detail: "boom" }, { status: 500 }),
+			),
+		);
+		renderInbounds();
+		fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+		// findAllByText: the table row may also render the same failure line.
+		expect(
+			(await screen.findAllByText(/could not load attached clients/i)).length,
+		).toBeGreaterThan(0);
+		expect(
+			screen.queryByRole("button", { name: /confirm delete/i }),
+		).not.toBeInTheDocument();
 	});
 
 	it("describes only the listener removal for an unattached inbound", async () => {
