@@ -420,6 +420,46 @@ describe("apiFetch request policy", () => {
 		expect(apiError.issues?.[0]?.message).toContain("between 1 and 65535");
 	});
 
+	it("preserves Retry-After on ApiError for lockout responses", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(
+				new Response(JSON.stringify({ error: "too many login attempts" }), {
+					status: 429,
+					statusText: "Too Many Requests",
+					headers: { "Retry-After": "42" },
+				}),
+			),
+		);
+		const failure = await fetcher
+			.apiFetch("/api/auth/login", { method: "POST", body: "{}" })
+			.then(
+				() => undefined,
+				(error: unknown) => error,
+			);
+		expect(failure).toBeInstanceOf(fetcher.ApiError);
+		expect((failure as fetcher.ApiError).status).toBe(429);
+		expect((failure as fetcher.ApiError).retryAfterSeconds).toBe(42);
+	});
+
+	it("leaves retryAfterSeconds undefined when no Retry-After is sent", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(
+				new Response(JSON.stringify({ error: "unauthorized" }), {
+					status: 401,
+					statusText: "Unauthorized",
+				}),
+			),
+		);
+		const failure = await fetcher.apiFetch("/api/v1/clients").then(
+			() => undefined,
+			(error: unknown) => error,
+		);
+		expect(failure).toBeInstanceOf(fetcher.ApiError);
+		expect((failure as fetcher.ApiError).retryAfterSeconds).toBeUndefined();
+	});
+
 	it("notifies the session handler on 401 except for login", async () => {
 		const handler = vi.fn();
 		fetcher.setUnauthorizedHandler(handler);
