@@ -55,8 +55,10 @@ export function liveApplyLastError(
 	if (!isRecoveryTransferCode(err.code)) return err;
 
 	const inSync = state.desiredRevision === state.appliedRevision;
-	const settled =
-		inSync && (state.state === "synced" || state.state === "applied");
+	// Only the OpenAPI enum value "synced" counts as in-sync (#674): a bogus
+	// or legacy value like "applied" is not a settled signal and must not
+	// silence a transferred recovery error.
+	const settled = inSync && state.state === "synced";
 	if (settled) return undefined;
 	if (jobs.some((job) => job.status === "succeeded")) return undefined;
 	if (

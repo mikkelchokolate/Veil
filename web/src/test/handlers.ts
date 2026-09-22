@@ -21,7 +21,7 @@ export const defaultHandlers = [
 		HttpResponse.json({
 			desiredRevision: 1,
 			appliedRevision: 1,
-			state: "applied",
+			state: "synced",
 		}),
 	),
 	http.get("/api/settings", () =>

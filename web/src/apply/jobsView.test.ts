@@ -76,6 +76,26 @@ describe("liveApplyLastError", () => {
 		).toBeUndefined();
 	});
 
+	// #674: only the OpenAPI "synced" enum may silence a transferred
+	// lastError — a bogus/legacy state value must not count as in-sync even
+	// when the revisions happen to match.
+	it.each(["applied", "drift", "bogus"])(
+		"does not treat %s as a settled in-sync state",
+		(state) => {
+			expect(
+				liveApplyLastError(
+					{
+						state,
+						desiredRevision: 4,
+						appliedRevision: 4,
+						lastError: transferred,
+					},
+					[],
+				),
+			).toEqual(transferred);
+		},
+	);
+
 	it("drops a transferred lastError when runtime has already caught up", () => {
 		expect(
 			liveApplyLastError(
