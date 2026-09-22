@@ -38,7 +38,7 @@ install_pinned_caddy_binary() { # <destdir> <veil-binary-for-caddy-build>
     # A RETURN trap armed here stays set after this function returns and
     # re-fires on the caller's next function return with `tmp` unbound under
     # set -u — disarm it once the build subshell is done.
-    trap 'rm -rf "${tmp}"' RETURN
+    trap 'rm -rf "${tmp}"; trap - RETURN' RETURN
     mkdir -p "${tmp}/caddy-build" "${gopath_cache}"
     (
       cd "${tmp}/caddy-build"
@@ -105,7 +105,7 @@ install_pinned_singbox_for_tests() { # <destdir>
   tmp="$(mktemp -d /tmp/veil-pinned-singbox.XXXXXX)"
   # RETURN traps persist past this function's own return — clear it after the
   # install or the next caller's return re-fires it with `tmp` unbound (#686).
-  trap 'rm -rf "${tmp}"' RETURN
+  trap 'rm -rf "${tmp}"; trap - RETURN' RETURN
   (
     cd "${tmp}"
     install_singbox_from_workdir "${dest}"
@@ -121,7 +121,7 @@ install_pinned_runtimes() { # <destdir> <veil-binary-for-caddy-build>
   tmp="$(mktemp -d /tmp/veil-pinned-runtimes.XXXXXX)"
   # Same RETURN-trap hygiene as install_pinned_caddy_binary: disarm once the
   # fetch subshell finishes so the trap cannot leak to the caller's functions.
-  trap 'rm -rf "${tmp}"' RETURN
+  trap 'rm -rf "${tmp}"; trap - RETURN' RETURN
 
   mkdir -p "${dest}"
   (
