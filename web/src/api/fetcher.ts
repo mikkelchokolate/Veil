@@ -10,7 +10,9 @@ export function setUnauthorizedHandler(handler: (() => void) | null) {
 	unauthorizedHandler = handler;
 }
 
-function notifyUnauthorized(path: string, status: number) {
+/** Exported so raw fetch call sites that cannot go through apiFetch (blob
+ * downloads) still route a session-ending 401 to the gate (#696). */
+export function notifyUnauthorized(path: string, status: number) {
 	if (status !== 401 || path === "/api/auth/login") return;
 	unauthorizedHandler?.();
 }
@@ -31,6 +33,9 @@ export class ApiError extends Error {
 	details: unknown;
 	issues: ApiValidationIssue[] | undefined;
 	body: unknown;
+	/** Seconds until retry per the response Retry-After header (e.g. login
+	 * rate-limit 429), when the server sent a parseable value. */
+	retryAfterSeconds: number | undefined;
 
 	constructor(
 		status: number,
@@ -39,6 +44,7 @@ export class ApiError extends Error {
 		details?: unknown,
 		issues?: ApiValidationIssue[],
 		body?: unknown,
+		retryAfterSeconds?: number,
 	) {
 		super(message);
 		this.name = "ApiError";
@@ -47,6 +53,7 @@ export class ApiError extends Error {
 		this.details = details;
 		this.issues = issues;
 		this.body = body;
+		this.retryAfterSeconds = retryAfterSeconds;
 	}
 }
 
@@ -167,6 +174,21 @@ async function requestOnce(
 	}
 }
 
+/** Retry-After is either delta-seconds or an HTTP date; both reduce to a
+ * non-negative second count. Unparseable/absent → undefined. */
+function parseRetryAfterSeconds(response: Response): number | undefined {
+	const raw = response.headers?.get("Retry-After");
+	if (!raw) return undefined;
+	if (/^\s*\d+\s*$/.test(raw)) {
+		return Math.max(0, Number.parseInt(raw, 10));
+	}
+	const date = Date.parse(raw);
+	if (Number.isFinite(date)) {
+		return Math.max(0, Math.ceil((date - Date.now()) / 1000));
+	}
+	return undefined;
+}
+
 function assertSameOriginRedirect(response: Response) {
 	if (!response.redirected) return;
 	const finalURL = new URL(response.url, window.location.href);
@@ -284,6 +306,7 @@ export async function apiFetch<T>(
 			maybe?.details,
 			maybe?.issues,
 			body,
+			parseRetryAfterSeconds(response),
 		);
 	}
 	return body as T;

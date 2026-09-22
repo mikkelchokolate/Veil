@@ -119,6 +119,27 @@ func TestOpenAPIApplySchemasMatchRuntime(t *testing.T) {
 	}
 }
 
+// TestOpenAPIMutationEnvelopesRequireSuccess guards #687: the mutation
+// envelopes that carry the MutationOutcome honesty contract must keep
+// "success" in their required list. With nullable-type codegen a dropped
+// required turns Success into an omitempty *bool and the SPA/e2e honesty
+// checks silently weaken while verify-sdk still greens.
+func TestOpenAPIMutationEnvelopesRequireSuccess(t *testing.T) {
+	for schema, want := range map[string][]string{
+		"MutationOutcome":       {"revision", "success"},
+		"ClientCreateResponse":  {"client", "revision", "success"},
+		"ApplyRetryResponse":    {"applyJob", "revision", "success"},
+		"ApplyRollbackResponse": {"desiredRevision", "revision", "selectedRevision", "success"},
+		"KeyRotationResponse":   {"revokedSessions", "success"},
+		"ServiceActionResponse": {"action", "service", "success"},
+		"SuccessResponse":       {"success"},
+	} {
+		if got := schemaRequired(t, schema); !equalStrings(got, want) {
+			t.Errorf("%s required = %v, want %v", schema, got, want)
+		}
+	}
+}
+
 // TestOpenAPIApplyEndpointsHaveResponseSchemas guards #551, #553, #560, #561:
 // apply endpoints that used to return prose-only or wrong-shape bodies.
 func TestOpenAPIApplyEndpointsHaveResponseSchemas(t *testing.T) {

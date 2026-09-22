@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { ApiError, apiFetch, mutationErrorMessage } from "../api/fetcher";
-import type { UserResponse } from "../api/generated/models";
+import type { SessionInfo, UserResponse } from "../api/generated/models";
 import { useAuth, useIsAdmin } from "../auth/AuthContext";
 import {
 	AlertDialog,
@@ -32,24 +32,16 @@ import { useI18n } from "../i18n/I18nContext";
 
 type PanelUser = UserResponse;
 
-interface SessionInfo {
-	id: string;
-	username: string;
-	role: string;
-	createdAt: string;
-	lastSeenAt: string;
-	expiresAt: string;
-	userAgent?: string;
-	remoteAddr?: string;
-	current: boolean;
-}
+// The wire contract (generated SessionInfo) carries both deadlines — a
+// session dies at min(idleExpiresAt, expiresAt): ~30m idle or ~24h absolute.
+// Showing only the absolute value hid the binding idle deadline (#730).
 
 /** S4: full panel user management — create, edit role/password, delete (with
  * confirm), and active-session listing + revocation. */
 export function UsersPage() {
 	const { t } = useI18n();
 	const isAdmin = useIsAdmin();
-	const { session } = useAuth();
+	const { session, logout } = useAuth();
 	const qc = useQueryClient();
 	const [creatingUser, setCreatingUser] = useState(false);
 	const [username, setUsername] = useState("");
@@ -111,6 +103,14 @@ export function UsersPage() {
 			setEditing(null);
 			setEditPassword("");
 			setError(null);
+			// PUT /api/users/{name} revokes every session of that user before
+			// committing. For a self-edit that is THIS session: paint a clean
+			// "updated" notice would be a lie — sign out to the login screen
+			// instead of waiting for the next call to 401 (#693).
+			if (args.name === session?.username) {
+				void logout().catch(() => undefined);
+				return;
+			}
 			setNotice(t("users.updatedNotice", { name: args.name }));
 			invalidate();
 		},
@@ -290,6 +290,11 @@ export function UsersPage() {
 												<Button onClick={() => setEditing(null)}>
 													{t("common.cancel")}
 												</Button>
+												{session?.username === u.username ? (
+													<FormMessage style={{ flexBasis: "100%" }}>
+														{t("users.selfEditWarning")}
+													</FormMessage>
+												) : null}
 											</form>
 										) : null}
 									</TableCell>
@@ -379,6 +384,7 @@ export function UsersPage() {
 								<TableHead>{t("users.sessionUser")}</TableHead>
 								<TableHead>{t("users.role")}</TableHead>
 								<TableHead>{t("users.lastSeen")}</TableHead>
+								<TableHead>{t("users.idleExpires")}</TableHead>
 								<TableHead>{t("users.expires")}</TableHead>
 								<TableHead>{t("users.agent")}</TableHead>
 								<TableHead />
@@ -398,6 +404,11 @@ export function UsersPage() {
 									</TableCell>
 									<TableCell className="muted">
 										{new Date(s.lastSeenAt).toLocaleString()}
+									</TableCell>
+									<TableCell className="muted">
+										{s.idleExpiresAt
+											? new Date(s.idleExpiresAt).toLocaleString()
+											: "—"}
 									</TableCell>
 									<TableCell className="muted">
 										{new Date(s.expiresAt).toLocaleString()}

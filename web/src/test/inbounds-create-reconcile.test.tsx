@@ -36,6 +36,10 @@ interface MockState {
 	// jobStatus is the latest apply job status returned by /api/apply/jobs;
 	// null means the jobs list comes back empty.
 	jobStatus?: string | null;
+	// applyState overrides the GET /api/apply/state body; "fail" makes the
+	// state endpoint error out. jobsFail does the same for the jobs list.
+	applyState?: Record<string, unknown> | "fail";
+	jobsFail?: boolean;
 }
 
 function installFetchMock(state: MockState) {
@@ -70,7 +74,22 @@ function installFetchMock(state: MockState) {
 					: [],
 			);
 		}
+		if (url.endsWith("/api/apply/state")) {
+			if (state.applyState === "fail") {
+				return respond(errorBody("state down", "internal"), 500);
+			}
+			return respond(
+				state.applyState ?? {
+					desiredRevision: 2,
+					appliedRevision: 1,
+					state: "pending",
+				},
+			);
+		}
 		if (url.endsWith("/api/apply/jobs")) {
+			if (state.jobsFail) {
+				return respond(errorBody("jobs down", "internal"), 500);
+			}
 			const status =
 				state.jobStatus === undefined ? "applying" : state.jobStatus;
 			return respond({
@@ -153,6 +172,12 @@ describe("createInbound recovery", () => {
 			committed: true,
 			idempotencyKeys: [],
 			jobStatus: "succeeded",
+			applyState: {
+				desiredRevision: 2,
+				appliedRevision: 2,
+				state: "synced",
+				lastSuccessfulJobId: "job-1",
+			},
 		};
 		vi.stubGlobal("fetch", installFetchMock(state));
 		const pending = settle(createInbound({ name: "edge" }, "edge"));
@@ -191,7 +216,9 @@ describe("createInbound recovery", () => {
 		},
 	);
 
-	it("reports success:true when the committed inbound has no apply job", async () => {
+	// #689: a committed inbound with no succeeded apply job is saved-but-not-
+	// live — reconcile must not paint success:true on an empty jobs list.
+	it("reports success:false when the committed inbound has no apply job and the state is not synced", async () => {
 		vi.useFakeTimers();
 		const state: MockState = {
 			posts: 0,
@@ -200,15 +227,130 @@ describe("createInbound recovery", () => {
 			committed: true,
 			idempotencyKeys: [],
 			jobStatus: null,
+			applyState: {
+				desiredRevision: 2,
+				appliedRevision: 1,
+				state: "pending",
+			},
 		};
 		vi.stubGlobal("fetch", installFetchMock(state));
 		const pending = settle(createInbound({ name: "edge" }, "edge"));
 		await vi.advanceTimersByTimeAsync(120_000);
 		const { value, error } = await pending;
 		expect(error).toBeUndefined();
-		expect(value?.success).toBe(true);
+		expect(value?.success).toBe(false);
 		expect(value?.reconciled).toBe(true);
 		expect(value?.applyJob).toBeUndefined();
+	});
+
+	// #689 twin: a jobs-list fetch failure must not green the reconcile
+	// either — without evidence of a succeeded job the outcome stays
+	// "committed but unproven".
+	it("reports success:false when the apply state fetch fails", async () => {
+		vi.useFakeTimers();
+		const state: MockState = {
+			posts: 0,
+			firstPostHangs: true,
+			secondPostHangs: true,
+			committed: true,
+			idempotencyKeys: [],
+			jobStatus: "succeeded",
+			applyState: "fail",
+		};
+		vi.stubGlobal("fetch", installFetchMock(state));
+		const pending = settle(createInbound({ name: "edge" }, "edge"));
+		await vi.advanceTimersByTimeAsync(120_000);
+		const { value, error } = await pending;
+		expect(error).toBeUndefined();
+		expect(value?.success).toBe(false);
+		expect(value?.reconciled).toBe(true);
+	});
+
+	it("reports success:false when the jobs list fetch fails and the state is not synced", async () => {
+		vi.useFakeTimers();
+		const state: MockState = {
+			posts: 0,
+			firstPostHangs: true,
+			secondPostHangs: true,
+			committed: true,
+			idempotencyKeys: [],
+			jobsFail: true,
+			applyState: {
+				desiredRevision: 2,
+				appliedRevision: 1,
+				state: "pending",
+			},
+		};
+		vi.stubGlobal("fetch", installFetchMock(state));
+		const pending = settle(createInbound({ name: "edge" }, "edge"));
+		await vi.advanceTimersByTimeAsync(120_000);
+		const { value, error } = await pending;
+		expect(error).toBeUndefined();
+		expect(value?.success).toBe(false);
+		expect(value?.reconciled).toBe(true);
+		expect(value?.applyJob).toBeUndefined();
+	});
+
+	// #700: /api/apply/jobs is global newest-first — a concurrent mutation's
+	// succeeded job at items[0] must not green this create while the current
+	// desired revision is still unconverged. The attached job is the one the
+	// state view correlates (here: the job owning the current revision).
+	it("does not let a newer unrelated apply job decide the create's outcome", async () => {
+		vi.useFakeTimers();
+		const state: MockState = {
+			posts: 0,
+			firstPostHangs: true,
+			secondPostHangs: true,
+			committed: true,
+			idempotencyKeys: [],
+			jobStatus: "succeeded",
+			applyState: {
+				desiredRevision: 3,
+				appliedRevision: 2,
+				state: "pending",
+			},
+		};
+		const fetchMock = installFetchMock(state);
+		vi.stubGlobal(
+			"fetch",
+			vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+				const url = typeof input === "string" ? input : input.toString();
+				if (url.endsWith("/api/apply/jobs")) {
+					return respond({
+						items: [
+							// items[0]: a concurrent mutation's converged job — not
+							// this create's evidence.
+							{
+								id: "job-foreign",
+								desiredRevision: 2,
+								baseRevision: 1,
+								status: "succeeded",
+								trigger: "mutation",
+								createdAt: 2,
+							},
+							{
+								id: "job-pending",
+								desiredRevision: 3,
+								baseRevision: 2,
+								status: "applying",
+								trigger: "mutation",
+								createdAt: 1,
+							},
+						],
+					});
+				}
+				return fetchMock(input, init);
+			}),
+		);
+		const pending = settle(createInbound({ name: "edge" }, "edge"));
+		await vi.advanceTimersByTimeAsync(120_000);
+		const { value, error } = await pending;
+		expect(error).toBeUndefined();
+		expect(value?.success).toBe(false);
+		expect(value?.reconciled).toBe(true);
+		// The attached job correlates to the current desired revision, never
+		// bare items[0].
+		expect(value?.applyJob?.id).toBe("job-pending");
 	});
 
 	it("propagates a replayed rejection instead of falsely claiming a commit", async () => {

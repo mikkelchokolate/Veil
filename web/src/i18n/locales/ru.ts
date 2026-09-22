@@ -82,6 +82,10 @@ export const ru: Record<string, string> = {
 	"applyState.untracked": "Не отслеживается",
 	"applyState.unavailable": "состояние применения недоступно",
 	"applyState.loading": "применение…",
+	"applyState.revTooltip": "текущая ревизия {applied}",
+	"applyState.revTooltipDrift":
+		"целевая ревизия {desired}, текущая ревизия {applied}",
+	"applyState.revDrift": " · рев. {applied}→{desired}",
 
 	"auth.username": "Имя пользователя",
 	"auth.password": "Пароль",
@@ -90,6 +94,10 @@ export const ru: Record<string, string> = {
 	"auth.login.signingIn": "Вход…",
 	"auth.login.invalid": "Неверное имя пользователя или пароль.",
 	"auth.login.failed": "Не удалось войти. Попробуйте ещё раз.",
+	"auth.login.tooManyAttempts":
+		"Слишком много попыток входа. Подождите и попробуйте снова.",
+	"auth.login.tooManyAttemptsWait":
+		"Слишком много попыток входа. Попробуйте снова через {seconds} с.",
 	"auth.setup.title": "Добро пожаловать в Veil",
 	"auth.setup.subtitle": "Создайте начальную учётную запись администратора",
 	"auth.setup.confirm": "Подтвердите пароль",
@@ -118,7 +126,10 @@ export const ru: Record<string, string> = {
 	"users.newPassword": "Новый пароль",
 	"users.newPasswordOptional": "Новый пароль (необязательно)",
 	"users.createdNotice": "Пользователь {name} создан.",
-	"users.updatedNotice": "Пользователь {name} обновлён.",
+	"users.updatedNotice":
+		"Пользователь {name} обновлён. Все его сессии отозваны.",
+	"users.selfEditWarning":
+		"Сохранение своей учётной записи отзовёт ваши сессии — вы выйдете из системы.",
 	"users.deletedNotice": "Пользователь {name} удалён.",
 	"users.error.create": "Не удалось создать",
 	"users.error.update": "Не удалось обновить",
@@ -132,6 +143,7 @@ export const ru: Record<string, string> = {
 	"users.noActiveSessions": "Нет активных сессий.",
 	"users.sessionUser": "Пользователь",
 	"users.lastSeen": "Последний вход",
+	"users.idleExpires": "Истекает по бездействию",
 	"users.expires": "Истекает",
 	"users.agent": "Агент",
 	"users.thisSession": " (эта)",
@@ -176,7 +188,10 @@ export const ru: Record<string, string> = {
 	"inbounds.dismiss": "Закрыть",
 	"inbounds.delete.title": "Удалить инбаунд?",
 	"inbounds.delete.description":
-		"Удаление {name} удалит прослушиватель и отсоединит его клиентов. Это действие нельзя отменить.",
+		"Удаление {name} удалит прослушиватель. Это действие нельзя отменить.",
+	"inbounds.delete.blocked":
+		"К {name} всё ещё привязано клиентов: {count}. Отвяжите их перед удалением — инбаунд нельзя удалить, пока на него ссылаются клиенты.",
+	"inbounds.delete.checking": "Проверка привязанных клиентов…",
 	"inbounds.delete.deleting": "Удаление…",
 	"inbounds.delete.confirm": "Подтвердить удаление",
 
@@ -301,8 +316,16 @@ export const ru: Record<string, string> = {
 	"settings.webBasePathRequired":
 		"Базовый путь панели нельзя очистить в этой форме.",
 	"settings.rotated": "Ключ состояния изменён. Остальные сессии отозваны.",
+	"settings.rotatedRevoked":
+		"Ключ состояния изменён. Отозвано других сессий: {n}.",
+	"settings.rotatedNoOthers":
+		"Ключ состояния изменён. Других активных сессий не было.",
 	"settings.rotatedApplyFailed":
-		"Ключ состояния изменён, но применение новой ревизии не удалось. Проверьте Apply.",
+		"Ключ состояния изменён, остальные сессии отозваны, но применение новой ревизии не удалось. Проверьте Apply.",
+	"settings.rotatedApplyFailedRevoked":
+		"Ключ состояния изменён, отозвано других сессий: {n}, но применение новой ревизии не удалось. Проверьте Apply.",
+	"settings.rotatedApplyFailedNoOthers":
+		"Ключ состояния изменён, но применение новой ревизии не удалось. Других активных сессий не было. Проверьте Apply.",
 	"settings.rotateFailed": "Не удалось сменить ключ",
 
 	"apply.title": "Состояние применения",
@@ -363,7 +386,7 @@ export const ru: Record<string, string> = {
 	"backups.status.succeeded": "успешно",
 	"backups.status.failed": "ошибка",
 	"backups.status.degraded": "деградировало",
-	"backups.status.pending": "ожидание",
+	"backups.status.pending": "ожидает публикации ключа",
 	"backups.empty": "Бэкапов пока нет.",
 	"backups.hint":
 		"Архивы шифруются серверным паролем, созданным при установке. Браузер его не получает.",
@@ -376,12 +399,22 @@ export const ru: Record<string, string> = {
 	"backups.restoreJobPhase": "Этап: {phase}.",
 	"backups.restoreJobDegraded":
 		"Бэкап восстановлен, но последующий шаг завершился ошибкой — состояние уже зафиксировано.",
+	"backups.restoreJobPendingKey":
+		"Архив не восстановлен — сначала нужно опубликовать новый ключ состояния, иначе восстановление не зафиксируется.",
+	"backups.restoreJobSafetyKey": "Файл резервного ключа: {path}",
+	"backups.dismissNotRestored": "Закрыть (архив не восстановлен)",
 	"backups.restoreConfirmTitle": "Восстановить бэкап?",
 	"backups.restoreConfirmDescription":
-		"Восстановление {name} заменит текущее состояние. После завершения вас может вывести из системы.",
+		"Восстановление {name} заменит текущее состояние. Успешное восстановление отзовёт все остальные сессии панели, а по завершении вы выйдете из системы.",
 	"backups.confirmRestore": "Подтвердить восстановление",
 	"backups.notice.created": "Бэкап создан.",
-	"backups.notice.pruned": "Старые бэкапы удалены.",
+	"backups.notice.createdWarning":
+		"Бэкап создан, но сервер сообщил предупреждение: {warning}",
+	"backups.notice.prunedCount": "Удалено старых бэкапов: {n}.",
+	"backups.notice.prunedNone":
+		"Под политику хранения ничего не подошло — бэкапы не удалены.",
+	"backups.notice.prunedDryRun":
+		"Тестовый запуск — было бы удалено бэкапов: {n}.",
 	"backups.notice.queued":
 		"Задача восстановления поставлена в очередь для {archive}.",
 	"backups.error.create": "Не удалось создать бэкап",
@@ -512,6 +545,8 @@ export const ru: Record<string, string> = {
 	"clientDetail.tab.audit": "Аудит",
 	"clientDetail.enableClient": "Включить клиента",
 	"clientDetail.disableClient": "Отключить клиента",
+	"clientDetail.saveDraftBeforeToggle":
+		"Сохраните или отмените правки перед включением/отключением.",
 	"clientDetail.deleteTitle": "Действительно удалить этого клиента?",
 	"clientDetail.deleteDescription":
 		"Это действие нельзя отменить. Все привязки и учётные данные будут удалены.",
