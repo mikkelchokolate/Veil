@@ -296,20 +296,37 @@ func appendHysteria2ACLRuleIssues(plan *model.ApplyPlanResponse, input Input) {
 		if err != nil {
 			continue
 		}
+		var dropped []string
 		for _, matcher := range matchers {
 			if _, ok := routing.Hysteria2ACLAddress(matcher); ok {
 				continue
 			}
-			plan.Issues = append(plan.Issues, model.ValidationIssue{
-				Code:        "hysteria2_acl_unsupported_match",
-				Severity:    "warning",
-				Field:       "match",
-				Message:     fmt.Sprintf("routing rule %q match %q uses a matcher Hysteria2 ACL cannot express; that atom is skipped for Hysteria2 inbounds", rule.Name, rule.Match),
-				Remediation: "Use domain, domain-suffix, geoip, geosite, or CIDR matches for rules that must apply to Hysteria2.",
-				Source:      "hysteria2",
-			})
-			break
+			dropped = append(dropped, hysteria2ACLAtomLabel(matcher))
 		}
+		if len(dropped) == 0 {
+			continue
+		}
+		plan.Issues = append(plan.Issues, model.ValidationIssue{
+			Code:        "hysteria2_acl_unsupported_match",
+			Severity:    "warning",
+			Field:       "match",
+			Message:     fmt.Sprintf("routing rule %q: Hysteria2 ACL cannot express %s; those atoms are skipped for Hysteria2 inbounds", rule.Name, strings.Join(dropped, ", ")),
+			Remediation: "Use domain, domain-suffix, geoip, geosite, or CIDR matches for rules that must apply to Hysteria2.",
+			Source:      "hysteria2",
+		})
+	}
+}
+
+// hysteria2ACLAtomLabel reconstructs a matcher's management-dialect atom for
+// warning messages.
+func hysteria2ACLAtomLabel(matcher routing.Matcher) string {
+	switch matcher.Kind {
+	case routing.MatchDomainKeyword:
+		return "keyword:" + matcher.Value
+	case routing.MatchDomainRegex:
+		return "regexp:" + matcher.Value
+	default:
+		return matcher.Value
 	}
 }
 

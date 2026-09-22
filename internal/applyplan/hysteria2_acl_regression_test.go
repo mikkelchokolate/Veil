@@ -11,11 +11,14 @@ import (
 // ACL form, so the renderer drops those atoms. The apply plan must surface
 // that loss as a warning instead of staying green.
 func TestBuildWarnsWhenRuleMatchCannotReachHysteria2(t *testing.T) {
-	for _, match := range []string{
-		"keyword:google",
-		`regexp:.*\.ru$`,
-		"suffix:example.com,keyword:foo", // partially expressible
-		"full:bad#host",                  // '#' would corrupt the ACL line
+	for _, tc := range []struct {
+		match     string
+		wantAtoms []string // named in the warning
+	}{
+		{"keyword:google", []string{"keyword:google"}},
+		{`regexp:.*\.ru$`, []string{`regexp:.*\.ru$`}},
+		{"suffix:example.com,keyword:foo", []string{"keyword:foo"}}, // partially expressible
+		{"full:bad#host", []string{"bad#host"}},                     // '#' would corrupt the ACL line
 	} {
 		plan := Build(Input{
 			Warp: model.WarpConfig{Enabled: true},
@@ -24,26 +27,31 @@ func TestBuildWarnsWhenRuleMatchCannotReachHysteria2(t *testing.T) {
 			},
 			Capabilities: []ProtocolCapability{{Protocol: "hysteria2"}},
 			Rules: []model.RoutingRule{
-				{Name: "r1", Match: match, Outbound: "direct", Enabled: true},
+				{Name: "r1", Match: tc.match, Outbound: "direct", Enabled: true},
 			},
 		})
 		if !plan.Valid {
-			t.Fatalf("match %q: warning must not invalidate the plan, errors: %v", match, plan.Errors)
+			t.Fatalf("match %q: warning must not invalidate the plan, errors: %v", tc.match, plan.Errors)
 		}
 		found := false
 		for _, issue := range plan.Issues {
 			if issue.Code == "hysteria2_acl_unsupported_match" {
 				found = true
 				if issue.Severity != "warning" {
-					t.Fatalf("match %q: issue severity = %q, want warning", match, issue.Severity)
+					t.Fatalf("match %q: issue severity = %q, want warning", tc.match, issue.Severity)
 				}
 				if !strings.Contains(issue.Message, "r1") {
-					t.Fatalf("match %q: issue should name the rule: %q", match, issue.Message)
+					t.Fatalf("match %q: issue should name the rule: %q", tc.match, issue.Message)
+				}
+				for _, atom := range tc.wantAtoms {
+					if !strings.Contains(issue.Message, atom) {
+						t.Fatalf("match %q: issue should name dropped atom %q: %q", tc.match, atom, issue.Message)
+					}
 				}
 			}
 		}
 		if !found {
-			t.Fatalf("match %q: expected hysteria2_acl_unsupported_match issue, got %v", match, plan.Issues)
+			t.Fatalf("match %q: expected hysteria2_acl_unsupported_match issue, got %v", tc.match, plan.Issues)
 		}
 	}
 }
