@@ -89,6 +89,54 @@ describe("static login handoff", () => {
 		).toBeInTheDocument();
 	});
 
+	// #692: a 429 lockout must say "too many attempts" (+ Retry-After wait),
+	// not fall through to the generic "could not sign in" failure.
+	it("names the login lockout and the Retry-After wait on 429", async () => {
+		const user = userEvent.setup();
+		server.use(
+			http.get("/api/auth/status", () =>
+				HttpResponse.json({ authenticated: false }),
+			),
+			http.post("/api/auth/login", () =>
+				HttpResponse.json(
+					{ error: { message: "too many login attempts" } },
+					{ status: 429, headers: { "Retry-After": "42" } },
+				),
+			),
+		);
+		renderLogin();
+		await user.type(screen.getByLabelText("Username"), "admin");
+		await user.type(screen.getByLabelText("Password"), "s3cret-pass");
+		await user.click(screen.getByRole("button", { name: /^sign in$/i }));
+		const alert = await screen.findByRole("alert");
+		expect(alert).toHaveTextContent(/too many login attempts/i);
+		expect(alert).toHaveTextContent(/42/);
+		expect(alert).not.toHaveTextContent(/could not sign in/i);
+		expect(alert).not.toHaveTextContent(/invalid username or password/i);
+	});
+
+	it("shows lockout copy on 429 even without a Retry-After header", async () => {
+		const user = userEvent.setup();
+		server.use(
+			http.get("/api/auth/status", () =>
+				HttpResponse.json({ authenticated: false }),
+			),
+			http.post("/api/auth/login", () =>
+				HttpResponse.json(
+					{ error: { message: "too many login attempts" } },
+					{ status: 429 },
+				),
+			),
+		);
+		renderLogin();
+		await user.type(screen.getByLabelText("Username"), "admin");
+		await user.type(screen.getByLabelText("Password"), "s3cret-pass");
+		await user.click(screen.getByRole("button", { name: /^sign in$/i }));
+		const alert = await screen.findByRole("alert");
+		expect(alert).toHaveTextContent(/too many login attempts/i);
+		expect(alert).toHaveTextContent(/wait/i);
+	});
+
 	it("does not call a Panel outage invalid credentials", async () => {
 		const user = userEvent.setup();
 		server.use(
