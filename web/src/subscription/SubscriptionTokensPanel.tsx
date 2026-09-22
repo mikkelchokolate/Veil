@@ -327,7 +327,10 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 												type="button"
 												className="btn btn-danger"
 												disabled={revoke.isPending}
-												onClick={() => setRevokeTarget(tok)}
+												onClick={() => {
+													setRevokeTarget(tok);
+													setError(null);
+												}}
 											>
 												{t("subTokens.revoke")}
 											</button>

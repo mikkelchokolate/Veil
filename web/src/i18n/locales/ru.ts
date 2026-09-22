@@ -278,7 +278,7 @@ export const ru: Record<string, string> = {
 		"Включение создаёт бесплатный аккаунт Cloudflare WARP на стороне сервера; изменения применятся при следующем применении конфигурации.",
 	"warp.enableConfirmTitle": "Включить WARP?",
 	"warp.enableConfirmDescription":
-		"Включение WARP создаст бесплатный аккаунт Cloudflare на стороне сервера и применит конфигурацию.",
+		"Включение WARP создаст бесплатный аккаунт Cloudflare WARP на стороне сервера; изменение применится при следующем применении конфигурации.",
 	"warp.disableConfirmTitle": "Отключить WARP?",
 	"warp.disableConfirmDescription":
 		"Отключение WARP остановит исходящий WARP — правила маршрутизации через warp перестанут работать, пока его не включат снова.",

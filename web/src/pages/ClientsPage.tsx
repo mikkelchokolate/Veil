@@ -472,26 +472,38 @@ export function ClientsPage() {
 					</span>
 					<Button
 						disabled={bulk.isPending}
-						onClick={() => setConfirmBulk("enable")}
+						onClick={() => {
+							setBulkError(null);
+							setConfirmBulk("enable");
+						}}
 					>
 						{t("common.enable")}
 					</Button>
 					<Button
 						disabled={bulk.isPending}
-						onClick={() => setConfirmBulk("disable")}
+						onClick={() => {
+							setBulkError(null);
+							setConfirmBulk("disable");
+						}}
 					>
 						{t("common.disable")}
 					</Button>
 					<Button
 						disabled={bulk.isPending}
-						onClick={() => setConfirmBulk("reset_traffic")}
+						onClick={() => {
+							setBulkError(null);
+							setConfirmBulk("reset_traffic");
+						}}
 					>
 						{t("clients.resetTraffic")}
 					</Button>
 					<Button
 						variant="danger"
 						disabled={bulk.isPending}
-						onClick={() => setConfirmDelete(true)}
+						onClick={() => {
+							setBulkError(null);
+							setConfirmDelete(true);
+						}}
 					>
 						{t("common.delete")}
 					</Button>

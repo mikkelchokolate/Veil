@@ -1033,7 +1033,10 @@ export function InboundsPage() {
 													<Button
 														size="sm"
 														disabled={update.isPending}
-														onClick={() => setConfirmToggle(ib)}
+														onClick={() => {
+															setError(null);
+															setConfirmToggle(ib);
+														}}
 													>
 														{ib.enabled
 															? t("common.disable")

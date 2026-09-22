@@ -442,7 +442,10 @@ export function ClientDetailPage() {
 								title={
 									isDirty ? t("clientDetail.saveDraftBeforeToggle") : undefined
 								}
-								onClick={() => setConfirmToggle(true)}
+								onClick={() => {
+									setError(null);
+									setConfirmToggle(true);
+								}}
 							>
 								{c.enabled
 									? t("clientDetail.disableClient")
@@ -736,30 +739,33 @@ export function ClientDetailPage() {
 											<Button
 												variant="default"
 												disabled={toggleBinding.isPending}
-												onClick={() =>
+												onClick={() => {
+													setError(null);
 													setConfirmBinding({
 														action: b.enabled ? "disable" : "enable",
 														binding: b,
-													})
-												}
+													});
+												}}
 											>
 												{b.enabled ? t("common.disable") : t("common.enable")}
 											</Button>
 											<Button
 												variant="default"
 												disabled={rotate.isPending}
-												onClick={() =>
-													setConfirmBinding({ action: "rotate", binding: b })
-												}
+												onClick={() => {
+													setError(null);
+													setConfirmBinding({ action: "rotate", binding: b });
+												}}
 											>
 												{t("clientDetail.rotateCredential")}
 											</Button>
 											<Button
 												variant="danger"
 												disabled={detach.isPending}
-												onClick={() =>
-													setConfirmBinding({ action: "detach", binding: b })
-												}
+												onClick={() => {
+													setError(null);
+													setConfirmBinding({ action: "detach", binding: b });
+												}}
 											>
 												{t("clientDetail.detach")}
 											</Button>

@@ -373,7 +373,7 @@ export const en: Record<string, string> = {
 		"Enabling provisions a free Cloudflare WARP account server-side; changes apply on the next config apply.",
 	"warp.enableConfirmTitle": "Enable WARP?",
 	"warp.enableConfirmDescription":
-		"Enabling WARP provisions a free Cloudflare account server-side and applies the config.",
+		"Enabling WARP provisions a free Cloudflare WARP account server-side; the change applies on the next config apply.",
 	"warp.disableConfirmTitle": "Disable WARP?",
 	"warp.disableConfirmDescription":
 		"Disabling WARP takes the WARP outbound down — routing rules that use warp stop working until it is re-enabled.",

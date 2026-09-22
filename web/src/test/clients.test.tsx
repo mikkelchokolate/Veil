@@ -70,7 +70,12 @@ describe("ClientsPage", () => {
 			),
 		);
 		renderClients();
-		await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
+		// First test in the file pays MSW/router cold-start — give the query
+		// render headroom so a loaded runner does not flake the assertion.
+		await waitFor(
+			() => expect(screen.getByText("Alice")).toBeInTheDocument(),
+			{ timeout: 3000 },
+		);
 	});
 
 	it("maps the depleted status filter to quotaState", async () => {

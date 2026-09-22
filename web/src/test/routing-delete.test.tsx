@@ -82,9 +82,7 @@ describe("RoutingPage delete errors", () => {
 		// The dialog stays open with the failure in context (the page card
 		// behind it repeats the error) — assert it inside the dialog.
 		const dialog = await screen.findByRole("alertdialog");
-		expect(
-			await within(dialog).findByText(/rule in use/i),
-		).toBeInTheDocument();
+		expect(await within(dialog).findByText(/rule in use/i)).toBeInTheDocument();
 	});
 
 	// #644: a 200 with success=false means the delete committed but the

@@ -432,7 +432,10 @@ export function UsersPage() {
 											<Button
 												size="sm"
 												disabled={revoke.isPending}
-												onClick={() => setConfirmRevoke(s)}
+												onClick={() => {
+													setError(null);
+													setConfirmRevoke(s);
+												}}
 											>
 												{t("users.revoke")}
 											</Button>
