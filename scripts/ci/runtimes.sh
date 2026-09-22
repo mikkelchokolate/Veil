@@ -98,11 +98,15 @@ install_pinned_singbox_for_tests() { # <destdir>
   rm -f "${dest}/sing-box"
   local tmp
   tmp="$(mktemp -d /tmp/veil-pinned-singbox.XXXXXX)"
+  # RETURN traps persist past this function's own return — clear it after the
+  # install or the next caller's return re-fires it with `tmp` unbound (#686).
   trap 'rm -rf "${tmp}"' RETURN
   (
     cd "${tmp}"
     install_singbox_from_workdir "${dest}"
   )
+  trap - RETURN
+  rm -rf "${tmp}"
   printf '[ci] pinned sing-box test runtime installed to %s\n' "${dest}"
 }
 
