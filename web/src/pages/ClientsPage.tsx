@@ -165,6 +165,12 @@ export function ClientsPage() {
 	const [colVis, setColVis] = useState<Record<string, boolean>>({});
 	const [showColMenu, setShowColMenu] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState(false);
+	// #705: enable/disable/reset_traffic are the same danger class as the
+	// already-gated bulk Delete — they confirm via one shared dialog keyed
+	// by the pending action.
+	const [confirmBulk, setConfirmBulk] = useState<
+		"enable" | "disable" | "reset_traffic" | null
+	>(null);
 
 	function setParam(patch: Record<string, string | undefined>) {
 		void navigate({
@@ -184,6 +190,7 @@ export function ClientsPage() {
 			setSelected(new Set());
 			setBulkError(null);
 			setConfirmDelete(false);
+			setConfirmBulk(null);
 			// apiFetch returns the parsed body directly; the generated type
 			// carries the mutation outcome envelope (#652).
 			// S3: per-client bulk result, not just an aggregate.
@@ -465,28 +472,19 @@ export function ClientsPage() {
 					</span>
 					<Button
 						disabled={bulk.isPending}
-						onClick={() =>
-							bulk.mutate({ action: "enable", ids: [...selectedOnPage] })
-						}
+						onClick={() => setConfirmBulk("enable")}
 					>
 						{t("common.enable")}
 					</Button>
 					<Button
 						disabled={bulk.isPending}
-						onClick={() =>
-							bulk.mutate({ action: "disable", ids: [...selectedOnPage] })
-						}
+						onClick={() => setConfirmBulk("disable")}
 					>
 						{t("common.disable")}
 					</Button>
 					<Button
 						disabled={bulk.isPending}
-						onClick={() =>
-							bulk.mutate({
-								action: "reset_traffic",
-								ids: [...selectedOnPage],
-							})
-						}
+						onClick={() => setConfirmBulk("reset_traffic")}
 					>
 						{t("clients.resetTraffic")}
 					</Button>
@@ -633,6 +631,9 @@ export function ClientsPage() {
 							{t("clients.delete.confirmation", { count: deleteCountLabel })}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
+					{/* A failed bulk action keeps this dialog open — the error must
+						be visible here, not only behind the overlay (#649). */}
+					{bulkError ? <FormMessage>{bulkError}</FormMessage> : null}
 					<AlertDialogFooter>
 						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
 						<AlertDialogAction
@@ -648,6 +649,52 @@ export function ClientsPage() {
 							{bulk.isPending
 								? t("clients.delete.confirmPending")
 								: t("clients.delete.confirm")}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
+			{/* #705: bulk enable/disable/reset_traffic confirm — same gate as
+				bulk Delete, with the action name + selected count in the copy. */}
+			<AlertDialog
+				open={confirmBulk !== null}
+				onOpenChange={(open) => {
+					if (!open) setConfirmBulk(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							{confirmBulk ? t(`clients.bulk.${confirmBulk}.title`) : null}
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							{confirmBulk
+								? t(`clients.bulk.${confirmBulk}.description`, {
+										count: deleteCountLabel,
+									})
+								: null}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					{bulkError ? <FormMessage>{bulkError}</FormMessage> : null}
+					<AlertDialogFooter>
+						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={bulk.isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								if (confirmBulk) {
+									bulk.mutate({
+										action: confirmBulk,
+										ids: [...selectedOnPage],
+									});
+								}
+							}}
+						>
+							{bulk.isPending
+								? t("clients.bulk.pending")
+								: confirmBulk
+									? t(`clients.bulk.${confirmBulk}.confirm`)
+									: null}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

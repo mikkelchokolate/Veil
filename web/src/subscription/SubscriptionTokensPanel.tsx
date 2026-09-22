@@ -92,6 +92,15 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 	const [nowUnix, setNowUnix] = useState(() => Math.floor(Date.now() / 1000));
 	const [renewId, setRenewId] = useState<string | null>(null);
 	const [renewExpiry, setRenewExpiry] = useState("");
+	// #699/#714: revoke and active-token rotate are irreversible for
+	// subscribers — both confirm before firing, like the expired-renew
+	// dialog below.
+	const [revokeTarget, setRevokeTarget] = useState<SubscriptionToken | null>(
+		null,
+	);
+	const [rotateTarget, setRotateTarget] = useState<SubscriptionToken | null>(
+		null,
+	);
 
 	useEffect(() => {
 		const id = window.setInterval(
@@ -144,6 +153,7 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 			setIssued(res);
 			setRenewId(null);
 			setRenewExpiry("");
+			setRotateTarget(null);
 			void qc.invalidateQueries({ queryKey: ["clients", clientId, "tokens"] });
 		},
 		onError: (err) =>
@@ -159,6 +169,7 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 			}),
 		onSuccess: () => {
 			setError(null);
+			setRevokeTarget(null);
 			void qc.invalidateQueries({ queryKey: ["clients", clientId, "tokens"] });
 		},
 		onError: (err) =>
@@ -184,7 +195,9 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 			setError(null);
 			return;
 		}
-		rotate.mutate({ tokenId: tok.id });
+		// #714: active rotate invalidates every subscriber URL — confirm first.
+		setRotateTarget(tok);
+		setError(null);
 	}
 
 	function confirmRenew() {
@@ -314,7 +327,7 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 												type="button"
 												className="btn btn-danger"
 												disabled={revoke.isPending}
-												onClick={() => revoke.mutate(tok.id)}
+												onClick={() => setRevokeTarget(tok)}
 											>
 												{t("subTokens.revoke")}
 											</button>
@@ -379,6 +392,82 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 							{rotate.isPending
 								? t("subTokens.rotate")
 								: t("subTokens.confirmRotate")}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
+			{/* #714: rotating a live token invalidates every subscriber URL —
+				confirm naming the token before the POST. */}
+			<AlertDialog
+				open={rotateTarget !== null}
+				onOpenChange={(open) => {
+					if (!open) setRotateTarget(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							{t("subTokens.rotateActiveTitle")}
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							{t("subTokens.rotateActiveDescription", {
+								name: rotateTarget?.label || rotateTarget?.prefix || "",
+							})}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					{error ? <p className="form-error">{error}</p> : null}
+					<AlertDialogFooter>
+						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={rotate.isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								if (rotateTarget) {
+									rotate.mutate({ tokenId: rotateTarget.id });
+								}
+							}}
+						>
+							{rotate.isPending
+								? t("subTokens.rotate")
+								: t("subTokens.confirmRotateActive")}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
+			{/* #699: revoke permanently kills the subscription URL — same
+				confirm gate as the other destructive Panel actions. */}
+			<AlertDialog
+				open={revokeTarget !== null}
+				onOpenChange={(open) => {
+					if (!open) setRevokeTarget(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>{t("subTokens.revokeTitle")}</AlertDialogTitle>
+						<AlertDialogDescription>
+							{t("subTokens.revokeDescription", {
+								name: revokeTarget?.label || revokeTarget?.prefix || "",
+							})}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					{error ? <p className="form-error">{error}</p> : null}
+					<AlertDialogFooter>
+						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={revoke.isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								if (revokeTarget) {
+									revoke.mutate(revokeTarget.id);
+								}
+							}}
+						>
+							{revoke.isPending
+								? t("subTokens.revoking")
+								: t("subTokens.confirmRevoke")}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

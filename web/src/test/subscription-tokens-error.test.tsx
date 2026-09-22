@@ -74,10 +74,106 @@ describe("SubscriptionTokensPanel errors", () => {
 			</QueryClientProvider>,
 		);
 		await user.click(await screen.findByRole("button", { name: /^rotate$/i }));
+		// #714: rotating a live token confirms before the POST fires.
+		await user.click(
+			await screen.findByRole("button", { name: /confirm rotate/i }),
+		);
 		expect(
 			await screen.findByTestId("issued-subscription-token"),
 		).toBeInTheDocument();
 		expect(screen.getByText(/new token \(shown once\)/i)).toBeInTheDocument();
+	});
+
+	// #699: revoke permanently kills the subscription URL — it must confirm
+	// before the DELETE, like the expired-rotate and other Panel gates.
+	it("does not DELETE a token until revoke is confirmed", async () => {
+		const user = userEvent.setup();
+		const deletes: string[] = [];
+		server.use(
+			http.get("/api/v1/clients/c1/tokens", () =>
+				HttpResponse.json({
+					items: [
+						{
+							id: "tok-1",
+							prefix: "veil_ab",
+							label: "phone",
+							enabled: true,
+							createdAt: 1700000000,
+						},
+					],
+				}),
+			),
+			http.delete("/api/v1/clients/c1/tokens/tok-1", () => {
+				deletes.push("tok-1");
+				return HttpResponse.json({ id: "tok-1" });
+			}),
+		);
+		const qc = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={qc}>
+				<I18nProvider>
+					<SubscriptionTokensPanel clientId="c1" />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+		await user.click(await screen.findByRole("button", { name: /^revoke$/i }));
+		expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+		expect(deletes).toEqual([]);
+		await user.click(screen.getByRole("button", { name: /confirm revoke/i }));
+		await waitFor(() => expect(deletes).toEqual(["tok-1"]));
+	});
+
+	// #714: rotating an ACTIVE token confirms too — only the expired path
+	// had a dialog before.
+	it("does not POST rotate on an active token until confirmed", async () => {
+		const user = userEvent.setup();
+		const rotates: unknown[] = [];
+		server.use(
+			http.get("/api/v1/clients/c1/tokens", () =>
+				HttpResponse.json({
+					items: [
+						{
+							id: "tok-1",
+							prefix: "veil_ab",
+							label: "phone",
+							enabled: true,
+							createdAt: 1700000000,
+						},
+					],
+				}),
+			),
+			http.post("/api/v1/clients/c1/tokens/tok-1/rotate", () => {
+				rotates.push("rotate");
+				return HttpResponse.json({
+					token: {
+						id: "tok-1",
+						prefix: "veil_cd",
+						label: "phone",
+						enabled: true,
+						createdAt: 1700000000,
+					},
+					plaintext: "veil_cd_secret",
+					url: "/s/veil_cd_secret",
+				});
+			}),
+		);
+		const qc = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={qc}>
+				<I18nProvider>
+					<SubscriptionTokensPanel clientId="c1" />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+		await user.click(await screen.findByRole("button", { name: /^rotate$/i }));
+		expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+		expect(rotates).toEqual([]);
+		await user.click(screen.getByRole("button", { name: /confirm rotate/i }));
+		await waitFor(() => expect(rotates).toHaveLength(1));
 	});
 
 	it("shows an expired token as expired and requires a future expiry to rotate", async () => {

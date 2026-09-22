@@ -133,6 +133,15 @@ export function ClientDetailPage() {
 	const [conflict, setConflict] = useState(false);
 	const [feedback, setFeedback] = useState<MutationOutcome | null>(null);
 	const [attachInbound, setAttachInbound] = useState("");
+	// #713: header enable/disable cuts the whole client's access — gate it
+	// like the Delete next to it.
+	const [confirmToggle, setConfirmToggle] = useState(false);
+	// #704/#710: binding enable/disable, credential rotate and detach all
+	// mutate live access — one shared confirm dialog keyed by action.
+	const [confirmBinding, setConfirmBinding] = useState<{
+		action: "enable" | "disable" | "rotate" | "detach";
+		binding: BindingView;
+	} | null>(null);
 	const { t } = useI18n();
 
 	// Clear one-time revealed credentials on unmount/navigation.
@@ -291,6 +300,7 @@ export function ClientDetailPage() {
 		},
 		onSuccess: (data) => {
 			setError(null);
+			setConfirmToggle(false);
 			recordFeedback(data);
 			invalidate();
 		},
@@ -331,6 +341,7 @@ export function ClientDetailPage() {
 				}));
 			}
 			setError(null);
+			setConfirmBinding(null);
 			recordFeedback(res);
 			invalidate();
 		},
@@ -345,6 +356,7 @@ export function ClientDetailPage() {
 			}),
 		onSuccess: (data) => {
 			setError(null);
+			setConfirmBinding(null);
 			recordFeedback(data);
 			invalidate();
 		},
@@ -375,6 +387,7 @@ export function ClientDetailPage() {
 			deleteApiV1ClientsIdBindingsBindingId(clientId, bindingId),
 		onSuccess: (data) => {
 			setError(null);
+			setConfirmBinding(null);
 			recordFeedback(data);
 			invalidate();
 		},
@@ -429,7 +442,7 @@ export function ClientDetailPage() {
 								title={
 									isDirty ? t("clientDetail.saveDraftBeforeToggle") : undefined
 								}
-								onClick={() => enableToggle.mutate()}
+								onClick={() => setConfirmToggle(true)}
 							>
 								{c.enabled
 									? t("clientDetail.disableClient")
@@ -440,6 +453,45 @@ export function ClientDetailPage() {
 									{t("clientDetail.saveDraftBeforeToggle")}
 								</span>
 							) : null}
+							{/* #713: enable/disable drops every binding + auto-apply —
+								confirm naming the client, like Delete next to it. */}
+							<AlertDialog open={confirmToggle} onOpenChange={setConfirmToggle}>
+								<AlertDialogContent>
+									<AlertDialogHeader>
+										<AlertDialogTitle>
+											{c.enabled
+												? t("clientDetail.disableConfirmTitle")
+												: t("clientDetail.enableConfirmTitle")}
+										</AlertDialogTitle>
+										<AlertDialogDescription>
+											{c.enabled
+												? t("clientDetail.disableConfirmDescription", {
+														name: c.name ?? clientId,
+													})
+												: t("clientDetail.enableConfirmDescription", {
+														name: c.name ?? clientId,
+													})}
+										</AlertDialogDescription>
+									</AlertDialogHeader>
+									{error ? <p className="form-error">{error}</p> : null}
+									<AlertDialogFooter>
+										<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+										<AlertDialogAction
+											disabled={enableToggle.isPending}
+											onClick={(e) => {
+												e.preventDefault();
+												enableToggle.mutate();
+											}}
+										>
+											{enableToggle.isPending
+												? t("clientDetail.toggling")
+												: c.enabled
+													? t("clientDetail.confirmDisable")
+													: t("clientDetail.confirmEnable")}
+										</AlertDialogAction>
+									</AlertDialogFooter>
+								</AlertDialogContent>
+							</AlertDialog>
 							<AlertDialog>
 								<AlertDialogTrigger asChild>
 									<Button variant="danger">{t("common.delete")}</Button>
@@ -684,21 +736,30 @@ export function ClientDetailPage() {
 											<Button
 												variant="default"
 												disabled={toggleBinding.isPending}
-												onClick={() => toggleBinding.mutate(b)}
+												onClick={() =>
+													setConfirmBinding({
+														action: b.enabled ? "disable" : "enable",
+														binding: b,
+													})
+												}
 											>
 												{b.enabled ? t("common.disable") : t("common.enable")}
 											</Button>
 											<Button
 												variant="default"
 												disabled={rotate.isPending}
-												onClick={() => rotate.mutate(b.id)}
+												onClick={() =>
+													setConfirmBinding({ action: "rotate", binding: b })
+												}
 											>
 												{t("clientDetail.rotateCredential")}
 											</Button>
 											<Button
 												variant="danger"
 												disabled={detach.isPending}
-												onClick={() => detach.mutate(b.id)}
+												onClick={() =>
+													setConfirmBinding({ action: "detach", binding: b })
+												}
 											>
 												{t("clientDetail.detach")}
 											</Button>
@@ -817,6 +878,61 @@ export function ClientDetailPage() {
 					)}
 				</div>
 			) : null}
+
+			{/* #704/#710: one confirm dialog for every binding action that
+				mutates live access — names the inbound in the copy. */}
+			<AlertDialog
+				open={confirmBinding !== null}
+				onOpenChange={(open) => {
+					if (!open) setConfirmBinding(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							{confirmBinding
+								? t(`clientDetail.binding.${confirmBinding.action}.title`)
+								: null}
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							{confirmBinding
+								? t(
+										`clientDetail.binding.${confirmBinding.action}.description`,
+										{ name: confirmBinding.binding.inboundId },
+									)
+								: null}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					{/* A failed mutation keeps this dialog open — the error must be
+						visible here, not only behind the overlay (#649 pattern). */}
+					{error ? <p className="form-error">{error}</p> : null}
+					<AlertDialogFooter>
+						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={
+								toggleBinding.isPending || rotate.isPending || detach.isPending
+							}
+							onClick={(e) => {
+								e.preventDefault();
+								if (!confirmBinding) return;
+								if (confirmBinding.action === "rotate") {
+									rotate.mutate(confirmBinding.binding.id);
+								} else if (confirmBinding.action === "detach") {
+									detach.mutate(confirmBinding.binding.id);
+								} else {
+									toggleBinding.mutate(confirmBinding.binding);
+								}
+							}}
+						>
+							{toggleBinding.isPending || rotate.isPending || detach.isPending
+								? t("clientDetail.binding.pending")
+								: confirmBinding
+									? t(`clientDetail.binding.${confirmBinding.action}.confirm`)
+									: null}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</>
 	);
 }

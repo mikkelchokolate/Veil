@@ -3,6 +3,16 @@ import { useState } from "react";
 import { apiFetch, mutationErrorMessage } from "../api/fetcher";
 import type { MutationOutcome, WarpConfig } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "../components/ui/alert-dialog";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { FormMessage } from "../components/ui/form";
@@ -23,6 +33,9 @@ export function WarpPage() {
 	// Set when the PUT committed but the auto-apply failed (success=false in
 	// the mutation envelope); cleared on the next attempt (#643).
 	const [applyFailed, setApplyFailed] = useState(false);
+	// #707: enable provisions a Cloudflare account server-side and disable
+	// can strand warp routing rules — both confirm first.
+	const [confirmToggle, setConfirmToggle] = useState(false);
 
 	const toggle = useMutation({
 		mutationFn: (enabled: boolean) => {
@@ -36,6 +49,7 @@ export function WarpPage() {
 			});
 		},
 		onSuccess: (data) => {
+			setConfirmToggle(false);
 			setApplyFailed(data?.success === false);
 			void qc.invalidateQueries({ queryKey: ["warp"] });
 			void qc.invalidateQueries({ queryKey: ["apply"] });
@@ -100,7 +114,7 @@ export function WarpPage() {
 				<Button
 					variant={w.enabled ? "default" : "primary"}
 					disabled={toggle.isPending}
-					onClick={() => toggle.mutate(!w.enabled)}
+					onClick={() => setConfirmToggle(true)}
 				>
 					{toggle.isPending
 						? t("warp.applying")
@@ -120,6 +134,43 @@ export function WarpPage() {
 			<p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
 				{t("warp.provisionNotice")}
 			</p>
+			<AlertDialog open={confirmToggle} onOpenChange={setConfirmToggle}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							{w.enabled
+								? t("warp.disableConfirmTitle")
+								: t("warp.enableConfirmTitle")}
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							{w.enabled
+								? t("warp.disableConfirmDescription")
+								: t("warp.enableConfirmDescription")}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					{toggle.isError ? (
+						<FormMessage>
+							{mutationErrorMessage(toggle.error, t("warp.toggleFailed"))}
+						</FormMessage>
+					) : null}
+					<AlertDialogFooter>
+						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={toggle.isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								toggle.mutate(!w.enabled);
+							}}
+						>
+							{toggle.isPending
+								? t("warp.applying")
+								: w.enabled
+									? t("warp.confirmDisable")
+									: t("warp.confirmEnable")}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</div>
 	);
 }

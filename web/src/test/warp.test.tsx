@@ -44,6 +44,11 @@ describe("WarpPage toggle", () => {
 		fireEvent.click(
 			await screen.findByRole("button", { name: /disable warp/i }),
 		);
+		// #707: disable confirms first — no PUT until the dialog action.
+		expect(puts).toHaveLength(0);
+		fireEvent.click(
+			await screen.findByRole("button", { name: /confirm disable/i }),
+		);
 		await waitFor(() => expect(puts).toHaveLength(1));
 		expect(puts[0]).toMatchObject({
 			enabled: false,
@@ -84,8 +89,35 @@ describe("WarpPage toggle", () => {
 		fireEvent.click(
 			await screen.findByRole("button", { name: /disable warp/i }),
 		);
+		fireEvent.click(
+			await screen.findByRole("button", { name: /confirm disable/i }),
+		);
 		expect(
 			await screen.findByText(/applying the change failed/i),
 		).toBeInTheDocument();
+	});
+
+	// #707: enable provisions a Cloudflare account server-side — the PUT
+	// must not fire until the dialog action is clicked.
+	it("does not PUT until enable is confirmed", async () => {
+		const puts: Array<Record<string, unknown>> = [];
+		server.use(
+			http.get("/api/warp", () =>
+				HttpResponse.json({ ...snapshot, enabled: false }),
+			),
+			http.put("/api/warp", async ({ request }) => {
+				puts.push((await request.json()) as Record<string, unknown>);
+				return HttpResponse.json({ ...snapshot, enabled: true });
+			}),
+		);
+		renderWarp();
+		fireEvent.click(
+			await screen.findByRole("button", { name: /enable warp/i }),
+		);
+		expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+		expect(puts).toHaveLength(0);
+		fireEvent.click(screen.getByRole("button", { name: /confirm enable/i }));
+		await waitFor(() => expect(puts).toHaveLength(1));
+		expect(puts[0]).toMatchObject({ enabled: true });
 	});
 });

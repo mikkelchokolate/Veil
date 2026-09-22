@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { AuthProvider, useAuth } from "../auth/AuthContext";
 import { I18nProvider } from "../i18n/I18nContext";
 import { UsersPage } from "../pages/UsersPage";
@@ -178,5 +179,53 @@ describe("UsersPage errors", () => {
 		expect(
 			screen.getByText(new Date(absolute).toLocaleString()),
 		).toBeInTheDocument();
+	});
+
+	// #702: session revoke is a remote sign-out — the DELETE must not fire
+	// until the confirm dialog action, like the user Delete next to it.
+	it("does not DELETE a session until revoke is confirmed", async () => {
+		const user = userEvent.setup();
+		const deletes: string[] = [];
+		server.use(
+			http.get("/api/users", () =>
+				HttpResponse.json([
+					{ username: "alice", role: "viewer", locale: "en" },
+				]),
+			),
+			http.get("/api/auth/sessions", () =>
+				HttpResponse.json([
+					{
+						id: "s-current",
+						username: "admin",
+						role: "admin",
+						createdAt: "2024-01-01T00:00:00Z",
+						lastSeenAt: "2024-01-01T00:00:00Z",
+						expiresAt: "2024-01-02T00:00:00Z",
+						current: true,
+					},
+					{
+						id: "s-other",
+						username: "alice",
+						role: "viewer",
+						createdAt: "2024-01-01T00:00:00Z",
+						lastSeenAt: "2024-01-01T00:00:00Z",
+						expiresAt: "2024-01-02T00:00:00Z",
+						userAgent: "curl/8",
+						current: false,
+					},
+				]),
+			),
+			http.delete("/api/auth/sessions", async ({ request }) => {
+				deletes.push(await request.text());
+				return HttpResponse.json({ success: true });
+			}),
+		);
+		renderUsers();
+		await user.click(await screen.findByRole("button", { name: /^revoke$/i }));
+		expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+		expect(deletes).toEqual([]);
+		await user.click(screen.getByRole("button", { name: /confirm revoke/i }));
+		await waitFor(() => expect(deletes).toHaveLength(1));
+		expect(deletes[0]).toContain("s-other");
 	});
 });
