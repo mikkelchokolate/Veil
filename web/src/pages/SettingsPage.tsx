@@ -347,9 +347,12 @@ export function SettingsPage() {
 			// The serve identity belongs to the running process, not the
 			// stored settings. Pin the echoed webBasePath to the live mount
 			// so drifted stored state cannot fail unrelated field saves
-			// (CheckProcessCanAdoptCaddyIdentity). panelAccess/panelListen
-			// echo the stored values — a drift there still fails with the
-			// server's `veil repair` guidance, which is honest.
+			// (CheckProcessCanAdoptCaddyIdentity). panelAccess echoes the
+			// stored value — the live process mode is not knowable from the
+			// SPA, and a drift there still fails with the server's
+			// `veil repair` guidance, which is honest. panelListen is
+			// display-only (read-only rows, not ALL_FIELDS), so it can never
+			// be edited into drift here.
 			base.webBasePath = `${processMount}/`;
 		}
 		save.mutate(base);
