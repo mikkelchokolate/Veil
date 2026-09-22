@@ -208,6 +208,41 @@ describe("ClientDetailPage conflict and expiry", () => {
 		await waitFor(() => expect(nameField).toHaveValue("From other tab"));
 	});
 
+	// #701: the header Enable/Disable PATCH commits a new server version but
+	// cannot reset a dirty form (#218 guard) — leaving the checkbox and
+	// draftVersion stale so the next Save 409s. While dirty the toggle must
+	// be blocked, not silently split-brain.
+	it("disables the header enable/disable toggle while the form is dirty", async () => {
+		const user = userEvent.setup();
+		const patches: Array<Record<string, unknown>> = [];
+		server.use(
+			http.get("/api/inbounds", () => HttpResponse.json([])),
+			http.get("/api/v1/clients/c1", () =>
+				HttpResponse.json({
+					id: "c1",
+					name: "Original",
+					enabled: true,
+					version: 1,
+					status: "active",
+					bindings: [],
+				}),
+			),
+			http.patch("/api/v1/clients/c1", async ({ request }) => {
+				patches.push((await request.json()) as Record<string, unknown>);
+				return HttpResponse.json({ success: true });
+			}),
+		);
+		renderClientDetail();
+		const nameField = await screen.findByLabelText(/^name$/i);
+		const toggle = screen.getByRole("button", { name: /disable client/i });
+		expect(toggle).toBeEnabled();
+		await user.type(nameField, " draft");
+		expect(toggle).toBeDisabled();
+		expect(screen.getByText(/save or discard your edits/i)).toBeInTheDocument();
+		await user.click(toggle);
+		expect(patches).toEqual([]);
+	});
+
 	it("saves expiry as the local calendar day, not UTC midnight of the date string", async () => {
 		const user = userEvent.setup();
 		let patch: Record<string, unknown> | null = null;

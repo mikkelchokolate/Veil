@@ -176,6 +176,10 @@ export const en: Record<string, string> = {
 	"auth.login.signingIn": "Signing in…",
 	"auth.login.invalid": "Invalid username or password.",
 	"auth.login.failed": "Could not sign in. Try again.",
+	"auth.login.tooManyAttempts":
+		"Too many login attempts. Wait before trying again.",
+	"auth.login.tooManyAttemptsWait":
+		"Too many login attempts. Try again in {seconds} s.",
 	"auth.setup.title": "Welcome to Veil",
 	"auth.setup.subtitle": "Create the initial administrator account",
 	"auth.setup.confirm": "Confirm password",
@@ -202,7 +206,9 @@ export const en: Record<string, string> = {
 	"users.newPassword": "New password",
 	"users.newPasswordOptional": "New password (optional)",
 	"users.createdNotice": "User {name} created.",
-	"users.updatedNotice": "User {name} updated.",
+	"users.updatedNotice": "User {name} updated. Their sessions were revoked.",
+	"users.selfEditWarning":
+		"Saving changes to your own account revokes your sessions — you will be signed out.",
 	"users.deletedNotice": "User {name} deleted.",
 	"users.error.create": "Create failed",
 	"users.error.update": "Update failed",
@@ -216,6 +222,7 @@ export const en: Record<string, string> = {
 	"users.noActiveSessions": "No active sessions.",
 	"users.sessionUser": "User",
 	"users.lastSeen": "Last seen",
+	"users.idleExpires": "Idle expires",
 	"users.expires": "Expires",
 	"users.agent": "Agent",
 	"users.thisSession": " (this)",
@@ -260,7 +267,9 @@ export const en: Record<string, string> = {
 	"inbounds.dismiss": "Dismiss",
 	"inbounds.delete.title": "Delete inbound?",
 	"inbounds.delete.description":
-		"Deleting {name} removes the listener and detaches its clients. This cannot be undone.",
+		"Deleting {name} removes the listener. This cannot be undone.",
+	"inbounds.delete.blocked":
+		"{name} still has {count} attached client(s). Detach them before deleting — the inbound cannot be removed while clients reference it.",
 	"inbounds.delete.deleting": "Deleting…",
 	"inbounds.delete.confirm": "Confirm delete",
 
@@ -383,8 +392,15 @@ export const en: Record<string, string> = {
 	"settings.webBasePathRequired":
 		"Web base path cannot be cleared from this form.",
 	"settings.rotated": "State key rotated. Other sessions were revoked.",
+	"settings.rotatedRevoked": "State key rotated. Revoked {n} other session(s).",
+	"settings.rotatedNoOthers":
+		"State key rotated. No other sessions were active.",
 	"settings.rotatedApplyFailed":
-		"State key rotated, but applying the new revision failed. Check Apply.",
+		"State key rotated and other sessions were revoked, but applying the new revision failed. Check Apply.",
+	"settings.rotatedApplyFailedRevoked":
+		"State key rotated and {n} other session(s) were revoked, but applying the new revision failed. Check Apply.",
+	"settings.rotatedApplyFailedNoOthers":
+		"State key rotated, but applying the new revision failed. No other sessions were active. Check Apply.",
 	"settings.rotateFailed": "Key rotation failed",
 
 	"backups.title": "Backups",
@@ -411,7 +427,7 @@ export const en: Record<string, string> = {
 	"backups.status.succeeded": "succeeded",
 	"backups.status.failed": "failed",
 	"backups.status.degraded": "degraded",
-	"backups.status.pending": "pending",
+	"backups.status.pending": "awaiting key publication",
 	"backups.empty": "No backups yet.",
 	"backups.hint":
 		"Archives are encrypted with a server-side passphrase created at install. The browser never receives it.",
@@ -424,12 +440,21 @@ export const en: Record<string, string> = {
 	"backups.restoreJobPhase": "Phase: {phase}.",
 	"backups.restoreJobDegraded":
 		"The backup was restored, but a follow-up step failed — the restored state is committed.",
+	"backups.restoreJobPendingKey":
+		"The archive was not restored — publishing the new state key is still required before the restore can commit.",
+	"backups.restoreJobSafetyKey": "Safety key file: {path}",
+	"backups.dismissNotRestored": "Dismiss (archive was not restored)",
 	"backups.restoreConfirmTitle": "Restore backup?",
 	"backups.restoreConfirmDescription":
-		"Restoring {name} replaces the current state. You may be logged out when it finishes.",
+		"Restoring {name} replaces the current state. A successful restore revokes every other panel session, and you will be signed out when it finishes.",
 	"backups.confirmRestore": "Confirm restore",
 	"backups.notice.created": "Backup created.",
-	"backups.notice.pruned": "Old backups pruned.",
+	"backups.notice.createdWarning":
+		"Backup created, but the server reported a warning: {warning}",
+	"backups.notice.prunedCount": "Pruned {n} old backup(s).",
+	"backups.notice.prunedNone":
+		"No backups matched the retention policy — nothing was deleted.",
+	"backups.notice.prunedDryRun": "Dry run — {n} backup(s) would be pruned.",
 	"backups.notice.queued": "Restore job queued for {archive}.",
 	"backups.error.create": "Failed to create backup",
 	"backups.error.download": "Failed to download backup",
@@ -507,6 +532,8 @@ export const en: Record<string, string> = {
 	"clientDetail.tab.audit": "Audit",
 	"clientDetail.enableClient": "Enable client",
 	"clientDetail.disableClient": "Disable client",
+	"clientDetail.saveDraftBeforeToggle":
+		"Save or discard your edits before enabling/disabling.",
 	"clientDetail.deleteTitle": "Really delete this client?",
 	"clientDetail.deleteDescription":
 		"This action cannot be undone. All bindings and credentials will be removed.",

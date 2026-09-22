@@ -300,6 +300,17 @@ export function InboundsPage() {
 				) as Promise<{ items?: ClientView[]; total?: number }>,
 		})),
 	});
+	// DELETE 409s when bindings still reference the inbound — the confirm
+	// dialog must not promise a detach cascade that does not exist (#712).
+	const confirmDeleteIndex = inboundItems.findIndex(
+		(ib) => ib.name === confirmDelete,
+	);
+	const confirmDeleteQuery =
+		confirmDeleteIndex >= 0 ? attachedQueries[confirmDeleteIndex] : undefined;
+	const confirmDeleteAttached = confirmDeleteQuery?.data?.items ?? [];
+	const confirmDeleteAttachedTotal =
+		confirmDeleteQuery?.data?.total ?? confirmDeleteAttached.length;
+	const confirmDeleteBlocked = confirmDeleteAttachedTotal > 0;
 
 	function invalidate() {
 		void qc.invalidateQueries({ queryKey: ["inbounds"] });
@@ -1047,26 +1058,55 @@ export function InboundsPage() {
 					<AlertDialogHeader>
 						<AlertDialogTitle>{t("inbounds.delete.title")}</AlertDialogTitle>
 						<AlertDialogDescription>
-							{t("inbounds.delete.description", { name: confirmDelete ?? "" })}
+							{confirmDeleteBlocked
+								? t("inbounds.delete.blocked", {
+										name: confirmDelete ?? "",
+										count: confirmDeleteAttachedTotal,
+									})
+								: t("inbounds.delete.description", {
+										name: confirmDelete ?? "",
+									})}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
+					{confirmDeleteBlocked ? (
+						<div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+							{confirmDeleteAttached.map((client) => (
+								<Link
+									key={client.id}
+									to="/clients/$clientId"
+									params={{ clientId: client.id }}
+								>
+									<Badge>{client.name}</Badge>
+								</Link>
+							))}
+							{confirmDeleteAttachedTotal > confirmDeleteAttached.length ? (
+								<span className="muted">
+									+{confirmDeleteAttachedTotal - confirmDeleteAttached.length}
+								</span>
+							) : null}
+						</div>
+					) : null}
 					{/* A committed-but-unapplied delete keeps this dialog open —
 						the failure must be visible here, not only behind the
 						overlay (#649). */}
 					{error ? <p className="form-error">{error}</p> : null}
 					<AlertDialogFooter>
-						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-						<AlertDialogAction
-							disabled={remove.isPending}
-							onClick={(e) => {
-								e.preventDefault();
-								if (confirmDelete) remove.mutate(confirmDelete);
-							}}
-						>
-							{remove.isPending
-								? t("inbounds.delete.deleting")
-								: t("inbounds.delete.confirm")}
-						</AlertDialogAction>
+						<AlertDialogCancel>
+							{confirmDeleteBlocked ? t("common.close") : t("common.cancel")}
+						</AlertDialogCancel>
+						{confirmDeleteBlocked ? null : (
+							<AlertDialogAction
+								disabled={remove.isPending}
+								onClick={(e) => {
+									e.preventDefault();
+									if (confirmDelete) remove.mutate(confirmDelete);
+								}}
+							>
+								{remove.isPending
+									? t("inbounds.delete.deleting")
+									: t("inbounds.delete.confirm")}
+							</AlertDialogAction>
+						)}
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>

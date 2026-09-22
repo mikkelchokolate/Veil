@@ -5,8 +5,13 @@ import {
 	apiFetch,
 	apiUrl,
 	mutationErrorMessage,
+	notifyUnauthorized,
 } from "../api/fetcher";
-import type { BackupArchive } from "../api/generated/models";
+import type {
+	BackupArchive,
+	BackupCreateResponse,
+	BackupPruneResult,
+} from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import {
 	AlertDialog,
@@ -47,6 +52,7 @@ interface RestoreJob {
 	createdAt: string;
 	finishedAt?: string;
 	error?: string;
+	safetyKeyPath?: string;
 }
 
 interface VerifyResult {
@@ -127,10 +133,20 @@ export function BackupsPage() {
 
 	const create = useMutation({
 		mutationFn: () =>
-			apiFetch("/api/backups", { method: "POST", body: JSON.stringify({}) }),
-		onSuccess: () => {
+			apiFetch<BackupCreateResponse>("/api/backups", {
+				method: "POST",
+				body: JSON.stringify({}),
+			}),
+		onSuccess: (body) => {
 			setError(null);
-			setNotice(t("backups.notice.created"));
+			// A live create can succeed AND still carry a warning (e.g. the
+			// post-archive retention prune failed) — paint that instead of a
+			// clean "created" so degraded backup hygiene is visible (#697).
+			setNotice(
+				body?.warning
+					? t("backups.notice.createdWarning", { warning: body.warning })
+					: t("backups.notice.created"),
+			);
 			void qc.invalidateQueries({ queryKey: ["backups"] });
 		},
 		onError: (e) =>
@@ -150,14 +166,23 @@ export function BackupsPage() {
 
 	const prune = useMutation({
 		mutationFn: () =>
-			apiFetch("/api/backups/prune", {
+			apiFetch<BackupPruneResult>("/api/backups/prune", {
 				method: "POST",
 				body: JSON.stringify(pruneRetention),
 			}),
-		onSuccess: () => {
+		onSuccess: (result) => {
 			setConfirmPrune(false);
 			setError(null);
-			setNotice(t("backups.notice.pruned"));
+			// Report what actually happened: a no-op prune and a mass delete
+			// must not read the same (#722).
+			const deleted = result?.deleted?.length ?? 0;
+			setNotice(
+				result?.dryRun
+					? t("backups.notice.prunedDryRun", { n: deleted })
+					: deleted > 0
+						? t("backups.notice.prunedCount", { n: deleted })
+						: t("backups.notice.prunedNone"),
+			);
 			void qc.invalidateQueries({ queryKey: ["backups"] });
 		},
 		onError: (e) => setError(mutationErrorMessage(e, t("backups.error.prune"))),
@@ -181,8 +206,16 @@ export function BackupsPage() {
 			setError(null);
 			setVerifyResult((prev) => ({ ...prev, [name]: res }));
 		},
-		onError: (e) =>
-			setError(mutationErrorMessage(e, t("backups.error.verify"))),
+		// Stamp the row too — a failed verify that only raises the top banner
+		// leaves the cell at "—" as if the archive was never checked (#698).
+		onError: (e, name) => {
+			const message = mutationErrorMessage(e, t("backups.error.verify"));
+			setError(message);
+			setVerifyResult((prev) => ({
+				...prev,
+				[name]: { ok: false, error: message },
+			}));
+		},
 	});
 
 	const remove = useMutation({
@@ -222,14 +255,19 @@ export function BackupsPage() {
 	});
 
 	async function download(name: string) {
+		const path = `/api/backups/${encodeURIComponent(name)}/download`;
 		try {
-			const res = await fetch(
-				apiUrl(`/api/backups/${encodeURIComponent(name)}/download`),
-				{
-					credentials: "same-origin",
-				},
-			);
-			if (!res.ok) throw new Error(`download failed: ${res.status}`);
+			// Blob download needs the raw body, so it cannot go through apiFetch
+			// (which consumes text()). A session-ending 401 still has to reach
+			// the unauthorized handler — otherwise the shell keeps painting a
+			// dead session as live (#696).
+			const res = await fetch(apiUrl(path), {
+				credentials: "same-origin",
+			});
+			if (!res.ok) {
+				notifyUnauthorized(path, res.status);
+				throw new Error(`download failed: ${res.status}`);
+			}
 			const blob = await res.blob();
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement("a");
@@ -317,6 +355,19 @@ export function BackupsPage() {
 					{job.restored && job.status === "degraded" ? (
 						<p className="muted">{t("backups.restoreJobDegraded")}</p>
 					) : null}
+					{/* status=pending means pending_key_publication: nothing was
+					    restored and the archive will not commit until the state key
+					    is published — say so instead of a bare "pending" badge that
+					    looks like a finished job (#720). */}
+					{job.status === "pending" ||
+					job.outcome === "pending_key_publication" ? (
+						<p className="muted">{t("backups.restoreJobPendingKey")}</p>
+					) : null}
+					{job.safetyKeyPath ? (
+						<p className="muted mono" style={{ fontSize: 12 }}>
+							{t("backups.restoreJobSafetyKey", { path: job.safetyKeyPath })}
+						</p>
+					) : null}
 					{jobQuery.isError ? (
 						<FormMessage>
 							{jobQuery.error instanceof ApiError
@@ -332,7 +383,11 @@ export function BackupsPage() {
 								void qc.invalidateQueries({ queryKey: ["backups"] });
 							}}
 						>
-							{t("backups.dismiss")}
+							{/* A pending (key-publication) job is not a finished restore —
+							    the dismiss label must not read like one (#720). */}
+							{job.status === "pending"
+								? t("backups.dismissNotRestored")
+								: t("backups.dismiss")}
 						</Button>
 					) : null}
 				</div>
