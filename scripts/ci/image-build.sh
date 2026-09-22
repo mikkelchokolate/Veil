@@ -43,6 +43,6 @@ docker run --rm veil:ci version | tee "${CI_ARTIFACT_DIR}/image-version.txt" | g
 # still greens it (#441). The shared probe runs the image and asserts the
 # panel actually serves the real SPA shell; release.yml reuses the same probe
 # on the pushed multi-arch tags (#681).
-ci_run image-spa-probe bash "${CI_SCRIPTS_DIR}/image-spa-probe.sh" veil:ci
+ci_run image-spa-probe bash "${CI_SCRIPTS_DIR}/image-spa-probe.sh" veil:ci "" "${CI_ARTIFACT_DIR}"
 
 ci_log "image-build job passed"

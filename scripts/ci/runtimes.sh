@@ -35,6 +35,9 @@ install_pinned_caddy_binary() { # <destdir> <veil-binary-for-caddy-build>
     local tmp gopath_cache
     tmp="$(mktemp -d /tmp/veil-pinned-caddy.XXXXXX)"
     gopath_cache="${tmp}/go"
+    # A RETURN trap armed here stays set after this function returns and
+    # re-fires on the caller's next function return with `tmp` unbound under
+    # set -u — disarm it once the build subshell is done.
     trap 'rm -rf "${tmp}"' RETURN
     mkdir -p "${tmp}/caddy-build" "${gopath_cache}"
     (
@@ -58,6 +61,8 @@ EOF
       go mod tidy
       CGO_ENABLED=0 go build -o "${dest}/caddy" -ldflags='-s -w' -trimpath .
     )
+    trap - RETURN
+    rm -rf "${tmp}"
   fi
   "${dest}/caddy" list-modules | grep -Fx http.handlers.forward_proxy >/dev/null
 }
@@ -114,6 +119,8 @@ install_pinned_runtimes() { # <destdir> <veil-binary-for-caddy-build>
   local dest="$1" veil_bin="${2:-}"
   local tmp
   tmp="$(mktemp -d /tmp/veil-pinned-runtimes.XXXXXX)"
+  # Same RETURN-trap hygiene as install_pinned_caddy_binary: disarm once the
+  # fetch subshell finishes so the trap cannot leak to the caller's functions.
   trap 'rm -rf "${tmp}"' RETURN
 
   mkdir -p "${dest}"
@@ -136,6 +143,8 @@ install_pinned_runtimes() { # <destdir> <veil-binary-for-caddy-build>
 
     install_singbox_from_workdir "${dest}"
   )
+  trap - RETURN
+  rm -rf "${tmp}"
 
   # caddy with naive forward_proxy: source-built with product-pinned modules.
   install_pinned_caddy_binary "${dest}" "${veil_bin}"
