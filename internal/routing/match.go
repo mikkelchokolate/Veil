@@ -5,6 +5,7 @@ import (
 	"net"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // Matcher is one match atom from a routing rule.
@@ -163,6 +164,64 @@ func splitPrefix(part string) (kind, value string, ok bool) {
 	default:
 		return "", "", false
 	}
+}
+
+// Hysteria2ACLAddress renders a matcher into the address field of a Hysteria2
+// `outbound(address)` ACL line. apernet/hysteria compiles only the geoip:,
+// geosite: and suffix: prefixes, `all`/`*`, bare CIDRs and IPs, `*`-wildcard
+// domains, and exact domains — it has no keyword or regexp matcher. The
+// management dialect's keyword:/regexp: atoms therefore report ok=false
+// instead of emitting a fake prefix Hysteria would silently miscompile as a
+// literal host (or, for `cidr:X`, reject with "invalid CIDR address" and fail
+// the whole config load). Values whose characters corrupt the ACL line
+// grammar likewise report ok=false (#679).
+func Hysteria2ACLAddress(matcher Matcher) (string, bool) {
+	// Value-less kinds are decided before the character safety check, which
+	// would reject their empty Value.
+	switch matcher.Kind {
+	case MatchAll:
+		return "all", true
+	case MatchPrivateIP:
+		return "geoip:private", true
+	}
+	if !hysteria2ACLValueSafe(matcher.Value) {
+		return "", false
+	}
+	switch matcher.Kind {
+	case MatchGeoIP:
+		return "geoip:" + matcher.Value, true
+	case MatchGeoSite:
+		return "geosite:" + matcher.Value, true
+	case MatchDomainSuffix:
+		return "suffix:" + matcher.Value, true
+	case MatchDomain, MatchIPCIDR:
+		// Bare values: Hysteria compiles a bare address as CIDR, single IP,
+		// *-wildcard, or exact domain — the native forms for the management
+		// dialect's full: and cidr: atoms.
+		return matcher.Value, true
+	default:
+		// MatchDomainKeyword and MatchDomainRegex have no Hysteria ACL
+		// equivalent.
+		return "", false
+	}
+}
+
+// hysteria2ACLValueSafe reports whether a value survives the upstream ACL
+// grammar intact: `#` starts a comment in ParseTextRules (truncating the
+// line into InvalidSyntax), `,` and `(`/`)` break or re-shape the
+// `outbound(address,...)` line pattern, and whitespace/control characters
+// make the field unmatchable. None of these can appear in a real domain,
+// CIDR, or geo code.
+func hysteria2ACLValueSafe(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r == '#' || r == ',' || r == '(' || r == ')' || unicode.IsSpace(r) || unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
 }
 
 func validDomainToken(value string) bool {
