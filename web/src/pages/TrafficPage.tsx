@@ -21,6 +21,7 @@ import {
 } from "../components/ui/table";
 import { useI18n } from "../i18n/I18nContext";
 import { fmtBytes } from "../lib/bytes";
+import { escapeHtml } from "../lib/escapeHtml";
 
 interface TrafficProviderHealth {
 	key: string;
@@ -85,7 +86,10 @@ function chartOption(
 					seriesName: string;
 				}>;
 				if (!p.length) return "";
-				const name = p[0].name;
+				// Client names are user-controlled and may contain HTML
+				// metacharacters; the tooltip formatter emits raw HTML, so the
+				// name must be escaped before interpolation.
+				const name = escapeHtml(p[0].name);
 				const up = p.find((x) => x.seriesName === uploadLabel)?.value ?? 0;
 				const down = p.find((x) => x.seriesName === downloadLabel)?.value ?? 0;
 				return `${name}<br/>${uploadLabel}: ${fmtBytes(up)}<br/>${downloadLabel}: ${fmtBytes(down)}<br/>${totalLabel}: ${fmtBytes(up + down)}`;

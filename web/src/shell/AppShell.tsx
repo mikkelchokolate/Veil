@@ -5,6 +5,15 @@ import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nContext";
 import { NAV_ENTRIES } from "./nav";
 
+/** Localize the session role when a catalog key exists (users.role.admin /
+ * users.role.viewer); fall back to the raw value for unknown roles so the
+ * header never shows an untranslated i18n key. */
+function roleLabel(role: string, t: (key: string) => string): string {
+	const key = `users.role.${role}`;
+	const label = t(key);
+	return label === key ? role : label;
+}
+
 export function AppShell({ children }: { children?: ReactNode }) {
 	const { session, logout } = useAuth();
 	const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -54,7 +63,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
 						<ApplyStatusIndicator />
 						<span className="muted" style={{ fontSize: 13 }}>
 							{session?.username}
-							{session?.role ? ` · ${session.role}` : ""}
+							{session?.role ? ` · ${roleLabel(session.role, t)}` : ""}
 						</span>
 						<select
 							className="input"

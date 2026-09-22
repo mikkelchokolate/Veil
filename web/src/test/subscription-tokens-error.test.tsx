@@ -80,6 +80,80 @@ describe("SubscriptionTokensPanel errors", () => {
 		expect(screen.getByText(/new token \(shown once\)/i)).toBeInTheDocument();
 	});
 
+	// #725: the backend still returns stored URLs for expired/disabled tokens,
+	// but those URLs no longer authenticate — never render them as copyable.
+	it("hides the copyable URL on an expired token", async () => {
+		const expiredAt = Math.floor(Date.now() / 1000) - 60;
+		server.use(
+			http.get("/api/v1/clients/c1/tokens", () =>
+				HttpResponse.json({
+					items: [
+						{
+							id: "tok-exp",
+							prefix: "veil_ex",
+							label: "old phone",
+							enabled: true,
+							createdAt: 1700000000,
+							expiresAt: expiredAt,
+							url: "/s/veil_ex_secret",
+						},
+					],
+				}),
+			),
+		);
+		const qc = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={qc}>
+				<I18nProvider>
+					<SubscriptionTokensPanel clientId="c1" />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+		expect(await screen.findByText(/^expired$/i)).toBeInTheDocument();
+		expect(screen.getByText(/no longer authenticates/i)).toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: /show link|copy url/i }),
+		).not.toBeInTheDocument();
+		expect(screen.queryByText(/veil_ex_secret/)).not.toBeInTheDocument();
+	});
+
+	it("hides the copyable URL on a disabled token", async () => {
+		server.use(
+			http.get("/api/v1/clients/c1/tokens", () =>
+				HttpResponse.json({
+					items: [
+						{
+							id: "tok-dis",
+							prefix: "veil_di",
+							label: "paused",
+							enabled: false,
+							createdAt: 1700000000,
+							url: "/s/veil_di_secret",
+						},
+					],
+				}),
+			),
+		);
+		const qc = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={qc}>
+				<I18nProvider>
+					<SubscriptionTokensPanel clientId="c1" />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+		expect(await screen.findByText(/^disabled$/i)).toBeInTheDocument();
+		expect(screen.getByText(/does not authenticate/i)).toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: /show link|copy url/i }),
+		).not.toBeInTheDocument();
+		expect(screen.queryByText(/veil_di_secret/)).not.toBeInTheDocument();
+	});
+
 	it("shows an expired token as expired and requires a future expiry to rotate", async () => {
 		const user = userEvent.setup();
 		const rotateBodies: unknown[] = [];
