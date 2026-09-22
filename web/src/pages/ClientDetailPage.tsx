@@ -19,6 +19,7 @@ import type {
 	MutationOutcome,
 } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
+import { ClientStatusBadge } from "../components/ClientStatusBadge";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -609,7 +610,10 @@ export function ClientDetailPage() {
 				<div className="card">
 					<h2>{t("clientDetail.tab.overview")}</h2>
 					<p>
-						<strong>{t("common.status")}:</strong> {c.status}
+						<strong>{t("common.status")}:</strong>{" "}
+						{/* #732: same localized effective-status badge as the
+						 * Clients list — never the raw enum. */}
+						<ClientStatusBadge status={c.status} />
 					</p>
 					<p>
 						<strong>{t("clientDetail.quota")}:</strong>{" "}
@@ -806,7 +810,10 @@ export function ClientDetailPage() {
 								<option value="">{t("clientDetail.attachInbound")}</option>
 								{attachable.map((ib) => (
 									<option key={ib.name} value={ib.name}>
+										{/* #729: attaching to a disabled inbound produces
+										 * no usable links — label the state. */}
 										{ib.name} ({ib.protocol})
+										{ib.enabled === false ? ` — ${t("common.disabled")}` : ""}
 									</option>
 								))}
 							</Select>

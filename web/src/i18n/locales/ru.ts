@@ -215,6 +215,7 @@ export const ru: Record<string, string> = {
 	"traffic.state.degraded": "деградировано",
 	"traffic.state.pending": "ожидает первое наблюдение",
 	"traffic.state.unsupported": "не поддерживается",
+	"traffic.state.stale": "устарело",
 	"traffic.providerError": "{provider}: {details}",
 	"traffic.summaryUnavailable": "Сводка трафика недоступна",
 	"traffic.noTrafficSource":
@@ -241,8 +242,12 @@ export const ru: Record<string, string> = {
 	"routing.outbound": "Исходящий",
 	"routing.outboundHint":
 		"direct обходит полный прокси и WARP. warp отправляет трафик через WARP. proxy отправляет трафик через прокси, не через WARP.",
+	"routing.outboundHintWarpOff":
+		"direct обходит полный прокси. proxy отправляет трафик через прокси, не через WARP. warp недоступен, пока WARP выключен — включённое warp-правило не пройдёт применение.",
+	"routing.warpOutboundBlocked":
+		"WARP выключен — включённое правило с исходящим «warp» не пройдёт применение. Включите WARP, отключите правило или выберите другой исходящий.",
 	"routing.warpRequired":
-		"WARP выключен, поэтому правила warp пока не действуют. direct по-прежнему выходит локально. proxy использует собственный выход inbound, не WARP.",
+		"WARP выключен — включённое правило с исходящим «warp» не пройдёт план применения, пока WARP не будет включён или правило изменено. direct по-прежнему выходит локально. proxy использует собственный выход inbound, не WARP.",
 	"routing.enabled": "Включено",
 	"routing.saving": "Сохранение…",
 	"routing.saveFailed": "Не удалось сохранить",
@@ -323,6 +328,8 @@ export const ru: Record<string, string> = {
 	"settings.field.panelListen": "Адрес панели",
 	"settings.field.acmeEmail": "Email ACME",
 	"settings.field.acmeChallenge": "Проверка ACME",
+	"settings.identityLocked":
+		"Доступ к панели и базовый путь веба задаются запущенным процессом (veil.env). Чтобы изменить их, выполните `veil repair` и перезапустите панель — сохранение настроек не применяет их на лету.",
 	"settings.readOnlyHint":
 		"Адрес прослушивания и режим меняются через CLI / процесс настройки. Всё остальное выше редактируется.",
 	"settings.section.protocolDefaults": "Значения по умолчанию для протоколов",
@@ -467,11 +474,18 @@ export const ru: Record<string, string> = {
 	"clientTraffic.depleted": "квота исчерпана",
 	"clientTraffic.noQuota": "Квота не настроена.",
 	"clientTraffic.unavailable": "Трафик недоступен",
+	"clientTraffic.unsupported":
+		"Ни один включённый инбаунд этого клиента не отдаёт счётчики трафика — живой статистики нет.",
+	"clientTraffic.pending":
+		"Учёт трафика настроен, но наблюдений пока не было — счётчики появятся после первого наблюдения.",
 	"clientTraffic.collected": "Собрано в {at}",
 
 	"subTokens.title": "Токены подписки",
 	"subTokens.alwaysAvailable":
 		"У каждого токена URL и QR остаются после перезагрузки страницы. Откройте их кнопкой «Показать ссылку». Ротация заменяет URL.",
+	"subTokens.urlExpired":
+		"Истёк — сохранённая ссылка больше не работает. Ротируйте токен с новым сроком, чтобы выдать новую ссылку.",
+	"subTokens.urlDisabled": "Отключён — сохранённая ссылка не работает.",
 	"subTokens.urlUnavailable":
 		"Этот токен создан до сохранения ссылок. Нажмите «Ротировать», чтобы получить URL и QR.",
 	"subTokens.issuedTitle": "URL подписки",
@@ -528,8 +542,11 @@ export const ru: Record<string, string> = {
 	"clients.adminRequired": "Создание клиентов требует роли администратора.",
 	"clients.searchPlaceholder": "Поиск по имени или email",
 	"clients.searchAriaLabel": "Поиск клиентов",
-	"clients.filterStatusAriaLabel": "Фильтр по статусу",
-	"clients.statusFilter.all": "Все статусы",
+	"clients.filterStatusAriaLabel": "Фильтр клиентов",
+	"clients.statusFilter.all": "Все клиенты",
+	"clients.statusFilter.enabled": "Включён (флаг)",
+	"clients.statusFilter.disabled": "Отключён (флаг)",
+	"clients.statusFilter.depleted": "Исчерпан (квота)",
 	"clients.sortAriaLabel": "Сортировка",
 	"clients.sort.newest": "Сначала новые",
 	"clients.sort.expiry": "По сроку действия",
@@ -538,12 +555,12 @@ export const ru: Record<string, string> = {
 	"clients.columns.expires": "Истекает",
 	"clients.columns.inbounds": "Инбаунды",
 	"clients.columns.quota": "Квота",
-	"clients.selectAll": "Выбрать все",
+	"clients.selectAll": "Выбрать все на этой странице",
 	"clients.selectRow": "Выбрать {name}",
 	"clients.selected": "Выбрано: {n}",
 	"clients.empty": "Клиенты не найдены.",
 	"clients.summary": "Показано: {count} · активных: {active}",
-	"clients.summary.totalQuota": " · общая квота {quota}",
+	"clients.summary.pageQuota": " · квота на этой странице {quota}",
 	"clients.resetTraffic": "Сбросить трафик",
 	"clients.bulkResult.title": "Результат массовой операции",
 	"clients.bulkResult.ok": "успешно",
@@ -584,6 +601,7 @@ export const ru: Record<string, string> = {
 	"clients.status.enabled": "Включён",
 	"clients.status.expired": "истёк",
 	"clients.status.orphaned": "осиротевший",
+	"clients.status.unsupported_telemetry": "телеметрия не поддерживается",
 	"clients.status.pending_apply": "ожидает применения",
 
 	"common.dismiss": "Закрыть",
@@ -714,7 +732,9 @@ export const ru: Record<string, string> = {
 	"applyJob.target": "Цель",
 	"applyJob.result": "Результат",
 	"applyJob.detail": "Детали",
-	"applyJob.renderedPlan": "Сформированный план",
+	"applyJob.livePlanTitle": "Предпросмотр текущего плана (live)",
+	"applyJob.livePlanNotice":
+		"Это результат POST /api/apply/plan для текущего желаемого состояния, а не снимок плана этой задачи — записи задач не хранят свой план.",
 	"applyJob.hide": "Скрыть",
 	"applyJob.showPlan": "Показать план",
 	"applyJob.loadingPlan": "Загрузка плана…",
@@ -726,7 +746,9 @@ export const ru: Record<string, string> = {
 	"applyJob.unit": "Единица",
 	"applyJob.risk": "Риск",
 	"applyJob.rollback": "Откат",
-	"applyJob.historyTitle": "История применения (устаревшая)",
+	"applyJob.globalHistoryTitle": "Глобальная история применений (все задачи)",
+	"applyJob.globalHistoryNotice":
+		"Все попытки применения, а не только эта задача — API не связывает записи истории с задачами.",
 	"applyJob.historyEmpty": "Нет записей истории.",
 	"applyJob.rolledBack": "откачено",
 	"applyJob.historySummary":

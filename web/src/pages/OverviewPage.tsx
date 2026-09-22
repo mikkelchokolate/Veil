@@ -262,7 +262,8 @@ export function OverviewPage() {
 				<div className="card">
 					<h2>{t("overview.system")}</h2>
 					<p>
-						<strong>CPU:</strong> {sys.data.cpuPercent.toFixed(1)}%
+						<strong>{t("system.cpu")}:</strong> {sys.data.cpuPercent.toFixed(1)}
+						%
 					</p>
 					<p>
 						<strong>{t("overview.memory")}:</strong> {sys.data.memoryUsedMB} /{" "}

@@ -337,7 +337,19 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 										</span>
 									) : null}
 								</div>
-								{tok.revokedAt ? null : tok.url ? (
+								{/* #725: the backend may still return a stored URL for
+								 * expired/disabled tokens, but token lookup requires
+								 * enabled + not expired — those URLs do not
+								 * authenticate, so never offer them as copyable. */}
+								{tok.revokedAt ? null : expired ? (
+									<p className="muted" style={{ fontSize: 13, marginTop: 12 }}>
+										{t("subTokens.urlExpired")}
+									</p>
+								) : !tok.enabled ? (
+									<p className="muted" style={{ fontSize: 13, marginTop: 12 }}>
+										{t("subTokens.urlDisabled")}
+									</p>
+								) : tok.url ? (
 									<TokenLink
 										url={tok.url}
 										copied={copied === absoluteSubURL(tok.url)}

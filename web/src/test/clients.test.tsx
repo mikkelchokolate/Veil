@@ -412,4 +412,45 @@ describe("ClientsPage", () => {
 		// The per-client result row still renders under the warning.
 		expect(screen.getByText("c1")).toBeInTheDocument();
 	});
+
+	// #716/#719/#723: the filter is the enabled DB flag (not the effective
+	// status), the quota sums the visible page only, and the header checkbox
+	// selects this page only — the labels must say so.
+	it("labels the flag filter, page quota, and page select-all honestly", async () => {
+		server.use(
+			http.get("/api/v1/clients", () =>
+				HttpResponse.json({
+					items: [
+						{
+							id: "c1",
+							name: "Alice",
+							status: "active",
+							enabled: true,
+							quotaBytes: 1024,
+							createdAt: 1700000000,
+						},
+					],
+					total: 5,
+					page: 1,
+					pageSize: 1,
+				}),
+			),
+		);
+		renderClients("/clients?pageSize=1");
+		await screen.findByText("Alice");
+		const filter = screen.getByLabelText(/filter clients/i);
+		const optionLabels = Array.from(
+			filter.querySelectorAll("option"),
+			(o) => o.textContent,
+		);
+		expect(optionLabels).toContain("Enabled (flag)");
+		expect(optionLabels).toContain("Disabled (flag)");
+		expect(optionLabels).not.toContain("All statuses");
+		expect(optionLabels).toContain("All clients");
+		expect(screen.getByText(/quota on this page/i)).toBeInTheDocument();
+		expect(screen.queryByText(/total quota/i)).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("checkbox", { name: /select all on this page/i }),
+		).toBeInTheDocument();
+	});
 });

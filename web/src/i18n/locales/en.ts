@@ -76,8 +76,11 @@ export const en: Record<string, string> = {
 	"clients.title": "Clients",
 	"clients.searchPlaceholder": "Search name or email",
 	"clients.searchAriaLabel": "Search clients",
-	"clients.filterStatusAriaLabel": "Filter status",
-	"clients.statusFilter.all": "All statuses",
+	"clients.filterStatusAriaLabel": "Filter clients",
+	"clients.statusFilter.all": "All clients",
+	"clients.statusFilter.enabled": "Enabled (flag)",
+	"clients.statusFilter.disabled": "Disabled (flag)",
+	"clients.statusFilter.depleted": "Depleted (quota)",
 	"clients.status.enabled": "Enabled",
 	"clients.status.disabled": "Disabled",
 	"clients.status.depleted": "Depleted",
@@ -92,7 +95,7 @@ export const en: Record<string, string> = {
 	"clients.newClient": "New client",
 	"clients.adminRequired": "Creating clients requires the admin role.",
 	"clients.summary": "{count} shown · {active} active",
-	"clients.summary.totalQuota": " · total quota {quota}",
+	"clients.summary.pageQuota": " · quota on this page {quota}",
 	"clients.selected": "{n} selected",
 	"clients.resetTraffic": "Reset traffic",
 	"clients.bulkResult.title": "Bulk result",
@@ -133,7 +136,8 @@ export const en: Record<string, string> = {
 	"clients.status.pending_apply": "pending apply",
 	"clients.status.apply_failed": "apply failed",
 	"clients.status.orphaned": "orphaned",
-	"clients.selectAll": "Select all",
+	"clients.status.unsupported_telemetry": "unsupported telemetry",
+	"clients.selectAll": "Select all on this page",
 	"clients.selectRow": "Select {name}",
 
 	"applyState.synced": "Synced",
@@ -310,6 +314,7 @@ export const en: Record<string, string> = {
 	"traffic.state.degraded": "degraded",
 	"traffic.state.pending": "pending first observation",
 	"traffic.state.unsupported": "unsupported",
+	"traffic.state.stale": "stale",
 	"traffic.providerError": "{provider}: {details}",
 	"traffic.summaryUnavailable": "Traffic summary unavailable",
 	"traffic.noTrafficSource":
@@ -336,8 +341,12 @@ export const en: Record<string, string> = {
 	"routing.outbound": "Outbound",
 	"routing.outboundHint":
 		"direct bypasses the full proxy and WARP. warp sends traffic through WARP. proxy sends traffic through the proxy, not WARP.",
+	"routing.outboundHintWarpOff":
+		"direct bypasses the full proxy. proxy sends traffic through the proxy, not WARP. warp is unavailable while WARP is disabled — an enabled warp rule fails the apply plan.",
+	"routing.warpOutboundBlocked":
+		'WARP is disabled — an enabled rule with outbound "warp" fails apply. Enable WARP, disable the rule, or choose another outbound.',
 	"routing.warpRequired":
-		"WARP is off, so warp rules have no effect yet. direct still exits locally. proxy uses the inbound's own exit, not WARP.",
+		'WARP is off — an enabled rule with outbound "warp" fails the apply plan until WARP is enabled or the rule is changed. direct still exits locally. proxy uses the inbound\'s own exit, not WARP.',
 	"routing.enabled": "Enabled",
 	"routing.saving": "Saving…",
 	"routing.saveFailed": "Save failed",
@@ -416,6 +425,8 @@ export const en: Record<string, string> = {
 	"settings.field.panelListen": "Panel listen",
 	"settings.field.acmeEmail": "ACME email",
 	"settings.field.acmeChallenge": "ACME challenge",
+	"settings.identityLocked":
+		"Panel access and web base path are owned by the running process (veil.env). To change them, run `veil repair` and restart the Panel — a settings save cannot adopt them live.",
 	"settings.readOnlyHint":
 		"Listen address and mode are changed through the CLI / setup flow. Everything else above is editable.",
 	"settings.section.protocolDefaults": "Protocol defaults",
@@ -521,11 +532,18 @@ export const en: Record<string, string> = {
 	"clientTraffic.depleted": "quota depleted",
 	"clientTraffic.noQuota": "No quota configured.",
 	"clientTraffic.unavailable": "Traffic unavailable",
+	"clientTraffic.unsupported":
+		"No enabled binding for this client reports traffic counters — there is no live usage to show.",
+	"clientTraffic.pending":
+		"Traffic accounting is configured, but no sample has been observed yet — counters appear after the first observation.",
 	"clientTraffic.collected": "Collected {at}",
 
 	"subTokens.title": "Subscription tokens",
 	"subTokens.alwaysAvailable":
 		"Each token keeps its URL and QR after you reload. Open them with Show link. Rotating a token replaces the URL.",
+	"subTokens.urlExpired":
+		"Expired — the saved URL no longer authenticates. Rotate the token with a new expiry to issue a fresh link.",
+	"subTokens.urlDisabled": "Disabled — the saved URL does not authenticate.",
 	"subTokens.urlUnavailable":
 		"This token was issued before links could be stored. Rotate it to get a URL and QR.",
 	"subTokens.issuedTitle": "Subscription URL",
@@ -703,7 +721,9 @@ export const en: Record<string, string> = {
 	"applyJob.target": "Target",
 	"applyJob.result": "Result",
 	"applyJob.detail": "Detail",
-	"applyJob.renderedPlan": "Rendered plan",
+	"applyJob.livePlanTitle": "Current plan preview (live)",
+	"applyJob.livePlanNotice":
+		"This is POST /api/apply/plan against the current desired state — not a snapshot of this job. Job records do not retain their plan.",
 	"applyJob.hide": "Hide",
 	"applyJob.showPlan": "Show plan",
 	"applyJob.loadingPlan": "Loading plan…",
@@ -715,7 +735,9 @@ export const en: Record<string, string> = {
 	"applyJob.unit": "Unit",
 	"applyJob.risk": "Risk",
 	"applyJob.rollback": "Rollback",
-	"applyJob.historyTitle": "Apply history (legacy)",
+	"applyJob.globalHistoryTitle": "Global apply history (all jobs)",
+	"applyJob.globalHistoryNotice":
+		"Every apply attempt, not just this job — the API does not link history entries to jobs.",
 	"applyJob.historyEmpty": "No history entries.",
 	"applyJob.rolledBack": "rolled back",
 	"applyJob.historySummary":

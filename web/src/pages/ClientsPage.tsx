@@ -21,6 +21,7 @@ import type {
 	ClientView,
 } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
+import { ClientStatusBadge } from "../components/ClientStatusBadge";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -31,7 +32,6 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "../components/ui/alert-dialog";
-import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import {
 	DropdownMenu,
@@ -53,27 +53,6 @@ import {
 import { useI18n } from "../i18n/I18nContext";
 import { fmtBytes } from "../lib/bytes";
 import { Route } from "../routes/clients.index";
-
-const STATUS_VARIANT: Record<
-	string,
-	"success" | "warning" | "danger" | "default"
-> = {
-	active: "success",
-	disabled: "default",
-	expired: "warning",
-	depleted: "warning",
-	pending_apply: "warning",
-	apply_failed: "danger",
-	orphaned: "danger",
-};
-
-function StatusBadge({ status }: { status: string }) {
-	const { t } = useI18n();
-	const variant = STATUS_VARIANT[status] ?? "default";
-	const key = `clients.status.${status}`;
-	const label = t(key) === key ? status : t(key);
-	return <Badge variant={variant}>{label}</Badge>;
-}
 
 function fmtExpiry(ts?: number): string {
 	if (!ts) return "—";
@@ -303,7 +282,7 @@ export function ClientsPage() {
 		{
 			accessorKey: "status",
 			header: () => t("common.status"),
-			cell: ({ row }) => <StatusBadge status={row.original.status} />,
+			cell: ({ row }) => <ClientStatusBadge status={row.original.status} />,
 		},
 		{
 			accessorKey: "inboundIds",
@@ -391,10 +370,17 @@ export function ClientsPage() {
 						}
 						aria-label={t("clients.filterStatusAriaLabel")}
 					>
+						{/* #716: the API's `status` param is the enabled DB
+						 * flag, not the effective status — the labels must say
+						 * so. `depleted` maps to quotaState=depleted. */}
 						<option value="">{t("clients.statusFilter.all")}</option>
-						<option value="enabled">{t("clients.status.enabled")}</option>
-						<option value="disabled">{t("clients.status.disabled")}</option>
-						<option value="depleted">{t("clients.status.depleted")}</option>
+						<option value="enabled">{t("clients.statusFilter.enabled")}</option>
+						<option value="disabled">
+							{t("clients.statusFilter.disabled")}
+						</option>
+						<option value="depleted">
+							{t("clients.statusFilter.depleted")}
+						</option>
 					</Select>
 					<Select
 						style={{ maxWidth: 160 }}
@@ -448,8 +434,10 @@ export function ClientsPage() {
 							count: summary.count,
 							active: summary.active,
 						})}
+						{/* #719: the quota is summed over the current page
+						 * only — never presented as a fleet total. */}
 						{summary.quota > 0
-							? t("clients.summary.totalQuota", {
+							? t("clients.summary.pageQuota", {
 									quota: fmtBytes(summary.quota),
 								})
 							: ""}

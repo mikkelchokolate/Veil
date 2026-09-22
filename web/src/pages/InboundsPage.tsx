@@ -538,7 +538,9 @@ export function InboundsPage() {
 			name: ib.name,
 			protocol: ib.protocol,
 			transport: ib.transport ?? "tcp",
-			port: ib.port != null ? String(ib.port) : "",
+			// #717: same effective-port resolution as the edit form — schema
+			// inbounds carry it in protocolFields.publicPort, not flat port.
+			port: livePortValue(ib),
 			enabled: !ib.enabled,
 			masqueradeURL: ib.masqueradeURL ?? "",
 			fallbackRoot: ib.fallbackRoot ?? "",
@@ -976,7 +978,13 @@ export function InboundsPage() {
 										<TableCell className="muted">
 											{ib.transport ?? "—"}
 										</TableCell>
-										<TableCell className="muted">{ib.port ?? "—"}</TableCell>
+										{/* #717: the effective port may live in
+										 * protocolFields.publicPort (schema
+										 * protocols like naive) — render what the
+										 * edit form would use. */}
+										<TableCell className="muted">
+											{livePortValue(ib) || "—"}
+										</TableCell>
 										<TableCell>
 											<Badge variant={ib.enabled ? "success" : "default"}>
 												{ib.enabled
