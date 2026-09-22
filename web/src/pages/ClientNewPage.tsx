@@ -314,6 +314,12 @@ export function ClientNewPage() {
 												<span>{ib.name}</span>
 												<span className="muted" style={{ fontSize: 12 }}>
 													{ib.protocol}
+													{/* #729: a disabled inbound yields no
+													 * subscription links — say so on the
+													 * option instead of hiding it. */}
+													{ib.enabled === false
+														? ` · ${t("common.disabled")}`
+														: ""}
 												</span>
 											</Label>
 											{bound ? (

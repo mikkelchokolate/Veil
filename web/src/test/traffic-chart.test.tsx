@@ -204,6 +204,33 @@ describe("Traffic chart instance lifecycle", () => {
 		);
 	});
 
+	it("escapes client names before they land in the tooltip HTML", async () => {
+		const payload = "<img src=x onerror=alert(1)>";
+		trafficApis({
+			providerCount: 1,
+			items: [
+				{
+					clientId: "c1",
+					name: payload,
+					uploadBytes: 10,
+					downloadBytes: 20,
+				},
+			],
+		});
+		renderTraffic();
+		await waitForChart();
+		const chart = echartsMocks.instances[0];
+		const option = chart?.setOption.mock.calls.at(-1)?.[0] as {
+			tooltip: { formatter: (p: unknown) => string };
+		};
+		const html = option.tooltip.formatter([
+			{ name: payload, value: 10, seriesName: "Upload" },
+			{ name: payload, value: 20, seriesName: "Download" },
+		]);
+		expect(html).not.toContain("<img");
+		expect(html).toContain("&lt;img");
+	});
+
 	it("renders Total from usedBytes when the live API omits totalBytes", async () => {
 		trafficApis({
 			providerCount: 1,

@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ApiError, apiFetch, mutationErrorMessage } from "../api/fetcher";
+import {
+	ApiError,
+	apiFetch,
+	mutationErrorMessage,
+	panelBasePath,
+} from "../api/fetcher";
 import type {
 	KeyRotationResponse,
 	MutationOutcome,
@@ -44,12 +49,22 @@ export function SettingsPage() {
 	});
 	const s = settings.data;
 
+	// When the SPA is served under a non-root base path, the running process
+	// owns the serve identity: the API rejects any PUT whose
+	// webBasePath/panelAccess/panelListen differ from the live process values
+	// (they only change via `veil repair` + restart). Presenting them as
+	// editable let a stale stored value fail unrelated field saves (#695).
+	const processMount = panelBasePath();
+	const identityLocked = processMount !== "";
+
 	const GLOBAL_FIELDS: Array<{
 		key: string;
 		label: string;
 		placeholder?: string;
 		type?: "text" | "checkbox" | "select";
 		options?: Array<{ value: string; label: string }>;
+		/** Owned by the running serve process — read-only while the Panel is mounted under a secret path. */
+		processIdentity?: boolean;
 	}> = [
 		{ key: "domain", label: t("settings.field.domain") },
 		{ key: "panelDomain", label: t("settings.field.panelDomain") },
@@ -57,8 +72,13 @@ export function SettingsPage() {
 			key: "panelAccess",
 			label: t("settings.field.panelAccess"),
 			placeholder: "local | direct | caddy",
+			processIdentity: true,
 		},
-		{ key: "webBasePath", label: t("settings.field.webBasePath") },
+		{
+			key: "webBasePath",
+			label: t("settings.field.webBasePath"),
+			processIdentity: true,
+		},
 		{ key: "email", label: t("settings.field.email") },
 		{ key: "panelEmail", label: t("settings.field.panelEmail") },
 		{ key: "panelPublicPort", label: t("settings.field.panelPublicPort") },
@@ -277,7 +297,7 @@ export function SettingsPage() {
 				}
 				base[f.key] = form[f.key];
 			} else if (f.key === "webBasePath") {
-				// The server always inherits the live webBasePath when the
+				// The server always inherits the stored webBasePath when the
 				// field is empty (it is required for caddy Panel access), so
 				// a "cleared" input would silently no-op. Keep the echoed
 				// value instead of pretending the clear succeeded.
@@ -322,6 +342,15 @@ export function SettingsPage() {
 			setEditing(false);
 			setError(t("settings.webBasePathRequired"));
 			return;
+		}
+		if (identityLocked) {
+			// The serve identity belongs to the running process, not the
+			// stored settings. Pin the echoed webBasePath to the live mount
+			// so drifted stored state cannot fail unrelated field saves
+			// (CheckProcessCanAdoptCaddyIdentity). panelAccess/panelListen
+			// echo the stored values — a drift there still fails with the
+			// server's `veil repair` guidance, which is honest.
+			base.webBasePath = `${processMount}/`;
 		}
 		save.mutate(base);
 	}
@@ -425,36 +454,46 @@ export function SettingsPage() {
 				<div className="card">
 					<h2 style={{ fontSize: 15 }}>{t("settings.editTitle")}</h2>
 					<div className="form-stack">
-						{GLOBAL_FIELDS.map((f) => (
-							<FormItem key={f.key}>
-								<Label htmlFor={`set-${f.key}`}>{f.label}</Label>
-								{f.type === "select" ? (
-									<Select
-										id={`set-${f.key}`}
-										value={form[f.key] ?? ""}
-										onChange={(e) =>
-											setForm({ ...form, [f.key]: e.target.value })
-										}
-									>
-										{(f.options ?? []).map((o) => (
-											<option key={o.value} value={o.value}>
-												{o.label}
-											</option>
-										))}
-									</Select>
-								) : (
-									<Input
-										id={`set-${f.key}`}
-										{...(f.placeholder ? { placeholder: f.placeholder } : {})}
-										value={form[f.key] ?? ""}
-										onChange={(e) =>
-											setForm({ ...form, [f.key]: e.target.value })
-										}
-									/>
-								)}
-							</FormItem>
-						))}
+						{GLOBAL_FIELDS.map((f) => {
+							const locked = f.processIdentity === true && identityLocked;
+							return (
+								<FormItem key={f.key}>
+									<Label htmlFor={`set-${f.key}`}>{f.label}</Label>
+									{f.type === "select" ? (
+										<Select
+											id={`set-${f.key}`}
+											disabled={locked}
+											value={form[f.key] ?? ""}
+											onChange={(e) =>
+												setForm({ ...form, [f.key]: e.target.value })
+											}
+										>
+											{(f.options ?? []).map((o) => (
+												<option key={o.value} value={o.value}>
+													{o.label}
+												</option>
+											))}
+										</Select>
+									) : (
+										<Input
+											id={`set-${f.key}`}
+											{...(f.placeholder ? { placeholder: f.placeholder } : {})}
+											disabled={locked}
+											value={form[f.key] ?? ""}
+											onChange={(e) =>
+												setForm({ ...form, [f.key]: e.target.value })
+											}
+										/>
+									)}
+								</FormItem>
+							);
+						})}
 					</div>
+					{identityLocked ? (
+						<p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+							{t("settings.identityLocked")}
+						</p>
+					) : null}
 					<h2
 						style={{
 							fontSize: 15,

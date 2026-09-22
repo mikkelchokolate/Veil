@@ -64,9 +64,14 @@ const IN_FLIGHT_STATUSES: ReadonlySet<ApplyJobStatus> = new Set([
 ]);
 
 /** S5: apply job detail — full operation/validation/service/health/rollback
- * breakdown, synchronous retry, plus the rendered plan and the legacy apply
+ * breakdown, synchronous retry, plus a live plan preview and the legacy apply
  * history. The generated ApplyJob model omits operations (backend returns
- * them), so they are read defensively here. */
+ * them), so they are read defensively here.
+ *
+ * Scope honesty (#715/#718): `POST /api/apply/plan` renders the *current*
+ * desired state, and `GET /api/apply/history` is a global feed with no job
+ * linkage — neither is pinned to the selected job, so both are labelled as
+ * live/global and kept out of the job-scoped copy report. */
 interface OperationResult {
 	type: string;
 	target?: string;
@@ -391,32 +396,10 @@ export function ApplyJobDetailPage() {
 												)
 												.join("\n")
 										: "(none)",
-									"",
-									"history:",
-									historyItems.length
-										? historyItems
-												.map((h) =>
-													JSON.stringify(
-														{
-															id: h.id,
-															timestamp: h.timestamp,
-															stage: h.stage,
-															success: h.success,
-															applied: h.applied,
-															liveApplied: h.liveApplied,
-															servicesApplied: h.servicesApplied,
-															rolledBack: h.rolledBack,
-															validations: h.validations,
-															serviceActions: h.serviceActions,
-															healthChecks: h.healthChecks,
-															rollbackActions: h.rollbackActions,
-														},
-														null,
-														2,
-													),
-												)
-												.join("\n")
-										: "(none)",
+									// #718: GET /api/apply/history is a global feed
+									// with no job linkage — embedding it here would
+									// present other jobs' entries as this job's
+									// history, so the report stays job-scoped.
 								].join("\n");
 								void navigator.clipboard.writeText(report).then(
 									() => {
@@ -454,7 +437,9 @@ export function ApplyJobDetailPage() {
 								{
 									job: j,
 									operations: ops,
-									history: historyItems,
+									// Global feed, not scoped to this job — the key name
+									// must say so (#718).
+									globalApplyHistory: historyItems,
 								},
 								null,
 								2,
@@ -501,16 +486,21 @@ export function ApplyJobDetailPage() {
 				</div>
 			) : null}
 
-			{/* S5: rendered plan (on demand) */}
+			{/* #715: POST /api/apply/plan renders the current desired state — a
+			 * live preview, never the plan recorded for this job (job records do
+			 * not retain one). The heading and notice must not imply otherwise. */}
 			<div className="card">
 				<div style={{ display: "flex", alignItems: "center", gap: 12 }}>
 					<h2 style={{ margin: 0, fontSize: 15, flex: 1 }}>
-						{t("applyJob.renderedPlan")}
+						{t("applyJob.livePlanTitle")}
 					</h2>
 					<Button onClick={() => setShowPlan((v) => !v)}>
 						{showPlan ? t("applyJob.hide") : t("applyJob.showPlan")}
 					</Button>
 				</div>
+				<p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+					{t("applyJob.livePlanNotice")}
+				</p>
 				{showPlan ? (
 					plan.isLoading ? (
 						<p className="muted">{t("applyJob.loadingPlan")}</p>
@@ -583,9 +573,14 @@ export function ApplyJobDetailPage() {
 				) : null}
 			</div>
 
-			{/* S5: legacy apply history with full validation/service/health/rollback */}
+			{/* #718: GET /api/apply/history is a global feed — the API does not
+			 * link entries to apply jobs, so the section is labelled global and
+			 * must not be presented as this job's history. */}
 			<div className="card">
-				<h2 style={{ fontSize: 15 }}>{t("applyJob.historyTitle")}</h2>
+				<h2 style={{ fontSize: 15 }}>{t("applyJob.globalHistoryTitle")}</h2>
+				<p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+					{t("applyJob.globalHistoryNotice")}
+				</p>
 				{history.isLoading ? (
 					<p className="muted">{t("common.loading")}</p>
 				) : history.isError ? (

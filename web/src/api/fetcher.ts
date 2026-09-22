@@ -64,7 +64,13 @@ export class CancelledError extends Error {
 	}
 }
 
-function panelBasePath(): string {
+/**
+ * The live process mount path derived from the rewritten <base href>.
+ * "" means the Panel is mounted at root; "/secret" style values mean the
+ * running process owns the serve identity (webBasePath/panelAccess/
+ * panelListen cannot be adopted until `veil repair` + restart).
+ */
+export function panelBasePath(): string {
 	const element =
 		typeof document !== "undefined" ? document.querySelector("base") : null;
 	const href = element?.getAttribute("href") ?? "/";
