@@ -4,29 +4,28 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
-type ConfigValidationPassPolicy struct{}
+// ConfigValidationPassPolicy gates live apply on the staged-config
+// validation results. It delegates to generatedconfig.ValidationPassPolicy —
+// the single fail-closed contract: protocols without a standalone checker
+// produce no validation entry at all, so a Skipped entry always means a
+// CONFIGURED validator could not run (binary missing from PATH, empty
+// command). That must block promotion — otherwise a bad config goes live
+// whenever PATH lacks the checker, and the post-restart health probe is not
+// a substitute for stage-time validation (issue #686).
+type ConfigValidationPassPolicy struct {
+	inner generatedconfig.ValidationPassPolicy
+}
 
-func NewConfigValidationPassPolicy() ConfigValidationPassPolicy { return ConfigValidationPassPolicy{} }
+func NewConfigValidationPassPolicy() ConfigValidationPassPolicy {
+	return ConfigValidationPassPolicy{inner: generatedconfig.NewValidationPassPolicy()}
+}
 
-func (ConfigValidationPassPolicy) RequirePassed(validations []model.ConfigValidationResult) error {
-	for _, validation := range validations {
-		// A skipped validation (the validator binary is absent or the protocol has
-		// no standalone checker) must not block the apply — the post-restart
-		// service health check is the real gate and rolls back on failure.
-		if validation.Skipped {
-			continue
-		}
-		if !validation.Valid {
-			if validation.Error != "" {
-				return errors.New(validation.Error)
-			}
-			return fmt.Errorf("%s validation did not pass", validation.Name)
-		}
-	}
-	return nil
+func (p ConfigValidationPassPolicy) RequirePassed(validations []model.ConfigValidationResult) error {
+	return p.inner.RequirePassed(validations)
 }
 
 type ServiceActionSuccessPolicy struct{}

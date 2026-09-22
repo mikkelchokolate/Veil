@@ -21,10 +21,17 @@ func TestDockerWorkflowsInjectAndVerifyBuildVersion(t *testing.T) {
 		},
 		"../../.github/workflows/release.yml": {
 			`VERSION=${{ github.ref_name }}`,
-			`docker run --rm "${image}" version`,
+			// The verify gate must execute BOTH pushed architectures — a
+			// manifest entry alone is not evidence the arm64 blob runs — and
+			// probe the embedded SPA on each, matching the PR image-build
+			// contract (issue #681).
+			`GO_GODEBUG=${{ steps.versions.outputs.go_godebug }}`,
+			`GO_GOPROXY=${{ steps.versions.outputs.go_goproxy }}`,
+			`for platform in linux/amd64 linux/arm64`,
+			`docker pull --platform "${platform}" "${image}"`,
+			`docker run --rm --platform "${platform}" "${image}" version`,
 			`grep -F "${GITHUB_REF_NAME}"`,
-			`grep -F "linux/amd64"`,
-			`grep -F "linux/arm64"`,
+			`image-spa-probe.sh "${image}" "${platform}"`,
 		},
 	}
 

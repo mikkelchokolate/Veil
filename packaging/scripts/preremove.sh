@@ -27,6 +27,12 @@ fi
 
 stop_disable_unit() {
     unit="$1"
+    # The per-call || true is intentional and narrow: it tolerates only the
+    # "unit not loaded" / "systemd is not running" cases (containers, chroots)
+    # so `dpkg -r`/`rpm -e`/`apk del` cannot be held hostage by a unit that
+    # never started. The calls themselves are NOT optional — package-smoke's
+    # stub log asserts every managed unit gets stop+disable on the remove
+    # path, so deleting a call fails the gate (issue #683).
     systemctl stop "$unit" >/dev/null 2>&1 || true
     systemctl disable "$unit" >/dev/null 2>&1 || true
 }
