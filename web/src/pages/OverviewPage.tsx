@@ -9,7 +9,11 @@ import {
 	reloadPanel,
 	waitForPanelVersion,
 } from "../api/panelUpdate";
-import { useApplyState } from "../apply/ApplyStatusIndicator";
+import {
+	applyStateBadgeVariant,
+	applyStateLabel,
+	useApplyState,
+} from "../apply/ApplyStatusIndicator";
 import { useIsAdmin } from "../auth/AuthContext";
 import {
 	AlertDialog,
@@ -212,8 +216,11 @@ export function OverviewPage() {
 					{apply.isError ? (
 						<span className="form-error">{t("applyState.unavailable")}</span>
 					) : apply.data ? (
-						<Badge variant={drift ? "warning" : "success"}>
-							{apply.data.state}
+						// State-first severity (#691): revision equality is not proof of
+						// convergence — degraded/untracked must not paint green. The
+						// label is localized through applyState.* (#703).
+						<Badge variant={applyStateBadgeVariant(apply.data.state)}>
+							{applyStateLabel(t, apply.data.state)}
 						</Badge>
 					) : (
 						<span className="muted">—</span>

@@ -2,6 +2,7 @@
 // suite. Uses the cookie session + CSRF flow the React frontend actually uses.
 const { test, expect } = require('@playwright/test');
 const { waitForSpa } = require('./spa-boot');
+const { assertMutationOutcome } = require('./mutation-outcome');
 
 const adminUsername = process.env.VEIL_BROWSER_USERNAME || 'browser-admin';
 const adminPassword = process.env.VEIL_BROWSER_PASSWORD || 'Browser-E2E-Password-123!';
@@ -276,7 +277,12 @@ test.describe('Veil Panel — React SPA', () => {
       headers: { 'X-Veil-Token': apiToken, 'Content-Type': 'application/json' },
       data: { name: inboundName, protocol: 'hysteria2', transport: 'udp', port, enabled: false },
     });
-    expect(resp.status(), `inbound seed failed: ${resp.status()} ${await resp.text()}`).toBeLessThan(300);
+    // The detached helper makes every apply fail honestly — tolerate the
+    // success=false but require the failed apply job as evidence (#677).
+    await assertMutationOutcome(resp, {
+      label: `inbound seed ${inboundName}`,
+      allowApplyFailure: true,
+    });
 
     await login(page, adminUsername, adminPassword);
     await page.getByRole('link', { name: /clients/i }).first().click();

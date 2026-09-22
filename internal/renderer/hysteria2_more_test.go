@@ -85,7 +85,7 @@ func TestRenderHysteria2ACLSplitsCommaSeparatedDirectRules(t *testing.T) {
 		MasqueradeURL: "https://www.bing.com/",
 		Upstream:      "127.0.0.1:40000",
 		RoutingRules: []Hysteria2RoutingRule{{
-			Match:    `geosite:category-gov-ru,regexp:.*\.ru$,regexp:.*\.su$`,
+			Match:    `geosite:category-gov-ru,suffix:ru,regexp:.*\.su$,full:api.example.com`,
 			Outbound: "direct",
 		}},
 	})
@@ -97,8 +97,8 @@ func TestRenderHysteria2ACLSplitsCommaSeparatedDirectRules(t *testing.T) {
 		"type: direct",
 		"name: warp",
 		"acl:",
-		"direct(regex:.*\\.ru$)",
-		"direct(regex:.*\\.su$)",
+		"direct(suffix:ru)",
+		"direct(api.example.com)",
 		"warp(all)",
 	} {
 		if !strings.Contains(cfg, want) {
@@ -108,6 +108,13 @@ func TestRenderHysteria2ACLSplitsCommaSeparatedDirectRules(t *testing.T) {
 	// geosite.dat is absent in this test, so geosite() must not crash hysteria2.
 	if strings.Contains(cfg, "geosite:category-gov-ru") {
 		t.Fatalf("geosite ACL requires geosite.dat:\n%s", cfg)
+	}
+	// #679/#680: Hysteria has no keyword/regexp/domain/cidr matchers — the
+	// management dialect prefixes must never reach acl.inline.
+	for _, bad := range []string{"regex:", "regexp:", "keyword:", "domain:", "cidr:"} {
+		if strings.Contains(cfg, bad) {
+			t.Fatalf("non-Hysteria ACL dialect %q emitted:\n%s", bad, cfg)
+		}
 	}
 }
 
@@ -129,7 +136,7 @@ func TestRenderHysteria2ACLIncludesGeositeWhenDatExists(t *testing.T) {
 		GeoIPPath:     geoip,
 		GeoSitePath:   geosite,
 		RoutingRules: []Hysteria2RoutingRule{{
-			Match:    `geosite:category-gov-ru,regexp:.*\.ru$,regexp:.*\.su$`,
+			Match:    `geosite:category-gov-ru,full:api.example.com,10.9.0.0/16`,
 			Outbound: "direct",
 		}},
 	})
@@ -138,8 +145,8 @@ func TestRenderHysteria2ACLIncludesGeositeWhenDatExists(t *testing.T) {
 	}
 	for _, want := range []string{
 		"direct(geosite:category-gov-ru)",
-		"direct(regex:.*\\.ru$)",
-		"direct(regex:.*\\.su$)",
+		"direct(api.example.com)",
+		"direct(10.9.0.0/16)",
 		"warp(all)",
 		"geosite: " + geosite,
 	} {
@@ -206,7 +213,7 @@ func TestRenderHysteria2ACLKeepsProxyOffWarp(t *testing.T) {
 		MasqueradeURL: "https://www.bing.com/",
 		Upstream:      "127.0.0.1:40000",
 		RoutingRules: []Hysteria2RoutingRule{
-			{Match: `regexp:.*\.ru$`, Outbound: "direct"},
+			{Match: `regexp:.*\.ru$,suffix:ru`, Outbound: "direct"},
 			{Match: "domain:openai.com", Outbound: "warp"},
 			{Match: "all", Outbound: "proxy"},
 		},
@@ -218,13 +225,18 @@ func TestRenderHysteria2ACLKeepsProxyOffWarp(t *testing.T) {
 		"name: direct",
 		"name: proxy",
 		"name: warp",
-		"direct(regex:.*\\.ru$)",
+		"direct(suffix:ru)",
 		"warp(suffix:openai.com)",
 		"proxy(all)",
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Fatalf("missing %q in:\n%s", want, cfg)
 		}
+	}
+	// The regexp atom is not expressible in Hysteria ACL and must be dropped,
+	// not emitted as a fake regex: prefix.
+	if strings.Contains(cfg, "regex:") || strings.Contains(cfg, "regexp:") {
+		t.Fatalf("regexp matcher must not reach acl.inline:\n%s", cfg)
 	}
 	if strings.Contains(cfg, "warp(all)") {
 		t.Fatalf("proxy must not fall through to WARP:\n%s", cfg)

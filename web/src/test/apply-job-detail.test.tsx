@@ -150,6 +150,62 @@ describe("ApplyJobDetailPage", () => {
 		expect(screen.queryByText(/original failed/i)).not.toBeInTheDocument();
 	});
 
+	// #675: a 200 retry body with success=false is an explicit execution
+	// failure (#544) — show the error and stay on the failed job instead of
+	// navigating to the retry job or claiming it was queued.
+	it("shows a retry error and stays put when the 200 body reports success:false", async () => {
+		server.use(
+			http.get("/api/apply/jobs/job-1", () =>
+				HttpResponse.json({
+					id: "job-1",
+					desiredRevision: 2,
+					baseRevision: 1,
+					status: "failed",
+					trigger: "manual",
+					createdAt: 1700000000,
+					errorMessage: "original failed",
+				}),
+			),
+			http.get("/api/apply/jobs/job-2", () =>
+				HttpResponse.json({
+					id: "job-2",
+					desiredRevision: 2,
+					baseRevision: 1,
+					status: "failed",
+					trigger: "retry",
+					createdAt: 1700000001,
+					errorMessage: "still broken",
+				}),
+			),
+			http.get("/api/apply/history", () => HttpResponse.json({ items: [] })),
+			http.post("/api/apply/jobs/job-1/retry", () =>
+				HttpResponse.json({
+					success: false,
+					error: "retry apply did not converge",
+					applyJob: {
+						id: "job-2",
+						desiredRevision: 2,
+						baseRevision: 1,
+						status: "failed",
+						trigger: "retry",
+						createdAt: 1700000001,
+					},
+				}),
+			),
+		);
+		renderJob();
+		fireEvent.click(
+			await screen.findByRole("button", { name: /retry this revision/i }),
+		);
+		expect(
+			await screen.findByText(/retry apply did not converge/i),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("heading", { name: /apply job job-1/i }),
+		).toBeInTheDocument();
+		expect(screen.queryByText(/retry queued/i)).not.toBeInTheDocument();
+	});
+
 	it("renders a 422 plan body instead of a load error", async () => {
 		server.use(
 			http.get("/api/apply/jobs/job-1", () =>

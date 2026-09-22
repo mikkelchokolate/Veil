@@ -176,7 +176,9 @@ func parseSSHConfigIncludes(data []byte) []string {
 // sshConfigEntry splits an sshd_config line into keyword and arguments.
 // OpenSSH separates the keyword by whitespace or an optional '=' (so
 // "Port=2222" parses the same as "Port 2222"); blank and comment lines
-// report ok=false.
+// report ok=false. Arguments may be enclosed in double quotes per
+// sshd_config(5), so tokens go through sshConfigArgs rather than plain
+// whitespace splitting.
 func sshConfigEntry(line string) (keyword string, args []string, ok bool) {
 	line = strings.TrimSpace(line)
 	if line == "" || strings.HasPrefix(line, "#") {
@@ -191,10 +193,52 @@ func sshConfigEntry(line string) (keyword string, args []string, ok bool) {
 			break
 		}
 	}
-	if args = strings.Fields(rest); len(args) == 0 {
+	if args = sshConfigArgs(rest); len(args) == 0 {
 		return "", nil, false
 	}
 	return keyword, args, true
+}
+
+// sshConfigArgs splits the argument portion of an sshd_config line into
+// tokens. OpenSSH lets an argument be enclosed in double quotes so it may
+// contain whitespace; each '"' toggles quoting, the quote characters
+// themselves are stripped, and whitespace inside quotes stays in the token
+// (so Include "/path with space/*.conf" is one argument). An unmatched quote
+// simply runs to end of line — matching OpenSSH's lenient strdelim and this
+// detector's bias toward collecting a possible port/path rather than
+// dropping it (#673).
+func sshConfigArgs(rest string) []string {
+	var args []string
+	var token strings.Builder
+	inToken := false
+	quoted := false
+	for i := 0; i < len(rest); i++ {
+		c := rest[i]
+		switch {
+		case quoted:
+			if c == '"' {
+				quoted = false
+				continue
+			}
+			token.WriteByte(c)
+		case c == '"':
+			quoted = true
+			inToken = true
+		case c == ' ' || c == '\t':
+			if inToken {
+				args = append(args, token.String())
+				token.Reset()
+				inToken = false
+			}
+		default:
+			inToken = true
+			token.WriteByte(c)
+		}
+	}
+	if inToken {
+		args = append(args, token.String())
+	}
+	return args
 }
 
 func parseSSHConfigPorts(data []byte) []int {
@@ -205,11 +249,17 @@ func parseSSHConfigPorts(data []byte) []int {
 		if !ok {
 			continue
 		}
-		var port int
-		var valid bool
+		// Both Port and ListenAddress accept multiple arguments on one line
+		// in OpenSSH ("Port 22 2222" binds both); every argument is scanned
+		// so a later token's port cannot be missed.
+		var linePorts []int
 		switch {
 		case strings.EqualFold(keyword, "Port"):
-			port, valid = sshPortValue(args[0])
+			for _, arg := range args {
+				if port, valid := sshPortValue(arg); valid {
+					linePorts = append(linePorts, port)
+				}
+			}
 		case strings.EqualFold(keyword, "ListenAddress"):
 			// sshd also binds ports via ListenAddress host:port and
 			// [addr]:port forms — commonly with no Port directive at all.
@@ -217,15 +267,21 @@ func parseSSHConfigPorts(data []byte) []int {
 			// sshd only listens on the ListenAddress port, locking the
 			// operator out. Bare addresses without a port are skipped: they
 			// bind the Port directives, which are already collected.
-			port, valid = sshListenAddressPort(args[0])
+			for _, arg := range args {
+				if port, valid := sshListenAddressPort(arg); valid {
+					linePorts = append(linePorts, port)
+				}
+			}
 		default:
 			continue
 		}
-		if !valid || seen[port] {
-			continue
+		for _, port := range linePorts {
+			if seen[port] {
+				continue
+			}
+			seen[port] = true
+			ports = append(ports, port)
 		}
-		seen[port] = true
-		ports = append(ports, port)
 	}
 	return ports
 }

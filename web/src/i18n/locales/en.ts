@@ -138,6 +138,9 @@ export const en: Record<string, string> = {
 	"applyState.untracked": "Not tracked",
 	"applyState.unavailable": "apply state unavailable",
 	"applyState.loading": "apply…",
+	"applyState.revTooltip": "runtime rev {applied}",
+	"applyState.revTooltipDrift": "desired rev {desired}, runtime rev {applied}",
+	"applyState.revDrift": " · rev {applied}→{desired}",
 
 	"apply.title": "Apply state",
 	"apply.stateUnavailable": "Apply state unavailable",
