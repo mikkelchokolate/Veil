@@ -4,7 +4,8 @@ import {
 	createRouter,
 	RouterProvider,
 } from "@tanstack/react-router";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { vi } from "vitest";
 import { AuthProvider } from "../auth/AuthContext";
 import { I18nProvider } from "../i18n/I18nContext";
 import { routeTree } from "../routeTree.gen";
@@ -233,6 +234,59 @@ describe("ApplyJobDetailPage", () => {
 		fireEvent.click(await screen.findByRole("button", { name: /show plan/i }));
 		expect(await screen.findByText(/1 config\(s\)/i)).toBeInTheDocument();
 		expect(screen.queryByText(/failed to load plan/i)).not.toBeInTheDocument();
+	});
+
+	// #715/#718: neither the live plan preview nor the global apply history
+	// is scoped to this job — the UI must say so, and the copy report must not
+	// embed global entries as this job's history.
+	it("labels live plan + global history and keeps the report job-scoped", async () => {
+		const writeText = vi.fn().mockResolvedValue(undefined);
+		Object.defineProperty(navigator, "clipboard", {
+			value: { writeText },
+			configurable: true,
+		});
+		server.use(
+			http.get("/api/apply/jobs/job-1", () =>
+				HttpResponse.json({
+					id: "job-1",
+					desiredRevision: 2,
+					baseRevision: 1,
+					status: "failed",
+					trigger: "manual",
+					createdAt: 1700000000,
+					errorMessage: "boom",
+				}),
+			),
+			http.get("/api/apply/history", () =>
+				HttpResponse.json({
+					items: [
+						{
+							id: "h-9",
+							timestamp: "2023-11-14T00:00:00Z",
+							stage: "apply",
+							success: false,
+							applied: false,
+							liveApplied: false,
+							servicesApplied: false,
+						},
+					],
+				}),
+			),
+		);
+		renderJob();
+		expect(
+			await screen.findByText(/current plan preview \(live\)/i),
+		).toBeInTheDocument();
+		expect(screen.getByText(/not a snapshot of this job/i)).toBeInTheDocument();
+		expect(
+			await screen.findByText(/global apply history \(all jobs\)/i),
+		).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: /copy report/i }));
+		await waitFor(() => expect(writeText).toHaveBeenCalled());
+		const report = String(writeText.mock.calls[0]?.[0]);
+		expect(report).toContain("id: job-1");
+		expect(report).not.toContain("h-9");
+		expect(report).not.toContain("history:");
 	});
 
 	it("does not treat a failed history fetch as empty", async () => {
