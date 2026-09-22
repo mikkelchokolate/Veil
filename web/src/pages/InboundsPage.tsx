@@ -311,6 +311,10 @@ export function InboundsPage() {
 	const confirmDeleteAttachedTotal =
 		confirmDeleteQuery?.data?.total ?? confirmDeleteAttached.length;
 	const confirmDeleteBlocked = confirmDeleteAttachedTotal > 0;
+	// While the attached-clients query is loading or errored the binding count
+	// is unknown — withhold the destructive confirm rather than let a stale
+	// "no attachments" read slip through to the fail-closed 409.
+	const confirmDeleteKnown = confirmDeleteQuery?.isSuccess === true;
 
 	function invalidate() {
 		void qc.invalidateQueries({ queryKey: ["inbounds"] });
@@ -1058,14 +1062,18 @@ export function InboundsPage() {
 					<AlertDialogHeader>
 						<AlertDialogTitle>{t("inbounds.delete.title")}</AlertDialogTitle>
 						<AlertDialogDescription>
-							{confirmDeleteBlocked
-								? t("inbounds.delete.blocked", {
-										name: confirmDelete ?? "",
-										count: confirmDeleteAttachedTotal,
-									})
-								: t("inbounds.delete.description", {
-										name: confirmDelete ?? "",
-									})}
+							{!confirmDeleteKnown
+								? confirmDeleteQuery?.isError
+									? t("inbounds.clientsUnavailable")
+									: t("inbounds.delete.checking")
+								: confirmDeleteBlocked
+									? t("inbounds.delete.blocked", {
+											name: confirmDelete ?? "",
+											count: confirmDeleteAttachedTotal,
+										})
+									: t("inbounds.delete.description", {
+											name: confirmDelete ?? "",
+										})}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					{confirmDeleteBlocked ? (
@@ -1092,9 +1100,11 @@ export function InboundsPage() {
 					{error ? <p className="form-error">{error}</p> : null}
 					<AlertDialogFooter>
 						<AlertDialogCancel>
-							{confirmDeleteBlocked ? t("common.close") : t("common.cancel")}
+							{confirmDeleteBlocked || !confirmDeleteKnown
+								? t("common.close")
+								: t("common.cancel")}
 						</AlertDialogCancel>
-						{confirmDeleteBlocked ? null : (
+						{confirmDeleteBlocked || !confirmDeleteKnown ? null : (
 							<AlertDialogAction
 								disabled={remove.isPending}
 								onClick={(e) => {

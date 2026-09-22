@@ -270,6 +270,7 @@ export const en: Record<string, string> = {
 		"Deleting {name} removes the listener. This cannot be undone.",
 	"inbounds.delete.blocked":
 		"{name} still has {count} attached client(s). Detach them before deleting — the inbound cannot be removed while clients reference it.",
+	"inbounds.delete.checking": "Checking for attached clients…",
 	"inbounds.delete.deleting": "Deleting…",
 	"inbounds.delete.confirm": "Confirm delete",
 

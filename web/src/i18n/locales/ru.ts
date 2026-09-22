@@ -187,6 +187,7 @@ export const ru: Record<string, string> = {
 		"Удаление {name} удалит прослушиватель. Это действие нельзя отменить.",
 	"inbounds.delete.blocked":
 		"К {name} всё ещё привязано клиентов: {count}. Отвяжите их перед удалением — инбаунд нельзя удалить, пока на него ссылаются клиенты.",
+	"inbounds.delete.checking": "Проверка привязанных клиентов…",
 	"inbounds.delete.deleting": "Удаление…",
 	"inbounds.delete.confirm": "Подтвердить удаление",
 

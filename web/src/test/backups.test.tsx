@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/fetcher";
 import { I18nProvider } from "../i18n/I18nContext";
@@ -560,7 +566,11 @@ describe("BackupsPage", () => {
 		expect(await screen.findAllByText(/corrupt archive/i)).not.toHaveLength(0);
 		const row = screen.getByText("bad.enc").closest("tr");
 		expect(row).not.toBeNull();
-		expect(row?.textContent).not.toContain("—");
+		// Assert the stamped error inside the row itself — a blanket em-dash
+		// check on the whole row is brittle against unrelated cells.
+		if (row) {
+			expect(within(row).getByText(/corrupt archive/i)).toBeInTheDocument();
+		}
 	});
 
 	// #722: the prune notice must reflect the real deleted count — a no-op
@@ -708,7 +718,9 @@ describe("BackupsPage", () => {
 			await screen.findByText(/awaiting key publication/i),
 		).toBeInTheDocument();
 		expect(
-			await screen.findByText(/publishing the new state key is still required/i),
+			await screen.findByText(
+				/publishing the new state key is still required/i,
+			),
 		).toBeInTheDocument();
 		expect(
 			await screen.findByText(/\/var\/lib\/veil\/safety\.key/),

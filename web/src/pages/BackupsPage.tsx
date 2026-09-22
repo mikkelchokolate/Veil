@@ -116,6 +116,10 @@ export function BackupsPage() {
 		},
 	});
 	const job = jobQuery.data ?? activeJob;
+	// `status: "pending"` on a restore job only ever means
+	// pending_key_publication (see classifyRestoreOutcome) — hence the
+	// `backups.status.pending` label reads "awaiting key publication".
+	// If the API grows other pending meanings, this mapping must be revisited.
 	const jobStatusKey = job ? `backups.status.${job.status}` : "";
 	// A malformed poll payload (no status) must not crash the render — fall
 	// back to an empty label instead of calling replaceAll on undefined.
