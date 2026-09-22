@@ -40,37 +40,9 @@ ci_run image-build docker build --pull "${no_cache[@]}" \
 docker run --rm veil:ci version | tee "${CI_ARTIFACT_DIR}/image-version.txt" | grep -F "${version}"
 
 # `veil version` only proves the ldflags stamp — a stub/empty web/dist embed
-# still greens it (#441). Run the image and assert the panel actually serves
-# the real SPA shell. Serve on container loopback and probe via docker exec:
-# a 0.0.0.0 listener would trip the public-exposure policy (token + session
-# users + TLS) on a fresh state, and port publishing races container exit.
-check_name="veil-ci-imagecheck-$$"
-cleanup_image_check() {
-  docker rm -f "${check_name}" >/dev/null 2>&1 || true
-}
-trap cleanup_image_check EXIT
-docker run -d --name "${check_name}" \
-  veil:ci serve --listen 127.0.0.1:2096 >/dev/null
-spa_up=1
-for _ in $(seq 1 60); do
-  if docker exec "${check_name}" wget -q -O- "http://127.0.0.1:2096/" \
-       >"${CI_ARTIFACT_DIR}/image-index.html" 2>/dev/null \
-     && grep -q 'id="root"' "${CI_ARTIFACT_DIR}/image-index.html"; then
-    spa_up=0
-    break
-  fi
-  # Container exited? Fail now with logs instead of polling a dead box.
-  if [ "$(docker inspect -f '{{.State.Running}}' "${check_name}" 2>/dev/null)" != "true" ]; then
-    docker logs "${check_name}" >"${CI_ARTIFACT_DIR}/image-panel.log" 2>&1 || true
-    ci_die "image panel container exited before serving (see image-panel.log)"
-  fi
-  sleep 1
-done
-if [ "${spa_up}" -ne 0 ]; then
-  docker logs "${check_name}" >"${CI_ARTIFACT_DIR}/image-panel.log" 2>&1 || true
-  ci_die "built image does not serve the embedded panel SPA (see image-panel.log)"
-fi
-docker rm -f "${check_name}" >/dev/null 2>&1 || true
-trap - EXIT
+# still greens it (#441). The shared probe runs the image and asserts the
+# panel actually serves the real SPA shell; release.yml reuses the same probe
+# on the pushed multi-arch tags (#681).
+ci_run image-spa-probe bash "${CI_SCRIPTS_DIR}/image-spa-probe.sh" veil:ci
 
 ci_log "image-build job passed"

@@ -16,7 +16,9 @@ bash "${CI_SCRIPTS_DIR}/prepare-frontend-dist.sh"
 ci_step "systemd socket activation (linuxintegration)"
 ci_run privilege-socket-activation \
   go test -tags linuxintegration ./internal/privileged -run TestSystemdSocketActivationAdoptsFD3 -count=1 -v
-ci_assert_tests_ran "${CI_ARTIFACT_DIR}/privilege-socket-activation.log"
+# A SKIP still satisfies ci_assert_tests_ran — require the PASS by name so a
+# soft-skipped activation probe cannot green the job (issue #685).
+ci_assert_test_passed "${CI_ARTIFACT_DIR}/privilege-socket-activation.log" TestSystemdSocketActivationAdoptsFD3
 
 ci_step "helper socket and filesystem access matrix (root)"
 if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
@@ -62,10 +64,19 @@ fi
 ci_assert_tests_ran "${CI_ARTIFACT_DIR}/privilege-access-matrix.log"
 # A suite where every test skips still satisfies ci_assert_tests_ran — require
 # at least one real pass, and require the security-contract roots by name so a
-# missing veil/nobody account cannot skip the DAC/permission evidence (#411, #428).
+# missing veil/nobody account cannot skip the DAC/permission evidence
+# (#411, #428). The helper-socket and key-rotation roots are security evidence
+# too — a soft-skip there must fail the job, not green it (issue #685).
 ci_assert_tests_passed "${CI_ARTIFACT_DIR}/privilege-access-matrix.log"
-ci_assert_test_passed "${CI_ARTIFACT_DIR}/privilege-access-matrix.log" TestBackupServiceHardeningCanReadVeilOwnedState
-ci_assert_test_passed "${CI_ARTIFACT_DIR}/privilege-access-matrix.log" TestIntegrationPanelPermissionMatrix
+for required_root in \
+    TestBackupServiceHardeningCanReadVeilOwnedState \
+    TestIntegrationPanelPermissionMatrix \
+    TestIntegrationHelperSocketCanonicalLayout \
+    TestIntegrationHelperSocketRejectsProxyUID \
+    TestIntegrationHelperSocketAuthenticatesPeerAndDispatches \
+    TestIntegrationPrivilegedKeyRotationRecoveryAcrossDurablePhases; do
+  ci_assert_test_passed "${CI_ARTIFACT_DIR}/privilege-access-matrix.log" "${required_root}"
+done
 
 ci_step "runtime version-probe sandbox isolation (root + systemd)"
 # The runtimeinstall sandbox-integration roots require root AND a live systemd

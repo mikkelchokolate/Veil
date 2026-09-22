@@ -111,7 +111,12 @@ jobs:
           tar -xzf /tmp/mita/mita_*_linux_amd64.tar.gz -C /tmp/mita
           mita_bin="$(find /tmp/mita -type f -name mita -perm -u+x | head -n1)"
           sudo install -m 0755 "$mita_bin" /usr/local/bin/mita
-          mita -version 2>/dev/null || mita --version 2>/dev/null || true
+          # Same bar as the peer probes (hysteria/mieru/naive/sing-box): the
+          # version print must produce real output — a broken mita cannot
+          # green the install-step signal silently (issue #690).
+          mita_version="$(mita -version 2>/dev/null || mita --version 2>/dev/null)"
+          [ -n "${mita_version}" ] || { echo "mita produced no version output" >&2; exit 1; }
+          echo "${mita_version}"
 
       # naiveproxy's server side is caddy + the klzgrad forwardproxy fork,
       # source-built — "latest" means caddy@latest + forwardproxy@master, not

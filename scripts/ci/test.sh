@@ -38,21 +38,29 @@ gofmt_stage() {
 }
 caddy_stage() {
   local runtime_dir="${VEIL_CI_RUNTIME_DIR:-/opt/veil-runtime}"
-  if [ ! -x "${runtime_dir}/caddy" ]; then
+  local caddy_ok=1 singbox_ok=1
+  if ! [ -x "${runtime_dir}/caddy" ] \
+    || ! "${runtime_dir}/caddy" list-modules 2>/dev/null | grep -Fx http.handlers.forward_proxy >/dev/null; then
+    caddy_ok=0
+  fi
+  # The generated-config catalog also gates warp artifacts on `sing-box check`
+  # — and apply validation is now fail-closed on a missing configured
+  # validator (issue #686). The test job must carry the real pinned binary so
+  # those validations execute; a validator that cannot run is not a pass.
+  [ -x "${runtime_dir}/sing-box" ] || singbox_ok=0
+  if [ "${caddy_ok}" -eq 0 ] || [ "${singbox_ok}" -eq 0 ]; then
+    # Fall back to the per-runner cache dir — the pre-provisioned image dir may
+    # be root-owned on hosted runners.
     runtime_dir="${VEIL_CI_CADDY_CACHE_DIR:-${HOME}/.cache/veil-caddy-test}"
     # shellcheck source=scripts/ci/runtimes.sh
     # shellcheck disable=SC1091
     . "${CI_SCRIPTS_DIR}/runtimes.sh"
     install_pinned_caddy_for_tests "${runtime_dir}" "./bin/veil"
-  elif ! "${runtime_dir}/caddy" list-modules 2>/dev/null | grep -Fx http.handlers.forward_proxy >/dev/null; then
-    rm -f "${runtime_dir}/caddy"
-    # shellcheck source=scripts/ci/runtimes.sh
-    # shellcheck disable=SC1091
-    . "${CI_SCRIPTS_DIR}/runtimes.sh"
-    install_pinned_caddy_for_tests "${runtime_dir}" "./bin/veil"
+    install_pinned_singbox_for_tests "${runtime_dir}"
   fi
   export PATH="${runtime_dir}:${PATH}"
   "${runtime_dir}/caddy" list-modules | grep -Fx http.handlers.forward_proxy
+  "${runtime_dir}/sing-box" version >/dev/null
 }
 
 ci_test_stage "frontend artifact restore" frontend_stage
@@ -62,7 +70,7 @@ ci_test_stage go-vet ci_run go-vet go vet ./...
 ci_test_stage "OpenAPI verification" ci_run verify-openapi make verify-openapi
 ci_test_stage "SDK verification" ci_run verify-sdk make verify-sdk
 ci_test_stage build ci_run build make build
-ci_test_stage "Caddy preparation" caddy_stage
+ci_test_stage "validator runtimes" caddy_stage
 
 # The SDK suite writes a real coverprofile that is merged and measured like
 # every other package — a run without -coverprofile would keep sdk/go

@@ -103,21 +103,24 @@ run_olcrtc_upstream_local() {
   )
 }
 
+# ci_assert_tests_ran accepts `--- SKIP:` as "ran" evidence — every Required
+# root must instead report `--- PASS:` by name so a soft-skip inside a matched
+# -run can never green this suite (issues #361, #688).
 ci_run e2e-hysteria2 run_proto TestRequiredHysteria2DataPath
-ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-hysteria2.log"
+ci_assert_test_passed "${CI_ARTIFACT_DIR}/e2e-hysteria2.log" TestRequiredHysteria2DataPath
 ci_run e2e-mieru-tcp run_proto TestRequiredMieruTCPDataPath
-ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-mieru-tcp.log"
+ci_assert_test_passed "${CI_ARTIFACT_DIR}/e2e-mieru-tcp.log" TestRequiredMieruTCPDataPath
 ci_run e2e-mieru-udp run_proto TestRequiredMieruUDPDataPath
-ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-mieru-udp.log"
+ci_assert_test_passed "${CI_ARTIFACT_DIR}/e2e-mieru-udp.log" TestRequiredMieruUDPDataPath
 ci_run e2e-naiveproxy run_proto TestRequiredNaiveProxyDataPath
-ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-naiveproxy.log"
+ci_assert_test_passed "${CI_ARTIFACT_DIR}/e2e-naiveproxy.log" TestRequiredNaiveProxyDataPath
 # WARP outbound runtime: the pinned sing-box must accept the exact config Veil
 # renders — schema drift is the breakage class upstream-compat tracks (#470).
 ci_run e2e-warp-singbox run_proto TestRequiredWarpSingBoxConfig
-ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-warp-singbox.log"
+ci_assert_test_passed "${CI_ARTIFACT_DIR}/e2e-warp-singbox.log" TestRequiredWarpSingBoxConfig
 ci_run e2e-olcrtc-contract run_proto TestRequiredOlcRTCRuntimeContract
-ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-olcrtc-contract.log"
+ci_assert_test_passed "${CI_ARTIFACT_DIR}/e2e-olcrtc-contract.log" TestRequiredOlcRTCRuntimeContract
 ci_run e2e-olcrtc-local-data-path run_olcrtc_upstream_local
-ci_assert_tests_ran "${CI_ARTIFACT_DIR}/e2e-olcrtc-local-data-path.log"
+ci_assert_test_passed "${CI_ARTIFACT_DIR}/e2e-olcrtc-local-data-path.log" TestLocalThroughputSoak
 
 ci_log "e2e job passed"

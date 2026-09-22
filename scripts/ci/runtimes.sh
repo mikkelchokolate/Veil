@@ -74,6 +74,38 @@ install_pinned_caddy_for_tests() { # <destdir> <veil-binary-for-caddy-build>
   printf '[ci] pinned Caddy test runtime installed to %s\n' "${dest}"
 }
 
+# Shared checksum-verified sing-box install — call from a scratch dir; the
+# tarball lands in CWD and the verified binary is installed into <dest>.
+install_singbox_from_workdir() { # <dest>
+  local dest="$1"
+  fetch_verified "https://github.com/SagerNet/sing-box/releases/download/${CI_SINGBOX_TAG}/${CI_SINGBOX_ASSET}" singbox.tar.gz "${CI_SINGBOX_SHA256}"
+  mkdir -p singbox && tar -xzf singbox.tar.gz -C singbox
+  install -m 0755 "$(find singbox -type f -name sing-box | head -n1)" "${dest}/sing-box"
+}
+
+# The generated-config catalog validates warp artifacts with `sing-box check`
+# (artifact_catalog.go) — and apply now fails closed when that configured
+# validator is absent from PATH (issue #686). The test job must therefore
+# provision the real pinned binary so warp validations execute instead of
+# skipping: a validator that never runs is not evidence.
+install_pinned_singbox_for_tests() { # <destdir>
+  local dest="$1"
+  mkdir -p "${dest}"
+  if [ -x "${dest}/sing-box" ] && "${dest}/sing-box" version >/dev/null 2>&1; then
+    printf '[ci] validated cached sing-box test runtime at %s\n' "${dest}"
+    return 0
+  fi
+  rm -f "${dest}/sing-box"
+  local tmp
+  tmp="$(mktemp -d /tmp/veil-pinned-singbox.XXXXXX)"
+  trap 'rm -rf "${tmp}"' RETURN
+  (
+    cd "${tmp}"
+    install_singbox_from_workdir "${dest}"
+  )
+  printf '[ci] pinned sing-box test runtime installed to %s\n' "${dest}"
+}
+
 install_pinned_runtimes() { # <destdir> <veil-binary-for-caddy-build>
   local dest="$1" veil_bin="${2:-}"
   local tmp
@@ -98,9 +130,7 @@ install_pinned_runtimes() { # <destdir> <veil-binary-for-caddy-build>
     mkdir -p naive-client && tar -xJf naive.tar.xz -C naive-client
     install -m 0755 "$(find naive-client -type f -name naive | head -n1)" "${dest}/naive"
 
-    fetch_verified "https://github.com/SagerNet/sing-box/releases/download/${CI_SINGBOX_TAG}/${CI_SINGBOX_ASSET}" singbox.tar.gz "${CI_SINGBOX_SHA256}"
-    mkdir -p singbox && tar -xzf singbox.tar.gz -C singbox
-    install -m 0755 "$(find singbox -type f -name sing-box | head -n1)" "${dest}/sing-box"
+    install_singbox_from_workdir "${dest}"
   )
 
   # caddy with naive forward_proxy: source-built with product-pinned modules.

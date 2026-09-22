@@ -107,18 +107,29 @@ func TestWorkflowStagesOnlyWithConfirm(t *testing.T) {
 	}
 }
 
-func TestWorkflowSkippedValidationDoesNotBlockLiveApply(t *testing.T) {
+// A configured validator that could not run (PATH miss → Skipped) must block
+// live promotion — otherwise bad config promotes whenever the checker binary
+// is absent (issue #686). Protocols with no standalone checker produce no
+// validation entry at all, so this gate does not affect them.
+func TestWorkflowSkippedValidationBlocksLiveApply(t *testing.T) {
 	state := &fakeState{
-		plan:        model.ApplyPlanResponse{Valid: true},
-		validations: []model.ConfigValidationResult{{Name: "mieru", Skipped: true}},
-		liveFiles:   []string{"/live/mieru/server_config.json"},
+		plan: model.ApplyPlanResponse{Valid: true},
+		validations: []model.ConfigValidationResult{{
+			Name:    "caddy",
+			Skipped: true,
+			Error:   "caddy not found; syntax validation skipped",
+		}},
+		liveFiles: []string{"/live/caddy/config.json"},
 	}
 	resp, status, err := NewWorkflow(state, nil).RunLocked(model.ApplyRequest{Confirm: true, ApplyLive: true})
-	if err != nil || status != http.StatusOK {
-		t.Fatalf("skipped validation must not block live apply: status=%d err=%v", status, err)
+	if err != nil || status != http.StatusBadRequest {
+		t.Fatalf("skipped validation must block live apply with 400: status=%d err=%v", status, err)
 	}
-	if !resp.LiveApplied {
-		t.Fatalf("expected live applied, got %+v", resp)
+	if resp.LiveApplied || len(state.promoted) != 0 {
+		t.Fatalf("nothing may promote when a configured validator is missing: %+v promoted=%v", resp, state.promoted)
+	}
+	if len(state.history) == 0 || state.history[len(state.history)-1] != "validation" {
+		t.Fatalf("history = %v, want last 'validation'", state.history)
 	}
 }
 
