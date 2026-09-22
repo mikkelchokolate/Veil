@@ -56,7 +56,7 @@ describe("ClientDetailPage delete apply outcome", () => {
 				HttpResponse.json({
 					id: "c1",
 					success: false,
-					revision: { desired: 2, applied: 1, state: "drift" },
+					revision: { desired: 2, applied: 1, state: "failed" },
 					applyJob: {
 						id: "job-1",
 						desiredRevision: 2,
@@ -102,7 +102,7 @@ describe("ClientDetailPage delete apply outcome", () => {
 				HttpResponse.json({
 					id: "c1",
 					success: true,
-					revision: { desired: 2, applied: 2, state: "applied" },
+					revision: { desired: 2, applied: 2, state: "synced" },
 				}),
 			),
 		);

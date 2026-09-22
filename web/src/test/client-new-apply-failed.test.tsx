@@ -50,7 +50,7 @@ describe("ClientNewPage apply-failed outcome", () => {
 							status: "active",
 						},
 						success: false,
-						revision: { desired: 2, applied: 1, state: "drift" },
+						revision: { desired: 2, applied: 1, state: "failed" },
 						applyJob: {
 							id: "job-1",
 							desiredRevision: 2,
@@ -95,7 +95,7 @@ describe("ClientNewPage apply-failed outcome", () => {
 							status: "active",
 						},
 						success: true,
-						revision: { desired: 2, applied: 2, state: "applied" },
+						revision: { desired: 2, applied: 2, state: "synced" },
 					},
 					{ status: 201 },
 				),

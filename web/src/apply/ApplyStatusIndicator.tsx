@@ -36,19 +36,45 @@ export function useApplyState() {
 	});
 }
 
-const STATE_CLS: Record<string, string> = {
-	synced: "badge-success",
-	pending: "badge-warning",
-	applying: "badge-warning",
-	failed: "badge-danger",
-	rolling_back: "badge-warning",
-	rolled_back: "badge-warning",
-	degraded: "badge-danger",
-	// recovering = a recovery_pending job is active; untracked = no durable
-	// apply tracking, so "synced" cannot be proven. Neither may render green.
-	recovering: "badge-danger",
-	untracked: "badge-warning",
-};
+export type ApplyStateBadgeVariant =
+	| "success"
+	| "warning"
+	| "danger"
+	| "default";
+
+/** Canonical system-state → badge severity map (#691). Shared by the shell
+ * indicator and the Overview badge so revision-equal-but-degraded, or
+ * untracked-without-tracking, states can never render green on one surface
+ * while the other reports danger/warning. */
+export const APPLY_STATE_BADGE_VARIANT: Record<string, ApplyStateBadgeVariant> =
+	{
+		synced: "success",
+		pending: "warning",
+		applying: "warning",
+		failed: "danger",
+		rolling_back: "warning",
+		rolled_back: "warning",
+		degraded: "danger",
+		// recovering = a recovery_pending job is active; untracked = no durable
+		// apply tracking, so "synced" cannot be proven. Neither may render green.
+		recovering: "danger",
+		untracked: "warning",
+	};
+
+export function applyStateBadgeVariant(state: string): ApplyStateBadgeVariant {
+	return APPLY_STATE_BADGE_VARIANT[state] ?? "default";
+}
+
+/** Localized label for a system state; an unknown enum still renders the raw
+ * value rather than a bare i18n key or a misleading translation. */
+export function applyStateLabel(
+	t: (key: string) => string,
+	state: string,
+): string {
+	const key = `applyState.${state}`;
+	const label = t(key);
+	return label === key ? state : label;
+}
 
 /** Global apply-status indicator shown on every authenticated page (B5). */
 export function ApplyStatusIndicator() {
@@ -64,24 +90,28 @@ export function ApplyStatusIndicator() {
 		return <span className="badge">{t("applyState.loading")}</span>;
 	}
 
-	const label = t(`applyState.${data.state}`);
-	const meta = {
-		label: label === `applyState.${data.state}` ? data.state : label,
-		cls: STATE_CLS[data.state] ?? "",
-	};
+	const variant = applyStateBadgeVariant(data.state);
 	const drift = data.desiredRevision !== data.appliedRevision;
 
 	return (
 		<span
-			className={`badge ${meta.cls}`}
+			className={`badge${variant === "default" ? "" : ` badge-${variant}`}`}
 			title={
 				drift
-					? `desired rev ${data.desiredRevision}, runtime rev ${data.appliedRevision}`
-					: `runtime rev ${data.appliedRevision}`
+					? t("applyState.revTooltipDrift", {
+							desired: data.desiredRevision,
+							applied: data.appliedRevision,
+						})
+					: t("applyState.revTooltip", { applied: data.appliedRevision })
 			}
 		>
-			{meta.label}
-			{drift ? ` · rev ${data.appliedRevision}→${data.desiredRevision}` : ""}
+			{applyStateLabel(t, data.state)}
+			{drift
+				? t("applyState.revDrift", {
+						applied: data.appliedRevision,
+						desired: data.desiredRevision,
+					})
+				: ""}
 		</span>
 	);
 }

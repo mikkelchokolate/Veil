@@ -104,7 +104,7 @@ describe("RoutingPage delete errors", () => {
 				HttpResponse.json({
 					name: "warp-out",
 					success: false,
-					revision: { desired: 2, applied: 1, state: "drift" },
+					revision: { desired: 2, applied: 1, state: "failed" },
 				}),
 			),
 		);
@@ -138,7 +138,7 @@ describe("RoutingPage delete errors", () => {
 					outbound: "warp",
 					enabled: false,
 					success: false,
-					revision: { desired: 2, applied: 1, state: "drift" },
+					revision: { desired: 2, applied: 1, state: "failed" },
 				}),
 			),
 		);

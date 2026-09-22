@@ -4,7 +4,11 @@ import {
 	apiFetch,
 	TimeoutError,
 } from "../api/fetcher";
-import type { ApplyJob, Inbound } from "../api/generated/models";
+import type {
+	ApplyJob,
+	ApplyStateResponse,
+	Inbound,
+} from "../api/generated/models";
 
 /** Feedback extracted from a create response or a reconciled commit. */
 export interface CreateOutcome {
@@ -28,9 +32,34 @@ function idempotencyInFlight(error: unknown): boolean {
 	);
 }
 
+// correlatedApplyJob picks the job that gates the CURRENT desired revision —
+// the one the apply state names (active / last succeeded / last failed) or
+// the one targeting that revision. /api/apply/jobs is global and newest-first
+// (handleApplyJobs), so a bare items[0] can belong to a concurrent mutation
+// and must never decide this create's outcome (#700).
+function correlatedApplyJob(
+	state: ApplyStateResponse,
+	items: ApplyJob[],
+): CreateOutcome["applyJob"] {
+	const named = new Set(
+		[
+			state.activeJobId,
+			state.lastSuccessfulJobId,
+			state.lastFailedJobId,
+		].filter((id): id is string => Boolean(id)),
+	);
+	const job =
+		items.find((entry) => entry.id && named.has(entry.id)) ??
+		items.find((entry) => entry.desiredRevision === state.desiredRevision);
+	return job?.id ? { id: job.id, status: job.status } : undefined;
+}
+
 // reconcileCommittedCreate confirms the unknown-outcome create by looking up
-// the committed object by name and attaching the latest apply job. It returns
-// null when the inbound was never committed (a genuine pre-commit rejection).
+// the committed object by name, then proves convergence from the system apply
+// state — only "synced" means the desired revision containing this inbound is
+// live on the runtime. An empty/failed jobs fetch or an absent apply job is
+// saved-but-unproven, never a green "saved and live" (#689). Returns null when
+// the inbound was never committed (a genuine pre-commit rejection).
 async function reconcileCommittedCreate(
 	name: string,
 ): Promise<CreateOutcome | null> {
@@ -41,27 +70,38 @@ async function reconcileCommittedCreate(
 		return null;
 	}
 	if (!list.some((ib) => ib.name === name)) return null;
-	let applyJob: CreateOutcome["applyJob"];
+	let state: ApplyStateResponse | undefined;
+	try {
+		state = await apiFetch<ApplyStateResponse>("/api/apply/state");
+	} catch {
+		// No server signal — committed but unproven; report success:false.
+	}
+	let items: ApplyJob[] = [];
 	try {
 		const jobs = await apiFetch<{ items?: ApplyJob[] }>("/api/apply/jobs");
-		const latest = jobs.items?.[0];
-		if (latest?.id) {
-			applyJob = { id: latest.id, status: latest.status };
-		}
+		items = jobs.items ?? [];
 	} catch {
-		// The job id is best-effort; the committed inbound is the evidence.
+		// Job detail is best-effort evidence; the state view alone decides.
 	}
-	// Match the server contract (management_operational_routes.go): with an
-	// attached job the object is only honestly "saved and live" when the job
-	// succeeded; running/failed/recovery_pending must not paint green.
-	if (applyJob) {
-		return {
-			success: applyJob.status === "succeeded",
-			reconciled: true,
-			applyJob,
-		};
-	}
-	return { success: true, reconciled: true };
+	const applyJob = state ? correlatedApplyJob(state, items) : undefined;
+	return {
+		// Match the server contract (management_operational_routes.go): only a
+		// synced state is explicit evidence the runtime converged — everything
+		// else (pending/failed/degraded/untracked or no evidence at all) is
+		// honest "saved but not live".
+		success: state?.state === "synced",
+		reconciled: true,
+		...(state
+			? {
+					revision: {
+						desired: state.desiredRevision,
+						applied: state.appliedRevision,
+						state: state.state,
+					},
+				}
+			: {}),
+		...(applyJob ? { applyJob } : {}),
+	};
 }
 
 // createInbound posts a new inbound and resolves an unknown response outcome.

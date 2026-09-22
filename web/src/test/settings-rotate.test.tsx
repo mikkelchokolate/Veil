@@ -80,3 +80,64 @@ describe("SettingsPage key rotation", () => {
 		).toBeInTheDocument();
 	});
 });
+
+// #676: POST /api/admin/rotate-key is a MutationOutcome-bearing mutation —
+// success=false on a 200 means the key rotation committed but the auto-apply
+// did not converge. The notice must say that, never the clean "rotated" copy.
+describe("SettingsPage rotate key apply outcome", () => {
+	it("surfaces a committed-but-unapplied rotation instead of claiming a clean rotate", async () => {
+		server.use(
+			http.get("/api/settings", () =>
+				HttpResponse.json({
+					mode: "prod",
+					panelListen: "127.0.0.1:2096",
+				}),
+			),
+			http.post("/api/admin/rotate-key", () =>
+				HttpResponse.json({
+					success: false,
+					revokedSessions: 2,
+					revision: { desired: 2, applied: 1, state: "failed" },
+					applyJob: {
+						id: "job-rot",
+						desiredRevision: 2,
+						baseRevision: 1,
+						status: "failed",
+						trigger: "mutation",
+						createdAt: 1700000000,
+					},
+				}),
+			),
+		);
+		renderSettings();
+		await confirmRotate();
+		expect(
+			await screen.findByText(
+				/2 other session\(s\) were revoked.*applying the new revision failed/i,
+			),
+		).toBeInTheDocument();
+	});
+
+	it("keeps the clean rotated notice when the apply converges", async () => {
+		server.use(
+			http.get("/api/settings", () =>
+				HttpResponse.json({
+					mode: "prod",
+					panelListen: "127.0.0.1:2096",
+				}),
+			),
+			http.post("/api/admin/rotate-key", () =>
+				HttpResponse.json({
+					success: true,
+					revokedSessions: 2,
+					revision: { desired: 2, applied: 2, state: "synced" },
+				}),
+			),
+		);
+		renderSettings();
+		await confirmRotate();
+		expect(
+			await screen.findByText(/state key rotated\. revoked 2 other session/i),
+		).toBeInTheDocument();
+	});
+});

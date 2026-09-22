@@ -388,7 +388,7 @@ describe("ClientsPage", () => {
 					failed: 0,
 					results: [{ id: "c1", ok: true }],
 					success: false,
-					revision: { desired: 2, applied: 1, state: "drift" },
+					revision: { desired: 2, applied: 1, state: "failed" },
 					applyJob: {
 						id: "job-9",
 						desiredRevision: 2,
