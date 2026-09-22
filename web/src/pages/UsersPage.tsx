@@ -53,6 +53,9 @@ export function UsersPage() {
 	const [editRole, setEditRole] = useState<"admin" | "viewer">("viewer");
 	const [editPassword, setEditPassword] = useState("");
 	const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+	// #702: session revoke is a remote sign-out — same confirm gate as the
+	// user Delete next to it.
+	const [confirmRevoke, setConfirmRevoke] = useState<SessionInfo | null>(null);
 
 	const users = useQuery<PanelUser[]>({
 		queryKey: ["users"],
@@ -138,6 +141,7 @@ export function UsersPage() {
 				body: JSON.stringify({ id }),
 			}),
 		onSuccess: () => {
+			setConfirmRevoke(null);
 			setError(null);
 			invalidate();
 		},
@@ -428,7 +432,10 @@ export function UsersPage() {
 											<Button
 												size="sm"
 												disabled={revoke.isPending}
-												onClick={() => revoke.mutate(s.id)}
+												onClick={() => {
+													setError(null);
+													setConfirmRevoke(s);
+												}}
 											>
 												{t("users.revoke")}
 											</Button>
@@ -468,6 +475,42 @@ export function UsersPage() {
 							{remove.isPending
 								? t("users.deleting")
 								: t("users.confirmDelete")}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
+			<AlertDialog
+				open={confirmRevoke !== null}
+				onOpenChange={(open) => {
+					if (!open) setConfirmRevoke(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>{t("users.revokeDialogTitle")}</AlertDialogTitle>
+						<AlertDialogDescription>
+							{t("users.revokeDialogDescription", {
+								name: confirmRevoke?.username ?? "",
+								agent: confirmRevoke?.userAgent ?? "—",
+							})}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					{/* A failed revoke keeps this dialog open — the error must be
+						visible here, not only behind the overlay (#649 pattern). */}
+					{error ? <FormMessage>{error}</FormMessage> : null}
+					<AlertDialogFooter>
+						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={revoke.isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								if (confirmRevoke) revoke.mutate(confirmRevoke.id);
+							}}
+						>
+							{revoke.isPending
+								? t("users.revoking")
+								: t("users.confirmRevoke")}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

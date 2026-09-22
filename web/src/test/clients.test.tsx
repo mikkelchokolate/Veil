@@ -70,7 +70,11 @@ describe("ClientsPage", () => {
 			),
 		);
 		renderClients();
-		await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
+		// First test in the file pays MSW/router cold-start — give the query
+		// render headroom so a loaded runner does not flake the assertion.
+		await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument(), {
+			timeout: 3000,
+		});
 	});
 
 	it("maps the depleted status filter to quotaState", async () => {
@@ -294,9 +298,64 @@ describe("ClientsPage", () => {
 		await user.click(selectAllPage2);
 		expect(selectAllPage2).toBeChecked();
 		await user.click(screen.getByRole("button", { name: /^enable$/i }));
+		// #705: bulk enable confirms first — no POST until the dialog action.
+		expect(bulkBodies).toHaveLength(0);
+		await user.click(
+			await screen.findByRole("button", { name: /confirm enable/i }),
+		);
 		await waitFor(() => expect(bulkBodies).toHaveLength(1));
 		expect(bulkBodies[0]?.clientIds).toEqual(["p2a", "p2b"]);
 	});
+
+	// #705: bulk disable/reset_traffic are the same danger class as the
+	// already-gated bulk Delete — the POST must not fire until confirmed.
+	it.each([
+		{ button: /^disable$/i, confirm: /confirm disable/i, action: "disable" },
+		{
+			button: /^reset traffic$/i,
+			confirm: /confirm reset/i,
+			action: "reset_traffic",
+		},
+	] as const)(
+		"gates bulk $action behind a confirm dialog",
+		async ({ button, confirm, action }) => {
+			const user = userEvent.setup();
+			const bulkBodies: Array<Record<string, unknown>> = [];
+			server.use(
+				http.get("/api/v1/clients", () =>
+					HttpResponse.json({
+						items: [
+							{
+								id: "c1",
+								name: "Alice",
+								status: "active",
+								enabled: true,
+								createdAt: 1700000000,
+							},
+						],
+						total: 1,
+						page: 1,
+						pageSize: 25,
+					}),
+				),
+				http.post("/api/v1/clients/bulk", async ({ request }) => {
+					bulkBodies.push((await request.json()) as Record<string, unknown>);
+					return HttpResponse.json({ succeeded: 1, results: [] });
+				}),
+			);
+			renderClients();
+			await screen.findByText("Alice");
+			await user.click(screen.getByRole("checkbox", { name: /select all/i }));
+			await user.click(screen.getByRole("button", { name: button }));
+			// Dialog open, mutation not yet sent.
+			expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+			expect(bulkBodies).toHaveLength(0);
+			await user.click(screen.getByRole("button", { name: confirm }));
+			await waitFor(() => expect(bulkBodies).toHaveLength(1));
+			expect(bulkBodies[0]?.action).toBe(action);
+			expect(bulkBodies[0]?.clientIds).toEqual(["c1"]);
+		},
+	);
 
 	// #647: the bulk endpoint reports per-client results AND a top-level
 	// mutation outcome — success=false means the action committed but the
@@ -345,6 +404,9 @@ describe("ClientsPage", () => {
 		await screen.findByText("Alice");
 		await user.click(screen.getByRole("checkbox", { name: /select all/i }));
 		await user.click(screen.getByRole("button", { name: /^enable$/i }));
+		await user.click(
+			await screen.findByRole("button", { name: /confirm enable/i }),
+		);
 		expect(await screen.findByText(/applying it failed/i)).toBeInTheDocument();
 		expect(screen.getByText(/apply job job-9/i)).toBeInTheDocument();
 		// The per-client result row still renders under the warning.

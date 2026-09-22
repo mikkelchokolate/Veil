@@ -153,6 +153,11 @@ export const ru: Record<string, string> = {
 		"Удаление {name} удалит учётную запись и отзовёт все сессии. Это действие нельзя отменить.",
 	"users.deleting": "Удаление…",
 	"users.confirmDelete": "Подтвердить удаление",
+	"users.revokeDialogTitle": "Отозвать сессию?",
+	"users.revokeDialogDescription":
+		"Отзыв этой сессии немедленно завершит сеанс пользователя {name} — потребуется повторный вход. Устройство: {agent}",
+	"users.revoking": "Отзыв…",
+	"users.confirmRevoke": "Подтвердить отзыв",
 
 	"inbounds.title": "Инбаунды",
 	"inbounds.newInbound": "Новый инбаунд",
@@ -194,6 +199,15 @@ export const ru: Record<string, string> = {
 	"inbounds.delete.checking": "Проверка привязанных клиентов…",
 	"inbounds.delete.deleting": "Удаление…",
 	"inbounds.delete.confirm": "Подтвердить удаление",
+	"inbounds.toggle.enableTitle": "Включить инбаунд?",
+	"inbounds.toggle.enableDescription":
+		"Включение {name} восстановит прослушиватель и применит конфигурацию.",
+	"inbounds.toggle.disableTitle": "Отключить инбаунд?",
+	"inbounds.toggle.disableDescription":
+		"Отключение {name} лишит доступа всех прикреплённых клиентов и применит конфигурацию.",
+	"inbounds.toggle.confirmEnable": "Подтвердить включение",
+	"inbounds.toggle.confirmDisable": "Подтвердить отключение",
+	"inbounds.toggle.pending": "Применение…",
 
 	"traffic.title": "Телеметрия трафика",
 	"traffic.telemetryState": "Состояние телеметрии",
@@ -242,6 +256,11 @@ export const ru: Record<string, string> = {
 	"routing.loadFailed": "Не удалось загрузить правила маршрутизации",
 	"routing.deleteFailed": "Не удалось удалить правило маршрутизации",
 	"routing.empty": "Правила маршрутизации не настроены.",
+	"routing.delete.title": "Удалить правило маршрутизации?",
+	"routing.delete.description":
+		"Удаление {name} удалит правило и применит конфигурацию. Это действие нельзя отменить.",
+	"routing.delete.confirm": "Подтвердить удаление",
+	"routing.delete.deleting": "Удаление…",
 
 	"system.title": "Система",
 	"system.unavailable": "Системная статистика недоступна",
@@ -266,6 +285,14 @@ export const ru: Record<string, string> = {
 		"WARP обновлён, но применение изменения не удалось. Проверьте Apply.",
 	"warp.provisionNotice":
 		"Включение создаёт бесплатный аккаунт Cloudflare WARP на стороне сервера; изменения применятся при следующем применении конфигурации.",
+	"warp.enableConfirmTitle": "Включить WARP?",
+	"warp.enableConfirmDescription":
+		"Включение WARP создаст бесплатный аккаунт Cloudflare WARP на стороне сервера; изменение применится при следующем применении конфигурации.",
+	"warp.disableConfirmTitle": "Отключить WARP?",
+	"warp.disableConfirmDescription":
+		"Отключение WARP остановит исходящий WARP — правила маршрутизации через warp перестанут работать, пока его не включат снова.",
+	"warp.confirmEnable": "Подтвердить включение",
+	"warp.confirmDisable": "Подтвердить отключение",
 
 	"settings.title": "Настройки",
 	"settings.unavailable": "Настройки недоступны",
@@ -497,6 +524,15 @@ export const ru: Record<string, string> = {
 	"subTokens.newExpiry": "Новая дата истечения",
 	"subTokens.confirmRotate": "Ротировать с новой датой",
 	"subTokens.expiryMustBeFuture": "Выберите дату истечения в будущем.",
+	"subTokens.revokeTitle": "Отозвать токен подписки?",
+	"subTokens.revokeDescription":
+		"Отзыв {name} навсегда отключит его URL и QR подписки для всех подписчиков. Это действие нельзя отменить.",
+	"subTokens.confirmRevoke": "Подтвердить отзыв",
+	"subTokens.revoking": "Отзыв…",
+	"subTokens.rotateActiveTitle": "Ротировать токен подписки?",
+	"subTokens.rotateActiveDescription":
+		"Ротация {name} сделает текущие URL и QR подписки недействительными — подписчикам нужно будет перейти на новую ссылку.",
+	"subTokens.confirmRotateActive": "Подтвердить ротацию",
 	"subTokens.error.create": "Ошибка создания",
 	"subTokens.error.rotate": "Ошибка ротации",
 	"subTokens.error.revoke": "Ошибка отзыва",
@@ -541,6 +577,19 @@ export const ru: Record<string, string> = {
 	"clients.delete.count_other": "{n} клиентов",
 	"clients.delete.confirm": "Подтвердить удаление",
 	"clients.delete.confirmPending": "Удаление…",
+	"clients.bulk.enable.title": "Включить клиентов?",
+	"clients.bulk.enable.description":
+		"Включить {count}? Они снова получат доступ через включённые привязки.",
+	"clients.bulk.enable.confirm": "Подтвердить включение",
+	"clients.bulk.disable.title": "Отключить клиентов?",
+	"clients.bulk.disable.description":
+		"Отключение {count} немедленно лишит их доступа.",
+	"clients.bulk.disable.confirm": "Подтвердить отключение",
+	"clients.bulk.reset_traffic.title": "Сбросить трафик?",
+	"clients.bulk.reset_traffic.description":
+		"Сброс трафика для {count} обнулит их счётчики использования. Это действие нельзя отменить.",
+	"clients.bulk.reset_traffic.confirm": "Подтвердить сброс",
+	"clients.bulk.pending": "Применение…",
 	"clients.pagination.count_one": "{n} клиент",
 	"clients.pagination.count_other": "{n} клиентов",
 	"clients.pagination.pageInfo": "страница {page} из {totalPages}",
@@ -565,6 +614,32 @@ export const ru: Record<string, string> = {
 	"clientDetail.disableClient": "Отключить клиента",
 	"clientDetail.saveDraftBeforeToggle":
 		"Сохраните или отмените правки перед включением/отключением.",
+	"clientDetail.enableConfirmTitle": "Включить клиента?",
+	"clientDetail.enableConfirmDescription":
+		"Включение {name} восстановит доступ клиента через включённые привязки.",
+	"clientDetail.disableConfirmTitle": "Отключить клиента?",
+	"clientDetail.disableConfirmDescription":
+		"Отключение {name} немедленно лишит клиента доступа по всем привязкам.",
+	"clientDetail.confirmEnable": "Подтвердить включение",
+	"clientDetail.confirmDisable": "Подтвердить отключение",
+	"clientDetail.toggling": "Применение…",
+	"clientDetail.binding.enable.title": "Включить привязку?",
+	"clientDetail.binding.enable.description":
+		"Включение привязки {name} даст клиенту доступ через этот инбаунд.",
+	"clientDetail.binding.enable.confirm": "Подтвердить включение",
+	"clientDetail.binding.disable.title": "Отключить привязку?",
+	"clientDetail.binding.disable.description":
+		"Отключение привязки {name} немедленно лишит клиента доступа через этот инбаунд.",
+	"clientDetail.binding.disable.confirm": "Подтвердить отключение",
+	"clientDetail.binding.rotate.title": "Ротировать учётные данные?",
+	"clientDetail.binding.rotate.description":
+		"Ротация учётных данных для {name} сделает текущие недействительными — соединения оборвутся, пока клиент не получит новые.",
+	"clientDetail.binding.rotate.confirm": "Подтвердить ротацию",
+	"clientDetail.binding.detach.title": "Отвязать инбаунд?",
+	"clientDetail.binding.detach.description":
+		"Отвязка {name} лишит клиента доступа через этот инбаунд. Это действие нельзя отменить.",
+	"clientDetail.binding.detach.confirm": "Подтвердить отвязку",
+	"clientDetail.binding.pending": "Применение…",
 	"clientDetail.deleteTitle": "Действительно удалить этого клиента?",
 	"clientDetail.deleteDescription":
 		"Это действие нельзя отменить. Все привязки и учётные данные будут удалены.",

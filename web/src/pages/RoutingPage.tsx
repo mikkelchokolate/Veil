@@ -3,6 +3,16 @@ import { useState } from "react";
 import { apiFetch, mutationErrorMessage } from "../api/fetcher";
 import type { MutationOutcome, RoutingRule } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "../components/ui/alert-dialog";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "../components/ui/dialog";
@@ -40,6 +50,8 @@ export function RoutingPage() {
 	// (success=false in the mutation envelope) — the UI must not report a
 	// clean save/delete in that case (#644).
 	const [applyFailed, setApplyFailed] = useState(false);
+	// #706: rule Delete confirms like every other destructive Panel action.
+	const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
 	const rules = useQuery<RoutingRule[]>({
 		queryKey: ["routing", "rules"],
@@ -93,6 +105,7 @@ export function RoutingPage() {
 				},
 			),
 		onSuccess: (data) => {
+			setConfirmDelete(null);
 			setApplyFailed(data?.success === false);
 			void qc.invalidateQueries({ queryKey: ["routing"] });
 			void qc.invalidateQueries({ queryKey: ["apply"] });
@@ -308,7 +321,7 @@ export function RoutingPage() {
 													size="sm"
 													variant="danger"
 													disabled={del.isPending}
-													onClick={() => del.mutate(r.name)}
+													onClick={() => setConfirmDelete(r.name)}
 												>
 													{t("common.delete")}
 												</Button>
@@ -321,6 +334,45 @@ export function RoutingPage() {
 					</Table>
 				)}
 			</div>
+
+			<AlertDialog
+				open={confirmDelete !== null}
+				onOpenChange={(open) => {
+					if (!open) setConfirmDelete(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>{t("routing.delete.title")}</AlertDialogTitle>
+						<AlertDialogDescription>
+							{t("routing.delete.description", {
+								name: confirmDelete ?? "",
+							})}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					{/* A failed delete keeps this dialog open — the error must be
+						visible here, not only behind the overlay (#649 pattern). */}
+					{del.isError ? (
+						<FormMessage>
+							{mutationErrorMessage(del.error, t("routing.deleteFailed"))}
+						</FormMessage>
+					) : null}
+					<AlertDialogFooter>
+						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={del.isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								if (confirmDelete) del.mutate(confirmDelete);
+							}}
+						>
+							{del.isPending
+								? t("routing.delete.deleting")
+								: t("routing.delete.confirm")}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</>
 	);
 }

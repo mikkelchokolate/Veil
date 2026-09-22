@@ -148,6 +148,10 @@ describe("ClientDetailPage mutation apply outcome", () => {
 		await user.click(
 			screen.getByRole("button", { name: /rotate credential/i }),
 		);
+		// #704: the rotate is gated — confirm before the POST fires.
+		await user.click(
+			await screen.findByRole("button", { name: /confirm rotate/i }),
+		);
 		await expectApplyFailedBadge();
 	});
 
@@ -163,6 +167,10 @@ describe("ClientDetailPage mutation apply outcome", () => {
 		await screen.findByText("Alice");
 		await user.click(screen.getByRole("tab", { name: /^access$/i }));
 		await user.click(screen.getByRole("button", { name: /^detach$/i }));
+		// #704: the detach is gated — confirm before the DELETE fires.
+		await user.click(
+			await screen.findByRole("button", { name: /confirm detach/i }),
+		);
 		await expectApplyFailedBadge();
 	});
 });

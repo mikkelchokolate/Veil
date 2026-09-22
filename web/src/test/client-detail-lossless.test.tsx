@@ -286,6 +286,11 @@ describe("ClientDetailPage lossless UI mutations", () => {
 				uiLoadTimeout,
 			),
 		);
+		// #713: the header toggle confirms before the PATCH fires.
+		expect(api.requests.some((r) => r.path === "/client")).toBe(false);
+		await user.click(
+			await screen.findByRole("button", { name: /confirm disable/i }),
+		);
 		await waitFor(() =>
 			expect(api.requests.some((r) => r.path === "/client")).toBe(true),
 		);
@@ -308,11 +313,23 @@ describe("ClientDetailPage lossless UI mutations", () => {
 		const card = edge.parentElement?.parentElement;
 		if (!card) throw new Error("binding card unavailable");
 		await user.click(within(card).getByRole("button", { name: /^disable$/i }));
+		// #710: binding enable/disable confirms before the PATCH fires.
+		expect(api.requests.some((r) => r.path === "/binding")).toBe(false);
+		await user.click(
+			await screen.findByRole("button", { name: /confirm disable/i }),
+		);
 		await waitFor(() =>
 			expect(api.requests.some((r) => r.path === "/binding")).toBe(true),
 		);
 		await user.click(
 			within(card).getByRole("button", { name: /rotate credential/i }),
+		);
+		// #704: credential rotate confirms first.
+		expect(api.requests.some((r) => r.path === "/credential/rotate")).toBe(
+			false,
+		);
+		await user.click(
+			await screen.findByRole("button", { name: /confirm rotate/i }),
 		);
 		await waitFor(() =>
 			expect(api.requests.some((r) => r.path === "/credential/rotate")).toBe(
@@ -330,6 +347,11 @@ describe("ClientDetailPage lossless UI mutations", () => {
 			await screen.findByText("attach-one-time-secret"),
 		).toBeInTheDocument();
 		await user.click(within(card).getByRole("button", { name: /detach/i }));
+		// #704: detach confirms before the DELETE fires.
+		expect(api.requests.some((r) => r.path === "/binding/delete")).toBe(false);
+		await user.click(
+			await screen.findByRole("button", { name: /confirm detach/i }),
+		);
 		await waitFor(() =>
 			expect(api.requests.some((r) => r.path === "/binding/delete")).toBe(true),
 		);

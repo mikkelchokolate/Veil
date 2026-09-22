@@ -190,6 +190,9 @@ export function InboundsPage() {
 	const [editing, setEditing] = useState<string | null>(null); // name being edited
 	const [creating, setCreating] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+	// #709: row enable/disable drops live access for every attached client —
+	// gate it like the Delete next to it.
+	const [confirmToggle, setConfirmToggle] = useState<Inbound | null>(null);
 	const [form, setForm] = useState<InboundForm>(EMPTY);
 	const [generateError, setGenerateError] = useState<string | null>(null);
 
@@ -435,6 +438,7 @@ export function InboundsPage() {
 				return;
 			}
 			setEditing(null);
+			setConfirmToggle(null);
 			setError(null);
 		},
 		onError: (e) => {
@@ -525,6 +529,38 @@ export function InboundsPage() {
 		setCreating(false);
 		setEditing(null);
 		setForm(EMPTY);
+	}
+
+	// Row enable/disable fires a full PUT echoing the list record — the same
+	// payload the button used to send one-click (#709 now confirms first).
+	function toggleInbound(ib: Inbound) {
+		update.mutate({
+			name: ib.name,
+			protocol: ib.protocol,
+			transport: ib.transport ?? "tcp",
+			// #717: same effective-port resolution as the edit form — schema
+			// inbounds carry it in protocolFields.publicPort, not flat port.
+			port: livePortValue(ib),
+			enabled: !ib.enabled,
+			masqueradeURL: ib.masqueradeURL ?? "",
+			fallbackRoot: ib.fallbackRoot ?? "",
+			olcrtcRoomID: ib.olcrtcRoomID ?? "",
+			password: ib.password ?? "",
+			profiles: ib.profiles ?? [],
+			naiveUsername: ib.naiveUsername ?? "",
+			naivePassword: ib.naivePassword ?? "",
+			hysteria2Password: ib.hysteria2Password ?? "",
+			hysteria2Insecure: Boolean(
+				(ib as unknown as Record<string, unknown>).hysteria2Insecure ??
+					ib.protocolFields?.hysteria2Insecure ??
+					false,
+			),
+			olcrtcAuth: ib.olcrtcAuth ?? "",
+			olcrtcTransport: ib.olcrtcTransport ?? "",
+			protocolFields: { ...(ib.protocolFields ?? {}) },
+			originalRecord: ib,
+			original: ib.name,
+		});
 	}
 
 	const formCard =
@@ -1005,39 +1041,10 @@ export function InboundsPage() {
 													<Button
 														size="sm"
 														disabled={update.isPending}
-														onClick={() =>
-															update.mutate({
-																name: ib.name,
-																protocol: ib.protocol,
-																transport: ib.transport ?? "tcp",
-																// #717: same effective-port resolution as the
-																// edit form — schema inbounds carry it in
-																// protocolFields.publicPort, not flat port.
-																port: livePortValue(ib),
-																enabled: !ib.enabled,
-																masqueradeURL: ib.masqueradeURL ?? "",
-																fallbackRoot: ib.fallbackRoot ?? "",
-																olcrtcRoomID: ib.olcrtcRoomID ?? "",
-																password: ib.password ?? "",
-																profiles: ib.profiles ?? [],
-																naiveUsername: ib.naiveUsername ?? "",
-																naivePassword: ib.naivePassword ?? "",
-																hysteria2Password: ib.hysteria2Password ?? "",
-																hysteria2Insecure: Boolean(
-																	(ib as unknown as Record<string, unknown>)
-																		.hysteria2Insecure ??
-																		ib.protocolFields?.hysteria2Insecure ??
-																		false,
-																),
-																olcrtcAuth: ib.olcrtcAuth ?? "",
-																olcrtcTransport: ib.olcrtcTransport ?? "",
-																protocolFields: {
-																	...(ib.protocolFields ?? {}),
-																},
-																originalRecord: ib,
-																original: ib.name,
-															})
-														}
+														onClick={() => {
+															setError(null);
+															setConfirmToggle(ib);
+														}}
 													>
 														{ib.enabled
 															? t("common.disable")
@@ -1126,6 +1133,54 @@ export function InboundsPage() {
 									: t("inbounds.delete.confirm")}
 							</AlertDialogAction>
 						)}
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
+			{/* #709: enable/disable drops live access for every attached client
+				and kicks auto-apply — confirm naming the inbound, like Delete. */}
+			<AlertDialog
+				open={confirmToggle !== null}
+				onOpenChange={(open) => {
+					if (!open) setConfirmToggle(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							{confirmToggle?.enabled
+								? t("inbounds.toggle.disableTitle")
+								: t("inbounds.toggle.enableTitle")}
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							{confirmToggle?.enabled
+								? t("inbounds.toggle.disableDescription", {
+										name: confirmToggle.name,
+									})
+								: t("inbounds.toggle.enableDescription", {
+										name: confirmToggle?.name ?? "",
+									})}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					{/* A committed-but-unapplied/failed toggle keeps this dialog
+						open — the failure must be visible here, not only behind
+						the overlay (#649). */}
+					{error ? <p className="form-error">{error}</p> : null}
+					<AlertDialogFooter>
+						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={update.isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								if (confirmToggle) toggleInbound(confirmToggle);
+							}}
+						>
+							{update.isPending
+								? t("inbounds.toggle.pending")
+								: confirmToggle?.enabled
+									? t("inbounds.toggle.confirmDisable")
+									: t("inbounds.toggle.confirmEnable")}
+						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
