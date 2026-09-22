@@ -4,7 +4,9 @@ package linuxintegration
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"os/user"
@@ -73,7 +75,20 @@ func TestIntegrationHelperSocketCanonicalLayout(t *testing.T) {
 		t.Skip("helper socket layout requires root")
 	}
 	if _, err := os.Lstat(privileged.DefaultSocketPath); err == nil {
-		t.Skip("real helper socket already active")
+		// Never skip on the packaged layout (issue #685): a skip is not
+		// evidence. A live helper owning the socket means the test environment
+		// is wrong — fail. A stale node with no listener is safe to remove so
+		// the canonical-layout probe still executes.
+		conn, dialErr := net.DialTimeout("unix", privileged.DefaultSocketPath, time.Second)
+		if dialErr == nil {
+			_ = conn.Close()
+			t.Fatalf("real helper socket %s is already active — refusing to overwrite the live packaged layout", privileged.DefaultSocketPath)
+		}
+		if err := os.Remove(privileged.DefaultSocketPath); err != nil {
+			t.Fatalf("remove stale helper socket node %s: %v", privileged.DefaultSocketPath, err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stat helper socket %s: %v", privileged.DefaultSocketPath, err)
 	}
 	veilUID, veilGID := requireVeilIdentity(t)
 	dir := filepath.Dir(privileged.DefaultSocketPath)

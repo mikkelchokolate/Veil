@@ -6,15 +6,22 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
-func TestConfigValidationPassPolicyTreatsSkippedAsPass(t *testing.T) {
+// A skipped validation means a configured validator could not run (e.g. the
+// caddy/sing-box binary missed exec.LookPath) — that must block live apply,
+// not wave a bad config through to promotion (issue #686).
+func TestConfigValidationPassPolicyRejectsSkippedValidation(t *testing.T) {
 	policy := NewConfigValidationPassPolicy()
 
-	// A skipped validation (validator binary absent or no standalone checker)
-	// must not block the apply — the service health check is the real gate.
 	if err := policy.RequirePassed([]model.ConfigValidationResult{
-		{Name: "mieru", Skipped: true, Valid: false, Error: "mita not found; syntax validation skipped"},
-	}); err != nil {
-		t.Fatalf("skipped validation must pass, got %v", err)
+		{Name: "caddy", Skipped: true, Valid: false, Error: "caddy not found; syntax validation skipped"},
+	}); err == nil || err.Error() != "caddy not found; syntax validation skipped" {
+		t.Fatalf("skipped validation must fail closed with its error, got %v", err)
+	}
+
+	if err := policy.RequirePassed([]model.ConfigValidationResult{
+		{Name: "warp", Skipped: true},
+	}); err == nil || err.Error() != "warp validation did not pass" {
+		t.Fatalf("skipped validation without error text must still fail, got %v", err)
 	}
 
 	// A passing validation passes.

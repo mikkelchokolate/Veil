@@ -38,9 +38,24 @@ required = {
     "CI_CADDY_VERSION",
     "CI_FORWARDPROXY_VERSION",
     "CI_UBUNTU_BASE",
+    # Protocol runtime pins: the checksum-verified asset/sha pins consumed by
+    # runtimes.sh and vm-build.sh must be gated alongside the tags — deleting
+    # or emptying them otherwise greens this job while runtime install drifts
+    # or fails closed later (issues #678, #684).
     "CI_HYSTERIA_TAG",
+    "CI_HYSTERIA_ASSET",
+    "CI_HYSTERIA_SHA256",
     "CI_MITA_TAG",
+    "CI_MITA_ASSET",
+    "CI_MITA_SHA256",
+    "CI_MIERU_CLIENT_TAG",
+    "CI_MIERU_CLIENT_ASSET",
+    "CI_MIERU_CLIENT_SHA256",
+    "CI_NAIVE_CLIENT_TAG",
+    "CI_NAIVE_CLIENT_ASSET",
+    "CI_NAIVE_CLIENT_SHA256",
     "CI_SINGBOX_TAG",
+    "CI_SINGBOX_ASSET",
     "CI_SINGBOX_SHA256",
     "CI_OAPI_CODEGEN_VERSION",
     "CI_SHELLCHECK_VERSION",
@@ -49,10 +64,46 @@ required = {
     "CI_GO_IMAGE_DIGEST",
     "CI_ALPINE_VERSION",
     "CI_ALPINE_IMAGE_DIGEST",
+    # Coverage floors are part of the gate contract: an empty or zeroed pin
+    # turns the coverage stage into a no-op (issue #682).
+    "CI_COVERAGE_THRESHOLD",
+    "CI_SDK_COVERAGE_FLOOR",
 }
 missing = sorted(required - versions.keys())
 if missing:
     fail(f"versions.sh is missing {', '.join(missing)}")
+
+
+def require_numeric_floor(name: str, minimum: float) -> None:
+    try:
+        value = float(versions[name])
+    except ValueError:
+        fail(f"{name} must be numeric, found {versions[name]!r}")
+    if value < minimum:
+        fail(f"{name}={value} is below the documented minimum {minimum}")
+
+
+# The product coverage threshold implements the documented 70% contract and
+# the SDK floor proves the merged sdk profile is really measured — both must
+# stay numeric and non-zero or `test.sh`'s `cov >= min` awk check goes soft
+# (issue #682). Raising a floor is allowed; lowering it is a policy change.
+require_numeric_floor("CI_COVERAGE_THRESHOLD", 70.0)
+require_numeric_floor("CI_SDK_COVERAGE_FLOOR", 1.0)
+
+# The versioned release assets must carry the pinned tag so a tag bump without
+# the matching asset rename (or vice versa) cannot drift (issues #678, #684).
+# CI_HYSTERIA_ASSET ("hysteria-linux-amd64") is intentionally exempt: upstream
+# ships the same arch-only asset name on every release.
+for tag_var, asset_var in (
+    ("CI_MITA_TAG", "CI_MITA_ASSET"),
+    ("CI_MIERU_CLIENT_TAG", "CI_MIERU_CLIENT_ASSET"),
+    ("CI_NAIVE_CLIENT_TAG", "CI_NAIVE_CLIENT_ASSET"),
+    ("CI_SINGBOX_TAG", "CI_SINGBOX_ASSET"),
+):
+    tag = versions[tag_var]
+    asset = versions[asset_var]
+    if tag not in asset and tag.removeprefix("v") not in asset:
+        fail(f"{asset_var} {asset!r} does not carry the {tag_var} version {tag!r}")
 
 
 def expect(label: str, actual: str, expected: str) -> None:

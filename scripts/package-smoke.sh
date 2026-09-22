@@ -78,6 +78,19 @@ write_stub() {
   cat > /usr/bin/systemctl <<EOF
 #!/bin/sh
 echo "systemctl \$*" >> ${SYSTEMCTL_LOG}
+# Report representative instances for Veil's template globs so the
+# per-instance stop/disable sweep in preremove (stop_disable_matching_units)
+# is actually exercised — a stub that always lists nothing would leave the
+# hysteria2@/olcrtc@/legacy-caddy@ remove path unasserted (issue #683).
+if [ "\$1" = "list-units" ] || [ "\$1" = "list-unit-files" ]; then
+  for arg in "\$@"; do
+    case "\$arg" in
+      'veil-hysteria2@*.service') echo 'veil-hysteria2@ci.service' ;;
+      'veil-olcrtc@*.service')    echo 'veil-olcrtc@ci.service' ;;
+      'veil-caddy@*.service')     echo 'veil-caddy@legacy.service' ;;
+    esac
+  done
+fi
 exit ${rc}
 EOF
   chmod +x /usr/bin/systemctl
@@ -163,6 +176,33 @@ assert_upgrade_systemctl() {
     cat "$SYSTEMCTL_LOG" >&2
     exit 1
   fi
+}
+
+assert_remove_systemctl() {
+  # The remove path must stop AND disable every managed unit before the
+  # payload is deleted (issue #683). preremove's per-call `|| true` only
+  # tolerates "unit not loaded"/"systemd not running" — a preremove that
+  # never asks systemctl at all is a silent no-op, which this gate catches:
+  # with the stub in place every issued call lands in SYSTEMCTL_LOG.
+  [ -f "$SYSTEMCTL_LOG" ] || fail "systemctl stub log missing"
+  for unit in veil.service veil-helper.service veil-helper.socket \
+      veil-backup.service veil-backup.timer veil-caddy.service \
+      veil-mieru.service veil-warp.service; do
+    grep -qxF "systemctl stop $unit" "$SYSTEMCTL_LOG" \
+      || fail "preremove did not stop $unit"
+    grep -qxF "systemctl disable $unit" "$SYSTEMCTL_LOG" \
+      || fail "preremove did not disable $unit"
+  done
+  # Template instances are enumerated via list-units/list-unit-files — the
+  # stub reports representative ones (veil-*@ci / veil-caddy@legacy) so the
+  # per-instance sweep, including the legacy caddy cleanup (issue #375), is
+  # asserted rather than assumed.
+  for unit in veil-hysteria2@ci.service veil-olcrtc@ci.service veil-caddy@legacy.service; do
+    grep -qxF "systemctl stop $unit" "$SYSTEMCTL_LOG" \
+      || fail "preremove did not stop template instance $unit"
+    grep -qxF "systemctl disable $unit" "$SYSTEMCTL_LOG" \
+      || fail "preremove did not disable template instance $unit"
+  done
 }
 
 assert_state_sentinels() {
@@ -328,8 +368,11 @@ case "$phase" in
     # Remove AND purge must both leave no packaged payload behind — the units
     # and sysctl drop-in are package-owned, not conffiles (issues #476, #495,
     # #505). Operator state under /etc/veil + /var/lib/veil is NOT
-    # package-managed and must survive.
+    # package-managed and must survive. The preremove stop/disable contract
+    # is asserted via the stub log too (issue #683) — on purge the log still
+    # carries the remove leg's entries, so the check holds for both phases.
     assert_payload_absent
+    assert_remove_systemctl
     [ "$(cat /var/lib/veil/state.json)" = state-before-upgrade ] || fail "state.json lost on $phase"
     [ "$(cat /etc/veil/state.key)" = key-before-upgrade ] || fail "state.key lost on $phase"
     ;;
