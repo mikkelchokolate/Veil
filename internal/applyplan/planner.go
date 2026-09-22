@@ -8,6 +8,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/routing"
 )
 
 type Material struct {
@@ -156,6 +157,7 @@ func Build(input Input) model.ApplyPlanResponse {
 		}
 		plan.Configs = appendUnique(plan.Configs, liveRoot+"/rules/"+file.Name)
 	}
+	appendHysteria2ACLRuleIssues(&plan, input)
 	if len(plan.Configs) > 0 {
 		plan.Actions = append([]string{"validate management state", "stage generated configs"}, plan.Actions[1:]...)
 	}
@@ -262,6 +264,53 @@ func serviceVerbForUnit(unit string, verbs map[string]string) string {
 		}
 	}
 	return ""
+}
+
+// appendHysteria2ACLRuleIssues surfaces routing-rule atoms the Hysteria2 ACL
+// renderer must drop. apernet/hysteria implements only geoip:/geosite:/
+// suffix:/bare-CIDR-or-IP/wildcard/exact-domain addresses — keyword: and
+// regexp: atoms, and values carrying grammar-breaking characters like `#`,
+// have no native form and would previously be emitted as fake prefixes that
+// silently misrouted or failed the unit's config load (#679). The renderer
+// now omits them; this warning keeps the loss loud in the apply plan while
+// sing-box (WARP) keeps full matcher semantics.
+func appendHysteria2ACLRuleIssues(plan *model.ApplyPlanResponse, input Input) {
+	if plan == nil || !input.Warp.Enabled {
+		return
+	}
+	hasHysteria2 := false
+	for _, inbound := range input.Inbounds {
+		if inbound.Enabled && inbound.Protocol == "hysteria2" {
+			hasHysteria2 = true
+			break
+		}
+	}
+	if !hasHysteria2 {
+		return
+	}
+	for _, rule := range input.Rules {
+		if !rule.Enabled || rule.Match == "" {
+			continue
+		}
+		matchers, err := routing.ParseMatch(rule.Match)
+		if err != nil {
+			continue
+		}
+		for _, matcher := range matchers {
+			if _, ok := routing.Hysteria2ACLAddress(matcher); ok {
+				continue
+			}
+			plan.Issues = append(plan.Issues, model.ValidationIssue{
+				Code:        "hysteria2_acl_unsupported_match",
+				Severity:    "warning",
+				Field:       "match",
+				Message:     fmt.Sprintf("routing rule %q match %q uses a matcher Hysteria2 ACL cannot express; that atom is skipped for Hysteria2 inbounds", rule.Name, rule.Match),
+				Remediation: "Use domain, domain-suffix, geoip, geosite, or CIDR matches for rules that must apply to Hysteria2.",
+				Source:      "hysteria2",
+			})
+			break
+		}
+	}
 }
 
 func appendMaterial(plan *model.ApplyPlanResponse, material Material) {
