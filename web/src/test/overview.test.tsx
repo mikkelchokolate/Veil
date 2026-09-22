@@ -30,7 +30,7 @@ vi.mock("../api/panelUpdate", async (importOriginal) => {
 	};
 });
 
-function renderOverview() {
+function renderOverview(locale: "en" | "ru" = "en") {
 	const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 	const rootRoute = createRootRoute();
 	const route = createRoute({
@@ -44,7 +44,7 @@ function renderOverview() {
 	return render(
 		<QueryClientProvider client={qc}>
 			<AuthProvider>
-				<I18nProvider>
+				<I18nProvider initialLocale={locale}>
 					<RouterProvider router={router} />
 				</I18nProvider>
 			</AuthProvider>
@@ -91,6 +91,79 @@ async function confirmUpdate() {
 afterEach(() => {
 	panelUpdateMocks.waitForPanelVersion.mockReset();
 	panelUpdateMocks.reloadPanel.mockReset();
+});
+
+// #691: the badge colors from the API state, not revision equality — a
+// failed equal-revision apply reports degraded server-side (#543) and must
+// never render green; untracked (#539) must not render green either.
+describe("OverviewPage apply state badge", () => {
+	it("renders a degraded equal-revision state as danger, not green", async () => {
+		overviewApis();
+		server.use(
+			http.get("/api/apply/state", () =>
+				HttpResponse.json({
+					desiredRevision: 2,
+					appliedRevision: 2,
+					state: "degraded",
+				}),
+			),
+		);
+		renderOverview();
+		const badge = await screen.findByText("Degraded");
+		expect(badge.className).toContain("danger");
+		expect(badge.className).not.toContain("success");
+	});
+
+	it("renders untracked as a warning instead of green", async () => {
+		overviewApis();
+		server.use(
+			http.get("/api/apply/state", () =>
+				HttpResponse.json({
+					desiredRevision: 0,
+					appliedRevision: 0,
+					state: "untracked",
+				}),
+			),
+		);
+		renderOverview();
+		const badge = await screen.findByText("Not tracked");
+		expect(badge.className).toContain("warning");
+		expect(badge.className).not.toContain("success");
+	});
+
+	it("renders synced as success", async () => {
+		overviewApis();
+		server.use(
+			http.get("/api/apply/state", () =>
+				HttpResponse.json({
+					desiredRevision: 2,
+					appliedRevision: 2,
+					state: "synced",
+				}),
+			),
+		);
+		renderOverview();
+		const badge = await screen.findByText("Synced");
+		expect(badge.className).toContain("success");
+	});
+
+	// #703: the label comes from applyState.* — in ru the badge is the
+	// translated string, not the raw English enum.
+	it("localizes the apply-state badge in ru", async () => {
+		overviewApis();
+		server.use(
+			http.get("/api/apply/state", () =>
+				HttpResponse.json({
+					desiredRevision: 2,
+					appliedRevision: 2,
+					state: "degraded",
+				}),
+			),
+		);
+		renderOverview("ru");
+		const badge = await screen.findByText("Деградировано");
+		expect(badge.className).toContain("danger");
+	});
 });
 
 describe("OverviewPage version", () => {

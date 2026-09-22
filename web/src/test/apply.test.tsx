@@ -40,7 +40,7 @@ describe("ApplyPage", () => {
 				HttpResponse.json({
 					desiredRevision: 3,
 					appliedRevision: 1,
-					state: "drift",
+					state: "pending",
 				}),
 			),
 			http.get("/api/apply/jobs", () => HttpResponse.json({ items: [] })),
@@ -58,7 +58,7 @@ describe("ApplyPage", () => {
 				HttpResponse.json({
 					desiredRevision: 2,
 					appliedRevision: 2,
-					state: "applied",
+					state: "synced",
 				}),
 			),
 			http.get("/api/apply/jobs", () =>
@@ -208,6 +208,55 @@ describe("ApplyPage", () => {
 		expect(await screen.findByText(/helper unavailable/i)).toBeInTheDocument();
 	});
 
+	// #675 sibling of the 503 case: a 200 retry body with success=false is an
+	// explicit execution failure (#544) — surface the API error instead of
+	// treating the HTTP status as success.
+	it("treats a 200 retry carrying success:false as an error", async () => {
+		server.use(
+			http.get("/api/apply/state", () =>
+				HttpResponse.json({
+					desiredRevision: 2,
+					appliedRevision: 1,
+					state: "failed",
+				}),
+			),
+			http.get("/api/apply/jobs", () =>
+				HttpResponse.json({
+					items: [
+						{
+							id: "j-rf",
+							desiredRevision: 2,
+							baseRevision: 1,
+							status: "rollback_failed",
+							trigger: "manual",
+							createdAt: 1700000000,
+							errorMessage: "rollback aborted",
+						},
+					],
+				}),
+			),
+			http.post("/api/apply/jobs/j-rf/retry", () =>
+				HttpResponse.json({
+					success: false,
+					error: "retry apply did not converge",
+					applyJob: {
+						id: "j-rf2",
+						desiredRevision: 2,
+						baseRevision: 1,
+						status: "failed",
+						trigger: "retry",
+						createdAt: 1700000001,
+					},
+				}),
+			),
+		);
+		renderApply();
+		fireEvent.click(await screen.findByRole("button", { name: /^retry$/i }));
+		expect(
+			await screen.findByText(/retry apply did not converge/i),
+		).toBeInTheDocument();
+	});
+
 	// #651: POST /api/apply/reconcile returns 200 with reconciled=false plus
 	// the failed applyJob when the converge fails — that is an execution
 	// failure, not a successful reconcile.
@@ -217,7 +266,7 @@ describe("ApplyPage", () => {
 				HttpResponse.json({
 					desiredRevision: 3,
 					appliedRevision: 1,
-					state: "drift",
+					state: "failed",
 				}),
 			),
 			http.get("/api/apply/jobs", () => HttpResponse.json({ items: [] })),
@@ -254,7 +303,7 @@ describe("ApplyPage", () => {
 				HttpResponse.json({
 					desiredRevision: 2,
 					appliedRevision: 1,
-					state: "drift",
+					state: "pending",
 				}),
 			),
 			http.get("/api/apply/jobs", () => HttpResponse.json({ items: [] })),

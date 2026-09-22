@@ -82,6 +82,10 @@ export const ru: Record<string, string> = {
 	"applyState.untracked": "Не отслеживается",
 	"applyState.unavailable": "состояние применения недоступно",
 	"applyState.loading": "применение…",
+	"applyState.revTooltip": "текущая ревизия {applied}",
+	"applyState.revTooltipDrift":
+		"целевая ревизия {desired}, текущая ревизия {applied}",
+	"applyState.revDrift": " · рев. {applied}→{desired}",
 
 	"auth.username": "Имя пользователя",
 	"auth.password": "Пароль",

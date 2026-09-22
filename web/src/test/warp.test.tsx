@@ -68,7 +68,7 @@ describe("WarpPage toggle", () => {
 					...snapshot,
 					enabled: false,
 					success: false,
-					revision: { desired: 2, applied: 1, state: "drift" },
+					revision: { desired: 2, applied: 1, state: "failed" },
 					applyJob: {
 						id: "job-1",
 						desiredRevision: 2,

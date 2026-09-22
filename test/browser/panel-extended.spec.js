@@ -13,6 +13,7 @@
 //     panel instance with --web-base-path for this)
 const { test, expect } = require('@playwright/test');
 const { waitForSpa } = require('./spa-boot');
+const { assertMutationOutcome } = require('./mutation-outcome');
 
 const adminUsername = process.env.VEIL_BROWSER_USERNAME || 'browser-admin';
 const adminPassword = process.env.VEIL_BROWSER_PASSWORD || 'Browser-E2E-Password-123!';
@@ -39,26 +40,34 @@ async function login(page, username, password) {
   }
 }
 
+// The main browser panel runs with the privileged-helper alias detached, so
+// every auto-apply honestly fails: seeds on it commit with success=false and
+// a failed applyJob. allowApplyFailure keeps that tolerated-but-checked —
+// a seed must still carry the job evidence instead of ignoring the outcome
+// (#677). Callers on the helper-backed panel leave it strict.
 async function seedInbound(request, name, port, enabled = false) {
   const resp = await request.post('/api/inbounds', {
     headers: tokenHeaders,
     data: { name, protocol: 'hysteria2', transport: 'udp', port, enabled },
   });
-  expect(resp.status(), `inbound seed failed: ${resp.status()} ${await resp.text()}`).toBeLessThan(300);
-  return resp;
+  return assertMutationOutcome(resp, {
+    label: `inbound seed ${name}`,
+    allowApplyFailure: true,
+  });
 }
 
-async function createClientMutation(request, name, extra = {}) {
+// strict by default: a success=false apply is only tolerated on the
+// helper-detached panel, where callers pass { allowApplyFailure: true }.
+async function createClientMutation(request, name, extra = {}, outcome = {}) {
   const resp = await request.post('/api/v1/clients', {
     headers: tokenHeaders,
     data: { name, ...extra },
   });
-  expect(resp.status(), `client create failed: ${resp.status()} ${await resp.text()}`).toBeLessThan(300);
-  return resp.json();
+  return assertMutationOutcome(resp, { label: `client create ${name}`, ...outcome });
 }
 
-async function createClientAPI(request, name, extra = {}) {
-  return (await createClientMutation(request, name, extra)).client;
+async function createClientAPI(request, name, extra = {}, outcome = {}) {
+  return (await createClientMutation(request, name, extra, outcome)).client;
 }
 
 async function waitForApplyJob(request, jobID) {
@@ -199,7 +208,7 @@ test.describe('Veil Panel — extended critical flows', () => {
 
   test('stale version update returns 409 version_conflict', async ({ request }) => {
     const stamp = Date.now();
-    const created = await createClientAPI(request, `e2e-conflict-${stamp}`);
+    const created = await createClientAPI(request, `e2e-conflict-${stamp}`, {}, { allowApplyFailure: true });
     expect(created.version, 'created client carries version').toBeGreaterThanOrEqual(1);
 
     // First update at the current version succeeds and bumps the version.
@@ -236,7 +245,7 @@ test.describe('Veil Panel — extended critical flows', () => {
 
     // A plain client mutation is enough to enqueue one apply job.
     const stamp = Date.now();
-    const mutation = await createClientMutation(request, `e2e-apply-${stamp}`);
+    const mutation = await createClientMutation(request, `e2e-apply-${stamp}`, {}, { allowApplyFailure: true });
     const latest = mutation.applyJob;
     expect(latest, 'client mutation returns an apply job').toBeTruthy();
 
@@ -300,12 +309,9 @@ test.describe('Veil Panel — extended critical flows', () => {
           firewallManagement: false,
         },
       });
-      const firewallText = await firewallUpdate.text();
-      expect(
-        firewallUpdate.status(),
-        `disable firewall management: ${firewallUpdate.status()} ${firewallText}`,
-      ).toBeLessThan(300);
-      const firewallMutation = JSON.parse(firewallText);
+      const firewallMutation = await assertMutationOutcome(firewallUpdate, {
+        label: 'disable firewall management',
+      });
       expect(firewallMutation.applyJob, 'settings mutation returns an apply job').toBeTruthy();
       const firewallJob = await waitForApplyJob(request, firewallMutation.applyJob.id);
       expect(firewallJob.status, `settings apply job: ${JSON.stringify(firewallJob)}`).toBe('succeeded');
