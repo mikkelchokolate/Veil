@@ -184,11 +184,29 @@ export function SettingsPage() {
 			setConfirmRotate(false);
 			setError(null);
 			void qc.invalidateQueries({ queryKey: ["apply"] });
+			// The API reports the real revoked-session count — report it
+			// instead of a blanket "other sessions were revoked" claim that is
+			// false when the operator was the only live session (#731), and
+			// keep the revocation visible when apply fails (#726).
+			const revoked =
+				typeof body?.revokedSessions === "number" ? body.revokedSessions : null;
 			if (body?.success === false) {
-				setNotice(t("settings.rotatedApplyFailed"));
+				setNotice(
+					revoked === 0
+						? t("settings.rotatedApplyFailedNoOthers")
+						: revoked === null
+							? t("settings.rotatedApplyFailed")
+							: t("settings.rotatedApplyFailedRevoked", { n: revoked }),
+				);
 				return;
 			}
-			setNotice(t("settings.rotated"));
+			setNotice(
+				revoked === 0
+					? t("settings.rotatedNoOthers")
+					: revoked === null
+						? t("settings.rotated")
+						: t("settings.rotatedRevoked", { n: revoked }),
+			);
 		},
 		onError: (e) => {
 			setError(mutationErrorMessage(e, t("settings.rotateFailed")));

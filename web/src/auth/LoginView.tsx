@@ -1,12 +1,25 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { ApiError } from "../api/fetcher";
 import { useAuth } from "../auth/AuthContext";
-import { useI18n } from "../i18n/I18nContext";
+import { type I18nVars, useI18n } from "../i18n/I18nContext";
 import { takePendingLogin } from "../pendingLogin";
 
-function loginFailureMessage(err: unknown, t: (key: string) => string): string {
-	if (err instanceof ApiError && (err.status === 401 || err.status === 400)) {
-		return t("auth.login.invalid");
+function loginFailureMessage(
+	err: unknown,
+	t: (key: string, vars?: I18nVars) => string,
+): string {
+	if (err instanceof ApiError) {
+		if (err.status === 401 || err.status === 400) {
+			return t("auth.login.invalid");
+		}
+		// 429 = username-keyed lockout (#667): name it and pass through the
+		// Retry-After wait instead of the generic "try again" failure.
+		if (err.status === 429) {
+			const wait = err.retryAfterSeconds;
+			return wait != null && wait > 0
+				? t("auth.login.tooManyAttemptsWait", { seconds: wait })
+				: t("auth.login.tooManyAttempts");
+		}
 	}
 	return t("auth.login.failed");
 }

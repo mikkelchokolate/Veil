@@ -419,15 +419,28 @@ export function ClientDetailPage() {
 					<h2 style={{ margin: 0, flex: 1 }}>{c.name}</h2>
 					{isAdmin ? (
 						<>
+							{/* A header enable/disable PATCH while the edit form is dirty
+							    commits a new version server-side but cannot reset the form
+							    (#218 guard) — the checkbox and draftVersion stay stale and
+							    the next Save 409s. Block the toggle until the draft is
+							    saved or discarded (#701). */}
 							<Button
 								variant="default"
-								disabled={enableToggle.isPending}
+								disabled={enableToggle.isPending || isDirty}
+								title={
+									isDirty ? t("clientDetail.saveDraftBeforeToggle") : undefined
+								}
 								onClick={() => enableToggle.mutate()}
 							>
 								{c.enabled
 									? t("clientDetail.disableClient")
 									: t("clientDetail.enableClient")}
 							</Button>
+							{isDirty ? (
+								<span className="muted" style={{ fontSize: 12 }}>
+									{t("clientDetail.saveDraftBeforeToggle")}
+								</span>
+							) : null}
 							<AlertDialog>
 								<AlertDialogTrigger asChild>
 									<Button variant="danger">{t("common.delete")}</Button>
