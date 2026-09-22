@@ -240,36 +240,30 @@ func hysteria2ACLOutbound(outbound string) string {
 	}
 }
 
+// hysteria2ACLLine renders one `outbound(address)` ACL line using only
+// address forms apernet/hysteria implements (see routing.Hysteria2ACLAddress).
+// Matchers with no Hysteria dialect — keyword/regexp, or values carrying
+// grammar-breaking characters like `#` — report ok=false rather than emit a
+// fake prefix that Hysteria would miscompile or reject at config load (#679);
+// the apply plan surfaces the dropped atoms as a warning issue.
 func hysteria2ACLLine(outbound string, matcher routing.Matcher, hasGeoIP, hasGeoSite bool) (string, bool) {
 	switch matcher.Kind {
-	case routing.MatchPrivateIP:
+	case routing.MatchPrivateIP, routing.MatchGeoIP:
+		// geoip: addresses need the GeoIP database; without it the line
+		// would crash Hysteria2 at load, so the atom is dropped instead.
 		if !hasGeoIP {
 			return "", false
 		}
-		return fmt.Sprintf("%s(geoip:private)", outbound), true
-	case routing.MatchGeoIP:
-		if !hasGeoIP {
-			return "", false
-		}
-		return fmt.Sprintf("%s(geoip:%s)", outbound, matcher.Value), true
 	case routing.MatchGeoSite:
 		if !hasGeoSite {
 			return "", false
 		}
-		return fmt.Sprintf("%s(geosite:%s)", outbound, matcher.Value), true
-	case routing.MatchDomain:
-		return fmt.Sprintf("%s(domain:%s)", outbound, matcher.Value), true
-	case routing.MatchDomainSuffix:
-		return fmt.Sprintf("%s(suffix:%s)", outbound, matcher.Value), true
-	case routing.MatchDomainKeyword:
-		return fmt.Sprintf("%s(keyword:%s)", outbound, matcher.Value), true
-	case routing.MatchDomainRegex:
-		return fmt.Sprintf("%s(regex:%s)", outbound, matcher.Value), true
-	case routing.MatchIPCIDR:
-		return fmt.Sprintf("%s(cidr:%s)", outbound, matcher.Value), true
-	default:
+	}
+	address, ok := routing.Hysteria2ACLAddress(matcher)
+	if !ok {
 		return "", false
 	}
+	return fmt.Sprintf("%s(%s)", outbound, address), true
 }
 
 func usableRoutingDat(path string) string {
