@@ -124,7 +124,7 @@ func TestPromotionManifestContainsDurableTransactionEvidence(t *testing.T) {
 
 func TestPromotionCrashProcess(t *testing.T) {
 	if os.Getenv(promotionCrashHelperEnv) != "1" {
-		return
+		t.Skip("subprocess helper")
 	}
 	root := os.Getenv("VEIL_PROMOTION_ROOT")
 	mode := os.Getenv("VEIL_PROMOTION_MODE")

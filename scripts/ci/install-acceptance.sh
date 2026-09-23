@@ -52,6 +52,11 @@ trap collect_diagnostics EXIT
 
 PANEL_PORT=2096
 INSTALL_FLAGS=(--yes --panel-access direct --le-ip-cert=false --public-ip 127.0.0.1 --panel-port "${PANEL_PORT}")
+# Custom-root leg (issue #746): the install left live through the smolvm
+# reboot is this one, so phase B proves the custom trees persist.
+CUSTOM_ROOT=/opt/veil-ci
+CUSTOM_ETC="${CUSTOM_ROOT}/etc"
+CUSTOM_VAR="${CUSTOM_ROOT}/var"
 
 uninstall_leg() {
   ci_step "uninstall --keep-data"
@@ -100,6 +105,24 @@ assert_protocol_units() { # $1 = leg context for diagnostics
     || ci_die "veil-olcrtc@ci-olc never reached ExecStart $1"
   ${SUDO} test -x /usr/local/bin/olcrtc \
     || ci_die "olcrtc runtime binary missing/non-executable $1"
+}
+
+# probe_panel_healthz <etc-dir> — read the live install's token/base path from
+# its env file and require /healthz to answer HTTP 200 with a "status":"ok"
+# payload. A bare exit-0 or "status" key assert cannot prove health: an
+# unhealthy panel still emits the field. Used by the first-install check, the
+# post-reboot leg, and the custom-root leg (which reads the custom etc dir).
+probe_panel_healthz() {
+  local etc_dir="$1" token base_path code
+  token="$(${SUDO} grep '^VEIL_API_TOKEN=' "${etc_dir}/veil.env" | cut -d= -f2- | tr -d '[:space:]')"
+  base_path="$(${SUDO} grep '^VEIL_WEB_BASE_PATH=' "${etc_dir}/veil.env" | cut -d= -f2- | tr -d '[:space:]')"
+  { [ -n "${token}" ] && [ -n "${base_path}" ]; } \
+    || ci_die "${etc_dir}/veil.env lacks VEIL_API_TOKEN/VEIL_WEB_BASE_PATH"
+  code="$(curl --http1.1 -sk --max-time 60 -o /tmp/ia-health.json -w '%{http_code}' \
+    -H "X-Veil-Token: ${token}" "https://127.0.0.1:${PANEL_PORT}${base_path}healthz")"
+  [ "${code}" = "200" ] || ci_die "panel /healthz returned HTTP ${code}"
+  grep -q '"status":"ok"' /tmp/ia-health.json \
+    || ci_die "panel /healthz did not report status ok: $(cat /tmp/ia-health.json)"
 }
 
 # Pinned pebble test CA. Always installed at CI_PEBBLE_VERSION — a stale
@@ -229,6 +252,29 @@ if [ -n "${IA_PHASE_MARKER}" ] && [ -f "${IA_PHASE_MARKER}" ]; then
   done
   [ "${ready}" -eq 0 ] || ci_die "panel did not become ready after reboot"
   ci_run veil-status-post-reboot ${SUDO} /usr/local/bin/veil status --json
+  # Exit-0 alone is not readiness: the status payload must report the unit
+  # active/running and the panel must answer an authenticated /healthz probe
+  # — matching the same contract the first-install leg asserts.
+  grep -q '"activeState": "active"' "${CI_ARTIFACT_DIR}/veil-status-post-reboot.log" \
+    || ci_die "post-reboot status does not report an active service: $(cat "${CI_ARTIFACT_DIR}/veil-status-post-reboot.log")"
+  grep -q '"subState": "running"' "${CI_ARTIFACT_DIR}/veil-status-post-reboot.log" \
+    || ci_die "post-reboot status does not report a running service: $(cat "${CI_ARTIFACT_DIR}/veil-status-post-reboot.log")"
+  # The install left live through the reboot is the custom-root leg (#746):
+  # its env file carries the token/base path, and persistence of the custom
+  # trees is itself part of the reboot contract.
+  ${SUDO} test -s "${CUSTOM_VAR}/state.json" || ci_die "custom var state.json lost after reboot"
+  ${SUDO} test -f "${CUSTOM_ETC}/veil.env" || ci_die "custom etc veil.env lost after reboot"
+  ${SUDO} test -f "${CUSTOM_ETC}/generated/hysteria2/ci-hy2.yaml" \
+    || ci_die "custom etc generated hysteria2 config lost after reboot"
+  probe_panel_healthz "${CUSTOM_ETC}"
+  # Custom-root teardown: the uninstall must remove the custom trees and stop
+  # the units. The caddy leg below reinstalls default roots (#746).
+  ci_run veil-uninstall-custom ${SUDO} /usr/local/bin/veil uninstall --yes --etc-dir "${CUSTOM_ETC}" --var-dir "${CUSTOM_VAR}"
+  ${SUDO} test ! -e "${CUSTOM_ETC}" || ci_die "custom etc dir left after custom-root uninstall"
+  ${SUDO} test ! -e "${CUSTOM_VAR}" || ci_die "custom var dir left after custom-root uninstall"
+  if systemctl is-active --quiet veil.service; then
+    ci_die "veil.service still active after custom-root uninstall"
+  fi
   # The reboot leg previously skipped the entire caddy/ACME/public-route
   # contract — phase B exited right after the persistence checks. The CA
   # process does not survive reboot, so restart pebble here and run the same
@@ -291,8 +337,23 @@ singbox_version="$(/usr/local/bin/sing-box version 2>/dev/null | grep -o '[0-9][
 ci_step "install --check capability report (must not mutate)"
 ${SUDO} /usr/local/bin/veil install --check --panel-access direct --le-ip-cert=false --public-ip 127.0.0.1 --panel-port "${PANEL_PORT}" \
   | tee "${CI_ARTIFACT_DIR}/install-check.txt"
-grep -q "capability report" "${CI_ARTIFACT_DIR}/install-check.txt"
-grep -q "init" "${CI_ARTIFACT_DIR}/install-check.txt"
+# Row-level asserts (issues #787/#818): each required check must appear with a
+# real status — a bare "capability report"/"init" substring can be satisfied
+# by a header line or unrelated prose while the actual checks never ran.
+grep -q 'Install capability report' "${CI_ARTIFACT_DIR}/install-check.txt" \
+  || ci_die "capability report header missing: $(cat "${CI_ARTIFACT_DIR}/install-check.txt")"
+for row in platform init accounts sysctl; do
+  grep -Eq "^${row}[[:space:]]+(ok|provision)[[:space:]]" "${CI_ARTIFACT_DIR}/install-check.txt" \
+    || ci_die "capability report lacks a passing '${row}' row: $(cat "${CI_ARTIFACT_DIR}/install-check.txt")"
+done
+# The firewall row must exist too; its honest status depends on whether ufw
+# was already present (ok|skipped) or needs provisioning (provision).
+grep -Eq '^firewall[[:space:]]+(ok|provision|skipped)[[:space:]]' "${CI_ARTIFACT_DIR}/install-check.txt" \
+  || ci_die "capability report lacks a 'firewall' row: $(cat "${CI_ARTIFACT_DIR}/install-check.txt")"
+# A report that still lists a missing prerequisite must never exit 0.
+if grep -Eq '^[a-z0-9-]+[[:space:]]+missing[[:space:]]' "${CI_ARTIFACT_DIR}/install-check.txt"; then
+  ci_die "capability report lists missing prerequisites yet --check exited 0: $(cat "${CI_ARTIFACT_DIR}/install-check.txt")"
+fi
 if ${SUDO} test -e /var/lib/veil/state.json || ${SUDO} test -e /etc/veil/state.key; then
   ci_die "--check mutated the host (state files exist)"
 fi
@@ -317,7 +378,11 @@ ${SUDO} test -f /etc/veil/veil.env || ci_die "veil.env missing"
 ci_step "firewall contract (direct mode opens the panel port)"
 if command -v ufw >/dev/null 2>&1; then
   ${SUDO} ufw status | tee "${CI_ARTIFACT_DIR}/ufw-status.txt"
-  grep -q "${PANEL_PORT}/tcp" "${CI_ARTIFACT_DIR}/ufw-status.txt" || ci_die "ufw has no allow rule for the panel port"
+  # Require an actual ALLOW rule — matching the port text alone greens a DENY
+  # or a stale "Anywhere" comment column (issue #787). ufw renders v6 rules
+  # as "2096/tcp (v6)  ALLOW  Anywhere (v6)".
+  grep -Eq "^${PANEL_PORT}/tcp( \\(v6\\))?[[:space:]]+ALLOW[[:space:]]" "${CI_ARTIFACT_DIR}/ufw-status.txt" \
+    || ci_die "ufw has no ALLOW rule for the panel port: $(cat "${CI_ARTIFACT_DIR}/ufw-status.txt")"
 else
   ci_warn "ufw not present — install should have provisioned it; failing"
   exit 1
@@ -451,8 +516,8 @@ ci_step "firewall inbound contract (ufw carries the applied inbound ports)"
 # the panel side terminates the datachannel), so port 34446 expects no rule.
 ${SUDO} ufw status | tee "${CI_ARTIFACT_DIR}/ufw-status-after-inbounds.txt"
 for port_spec in 34443/udp 34444/tcp 34445/udp 34447/tcp; do
-  grep -q "${port_spec}" "${CI_ARTIFACT_DIR}/ufw-status-after-inbounds.txt" \
-    || ci_die "ufw has no allow rule for inbound ${port_spec}: $(cat "${CI_ARTIFACT_DIR}/ufw-status-after-inbounds.txt")"
+  grep -Eq "^${port_spec}( \\(v6\\))?[[:space:]]+ALLOW[[:space:]]" "${CI_ARTIFACT_DIR}/ufw-status-after-inbounds.txt" \
+    || ci_die "ufw has no ALLOW rule for inbound ${port_spec}: $(cat "${CI_ARTIFACT_DIR}/ufw-status-after-inbounds.txt")"
 done
 
 ci_step "rendered configs"
@@ -610,6 +675,76 @@ systemctl is-active --quiet veil.service || ci_die "veil.service not active afte
 # first-inbound leg must still be standing as well.
 assert_protocol_units "after controlled-CA reinstall"
 
+# --- 6.5. Custom --etc-dir/--var-dir install (issue #746) --------------------
+# The legs above only exercise the packaged /etc/veil + /var/lib/veil layout.
+# Install again under custom roots and leave it LIVE through the smolvm reboot
+# so phase B proves the custom trees, rendered units, and panel persist. On
+# the linear path the custom install is torn down right here and the caddy
+# leg below reinstalls default roots.
+ci_step "custom-root install (--etc-dir/--var-dir)"
+${SUDO} rm -rf "${CUSTOM_ROOT}"
+ci_run veil-install-custom ${SUDO} /usr/local/bin/veil install "${INSTALL_FLAGS[@]}" --etc-dir "${CUSTOM_ETC}" --var-dir "${CUSTOM_VAR}"
+systemctl is-active --quiet veil.service || ci_die "custom-root veil.service not active"
+systemctl is-enabled --quiet veil.service || ci_die "custom-root veil.service not enabled"
+systemctl is-active --quiet veil-helper.socket || ci_die "custom-root helper socket not active"
+${SUDO} test -S /run/veil/helper.sock || ci_die "helper socket missing under custom roots"
+${SUDO} test -s "${CUSTOM_ETC}/state.key" || ci_die "custom state.key missing"
+${SUDO} test -f "${CUSTOM_ETC}/veil.env" || ci_die "custom veil.env missing"
+${SUDO} test -s "${CUSTOM_VAR}/state.json" || ci_die "custom state.json missing"
+# The rendered units must carry the custom roots — merged `systemctl cat`
+# output covers both the generated-unit and drop-in layouts, so neither
+# placement can green this while pointing at /etc/veil or /var/lib/veil.
+${SUDO} systemctl cat veil.service > "${CI_ARTIFACT_DIR}/veil-custom-unit.txt"
+grep -q "EnvironmentFile=-${CUSTOM_ETC}/veil.env" "${CI_ARTIFACT_DIR}/veil-custom-unit.txt" \
+  || ci_die "veil.service does not reference the custom etc dir"
+grep -q "VEIL_STATE_PATH=${CUSTOM_VAR}/state.json" "${CI_ARTIFACT_DIR}/veil-custom-unit.txt" \
+  || ci_die "veil.service does not reference the custom var dir"
+grep -q "ReadWritePaths=${CUSTOM_VAR}" "${CI_ARTIFACT_DIR}/veil-custom-unit.txt" \
+  || ci_die "veil.service does not grant the custom var dir"
+${SUDO} systemctl cat veil-helper.service > "${CI_ARTIFACT_DIR}/veil-helper-custom-unit.txt"
+grep -q "VEIL_KEY_PATH=${CUSTOM_ETC}/state.key" "${CI_ARTIFACT_DIR}/veil-helper-custom-unit.txt" \
+  || ci_die "veil-helper.service does not reference the custom etc dir"
+grep -q "ReadWritePaths=${CUSTOM_ETC} ${CUSTOM_VAR}" "${CI_ARTIFACT_DIR}/veil-helper-custom-unit.txt" \
+  || ci_die "veil-helper.service does not grant the custom roots"
+# The edge units must mask the CUSTOM var dir, not the packaged default.
+${SUDO} systemctl cat veil-hysteria2@.service > "${CI_ARTIFACT_DIR}/veil-hy2-custom-unit.txt"
+grep -q "InaccessiblePaths=/run/veil/helper.sock ${CUSTOM_VAR}" "${CI_ARTIFACT_DIR}/veil-hy2-custom-unit.txt" \
+  || ci_die "veil-hysteria2@ does not mask the custom var dir"
+probe_panel_healthz "${CUSTOM_ETC}"
+# Re-apply the protocol inbounds under the custom roots so the reboot leg
+# proves the units persist with their configs under the custom etc tree —
+# an install-only leg would leave the templates without rendered configs.
+TOKEN="$(${SUDO} grep '^VEIL_API_TOKEN=' "${CUSTOM_ETC}/veil.env" | cut -d= -f2- | tr -d '[:space:]')"
+BASE_PATH="$(${SUDO} grep '^VEIL_WEB_BASE_PATH=' "${CUSTOM_ETC}/veil.env" | cut -d= -f2- | tr -d '[:space:]')"
+API="https://127.0.0.1:${PANEL_PORT}${BASE_PATH%/}"
+api_ready=1
+for _ in $(seq 1 24); do
+  ready_code="$(api_code GET /api/apply/state || true)"
+  if [ "${ready_code}" = "200" ]; then
+    api_ready=0
+    break
+  fi
+  sleep 5
+done
+[ "${api_ready}" -eq 0 ] || ci_die "custom-root management API did not become ready (last code ${ready_code:-none})"
+create_inbound ci-hy2 '{"name":"ci-hy2","protocol":"hysteria2","transport":"udp","port":34443,"enabled":true,"password":"ci-pass"}'
+create_inbound ci-mieru-tcp '{"name":"ci-mieru-tcp","protocol":"mieru","transport":"tcp","port":34444,"enabled":true,"profiles":[{"name":"alice","password":"alice-pass","enabled":true}]}'
+create_inbound ci-mieru-udp '{"name":"ci-mieru-udp","protocol":"mieru","transport":"udp","port":34445,"enabled":true,"password":"udp-pass"}'
+create_inbound ci-olc '{"name":"ci-olc","protocol":"olcrtc","transport":"udp","port":34446,"enabled":true,"protocolFields":{"password":"abababababababababababababababababababababababababababababababab","olcrtcAuth":"jitsi","olcrtcTransport":"datachannel","olcrtcRoomID":"https://127.0.0.1/veil-ci"}}'
+apply_panel
+assert_protocol_units "custom-root leg"
+if [ -z "${IA_PHASE_MARKER}" ]; then
+  # Linear path: tear the custom install down now; on the smolvm path phase B
+  # verifies reboot persistence first and tears down there.
+  ci_step "custom-root uninstall"
+  ci_run veil-uninstall-custom ${SUDO} /usr/local/bin/veil uninstall --yes --etc-dir "${CUSTOM_ETC}" --var-dir "${CUSTOM_VAR}"
+  ${SUDO} test ! -e "${CUSTOM_ETC}" || ci_die "custom etc dir left after custom-root uninstall"
+  ${SUDO} test ! -e "${CUSTOM_VAR}" || ci_die "custom var dir left after custom-root uninstall"
+  if systemctl is-active --quiet veil.service; then
+    ci_die "veil.service still active after custom-root uninstall"
+  fi
+fi
+
 # --- 7. Reboot persistence (smolvm system VM only) ---------------------------
 if [ -n "${IA_PHASE_MARKER}" ]; then
   ci_log "smolvm system VM: staging post-reboot phase and rebooting"
@@ -692,9 +827,39 @@ fi
 # Finish through the standalone leftover-path uninstaller — it must detect and
 # clear them, and report a clean host on a second pass (issues #500, #501).
 ci_step "leftover-state uninstaller after package purge"
+# Plant every wants-link/drop-in shape the uninstaller must clear (issue
+# #788): non-template service links, the helper socket link, the backup timer
+# link, and per-unit drop-in dirs. Links dangle post-purge (their vendor
+# targets are gone) — a leftover pass that only saw /etc/veil would never
+# prove these globs.
+${SUDO} mkdir -p /etc/systemd/system/multi-user.target.wants \
+  /etc/systemd/system/sockets.target.wants \
+  /etc/systemd/system/timers.target.wants \
+  /etc/systemd/system/veil.service.d \
+  /etc/systemd/system/veil-helper.socket.d \
+  /etc/systemd/system/veil-backup.timer.d
+${SUDO} ln -sf /nonexistent/veil.service /etc/systemd/system/multi-user.target.wants/veil.service
+${SUDO} ln -sf /nonexistent/veil-helper.socket /etc/systemd/system/sockets.target.wants/veil-helper.socket
+${SUDO} ln -sf /nonexistent/veil-backup.timer /etc/systemd/system/timers.target.wants/veil-backup.timer
+${SUDO} ln -sf /nonexistent/veil-olcrtc@ci-olc.service /etc/systemd/system/multi-user.target.wants/veil-olcrtc@ci-olc.service
+for dropin in veil.service.d veil-helper.socket.d veil-backup.timer.d; do
+  printf '[Service]\n' | ${SUDO} tee "/etc/systemd/system/${dropin}/10-veil-install.conf" >/dev/null
+done
 ci_run veil-uninstall-leftover ${SUDO} bash scripts/uninstall.sh --yes
 ${SUDO} test ! -e /etc/veil || ci_die "/etc/veil left after leftover uninstall"
 ${SUDO} test ! -e /var/lib/veil || ci_die "/var/lib/veil left after leftover uninstall"
+for leftover in \
+  /etc/systemd/system/multi-user.target.wants/veil.service \
+  /etc/systemd/system/multi-user.target.wants/veil-olcrtc@ci-olc.service \
+  /etc/systemd/system/sockets.target.wants/veil-helper.socket \
+  /etc/systemd/system/timers.target.wants/veil-backup.timer \
+  /etc/systemd/system/veil.service.d \
+  /etc/systemd/system/veil-helper.socket.d \
+  /etc/systemd/system/veil-backup.timer.d; do
+  if ${SUDO} test -e "${leftover}" || ${SUDO} test -L "${leftover}"; then
+    ci_die "planted leftover ${leftover} survived the uninstaller"
+  fi
+done
 bash scripts/uninstall.sh --yes 2>&1 | tee "${CI_ARTIFACT_DIR}/uninstall-second-pass.log"
 grep -q "Nothing to uninstall" "${CI_ARTIFACT_DIR}/uninstall-second-pass.log" \
   || ci_die "second uninstall pass still finds leftover state"
