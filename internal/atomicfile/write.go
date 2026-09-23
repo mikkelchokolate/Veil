@@ -48,6 +48,9 @@ func Write(path string, body []byte, mode os.FileMode, dirMode os.FileMode) erro
 	if err := chmod(tmpPath, mode); err != nil {
 		return err
 	}
+	if err := preserveOwner(tmpPath, path); err != nil {
+		return err
+	}
 	if err := syncFile(tmp); err != nil {
 		return err
 	}
