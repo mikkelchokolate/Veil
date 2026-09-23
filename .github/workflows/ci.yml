@@ -374,12 +374,15 @@ jobs:
           path: .artifacts/ci/
           if-no-files-found: ignore
 
-  package-smoke:
+  # #670: arm64 deb/rpm/apk install/upgrade/remove must not wait for a
+  # release tag — same matrix contract as install-acceptance. The matrix
+  # legs report as "package-smoke (<arch>)"; the branch ruleset requires
+  # a literal "package-smoke" context, so a tiny aggregator job below maps
+  # both legs back to the required check name.
+  package-smoke-matrix:
     needs: frontend
     env:
       CI_FRONTEND_DIST_ARTIFACT_DIR: .artifacts/ci/frontend-dist
-    # #670: arm64 deb/rpm/apk install/upgrade/remove must not wait for a
-    # release tag — same matrix contract as install-acceptance.
     strategy:
       fail-fast: false
       matrix:
@@ -420,6 +423,15 @@ jobs:
           name: ci-package-smoke-${{ matrix.arch }}
           path: .artifacts/ci/
           if-no-files-found: ignore
+
+  # Aggregates both matrix legs into the literal "package-smoke" check
+  # context the branch ruleset requires — fails/skips if either arch fails.
+  package-smoke:
+    needs: package-smoke-matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: 'true'
 
   image-build:
     runs-on: ubuntu-24.04

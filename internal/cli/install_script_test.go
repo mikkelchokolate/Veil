@@ -438,6 +438,20 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 		}
 	}
 
+	// #670 + ruleset contract: the branch ruleset requires a literal
+	// "package-smoke" check context. Matrix legs report as
+	// "package-smoke (<arch>)", so ci.yml must keep an aggregator job named
+	// package-smoke that depends on the matrix and fails if any arch fails.
+	for _, want := range []string{
+		"package-smoke-matrix:",
+		"arch: [amd64, arm64]",
+		"package-smoke:\n    needs: package-smoke-matrix",
+	} {
+		if !strings.Contains(workflow, want) {
+			t.Fatalf("ci.yml lost the literal package-smoke check context %q:\n%s", want, workflow)
+		}
+	}
+
 	testScript := read("../../scripts/ci/test.sh")
 	for _, want := range []string{
 		"go test ./sdk/go -race -count=1",
