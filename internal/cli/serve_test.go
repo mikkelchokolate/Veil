@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"net"
 	"net/http"
@@ -117,8 +118,105 @@ func TestResolveServeTLSRejectsKeyOnly(t *testing.T) {
 	}
 }
 
+// freeLoopbackPort reserves an ephemeral port so serve tests do not collide
+// on fixed port numbers.
+func freeLoopbackPort(t *testing.T) int {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port
+}
+
+// runServeUntilStartup launches the real serve workflow, waits until the
+// startup banner is printed, then cancels. It returns the captured output.
+func runServeUntilStartup(t *testing.T, extraArgs ...string) string {
+	t.Helper()
+	root := t.TempDir()
+	listen := fmt.Sprintf("127.0.0.1:%d", freeLoopbackPort(t))
+	stateFile := filepath.Join(root, "state.json")
+	if err := os.WriteFile(stateFile, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetContext(ctx)
+	args := []string{
+		"serve",
+		"--listen", listen,
+		"--auth-token", "test",
+		"--state", stateFile,
+		"--key-path", filepath.Join(root, "state.key"),
+		"--apply-root", filepath.Join(root, "apply"),
+		"--helper-socket", filepath.Join(root, "helper.sock"),
+	}
+	cmd.SetArgs(append(args, extraArgs...))
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- cmd.Execute()
+	}()
+
+	deadline := time.Now().Add(10 * time.Second)
+	for !strings.Contains(out.String(), "TLS:") {
+		select {
+		case err := <-errCh:
+			t.Fatalf("serve exited before printing TLS status: %v\n%s", err, out.String())
+		default:
+		}
+		if time.Now().After(deadline) {
+			cancel()
+			t.Fatalf("timed out waiting for TLS status line\n%s", out.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("serve shutdown error: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("serve did not shut down")
+	}
+	return out.String()
+}
+
 func TestServeCommandPrintsTLSStatus(t *testing.T) {
-	// Quick exit: just verify --help includes the new flags
+	// Exercise the real serve-start path for both modes; the banner must
+	// report the actual negotiated TLS state, not just document the flags.
+	t.Run("disabled", func(t *testing.T) {
+		out := runServeUntilStartup(t)
+		if !strings.Contains(out, "TLS: disabled") {
+			t.Fatalf("expected \"TLS: disabled\" in startup output:\n%s", out)
+		}
+		if !strings.Contains(out, "http://") {
+			t.Fatalf("expected http listen URL in startup output:\n%s", out)
+		}
+	})
+	t.Run("enabled", func(t *testing.T) {
+		cert, err := generateSelfSignedCert()
+		if err != nil {
+			t.Fatalf("self-signed cert: %v", err)
+		}
+		out := runServeUntilStartup(t, "--tls-cert", cert.certFile, "--tls-key", cert.keyFile)
+		if !strings.Contains(out, "TLS: enabled (--tls-cert / --tls-key)") {
+			t.Fatalf("expected \"TLS: enabled (--tls-cert / --tls-key)\":\n%s", out)
+		}
+		if !strings.Contains(out, "https://") {
+			t.Fatalf("expected https listen URL in startup output:\n%s", out)
+		}
+	})
+}
+
+func TestServeCommandHelpDocumentsTLSFlags(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -147,16 +245,31 @@ func TestNewServeTLSConfigEnforcesModernTLS(t *testing.T) {
 			t.Fatalf("TLS version 0x%04x should be rejected by MinVersion=%d", ver, cfg.MinVersion)
 		}
 	}
-	// Verify only AEAD cipher suites
+	// The cipher-suite pin must actually contain entries — ranging over an
+	// empty list would pass vacuously while offering no AEAD guarantee.
+	if len(cfg.CipherSuites) == 0 {
+		t.Fatal("expected non-empty AEAD cipher suite list")
+	}
 	for _, cs := range cfg.CipherSuites {
 		switch cs {
 		case tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
 			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
 			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
-			// valid
+			// valid AEAD suite
 		default:
 			t.Fatalf("unexpected cipher suite: 0x%04x", cs)
+		}
+	}
+	if len(cfg.CurvePreferences) == 0 {
+		t.Fatal("expected explicit curve preferences")
+	}
+	for _, curve := range cfg.CurvePreferences {
+		switch curve {
+		case tls.X25519, tls.CurveP256:
+			// modern curves only
+		default:
+			t.Fatalf("unexpected curve preference: 0x%04x", curve)
 		}
 	}
 }

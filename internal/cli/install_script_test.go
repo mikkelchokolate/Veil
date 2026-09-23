@@ -529,17 +529,37 @@ func TestReadmeDocumentsBackupRollbackAuditWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	readme := strings.ReplaceAll(string(body), "\r\n", "\n")
+
+	// The runnable commands must appear inside fenced code blocks — prose
+	// mentions of "rollback restore" do not prove an operator-run example
+	// exists.
+	var fenced strings.Builder
+	inFence := false
+	for _, line := range strings.Split(readme, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			fenced.WriteString(line + "\n")
+		}
+	}
+	examples := fenced.String()
 	for _, want := range []string{
-		"repair --backup-dir",
-		"rollback list --backup-dir",
-		"rollback restore",
-		"rollback cleanup",
+		"veil repair --backup-dir",
+		"veil rollback list --backup-dir",
+		"veil rollback restore",
+		"veil rollback cleanup",
 		"--audit-log",
-		"audit",
-		"JSONL",
-		"dry-run",
-		"writable",
 	} {
+		if !strings.Contains(examples, want) {
+			t.Fatalf("README.md has no fenced example running %q:\n%s", want, examples)
+		}
+	}
+
+	// The surrounding prose must still explain the audit format and the
+	// destructive/preview split.
+	for _, want := range []string{"JSONL", "dry-run", "writable"} {
 		if !strings.Contains(readme, want) {
 			t.Fatalf("README.md missing %q:\n%s", want, readme)
 		}

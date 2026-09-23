@@ -56,21 +56,29 @@ export const GetApiV1ClientsResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "email": zod.string().optional(),
-  "enabled": zod.boolean().optional(),
+  "enabled": zod.boolean(),
   "groupId": zod.string().optional(),
   "quotaBytes": zod.int().min(getApiV1ClientsResponseItemsItemQuotaBytesMin).max(getApiV1ClientsResponseItemsItemQuotaBytesMax).optional(),
-  "quotaResetPolicy": zod.string().optional(),
+  "quotaResetPolicy": zod.string(),
   "quotaResetAt": zod.int().optional(),
   "expiresAt": zod.int().optional(),
   "deviceLimit": zod.int().optional(),
   "notes": zod.string().optional(),
-  "depleted": zod.boolean().optional(),
+  "depleted": zod.boolean(),
   "status": zod.enum(['active', 'disabled', 'expired', 'depleted', 'pending_apply', 'apply_failed', 'orphaned']).describe('Effective status.'),
   "inboundIds": zod.array(zod.string()).optional(),
-  "hasCreds": zod.boolean().optional(),
-  "createdAt": zod.int().optional(),
-  "updatedAt": zod.int().optional(),
-  "version": zod.int().optional(),
+  "hasCredentials": zod.boolean().describe('Whether any binding holds an issued credential.'),
+  "expirationEnforcement": zod.object({
+  "state": zod.string().describe('Current enforcement state for the client\'s expiry.'),
+  "desiredRevision": zod.int(),
+  "appliedRevision": zod.int(),
+  "attempts": zod.int(),
+  "nextRetryAt": zod.int().optional(),
+  "lastError": zod.string().optional()
+}).optional(),
+  "createdAt": zod.int(),
+  "updatedAt": zod.int(),
+  "version": zod.int(),
   "bindings": zod.array(zod.object({
   "id": zod.string(),
   "inboundId": zod.string(),
@@ -81,7 +89,11 @@ export const GetApiV1ClientsResponse = zod.object({
   "protocol": zod.string(),
   "transports": zod.array(zod.string()),
   "perClientCredentials": zod.boolean(),
-  "requiresCaddy": zod.boolean()
+  "requiresCaddy": zod.boolean(),
+  "trafficAccounting": zod.boolean().describe('Whether traffic on this binding counts toward the client\'s recorded usage.'),
+  "quotaEnforcement": zod.boolean().describe('Whether the runtime rejects traffic once the client\'s quota is depleted.'),
+  "credentialKinds": zod.array(zod.string()).optional().describe('Credential kinds the protocol can issue for this binding. Omitted when empty.'),
+  "expirationEnforcement": zod.boolean().describe('Whether expiry enforcement is applied for credentials on this binding.')
 }).optional(),
   "credential": zod.object({
   "configured": zod.boolean(),
@@ -144,21 +156,29 @@ export const PostApiV1ClientsResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "email": zod.string().optional(),
-  "enabled": zod.boolean().optional(),
+  "enabled": zod.boolean(),
   "groupId": zod.string().optional(),
   "quotaBytes": zod.int().min(postApiV1ClientsResponseClientQuotaBytesMin).max(postApiV1ClientsResponseClientQuotaBytesMax).optional(),
-  "quotaResetPolicy": zod.string().optional(),
+  "quotaResetPolicy": zod.string(),
   "quotaResetAt": zod.int().optional(),
   "expiresAt": zod.int().optional(),
   "deviceLimit": zod.int().optional(),
   "notes": zod.string().optional(),
-  "depleted": zod.boolean().optional(),
+  "depleted": zod.boolean(),
   "status": zod.enum(['active', 'disabled', 'expired', 'depleted', 'pending_apply', 'apply_failed', 'orphaned']).describe('Effective status.'),
   "inboundIds": zod.array(zod.string()).optional(),
-  "hasCreds": zod.boolean().optional(),
-  "createdAt": zod.int().optional(),
-  "updatedAt": zod.int().optional(),
-  "version": zod.int().optional(),
+  "hasCredentials": zod.boolean().describe('Whether any binding holds an issued credential.'),
+  "expirationEnforcement": zod.object({
+  "state": zod.string().describe('Current enforcement state for the client\'s expiry.'),
+  "desiredRevision": zod.int(),
+  "appliedRevision": zod.int(),
+  "attempts": zod.int(),
+  "nextRetryAt": zod.int().optional(),
+  "lastError": zod.string().optional()
+}).optional(),
+  "createdAt": zod.int(),
+  "updatedAt": zod.int(),
+  "version": zod.int(),
   "bindings": zod.array(zod.object({
   "id": zod.string(),
   "inboundId": zod.string(),
@@ -169,7 +189,11 @@ export const PostApiV1ClientsResponse = zod.object({
   "protocol": zod.string(),
   "transports": zod.array(zod.string()),
   "perClientCredentials": zod.boolean(),
-  "requiresCaddy": zod.boolean()
+  "requiresCaddy": zod.boolean(),
+  "trafficAccounting": zod.boolean().describe('Whether traffic on this binding counts toward the client\'s recorded usage.'),
+  "quotaEnforcement": zod.boolean().describe('Whether the runtime rejects traffic once the client\'s quota is depleted.'),
+  "credentialKinds": zod.array(zod.string()).optional().describe('Credential kinds the protocol can issue for this binding. Omitted when empty.'),
+  "expirationEnforcement": zod.boolean().describe('Whether expiry enforcement is applied for credentials on this binding.')
 }).optional(),
   "credential": zod.object({
   "configured": zod.boolean(),
@@ -299,7 +323,31 @@ export const GetApiV1ClientsIdBindingsParams = zod.object({
   "id": zod.string().min(1)
 })
 
-export const GetApiV1ClientsIdBindingsResponse = zod.unknown()
+export const GetApiV1ClientsIdBindingsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "inboundId": zod.string(),
+  "runtimeIdentity": zod.string(),
+  "enabled": zod.boolean(),
+  "version": zod.int(),
+  "capability": zod.object({
+  "protocol": zod.string(),
+  "transports": zod.array(zod.string()),
+  "perClientCredentials": zod.boolean(),
+  "requiresCaddy": zod.boolean(),
+  "trafficAccounting": zod.boolean().describe('Whether traffic on this binding counts toward the client\'s recorded usage.'),
+  "quotaEnforcement": zod.boolean().describe('Whether the runtime rejects traffic once the client\'s quota is depleted.'),
+  "credentialKinds": zod.array(zod.string()).optional().describe('Credential kinds the protocol can issue for this binding. Omitted when empty.'),
+  "expirationEnforcement": zod.boolean().describe('Whether expiry enforcement is applied for credentials on this binding.')
+}).optional(),
+  "credential": zod.object({
+  "configured": zod.boolean(),
+  "kind": zod.string().optional(),
+  "version": zod.int().optional(),
+  "rotatedAt": zod.int().optional()
+}).optional()
+}))
+})
 
 /**
  * @summary Add a binding; empty credential is generated once
@@ -706,21 +754,29 @@ export const GetApiV1ClientsIdResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "email": zod.string().optional(),
-  "enabled": zod.boolean().optional(),
+  "enabled": zod.boolean(),
   "groupId": zod.string().optional(),
   "quotaBytes": zod.int().min(getApiV1ClientsIdResponseQuotaBytesMin).max(getApiV1ClientsIdResponseQuotaBytesMax).optional(),
-  "quotaResetPolicy": zod.string().optional(),
+  "quotaResetPolicy": zod.string(),
   "quotaResetAt": zod.int().optional(),
   "expiresAt": zod.int().optional(),
   "deviceLimit": zod.int().optional(),
   "notes": zod.string().optional(),
-  "depleted": zod.boolean().optional(),
+  "depleted": zod.boolean(),
   "status": zod.enum(['active', 'disabled', 'expired', 'depleted', 'pending_apply', 'apply_failed', 'orphaned']).describe('Effective status.'),
   "inboundIds": zod.array(zod.string()).optional(),
-  "hasCreds": zod.boolean().optional(),
-  "createdAt": zod.int().optional(),
-  "updatedAt": zod.int().optional(),
-  "version": zod.int().optional(),
+  "hasCredentials": zod.boolean().describe('Whether any binding holds an issued credential.'),
+  "expirationEnforcement": zod.object({
+  "state": zod.string().describe('Current enforcement state for the client\'s expiry.'),
+  "desiredRevision": zod.int(),
+  "appliedRevision": zod.int(),
+  "attempts": zod.int(),
+  "nextRetryAt": zod.int().optional(),
+  "lastError": zod.string().optional()
+}).optional(),
+  "createdAt": zod.int(),
+  "updatedAt": zod.int(),
+  "version": zod.int(),
   "bindings": zod.array(zod.object({
   "id": zod.string(),
   "inboundId": zod.string(),
@@ -731,7 +787,11 @@ export const GetApiV1ClientsIdResponse = zod.object({
   "protocol": zod.string(),
   "transports": zod.array(zod.string()),
   "perClientCredentials": zod.boolean(),
-  "requiresCaddy": zod.boolean()
+  "requiresCaddy": zod.boolean(),
+  "trafficAccounting": zod.boolean().describe('Whether traffic on this binding counts toward the client\'s recorded usage.'),
+  "quotaEnforcement": zod.boolean().describe('Whether the runtime rejects traffic once the client\'s quota is depleted.'),
+  "credentialKinds": zod.array(zod.string()).optional().describe('Credential kinds the protocol can issue for this binding. Omitted when empty.'),
+  "expirationEnforcement": zod.boolean().describe('Whether expiry enforcement is applied for credentials on this binding.')
 }).optional(),
   "credential": zod.object({
   "configured": zod.boolean(),
@@ -793,21 +853,29 @@ export const PatchApiV1ClientsIdResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "email": zod.string().optional(),
-  "enabled": zod.boolean().optional(),
+  "enabled": zod.boolean(),
   "groupId": zod.string().optional(),
   "quotaBytes": zod.int().min(patchApiV1ClientsIdResponseOneQuotaBytesMin).max(patchApiV1ClientsIdResponseOneQuotaBytesMax).optional(),
-  "quotaResetPolicy": zod.string().optional(),
+  "quotaResetPolicy": zod.string(),
   "quotaResetAt": zod.int().optional(),
   "expiresAt": zod.int().optional(),
   "deviceLimit": zod.int().optional(),
   "notes": zod.string().optional(),
-  "depleted": zod.boolean().optional(),
+  "depleted": zod.boolean(),
   "status": zod.enum(['active', 'disabled', 'expired', 'depleted', 'pending_apply', 'apply_failed', 'orphaned']).describe('Effective status.'),
   "inboundIds": zod.array(zod.string()).optional(),
-  "hasCreds": zod.boolean().optional(),
-  "createdAt": zod.int().optional(),
-  "updatedAt": zod.int().optional(),
-  "version": zod.int().optional(),
+  "hasCredentials": zod.boolean().describe('Whether any binding holds an issued credential.'),
+  "expirationEnforcement": zod.object({
+  "state": zod.string().describe('Current enforcement state for the client\'s expiry.'),
+  "desiredRevision": zod.int(),
+  "appliedRevision": zod.int(),
+  "attempts": zod.int(),
+  "nextRetryAt": zod.int().optional(),
+  "lastError": zod.string().optional()
+}).optional(),
+  "createdAt": zod.int(),
+  "updatedAt": zod.int(),
+  "version": zod.int(),
   "bindings": zod.array(zod.object({
   "id": zod.string(),
   "inboundId": zod.string(),
@@ -818,7 +886,11 @@ export const PatchApiV1ClientsIdResponse = zod.object({
   "protocol": zod.string(),
   "transports": zod.array(zod.string()),
   "perClientCredentials": zod.boolean(),
-  "requiresCaddy": zod.boolean()
+  "requiresCaddy": zod.boolean(),
+  "trafficAccounting": zod.boolean().describe('Whether traffic on this binding counts toward the client\'s recorded usage.'),
+  "quotaEnforcement": zod.boolean().describe('Whether the runtime rejects traffic once the client\'s quota is depleted.'),
+  "credentialKinds": zod.array(zod.string()).optional().describe('Credential kinds the protocol can issue for this binding. Omitted when empty.'),
+  "expirationEnforcement": zod.boolean().describe('Whether expiry enforcement is applied for credentials on this binding.')
 }).optional(),
   "credential": zod.object({
   "configured": zod.boolean(),

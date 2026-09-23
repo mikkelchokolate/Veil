@@ -41,6 +41,9 @@
  * OpenAPI spec version: 0.6.3
  */
 
+/**
+ * Panel access mode. Always emitted on read; on write, an omitted field keeps the current value.
+ */
 export type SettingsPanelAccess = typeof SettingsPanelAccess[keyof typeof SettingsPanelAccess];
 
 
@@ -48,5 +51,4 @@ export const SettingsPanelAccess = {
   local: 'local',
   direct: 'direct',
   caddy: 'caddy',
-  '': '',
 } as const;

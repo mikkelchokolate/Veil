@@ -180,8 +180,21 @@ func TestInstallRURecommendedRejectsInvalidPublicIP(t *testing.T) {
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--public-ip", "not-an-ip", "--dry-run"})
 
-	if err := cmd.Execute(); err == nil {
+	err := cmd.Execute()
+	if err == nil {
 		t.Fatalf("expected error with invalid public IP")
+	}
+	// Any error would pass an err-only check — including unrelated flag
+	// errors. Lock that the refusal names the flag concept and the reason
+	// (#773); the production message is "public IP must be a valid IPv4 or
+	// IPv6 address, or auto".
+	combined := err.Error() + "\n" + out.String()
+	lower := strings.ToLower(combined)
+	if !strings.Contains(lower, "public ip") && !strings.Contains(lower, "public-ip") {
+		t.Fatalf("invalid public-ip refusal must name the flag, got err=%v out=%s", err, out.String())
+	}
+	if !strings.Contains(lower, "valid") && !strings.Contains(lower, "invalid") {
+		t.Fatalf("invalid public-ip refusal must state the validation reason, got err=%v out=%s", err, out.String())
 	}
 }
 

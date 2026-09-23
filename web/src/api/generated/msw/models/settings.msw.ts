@@ -46,6 +46,7 @@ import type { SettingsProtocolFields } from './settingsProtocolFields.msw.ts';
 
 export interface Settings {
   panelListen: string;
+  /** Panel access mode. Always emitted on read; on write, an omitted field keeps the current value. */
   panelAccess?: SettingsPanelAccess;
   webBasePath?: string;
   mode: string;

@@ -46,4 +46,12 @@ export interface BindingCapability {
   transports: string[];
   perClientCredentials: boolean;
   requiresCaddy: boolean;
+  /** Whether traffic on this binding counts toward the client's recorded usage. */
+  trafficAccounting: boolean;
+  /** Whether the runtime rejects traffic once the client's quota is depleted. */
+  quotaEnforcement: boolean;
+  /** Credential kinds the protocol can issue for this binding. Omitted when empty. */
+  credentialKinds?: string[];
+  /** Whether expiry enforcement is applied for credentials on this binding. */
+  expirationEnforcement: boolean;
 }
