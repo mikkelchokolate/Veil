@@ -168,11 +168,16 @@ func TestManagedMaterialCustomPathsWriteProtocolDropIns(t *testing.T) {
 	}
 }
 
+// Issue #914: when the vendor dir carries every packaged unit, a default-path
+// install must generate NOTHING under /etc/systemd/system — no unit copies and
+// no drop-in overrides.
 func TestManagedMaterialDefaultPackagedInstallWritesNoEtcUnits(t *testing.T) {
 	vendor := t.TempDir()
 	etcSystemd := filepath.Join(t.TempDir(), "etc", "systemd", "system")
-	if err := os.WriteFile(filepath.Join(vendor, "veil.service"), []byte("[Unit]\nDescription=vendor\n"), 0o644); err != nil {
-		t.Fatal(err)
+	for _, name := range systemdunits.Names() {
+		if err := os.WriteFile(filepath.Join(vendor, name), []byte("[Unit]\nDescription=vendor\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	material := NewManagedMaterial(Input{
 		Paths: Paths{
@@ -189,8 +194,10 @@ func TestManagedMaterialDefaultPackagedInstallWritesNoEtcUnits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Files: %v", err)
 	}
-	if hasFile(files, filepath.Join(etcSystemd, "veil.service")) || hasFile(files, filepath.Join(etcSystemd, "veil.service.d", "10-veil-install.conf")) {
-		t.Fatalf("default packaged install must not write /etc unit overrides: %+v", files)
+	for _, file := range files {
+		if strings.HasPrefix(file.Path, etcSystemd+string(os.PathSeparator)) {
+			t.Fatalf("packaged install must not write under %s, found %q", etcSystemd, file.Path)
+		}
 	}
 }
 

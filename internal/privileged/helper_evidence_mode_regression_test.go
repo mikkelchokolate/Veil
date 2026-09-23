@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,7 +40,38 @@ func TestRestartHelperEvidenceIsReadableByNonRoot(t *testing.T) {
 	if err := executor.RestartPanel(ctx); err != nil {
 		t.Fatalf("restart Panel: %v", err)
 	}
-	assertHelperEvidenceReadable(t, filepath.Join(dir, ".veil-restart-evidence.json"))
+	manifestPath := filepath.Join(dir, ".veil-restart-evidence.json")
+	assertHelperEvidenceReadable(t, manifestPath)
+
+	// The committed receipt must carry the exact evidence the restart
+	// transaction gathered, not merely be a readable JSON file.
+	binaryDigest := sha256.Sum256([]byte("panel-binary"))
+	var evidence map[string]any
+	body, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(body, &evidence); err != nil {
+		t.Fatalf("restart evidence is not JSON: %v", err)
+	}
+	want := map[string]any{
+		"version":                  float64(1),
+		"transactionId":            "restart-op",
+		"expectedExecutableDigest": hex.EncodeToString(binaryDigest[:]),
+		// The fake systemctl show returns MainPID/Monotonic equal to the call
+		// number: generation 1 before restart, generation 2 after.
+		"previousStartGeneration": float64(1),
+		"newStartGeneration":      float64(2),
+		"mainPid":                 float64(2),
+		"serviceActive":           true,
+		"activationManifest":      manifestPath,
+		"commitPhase":             "committed",
+	}
+	for key, wantValue := range want {
+		if got := evidence[key]; got != wantValue {
+			t.Errorf("restart evidence %s = %#v, want %#v (body %s)", key, got, wantValue, body)
+		}
+	}
 }
 
 func TestUpdateHelperEvidenceIsReadableByNonRoot(t *testing.T) {
@@ -72,7 +105,44 @@ func TestUpdateHelperEvidenceIsReadableByNonRoot(t *testing.T) {
 	if _, err := executor.Update(context.Background(), request); err != nil {
 		t.Fatalf("install staged update: %v", err)
 	}
-	assertHelperEvidenceReadable(t, filepath.Join(root, ".veil-update-evidence.json"))
+	manifestPath := filepath.Join(root, ".veil-update-evidence.json")
+	assertHelperEvidenceReadable(t, manifestPath)
+
+	// Assert the exact committed receipt fields — digests of the old and new
+	// binaries, target version, and the committed phase — not just that some
+	// readable JSON exists.
+	newDigest := sha256.Sum256([]byte("new-binary"))
+	oldDigest := sha256.Sum256([]byte("old-binary"))
+	body, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var evidence map[string]any
+	if err := json.Unmarshal(body, &evidence); err != nil {
+		t.Fatalf("update evidence is not JSON: %v", err)
+	}
+	want := map[string]any{
+		"version":              float64(1),
+		"expectedBinaryDigest": hex.EncodeToString(newDigest[:]),
+		"oldBinaryDigest":      hex.EncodeToString(oldDigest[:]),
+		"targetVersion":        "v0.6.0",
+		"activationManifest":   manifestPath,
+		"commitPhase":          "committed",
+	}
+	for key, wantValue := range want {
+		if got := evidence[key]; got != wantValue {
+			t.Errorf("update evidence %s = %#v, want %#v (body %s)", key, got, wantValue, body)
+		}
+	}
+	// transactionId is generated when the request carries no fence; it must
+	// still be a durable 16-byte hex token, and installedPathInode must be
+	// populated ("unknown" is the documented fallback off Linux).
+	if tx, _ := evidence["transactionId"].(string); len(tx) != 32 || strings.Trim(tx, "0123456789abcdef") != "" {
+		t.Errorf("update evidence transactionId = %#v, want 32-char hex", evidence["transactionId"])
+	}
+	if inode, _ := evidence["installedPathInode"].(string); inode == "" {
+		t.Error("update evidence omits installedPathInode")
+	}
 }
 
 func assertHelperEvidenceReadable(t *testing.T, path string) {

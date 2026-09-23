@@ -13,8 +13,19 @@ import (
 // deleted. The result must report them separately (WrittenArtifacts vs
 // RemovedArtifacts); merging them makes the API reload a service against a
 // config that no longer exists and skip stopping the newly added unit.
+// Restored files must also get the runtime-artifact ownership contract back
+// (the dedicated ownership matrix lives in
+// promotion_rollback_ownership_regression_test.go).
 func TestRestorePromotedArtifactsSeparatesRestoredAndRemoved(t *testing.T) {
 	stubRuntimeArtifactOwnership(t)
+
+	var chowns []ownershipCall
+	oldChownPath := chownPath
+	t.Cleanup(func() { chownPath = oldChownPath })
+	chownPath = func(path string, uid, gid int) error {
+		chowns = append(chowns, ownershipCall{path: path, uid: uid, gid: gid})
+		return nil
+	}
 
 	root := t.TempDir()
 	backupRoot := filepath.Join(root, "backups")
@@ -64,5 +75,13 @@ func TestRestorePromotedArtifactsSeparatesRestoredAndRemoved(t *testing.T) {
 	assertFileContent(t, caddyDst, string(oldCaddy))
 	if _, err := os.Stat(hy2Dst); !os.IsNotExist(err) {
 		t.Fatalf("newly added config should be deleted by restore, stat err=%v", err)
+	}
+	// The restored artifact must regain root:veil-proxy ownership; the removed
+	// artifact must not be chowned at all.
+	if !hasChown(chowns, caddyDst, 0, 457) {
+		t.Fatalf("restored artifact was not chowned root:veil-proxy: %+v", chowns)
+	}
+	if hasChown(chowns, hy2Dst, 0, 457) {
+		t.Fatalf("removed artifact should not be chowned: %+v", chowns)
 	}
 }

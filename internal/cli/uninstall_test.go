@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	uninstallflow "github.com/mikkelchokolate/Veil/internal/cliflow/uninstall"
 )
 
 func TestUninstallRefusesWithoutYes(t *testing.T) {
@@ -362,26 +365,19 @@ func TestUninstallCaddyMitaStateDirOverrides(t *testing.T) {
 	}
 }
 
-func TestUninstallServiceStopperStopsAndDisablesReal(t *testing.T) {
-	// Test that the real implementation calls systemctl stop and disable
-	origLookPath := commandLookPath
-	t.Cleanup(func() { commandLookPath = origLookPath })
-
-	// Mock systemctl to return success
-	var stopCalled, disableCalled bool
-	commandLookPath = func(name string) (string, error) {
-		if name == "systemctl" {
-			return "/usr/bin/systemctl", nil
-		}
-		return "", errCommandNotFound
+// The CLI cannot invoke real systemctl in unit tests — the command-level
+// coverage (systemctl stop + disable argv) lives in internal/cliflow/uninstall
+// via the stubbed runner. This test locks the wiring instead: the CLI stopper
+// must still be that real implementation, not a stub or a no-op.
+func TestUninstallServiceStopperDelegatesToRealImplementation(t *testing.T) {
+	if reflect.ValueOf(uninstallServiceStopper).Pointer() != reflect.ValueOf(uninstallflow.StopAndDisableService).Pointer() {
+		t.Fatal("uninstallServiceStopper must delegate to cliflow/uninstall.StopAndDisableService")
 	}
-
-	_ = stopCalled
-	_ = disableCalled
-	// This test is limited — real systemctl can't be called in unit tests.
-	// We verify the function signature and that it doesn't panic.
-	if uninstallServiceStopper == nil {
-		t.Fatal("uninstallServiceStopper is nil")
+	if reflect.ValueOf(uninstallFileRemover).Pointer() != reflect.ValueOf(uninstallflow.RemovePath).Pointer() {
+		t.Fatal("uninstallFileRemover must delegate to cliflow/uninstall.RemovePath")
+	}
+	if reflect.ValueOf(uninstallSystemdReloader).Pointer() != reflect.ValueOf(uninstallflow.ReloadSystemdDaemon).Pointer() {
+		t.Fatal("uninstallSystemdReloader must delegate to cliflow/uninstall.ReloadSystemdDaemon")
 	}
 }
 

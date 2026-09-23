@@ -413,6 +413,10 @@ func TestRuntimeDescriptorsSingleCaddyService(t *testing.T) {
 	}
 }
 
+// The consolidated Caddy runtime is the contract the service catalog, promoted
+// reloads, and orphan cleanup all key off — assert every field, not just Name.
+// TemplateUnit must stay empty: a template here would reclassify naiveproxy as
+// a per-inbound protocol and resurrect the retired veil-caddy@ template model.
 func TestRuntimeDescriptorsWithMatchingInbounds(t *testing.T) {
 	p := New()
 	inbounds := []model.Inbound{
@@ -425,8 +429,42 @@ func TestRuntimeDescriptorsWithMatchingInbounds(t *testing.T) {
 	if len(runtimes) != 1 {
 		t.Fatalf("len(runtimes) = %d, want 1", len(runtimes))
 	}
-	if runtimes[0].Name != "veil-caddy.service" {
-		t.Errorf("runtime name = %q, want veil-caddy.service", runtimes[0].Name)
+	rt := runtimes[0]
+	if rt.Name != "veil-caddy.service" || rt.Unit != "veil-caddy.service" {
+		t.Errorf("runtime name/unit = %q/%q, want veil-caddy.service", rt.Name, rt.Unit)
+	}
+	if rt.TemplateUnit != "" {
+		t.Errorf("TemplateUnit = %q, want empty (flat aggregate unit)", rt.TemplateUnit)
+	}
+	if rt.ActionName != "caddy" || rt.Protocol != "naiveproxy" || rt.Transport != "tcp" {
+		t.Errorf("runtime identity = %+v", rt)
+	}
+	if rt.PromotedSubpath != generatedconfig.CaddyJSONConfigSubpath || rt.PromotedVerb != "reload" {
+		t.Errorf("promoted fields = %q/%q, want %q/reload", rt.PromotedSubpath, rt.PromotedVerb, generatedconfig.CaddyJSONConfigSubpath)
+	}
+	if !rt.ManualRestart || !rt.HealthCheckAfter {
+		t.Errorf("ManualRestart=%v HealthCheckAfter=%v, want both true", rt.ManualRestart, rt.HealthCheckAfter)
+	}
+}
+
+// The nil-inbound catalog path (install/uninstall, service actions) must
+// return the same consolidated unit with the same promoted-reload contract.
+func TestRuntimeDescriptorsBroadCatalogMatchesInboundPath(t *testing.T) {
+	p := New()
+	catalog := p.RuntimeDescriptors(nil)
+	if len(catalog) != 1 {
+		t.Fatalf("broad catalog len = %d, want 1", len(catalog))
+	}
+	inbound := p.RuntimeDescriptors([]model.Inbound{{Name: "n", Protocol: "naiveproxy"}})
+	if len(inbound) != 1 {
+		t.Fatalf("inbound runtime len = %d, want 1", len(inbound))
+	}
+	got, want := catalog[0], inbound[0]
+	if got.Name != want.Name || got.Unit != want.Unit || got.ActionName != want.ActionName ||
+		got.Transport != want.Transport || got.PromotedSubpath != want.PromotedSubpath ||
+		got.PromotedVerb != want.PromotedVerb || got.ManualRestart != want.ManualRestart ||
+		got.HealthCheckAfter != want.HealthCheckAfter || got.TemplateUnit != want.TemplateUnit {
+		t.Fatalf("broad catalog descriptor diverges from inbound path:\ncatalog: %+v\ninbound: %+v", got, want)
 	}
 }
 
