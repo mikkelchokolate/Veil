@@ -2,7 +2,6 @@ package mieru
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
@@ -478,19 +477,46 @@ func TestAggregateLinksBuildsConfigAndURI(t *testing.T) {
 	if link.Port != 443 {
 		t.Errorf("Port = %d, want 443", link.Port)
 	}
-	if !strings.HasPrefix(link.URI, "mierus://") {
-		t.Errorf("URI = %q, want mierus:// prefix", link.URI)
-	}
-	if !strings.Contains(link.URI, "profile=mieru-tcp") {
-		t.Errorf("URI missing profile: %q", link.URI)
+	// The URI must carry the credential userinfo and the port binding — a
+	// prefix/profile check alone would green a link missing the password or
+	// dialing the wrong port (#960).
+	wantURI := "mierus://mieru-tcp:tcp-pass@example.com?port=443&profile=mieru-tcp&protocol=TCP"
+	if link.URI != wantURI {
+		t.Errorf("URI = %q, want %q", link.URI, wantURI)
 	}
 
-	var decoded map[string]any
+	var decoded struct {
+		ActiveProfile string `json:"activeProfile"`
+		Profiles      []struct {
+			ProfileName string `json:"profileName"`
+			User        struct {
+				Name     string `json:"name"`
+				Password string `json:"password"`
+			} `json:"user"`
+			Servers []struct {
+				PortBindings []struct {
+					Port     int    `json:"port"`
+					Protocol string `json:"protocol"`
+				} `json:"portBindings"`
+			} `json:"servers"`
+		} `json:"profiles"`
+	}
 	if err := json.Unmarshal([]byte(link.Config), &decoded); err != nil {
 		t.Fatalf("invalid client config JSON: %v\n%s", err, link.Config)
 	}
-	if decoded["activeProfile"] != "mieru-tcp" {
-		t.Errorf("activeProfile = %v, want %q", decoded["activeProfile"], "mieru-tcp")
+	if decoded.ActiveProfile != "mieru-tcp" {
+		t.Errorf("activeProfile = %v, want %q", decoded.ActiveProfile, "mieru-tcp")
+	}
+	if len(decoded.Profiles) != 1 {
+		t.Fatalf("profiles = %+v", decoded.Profiles)
+	}
+	profile := decoded.Profiles[0]
+	if profile.User.Name != "mieru-tcp" || profile.User.Password != "tcp-pass" {
+		t.Errorf("profile user = %+v, want mieru-tcp/tcp-pass", profile.User)
+	}
+	if len(profile.Servers) != 1 || len(profile.Servers[0].PortBindings) != 1 ||
+		profile.Servers[0].PortBindings[0].Port != 443 || profile.Servers[0].PortBindings[0].Protocol != "TCP" {
+		t.Errorf("profile port bindings = %+v, want 443/TCP", profile.Servers)
 	}
 }
 

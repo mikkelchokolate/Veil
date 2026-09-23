@@ -42,6 +42,9 @@ func TestManagementAPIWarpEnableAutoRegisters(t *testing.T) {
 	if !called {
 		t.Fatal("warp registrar was not invoked")
 	}
+	// The mutation envelope must report the apply outcome — a green config
+	// body with success:false would mean WARP never reached the runtime.
+	requireMutationEnvelopeSuccess(t, w.Body.Bytes(), "warp auto-register PUT")
 	var resp WarpConfig
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode warp response: %v", err)

@@ -183,11 +183,14 @@ func TestJobStorePersistsFailure(t *testing.T) {
 	rs := NewRevisionStore(db)
 	d, _ := rs.BumpDesired()
 	_ = js.Create(Job{ID: "j", DesiredRevision: d, Status: StatusPending, Trigger: "mutation", CreatedAt: time.Now().Unix()})
-	if err := js.Finish("j", StatusFailed, "HEALTH_CHECK_FAILED", "unit veil-hysteria2 unhealthy"); err != nil {
+	const wantMessage = "unit veil-hysteria2 unhealthy"
+	if err := js.Finish("j", StatusFailed, "HEALTH_CHECK_FAILED", wantMessage); err != nil {
 		t.Fatalf("finish failed: %v", err)
 	}
 	got, _ := js.Get("j")
-	if got.Status != StatusFailed || got.ErrorCode != "HEALTH_CHECK_FAILED" || got.ErrorMessage == "" {
+	// The error message is what operators read — lock it exactly, not just
+	// non-empty (#909).
+	if got.Status != StatusFailed || got.ErrorCode != "HEALTH_CHECK_FAILED" || got.ErrorMessage != wantMessage {
 		t.Fatalf("failure not persisted: %+v", got)
 	}
 }

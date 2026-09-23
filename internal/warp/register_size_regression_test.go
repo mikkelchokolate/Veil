@@ -78,14 +78,27 @@ func TestRegistrarRegisterStopsAfterSizeLimitWhenContentLengthLies(t *testing.T)
 	}
 }
 
+// TestRegistrarRegisterAcceptsResponseAtSizeLimit exercises the inclusive
+// upper bound: a valid registration document of EXACTLY
+// maxRegistrationResponseBytes must succeed (#935). Trailing whitespace keeps
+// the document valid JSON while reaching the byte boundary.
 func TestRegistrarRegisterAcceptsResponseAtSizeLimit(t *testing.T) {
+	base := `{"id":"device-123","token":"tok-456","account":{"license":"LICENSE-KEY"},"config":{"client_id":"t0o+","interface":{"addresses":{"v4":"172.16.0.2"}},"peers":[{"public_key":"PEERPUBKEY=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]}}`
+	body := base + strings.Repeat(" ", maxRegistrationResponseBytes-len(base))
+	if len(body) != maxRegistrationResponseBytes {
+		t.Fatalf("fixture is %d bytes, want %d", len(body), maxRegistrationResponseBytes)
+	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"id":"device-123","token":"tok-456","account":{"license":"LICENSE-KEY"},"config":{"client_id":"t0o+","interface":{"addresses":{"v4":"172.16.0.2"}},"peers":[{"public_key":"PEERPUBKEY=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]}}`))
+		_, _ = w.Write([]byte(body))
 	}))
 	defer server.Close()
 
-	if _, err := (&Registrar{BaseURL: server.URL, Client: server.Client()}).Register(context.Background()); err != nil {
-		t.Fatalf("Register: %v", err)
+	reg, err := (&Registrar{BaseURL: server.URL, Client: server.Client()}).Register(context.Background())
+	if err != nil {
+		t.Fatalf("Register at exact limit: %v", err)
+	}
+	if reg.DeviceID != "device-123" || reg.PeerPublicKey != "PEERPUBKEY=" {
+		t.Fatalf("registration = %+v", reg)
 	}
 }
 

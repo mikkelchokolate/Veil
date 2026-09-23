@@ -52,6 +52,9 @@ func TestManagementAPIUpdatesWarpConfig(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
+	// The mutation envelope is part of the contract: config fields can decode
+	// while "success":false reports a failed apply (#834).
+	requireMutationEnvelopeSuccess(t, w.Body.Bytes(), "warp PUT")
 	var response WarpConfig
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)

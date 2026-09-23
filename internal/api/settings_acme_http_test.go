@@ -26,10 +26,19 @@ func TestSettingsPutRejectsDNS01AcmeChallengeMode(t *testing.T) {
 }
 
 func TestSettingsPutRejectsUnknownAcmeChallengeMode(t *testing.T) {
-	r, _ := newSettingsEchoRouter(t)
-	code := putSettings(t, r, `{"panelListen":"127.0.0.1:2096","mode":"dev","acmeChallengeMode":"bogus"}`)
-	if code != http.StatusBadRequest {
-		t.Fatalf("bogus mode put: %d", code)
+	r, state := newSettingsEchoRouter(t)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","acmeChallengeMode":"bogus"}`)))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("bogus mode put: %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "acmeChallengeMode must be http-01 or tls-alpn-01") {
+		t.Fatalf("error body = %s", w.Body.String())
+	}
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if state.settings.AcmeChallengeMode == "bogus" {
+		t.Fatal("bogus acmeChallengeMode must not be persisted")
 	}
 }
 

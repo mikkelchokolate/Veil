@@ -157,7 +157,7 @@ func TestV1TrafficUnknownClient404(t *testing.T) {
 
 func TestV1TrafficStreamEmitsSnapshot(t *testing.T) {
 	r, st := newTrafficRouter(t)
-	seedTrafficClient(t, r, st, "streamer", 1, 2)
+	clientID := seedTrafficClient(t, r, st, "streamer", 1, 2)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/traffic/stream", nil)
 	req = req.WithContext(cancelAfterFirst())
 	w := httptest.NewRecorder()
@@ -165,7 +165,40 @@ func TestV1TrafficStreamEmitsSnapshot(t *testing.T) {
 	if ct := w.Header().Get("Content-Type"); ct != "text/event-stream" {
 		t.Fatalf("expected event-stream, got %q", ct)
 	}
-	if got := w.Body.String(); got == "" || !contains(got, "event: traffic") {
-		t.Fatalf("expected at least one traffic event, got %q", got)
+	// Parse the SSE frames and decode the traffic data payload — an
+	// "event: traffic" line with no usable JSON would pass the old check
+	// while serving nothing to dashboards (#928).
+	var payload []byte
+	lastEvent := ""
+	for _, line := range strings.Split(w.Body.String(), "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.HasPrefix(line, "event: ") {
+			lastEvent = strings.TrimPrefix(line, "event: ")
+			continue
+		}
+		if lastEvent == "traffic" && strings.HasPrefix(line, "data: ") {
+			payload = []byte(strings.TrimPrefix(line, "data: "))
+			break
+		}
+	}
+	if len(payload) == 0 {
+		t.Fatalf("no traffic SSE data frame in body %q", w.Body.String())
+	}
+	var snapshot struct {
+		At      int64 `json:"at"`
+		Clients map[string]struct {
+			Upload   int64 `json:"upload"`
+			Download int64 `json:"download"`
+		} `json:"clients"`
+	}
+	if err := json.Unmarshal(payload, &snapshot); err != nil {
+		t.Fatalf("traffic data frame is not JSON: %q: %v", payload, err)
+	}
+	pair, ok := snapshot.Clients[clientID]
+	if !ok {
+		t.Fatalf("seeded client %s missing from stream clients %v", clientID, snapshot.Clients)
+	}
+	if pair.Upload != 1 || pair.Download != 2 {
+		t.Fatalf("streamed counters = %d/%d, want 1/2", pair.Upload, pair.Download)
 	}
 }

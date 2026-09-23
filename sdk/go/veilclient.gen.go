@@ -2296,8 +2296,11 @@ type TLSCertInfo struct {
 	NotAfter      string    `json:"notAfter"`
 	NotBefore     string    `json:"notBefore"`
 	Path          string    `json:"path"`
-	Subject       string    `json:"subject"`
-	Valid         bool      `json:"valid"`
+
+	// Source Where the certificate was loaded from — "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage).
+	Source  *string `json:"source,omitempty"`
+	Subject string  `json:"subject"`
+	Valid   bool    `json:"valid"`
 }
 
 // TrafficBucket defines model for TrafficBucket.
