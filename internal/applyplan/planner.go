@@ -273,7 +273,9 @@ func serviceVerbForUnit(unit string, verbs map[string]string) string {
 // have no native form and would previously be emitted as fake prefixes that
 // silently misrouted or failed the unit's config load (#679). The renderer
 // now omits them; this warning keeps the loss loud in the apply plan while
-// sing-box (WARP) keeps full matcher semantics.
+// sing-box (WARP) keeps full matcher semantics. geoip:/geosite: atoms are
+// expressible but still dropped when the corresponding route dat is not
+// staged, so those losses warn too (#740).
 func appendHysteria2ACLRuleIssues(plan *model.ApplyPlanResponse, input Input) {
 	if plan == nil || !input.Warp.Enabled {
 		return
@@ -288,6 +290,18 @@ func appendHysteria2ACLRuleIssues(plan *model.ApplyPlanResponse, input Input) {
 	if !hasHysteria2 {
 		return
 	}
+	// The renderer stages route dats only from configured RoutingSource files
+	// (see the plan.Configs loop above); without geoip.dat/geosite.dat the
+	// renderer's usableRoutingDat check fails and geo atoms drop silently.
+	hasGeoIPDat, hasGeoSiteDat := false, false
+	for _, file := range input.RoutingSource.Files {
+		switch file.Name {
+		case "geoip.dat":
+			hasGeoIPDat = true
+		case "geosite.dat":
+			hasGeoSiteDat = true
+		}
+	}
 	for _, rule := range input.Rules {
 		if !rule.Enabled || rule.Match == "" {
 			continue
@@ -296,24 +310,45 @@ func appendHysteria2ACLRuleIssues(plan *model.ApplyPlanResponse, input Input) {
 		if err != nil {
 			continue
 		}
-		var dropped []string
+		var dropped, missingDat []string
 		for _, matcher := range matchers {
+			switch matcher.Kind {
+			case routing.MatchPrivateIP, routing.MatchGeoIP:
+				if !hasGeoIPDat {
+					missingDat = append(missingDat, hysteria2ACLAtomLabel(matcher))
+					continue
+				}
+			case routing.MatchGeoSite:
+				if !hasGeoSiteDat {
+					missingDat = append(missingDat, hysteria2ACLAtomLabel(matcher))
+					continue
+				}
+			}
 			if _, ok := routing.Hysteria2ACLAddress(matcher); ok {
 				continue
 			}
 			dropped = append(dropped, hysteria2ACLAtomLabel(matcher))
 		}
-		if len(dropped) == 0 {
-			continue
+		if len(dropped) > 0 {
+			plan.Issues = append(plan.Issues, model.ValidationIssue{
+				Code:        "hysteria2_acl_unsupported_match",
+				Severity:    "warning",
+				Field:       "match",
+				Message:     fmt.Sprintf("routing rule %q: Hysteria2 ACL cannot express %s; those atoms are skipped for Hysteria2 inbounds", rule.Name, strings.Join(dropped, ", ")),
+				Remediation: "Use domain, domain-suffix, geoip, geosite, or CIDR matches for rules that must apply to Hysteria2.",
+				Source:      "hysteria2",
+			})
 		}
-		plan.Issues = append(plan.Issues, model.ValidationIssue{
-			Code:        "hysteria2_acl_unsupported_match",
-			Severity:    "warning",
-			Field:       "match",
-			Message:     fmt.Sprintf("routing rule %q: Hysteria2 ACL cannot express %s; those atoms are skipped for Hysteria2 inbounds", rule.Name, strings.Join(dropped, ", ")),
-			Remediation: "Use domain, domain-suffix, geoip, geosite, or CIDR matches for rules that must apply to Hysteria2.",
-			Source:      "hysteria2",
-		})
+		if len(missingDat) > 0 {
+			plan.Issues = append(plan.Issues, model.ValidationIssue{
+				Code:        "hysteria2_acl_missing_dat",
+				Severity:    "warning",
+				Field:       "match",
+				Message:     fmt.Sprintf("routing rule %q: Hysteria2 ACL drops %s because the matching route dat is not staged; those atoms are skipped for Hysteria2 inbounds", rule.Name, strings.Join(missingDat, ", ")),
+				Remediation: "Configure the geoip.dat / geosite.dat routing source files so geo atoms can render for Hysteria2 inbounds.",
+				Source:      "hysteria2",
+			})
+		}
 	}
 }
 
@@ -325,6 +360,12 @@ func hysteria2ACLAtomLabel(matcher routing.Matcher) string {
 		return "keyword:" + matcher.Value
 	case routing.MatchDomainRegex:
 		return "regexp:" + matcher.Value
+	case routing.MatchPrivateIP:
+		return "geoip:private"
+	case routing.MatchGeoIP:
+		return "geoip:" + matcher.Value
+	case routing.MatchGeoSite:
+		return "geosite:" + matcher.Value
 	default:
 		return matcher.Value
 	}
