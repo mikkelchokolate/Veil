@@ -351,7 +351,8 @@ test.describe('Veil Panel — extended critical flows', () => {
       const live = await request.get(subURL);
       expect(live.status(), `live token fetch: ${live.status()}`).toBe(200);
 
-      // …until revoked.
+      // …until revoked. Revoke is confirm-gated (#699): the card button only
+      // opens the AlertDialog — the DELETE fires from the dialog action.
       const revoked = page.waitForResponse((response) => {
         const path = new URL(response.url()).pathname;
         return (
@@ -360,6 +361,9 @@ test.describe('Veil Panel — extended critical flows', () => {
         );
       });
       await tokenCard.getByRole('button', { name: /^revoke$/i }).click();
+      const revokeDialog = page.getByRole('alertdialog');
+      await expect(revokeDialog).toBeVisible({ timeout: 10_000 });
+      await revokeDialog.getByRole('button', { name: /confirm revoke/i }).click();
       const revokedResponse = await revoked;
       expect(revokedResponse.status(), 'token revoke API must complete').toBe(200);
       await expect(tokenCard.locator('.badge-danger')).toBeVisible({ timeout: 10_000 });

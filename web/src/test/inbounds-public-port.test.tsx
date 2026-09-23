@@ -65,6 +65,10 @@ describe("InboundsPage effective port (#717)", () => {
 		expect(cells.some((td) => td.textContent?.trim() === "8443")).toBe(true);
 
 		fireEvent.click(await screen.findByRole("button", { name: /^disable$/i }));
+		// #709: the toggle is gated — confirm before the PUT fires.
+		expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+		expect(puts).toHaveLength(0);
+		fireEvent.click(screen.getByRole("button", { name: /confirm disable/i }));
 		await waitFor(() => expect(puts).toHaveLength(1));
 		expect(puts[0]?.port).toBe(8443);
 		expect(

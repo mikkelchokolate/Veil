@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import { AuthProvider } from "../auth/AuthContext";
 import { I18nProvider } from "../i18n/I18nContext";
 import { RoutingPage } from "../pages/RoutingPage";
@@ -19,6 +25,35 @@ function renderRouting() {
 }
 
 describe("RoutingPage delete errors", () => {
+	// #706: rule Delete confirms like every other destructive Panel action —
+	// no DELETE until the dialog action is clicked.
+	it("does not DELETE a rule until delete is confirmed", async () => {
+		const deletes: string[] = [];
+		server.use(
+			http.get("/api/warp", () => HttpResponse.json({ enabled: true })),
+			http.get("/api/routing/rules", () =>
+				HttpResponse.json([
+					{
+						name: "warp-out",
+						match: "geoip:cn",
+						outbound: "warp",
+						enabled: true,
+					},
+				]),
+			),
+			http.delete("/api/routing/rules/warp-out", () => {
+				deletes.push("warp-out");
+				return HttpResponse.json({ name: "warp-out", success: true });
+			}),
+		);
+		renderRouting();
+		fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+		expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+		expect(deletes).toEqual([]);
+		fireEvent.click(screen.getByRole("button", { name: /confirm delete/i }));
+		await waitFor(() => expect(deletes).toEqual(["warp-out"]));
+	});
+
 	it("shows an API error when delete fails", async () => {
 		server.use(
 			http.get("/api/warp", () => HttpResponse.json({ enabled: true })),
@@ -41,7 +76,13 @@ describe("RoutingPage delete errors", () => {
 		);
 		renderRouting();
 		fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
-		expect(await screen.findByText(/rule in use/i)).toBeInTheDocument();
+		fireEvent.click(
+			await screen.findByRole("button", { name: /confirm delete/i }),
+		);
+		// The dialog stays open with the failure in context (the page card
+		// behind it repeats the error) — assert it inside the dialog.
+		const dialog = await screen.findByRole("alertdialog");
+		expect(await within(dialog).findByText(/rule in use/i)).toBeInTheDocument();
 	});
 
 	// #644: a 200 with success=false means the delete committed but the
@@ -69,6 +110,9 @@ describe("RoutingPage delete errors", () => {
 		);
 		renderRouting();
 		fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+		fireEvent.click(
+			await screen.findByRole("button", { name: /confirm delete/i }),
+		);
 		expect(await screen.findByText(/applying it failed/i)).toBeInTheDocument();
 	});
 

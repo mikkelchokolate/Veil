@@ -118,6 +118,19 @@ export const en: Record<string, string> = {
 		"Really delete {count}? This cannot be undone.",
 	"clients.delete.confirmPending": "Deleting…",
 	"clients.delete.confirm": "Confirm delete",
+	"clients.bulk.enable.title": "Enable clients?",
+	"clients.bulk.enable.description":
+		"Enable {count}? They regain access on their enabled bindings.",
+	"clients.bulk.enable.confirm": "Confirm enable",
+	"clients.bulk.disable.title": "Disable clients?",
+	"clients.bulk.disable.description":
+		"Disabling {count} drops live access for those clients.",
+	"clients.bulk.disable.confirm": "Confirm disable",
+	"clients.bulk.reset_traffic.title": "Reset traffic?",
+	"clients.bulk.reset_traffic.description":
+		"Resetting traffic for {count} wipes their usage counters. This cannot be undone.",
+	"clients.bulk.reset_traffic.confirm": "Confirm reset",
+	"clients.bulk.pending": "Applying…",
 	"clients.status.active": "active",
 	"clients.status.expired": "expired",
 	"clients.status.pending_apply": "pending apply",
@@ -239,6 +252,11 @@ export const en: Record<string, string> = {
 		"Deleting {name} removes the account and revokes its sessions. This cannot be undone.",
 	"users.deleting": "Deleting…",
 	"users.confirmDelete": "Confirm delete",
+	"users.revokeDialogTitle": "Revoke session?",
+	"users.revokeDialogDescription":
+		"Revoking this session signs {name} out immediately — they must log in again. Device: {agent}",
+	"users.revoking": "Revoking…",
+	"users.confirmRevoke": "Confirm revoke",
 
 	"inbounds.title": "Inbounds",
 	"inbounds.newInbound": "New inbound",
@@ -280,6 +298,15 @@ export const en: Record<string, string> = {
 	"inbounds.delete.checking": "Checking for attached clients…",
 	"inbounds.delete.deleting": "Deleting…",
 	"inbounds.delete.confirm": "Confirm delete",
+	"inbounds.toggle.enableTitle": "Enable inbound?",
+	"inbounds.toggle.enableDescription":
+		"Enabling {name} restores the listener and applies the config.",
+	"inbounds.toggle.disableTitle": "Disable inbound?",
+	"inbounds.toggle.disableDescription":
+		"Disabling {name} drops live access for every attached client and applies the config.",
+	"inbounds.toggle.confirmEnable": "Confirm enable",
+	"inbounds.toggle.confirmDisable": "Confirm disable",
+	"inbounds.toggle.pending": "Applying…",
 
 	"traffic.title": "Traffic telemetry",
 	"traffic.telemetryState": "Telemetry state",
@@ -327,6 +354,11 @@ export const en: Record<string, string> = {
 	"routing.loadFailed": "Failed to load routing rules",
 	"routing.deleteFailed": "Failed to delete routing rule",
 	"routing.empty": "No routing rules configured.",
+	"routing.delete.title": "Delete routing rule?",
+	"routing.delete.description":
+		"Deleting {name} removes the rule and applies the config. This cannot be undone.",
+	"routing.delete.confirm": "Confirm delete",
+	"routing.delete.deleting": "Deleting…",
 
 	"system.title": "System",
 	"system.unavailable": "System stats unavailable",
@@ -351,6 +383,14 @@ export const en: Record<string, string> = {
 		"WARP updated, but applying the change failed. Check Apply.",
 	"warp.provisionNotice":
 		"Enabling provisions a free Cloudflare WARP account server-side; changes apply on the next config apply.",
+	"warp.enableConfirmTitle": "Enable WARP?",
+	"warp.enableConfirmDescription":
+		"Enabling WARP provisions a free Cloudflare WARP account server-side; the change applies on the next config apply.",
+	"warp.disableConfirmTitle": "Disable WARP?",
+	"warp.disableConfirmDescription":
+		"Disabling WARP takes the WARP outbound down — routing rules that use warp stop working until it is re-enabled.",
+	"warp.confirmEnable": "Confirm enable",
+	"warp.confirmDisable": "Confirm disable",
 
 	"settings.title": "Settings",
 	"settings.unavailable": "Settings unavailable",
@@ -542,6 +582,15 @@ export const en: Record<string, string> = {
 	"subTokens.newExpiry": "New expiry",
 	"subTokens.confirmRotate": "Rotate with new expiry",
 	"subTokens.expiryMustBeFuture": "Choose a future expiry date.",
+	"subTokens.revokeTitle": "Revoke subscription token?",
+	"subTokens.revokeDescription":
+		"Revoking {name} permanently disables its subscription URL and QR for every subscriber. This cannot be undone.",
+	"subTokens.confirmRevoke": "Confirm revoke",
+	"subTokens.revoking": "Revoking…",
+	"subTokens.rotateActiveTitle": "Rotate subscription token?",
+	"subTokens.rotateActiveDescription":
+		"Rotating {name} invalidates the current subscription URL and QR — subscribers must switch to the new link.",
+	"subTokens.confirmRotateActive": "Confirm rotate",
 	"subTokens.error.create": "Create failed",
 	"subTokens.error.rotate": "Rotate failed",
 	"subTokens.error.revoke": "Revoke failed",
@@ -556,6 +605,32 @@ export const en: Record<string, string> = {
 	"clientDetail.disableClient": "Disable client",
 	"clientDetail.saveDraftBeforeToggle":
 		"Save or discard your edits before enabling/disabling.",
+	"clientDetail.enableConfirmTitle": "Enable client?",
+	"clientDetail.enableConfirmDescription":
+		"Enabling {name} restores this client's access on its enabled bindings.",
+	"clientDetail.disableConfirmTitle": "Disable client?",
+	"clientDetail.disableConfirmDescription":
+		"Disabling {name} immediately cuts this client's access on every binding.",
+	"clientDetail.confirmEnable": "Confirm enable",
+	"clientDetail.confirmDisable": "Confirm disable",
+	"clientDetail.toggling": "Applying…",
+	"clientDetail.binding.enable.title": "Enable binding?",
+	"clientDetail.binding.enable.description":
+		"Enabling the {name} binding grants this client access via that inbound.",
+	"clientDetail.binding.enable.confirm": "Confirm enable",
+	"clientDetail.binding.disable.title": "Disable binding?",
+	"clientDetail.binding.disable.description":
+		"Disabling the {name} binding immediately cuts this client's access via that inbound.",
+	"clientDetail.binding.disable.confirm": "Confirm disable",
+	"clientDetail.binding.rotate.title": "Rotate credential?",
+	"clientDetail.binding.rotate.description":
+		"Rotating the credential for {name} invalidates the current one — subscribers must receive the new credential.",
+	"clientDetail.binding.rotate.confirm": "Confirm rotate",
+	"clientDetail.binding.detach.title": "Detach inbound?",
+	"clientDetail.binding.detach.description":
+		"Detaching {name} removes this client's access via that inbound. This cannot be undone.",
+	"clientDetail.binding.detach.confirm": "Confirm detach",
+	"clientDetail.binding.pending": "Applying…",
 	"clientDetail.deleteTitle": "Really delete this client?",
 	"clientDetail.deleteDescription":
 		"This action cannot be undone. All bindings and credentials will be removed.",
