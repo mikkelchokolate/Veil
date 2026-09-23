@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	veilfirewall "github.com/mikkelchokolate/Veil/internal/firewall"
 )
 
 type ufwState struct {
@@ -51,6 +53,13 @@ func reconcileUFW(ctx context.Context, runner CommandRunner, request ResolvedFir
 	initial, err := parseUFWStatus(initialOutput)
 	if err != nil {
 		return FirewallResult{}, fmt.Errorf("parse preflight ufw status: %w", err)
+	}
+	// Manage IPv6 too: with IPV6=no in /etc/default/ufw a plain `ufw allow`
+	// installs no (v6) twin and dual-stack listeners stay reachable on
+	// unmanaged ip6tables. Repair before any rule is staged so both the
+	// forward path and restore rely on real twins.
+	if err := veilfirewall.EnsureIPv6Managed(); err != nil {
+		return FirewallResult{}, err
 	}
 	// The enable transition is the dangerous step: once UFW is active its
 	// default-deny policy can cut off the management channel used to reach
@@ -204,6 +213,11 @@ func hasExistingManagementAccess(state ufwState) bool {
 
 func restoreUFWState(ctx context.Context, runner CommandRunner, initial ufwState, desired []ufwDesiredRule) error {
 	var joined error
+	// The replay below skips unrestricted "(v6)" status lines because a
+	// restored IPv4 allow reinstalls its twin only while UFW manages IPv6.
+	if err := veilfirewall.EnsureIPv6Managed(); err != nil {
+		joined = errors.Join(joined, err)
+	}
 
 	for _, rule := range desired {
 		if _, err := runUFW(ctx, runner, 10*time.Second, "delete", "allow", rule.target); err != nil {

@@ -101,6 +101,37 @@ ci_assert_tests_ran "${CI_ARTIFACT_DIR}/privilege-runtime-probe-sandbox.log"
 ci_assert_test_passed "${CI_ARTIFACT_DIR}/privilege-runtime-probe-sandbox.log" TestRuntimeVersionProbeExecutesProtectedHomeBinaryThroughSystemdBind
 ci_assert_test_passed "${CI_ARTIFACT_DIR}/privilege-runtime-probe-sandbox.log" TestMaliciousRuntimeProbeCannotReadHostSecretsEnvironmentDescriptorsOrNetwork
 
+ci_step "custom --etc-dir/--var-dir install contract (issue #664)"
+# Every leg above exercises only the packaged /etc/veil + /var/lib/veil
+# layout. The custom-root contract — drop-in ReadWritePaths/InaccessiblePaths
+# resets, the backup ConditionPathExists re-point, helper path grants, custom
+# root propagation, ownership, the fixed /var/lib/{mita,caddy} state dirs,
+# and the var-lib fallback migration — is enforced by named unit tests;
+# assert each root by name so a soft-skip cannot green the job. This leg must
+# run BEFORE the "hardened systemd units" step symlinks /usr/local/bin/caddy
+# to the veil binary — the ownership test probes real `caddy list-modules`
+# and a veil symlink fails closed.
+if [ "$(id -u)" -eq 0 ]; then
+  ci_run privilege-custom-roots \
+    go test ./internal/renderer ./internal/installer ./internal/cliflow/status ./internal/cli ./internal/managementstate -count=1 -v \
+    -run '^(TestRenderInstallDropInOverridesPackagedUnits|TestInstallApplyPropagatesCustomEtcAndVarDir|TestApplyRURecommendedProfileChownsSecretsForVeilGroup|TestStatusDiscoversEnvFileUnderCustomEtcDir|TestUninstallCaddyMitaStateDirOverrides|TestDecodeV4MigratesVarLibFallbackRoots)$'
+else
+  ci_run privilege-custom-roots \
+    sudo env "PATH=${PATH}" "HOME=${HOME}" \
+    go test ./internal/renderer ./internal/installer ./internal/cliflow/status ./internal/cli ./internal/managementstate -count=1 -v \
+    -run '^(TestRenderInstallDropInOverridesPackagedUnits|TestInstallApplyPropagatesCustomEtcAndVarDir|TestApplyRURecommendedProfileChownsSecretsForVeilGroup|TestStatusDiscoversEnvFileUnderCustomEtcDir|TestUninstallCaddyMitaStateDirOverrides|TestDecodeV4MigratesVarLibFallbackRoots)$'
+fi
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/privilege-custom-roots.log"
+for required_root in \
+    TestRenderInstallDropInOverridesPackagedUnits \
+    TestInstallApplyPropagatesCustomEtcAndVarDir \
+    TestApplyRURecommendedProfileChownsSecretsForVeilGroup \
+    TestStatusDiscoversEnvFileUnderCustomEtcDir \
+    TestUninstallCaddyMitaStateDirOverrides \
+    TestDecodeV4MigratesVarLibFallbackRoots; do
+  ci_assert_test_passed "${CI_ARTIFACT_DIR}/privilege-custom-roots.log" "${required_root}"
+done
+
 ci_step "hardened systemd units"
 go build -o /tmp/veil-unit-verify ./cmd/veil
 ${SUDO} install -m 0755 /tmp/veil-unit-verify /usr/local/bin/veil

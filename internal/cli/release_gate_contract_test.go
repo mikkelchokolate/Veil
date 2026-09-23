@@ -30,12 +30,22 @@ func TestReleaseWorkflowBuildsFrontendDistBeforeCompile(t *testing.T) {
 		t.Fatal(err)
 	}
 	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
-	marker := "scripts/ci/prepare-frontend-dist.sh"
-	if strings.Count(workflow, marker) < 4 {
-		t.Fatalf("release workflow must build web/dist in quality, browser-e2e, package-smoke, and package jobs; found %d", strings.Count(workflow, marker))
+	// #668: the quality leg runs the shared frontend job (frontend.sh is the
+	// superset that also leaves web/dist); the other legs still call
+	// prepare-frontend-dist.sh directly.
+	markers := []string{"scripts/ci/prepare-frontend-dist.sh", "scripts/ci/frontend.sh"}
+	count := 0
+	dist := -1
+	for _, marker := range markers {
+		count += strings.Count(workflow, marker)
+		if i := strings.Index(workflow, marker); i >= 0 && (dist < 0 || i < dist) {
+			dist = i
+		}
+	}
+	if count < 4 {
+		t.Fatalf("release workflow must build web/dist in quality, browser-e2e, package-smoke, and package jobs; found %d", count)
 	}
 	vet := strings.Index(workflow, "go vet ./...")
-	dist := strings.Index(workflow, marker)
 	if dist < 0 || vet < 0 || dist > vet {
 		t.Fatalf("frontend dist must be built before go vet so //go:embed all:dist succeeds")
 	}

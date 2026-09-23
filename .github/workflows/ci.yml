@@ -374,11 +374,20 @@ jobs:
           path: .artifacts/ci/
           if-no-files-found: ignore
 
-  package-smoke:
+  # #670: arm64 deb/rpm/apk install/upgrade/remove must not wait for a
+  # release tag — same matrix contract as install-acceptance. The matrix
+  # legs report as "package-smoke (<arch>)"; the branch ruleset requires
+  # a literal "package-smoke" context, so a tiny aggregator job below maps
+  # both legs back to the required check name.
+  package-smoke-matrix:
     needs: frontend
     env:
       CI_FRONTEND_DIST_ARTIFACT_DIR: .artifacts/ci/frontend-dist
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -403,14 +412,26 @@ jobs:
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
       - name: package-smoke job
+        env:
+          VEIL_GOARCH: ${{ matrix.arch }}
+          VEIL_ARCH: ${{ matrix.arch }}
         run: bash scripts/ci/package-smoke.sh
       - name: Upload CI artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ci-package-smoke
+          name: ci-package-smoke-${{ matrix.arch }}
           path: .artifacts/ci/
           if-no-files-found: ignore
+
+  # Aggregates both matrix legs into the literal "package-smoke" check
+  # context the branch ruleset requires — fails/skips if either arch fails.
+  package-smoke:
+    needs: package-smoke-matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: 'true'
 
   image-build:
     runs-on: ubuntu-24.04

@@ -31,6 +31,10 @@ func (a UFWApplier) ApplySafely(rules []Rule) error {
 		}
 	}
 
+	if err := EnsureIPv6Managed(); err != nil {
+		return err
+	}
+
 	initial, err := a.snapshot()
 	if err != nil {
 		return err

@@ -377,7 +377,16 @@ func TestReleaseWorkflowEnforcesQualityGatesBeforePublish(t *testing.T) {
 	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{
 		"quality:",
-		"go test ./... -race -count=1",
+		// #668: the release gate runs the same shared Required scripts as
+		// ci.yml — a hand-rolled subset is not the ship gate.
+		"scripts/ci/frontend.sh",
+		"scripts/ci/test.sh",
+		"scripts/ci/lint.sh",
+		"scripts/ci/privilege-boundary.sh",
+		"scripts/ci/multi-process.sh",
+		"scripts/ci/sigkill.sh",
+		"scripts/ci/filesystem-faults.sh",
+		"scripts/ci/install-acceptance.sh",
 		"go vet ./...",
 		"make build",
 		"gofmt -l",
@@ -426,6 +435,20 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 	} {
 		if !strings.Contains(workflow, want) {
 			t.Fatalf("ci.yml does not route to shared CI script %q:\n%s", want, workflow)
+		}
+	}
+
+	// #670 + ruleset contract: the branch ruleset requires a literal
+	// "package-smoke" check context. Matrix legs report as
+	// "package-smoke (<arch>)", so ci.yml must keep an aggregator job named
+	// package-smoke that depends on the matrix and fails if any arch fails.
+	for _, want := range []string{
+		"package-smoke-matrix:",
+		"arch: [amd64, arm64]",
+		"package-smoke:\n    needs: package-smoke-matrix",
+	} {
+		if !strings.Contains(workflow, want) {
+			t.Fatalf("ci.yml lost the literal package-smoke check context %q:\n%s", want, workflow)
 		}
 	}
 

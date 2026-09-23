@@ -14,7 +14,7 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify exact tagged source
@@ -45,8 +45,11 @@ jobs:
           node-version: ${{ steps.versions.outputs.node_version }}
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
-      - name: Build frontend dist
-        run: bash scripts/ci/prepare-frontend-dist.sh
+      # #668: the release gate runs the SAME shared frontend job as PR CI
+      # (install -> client drift -> typecheck -> biome -> i18n -> unit -> build),
+      # not a weaker dist-only build. It leaves web/dist for `make build`.
+      - name: frontend job (shared scripts/ci/frontend.sh)
+        run: bash scripts/ci/frontend.sh
       - name: Verify go.mod is tidy
         run: |
           go mod tidy
@@ -104,7 +107,24 @@ jobs:
           install_pinned_runtimes "${runtime_dir}" ./dist/veil
           echo "${runtime_dir}" >> "$GITHUB_PATH"
           "${runtime_dir}/caddy" list-modules | grep -Fx http.handlers.forward_proxy
-      - run: go test ./... -race -count=1
+      # #668: shared test job — coverage gate + SDK floor + sharded package/API
+      # suite + race scope. A bare `go test ./...` is not the PR-required gate.
+      - name: test job (shared scripts/ci/test.sh)
+        env:
+          VEIL_CI_RUNTIME_DIR: ${{ runner.temp }}/veil-runtime
+        run: bash scripts/ci/test.sh
+      # #668: remaining Required gates on the tagged commit — lint (includes
+      # verify_versions.py), privilege boundary, and the process/fault suites.
+      - name: lint job (shared scripts/ci/lint.sh)
+        run: bash scripts/ci/lint.sh
+      - name: privilege-boundary job (shared scripts/ci/privilege-boundary.sh)
+        run: bash scripts/ci/privilege-boundary.sh
+      - name: multi-process job (shared scripts/ci/multi-process.sh)
+        run: bash scripts/ci/multi-process.sh
+      - name: sigkill job (shared scripts/ci/sigkill.sh)
+        run: bash scripts/ci/sigkill.sh
+      - name: filesystem-faults job (shared scripts/ci/filesystem-faults.sh)
+        run: bash scripts/ci/filesystem-faults.sh
       # Run the same shared e2e job script as ci.yml — required coverage
       # (hysteria2, mieru tcp/udp, naiveproxy, olcRTC contract + upstream local
       # soak, zero-test-match guards) can never drift from PR CI again.
@@ -120,6 +140,50 @@ jobs:
       - run: bash scripts/uninstall.sh --help >/dev/null
       - run: bash scripts/install-main.sh --help >/dev/null
       - run: git diff --check
+
+  # install-acceptance is a required PR gate; the release must prove the same
+  # live-systemd install contract on both arches before shipping (#668).
+  install-acceptance:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify exact tagged source
+        run: |
+          tag_commit="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
+          test "${tag_commit}" = "${GITHUB_SHA}"
+          git checkout --detach "${GITHUB_SHA}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          { echo "go_version=${CI_GO_VERSION}"; echo "node_version=${CI_NODE_VERSION}"; echo "pnpm_version=${CI_PNPM_VERSION}"; } >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ steps.versions.outputs.go_version }}
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ steps.versions.outputs.pnpm_version }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ steps.versions.outputs.node_version }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Unstick Ubuntu apt mirrors
+        run: bash scripts/ci/apt-bootstrap.sh
+      - name: install-acceptance job (shared scripts/ci/install-acceptance.sh)
+        run: bash scripts/ci/install-acceptance.sh
+      - name: Upload CI artifacts (incl. install log and unit journal)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-install-acceptance-${{ matrix.arch }}
+          path: .artifacts/ci/
+          if-no-files-found: ignore
 
   browser-e2e:
     runs-on: ubuntu-24.04
@@ -236,7 +300,7 @@ jobs:
 
   release:
     runs-on: ubuntu-24.04
-    needs: [quality, browser-e2e]
+    needs: [quality, browser-e2e, install-acceptance]
     strategy:
       matrix:
         include:
