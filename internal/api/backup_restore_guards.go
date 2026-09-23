@@ -21,6 +21,16 @@ func (s *managementState) beginBackupMutation(w http.ResponseWriter) bool {
 	return false
 }
 
+// beginBackupRead fences a streaming read (archive download) against
+// prune/delete/restore mutations while still allowing concurrent downloads.
+func (s *managementState) beginBackupRead(w http.ResponseWriter) bool {
+	if s.backupMutationMu.TryRLock() {
+		return true
+	}
+	writeError(w, "another backup operation is already in progress", http.StatusConflict)
+	return false
+}
+
 func (s *managementState) pruneBackupRestoreJobs() {
 	s.backupJobsMu.Lock()
 	defer s.backupJobsMu.Unlock()

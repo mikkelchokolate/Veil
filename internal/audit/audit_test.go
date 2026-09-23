@@ -1,7 +1,7 @@
 package audit
 
 import (
-	"strings"
+	"encoding/json"
 	"testing"
 )
 
@@ -14,7 +14,11 @@ func TestLogAppendsJSONLine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if !strings.Contains(string(body), `"action":"install.apply"`) || !strings.Contains(string(body), `"backupID":"b1"`) {
-		t.Fatalf("body = %s", body)
+	var decoded Event
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("audit line is not valid JSON: %v\nbody: %s", err, body)
+	}
+	if decoded.Action != "install.apply" || decoded.BackupID != "b1" || !decoded.Success {
+		t.Fatalf("audit record = %+v, want action=install.apply backupID=b1 success=true", decoded)
 	}
 }
