@@ -14,28 +14,43 @@ import (
 // ownership (veil-proxy units reading tls certs) would crash on permission
 // denied if the file briefly reverted to root:root between WriteFile and the
 // installer's later chown pass. Ownership is applied to the staged temp file
-// before rename so the replacement never regresses.
+// before rename so the replacement never regresses. The geteuid/chownFile
+// hooks let the behavior run asserted under the unprivileged CI user.
 func TestWritePreservesExistingOwner(t *testing.T) {
-	if os.Geteuid() != 0 {
-		t.Skip("ownership preservation only applies to root writes")
-	}
-	path := filepath.Join(t.TempDir(), "tls.crt")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tls.crt")
 	if err := os.WriteFile(path, []byte("old"), 0o640); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chown(path, 1234, 1235); err != nil {
-		t.Skipf("cannot chown fixture: %v", err)
-	}
-	if err := Write(path, []byte("new"), 0o640, 0o750); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	info, err := os.Stat(path)
+	targetInfo, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	st := info.Sys().(*syscall.Stat_t)
-	if st.Uid != 1234 || st.Gid != 1235 {
-		t.Fatalf("owner = %d:%d, want 1234:1235", st.Uid, st.Gid)
+	want := targetInfo.Sys().(*syscall.Stat_t)
+
+	var gotPath string
+	var gotUID, gotGID int
+	calls := 0
+	origChown, origEuid := chownFile, geteuid
+	chownFile = func(p string, uid, gid int) error {
+		calls++
+		gotPath, gotUID, gotGID = p, uid, gid
+		return nil
+	}
+	geteuid = func() int { return 0 }
+	defer func() { chownFile, geteuid = origChown, origEuid }()
+
+	if err := Write(path, []byte("new"), 0o640, 0o750); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("chown calls = %d, want 1 (staged temp file before rename)", calls)
+	}
+	if gotUID != int(want.Uid) || gotGID != int(want.Gid) {
+		t.Fatalf("preserved owner = %d:%d, want replaced file's %d:%d", gotUID, gotGID, want.Uid, want.Gid)
+	}
+	if filepath.Dir(gotPath) != dir || filepath.Base(gotPath) == "tls.crt" {
+		t.Fatalf("chown must target the staged temp file in the same dir, got %q", gotPath)
 	}
 	if body, _ := os.ReadFile(path); string(body) != "new" {
 		t.Fatalf("body = %q", body)
@@ -45,36 +60,57 @@ func TestWritePreservesExistingOwner(t *testing.T) {
 // New files keep the writer's ownership — there is no prior contract to
 // preserve, and the caller's post-write chown pass sets the final owner.
 func TestWriteNewFileDoesNotPreserve(t *testing.T) {
-	if os.Geteuid() != 0 {
-		t.Skip("root-only assertion")
-	}
 	path := filepath.Join(t.TempDir(), "fresh.crt")
+
+	calls := 0
+	origChown, origEuid := chownFile, geteuid
+	chownFile = func(string, int, int) error { calls++; return nil }
+	geteuid = func() int { return 0 }
+	defer func() { chownFile, geteuid = origChown, origEuid }()
+
 	if err := Write(path, []byte("body"), 0o640, 0o750); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	info, err := os.Stat(path)
-	if err != nil {
+	if calls != 0 {
+		t.Fatalf("chown calls = %d, want 0 for a new file", calls)
+	}
+}
+
+// Non-root writers skip preservation entirely — they could not chown anyway,
+// and their temp file already carries the only uid they can produce.
+func TestWriteSkipsPreserveForNonRoot(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tls.crt")
+	if err := os.WriteFile(path, []byte("old"), 0o640); err != nil {
 		t.Fatal(err)
 	}
-	if st := info.Sys().(*syscall.Stat_t); st.Uid != 0 {
-		t.Fatalf("new file uid = %d, want 0", st.Uid)
+	calls := 0
+	origChown, origEuid := chownFile, geteuid
+	chownFile = func(string, int, int) error { calls++; return nil }
+	geteuid = func() int { return 1000 }
+	defer func() { chownFile, geteuid = origChown, origEuid }()
+
+	if err := Write(path, []byte("new"), 0o640, 0o750); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("chown calls = %d, want 0 for non-root writer", calls)
 	}
 }
 
 // A chown failure aborts the write before rename — a half-owned replacement
 // would regress readers mid-flight just like the unpatched window.
 func TestWriteFailsWhenOwnerPreservationFails(t *testing.T) {
-	if os.Geteuid() != 0 {
-		t.Skip("ownership preservation only applies to root writes")
-	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "tls.crt")
 	if err := os.WriteFile(path, []byte("old"), 0o640); err != nil {
 		t.Fatal(err)
 	}
-	orig := chownFile
+	origChown, origEuid := chownFile, geteuid
 	chownFile = func(string, int, int) error { return errors.New("chown denied") }
-	defer func() { chownFile = orig }()
+	geteuid = func() int { return 0 }
+	defer func() { chownFile, geteuid = origChown, origEuid }()
+
 	if err := Write(path, []byte("new"), 0o640, 0o750); err == nil {
 		t.Fatal("Write must fail when ownership preservation fails")
 	}
