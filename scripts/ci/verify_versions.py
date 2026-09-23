@@ -318,11 +318,13 @@ for workflow in sorted((ROOT / ".github/workflows").glob("*.yml")):
 docker_entrypoint = (ROOT / "packaging/docker/entrypoint.sh").read_text()
 # Assert the full VAR:-default marker, not a bare path substring — "/etc/veil"
 # alone would false-green on the KEY_PATH line without verifying APPLY_ROOT
-# at all (issue #393).
+# at all (issue #393). The leaf defaults derive from the VEIL_VAR_DIR /
+# VEIL_ETC_DIR roots so a custom-roots container is not pinned back onto the
+# packaged tree; explicit leaf env still wins (issue #672).
 for label, value in (
-    ("state", "VEIL_STATE_PATH:-/var/lib/veil/state.json"),
-    ("apply", "VEIL_APPLY_ROOT:-/var/lib/veil/staging"),
-    ("key", "VEIL_KEY_PATH:-/etc/veil/state.key"),
+    ("state", "VEIL_STATE_PATH:-${VEIL_VAR_DIR:-/var/lib/veil}/state.json"),
+    ("apply", "VEIL_APPLY_ROOT:-${VEIL_VAR_DIR:-/var/lib/veil}/staging"),
+    ("key", "VEIL_KEY_PATH:-${VEIL_ETC_DIR:-/etc/veil}/state.key"),
 ):
     if value not in docker_entrypoint:
         fail(f"Docker entrypoint does not contain the {label} default {value}")
