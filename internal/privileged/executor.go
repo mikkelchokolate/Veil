@@ -25,6 +25,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/caddyadmin"
 	"github.com/mikkelchokolate/Veil/internal/caddycert"
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/releaseverify"
 	"github.com/mikkelchokolate/Veil/internal/service"
 	"github.com/mikkelchokolate/Veil/internal/statecommit"
@@ -1269,13 +1270,18 @@ func resolveLiveBackupPassphrasePath(fallback string) string {
 		return v
 	}
 	if path := backup.ScheduledPassphrasePath(backupSystemdDir); path != "" {
-		if fallback == "" || isPackagedDefaultBackupPassphrasePath(fallback) {
+		if fallback == "" || isDefaultBackupPassphrasePath(fallback) {
 			return path
 		}
 	}
 	return fallback
 }
 
-func isPackagedDefaultBackupPassphrasePath(path string) bool {
-	return filepath.ToSlash(filepath.Clean(path)) == "/etc/veil/backup.passphrase"
+// isDefaultBackupPassphrasePath reports whether path is the passphrase
+// location DefaultPolicy derives for the configured install root —
+// <hostenv.EtcDir()>/backup.passphrase. Comparing only the packaged
+// /etc/veil literal would ignore a schedule-relocated passphrase on custom
+// --etc-dir installs (issue #661).
+func isDefaultBackupPassphrasePath(path string) bool {
+	return filepath.Clean(path) == filepath.Join(hostenv.EtcDir(), "backup.passphrase")
 }

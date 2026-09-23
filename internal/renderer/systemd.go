@@ -533,8 +533,11 @@ func dropInServiceOverrides(name string, cfg SystemdConfig) string {
 		b.WriteString("ExecStart=\n")
 		b.WriteString("ExecStart=" + veilBin + " helper serve --systemd-socket-activation\n")
 		writePanelEnvironment()
+		// Match the packaged unit and the full renderer: no writable /run
+		// path. The socket-activated helper adopts FD3 and must not be able
+		// to write the runtime dir that owns its socket (#663).
 		b.WriteString("ReadWritePaths=\n")
-		b.WriteString("ReadWritePaths=" + systemdQuote(cfg.EtcDir) + " " + systemdQuote(cfg.VarDir) + " /usr/local/bin /etc/ufw /run/veil\n")
+		b.WriteString("ReadWritePaths=" + systemdQuote(cfg.EtcDir) + " " + systemdQuote(cfg.VarDir) + " /usr/local/bin /etc/ufw\n")
 	case UnitBackupService:
 		passphraseFile := systemdQuote(path.Join(cfg.EtcDir, "backup.passphrase"))
 		b.WriteString("ExecStart=\n")

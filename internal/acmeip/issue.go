@@ -152,14 +152,27 @@ func defaultSystemOr(s System) System {
 func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 	sys := defaultSystemOr(opts.System)
 
-	if opts.PublicIPv4 == "" {
-		return IssuedCert{}, fmt.Errorf("public IPv4 address is required")
+	if opts.PublicIPv4 == "" && opts.PublicIPv6 == "" {
+		return IssuedCert{}, fmt.Errorf("a public IPv4 or IPv6 address is required")
 	}
-	if net.ParseIP(opts.PublicIPv4) == nil {
-		return IssuedCert{}, fmt.Errorf("public IPv4 %q is not a valid IP address", opts.PublicIPv4)
+	// Family-check each field: an IPv6 literal in PublicIPv4 (or IPv4 in
+	// PublicIPv6) silently produced a SAN covering the wrong family while
+	// the other stayed uncovered on dual-stack hosts (issue #665).
+	if opts.PublicIPv4 != "" {
+		if ip := net.ParseIP(opts.PublicIPv4); ip == nil || ip.To4() == nil {
+			return IssuedCert{}, fmt.Errorf("public IPv4 %q is not a valid IPv4 address", opts.PublicIPv4)
+		}
 	}
-	if opts.PublicIPv6 != "" && net.ParseIP(opts.PublicIPv6) == nil {
-		return IssuedCert{}, fmt.Errorf("public IPv6 %q is not a valid IP address", opts.PublicIPv6)
+	if opts.PublicIPv6 != "" {
+		if ip := net.ParseIP(opts.PublicIPv6); ip == nil || ip.To4() != nil {
+			return IssuedCert{}, fmt.Errorf("public IPv6 %q is not a valid IPv6 address", opts.PublicIPv6)
+		}
+	}
+	// acme.sh addresses the issued certificate by its first -d identity;
+	// prefer IPv4 when both are present, fall back to IPv6-only issuance.
+	primaryName := opts.PublicIPv4
+	if primaryName == "" {
+		primaryName = opts.PublicIPv6
 	}
 
 	certPath := opts.CertPath
@@ -201,7 +214,7 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 
 	issueArgs := []string{
 		"--issue",
-		"-d", opts.PublicIPv4,
+		"-d", primaryName,
 		"--standalone",
 		"--server", caServer,
 	}
@@ -214,8 +227,11 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 	if opts.Insecure {
 		issueArgs = append(issueArgs, "--insecure")
 	}
-	if opts.PublicIPv6 != "" {
+	if opts.PublicIPv6 != "" && opts.PublicIPv6 != primaryName {
 		issueArgs = append(issueArgs, "-d", opts.PublicIPv6)
+	}
+	if opts.PublicIPv4 != "" && opts.PublicIPv4 != primaryName {
+		issueArgs = append(issueArgs, "-d", opts.PublicIPv4)
 	}
 
 	home, err := sys.HomeDir()
@@ -228,12 +244,12 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 	defer cancel()
 	if out, err := runWithContext(issueCtx, sys, acmeSh, issueArgs...); err != nil {
 		cleanupAcmeState(sys, acmeSh, opts.PublicIPv4, opts.PublicIPv6, preexistingACME)
-		return IssuedCert{}, fmt.Errorf("issue certificate for %s: %w (output: %s)", opts.PublicIPv4, err, string(out))
+		return IssuedCert{}, fmt.Errorf("issue certificate for %s: %w (output: %s)", primaryName, err, string(out))
 	}
 
 	installArgs := []string{
 		"--installcert",
-		"-d", opts.PublicIPv4,
+		"-d", primaryName,
 		"--key-file", keyPath,
 		"--fullchain-file", certPath,
 		"--reloadcmd", renewReloadCmd(certPath, keyPath),
@@ -552,8 +568,10 @@ func validateIssuedMaterial(certPEM, keyPEM []byte, ipv4, ipv6 string) error {
 	if now.Before(cert.NotBefore) || !now.Before(cert.NotAfter) {
 		return fmt.Errorf("certificate is not currently valid")
 	}
-	if err := cert.VerifyHostname(ipv4); err != nil {
-		return fmt.Errorf("certificate does not include IP %s: %w", ipv4, err)
+	if ipv4 != "" {
+		if err := cert.VerifyHostname(ipv4); err != nil {
+			return fmt.Errorf("certificate does not include IP %s: %w", ipv4, err)
+		}
 	}
 	if ipv6 != "" {
 		if err := cert.VerifyHostname(ipv6); err != nil {

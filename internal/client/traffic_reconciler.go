@@ -307,7 +307,7 @@ func (r *Reconciler) planWithTotals(current Client, now time.Time, totals [2]int
 	}
 
 	upload, download := totals[0], totals[1]
-	mutation.Depleted = quotaReached(upload, download, *current.QuotaBytes)
+	mutation.Depleted = QuotaReached(upload, download, *current.QuotaBytes)
 	return mutation, mutation.Depleted != current.Depleted || mutation.NextResetAt != nil, nil
 }
 
@@ -348,7 +348,11 @@ func ApplyQuotaMutationTx(tx *Tx, mutation QuotaMutation) error {
 	return err
 }
 
-func quotaReached(upload, download, quota int64) bool {
+// QuotaReached reports whether observed upload/download totals have met the
+// client's quota. Exported so the public subscription feed can gate link
+// delivery on live counters instead of waiting for the applied snapshot's
+// Depleted flag (issue #671).
+func QuotaReached(upload, download, quota int64) bool {
 	if quota <= 0 {
 		return true
 	}

@@ -20,6 +20,15 @@ func TestNormalize(t *testing.T) {
 		{"panel#fragment", "", true},
 		{"panel'break", "", true},
 		{"panel\\admin", "", true},
+		// "s" is reserved as a FIRST segment only — it collides with the
+		// public /s/{token} subscription feeds (#662).
+		{"s", "", true},
+		{"/s/", "", true},
+		{"s/panel", "", true},
+		{"/s/secret/", "", true},
+		{"s2", "/s2/", false},
+		{"panel/s", "/panel/s/", false},
+		{"subscriptions", "/subscriptions/", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {

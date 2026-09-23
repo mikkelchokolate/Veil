@@ -92,6 +92,52 @@ func TestStripBasePathMiddleware(t *testing.T) {
 	}
 }
 
+// Regression for #662: the /s/{token} bypass must match only the exact
+// single-segment public-subscription shape. Anything deeper under /s/ still
+// goes through the mount check, so an /s/-nested mount cannot blackhole
+// panel API paths and a multi-segment /s/ path under a normal mount is a
+// plain 404 instead of bypassing the strip.
+func TestStripBasePathSubscriptionBypassShape(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]string{"path": r.URL.Path})
+	})
+	mux.HandleFunc("/s/", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]string{"path": r.URL.Path})
+	})
+
+	t.Run("public feed bypasses a normal mount", func(t *testing.T) {
+		handler := stripBasePathMiddleware("/secret/", mux)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s/public-token", nil))
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "/s/public-token") {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("multi-segment /s path does not bypass", func(t *testing.T) {
+		handler := stripBasePathMiddleware("/secret/", mux)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s/token/extra", nil))
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status=%d want=404 body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	// A mount under /s/ is rejected by webbasepath validation, but the
+	// middleware must still behave sanely if such a mount is ever
+	// constructed directly: nested panel paths strip, and only the bare
+	// /s/{token} shape reaches the subscription route.
+	t.Run("nested mount under /s still strips api paths", func(t *testing.T) {
+		handler := stripBasePathMiddleware("/s/panel/", mux)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s/panel/api/version", nil))
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "/api/version") {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
 func TestDecodeJSONRequestRejectsNonJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/test", strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "text/plain")
