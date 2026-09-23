@@ -217,8 +217,11 @@ func TestMigrateGroupsPanelTLSForProxyReaders(t *testing.T) {
 // Regression for #624: veil-mieru.service now runs as the dedicated
 // veil-mita identity, but systemd does not re-own an existing StateDirectory
 // — a stale veil-proxy-owned mita tree would be unwritable for the daemon.
-// Migrate must re-own the sibling "mita" dir (or Paths.MitaDir) to the mita
-// uid/gid once EnsureAccount has established them.
+// Migrate must re-own the fixed mita state dir (or Paths.MitaDir) to the mita
+// uid/gid once EnsureAccount has established them. The default target is NOT
+// derived from VarDir (#660): the injected default below deliberately sits
+// away from the VarDir sibling position so a custom --var-dir layout cannot
+// redirect the pass.
 func TestMigrateReownsMitaStateDirForDedicatedIdentity(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX ownership and mode test")
@@ -226,7 +229,9 @@ func TestMigrateReownsMitaStateDirForDedicatedIdentity(t *testing.T) {
 	root := t.TempDir()
 	etcDir := filepath.Join(root, "etc", "veil")
 	varDir := filepath.Join(root, "var", "lib", "veil")
-	mitaDir := filepath.Join(root, "var", "lib", "mita")
+	// Deliberately not filepath.Join(root, "var", "lib", "mita"): the fixed
+	// StateDirectory default must win over any VarDir-derived sibling.
+	mitaDir := filepath.Join(root, "state", "mita")
 	if err := os.MkdirAll(mitaDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -236,6 +241,10 @@ func TestMigrateReownsMitaStateDirForDedicatedIdentity(t *testing.T) {
 	}
 	uid, gid := os.Getuid(), os.Getgid()
 	mitaUID, mitaGID := uid+1, gid+1
+
+	originalDefault := defaultMitaStateDir
+	defer func() { defaultMitaStateDir = originalDefault }()
+	defaultMitaStateDir = mitaDir
 
 	originalChown := testHooks.chown
 	defer func() { testHooks.chown = originalChown }()
@@ -263,6 +272,73 @@ func TestMigrateReownsMitaStateDirForDedicatedIdentity(t *testing.T) {
 	assertMode(t, mitaFile, 0o600)
 }
 
+// Regression for #660: /var/lib/mita must never be re-owned to the veil-proxy
+// identity — the packaged default proxyStateDirs contains only the caddy
+// StateDirectory. Guard the packaged default itself (not an injected list)
+// so a stray re-addition fails here.
+func TestProxyStateDirsExcludeMitaStateDir(t *testing.T) {
+	for _, dir := range proxyStateDirs {
+		if filepath.Base(dir) == "mita" {
+			t.Fatalf("proxyStateDirs must not contain a mita StateDirectory (#660): %v", proxyStateDirs)
+		}
+	}
+}
+
+// Regression for #660: with a custom VarDir the mita pass must still target
+// the fixed StateDirectory location — a VarDir sibling like
+// /opt/veil/mita is NOT where systemd puts StateDirectory=mita.
+func TestMigrateMitaDirDefaultIgnoresVarDirSibling(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX ownership test")
+	}
+	root := t.TempDir()
+	etcDir := filepath.Join(root, "opt", "veil", "etc")
+	varDir := filepath.Join(root, "opt", "veil", "var")
+	for _, dir := range []string{etcDir, varDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The "real" state dir systemd would use, and the wrong sibling the old
+	// code derived from VarDir.
+	fixedDir := filepath.Join(root, "var", "lib", "mita")
+	siblingDir := filepath.Join(root, "opt", "veil", "mita")
+	for _, dir := range []string{fixedDir, siblingDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	uid, gid := os.Getuid(), os.Getgid()
+	mitaUID, mitaGID := uid+1, gid+1
+
+	originalDefault := defaultMitaStateDir
+	defer func() { defaultMitaStateDir = originalDefault }()
+	defaultMitaStateDir = fixedDir
+
+	type owner struct{ uid, gid int }
+	owners := map[string]owner{}
+	originalChown := testHooks.chown
+	defer func() { testHooks.chown = originalChown }()
+	testHooks.chown = func(path string, u, g int) error {
+		owners[path] = owner{u, g}
+		return nil
+	}
+
+	if err := Migrate(
+		Paths{EtcDir: etcDir, VarDir: varDir, RootUID: uid, RootGID: gid},
+		Identity{UID: uid, GID: gid, MitaUID: mitaUID, MitaGID: mitaGID},
+		time.Now,
+	); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if got, ok := owners[fixedDir]; !ok || got.uid != mitaUID || got.gid != mitaGID {
+		t.Fatalf("fixed mita dir chown=%+v ok=%v, want %d:%d", owners[fixedDir], ok, mitaUID, mitaGID)
+	}
+	if got, ok := owners[siblingDir]; ok {
+		t.Fatalf("VarDir-sibling mita dir must not be touched, got chown=%+v", got)
+	}
+}
+
 // A symlinked or non-directory mita state path must stop migration fail-closed
 // rather than being followed into a veil-mita-owned tree.
 func TestMigrateRefusesNonDirectoryMitaStateDir(t *testing.T) {
@@ -282,9 +358,11 @@ func TestMigrateRefusesNonDirectoryMitaStateDir(t *testing.T) {
 	uid, gid := os.Getuid(), os.Getgid()
 	// Nonzero mita ids — the refusal must fire before any ownership write, so
 	// these need not be real accounts. (Under Docker root uid==0 would
-	// otherwise disable the mita pass entirely.)
+	// otherwise disable the mita pass entirely.) MitaDir is passed
+	// explicitly because the empty default is the fixed /var/lib/mita, not a
+	// VarDir sibling (#660).
 	err := Migrate(
-		Paths{EtcDir: etcDir, VarDir: varDir, RootUID: uid, RootGID: gid},
+		Paths{EtcDir: etcDir, VarDir: varDir, RootUID: uid, RootGID: gid, MitaDir: mitaDir},
 		Identity{UID: uid, GID: gid, MitaUID: uid + 1, MitaGID: gid + 1},
 		time.Now,
 	)

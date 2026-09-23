@@ -132,7 +132,7 @@ func (s *managementState) handleLoginWithRevalidation(w http.ResponseWriter, r *
 		return
 	}
 
-	s.clearLoginFailures(loginUsernameKey(req.Username))
+	s.clearLoginFailures(loginThrottleKey(r, req.Username))
 	s.recordRequestAudit(r, audit.Record{
 		Actor:   req.Username,
 		Role:    role,

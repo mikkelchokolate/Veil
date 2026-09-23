@@ -36,6 +36,7 @@ type PlanDependencies struct {
 var leIPCertIssueFunc = acmeip.IssueIPCert
 var repairPublicIPResolver = hostenv.ResolvePublicIP
 var repairLEPublicIPResolver = hostenv.ResolvePublicIP
+var repairLEPublicIPFamilyResolver = hostenv.DetectPublicIPForFamily
 
 func BuildPlanFromOptions(opts Options, deps PlanDependencies) (installer.RepairPlan, error) {
 	secret := deps.secret()
@@ -431,6 +432,29 @@ func maybeIssueLEIPCert(ctx context.Context, profile *installer.RURecommendedPro
 		return fmt.Errorf("public IP detection returned empty")
 	}
 
+	// Split the resolved address into its family slot and — when detection
+	// was automatic — probe the other family too: dual-stack hosts need both
+	// SANs covered, and an IPv6 literal must never occupy PublicIPv4 (#665).
+	var publicIPv4, publicIPv6 string
+	if resolvedIP.To4() != nil {
+		publicIPv4 = resolvedIP.String()
+	} else {
+		publicIPv6 = resolvedIP.String()
+	}
+	if publicIP == "auto" {
+		otherNetwork := "tcp6"
+		if publicIPv4 == "" {
+			otherNetwork = "tcp4"
+		}
+		if other, err := repairLEPublicIPFamilyResolver(ctx, nil, otherNetwork); err == nil && other != nil {
+			if other.To4() != nil {
+				publicIPv4 = other.String()
+			} else {
+				publicIPv6 = other.String()
+			}
+		}
+	}
+
 	keyPath := filepath.Join(opts.EtcDir, "panel", "tls.key")
 	// Honour the same controlled-CA knobs install used: the persisted
 	// VEIL_ACME_CA_URL points issuance at the operator's ACME directory and
@@ -438,7 +462,8 @@ func maybeIssueLEIPCert(ctx context.Context, profile *installer.RURecommendedPro
 	// (audit #338).
 	acmeCAURL, _ := repairACMEEnv(opts.EtcDir)
 	cert, err := leIPCertIssueFunc(ctx, acmeip.IssueOptions{
-		PublicIPv4: resolvedIP.String(),
+		PublicIPv4: publicIPv4,
+		PublicIPv6: publicIPv6,
 		HTTPPort:   opts.LEIPCertPort,
 		Email:      profile.Email,
 		CertPath:   certPath,

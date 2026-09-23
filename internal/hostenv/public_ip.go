@@ -40,6 +40,26 @@ func ResolvePublicIP(ctx context.Context, value string, client *http.Client, end
 	return parsed, nil
 }
 
+// DetectPublicIPForFamily probes the endpoints over a forced address family
+// ("tcp4" or "tcp6") so a dual-stack host can learn BOTH public addresses —
+// DetectPublicIP returns whichever family the winning connection used, which
+// leaves the other family uncovered on the issued IP certificate (#665).
+// A nil result with nil error is impossible: the family probe either returns
+// a public address of that family or an error.
+func DetectPublicIPForFamily(ctx context.Context, endpoints []string, network string) (net.IP, error) {
+	if network != "tcp4" && network != "tcp6" {
+		return nil, fmt.Errorf("network must be tcp4 or tcp6, got %q", network)
+	}
+	dialer := &net.Dialer{Timeout: 5 * time.Second}
+	transport := &http.Transport{
+		DialContext: func(dialCtx context.Context, _, addr string) (net.Conn, error) {
+			return dialer.DialContext(dialCtx, network, addr)
+		},
+	}
+	defer transport.CloseIdleConnections()
+	return DetectPublicIP(ctx, &http.Client{Transport: transport, Timeout: 5 * time.Second}, endpoints)
+}
+
 func DetectPublicIP(ctx context.Context, client *http.Client, endpoints []string) (net.IP, error) {
 	if ctx == nil {
 		ctx = context.Background()

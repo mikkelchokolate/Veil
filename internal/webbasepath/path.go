@@ -30,6 +30,14 @@ func Normalize(value string) (string, error) {
 			}
 		}
 	}
+	// "s" as the FIRST segment collides with the public subscription feeds
+	// at /s/{token}, which intentionally bypass the secret mount: every panel
+	// URL under an /s/… mount would be misclassified as a feed and never
+	// stripped, and the session cookie scoped to /s/… would leak onto the
+	// public endpoint (issue #662).
+	if segments[0] == "s" {
+		return "", fmt.Errorf("first segment %q is reserved for public subscription links", segments[0])
+	}
 	return "/" + strings.Join(segments, "/") + "/", nil
 }
 

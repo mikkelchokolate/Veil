@@ -421,10 +421,17 @@ func buildInstallPlan(profile installer.RURecommendedProfile, opts ruRecommended
 	})
 }
 
+// installPublicIPFamilyDetectFunc probes the public address of ONE forced
+// address family ("tcp4"/"tcp6") so an auto-detected dual-stack install can
+// cover both SANs — ResolvePublicIP returns only the family the winning
+// endpoint connection used (issue #665).
+var installPublicIPFamilyDetectFunc = hostenv.DetectPublicIPForFamily
+
 func issueLEIPCertForProfile(ctx context.Context, profile *installer.RURecommendedProfile, opts ruRecommendedInstallOptions, resolvedIP net.IP) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	autoDetected := strings.TrimSpace(opts.PublicIP) == "" || strings.EqualFold(strings.TrimSpace(opts.PublicIP), "auto")
 	if resolvedIP == nil {
 		publicIP := opts.PublicIP
 		if publicIP == "" {
@@ -440,13 +447,40 @@ func issueLEIPCertForProfile(ctx context.Context, profile *installer.RURecommend
 		}
 	}
 
+	// Split the resolved address into its family slot — an IPv6 literal in
+	// PublicIPv4 would produce a SAN covering the wrong family (#665).
+	var publicIPv4, publicIPv6 string
+	if resolvedIP.To4() != nil {
+		publicIPv4 = resolvedIP.String()
+	} else {
+		publicIPv6 = resolvedIP.String()
+	}
+	// When the address was auto-detected, probe the other family too: the
+	// panel and protocol units listen dual-stack, so the IP certificate
+	// should cover both public identities when the host has both. The probe
+	// is best-effort — a single-stack host simply leaves the field empty.
+	if autoDetected {
+		otherNetwork := "tcp6"
+		if publicIPv4 == "" {
+			otherNetwork = "tcp4"
+		}
+		if other, err := installPublicIPFamilyDetectFunc(ctx, installPublicIPEndpoints, otherNetwork); err == nil && other != nil {
+			if other.To4() != nil {
+				publicIPv4 = other.String()
+			} else {
+				publicIPv6 = other.String()
+			}
+		}
+	}
+
 	certPath := filepath.Join(opts.EtcDir, "panel", "tls.crt")
 	keyPath := filepath.Join(opts.EtcDir, "panel", "tls.key")
 	if err := os.MkdirAll(filepath.Dir(certPath), 0o750); err != nil {
 		return fmt.Errorf("create panel cert directory: %w", err)
 	}
 	cert, err := leIPCertIssueFunc(ctx, acmeip.IssueOptions{
-		PublicIPv4: resolvedIP.String(),
+		PublicIPv4: publicIPv4,
+		PublicIPv6: publicIPv6,
 		HTTPPort:   opts.LEIPCertPort,
 		Email:      opts.Email,
 		CertPath:   certPath,
@@ -475,8 +509,14 @@ func issueLEIPCertForProfile(ctx context.Context, profile *installer.RURecommend
 	// The issued certificate names the public IP, not the configured hostname
 	// (audit #299). Point the panel domain — already persisted in state.json —
 	// at the covered identity so client links, the printed endpoint, and the
-	// readiness check all present a URL the certificate validates for.
-	if ipText := resolvedIP.String(); profile.Domain != ipText {
+	// readiness check all present a URL the certificate validates for. Prefer
+	// the IPv4 identity when both families are covered — it needs no URL
+	// brackets.
+	ipText := publicIPv4
+	if ipText == "" {
+		ipText = publicIPv6
+	}
+	if profile.Domain != ipText {
 		if err := updateInstalledStateDomain(opts, ipText); err != nil {
 			return fmt.Errorf("update panel domain to issued IP identity: %w", err)
 		}
