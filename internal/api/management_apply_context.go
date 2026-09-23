@@ -13,6 +13,7 @@ import (
 	"time"
 
 	veilapply "github.com/mikkelchokolate/Veil/internal/apply"
+	"github.com/mikkelchokolate/Veil/internal/applyflow"
 	"github.com/mikkelchokolate/Veil/internal/caddyadmin"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
@@ -158,7 +159,7 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 		}
 		relative, err := filepath.Rel(generatedRoot, stagedPath)
 		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-			return nil, nil, nil, fmt.Errorf("staged config escapes generated root: %s", stagedPath)
+			return nil, nil, nil, applyflow.MarkPreMutationError(fmt.Errorf("staged config escapes generated root: %s", stagedPath))
 		}
 		artifactIDs = append(artifactIDs, filepath.ToSlash(relative))
 	}
@@ -168,13 +169,13 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 	}
 	orphans, err := scanLiveConfigOrphans(ctx.state.liveRoot, activeFiles)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, applyflow.MarkPreMutationError(err)
 	}
 	var removeIDs []string
 	for _, orphan := range orphans {
 		relative, relErr := filepath.Rel(ctx.state.liveRoot, orphan)
 		if relErr != nil {
-			return nil, nil, nil, relErr
+			return nil, nil, nil, applyflow.MarkPreMutationError(relErr)
 		}
 		removeIDs = append(removeIDs, filepath.ToSlash(relative))
 	}
@@ -208,12 +209,12 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 		return nil, nil, nil, nil
 	}
 	if ctx.state.privileged == nil {
-		return nil, nil, nil, fmt.Errorf("privileged helper is unavailable")
+		return nil, nil, nil, applyflow.MarkPreMutationError(fmt.Errorf("privileged helper is unavailable"))
 	}
 	publicationArtifacts := append(append([]string(nil), artifactIDs...), removeIDs...)
 	expectedManifest, previousManifest, err := publicationArtifactDigests(generatedRoot, ctx.state.liveRoot, artifactIDs, removeIDs)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("build publication manifest: %w", err)
+		return nil, nil, nil, applyflow.MarkPreMutationError(fmt.Errorf("build publication manifest: %w", err))
 	}
 	if err := veilapply.MarkRuntimeMutationStarting(ctx.operationContext(), veilapply.PublicationDetails{
 		ExpectedLiveManifestSHA256: expectedManifest,

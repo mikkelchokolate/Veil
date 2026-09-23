@@ -27,72 +27,114 @@ func TestInMemoryIdempotencyDoesNotTruncateOrReplayOversizedSuccess(t *testing.T
 	}
 	first := issue()
 	second := issue()
-	if first.Code != http.StatusAccepted || second.Code != first.Code || second.Body.String() != first.Body.String() || calls.Load() != 1 {
-		t.Fatalf("first=%d/%q second=%d/%q calls=%d", first.Code, first.Body.String(), second.Code, second.Body.String(), calls.Load())
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("oversized success must be bounded to 202, got %d body=%q", first.Code, first.Body.String())
 	}
-	if !strings.Contains(first.Body.String(), "response_too_large") {
-		t.Fatalf("expected bounded committed response, got %q", first.Body.String())
+	assertResponseTooLargeEnvelope(t, first)
+	if second.Code != first.Code || second.Body.String() != first.Body.String() {
+		t.Fatalf("replay mismatch first=%d/%q second=%d/%q", first.Code, first.Body.String(), second.Code, second.Body.String())
 	}
-	if first.Body.Len() > 1024 {
-		t.Fatalf("bounded response unexpectedly large: %d", first.Body.Len())
+	if second.Header().Get("Idempotency-Replayed") != "true" {
+		t.Fatalf("replay must carry Idempotency-Replayed: true, got %v", second.Header())
 	}
-	if strings.Count(first.Body.String(), "x") > 0 {
-		t.Fatalf("truncated payload was returned or cached: %q", first.Body.String())
+	if calls.Load() != 1 {
+		t.Fatalf("oversized response repeated the mutation: calls=%d", calls.Load())
 	}
 }
 
-func TestInMemoryIdempotencyCachesResponsesAtBodyLimit(t *testing.T) {
-	cases := []struct {
-		name     string
-		size     int
-		writes   int
-		wantCode int
-	}{
+// idempotencyBodyLimitCase exercises one response-size boundary.
+type idempotencyBodyLimitCase struct {
+	name     string
+	size     int
+	writes   int
+	wantCode int
+}
+
+func idempotencyBodyLimitCases() []idempotencyBodyLimitCase {
+	return []idempotencyBodyLimitCase{
 		{name: "limit-minus-one", size: maxIdempotencyBody - 1, writes: 1, wantCode: http.StatusOK},
 		{name: "exact-limit", size: maxIdempotencyBody, writes: 1, wantCode: http.StatusOK},
 		{name: "limit-plus-one", size: maxIdempotencyBody + 1, writes: 1, wantCode: http.StatusAccepted},
 		{name: "multi-write-overflow", size: maxIdempotencyBody + 8, writes: 2, wantCode: http.StatusAccepted},
 	}
-	for _, tc := range cases {
+}
+
+// runIdempotencyBodyLimitCase drives one boundary case against the given
+// store and asserts the exact contract: responses at or under the limit are
+// replayed byte-identical; anything over — including multi-write overflow —
+// is replaced by the bounded response_too_large envelope, never a truncated
+// payload. The mutation runs exactly once.
+func runIdempotencyBodyLimitCase(t *testing.T, store *idempotencyStore, tc idempotencyBodyLimitCase) {
+	t.Helper()
+	var calls atomic.Int32
+	handler := store.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		payload := bytes.Repeat([]byte("y"), tc.size)
+		if tc.writes == 1 {
+			_, _ = w.Write(payload)
+			return
+		}
+		split := tc.size / 2
+		_, _ = w.Write(payload[:split])
+		_, _ = w.Write(payload[split:])
+	}))
+	issue := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/test/limit", strings.NewReader(`{"a":1}`))
+		req.Header.Set("Idempotency-Key", "limit-"+tc.name)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		return response
+	}
+	first := issue()
+	second := issue()
+	if first.Code != tc.wantCode {
+		t.Fatalf("first status=%d want=%d body=%q", first.Code, tc.wantCode, first.Body.String())
+	}
+	if first.Header().Get("Idempotency-Replayed") == "true" {
+		t.Fatalf("first response must not be marked replayed: %v", first.Header())
+	}
+	if second.Code != first.Code || second.Body.String() != first.Body.String() {
+		t.Fatalf("replay mismatch first=%d/%q second=%d/%q", first.Code, first.Body.String(), second.Code, second.Body.String())
+	}
+	if second.Header().Get("Idempotency-Replayed") != "true" {
+		t.Fatalf("replay must carry Idempotency-Replayed: true, got %v", second.Header())
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("calls=%d want 1", calls.Load())
+	}
+	if tc.wantCode == http.StatusOK {
+		// At or under the limit the cached body is the handler's full payload,
+		// replayed byte-identical.
+		want := strings.Repeat("y", tc.size)
+		if first.Body.String() != want || second.Body.String() != want {
+			t.Fatalf("cached body len=%d want=%d full payload replayed", first.Body.Len(), tc.size)
+		}
+		return
+	}
+	// Overflow responses are replaced by the bounded envelope — the stored
+	// record must never contain a fragment of the real payload.
+	assertResponseTooLargeEnvelope(t, first)
+	assertResponseTooLargeEnvelope(t, second)
+}
+
+func TestInMemoryIdempotencyCachesResponsesAtBodyLimit(t *testing.T) {
+	for _, tc := range idempotencyBodyLimitCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			store := newIdempotencyStore()
 			defer store.Close()
-			var calls atomic.Int32
-			handler := store.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				calls.Add(1)
-				payload := bytes.Repeat([]byte("y"), tc.size)
-				if tc.writes == 1 {
-					_, _ = w.Write(payload)
-					return
-				}
-				split := tc.size / 2
-				_, _ = w.Write(payload[:split])
-				_, _ = w.Write(payload[split:])
-			}))
-			issue := func() *httptest.ResponseRecorder {
-				req := httptest.NewRequest(http.MethodPost, "/api/test/limit", strings.NewReader(`{"a":1}`))
-				req.Header.Set("Idempotency-Key", "limit-"+tc.name)
-				response := httptest.NewRecorder()
-				handler.ServeHTTP(response, req)
-				return response
-			}
-			first := issue()
-			second := issue()
-			if first.Code != tc.wantCode {
-				t.Fatalf("first status=%d want=%d body=%q", first.Code, tc.wantCode, first.Body.String())
-			}
-			if second.Code != first.Code || second.Body.String() != first.Body.String() {
-				t.Fatalf("replay mismatch first=%d/%q second=%d/%q", first.Code, first.Body.String(), second.Code, second.Body.String())
-			}
-			if calls.Load() != 1 {
-				t.Fatalf("calls=%d want 1", calls.Load())
-			}
-			if tc.wantCode == http.StatusOK && first.Body.Len() != tc.size {
-				t.Fatalf("cached body len=%d want=%d", first.Body.Len(), tc.size)
-			}
-			if tc.wantCode == http.StatusAccepted && first.Body.Len() == tc.size {
-				t.Fatalf("overflow response replayed full truncated payload len=%d", first.Body.Len())
-			}
+			runIdempotencyBodyLimitCase(t, store, tc)
+		})
+	}
+}
+
+func TestDurableIdempotencyCachesResponsesAtBodyLimit(t *testing.T) {
+	for _, tc := range idempotencyBodyLimitCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			db := openApplyTestDB(t)
+			defer db.Close()
+			store := newIdempotencyStore(db)
+			defer store.Close()
+			runIdempotencyBodyLimitCase(t, store, tc)
 		})
 	}
 }
