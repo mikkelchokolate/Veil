@@ -203,8 +203,17 @@ func TestDockerEntrypointKeepsApplyRootOffLiveGeneratedTree(t *testing.T) {
 	if strings.Contains(script, "VEIL_APPLY_ROOT:-/etc/veil}") || strings.Contains(script, "VEIL_APPLY_ROOT=/etc/veil") {
 		t.Fatal("container entrypoint must not default VEIL_APPLY_ROOT to the live config tree")
 	}
-	if !strings.Contains(script, "VEIL_APPLY_ROOT:-/var/lib/veil/staging}") {
-		t.Fatal("container entrypoint must default VEIL_APPLY_ROOT to /var/lib/veil/staging")
+	// #672: leaf envs default from the VEIL_VAR_DIR/VEIL_ETC_DIR roots so a
+	// custom-roots container is not pinned back onto the packaged tree, while
+	// an explicit leaf override still wins.
+	for _, want := range []string{
+		`VEIL_STATE_PATH:-${VEIL_VAR_DIR:-/var/lib/veil}/state.json}`,
+		`VEIL_APPLY_ROOT:-${VEIL_VAR_DIR:-/var/lib/veil}/staging}`,
+		`VEIL_KEY_PATH:-${VEIL_ETC_DIR:-/etc/veil}/state.key}`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("container entrypoint must derive leaf default from the root env: %s", want)
+		}
 	}
 }
 

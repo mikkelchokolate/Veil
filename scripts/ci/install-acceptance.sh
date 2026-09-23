@@ -461,11 +461,11 @@ ${SUDO} test -f /etc/veil/generated/mieru/server_config.json || ci_die "mieru co
 ${SUDO} test -f /etc/veil/generated/olcrtc/ci-olc.yaml || ci_die "olcrtc config not rendered"
 
 ci_step "protocol service lifecycle"
-systemctl is-active --quiet veil-hysteria2@ci-hy2.service || ci_die "veil-hysteria2@ci-hy2 not active"
-systemctl is-active --quiet veil-mieru.service || ci_die "veil-mieru not active"
-# olcRTC needs an external conferencing provider at runtime; the contract is
-# that the panel-generated config validates and the instance is enabled.
-systemctl is-enabled --quiet veil-olcrtc@ci-olc.service || ci_die "veil-olcrtc@ci-olc not enabled"
+# olcRTC needs an external conferencing provider at runtime; is-enabled alone
+# can green a unit that never reached ExecStart, so the first leg shares the
+# same start-once contract as assert_protocol_units (#408 residual, #669) —
+# which also covers hy2/mieru is-active.
+assert_protocol_units "first lifecycle leg"
 # veil-helper.service is a static socket-activated unit (no [Install]) — the
 # correct contract is "running once the socket was used", and the apply legs
 # above provably drove privileged ops (service actions, ufw) through it.

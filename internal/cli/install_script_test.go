@@ -377,7 +377,16 @@ func TestReleaseWorkflowEnforcesQualityGatesBeforePublish(t *testing.T) {
 	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, want := range []string{
 		"quality:",
-		"go test ./... -race -count=1",
+		// #668: the release gate runs the same shared Required scripts as
+		// ci.yml — a hand-rolled subset is not the ship gate.
+		"scripts/ci/frontend.sh",
+		"scripts/ci/test.sh",
+		"scripts/ci/lint.sh",
+		"scripts/ci/privilege-boundary.sh",
+		"scripts/ci/multi-process.sh",
+		"scripts/ci/sigkill.sh",
+		"scripts/ci/filesystem-faults.sh",
+		"scripts/ci/install-acceptance.sh",
 		"go vet ./...",
 		"make build",
 		"gofmt -l",

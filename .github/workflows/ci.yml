@@ -378,7 +378,13 @@ jobs:
     needs: frontend
     env:
       CI_FRONTEND_DIST_ARTIFACT_DIR: .artifacts/ci/frontend-dist
-    runs-on: ubuntu-24.04
+    # #670: arm64 deb/rpm/apk install/upgrade/remove must not wait for a
+    # release tag — same matrix contract as install-acceptance.
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -403,12 +409,15 @@ jobs:
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
       - name: package-smoke job
+        env:
+          VEIL_GOARCH: ${{ matrix.arch }}
+          VEIL_ARCH: ${{ matrix.arch }}
         run: bash scripts/ci/package-smoke.sh
       - name: Upload CI artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ci-package-smoke
+          name: ci-package-smoke-${{ matrix.arch }}
           path: .artifacts/ci/
           if-no-files-found: ignore
 
