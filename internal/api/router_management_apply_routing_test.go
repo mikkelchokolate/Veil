@@ -108,9 +108,25 @@ func TestManagementApplyStagesRoutingPresetRuleDatFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected staged WARP config: %v", err)
 	}
-	for _, want := range []string{`"route":`, `"rule_set": "geoip-ru-blocked"`, `"rule_set": "geosite-ru-blocked"`} {
+	// Lock the full remote rule-set contract, not just the tags: ru-blocked is
+	// a runetfreedom-only list (SagerNet publishes no geosite/geolocation-ru or
+	// geoip-ru-blocked artifacts), so the URLs must point at the pinned
+	// russia-v2ray release tree and fetch via the direct detour (#763/#779).
+	for _, want := range []string{
+		`"route":`,
+		`"rule_set": "geoip-ru-blocked"`,
+		`"rule_set": "geosite-ru-blocked"`,
+		`"url": "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/sing-box/rule-set-geoip/geoip-ru-blocked.srs"`,
+		`"url": "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/sing-box/rule-set-geosite/geosite-ru-blocked.srs"`,
+		`"download_detour": "direct"`,
+	} {
 		if !strings.Contains(string(warpConfig), want) {
 			t.Fatalf("staged WARP config missing routing preset fragment %q:\n%s", want, string(warpConfig))
+		}
+	}
+	for _, forbidden := range []string{"geolocation-ru.srs", "rule-set/geoip/geoip-ru.srs"} {
+		if strings.Contains(string(warpConfig), forbidden) {
+			t.Fatalf("staged WARP config must not reference dead/wrong rule-set %q:\n%s", forbidden, string(warpConfig))
 		}
 	}
 }
@@ -245,7 +261,7 @@ func TestManagementApplyPlanRejectsRoutingRuleUsingDisabledWarpOutbound(t *testi
 	if err := os.WriteFile(statePath, []byte(`{
 		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","hysteria2Password":"hy2-secret"},
 		"inbounds":[{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}],
-		"routingRules":[{"name":"non-ru-through-warp","match":"geosite:geolocation-!ru","outbound":"warp","enabled":true}],
+		"routingRules":[{"name":"non-ru-through-warp","match":"geosite:ru-blocked","outbound":"warp","enabled":true}],
 		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
 	}`), 0o600); err != nil {
 		t.Fatalf("write state: %v", err)

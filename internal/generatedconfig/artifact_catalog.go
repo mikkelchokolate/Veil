@@ -1,6 +1,7 @@
 package generatedconfig
 
 import (
+	pathpkg "path"
 	"path/filepath"
 	"strings"
 
@@ -10,10 +11,15 @@ import (
 const (
 	CaddyfileSubpath       = "caddy/config.json"
 	CaddyJSONConfigSubpath = "caddy/config.json"
-	Hysteria2ConfigSubpath = "hysteria2/server.yaml"
+	// Hysteria2 and olcRTC render one config per enabled inbound
+	// (hysteria2/<name>.yaml, olcrtc/<name>.yaml); the aggregate server.yaml
+	// artifacts are gone (#780). Their catalog subpaths are therefore glob
+	// patterns — matching/promotion treat them as patterns, and PlanPath
+	// returns "" because no single file represents them.
+	Hysteria2ConfigSubpath = "hysteria2/*.yaml"
 	MieruConfigSubpath     = "mieru/server_config.json"
 	WarpConfigSubpath      = "sing-box/warp.json"
-	OlcrtcConfigSubpath    = "olcrtc/server.yaml"
+	OlcrtcConfigSubpath    = "olcrtc/*.yaml"
 )
 
 type ValidationSpec struct {
@@ -39,9 +45,10 @@ func (s ArtifactSpec) PlanPath() string {
 // PlanPathForLiveRoot renders the displayed plan path under the actual live
 // generated root, so a custom --live-root/--etc-dir install previews the same
 // destination the apply job will promote to (issue #636). An empty liveRoot
-// falls back to the configured etc dir's generated tree.
+// falls back to the configured etc dir's generated tree. Glob subpaths
+// (per-inbound artifacts) have no single plan path and return "".
 func (s ArtifactSpec) PlanPathForLiveRoot(liveRoot string) string {
-	if s.Subpath == "" {
+	if s.Subpath == "" || strings.Contains(s.Subpath, "*") {
 		return ""
 	}
 	root := liveRoot
@@ -72,13 +79,30 @@ func (s ArtifactSpec) ValidationSuffix() string {
 	return "/generated/" + filepath.ToSlash(s.Subpath)
 }
 
+// MatchesGeneratedPath reports whether path is the artifact's staged file.
+// Fixed subpaths must match the generated-relative path exactly — a stray
+// caddy/Caddyfile or sibling junk file must not be treated as the managed
+// caddy/config.json (#855). Glob subpaths (per-inbound artifacts) match the
+// glob against the generated-relative path.
 func (s ArtifactSpec) MatchesGeneratedPath(path string) bool {
-	slashPath := filepath.ToSlash(path)
-	dir := s.Subpath
-	if idx := strings.Index(dir, "/"); idx != -1 {
-		dir = dir[:idx]
+	sub := filepath.ToSlash(s.Subpath)
+	if sub == "" {
+		return false
 	}
-	return dir != "" && strings.Contains(slashPath, "/generated/"+dir+"/")
+	slashPath := filepath.ToSlash(path)
+	idx := strings.Index(slashPath, "/generated/")
+	if idx < 0 {
+		return false
+	}
+	rel := slashPath[idx+len("/generated/"):]
+	if rel == "" {
+		return false
+	}
+	if strings.Contains(sub, "*") {
+		matched, err := pathpkg.Match(sub, rel)
+		return err == nil && matched
+	}
+	return rel == sub
 }
 
 func (s ArtifactSpec) ValidationSpec(path string) (ValidationSpec, bool) {
@@ -162,11 +186,18 @@ func (c ArtifactCatalog) LivePathForStagedConfig(applyRoot string, stagedPath st
 	rel := strings.TrimPrefix(slashPath, prefix)
 	matched := false
 	for _, artifact := range c.artifacts {
-		dir := artifact.Subpath
-		if idx := strings.Index(dir, "/"); idx != -1 {
-			dir = dir[:idx]
+		sub := filepath.ToSlash(artifact.Subpath)
+		if sub == "" {
+			continue
 		}
-		if strings.HasPrefix(filepath.ToSlash(rel), dir+"/") {
+		if strings.Contains(sub, "*") {
+			if ok, err := pathpkg.Match(sub, rel); err == nil && ok {
+				matched = true
+				break
+			}
+			continue
+		}
+		if rel == sub {
 			matched = true
 			break
 		}

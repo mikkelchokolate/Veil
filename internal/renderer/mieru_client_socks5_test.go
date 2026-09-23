@@ -29,11 +29,13 @@ func TestRenderMieruClientDefaultsToValidSocks5Port(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &decoded); err != nil {
 		t.Fatalf("invalid JSON: %v\n%s", err, body)
 	}
-	if decoded.Socks5Port < 1 || decoded.Socks5Port > 65535 {
-		t.Fatalf("socks5Port = %d, want in [1, 65535]", decoded.Socks5Port)
+	// The deterministic default is [1024, 65535] — a derived privileged port
+	// (<1024) must not green this regression guard (#823).
+	if decoded.Socks5Port < 1024 || decoded.Socks5Port > 65535 {
+		t.Fatalf("socks5Port = %d, want in [1024, 65535]", decoded.Socks5Port)
 	}
-	if decoded.RPCPort < 1 || decoded.RPCPort > 65535 {
-		t.Fatalf("rpcPort = %d, want in [1, 65535]", decoded.RPCPort)
+	if decoded.RPCPort < 1024 || decoded.RPCPort > 65535 {
+		t.Fatalf("rpcPort = %d, want in [1024, 65535]", decoded.RPCPort)
 	}
 	if decoded.RPCPort == decoded.Socks5Port {
 		t.Fatalf("rpcPort must not collide with socks5Port %d", decoded.Socks5Port)
@@ -113,8 +115,8 @@ func TestRenderMieruClientDefaultsToValidRPCPort(t *testing.T) {
 	if decoded.Socks5Port != 1080 {
 		t.Fatalf("socks5Port = %d, want 1080", decoded.Socks5Port)
 	}
-	if decoded.RPCPort < 1 || decoded.RPCPort > 65535 {
-		t.Fatalf("rpcPort = %d, want in [1, 65535]", decoded.RPCPort)
+	if decoded.RPCPort < 1024 || decoded.RPCPort > 65535 {
+		t.Fatalf("rpcPort = %d, want derived default in [1024, 65535]", decoded.RPCPort)
 	}
 	if decoded.RPCPort == 1080 {
 		t.Fatal("rpcPort collided with explicit socks5Port")

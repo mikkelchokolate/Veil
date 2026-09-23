@@ -332,7 +332,7 @@ func TestRuntimeDescriptorsWithoutMatchingInbound(t *testing.T) {
 			Transport:        "udp",
 			Unit:             templateUnit,
 			TemplateUnit:     templateUnit,
-			PromotedSubpath:  "olcrtc/server.yaml",
+			PromotedSubpath:  generatedconfig.OlcrtcConfigSubpath,
 			PromotedVerb:     "restart",
 			ManualRestart:    true,
 			HealthCheckAfter: true,

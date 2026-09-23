@@ -88,7 +88,7 @@ func TestBuildApplyPlanUsesPerInboundRuntimeActions(t *testing.T) {
 func TestBuildApplyPlanRejectsRoutingRuleUsingDisabledWarp(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
 		Settings: Settings{},
-		Rules:    []RoutingRule{{Name: "non-ru", Match: "geosite:geolocation-!ru", Outbound: "warp", Enabled: true}},
+		Rules:    []RoutingRule{{Name: "non-ru", Match: "geosite:ru-blocked", Outbound: "warp", Enabled: true}},
 	})
 	if plan.Valid {
 		t.Fatalf("plan should be invalid: %+v", plan)

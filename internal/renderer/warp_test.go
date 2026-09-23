@@ -105,7 +105,9 @@ func TestRenderWarpSingBoxConfigCountryRulesUseRuleSets(t *testing.T) {
 		`"rule_set": "geoip-ru"`,
 		`"rule_set": "geosite-ru-blocked"`,
 		`SagerNet/sing-geoip/rule-set/geoip-ru.srs`,
-		`SagerNet/sing-geosite/rule-set/geosite-geolocation-ru.srs`,
+		// geosite:ru-blocked is a runetfreedom-only list — SagerNet publishes
+		// no geosite-geolocation-ru.srs / geosite-ru-blocked.srs (both 404).
+		`runetfreedom/russia-v2ray-rules-dat/release/sing-box/rule-set-geosite/geosite-ru-blocked.srs`,
 		`"download_detour": "direct"`,
 		`"final": "warp"`,
 		`"outbound": "direct"`,
@@ -117,6 +119,64 @@ func TestRenderWarpSingBoxConfigCountryRulesUseRuleSets(t *testing.T) {
 	// The removed inline geoip/geosite rule fields must not appear.
 	if strings.Contains(body, `"geoip":`) || strings.Contains(body, `"geosite":`) {
 		t.Fatalf("removed inline geoip/geosite rule fields must not appear:\n%s", body)
+	}
+}
+
+// TestGeoRuleSetURLMapsVeilCodesToPublishedArtifacts locks the remote rule-set
+// mapping: standard geoip/geosite codes stay on the official SagerNet mirror,
+// while the Veil-specific ru-blocked lists (which SagerNet does not publish —
+// geosite-geolocation-ru.srs 404s and geoip-ru.srs is all-Russia, not the
+// blocked set) resolve to the runetfreedom release build that shares upstream
+// with the pinned geoip.dat/geosite.dat artifacts.
+func TestGeoRuleSetURLMapsVeilCodesToPublishedArtifacts(t *testing.T) {
+	cases := []struct {
+		kind string
+		code string
+		want string
+	}{
+		{"geoip", "ru", "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-ru.srs"},
+		{"geosite", "category-ru", "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ru.srs"},
+		{"geosite", "category-gov-ru", "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-gov-ru.srs"},
+		{"geoip", "ru-blocked", "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/sing-box/rule-set-geoip/geoip-ru-blocked.srs"},
+		{"geosite", "ru-blocked", "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/sing-box/rule-set-geosite/geosite-ru-blocked.srs"},
+	}
+	for _, tc := range cases {
+		if got := geoRuleSetURL(tc.kind, tc.code); got != tc.want {
+			t.Fatalf("geoRuleSetURL(%q, %q) = %q, want %q", tc.kind, tc.code, got, tc.want)
+		}
+	}
+}
+
+// TestRenderWarpSingBoxConfigRUBlockedUsesBlockedRuleSets pins the RU-blocked
+// preset semantics end to end: the rule_set tags and the remote URLs must both
+// reference the blocked lists, not the all-Russia geoip-ru.srs (#779) or the
+// non-existent geolocation-ru.srs (#763).
+func TestRenderWarpSingBoxConfigRUBlockedUsesBlockedRuleSets(t *testing.T) {
+	body, err := RenderWarpSingBox(WarpSingBoxConfig{
+		Endpoint: "engage.cloudflareclient.com:2408", PrivateKey: "k", LocalAddress: "172.16.0.2/32", PeerPublicKey: "p", SocksPort: 40000,
+		RoutingRules: []WarpRoutingRule{
+			{Match: "geoip:ru-blocked", Outbound: "warp"},
+			{Match: "geosite:ru-blocked", Outbound: "warp"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	for _, want := range []string{
+		`"rule_set": "geoip-ru-blocked"`,
+		`"rule_set": "geosite-ru-blocked"`,
+		`sing-box/rule-set-geoip/geoip-ru-blocked.srs`,
+		`sing-box/rule-set-geosite/geosite-ru-blocked.srs`,
+		`"download_detour": "direct"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("RU-blocked WARP routing missing %q:\n%s", want, body)
+		}
+	}
+	for _, forbidden := range []string{"geolocation-ru.srs", "rule-set/geoip/geoip-ru.srs", "rule-set-geosite/geosite-category-ru.srs"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("RU-blocked must not reference the wrong/all-Russia artifact %q:\n%s", forbidden, body)
+		}
 	}
 }
 

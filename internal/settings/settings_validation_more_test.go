@@ -121,12 +121,16 @@ func TestSettingsValidationFallbackRootEscapesVarLibVeil(t *testing.T) {
 }
 
 func TestSettingsValidationFallsBackToCurrentValues(t *testing.T) {
+	// Inherited fixtures must be legal enum values: "old-auth"/"old-transport"
+	// are not declared options, so greening them would soft-lock illegal enums
+	// the inherit path is explicitly designed to carry across schema changes
+	// (#820).
 	current := Settings{
 		PanelAccess: "local",
 		WebBasePath: "/panel/",
 		ProtocolFields: map[string]any{
-			"olcrtcAuth":      "old-auth",
-			"olcrtcTransport": "old-transport",
+			"olcrtcAuth":      "wbstream",
+			"olcrtcTransport": "seichannel",
 			"olcrtcRoomID":    "old-room",
 		},
 	}
@@ -142,11 +146,11 @@ func TestSettingsValidationFallsBackToCurrentValues(t *testing.T) {
 	if update.WebBasePath != current.WebBasePath {
 		t.Fatalf("WebBasePath = %q, want %q", update.WebBasePath, current.WebBasePath)
 	}
-	if update.ProtocolFields["olcrtcAuth"] != "old-auth" {
-		t.Fatalf("olcrtcAuth = %v, want %q", update.ProtocolFields["olcrtcAuth"], "old-auth")
+	if update.ProtocolFields["olcrtcAuth"] != "wbstream" {
+		t.Fatalf("olcrtcAuth = %v, want %q", update.ProtocolFields["olcrtcAuth"], "wbstream")
 	}
-	if update.ProtocolFields["olcrtcTransport"] != "old-transport" {
-		t.Fatalf("olcrtcTransport = %v, want %q", update.ProtocolFields["olcrtcTransport"], "old-transport")
+	if update.ProtocolFields["olcrtcTransport"] != "seichannel" {
+		t.Fatalf("olcrtcTransport = %v, want %q", update.ProtocolFields["olcrtcTransport"], "seichannel")
 	}
 	if update.ProtocolFields["olcrtcRoomID"] != "old-room" {
 		t.Fatalf("olcrtcRoomID = %v, want %q", update.ProtocolFields["olcrtcRoomID"], "old-room")
@@ -285,7 +289,8 @@ func TestSettingsValidationRejectsUnknownSelectValue(t *testing.T) {
 }
 
 // TestSettingsValidationAcceptsKnownSelectValue ensures valid select values
-// still pass through untouched.
+// pass through AND persist untouched — an err-only assertion would green even
+// if normalization dropped the values (#820).
 func TestSettingsValidationAcceptsKnownSelectValue(t *testing.T) {
 	settings := Settings{
 		PanelListen: "127.0.0.1:2096",
@@ -298,6 +303,34 @@ func TestSettingsValidationAcceptsKnownSelectValue(t *testing.T) {
 	err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{})
 	if err != nil {
 		t.Fatalf("err = %v", err)
+	}
+	if settings.ProtocolFields["olcrtcAuth"] != "telemost" {
+		t.Fatalf("olcrtcAuth = %v, want %q", settings.ProtocolFields["olcrtcAuth"], "telemost")
+	}
+	if settings.ProtocolFields["olcrtcTransport"] != "vp8channel" {
+		t.Fatalf("olcrtcTransport = %v, want %q", settings.ProtocolFields["olcrtcTransport"], "vp8channel")
+	}
+}
+
+// TestSettingsValidationEmptySelectClearsToUnset pins the deliberate contract:
+// the panel writes protocolFields[key]="" when a select input is emptied, so a
+// provided "" is the "clear to unset" signal — it persists as "" and renderers
+// apply the schema default. It is NOT validated against the options enum
+// ("" is a control value, not an enum member) (#820).
+func TestSettingsValidationEmptySelectClearsToUnset(t *testing.T) {
+	settings := Settings{
+		PanelListen: "127.0.0.1:2096",
+		Mode:        "server",
+		ProtocolFields: map[string]any{
+			"olcrtcAuth": "",
+		},
+	}
+	err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{})
+	if err != nil {
+		t.Fatalf("provided empty select must clear, not error: %v", err)
+	}
+	if got := settings.ProtocolFields["olcrtcAuth"]; got != "" {
+		t.Fatalf("olcrtcAuth = %v, want persisted empty string", got)
 	}
 }
 

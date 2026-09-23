@@ -74,3 +74,24 @@ func TestInboundValidationRejectsPortsAbove65535(t *testing.T) {
 		t.Fatalf("ValidateCreate(Port=1) = %v, want valid", err)
 	}
 }
+
+// TestInboundValidationAcceptsMieruPrivilegedPorts is where the mieru
+// privileged-port contract actually lives: mita v3.36.1 accepts the full
+// 1..65535 range and the Veil unit grants CAP_NET_BIND_SERVICE, so the common
+// validator must admit privileged ports for mieru while still rejecting
+// out-of-range values (#821 — the plugin-level check is intentionally nil).
+func TestInboundValidationAcceptsMieruPrivilegedPorts(t *testing.T) {
+	validator := NewInboundValidation()
+	for _, port := range []int{1, 80, 443, 1024, 1025, 65535} {
+		inbound := Inbound{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: port}
+		if err := validator.ValidateCreate(inbound); err != nil {
+			t.Fatalf("ValidateCreate(mieru Port=%d) = %v, want valid", port, err)
+		}
+	}
+	for _, port := range []int{-1, 0, 65536, 70000, 999999} {
+		inbound := Inbound{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: port}
+		if err := validator.ValidateCreate(inbound); err != ErrInboundInvalid {
+			t.Fatalf("ValidateCreate(mieru Port=%d) = %v, want ErrInboundInvalid", port, err)
+		}
+	}
+}

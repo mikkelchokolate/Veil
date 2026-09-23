@@ -125,8 +125,11 @@ func TestValidationAllowsUDPInboundOnWarpSocksPort(t *testing.T) {
 		"warp":     json.RawMessage(`{}`),
 	}
 	errs := NewValidation().ValidateSnapshot(snapshot, fields)
+	// No error may mention the shared port number or warp at all: restricting
+	// the needle to the current "conflicts with warp" phrasing would green a
+	// regression that rejects the co-existence under different wording (#915).
 	for _, err := range errs {
-		if strings.Contains(err, "conflicts with warp") || strings.Contains(err, "udp:40000") {
+		if strings.Contains(err, "40000") || strings.Contains(strings.ToLower(err), "warp") {
 			t.Fatalf("valid WARP-TCP + Hy2-UDP co-existence was rejected: %v", errs)
 		}
 	}
@@ -149,7 +152,10 @@ func TestValidationRejectsTCPInboundOnWarpSocksPort(t *testing.T) {
 		"warp":     json.RawMessage(`{}`),
 	}
 	errs := NewValidation().ValidateSnapshot(snapshot, fields)
-	if !validationContains(errs, "conflicts with warp") {
+	// The error must name the conflicting bind, not merely mention warp:
+	// otherwise a vague unrelated warp error would green a missing
+	// TCP-collision check (#915).
+	if !validationContains(errs, "conflicts with warp") || !validationContains(errs, "40000") {
 		t.Fatalf("TCP inbound on the WARP socks port was accepted: %v", errs)
 	}
 }

@@ -185,7 +185,7 @@ func TestManagementApplyStagesWarpOutboundWhenEnabled(t *testing.T) {
 			"hysteria2Password":"hy2-secret"
 		},
 		"inbounds":[{"name":"hysteria2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true}],
-		"routingRules":[{"name":"non-ru-through-warp","match":"geosite:geolocation-!ru","outbound":"warp","enabled":true}],
+		"routingRules":[{"name":"non-ru-through-warp","match":"geosite:ru-blocked","outbound":"warp","enabled":true}],
 		"warp":{
 			"enabled":true,
 			"endpoint":"engage.cloudflareclient.com:2408",

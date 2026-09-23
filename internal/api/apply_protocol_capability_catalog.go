@@ -1,6 +1,8 @@
 package api
 
 import (
+	"strings"
+
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
@@ -44,7 +46,14 @@ func NewApplyProtocolCapabilityCatalogForLiveRoot(liveRoot string) ApplyProtocol
 				if descs[0].TemplateUnit != "" {
 					unit = descs[0].TemplateUnit
 				}
-				cap.Action = descs[0].PromotedVerb + " " + unit
+				// A bare template unit (veil-hysteria2@.service) is not a
+				// restartable unit — real units are per-inbound instances.
+				// Leave Action empty so the catalog never advertises a ghost
+				// restart; apply resolves the concrete per-inbound action via
+				// ActionForInbound (#780).
+				if !strings.HasSuffix(unit, "@.service") {
+					cap.Action = descs[0].PromotedVerb + " " + unit
+				}
 			}
 		}
 		byProtocol[meta.Protocol] = cap

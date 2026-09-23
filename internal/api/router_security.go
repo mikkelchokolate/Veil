@@ -9,7 +9,13 @@ import (
 )
 
 // securityHeadersMiddleware adds baseline security headers to every response.
-func securityHeadersMiddleware(next http.Handler) http.Handler {
+// tlsEdge reports whether the process sits behind a TLS-terminating edge that
+// Veil itself rendered (panelAccess=caddy): the inner listener then sees plain
+// loopback HTTP (r.TLS == nil) even though clients only ever reach the panel
+// over HTTPS, so HSTS must be emitted for the edge the way Secure cookies
+// already are (#902). Browsers ignore HSTS received over plain HTTP, so the
+// header is harmless on any residual direct-HTTP path.
+func securityHeadersMiddleware(next http.Handler, tlsEdge bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -18,7 +24,7 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 		w.Header().Set("X-DNS-Prefetch-Control", "off")
 		w.Header()["Server"] = nil
-		if r.TLS != nil {
+		if r.TLS != nil || tlsEdge {
 			host, _, _ := net.SplitHostPort(r.Host)
 			if host == "" {
 				host = r.Host

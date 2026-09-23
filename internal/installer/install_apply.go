@@ -65,8 +65,11 @@ func (a InstallApply) Apply() (ApplyResult, error) {
 		return ApplyResult{}, err
 	}
 	result := ApplyResult{
-		CaddyfilePath:     filepath.Join(a.paths.EtcDir, "generated", "caddy", "config.json"),
-		Hysteria2Path:     filepath.Join(a.paths.EtcDir, "generated", "hysteria2", "server.yaml"),
+		CaddyfilePath: filepath.Join(a.paths.EtcDir, "generated", "caddy", "config.json"),
+		// Hysteria2 renders per-inbound configs (hysteria2/<name>.yaml); the
+		// aggregate server.yaml no longer exists, so report the artifact dir
+		// for the "no Hysteria2 config was written" checks (#780).
+		Hysteria2Path:     filepath.Join(a.paths.EtcDir, "generated", "hysteria2"),
 		FallbackIndexPath: filepath.Join(a.paths.EtcDir, "www", "index.html"),
 	}
 	if a.paths.BackupDir != "" {

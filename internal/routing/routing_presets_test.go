@@ -50,6 +50,57 @@ func TestRoutingPresetProfiles(t *testing.T) {
 	}
 }
 
+// TestRoutingPresetRUBlockedMatchers locks the RU-blocked preset to the real
+// runetfreedom lists. The previous geosite:geolocation-!ru placeholder
+// referenced a SagerNet artifact that was never published, so a matcher-only
+// smoke check would green a preset that downloads nothing (#778/#852).
+func TestRoutingPresetRUBlockedMatchers(t *testing.T) {
+	preset, ok := routingPresetByName("RU-blocked")
+	if !ok {
+		t.Fatal("RU-blocked preset not found")
+	}
+	type wantRule struct{ match, outbound string }
+	want := []wantRule{
+		{"geoip:ru-blocked", "proxy"},
+		{"geosite:ru-blocked", "proxy"},
+	}
+	if len(preset.Rules) != len(want) {
+		t.Fatalf("RU-blocked rules = %+v, want %d entries", preset.Rules, len(want))
+	}
+	for i, w := range want {
+		if preset.Rules[i].Match != w.match || preset.Rules[i].Outbound != w.outbound || !preset.Rules[i].Enabled {
+			t.Fatalf("RU-blocked rule %d = %+v, want match=%q outbound=%q enabled", i, preset.Rules[i], w.match, w.outbound)
+		}
+	}
+	for _, rule := range preset.Rules {
+		if strings.Contains(rule.Match, "geolocation-!ru") || strings.Contains(rule.Match, "geolocation-ru") {
+			t.Fatalf("RU-blocked preset must not reference the unpublished geolocation-ru list: %+v", rule)
+		}
+	}
+	if len(preset.Source.Files) == 0 {
+		t.Fatal("RU-blocked preset must carry the routing dat source so geoip/geosite matchers resolve")
+	}
+}
+
+// TestRoutingPresetAllExceptRussiaMatchers locks the privacy baseline rules:
+// private IP space direct first, then RU geoip/geosite, then all-through-proxy.
+func TestRoutingPresetAllExceptRussiaMatchers(t *testing.T) {
+	preset, ok := routingPresetByName("all-except-Russia")
+	if !ok {
+		t.Fatal("all-except-Russia preset not found")
+	}
+	wantMatches := []string{"geoip:private", "geoip:ru", "geosite:category-ru", "all"}
+	wantOutbounds := []string{"direct", "direct", "direct", "proxy"}
+	if len(preset.Rules) != len(wantMatches) {
+		t.Fatalf("all-except-Russia rules = %+v, want %d entries", preset.Rules, len(wantMatches))
+	}
+	for i := range wantMatches {
+		if preset.Rules[i].Match != wantMatches[i] || preset.Rules[i].Outbound != wantOutbounds[i] {
+			t.Fatalf("all-except-Russia rule %d = %+v, want match=%q outbound=%q", i, preset.Rules[i], wantMatches[i], wantOutbounds[i])
+		}
+	}
+}
+
 func TestRoutingPresetByName(t *testing.T) {
 	presets := routingPresetProfiles()
 	for _, preset := range presets {

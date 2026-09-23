@@ -1,6 +1,7 @@
 package generatedconfig
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -51,8 +52,24 @@ func TestGeneratedMieruConfigRendererKeepsSiblingUsersAndBindings(t *testing.T) 
 	if !strings.Contains(artifact.Body, `"name": "alice"`) || !strings.Contains(artifact.Body, `"protocol": "TCP"`) || !strings.Contains(artifact.Body, `"protocol": "UDP"`) {
 		t.Fatalf("aggregated config missing alice or both bindings:\n%s", artifact.Body)
 	}
-	if strings.Contains(artifact.Body, "leftover") {
-		t.Fatalf("all-disabled inbound revived leftover password:\n%s", artifact.Body)
+	// A substring sweep is not enough: forbid the disabled profile's name and
+	// password as JSON values, not just the leftover inbound password (#822).
+	var doc struct {
+		Users []struct {
+			Name     string `json:"name"`
+			Password string `json:"password"`
+		} `json:"users"`
+	}
+	if err := json.Unmarshal([]byte(artifact.Body), &doc); err != nil {
+		t.Fatalf("aggregated mieru config is not JSON: %v\n%s", err, artifact.Body)
+	}
+	if len(doc.Users) != 1 || doc.Users[0].Name != "alice" || doc.Users[0].Password != "alice-pass" {
+		t.Fatalf("aggregated users = %+v, want exactly [alice alice-pass]", doc.Users)
+	}
+	for _, forbidden := range []string{"leftover", `"bob-pass"`, `"name": "bob"`} {
+		if strings.Contains(artifact.Body, forbidden) {
+			t.Fatalf("all-disabled inbound leaked forbidden credential %q:\n%s", forbidden, artifact.Body)
+		}
 	}
 }
 

@@ -30,8 +30,11 @@ func TestValidateInboundEnforcesPinnedUpstreamCompatibilityMatrix(t *testing.T) 
 				room = "https://meet.example.org/room-1"
 			}
 			issues := (Plugin{}).ValidateInbound(model.Settings{}, olcrtcValidationInbound(key, tc.auth, tc.transport, room))
-			if hasOlcrtcIssue(issues, "olcrtc_provider_transport_unsupported") || hasOlcrtcIssue(issues, "olcrtc_wbstream_datachannel") {
-				t.Fatalf("working upstream combination was rejected: %+v", issues)
+			// Valid matrix arms must produce zero issues — forbidding only the
+			// two known rejection codes would still green unrelated errors
+			// like olcrtc_key_invalid (#894).
+			if len(issues) != 0 {
+				t.Fatalf("working upstream combination produced issues: %+v", issues)
 			}
 		})
 	}
@@ -85,8 +88,10 @@ func TestValidateInboundAcceptsPinnedUpstreamJitsiRoomForms(t *testing.T) {
 		"meet.example.org/room",
 	} {
 		issues := (Plugin{}).ValidateInbound(model.Settings{}, olcrtcValidationInbound(key, "jitsi", "datachannel", room))
-		if hasOlcrtcIssue(issues, "olcrtc_jitsi_room_invalid") {
-			t.Fatalf("room %q should match upstream parser: %+v", room, issues)
+		// Not just "no olcrtc_jitsi_room_invalid": a valid room on a valid
+		// combination must yield no issues at all (#894).
+		if len(issues) != 0 {
+			t.Fatalf("room %q should match upstream parser cleanly: %+v", room, issues)
 		}
 	}
 }

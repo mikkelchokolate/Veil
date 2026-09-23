@@ -176,7 +176,7 @@ func TestValidatorRejectsNaiveProxyOnDifferentBusyPortThanPanelPublicPort(t *tes
 		}},
 	})
 
-	assertIssueCode(t, response, "port_in_use")
+	assertErrorIssue(t, response, "port_in_use")
 }
 
 func TestValidatorDoesNotTreatCustomPanelPublicPortAsOwnedByOtherProtocols(t *testing.T) {
@@ -190,7 +190,7 @@ func TestValidatorDoesNotTreatCustomPanelPublicPortAsOwnedByOtherProtocols(t *te
 		}},
 	})
 
-	assertIssueCode(t, response, "port_in_use")
+	assertErrorIssue(t, response, "port_in_use")
 }
 
 func TestValidatorDoesNotTreatPanelCaddyBindingAsOwnedByOtherProtocols(t *testing.T) {
@@ -204,7 +204,7 @@ func TestValidatorDoesNotTreatPanelCaddyBindingAsOwnedByOtherProtocols(t *testin
 		}},
 	})
 
-	assertIssueCode(t, response, "port_in_use")
+	assertErrorIssue(t, response, "port_in_use")
 }
 
 func TestValidatorReportsMissingDomainEmailCredentialBinaryAndUnit(t *testing.T) {
@@ -233,6 +233,16 @@ func TestValidatorReportsMissingDomainEmailCredentialBinaryAndUnit(t *testing.T)
 	} {
 		assertIssueCode(t, response, code)
 	}
+	// The *_required issues are errors and must invalidate; the runtime_*
+	// readiness issues are warnings (#861).
+	if response.Valid {
+		t.Fatalf("missing domain/email/credential must invalidate: %+v", response)
+	}
+	for _, code := range []string{"naive_domain_required", "naive_email_required", "naive_credential_required", "credential_required"} {
+		if severity := issueSeverity(response, code); severity != SeverityError {
+			t.Fatalf("%s severity = %q, want error", code, severity)
+		}
+	}
 }
 
 func TestValidatorReportsUnresolvedDomainAndProbeFailure(t *testing.T) {
@@ -258,7 +268,7 @@ func TestValidatorReportsUnresolvedDomainAndProbeFailure(t *testing.T) {
 	})
 
 	assertIssueCode(t, response, "dns_unresolved")
-	assertIssueCode(t, response, "port_probe_failed")
+	assertErrorIssue(t, response, "port_probe_failed")
 }
 
 func TestValidatorTreatsExternalDNSAndRuntimeAvailabilityAsWarnings(t *testing.T) {
@@ -303,7 +313,7 @@ func TestValidatorRejectsPanelPortCollision(t *testing.T) {
 		}},
 	})
 
-	assertIssueCode(t, response, "reserved_panel_port")
+	assertErrorIssue(t, response, "reserved_panel_port")
 }
 
 func TestValidatorAllowsOlcrtcWithoutDomain(t *testing.T) {
@@ -378,6 +388,20 @@ func assertIssueCode(t *testing.T, response Response, code string) {
 	t.Helper()
 	if !hasIssueCode(response, code) {
 		t.Fatalf("missing issue %q in %+v", code, response)
+	}
+}
+
+// assertErrorIssue locks the full invalid contract for codes that must be
+// severity=error: code presence alone greens a regression that downgrades the
+// issue to a warning (response.Valid would stay true) (#861).
+func assertErrorIssue(t *testing.T, response Response, code string) {
+	t.Helper()
+	assertIssueCode(t, response, code)
+	if response.Valid {
+		t.Fatalf("error issue %q must invalidate the response: %+v", code, response)
+	}
+	if severity := issueSeverity(response, code); severity != SeverityError {
+		t.Fatalf("%s severity = %q, want %q", code, severity, SeverityError)
 	}
 }
 

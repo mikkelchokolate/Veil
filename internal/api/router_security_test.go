@@ -412,7 +412,7 @@ func TestConstantTimeCompareCSRF(t *testing.T) {
 func TestSecurityHeadersHSTSForIPHosts(t *testing.T) {
 	handler := securityHeadersMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-	}))
+	}), false)
 
 	cases := []struct {
 		host     string
@@ -444,5 +444,34 @@ func TestSecurityHeadersHSTSForIPHosts(t *testing.T) {
 				t.Fatalf("host %q: expected no HSTS header, got %q", c.host, got)
 			}
 		}
+	}
+}
+
+// Under panelAccess=caddy the panel is reached through the managed Caddy TLS
+// edge while the Go listener only sees plain loopback HTTP (r.TLS == nil).
+// HSTS must still be emitted — matching the Secure-cookie edge treatment —
+// otherwise the public site never sends it (#902).
+func TestSecurityHeadersHSTSBehindCaddyEdge(t *testing.T) {
+	handler := securityHeadersMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}), true)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "panel.example.com"
+	// r.TLS stays nil: this is what the request looks like after Caddy's
+	// reverse_proxy hop.
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if got := w.Header().Get("Strict-Transport-Security"); !strings.Contains(got, "max-age=63072000") {
+		t.Fatalf("expected HSTS behind caddy TLS edge, got %q", got)
+	}
+
+	// IP hosts still must not get HSTS (browsers would pin a bare IP).
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "192.0.2.1"
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if got := w.Header().Get("Strict-Transport-Security"); got != "" {
+		t.Fatalf("expected no HSTS for IP host even behind caddy edge, got %q", got)
 	}
 }

@@ -54,14 +54,31 @@ func TestGeneratedConfigRegistryMultipleHysteriaAndNaive(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 
-	// Verify hysteria2 configs are rendered as separate files
+	// Verify hysteria2 configs are rendered as separate files — and that each
+	// body actually carries its own listen port and credential, not just that
+	// the map keys exist (#894).
 	hy2APath := filepath.Join(root, "generated", "hysteria2", "hy2-a.yaml")
 	hy2BPath := filepath.Join(root, "generated", "hysteria2", "hy2-b.yaml")
-	if _, ok := configs[hy2APath]; !ok {
-		t.Errorf("missing config for hy2-a at %s", hy2APath)
+	hy2A, ok := configs[hy2APath]
+	if !ok {
+		t.Fatalf("missing config for hy2-a at %s", hy2APath)
 	}
-	if _, ok := configs[hy2BPath]; !ok {
-		t.Errorf("missing config for hy2-b at %s", hy2BPath)
+	hy2B, ok := configs[hy2BPath]
+	if !ok {
+		t.Fatalf("missing config for hy2-b at %s", hy2BPath)
+	}
+	for _, want := range []string{"listen: :10001", "password: passa"} {
+		if !strings.Contains(hy2A, want) {
+			t.Errorf("hy2-a config missing %q:\n%s", want, hy2A)
+		}
+	}
+	for _, want := range []string{"listen: :10002", "password: passb"} {
+		if !strings.Contains(hy2B, want) {
+			t.Errorf("hy2-b config missing %q:\n%s", want, hy2B)
+		}
+	}
+	if strings.Contains(hy2A, "passb") || strings.Contains(hy2B, "passa") {
+		t.Fatalf("hysteria2 per-inbound credentials crossed: hy2-a=%q hy2-b=%q", hy2A, hy2B)
 	}
 
 	// Verify naiveproxy config is rendered as a single consolidated JSON file

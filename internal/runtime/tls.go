@@ -19,6 +19,15 @@ type TLSCertInfo struct {
 	DNSNames      []string `json:"dnsNames,omitempty"`
 	Valid         bool     `json:"valid"`
 	Error         string   `json:"error,omitempty"`
+	// ManagedBy names the component that issued/stores the certificate when it
+	// is not the process's own VEIL_TLS_CERT file (e.g. "caddy" for the managed
+	// panel edge). IssuerSource is the upstream issuer identity (Caddy issuer
+	// storage name) and IssuerKind classifies it ("acme" vs "internal") so an
+	// ACME failure that silently fell back to Caddy's local CA stays visible
+	// in status instead of looking like a trusted cert (#906).
+	ManagedBy    string `json:"managedBy,omitempty"`
+	IssuerSource string `json:"issuerSource,omitempty"`
+	IssuerKind   string `json:"issuerKind,omitempty"`
 }
 
 // ReadTLSCert reads and parses a TLS certificate file.

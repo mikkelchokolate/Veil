@@ -10,8 +10,13 @@ func TestConfigValidationCatalogMatchesKnownGeneratedConfigs(t *testing.T) {
 		cmd  []string
 	}{
 		// Only protocols with a working standalone checker have a validation command.
-		{"/etc/veil/generated/caddy/Caddyfile", "caddy", []string{"caddy", "validate", "--config", "/etc/veil/generated/caddy/Caddyfile"}},
+		// The managed caddy artifact is the consolidated JSON config (#855).
+		{"/etc/veil/generated/caddy/config.json", "caddy", []string{"caddy", "validate", "--config", "/etc/veil/generated/caddy/config.json"}},
 		{"/etc/veil/generated/sing-box/warp.json", "warp", []string{"sing-box", "check", "-c", "/etc/veil/generated/sing-box/warp.json"}},
+	}
+	// A legacy Caddyfile staged under caddy/ is not the managed artifact.
+	if _, ok := catalog.Match("/etc/veil/generated/caddy/panel.Caddyfile"); ok {
+		t.Fatal("legacy Caddyfile must not match the caddy validation spec")
 	}
 	for _, tc := range cases {
 		validation, ok := catalog.Match(tc.path)
@@ -29,7 +34,7 @@ func TestConfigValidationCatalogMatchesKnownGeneratedConfigs(t *testing.T) {
 	}
 	// Hysteria2 and Mieru have no standalone checker, so no validation command runs.
 	for _, path := range []string{
-		"/etc/veil/generated/hysteria2/server.yaml",
+		"/etc/veil/generated/hysteria2/edge.yaml",
 		"/etc/veil/generated/mieru/server_config.json",
 	} {
 		if _, ok := catalog.Match(path); ok {

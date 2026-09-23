@@ -47,10 +47,30 @@ func TestSettingsValidationRejectsUnsupportedAcmeChallengeMode(t *testing.T) {
 }
 
 func TestSettingsValidationAcceptsSupportedAcmeChallengeModes(t *testing.T) {
-	for _, mode := range []string{"", "http-01", "tls-alpn-01"} {
+	// Only the two OpenAPI enum members are "supported modes" (#820).
+	for _, mode := range []string{"http-01", "tls-alpn-01"} {
 		settings := Settings{PanelListen: "127.0.0.1:2096", Mode: "dev", AcmeChallengeMode: mode}
 		if err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{}); err != nil {
 			t.Errorf("mode %q: %v", mode, err)
 		}
+		if settings.AcmeChallengeMode != mode {
+			t.Errorf("mode %q was not persisted: %q", mode, settings.AcmeChallengeMode)
+		}
+	}
+}
+
+// TestSettingsValidationAcmeChallengeModeEmptyMeansUnset pins the deliberate
+// contract: "" is not an OpenAPI enum member — it is the flat-field unset
+// sentinel. acmeChallengeMode is a plain string field, so a PUT that omits
+// the key decodes to "" and must not be rejected, or every settings update
+// not carrying the field would fail. It persists as "" (unset) and the
+// challenge planner applies its default (#820).
+func TestSettingsValidationAcmeChallengeModeEmptyMeansUnset(t *testing.T) {
+	settings := Settings{PanelListen: "127.0.0.1:2096", Mode: "dev"}
+	if err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, Settings{}); err != nil {
+		t.Fatalf("absent acmeChallengeMode must not error: %v", err)
+	}
+	if settings.AcmeChallengeMode != "" {
+		t.Fatalf("absent acmeChallengeMode must persist as unset, got %q", settings.AcmeChallengeMode)
 	}
 }

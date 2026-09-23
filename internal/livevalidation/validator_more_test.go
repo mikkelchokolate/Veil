@@ -86,7 +86,7 @@ func TestValidatorRejectsEmptyInboundName(t *testing.T) {
 		}},
 	})
 
-	assertIssueCode(t, response, "name_required")
+	assertErrorIssue(t, response, "name_required")
 }
 
 func TestValidatorRejectsUnsupportedTransportForProtocol(t *testing.T) {
@@ -96,7 +96,7 @@ func TestValidatorRejectsUnsupportedTransportForProtocol(t *testing.T) {
 		}},
 	})
 
-	assertIssueCode(t, response, "unsupported_transport")
+	assertErrorIssue(t, response, "unsupported_transport")
 }
 
 func TestValidatorReportsUnitInspectorError(t *testing.T) {

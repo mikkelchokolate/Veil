@@ -3,6 +3,7 @@ package api
 import (
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/clientaddr"
 	"github.com/mikkelchokolate/Veil/internal/observability"
@@ -37,7 +38,7 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 			_, _ = io.WriteString(w, state.trafficCollector.PrometheusMetrics())
 		}
 	})
-	RuntimeRoutes{}.Register(mux)
+	RuntimeRoutes{TLSInfo: state.tlsCertInfo}.Register(mux)
 	mux.HandleFunc("/api/services/", state.handleServiceActionRoute)
 	state.register(mux)
 	panelRoutes := PanelRoutes{Info: info, BasePath: basePath, State: state}
@@ -94,7 +95,10 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	if basePath != "/" {
 		handler = stripBasePathMiddleware(basePath, authenticated)
 	}
-	secured := securityHeadersMiddleware(handler)
+	// Under panelAccess=caddy the public TLS edge is the managed Caddy site, so
+	// this Go listener only ever sees loopback HTTP. Treat that edge as TLS for
+	// HSTS the same way panelCookieAttrs treats it for Secure cookies (#902).
+	secured := securityHeadersMiddleware(handler, strings.EqualFold(strings.TrimSpace(info.PanelAccess), "caddy"))
 	healthAware := auditHealthMiddleware(state, metrics.MetricsMiddleware(secured))
 	return requestIDMiddleware(degradedStateMiddleware(state, healthAware)), state
 }

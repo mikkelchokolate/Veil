@@ -183,28 +183,39 @@ func renderWarpRoute(rules []WarpRoutingRule) map[string]any {
 	return route
 }
 
-// geoRuleSet references the official SagerNet remote rule-sets, downloaded via
-// the direct outbound so resolution does not depend on the WARP tunnel itself.
+// geoRuleSet references a remote .srs rule-set, downloaded via the direct
+// outbound so resolution does not depend on the WARP tunnel itself.
 func geoRuleSet(tag, kind, code string) map[string]any {
 	return map[string]any{
 		"type":            "remote",
 		"tag":             tag,
 		"format":          "binary",
-		"url":             fmt.Sprintf("https://raw.githubusercontent.com/SagerNet/sing-%s/rule-set/%s-%s.srs", kind, kind, sagerNetRuleCode(kind, code)),
+		"url":             geoRuleSetURL(kind, code),
 		"download_detour": "direct",
 	}
 }
 
-// sagerNetRuleCode maps Veil preset tokens onto published SagerNet rule-set
-// filenames. `ru-blocked` is a Veil preset name, not a SagerNet artifact.
-func sagerNetRuleCode(kind, code string) string {
+const (
+	// sagerNetRuleSetURLFormat is the official SagerNet rule-set mirror of the
+	// domain-list-community / geoip artifacts (branch layout
+	// sing-<kind>/rule-set/<kind>-<code>.srs).
+	sagerNetRuleSetURLFormat = "https://raw.githubusercontent.com/SagerNet/sing-%s/rule-set/%s-%s.srs"
+	// runetfreedomRuleSetURLFormat hosts the sing-box rule-set builds of the
+	// russia-v2ray lists on the release branch — the same upstream Veil pins
+	// for the geoip.dat/geosite.dat artifacts consumed by Hysteria2 ACLs.
+	runetfreedomRuleSetURLFormat = "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/sing-box/rule-set-%s/%s-%s.srs"
+)
+
+// geoRuleSetURL resolves a geoip/geosite code to a published .srs URL.
+// `ru-blocked` is a runetfreedom-only list: SagerNet publishes no such artifact
+// (the previous remaps geosite→geolocation-ru 404 and geoip→ru misrouted every
+// Russian IP instead of the blocked set), so both kinds resolve to the
+// runetfreedom build that carries the true RU-BLOCKED lists.
+func geoRuleSetURL(kind, code string) string {
 	if code == "ru-blocked" {
-		if kind == "geoip" {
-			return "ru"
-		}
-		return "geolocation-ru"
+		return fmt.Sprintf(runetfreedomRuleSetURLFormat, kind, kind, code)
 	}
-	return code
+	return fmt.Sprintf(sagerNetRuleSetURLFormat, kind, kind, code)
 }
 
 func splitCSV(value string) []string {
