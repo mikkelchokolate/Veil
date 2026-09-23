@@ -194,3 +194,29 @@ func TestCidrInitDoesNotPanic(t *testing.T) {
 		t.Fatal("expected 192.0.2.1 to be within TEST-NET-1")
 	}
 }
+
+func TestDetectPublicIPForFamilyRejectsWrongFamilyAnswer(t *testing.T) {
+	// A forced tcp4 probe must fail closed when the endpoint body answers
+	// with an IPv6 address — the result feeds certificate SANs (#665).
+	v6 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("2606:4700:4700::1111"))
+	}))
+	defer v6.Close()
+	if _, err := DetectPublicIPForFamily(context.Background(), []string{v6.URL}, "tcp4"); err == nil {
+		t.Fatal("tcp4 probe accepted an IPv6 response body")
+	}
+	v4 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("93.184.216.34"))
+	}))
+	defer v4.Close()
+	ip, err := DetectPublicIPForFamily(context.Background(), []string{v4.URL}, "tcp4")
+	if err != nil {
+		t.Fatalf("tcp4 probe rejected a matching IPv4 answer: %v", err)
+	}
+	if ip.To4() == nil {
+		t.Fatalf("tcp4 probe returned non-IPv4 %s", ip)
+	}
+	if _, err := DetectPublicIPForFamily(context.Background(), []string{v4.URL}, "udp4"); err == nil {
+		t.Fatal("non-tcp network must be rejected")
+	}
+}

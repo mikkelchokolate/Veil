@@ -57,7 +57,18 @@ func DetectPublicIPForFamily(ctx context.Context, endpoints []string, network st
 		},
 	}
 	defer transport.CloseIdleConnections()
-	return DetectPublicIP(ctx, &http.Client{Transport: transport, Timeout: 5 * time.Second}, endpoints)
+	ip, err := DetectPublicIP(ctx, &http.Client{Transport: transport, Timeout: 5 * time.Second}, endpoints)
+	if err != nil {
+		return nil, err
+	}
+	// Fail closed if an endpoint answers a forced-family connection with the
+	// other family's address (lying proxy, NAT64, captive portal): the result
+	// feeds certificate SANs, so a mismatch would certify an address the host
+	// does not own on that family.
+	if (network == "tcp4") != (ip.To4() != nil) {
+		return nil, fmt.Errorf("endpoint answered %s probe with wrong-family address %s", network, ip)
+	}
+	return ip, nil
 }
 
 func DetectPublicIP(ctx context.Context, client *http.Client, endpoints []string) (net.IP, error) {
