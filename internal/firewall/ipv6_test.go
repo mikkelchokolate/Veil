@@ -38,6 +38,22 @@ func TestEnsureIPv6ManagedRepairsDisabledIPv6(t *testing.T) {
 	}
 }
 
+func TestEnsureIPv6ManagedRepairsQuotedDisabledIPv6(t *testing.T) {
+	for _, seed := range []string{"IPV6=\"no\"\n", "IPV6='no'\n", "IPV6=No\n"} {
+		path := withUFWDefaultsFile(t, seed)
+		if err := EnsureIPv6Managed(); err != nil {
+			t.Fatalf("EnsureIPv6Managed(%q): %v", seed, err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read ufw defaults: %v", err)
+		}
+		if !strings.Contains(string(data), "IPV6=yes") {
+			t.Fatalf("quoted/cased IPV6=no must be repaired, seed %q:\n%s", seed, data)
+		}
+	}
+}
+
 func TestEnsureIPv6ManagedLeavesEnabledAndCommentedAlone(t *testing.T) {
 	for _, content := range []string{
 		"IPV6=yes\n",
