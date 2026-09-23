@@ -308,14 +308,9 @@ func (s *managementState) appliedSubscription(clientID string) (client.View, []m
 // the metadata headers proxy clients consume.
 func (s *managementState) writeSubscription(w http.ResponseWriter, r *http.Request, cl client.View, links []model.ClientLink) {
 	format := r.URL.Query().Get("format")
-	response := model.ClientLinksResponse{Links: links, Count: len(links)}
-	subscription, err := clientaccess.BuildClientSubscription(response, format)
-	if err != nil {
-		writeError(w, err.Error(), http.StatusBadRequest)
-		return
-	}
 	var upload, download int64
 	trafficState := "unsupported"
+	trafficObserved := false
 	if s.trafficStore != nil {
 		var trafficErr error
 		upload, download, trafficErr = s.trafficStore.TotalsForClient(cl.ID)
@@ -323,7 +318,23 @@ func (s *managementState) writeSubscription(w http.ResponseWriter, r *http.Reque
 			trafficState = "unavailable"
 		} else {
 			trafficState = "observed"
+			trafficObserved = true
 		}
+	}
+	// Quota gating uses LIVE observed totals, not just the applied snapshot's
+	// Depleted flag (issue #671): between the quota breach and apply
+	// convergence the feed must already stop handing out credentials, exactly
+	// like the wall-clock ExpiresAt check in appliedSubscription. When
+	// telemetry is unavailable the applied status still governs rather than
+	// guessing at counters.
+	if trafficObserved && cl.QuotaBytes != nil && client.QuotaReached(upload, download, *cl.QuotaBytes) {
+		links = nil
+	}
+	response := model.ClientLinksResponse{Links: links, Count: len(links)}
+	subscription, err := clientaccess.BuildClientSubscription(response, format)
+	if err != nil {
+		writeError(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 	w.Header().Set("X-Veil-Traffic-State", trafficState)
 	meta := clientaccess.SubscriptionMetaHeaders{

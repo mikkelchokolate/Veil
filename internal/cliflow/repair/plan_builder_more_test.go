@@ -352,6 +352,56 @@ func TestMaybeIssueLEIPCertReturnsErrorOnNilIP(t *testing.T) {
 	}
 }
 
+// Issue #665: repair-time renewal must split the resolved address into its
+// family slot and probe the other family on auto-detect so dual-stack hosts
+// renew with both SANs covered.
+func TestMaybeIssueLEIPCertPopulatesBothFamiliesOnAuto(t *testing.T) {
+	etcDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(etcDir, "panel"), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(etcDir, "panel", "tls.crt"), []byte("bad"), 0o644); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(etcDir, "panel", "tls.key"), []byte("key"), 0o600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+
+	oldResolver := repairLEPublicIPResolver
+	repairLEPublicIPResolver = func(ctx context.Context, value string, client *http.Client, endpoints []string) (net.IP, error) {
+		return net.ParseIP("203.0.113.10"), nil
+	}
+	t.Cleanup(func() { repairLEPublicIPResolver = oldResolver })
+
+	oldFamily := repairLEPublicIPFamilyResolver
+	repairLEPublicIPFamilyResolver = func(ctx context.Context, endpoints []string, network string) (net.IP, error) {
+		if network != "tcp6" {
+			return nil, errors.New("unexpected family probe " + network)
+		}
+		return net.ParseIP("2001:db8::9"), nil
+	}
+	t.Cleanup(func() { repairLEPublicIPFamilyResolver = oldFamily })
+
+	var got acmeip.IssueOptions
+	oldIssue := leIPCertIssueFunc
+	leIPCertIssueFunc = func(ctx context.Context, opts acmeip.IssueOptions) (acmeip.IssuedCert, error) {
+		got = opts
+		return acmeip.IssuedCert{CertPath: opts.CertPath, KeyPath: opts.KeyPath}, nil
+	}
+	t.Cleanup(func() { leIPCertIssueFunc = oldIssue })
+
+	profile := installer.RURecommendedProfile{Email: "admin@example.com"}
+	if err := maybeIssueLEIPCert(context.Background(), &profile, Options{EtcDir: etcDir, PublicIP: "auto"}); err != nil {
+		t.Fatalf("maybeIssueLEIPCert: %v", err)
+	}
+	if got.PublicIPv4 != "203.0.113.10" {
+		t.Fatalf("PublicIPv4 = %q, want 203.0.113.10", got.PublicIPv4)
+	}
+	if got.PublicIPv6 != "2001:db8::9" {
+		t.Fatalf("PublicIPv6 = %q, want probed 2001:db8::9", got.PublicIPv6)
+	}
+}
+
 func TestMaybeIssueLEIPCertReturnsErrorOnIssueFailure(t *testing.T) {
 	etcDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(etcDir, "panel"), 0o700); err != nil {

@@ -125,7 +125,7 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.clearLoginFailures(loginUsernameKey(req.Username))
+	s.clearLoginFailures(loginThrottleKey(r, req.Username))
 	session, err := s.sessionRegistry().Create(SessionCreateInput{
 		Username:   req.Username,
 		Role:       role,
@@ -167,8 +167,18 @@ func loginUsernameKey(username string) string {
 	return strings.ToLower(strings.TrimSpace(username))
 }
 
+// loginThrottleKey scopes the per-username login limiter and backoff to the
+// calling client address. A process-global username key let anyone who knew
+// a login name (the default is "admin") burn the whole budget from
+// distributed IPs and lock the real operator out without a valid password
+// (issue #667). The per-IP /api/auth/login HTTP limit still bounds password
+// spraying from a single address.
+func loginThrottleKey(r *http.Request, username string) string {
+	return clientIP(r) + "|" + loginUsernameKey(username)
+}
+
 func (s *managementState) rejectThrottledLogin(w http.ResponseWriter, r *http.Request, username string) bool {
-	key := loginUsernameKey(username)
+	key := loginThrottleKey(r, username)
 	if allowed, retryAfter := s.allowLoginUsername(key); !allowed {
 		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
 		s.recordRequestAudit(r, audit.Record{
@@ -187,7 +197,7 @@ func (s *managementState) rejectThrottledLogin(w http.ResponseWriter, r *http.Re
 }
 
 func (s *managementState) recordInvalidLogin(w http.ResponseWriter, r *http.Request, username string) {
-	retryAfter := s.recordLoginFailure(loginUsernameKey(username))
+	retryAfter := s.recordLoginFailure(loginThrottleKey(r, username))
 	w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
 	s.recordRequestAudit(r, audit.Record{
 		Actor:   username,
@@ -199,14 +209,16 @@ func (s *managementState) recordInvalidLogin(w http.ResponseWriter, r *http.Requ
 	writeError(w, "invalid username or password", http.StatusUnauthorized)
 }
 
-func (s *managementState) allowLoginUsername(normalizedUsername string) (bool, time.Duration) {
+// allowLoginUsername applies the per-(clientIP, username) login budget — the
+// key is already scoped to the caller's address by loginThrottleKey.
+func (s *managementState) allowLoginUsername(scopedKey string) (bool, time.Duration) {
 	s.mu.Lock()
 	if s.loginUsernameLimiter == nil {
 		s.loginUsernameLimiter = observability.NewRateLimiterEngine()
 	}
 	limiter := s.loginUsernameLimiter
 	s.mu.Unlock()
-	return limiter.Allow("login-username:"+normalizedUsername, 5.0/60.0, 3)
+	return limiter.Allow("login-username:"+scopedKey, 5.0/60.0, 3)
 }
 
 func (s *managementState) handleLogout(w http.ResponseWriter, r *http.Request) {
