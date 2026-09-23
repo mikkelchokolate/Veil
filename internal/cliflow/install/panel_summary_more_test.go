@@ -16,13 +16,15 @@ func TestPanelSummaryMore(t *testing.T) {
 		{
 			name: "random port source",
 			input: PanelSummaryInput{
-				Profile:     installer.RURecommendedProfile{Domain: "d.example.com", WebBasePath: "/s/"},
+				// A first path segment of "s" is reserved for public
+				// subscription links (#662) — use an ordinary secret mount.
+				Profile:     installer.RURecommendedProfile{Domain: "d.example.com", WebBasePath: "/secret-mount/"},
 				PanelPort:   1234,
 				PanelRandom: true,
 			},
 			want: []string{
 				"Panel port: 1234 (random)",
-				"Panel URL: https://d.example.com/s/",
+				"Panel URL: https://d.example.com/secret-mount/",
 			},
 		},
 		{

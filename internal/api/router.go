@@ -104,8 +104,12 @@ func stripBasePathMiddleware(prefix string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// The public token-based subscription endpoint (/s/{token}) must stay
 		// reachable even when the panel is mounted under a secret base path:
-		// the unguessable token is the capability, not the panel path.
-		if strings.HasPrefix(r.URL.Path, "/s/") {
+		// the unguessable token is the capability, not the panel path. The
+		// bypass matches only the exact single-segment /s/{token} shape —
+		// anything deeper under /s/ still goes through the mount check, so a
+		// panel URL can never be mistaken for a public feed (issue #662;
+		// webbasepath additionally reserves "s" as a first mount segment).
+		if rest, ok := strings.CutPrefix(r.URL.Path, "/s/"); ok && rest != "" && !strings.Contains(rest, "/") {
 			next.ServeHTTP(w, r)
 			return
 		}

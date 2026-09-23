@@ -381,11 +381,14 @@ func (e failingInfoEntry) IsDir() bool                { return false }
 func (e failingInfoEntry) Type() fs.FileMode          { return 0 }
 func (e failingInfoEntry) Info() (fs.FileInfo, error) { return nil, errors.New("info error") }
 
-// Issue #623: veil-mieru.service declares StateDirectory=mita and runs as
+// Issue #623: veil-caddy.service declares StateDirectory=caddy and runs as
 // veil-proxy, but systemd never re-owns an existing state dir — an old
-// veil-owned /var/lib/mita (like /var/lib/caddy before #497) stays
-// unwritable to the unit. Migrate must re-own both trees to the proxy
-// identity, mirroring the package postinstall chown -R repair.
+// veil-owned /var/lib/caddy stays unwritable to the unit. Migrate must
+// re-own every tree in proxyStateDirs to the proxy identity, mirroring the
+// package postinstall chown -R repair. (The packaged default is
+// /var/lib/caddy only — the mita StateDirectory belongs to the dedicated
+// veil-mita identity since #624; this test injects a scratch list purely to
+// exercise the re-own mechanism, see #660.)
 func TestMigrateReownsProxyStateDirs(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX ownership test")

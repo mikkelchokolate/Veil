@@ -52,8 +52,10 @@ type Paths struct {
 	VarDir  string
 	RootUID int
 	RootGID int
-	// MitaDir is the mieru daemon StateDirectory (/var/lib/mita). Empty
-	// resolves to the sibling "mita" directory next to VarDir.
+	// MitaDir is the mieru daemon StateDirectory. Empty resolves to the
+	// fixed systemd location /var/lib/mita — StateDirectory=mita always
+	// resolves under /var/lib regardless of the configured VarDir
+	// (issue #660).
 	MitaDir string
 }
 
@@ -217,11 +219,13 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 	case !os.IsNotExist(err):
 		return err
 	}
-	// veil-caddy.service and veil-mieru.service moved to User=veil-proxy
-	// (#497/#615). systemd never re-owns an existing StateDirectory, so a
-	// /var/lib/caddy or /var/lib/mita left behind by the previous identity
-	// stays unwritable to the new unit — mirror the package postinstall and
-	// re-own existing real directories to the proxy identity (issue #623).
+	// veil-caddy.service moved to User=veil-proxy (#497/#615). systemd never
+	// re-owns an existing StateDirectory, so a /var/lib/caddy left behind by
+	// the previous identity stays unwritable to the new unit — mirror the
+	// package postinstall and re-own existing real directories to the proxy
+	// identity (issue #623). /var/lib/mita is deliberately NOT in this set:
+	// veil-mieru.service now runs as the dedicated veil-mita identity
+	// (#624), so the mita tree gets its own pass below (issue #660).
 	// StateDirectory names always resolve under /var/lib regardless of the
 	// configured VarDir, hence the fixed paths.
 	if panel.ProxyUID != 0 || panel.ProxyGID != 0 {
@@ -276,7 +280,11 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 	if panel.MitaUID != 0 && panel.MitaGID != 0 {
 		mitaDir := paths.MitaDir
 		if mitaDir == "" {
-			mitaDir = filepath.Join(filepath.Dir(paths.VarDir), "mita")
+			// systemd StateDirectory=mita is fixed at /var/lib/mita — it
+			// does NOT follow a custom --var-dir. Defaulting to a VarDir
+			// sibling would leave the real daemon state dir untouched
+			// (issue #660).
+			mitaDir = defaultMitaStateDir
 		}
 		info, err := testHooks.lstat(mitaDir)
 		switch {
@@ -410,10 +418,17 @@ func copyRegularFile(source, destination string) error {
 }
 
 // proxyStateDirs are the fixed StateDirectory trees that must belong to the
-// veil-proxy identity (veil-caddy.service StateDirectory=caddy,
-// veil-mieru.service StateDirectory=mita). It is a variable so tests can
-// point it at a scratch tree.
-var proxyStateDirs = []string{"/var/lib/caddy", "/var/lib/mita"}
+// veil-proxy identity (veil-caddy.service StateDirectory=caddy).
+// /var/lib/mita is NOT here: it belongs to the dedicated veil-mita identity
+// since #624, and the mita pass below owns it (issue #660). It is a
+// variable so tests can point it at a scratch tree.
+var proxyStateDirs = []string{"/var/lib/caddy"}
+
+// defaultMitaStateDir is the fixed systemd StateDirectory=mita location.
+// systemd always resolves it under /var/lib no matter what --var-dir the
+// install used, so the default never derives from Paths.VarDir. It is a
+// variable so tests can point it at a scratch tree.
+var defaultMitaStateDir = "/var/lib/mita"
 
 // reownProxyStateDir mirrors the package postinstall `chown -R
 // veil-proxy:veil-proxy` repair: an existing real directory tree is re-owned

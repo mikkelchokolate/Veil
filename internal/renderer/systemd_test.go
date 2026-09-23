@@ -325,8 +325,15 @@ func TestRenderInstallDropInOverridesPackagedUnits(t *testing.T) {
 		if !ok {
 			t.Fatal("expected helper drop-in")
 		}
-		if !strings.Contains(helper, "ReadWritePaths=\nReadWritePaths=/opt/veil/etc /opt/veil/var /usr/local/bin /etc/ufw /run/veil") {
+		// Issue #663: the drop-in must match the packaged unit and the full
+		// renderer — no writable /run path. The socket-activated helper
+		// adopts FD3 and must never write the runtime dir holding its socket,
+		// so the drop-in cannot reference /run/veil at all.
+		if !strings.Contains(helper, "ReadWritePaths=\nReadWritePaths=/opt/veil/etc /opt/veil/var /usr/local/bin /etc/ufw\n") {
 			t.Fatalf("helper drop-in must reset ReadWritePaths before the custom list:\n%s", helper)
+		}
+		if strings.Contains(helper, "/run/veil") {
+			t.Fatalf("helper drop-in must not reference a writable runtime dir:\n%s", helper)
 		}
 	})
 
