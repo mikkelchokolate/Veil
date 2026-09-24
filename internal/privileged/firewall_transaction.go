@@ -372,13 +372,15 @@ func parseUFWStatus(output string) (ufwState, error) {
 	return state, nil
 }
 
+// The managed/protected comment predicates live in the firewall package so
+// the privileged reconcile and the local prune path share one definition of
+// which UFW rules Veil owns (and which of those must never be pruned).
 func isVeilManagedFirewallComment(comment string) bool {
-	return strings.HasPrefix(strings.TrimSpace(comment), "Veil ")
+	return veilfirewall.IsVeilManagedComment(comment)
 }
 
 func isProtectedVeilFirewallComment(comment string) bool {
-	c := strings.TrimSpace(comment)
-	return c == "Veil management SSH" || strings.HasPrefix(c, "Veil ACME")
+	return veilfirewall.IsProtectedVeilComment(comment)
 }
 
 func isUFWAction(action string) bool {

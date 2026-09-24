@@ -1,13 +1,16 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/client"
@@ -151,6 +154,20 @@ func TestTrafficReconcilerCreatesRevisionAndSnapshot(t *testing.T) {
 		t.Fatalf("record sample: %v", err)
 	}
 
+	// The client create queued an apply job; the reconciler commits its own
+	// quota apply and fails with "another apply job is active" if the first
+	// is still in flight. Wait for it to reach a terminal state first.
+	waitForApplyJobsTerminal(t, r)
+
+	// The hysteria2 traffic provider reads a runtime stats endpoint that does
+	// not exist under test; after one failed poll it reports "degraded" and
+	// quota enforcement pauses fail-closed. Swap the collector to no
+	// providers so this test exercises the mutation path deterministically —
+	// provider-degradation pausing has its own coverage in quota tests.
+	if err := st.trafficCollector.ResetProviders(nil); err != nil {
+		t.Fatalf("reset traffic providers: %v", err)
+	}
+
 	desired0, _ := applyState(t, r)
 	jobs0 := len(listApplyJobs(t, r))
 
@@ -205,6 +222,32 @@ func TestTrafficReconcilerCreatesRevisionAndSnapshot(t *testing.T) {
 	}
 }
 
+// waitForApplyJobsTerminal polls the apply-jobs endpoint until every job is
+// in a terminal state (succeeded/failed/rolled_back/rollback_failed) so a
+// mutation's apply is fully drained before the next assertion.
+func waitForApplyJobsTerminal(t *testing.T, r http.Handler) {
+	t.Helper()
+	terminal := map[string]bool{
+		"succeeded": true, "failed": true, "rolled_back": true, "rollback_failed": true,
+	}
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		active := 0
+		for _, job := range listApplyJobs(t, r) {
+			if status, _ := job["status"].(string); !terminal[status] {
+				active++
+			}
+		}
+		if active == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("apply jobs still active after 60s: %+v", listApplyJobs(t, r))
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
 // TestStartupMigrateLegacyMarkerBackupAndIdempotency (blocker A3): a normal
 // boot (no SIGHUP) migrates legacy profiles with a pre-flight backup, records
 // a migration marker, and later boots take the marker fast path without
@@ -216,7 +259,8 @@ func TestStartupMigrateLegacyMarkerBackupAndIdempotency(t *testing.T) {
 	info := ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, KeyPath: keyPath, ApplyRoot: filepath.Join(dir, "apply")}
 
 	// Seed a state file with a legacy inbound carrying embedded profiles.
-	if err := atomicfile.Write(statePath, []byte(`{"schemaVersion":4,"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"legacy.example.com"},"inbounds":[{"name":"hy2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true,"profiles":[{"username":"alice","password":"alice-pass","enabled":true},{"username":"bob","password":"bob-pass","enabled":true}]}]}`), 0o600, 0o700); err != nil {
+	seededState := []byte(`{"schemaVersion":4,"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"legacy.example.com"},"inbounds":[{"name":"hy2","protocol":"hysteria2","transport":"udp","port":443,"enabled":true,"profiles":[{"username":"alice","password":"alice-pass","enabled":true},{"username":"bob","password":"bob-pass","enabled":true}]}]}`)
+	if err := atomicfile.Write(statePath, seededState, 0o600, 0o700); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
 
@@ -247,15 +291,40 @@ func TestStartupMigrateLegacyMarkerBackupAndIdempotency(t *testing.T) {
 
 	// Backup exists with both the state file and the database copy.
 	// Startup migration writes panel-owned safety copies next to the
-	// encrypted archive root, not under backups/migrations/.
+	// encrypted archive root, not under backups/migrations/. The copies must
+	// carry real content — the pre-migration state verbatim and a valid
+	// SQLite image — or a restore from them would be worthless.
 	backups, err := filepath.Glob(filepath.Join(dir, "migration-backups", "legacy-profiles-*"))
 	if err != nil || len(backups) != 1 {
 		t.Fatalf("expected exactly 1 migration backup dir, got %v (err %v)", backups, err)
 	}
-	for _, name := range []string{"state.json.bak", "veil.db.bak"} {
-		if _, err := os.Stat(filepath.Join(backups[0], name)); err != nil {
-			t.Fatalf("backup missing %s: %v", name, err)
-		}
+	stateBak, err := os.ReadFile(filepath.Join(backups[0], "state.json.bak"))
+	if err != nil {
+		t.Fatalf("backup missing state.json.bak: %v", err)
+	}
+	if !bytes.Equal(stateBak, seededState) {
+		t.Fatalf("state.json.bak diverges from the pre-migration state file: %s", stateBak)
+	}
+	dbBakPath := filepath.Join(backups[0], "veil.db.bak")
+	dbBakInfo, err := os.Stat(dbBakPath)
+	if err != nil {
+		t.Fatalf("backup missing veil.db.bak: %v", err)
+	}
+	if dbBakInfo.Size() == 0 {
+		t.Fatal("veil.db.bak is empty")
+	}
+	dbBak, err := os.Open(dbBakPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	magic := make([]byte, 16)
+	if _, err := io.ReadFull(dbBak, magic); err != nil {
+		_ = dbBak.Close()
+		t.Fatalf("read veil.db.bak header: %v", err)
+	}
+	_ = dbBak.Close()
+	if string(magic) != "SQLite format 3\x00" {
+		t.Fatalf("veil.db.bak is not a SQLite image (magic %q)", magic)
 	}
 
 	// Issue 1: the migration ran through the mutation orchestration — a

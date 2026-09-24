@@ -19,6 +19,28 @@ func TestInstallApplyRendersVeilUnitWithSelectedBinaryPath(t *testing.T) {
 	if !strings.Contains(unit, "ExecStart=/opt/veil/bin/veil serve") {
 		t.Fatalf("veil.service should use selected binary path:\n%s", unit)
 	}
+	// Assert the panel unit contract, not just the unit path: it runs as the
+	// dedicated veil account, is bound to the helper socket, and carries no
+	// capabilities of its own.
+	for _, want := range []string{
+		"Type=simple",
+		"User=veil",
+		"Group=veil",
+		"Requires=veil-helper.socket",
+		"Environment=VEIL_HELPER_SOCKET=/run/veil/helper.sock",
+		"Restart=on-failure",
+		"NoNewPrivileges=true",
+		"ProtectSystem=strict",
+	} {
+		if !strings.Contains(unit, want+"\n") {
+			t.Fatalf("veil.service missing %q:\n%s", want, unit)
+		}
+	}
+	// The panel drops ALL capabilities — the bounding set line must be empty,
+	// not merely absent (an absent line could hide a copy-paste regression).
+	if !strings.Contains(unit, "CapabilityBoundingSet=\n") {
+		t.Fatalf("veil.service must carry an empty CapabilityBoundingSet:\n%s", unit)
+	}
 }
 
 func TestInstallApplyPropagatesCustomEtcAndVarDir(t *testing.T) {

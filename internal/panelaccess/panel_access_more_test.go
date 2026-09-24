@@ -107,7 +107,11 @@ func TestApplyIntentPropagatesCaddyRouteError(t *testing.T) {
 	}
 }
 
-func TestApplyIntentSelectsInboundOn443(t *testing.T) {
+// ApplyIntent does not select or rank inbounds — its inbound scan exists only
+// to reject TCP:443 listeners that would collide with the panel's own caddy
+// public port. A caddy-managed protocol (requiresCaddy) on 443 shares the
+// listener legitimately and produces no error.
+func TestApplyIntentAllowsCaddyProtocolInboundOn443(t *testing.T) {
 	settings := model.Settings{PanelAccess: "caddy", PanelListen: "127.0.0.1:2096", Domain: "panel.example.com", Email: "admin@example.com", WebBasePath: "panel-secret"}
 	access := New(settings, func(protocol string) bool { return protocol == "naiveproxy" })
 	inbounds := []model.Inbound{
@@ -128,57 +132,35 @@ func TestApplyIntentSelectsInboundOn443(t *testing.T) {
 	}
 }
 
-func TestApplyIntentFallsBackToFirstCaddyProtocolInbound(t *testing.T) {
+func TestApplyIntentRejectsNonCaddyInboundOn443(t *testing.T) {
 	settings := model.Settings{PanelAccess: "caddy", PanelListen: "127.0.0.1:2096", Domain: "panel.example.com", Email: "admin@example.com", WebBasePath: "panel-secret"}
 	access := New(settings, func(protocol string) bool { return protocol == "naiveproxy" })
 	inbounds := []model.Inbound{
-		{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 8080, Enabled: true},
-		{Name: "naive1", Protocol: "naiveproxy", Transport: "tcp", Port: 8443, Enabled: true},
-		{Name: "naive2", Protocol: "naiveproxy", Transport: "tcp", Port: 8444, Enabled: true},
+		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true},
+		{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true},
 	}
 	intent := access.ApplyIntent(inbounds)
-	if !contains(intent.Configs, "/etc/veil/generated/caddy/config.json") {
-		t.Fatalf("expected consolidated config.json, got %+v", intent.Configs)
-	}
-	if !contains(intent.Actions, "reload veil-caddy.service") || !contains(intent.Runtimes, "veil-caddy.service") {
-		t.Fatalf("expected consolidated caddy action/runtime, got %+v", intent)
-	}
-	if len(intent.Errors) != 0 {
-		t.Fatalf("expected no errors, got %+v", intent.Errors)
+	if len(intent.Errors) != 1 || !strings.Contains(intent.Errors[0], "443/tcp") || !strings.Contains(intent.Errors[0], "mieru") {
+		t.Fatalf("expected a 443/tcp conflict naming the colliding inbound, got %+v", intent.Errors)
 	}
 }
 
-func TestApplyIntentSkipsDisabledInbounds(t *testing.T) {
+func TestApplyIntentIgnoresNonTCP443AndDisabledInbounds(t *testing.T) {
 	settings := model.Settings{PanelAccess: "caddy", PanelListen: "127.0.0.1:2096", Domain: "panel.example.com", Email: "admin@example.com", WebBasePath: "panel-secret"}
 	access := New(settings, func(protocol string) bool { return protocol == "naiveproxy" })
 	inbounds := []model.Inbound{
-		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: false},
+		{Name: "udp-443", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true},
+		{Name: "disabled-tcp-443", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: false},
+		{Name: "other-port", Protocol: "mieru", Transport: "tcp", Port: 8443, Enabled: true},
 	}
 	intent := access.ApplyIntent(inbounds)
-	if !contains(intent.Configs, "/etc/veil/generated/caddy/config.json") {
-		t.Fatalf("expected consolidated config.json, got %+v", intent.Configs)
-	}
-	if !contains(intent.Actions, "reload veil-caddy.service") || !contains(intent.Runtimes, "veil-caddy.service") {
-		t.Fatalf("expected consolidated caddy action/runtime, got %+v", intent)
-	}
 	if len(intent.Errors) != 0 {
-		t.Fatalf("expected no errors, got %+v", intent.Errors)
+		t.Fatalf("non-tcp or disabled inbounds must not conflict on 443, got %+v", intent.Errors)
 	}
-}
-
-func TestApplyIntentPrefers443InboundOverFallback(t *testing.T) {
-	settings := model.Settings{PanelAccess: "caddy", PanelListen: "127.0.0.1:2096", Domain: "panel.example.com", Email: "admin@example.com", WebBasePath: "panel-secret"}
-	access := New(settings, func(protocol string) bool { return protocol == "naiveproxy" })
-	inbounds := []model.Inbound{
-		{Name: "naive-fallback", Protocol: "naiveproxy", Transport: "tcp", Port: 8443, Enabled: true},
-		{Name: "naive-443", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true},
-	}
-	intent := access.ApplyIntent(inbounds)
-	if !contains(intent.Configs, "/etc/veil/generated/caddy/config.json") {
-		t.Fatalf("expected consolidated config.json, got %+v", intent.Configs)
-	}
-	if !contains(intent.Actions, "reload veil-caddy.service") || !contains(intent.Runtimes, "veil-caddy.service") {
-		t.Fatalf("expected consolidated caddy action/runtime, got %+v", intent)
+	if !contains(intent.Configs, "/etc/veil/generated/caddy/config.json") ||
+		!contains(intent.Actions, "reload veil-caddy.service") ||
+		!contains(intent.Runtimes, "veil-caddy.service") {
+		t.Fatalf("expected consolidated caddy config/action/runtime, got %+v", intent)
 	}
 }
 
@@ -189,13 +171,17 @@ func TestApplyIntentRequiresCaddyFuncNil(t *testing.T) {
 		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true},
 	}
 	intent := access.ApplyIntent(inbounds)
-	// With nil requiresCaddy, no inbound requires caddy, so the consolidated panel
-	// Caddy config is still used.
+	// With nil requiresCaddy, no inbound is treated as caddy-owned — the
+	// consolidated panel Caddy config is still scheduled AND the tcp:443
+	// inbound is reported as colliding with it.
 	if !contains(intent.Configs, "/etc/veil/generated/caddy/config.json") {
 		t.Fatalf("expected consolidated config.json, got %+v", intent.Configs)
 	}
 	if !contains(intent.Actions, "reload veil-caddy.service") || !contains(intent.Runtimes, "veil-caddy.service") {
 		t.Fatalf("expected consolidated caddy action/runtime, got %+v", intent)
+	}
+	if len(intent.Errors) != 1 || !strings.Contains(intent.Errors[0], "443/tcp") {
+		t.Fatalf("nil requiresCaddy must surface the 443/tcp conflict in Errors, got %+v", intent.Errors)
 	}
 }
 
