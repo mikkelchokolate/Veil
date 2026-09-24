@@ -131,6 +131,43 @@ func TestPlannerBuildsManagementApplyIntentFromPanelProtocolsWarpAndRouting(t *t
 			t.Fatalf("runtimes missing %q: %+v", want, plan.Runtimes)
 		}
 	}
+	// Every staged config must produce exactly one promote_file operation
+	// whose destination is that config; the action verbs produce the matching
+	// service operations.
+	promoteDestinations := map[string]bool{}
+	promoteCount := 0
+	serviceOps := map[string]string{}
+	for _, op := range plan.Operations {
+		switch op.Type {
+		case "promote_file":
+			promoteCount++
+			promoteDestinations[op.Destination] = true
+			if op.Source == "" || op.Destination == "" {
+				t.Fatalf("promote_file operation missing source/destination: %+v", op)
+			}
+		case "reload_service", "restart_service":
+			serviceOps[op.Unit] = op.Type
+		default:
+			t.Fatalf("unexpected operation type %q: %+v", op.Type, op)
+		}
+	}
+	if promoteCount != len(plan.Configs) {
+		t.Fatalf("promote_file count=%d want=%d (one per config): %+v", promoteCount, len(plan.Configs), plan.Operations)
+	}
+	for _, config := range plan.Configs {
+		if !promoteDestinations[config] {
+			t.Fatalf("no promote_file operation targets config %q: %+v", config, plan.Operations)
+		}
+	}
+	for unit, want := range map[string]string{
+		"veil-caddy.service": "reload_service",
+		"veil-mieru.service": "restart_service",
+		"veil-warp.service":  "restart_service",
+	} {
+		if serviceOps[unit] != want {
+			t.Fatalf("service op for %s=%q, want %q: %+v", unit, serviceOps[unit], want, plan.Operations)
+		}
+	}
 }
 
 func TestPlannerRejectsInvalidEnabledInboundAndCardinality(t *testing.T) {

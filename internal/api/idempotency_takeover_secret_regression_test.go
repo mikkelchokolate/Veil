@@ -110,6 +110,12 @@ func TestSecretIdempotencyReplayIsEncryptedAndInvalidatedByRotate(t *testing.T) 
 	if invalidated.Code != http.StatusGone || calls.Load() != 2 {
 		t.Fatalf("revoked secret replay=%d body=%s calls=%d", invalidated.Code, invalidated.Body.String(), calls.Load())
 	}
+	// The invalidated envelope must carry an error and must never leak the
+	// rotated-out plaintext.
+	if strings.Contains(invalidated.Body.String(), "one-time-secret") ||
+		!strings.Contains(invalidated.Body.String(), `"error"`) {
+		t.Fatalf("revoked secret replay leaked payload or lost error envelope: %s", invalidated.Body.String())
+	}
 }
 
 func TestOversizedPostCommitResultDoesNotRepeatMutation(t *testing.T) {
@@ -130,7 +136,20 @@ func TestOversizedPostCommitResultDoesNotRepeatMutation(t *testing.T) {
 	}
 	first := request()
 	second := request()
-	if first.Code != http.StatusAccepted || second.Code != http.StatusAccepted || calls.Load() != 1 || first.Body.String() != second.Body.String() || !strings.Contains(second.Body.String(), "response_too_large") {
-		t.Fatalf("first=%d retry=%d firstBody=%s retryBody=%s calls=%d", first.Code, second.Code, first.Body.String(), second.Body.String(), calls.Load())
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("oversized post-commit result must be bounded to 202, got %d body=%s", first.Code, first.Body.String())
+	}
+	assertResponseTooLargeEnvelope(t, first)
+	if first.Header().Get("Idempotency-Replayed") == "true" {
+		t.Fatalf("first response must not be marked replayed: %v", first.Header())
+	}
+	if second.Code != http.StatusAccepted || second.Body.String() != first.Body.String() {
+		t.Fatalf("retry status=%d body=%s, want identical bounded 202", second.Code, second.Body.String())
+	}
+	if second.Header().Get("Idempotency-Replayed") != "true" {
+		t.Fatalf("retry must carry Idempotency-Replayed: true, got %v", second.Header())
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("oversized committed response repeated the mutation: calls=%d", calls.Load())
 	}
 }

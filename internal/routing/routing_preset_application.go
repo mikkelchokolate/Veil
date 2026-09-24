@@ -20,5 +20,9 @@ func (a RoutingPresetApplication) Apply(preset RoutingPreset) {
 	}
 	a.state.ActivePreset = preset.Name
 	a.state.Source = preset.Source
+	// Deep-copy the source file list: a struct copy still shares the Files
+	// backing array, so a later mutation of the preset would leak into the
+	// applied state (#947).
+	a.state.Source.Files = append([]RoutingSourceFile(nil), preset.Source.Files...)
 	a.state.Rules = append([]RoutingRule(nil), preset.Rules...)
 }

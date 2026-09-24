@@ -17,6 +17,30 @@ type PromotionRecord struct {
 	BackupID    string
 }
 
+// PreMutationError marks a PromoteStagedConfigsLocked failure that happened
+// before the live mutation began: no artifact was promoted, removed, or
+// backed up, and no durable mutation-start marker was recorded. RunLocked
+// treats it as a clean failure — MutationStarted and Ambiguous stay false, so
+// the durable runner can finalize the job as failed instead of stranding it
+// as recovery_pending (issue #967).
+type PreMutationError struct {
+	Err error
+}
+
+func (e *PreMutationError) Error() string { return e.Err.Error() }
+func (e *PreMutationError) Unwrap() error { return e.Err }
+
+// MarkPreMutationError wraps a pre-mutation promote failure. Post-mutation
+// promote failures (the promote itself, durable phase persistence, partial
+// artifact writes) must NOT be wrapped: their live-system state is unproven
+// and stays ambiguous.
+func MarkPreMutationError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &PreMutationError{Err: err}
+}
+
 type State interface {
 	BuildApplyPlanLocked() model.ApplyPlanResponse
 	WriteApplyStageLocked(model.ApplyPlanResponse) ([]string, []model.ConfigValidationResult, []string, error)
@@ -79,8 +103,26 @@ func (w Workflow) RunLocked(req model.ApplyRequest) (model.ApplyResponse, int, e
 		}
 		liveFiles, backupFiles, promotionRecords, err := s.PromoteStagedConfigsLocked(written)
 		if err != nil {
+			var preMutation *PreMutationError
+			if errors.As(err, &preMutation) {
+				// The promote failed before any live mutation: nothing was
+				// promoted and no mutation marker was recorded durably. Record
+				// the failed apply and surface a clean error — the durable
+				// layer finalizes the job as failed, never recovery_pending
+				// (#967).
+				if historyErr := s.AppendApplyHistoryLocked(HistoryStage(response), false, response); historyErr != nil {
+					return response, http.StatusInternalServerError, errors.Join(err, historyErr)
+				}
+				return response, http.StatusInternalServerError, err
+			}
 			response.MutationStarted = true
 			response.Ambiguous = true
+			// Record the unproven outcome — HistoryStage maps it to the
+			// "ambiguous" stage so the failure is visible in history instead of
+			// disappearing silently (#968).
+			if historyErr := s.AppendApplyHistoryLocked(HistoryStage(response), false, response); historyErr != nil {
+				return response, http.StatusInternalServerError, errors.Join(err, historyErr)
+			}
 			return response, http.StatusInternalServerError, err
 		}
 		// Report LiveApplied only when at least one file was actually promoted;
@@ -116,7 +158,10 @@ func (w Workflow) RunLocked(req model.ApplyRequest) (model.ApplyResponse, int, e
 						response.FirewallRestored && rollbackHealthOK
 					response.RolledBack = response.RollbackComplete
 					response.Ambiguous = !response.RollbackComplete
-					if historyErr := s.AppendApplyHistoryLocked("rollback", false, response); historyErr != nil {
+					// HistoryStage keeps complete rollbacks at "rollback" but labels
+					// an incomplete (ambiguous) one "ambiguous" — a rollback that did
+					// not finish is not proof of restoration (#968).
+					if historyErr := s.AppendApplyHistoryLocked(HistoryStage(response), false, response); historyErr != nil {
 						return response, http.StatusInternalServerError, errors.Join(err, historyErr)
 					}
 					return response, http.StatusInternalServerError, err
@@ -148,7 +193,9 @@ func (w Workflow) RunLocked(req model.ApplyRequest) (model.ApplyResponse, int, e
 					response.FirewallRestored && rollbackHealthOK && rollbackErr == nil
 				response.RolledBack = response.RollbackComplete
 				response.Ambiguous = !response.RollbackComplete
-				if historyErr := s.AppendApplyHistoryLocked("rollback", false, response); historyErr != nil {
+				// Same ambiguity rule: only a fully-proven rollback earns the
+				// "rollback" stage; an incomplete one records "ambiguous" (#968).
+				if historyErr := s.AppendApplyHistoryLocked(HistoryStage(response), false, response); historyErr != nil {
 					rollbackErr = errors.Join(rollbackErr, fmt.Errorf("persist rollback history: %w", historyErr))
 				}
 				return rollbackErr
@@ -303,6 +350,13 @@ func allServiceActionsSuccessful(actions []model.ServiceActionResult) bool {
 
 func HistoryStage(response model.ApplyResponse) string {
 	switch {
+	case response.Ambiguous:
+		// An ambiguous outcome carries no proven convergence evidence: it must
+		// not be labeled live/services (claims the mutation converged) or
+		// rollback (claims it was undone) (#968). "ambiguous" is a first-class
+		// history stage so operators can filter for applies whose runtime
+		// outcome could not be proven.
+		return "ambiguous"
 	case response.RolledBack:
 		return "rollback"
 	case response.ServicesApplied:

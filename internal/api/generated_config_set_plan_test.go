@@ -9,7 +9,11 @@ import (
 	"testing"
 )
 
-func TestApplyPlanRejectsMultipleEnabledInboundsPerProtocol(t *testing.T) {
+// naiveproxy permits multiple enabled inbounds (MaxEnabled()==0): they all
+// consolidate into the single Caddy JSON config served by veil-caddy.service.
+// The plan must be valid AND consolidate — exactly one caddy config artifact
+// and one consolidated reload, not per-inbound runtime work (#921).
+func TestApplyPlanConsolidatesMultipleEnabledNaiveproxyInbounds(t *testing.T) {
 	// Anchor the state's live root at the same VEIL_LIVE_ROOT the
 	// render-time fallbackRoot default resolves from (hostenv.EtcDir/www),
 	// so the render base and the effective root agree (issue #636).
@@ -40,5 +44,25 @@ func TestApplyPlanRejectsMultipleEnabledInboundsPerProtocol(t *testing.T) {
 	}
 	if !plan.Valid || len(plan.Errors) > 0 {
 		t.Fatalf("plan should be valid for multiple enabled naiveproxy inbounds: %+v", plan)
+	}
+
+	// Consolidated runtime leg: exactly one caddy config promoted and one
+	// consolidated reload of veil-caddy.service — no per-inbound units.
+	var caddyConfigs, caddyReloads int
+	for _, op := range plan.Operations {
+		switch {
+		case op.Type == "promote_file" && strings.HasSuffix(op.Destination, "caddy/config.json"):
+			caddyConfigs++
+		case op.Type == "reload_service" && op.Unit == "veil-caddy.service":
+			caddyReloads++
+		case op.Type == "restart_service" || strings.Contains(op.Unit, "naive"):
+			t.Fatalf("unexpected per-inbound/restart operation for consolidated naive runtime: %+v", op)
+		}
+	}
+	if caddyConfigs != 1 || caddyReloads != 1 {
+		t.Fatalf("plan must consolidate naiveproxy into one caddy config + one reload: ops=%+v", plan.Operations)
+	}
+	if !containsApplyPlanString(plan.Actions, "reload veil-caddy.service") {
+		t.Fatalf("plan actions missing consolidated caddy reload: %+v", plan.Actions)
 	}
 }

@@ -238,14 +238,17 @@ type ApplyResponse struct {
 }
 
 type ApplyHistoryEntry struct {
-	ID              string                   `json:"id"`
-	Timestamp       string                   `json:"timestamp"`
-	Stage           string                   `json:"stage"`
-	Success         bool                     `json:"success"`
-	Applied         bool                     `json:"applied"`
-	LiveApplied     bool                     `json:"liveApplied"`
-	ServicesApplied bool                     `json:"servicesApplied"`
-	RolledBack      bool                     `json:"rolledBack,omitempty"`
+	ID              string `json:"id"`
+	Timestamp       string `json:"timestamp"`
+	Stage           string `json:"stage"`
+	Success         bool   `json:"success"`
+	Applied         bool   `json:"applied"`
+	LiveApplied     bool   `json:"liveApplied"`
+	ServicesApplied bool   `json:"servicesApplied"`
+	RolledBack      bool   `json:"rolledBack,omitempty"`
+	// Ambiguous marks entries whose runtime outcome could not be proven —
+	// they carry stage "ambiguous" and are never labeled live/services (#968).
+	Ambiguous       bool                     `json:"ambiguous,omitempty"`
 	Plan            ApplyPlanResponse        `json:"plan"`
 	WrittenFiles    []string                 `json:"writtenFiles,omitempty"`
 	LiveFiles       []string                 `json:"liveFiles,omitempty"`
