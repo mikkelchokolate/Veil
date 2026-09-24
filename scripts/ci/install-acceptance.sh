@@ -269,7 +269,12 @@ if [ -n "${IA_PHASE_MARKER}" ] && [ -f "${IA_PHASE_MARKER}" ]; then
   probe_panel_healthz "${CUSTOM_ETC}"
   # Custom-root teardown: the uninstall must remove the custom trees and stop
   # the units. The caddy leg below reinstalls default roots (#746).
+  # uninstall also removes the shared /usr/local/bin/veil binary — stash and
+  # restore it so the caddy leg can reinstall.
+  ${SUDO} cp -a /usr/local/bin/veil /tmp/veil-binary.keep
   ci_run veil-uninstall-custom ${SUDO} /usr/local/bin/veil uninstall --yes --etc-dir "${CUSTOM_ETC}" --var-dir "${CUSTOM_VAR}"
+  ${SUDO} install -m 0755 /tmp/veil-binary.keep /usr/local/bin/veil
+  ${SUDO} rm -f /tmp/veil-binary.keep
   ${SUDO} test ! -e "${CUSTOM_ETC}" || ci_die "custom etc dir left after custom-root uninstall"
   ${SUDO} test ! -e "${CUSTOM_VAR}" || ci_die "custom var dir left after custom-root uninstall"
   if systemctl is-active --quiet veil.service; then
@@ -743,7 +748,12 @@ if [ -z "${IA_PHASE_MARKER}" ]; then
   # Linear path: tear the custom install down now; on the smolvm path phase B
   # verifies reboot persistence first and tears down there.
   ci_step "custom-root uninstall"
+  # uninstall also removes the shared /usr/local/bin/veil binary — the caddy
+  # leg below needs it to reinstall, so stash and restore it.
+  ${SUDO} cp -a /usr/local/bin/veil /tmp/veil-binary.keep
   ci_run veil-uninstall-custom ${SUDO} /usr/local/bin/veil uninstall --yes --etc-dir "${CUSTOM_ETC}" --var-dir "${CUSTOM_VAR}"
+  ${SUDO} install -m 0755 /tmp/veil-binary.keep /usr/local/bin/veil
+  ${SUDO} rm -f /tmp/veil-binary.keep
   ${SUDO} test ! -e "${CUSTOM_ETC}" || ci_die "custom etc dir left after custom-root uninstall"
   ${SUDO} test ! -e "${CUSTOM_VAR}" || ci_die "custom var dir left after custom-root uninstall"
   if systemctl is-active --quiet veil.service; then
