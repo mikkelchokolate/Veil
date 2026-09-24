@@ -17,8 +17,15 @@ func TestRepairApplyRequiresYes(t *testing.T) {
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"repair", "--profile", "ru-recommended"})
 
-	if err := cmd.Execute(); err == nil {
+	err := cmd.Execute()
+	if err == nil {
 		t.Fatalf("expected repair without --dry-run or --yes to fail")
+	}
+	// Fail-closed means the operator is told HOW to confirm — an error that
+	// never mentions --yes would leave the reason opaque (issue #773).
+	combined := err.Error() + "\n" + out.String()
+	if !strings.Contains(combined, "--yes") {
+		t.Fatalf("repair refusal must name the --yes flag, got err=%v out=%s", err, out.String())
 	}
 }
 
