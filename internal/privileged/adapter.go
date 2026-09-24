@@ -76,7 +76,8 @@ func (a *LocalAdapter) Backup(ctx context.Context, request BackupRequest) (Backu
 	if err != nil {
 		return BackupResult{}, err
 	}
-	if request.Action == BackupActionRestore {
+	switch request.Action {
+	case BackupActionCreate, BackupActionDelete, BackupActionPrune, BackupActionRestore:
 		if err := a.fence.Accept(request.Fence); err != nil {
 			return BackupResult{}, err
 		}
@@ -92,13 +93,19 @@ func (a *LocalAdapter) Backup(ctx context.Context, request BackupRequest) (Backu
 }
 
 func (a *LocalAdapter) RotateKey(ctx context.Context, request RotateKeyRequest) error {
+	if err := a.fence.Accept(request.Fence); err != nil {
+		return err
+	}
 	if a.executor.RotateKey == nil {
 		return newError(ErrorOperationFailed, "key rotation executor is unavailable")
 	}
 	return wrapOperationError(a.executor.RotateKey(ctx, request))
 }
 
-func (a *LocalAdapter) RecoverKeyRotation(ctx context.Context, _ RecoverKeyRotationRequest) error {
+func (a *LocalAdapter) RecoverKeyRotation(ctx context.Context, request RecoverKeyRotationRequest) error {
+	if err := a.fence.Accept(request.Fence); err != nil {
+		return err
+	}
 	if a.executor.RecoverKeyRotation == nil {
 		return newError(ErrorOperationFailed, "key rotation recovery executor is unavailable")
 	}

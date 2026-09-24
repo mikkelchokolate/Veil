@@ -93,9 +93,13 @@ type managementState struct {
 	audit                      *audit.Recorder
 	auditHealthMu              sync.RWMutex
 	auditDegraded              bool
-	version                    string
-	backupDir                  string
-	backupPassphrasePath       string
+	// auditSpoolDurable is true when the last degraded append was durably
+	// accepted by the critical spool, so /health can report an honest
+	// audit_spool status instead of a blanket durability_unverified (#981).
+	auditSpoolDurable    bool
+	version              string
+	backupDir            string
+	backupPassphrasePath string
 	// Mutations (create/prune/delete/restore) take the write lock; downloads
 	// take the read lock so a concurrent mutation cannot remove or replace an
 	// archive mid-transfer while parallel downloads remain possible (#963).
@@ -113,6 +117,9 @@ type managementState struct {
 	enforceConfigurationValidation bool
 	privileged                     privileged.Client
 	privilegedLocal                bool
+	// metrics is the collector served at /metrics. RouterComposition assigns it
+	// after constructing the state; nil in bare test-constructed states.
+	metrics *observability.MetricsCollector
 
 	// Architecture rework (durable apply + normalized store). db is nil when no
 	// StatePath is configured; the apply subsystem and revision/job tracking are

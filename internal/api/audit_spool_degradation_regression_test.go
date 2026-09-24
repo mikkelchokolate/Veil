@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -65,5 +66,54 @@ func TestAuditSpoolReplayFailureRemainsVisible(t *testing.T) {
 	}
 	if _, err := os.Stat(spool); err != nil {
 		t.Fatalf("failed spool was discarded: %v", err)
+	}
+}
+
+// TestHealthReportsDurablySpoolingAudit (#981): when the primary audit log is
+// unavailable but the critical spool accepted the event, /health must not
+// label audit_spool durability_unverified — the spool is proven durable.
+func TestHealthReportsDurablySpoolingAudit(t *testing.T) {
+	root := t.TempDir()
+	// A directory as the primary path makes every primary append fail.
+	primary := filepath.Join(root, "primary-directory")
+	if err := os.Mkdir(primary, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	recorder := audit.NewRecorder(primary, audit.RecorderOptions{SpoolPath: filepath.Join(root, "critical.spool")})
+	state := &managementState{audit: recorder}
+	// backup.create was missing from the critical allowlist (#981): it must
+	// durably spool instead of being dropped.
+	if err := state.recordRequestAudit(nil, audit.Record{Action: "backup.create", Success: true}); err != nil {
+		t.Fatalf("critical append should durably spool: %v", err)
+	}
+	response, _ := HealthRoutes{State: state}.snapshot(context.Background())
+	if got := response.Components["audit_primary"]; got.Status != "degraded" || got.Reason != "primary_unavailable" {
+		t.Fatalf("audit_primary = %+v, want degraded/primary_unavailable", got)
+	}
+	if got := response.Components["audit_spool"]; got.Status != "ok" || got.Reason != "spool_active" {
+		t.Fatalf("audit_spool = %+v, want ok/spool_active (spool proved durable)", got)
+	}
+}
+
+// TestHealthMarksUnprovenSpoolUnverified (#981): when a critical append fails
+// at both sinks, audit_spool must stay degraded/durability_unverified.
+func TestHealthMarksUnprovenSpoolUnverified(t *testing.T) {
+	root := t.TempDir()
+	primary := filepath.Join(root, "primary-directory")
+	if err := os.Mkdir(primary, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	spoolDir := filepath.Join(root, "spool-directory")
+	if err := os.Mkdir(spoolDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	recorder := audit.NewRecorder(primary, audit.RecorderOptions{SpoolPath: spoolDir, BackpressurePolicy: "spool_critical"})
+	state := &managementState{audit: recorder}
+	if err := state.recordRequestAudit(nil, audit.Record{Action: "security.key.rotate", Success: true}); err == nil {
+		t.Fatal("append with both sinks broken should fail")
+	}
+	response, _ := HealthRoutes{State: state}.snapshot(context.Background())
+	if got := response.Components["audit_spool"]; got.Status != "degraded" || got.Reason != "durability_unverified" {
+		t.Fatalf("audit_spool = %+v, want degraded/durability_unverified", got)
 	}
 }

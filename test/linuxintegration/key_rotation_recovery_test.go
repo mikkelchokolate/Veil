@@ -65,6 +65,10 @@ func TestIntegrationPrivilegedKeyRotationRecoveryAcrossDurablePhases(t *testing.
 			policy.BackupRoot = filepath.Join(fixture.varDir, "backups")
 			policy.UpdateRoot = filepath.Join(fixture.varDir, "updates")
 			policy.BackupPassphrasePath = filepath.Join(fixture.etcDir, "backup.passphrase")
+			// RequireFence comes from DefaultPolicy: rotate/recover now demand a
+			// fencing token (#982), so the fixture needs its own fence file —
+			// the default path would leak state between phase subtests.
+			policy.FencePath = filepath.Join(fixture.varDir, "transactions", "runtime-fence.json")
 
 			config := privileged.DefaultProductionConfig(policy, "integration")
 			config.RotateKeyWorkflow = func(context.Context) error {
@@ -104,9 +108,35 @@ func TestIntegrationPrivilegedKeyRotationRecoveryAcrossDurablePhases(t *testing.
 				}
 			})
 
-			err := privileged.NewSocketClient(fixture.socketPath).RotateKey(context.Background(), privileged.RotateKeyRequest{})
+			// Mint the fencing token from the same lease store the panel child
+			// recovery will use, so its fresh generation supersedes this one
+			// (fencing tokens are mandatory under RequireFence — #982).
+			leaseDB, err := storage.Open(fixture.databasePath)
+			if err != nil {
+				t.Fatalf("open lease store: %v", err)
+			}
+			leaseStore := apply.NewLeaseStore(leaseDB)
+			lease, acquired, err := leaseStore.Acquire("pid:0:key-rotation-test", "key-rotation", time.Now().UTC(), time.Hour)
+			if err != nil || !acquired {
+				t.Fatalf("acquire rotation fencing lease: acquired=%v err=%v", acquired, err)
+			}
+			rotateToken := privileged.FenceToken{
+				Owner:          lease.Owner,
+				Generation:     lease.Generation,
+				OperationID:    lease.Operation,
+				LeaseExpiresAt: lease.ExpiresAt,
+			}
+			err = privileged.NewSocketClient(fixture.socketPath).RotateKey(context.Background(), privileged.RotateKeyRequest{Fence: rotateToken})
 			if err == nil {
 				t.Fatalf("phase %s rotation did not report interruption", tc.phase)
+			}
+			// The interrupted rotation is done with its lease; recovery must be
+			// able to acquire a newer generation through the same store.
+			if err := leaseStore.Release(lease.Owner, lease.Generation); err != nil {
+				t.Fatalf("release rotation fencing lease: %v", err)
+			}
+			if err := leaseDB.Close(); err != nil {
+				t.Fatalf("close lease store: %v", err)
 			}
 			journalPath := statecommit.KeyRotationJournalPath(fixture.statePath)
 			journal := readAndAssertRootRotationArtifacts(t, journalPath)

@@ -269,6 +269,12 @@ func (s *CredentialStore) ActiveForBinding(bindingID, kind string) (Credential, 
 	return activeCredentialQ(s.db, bindingID, kind)
 }
 
+// ActiveCredential returns the current (unrevoked) credential of a kind for a
+// binding inside the transaction. It returns sql.ErrNoRows when none exists.
+func (t *Tx) ActiveCredential(bindingID, kind string) (Credential, error) {
+	return activeCredentialQ(t.q, bindingID, kind)
+}
+
 // activeCredentialQ is the querier-based ActiveForBinding shared by the
 // autocommit store and the transactional Tx path.
 func activeCredentialQ(q interface {

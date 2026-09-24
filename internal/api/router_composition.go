@@ -32,6 +32,7 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	mux := http.NewServeMux()
 	state := newManagementStateProduction(info)
 	metrics := observability.NewMetricsCollector()
+	state.metrics = metrics
 	c.registerMux(mux, info, state, metrics, basePath)
 
 	state.idempotency = newIdempotencyStore(state.db)
@@ -76,15 +77,17 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	// Strip WebBasePath before auth. capabilityForEndpoint treats anything
 	// outside /api and /s as a public SPA route; classifying /<base>/api/*
 	// before the strip made the whole management API anonymous.
-	var handler http.Handler = authenticated
+	// Metrics observe the post-strip path: recording the outer request would
+	// label every mounted route /<base>/api/* as /{unmatched} (issue #979).
+	var handler http.Handler = metrics.MetricsMiddleware(authenticated)
 	if basePath != "/" {
-		handler = stripBasePathMiddleware(basePath, authenticated)
+		handler = stripBasePathMiddleware(basePath, handler)
 	}
 	// Under panelAccess=caddy the public TLS edge is the managed Caddy site, so
 	// this Go listener only ever sees loopback HTTP. Treat that edge as TLS for
 	// HSTS the same way panelCookieAttrs treats it for Secure cookies (#902).
 	secured := securityHeadersMiddleware(handler, strings.EqualFold(strings.TrimSpace(info.PanelAccess), "caddy"))
-	healthAware := auditHealthMiddleware(state, metrics.MetricsMiddleware(secured))
+	healthAware := auditHealthMiddleware(state, secured)
 	return requestIDMiddleware(degradedStateMiddleware(state, healthAware)), state
 }
 
