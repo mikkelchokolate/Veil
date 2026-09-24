@@ -3,10 +3,13 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/caddycert"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 	veilruntime "github.com/mikkelchokolate/Veil/internal/runtime"
 	"github.com/mikkelchokolate/Veil/internal/runtimeinstall"
@@ -14,11 +17,21 @@ import (
 
 var runtimeTelemetryPolicy = protocols.ManagedProcessPolicy()
 
-type RuntimeRoutes struct{}
+// findCaddyTLSCertPair locates a Caddy-managed certificate pair for the panel
+// domain in Caddy's ACME storage. It is a package variable so tests can stub
+// the filesystem search.
+var findCaddyTLSCertPair = caddycert.FindPair
 
-func (RuntimeRoutes) Register(mux *http.ServeMux) {
+type RuntimeRoutes struct {
+	// State supplies the panel settings (panelAccess/domain) the TLS endpoint
+	// needs to locate and validate the served certificate. Nil keeps the
+	// legacy VEIL_TLS_CERT-only behavior for embedded/test routers.
+	State *managementState
+}
+
+func (r RuntimeRoutes) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/system", handleSystemRuntime)
-	mux.HandleFunc("/api/tls", handleTLSRuntime)
+	mux.HandleFunc("/api/tls", r.handleTLSRuntime)
 	mux.HandleFunc("/api/network", handleNetworkRuntime)
 	mux.HandleFunc("/api/connections", handleConnectionsRuntime)
 	mux.HandleFunc("/api/processes", handleProcessesRuntime)
@@ -43,15 +56,66 @@ func handleSystemRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleTLSRuntime(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+// handleTLSRuntime reports the certificate the panel actually serves. Direct
+// TLS mode points VEIL_TLS_CERT at a cert file; caddy panel access leaves the
+// env unset because Caddy terminates TLS from its own ACME storage — in that
+// case surface the Caddy-managed pair instead of a blind "no certificate
+// path configured" (#905).
+func (r RuntimeRoutes) handleTLSRuntime(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet && req.Method != http.MethodHead {
 		methodNotAllowed(w, http.MethodGet, http.MethodHead)
 		return
 	}
 	setJSONHeaders(w)
-	if r.Method == http.MethodGet {
-		writeJSON(w, veilruntime.NewRuntimeTelemetryWithPolicy(runtimeTelemetryPolicy).TLS())
+	if req.Method == http.MethodGet {
+		writeJSON(w, r.tlsCertInfo())
 	}
+}
+
+// handleTLSRuntime preserves the legacy env-only behavior for callers that
+// invoke the handler without a management state (tests, embedded routers).
+func handleTLSRuntime(w http.ResponseWriter, req *http.Request) {
+	(RuntimeRoutes{}).handleTLSRuntime(w, req)
+}
+
+func (r RuntimeRoutes) tlsCertInfo() veilruntime.TLSCertInfo {
+	var settings Settings
+	if r.State != nil {
+		r.State.mu.Lock()
+		settings = r.State.settings
+		r.State.mu.Unlock()
+	}
+	expectedDomain := tlsExpectedDomain(settings)
+	envPath := strings.TrimSpace(os.Getenv("VEIL_TLS_CERT"))
+	if envPath == "" && strings.EqualFold(strings.TrimSpace(settings.PanelAccess), "caddy") && expectedDomain != "" {
+		pair, err := findCaddyTLSCertPair("", expectedDomain)
+		if err == nil {
+			info := veilruntime.ReadTLSCertForDomain(pair.CertPath, expectedDomain)
+			info.Source = "caddy"
+			return info
+		}
+		info := veilruntime.TLSCertInfo{Source: "caddy"}
+		info.Error = fmt.Sprintf("no Caddy-managed certificate for %s: %v", expectedDomain, err)
+		return info
+	}
+	info := veilruntime.ReadTLSCertForDomain(envPath, expectedDomain)
+	if info.Path != "" {
+		info.Source = "env"
+	}
+	return info
+}
+
+// tlsExpectedDomain returns the hostname the panel TLS certificate must
+// cover: the panel domain under caddy access (PanelDomain falling back to
+// Domain, matching caddyassembly.ResolveDomainCertSpecs), otherwise the
+// primary domain. An empty result skips the SAN check.
+func tlsExpectedDomain(settings Settings) string {
+	if strings.EqualFold(strings.TrimSpace(settings.PanelAccess), "caddy") {
+		if d := strings.Trim(strings.TrimSpace(settings.PanelDomain), "[]"); d != "" {
+			return d
+		}
+	}
+	return strings.Trim(strings.TrimSpace(settings.Domain), "[]")
 }
 
 func handleNetworkRuntime(w http.ResponseWriter, r *http.Request) {

@@ -63,6 +63,7 @@ export const GetApiSystemResponse = zod.object({
  */
 export const GetApiTlsResponse = zod.object({
   "path": zod.string(),
+  "source": zod.string().optional().describe('Where the certificate was loaded from — "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage).'),
   "subject": zod.string(),
   "issuer": zod.string(),
   "notBefore": zod.string(),
@@ -139,6 +140,7 @@ export const GetApiRuntimeObservationResponse = zod.object({
 }),
   "tls": zod.object({
   "path": zod.string(),
+  "source": zod.string().optional().describe('Where the certificate was loaded from — "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage).'),
   "subject": zod.string(),
   "issuer": zod.string(),
   "notBefore": zod.string(),

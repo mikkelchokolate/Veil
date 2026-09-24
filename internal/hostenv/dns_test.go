@@ -30,8 +30,19 @@ func TestCheckDomainDNSWarnsWhenPublicIPDiffers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if check.MatchesPublicIP || len(check.Warnings) == 0 {
-		t.Fatalf("expected warning: %+v", check)
+	if check.MatchesPublicIP {
+		t.Fatalf("expected mismatch: %+v", check)
+	}
+	// The warning must name both the domain and the public IP so operators
+	// can tell which side of the drift is wrong (#854).
+	want := []string{"domain example.com does not resolve to public IP 203.0.113.10"}
+	if len(check.Warnings) != len(want) {
+		t.Fatalf("warnings = %v, want %v", check.Warnings, want)
+	}
+	for i := range want {
+		if check.Warnings[i] != want[i] {
+			t.Fatalf("warning[%d] = %q, want %q", i, check.Warnings[i], want[i])
+		}
 	}
 }
 
@@ -67,8 +78,8 @@ func TestCheckDomainDNSSkipsNilIPsAndWarnsOnEmptyResults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(check.Warnings) == 0 {
-		t.Fatalf("expected warning about no records, got none: %+v", check)
+	if len(check.Warnings) != 1 || check.Warnings[0] != "domain example.com has no A/AAAA records" {
+		t.Fatalf("expected exactly the no-records warning, got %+v", check.Warnings)
 	}
 	if check.MatchesPublicIP {
 		t.Fatalf("expected no match when no records resolved: %+v", check)

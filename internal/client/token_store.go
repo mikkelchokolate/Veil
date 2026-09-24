@@ -408,7 +408,12 @@ func (s *TokenStore) Reveal(id string) (string, error) {
 		return "", ErrSecretUnavailable
 	}
 	var ciphertext sql.NullString
-	err := s.db.QueryRow(`SELECT token_ciphertext FROM subscription_tokens WHERE id=? AND revoked_at IS NULL`, id).Scan(&ciphertext)
+	// Reveal mirrors SubscriptionToken.IsActive: revoked, disabled, and
+	// expired tokens no longer authenticate, so their secret must not be
+	// recoverable through the store either (#966).
+	err := s.db.QueryRow(`SELECT token_ciphertext FROM subscription_tokens
+	  WHERE id=? AND revoked_at IS NULL AND enabled=1
+	    AND (expires_at IS NULL OR expires_at > ?)`, id, nowUnix()).Scan(&ciphertext)
 	if err == sql.ErrNoRows {
 		return "", ErrNotFound
 	}

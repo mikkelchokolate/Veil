@@ -387,7 +387,10 @@ func (s *managementState) handleV1ClientTokens(w http.ResponseWriter, r *http.Re
 		items := make([]tokenView, 0, len(tokens))
 		for _, tok := range tokens {
 			item := tokenView{SubscriptionToken: tok}
-			if tok.RevokedAt == nil && tok.HasSecret {
+			// Only active tokens may surface a usable subscription URL —
+			// revoked, disabled, and expired tokens no longer authenticate, so
+			// handing out the URL leaks a dead credential (#966).
+			if tok.HasSecret && tok.IsActive(time.Now()) {
 				plaintext, revealErr := s.tokenStore.Reveal(tok.ID)
 				if revealErr == nil {
 					item.URL = s.subscriptionURLFor(plaintext)
@@ -463,6 +466,13 @@ func (s *managementState) handleV1ClientTokenByID(w http.ResponseWriter, r *http
 		return
 	}
 	if action == "" && r.Method == http.MethodGet {
+		// Reveal is gated on the full active-state check, not just revocation:
+		// disabled and expired tokens must not expose the subscription URL
+		// either (#966).
+		if !token.IsActive(time.Now()) {
+			writeError(w, "token is disabled, expired, or revoked; rotate or re-enable to issue a usable subscription URL", http.StatusNotFound)
+			return
+		}
 		plaintext, err := s.tokenStore.Reveal(tokenID)
 		if err != nil {
 			if errors.Is(err, client.ErrSecretUnavailable) {

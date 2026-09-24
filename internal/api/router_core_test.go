@@ -189,6 +189,27 @@ func TestAuthErrorResponseIncludesSecurityHeaders(t *testing.T) {
 	}
 }
 
+// assertStaticTokenIdentity requires the effective auth status to identify the
+// static-token admin — proving the bearer/X-Veil-Token credential authenticated
+// the request, not merely that some handler returned 200 (#826).
+func assertStaticTokenIdentity(t *testing.T, r http.Handler, authorization string) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
+	if authorization != "" {
+		req.Header.Set("Authorization", authorization)
+	}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("auth status: %d %s", w.Code, w.Body.String())
+	}
+	for _, want := range []string{`"authenticated":true`, `"username":"api-token"`, `"role":"admin"`, `"authMethod":"static-token"`} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("auth status missing %q: %s", want, w.Body.String())
+		}
+	}
+}
+
 func TestRouterAcceptsBearerAuthTokenForAPIWhenConfigured(t *testing.T) {
 	r, _ := newTestRouter(ServerInfo{Version: "test", AuthToken: "secret-token"})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
@@ -200,6 +221,16 @@ func TestRouterAcceptsBearerAuthTokenForAPIWhenConfigured(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
+	// The protected resource body must decode — an empty 200 would prove
+	// nothing about the authenticated path.
+	var body StatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode protected status body: %v", err)
+	}
+	if body.Name != "Veil" || body.Version != "test" {
+		t.Fatalf("unexpected protected status body: %+v", body)
+	}
+	assertStaticTokenIdentity(t, r, "Bearer secret-token")
 }
 
 func TestRouterAcceptsBearerAuthTokenCaseInsensitive(t *testing.T) {
@@ -213,6 +244,14 @@ func TestRouterAcceptsBearerAuthTokenCaseInsensitive(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 for lowercase bearer, got %d: %s", w.Code, w.Body.String())
 	}
+	var body StatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode protected status body: %v", err)
+	}
+	if body.Name != "Veil" || body.Version != "test" {
+		t.Fatalf("unexpected protected status body: %+v", body)
+	}
+	assertStaticTokenIdentity(t, r, "bearer secret-token")
 }
 
 func TestStatusEndpointIncludesRuntimeServiceStates(t *testing.T) {
