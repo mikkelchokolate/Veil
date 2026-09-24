@@ -36,6 +36,10 @@ type firewallApplier interface {
 	// ApplySafely stages rules, refuses to enable an inactive firewall with
 	// no SSH management access, and rolls back on failure.
 	ApplySafely(rules []firewall.Rule) error
+	// PruneStaleManagedRules deletes Veil-managed UFW rules absent from the
+	// desired set — the local counterpart of the privileged reconcile's
+	// stale-rule pass — and returns the number deleted.
+	PruneStaleManagedRules(desired []firewall.Rule) (int, error)
 }
 
 var (
@@ -680,9 +684,6 @@ func (ctx ManagementApplyContext) syncFirewall() []ServiceActionResult {
 		return nil
 	}
 	rules := desiredFirewallUFWRules(ctx.state.settings, ctx.state.inbounds)
-	if len(rules) == 0 {
-		return nil
-	}
 	result := ServiceActionResult{
 		Name:    "sync-firewall",
 		Command: []string{"ufw", "sync-rules"},
@@ -701,11 +702,26 @@ func (ctx ManagementApplyContext) syncFirewall() []ServiceActionResult {
 	} else {
 		// ApplySafely refuses to enable an inactive UFW that has no SSH
 		// management access — enabling there would lock the operator out —
-		// and rolls staged rules back on any failure.
+		// and rolls staged rules back on any failure. For an empty desired
+		// set it is a no-op; pruning below still reconciles stale rules.
 		applier := currentFirewallApplier()
 		if err := applier.ApplySafely(rules); err != nil {
 			result.Error = err.Error()
 			return []ServiceActionResult{result}
+		}
+		// The privileged reconcile also deletes stale Veil-managed rules
+		// absent from the desired set — including when that set is empty
+		// (#356). The local path must do the same or clearing every managed
+		// port leaves stale UFW allows behind forever (#782).
+		pruned, err := applier.PruneStaleManagedRules(rules)
+		if err != nil {
+			result.Error = err.Error()
+			return []ServiceActionResult{result}
+		}
+		if len(rules) == 0 && pruned == 0 {
+			// Nothing was staged or pruned — report no result so the
+			// workflow does not claim a firewall change that never ran.
+			return nil
 		}
 	}
 	result.Success = true

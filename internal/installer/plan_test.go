@@ -49,17 +49,19 @@ func TestBuildInstallPlanSummaryIncludesPanelCaddyAccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build profile: %v", err)
 	}
-	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: []string{"veil.service", "veil-naive.service"}, PanelPort: 2096})
+	// Feed the real Panel Caddy unit set — the same PanelSystemdUnits the CLI
+	// install summary uses — so the preview cannot lock a dead unit name.
+	plan, err := BuildInstallPlan(profile, InstallPlanInput{Platform: hostenv.Platform{OS: "linux", Arch: "amd64"}, SystemdUnits: PanelSystemdUnits(profile), PanelAccess: profile.PanelAccess, PanelPort: 2096})
 	if err != nil {
 		t.Fatalf("build plan: %v", err)
 	}
 	text := plan.Summary()
-	for _, want := range []string{"Caddy/Panel reverse proxy: /usr/local/bin/caddy", "ufw allow 443/tcp comment Veil panel HTTPS", "veil-naive.service"} {
+	for _, want := range []string{"Caddy/Panel reverse proxy: /usr/local/bin/caddy", "ufw allow 443/tcp comment Veil panel HTTPS", "systemctl enable veil-caddy.service", "systemctl enable veil-helper.socket"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("summary missing %q:\n%s", want, text)
 		}
 	}
-	for _, unwanted := range []string{"NaiveProxy: tcp/443", "Hysteria2: udp/443", "Shared port:"} {
+	for _, unwanted := range []string{"veil-naive.service", "NaiveProxy: tcp/443", "Hysteria2: udp/443", "Shared port:"} {
 		if strings.Contains(text, unwanted) {
 			t.Fatalf("summary should not contain %q:\n%s", unwanted, text)
 		}

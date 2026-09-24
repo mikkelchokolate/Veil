@@ -107,14 +107,47 @@ func TestAllowsPromotedActionStandardVerbs(t *testing.T) {
 	}
 }
 
+// The production catalog uses the flat veil-caddy.service — no template — so
+// a veil-caddy@*.service candidate can never matchUnit anything. Orphan
+// teardown of legacy per-instance Caddy units depends entirely on
+// isLegacyCaddyLifecycleUnit; this case locks that isolation.
+func TestAllowsPromotedActionFlatCaddyOrphans(t *testing.T) {
+	catalog := NewManagedRuntimeCatalog([]ManagedRuntime{
+		{Unit: "veil-caddy.service", PromotedSubpath: "caddy/config.json", PromotedVerb: "reload"},
+		{Unit: "veil-hysteria2@edge.service"},
+	})
+	tests := []struct {
+		command []string
+		want    bool
+	}{
+		{[]string{"systemctl", "stop", "veil-caddy@orphan.service"}, true},
+		{[]string{"systemctl", "disable", "veil-caddy@orphan.service"}, true},
+		{[]string{"systemctl", "enable", "veil-caddy@orphan.service"}, true},
+		{[]string{"systemctl", "stop", "veil-caddy.service"}, true},
+		{[]string{"systemctl", "reload", "veil-caddy.service"}, true},
+		{[]string{"systemctl", "restart", "veil-caddy@orphan.service"}, false},
+		{[]string{"systemctl", "stop", "veil-caddy@bad;rm.service"}, false},
+		{[]string{"systemctl", "stop", "veil-caddy.service;"}, false},
+	}
+	for _, tt := range tests {
+		if got := catalog.AllowsPromotedAction(tt.command); got != tt.want {
+			t.Fatalf("AllowsPromotedAction(%v) = %v, want %v", tt.command, got, tt.want)
+		}
+	}
+}
+
 func TestLifecycleUnitPrefixesDerivedFromRuntimes(t *testing.T) {
 	catalog := NewManagedRuntimeCatalog([]ManagedRuntime{
-		{Unit: "veil-caddy@panel.service", TemplateUnit: "veil-caddy@.service"},
+		// Production shape: the consolidated Caddy runtime is a single flat
+		// unit with no template, so veil-caddy@ can only come from the
+		// always-append that keeps orphan veil-caddy@*.service teardown
+		// authorized after the redesign.
+		{Unit: "veil-caddy.service"},
 		{Unit: "veil-hysteria2@edge.service"},
 		{TemplateUnit: "veil-future@.service"},
 		{Unit: "veil-mieru.service"},
 	})
-	want := []string{"veil-caddy@", "veil-hysteria2@", "veil-future@"}
+	want := []string{"veil-hysteria2@", "veil-future@", "veil-caddy@"}
 	if got := catalog.LifecycleUnitPrefixes(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("LifecycleUnitPrefixes = %+v, want %+v", got, want)
 	}

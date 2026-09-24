@@ -4,6 +4,7 @@ package atomicfile
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -95,6 +96,48 @@ func TestWriteSkipsPreserveForNonRoot(t *testing.T) {
 	}
 	if calls != 0 {
 		t.Fatalf("chown calls = %d, want 0 for non-root writer", calls)
+	}
+}
+
+// A Stat failure other than NotExist must abort the write before rename —
+// soft-succeeding would re-open the root-owned window this pass exists to
+// close for a file that does exist.
+func TestWriteFailsWhenStatFailsForExistingTarget(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tls.crt")
+	if err := os.WriteFile(path, []byte("old"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	origStat, origEuid := statFile, geteuid
+	statFile = func(string) (os.FileInfo, error) { return nil, errors.New("stat denied") }
+	geteuid = func() int { return 0 }
+	defer func() { statFile, geteuid = origStat, origEuid }()
+
+	if err := Write(path, []byte("new"), 0o640, 0o750); err == nil {
+		t.Fatal("Write must fail when stat of an existing target fails")
+	}
+	body, err := os.ReadFile(path)
+	if err != nil || string(body) != "old" {
+		t.Fatalf("target must be untouched after aborted write: %q %v", body, err)
+	}
+}
+
+// A missing target is the only Stat outcome that skips preservation.
+func TestWriteSkipsPreserveOnlyOnNotExist(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fresh.crt")
+
+	calls := 0
+	origStat, origChown, origEuid := statFile, chownFile, geteuid
+	statFile = func(string) (os.FileInfo, error) { return nil, fs.ErrNotExist }
+	chownFile = func(string, int, int) error { calls++; return nil }
+	geteuid = func() int { return 0 }
+	defer func() { statFile, chownFile, geteuid = origStat, origChown, origEuid }()
+
+	if err := Write(path, []byte("body"), 0o640, 0o750); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("chown calls = %d, want 0 when the target does not exist", calls)
 	}
 }
 
