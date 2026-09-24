@@ -88,7 +88,10 @@ RUN apk add --no-cache ca-certificates tzdata \
 COPY --from=builder /veil /usr/local/bin/veil
 COPY --chmod=0755 packaging/docker/entrypoint.sh /usr/local/bin/veil-entrypoint
 
-ENV VEIL_CONTAINER_HEALTH_PATH=/var/lib/veil/container-health.json
+# No VEIL_CONTAINER_HEALTH_PATH ENV here: a packaged /var/lib/veil pin would
+# override the VEIL_VAR_DIR-derived default for custom-root containers. The
+# entrypoint exports the derived path for `veil serve`, and `veil healthcheck`
+# derives the same path itself (issue #753).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD veil healthcheck || exit 1
 
