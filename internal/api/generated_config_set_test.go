@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-func TestGeneratedConfigSetAllowsMultipleEnabledInboundsPerProtocol(t *testing.T) {
+func TestGeneratedConfigSetConsolidatesMultipleEnabledNaiveproxyInbounds(t *testing.T) {
 	applyRoot := t.TempDir()
-	_, err := BuildGeneratedConfigSet(GeneratedConfigInput{
+	configs, err := BuildGeneratedConfigSet(GeneratedConfigInput{
 		ApplyRoot: applyRoot,
 		Settings: Settings{
 			Domain:            "vpn.example.com",
@@ -30,6 +30,33 @@ func TestGeneratedConfigSetAllowsMultipleEnabledInboundsPerProtocol(t *testing.T
 	if err != nil {
 		t.Fatalf("expected no error for multiple enabled naiveproxy inbounds, got %v", err)
 	}
+	// Both inbounds consolidate into the single Caddy JSON artifact: the map
+	// has exactly one naive artifact and it carries BOTH listeners.
+	caddyPath := filepath.Join(applyRoot, "generated", "caddy", "config.json")
+	caddy, ok := configs[caddyPath]
+	if !ok {
+		t.Fatalf("consolidated caddy config %s missing from config map: %v", caddyPath, generatedConfigKeys(configs))
+	}
+	for _, port := range []string{":443", ":8443"} {
+		if !strings.Contains(caddy, port) {
+			t.Fatalf("consolidated caddy config missing listener port %s:\n%s", port, caddy)
+		}
+	}
+	// And no per-inbound naiveproxy artifacts exist — naiveproxy has no own
+	// config file, it lives inside the Caddy JSON.
+	for path := range configs {
+		if strings.Contains(path, "naive") && path != caddyPath {
+			t.Fatalf("unexpected per-inbound naiveproxy artifact %s; config map keys: %v", path, generatedConfigKeys(configs))
+		}
+	}
+}
+
+func generatedConfigKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 func TestGeneratedConfigSetUsesClientProfiles(t *testing.T) {

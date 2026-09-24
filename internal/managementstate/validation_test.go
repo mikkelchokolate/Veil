@@ -2,6 +2,7 @@ package managementstate
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -227,15 +228,42 @@ func TestValidationChecksRoutingRules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ValidateBytes: %v", err)
 	}
+	// Exact set, in order: one error per missing field, nothing extra.
 	expected := []string{
 		"routingRules[0].name is required",
 		"routingRules[0].match is required",
 		"routingRules[0].outbound is required",
 	}
-	for _, want := range expected {
-		if !containsError(result.Errors, want) {
-			t.Fatalf("missing error %q in %+v", want, result)
-		}
+	if !reflect.DeepEqual(result.Errors, expected) {
+		t.Fatalf("routing rule errors = %+v, want exactly %+v", result.Errors, expected)
+	}
+}
+
+// Multiple offending rules must each produce their own indexed errors — the
+// validator reports every problem, not just the first rule's (#943).
+func TestValidationReportsEveryBadRoutingRule(t *testing.T) {
+	body := []byte(`{
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"},
+		"inbounds":[],
+		"routingRules":[
+			{"name":"dup","match":"","outbound":"","enabled":true},
+			{"name":"dup","match":"geoip:private","outbound":"direct","enabled":true},
+			{"name":"","match":"geosite:test","outbound":"proxy","enabled":true}
+		],
+		"warp":{"enabled":false}
+	}`)
+	result, err := NewValidation().ValidateBytes(body)
+	if err != nil {
+		t.Fatalf("ValidateBytes: %v", err)
+	}
+	expected := []string{
+		"routingRules[0].match is required",
+		"routingRules[0].outbound is required",
+		`routingRules[1]: duplicate name "dup" also used by routingRules[0]`,
+		"routingRules[2].name is required",
+	}
+	if !reflect.DeepEqual(result.Errors, expected) {
+		t.Fatalf("multi-rule errors = %+v, want exactly %+v", result.Errors, expected)
 	}
 }
 
@@ -259,9 +287,12 @@ func TestValidateSnapshotPortsAndWarpDefault(t *testing.T) {
 	if !containsError(errs, "inbounds[1]: duplicate transport/port tcp:443") {
 		t.Fatalf("expected duplicate port error, got %+v", errs)
 	}
-	// warp default port 40000 is reserved for tcp only (#359).
-	if !containsError(errs, "inbounds[0]: port 443 conflicts with warp") {
-		// 443 != 40000, so no warp conflict expected; this branch is unreachable but left for clarity.
+	// WARP reserves only its own TCP port (default 40000, #359). An inbound on
+	// port 443 does not overlap, so no warp conflict may be reported — the
+	// companion case where the inbound DOES share the WARP port is asserted by
+	// TestValidationDetectsInboundConflictWithWarp.
+	if containsError(errs, "conflicts with warp") {
+		t.Fatalf("non-overlapping inbound port reported a warp conflict: %+v", errs)
 	}
 }
 

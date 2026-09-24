@@ -2,9 +2,12 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -16,6 +19,21 @@ import (
 // durable apply subsystem (SQLite revisions + jobs) is active, with the
 // service action runner and staged validator stubbed to succeed.
 func newApplyTrackedRouter(t *testing.T) (http.Handler, *[][]string) {
+	t.Helper()
+	router, calls, state := newApplyTrackedRouterAt(t, t.TempDir())
+	t.Cleanup(func() {
+		if err := state.Close(); err != nil {
+			t.Errorf("close apply-tracked management state: %v", err)
+		}
+	})
+	return router, calls
+}
+
+// newApplyTrackedRouterAt builds an apply-tracked router over an explicit
+// state directory so tests can close the state and rebuild a second router —
+// a real management-plane restart against the same durable veil.db. The
+// caller owns the returned state (it is not closed by cleanup here).
+func newApplyTrackedRouterAt(t *testing.T, dir string) (http.Handler, *[][]string, *managementState) {
 	t.Helper()
 	origValidator := stagedConfigValidator
 	origRunner := serviceActionRunner
@@ -50,22 +68,18 @@ func newApplyTrackedRouter(t *testing.T) (http.Handler, *[][]string) {
 	}
 	autoApplyAfterMutation = true
 
-	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state.json")
-	if err := atomicfile.Write(statePath, []byte(`{"schemaVersion":4,"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"hy.example.com"}}`), 0o600, 0o700); err != nil {
-		t.Fatalf("write state: %v", err)
+	if _, err := os.Stat(statePath); errors.Is(err, os.ErrNotExist) {
+		if err := atomicfile.Write(statePath, []byte(`{"schemaVersion":4,"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"hy.example.com"}}`), 0o600, 0o700); err != nil {
+			t.Fatalf("write state: %v", err)
+		}
 	}
 	r, reloader := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: dir})
 	state, ok := reloader.(*managementState)
 	if !ok {
 		t.Fatalf("reloader is not *managementState: %T", reloader)
 	}
-	t.Cleanup(func() {
-		if err := state.Close(); err != nil {
-			t.Errorf("close apply-tracked management state: %v", err)
-		}
-	})
-	return r, &calls
+	return r, &calls, state
 }
 
 func TestApplyStateTracksDesiredVsApplied(t *testing.T) {
@@ -166,20 +180,92 @@ func TestApplyJobsListAndGet(t *testing.T) {
 }
 
 func TestApplyJobHistorySurvivesRouterRestart(t *testing.T) {
-	r, _ := newApplyTrackedRouter(t)
+	dir := t.TempDir()
+	r1, _, state1 := newApplyTrackedRouterAt(t, dir)
 	body := strings.NewReader(`{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"hy.example.com"}`)
-	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/settings", body))
+	w1 := httptest.NewRecorder()
+	r1.ServeHTTP(w1, httptest.NewRequest(http.MethodPut, "/api/settings", body))
+	if w1.Code != http.StatusOK {
+		t.Fatalf("settings put: %d %s", w1.Code, w1.Body.String())
+	}
 
-	// Recreate the router against the same StatePath: history must persist.
-	dir := filepath.Dir("")
-	_ = dir
-	// Build a fresh router with the same state path by reusing the helper's dir.
-	// We can't reach the tempdir from here, so instead assert via the jobs list
-	// that a job exists; persistence is covered by the JobStore SQLite tests.
 	wl := httptest.NewRecorder()
-	r.ServeHTTP(wl, httptest.NewRequest(http.MethodGet, "/api/apply/jobs", nil))
-	if !strings.Contains(wl.Body.String(), `"id"`) {
-		t.Fatalf("expected persisted job id in list: %s", wl.Body.String())
+	r1.ServeHTTP(wl, httptest.NewRequest(http.MethodGet, "/api/apply/jobs", nil))
+	if wl.Code != http.StatusOK {
+		t.Fatalf("jobs list before restart: %d %s", wl.Code, wl.Body.String())
+	}
+	var before struct {
+		Items []apply.Job `json:"items"`
+	}
+	if err := json.NewDecoder(wl.Body).Decode(&before); err != nil {
+		t.Fatalf("decode jobs before restart: %v", err)
+	}
+	if len(before.Items) == 0 {
+		t.Fatal("no apply jobs before restart")
+	}
+	orig := before.Items[0]
+
+	ws := httptest.NewRecorder()
+	r1.ServeHTTP(ws, httptest.NewRequest(http.MethodGet, "/api/apply/state", nil))
+	var stateBefore applyStateResponse
+	if err := json.NewDecoder(ws.Body).Decode(&stateBefore); err != nil {
+		t.Fatalf("decode state before restart: %v", err)
+	}
+
+	// A real restart: close the management state (SQLite handle + runner) and
+	// build a brand-new router over the same state directory.
+	if err := state1.Close(); err != nil {
+		t.Fatalf("close first management state: %v", err)
+	}
+	r2, _, state2 := newApplyTrackedRouterAt(t, dir)
+	t.Cleanup(func() { _ = state2.Close() })
+
+	wl2 := httptest.NewRecorder()
+	r2.ServeHTTP(wl2, httptest.NewRequest(http.MethodGet, "/api/apply/jobs", nil))
+	if wl2.Code != http.StatusOK {
+		t.Fatalf("jobs list after restart: %d %s", wl2.Code, wl2.Body.String())
+	}
+	var after struct {
+		Items []apply.Job `json:"items"`
+	}
+	if err := json.NewDecoder(wl2.Body).Decode(&after); err != nil {
+		t.Fatalf("decode jobs after restart: %v", err)
+	}
+	var found *apply.Job
+	for i := range after.Items {
+		if after.Items[i].ID == orig.ID {
+			found = &after.Items[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("job %s missing from durable history after restart: %s", orig.ID, wl2.Body.String())
+	}
+	if found.Status != orig.Status || found.DesiredRevision != orig.DesiredRevision {
+		t.Fatalf("job %s mutated across restart: before=%+v after=%+v", orig.ID, orig, *found)
+	}
+	if len(after.Items) != len(before.Items) {
+		t.Fatalf("job count changed across restart: before=%d after=%d", len(before.Items), len(after.Items))
+	}
+
+	wg := httptest.NewRecorder()
+	r2.ServeHTTP(wg, httptest.NewRequest(http.MethodGet, "/api/apply/jobs/"+orig.ID, nil))
+	if wg.Code != http.StatusOK {
+		t.Fatalf("get job %s after restart: %d %s", orig.ID, wg.Code, wg.Body.String())
+	}
+
+	ws2 := httptest.NewRecorder()
+	r2.ServeHTTP(ws2, httptest.NewRequest(http.MethodGet, "/api/apply/state", nil))
+	var stateAfter applyStateResponse
+	if err := json.NewDecoder(ws2.Body).Decode(&stateAfter); err != nil {
+		t.Fatalf("decode state after restart: %v", err)
+	}
+	if stateAfter.DesiredRevision != stateBefore.DesiredRevision ||
+		stateAfter.AppliedRevision != stateBefore.AppliedRevision {
+		t.Fatalf("revisions changed across restart: before=%+v after=%+v", stateBefore, stateAfter)
+	}
+	if stateAfter.State != stateBefore.State {
+		t.Fatalf("system state changed across restart: before=%q after=%q", stateBefore.State, stateAfter.State)
 	}
 }
 
@@ -205,16 +291,74 @@ func TestApplyJobRetryCreatesNewJob(t *testing.T) {
 		t.Fatalf("retry: %d %s", wr.Code, wr.Body.String())
 	}
 	var resp struct {
+		Success  bool      `json:"success"`
 		ApplyJob apply.Job `json:"applyJob"`
+		Revision struct {
+			Desired uint64 `json:"desired"`
+			Applied uint64 `json:"applied"`
+			State   string `json:"state"`
+		} `json:"revision"`
 	}
 	if err := json.NewDecoder(wr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode retry: %v", err)
 	}
+	// The success envelope is explicit: status-only clients must see
+	// success=true, the new job, and the post-run revisions — not infer
+	// success from the HTTP status alone.
+	if !resp.Success {
+		t.Fatalf("retry success envelope missing success=true: %s", wr.Body.String())
+	}
 	if resp.ApplyJob.ID == orig.ID {
 		t.Fatalf("retry must create a NEW job, not rewrite %s", orig.ID)
 	}
+	if resp.ApplyJob.Status != apply.StatusSucceeded {
+		t.Fatalf("retry job status=%q, want %q", resp.ApplyJob.Status, apply.StatusSucceeded)
+	}
 	if resp.ApplyJob.DesiredRevision != orig.DesiredRevision {
 		t.Fatalf("retry should target same revision %d, got %d", orig.DesiredRevision, resp.ApplyJob.DesiredRevision)
+	}
+	if resp.ApplyJob.Trigger != "retry" {
+		t.Fatalf("retry job trigger=%q, want retry", resp.ApplyJob.Trigger)
+	}
+	if resp.Revision.Desired == 0 || resp.Revision.Desired != resp.Revision.Applied {
+		t.Fatalf("retry revisions=%+v, want desired==applied>0", resp.Revision)
+	}
+	if resp.Revision.State != apply.StateSynced {
+		t.Fatalf("retry revision state=%q, want %q", resp.Revision.State, apply.StateSynced)
+	}
+
+	// The original job must be preserved untouched — retry never rewrites
+	// history.
+	wg := httptest.NewRecorder()
+	r.ServeHTTP(wg, httptest.NewRequest(http.MethodGet, "/api/apply/jobs/"+orig.ID, nil))
+	if wg.Code != http.StatusOK {
+		t.Fatalf("get original job after retry: %d %s", wg.Code, wg.Body.String())
+	}
+	var preserved apply.Job
+	if err := json.NewDecoder(wg.Body).Decode(&preserved); err != nil {
+		t.Fatalf("decode preserved job: %v", err)
+	}
+	if preserved.Status != orig.Status ||
+		!reflect.DeepEqual(preserved.FinishedAt, orig.FinishedAt) ||
+		preserved.ErrorCode != orig.ErrorCode {
+		t.Fatalf("retry rewrote the original job: before=%+v after=%+v", orig, preserved)
+	}
+
+	// Both jobs are now in durable history.
+	wl2 := httptest.NewRecorder()
+	r.ServeHTTP(wl2, httptest.NewRequest(http.MethodGet, "/api/apply/jobs", nil))
+	var after struct {
+		Items []apply.Job `json:"items"`
+	}
+	if err := json.NewDecoder(wl2.Body).Decode(&after); err != nil {
+		t.Fatalf("decode jobs after retry: %v", err)
+	}
+	seen := map[string]bool{}
+	for _, item := range after.Items {
+		seen[item.ID] = true
+	}
+	if !seen[orig.ID] || !seen[resp.ApplyJob.ID] {
+		t.Fatalf("history must contain both original %s and retry %s: %s", orig.ID, resp.ApplyJob.ID, wl2.Body.String())
 	}
 }
 
