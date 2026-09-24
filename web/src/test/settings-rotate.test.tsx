@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AuthProvider } from "../auth/AuthContext";
 import { I18nProvider } from "../i18n/I18nContext";
 import { SettingsPage } from "../pages/SettingsPage";
@@ -28,6 +28,27 @@ async function confirmRotate() {
 }
 
 describe("SettingsPage key rotation", () => {
+	// #766: rotation is already gated behind the AlertDialog — the primary
+	// button only opens it, so no POST may fire until Confirm is clicked
+	// (same no-request-until-confirm lock as #733 / #757).
+	it("does not POST rotate-key until the dialog is confirmed", async () => {
+		const posts: string[] = [];
+		server.use(
+			http.post("/api/admin/rotate-key", () => {
+				posts.push("rotate-key");
+				return HttpResponse.json({ success: true, revokedSessions: 0 });
+			}),
+		);
+		renderSettings();
+		fireEvent.click(
+			await screen.findByRole("button", { name: /rotate state key/i }),
+		);
+		expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+		expect(posts).toEqual([]);
+		fireEvent.click(screen.getByRole("button", { name: /confirm rotation/i }));
+		await waitFor(() => expect(posts).toEqual(["rotate-key"]));
+	});
+
 	// #731: the API reports revokedSessions — the notice must report the real
 	// count, not blanket-claim "other sessions were revoked".
 	it("does not claim revocations when no other session was active", async () => {
@@ -67,7 +88,7 @@ describe("SettingsPage key rotation", () => {
 				HttpResponse.json({
 					success: false,
 					revokedSessions: 2,
-					revision: { desired: 2, applied: 1, state: "drift" },
+					revision: { desired: 2, applied: 1, state: "failed" },
 				}),
 			),
 		);

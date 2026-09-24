@@ -22,8 +22,28 @@ func TestRunDryRunPrintsPlanWithoutSideEffects(t *testing.T) {
 	if called {
 		t.Fatal("dry run should not call dependencies")
 	}
-	if !strings.Contains(out.String(), "Veil uninstall plan") || !strings.Contains(out.String(), "veil.service") {
-		t.Fatalf("output = %s", out.String())
+	// Lock the plan contents: helper socket/service, backup units, warp,
+	// protocol units, vendor unit dirs, sysctl drop-in, and the binary must
+	// all be listed — a plan that silently drops one would uninstall nothing.
+	plan := out.String()
+	for _, want := range []string{
+		"Veil uninstall plan",
+		"veil.service",
+		"veil-helper.service",
+		"veil-helper.socket",
+		"veil-backup.service",
+		"veil-backup.timer",
+		"veil-warp.service",
+		"veil-hysteria2@.service",
+		"/lib/systemd/system/veil.service",
+		"/usr/lib/systemd/system/veil.service",
+		"/etc/sysctl.d/99-veil-quic.conf",
+		"/usr/local/bin/veil",
+		"Remove configuration and state:",
+	} {
+		if !strings.Contains(plan, want) {
+			t.Fatalf("dry-run plan missing %q:\n%s", want, plan)
+		}
 	}
 }
 

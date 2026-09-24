@@ -180,6 +180,37 @@ function livePortValue(ib: Inbound): string {
 	return "";
 }
 
+// Schema-declared fields with a flat record counterpart must agree: the
+// server resolves the protocolFields copy first, so loading a flat-only
+// record without seeding would show the schema DEFAULT in the schema input
+// while the live value hides in the flat field — a save would then ship a
+// pair that disagrees (#850). Password fields are excluded: their flat copy
+// can carry the "[REDACTED]" echo the server's preserve-redacted path
+// restores, and seeding it would surface the sentinel in the input.
+// publicPort is excluded too — it is resolved via livePortValue/port.
+function seededRecordFields(
+	ib: Inbound,
+	schema: ProtocolField[],
+): Record<string, unknown> {
+	const fields: Record<string, unknown> = { ...(ib.protocolFields ?? {}) };
+	const flat = ib as unknown as Record<string, unknown>;
+	for (const field of schema) {
+		if (
+			field.key === "publicPort" ||
+			field.type === "password" ||
+			field.type === "checkbox"
+		) {
+			continue;
+		}
+		if (Object.hasOwn(fields, field.key)) continue;
+		const value = flat[field.key];
+		if (value != null && value !== "") {
+			fields[field.key] = value;
+		}
+	}
+	return fields;
+}
+
 export function InboundsPage() {
 	const isAdmin = useIsAdmin();
 	const { t } = useI18n();
@@ -366,6 +397,33 @@ export function InboundsPage() {
 			if (flat !== "") return flat;
 			return (f.originalRecord as Record<string, unknown> | undefined)?.[key];
 		};
+		// Schema fields with a flat counterpart must be echoed in BOTH places:
+		// the server resolves the protocolFields copy first, so a flat-only
+		// record saved without it would leave the two representations
+		// inconsistent (and the schema input would have shown the field
+		// default, not the live flat value). Password fields stay flat-only —
+		// their flat value may carry the "[REDACTED]" echo that the server's
+		// preserve-redacted path restores (#850).
+		for (const field of schema) {
+			if (
+				field.key === "publicPort" ||
+				field.type === "password" ||
+				field.type === "checkbox"
+			) {
+				continue;
+			}
+			if (Object.hasOwn(protocolFields, field.key)) continue;
+			const flat = (f as unknown as Record<string, unknown>)[field.key];
+			const resolved =
+				typeof flat === "string" && flat !== ""
+					? flat
+					: (f.originalRecord as Record<string, unknown> | undefined)?.[
+							field.key
+						];
+			if (resolved != null && resolved !== "") {
+				protocolFields[field.key] = resolved;
+			}
+		}
 		const body: Record<string, unknown> = {
 			name: keepName ?? f.name,
 			protocol: f.protocol,
@@ -518,7 +576,14 @@ export function InboundsPage() {
 			),
 			olcrtcAuth: ib.olcrtcAuth ?? "",
 			olcrtcTransport: ib.olcrtcTransport ?? "",
-			protocolFields: { ...(ib.protocolFields ?? {}) },
+			// #850: seed the schema-keyed copies from the flat record fields so
+			// the schema inputs show the live values (not defaults) and a save
+			// echoes both representations with the same value.
+			protocolFields: seededRecordFields(
+				ib,
+				protocolCatalog.data?.find((p) => p.protocol === ib.protocol)
+					?.inboundFieldSchema ?? [],
+			),
 			originalRecord: ib,
 		});
 		setEditing(ib.name);
@@ -557,7 +622,13 @@ export function InboundsPage() {
 			),
 			olcrtcAuth: ib.olcrtcAuth ?? "",
 			olcrtcTransport: ib.olcrtcTransport ?? "",
-			protocolFields: { ...(ib.protocolFields ?? {}) },
+			// #850: same flat→protocolFields seeding as the edit form so the
+			// toggle PUT echoes the live value in both representations.
+			protocolFields: seededRecordFields(
+				ib,
+				protocolCatalog.data?.find((p) => p.protocol === ib.protocol)
+					?.inboundFieldSchema ?? [],
+			),
 			originalRecord: ib,
 			original: ib.name,
 		});

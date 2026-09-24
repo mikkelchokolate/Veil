@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { I18nProvider } from "../i18n/I18nContext";
@@ -35,20 +41,24 @@ describe("SubscriptionTokensPanel errors", () => {
 
 	it("keeps the one-time rotate URL after the token list refetches", async () => {
 		const user = userEvent.setup();
+		let listGets = 0;
 		server.use(
-			http.get("/api/v1/clients/c1/tokens", () =>
-				HttpResponse.json({
+			http.get("/api/v1/clients/c1/tokens", () => {
+				listGets += 1;
+				return HttpResponse.json({
 					items: [
 						{
 							id: "tok-1",
-							prefix: "veil_ab",
+							// The refetched row only carries the new prefix — the rotated
+							// URL is one-time and never comes back in a list payload.
+							prefix: listGets === 1 ? "veil_ab" : "veil_cd",
 							label: "phone",
 							enabled: true,
 							createdAt: 1700000000,
 						},
 					],
-				}),
-			),
+				});
+			}),
 			http.post("/api/v1/clients/c1/tokens/tok-1/rotate", () =>
 				HttpResponse.json({
 					token: {
@@ -82,6 +92,16 @@ describe("SubscriptionTokensPanel errors", () => {
 			await screen.findByTestId("issued-subscription-token"),
 		).toBeInTheDocument();
 		expect(screen.getByText(/new token \(shown once\)/i)).toBeInTheDocument();
+		// #832: wait for the post-rotate list refetch to land — the one-time
+		// banner must still carry the URL after the list repaints.
+		await waitFor(() => expect(listGets).toBeGreaterThan(1));
+		const banner = await screen.findByTestId("issued-subscription-token");
+		await user.click(
+			within(banner).getByRole("button", { name: /show link/i }),
+		);
+		expect(
+			await within(banner).findByText(/\/s\/veil_cd_secret/),
+		).toBeInTheDocument();
 	});
 
 	// #699: revoke permanently kills the subscription URL — it must confirm

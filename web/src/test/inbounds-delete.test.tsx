@@ -5,7 +5,7 @@ import {
 	createRouter,
 	RouterProvider,
 } from "@tanstack/react-router";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { delay } from "msw";
 import { AuthProvider } from "../auth/AuthContext";
 import { I18nProvider } from "../i18n/I18nContext";
@@ -153,6 +153,9 @@ describe("InboundsPage delete confirm", () => {
 	});
 
 	it("describes only the listener removal for an unattached inbound", async () => {
+		// #813: the unattached path still gates the DELETE behind the dialog —
+		// count the requests so a fire-on-open regression cannot pass.
+		const deletes: string[] = [];
 		server.use(
 			http.get("/api/inbounds", () =>
 				HttpResponse.json([
@@ -174,6 +177,10 @@ describe("InboundsPage delete confirm", () => {
 					pageSize: 500,
 				}),
 			),
+			http.delete("/api/inbounds/:name", ({ params }) => {
+				deletes.push(String(params.name));
+				return HttpResponse.json({ success: true });
+			}),
 		);
 		renderInbounds();
 		fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
@@ -181,8 +188,8 @@ describe("InboundsPage delete confirm", () => {
 			await screen.findByText(/removes the listener\. this cannot be undone/i),
 		).toBeInTheDocument();
 		expect(screen.queryByText(/detaches/i)).not.toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: /confirm delete/i }),
-		).toBeInTheDocument();
+		expect(deletes).toEqual([]);
+		fireEvent.click(screen.getByRole("button", { name: /confirm delete/i }));
+		await waitFor(() => expect(deletes).toEqual(["free"]));
 	});
 });

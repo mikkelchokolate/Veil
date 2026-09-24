@@ -107,6 +107,9 @@ func TestHandleBackupByNameRestoreConfirmRequired(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	if !strings.Contains(rec.Body.String(), "restore requires confirm=true") {
+		t.Fatalf("body=%s, want the confirm-required message", rec.Body.String())
+	}
 }
 
 func TestQueuePanelBackupRestoreFailsWhenRandomReaderFails(t *testing.T) {

@@ -39,7 +39,7 @@ func TestDedicatedCrashAndFaultInjectionCIJobsAreWiredEndToEnd(t *testing.T) {
 			"TestRestoreRecoveryRejectsUntrustedSafetyObjectsBeforeMutation",
 			"TestRuntimeInstallRollsBackActiveTargetAfterPostActivationFailure",
 			"TestRoutingSourceMultiFileReplacementIsTransactional",
-			"TestMigrationHistoryChecksIteratorErrorBeforeSuccess",
+			"TestMigrationHistoryIteratorErrorFailsMigrate",
 		},
 	}
 

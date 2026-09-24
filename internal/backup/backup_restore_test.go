@@ -3,7 +3,6 @@ package backup
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -244,38 +243,42 @@ func TestRestoreFromBackupCreatesSafetyBackup(t *testing.T) {
 
 	// Verify safety backup contains the modified (pre-restore) files
 	safetyBackupPath := filepath.Join(backupDir, safetyID)
-	manifestData, err := os.ReadFile(filepath.Join(safetyBackupPath, "manifest.json"))
+	safetyManifest, err := NewBackupManifestStore(filepath.Join(safetyBackupPath, "manifest.json")).Load()
 	if err != nil {
-		t.Fatalf("read safety manifest: %v", err)
+		t.Fatalf("load safety manifest: %v", err)
 	}
-	manifestStr := strings.ReplaceAll(string(manifestData), "\\\\", "/")
-	f1Slash := filepath.ToSlash(file1)
-	f2Slash := filepath.ToSlash(file2)
-	if !strings.Contains(manifestStr, f1Slash) {
-		t.Fatalf("safety backup manifest should contain %s (slashed: %s), got normalized manifest: %s", file1, f1Slash, manifestStr)
-	}
-	if !strings.Contains(manifestStr, f2Slash) {
-		t.Fatalf("safety backup manifest should contain %s (slashed: %s), got normalized manifest: %s", file2, f2Slash, manifestStr)
+	if len(safetyManifest.Entries) != 2 {
+		t.Fatalf("safety manifest entries = %d, want 2: %+v", len(safetyManifest.Entries), safetyManifest.Entries)
 	}
 
-	// Verify safety backup contains the modified content (not the original)
-	// The safety backup should have the files as they were BEFORE restore
-	safetyFiles, err := os.ReadDir(safetyBackupPath)
-	if err != nil {
-		t.Fatalf("read safety backup dir: %v", err)
+	// Every restored member must be captured in the safety backup with the
+	// exact bytes it had immediately before restore — not merely "some file
+	// containing a marker substring".
+	wantByOriginal := map[string]string{
+		filepath.Clean(file1): modified1,
+		filepath.Clean(file2): modified2,
 	}
-	for _, f := range safetyFiles {
-		if f.Name() == "manifest.json" {
-			continue
+	seen := make(map[string]bool)
+	for _, entry := range safetyManifest.Entries {
+		want, ok := wantByOriginal[filepath.Clean(entry.OriginalPath)]
+		if !ok {
+			t.Fatalf("safety backup has unexpected member %q", entry.OriginalPath)
 		}
-		content, err := os.ReadFile(filepath.Join(safetyBackupPath, f.Name()))
+		content, err := os.ReadFile(filepath.Join(safetyBackupPath, filepath.FromSlash(entry.BackupPath)))
 		if err != nil {
-			t.Fatalf("read safety file %s: %v", f.Name(), err)
+			t.Fatalf("read safety member %s for %s: %v", entry.BackupPath, entry.OriginalPath, err)
 		}
-		if strings.Contains(string(content), "newpass") || strings.Contains(string(content), "Modified") {
-			// Found modified content in safety backup - this is correct
-			return
+		if string(content) != want {
+			t.Fatalf("safety member for %s = %q, want exact pre-restore bytes %q", entry.OriginalPath, content, want)
+		}
+		if entry.Size != int64(len(want)) {
+			t.Fatalf("safety manifest size for %s = %d, want %d", entry.OriginalPath, entry.Size, len(want))
+		}
+		seen[filepath.Clean(entry.OriginalPath)] = true
+	}
+	for original := range wantByOriginal {
+		if !seen[original] {
+			t.Fatalf("safety backup is missing restored member %s", original)
 		}
 	}
-	t.Fatal("safety backup should contain the modified pre-restore content")
 }

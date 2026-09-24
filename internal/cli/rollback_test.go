@@ -61,7 +61,11 @@ func TestRollbackListEmptyDirShowsNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out.String())
 	}
-	// Should not crash and should print something (even if empty)
+	// An empty backup dir must report the empty state explicitly, not print
+	// nothing or list spurious entries.
+	if got := strings.TrimSpace(out.String()); got != "No backups found" {
+		t.Fatalf("empty backup dir output = %q, want %q", got, "No backups found")
+	}
 }
 
 func TestRollbackRestoreBringsFilesBack(t *testing.T) {

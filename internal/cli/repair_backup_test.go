@@ -8,6 +8,54 @@ import (
 	"testing"
 )
 
+// backupIDFromOutput extracts the printed backup id so tests can verify the
+// archive actually exists on disk instead of trusting stdout.
+func backupIDFromOutput(t *testing.T, output string) string {
+	t.Helper()
+	for _, line := range strings.Split(output, "\n") {
+		if id, ok := strings.CutPrefix(strings.TrimSpace(line), "Backup ID: "); ok {
+			return strings.TrimSpace(id)
+		}
+	}
+	t.Fatalf("output has no 'Backup ID:' line:\n%s", output)
+	return ""
+}
+
+// assertBackupDirHasArchive locks the on-disk contract behind "Backup ID:":
+// the id resolves to a directory containing a manifest.json.
+func assertBackupDirHasArchive(t *testing.T, backupDir, backupID string) {
+	t.Helper()
+	if backupID == "" {
+		t.Fatal("expected a backup id")
+	}
+	archive := filepath.Join(backupDir, backupID)
+	info, err := os.Stat(archive)
+	if err != nil || !info.IsDir() {
+		t.Fatalf("backup archive %q missing: %v", archive, err)
+	}
+	if _, err := os.Stat(filepath.Join(archive, "manifest.json")); err != nil {
+		t.Fatalf("backup archive %q has no manifest.json: %v", archive, err)
+	}
+}
+
+// assertNoBackupArtifacts locks the negative side: neither an explicit backup
+// dir nor the default <varDir>/backups may gain an archive.
+func assertNoBackupArtifacts(t *testing.T, dirs ...string) {
+	t.Helper()
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			t.Fatalf("read backup dir %q: %v", dir, err)
+		}
+		if len(entries) != 0 {
+			t.Fatalf("backup artifacts must not be created under %q, found %v", dir, entries)
+		}
+	}
+}
+
 func TestRepairWithBackupDirPrintsBackupID(t *testing.T) {
 	dir := t.TempDir()
 	etcDir := filepath.Join(dir, "etc", "veil")
@@ -52,8 +100,39 @@ func TestRepairWithBackupDirPrintsBackupID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out.String())
 	}
-	if !strings.Contains(out.String(), "Backup ID:") {
-		t.Fatalf("expected output to contain 'Backup ID:', got:\n%s", out.String())
+	backupID := backupIDFromOutput(t, out.String())
+	assertBackupDirHasArchive(t, backupDir, backupID)
+	// The drifted managed file must be recoverable: the archive holds a
+	// member with the pre-repair content plus a manifest entry mapping it
+	// back to the live path. (The stray Caddyfile is NOT a managed file, so
+	// it is deliberately absent — only managed drift is backed up.)
+	archive := filepath.Join(backupDir, backupID)
+	entries, err := os.ReadDir(archive)
+	if err != nil {
+		t.Fatalf("read backup archive: %v", err)
+	}
+	foundDrifted := false
+	for _, entry := range entries {
+		if entry.Name() == "manifest.json" {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Join(archive, entry.Name()))
+		if err != nil {
+			t.Fatalf("read backup member %q: %v", entry.Name(), err)
+		}
+		if string(body) == "VEIL_API_TOKEN=old-token\n" {
+			foundDrifted = true
+		}
+	}
+	if !foundDrifted {
+		t.Fatalf("backup archive %q contains no member with the pre-repair veil.env content", archive)
+	}
+	manifestBody, err := os.ReadFile(filepath.Join(archive, "manifest.json"))
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	if !strings.Contains(string(manifestBody), filepath.ToSlash(veilEnvPath)) && !strings.Contains(string(manifestBody), veilEnvPath) {
+		t.Fatalf("manifest does not map a member back to %s:\n%s", veilEnvPath, manifestBody)
 	}
 }
 
@@ -95,6 +174,9 @@ func TestRepairDryRunDoesNotCreateBackup(t *testing.T) {
 	if strings.Contains(out.String(), "Backup ID:") {
 		t.Fatalf("expected output to NOT contain 'Backup ID:' in dry-run mode, got:\n%s", out.String())
 	}
+	// Stdout alone cannot prove no backup ran — a silent write would still
+	// pass. Assert the backup dir stays absent/empty on disk.
+	assertNoBackupArtifacts(t, backupDir)
 }
 
 func TestRepairDefaultsBackupDirWhenNotSet(t *testing.T) {
@@ -135,9 +217,8 @@ func TestRepairDefaultsBackupDirWhenNotSet(t *testing.T) {
 		t.Fatalf("expected 'Repaired files:' in output, got:\n%s", out.String())
 	}
 	// Should contain backup ID since default backup-dir is var-dir/backups
-	if !strings.Contains(out.String(), "Backup ID:") {
-		t.Fatalf("expected 'Backup ID:' with default backup-dir, got:\n%s", out.String())
-	}
+	backupID := backupIDFromOutput(t, out.String())
+	assertBackupDirHasArchive(t, filepath.Join(varDir, "backups"), backupID)
 }
 
 func TestRepairExplicitEmptyBackupDirSkipsBackup(t *testing.T) {
@@ -182,6 +263,9 @@ func TestRepairExplicitEmptyBackupDirSkipsBackup(t *testing.T) {
 	if strings.Contains(out.String(), "Backup ID:") {
 		t.Fatalf("expected no 'Backup ID:' with --backup-dir '', got:\n%s", out.String())
 	}
+	// Stdout-only cannot prove the skip: the default <varDir>/backups and any
+	// stray dir under the temp root must stay without archives.
+	assertNoBackupArtifacts(t, filepath.Join(varDir, "backups"))
 }
 
 func TestRepairWithBackupDirNoFilesToRepair(t *testing.T) {
@@ -211,9 +295,8 @@ func TestRepairWithBackupDirNoFilesToRepair(t *testing.T) {
 	}
 
 	// First pass: files are missing so backup IS created (Backup ID: appears)
-	if !strings.Contains(out.String(), "Backup ID:") {
-		t.Fatalf("expected 'Backup ID:' when files need repair, got:\n%s", out.String())
-	}
+	backupID := backupIDFromOutput(t, out.String())
+	assertBackupDirHasArchive(t, backupDir, backupID)
 	// "No backup created" should not appear when there are actions
 	if strings.Contains(out.String(), "No backup created") {
 		t.Fatalf("expected no 'No backup created' when actions exist, got:\n%s", out.String())
