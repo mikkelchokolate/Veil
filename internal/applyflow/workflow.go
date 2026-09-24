@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
 type PromotionRecord struct {
@@ -79,8 +80,15 @@ func (w Workflow) RunLocked(req model.ApplyRequest) (model.ApplyResponse, int, e
 		}
 		liveFiles, backupFiles, promotionRecords, err := s.PromoteStagedConfigsLocked(written)
 		if err != nil {
-			response.MutationStarted = true
-			response.Ambiguous = true
+			// A dial-level failure proves the promote request never reached the
+			// helper, so no artifact could have been published. Reporting the
+			// mutation as not-started lets the job finalize as a terminal
+			// failure instead of pinning recovery_pending while the helper
+			// stays unreachable.
+			if !privileged.IsUndelivered(err) {
+				response.MutationStarted = true
+				response.Ambiguous = true
+			}
 			return response, http.StatusInternalServerError, err
 		}
 		// Report LiveApplied only when at least one file was actually promoted;

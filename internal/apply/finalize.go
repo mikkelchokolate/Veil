@@ -275,7 +275,7 @@ ON CONFLICT(job_id,phase) DO UPDATE SET generation=excluded.generation,evidence_
 
 func markRuntimePublicationRolledBack(db *sql.DB, jobID string, generation uint64, now int64) error {
 	result, err := db.Exec(`UPDATE runtime_publications SET phase='rolled_back',updated_at=?
-WHERE job_id=? AND generation=? AND phase IN ('intent','publishing')`, now, jobID, generation)
+WHERE job_id=? AND generation=? AND phase IN ('intent','publishing','artifacts_prepared')`, now, jobID, generation)
 	if err != nil {
 		return err
 	}
