@@ -19,11 +19,11 @@ github.com/mikkelchokolate/Veil/internal/apply	TestUpdateRecoveryAcceptsOnlyExac
 # The two runtimeinstall sandbox-integration roots need root + a live systemd
 # manager, so they intentionally skip in this unprivileged job; their execution
 # evidence is the `privilege-boundary` job, which asserts both roots PASS by
-# name (issue #632). The helper root stays allowlisted: it only runs inside
-# the systemd-run sandbox spawned by its parent and must skip everywhere else.
+# name (issue #632). The sandbox child entrypoint (TestRuntimeProbeMaliciousHelper)
+# is a subprocess-helper root and lives on test-helper-allowlist.txt instead —
+# its skip is a helper boundary, not an environment condition.
 github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestRuntimeVersionProbeExecutesProtectedHomeBinaryThroughSystemdBind
 github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestMaliciousRuntimeProbeCannotReadHostSecretsEnvironmentDescriptorsOrNetwork
-github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestRuntimeProbeMaliciousHelper
 # Windows-only by design: the rename-failure simulation uses CreateFile
 # sharing modes (admin_rotate_test_windows.go); unix has no equivalent
 # mandatory lock, so the test intentionally skips off-Windows.

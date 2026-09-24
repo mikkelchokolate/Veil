@@ -11,7 +11,7 @@ func TestCodeQLWorkflowUsesAdvancedConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	workflow := strings.ReplaceAll(string(workflowBody), "\r\n", "\n")
+	workflow := stripHashComments(t, strings.ReplaceAll(string(workflowBody), "\r\n", "\n"))
 
 	for _, required := range []string{
 		"merge_group:",
@@ -44,7 +44,7 @@ func TestCodeQLWorkflowUsesAdvancedConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	config := strings.ReplaceAll(string(configBody), "\r\n", "\n")
+	config := stripHashComments(t, strings.ReplaceAll(string(configBody), "\r\n", "\n"))
 	if !strings.Contains(config, "- uses: security-and-quality") {
 		t.Error("CodeQL config must enable the security-and-quality suite")
 	}

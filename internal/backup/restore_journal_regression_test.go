@@ -71,7 +71,7 @@ func TestRestoreRecoversSIGKILLAfterEveryFilePublication(t *testing.T) {
 
 func TestRestoreCrashProcess(t *testing.T) {
 	if os.Getenv(restoreCrashHelperEnv) != "1" {
-		return
+		t.Skip("subprocess helper")
 	}
 	faultFile, err := strconv.Atoi(os.Getenv("VEIL_RESTORE_FAULT_FILE"))
 	if err != nil || faultFile < 1 || faultFile > 3 {

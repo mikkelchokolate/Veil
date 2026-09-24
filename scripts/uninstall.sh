@@ -71,7 +71,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_root() {
-  if [[ "${EUID}" -ne 0 && -z "${DRY_RUN}" ]]; then
+  # VEIL_UNINSTALL_ALLOW_NONROOT lets fixture-based contract tests (and smolvm
+  # CI) drive the cleanup path against redirected dirs; without it a non-root
+  # run would only permission-fail halfway through anyway.
+  if [[ "${EUID}" -ne 0 && -z "${DRY_RUN}" && "${VEIL_UNINSTALL_ALLOW_NONROOT:-}" != "1" ]]; then
     echo "Veil uninstaller must run as root." >&2
     echo "Run with sudo." >&2
     exit 1
@@ -97,7 +100,9 @@ has_leftover_state() {
       [[ -d "${dropin}" ]] && return 0
     done
     for unit in "${dir}"/veil*.service "${dir}"/veil*.socket "${dir}"/veil*.timer \
-      "${dir}"/multi-user.target.wants/veil-*@*.service; do
+      "${dir}"/multi-user.target.wants/veil*.service \
+      "${dir}"/sockets.target.wants/veil*.socket \
+      "${dir}"/timers.target.wants/veil*.timer; do
       if [[ -e "${unit}" || -L "${unit}" ]]; then
         return 0
       fi
@@ -128,7 +133,9 @@ print_leftover_plan() {
     echo "  - ${dir}/veil*.service.d"
     echo "  - ${dir}/veil*.socket.d"
     echo "  - ${dir}/veil*.timer.d"
-    echo "  - ${dir}/multi-user.target.wants/veil-*@*.service"
+    echo "  - ${dir}/multi-user.target.wants/veil*.service"
+    echo "  - ${dir}/sockets.target.wants/veil*.socket"
+    echo "  - ${dir}/timers.target.wants/veil*.timer"
   done
   echo "  - ${SYSCTL_CONF}"
 }
@@ -140,13 +147,18 @@ remove_leftover_state() {
     # veil-caddy@* covers legacy pre-consolidation per-inbound Caddy instances
     # that never enter the current unit catalog (issue #375).
     systemctl stop 'veil-hysteria2@*' 'veil-olcrtc@*' 'veil-caddy@*' >/dev/null 2>&1 || true
-    # Template-glob disable cannot clear per-instance wants links (audit #176);
-    # stop/disable each concrete instance found under multi-user.target.wants —
-    # in the installer unit dir and the packaged vendor dirs alike (#375).
+    # Glob-unit disable cannot clear per-instance wants links (audit #176);
+    # stop/disable each concrete wants link found under multi-user/sockets/
+    # timers.target.wants — template instances (veil-hysteria2@*, veil-olcrtc@*,
+    # legacy veil-caddy@*), non-template services, the helper socket and the
+    # backup timer — in the installer unit dir and the packaged vendor dirs
+    # alike (#375, #788).
     local dir instance
     # shellcheck disable=SC2086 # VENDOR_SYSTEMD_DIRS is a space-separated list.
     for dir in "${SYSTEMD_DIR}" ${VENDOR_SYSTEMD_DIRS}; do
-      for instance in "${dir}"/multi-user.target.wants/veil-*@*.service; do
+      for instance in "${dir}"/multi-user.target.wants/veil*.service \
+        "${dir}"/sockets.target.wants/veil*.socket \
+        "${dir}"/timers.target.wants/veil*.timer; do
         [[ -e "${instance}" || -L "${instance}" ]] || continue
         systemctl stop "$(basename "${instance}")" >/dev/null 2>&1 || true
         systemctl disable "$(basename "${instance}")" >/dev/null 2>&1 || true
@@ -164,7 +176,12 @@ remove_leftover_state() {
     # into the next package install and point units at deleted trees (#642).
     rm -rf "${dir}"/veil*.service.d "${dir}"/veil*.socket.d "${dir}"/veil*.timer.d
     rm -f "${dir}"/veil*.service "${dir}"/veil*.socket "${dir}"/veil*.timer
-    rm -f "${dir}"/multi-user.target.wants/veil-*@*.service
+    # Wants symlinks: multi-user.target.wants covers template instances and
+    # non-template services; sockets/timers.target.wants hold the helper
+    # socket and backup timer links (issue #788).
+    rm -f "${dir}"/multi-user.target.wants/veil*.service \
+      "${dir}"/sockets.target.wants/veil*.socket \
+      "${dir}"/timers.target.wants/veil*.timer
   done
   if [[ -e "${SYSCTL_CONF}" ]]; then
     rm -f "${SYSCTL_CONF}"
