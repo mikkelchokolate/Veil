@@ -3,7 +3,7 @@ package managedfiles
 import (
 	"os"
 	"path/filepath"
-	"strings"
+	"runtime"
 	"testing"
 )
 
@@ -35,8 +35,15 @@ func TestSetPlansMissingAndDriftedFiles(t *testing.T) {
 	if plan.Actions[1].Path != missing || plan.Actions[1].Reason != RepairReasonMissing {
 		t.Fatalf("second action = %+v", plan.Actions[1])
 	}
-	if !strings.Contains(plan.Summary(), "repair drifted") || !plan.HasChanges() {
-		t.Fatalf("summary/changes mismatch: %q", plan.Summary())
+	if !plan.HasChanges() {
+		t.Fatal("plan with actions must report changes")
+	}
+	// Exact summary format — one "repair <reason> <slash-path>" line each, in
+	// plan order.
+	want := "repair drifted " + filepath.ToSlash(drifted) + "\n" +
+		"repair missing " + filepath.ToSlash(missing) + "\n"
+	if got := plan.Summary(); got != want {
+		t.Fatalf("Summary() = %q, want %q", got, want)
 	}
 }
 
@@ -52,5 +59,23 @@ func TestApplyWritesPlannedFiles(t *testing.T) {
 	}
 	if string(body) != "content" || len(result.WrittenFiles) != 1 || result.WrittenFiles[0] != path {
 		t.Fatalf("body=%q result=%+v", body, result)
+	}
+	// The managed file lands with exactly the planned mode and the created
+	// parent directory carries the restrictive 0750 contract (audit #519).
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("managed file mode = %o, want 0600", info.Mode().Perm())
+		}
+		parent, err := os.Stat(filepath.Dir(path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if parent.Mode().Perm() != 0o750 {
+			t.Fatalf("managed parent dir mode = %o, want 0750", parent.Mode().Perm())
+		}
 	}
 }

@@ -357,6 +357,47 @@ describe("ClientsPage", () => {
 		},
 	);
 
+	// #757: bulk Delete was already gated before #705 added the sibling
+	// dialogs — lock the same no-request-until-confirm contract on it so a
+	// one-click regression cannot slip through.
+	it("gates bulk delete behind a confirm dialog", async () => {
+		const user = userEvent.setup();
+		const bulkBodies: Array<Record<string, unknown>> = [];
+		server.use(
+			http.get("/api/v1/clients", () =>
+				HttpResponse.json({
+					items: [
+						{
+							id: "c1",
+							name: "Alice",
+							status: "active",
+							enabled: true,
+							createdAt: 1700000000,
+						},
+					],
+					total: 1,
+					page: 1,
+					pageSize: 25,
+				}),
+			),
+			http.post("/api/v1/clients/bulk", async ({ request }) => {
+				bulkBodies.push((await request.json()) as Record<string, unknown>);
+				return HttpResponse.json({ succeeded: 1, results: [] });
+			}),
+		);
+		renderClients();
+		await screen.findByText("Alice");
+		await user.click(screen.getByRole("checkbox", { name: /select all/i }));
+		await user.click(screen.getByRole("button", { name: /^delete$/i }));
+		// Dialog open, mutation not yet sent.
+		expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+		expect(bulkBodies).toHaveLength(0);
+		await user.click(screen.getByRole("button", { name: /confirm delete/i }));
+		await waitFor(() => expect(bulkBodies).toHaveLength(1));
+		expect(bulkBodies[0]?.action).toBe("delete");
+		expect(bulkBodies[0]?.clientIds).toEqual(["c1"]);
+	});
+
 	// #647: the bulk endpoint reports per-client results AND a top-level
 	// mutation outcome — success=false means the action committed but the
 	// auto-apply failed, which must be surfaced separately.

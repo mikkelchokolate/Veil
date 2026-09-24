@@ -28,8 +28,8 @@ func TestRuleResponsesOpenHTTP01ForHysteria2OnlyDomain(t *testing.T) {
 	if http01 == nil {
 		t.Fatalf("rules = %+v, want a 80/tcp ACME http-01 opening", rules)
 	}
-	if http01.Service == "" {
-		t.Fatalf("ACME rule must carry a service label: %+v", http01)
+	if http01.Service != "Veil ACME challenge" {
+		t.Fatalf("ACME rule service = %q, want %q — the label is the ufw comment and the stale-prune guard", http01.Service, "Veil ACME challenge")
 	}
 }
 

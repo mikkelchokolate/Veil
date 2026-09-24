@@ -40,7 +40,7 @@ func EnsureIPv6Managed() error {
 		if !ok || !strings.EqualFold(strings.TrimSpace(key), "IPV6") {
 			continue
 		}
-		if !strings.EqualFold(strings.Trim(strings.TrimSpace(value), `"'`), "no") {
+		if ufwIPv6Enabled(value) {
 			continue
 		}
 		lines[i] = "IPV6=yes"
@@ -54,4 +54,37 @@ func EnsureIPv6Managed() error {
 		return fmt.Errorf("rewrite %s with IPV6=yes: %w", ufwDefaultsPath, err)
 	}
 	return nil
+}
+
+// ufwIPv6Enabled reports whether the right-hand side of an IPV6= assignment
+// leaves UFW managing IPv6. /etc/default/ufw is sourced by shell (and read by
+// ufw with a "yes" check): only an effective value of "yes" enables
+// management, so any other value — `no`, `false`, `0`, empty — is a disable
+// that must be repaired. Shell-legal trailing comments (`IPV6=no # hardened`)
+// and quoting (`IPV6="no"`) must not defeat the check.
+func ufwIPv6Enabled(raw string) bool {
+	return strings.EqualFold(ufwShellValue(raw), "yes")
+}
+
+// ufwShellValue extracts the effective value of a shell assignment's
+// right-hand side: either a quoted string (content up to the closing quote)
+// or a bare word terminated by whitespace or a `#` comment start.
+func ufwShellValue(raw string) string {
+	s := strings.TrimSpace(raw)
+	if len(s) > 0 && (s[0] == '"' || s[0] == '\'') {
+		if end := strings.IndexByte(s[1:], s[0]); end >= 0 {
+			return s[1 : 1+end]
+		}
+		return s[1:] // unterminated quote — best effort
+	}
+	// A bare word ends at whitespace. A `#` starts a comment only at the
+	// start of a word — inside a bare word it is literal (`IPV6=yes#foo`
+	// assigns "yes#foo", which is still not "yes" and must be repaired).
+	if i := strings.IndexAny(s, " \t"); i >= 0 {
+		s = s[:i]
+	}
+	if strings.HasPrefix(s, "#") {
+		return ""
+	}
+	return s
 }

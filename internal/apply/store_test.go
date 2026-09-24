@@ -152,7 +152,10 @@ func TestJobStoreListOrdersNewestFirst(t *testing.T) {
 	rs := NewRevisionStore(db)
 	d, _ := rs.BumpDesired()
 	createdAt := time.Now().Unix()
-	for _, id := range []string{"z-old", "m-middle", "a-new"} {
+	// Insert IDs in alphabetical order so a lexicographic tiebreak would order
+	// a-first/m-second/z-third — the opposite of the intended newest-insertion
+	// (rowid DESC) order. This fixture cannot pass by accident.
+	for _, id := range []string{"a-first", "m-second", "z-third"} {
 		if err := js.Create(Job{ID: id, DesiredRevision: d, Status: StatusPending, Trigger: "mutation", CreatedAt: createdAt}); err != nil {
 			t.Fatalf("create %s: %v", id, err)
 		}
@@ -164,14 +167,17 @@ func TestJobStoreListOrdersNewestFirst(t *testing.T) {
 	if len(jobs) != 3 {
 		t.Fatalf("expected 3 jobs, got %d", len(jobs))
 	}
-	if jobs[0].ID != "a-new" {
-		t.Fatalf("expected newest insertion first, got %s", jobs[0].ID)
+	wantOrder := []string{"z-third", "m-second", "a-first"}
+	for i, want := range wantOrder {
+		if jobs[i].ID != want {
+			t.Fatalf("job order = %v, want newest insertion first %v", []string{jobs[0].ID, jobs[1].ID, jobs[2].ID}, wantOrder)
+		}
 	}
 	latest, ok, err := js.LatestForRevision(d)
 	if err != nil {
 		t.Fatalf("latest for revision: %v", err)
 	}
-	if !ok || latest.ID != "a-new" {
+	if !ok || latest.ID != "z-third" {
 		t.Fatalf("expected newest insertion for revision, got ok=%v job=%+v", ok, latest)
 	}
 }

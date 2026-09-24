@@ -212,11 +212,18 @@ test.describe('Veil Panel — extended critical flows', () => {
     expect(created.version, 'created client carries version').toBeGreaterThanOrEqual(1);
 
     // First update at the current version succeeds and bumps the version.
+    // Status alone is not the contract (#756): this runs on the helper-
+    // detached panel, so the PATCH commits with success=false — allowed,
+    // but it must still carry terminal apply-job evidence.
     const ok = await request.patch(`/api/v1/clients/${created.id}`, {
       headers: tokenHeaders,
       data: { name: created.name, notes: 'first write', version: created.version },
     });
-    expect(ok.status(), `first update: ${ok.status()} ${await ok.text()}`).toBeLessThan(300);
+    const okBody = await assertMutationOutcome(ok, {
+      label: 'first client update',
+      allowApplyFailure: true,
+    });
+    expect(okBody.applyJob, 'first update returns apply-job evidence').toBeTruthy();
 
     // Replaying the same stale version must conflict.
     const conflict = await request.patch(`/api/v1/clients/${created.id}`, {
@@ -263,10 +270,16 @@ test.describe('Veil Panel — extended critical flows', () => {
     ).toMatch(/privileged helper|dial unix .*helper.*\.sock/i);
 
     // Retry creates a NEW job for the same desired revision; the old record
-    // is immutable history.
+    // is immutable history. Prove the ApplyRetryResponse envelope BEFORE
+    // reading applyJob (#756): HTTP <300 is not success — the detached
+    // helper makes the retry converge to success=false with a terminal
+    // failed job, which must still surface as job evidence.
     const retry = await request.post(`/api/apply/jobs/${latest.id}/retry`, { headers: tokenHeaders });
-    expect(retry.status(), `retry: ${retry.status()} ${await retry.text()}`).toBeLessThan(300);
-    const retryBody = await retry.json();
+    const retryBody = await assertMutationOutcome(retry, {
+      label: 'apply job retry',
+      allowApplyFailure: true,
+    });
+    expect(typeof retryBody.success, 'retry response carries a success flag').toBe('boolean');
     const newJob = retryBody.applyJob;
     expect(newJob, 'retry returns the new job').toBeTruthy();
     expect(newJob.id).not.toBe(latest.id);
@@ -362,8 +375,24 @@ test.describe('Veil Panel — extended critical flows', () => {
         'live token must report the applied configuration state',
       ).toBe('applied');
 
-      // …until revoked. Revoke is confirm-gated (#699): the card button only
-      // opens the AlertDialog — the DELETE fires from the dialog action.
+      // …until revoked. Revoke is confirm-gated (#699/#812): the card button
+      // only opens the AlertDialog — the DELETE fires from the dialog
+      // action. Count DELETEs on the request side so a listener registered
+      // before the first click cannot mask an eager request.
+      const deleteRequests = [];
+      page.on('request', (req) => {
+        const path = new URL(req.url()).pathname;
+        if (
+          req.method() === 'DELETE' &&
+          path.startsWith(`/api/v1/clients/${created.id}/tokens/`)
+        ) {
+          deleteRequests.push(path);
+        }
+      });
+      await tokenCard.getByRole('button', { name: /^revoke$/i }).click();
+      const revokeDialog = page.getByRole('alertdialog');
+      await expect(revokeDialog).toBeVisible({ timeout: 10_000 });
+      expect(deleteRequests, 'no token DELETE before confirm').toHaveLength(0);
       const revoked = page.waitForResponse((response) => {
         const path = new URL(response.url()).pathname;
         return (
@@ -371,12 +400,10 @@ test.describe('Veil Panel — extended critical flows', () => {
           path.startsWith(`/api/v1/clients/${created.id}/tokens/`)
         );
       });
-      await tokenCard.getByRole('button', { name: /^revoke$/i }).click();
-      const revokeDialog = page.getByRole('alertdialog');
-      await expect(revokeDialog).toBeVisible({ timeout: 10_000 });
       await revokeDialog.getByRole('button', { name: /confirm revoke/i }).click();
       const revokedResponse = await revoked;
       expect(revokedResponse.status(), 'token revoke API must complete').toBe(200);
+      expect(deleteRequests, 'exactly one token DELETE after confirm').toHaveLength(1);
       await expect(tokenCard.locator('.badge-danger')).toBeVisible({ timeout: 10_000 });
       const dead = await request.get(subURL);
       expect(dead.status(), 'revoked token must 404 (oracle-safe)').toBe(404);
@@ -414,19 +441,35 @@ test.describe('Veil Panel — extended critical flows', () => {
     });
     expect(createResp.status(), `seed before-backup user: ${createResp.status()} ${await createResp.text()}`).toBeLessThan(300);
 
-    // Create + auto-verify the archive.
+    // Create + auto-verify the archive. The contract is exactly 201
+    // (#848) — a bare <300 would also green a misrouted 200 — and the
+    // BackupCreateResponse must carry the required `verification` report,
+    // not just an archive name.
     const created = await request.post('/api/backups', { headers: tokenHeaders, data: {} });
-    expect(created.status(), `backup create: ${created.status()} ${await created.text()}`).toBeLessThan(300);
+    expect(created.status(), `backup create: ${created.status()} ${await created.text()}`).toBe(201);
     const createdBody = await created.json();
     const archiveName = createdBody.archive?.name;
     expect(archiveName, 'archive name returned').toBeTruthy();
+    const verification = createdBody.verification;
+    expect(verification, 'create response carries BackupVerificationReport').toBeTruthy();
+    expect(typeof verification.encrypted, 'verification.encrypted').toBe('boolean');
+    expect(
+      Array.isArray(verification.files) && verification.files.length >= 2,
+      `verification.files lists archive members: ${JSON.stringify(verification)}`,
+    ).toBe(true);
 
-    // Explicit verify passes.
+    // Explicit verify passes — and returns the report body, not just a 200.
     const verify = await request.post(`/api/backups/${archiveName}/verify`, {
       headers: tokenHeaders,
       data: {},
     });
     expect(verify.status(), `verify: ${verify.status()} ${await verify.text()}`).toBe(200);
+    const verifyBody = await verify.json();
+    expect(
+      Array.isArray(verifyBody.files) && verifyBody.files.length >= 2,
+      `verify response carries archive member list: ${JSON.stringify(verifyBody)}`,
+    ).toBe(true);
+    expect(verifyBody.stateSchemaVersion, 'verify reports the state schema version').toBeGreaterThanOrEqual(1);
 
     // A post-backup mutation…
     const afterResp = await request.post('/api/users', {

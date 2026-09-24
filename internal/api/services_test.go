@@ -1,8 +1,10 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -40,9 +42,11 @@ func TestServicesRestartRequiresConfirm(t *testing.T) {
 }
 
 func TestServicesRestartSuccess(t *testing.T) {
+	var gotCommand []string
 	orig := serviceActionRunner
 	serviceActionRunner = func(command []string) ServiceActionResult {
-		return ServiceActionResult{Name: command[2], Command: command, Success: true, Output: "restarted"}
+		gotCommand = append([]string(nil), command...)
+		return ServiceActionResult{Name: command[2], Command: command, Success: true}
 	}
 	defer func() { serviceActionRunner = orig }()
 
@@ -54,6 +58,22 @@ func TestServicesRestartSuccess(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	// Lock the response envelope, not just the status — the stubbed runner
+	// must have driven a restart of the real caddy unit.
+	if want := []string{"systemctl", "restart", "veil-caddy.service"}; !reflect.DeepEqual(gotCommand, want) {
+		t.Fatalf("runner command = %v, want %v", gotCommand, want)
+	}
+	var resp struct {
+		Service string `json:"service"`
+		Action  string `json:"action"`
+		Success bool   `json:"success"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v (body %s)", err, w.Body.String())
+	}
+	if resp.Service != "caddy" || resp.Action != "restart" || !resp.Success {
+		t.Fatalf("unexpected response envelope: %+v", resp)
 	}
 }
 
@@ -71,7 +91,24 @@ func TestServicesRestartFailure(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusInternalServerError {
-		t.Errorf("expected 500, got %d: %s", w.Code, w.Body.String())
+		t.Fatalf("expected 500, got %d: %s", w.Code, w.Body.String())
+	}
+	// The envelope must carry the structured error code; the runner's raw
+	// stderr is intentionally redacted behind the generic message.
+	var body struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode error envelope: %v (body %s)", err, w.Body.String())
+	}
+	if body.Error.Code != "operation_failed" {
+		t.Fatalf("error code = %q, want operation_failed", body.Error.Code)
+	}
+	if body.Error.Message != "privileged operation failed" {
+		t.Fatalf("error message = %q, want the redacted public message", body.Error.Message)
 	}
 }
 

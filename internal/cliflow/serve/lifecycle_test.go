@@ -181,13 +181,43 @@ func TestRunLifecycleHandlesSIGHUPReloadError(t *testing.T) {
 }
 
 func TestRunLifecycleDefaults(t *testing.T) {
-	lifecycleListenAndServe = func(srv *http.Server) error { return http.ErrServerClosed }
+	// Nil Out/Err default to io.Discard: the shutdown path writes
+	// "Shutting down"/"Server stopped" to both, so unset writers would panic
+	// if the defaults were not applied. Drive the full cancel → Shutdown →
+	// serve-exit path with them nil, and leave DrainTimeout unset so the
+	// default 5s budget bounds the graceful shutdown.
+	serveStarted := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	lifecycleListenAndServe = func(srv *http.Server) error {
+		close(serveStarted)
+		<-ctx.Done()
+		return http.ErrServerClosed
+	}
 	defer func() { lifecycleListenAndServe = func(srv *http.Server) error { return srv.ListenAndServe() } }()
 
-	// Exercise default Out, Err, Context, and DrainTimeout.
-	err := RunLifecycle(LifecycleOptions{Server: &http.Server{Addr: "127.0.0.1:0"}})
-	if err != nil {
-		t.Fatalf("RunLifecycle: %v", err)
+	done := make(chan error, 1)
+	go func() {
+		done <- RunLifecycle(LifecycleOptions{
+			Context: ctx,
+			Server:  &http.Server{Addr: "127.0.0.1:0"},
+		})
+	}()
+	<-serveStarted
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("RunLifecycle with default Out/Err/DrainTimeout: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("lifecycle did not finish shutdown")
+	}
+
+	// A nil Context defaults to context.Background; the only way out is the
+	// serve result itself.
+	lifecycleListenAndServe = func(srv *http.Server) error { return http.ErrServerClosed }
+	if err := RunLifecycle(LifecycleOptions{Server: &http.Server{Addr: "127.0.0.1:0"}}); err != nil {
+		t.Fatalf("RunLifecycle all-defaults: %v", err)
 	}
 }
 
