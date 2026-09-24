@@ -9,7 +9,7 @@ import (
 
 func TestGeneratedConfigSetAllowsMultipleEnabledInboundsPerProtocol(t *testing.T) {
 	applyRoot := t.TempDir()
-	_, err := BuildGeneratedConfigSet(GeneratedConfigInput{
+	configs, err := BuildGeneratedConfigSet(GeneratedConfigInput{
 		ApplyRoot: applyRoot,
 		Settings: Settings{
 			Domain:            "vpn.example.com",
@@ -29,6 +29,26 @@ func TestGeneratedConfigSetAllowsMultipleEnabledInboundsPerProtocol(t *testing.T
 	})
 	if err != nil {
 		t.Fatalf("expected no error for multiple enabled naiveproxy inbounds, got %v", err)
+	}
+	// Discarding the map greens a set that dropped the consolidated caddy
+	// config or either inbound's credential — lock the artifact and both
+	// passwords (#857).
+	caddy, ok := configs[filepath.Join(applyRoot, "generated", "caddy", "config.json")]
+	if !ok {
+		keys := make([]string, 0, len(configs))
+		for k := range configs {
+			keys = append(keys, k)
+		}
+		t.Fatalf("config set missing consolidated caddy config.json, got keys %v", keys)
+	}
+	for _, want := range []string{
+		"forward_proxy",
+		forwardProxyJSONCredential("veil", "a"),
+		forwardProxyJSONCredential("veil", "b"),
+	} {
+		if !strings.Contains(caddy, want) {
+			t.Fatalf("Caddy JSON missing %q:\n%s", want, caddy)
+		}
 	}
 }
 

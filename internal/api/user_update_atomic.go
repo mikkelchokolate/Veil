@@ -64,7 +64,7 @@ func (s *managementState) handleAtomicUserUpdate(w http.ResponseWriter, r *http.
 	err := s.withMutation(func(mutation managementstate.Mutation) error {
 		users := mutation.Users()
 		found := false
-		currentRole := ""
+		var prior model.User
 		adminCount := 0
 		for _, user := range users {
 			if user.Role == "admin" {
@@ -72,21 +72,34 @@ func (s *managementState) handleAtomicUserUpdate(w http.ResponseWriter, r *http.
 			}
 			if user.Username == username {
 				found = true
-				currentRole = user.Role
+				prior = user
 			}
 		}
 		if !found {
 			return errUserNotFound
 		}
-		if currentRole == "admin" && req.Role != "admin" && adminCount <= 1 {
+		if prior.Role == "admin" && req.Role != "admin" && adminCount <= 1 {
 			return managementstate.ErrLastAdministrator
 		}
-		if _, revokeErr := s.sessionRegistry().DeleteUsernamePersisted(username); revokeErr != nil {
-			return fmt.Errorf("%w: %v", errSessionRevocationPersistence, revokeErr)
-		}
+		// Persist the user mutation BEFORE revoking sessions: when the state
+		// save fails the mutation rolls back and the user's sessions must
+		// remain valid rather than being revoked for a change that never
+		// committed.
 		var updateErr error
 		updated, updateErr = mutation.UpdateUser(username, update)
-		return updateErr
+		if updateErr != nil {
+			return updateErr
+		}
+		if _, revokeErr := s.sessionRegistry().DeleteUsernamePersisted(username); revokeErr != nil {
+			// The user update already committed; restore the previous record
+			// so a failed revocation never leaves an updated user whose
+			// sessions were meant to be revoked but are still live.
+			if _, restoreErr := mutation.UpdateUser(username, prior); restoreErr != nil {
+				return fmt.Errorf("%w: %v (restore user: %v)", errSessionRevocationPersistence, revokeErr, restoreErr)
+			}
+			return fmt.Errorf("%w: %v", errSessionRevocationPersistence, revokeErr)
+		}
+		return nil
 	})
 	if err != nil {
 		s.recordRequestAudit(r, audit.Record{

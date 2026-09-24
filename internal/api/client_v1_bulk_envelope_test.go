@@ -31,24 +31,25 @@ func TestV1BulkReturnsRevisionAndSkipped(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("bulk: %d %s", w.Code, w.Body.String())
 	}
+	raw := w.Body.Bytes()
 	var resp map[string]any
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+	if err := json.Unmarshal(raw, &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	// mutation envelope present
-	if _, ok := resp["revision"]; !ok {
-		t.Errorf("bulk missing revision envelope: %v", keysOf(resp))
+	// Honest mutation envelope: success true (one client applied), a real
+	// revision, and an applyJob pinned to that exact revision.
+	env := decodeEnvelope(t, raw)
+	if !env.Success {
+		t.Errorf("bulk success=false when a client was applied: %s", w.Body.String())
 	}
-	if _, ok := resp["applyJob"]; !ok {
-		t.Errorf("bulk missing applyJob: %v", keysOf(resp))
+	if env.Revision.Desired < 1 {
+		t.Errorf("bulk revision.desired=%d, want >=1", env.Revision.Desired)
 	}
-	// skipped/failed accounting
-	if _, ok := resp["skipped"]; !ok {
-		t.Errorf("bulk missing skipped count: %v", resp)
+	if env.ApplyJob == nil || env.ApplyJob.DesiredRevision != env.Revision.Desired {
+		t.Errorf("bulk applyJob missing or pinned to wrong revision: %+v (desired=%d)", env.ApplyJob, env.Revision.Desired)
 	}
-	// one bad id must be counted as failed, not crash the batch
-	failed, _ := resp["failed"].(float64)
-	if failed < 1 {
-		t.Errorf("expected >=1 failed for missing-id, got %v", failed)
+	// Exact per-client accounting: one applied, one bad id failed, none skipped.
+	if resp["succeeded"] != float64(1) || resp["failed"] != float64(1) || resp["skipped"] != float64(0) || resp["total"] != float64(2) {
+		t.Errorf("bulk counters wrong: %v", resp)
 	}
 }

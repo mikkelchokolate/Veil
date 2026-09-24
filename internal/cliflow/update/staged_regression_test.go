@@ -44,7 +44,9 @@ func TestRestartAfterUpdateDoesNotRollbackWhenPrefixedHealthzOK(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	}))
 	t.Cleanup(server.Close)
 

@@ -116,7 +116,7 @@ func TestOpenAPIRoutesAndMethodsMatchRegisteredAPI(t *testing.T) {
 		"/api/v1/clients/migrate-legacy":               {"post"},
 		"/api/v1/clients/{id}":                         {"delete", "get", "patch"},
 		"/api/v1/clients/{id}/bindings":                {"get", "post"},
-		"/api/v1/clients/{id}/bindings/{bindingId}":    {"delete", "patch"},
+		"/api/v1/clients/{id}/bindings/{bindingId}":    {"delete", "get", "patch"},
 		"/api/v1/clients/{id}/credentials/{bindingId}": {"post"},
 		"/api/v1/clients/{id}/credentials/{bindingId}/rotate": {"post"},
 		"/api/v1/clients/{id}/audit":                          {"get"},

@@ -182,8 +182,8 @@ func (s *managementState) handleV1Bulk(w http.ResponseWriter, r *http.Request) {
 	results := make([]v1BulkResult, 0, len(req.ClientIDs))
 	succeeded := 0
 	skipped := 0
+	anyApplied := false
 	outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
-		anyApplied := false
 		for i, id := range req.ClientIDs {
 			sp := fmt.Sprintf("bulk_%d", i)
 			if err := tx.Savepoint(sp); err != nil {
@@ -233,6 +233,12 @@ func (s *managementState) handleV1Bulk(w http.ResponseWriter, r *http.Request) {
 		"results":   results,
 	}
 	s.mergeOutcomeInto(resp, outcome)
+	// When nothing was applied because every requested client failed, the
+	// envelope must not claim success: no mutation committed, no apply ran,
+	// and callers have to see the failure instead of a false-green 200.
+	if !anyApplied && failed > 0 {
+		resp["success"] = false
+	}
 	for _, item := range results {
 		if item.Plaintext != "" {
 			markIdempotencySecretResponse(w, item.ID, 1)
@@ -813,8 +819,44 @@ func (s *managementState) bindingInboundExistsLocked(inboundID string) bool {
 	return false
 }
 
+// handleV1ListClientBindings returns the full binding read model for one
+// client (id, inbound, enabled, capability, credential metadata).
+func (s *managementState) handleV1ListClientBindings(w http.ResponseWriter, r *http.Request, clientID string) {
+	view, err := s.clientService.Get(clientID)
+	if err != nil {
+		s.writeV1ClientError(w, err)
+		return
+	}
+	bindings := view.Bindings
+	if bindings == nil {
+		bindings = []client.BindingView{}
+	}
+	writeJSON(w, map[string]any{"items": bindings})
+}
+
+// handleV1GetClientBinding returns one binding read model by id, or 404 when
+// the binding does not exist on this client.
+func (s *managementState) handleV1GetClientBinding(w http.ResponseWriter, r *http.Request, clientID, bindingID string) {
+	view, err := s.clientService.Get(clientID)
+	if err != nil {
+		s.writeV1ClientError(w, err)
+		return
+	}
+	for _, binding := range view.Bindings {
+		if binding.ID == bindingID {
+			writeJSON(w, binding)
+			return
+		}
+	}
+	writeNotFound(w)
+}
+
 func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.Request, clientID string, parts []string) {
 	if len(parts) == 1 { // /bindings
+		if r.Method == http.MethodGet {
+			s.handleV1ListClientBindings(w, r, clientID)
+			return
+		}
 		if r.Method == http.MethodPost {
 			var req v1BindingRequest
 			if !decodeJSONRequest(w, r, &req) {
@@ -881,11 +923,15 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 			s.writeMutationResponse(w, http.StatusCreated, resp, outcome)
 			return
 		}
-		methodNotAllowed(w, http.MethodPost)
+		methodNotAllowed(w, http.MethodGet, http.MethodPost)
 		return
 	}
 	// /bindings/{bindingId}
 	bindingID := parts[1]
+	if r.Method == http.MethodGet {
+		s.handleV1GetClientBinding(w, r, clientID, bindingID)
+		return
+	}
 	if r.Method == http.MethodPatch {
 		var req struct {
 			Enabled *bool `json:"enabled"`
@@ -950,7 +996,7 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 		s.writeMutationResponse(w, http.StatusOK, map[string]string{"id": bindingID}, outcome)
 		return
 	}
-	methodNotAllowed(w, http.MethodPatch, http.MethodDelete)
+	methodNotAllowed(w, http.MethodGet, http.MethodPatch, http.MethodDelete)
 }
 
 func (s *managementState) handleV1ClientCredentials(w http.ResponseWriter, r *http.Request, clientID string, parts []string) {

@@ -376,7 +376,7 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
       x-roles:
-      - admin
+      - public
   /api/auth/status:
     get:
       x-veil-role: public
@@ -470,6 +470,7 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
       x-roles:
       - admin
+      - viewer
   /api/auth/sessions:
     get:
       x-veil-role: admin-metadata
@@ -509,7 +510,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
       x-roles:
       - admin
-      - viewer
     delete:
       parameters:
       - $ref: '#/components/parameters/IdempotencyKey'
@@ -622,7 +622,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
       x-roles:
       - admin
-      - viewer
   /api/admin/rotate-key:
     post:
       parameters:
@@ -724,7 +723,6 @@ paths:
       - veilToken: []
       x-roles:
       - admin
-      - viewer
     post:
       parameters:
       - $ref: '#/components/parameters/IdempotencyKey'
@@ -907,7 +905,6 @@ paths:
       - veilToken: []
       x-roles:
       - admin
-      - viewer
   /api/backups/{name}/verify:
     parameters:
     - $ref: '#/components/parameters/BackupName'
@@ -1076,7 +1073,6 @@ paths:
       - veilToken: []
       x-roles:
       - admin
-      - viewer
     post:
       parameters:
       - $ref: '#/components/parameters/IdempotencyKey'
@@ -2036,7 +2032,6 @@ paths:
       - veilToken: []
       x-roles:
       - admin
-      - viewer
   /api/client-links/subscription:
     get:
       x-veil-role: admin-secret
@@ -2069,7 +2064,6 @@ paths:
       - veilToken: []
       x-roles:
       - admin
-      - viewer
   /api/client-links/qr:
     post:
       parameters:
@@ -2562,6 +2556,7 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
       x-roles:
       - admin
+      - viewer
   /api/apply/history:
     get:
       x-veil-role: viewer
@@ -2635,6 +2630,7 @@ paths:
       - veilToken: []
       x-roles:
       - admin
+      - viewer
   /api/services/{name}/restart:
     parameters:
     - $ref: '#/components/parameters/Name'
@@ -2861,7 +2857,6 @@ paths:
       - veilToken: []
       x-roles:
       - admin
-      - viewer
   /api/tools/dns-lookup:
     post:
       parameters:
@@ -2900,6 +2895,7 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
       x-roles:
       - admin
+      - viewer
   /api/tools/ping:
     post:
       parameters:
@@ -2938,6 +2934,7 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
       x-roles:
       - admin
+      - viewer
   /api/tools/speedtest:
     post:
       parameters:
@@ -2976,6 +2973,7 @@ paths:
           $ref: '#/components/responses/Locked'
       x-roles:
       - admin
+      - viewer
   /api/v1/clients:
     get:
       x-veil-role: viewer
@@ -3160,6 +3158,38 @@ paths:
       x-roles:
       - admin
   /api/v1/clients/{id}/bindings/{bindingId}:
+    get:
+      x-veil-role: viewer
+      tags:
+      - clients
+      summary: Get a single client binding read model
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      parameters:
+      - $ref: '#/components/parameters/ClientId'
+      - name: bindingId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Binding read model (id, inboundId, enabled, capability, credential metadata).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientBinding'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      x-roles:
+      - admin
+      - viewer
     patch:
       x-veil-role: admin-mutation
       tags:

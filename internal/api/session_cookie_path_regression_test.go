@@ -147,6 +147,11 @@ func TestRootMountSessionCookieKeepsOriginPath(t *testing.T) {
 	if cookie == nil || cookie.Path != "/" {
 		t.Fatalf("root mount cookie=%+v, want Path=/", cookie)
 	}
+	// Root mount keeps the rest of the session-cookie contract too (#827):
+	// HttpOnly + SameSite=Lax + a positive MaxAge.
+	if !cookie.HttpOnly || cookie.SameSite != http.SameSiteLaxMode || cookie.MaxAge <= 0 {
+		t.Fatalf("root mount cookie attributes wrong: %+v", cookie)
+	}
 }
 
 // Settings may drift webBasePath/panelAccess ahead of `veil repair`, but the
@@ -189,5 +194,11 @@ func TestLogoutCookieRepeatsLoginSameSite(t *testing.T) {
 	cookie := rec.Header().Get("Set-Cookie")
 	if !strings.Contains(cookie, "Path=/panel-secret/") || !strings.Contains(cookie, "SameSite=Lax") {
 		t.Fatalf("logout cookie=%q", cookie)
+	}
+	// The logout cookie must also be an expiry: empty value + negative MaxAge
+	// (#827), not just matching path/SameSite attributes on a live value.
+	expired := sessionSetCookie(rec)
+	if expired == nil || expired.Value != "" || expired.MaxAge >= 0 {
+		t.Fatalf("logout cookie does not expire the session: %+v", expired)
 	}
 }

@@ -41,6 +41,9 @@ func TestLoginDoesNotRequireCSRFWithLiveSession(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("login status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	// A live leftover cookie must not gate login, but the success still owes
+	// the full contract: fresh session cookie + csrfToken (#827).
+	assertLoginSetsSessionCookieAndCSRF(t, rec)
 
 	bad := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"alice","password":"wrong-pass"}`))
 	bad.Header.Set("Content-Type", "application/json")

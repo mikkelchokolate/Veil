@@ -2,8 +2,8 @@ package api
 
 import (
 	"context"
-	"strings"
 	"testing"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/client"
 )
@@ -38,11 +38,25 @@ func TestUnknownIdentitiesDoNotPauseQuotaEnforcement(t *testing.T) {
 			t.Fatalf("provider degraded by leftover identity: %+v", health)
 		}
 	}
-	err = state.enforceQuotaMutation(client.QuotaMutation{
-		ClientID: row.ID, TargetGeneration: 1, TargetPayloadHash: strings.Repeat("a", 64),
-	})
-	if err != nil && strings.Contains(err.Error(), "degraded") {
-		t.Fatalf("quota enforcement paused for leftover identity: %v", err)
+	// The claim is "do not pause": a real pending target must run to
+	// completion, not just fail with a non-degraded error. Seed the
+	// enforcement row exactly the way the reconciler does — bound to the
+	// client's next generation — then run the production enforce path; any
+	// error means the leftover identity blocked a quota mutation it should
+	// never have touched (#842).
+	current, err := state.clientRepo.Get(row.ID)
+	if err != nil {
+		t.Fatalf("reload client: %v", err)
+	}
+	mutation := client.BindQuotaTarget(current, client.QuotaMutation{ClientID: row.ID, Depleted: true})
+	if _, err := state.db.Exec(`INSERT INTO quota_enforcement
+		(client_id,target_generation,target_payload_hash,target_depleted,target_period_epoch,state,next_retry_at,last_error,attempts,updated_at)
+		VALUES (?,?,?,?,?,'pending',0,'',0,?)`,
+		row.ID, mutation.TargetGeneration, mutation.TargetPayloadHash, 1, mutation.TargetPeriodEpoch, time.Now().UTC().Unix()); err != nil {
+		t.Fatalf("seed pending quota target: %v", err)
+	}
+	if err := state.enforceQuotaMutation(mutation); err != nil {
+		t.Fatalf("quota enforcement did not run cleanly for leftover identity: %v", err)
 	}
 }
 

@@ -180,124 +180,177 @@ func TestServerDispatchesAllOperations(t *testing.T) {
 		name      string
 		operation Operation
 		payload   any
-		setup     func(*Executor)
+		setup     func(*Executor, *int)
 		wantOK    bool
 	}{
 		{
 			name: "promote", operation: OperationPromote, payload: &PromoteRequest{ArtifactIDs: []string{"mieru"}},
-			setup: func(e *Executor) {
-				e.Promote = func(context.Context, ResolvedPromotion) (PromoteResult, error) { return PromoteResult{}, nil }
+			setup: func(e *Executor, calls *int) {
+				e.Promote = func(context.Context, ResolvedPromotion) (PromoteResult, error) {
+					*calls++
+					return PromoteResult{}, nil
+				}
 			}, wantOK: true,
 		},
 		{
 			name: "service_action", operation: OperationServiceAction, payload: &ServiceActionRequest{Unit: "veil.service", Action: ServiceActionRestart},
-			setup: func(e *Executor) { e.ServiceAction = func(context.Context, ServiceActionRequest) error { return nil } }, wantOK: true,
+			setup: func(e *Executor, calls *int) {
+				e.ServiceAction = func(context.Context, ServiceActionRequest) error { *calls++; return nil }
+			}, wantOK: true,
 		},
 		{
 			name: "service_status", operation: OperationServiceStatus, payload: &ServiceStatusRequest{Units: []string{"veil.service"}},
-			setup: func(e *Executor) {
+			setup: func(e *Executor, calls *int) {
 				e.ServiceStatus = func(context.Context, ServiceStatusRequest) (ServiceStatusResult, error) {
+					*calls++
 					return ServiceStatusResult{}, nil
 				}
 			}, wantOK: true,
 		},
 		{
 			name: "journal", operation: OperationJournal, payload: &JournalRequest{Unit: "veil.service", Lines: 10},
-			setup: func(e *Executor) {
-				e.Journal = func(context.Context, ResolvedJournal) (JournalResult, error) { return JournalResult{}, nil }
+			setup: func(e *Executor, calls *int) {
+				e.Journal = func(context.Context, ResolvedJournal) (JournalResult, error) {
+					*calls++
+					return JournalResult{}, nil
+				}
 			}, wantOK: true,
 		},
 		{
 			name: "backup_create", operation: OperationBackupCreate, payload: &BackupRequest{Action: BackupActionCreate},
-			setup: func(e *Executor) {
-				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) { return BackupResult{}, nil }
+			setup: func(e *Executor, calls *int) {
+				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) {
+					*calls++
+					return BackupResult{}, nil
+				}
 			}, wantOK: true,
 		},
 		{
 			name: "backup_list", operation: OperationBackupList, payload: &BackupRequest{Action: BackupActionList},
-			setup: func(e *Executor) {
-				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) { return BackupResult{}, nil }
+			setup: func(e *Executor, calls *int) {
+				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) {
+					*calls++
+					return BackupResult{}, nil
+				}
 			}, wantOK: true,
 		},
 		{
 			name: "backup_verify", operation: OperationBackupVerify, payload: &BackupRequest{Action: BackupActionVerify, ArchiveName: "daily.enc"},
-			setup: func(e *Executor) {
-				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) { return BackupResult{}, nil }
+			setup: func(e *Executor, calls *int) {
+				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) {
+					*calls++
+					return BackupResult{}, nil
+				}
 			}, wantOK: true,
 		},
 		{
 			name: "backup_read", operation: OperationBackupRead, payload: &BackupRequest{Action: BackupActionRead, ArchiveName: "daily.enc"},
-			setup: func(e *Executor) {
+			setup: func(e *Executor, calls *int) {
 				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) {
+					*calls++
 					return BackupResult{Data: []byte("x")}, nil
 				}
 			}, wantOK: true,
 		},
 		{
 			name: "backup_prune", operation: OperationBackupPrune, payload: &BackupRequest{Action: BackupActionPrune},
-			setup: func(e *Executor) {
-				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) { return BackupResult{}, nil }
+			setup: func(e *Executor, calls *int) {
+				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) {
+					*calls++
+					return BackupResult{}, nil
+				}
 			}, wantOK: true,
 		},
 		{
 			name: "backup_restore", operation: OperationBackupRestore, payload: &BackupRequest{Action: BackupActionRestore, ArchiveName: "daily.enc"},
-			setup: func(e *Executor) {
-				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) { return BackupResult{}, nil }
+			setup: func(e *Executor, calls *int) {
+				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) {
+					*calls++
+					return BackupResult{}, nil
+				}
 			}, wantOK: true,
 		},
 		{
 			name: "backup_delete", operation: OperationBackupDelete, payload: &BackupRequest{Action: BackupActionDelete, ArchiveName: "daily.enc"},
-			setup: func(e *Executor) {
-				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) { return BackupResult{}, nil }
+			setup: func(e *Executor, calls *int) {
+				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) {
+					*calls++
+					return BackupResult{}, nil
+				}
 			}, wantOK: true,
 		},
 		{
 			name: "rotate_key", operation: OperationRotateKey, payload: &RotateKeyRequest{},
-			setup: func(e *Executor) { e.RotateKey = func(context.Context, RotateKeyRequest) error { return nil } }, wantOK: true,
+			setup: func(e *Executor, calls *int) {
+				e.RotateKey = func(context.Context, RotateKeyRequest) error { *calls++; return nil }
+			}, wantOK: true,
 		},
 		{
 			name: "recover_key_rotation", operation: OperationRecoverKeyRotation, payload: &RecoverKeyRotationRequest{},
-			setup: func(e *Executor) { e.RecoverKeyRotation = func(context.Context) error { return nil } }, wantOK: true,
+			setup: func(e *Executor, calls *int) {
+				e.RecoverKeyRotation = func(context.Context) error { *calls++; return nil }
+			}, wantOK: true,
 		},
 		{
 			name: "firewall_apply", operation: OperationFirewallApply, payload: &FirewallRequest{RuleIDs: []string{"allow-mieru-tcp"}},
-			setup: func(e *Executor) {
-				e.Firewall = func(context.Context, ResolvedFirewall) (FirewallResult, error) { return FirewallResult{}, nil }
+			setup: func(e *Executor, calls *int) {
+				e.Firewall = func(context.Context, ResolvedFirewall) (FirewallResult, error) {
+					*calls++
+					return FirewallResult{}, nil
+				}
 			}, wantOK: true,
 		},
 		{
 			name: "stage_update", operation: OperationStageUpdate, payload: &UpdateRequest{ArtifactID: "veil-linux-amd64", Version: "v0.6.0"},
-			setup: func(e *Executor) {
-				e.Update = func(context.Context, ResolvedUpdate) (UpdateResult, error) { return UpdateResult{}, nil }
+			setup: func(e *Executor, calls *int) {
+				e.Update = func(context.Context, ResolvedUpdate) (UpdateResult, error) {
+					*calls++
+					return UpdateResult{}, nil
+				}
 			}, wantOK: true,
 		},
 		{
 			name: "restart_panel", operation: OperationRestartPanel, payload: &RestartPanelRequest{},
-			setup: func(e *Executor) { e.RestartPanel = func(context.Context) error { return nil } }, wantOK: true,
+			setup: func(e *Executor, calls *int) {
+				e.RestartPanel = func(context.Context) error { *calls++; return nil }
+			}, wantOK: true,
 		},
 		{
 			name: "sync_caddy_cert", operation: OperationSyncCaddyCert, payload: &SyncCaddyCertRequest{Domain: "example.com"},
-			setup: func(e *Executor) {
+			setup: func(e *Executor, calls *int) {
 				e.SyncCaddyCert = func(context.Context, SyncCaddyCertRequest) (SyncCaddyCertResult, error) {
+					*calls++
 					return SyncCaddyCertResult{}, nil
 				}
 			}, wantOK: true,
 		},
 		{
+			// #900: the caddy_load dispatch arm was previously untested — a
+			// dropped case in the server switch would silently fail.
+			name: "caddy_load", operation: OperationCaddyLoad, payload: &CaddyLoadRequest{Config: []byte(`{"apps":{}}`)},
+			setup: func(e *Executor, calls *int) {
+				e.CaddyLoad = func(context.Context, CaddyLoadRequest) error { *calls++; return nil }
+			}, wantOK: true,
+		},
+		{
 			name: "backup_action_mismatch", operation: OperationBackupCreate, payload: &BackupRequest{Action: BackupActionList},
-			setup: func(e *Executor) {
-				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) { return BackupResult{}, nil }
+			setup: func(e *Executor, calls *int) {
+				e.Backup = func(context.Context, ResolvedBackup) (BackupResult, error) {
+					*calls++
+					return BackupResult{}, nil
+				}
 			}, wantOK: false,
 		},
 		{
 			name: "unsupported_operation", operation: Operation("bad"), payload: &RestartPanelRequest{},
-			setup: func(e *Executor) {}, wantOK: false,
+			setup: func(e *Executor, calls *int) {}, wantOK: false,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			executor := Executor{}
-			tc.setup(&executor)
+			calls := 0
+			tc.setup(&executor, &calls)
 			server := NewServer(NewLocalAdapter(policy, executor))
 			request := RequestEnvelope{Version: ProtocolVersion, RequestID: tc.name, Operation: tc.operation}
 			switch tc.operation {
@@ -323,6 +376,8 @@ func TestServerDispatchesAllOperations(t *testing.T) {
 				request.RestartPanel = tc.payload.(*RestartPanelRequest)
 			case OperationSyncCaddyCert:
 				request.SyncCaddyCert = tc.payload.(*SyncCaddyCertRequest)
+			case OperationCaddyLoad:
+				request.CaddyLoad = tc.payload.(*CaddyLoadRequest)
 			default:
 				request.RestartPanel = tc.payload.(*RestartPanelRequest)
 			}
@@ -332,6 +387,15 @@ func TestServerDispatchesAllOperations(t *testing.T) {
 			}
 			if !tc.wantOK && (response.OK || response.Error == nil || response.Error.Code != ErrorInvalidRequest) {
 				t.Fatalf("expected invalid_request error, got %+v", response)
+			}
+			// A dispatched operation must reach the executor exactly once; a
+			// rejected request must never reach it. An OK response with zero
+			// executor calls means the server swallowed the operation.
+			if tc.wantOK && calls != 1 {
+				t.Fatalf("executor invoked %d times, want exactly 1", calls)
+			}
+			if !tc.wantOK && calls != 0 {
+				t.Fatalf("rejected request reached executor %d times", calls)
 			}
 		})
 	}

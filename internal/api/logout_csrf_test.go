@@ -48,6 +48,12 @@ func TestLogoutRequiresCSRFWithLiveSession(t *testing.T) {
 	if rec2.Code != http.StatusOK {
 		t.Fatalf("logout with CSRF = %d, want 200; body = %s", rec2.Code, rec2.Body.String())
 	}
+	// The response must also expire the cookie — empty value, negative
+	// MaxAge — so the browser actually drops the session (#827).
+	expired := sessionSetCookie(rec2)
+	if expired == nil || expired.Value != "" || expired.MaxAge >= 0 {
+		t.Fatalf("logout did not emit an expiring veil_session cookie: %+v", expired)
+	}
 	if _, ok := state.sessionRegistry().Get(sess.Token); ok {
 		t.Fatal("session still live after logout")
 	}

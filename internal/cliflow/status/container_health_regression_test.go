@@ -76,6 +76,23 @@ func TestProbeHealthHTTPSUsesSuppliedTrustMaterial(t *testing.T) {
 	}
 }
 
+// TestProbeRejectsBareOKAndUnhealthyBody covers #828: an HTTP 200 alone is
+// not health evidence — the body must be the Veil health contract.
+func TestProbeRejectsBareOKAndUnhealthyBody(t *testing.T) {
+	for _, body := range []string{"", "ok", `{"status":"unhealthy"}`, `{"status":"degraded"}`} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(body))
+		}))
+		contract := ContainerHealthContract{Listen: server.Listener.Addr().String(), Scheme: "http", WebBasePath: "/"}
+		err := Probe(context.Background(), contract, "")
+		server.Close()
+		if err == nil {
+			t.Fatalf("Probe accepted a 200 with body %q as healthy", body)
+		}
+	}
+}
+
 func TestProbeHealthUnavailableServer(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

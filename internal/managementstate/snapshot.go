@@ -106,22 +106,13 @@ func cloneInbounds(inbounds []model.Inbound) []model.Inbound {
 	}
 	out := make([]model.Inbound, len(inbounds))
 	for i, inbound := range inbounds {
-		out[i] = inbound
-		out[i].Profiles = append([]model.ClientProfile(nil), inbound.Profiles...)
-		out[i].ProtocolFields = cloneProtocolFields(inbound.ProtocolFields)
+		out[i] = model.CloneInbound(inbound)
 	}
 	return out
 }
 
 func cloneProtocolFields(pf map[string]any) map[string]any {
-	if pf == nil {
-		return nil
-	}
-	out := make(map[string]any, len(pf))
-	for k, v := range pf {
-		out[k] = v
-	}
-	return out
+	return model.CloneProtocolFields(pf)
 }
 
 func cloneUsers(users []model.User) []model.User {

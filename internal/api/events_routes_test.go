@@ -2,6 +2,7 @@ package api
 
 import (
 	"bufio"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -83,16 +84,47 @@ func TestV1EventsSSE(t *testing.T) {
 		t.Error("missing apply event")
 	}
 
-	// Verify traffic event contains client data.
+	// The traffic payload must be real JSON carrying the per-client totals map,
+	// and the created client's ID must be a key — a bare "clients" substring is
+	// not proof of a well-formed payload.
+	var traffic struct {
+		At      int64 `json:"at"`
+		Clients map[string]struct {
+			Upload   int64 `json:"upload"`
+			Download int64 `json:"download"`
+		} `json:"clients"`
+	}
 	if data, ok := events["traffic"]; ok {
-		if !strings.Contains(data, "clients") {
-			t.Error("traffic event missing clients")
+		if err := json.Unmarshal([]byte(data), &traffic); err != nil {
+			t.Fatalf("traffic event data is not valid JSON: %v (%s)", err, data)
+		}
+		if traffic.At == 0 {
+			t.Errorf("traffic event missing at timestamp: %s", data)
+		}
+		if _, ok := traffic.Clients[view.ID]; !ok {
+			t.Errorf("traffic event clients map lacks created client %q: %s", view.ID, data)
 		}
 	}
-	// Verify apply event contains revision data.
+	// The apply payload must decode to a revision object that actually
+	// carries numeric revision fields and a state — not merely contain the
+	// key name as a substring.
 	if data, ok := events["apply"]; ok {
-		if !strings.Contains(data, "desiredRevision") {
-			t.Error("apply event missing desiredRevision")
+		var apply map[string]any
+		if err := json.Unmarshal([]byte(data), &apply); err != nil {
+			t.Fatalf("apply event data is not valid JSON: %v (%s)", err, data)
+		}
+		if state, _ := apply["state"].(string); state == "" {
+			t.Errorf("apply event missing state field: %s", data)
+		}
+		for _, field := range []string{"desiredRevision", "appliedRevision"} {
+			v, ok := apply[field]
+			if !ok {
+				t.Errorf("apply event missing %s field: %s", field, data)
+				continue
+			}
+			if _, ok := v.(float64); !ok {
+				t.Errorf("apply event %s is not numeric: %s", field, data)
+			}
 		}
 	}
 }

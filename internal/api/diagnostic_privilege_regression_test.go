@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -62,6 +63,20 @@ func TestProductionDiagnosticsFailClosedWithoutRootHelper(t *testing.T) {
 			if response.Code != http.StatusServiceUnavailable {
 				t.Fatalf("diagnostic without helper status=%d want=503 body=%s", response.Code, response.Body.String())
 			}
+			// The body must be the dependency_unavailable error envelope, not
+			// a bare 503 or a success payload.
+			var body struct {
+				Error struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+				t.Fatalf("diagnostic error body is not JSON: %v (%s)", err, response.Body.String())
+			}
+			if body.Error.Code != "dependency_unavailable" {
+				t.Fatalf("diagnostic error code=%q want=dependency_unavailable body=%v", body.Error.Code, body)
+			}
 		})
 	}
 }
@@ -80,5 +95,15 @@ func TestProductionSystemStatsDoNotRequireRootHelper(t *testing.T) {
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("system stats status=%d want=200 body=%s", response.Code, response.Body.String())
+	}
+	// A 200 alone is not enough — the payload must be the system stats object.
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("system stats body is not JSON: %v (%s)", err, response.Body.String())
+	}
+	for _, field := range []string{"cpuPercent", "memoryUsedMB", "memoryTotalMB", "uptimeSeconds"} {
+		if _, ok := body[field]; !ok {
+			t.Fatalf("system stats body missing %q: %v", field, body)
+		}
 	}
 }

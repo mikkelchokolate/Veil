@@ -3,6 +3,8 @@ package api
 import (
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 )
 
 func TestBuildApplyPlanRejectsPanelCaddyAccessWithoutDomainEmail(t *testing.T) {
@@ -71,22 +73,40 @@ func TestBuildApplyPlanRequiresCaddySettingsForNaiveProxyInbound(t *testing.T) {
 }
 
 func TestBuildApplyPlanAcceptsNaiveProxyWithCaddySettings(t *testing.T) {
+	// Probe is stubbed so the accepted-plan contract does not depend on a
+	// host caddy binary (#846): a Valid naive plan must still carry the
+	// caddy config leg, the reload action, and the consolidated runtime —
+	// the same golden the Panel sister locks.
+	stubCaddyProbe(t, func(string) (caddycapabilities.CaddyCapabilities, error) {
+		return caddycapabilities.CaddyCapabilities{ForwardProxy: true, HTTP3: true}, nil
+	})
 	plan := BuildApplyPlan(ApplyPlanInput{
+		LiveRoot: "/etc/veil/generated",
 		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev", Domain: "vpn.example.com", DefaultAcmeEmail: "admin@example.com", NaiveUsername: "veil", NaivePassword: "secret"},
 		Inbounds: []Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true, Password: "secret"}},
 	})
 	if !plan.Valid {
 		t.Fatalf("NaiveProxy with Caddy settings should be valid: %+v", plan)
 	}
+	if !containsString(plan.Configs, "/etc/veil/generated/caddy/config.json") || !containsString(plan.Actions, "reload veil-caddy.service") || !containsString(plan.Runtimes, "veil-caddy.service") {
+		t.Fatalf("accepted naive plan missing caddy config/action/runtime: %+v", plan)
+	}
 }
 
 func TestBuildApplyPlanAcceptsNaiveProxyWithInboundCredentials(t *testing.T) {
+	stubCaddyProbe(t, func(string) (caddycapabilities.CaddyCapabilities, error) {
+		return caddycapabilities.CaddyCapabilities{ForwardProxy: true, HTTP3: true}, nil
+	})
 	plan := BuildApplyPlan(ApplyPlanInput{
+		LiveRoot: "/etc/veil/generated",
 		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev", Domain: "vpn.example.com", DefaultAcmeEmail: "admin@example.com"},
 		Inbounds: []Inbound{{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Enabled: true, NaiveUsername: "veil", NaivePassword: "secret"}},
 	})
 	if !plan.Valid {
 		t.Fatalf("NaiveProxy with inbound credentials should be valid: %+v", plan)
+	}
+	if !containsString(plan.Configs, "/etc/veil/generated/caddy/config.json") || !containsString(plan.Actions, "reload veil-caddy.service") || !containsString(plan.Runtimes, "veil-caddy.service") {
+		t.Fatalf("accepted naive plan missing caddy config/action/runtime: %+v", plan)
 	}
 }
 

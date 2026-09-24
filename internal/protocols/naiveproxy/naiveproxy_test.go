@@ -1,6 +1,7 @@
 package naiveproxy
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -341,8 +342,33 @@ func TestRenderConfigDefaultsPublicPort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderConfig error: %v", err)
 	}
-	if !strings.Contains(artifacts[0].Body, "8443") {
-		t.Errorf("expected default publicPort 8443 in JSON, got:\n%s", artifacts[0].Body)
+	// Bare Contains("8443") greens the port appearing in any field — the
+	// public port contract is the server's listen array, so decode and pin
+	// it exactly (#895).
+	var doc struct {
+		Apps struct {
+			HTTP struct {
+				Servers map[string]struct {
+					Listen []string `json:"listen"`
+				} `json:"servers"`
+			} `json:"http"`
+		} `json:"apps"`
+	}
+	if err := json.Unmarshal([]byte(artifacts[0].Body), &doc); err != nil {
+		t.Fatalf("artifact body is not JSON: %v", err)
+	}
+	found := false
+	for name, server := range doc.Apps.HTTP.Servers {
+		for _, listen := range server.Listen {
+			if listen == ":8443" {
+				found = true
+			} else {
+				t.Errorf("server %s listens on %q, want only :8443", name, listen)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("no server listens on :8443:\n%s", artifacts[0].Body)
 	}
 }
 
@@ -377,8 +403,14 @@ func TestRenderConfigInvalidPanelListenIgnored(t *testing.T) {
 		t.Fatalf("RenderConfig error: %v", err)
 	}
 	// panelCaddyRoute errors are intentionally swallowed by renderNaive.
-	if strings.Contains(artifacts[0].Body, "handle /panel") {
-		t.Errorf("body unexpectedly contains panel route with invalid panelListen:\n%s", artifacts[0].Body)
+	// The live artifact is Caddy JSON — a Caddyfile token can never appear
+	// in it, so the old "handle /panel" check was vacuous (#895). Forbid the
+	// JSON panel-route markers instead: the reverse_proxy handler, its
+	// loopback dial, and the /panel path matchers.
+	for _, marker := range []string{`"handler": "reverse_proxy"`, `"dial": "127.0.0.1:`, `"/panel`} {
+		if strings.Contains(artifacts[0].Body, marker) {
+			t.Errorf("body unexpectedly contains panel JSON marker %q with invalid panelListen:\n%s", marker, artifacts[0].Body)
+		}
 	}
 }
 

@@ -24,7 +24,9 @@ func TestHealthcheckCommandUsesContainerContract(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	}))
 	defer server.Close()
 

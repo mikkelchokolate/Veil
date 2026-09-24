@@ -52,11 +52,24 @@ func TestV1ClientViewIncludesBindingCapabilities(t *testing.T) {
 	if cap["protocol"] != "hysteria2" {
 		t.Errorf("capability protocol=%v, want hysteria2", cap["protocol"])
 	}
-	if _, ok := cap["transports"]; !ok {
-		t.Errorf("capability missing transports: %v", cap)
+	// A capability whose transports list is absent or empty is not a usable
+	// capability — the panel needs the concrete transport list.
+	transports, _ := cap["transports"].([]any)
+	if len(transports) == 0 {
+		t.Errorf("capability transports empty: %v", cap)
+	} else {
+		found := false
+		for _, tr := range transports {
+			if tr == "udp" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("capability transports %v missing the bound udp transport", transports)
+		}
 	}
-	if _, ok := cap["perClientCredentials"]; !ok {
-		t.Errorf("capability missing perClientCredentials: %v", cap)
+	if cap["perClientCredentials"] != true {
+		t.Errorf("hysteria2 perClientCredentials=%v, want true", cap["perClientCredentials"])
 	}
 }
 

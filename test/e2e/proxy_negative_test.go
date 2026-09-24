@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // TestPortCollisionPanel verifies that starting the serve command on a port
@@ -46,8 +48,9 @@ func TestPortCollisionPanel(t *testing.T) {
 	cmd.Stderr = logBuf
 
 	if err := cmd.Start(); err != nil {
-		// If it fails to even start, that is a clean exit/failure.
-		return
+		// A failure to exec the binary is a harness failure, not evidence the
+		// port collision was handled — fail rather than silently passing.
+		t.Fatalf("veil serve failed to start: %v", err)
 	}
 
 	// 3. The process should exit with an error because the port is in use
@@ -58,6 +61,12 @@ func TestPortCollisionPanel(t *testing.T) {
 	case err := <-waitErr:
 		if err == nil {
 			t.Fatalf("expected server to exit with bind error, but exited with code 0. Logs:\n%s", logBuf.String())
+		}
+		// The exit must be caused by the bind failure, not some unrelated
+		// startup error — assert the log names the address-in-use condition.
+		logs := logBuf.String()
+		if !strings.Contains(logs, "address already in use") && !strings.Contains(logs, "Only one usage of each socket address") {
+			t.Fatalf("server exited non-zero but not with a bind error. Logs:\n%s", logs)
 		}
 	case <-time.After(5 * time.Second):
 		_ = cmd.Process.Kill()
@@ -124,9 +133,22 @@ func TestPortCollisionInbound(t *testing.T) {
 	}
 }
 
-// TestBadAuthentication validates rejections for invalid tokens, invalid cookies, and CSRF token issues.
+// TestBadAuthentication validates rejections for invalid tokens, invalid
+// cookies, and CSRF enforcement on a REAL session: a valid session cookie
+// without (or with a wrong) CSRF token must get exactly 403 on a mutation,
+// while the same session with the correct CSRF token succeeds.
 func TestBadAuthentication(t *testing.T) {
-	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte("e2e-password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
+	}
+	srv := startServer(t, serverOptions{
+		token: "e2e-secret-token",
+		seedState: `{"schemaVersion":4,` +
+			`"setup":{"completed":true},` +
+			`"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com"},` +
+			`"users":[{"username":"e2e-admin","passwordHash":"` + string(passwordHash) + `","role":"admin"}]}`,
+	})
 	sessionsPath := filepath.Join(filepath.Dir(srv.statePath), "sessions.json")
 	if err := os.WriteFile(sessionsPath, []byte(`{"version":1,"sessions":[]}`), 0o600); err != nil {
 		t.Fatalf("seed empty sessions store: %v", err)
@@ -156,21 +178,73 @@ func TestBadAuthentication(t *testing.T) {
 	}
 	drain(resp)
 
-	// 3. Mutating Cookie Session without CSRF -> 403
-	// We first need to login to get a valid session cookie, but no CSRF token.
-	// Wait, we can test this by providing a session cookie and a wrong CSRF token header.
-	req, _ = http.NewRequest(http.MethodPut, srv.baseURL+"/api/settings", strings.NewReader(`{}`))
-	req.AddCookie(&http.Cookie{Name: "veil_session", Value: "some-session-id"})
-	req.Header.Set("X-CSRF-Token", "invalid-csrf-token")
+	// 3. Real login to obtain a VALID session cookie + its CSRF token.
+	req, _ = http.NewRequest(http.MethodPost, srv.baseURL+"/api/auth/login",
+		strings.NewReader(`{"username":"e2e-admin","password":"e2e-password"}`))
+	req.Header.Set("Content-Type", "application/json")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("request failed: %v", err)
+		t.Fatalf("login request failed: %v", err)
 	}
-	// It should return 401 (Unauthorized) if session cookie is invalid, or 403 (Forbidden) if session is valid but CSRF is invalid.
-	// Since "some-session-id" is invalid, it returns 401, which is also safe.
-	// But let's check: if we pass a valid token, CSRF check is bypassed (which is correct for static token).
-	if resp.StatusCode != http.StatusUnauthorized && resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("expected 401 or 403, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("login failed: %d %v", resp.StatusCode, readJSON(t, resp))
+	}
+	var sessionCookie *http.Cookie
+	for _, c := range resp.Cookies() {
+		if c.Name == "veil_session" {
+			sessionCookie = c
+		}
+	}
+	loginBody := readJSON(t, resp)
+	if sessionCookie == nil || sessionCookie.Value == "" {
+		t.Fatalf("login did not set veil_session cookie: %+v", resp.Header)
+	}
+	csrfToken, _ := loginBody["csrfToken"].(string)
+	if csrfToken == "" {
+		t.Fatalf("login response missing csrfToken: %v", loginBody)
+	}
+
+	settingsBody := `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com"}`
+	putSettings := func(withCSRF string) *http.Response {
+		req, _ := http.NewRequest(http.MethodPut, srv.baseURL+"/api/settings", strings.NewReader(settingsBody))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(sessionCookie)
+		if withCSRF != "" {
+			req.Header.Set("X-CSRF-Token", withCSRF)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("settings request failed: %v", err)
+		}
+		return resp
+	}
+
+	// 3a. Valid session cookie, NO CSRF header -> exactly 403.
+	resp = putSettings("")
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("valid session without CSRF: expected 403, got %d (%v)", resp.StatusCode, readJSON(t, resp))
+	}
+	drain(resp)
+
+	// 3b. Valid session cookie, WRONG CSRF token -> exactly 403.
+	resp = putSettings("invalid-csrf-token")
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("valid session with wrong CSRF: expected 403, got %d (%v)", resp.StatusCode, readJSON(t, resp))
+	}
+	drain(resp)
+
+	// 3c. Valid session cookie + the real CSRF token -> the mutation succeeds.
+	resp = putSettings(csrfToken)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("valid session with correct CSRF: expected 200, got %d (%v)", resp.StatusCode, readJSON(t, resp))
+	}
+	drain(resp)
+
+	// 3d. The static bearer token is not a cookie session, so CSRF does not
+	// apply to it — the same mutation succeeds without any CSRF header.
+	resp = srv.do(http.MethodPut, "/api/settings", settingsBody)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("bearer-token mutation without CSRF: expected 200, got %d (%v)", resp.StatusCode, readJSON(t, resp))
 	}
 	drain(resp)
 }

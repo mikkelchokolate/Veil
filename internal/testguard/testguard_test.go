@@ -1,6 +1,9 @@
 package testguard
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestCheckPathOnlyReportsProductionLocations(t *testing.T) {
 	var got []string
@@ -18,17 +21,20 @@ func TestCheckPathOnlyReportsProductionLocations(t *testing.T) {
 		t.Fatalf("non-production paths triggered guard: %v", got)
 	}
 
-	for _, path := range []string{
+	production := []string{
 		"/etc/veil",
 		"/etc/veil/generated/caddy/config.json",
 		"/var/lib/veil/state.json",
 		"/usr/local/bin/veil",
 		"/run/veil/helper.sock",
-	} {
+	}
+	for _, path := range production {
 		CheckPath(path)
 	}
-	if len(got) != 5 {
-		t.Fatalf("production paths reported = %d, want 5: %v", len(got), got)
+	// Exact slice equality: every production path reported exactly once, in
+	// order — a guard that double-reports or reports the wrong path must fail.
+	if !reflect.DeepEqual(got, production) {
+		t.Fatalf("production paths reported = %v, want %v", got, production)
 	}
 }
 
