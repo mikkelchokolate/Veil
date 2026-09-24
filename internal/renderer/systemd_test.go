@@ -476,3 +476,65 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 		t.Fatalf("veil-mieru.service missing helper/state InaccessiblePaths:\n%s", mieru)
 	}
 }
+
+// #814: lock the exact address-family and capability lines per unit. The
+// boundary this guards: AF_NETLINK is required only by runtimes that touch
+// netlink (olcrtc, sing-box/warp for TUN/routing, the root helper for ufw and
+// tc); every other unit must stay without it. Likewise the helper is the only
+// unit carrying CAP_NET_ADMIN/CAP_NET_RAW as ambient, and the panel must carry
+// none at all.
+func TestRuntimeUnitsLockExactAddressFamiliesAndCapabilities(t *testing.T) {
+	units := RenderSystemdUnits(SystemdConfig{})
+
+	type sandboxWant struct {
+		raf     string
+		bounds  string
+		ambient string // empty means the unit must not set AmbientCapabilities at all
+	}
+	want := map[string]sandboxWant{
+		UnitVeil:          {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6", bounds: "CapabilityBoundingSet=\n", ambient: "AmbientCapabilities=\n"},
+		UnitHelperService: {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK", bounds: "CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_NET_ADMIN CAP_NET_RAW\n", ambient: "AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW\n"},
+		UnitCaddy:         {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6", bounds: "CapabilityBoundingSet=CAP_NET_BIND_SERVICE\n", ambient: "AmbientCapabilities=CAP_NET_BIND_SERVICE\n"},
+		UnitHysteria2:     {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6", bounds: "CapabilityBoundingSet=CAP_NET_BIND_SERVICE\n", ambient: "AmbientCapabilities=CAP_NET_BIND_SERVICE\n"},
+		UnitOlcrtc:        {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK", bounds: "CapabilityBoundingSet=CAP_NET_BIND_SERVICE\n", ambient: "AmbientCapabilities=CAP_NET_BIND_SERVICE\n"},
+		UnitWarp:          {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK", bounds: "CapabilityBoundingSet=CAP_NET_BIND_SERVICE\n", ambient: "AmbientCapabilities=CAP_NET_BIND_SERVICE\n"},
+		UnitMieru:         {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6", bounds: "CapabilityBoundingSet=CAP_NET_BIND_SERVICE\n", ambient: "AmbientCapabilities=CAP_NET_BIND_SERVICE\n"},
+		UnitBackupService: {raf: "RestrictAddressFamilies=AF_UNIX", bounds: "CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH\n"},
+	}
+	for name, expected := range want {
+		body := units[name]
+		if body == "" {
+			t.Fatalf("missing unit %s", name)
+		}
+		if !strings.Contains(body, expected.raf+"\n") {
+			t.Errorf("%s missing exact line %q:\n%s", name, expected.raf, body)
+		}
+		if !strings.Contains(body, expected.bounds) {
+			t.Errorf("%s missing exact line %q:\n%s", name, expected.bounds, body)
+		}
+		if expected.ambient == "" {
+			if strings.Contains(body, "AmbientCapabilities=") {
+				t.Errorf("%s must not grant AmbientCapabilities:\n%s", name, body)
+			}
+		} else if !strings.Contains(body, expected.ambient) {
+			t.Errorf("%s missing exact line %q:\n%s", name, expected.ambient, body)
+		}
+		// Singleton guarantees: a duplicated RAF or bounding-set line would
+		// silently widen or narrow the sandbox depending on ordering.
+		if n := countSystemdDirective(body, "RestrictAddressFamilies"); n != 1 {
+			t.Errorf("%s has %d RestrictAddressFamilies lines, want exactly 1", name, n)
+		}
+		if n := countSystemdDirective(body, "CapabilityBoundingSet"); n != 1 {
+			t.Errorf("%s has %d CapabilityBoundingSet lines, want exactly 1", name, n)
+		}
+	}
+	// Only netlink consumers may carry AF_NETLINK — catching a unit that grew
+	// it without being added to the table above.
+	for name, body := range units {
+		if strings.Contains(body, "AF_NETLINK") {
+			if _, known := want[name]; !known || !strings.Contains(want[name].raf, "AF_NETLINK") {
+				t.Errorf("%s unexpectedly grants AF_NETLINK:\n%s", name, body)
+			}
+		}
+	}
+}

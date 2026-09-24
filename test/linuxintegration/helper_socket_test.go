@@ -20,7 +20,13 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
-func TestIntegrationHelperSocketAuthenticatesPeerAndDispatches(t *testing.T) {
+// TestIntegrationHelperSocketAcceptsAllowedUIDAndDispatches covers UID-policy
+// acceptance and dispatch only — the veil.service unit binding
+// (PeerPolicy.AllowedUnit) cannot be exercised from a test process that is not
+// inside that cgroup; the unit-boundary rejection path is covered by
+// TestIntegrationHelperSocketRejectsProxyUID and the cgroup parser tests in
+// internal/privileged.
+func TestIntegrationHelperSocketAcceptsAllowedUIDAndDispatches(t *testing.T) {
 	socketPath := filepath.Join(t.TempDir(), "helper.sock")
 	var calls atomic.Int32
 	server := privileged.NewServer(privileged.NewLocalAdapter(privileged.Policy{

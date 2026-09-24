@@ -141,18 +141,11 @@ describe("InboundsPage create payload", () => {
 		expect(body?.port).toBe(20001);
 		expect(body?.naiveUsername).toBe("u1");
 		expect(body?.fallbackRoot).toBe("/srv/custom");
-		expect(
-			fields?.publicPort === undefined || fields?.publicPort === 20001,
-		).toBe(true);
-		expect(fields?.publicPort).not.toBe(443);
-		expect(
-			fields?.naiveUsername === undefined || fields?.naiveUsername === "u1",
-		).toBe(true);
-		expect(fields?.naiveUsername).not.toBe("veil");
-		expect(
-			fields?.fallbackRoot === undefined ||
-				fields?.fallbackRoot === "/srv/custom",
-		).toBe(true);
+		// #850: the dual copy is exact — schema-keyed flat values must be
+		// echoed into protocolFields, never omitted or replaced by defaults.
+		expect(fields?.publicPort).toBe(20001);
+		expect(fields?.naiveUsername).toBe("u1");
+		expect(fields?.fallbackRoot).toBe("/srv/custom");
 	});
 
 	it("does not overwrite a live Hysteria2 masquerade with the schema default", async () => {
@@ -200,11 +193,8 @@ describe("InboundsPage create payload", () => {
 		const body = puts[0];
 		const fields = body?.protocolFields as Record<string, unknown> | undefined;
 		expect(body?.masqueradeURL).toBe("https://live.example");
-		expect(
-			fields?.masqueradeURL === undefined ||
-				fields?.masqueradeURL === "https://live.example",
-		).toBe(true);
-		expect(fields?.masqueradeURL).not.toBe("https://example.com");
+		// #850: exact dual copy — the live value, never the schema default.
+		expect(fields?.masqueradeURL).toBe("https://live.example");
 	});
 
 	it("sends NaiveProxy publicPort from Port instead of schema 443", async () => {
@@ -234,10 +224,8 @@ describe("InboundsPage create payload", () => {
 		const body = posts[0];
 		const fields = body?.protocolFields as Record<string, unknown> | undefined;
 		expect(body?.port).toBe(20001);
-		expect(
-			fields?.publicPort === undefined || fields?.publicPort === 20001,
-		).toBe(true);
-		expect(fields?.publicPort).not.toBe(443);
+		// #850: exact dual copy — publicPort mirrors Port, not the schema 443.
+		expect(fields?.publicPort).toBe(20001);
 	});
 
 	it("prefills new NaiveProxy inbounds from settings.defaultInboundPublicPort", async () => {
@@ -271,10 +259,8 @@ describe("InboundsPage create payload", () => {
 		const body = posts[0];
 		const fields = body?.protocolFields as Record<string, unknown> | undefined;
 		expect(body?.port).toBe(8443);
-		expect(
-			fields?.publicPort === undefined || fields?.publicPort === 8443,
-		).toBe(true);
-		expect(fields?.publicPort).not.toBe(443);
+		// #850: exact dual copy — the settings-derived port, not the schema 443.
+		expect(fields?.publicPort).toBe(8443);
 	});
 
 	it("does not treat a failed attached-clients fetch as none", async () => {

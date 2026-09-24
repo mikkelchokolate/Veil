@@ -3,6 +3,7 @@ package caddyadmin
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -18,8 +19,16 @@ func TestLoadConfigRejectsAdminStateWithDifferentDigest(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	if err := NewClient(srv.URL).LoadConfig([]byte(`{"apps":{}}`)); err == nil {
+	err := NewClient(srv.URL).LoadConfig([]byte(`{"apps":{}}`))
+	if err == nil {
 		t.Fatal("HTTP 200 was accepted without proving active Caddy config digest")
+	}
+	// The failure must be the digest mismatch, not a transport/decode error.
+	if !strings.Contains(err.Error(), "caddy active config digest mismatch") {
+		t.Fatalf("expected digest mismatch error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "expected") || !strings.Contains(err.Error(), "observed") {
+		t.Fatalf("digest mismatch error must name expected/observed digests, got %v", err)
 	}
 }
 

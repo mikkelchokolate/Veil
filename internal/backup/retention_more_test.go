@@ -132,3 +132,52 @@ func TestPruneArchivesRemoveError(t *testing.T) {
 		t.Fatalf("expected remove error, got %v", err)
 	}
 }
+
+// Regression for #965: when a delete fails mid-prune, the archives that were
+// already removed must still be reported — and the failed archive must NOT be
+// counted as deleted.
+func TestPruneArchivesReportsPartialDeletionOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	// Newest-first order: the newest archive is deleted first, then the
+	// removal of the middle one fails.
+	names := []string{
+		"veil_backup_20260301_120000.tar.gz",
+		"veil_backup_20260201_120000.tar.gz",
+		"veil_backup_20260101_120000.tar.gz",
+	}
+	for _, name := range names {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	orig := retentionRemove
+	defer func() { retentionRemove = orig }()
+	removals := 0
+	retentionRemove = func(path string) error {
+		removals++
+		if removals == 2 {
+			return errors.New("injected remove error")
+		}
+		return os.Remove(path)
+	}
+
+	result, err := PruneArchives(dir, RetentionPolicy{}, false)
+	if err == nil || !strings.Contains(err.Error(), "injected remove error") {
+		t.Fatalf("expected remove error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), names[1]) {
+		t.Fatalf("error should name the archive whose removal failed, got %v", err)
+	}
+	// Only the archive actually removed before the failure is reported deleted;
+	// the failed name and everything after it are not.
+	if len(result.Deleted) != 1 || result.Deleted[0] != names[0] {
+		t.Fatalf("partial prune deleted = %v, want [%s]", result.Deleted, names[0])
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, names[0])); !os.IsNotExist(statErr) {
+		t.Fatalf("deleted archive %s still present (stat err=%v)", names[0], statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, names[1])); statErr != nil {
+		t.Fatalf("failed archive %s should remain: %v", names[1], statErr)
+	}
+}

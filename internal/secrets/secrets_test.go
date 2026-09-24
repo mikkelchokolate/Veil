@@ -86,6 +86,17 @@ func TestDecryptPlaintextPassthrough(t *testing.T) {
 			t.Errorf("passthrough: got %q, want %q", decrypted, plain)
 		}
 	}
+
+	// Passthrough applies only to values without the ve1: marker — a marked
+	// value is ciphertext, and malformed ciphertext must error, not echo.
+	// ("ve1:" alone is intentionally plaintext: IsEncrypted requires content
+	// after the prefix.) Cover both failure seams: invalid base64 and valid
+	// base64 that decodes below MinCiphertextLen.
+	for _, bad := range []string{"ve1:not-real-ciphertext", "ve1:QQ"} {
+		if _, err := cipher.Decrypt(bad); err == nil {
+			t.Errorf("Decrypt(%q): malformed ciphertext must be rejected, not passed through", bad)
+		}
+	}
 }
 
 func TestDecryptEmptyString(t *testing.T) {
@@ -307,32 +318,23 @@ func TestEncryptProducesDifferentCiphertexts(t *testing.T) {
 	}
 
 	// Both should decrypt to the same plaintext
-	d1, _ := cipher.Decrypt(enc1)
-	d2, _ := cipher.Decrypt(enc2)
+	d1, err := cipher.Decrypt(enc1)
+	if err != nil {
+		t.Fatalf("Decrypt enc1: %v", err)
+	}
+	d2, err := cipher.Decrypt(enc2)
+	if err != nil {
+		t.Fatalf("Decrypt enc2: %v", err)
+	}
 	if d1 != plain || d2 != plain {
 		t.Errorf("decryption mismatch: %q, %q", d1, d2)
 	}
 }
 
-func TestNewCipherInvalidKeyLength(t *testing.T) {
-	tests := [][]byte{
-		nil,
-		make([]byte, 0),
-		make([]byte, 16), // AES-128
-		make([]byte, 31),
-		make([]byte, 33),
-	}
-	for _, k := range tests {
-		_, err := NewCipher([32]byte{})
-		_ = k // placeholder
-		if err != nil {
-			// Expected for invalid keys
-			continue
-		}
-	}
-	// Actually test with a 31-byte key (can't pass [31]byte to [32]byte)
-	// NewCipher takes [32]byte, so compile-time enforced. Good enough.
-}
+// NewCipher takes [KeySize]byte, so invalid key lengths are compile-time
+// enforced — there is no failure-capable API to test here. Runtime key-length
+// rejection is covered by TestLoadOrCreateKeyWrongLength against a real key
+// file on disk.
 
 func TestDecryptInvalidBase64(t *testing.T) {
 	var key [32]byte

@@ -51,11 +51,20 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
 		if !errors.As(err, &operationError) {
 			operationError = newError(ErrorOperationFailed, err.Error())
 		}
-		s.writeResponse(conn, ResponseEnvelope{
+		envelope := ResponseEnvelope{
 			Version:   ProtocolVersion,
 			RequestID: request.RequestID,
 			Error:     operationError,
-		})
+		}
+		// Operations that produce partial evidence (e.g. a prune that already
+		// deleted archives before failing) still return it with the error so
+		// the caller can report exactly what happened.
+		if result != nil {
+			if rawResult, marshalErr := json.Marshal(result); marshalErr == nil {
+				envelope.Result = rawResult
+			}
+		}
+		s.writeResponse(conn, envelope)
 		return
 	}
 	rawResult, err := json.Marshal(result)

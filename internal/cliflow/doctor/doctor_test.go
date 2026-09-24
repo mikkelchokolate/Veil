@@ -20,6 +20,22 @@ func TestReadinessTreatsProtocolRuntimesAsOptional(t *testing.T) {
 	if !summary.Ready {
 		t.Fatalf("summary should be ready when only optional commands are missing: %+v", summary)
 	}
+	// Lock the protocol-runtime set: every optional runtime must be listed and
+	// flagged optional so a missing one can never flip readiness again.
+	wantOptional := map[string]bool{
+		"caddy": false, "hysteria": false, "mita": false,
+		"olcrtc": false, "sing-box": false, "ufw": false,
+	}
+	for _, command := range summary.Commands {
+		if _, ok := wantOptional[command.Name]; ok {
+			wantOptional[command.Name] = command.Optional && !command.Present
+		}
+	}
+	for name, seen := range wantOptional {
+		if !seen {
+			t.Fatalf("optional runtime %q missing, mislabeled, or unexpectedly present: %+v", name, summary.Commands)
+		}
+	}
 }
 
 func TestReadinessReportsNotReadyWhenRequiredMissing(t *testing.T) {

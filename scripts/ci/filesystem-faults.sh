@@ -23,7 +23,7 @@ ci_run filesystem-routing-publication \
   go test ./internal/generatedconfig -run '^TestRoutingSourceMultiFileReplacementIsTransactional$' -count=1 -v -timeout=60s
 ci_assert_test_passed "${CI_ARTIFACT_DIR}/filesystem-routing-publication.log" TestRoutingSourceMultiFileReplacementIsTransactional
 ci_run filesystem-iterator-error \
-  go test ./internal/storage -run '^TestMigrationHistoryChecksIteratorErrorBeforeSuccess$' -count=1 -v -timeout=30s
-ci_assert_test_passed "${CI_ARTIFACT_DIR}/filesystem-iterator-error.log" TestMigrationHistoryChecksIteratorErrorBeforeSuccess
+  go test ./internal/storage -run '^TestMigrationHistoryIteratorErrorFailsMigrate$' -count=1 -v -timeout=30s
+ci_assert_test_passed "${CI_ARTIFACT_DIR}/filesystem-iterator-error.log" TestMigrationHistoryIteratorErrorFailsMigrate
 
 ci_log "filesystem-faults job passed"

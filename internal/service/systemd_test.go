@@ -27,8 +27,13 @@ func TestSystemdApplyPlanForManagedUnits(t *testing.T) {
 
 func TestSystemdApplyPlanIgnoresEmptyUnits(t *testing.T) {
 	plan := SystemdApplyPlan([]string{"", "veil.service"})
-	if len(plan) != 3 {
-		t.Fatalf("expected daemon-reload + enable + restart, got %#v", plan)
+	want := []SystemdAction{
+		{Command: "systemctl", Args: []string{"daemon-reload"}},
+		{Command: "systemctl", Args: []string{"enable", "veil.service"}},
+		{Command: "systemctl", Args: []string{"restart", "veil.service"}},
+	}
+	if !reflect.DeepEqual(plan, want) {
+		t.Fatalf("expected daemon-reload + enable + restart veil.service:\n got: %#v\nwant: %#v", plan, want)
 	}
 }
 
