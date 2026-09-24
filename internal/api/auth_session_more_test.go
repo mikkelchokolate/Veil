@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -40,6 +41,31 @@ func TestHandleUsersRouteAdminOperations(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	// A bare 201 is not enough: the response must echo the created user and
+	// the state must actually contain bob as a viewer (#838).
+	var created struct {
+		Username string `json:"username"`
+		Role     string `json:"role"`
+		Locale   string `json:"locale"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
+		t.Fatalf("create body is not JSON: %v (%s)", err, rec.Body.String())
+	}
+	if created.Username != "bob" || created.Role != "viewer" || created.Locale != "en" {
+		t.Fatalf("create body wrong: %+v", created)
+	}
+	bobFound := false
+	for _, user := range state.users {
+		if user.Username == "bob" {
+			bobFound = true
+			if user.Role != "viewer" || user.PasswordHash == "" {
+				t.Fatalf("created user missing role/hash: %+v", user)
+			}
+		}
+	}
+	if !bobFound {
+		t.Fatal("POST returned 201 but bob is not in state")
+	}
 
 	forbidden := httptest.NewRequest(http.MethodGet, "/api/users", nil)
 	forbidden = forbidden.WithContext(context.WithValue(forbidden.Context(), contextKeyRole, "viewer"))
@@ -47,6 +73,21 @@ func TestHandleUsersRouteAdminOperations(t *testing.T) {
 	state.handleUsersRoute(rec, forbidden)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("viewer status=%d", rec.Code)
+	}
+
+	// Viewer must also be denied on the mutation path, not just reads.
+	viewerPost := httptest.NewRequest(http.MethodPost, "/api/users", strings.NewReader(`{"username":"mallory","password":"a-long-password","role":"admin"}`))
+	viewerPost.Header.Set("Content-Type", "application/json")
+	viewerPost = viewerPost.WithContext(context.WithValue(viewerPost.Context(), contextKeyRole, "viewer"))
+	rec = httptest.NewRecorder()
+	state.handleUsersRoute(rec, viewerPost)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("viewer POST status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	for _, user := range state.users {
+		if user.Username == "mallory" {
+			t.Fatal("viewer POST created a user despite 403")
+		}
 	}
 }
 
@@ -87,27 +128,75 @@ func TestHandleUserByNameRoute(t *testing.T) {
 		},
 	}
 
+	// Exercise the production item route (handleReliableUserItemRoute →
+	// handleAtomicUserUpdate / handleAtomicUserDelete), not the legacy
+	// handleUserByNameRoute the mux no longer serves (#838).
 	put := httptest.NewRequest(http.MethodPut, "/api/users/alice", strings.NewReader(`{"role":"admin","locale":"ru"}`))
 	put.Header.Set("Content-Type", "application/json")
 	put = put.WithContext(context.WithValue(put.Context(), contextKeyRole, "admin"))
 	rec := httptest.NewRecorder()
-	state.handleUserByNameRoute(rec, put)
+	state.handleReliableUserItemRoute(rec, put)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PUT status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	// The update response carries the user golden, not just a 200.
+	var updated struct {
+		Username string `json:"username"`
+		Role     string `json:"role"`
+		Locale   string `json:"locale"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&updated); err != nil {
+		t.Fatalf("PUT body is not JSON: %v (%s)", err, rec.Body.String())
+	}
+	if updated.Username != "alice" || updated.Role != "admin" || updated.Locale != "ru" {
+		t.Fatalf("PUT body wrong: %+v", updated)
+	}
+	for _, user := range state.users {
+		if user.Username == "alice" && (user.Role != "admin" || user.Locale != "ru") {
+			t.Fatalf("state not updated by PUT: %+v", user)
+		}
+	}
+
+	// A viewer must be denied before the mutation runs.
+	viewerPut := httptest.NewRequest(http.MethodPut, "/api/users/bob", strings.NewReader(`{"role":"admin"}`))
+	viewerPut.Header.Set("Content-Type", "application/json")
+	viewerPut = viewerPut.WithContext(context.WithValue(viewerPut.Context(), contextKeyRole, "viewer"))
+	rec = httptest.NewRecorder()
+	state.handleReliableUserItemRoute(rec, viewerPut)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("viewer PUT status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	for _, user := range state.users {
+		if user.Username == "bob" && user.Role != "viewer" {
+			t.Fatalf("viewer PUT mutated bob: %+v", user)
+		}
 	}
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/users/bob", nil)
 	deleteReq = deleteReq.WithContext(context.WithValue(deleteReq.Context(), contextKeyRole, "admin"))
 	rec = httptest.NewRecorder()
-	state.handleUserByNameRoute(rec, deleteReq)
+	state.handleReliableUserItemRoute(rec, deleteReq)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("DELETE status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	for _, user := range state.users {
+		if user.Username == "bob" {
+			t.Fatal("bob still present after 204 delete")
+		}
+	}
+
+	viewerDelete := httptest.NewRequest(http.MethodDelete, "/api/users/alice", nil)
+	viewerDelete = viewerDelete.WithContext(context.WithValue(viewerDelete.Context(), contextKeyRole, "viewer"))
+	rec = httptest.NewRecorder()
+	state.handleReliableUserItemRoute(rec, viewerDelete)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("viewer DELETE status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	lastAdmin := httptest.NewRequest(http.MethodDelete, "/api/users/alice", nil)
 	lastAdmin = lastAdmin.WithContext(context.WithValue(lastAdmin.Context(), contextKeyRole, "admin"))
 	rec = httptest.NewRecorder()
-	state.handleUserByNameRoute(rec, lastAdmin)
+	state.handleReliableUserItemRoute(rec, lastAdmin)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("last admin DELETE status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -115,7 +204,7 @@ func TestHandleUserByNameRoute(t *testing.T) {
 	notFound := httptest.NewRequest(http.MethodGet, "/api/users/bob", nil)
 	notFound = notFound.WithContext(context.WithValue(notFound.Context(), contextKeyRole, "admin"))
 	rec = httptest.NewRecorder()
-	state.handleUserByNameRoute(rec, notFound)
+	state.handleReliableUserItemRoute(rec, notFound)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET status=%d", rec.Code)
 	}
@@ -127,10 +216,13 @@ func TestHandleAuthSessions(t *testing.T) {
 	viewerSession, _ := registry.Create(SessionCreateInput{Username: "bob", Role: "viewer"})
 	state := &managementState{sessions: registry}
 
+	// Exercise the production handler the mux registers
+	// (handlePersistentAuthSessions), not the legacy in-memory-only path —
+	// revoke must persist and the session must actually be gone (#827).
 	list := httptest.NewRequest(http.MethodGet, "/api/auth/sessions", nil)
 	list.AddCookie(&http.Cookie{Name: "veil_session", Value: adminSession.Token})
 	rec := httptest.NewRecorder()
-	state.handleAuthSessions(rec, list)
+	state.handlePersistentAuthSessions(rec, list)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -142,24 +234,42 @@ func TestHandleAuthSessions(t *testing.T) {
 	deleteReq.Header.Set("Content-Type", "application/json")
 	deleteReq.AddCookie(&http.Cookie{Name: "veil_session", Value: adminSession.Token})
 	rec = httptest.NewRecorder()
-	state.handleAuthSessions(rec, deleteReq)
+	state.handlePersistentAuthSessions(rec, deleteReq)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"success":true`) {
+		t.Fatalf("delete body missing success=true: %s", rec.Body.String())
+	}
+	// The revoked session must be gone from the registry — a StatusOK without
+	// the deletion is a false green.
+	if _, ok := registry.Get(viewerSession.Token); ok {
+		t.Fatal("revoked viewer session is still in the registry")
 	}
 
 	missingID := httptest.NewRequest(http.MethodDelete, "/api/auth/sessions", strings.NewReader(`{"id":" "}`))
 	missingID.Header.Set("Content-Type", "application/json")
 	missingID.AddCookie(&http.Cookie{Name: "veil_session", Value: adminSession.Token})
 	rec = httptest.NewRecorder()
-	state.handleAuthSessions(rec, missingID)
+	state.handlePersistentAuthSessions(rec, missingID)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("missing id status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// Deleting an unknown id must surface 404, not a soft 200.
+	unknownID := httptest.NewRequest(http.MethodDelete, "/api/auth/sessions", strings.NewReader(`{"id":"no-such-session"}`))
+	unknownID.Header.Set("Content-Type", "application/json")
+	unknownID.AddCookie(&http.Cookie{Name: "veil_session", Value: adminSession.Token})
+	rec = httptest.NewRecorder()
+	state.handlePersistentAuthSessions(rec, unknownID)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown id status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	viewer := httptest.NewRequest(http.MethodGet, "/api/auth/sessions", nil)
 	viewer.AddCookie(&http.Cookie{Name: "veil_session", Value: viewerSession.Token})
 	rec = httptest.NewRecorder()
-	state.handleAuthSessions(rec, viewer)
+	state.handlePersistentAuthSessions(rec, viewer)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("viewer status=%d", rec.Code)
 	}
@@ -374,6 +484,9 @@ func TestHandleLoginFallbackAdmin(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"role":"admin"`) {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	// Even the legacy handler owes the session contract: a bare 200 without
+	// the cookie/csrfToken pair is not a usable login (#827).
+	assertLoginSetsSessionCookieAndCSRF(t, rec)
 }
 
 func TestHandleLogout(t *testing.T) {
@@ -394,6 +507,13 @@ func TestHandleLogout(t *testing.T) {
 	state.handleLogout(rec, post)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	// Logout must actually expire the cookie: empty value + negative MaxAge
+	// (#827) — a 200 without the clear-cookie header leaves the browser
+	// holding a dead session.
+	expired := sessionSetCookie(rec)
+	if expired == nil || expired.Value != "" || expired.MaxAge >= 0 {
+		t.Fatalf("logout did not emit an expiring veil_session cookie: %+v", expired)
 	}
 	if _, ok := registry.Get(session.Token); ok {
 		t.Fatal("session was not revoked")

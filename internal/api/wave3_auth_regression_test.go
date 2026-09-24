@@ -84,9 +84,11 @@ func TestSuccessfulLoginClearsProgressiveBackoff(t *testing.T) {
 		t.Fatalf("first failure status=%d", rec.Code)
 	}
 	now = now.Add(2 * time.Second)
-	if rec := post("correct-password"); rec.Code != http.StatusOK {
+	rec := post("correct-password")
+	if rec.Code != http.StatusOK {
 		t.Fatalf("success status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	assertLoginSetsSessionCookieAndCSRF(t, rec)
 	state.mu.Lock()
 	// The backoff map is keyed by clientIP|username (#667): this request
 	// came from 192.0.2.10.
@@ -141,6 +143,7 @@ func TestLoginBackoffIsScopedToClientIP(t *testing.T) {
 	if victim.Code != http.StatusOK {
 		t.Fatalf("victim login from another IP must not inherit the attacker's throttle, status=%d body=%s", victim.Code, victim.Body.String())
 	}
+	assertLoginSetsSessionCookieAndCSRF(t, victim)
 
 	// And the attacker stays throttled on their own address.
 	if rec := post("198.51.100.10:1001", "correct-password"); rec.Code != http.StatusTooManyRequests {

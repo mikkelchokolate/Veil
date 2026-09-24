@@ -21,20 +21,20 @@ func TestCheckPathOnlyReportsProductionLocations(t *testing.T) {
 		t.Fatalf("non-production paths triggered guard: %v", got)
 	}
 
-	wantPaths := []string{
+	production := []string{
 		"/etc/veil",
 		"/etc/veil/generated/caddy/config.json",
 		"/var/lib/veil/state.json",
 		"/usr/local/bin/veil",
 		"/run/veil/helper.sock",
 	}
-	for _, path := range wantPaths {
+	for _, path := range production {
 		CheckPath(path)
 	}
-	// Lock the reported set itself, not just its length — a guard reporting
-	// five WRONG paths would still green a len check (#898).
-	if !reflect.DeepEqual(got, wantPaths) {
-		t.Fatalf("production paths reported = %v, want %v", got, wantPaths)
+	// Exact slice equality: every production path reported exactly once, in
+	// order — a guard that double-reports or reports the wrong path must fail.
+	if !reflect.DeepEqual(got, production) {
+		t.Fatalf("production paths reported = %v, want %v", got, production)
 	}
 }
 

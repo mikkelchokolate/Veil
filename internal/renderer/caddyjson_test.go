@@ -639,15 +639,29 @@ func TestRenderCaddyJSONAllowsNaiveTCPWithForwardProxy(t *testing.T) {
 				Domain:      "p.example.com",
 				InboundName: "naive-1",
 				Transport:   "tcp",
+				NaiveUsers:  []caddyassembly.CaddyNaiveUser{{Username: "u", Password: "p"}},
 			},
 		},
 		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
 			"p.example.com": {Domain: "p.example.com", Email: "a@example.com"},
 		},
 	}
-	_, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
 	if err != nil {
 		t.Fatalf("expected success for tcp transport with forward_proxy, got %v", err)
+	}
+	// err==nil alone greens a config that dropped forward_proxy entirely —
+	// pin the handler and the double-base64 Basic credential (#895).
+	wantCred := base64.StdEncoding.EncodeToString([]byte(base64.StdEncoding.EncodeToString([]byte("u:p"))))
+	var doc map[string]any
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("rendered config is not JSON: %v", err)
+	}
+	if !strings.Contains(string(data), `"handler": "forward_proxy"`) {
+		t.Fatalf("naive server missing forward_proxy handler:\n%s", data)
+	}
+	if !strings.Contains(string(data), `"auth_credentials": [`) || !strings.Contains(string(data), `"`+wantCred+`"`) {
+		t.Fatalf("forward_proxy missing naive auth_credentials %q:\n%s", wantCred, data)
 	}
 }
 

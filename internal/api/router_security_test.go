@@ -1,7 +1,6 @@
 package api
 
 import (
-	"crypto/subtle"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -232,6 +231,19 @@ func TestRouterUsersEndpointAcceptsStaticAdminToken(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected static admin token to access users, got %d: %s", w.Code, w.Body.String())
 	}
+	// A bare 200 could be any route — the body must be the users list (#838).
+	var users []struct {
+		Username string `json:"username"`
+		Role     string `json:"role"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&users); err != nil {
+		t.Fatalf("users response is not a JSON list: %v (%s)", err, w.Body.String())
+	}
+	for _, user := range users {
+		if user.Username == "" || (user.Role != "admin" && user.Role != "viewer") {
+			t.Fatalf("users list contains malformed entry: %+v", user)
+		}
+	}
 }
 
 func TestAuthSessionsEndpointListsAndRevokesSessions(t *testing.T) {
@@ -404,12 +416,46 @@ func TestAuthLoginLogoutStatusEndpoints(t *testing.T) {
 }
 
 func TestConstantTimeCompareCSRF(t *testing.T) {
-	token := "correct-token"
-	if subtle.ConstantTimeCompare([]byte(token), []byte("wrong-token")) == 1 {
-		t.Fatalf("expected comparison to fail")
+	// The production CSRF gate is SessionRegistry.ValidateCSRF: it hashes the
+	// presented token and constant-time-compares against the stored hash.
+	// Exercising stdlib subtle.ConstantTimeCompare on raw strings proves
+	// nothing about that path (#827).
+	registry, err := NewSessionRegistry("")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if subtle.ConstantTimeCompare([]byte(token), []byte("correct-token")) != 1 {
-		t.Fatalf("expected comparison to succeed")
+	sess, err := registry.Create(SessionCreateInput{Username: "alice", Role: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	csrf, _, err := registry.EnsureCSRFPersisted(sess.Token)
+	if err != nil || csrf == "" {
+		t.Fatalf("ensure csrf: %v", err)
+	}
+
+	if !registry.ValidateCSRF(sess.Token, csrf) {
+		t.Fatal("ValidateCSRF rejected the session's own CSRF token")
+	}
+	if registry.ValidateCSRF(sess.Token, "wrong-csrf-token") {
+		t.Fatal("ValidateCSRF accepted a wrong CSRF token")
+	}
+	if registry.ValidateCSRF(sess.Token, "") {
+		t.Fatal("ValidateCSRF accepted an empty token")
+	}
+	if registry.ValidateCSRF("not-a-session", csrf) {
+		t.Fatal("ValidateCSRF accepted an unknown session token")
+	}
+	// A different session's CSRF token must not validate against this session.
+	other, err := registry.Create(SessionCreateInput{Username: "bob", Role: "viewer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherCSRF, _, err := registry.EnsureCSRFPersisted(other.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registry.ValidateCSRF(sess.Token, otherCSRF) {
+		t.Fatal("ValidateCSRF accepted another session's CSRF token")
 	}
 }
 

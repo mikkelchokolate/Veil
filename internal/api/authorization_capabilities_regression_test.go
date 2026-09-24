@@ -83,6 +83,9 @@ func productionAuthorizationMatrix() []routeAuthorizationExpectation {
 		{http.MethodGet, "/api/apply/jobs/job-1", false, true, "viewer metadata"},
 		{http.MethodPost, "/api/apply/jobs/job-1/retry", false, false, "admin mutation"},
 		{http.MethodPost, "/api/apply/reconcile", false, false, "admin mutation"},
+		{http.MethodPost, "/api/apply/rollback", false, false, "admin mutation"},
+		{http.MethodPost, "/api/protocols/hysteria2/room", false, false, "admin secret material"},
+		{http.MethodGet, "/api/backups/example.tar.age/verify", false, false, "no GET verify route: falls back to the admin gate"},
 		{http.MethodPost, "/api/validation", false, false, "admin metadata"},
 		{http.MethodPost, "/api/apply/plan", false, true, "viewer diagnostic"},
 		{http.MethodGet, "/api/apply/history", false, true, "viewer metadata"},
@@ -108,6 +111,7 @@ func productionAuthorizationMatrix() []routeAuthorizationExpectation {
 		{http.MethodPatch, "/api/v1/clients/client-1", false, false, "admin mutation"},
 		{http.MethodDelete, "/api/v1/clients/client-1", false, false, "admin mutation"},
 		{http.MethodGet, "/api/v1/clients/client-1/bindings", false, true, "viewer metadata"},
+		{http.MethodGet, "/api/v1/clients/client-1/bindings/binding-1", false, true, "viewer metadata"},
 		{http.MethodPost, "/api/v1/clients/client-1/bindings", false, false, "admin mutation"},
 		{http.MethodPatch, "/api/v1/clients/client-1/bindings/binding-1", false, false, "admin mutation"},
 		{http.MethodDelete, "/api/v1/clients/client-1/bindings/binding-1", false, false, "admin mutation"},
@@ -184,6 +188,33 @@ func TestEveryOperationHasExplicitAnonymousViewerAdminAuthorization(t *testing.T
 				t.Fatalf("admin status=%d want=%d (%s)", rec.Code, http.StatusNoContent, tc.description)
 			}
 		})
+	}
+}
+
+// TestAuthorizationMatrixCoversEveryEndpointPolicy guards against matrix
+// drift (#839): every endpointPolicies row must be exercised by at least one
+// matrix entry whose public/viewer expectations agree with the policy's
+// capability, so a new route can never silently fall back to the generic
+// admin gate without an explicit access decision here.
+func TestAuthorizationMatrixCoversEveryEndpointPolicy(t *testing.T) {
+	matrix := productionAuthorizationMatrix()
+	for _, policy := range endpointPolicies {
+		wantPublic := policy.capability == capabilityPublic
+		wantViewer := capabilityAllowsRole(policy.capability, "viewer")
+		matched := false
+		for _, row := range matrix {
+			if row.method != policy.method || !matchEndpointPattern(policy.pattern, row.path) {
+				continue
+			}
+			matched = true
+			if row.public != wantPublic || row.viewer != wantViewer {
+				t.Errorf("matrix row %s %s (public=%v viewer=%v) disagrees with policy %s (capability %s)",
+					row.method, row.path, row.public, row.viewer, policy.pattern, policy.capability)
+			}
+		}
+		if !matched {
+			t.Errorf("authorization matrix has no entry exercising policy %s %s (%s)", policy.method, policy.pattern, policy.capability)
+		}
 	}
 }
 

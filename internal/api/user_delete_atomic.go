@@ -8,6 +8,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 func (s *managementState) handleAtomicUserDelete(w http.ResponseWriter, r *http.Request) {
@@ -24,7 +25,7 @@ func (s *managementState) handleAtomicUserDelete(w http.ResponseWriter, r *http.
 	err := s.withMutation(func(mutation managementstate.Mutation) error {
 		users := mutation.Users()
 		found := false
-		targetRole := ""
+		var prior model.User
 		adminCount := 0
 		for _, user := range users {
 			if user.Role == "admin" {
@@ -32,19 +33,32 @@ func (s *managementState) handleAtomicUserDelete(w http.ResponseWriter, r *http.
 			}
 			if user.Username == username {
 				found = true
-				targetRole = user.Role
+				prior = user
 			}
 		}
 		if !found {
 			return errUserNotFound
 		}
-		if targetRole == "admin" && adminCount <= 1 {
+		if prior.Role == "admin" && adminCount <= 1 {
 			return managementstate.ErrLastAdministrator
 		}
+		// Persist the user deletion BEFORE revoking sessions: when the state
+		// save fails the mutation rolls back and the user's sessions must
+		// remain valid rather than being revoked for a delete that never
+		// committed.
+		if deleteErr := mutation.DeleteUser(username); deleteErr != nil {
+			return deleteErr
+		}
 		if _, revokeErr := s.sessionRegistry().DeleteUsernamePersisted(username); revokeErr != nil {
+			// The delete already committed; restore the user record so a
+			// failed revocation never deletes a user whose sessions are
+			// still live.
+			if _, restoreErr := mutation.CreateUser(prior); restoreErr != nil {
+				return fmt.Errorf("%w: %v (restore user: %v)", errSessionRevocationPersistence, revokeErr, restoreErr)
+			}
 			return fmt.Errorf("%w: %v", errSessionRevocationPersistence, revokeErr)
 		}
-		return mutation.DeleteUser(username)
+		return nil
 	})
 	if err != nil {
 		s.recordRequestAudit(r, audit.Record{

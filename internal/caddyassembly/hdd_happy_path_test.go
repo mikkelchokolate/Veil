@@ -52,6 +52,11 @@ func TestBuildFinalRenderPlan_NaiveTCP443HappyPath(t *testing.T) {
 	if owner.InboundName != "test" {
 		t.Errorf("owner.InboundName = %q, want test", owner.InboundName)
 	}
+	// The consolidated Caddy unit pin is load-bearing for firewall/systemd
+	// consumers — a blanked or renamed ServiceName must fail here (#971).
+	if owner.ServiceName != "veil-caddy.service" {
+		t.Errorf("owner.ServiceName = %q, want veil-caddy.service", owner.ServiceName)
+	}
 
 	server := plan.Servers[naiveKey]
 	if server.Kind != caddyassembly.CaddyOwnerNaive {
@@ -108,15 +113,21 @@ func TestBuildFinalRenderPlan_NaiveTCP443MergesWithPanelCaddy(t *testing.T) {
 			model.ClientProfile{Name: "default", Username: "user", Password: "pass", Enabled: true}),
 	}
 
-	plan, owners, _, err := caddyassembly.BuildFinalRenderPlan(settings, inbounds)
+	plan, owners, issues, err := caddyassembly.BuildFinalRenderPlan(settings, inbounds)
 	if err != nil {
 		t.Fatalf("BuildFinalRenderPlan error: %v", err)
+	}
+	if len(issues) != 0 {
+		t.Fatalf("merged plan raised issues: %+v", issues)
 	}
 
 	key := bindregistry.BindKey{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}
 	owner := owners[key]
 	if owner.Kind != bindregistry.BindOwnerNaive || owner.InboundName != "test" {
 		t.Fatalf("expected naive owner on TCP :443, got %+v", owner)
+	}
+	if owner.ServiceName != "veil-caddy.service" {
+		t.Errorf("merged owner ServiceName = %q, want veil-caddy.service (#971)", owner.ServiceName)
 	}
 	server := plan.Servers[key]
 	if server.Kind != caddyassembly.CaddyOwnerNaive {
@@ -125,11 +136,33 @@ func TestBuildFinalRenderPlan_NaiveTCP443MergesWithPanelCaddy(t *testing.T) {
 	if server.PanelDomain != "panel.vpn.example.com" {
 		t.Errorf("server.PanelDomain = %q, want panel.vpn.example.com", server.PanelDomain)
 	}
+
+	// Bind-owner locks alone cannot prove ACME enrollment: both the panel
+	// domain and the naive domain must land in Domains with their email and
+	// owner sets (#845).
+	panelSpec, ok := plan.Domains["panel.vpn.example.com"]
+	if !ok {
+		t.Fatalf("panel domain missing from cert specs: %+v", plan.Domains)
+	}
+	if panelSpec.Email != "admin@vpn.example.com" || !panelSpec.Owners.Panel {
+		t.Errorf("panel domain spec wrong: %+v", panelSpec)
+	}
+	naiveSpec, ok := plan.Domains["vpn.example.com"]
+	if !ok {
+		t.Fatalf("naive domain missing from cert specs: %+v", plan.Domains)
+	}
+	if naiveSpec.Email != "admin@vpn.example.com" {
+		t.Errorf("naive domain email = %q, want admin@vpn.example.com", naiveSpec.Email)
+	}
+	if len(naiveSpec.Owners.NaiveInboundNames) != 1 || naiveSpec.Owners.NaiveInboundNames[0] != "test" {
+		t.Errorf("naive domain owners wrong: %+v", naiveSpec.Owners)
+	}
 	if plan.DefaultChallengeMode != "tls-alpn-01" {
 		t.Errorf("plan.DefaultChallengeMode = %q, want tls-alpn-01", plan.DefaultChallengeMode)
 	}
 	if len(plan.ACMEChallenges) != 0 {
 		t.Errorf("shared :443 listener must not gain standalone challenge binds, got %+v", plan.ACMEChallenges)
+
 	}
 }
 

@@ -72,15 +72,19 @@ func TestProductionDiagnosticsFailClosedWithoutRootHelper(t *testing.T) {
 			if response.Code != http.StatusServiceUnavailable {
 				t.Fatalf("diagnostic without helper status=%d want=503 body=%s", response.Code, response.Body.String())
 			}
-			// The fail-closed gate must answer with the stable error envelope,
-			// not a bare 503 or an unrelated payload (#829).
-			var body map[string]any
-			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
-				t.Fatalf("503 body is not JSON: %v (%q)", err, response.Body.String())
+			// The body must be the dependency_unavailable error envelope, not
+			// a bare 503 or a success payload.
+			var body struct {
+				Error struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
 			}
-			errObj, _ := body["error"].(map[string]any)
-			if errObj["code"] != "dependency_unavailable" {
-				t.Fatalf("diagnostic 503 error.code = %v, want dependency_unavailable: %v", errObj["code"], body)
+			if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+				t.Fatalf("diagnostic error body is not JSON: %v (%s)", err, response.Body.String())
+			}
+			if body.Error.Code != "dependency_unavailable" {
+				t.Fatalf("diagnostic error code=%q want=dependency_unavailable body=%v", body.Error.Code, body)
 			}
 		})
 	}
@@ -101,15 +105,14 @@ func TestProductionSystemStatsDoNotRequireRootHelper(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("system stats status=%d want=200 body=%s", response.Code, response.Body.String())
 	}
-	// Lock the payload contract: /api/system must carry the telemetry fields,
-	// not an empty object (#829).
-	var stats map[string]any
-	if err := json.Unmarshal(response.Body.Bytes(), &stats); err != nil {
-		t.Fatalf("system stats body is not JSON: %v (%q)", err, response.Body.String())
+	// A 200 alone is not enough — the payload must be the system stats object.
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("system stats body is not JSON: %v (%s)", err, response.Body.String())
 	}
-	for _, field := range []string{"cpuPercent", "memoryTotalMB", "uptimeSeconds"} {
-		if _, ok := stats[field]; !ok {
-			t.Fatalf("system stats missing %q: %v", field, stats)
+	for _, field := range []string{"cpuPercent", "memoryUsedMB", "memoryTotalMB", "uptimeSeconds"} {
+		if _, ok := body[field]; !ok {
+			t.Fatalf("system stats body missing %q: %v", field, body)
 		}
 	}
 }

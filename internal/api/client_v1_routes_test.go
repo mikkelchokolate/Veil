@@ -156,6 +156,10 @@ func TestV1ClientListPaginationAndSearch(t *testing.T) {
 	}
 }
 
+// TestV1DeleteBindingKeepsClient (audit #23) proves the UI binding delete
+// button only removes the binding, never the client: it issues the real
+// DELETE /api/v1/clients/{id}/bindings/{bindingId} and then asserts the
+// client survives as an orphan with zero bindings.
 func TestV1DeleteBindingKeepsClient(t *testing.T) {
 	r, _ := newApplyTrackedRouter(t)
 	v1Request(t, r, http.MethodPost, "/api/inbounds", `{"name":"hy2-d","protocol":"hysteria2","transport":"udp","port":9443,"enabled":false}`)
@@ -163,51 +167,76 @@ func TestV1DeleteBindingKeepsClient(t *testing.T) {
 	created := unwrapClient(t, w.Body.Bytes())
 	id := created["id"].(string)
 	inbounds, _ := created["inboundIds"].([]any)
-	if len(inbounds) == 0 {
-		t.Fatalf("expected binding")
+	if len(inbounds) != 1 {
+		t.Fatalf("expected exactly one binding, got %v", created["inboundIds"])
 	}
 
-	// Resolve the binding id from the client read model, then actually DELETE
-	// the binding through the subresource — the old body fetched the view and
-	// discarded it, so the delete path was never exercised (#840).
-	w2 := v1Request(t, r, http.MethodGet, "/api/v1/clients/"+id, "")
-	var view map[string]any
-	if err := json.NewDecoder(w2.Body).Decode(&view); err != nil {
-		t.Fatalf("decode client view: %v", err)
+	// Resolve the real binding id via the bindings list endpoint.
+	w = v1Request(t, r, http.MethodGet, "/api/v1/clients/"+id+"/bindings", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("list bindings: %d %s", w.Code, w.Body.String())
 	}
-	bindings, _ := view["bindings"].([]any)
-	if len(bindings) == 0 {
-		t.Fatalf("client view exposes no bindings: %v", view)
+	var list struct {
+		Items []map[string]any `json:"items"`
 	}
-	bindingID, _ := bindings[0].(map[string]any)["id"].(string)
+	if err := json.NewDecoder(w.Body).Decode(&list); err != nil {
+		t.Fatalf("decode bindings list: %v", err)
+	}
+	if len(list.Items) != 1 {
+		t.Fatalf("expected one binding, got %v", list.Items)
+	}
+	bindingID, _ := list.Items[0]["id"].(string)
 	if bindingID == "" {
-		t.Fatalf("binding missing id: %v", bindings[0])
+		t.Fatalf("binding has no id: %v", list.Items[0])
+	}
+	// The single-binding GET serves the same read model.
+	w = v1Request(t, r, http.MethodGet, "/api/v1/clients/"+id+"/bindings/"+bindingID, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("get binding: %d %s", w.Code, w.Body.String())
 	}
 
-	w3 := v1Request(t, r, http.MethodDelete, "/api/v1/clients/"+id+"/bindings/"+bindingID, "")
-	if w3.Code != http.StatusOK {
-		t.Fatalf("delete binding: %d %s", w3.Code, w3.Body.String())
+	// DELETE the binding, not the client.
+	w = v1Request(t, r, http.MethodDelete, "/api/v1/clients/"+id+"/bindings/"+bindingID, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("delete binding: %d %s", w.Code, w.Body.String())
 	}
-	var del map[string]any
-	if err := json.NewDecoder(w3.Body).Decode(&del); err != nil {
+	var delResp map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&delResp); err != nil {
 		t.Fatalf("decode delete response: %v", err)
 	}
-	if del["success"] != true {
-		t.Fatalf("delete binding success = %v, want true: %v", del["success"], del)
+	if delResp["id"] != bindingID {
+		t.Errorf("delete response id=%v, want %s", delResp["id"], bindingID)
+	}
+	if delResp["success"] != true {
+		t.Errorf("binding delete success=%v, want true: %v", delResp["success"], delResp)
 	}
 
-	// The client itself must survive the binding delete — assert it is still
-	// retrievable and now reports zero bindings.
-	w4 := v1Request(t, r, http.MethodGet, "/api/v1/clients/"+id, "")
-	if w4.Code != http.StatusOK {
-		t.Fatalf("client must survive binding delete: %d %s", w4.Code, w4.Body.String())
+	// The binding is gone.
+	w = v1Request(t, r, http.MethodGet, "/api/v1/clients/"+id+"/bindings/"+bindingID, "")
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("deleted binding still retrievable: %d %s", w.Code, w.Body.String())
 	}
-	var after map[string]any
-	if err := json.NewDecoder(w4.Body).Decode(&after); err != nil {
-		t.Fatalf("decode post-delete view: %v", err)
+
+	// The client row survives and reports orphaned with no bindings.
+	w = v1Request(t, r, http.MethodGet, "/api/v1/clients/"+id, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("client deleted along with binding: %d %s", w.Code, w.Body.String())
 	}
-	if remaining, _ := after["bindings"].([]any); len(remaining) != 0 {
-		t.Fatalf("binding still present after delete: %v", remaining)
+	var view map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&view); err != nil {
+		t.Fatalf("decode client after delete: %v", err)
+	}
+	if view["id"] != id || view["name"] != "alice" {
+		t.Fatalf("client row changed by binding delete: %v", view)
+	}
+	if view["status"] != "orphaned" {
+		t.Errorf("status=%v, want orphaned after binding removal", view["status"])
+	}
+	if remaining, _ := view["bindings"].([]any); len(remaining) != 0 {
+		t.Errorf("bindings still present after delete: %v", remaining)
+	}
+	if inboundIDs, _ := view["inboundIds"].([]any); len(inboundIDs) != 0 {
+		t.Errorf("inboundIds still present after delete: %v", inboundIDs)
 	}
 }
 

@@ -101,14 +101,20 @@ func TestBulkNoChangeCreatesNoRevision(t *testing.T) {
 		t.Fatalf("bulk: %d %s", w.Code, w.Body.String())
 	}
 	var resp struct {
-		Succeeded int `json:"succeeded"`
-		Failed    int `json:"failed"`
+		Succeeded int  `json:"succeeded"`
+		Failed    int  `json:"failed"`
+		Success   bool `json:"success"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode bulk: %v", err)
 	}
 	if resp.Succeeded != 0 || resp.Failed != 1 {
 		t.Fatalf("bulk summary = %+v, want 0 succeeded / 1 failed", resp)
+	}
+	// #904: a bulk where every client failed must report success=false even
+	// though HTTP 200 returns the per-client breakdown — no mutation, no apply.
+	if resp.Success {
+		t.Fatalf("all-fail bulk reported success=true: %s", w.Body.String())
 	}
 	desired1, _ := applyState(t, r)
 	if desired1 != desired0 {

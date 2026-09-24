@@ -97,17 +97,23 @@ func TestServeHTTPServerLoadsAuthWithoutHelperSocket(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("auth status=%d body=%s", response.Code, response.Body.String())
 	}
-	// 200 alone greens an empty/wrong payload — the auth status contract is a
-	// JSON object carrying an authenticated flag and an authMethod (#875).
-	var body map[string]any
-	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
-		t.Fatalf("auth status body is not JSON: %v (%q)", err, response.Body.String())
+	// The endpoint must answer the auth-status contract, not just any 200:
+	// valid JSON with an explicit authenticated flag and the resolution
+	// method. On a private listen with no users yet, the effective identity
+	// is the dev-anonymous administrator — the same identity the auth
+	// middleware would grant — so authenticated=true here is the honest
+	// answer, not a missing-helper failure.
+	var status struct {
+		Authenticated bool   `json:"authenticated"`
+		Username      string `json:"username"`
+		Role          string `json:"role"`
+		AuthMethod    string `json:"authMethod"`
 	}
-	if _, ok := body["authenticated"].(bool); !ok {
-		t.Fatalf("auth status missing boolean authenticated field: %v", body)
+	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
+		t.Fatalf("auth status is not JSON: %v (%s)", err, response.Body.String())
 	}
-	if method, _ := body["authMethod"].(string); method == "" {
-		t.Fatalf("auth status missing authMethod: %v", body)
+	if !status.Authenticated || status.AuthMethod != "dev-anonymous" || status.Role != "admin" {
+		t.Fatalf("expected dev-anonymous admin auth status on a private no-user panel, got %s", response.Body.String())
 	}
 }
 
@@ -264,6 +270,9 @@ func TestServeHTTPServerBuildsPlainServer(t *testing.T) {
 }
 
 func TestServeHTTPServerUsesDefaultHelperSocket(t *testing.T) {
+	// No HelperSocket option: Build must fall back to
+	// privileged.DefaultSocketPath (/run/veil/helper.sock). Lock the resolved
+	// path directly — the name claims the default, so prove it (#875).
 	opts := HTTPServerOptions{
 		Listen:      "127.0.0.1:2096",
 		Version:     "test",
@@ -273,8 +282,6 @@ func TestServeHTTPServerUsesDefaultHelperSocket(t *testing.T) {
 		KeyPath:     filepath.Join(t.TempDir(), "state.key"),
 		WebBasePath: "/",
 	}
-	// The name claims the default helper socket — lock the path Build actually
-	// wires, not just that a server object came back (#875).
 	if got := NewHTTPServer(opts).resolvedHelperSocket(); got != privileged.DefaultSocketPath {
 		t.Fatalf("resolved helper socket = %q, want %q", got, privileged.DefaultSocketPath)
 	}
@@ -282,7 +289,11 @@ func TestServeHTTPServerUsesDefaultHelperSocket(t *testing.T) {
 	if got := NewHTTPServer(opts).resolvedHelperSocket(); got != "/custom/helper.sock" {
 		t.Fatalf("explicit helper socket overridden: %q", got)
 	}
-	server, _ := NewHTTPServer(HTTPServerOptions{
+	// The socket is absent in tests, so a privileged request must surface the
+	// dedicated helper-unavailable envelope — which the API only emits when
+	// the dial error names the helper.sock path. A missing default ("") would
+	// instead produce a generic privileged-operation failure.
+	server, reloader := NewHTTPServer(HTTPServerOptions{
 		Listen:      "127.0.0.1:2096",
 		Version:     "test",
 		AuthToken:   "token",
@@ -293,5 +304,24 @@ func TestServeHTTPServerUsesDefaultHelperSocket(t *testing.T) {
 	}).Build()
 	if server == nil {
 		t.Fatalf("expected server")
+	}
+	if closer, ok := reloader.(interface{ Close() error }); ok {
+		t.Cleanup(func() { _ = closer.Close() })
+	}
+	// /api/status dials the helper synchronously (no apply-tracking fence in
+	// front of it), so the dial error names the configured socket path. With
+	// the default applied, the API emits the repairable helper-unavailable
+	// envelope that mentions veil-helper.socket; had Build left the path
+	// empty, the dial error would not name helper.sock and the response
+	// would be a generic privileged-operation failure.
+	request := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	request.Header.Set("X-Veil-Token", "token")
+	response := httptest.NewRecorder()
+	server.Handler.ServeHTTP(response, request)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("default helper socket status=%d body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "veil-helper.socket") {
+		t.Fatalf("default helper socket did not produce the helper-unavailable envelope: %s", response.Body.String())
 	}
 }

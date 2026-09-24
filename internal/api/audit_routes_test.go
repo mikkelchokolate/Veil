@@ -107,7 +107,16 @@ func TestAuditEndpointRequiresAdminAndReturnsBoundedHistory(t *testing.T) {
 	if err := json.NewDecoder(adminResponse.Body).Decode(&payload); err != nil {
 		t.Fatal(err)
 	}
-	if len(payload.Items) != 2 || payload.Items[0].Target != "three" || payload.NextBefore == "" {
+	if len(payload.Items) != 2 || payload.NextBefore == "" {
 		t.Fatalf("audit payload = %+v", payload)
+	}
+	// Newest first, with full record fields — not just any two items.
+	if payload.Items[0].Target != "three" || payload.Items[1].Target != "two" {
+		t.Fatalf("audit items not in newest-first order: %+v", payload.Items)
+	}
+	for _, item := range payload.Items {
+		if item.Action != "test.event" || item.Actor != "alice" || !item.Success {
+			t.Fatalf("audit item fields wrong: %+v", item)
+		}
 	}
 }

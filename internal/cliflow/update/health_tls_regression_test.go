@@ -64,6 +64,7 @@ func TestWaitForHealthyTrustsConfiguredPanelTLS(t *testing.T) {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	}))
 	server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
 	server.StartTLS()

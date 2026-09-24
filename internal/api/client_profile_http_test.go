@@ -51,7 +51,23 @@ func TestInboundCreateThroughHTTPGeneratesClientProfilePassword(t *testing.T) {
 	if strings.Contains(links, veilsettings.RedactedSecret) {
 		t.Fatalf("client links leak the redaction sentinel: %s", links)
 	}
-	if !strings.Contains(links, "https://alice:") || !strings.Contains(links, "@vpn.example.com:9443") {
+	// Extract the alice userinfo and prove the generated password segment is
+	// non-empty — "alice:@host" would be a broken link, not a credential.
+	needle := "https://alice:"
+	idx := strings.Index(links, needle)
+	if idx < 0 {
+		t.Fatalf("client links missing alice link: %s", links)
+	}
+	rest := links[idx+len(needle):]
+	at := strings.Index(rest, "@")
+	if at <= 0 {
+		t.Fatalf("alice link has an empty password: %q", links)
+	}
+	password := rest[:at]
+	if len(password) < 8 {
+		t.Fatalf("generated profile password too weak/short (%d chars): %q", len(password), links)
+	}
+	if !strings.Contains(links, "@vpn.example.com:9443") {
 		t.Fatalf("client links do not include the generated profile credential: %s", links)
 	}
 }
