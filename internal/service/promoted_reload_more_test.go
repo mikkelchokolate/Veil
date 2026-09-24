@@ -2,6 +2,7 @@ package service
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -32,17 +33,33 @@ func TestPromotedServiceReloaderRunsAllOnSuccess(t *testing.T) {
 		{Name: "mieru", Unit: "veil-mieru.service", PromotedSubpath: "mieru/config.json", PromotedVerb: "restart"},
 		{Name: "sing-box", Unit: "veil-warp.service", PromotedSubpath: "sing-box/warp.json", PromotedVerb: "reload"},
 	})
-	callCount := 0
+	var got [][]string
 	reloader := NewPromotedServiceReloader(filepath.FromSlash("/etc/veil"), catalog, func(command []string) model.ServiceActionResult {
-		callCount++
+		got = append(got, append([]string(nil), command...))
 		return model.ServiceActionResult{Name: command[2], Command: command, Success: true}
 	})
 	results := reloader.Reload([]string{
 		filepath.FromSlash("/etc/veil/live/mieru/config.json"),
 		filepath.FromSlash("/etc/veil/live/sing-box/warp.json"),
 	})
-	if callCount != 2 || len(results) != 2 {
-		t.Fatalf("callCount=%d results=%+v", callCount, results)
+	wantCommands := [][]string{
+		{"systemctl", "restart", "veil-mieru.service"},
+		{"systemctl", "reload", "veil-warp.service"},
+	}
+	if !reflect.DeepEqual(got, wantCommands) {
+		t.Fatalf("commands = %v, want %v", got, wantCommands)
+	}
+	wantNames := []string{"veil-mieru.service", "veil-warp.service"}
+	if len(results) != len(wantNames) {
+		t.Fatalf("results = %+v", results)
+	}
+	for i, want := range wantNames {
+		if results[i].Name != want {
+			t.Fatalf("results[%d].Name = %q, want %q", i, results[i].Name, want)
+		}
+		if !reflect.DeepEqual(results[i].Command, wantCommands[i]) {
+			t.Fatalf("results[%d].Command = %v, want %v", i, results[i].Command, wantCommands[i])
+		}
 	}
 }
 

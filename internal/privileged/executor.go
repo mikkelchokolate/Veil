@@ -923,7 +923,9 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 		}
 		pruned, err := backup.PruneArchives(request.BackupRoot, policy, false)
 		if err != nil {
-			return BackupResult{}, err
+			// Preserve the partial prune: archives already deleted and those
+			// classified as kept must reach the operator alongside the error.
+			return BackupResult{Pruned: pruned.Deleted, Kept: pruned.Kept}, err
 		}
 		return BackupResult{Pruned: pruned.Deleted, Kept: pruned.Kept}, nil
 	case BackupActionDelete:

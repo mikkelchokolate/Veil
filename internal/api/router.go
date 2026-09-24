@@ -287,12 +287,17 @@ func writePrivilegedError(w http.ResponseWriter, err error) {
 		writePrivilegedHelperUnavailable(w)
 		return
 	}
-	status := http.StatusInternalServerError
-	code := privileged.ErrorOperationFailed
-	message := "privileged operation failed"
+	code, message, status := classifyPrivilegedError(err)
+	writeErrorEnvelope(w, code, message, status)
+}
+
+func classifyPrivilegedError(err error) (code, message string, status int) {
+	status = http.StatusInternalServerError
+	code = string(privileged.ErrorOperationFailed)
+	message = "privileged operation failed"
 	var operationError *privileged.Error
 	if errors.As(err, &operationError) {
-		code = operationError.Code
+		code = string(operationError.Code)
 		message = operationError.Message
 		switch operationError.Code {
 		case privileged.ErrorInvalidRequest:
@@ -311,7 +316,7 @@ func writePrivilegedError(w http.ResponseWriter, err error) {
 	if status >= http.StatusInternalServerError && !publicPrivilegedErrorMessage(message) {
 		message = "privileged operation failed"
 	}
-	writeErrorEnvelope(w, string(code), message, status)
+	return code, message, status
 }
 
 func publicPrivilegedErrorMessage(message string) bool {

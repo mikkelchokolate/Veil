@@ -18,6 +18,8 @@ const fetcherMocks = vi.hoisted(() => ({
 	mutationErrorMessage: vi.fn((e: unknown, fallback: string) =>
 		e instanceof Error ? e.message : fallback,
 	),
+	// #848: viewer coverage needs the role switchable per test.
+	isAdmin: { value: true },
 }));
 
 vi.mock("../api/fetcher", () => ({
@@ -36,7 +38,7 @@ vi.mock("../api/fetcher", () => ({
 }));
 
 vi.mock("../auth/AuthContext", () => ({
-	useIsAdmin: () => true,
+	useIsAdmin: () => fetcherMocks.isAdmin.value,
 }));
 
 afterEach(() => {
@@ -45,6 +47,7 @@ afterEach(() => {
 	fetcherMocks.apiFetch.mockReset();
 	fetcherMocks.apiUrl.mockClear();
 	fetcherMocks.notifyUnauthorized.mockReset();
+	fetcherMocks.isAdmin.value = true;
 });
 
 describe("BackupsPage", () => {
@@ -95,6 +98,132 @@ describe("BackupsPage", () => {
 		expect(fetcherMocks.apiUrl).toHaveBeenCalledWith(
 			"/api/backups/veil%20backup.enc/download",
 		);
+	});
+
+	// #848: the whole backups surface is admin-only — a viewer must see the
+	// adminRequired notice, not the create/restore/delete controls.
+	it("shows adminRequired to viewers instead of the backup controls", async () => {
+		fetcherMocks.isAdmin.value = false;
+		fetcherMocks.apiFetch.mockResolvedValue({ items: [] });
+		const queryClient = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={queryClient}>
+				<I18nProvider>
+					<BackupsPage />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+		expect(
+			await screen.findByText(/require the admin role/i),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: /create backup/i }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: /prune old backups/i }),
+		).not.toBeInTheDocument();
+	});
+
+	// #757: archive Delete was already gated — lock no-request-until-confirm
+	// so a one-click regression fails this suite like the routing twin.
+	it("does not DELETE an archive until delete is confirmed", async () => {
+		const deletes: string[] = [];
+		fetcherMocks.apiFetch.mockImplementation(
+			(path: string, init?: RequestInit) => {
+				if (path === "/api/backups") {
+					return Promise.resolve({
+						items: [
+							{
+								name: "veil-backup.enc",
+								size: 42,
+								createdAt: "2026-08-17T03:39:09Z",
+								encrypted: true,
+							},
+						],
+					});
+				}
+				if (
+					path === "/api/backups/veil-backup.enc" &&
+					init?.method === "DELETE"
+				) {
+					deletes.push(path);
+					return Promise.resolve({});
+				}
+				return Promise.resolve({});
+			},
+		);
+		const queryClient = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={queryClient}>
+				<I18nProvider>
+					<BackupsPage />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+		fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+		const dialog = await screen.findByRole("alertdialog");
+		expect(deletes).toEqual([]);
+		// The dialog action shares the row label — click it inside the dialog.
+		fireEvent.click(within(dialog).getByRole("button", { name: /^delete$/i }));
+		await waitFor(() =>
+			expect(deletes).toEqual(["/api/backups/veil-backup.enc"]),
+		);
+	});
+
+	// #813: restore is gated behind its AlertDialog — the POST must not fire
+	// on the row button, only on the dialog action (same lock as prune).
+	it("does not POST a restore until restore is confirmed", async () => {
+		const restoreBodies: unknown[] = [];
+		fetcherMocks.apiFetch.mockImplementation(
+			(path: string, init?: RequestInit) => {
+				if (path === "/api/backups") {
+					return Promise.resolve({
+						items: [
+							{
+								name: "veil-backup.enc",
+								size: 42,
+								createdAt: "2026-08-17T03:39:09Z",
+								encrypted: true,
+							},
+						],
+					});
+				}
+				if (
+					path === "/api/backups/veil-backup.enc/restore" &&
+					init?.method === "POST"
+				) {
+					restoreBodies.push(
+						typeof init.body === "string" ? JSON.parse(init.body) : init.body,
+					);
+					return Promise.resolve({
+						id: "job-1",
+						archive: "veil-backup.enc",
+						status: "succeeded",
+					});
+				}
+				return Promise.resolve({});
+			},
+		);
+		const queryClient = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={queryClient}>
+				<I18nProvider>
+					<BackupsPage />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+		fireEvent.click(await screen.findByRole("button", { name: "Restore" }));
+		expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+		expect(restoreBodies).toEqual([]);
+		fireEvent.click(screen.getByRole("button", { name: "Confirm restore" }));
+		await waitFor(() => expect(restoreBodies).toHaveLength(1));
+		expect(restoreBodies[0]).toEqual({ confirm: true });
 	});
 
 	it("confirms prune and posts the displayed 7/4/12 retention", async () => {

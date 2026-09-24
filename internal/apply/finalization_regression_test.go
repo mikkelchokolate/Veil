@@ -97,18 +97,22 @@ func TestStartupFinalizesDurableRuntimePublicationReceipt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS runtime_publications (
- job_id TEXT PRIMARY KEY,
- revision INTEGER NOT NULL,
- generation INTEGER NOT NULL,
- snapshot_sha256 TEXT NOT NULL,
- operations_json TEXT NOT NULL,
- published_at INTEGER NOT NULL
-)`); err != nil {
+	// Plant the receipt exactly as a real publish left it: an explicit
+	// 'published' phase, the converged disposition, the lease fencing fields,
+	// and the matching phase-evidence row — not a bare legacy skeleton.
+	publishedAt := time.Now().Unix()
+	if _, err := db.Exec(`INSERT INTO runtime_publications
+(job_id, revision, base_revision, generation, snapshot_sha256, operations_json,
+ confirmations_json, published_at, owner_process, operation_id, lease_expires_at,
+ phase, artifacts_json, service_phase, firewall_phase, updated_at, disposition)
+VALUES(?, ?, 0, ?, ?, ?, '[]', ?, 'pid:1:dead', 'publish', 0,
+ 'published', '[]', 'converged', 'committed', ?, 'runtime_converged')`,
+		job.ID, revision, 7, digest, string(operationsJSON), publishedAt, publishedAt); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO runtime_publications(job_id, revision, generation, snapshot_sha256, operations_json, published_at)
-VALUES(?, ?, ?, ?, ?, ?)`, job.ID, revision, 7, digest, string(operationsJSON), time.Now().Unix()); err != nil {
+	if _, err := db.Exec(`INSERT INTO runtime_publication_phases(job_id,phase,generation,evidence_json,committed_at)
+VALUES(?, 'published', ?, ?, ?)`, job.ID, 7,
+		`{"disposition":"runtime_converged"}`, publishedAt); err != nil {
 		t.Fatal(err)
 	}
 
@@ -140,5 +144,35 @@ VALUES(?, ?, ?, ?, ?, ?)`, job.ID, revision, 7, digest, string(operationsJSON), 
 	}
 	if receipts != 0 {
 		t.Errorf("consumed runtime publication receipt remains: %d", receipts)
+	}
+	// The finalized receipt is archived, not just deleted: the history row
+	// preserves the published phase and converged disposition as evidence.
+	var finalPhase, receiptJSON, phasesJSON string
+	if err := db.QueryRow(`SELECT final_phase,receipt_json,phases_json FROM runtime_publication_history WHERE job_id=?`, job.ID).
+		Scan(&finalPhase, &receiptJSON, &phasesJSON); err != nil {
+		t.Fatalf("finalized publication was not archived to history: %v", err)
+	}
+	if finalPhase != PublicationPhaseFinalized {
+		t.Errorf("archived final phase = %q, want %q", finalPhase, PublicationPhaseFinalized)
+	}
+	var receipt map[string]any
+	if err := json.Unmarshal([]byte(receiptJSON), &receipt); err != nil {
+		t.Fatalf("archived receipt is not valid JSON: %v", err)
+	}
+	if receipt["phase"] != PublicationPhasePublished || receipt["disposition"] != string(ApplyDispositionRuntimeConverged) {
+		t.Errorf("archived receipt lost publication evidence: %s", receiptJSON)
+	}
+	var phases []map[string]any
+	if err := json.Unmarshal([]byte(phasesJSON), &phases); err != nil {
+		t.Fatalf("archived phase history is not valid JSON: %v", err)
+	}
+	foundPublished := false
+	for _, phase := range phases {
+		if phase["phase"] == PublicationPhasePublished {
+			foundPublished = true
+		}
+	}
+	if !foundPublished {
+		t.Errorf("archived phase history lacks the published evidence: %s", phasesJSON)
 	}
 }

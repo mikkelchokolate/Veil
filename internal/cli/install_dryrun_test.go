@@ -50,12 +50,15 @@ func TestRURecommendedInstallWorkflowDryRunPrintsPanelURLWithoutApply(t *testing
 	}
 }
 
+// Domain+email on a local panel install keep the scope Panel-only — the
+// profile records them, the panel URL advertises the domain, but no Caddy
+// config, firewall openings, or protocol runtime plans appear.
 func TestInstallDryRunWithDomainEmailStillInstallsPanelOnly(t *testing.T) {
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--dry-run"})
+	cmd.SetArgs([]string{"install", "--profile", "ru-recommended", "--domain", "example.com", "--email", "admin@example.com", "--dry-run"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v\n%s", err, out.String())
@@ -63,15 +66,17 @@ func TestInstallDryRunWithDomainEmailStillInstallsPanelOnly(t *testing.T) {
 	got := out.String()
 	for _, want := range []string{
 		"Veil ru-recommended dry run",
+		"Domain: example.com",
+		"Email: admin@example.com",
 		"Install scope: Panel",
 		"Panel port: 2096",
-		"Panel access: https://127.0.0.1:2096/",
+		"Panel URL: https://example.com/",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
 	}
-	for _, unwanted := range []string{"ufw allow 2096/tcp comment Veil panel", "NaiveProxy TCP port:", "Hysteria2 UDP port:", "NaiveProxy client URL:", "Hysteria2 client URI:", "Generated Hysteria2 server.yaml", "Shared port:"} {
+	for _, unwanted := range []string{"ufw allow 2096/tcp comment Veil panel", "Generated Caddy JSON", "NaiveProxy TCP port:", "Hysteria2 UDP port:", "NaiveProxy client URL:", "Hysteria2 client URI:", "Generated Hysteria2 server.yaml", "Shared port:"} {
 		if strings.Contains(got, unwanted) {
 			t.Fatalf("Panel install should not contain %q:\n%s", unwanted, got)
 		}
@@ -229,8 +234,18 @@ func TestInstallDryRunDirectPublicIPWithoutDomainPrintsPlan(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("direct public-ip without domain: %v\n%s", err, out.String())
 	}
-	if !strings.Contains(out.String(), "Install plan") {
-		t.Fatalf("expected install plan:\n%s", out.String())
+	got := out.String()
+	// The header alone proves nothing — lock the plan body: the public panel
+	// firewall rule, the LE IP-cert HTTP-01 opening, and the direct access URL.
+	for _, want := range []string{
+		"Install plan",
+		"ufw allow 2096/tcp comment Veil panel",
+		"ufw allow 80/tcp comment Veil ACME HTTP-01",
+		"Panel access: https://0.0.0.0:2096/",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("direct dry-run output missing %q:\n%s", want, got)
+		}
 	}
 }
 
@@ -244,6 +259,17 @@ func TestInstallRURecommendedDoesNotRequireDomainForLocalPanel(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("local Panel install should not require domain: %v\n%s", err, out.String())
 	}
+	got := out.String()
+	// The plan must render a usable local panel: no domain requirement means
+	// the panel URL still resolves on loopback.
+	for _, want := range []string{"Install scope: Panel", "Panel port: 2096", "Panel access: https://127.0.0.1:2096/"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("domain-less local panel plan missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "Domain: example") || strings.Contains(got, "domain is required") {
+		t.Fatalf("local panel plan must not demand a domain:\n%s", got)
+	}
 }
 
 func TestInstallRURecommendedDoesNotRequireSharedProxyPort(t *testing.T) {
@@ -255,6 +281,15 @@ func TestInstallRURecommendedDoesNotRequireSharedProxyPort(t *testing.T) {
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Panel install should not require shared proxy port: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "Install scope: Panel") || !strings.Contains(got, "Install plan") {
+		t.Fatalf("expected a complete Panel-only plan:\n%s", got)
+	}
+	for _, unwanted := range []string{"Shared port:", "NaiveProxy TCP port:", "Hysteria2 UDP port:"} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("Panel install should not require %q:\n%s", unwanted, got)
+		}
 	}
 }
 
