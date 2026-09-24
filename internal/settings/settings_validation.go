@@ -173,7 +173,11 @@ func (v SettingsValidation) normalizeProtocolFields(settings *Settings, current 
 			// inherited from current or defaults may predate the declared
 			// options (live states written by older releases); rejecting
 			// them would turn every PUT into a permanent 400 with no
-			// migration path.
+			// migration path. A provided "" is the panel's documented
+			// "clear to unset" signal (SettingsPage writes pf[key]="" when a
+			// select input is emptied), so it is skipped here and persisted
+			// as empty — renderers then fall back to the schema default
+			// (#820).
 			s, isString := val.(string)
 			if !isString {
 				return fmt.Errorf("protocolFields.%s must be a string", f.Key)

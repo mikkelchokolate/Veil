@@ -22,9 +22,14 @@ func TestApplyProtocolCapabilityCatalogOwnsConfigActionsAndValidation(t *testing
 		settingsError          bool
 	}{
 		{"naiveproxy", genRoot + "/caddy/config.json", "reload veil-caddy.service", true, false, false},
-		{"hysteria2", genRoot + "/hysteria2/server.yaml", "restart veil-hysteria2@.service", true, true, false},
+		// hysteria2/olcrtc render per-inbound artifacts (<dir>/<name>.yaml) and
+		// per-inbound template instances (veil-*@<name>.service). With no
+		// inbound selected there is no concrete config path or restartable
+		// unit, so the catalog advertises neither a ghost server.yaml nor a
+		// bare @.service restart (#780).
+		{"hysteria2", "", "", true, true, false},
 		{"mieru", genRoot + "/mieru/server_config.json", "restart veil-mieru.service", true, false, false},
-		{"olcrtc", genRoot + "/olcrtc/server.yaml", "restart veil-olcrtc@.service", true, false, false},
+		{"olcrtc", "", "", true, false, false},
 	}
 	for _, tc := range cases {
 		capability, ok := catalog.ForProtocol(tc.protocol)

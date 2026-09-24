@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -97,6 +98,23 @@ func (c *SocketClient) CaddyLoad(ctx context.Context, request CaddyLoadRequest) 
 	return c.call(ctx, RequestEnvelope{Operation: OperationCaddyLoad, CaddyLoad: &request}, nil)
 }
 
+// undeliveredError tags a failure that happened before the request could
+// reach the helper: the unix dial failed, so no privileged mutation could
+// have started and callers may safely finalize the attempt as a plain
+// failure instead of retaining it for exact-phase recovery.
+type undeliveredError struct{ err error }
+
+func (e *undeliveredError) Error() string { return e.err.Error() }
+func (e *undeliveredError) Unwrap() error { return e.err }
+
+// IsUndelivered reports whether err proves the request never reached the
+// helper. Only dial-phase failures qualify; once bytes leave the process the
+// outcome is ambiguous and must not be treated as undelivered.
+func IsUndelivered(err error) bool {
+	var undelivered *undeliveredError
+	return errors.As(err, &undelivered)
+}
+
 // Reachable reports whether the helper socket currently accepts a unix
 // connection. The client object persists after the socket disappears (e.g. a
 // detached alias or a stopped helper), so health reporting must probe
@@ -117,7 +135,7 @@ func (c *SocketClient) call(ctx context.Context, request RequestEnvelope, result
 	}
 	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", c.path)
 	if err != nil {
-		return wrapOperationError(err)
+		return &undeliveredError{err: wrapOperationError(err)}
 	}
 	defer conn.Close()
 	deadline := time.Now().Add(c.operationTimeout(request.Operation))

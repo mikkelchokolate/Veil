@@ -42,10 +42,6 @@ func (p Paths) CaddyJSON() string {
 	return p.Generated(CaddyJSONConfigSubpath)
 }
 
-func (p Paths) Hysteria2() string {
-	return p.Generated(Hysteria2ConfigSubpath)
-}
-
 func (p Paths) Mieru() string {
 	return p.Generated(MieruConfigSubpath)
 }

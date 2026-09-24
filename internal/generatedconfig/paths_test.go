@@ -9,8 +9,10 @@ func TestGeneratedConfigPathsBuildsKnownGeneratedPaths(t *testing.T) {
 	paths := NewPaths("/apply")
 	cases := map[string]string{
 		paths.Caddyfile(): filepath.Join("/apply", "generated", "caddy", "config.json"),
-		paths.Hysteria2(): filepath.Join("/apply", "generated", "hysteria2", "server.yaml"),
-		paths.Warp():      filepath.Join("/apply", "generated", "sing-box", "warp.json"),
+		// Hysteria2 renders per-inbound artifacts (hysteria2/<name>.yaml); the
+		// catalog subpath is a glob so only the directory is meaningful (#780).
+		paths.Generated("hysteria2/h1.yaml"): filepath.Join("/apply", "generated", "hysteria2", "h1.yaml"),
+		paths.Warp():                         filepath.Join("/apply", "generated", "sing-box", "warp.json"),
 	}
 	for got, want := range cases {
 		if got != want {

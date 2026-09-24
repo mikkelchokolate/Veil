@@ -608,11 +608,11 @@ func panelRoutingCardHTML() string {
             <form id="routing-rule-form">
               <div class="form-group">
                 <label for="routing-rule-name">Name</label>
-                <input id="routing-rule-name" autocomplete="off" placeholder="non-ru-through-warp" required>
+                <input id="routing-rule-name" autocomplete="off" placeholder="ru-blocked-through-proxy" required>
               </div>
               <div class="form-group">
                 <label for="routing-rule-match">Match</label>
-                <input id="routing-rule-match" autocomplete="off" placeholder="geosite:geolocation-!ru">
+                <input id="routing-rule-match" autocomplete="off" placeholder="geosite:ru-blocked">
               </div>
               <div class="form-group">
                 <label for="routing-rule-outbound">Outbound</label>

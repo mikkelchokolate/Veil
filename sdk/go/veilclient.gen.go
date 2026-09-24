@@ -2314,9 +2314,18 @@ type TLSCertInfo struct {
 	DnsNames      *[]string `json:"dnsNames,omitempty"`
 	Error         *string   `json:"error,omitempty"`
 	Issuer        string    `json:"issuer"`
-	NotAfter      string    `json:"notAfter"`
-	NotBefore     string    `json:"notBefore"`
-	Path          string    `json:"path"`
+
+	// IssuerKind Issuer classification — "acme", "internal" (Caddy local CA, an untrusted fallback), or "other".
+	IssuerKind *string `json:"issuerKind,omitempty"`
+
+	// IssuerSource Upstream issuer identity (Caddy issuer storage name, e.g. "local" or "acme-v02.api.letsencrypt.org-directory").
+	IssuerSource *string `json:"issuerSource,omitempty"`
+
+	// ManagedBy Component that issued/stores the certificate when it is not the process's own VEIL_TLS_CERT file (e.g. "caddy" for the managed panel edge).
+	ManagedBy *string `json:"managedBy,omitempty"`
+	NotAfter  string  `json:"notAfter"`
+	NotBefore string  `json:"notBefore"`
+	Path      string  `json:"path"`
 
 	// Source Where the certificate was loaded from — "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage).
 	Source  *string `json:"source,omitempty"`

@@ -372,6 +372,118 @@ func TestRenderCaddyJSONEnablesTLSOnNonStandardNaivePort(t *testing.T) {
 	if !ok || len(policies) != 1 {
 		t.Fatalf("non-standard Naive port must explicitly enable TLS, server=%+v", server)
 	}
+	// The server must listen on the inbound's publicPort — asserting only the
+	// server-map key would green a listen array pinned to :443 (#962).
+	listen, _ := server["listen"].([]any)
+	if len(listen) != 1 || listen[0] != ":8443" {
+		t.Fatalf("server listen = %v, want [:8443] (publicPort)", listen)
+	}
+}
+
+// TestRenderCaddyJSONPanelUsesJSONDialect pins the Panel server to native
+// Caddy JSON field names: a regression to Caddyfile tokens (respond,
+// reverse_proxy <addr>, redir) inside the JSON document would fail caddy
+// validate while substring tests still pass (#920).
+func TestRenderCaddyJSONPanelUsesJSONDialect(t *testing.T) {
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}: {
+				Kind:        caddyassembly.CaddyOwnerPanel,
+				Domain:      "panel.example.com",
+				BackendPort: 2096,
+				WebBasePath: "/panel/",
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"panel.example.com": {Domain: "panel.example.com", Email: "admin@example.com"},
+		},
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	server := cfg["apps"].(map[string]any)["http"].(map[string]any)["servers"].(map[string]any)["tcp-0.0.0.0-443"].(map[string]any)
+	var sawRedirect, sawProxy bool
+	for _, rawRoute := range server["routes"].([]any) {
+		route := rawRoute.(map[string]any)
+		for _, rawHandler := range route["handle"].([]any) {
+			handler := rawHandler.(map[string]any)
+			switch handler["handler"] {
+			case "static_response":
+				if handler["status_code"] == float64(308) {
+					sawRedirect = true
+					headers, _ := handler["headers"].(map[string]any)
+					loc, _ := headers["Location"].([]any)
+					if len(loc) != 1 || loc[0] != "/panel/" {
+						t.Fatalf("base-path redirect Location = %v, want [/panel/]", loc)
+					}
+				}
+			case "reverse_proxy":
+				sawProxy = true
+				upstreams, _ := handler["upstreams"].([]any)
+				if len(upstreams) != 1 || upstreams[0].(map[string]any)["dial"] != "127.0.0.1:2096" {
+					t.Fatalf("reverse_proxy upstreams = %v, want dial 127.0.0.1:2096", upstreams)
+				}
+			}
+		}
+	}
+	if !sawRedirect || !sawProxy {
+		t.Fatalf("panel routes missing 308 base-path redirect or reverse_proxy:\n%s", data)
+	}
+	// Caddyfile tokens must not leak into the JSON document.
+	for _, token := range []string{"handle_path", "basic_auth", "root *", "encode gzip", "tls internal"} {
+		if strings.Contains(string(data), token) {
+			t.Fatalf("rendered JSON contains Caddyfile token %q:\n%s", token, data)
+		}
+	}
+}
+
+func TestRenderCaddyJSONTlsAlpnChallengeFlags(t *testing.T) {
+	// Mirror of the http-01 case: tls-alpn-01 must disable the http challenge
+	// and keep tls-alpn enabled — symmetric flag checks stop a swapped
+	// boolean from greening (#962).
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}: {
+				Kind:        caddyassembly.CaddyOwnerPanel,
+				Domain:      "panel.example.com",
+				BackendPort: 2096,
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"panel.example.com": {Domain: "panel.example.com", Email: "admin@example.com"},
+		},
+		ACMEChallenges: map[bindregistry.BindKey]caddyassembly.AcmeChallengeOwner{
+			{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}: {
+				ChallengeMode: "tls-alpn-01",
+				Domains:       []string{"panel.example.com"},
+			},
+		},
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	policies := cfg["apps"].(map[string]any)["tls"].(map[string]any)["automation"].(map[string]any)["policies"].([]any)
+	if len(policies) != 1 {
+		t.Fatalf("policies = %d, want 1", len(policies))
+	}
+	issuer := policies[0].(map[string]any)["issuers"].([]any)[0].(map[string]any)
+	challenges := issuer["challenges"].(map[string]any)
+	if challenges["http"].(map[string]any)["disabled"] != true {
+		t.Error("expected http challenge to be disabled for tls-alpn-01 mode")
+	}
+	if challenges["tls-alpn"].(map[string]any)["disabled"] != false {
+		t.Error("expected tls-alpn challenge to be enabled for tls-alpn-01 mode")
+	}
 }
 
 func TestRenderCaddyJSONPanelOnly(t *testing.T) {
@@ -769,6 +881,51 @@ func TestRenderCaddyJSONNaiveForwardProxyAuthCredentials(t *testing.T) {
 			t.Errorf("expected JSON-encoded forwardproxy credential %q for %s", want, u.user)
 		}
 	}
+	fp := naiveForwardProxyHandler(t, data)
+	// NaiveProxy privacy posture is load-bearing: dropping hide_ip/hide_via
+	// or probe_resistance leaks proxy behavior to active probers (#824).
+	if fp["hide_ip"] != true {
+		t.Errorf("forward_proxy hide_ip = %v, want true", fp["hide_ip"])
+	}
+	if fp["hide_via"] != true {
+		t.Errorf("forward_proxy hide_via = %v, want true", fp["hide_via"])
+	}
+	if _, ok := fp["probe_resistance"]; !ok {
+		t.Error("forward_proxy missing probe_resistance")
+	}
+	if hosts, _ := fp["hosts"].([]any); len(hosts) != 1 || hosts[0] != "p.example.com" {
+		t.Errorf("forward_proxy hosts = %v, want [p.example.com]", fp["hosts"])
+	}
+	if creds, _ := fp["auth_credentials"].([]any); len(creds) != 2 {
+		t.Errorf("forward_proxy auth_credentials = %v, want 2 entries", fp["auth_credentials"])
+	}
+}
+
+// naiveForwardProxyHandler returns the forward_proxy handler map of the
+// unmatched proxy route on the first server, failing the test if absent.
+func naiveForwardProxyHandler(t *testing.T, data []byte) map[string]any {
+	t.Helper()
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	servers := cfg["apps"].(map[string]any)["http"].(map[string]any)["servers"].(map[string]any)
+	for _, rawServer := range servers {
+		for _, rawRoute := range rawServer.(map[string]any)["routes"].([]any) {
+			route := rawRoute.(map[string]any)
+			for _, rawHandler := range route["handle"].([]any) {
+				handler := rawHandler.(map[string]any)
+				if handler["handler"] == "forward_proxy" {
+					if _, matched := route["match"]; matched {
+						t.Fatalf("forward_proxy route must stay unmatched for CONNECT: %+v", route)
+					}
+					return handler
+				}
+			}
+		}
+	}
+	t.Fatalf("no forward_proxy handler in rendered config:\n%s", data)
+	return nil
 }
 
 func TestRenderCaddyJSONAdminEndpoint(t *testing.T) {

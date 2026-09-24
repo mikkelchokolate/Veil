@@ -30,7 +30,7 @@ func TestPluginStagedConfigValidatorUsesPluginAndWarpSpecs(t *testing.T) {
 	})
 
 	results := validator.Validate([]string{
-		"/etc/veil/generated/caddy/demo.Caddyfile",
+		"/etc/veil/generated/caddy/config.json",
 		"/etc/veil/generated/sing-box/warp.json",
 	})
 	if len(results) != 2 {
@@ -38,6 +38,13 @@ func TestPluginStagedConfigValidatorUsesPluginAndWarpSpecs(t *testing.T) {
 	}
 	if calls[0] != "caddy" || calls[1] != "warp" {
 		t.Fatalf("calls = %+v", calls)
+	}
+	if results[0].Command[0] != "caddy" || results[0].Config != "/etc/veil/generated/caddy/config.json" {
+		t.Fatalf("unexpected caddy validation result: %+v", results[0])
+	}
+	// A legacy Caddyfile staged under caddy/ is not the managed artifact (#855).
+	if res := validator.Validate([]string{"/etc/veil/generated/caddy/demo.Caddyfile"}); len(res) != 0 {
+		t.Fatalf("legacy Caddyfile must not produce a validation result: %+v", res)
 	}
 	if results[1].Command[0] != "sing-box" || results[1].Config != "/etc/veil/generated/sing-box/warp.json" {
 		t.Fatalf("unexpected warp validation result: %+v", results[1])

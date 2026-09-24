@@ -48,6 +48,11 @@ func RenderPanelCaddyfile(cfg PanelCaddyConfig) (string, error) {
     issuer internal
   }
 
+  # The panel is only ever served over HTTPS at this edge; pin HSTS here too —
+  # the Go handler behind reverse_proxy sees plain loopback HTTP and cannot
+  # detect the public TLS transport itself (#902).
+  header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+
   handle {{ .WebBasePath }} {
     redir * {{ .WebBasePathSlash }} 308
   }

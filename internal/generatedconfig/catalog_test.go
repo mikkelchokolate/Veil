@@ -37,28 +37,59 @@ func TestArtifactSpecDerivesStablePlanGeneratedAndLivePaths(t *testing.T) {
 	if !artifact.MatchesGeneratedPath(filepath.FromSlash("/tmp/root/generated/mieru/server_config.json")) {
 		t.Fatalf("artifact should match generated path suffix")
 	}
+	// Matching is exact against the generated-relative path: sibling files and
+	// wrong basenames must not be treated as the managed artifact (#855).
+	for _, wrong := range []string{
+		"/tmp/root/generated/mieru/other_config.json",
+		"/tmp/root/generated/mieru/server_config.json.bak",
+		"/tmp/root/generated/mieru/extra/server_config.json",
+		"/tmp/root/generated/mieru",
+	} {
+		if artifact.MatchesGeneratedPath(filepath.FromSlash(wrong)) {
+			t.Fatalf("artifact matched wrong basename %q", wrong)
+		}
+	}
+	// Glob subpaths match any file of the right extension in the artifact dir.
+	perInbound := ArtifactSpec{Subpath: Hysteria2ConfigSubpath}
+	if !perInbound.MatchesGeneratedPath(filepath.FromSlash("/tmp/root/generated/hysteria2/edge.yaml")) {
+		t.Fatalf("per-inbound artifact should match hysteria2/edge.yaml")
+	}
+	for _, wrong := range []string{
+		"/tmp/root/generated/hysteria2/edge.txt",
+		"/tmp/root/generated/hysteria2/nested/edge.yaml",
+		"/tmp/root/generated/other/edge.yaml",
+	} {
+		if perInbound.MatchesGeneratedPath(filepath.FromSlash(wrong)) {
+			t.Fatalf("per-inbound artifact matched %q", wrong)
+		}
+	}
 }
 
 func TestArtifactCatalogMatchesValidationAndPromotionSpecs(t *testing.T) {
 	catalog := NewDefaultArtifactCatalog()
-	// caddy has a working standalone validator.
-	validation, ok := catalog.ValidationSpec(filepath.FromSlash("/apply/generated/caddy/Caddyfile"))
+	// caddy has a working standalone validator; the managed artifact is the
+	// consolidated JSON config, not a legacy Caddyfile (#855).
+	validation, ok := catalog.ValidationSpec(filepath.FromSlash("/apply/generated/caddy/config.json"))
 	if !ok {
 		t.Fatal("missing validation spec for caddy generated config")
 	}
-	if validation.Name != "caddy" || validation.Config != filepath.FromSlash("/apply/generated/caddy/Caddyfile") {
+	if validation.Name != "caddy" || validation.Config != filepath.FromSlash("/apply/generated/caddy/config.json") {
 		t.Fatalf("validation spec = %+v", validation)
 	}
 	if got := validation.Command; len(got) != 4 || got[0] != "caddy" || got[1] != "validate" {
 		t.Fatalf("validation command = %+v", got)
 	}
+	// A staged legacy Caddyfile is not the managed artifact and gets no spec.
+	if _, ok := catalog.ValidationSpec(filepath.FromSlash("/apply/generated/caddy/panel.Caddyfile")); ok {
+		t.Fatal("legacy Caddyfile should not match the caddy validation spec")
+	}
 	// hysteria2 has no standalone config checker, so it produces no validation spec...
-	if _, ok := catalog.ValidationSpec(filepath.FromSlash("/apply/generated/hysteria2/server.yaml")); ok {
+	if _, ok := catalog.ValidationSpec(filepath.FromSlash("/apply/generated/hysteria2/edge.yaml")); ok {
 		t.Fatal("hysteria2 should have no validation spec (no standalone checker)")
 	}
-	// ...but its staged config still maps to a live path for promotion.
-	livePath, ok := catalog.LivePathForStagedConfig(filepath.FromSlash("/apply"), filepath.FromSlash("/apply/generated/hysteria2/server.yaml"))
-	if !ok || livePath != filepath.FromSlash("/apply/live/hysteria2/server.yaml") {
+	// ...but its staged per-inbound config still maps to a live path for promotion.
+	livePath, ok := catalog.LivePathForStagedConfig(filepath.FromSlash("/apply"), filepath.FromSlash("/apply/generated/hysteria2/edge.yaml"))
+	if !ok || livePath != filepath.FromSlash("/apply/live/hysteria2/edge.yaml") {
 		t.Fatalf("live path = %q %v", livePath, ok)
 	}
 }

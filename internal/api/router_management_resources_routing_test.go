@@ -60,7 +60,7 @@ func TestManagementAPIUpdatesAndDeletesRoutingRuleByName(t *testing.T) {
 	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
 	create := httptest.NewRecorder()
-	r.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"non-ru","match":"geosite:geolocation-!ru","outbound":"warp","enabled":false}`)))
+	r.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"non-ru","match":"geosite:ru-blocked","outbound":"warp","enabled":false}`)))
 	if create.Code != http.StatusCreated {
 		t.Fatalf("create routing rule expected 201, got %d: %s", create.Code, create.Body.String())
 	}

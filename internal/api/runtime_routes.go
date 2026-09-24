@@ -80,21 +80,34 @@ func handleTLSRuntime(w http.ResponseWriter, req *http.Request) {
 
 func (r RuntimeRoutes) tlsCertInfo() veilruntime.TLSCertInfo {
 	var settings Settings
+	var serveAccess string
 	if r.State != nil {
 		r.State.mu.Lock()
 		settings = r.State.settings
+		serveAccess = r.State.servePanelAccess
 		r.State.mu.Unlock()
 	}
-	expectedDomain := tlsExpectedDomain(settings)
 	envPath := strings.TrimSpace(os.Getenv("VEIL_TLS_CERT"))
-	if envPath == "" && strings.EqualFold(strings.TrimSpace(settings.PanelAccess), "caddy") && expectedDomain != "" {
+	// A serve-time panelAccess override wins over the stored setting (#906).
+	access := strings.TrimSpace(serveAccess)
+	if access == "" {
+		access = strings.TrimSpace(settings.PanelAccess)
+	}
+	expectedDomain := tlsExpectedDomain(settings)
+	if envPath == "" && strings.EqualFold(access, "caddy") && expectedDomain != "" {
 		pair, err := findCaddyTLSCertPair("", expectedDomain)
 		if err == nil {
 			info := veilruntime.ReadTLSCertForDomain(pair.CertPath, expectedDomain)
 			info.Source = "caddy"
+			// Surface which issuer actually served the managed certificate —
+			// an ACME failure that silently fell back to Caddy's internal CA
+			// is a degraded state, not a trusted issuance (#906).
+			info.ManagedBy = "caddy"
+			info.IssuerSource = pair.IssuerName
+			info.IssuerKind = caddycert.IssuerKind(pair.IssuerName)
 			return info
 		}
-		info := veilruntime.TLSCertInfo{Source: "caddy"}
+		info := veilruntime.TLSCertInfo{Source: "caddy", ManagedBy: "caddy"}
 		info.Error = fmt.Sprintf("no Caddy-managed certificate for %s: %v", expectedDomain, err)
 		return info
 	}

@@ -59,6 +59,14 @@ func TestRenderNaiveCaddyfileSupportsMultipleUsers(t *testing.T) {
 			t.Fatalf("rendered Caddyfile missing %q:\n%s", want, cfg)
 		}
 	}
+	// When Users are present the leftover top-level fallback credential must
+	// not leak into the render — it would silently authorize an extra login
+	// (#822).
+	for _, forbidden := range []string{"fallback", "fallback-pass", "basic_auth fallback"} {
+		if strings.Contains(cfg, forbidden) {
+			t.Fatalf("rendered Caddyfile must not leak fallback credential %q:\n%s", forbidden, cfg)
+		}
+	}
 }
 
 func TestRenderNaiveCaddyfileRequiresDomain(t *testing.T) {

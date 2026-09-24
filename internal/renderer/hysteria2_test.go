@@ -51,6 +51,13 @@ func TestRenderHysteria2SupportsMultipleUsers(t *testing.T) {
 			t.Fatalf("rendered Hysteria2 config missing %q:\n%s", want, cfg)
 		}
 	}
+	// The leftover top-level fallback credential must not appear when Users
+	// are present — it would silently authorize an extra login (#822).
+	for _, forbidden := range []string{"fallback", "fallback-pass"} {
+		if strings.Contains(cfg, forbidden) {
+			t.Fatalf("rendered Hysteria2 config must not leak fallback credential %q:\n%s", forbidden, cfg)
+		}
+	}
 }
 
 func TestRenderHysteria2RequiresListenPort(t *testing.T) {

@@ -6030,6 +6030,22 @@ components:
           type: boolean
         error:
           type: string
+        managedBy:
+          type: string
+          description: >-
+            Component that issued/stores the certificate when it is not the
+            process's own VEIL_TLS_CERT file (e.g. "caddy" for the managed
+            panel edge).
+        issuerSource:
+          type: string
+          description: >-
+            Upstream issuer identity (Caddy issuer storage name, e.g. "local"
+            or "acme-v02.api.letsencrypt.org-directory").
+        issuerKind:
+          type: string
+          description: >-
+            Issuer classification — "acme", "internal" (Caddy local CA, an
+            untrusted fallback), or "other".
     NetworkInterface:
       type: object
       required:

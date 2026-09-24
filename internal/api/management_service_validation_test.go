@@ -27,9 +27,15 @@ func TestLivePathForStagedConfig(t *testing.T) {
 			wantOK:     true,
 		},
 		{
-			name:       "hysteria2 server.yaml",
-			stagedPath: "/tmp/veil-test/generated/hysteria2/server.yaml",
-			wantPath:   "/tmp/veil-test/live/hysteria2/server.yaml",
+			name:       "hysteria2 per-inbound yaml",
+			stagedPath: "/tmp/veil-test/generated/hysteria2/edge.yaml",
+			wantPath:   "/tmp/veil-test/live/hysteria2/edge.yaml",
+			wantOK:     true,
+		},
+		{
+			name:       "olcrtc per-inbound yaml",
+			stagedPath: "/tmp/veil-test/generated/olcrtc/o.yaml",
+			wantPath:   "/tmp/veil-test/live/olcrtc/o.yaml",
 			wantOK:     true,
 		},
 		{
@@ -54,6 +60,27 @@ func TestLivePathForStagedConfig(t *testing.T) {
 		{
 			name:       "unknown generated file",
 			stagedPath: "/tmp/veil-test/generated/unknown/config.yaml",
+			wantPath:   "",
+			wantOK:     false,
+		},
+		// Sibling files sharing the artifact directory or basename prefix must
+		// not be promoted: matching is exact for fixed artifacts and glob-bound
+		// for per-inbound ones (#855).
+		{
+			name:       "caddy config json backup suffix",
+			stagedPath: "/tmp/veil-test/generated/caddy/config.json.bak",
+			wantPath:   "",
+			wantOK:     false,
+		},
+		{
+			name:       "hysteria2 non-yaml sibling",
+			stagedPath: "/tmp/veil-test/generated/hysteria2/edge.txt",
+			wantPath:   "",
+			wantOK:     false,
+		},
+		{
+			name:       "warp wrong basename",
+			stagedPath: "/tmp/veil-test/generated/sing-box/other.json",
 			wantPath:   "",
 			wantOK:     false,
 		},

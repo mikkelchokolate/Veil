@@ -23,6 +23,11 @@ func TestRenderOlcrtcUsesResolverDNSNotServerDomain(t *testing.T) {
 	if strings.Contains(out, "45.157.233.54") {
 		t.Fatalf("olcrtc config must not put the server domain in dns:\n%s", out)
 	}
+	// Positive golden: the resolver must be present with the product default —
+	// omitting net.dns entirely would still pass the absence checks above (#823).
+	if !strings.Contains(out, "dns: 1.1.1.1:53") {
+		t.Fatalf("olcrtc config must set the default resolver dns: 1.1.1.1:53:\n%s", out)
+	}
 	if !strings.Contains(out, "transport: datachannel") {
 		t.Fatalf("olcrtc transport should default to datachannel, got:\n%s", out)
 	}

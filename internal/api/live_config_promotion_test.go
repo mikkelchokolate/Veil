@@ -149,9 +149,12 @@ func TestLiveConfigOrphanDirsComeFromTemplateAndAggregateProtocolPlugins(t *test
 		// template, so the JSON dir scans without an excluded base name
 		// (config.json itself is cleaned once no runtime needs it).
 		{subpath: "caddy", ext: ".json"},
-		{subpath: "hysteria2", ext: ".yaml", exclude: "server.yaml"},
+		// Per-inbound artifact globs have no aggregate base file to exclude;
+		// every leftover *.yaml (including a legacy server.yaml) is orphaned
+		// once no live inbound renders it (#780).
+		{subpath: "hysteria2", ext: ".yaml", exclude: "*.yaml"},
 		{subpath: "mieru", ext: ".json"},
-		{subpath: "olcrtc", ext: ".yaml", exclude: "server.yaml"},
+		{subpath: "olcrtc", ext: ".yaml", exclude: "*.yaml"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("liveConfigOrphanDirs = %+v, want %+v", got, want)

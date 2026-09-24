@@ -71,7 +71,7 @@ func TestManagementStateMutationOwnsRoutingRuleMutations(t *testing.T) {
 		return nil
 	})
 
-	created, err := mutation.CreateRoutingRule(RoutingRule{Name: "non-ru", Match: "geosite:geolocation-!ru", Outbound: "warp", Enabled: true})
+	created, err := mutation.CreateRoutingRule(RoutingRule{Name: "non-ru", Match: "geosite:ru-blocked", Outbound: "warp", Enabled: true})
 	if err != nil {
 		t.Fatalf("CreateRoutingRule: %v", err)
 	}
@@ -291,8 +291,11 @@ func TestMutationUpdateWarpAddsAndRemovesRoutingRule(t *testing.T) {
 	if !updated.Enabled || updated.Endpoint == "" {
 		t.Fatalf("warp defaults not set: %+v", updated)
 	}
-	if len(rules) != 2 || rules[0].Outbound != "warp" {
-		t.Fatalf("warp routing rule not added: %+v", rules)
+	// Lock the exact auto-rule shape — a bare Outbound=="warp" check greens a
+	// rule with an empty Match that routes nothing (#863/#915).
+	wantRule := RoutingRule{Name: "warp-routing", Match: "geosite:openai", Outbound: "warp", Enabled: true}
+	if len(rules) != 2 || rules[0] != wantRule {
+		t.Fatalf("warp routing rule = %+v, want prepended %+v; rules=%+v", rules[0], wantRule, rules)
 	}
 
 	updated, err = m.UpdateWarp(WarpConfig{Enabled: false})
@@ -304,6 +307,9 @@ func TestMutationUpdateWarpAddsAndRemovesRoutingRule(t *testing.T) {
 	}
 	if len(rules) != 1 || rules[0].Outbound == "warp" {
 		t.Fatalf("warp routing rule not removed: %+v", rules)
+	}
+	if rules[0].Match != "geoip:private" {
+		t.Fatalf("disable must keep the pre-existing rule, got %+v", rules[0])
 	}
 }
 

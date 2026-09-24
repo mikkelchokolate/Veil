@@ -33,7 +33,9 @@ func TestParseMatchKnownAtoms(t *testing.T) {
 		{"geoip:private", MatchPrivateIP, ""},
 		{"geoip:ru", MatchGeoIP, "ru"},
 		{"geosite:openai", MatchGeoSite, "openai"},
-		{"geosite:geolocation-!ru", MatchGeoSite, "geolocation-!ru"},
+		// geolocation-!cn is a published SagerNet/runetfreedom geosite list;
+		// geolocation-!ru exists in neither and must not be used as an example.
+		{"geosite:geolocation-!cn", MatchGeoSite, "geolocation-!cn"},
 		{"all", MatchAll, ""},
 		{"example.com", MatchDomainSuffix, "example.com"},
 		{"domain:example.com", MatchDomainSuffix, "example.com"},

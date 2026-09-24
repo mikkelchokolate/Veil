@@ -23,9 +23,31 @@ const DefaultCaddyDataDir = "/var/lib/caddy"
 var defaultDataDir = DefaultCaddyDataDir
 
 // Pair holds the filesystem paths to a matched certificate and private key.
+// IssuerName is the Caddy issuer storage directory the pair was found under
+// (e.g. "local" for Caddy's internal CA or "acme-v02.api.letsencrypt.org-
+// directory" for an ACME issuer), so callers can tell a silently degraded
+// internal fallback apart from a publicly trusted ACME issuance (#906).
 type Pair struct {
-	CertPath string
-	KeyPath  string
+	CertPath   string
+	KeyPath    string
+	IssuerName string
+}
+
+// IssuerKind classifies a Caddy issuer storage directory name.
+// "internal" is Caddy's local CA — browsers do not trust it, so a panel or
+// inbound silently falling back to it is a degraded state that must stay
+// visible (#906).
+func IssuerKind(issuerName string) string {
+	switch {
+	case issuerName == "local":
+		return "internal"
+	case strings.HasPrefix(issuerName, "acme"):
+		return "acme"
+	case issuerName == "":
+		return ""
+	default:
+		return "other"
+	}
 }
 
 // FindPair searches Caddy certificate storage for a valid, non-expired
@@ -76,7 +98,7 @@ func FindPair(caddyDataDir, domain string) (Pair, error) {
 		score := issuerScore(issuerName)
 		modTime := certInfo.ModTime()
 		if score > bestScore || (score == bestScore && modTime.After(bestModTime)) {
-			best = &Pair{CertPath: certPath, KeyPath: keyPath}
+			best = &Pair{CertPath: certPath, KeyPath: keyPath, IssuerName: issuerName}
 			bestScore = score
 			bestModTime = modTime
 		}

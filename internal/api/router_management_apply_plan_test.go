@@ -30,7 +30,14 @@ func TestManagementApplyPlanValidatesAndReturnsStagedActions(t *testing.T) {
 	if len(response.Errors) != 0 {
 		t.Fatalf("expected no validation errors: %+v", response.Errors)
 	}
-	if len(response.Configs) != 0 {
+	// The default geoip:private direct rule provisions geoip.dat (#764), so the
+	// plan may carry rules/ routing data — but never generated PROXY configs
+	// (caddy/hysteria2/mieru/olcrtc/sing-box) when no inbound is enabled.
+	for _, cfg := range response.Configs {
+		slash := filepath.ToSlash(cfg)
+		if strings.Contains(slash, "/rules/") {
+			continue
+		}
 		t.Fatalf("fresh Panel without Inbounds should not plan generated proxy configs: %+v", response.Configs)
 	}
 	if !containsString(response.Actions, "validate management state") || containsString(response.Actions, "reload veil-caddy.service") || containsString(response.Actions, "reload veil-hysteria2@.service") {

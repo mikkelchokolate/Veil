@@ -14,7 +14,9 @@ import (
 
 func TestWriteApplyStageWritesPlanSnapshotAndRenderedConfigs(t *testing.T) {
 	root := t.TempDir()
-	configPath := filepath.Join(root, "generated", "caddy", "Caddyfile")
+	// The managed caddy artifact is the consolidated JSON config, staged at
+	// generated/caddy/config.json — not a legacy Caddyfile (#856).
+	configPath := filepath.Join(root, "generated", "caddy", "config.json")
 	written, validations, renderedPaths, err := WriteApplyStage(ApplyStageInput{
 		ApplyRoot: root,
 		Plan:      ApplyPlanResponse{Valid: true, Configs: []string{"caddy"}},
@@ -39,6 +41,21 @@ func TestWriteApplyStageWritesPlanSnapshotAndRenderedConfigs(t *testing.T) {
 			t.Fatalf("expected written file %s: %v", path, err)
 		}
 	}
+	// Rendered bodies land verbatim with owner-only permissions (#856).
+	body, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read staged caddy config: %v", err)
+	}
+	if string(body) != "caddy config" {
+		t.Fatalf("staged caddy config body = %q, want %q", body, "caddy config")
+	}
+	info, err := os.Stat(configPath)
+	if err != nil {
+		t.Fatalf("stat staged caddy config: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("staged caddy config mode = %#o, want 0600", got)
+	}
 	if len(written) != 3 || len(renderedPaths) != 1 || len(validations) != 1 {
 		t.Fatalf("unexpected result: written=%+v rendered=%+v validations=%+v", written, renderedPaths, validations)
 	}
@@ -46,7 +63,7 @@ func TestWriteApplyStageWritesPlanSnapshotAndRenderedConfigs(t *testing.T) {
 
 func TestWriteApplyStageRendersHysteria2GeoMatchersAfterDatDownload(t *testing.T) {
 	root := t.TempDir()
-	hyPath := filepath.Join(root, "generated", "hysteria2", "server.yaml")
+	hyPath := filepath.Join(root, "generated", "hysteria2", "edge.yaml")
 	geoBody := []byte("fake geosite dat")
 	digest := sha256.Sum256(geoBody)
 	oldDownloader := routeDatDownloader

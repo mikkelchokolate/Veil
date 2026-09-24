@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
 type PromotionRecord struct {
@@ -104,7 +105,12 @@ func (w Workflow) RunLocked(req model.ApplyRequest) (model.ApplyResponse, int, e
 		liveFiles, backupFiles, promotionRecords, err := s.PromoteStagedConfigsLocked(written)
 		if err != nil {
 			var preMutation *PreMutationError
-			if errors.As(err, &preMutation) {
+			// A dial-level failure proves the promote request never reached
+			// the helper, so no artifact could have been published — treat it
+			// like a pre-mutation failure so the job finalizes as a terminal
+			// failure instead of pinning recovery_pending while the helper
+			// stays unreachable.
+			if errors.As(err, &preMutation) || privileged.IsUndelivered(err) {
 				// The promote failed before any live mutation: nothing was
 				// promoted and no mutation marker was recorded durably. Record
 				// the failed apply and surface a clean error — the durable

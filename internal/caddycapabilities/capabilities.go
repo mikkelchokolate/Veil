@@ -33,18 +33,9 @@ func Probe(binaryPath string) (CaddyCapabilities, error) {
 	if err != nil {
 		return CaddyCapabilities{}, fmt.Errorf("caddy list-modules failed: %w", err)
 	}
-	modules, err := parseModules(out)
-	if err != nil {
-		return CaddyCapabilities{}, err
-	}
-	caps := CaddyCapabilities{
-		ForwardProxy: hasModule(modules, "http.handlers.forward_proxy"),
-	}
-	// HTTP3 is available in standard Caddy builds; this flag is set true when
-	// the base http app module is present. H3Only is intentionally left false
-	// here and verified behaviorally before `quic` transport is accepted.
-	caps.HTTP3 = hasModule(modules, "http")
-	return caps, nil
+	// Route production probing through the same parser the tests lock, so a
+	// parseModuleList regression cannot diverge from live behavior (#882).
+	return parseModuleList(out)
 }
 
 func hasModule(modules []caddyModule, name string) bool {
@@ -69,14 +60,12 @@ func parseModuleList(data []byte) (CaddyCapabilities, error) {
 	if err != nil {
 		return CaddyCapabilities{}, err
 	}
-	var caps CaddyCapabilities
-	for _, m := range modules {
-		switch m.Name {
-		case "http.handlers.forward_proxy":
-			caps.ForwardProxy = true
-		case "http":
-			// HTTP base present
-		}
+	caps := CaddyCapabilities{
+		ForwardProxy: hasModule(modules, "http.handlers.forward_proxy"),
 	}
+	// HTTP3 is available in standard Caddy builds; this flag is set true when
+	// the base http app module is present. H3Only is intentionally left false
+	// here and verified behaviorally before `quic` transport is accepted.
+	caps.HTTP3 = hasModule(modules, "http")
 	return caps, nil
 }
