@@ -49,7 +49,8 @@ func TestSocketClientRecoverKeyRotationUsesDedicatedOperation(t *testing.T) {
 		seen <- *request
 		return ResponseEnvelope{Version: ProtocolVersion, RequestID: request.RequestID, OK: true}
 	})
-	if err := NewSocketClient(path).RecoverKeyRotation(context.Background(), RecoverKeyRotationRequest{}); err != nil {
+	fence := FenceToken{Owner: "pid:1:owner", Generation: 7, OperationID: "key-rotation-recovery", LeaseExpiresAt: 4102444800}
+	if err := NewSocketClient(path).RecoverKeyRotation(context.Background(), RecoverKeyRotationRequest{Fence: fence}); err != nil {
 		t.Fatalf("recover through socket: %v", err)
 	}
 	request := <-seen
@@ -58,6 +59,9 @@ func TestSocketClientRecoverKeyRotationUsesDedicatedOperation(t *testing.T) {
 	}
 	if request.RotateKey != nil {
 		t.Fatal("recovery request reused rotate_key payload")
+	}
+	if request.RecoverKeyRotation.Fence != fence {
+		t.Fatalf("recovery fence did not round-trip: %+v", request.RecoverKeyRotation.Fence)
 	}
 }
 

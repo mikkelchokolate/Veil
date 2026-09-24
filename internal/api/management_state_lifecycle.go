@@ -238,6 +238,17 @@ func (l ManagementStateLifecycle) RecoverPendingKeyRotation() error {
 }
 
 func (l ManagementStateLifecycle) RecoverPendingKeyRotationContext(ctx context.Context) error {
+	return l.recoverPendingKeyRotation(ctx, nil)
+}
+
+// recoverPendingKeyRotationWithFence runs pending-journal recovery under a
+// fencing token the caller already holds (key rotation reuses the lease that
+// covered the failed rotation rather than acquiring a second one).
+func (l ManagementStateLifecycle) recoverPendingKeyRotationWithFence(ctx context.Context, fence privileged.FenceToken) error {
+	return l.recoverPendingKeyRotation(ctx, &fence)
+}
+
+func (l ManagementStateLifecycle) recoverPendingKeyRotation(ctx context.Context, callerFence *privileged.FenceToken) error {
 	if l.state.statePath == "" {
 		return nil
 	}
@@ -248,8 +259,25 @@ func (l ManagementStateLifecycle) RecoverPendingKeyRotationContext(ctx context.C
 		}
 		return errors.New("recover interrupted key rotation: privileged helper is unavailable")
 	}
-	if err := l.state.privileged.RecoverKeyRotation(ctx, privileged.RecoverKeyRotationRequest{}); err != nil {
-		if !pending && privilegedHelperSocketUnavailable(err) {
+	token := privileged.FenceToken{}
+	var release func()
+	if callerFence != nil {
+		token = *callerFence
+	} else {
+		var mintErr error
+		token, release, mintErr = l.state.acquireRuntimeFence("key-rotation-recovery")
+		if release != nil {
+			defer release()
+		}
+		if mintErr != nil && pending {
+			return fmt.Errorf("acquire fencing lease for pending privileged recovery: %w", mintErr)
+		}
+		// With no pending journal the helper call is a best-effort no-op; a
+		// missing lease store (or a lease held by the surrounding mutation)
+		// must not fail startup. The unfenced rejection below is tolerated.
+	}
+	if err := l.state.privileged.RecoverKeyRotation(ctx, privileged.RecoverKeyRotationRequest{Fence: token}); err != nil {
+		if !pending && (privilegedHelperSocketUnavailable(err) || privilegedFenceRejected(err)) {
 			return nil
 		}
 		return fmt.Errorf("recover interrupted key rotation through privileged helper: %w", err)

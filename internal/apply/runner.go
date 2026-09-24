@@ -304,7 +304,7 @@ func (r *Runner) recoverStartup() (bool, error) {
 		return false, fmt.Errorf("apply: inspect startup lease: %w", err)
 	}
 	now := r.now()
-	if lease.Owner != "" && lease.ExpiresAt > now.Unix() && processOwnerAlive(lease.Owner) {
+	if lease.Owner != "" && lease.ExpiresAt > now.Unix() && ProcessOwnerAlive(lease.Owner) {
 		return true, nil
 	}
 	if lease.Owner != "" {
@@ -321,7 +321,10 @@ func (r *Runner) recoverStartup() (bool, error) {
 	return false, nil
 }
 
-func processOwnerAlive(owner string) bool {
+// ProcessOwnerAlive reports whether the process encoded in a lease owner
+// string of the form "pid:<pid>:<uuid>" is still running. Owners without the
+// pid: prefix are treated as alive because they cannot be inspected.
+func ProcessOwnerAlive(owner string) bool {
 	if !strings.HasPrefix(owner, "pid:") {
 		return true
 	}
@@ -375,7 +378,7 @@ func (r *Runner) monitorRecovery() {
 				r.setRecoveryError(resumeErr)
 				continue
 			}
-			if lease.Owner != "" && lease.ExpiresAt > now.Unix() && processOwnerAlive(lease.Owner) {
+			if lease.Owner != "" && lease.ExpiresAt > now.Unix() && ProcessOwnerAlive(lease.Owner) {
 				continue
 			}
 			if lease.Owner != "" {

@@ -180,9 +180,13 @@ type BackupResult struct {
 	Warning            string                    `json:"warning,omitempty"`
 }
 
-type RotateKeyRequest struct{}
+type RotateKeyRequest struct {
+	Fence FenceToken `json:"fence"`
+}
 
-type RecoverKeyRotationRequest struct{}
+type RecoverKeyRotationRequest struct {
+	Fence FenceToken `json:"fence"`
+}
 
 // FirewallRule is a single firewall allow rule executed by the privileged helper.
 type FirewallRule struct {

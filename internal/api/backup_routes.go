@@ -81,10 +81,17 @@ func (s *managementState) handleBackups(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		defer s.backupMutationMu.Unlock()
+		fence, releaseFence, fenceErr := s.acquireRuntimeFence("backup-create")
+		if fenceErr != nil {
+			s.recordRequestAudit(r, audit.Record{Action: "backup.create", Target: "state", Success: false, Error: fenceErr.Error()})
+			writeError(w, "backup create fencing lease is unavailable: "+fenceErr.Error(), http.StatusConflict)
+			return
+		}
+		defer releaseFence()
 		// The helper acquires the cross-process Management snapshot barrier only
 		// while it copies state/key and runs SQLite VACUUM INTO; compression and
 		// verification do not block unrelated configuration mutations.
-		result, err := s.backupOperation(r.Context(), privileged.BackupRequest{Action: privileged.BackupActionCreate})
+		result, err := s.backupOperation(r.Context(), privileged.BackupRequest{Action: privileged.BackupActionCreate, Fence: fence})
 		if err != nil {
 			s.recordRequestAudit(r, audit.Record{Action: "backup.create", Target: "state", Success: false, Error: err.Error()})
 			writePrivilegedError(w, err)
@@ -94,8 +101,11 @@ func (s *managementState) handleBackups(w http.ResponseWriter, r *http.Request) 
 		response := backupCreateResponseFromPrivileged(s.backupDir, result)
 		details := map[string]any{"prune": request.Prune}
 		if request.Prune {
+			// The same fencing lease covers the retention prune that belongs to
+			// this create request.
 			pruned, pruneErr := s.backupOperation(r.Context(), privileged.BackupRequest{
 				Action: privileged.BackupActionPrune, Daily: request.Daily, Weekly: request.Weekly, Monthly: request.Monthly,
+				Fence: fence,
 			})
 			if pruneErr != nil {
 				response.Warning = appendBackupResponseWarning(response.Warning, "backup created, but retention prune failed: "+pruneErr.Error())
@@ -141,8 +151,15 @@ func (s *managementState) handleBackupPrune(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	defer s.backupMutationMu.Unlock()
+	fence, releaseFence, fenceErr := s.acquireRuntimeFence("backup-prune")
+	if fenceErr != nil {
+		writeError(w, "backup prune fencing lease is unavailable: "+fenceErr.Error(), http.StatusConflict)
+		return
+	}
+	defer releaseFence()
 	result, err := s.backupOperation(r.Context(), privileged.BackupRequest{
 		Action: privileged.BackupActionPrune, Daily: request.Daily, Weekly: request.Weekly, Monthly: request.Monthly,
+		Fence: fence,
 	})
 	if err != nil {
 		writePrivilegedError(w, err)
@@ -255,8 +272,16 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		defer s.backupMutationMu.Unlock()
+		fence, releaseFence, fenceErr := s.acquireRuntimeFence("backup-delete")
+		if fenceErr != nil {
+			s.recordRequestAudit(r, audit.Record{Action: "backup.delete", Target: name, Success: false, Error: fenceErr.Error()})
+			writeError(w, "backup delete fencing lease is unavailable: "+fenceErr.Error(), http.StatusConflict)
+			return
+		}
+		defer releaseFence()
 		result, err := s.backupOperation(r.Context(), privileged.BackupRequest{
 			Action: privileged.BackupActionDelete, ArchiveName: name,
+			Fence: fence,
 		})
 		if err != nil {
 			s.recordRequestAudit(r, audit.Record{Action: "backup.delete", Target: name, Success: false, Error: err.Error()})
