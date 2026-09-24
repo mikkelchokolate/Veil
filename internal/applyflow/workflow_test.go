@@ -218,6 +218,15 @@ func TestWorkflowRollsBackOnServiceActionFailure(t *testing.T) {
 	if resp.ServicesApplied {
 		t.Fatal("ServicesApplied must be false on rollback")
 	}
+	// A clean self-rollback proves the triad: mutation started, the rollback
+	// completed, and nothing is ambiguous — the job is terminally failed, not
+	// recovery_pending (#888).
+	if !resp.MutationStarted || !resp.RollbackComplete || resp.Ambiguous {
+		t.Fatalf("clean rollback triad wrong: %+v", resp)
+	}
+	if len(state.history) == 0 || state.history[len(state.history)-1] != "rollback" {
+		t.Fatalf("clean rollback history = %v, want last 'rollback'", state.history)
+	}
 }
 
 func TestWorkflowRollsBackOnHealthFailure(t *testing.T) {
@@ -236,6 +245,9 @@ func TestWorkflowRollsBackOnHealthFailure(t *testing.T) {
 	}
 	if resp.RolledBack || !resp.Ambiguous {
 		t.Fatalf("unhealthy rollback must remain recovery-pending, got %+v", resp)
+	}
+	if len(state.history) == 0 || state.history[len(state.history)-1] != "ambiguous" {
+		t.Fatalf("unhealthy rollback must record 'ambiguous' history, got %v", state.history)
 	}
 }
 
@@ -285,6 +297,9 @@ func TestWorkflowLeavesRecoveryPendingWhenRestoredServiceActionFails(t *testing.
 	if resp.RolledBack || resp.RollbackComplete || !resp.Ambiguous {
 		t.Fatalf("failed service restoration was reported complete: %+v", resp)
 	}
+	if len(state.history) == 0 || state.history[len(state.history)-1] != "ambiguous" {
+		t.Fatalf("incomplete rollback must record 'ambiguous' history, got %v", state.history)
+	}
 }
 
 func TestWorkflowLeavesRecoveryPendingWhenRestoredServiceUnhealthy(t *testing.T) {
@@ -307,21 +322,69 @@ func TestWorkflowLeavesRecoveryPendingWhenRestoredServiceUnhealthy(t *testing.T)
 	if resp.RolledBack || resp.PostRollbackHealthPass || resp.RollbackComplete || !resp.Ambiguous {
 		t.Fatalf("unhealthy restored service was reported complete: %+v", resp)
 	}
+	if len(state.history) == 0 || state.history[len(state.history)-1] != "ambiguous" {
+		t.Fatalf("unhealthy restored service must record 'ambiguous' history, got %v", state.history)
+	}
 }
 
 func TestWorkflowReturns500OnStageWriteError(t *testing.T) {
 	state := &fakeState{plan: model.ApplyPlanResponse{Valid: true}, writeErr: errors.New("disk full")}
-	_, status, err := NewWorkflow(state, nil).RunLocked(model.ApplyRequest{Confirm: true})
+	resp, status, err := NewWorkflow(state, nil).RunLocked(model.ApplyRequest{Confirm: true})
 	if status != http.StatusInternalServerError || err == nil {
 		t.Fatalf("stage write error must 500: status=%d err=%v", status, err)
+	}
+	// Nothing was staged: no mutation evidence may be claimed and no history
+	// entry is written — there is no apply outcome to record.
+	if resp.MutationStarted || resp.Ambiguous || resp.LiveApplied || resp.Applied {
+		t.Fatalf("stage-write failure must not claim mutation evidence: %+v", resp)
+	}
+	if len(state.history) != 0 {
+		t.Fatalf("stage-write failure must not write history: %v", state.history)
 	}
 }
 
 func TestWorkflowReturns500OnPromoteError(t *testing.T) {
 	state := &fakeState{plan: model.ApplyPlanResponse{Valid: true}, promoteErr: errors.New("helper down")}
-	_, status, err := NewWorkflow(state, nil).RunLocked(model.ApplyRequest{Confirm: true, ApplyLive: true})
+	resp, status, err := NewWorkflow(state, nil).RunLocked(model.ApplyRequest{Confirm: true, ApplyLive: true})
 	if status != http.StatusInternalServerError || err == nil {
 		t.Fatalf("promote error must 500: status=%d err=%v", status, err)
+	}
+	// An unmarked promote failure cannot prove the live tree is untouched: the
+	// triad says mutation may have started and the outcome stays ambiguous, so
+	// the durable layer strands it as recovery_pending rather than claiming a
+	// clean failure (#888).
+	if !resp.MutationStarted || !resp.Ambiguous {
+		t.Fatalf("unmarked promote failure must report MutationStarted+Ambiguous: %+v", resp)
+	}
+	if len(state.history) == 0 || state.history[len(state.history)-1] != "ambiguous" {
+		t.Fatalf("ambiguous promote failure must record 'ambiguous' history: %v", state.history)
+	}
+}
+
+// #967: a promote failure that provably happened before any live mutation
+// (path escape, orphan scan, digest build, missing helper) is a clean failure
+// — MutationStarted/Ambiguous stay false so the durable runner finalizes the
+// job as failed instead of recovery_pending.
+func TestWorkflowPromotePreMutationErrorIsNotAmbiguous(t *testing.T) {
+	state := &fakeState{plan: model.ApplyPlanResponse{Valid: true},
+		promoteErr: MarkPreMutationError(errors.New("privileged helper is unavailable"))}
+	resp, status, err := NewWorkflow(state, nil).RunLocked(model.ApplyRequest{Confirm: true, ApplyLive: true})
+	if status != http.StatusInternalServerError || err == nil {
+		t.Fatalf("pre-mutation promote error must 500: status=%d err=%v", status, err)
+	}
+	var preMutation *PreMutationError
+	if !errors.As(err, &preMutation) {
+		t.Fatalf("error must keep the PreMutationError marker: %v", err)
+	}
+	if resp.MutationStarted || resp.Ambiguous {
+		t.Fatalf("pre-mutation promote failure must not claim mutation or ambiguity: %+v", resp)
+	}
+	if resp.LiveApplied || resp.Applied {
+		t.Fatalf("pre-mutation promote failure must not claim progress: %+v", resp)
+	}
+	// The apply was staged before the promote ran — that is the honest stage.
+	if len(state.history) != 1 || state.history[0] != "staged" {
+		t.Fatalf("pre-mutation failure history = %v, want [staged]", state.history)
 	}
 }
 

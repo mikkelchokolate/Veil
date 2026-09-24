@@ -15,6 +15,12 @@ func TestHistoryStageReturnsCorrectStage(t *testing.T) {
 		{name: "services stage supersedes live", response: ApplyResponse{ServicesApplied: true, LiveApplied: true}, want: "services"},
 		{name: "live stage", response: ApplyResponse{LiveApplied: true}, want: "live"},
 		{name: "staged fallback", response: ApplyResponse{}, want: "staged"},
+		// #968: an unproven runtime outcome is a first-class "ambiguous" stage —
+		// it must never be labeled staged/live/services (claims convergence)
+		// or rollback (claims proven undo).
+		{name: "ambiguous stage", response: ApplyResponse{MutationStarted: true, Ambiguous: true}, want: "ambiguous"},
+		{name: "ambiguous supersedes rollback", response: ApplyResponse{RolledBack: true, Ambiguous: true}, want: "ambiguous"},
+		{name: "ambiguous supersedes services", response: ApplyResponse{ServicesApplied: true, Ambiguous: true}, want: "ambiguous"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

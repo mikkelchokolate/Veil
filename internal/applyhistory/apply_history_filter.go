@@ -12,6 +12,10 @@ var allowedApplyHistoryStages = map[string]bool{
 	"services":   true,
 	"rollback":   true,
 	"validation": true,
+	// "ambiguous" labels applies whose runtime outcome could not be proven
+	// (rollback incomplete, post-mutation failure). It is a first-class stage
+	// so operators can filter for unproven applies (#968).
+	"ambiguous": true,
 }
 
 var allowedApplyHistoryFilters = map[string]bool{

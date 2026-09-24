@@ -24,6 +24,7 @@ func (b ApplyHistoryEntryBuilder) Build(stage string, success bool, response App
 		LiveApplied:     response.LiveApplied,
 		ServicesApplied: response.ServicesApplied,
 		RolledBack:      response.RolledBack,
+		Ambiguous:       response.Ambiguous,
 		Plan:            response.Plan,
 		WrittenFiles:    append([]string(nil), response.WrittenFiles...),
 		LiveFiles:       append([]string(nil), response.LiveFiles...),
