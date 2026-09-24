@@ -48,7 +48,7 @@ func TestRuntimeActivationRecoversSIGKILLAtIrreversiblePhases(t *testing.T) {
 func TestRuntimeActivationCrashHelper(t *testing.T) {
 	phase := os.Getenv(runtimeActivationCrashEnv)
 	if phase == "" {
-		return
+		t.Skip("subprocess helper")
 	}
 	binDir := os.Getenv("VEIL_RUNTIME_BIN_DIR")
 	payload := []byte("runtime-new-v1.2.4")

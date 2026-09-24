@@ -150,21 +150,39 @@ assert_install_systemctl() {
   # postinstall must daemon-reload and enable the helper socket on every
   # install path (issue #499).
   [ -f "$SYSTEMCTL_LOG" ] || fail "systemctl stub log missing"
-  grep -q 'daemon-reload' "$SYSTEMCTL_LOG" || fail "postinstall did not daemon-reload"
-  grep -Eq '(^|[[:space:]])enable veil-helper\.socket([[:space:]]|$)' "$SYSTEMCTL_LOG" \
+  grep -qxF 'systemctl daemon-reload' "$SYSTEMCTL_LOG" || fail "postinstall did not daemon-reload"
+  grep -qxF 'systemctl enable veil-helper.socket' "$SYSTEMCTL_LOG" \
     || fail "postinstall did not enable veil-helper.socket"
 }
 
 assert_upgrade_systemctl() {
   # Upgrade must reload and restart units so the new binary takes over, and
-  # must never disable them (issues #479, #494).
+  # must never disable them (issues #479, #494). The bulk try-restart line
+  # must name EVERY managed non-template unit — grepping for one unit name
+  # passes even when the call drops the rest (issue #752).
   [ -f "$SYSTEMCTL_LOG" ] || fail "systemctl stub log missing"
-  grep -q 'daemon-reload' "$SYSTEMCTL_LOG" || fail "upgrade postinstall did not daemon-reload"
-  grep -q 'try-restart .*veil\.service' "$SYSTEMCTL_LOG" \
-    || fail "upgrade postinstall did not try-restart veil.service"
-  grep -q 'try-restart .*veil-backup\.service' "$SYSTEMCTL_LOG" \
-    || fail "upgrade postinstall did not try-restart veil-backup.service"
-  grep -q 'enable veil-helper\.socket' "$SYSTEMCTL_LOG" \
+  grep -qxF 'systemctl daemon-reload' "$SYSTEMCTL_LOG" || fail "upgrade postinstall did not daemon-reload"
+  restart_line="$(grep 'try-restart' "$SYSTEMCTL_LOG" | grep 'veil\.service' | head -n 1)"
+  [ -n "$restart_line" ] || fail "upgrade postinstall issued no try-restart"
+  for unit in veil.service veil-helper.service veil-helper.socket \
+      veil-caddy.service veil-mieru.service veil-warp.service \
+      veil-backup.service veil-backup.timer; do
+    case " $restart_line " in
+      *" $unit "*) ;;
+      *) fail "bulk try-restart call missing $unit: $restart_line" ;;
+    esac
+  done
+  # Template units restart per concrete instance enumerated via list-units —
+  # a '@*' glob restart would be a no-op for loaded instances (issue #776).
+  # The stub reports @ci instances so both the enumeration and the restart
+  # land in the log.
+  grep -q 'systemctl list-units .*veil-hysteria2@\*\.service.*veil-olcrtc@\*\.service' "$SYSTEMCTL_LOG" \
+    || fail "upgrade postinstall did not enumerate template instances"
+  for unit in veil-hysteria2@ci.service veil-olcrtc@ci.service; do
+    grep -qxF "systemctl try-restart $unit" "$SYSTEMCTL_LOG" \
+      || fail "upgrade postinstall did not try-restart $unit"
+  done
+  grep -qxF 'systemctl enable veil-helper.socket' "$SYSTEMCTL_LOG" \
     || fail "upgrade postinstall did not re-enable veil-helper.socket"
   if grep -E "(^|[[:space:]])disable veil(\.service)?([[:space:]]|$)" "$SYSTEMCTL_LOG"; then
     echo "package upgrade disabled veil.service" >&2
@@ -243,21 +261,54 @@ assert_unit_hardening() {
     [ -f "$unitdir/veil-caddy.service" ] && break
   done
   for unit in veil-caddy.service veil-hysteria2@.service veil-olcrtc@.service veil-warp.service; do
-    grep -q '^User=veil-proxy$' "$unitdir/$unit" || fail "$unit User"
-    grep -q '^Group=veil-proxy$' "$unitdir/$unit" || fail "$unit Group"
-    grep -q 'InaccessiblePaths=.*/run/veil/helper.sock' "$unitdir/$unit" || fail "$unit helper.sock mask"
-    grep -q 'InaccessiblePaths=.*/var/lib/veil' "$unitdir/$unit" || fail "$unit var/lib/veil mask"
+    grep -qxF 'User=veil-proxy' "$unitdir/$unit" || fail "$unit User"
+    grep -qxF 'Group=veil-proxy' "$unitdir/$unit" || fail "$unit Group"
+    # Exact directive — a reordered, partial, or widened path list means the
+    # edge unit sees something it must not (issue #816).
+    grep -qxF 'InaccessiblePaths=/run/veil/helper.sock /var/lib/veil' "$unitdir/$unit" \
+      || fail "$unit InaccessiblePaths"
+    grep -qxF 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE' "$unitdir/$unit" || fail "$unit CapabilityBoundingSet"
+    grep -qxF 'AmbientCapabilities=CAP_NET_BIND_SERVICE' "$unitdir/$unit" || fail "$unit AmbientCapabilities"
   done
   # veil-mieru.service runs as the dedicated veil-mita identity (issue #624):
   # its appctl UDS is a control plane, so it must not share the veil-proxy
   # edge uid/gid — only the supplementary group for generated-config reads.
-  for want in '^User=veil-mita$' '^Group=veil-mita$' '^SupplementaryGroups=.*veil-proxy' \
-      '^RuntimeDirectory=veil-mieru$' '^RuntimeDirectoryMode=0750$' '^UMask=0007$' \
-      'InaccessiblePaths=.*/run/veil/helper.sock' 'InaccessiblePaths=.*/var/lib/veil'; do
-    grep -Eq "$want" "$unitdir/veil-mieru.service" || fail "veil-mieru.service missing /$want/"
+  # Every assertion is an exact-line match: SupplementaryGroups=.*veil-proxy
+  # would also accept a hypothetical 'SupplementaryGroups=aveil-proxy' or an
+  # extra group that widens the socket's reach (issue #754).
+  for want in 'User=veil-mita' 'Group=veil-mita' 'SupplementaryGroups=veil-proxy' \
+      'RuntimeDirectory=veil-mieru' 'RuntimeDirectoryMode=0750' 'UMask=0007' \
+      'CapabilityBoundingSet=CAP_NET_BIND_SERVICE' 'AmbientCapabilities=CAP_NET_BIND_SERVICE' \
+      'InaccessiblePaths=/run/veil/helper.sock /var/lib/veil'; do
+    grep -qxF "$want" "$unitdir/veil-mieru.service" || fail "veil-mieru.service missing $want"
   done
-  grep -q '^User=veil$' "$unitdir/veil.service" || fail "veil.service User"
-  grep -q '^SocketUser=root$' "$unitdir/veil-helper.socket" || fail "socket user"
+  # The panel carries NO capabilities — an ambient/bounding cap on the
+  # broadest-reach unit is a privilege-boundary regression (issue #754).
+  grep -qxF 'User=veil' "$unitdir/veil.service" || fail "veil.service User"
+  grep -qxF 'Group=veil' "$unitdir/veil.service" || fail "veil.service Group"
+  grep -qxF 'CapabilityBoundingSet=' "$unitdir/veil.service" \
+    || fail "veil.service CapabilityBoundingSet must be empty"
+  grep -qxF 'AmbientCapabilities=' "$unitdir/veil.service" \
+    || fail "veil.service AmbientCapabilities must be empty"
+  # The privileged helper is root with the exact cap set it needs — no more
+  # (issue #816).
+  grep -qxF 'User=root' "$unitdir/veil-helper.service" || fail "veil-helper.service User"
+  grep -qxF 'Group=root' "$unitdir/veil-helper.service" || fail "veil-helper.service Group"
+  grep -qxF 'CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_NET_ADMIN CAP_NET_RAW' \
+    "$unitdir/veil-helper.service" || fail "veil-helper.service CapabilityBoundingSet"
+  grep -qxF 'AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW' "$unitdir/veil-helper.service" \
+    || fail "veil-helper.service AmbientCapabilities"
+  # The backup unit is root but tightly bounded — its caps cover backup
+  # member reads, nothing else (issue #816).
+  grep -qxF 'User=root' "$unitdir/veil-backup.service" || fail "veil-backup.service User"
+  grep -qxF 'Group=root' "$unitdir/veil-backup.service" || fail "veil-backup.service Group"
+  grep -qxF 'CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH' \
+    "$unitdir/veil-backup.service" || fail "veil-backup.service CapabilityBoundingSet"
+  grep -qxF 'ReadWritePaths=/var/lib/veil' "$unitdir/veil-backup.service" \
+    || fail "veil-backup.service ReadWritePaths"
+  grep -qxF 'ProtectSystem=strict' "$unitdir/veil-backup.service" \
+    || fail "veil-backup.service ProtectSystem"
+  grep -qxF 'SocketUser=root' "$unitdir/veil-helper.socket" || fail "socket user"
   grep -q '^SocketGroup=veil$' "$unitdir/veil-helper.socket" || fail "socket group"
   grep -q '^SocketMode=0660$' "$unitdir/veil-helper.socket" || fail "socket mode"
   grep -q '^DirectoryMode=0711$' "$unitdir/veil-helper.socket" || fail "socket dir mode"
@@ -303,6 +354,19 @@ assert_migration_backups() {
   done
 }
 
+assert_backup_member_modes() {
+  # postinstall re-owns backup trees to root:root and normalizes DIR modes to
+  # 0700, but member file modes encode the restore mode and must survive
+  # untouched (issue #775) — a find -type f chmod would silently break
+  # rollback restores.
+  [ "$(stat -c "%U:%G %a" /var/lib/veil/backups)" = "root:root 700" ] \
+    || fail "/var/lib/veil/backups owner/mode"
+  [ "$(stat -c "%U:%G %a" /var/lib/veil/backups/daily)" = "root:root 700" ] \
+    || fail "backup subdir owner/mode"
+  [ "$(stat -c "%U:%G %a" /var/lib/veil/backups/daily/state.json.bak)" = "root:root 644" ] \
+    || fail "backup member mode was normalized (rollback would restore the wrong mode)"
+}
+
 case "$phase" in
   setup-systemd-stub)
     write_stub 0
@@ -344,6 +408,14 @@ case "$phase" in
     mkdir -p /var/lib/caddy /var/lib/mita
     chown -R veil:veil /var/lib/veil/www /var/lib/caddy /var/lib/mita
     chmod -R a+r /var/lib/veil/www
+    # Backup members encode their restore mode in their own permission bits —
+    # postinstall re-owns the tree to root:root but must never normalize
+    # member modes to 0600, or rollback restores the wrong mode (issue #775).
+    mkdir -p /var/lib/veil/backups/daily
+    printf backup-blob > /var/lib/veil/backups/daily/state.json.bak
+    chmod 0644 /var/lib/veil/backups/daily/state.json.bak
+    chmod 0755 /var/lib/veil/backups/daily
+    chown -R veil:veil /var/lib/veil/backups
     ;;
   post-install)
     assert_payload_present
@@ -362,6 +434,7 @@ case "$phase" in
     assert_runtime_readability
     assert_legacy_www_migrated
     assert_migration_backups
+    assert_backup_member_modes
     assert_upgrade_systemctl
     ;;
   post-remove|post-purge)
