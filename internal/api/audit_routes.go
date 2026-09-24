@@ -76,32 +76,43 @@ func (s *managementState) recordRequestAudit(r *http.Request, record audit.Recor
 	}
 	recorder := s.auditRecorder()
 	if err := recorder.Append(record); err != nil {
-		s.auditHealthMu.Lock()
-		s.auditDegraded = true
-		s.auditHealthMu.Unlock()
+		// A critical action that failed both sinks already cleared
+		// SpoolDurable; a non-critical drop leaves the last proven spool
+		// state intact — either way report what the recorder observed.
+		s.setAuditHealth(true, recorder.SpoolDurable())
 		log.Printf("SECURITY AUDIT DEGRADED: audit record persistence failed: %v", err)
 		return err
 	}
 	if err := recorder.Degraded(); err != nil {
-		s.auditHealthMu.Lock()
-		s.auditDegraded = true
-		s.auditHealthMu.Unlock()
+		s.setAuditHealth(true, recorder.SpoolDurable())
 		log.Printf("SECURITY AUDIT DEGRADED: primary audit unavailable; durable spool active: %v", err)
 	} else {
-		s.auditHealthMu.Lock()
-		s.auditDegraded = false
-		s.auditHealthMu.Unlock()
+		s.setAuditHealth(false, false)
 	}
 	return nil
 }
 
-func (s *managementState) isAuditDegraded() bool {
+func (s *managementState) setAuditHealth(degraded, spoolDurable bool) {
+	s.auditHealthMu.Lock()
+	s.auditDegraded = degraded
+	s.auditSpoolDurable = spoolDurable
+	s.auditHealthMu.Unlock()
+}
+
+// auditHealth reports (primary degraded, spool durably accepting). The spool
+// flag is only meaningful while degraded is true.
+func (s *managementState) auditHealth() (bool, bool) {
 	if s == nil {
-		return false
+		return false, false
 	}
 	s.auditHealthMu.RLock()
 	defer s.auditHealthMu.RUnlock()
-	return s.auditDegraded
+	return s.auditDegraded, s.auditSpoolDurable
+}
+
+func (s *managementState) isAuditDegraded() bool {
+	degraded, _ := s.auditHealth()
+	return degraded
 }
 
 func auditHealthMiddleware(state *managementState, next http.Handler) http.Handler {

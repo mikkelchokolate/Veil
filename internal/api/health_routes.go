@@ -155,9 +155,16 @@ func (routes HealthRoutes) snapshot(parent context.Context) (healthResponse, boo
 		components["session_store"] = healthComponent{Status: "degraded", Reason: "persistence_failure"}
 		ready = false
 	}
-	if state.isAuditDegraded() {
+	if degraded, spoolDurable := state.auditHealth(); degraded {
 		components["audit_primary"] = healthComponent{Status: "degraded", Reason: "primary_unavailable"}
-		components["audit_spool"] = healthComponent{Status: "degraded", Reason: "durability_unverified"}
+		if spoolDurable {
+			// The critical spool accepted and fsynced the event, so audit
+			// durability is proven — report it honestly instead of a
+			// blanket durability_unverified (#981).
+			components["audit_spool"] = healthComponent{Status: "ok", Reason: "spool_active"}
+		} else {
+			components["audit_spool"] = healthComponent{Status: "degraded", Reason: "durability_unverified"}
+		}
 		ready = false
 	}
 	if runtimeUnknown {
