@@ -51,4 +51,10 @@ export interface TLSCertInfo {
   dnsNames?: string[];
   valid: boolean;
   error?: string;
+  /** Component that issued/stores the certificate when it is not the process's own VEIL_TLS_CERT file (e.g. "caddy" for the managed panel edge). */
+  managedBy?: string;
+  /** Upstream issuer identity (Caddy issuer storage name, e.g. "local" or "acme-v02.api.letsencrypt.org-directory"). */
+  issuerSource?: string;
+  /** Issuer classification — "acme", "internal" (Caddy local CA, an untrusted fallback), or "other". */
+  issuerKind?: string;
 }

@@ -70,7 +70,10 @@ export const GetApiTlsResponse = zod.object({
   "daysRemaining": zod.int(),
   "dnsNames": zod.array(zod.string()).optional(),
   "valid": zod.boolean(),
-  "error": zod.string().optional()
+  "error": zod.string().optional(),
+  "managedBy": zod.string().optional().describe('Component that issued/stores the certificate when it is not the process\'s own VEIL_TLS_CERT file (e.g. "caddy" for the managed panel edge).'),
+  "issuerSource": zod.string().optional().describe('Upstream issuer identity (Caddy issuer storage name, e.g. "local" or "acme-v02.api.letsencrypt.org-directory").'),
+  "issuerKind": zod.string().optional().describe('Issuer classification — "acme", "internal" (Caddy local CA, an untrusted fallback), or "other".')
 })
 
 /**
@@ -146,7 +149,10 @@ export const GetApiRuntimeObservationResponse = zod.object({
   "daysRemaining": zod.int(),
   "dnsNames": zod.array(zod.string()).optional(),
   "valid": zod.boolean(),
-  "error": zod.string().optional()
+  "error": zod.string().optional(),
+  "managedBy": zod.string().optional().describe('Component that issued/stores the certificate when it is not the process\'s own VEIL_TLS_CERT file (e.g. "caddy" for the managed panel edge).'),
+  "issuerSource": zod.string().optional().describe('Upstream issuer identity (Caddy issuer storage name, e.g. "local" or "acme-v02.api.letsencrypt.org-directory").'),
+  "issuerKind": zod.string().optional().describe('Issuer classification — "acme", "internal" (Caddy local CA, an untrusted fallback), or "other".')
 }),
   "network": zod.object({
   "interfaces": zod.array(zod.object({
