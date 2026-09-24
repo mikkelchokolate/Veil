@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/apply"
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
 )
 
 const expirationSafetySweepInterval = 5 * time.Minute
@@ -269,47 +270,55 @@ FROM expiration_enforcement WHERE client_id=? AND target_generation=? AND target
 	if err != nil {
 		return 0, false, err
 	}
-	stateDigest := ""
-	if s.statePath != "" {
-		stateDigest, err = stateFileDigest(s.statePath)
-		if err != nil {
-			return 0, false, err
+	// The desired-revision bump and immutable-snapshot write must commit under
+	// the same snapshot barrier every other management-state mutation takes;
+	// otherwise a privileged backup can capture state.json and veil.db
+	// mid-commit and persist a mismatched pair (#987).
+	err = managementstate.WithSnapshotBarrier(s.statePath, func() error {
+		stateDigest := ""
+		if s.statePath != "" {
+			var digestErr error
+			stateDigest, digestErr = stateFileDigest(s.statePath)
+			if digestErr != nil {
+				return digestErr
+			}
 		}
-	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		return 0, false, err
-	}
-	defer tx.Rollback()
-	revision, err = apply.BumpDesiredTx(tx)
-	if err != nil {
-		return 0, false, err
-	}
-	if s.statePath == "" {
-		err = apply.SaveSnapshotTx(tx, revision, payload)
-	} else {
-		err = apply.SaveSnapshotTxBound(tx, revision, payload, stateDigest)
-	}
-	if err != nil {
-		return 0, false, err
-	}
-	if _, err := tx.Exec(`UPDATE expiration_enforcement SET state='superseded',superseded_revision=?,updated_at=?
+		tx, err := s.db.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		revision, err = apply.BumpDesiredTx(tx)
+		if err != nil {
+			return err
+		}
+		if s.statePath == "" {
+			err = apply.SaveSnapshotTx(tx, revision, payload)
+		} else {
+			err = apply.SaveSnapshotTxBound(tx, revision, payload, stateDigest)
+		}
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE expiration_enforcement SET state='superseded',superseded_revision=?,updated_at=?
 WHERE client_id=? AND state<>'superseded' AND (target_generation<>? OR target_payload_hash<>?)`,
-		revision, effectiveAt, candidate.ID, candidate.TargetGeneration, candidate.TargetPayloadHash); err != nil {
-		return 0, false, err
-	}
-	_, err = tx.Exec(`INSERT INTO expiration_enforcement
+			revision, effectiveAt, candidate.ID, candidate.TargetGeneration, candidate.TargetPayloadHash); err != nil {
+			return err
+		}
+		_, err = tx.Exec(`INSERT INTO expiration_enforcement
 (client_id,target_generation,target_payload_hash,target_expires_at,state,desired_revision,applied_revision,effective_at,next_retry_at,last_error,attempts,updated_at)
 VALUES(?,?,?,?,'applying',?,0,?,0,'',1,?)
 ON CONFLICT(client_id,target_generation) DO UPDATE SET
  target_payload_hash=excluded.target_payload_hash,target_expires_at=excluded.target_expires_at,state='applying',
  desired_revision=excluded.desired_revision,applied_revision=0,effective_at=excluded.effective_at,
  next_retry_at=0,last_error='',attempts=1,updated_at=excluded.updated_at`,
-		candidate.ID, candidate.TargetGeneration, candidate.TargetPayloadHash, candidate.ExpiresAt, revision, effectiveAt, effectiveAt)
+			candidate.ID, candidate.TargetGeneration, candidate.TargetPayloadHash, candidate.ExpiresAt, revision, effectiveAt, effectiveAt)
+		if err != nil {
+			return err
+		}
+		return tx.Commit()
+	})
 	if err != nil {
-		return 0, false, err
-	}
-	if err := tx.Commit(); err != nil {
 		return 0, false, err
 	}
 	return revision, false, nil

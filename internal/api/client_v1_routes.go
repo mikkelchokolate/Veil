@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -377,6 +378,8 @@ func (s *managementState) handleV1MigrateLegacy(w http.ResponseWriter, r *http.R
 	s.logUserAction(r, "migrate_legacy", "", true, "")
 	results := []inboundResult{}
 	totalCreated := 0
+	totalBindings := 0
+	totalCredentials := 0
 	outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
 		anyApplied := false
 		for _, in := range inbounds {
@@ -394,7 +397,13 @@ func (s *managementState) handleV1MigrateLegacy(w http.ResponseWriter, r *http.R
 				return fmt.Errorf("migrate inbound %s: %w", in.Name, err)
 			}
 			totalCreated += res.ClientsCreated
-			if res.ClientsCreated > 0 {
+			totalBindings += res.BindingsCreated
+			totalCredentials += res.CredentialsCreated
+			// Repair writes count too: an interrupted earlier migration can
+			// leave a committed client whose binding/credential never made it.
+			// Rolling those back while reporting success leaves the client
+			// permanently broken (#983).
+			if res.ClientsCreated > 0 || res.BindingsCreated > 0 || res.CredentialsCreated > 0 {
 				anyApplied = true
 			}
 			results = append(results, inboundResult{
@@ -416,8 +425,10 @@ func (s *managementState) handleV1MigrateLegacy(w http.ResponseWriter, r *http.R
 		return
 	}
 	s.writeMutationResponse(w, http.StatusOK, map[string]any{
-		"results":        results,
-		"clientsCreated": totalCreated,
+		"results":            results,
+		"clientsCreated":     totalCreated,
+		"bindingsCreated":    totalBindings,
+		"credentialsCreated": totalCredentials,
 	}, outcome)
 }
 
@@ -913,6 +924,16 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 					return err
 				}
 				if err := s.validateQuotaBindingsLocked(existingClient.QuotaBytes, []client.Binding{{InboundID: currentBinding.InboundID, Enabled: true}}); err != nil {
+					return err
+				}
+				// An enabled binding without an active credential can never
+				// authenticate; committing it here would fail later at
+				// render/apply time (#986). Only bindings left over from an
+				// interrupted migration or a revoked credential reach this.
+				if _, err := tx.ActiveCredential(bindingID, "password"); err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						return fmt.Errorf("%w: binding has no active credential", client.ErrValidation)
+					}
 					return err
 				}
 			}
