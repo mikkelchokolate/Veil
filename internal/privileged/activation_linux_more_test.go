@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -20,8 +21,12 @@ func TestServeSystemdAdoptsListenerAndHandlesRequest(t *testing.T) {
 		readPeerCgroup = oldReadPeerCgroup
 	}()
 	// ServeSystemd binds peers to veil.service; stand in for the test process.
+	// The cgroup is a variable so the second probe can impersonate a peer in a
+	// different unit — accepting it would prove AllowedUnit was not injected.
+	var peerCgroup atomic.Value
+	peerCgroup.Store([]byte("0::/system.slice/veil.service\n"))
 	readPeerCgroup = func(int32) ([]byte, error) {
-		return []byte("0::/system.slice/veil.service\n"), nil
+		return peerCgroup.Load().([]byte), nil
 	}
 
 	path := filepath.Join(t.TempDir(), "activated.sock")
@@ -78,6 +83,29 @@ func TestServeSystemdAdoptsListenerAndHandlesRequest(t *testing.T) {
 	if !called {
 		t.Fatal("executor was not called")
 	}
+
+	// Wrong-unit peer with the right UID must be refused. verifyPeer treats an
+	// empty AllowedUnit as "no unit check", so this probe fails if
+	// ServeSystemd ever stops auto-binding AllowedUnit = veil.service.
+	peerCgroup.Store([]byte("0::/system.slice/sshd.service\n"))
+	rejected, err := net.DialTimeout("unix", path, time.Second)
+	if err != nil {
+		t.Fatalf("dial activated listener for wrong-unit peer: %v", err)
+	}
+	_ = json.NewEncoder(rejected).Encode(RequestEnvelope{
+		Version:      ProtocolVersion,
+		RequestID:    "wrong-unit-req",
+		Operation:    OperationRestartPanel,
+		RestartPanel: &RestartPanelRequest{},
+	})
+	_ = rejected.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var rejectedResponse ResponseEnvelope
+	decodeErr := json.NewDecoder(rejected).Decode(&rejectedResponse)
+	_ = rejected.Close()
+	if decodeErr == nil && rejectedResponse.OK {
+		t.Fatal("wrong-unit peer was served; ServeSystemd must bind AllowedUnit to veil.service")
+	}
+
 	cancel()
 	select {
 	case <-done:

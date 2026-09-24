@@ -55,6 +55,20 @@ func TestSettingsValidationAcceptsValidPanelAccessValues(t *testing.T) {
 			if err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, current); err != nil {
 				t.Fatalf("access %q: %v", access, err)
 			}
+			// Accept means the value survives validation unchanged — an
+			// implementation that cleared or rewrote PanelAccess after
+			// accepting it would still pass an err-only check.
+			if settings.PanelAccess != access {
+				t.Fatalf("access %q: PanelAccess = %q after validate", access, settings.PanelAccess)
+			}
+			if access == "caddy" {
+				if settings.WebBasePath != "/panel/" {
+					t.Fatalf("access %q: WebBasePath = %q, want /panel/", access, settings.WebBasePath)
+				}
+				if settings.Domain != "example.com" || settings.Email != "admin@example.com" {
+					t.Fatalf("access %q: Domain/Email = %q/%q, want preserved", access, settings.Domain, settings.Email)
+				}
+			}
 		})
 	}
 }
@@ -209,7 +223,7 @@ func TestSettingsValidationCaddyRequiresWebBasePathEvenFromCurrent(t *testing.T)
 	settings := Settings{PanelListen: "127.0.0.1:2096", Mode: "server", PanelAccess: "caddy"}
 	current := Settings{}
 	err := NewSettingsValidationWithFieldSchemas(testSettingsFieldSchemas()).NormalizeAndValidate(&settings, current)
-	if err == nil || !strings.Contains(err.Error(), "webBasePath is required for caddy Panel access") {
+	if err == nil || err.Error() != "webBasePath is required for caddy Panel access" {
 		t.Fatalf("err = %v", err)
 	}
 }

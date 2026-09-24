@@ -210,23 +210,11 @@ func isMutatingRequest(r *http.Request) bool {
 	}
 }
 
-func isReadOnlyDiagnosticRequest(r *http.Request) bool {
-	if r.Method != http.MethodPost {
-		return false
-	}
-	switch r.URL.Path {
-	case "/api/tools/dns-lookup",
-		"/api/tools/ping",
-		"/api/tools/speedtest",
-		"/api/apply/plan",
-		"/api/client-links/qr",
-		"/api/profiles/ru-recommended/preview":
-		return true
-	default:
-		return false
-	}
-}
-
+// There is deliberately no "read-only POST" helper: POST endpoints that serve
+// viewers (apply plan, tool diagnostics, RU preview) are classified by
+// endpointPolicies like everything else. The old isReadOnlyDiagnosticRequest
+// allowlist was never consulted by the middleware and wrongly grouped
+// /api/client-links/qr — which emits admin secret material — with diagnostics.
 type contextKey string
 
 const (

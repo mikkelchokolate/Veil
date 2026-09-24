@@ -632,7 +632,6 @@ func (e SettingsAcmeChallengeMode) Valid() bool {
 const (
 	SettingsPanelAccessCaddy  SettingsPanelAccess = "caddy"
 	SettingsPanelAccessDirect SettingsPanelAccess = "direct"
-	SettingsPanelAccessEmpty  SettingsPanelAccess = ""
 	SettingsPanelAccessLocal  SettingsPanelAccess = "local"
 )
 
@@ -642,8 +641,6 @@ func (e SettingsPanelAccess) Valid() bool {
 	case SettingsPanelAccessCaddy:
 		return true
 	case SettingsPanelAccessDirect:
-		return true
-	case SettingsPanelAccessEmpty:
 		return true
 	case SettingsPanelAccessLocal:
 		return true
@@ -686,7 +683,6 @@ func (e SetupCompleteResponseCompleted) Valid() bool {
 const (
 	SetupStatusResponsePanelAccessCaddy  SetupStatusResponsePanelAccess = "caddy"
 	SetupStatusResponsePanelAccessDirect SetupStatusResponsePanelAccess = "direct"
-	SetupStatusResponsePanelAccessEmpty  SetupStatusResponsePanelAccess = ""
 	SetupStatusResponsePanelAccessLocal  SetupStatusResponsePanelAccess = "local"
 )
 
@@ -696,8 +692,6 @@ func (e SetupStatusResponsePanelAccess) Valid() bool {
 	case SetupStatusResponsePanelAccessCaddy:
 		return true
 	case SetupStatusResponsePanelAccessDirect:
-		return true
-	case SetupStatusResponsePanelAccessEmpty:
 		return true
 	case SetupStatusResponsePanelAccessLocal:
 		return true
@@ -923,7 +917,6 @@ func (e PutApiSettings200JSONResponseBodyAcmeChallengeMode) Valid() bool {
 const (
 	PutApiSettings200JSONResponseBodyPanelAccessCaddy  PutApiSettings200JSONResponseBodyPanelAccess = "caddy"
 	PutApiSettings200JSONResponseBodyPanelAccessDirect PutApiSettings200JSONResponseBodyPanelAccess = "direct"
-	PutApiSettings200JSONResponseBodyPanelAccessEmpty  PutApiSettings200JSONResponseBodyPanelAccess = ""
 	PutApiSettings200JSONResponseBodyPanelAccessLocal  PutApiSettings200JSONResponseBodyPanelAccess = "local"
 )
 
@@ -933,8 +926,6 @@ func (e PutApiSettings200JSONResponseBodyPanelAccess) Valid() bool {
 	case PutApiSettings200JSONResponseBodyPanelAccessCaddy:
 		return true
 	case PutApiSettings200JSONResponseBodyPanelAccessDirect:
-		return true
-	case PutApiSettings200JSONResponseBodyPanelAccessEmpty:
 		return true
 	case PutApiSettings200JSONResponseBodyPanelAccessLocal:
 		return true
@@ -1401,10 +1392,21 @@ type BackupVerificationReportEncryptionVersion int
 
 // BindingCapability defines model for BindingCapability.
 type BindingCapability struct {
-	PerClientCredentials bool     `json:"perClientCredentials"`
-	Protocol             string   `json:"protocol"`
-	RequiresCaddy        bool     `json:"requiresCaddy"`
-	Transports           []string `json:"transports"`
+	// CredentialKinds Credential kinds the protocol can issue for this binding. Omitted when empty.
+	CredentialKinds *[]string `json:"credentialKinds,omitempty"`
+
+	// ExpirationEnforcement Whether expiry enforcement is applied for credentials on this binding.
+	ExpirationEnforcement bool   `json:"expirationEnforcement"`
+	PerClientCredentials  bool   `json:"perClientCredentials"`
+	Protocol              string `json:"protocol"`
+
+	// QuotaEnforcement Whether the runtime rejects traffic once the client's quota is depleted.
+	QuotaEnforcement bool `json:"quotaEnforcement"`
+	RequiresCaddy    bool `json:"requiresCaddy"`
+
+	// TrafficAccounting Whether traffic on this binding counts toward the client's recorded usage.
+	TrafficAccounting bool     `json:"trafficAccounting"`
+	Transports        []string `json:"transports"`
 }
 
 // BindingView defines model for BindingView.
@@ -1622,27 +1624,30 @@ type ClientProfile struct {
 
 // ClientView defines model for ClientView.
 type ClientView struct {
-	Bindings         *[]BindingView `json:"bindings,omitempty"`
-	CreatedAt        *int64         `json:"createdAt,omitempty"`
-	Depleted         *bool          `json:"depleted,omitempty"`
-	DeviceLimit      *int           `json:"deviceLimit,omitempty"`
-	Email            *string        `json:"email,omitempty"`
-	Enabled          *bool          `json:"enabled,omitempty"`
-	ExpiresAt        *int64         `json:"expiresAt,omitempty"`
-	GroupId          *string        `json:"groupId,omitempty"`
-	HasCreds         *bool          `json:"hasCreds,omitempty"`
-	Id               string         `json:"id"`
-	InboundIds       *[]string      `json:"inboundIds,omitempty"`
-	Name             string         `json:"name"`
-	Notes            *string        `json:"notes,omitempty"`
-	QuotaBytes       *int64         `json:"quotaBytes,omitempty"`
-	QuotaResetAt     *int64         `json:"quotaResetAt,omitempty"`
-	QuotaResetPolicy *string        `json:"quotaResetPolicy,omitempty"`
+	Bindings              *[]BindingView         `json:"bindings,omitempty"`
+	CreatedAt             int64                  `json:"createdAt"`
+	Depleted              bool                   `json:"depleted"`
+	DeviceLimit           *int                   `json:"deviceLimit,omitempty"`
+	Email                 *string                `json:"email,omitempty"`
+	Enabled               bool                   `json:"enabled"`
+	ExpirationEnforcement *ExpirationEnforcement `json:"expirationEnforcement,omitempty"`
+	ExpiresAt             *int64                 `json:"expiresAt,omitempty"`
+	GroupId               *string                `json:"groupId,omitempty"`
+
+	// HasCredentials Whether any binding holds an issued credential.
+	HasCredentials   bool      `json:"hasCredentials"`
+	Id               string    `json:"id"`
+	InboundIds       *[]string `json:"inboundIds,omitempty"`
+	Name             string    `json:"name"`
+	Notes            *string   `json:"notes,omitempty"`
+	QuotaBytes       *int64    `json:"quotaBytes,omitempty"`
+	QuotaResetAt     *int64    `json:"quotaResetAt,omitempty"`
+	QuotaResetPolicy string    `json:"quotaResetPolicy"`
 
 	// Status Effective status.
 	Status    ClientViewStatus `json:"status"`
-	UpdatedAt *int64           `json:"updatedAt,omitempty"`
-	Version   *int             `json:"version,omitempty"`
+	UpdatedAt int64            `json:"updatedAt"`
+	Version   int              `json:"version"`
 }
 
 // ClientViewStatus Effective status.
@@ -1721,6 +1726,18 @@ type ErrorObject struct {
 
 	// RequestId Server-generated request identifier.
 	RequestId string `json:"requestId"`
+}
+
+// ExpirationEnforcement defines model for ExpirationEnforcement.
+type ExpirationEnforcement struct {
+	AppliedRevision int64   `json:"appliedRevision"`
+	Attempts        int     `json:"attempts"`
+	DesiredRevision int64   `json:"desiredRevision"`
+	LastError       *string `json:"lastError,omitempty"`
+	NextRetryAt     *int64  `json:"nextRetryAt,omitempty"`
+
+	// State Current enforcement state for the client's expiry.
+	State string `json:"state"`
 }
 
 // FieldOption defines model for FieldOption.
@@ -2172,12 +2189,14 @@ type Settings struct {
 	Mode string `json:"mode"`
 
 	// NaivePassword Plain value on write; redacted as `[REDACTED]` on read when present.
-	NaivePassword   *string              `json:"naivePassword,omitempty"`
-	NaiveUsername   *string              `json:"naiveUsername,omitempty"`
-	OlcrtcAuth      *string              `json:"olcrtcAuth,omitempty"`
-	OlcrtcRoomID    *string              `json:"olcrtcRoomID,omitempty"`
-	OlcrtcTransport *string              `json:"olcrtcTransport,omitempty"`
-	PanelAccess     *SettingsPanelAccess `json:"panelAccess,omitempty"`
+	NaivePassword   *string `json:"naivePassword,omitempty"`
+	NaiveUsername   *string `json:"naiveUsername,omitempty"`
+	OlcrtcAuth      *string `json:"olcrtcAuth,omitempty"`
+	OlcrtcRoomID    *string `json:"olcrtcRoomID,omitempty"`
+	OlcrtcTransport *string `json:"olcrtcTransport,omitempty"`
+
+	// PanelAccess Panel access mode. Always emitted on read; on write, an omitted field keeps the current value.
+	PanelAccess *SettingsPanelAccess `json:"panelAccess,omitempty"`
 
 	// PanelDomain Public domain for the panel when served through Caddy.
 	PanelDomain *string `json:"panelDomain,omitempty"`
@@ -2201,7 +2220,7 @@ type Settings struct {
 // SettingsAcmeChallengeMode ACME challenge mode used for inbound certificates.
 type SettingsAcmeChallengeMode string
 
-// SettingsPanelAccess defines model for Settings.PanelAccess.
+// SettingsPanelAccess Panel access mode. Always emitted on read; on write, an omitted field keeps the current value.
 type SettingsPanelAccess string
 
 // SetupCompleteRequest defines model for SetupCompleteRequest.
@@ -2232,12 +2251,14 @@ type SetupCompleteResponseCompleted bool
 
 // SetupStatusResponse defines model for SetupStatusResponse.
 type SetupStatusResponse struct {
-	Allowed     bool                           `json:"allowed"`
+	Allowed bool `json:"allowed"`
+
+	// PanelAccess Effective panel access mode. An unset value is reported as `local`.
 	PanelAccess SetupStatusResponsePanelAccess `json:"panelAccess"`
 	Required    bool                           `json:"required"`
 }
 
-// SetupStatusResponsePanelAccess defines model for SetupStatusResponse.PanelAccess.
+// SetupStatusResponsePanelAccess Effective panel access mode. An unset value is reported as `local`.
 type SetupStatusResponsePanelAccess string
 
 // SpeedtestResult defines model for SpeedtestResult.
@@ -16600,12 +16621,14 @@ type PutApiSettingsResponse struct {
 		Mode string `json:"mode"`
 
 		// NaivePassword Plain value on write; redacted as `[REDACTED]` on read when present.
-		NaivePassword   *string                                       `json:"naivePassword,omitempty"`
-		NaiveUsername   *string                                       `json:"naiveUsername,omitempty"`
-		OlcrtcAuth      *string                                       `json:"olcrtcAuth,omitempty"`
-		OlcrtcRoomID    *string                                       `json:"olcrtcRoomID,omitempty"`
-		OlcrtcTransport *string                                       `json:"olcrtcTransport,omitempty"`
-		PanelAccess     *PutApiSettings200JSONResponseBodyPanelAccess `json:"panelAccess,omitempty"`
+		NaivePassword   *string `json:"naivePassword,omitempty"`
+		NaiveUsername   *string `json:"naiveUsername,omitempty"`
+		OlcrtcAuth      *string `json:"olcrtcAuth,omitempty"`
+		OlcrtcRoomID    *string `json:"olcrtcRoomID,omitempty"`
+		OlcrtcTransport *string `json:"olcrtcTransport,omitempty"`
+
+		// PanelAccess Panel access mode. Always emitted on read; on write, an omitted field keeps the current value.
+		PanelAccess *PutApiSettings200JSONResponseBodyPanelAccess `json:"panelAccess,omitempty"`
 
 		// PanelDomain Public domain for the panel when served through Caddy.
 		PanelDomain *string `json:"panelDomain,omitempty"`
@@ -16668,12 +16691,14 @@ func (r PutApiSettingsResponse) GetJSON200() *struct {
 	Mode string `json:"mode"`
 
 	// NaivePassword Plain value on write; redacted as `[REDACTED]` on read when present.
-	NaivePassword   *string                                       `json:"naivePassword,omitempty"`
-	NaiveUsername   *string                                       `json:"naiveUsername,omitempty"`
-	OlcrtcAuth      *string                                       `json:"olcrtcAuth,omitempty"`
-	OlcrtcRoomID    *string                                       `json:"olcrtcRoomID,omitempty"`
-	OlcrtcTransport *string                                       `json:"olcrtcTransport,omitempty"`
-	PanelAccess     *PutApiSettings200JSONResponseBodyPanelAccess `json:"panelAccess,omitempty"`
+	NaivePassword   *string `json:"naivePassword,omitempty"`
+	NaiveUsername   *string `json:"naiveUsername,omitempty"`
+	OlcrtcAuth      *string `json:"olcrtcAuth,omitempty"`
+	OlcrtcRoomID    *string `json:"olcrtcRoomID,omitempty"`
+	OlcrtcTransport *string `json:"olcrtcTransport,omitempty"`
+
+	// PanelAccess Panel access mode. Always emitted on read; on write, an omitted field keeps the current value.
+	PanelAccess *PutApiSettings200JSONResponseBodyPanelAccess `json:"panelAccess,omitempty"`
 
 	// PanelDomain Public domain for the panel when served through Caddy.
 	PanelDomain *string `json:"panelDomain,omitempty"`
@@ -17951,30 +17976,33 @@ type PatchApiV1ClientsIdResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *struct {
-		ApplyJob         *ApplyJob      `json:"applyJob,omitempty"`
-		Bindings         *[]BindingView `json:"bindings,omitempty"`
-		CreatedAt        *int64         `json:"createdAt,omitempty"`
-		Depleted         *bool          `json:"depleted,omitempty"`
-		DeviceLimit      *int           `json:"deviceLimit,omitempty"`
-		Email            *string        `json:"email,omitempty"`
-		Enabled          *bool          `json:"enabled,omitempty"`
-		ExpiresAt        *int64         `json:"expiresAt,omitempty"`
-		GroupId          *string        `json:"groupId,omitempty"`
-		HasCreds         *bool          `json:"hasCreds,omitempty"`
-		Id               string         `json:"id"`
-		InboundIds       *[]string      `json:"inboundIds,omitempty"`
-		Name             string         `json:"name"`
-		Notes            *string        `json:"notes,omitempty"`
-		QuotaBytes       *int64         `json:"quotaBytes,omitempty"`
-		QuotaResetAt     *int64         `json:"quotaResetAt,omitempty"`
-		QuotaResetPolicy *string        `json:"quotaResetPolicy,omitempty"`
-		Revision         RevisionView   `json:"revision"`
+		ApplyJob              *ApplyJob              `json:"applyJob,omitempty"`
+		Bindings              *[]BindingView         `json:"bindings,omitempty"`
+		CreatedAt             int64                  `json:"createdAt"`
+		Depleted              bool                   `json:"depleted"`
+		DeviceLimit           *int                   `json:"deviceLimit,omitempty"`
+		Email                 *string                `json:"email,omitempty"`
+		Enabled               bool                   `json:"enabled"`
+		ExpirationEnforcement *ExpirationEnforcement `json:"expirationEnforcement,omitempty"`
+		ExpiresAt             *int64                 `json:"expiresAt,omitempty"`
+		GroupId               *string                `json:"groupId,omitempty"`
+
+		// HasCredentials Whether any binding holds an issued credential.
+		HasCredentials   bool         `json:"hasCredentials"`
+		Id               string       `json:"id"`
+		InboundIds       *[]string    `json:"inboundIds,omitempty"`
+		Name             string       `json:"name"`
+		Notes            *string      `json:"notes,omitempty"`
+		QuotaBytes       *int64       `json:"quotaBytes,omitempty"`
+		QuotaResetAt     *int64       `json:"quotaResetAt,omitempty"`
+		QuotaResetPolicy string       `json:"quotaResetPolicy"`
+		Revision         RevisionView `json:"revision"`
 
 		// Status Effective status.
 		Status    PatchApiV1ClientsId200JSONResponseBodyStatus `json:"status"`
 		Success   bool                                         `json:"success"`
-		UpdatedAt *int64                                       `json:"updatedAt,omitempty"`
-		Version   *int                                         `json:"version,omitempty"`
+		UpdatedAt int64                                        `json:"updatedAt"`
+		Version   int                                          `json:"version"`
 	}
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
@@ -17990,30 +18018,33 @@ type PatchApiV1ClientsIdResponse struct {
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PatchApiV1ClientsIdResponse) GetJSON200() *struct {
-	ApplyJob         *ApplyJob      `json:"applyJob,omitempty"`
-	Bindings         *[]BindingView `json:"bindings,omitempty"`
-	CreatedAt        *int64         `json:"createdAt,omitempty"`
-	Depleted         *bool          `json:"depleted,omitempty"`
-	DeviceLimit      *int           `json:"deviceLimit,omitempty"`
-	Email            *string        `json:"email,omitempty"`
-	Enabled          *bool          `json:"enabled,omitempty"`
-	ExpiresAt        *int64         `json:"expiresAt,omitempty"`
-	GroupId          *string        `json:"groupId,omitempty"`
-	HasCreds         *bool          `json:"hasCreds,omitempty"`
-	Id               string         `json:"id"`
-	InboundIds       *[]string      `json:"inboundIds,omitempty"`
-	Name             string         `json:"name"`
-	Notes            *string        `json:"notes,omitempty"`
-	QuotaBytes       *int64         `json:"quotaBytes,omitempty"`
-	QuotaResetAt     *int64         `json:"quotaResetAt,omitempty"`
-	QuotaResetPolicy *string        `json:"quotaResetPolicy,omitempty"`
-	Revision         RevisionView   `json:"revision"`
+	ApplyJob              *ApplyJob              `json:"applyJob,omitempty"`
+	Bindings              *[]BindingView         `json:"bindings,omitempty"`
+	CreatedAt             int64                  `json:"createdAt"`
+	Depleted              bool                   `json:"depleted"`
+	DeviceLimit           *int                   `json:"deviceLimit,omitempty"`
+	Email                 *string                `json:"email,omitempty"`
+	Enabled               bool                   `json:"enabled"`
+	ExpirationEnforcement *ExpirationEnforcement `json:"expirationEnforcement,omitempty"`
+	ExpiresAt             *int64                 `json:"expiresAt,omitempty"`
+	GroupId               *string                `json:"groupId,omitempty"`
+
+	// HasCredentials Whether any binding holds an issued credential.
+	HasCredentials   bool         `json:"hasCredentials"`
+	Id               string       `json:"id"`
+	InboundIds       *[]string    `json:"inboundIds,omitempty"`
+	Name             string       `json:"name"`
+	Notes            *string      `json:"notes,omitempty"`
+	QuotaBytes       *int64       `json:"quotaBytes,omitempty"`
+	QuotaResetAt     *int64       `json:"quotaResetAt,omitempty"`
+	QuotaResetPolicy string       `json:"quotaResetPolicy"`
+	Revision         RevisionView `json:"revision"`
 
 	// Status Effective status.
 	Status    PatchApiV1ClientsId200JSONResponseBodyStatus `json:"status"`
 	Success   bool                                         `json:"success"`
-	UpdatedAt *int64                                       `json:"updatedAt,omitempty"`
-	Version   *int                                         `json:"version,omitempty"`
+	UpdatedAt int64                                        `json:"updatedAt"`
+	Version   int                                          `json:"version"`
 } {
 	return r.JSON200
 }
@@ -18146,6 +18177,17 @@ func (r GetApiV1ClientsIdAuditResponse) ContentType() string {
 type GetApiV1ClientsIdBindingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Items []BindingView `json:"items"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiV1ClientsIdBindingsResponse) GetJSON200() *struct {
+	Items []BindingView `json:"items"`
+} {
+	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
@@ -25022,12 +25064,14 @@ func ParsePutApiSettingsResponse(rsp *http.Response) (*PutApiSettingsResponse, e
 			Mode string `json:"mode"`
 
 			// NaivePassword Plain value on write; redacted as `[REDACTED]` on read when present.
-			NaivePassword   *string                                       `json:"naivePassword,omitempty"`
-			NaiveUsername   *string                                       `json:"naiveUsername,omitempty"`
-			OlcrtcAuth      *string                                       `json:"olcrtcAuth,omitempty"`
-			OlcrtcRoomID    *string                                       `json:"olcrtcRoomID,omitempty"`
-			OlcrtcTransport *string                                       `json:"olcrtcTransport,omitempty"`
-			PanelAccess     *PutApiSettings200JSONResponseBodyPanelAccess `json:"panelAccess,omitempty"`
+			NaivePassword   *string `json:"naivePassword,omitempty"`
+			NaiveUsername   *string `json:"naiveUsername,omitempty"`
+			OlcrtcAuth      *string `json:"olcrtcAuth,omitempty"`
+			OlcrtcRoomID    *string `json:"olcrtcRoomID,omitempty"`
+			OlcrtcTransport *string `json:"olcrtcTransport,omitempty"`
+
+			// PanelAccess Panel access mode. Always emitted on read; on write, an omitted field keeps the current value.
+			PanelAccess *PutApiSettings200JSONResponseBodyPanelAccess `json:"panelAccess,omitempty"`
 
 			// PanelDomain Public domain for the panel when served through Caddy.
 			PanelDomain *string `json:"panelDomain,omitempty"`
@@ -26058,30 +26102,33 @@ func ParsePatchApiV1ClientsIdResponse(rsp *http.Response) (*PatchApiV1ClientsIdR
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			ApplyJob         *ApplyJob      `json:"applyJob,omitempty"`
-			Bindings         *[]BindingView `json:"bindings,omitempty"`
-			CreatedAt        *int64         `json:"createdAt,omitempty"`
-			Depleted         *bool          `json:"depleted,omitempty"`
-			DeviceLimit      *int           `json:"deviceLimit,omitempty"`
-			Email            *string        `json:"email,omitempty"`
-			Enabled          *bool          `json:"enabled,omitempty"`
-			ExpiresAt        *int64         `json:"expiresAt,omitempty"`
-			GroupId          *string        `json:"groupId,omitempty"`
-			HasCreds         *bool          `json:"hasCreds,omitempty"`
-			Id               string         `json:"id"`
-			InboundIds       *[]string      `json:"inboundIds,omitempty"`
-			Name             string         `json:"name"`
-			Notes            *string        `json:"notes,omitempty"`
-			QuotaBytes       *int64         `json:"quotaBytes,omitempty"`
-			QuotaResetAt     *int64         `json:"quotaResetAt,omitempty"`
-			QuotaResetPolicy *string        `json:"quotaResetPolicy,omitempty"`
-			Revision         RevisionView   `json:"revision"`
+			ApplyJob              *ApplyJob              `json:"applyJob,omitempty"`
+			Bindings              *[]BindingView         `json:"bindings,omitempty"`
+			CreatedAt             int64                  `json:"createdAt"`
+			Depleted              bool                   `json:"depleted"`
+			DeviceLimit           *int                   `json:"deviceLimit,omitempty"`
+			Email                 *string                `json:"email,omitempty"`
+			Enabled               bool                   `json:"enabled"`
+			ExpirationEnforcement *ExpirationEnforcement `json:"expirationEnforcement,omitempty"`
+			ExpiresAt             *int64                 `json:"expiresAt,omitempty"`
+			GroupId               *string                `json:"groupId,omitempty"`
+
+			// HasCredentials Whether any binding holds an issued credential.
+			HasCredentials   bool         `json:"hasCredentials"`
+			Id               string       `json:"id"`
+			InboundIds       *[]string    `json:"inboundIds,omitempty"`
+			Name             string       `json:"name"`
+			Notes            *string      `json:"notes,omitempty"`
+			QuotaBytes       *int64       `json:"quotaBytes,omitempty"`
+			QuotaResetAt     *int64       `json:"quotaResetAt,omitempty"`
+			QuotaResetPolicy string       `json:"quotaResetPolicy"`
+			Revision         RevisionView `json:"revision"`
 
 			// Status Effective status.
 			Status    PatchApiV1ClientsId200JSONResponseBodyStatus `json:"status"`
 			Success   bool                                         `json:"success"`
-			UpdatedAt *int64                                       `json:"updatedAt,omitempty"`
-			Version   *int                                         `json:"version,omitempty"`
+			UpdatedAt int64                                        `json:"updatedAt"`
+			Version   int                                          `json:"version"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -26219,6 +26266,18 @@ func ParseGetApiV1ClientsIdBindingsResponse(rsp *http.Response) (*GetApiV1Client
 	response := &GetApiV1ClientsIdBindingsResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Items []BindingView `json:"items"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	}
 
 	return response, nil

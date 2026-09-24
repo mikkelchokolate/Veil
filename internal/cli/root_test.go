@@ -183,7 +183,10 @@ func TestVersionCheckFlagRegistered(t *testing.T) {
 }
 
 func TestVersionCommandPrintsVersion(t *testing.T) {
-	cmd := NewRootCommand("test")
+	// Exact match: "contains test" would pass even if the command printed
+	// unrelated text alongside (or instead of) the injected version.
+	const injected = "test-version-9.9.9"
+	cmd := NewRootCommand(injected)
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -191,9 +194,8 @@ func TestVersionCommandPrintsVersion(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	got := out.String()
-	if !strings.Contains(got, "test") {
-		t.Errorf("version output missing version, got: %s", got)
+	if got := strings.TrimSpace(out.String()); got != injected {
+		t.Errorf("version output = %q, want exactly %q", got, injected)
 	}
 }
 
