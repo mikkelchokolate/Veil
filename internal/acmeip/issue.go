@@ -295,10 +295,13 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 // acme.sh runs it on every renewal and rewrites the key 0600 root:root, so the
 // command restores group readability BEFORE restarting the panel — otherwise
 // veil.service (User=veil) and the protocol units (User=veil-proxy) can no
-// longer read tls.key after renewal (audit #120). chgrp prefers veil-proxy —
-// the group both readers share — and falls back to veil when veil-proxy is
-// absent; every step fails closed so a renewal can never "succeed" leaving an
-// unreadable key or an unrestarted consumer (audit #526).
+// longer read tls.key after renewal (audit #120). The chgrp targets veil-proxy
+// unconditionally: EnsureAccount provisions that group during install and the
+// protocol units need it specifically — a `chgrp veil` fallback would let a
+// broken provisioning state report a successful renewal while veil-proxy units
+// lose key readability (issue #760). Every step fails closed so a renewal can
+// never "succeed" leaving an unreadable key or an unrestarted consumer
+// (audit #526).
 //
 // The hysteria2 loop mirrors postinstall: --plain keeps a status glyph out of
 // $1, --state=active skips instances the apply path already stopped/disabled
@@ -307,10 +310,10 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 // failure on an active unit still aborts the renewal (issue #620).
 func renewReloadCmd(certPath, keyPath string) string {
 	dir := filepath.Dir(certPath)
-	return fmt.Sprintf("chmod 0644 %s && chmod 0640 %s && (chgrp veil-proxy %s %s || chgrp veil %s %s) && (chgrp veil-proxy %s || chgrp veil %s) && chmod 0750 %s && systemctl restart veil.service && for u in $(systemctl list-units --plain --no-legend --state=active 'veil-hysteria2@*.service' | awk '{print $1}'); do systemctl try-restart \"$u\" || exit 1; done",
+	return fmt.Sprintf("chmod 0644 %s && chmod 0640 %s && chgrp veil-proxy %s %s && chgrp veil-proxy %s && chmod 0750 %s && systemctl restart veil.service && for u in $(systemctl list-units --plain --no-legend --state=active 'veil-hysteria2@*.service' | awk '{print $1}'); do systemctl try-restart \"$u\" || exit 1; done",
 		shellQuote(certPath), shellQuote(keyPath),
-		shellQuote(certPath), shellQuote(keyPath), shellQuote(certPath), shellQuote(keyPath),
-		shellQuote(dir), shellQuote(dir), shellQuote(dir))
+		shellQuote(certPath), shellQuote(keyPath),
+		shellQuote(dir), shellQuote(dir))
 }
 
 // shellQuote wraps a path in single quotes for embedding in the acme.sh

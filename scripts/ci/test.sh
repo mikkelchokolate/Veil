@@ -144,7 +144,8 @@ ci_test_stage "API shard root verification" \
 
 mapfile -t task_logs < "${CI_ARTIFACT_DIR}/test-task-logs.txt"
 report_args=(--repo "${CI_ROOT}" --artifact-dir "${CI_ARTIFACT_DIR}"
-  --skip-allowlist "${CI_SCRIPTS_DIR}/test-skip-allowlist.txt")
+  --skip-allowlist "${CI_SCRIPTS_DIR}/test-skip-allowlist.txt"
+  --helper-allowlist "${CI_SCRIPTS_DIR}/test-helper-allowlist.txt")
 for log in "${CI_ARTIFACT_DIR}/sdk-tests.log" "${task_logs[@]}"; do
   [ -f "${log}" ] && report_args+=(--log "${log}")
 done
