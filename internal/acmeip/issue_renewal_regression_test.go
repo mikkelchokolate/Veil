@@ -1,6 +1,7 @@
 package acmeip
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -15,22 +16,29 @@ func TestRenewReloadCmdRepairsOwnershipBeforeRestart(t *testing.T) {
 
 	chmodCert := strings.Index(cmd, "chmod 0644 '/etc/veil/panel/tls.crt'")
 	chmodKey := strings.Index(cmd, "chmod 0640 '/etc/veil/panel/tls.key'")
-	chgrp := strings.Index(cmd, "chgrp veil-proxy '/etc/veil/panel/tls.crt' '/etc/veil/panel/tls.key'")
-	chgrpFallback := strings.Index(cmd, "chgrp veil '/etc/veil/panel/tls.crt' '/etc/veil/panel/tls.key'")
+	// Issue #760: the chgrp is a hard &&-joined step — a `|| chgrp veil`
+	// fallback would mask a provisioning break and report a successful
+	// renewal while veil-proxy units lose key readability.
+	chgrp := strings.Index(cmd, "&& chgrp veil-proxy '/etc/veil/panel/tls.crt' '/etc/veil/panel/tls.key' &&")
 	restart := strings.Index(cmd, "systemctl restart veil.service")
-	for name, idx := range map[string]int{"chmod cert": chmodCert, "chmod key": chmodKey, "chgrp": chgrp, "chgrp fallback": chgrpFallback, "restart": restart} {
+	for name, idx := range map[string]int{"chmod cert": chmodCert, "chmod key": chmodKey, "chgrp": chgrp, "restart": restart} {
 		if idx < 0 {
 			t.Fatalf("reloadcmd missing %s step: %q", name, cmd)
 		}
 	}
-	if !(chmodCert < restart && chmodKey < restart && chgrp < restart && chgrpFallback < restart) {
+	if !(chmodCert < restart && chmodKey < restart && chgrp < restart) {
 		t.Fatalf("permission repair must precede the restart: %q", cmd)
 	}
 	if !(chmodCert < chgrp && chmodKey < chgrp) {
 		t.Fatalf("chgrp must follow chmod so the group gets the repaired modes: %q", cmd)
 	}
-	if !(chgrp < chgrpFallback) {
-		t.Fatalf("veil-proxy chgrp must be attempted before the veil fallback: %q", cmd)
+	// No group fallback may rescue a failed veil-proxy chgrp. ("chgrp veil '"
+	// cannot match "chgrp veil-proxy '" — the proxy name sits between.)
+	if strings.Contains(cmd, "|| chgrp") {
+		t.Fatalf("reloadcmd must not fall back to another group after a failed veil-proxy chgrp: %q", cmd)
+	}
+	if strings.Contains(cmd, "chgrp veil '") {
+		t.Fatalf("reloadcmd chgrps the veil group, which veil-proxy units cannot read: %q", cmd)
 	}
 }
 
@@ -39,12 +47,15 @@ func TestRenewReloadCmdRepairsOwnershipBeforeRestart(t *testing.T) {
 // blocks group traverse), and the veil-proxy protocol units that serve the
 // panel certificate (hysteria2) must be restarted — not just veil.service.
 func TestRenewReloadCmdPinsDirOwnershipAndProtocolRestart(t *testing.T) {
-	cmd := renewReloadCmd("/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key")
+	certPath := "/etc/veil/panel/tls.crt"
+	cmd := renewReloadCmd(certPath, "/etc/veil/panel/tls.key")
+	// The implementation derives the dir via filepath.Dir, so mirror that
+	// rather than pinning a POSIX-only literal (Windows CI uses \separators).
+	dir := filepath.Dir(certPath)
 
 	for _, want := range []string{
-		"chgrp veil-proxy '/etc/veil/panel'",
-		"chgrp veil '/etc/veil/panel'",
-		"chmod 0750 '/etc/veil/panel'",
+		"chgrp veil-proxy '" + dir + "'",
+		"chmod 0750 '" + dir + "'",
 		"veil-hysteria2@*.service",
 		// Issue #620: --plain keeps the status glyph out of awk's $1, and
 		// --state=active keeps stopped/disabled/not-found instances out of
@@ -56,8 +67,8 @@ func TestRenewReloadCmdPinsDirOwnershipAndProtocolRestart(t *testing.T) {
 		}
 	}
 	// Directory repair must run before the restarts as well.
-	dirChgrp := strings.Index(cmd, "chgrp veil-proxy '/etc/veil/panel'")
-	dirChmod := strings.Index(cmd, "chmod 0750 '/etc/veil/panel'")
+	dirChgrp := strings.Index(cmd, "chgrp veil-proxy '"+dir+"'")
+	dirChmod := strings.Index(cmd, "chmod 0750 '"+dir+"'")
 	restart := strings.Index(cmd, "systemctl restart veil.service")
 	if !(dirChgrp < restart && dirChmod < restart) {
 		t.Fatalf("directory repair must precede the restart: %q", cmd)

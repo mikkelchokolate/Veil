@@ -96,11 +96,14 @@ type managementState struct {
 	// auditSpoolDurable is true when the last degraded append was durably
 	// accepted by the critical spool, so /health can report an honest
 	// audit_spool status instead of a blanket durability_unverified (#981).
-	auditSpoolDurable              bool
-	version                        string
-	backupDir                      string
-	backupPassphrasePath           string
-	backupMutationMu               sync.Mutex
+	auditSpoolDurable    bool
+	version              string
+	backupDir            string
+	backupPassphrasePath string
+	// Mutations (create/prune/delete/restore) take the write lock; downloads
+	// take the read lock so a concurrent mutation cannot remove or replace an
+	// archive mid-transfer while parallel downloads remain possible (#963).
+	backupMutationMu               sync.RWMutex
 	backupJobsMu                   sync.Mutex
 	backupJobs                     map[string]BackupRestoreJob
 	backupJobsPath                 string

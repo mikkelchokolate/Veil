@@ -102,9 +102,23 @@ func TestAppendAuditEventCreatesParentDirs(t *testing.T) {
 		t.Fatalf("AppendAuditEvent: %v", err)
 	}
 
-	// File should exist
-	if _, err := os.Stat(auditPath); err != nil {
+	// File should exist with the documented 0600 mode, and the created parent
+	// directories must be 0755 — the log is private, the tree traversable.
+	info, err := os.Stat(auditPath)
+	if err != nil {
 		t.Fatalf("audit file should exist: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("audit file mode = %o, want 0600", info.Mode().Perm())
+	}
+	for _, parent := range []string{filepath.Join(dir, "sub"), filepath.Join(dir, "sub", "deep")} {
+		pinfo, err := os.Stat(parent)
+		if err != nil {
+			t.Fatalf("audit parent dir missing: %v", err)
+		}
+		if pinfo.Mode().Perm() != 0o755 {
+			t.Fatalf("audit parent %s mode = %o, want 0755", parent, pinfo.Mode().Perm())
+		}
 	}
 }
 

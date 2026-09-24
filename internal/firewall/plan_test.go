@@ -36,6 +36,22 @@ func TestUFWPlanOmitsZeroPorts(t *testing.T) {
 	}
 }
 
+// The panel port is opened only when the panel is publicly reachable: a
+// local (loopback) panel must not punch an external allow, while direct and
+// caddy access still open it.
+func TestUFWPlanPanelAccessGatesPanelPort(t *testing.T) {
+	if plan := UFWPlan(Config{PanelAccess: "local", PanelPort: 2096}); len(plan) != 0 {
+		t.Fatalf("local panel access must not open the panel port, got %#v", plan)
+	}
+	for _, access := range []string{"direct", "caddy", ""} {
+		plan := UFWPlan(Config{PanelAccess: access, PanelPort: 2096})
+		want := []Rule{{Command: "ufw", Args: []string{"allow", "2096/tcp", "comment", "Veil panel"}}}
+		if !reflect.DeepEqual(plan, want) {
+			t.Fatalf("PanelAccess=%q: got %#v, want panel rule %#v", access, plan, want)
+		}
+	}
+}
+
 func TestUFWPlanLEIPCertPort(t *testing.T) {
 	plan := UFWPlan(Config{LEIPCertPort: 80})
 	want := []Rule{{Command: "ufw", Args: []string{"allow", "80/tcp", "comment", "Veil ACME HTTP-01"}}}
@@ -59,6 +75,6 @@ func TestUFWPlanStagesSSHBeforePanelPorts(t *testing.T) {
 func TestUFWPlanOmitsSSHWhenNoPublicPorts(t *testing.T) {
 	plan := UFWPlan(Config{SSHPorts: []int{22}})
 	if len(plan) != 0 {
-		t.Fatalf("local/empty plans must not open SSH or other ports, got %#v", plan)
+		t.Fatalf("SSH ports are only staged alongside real public openings, got %#v", plan)
 	}
 }

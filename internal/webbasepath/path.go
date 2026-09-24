@@ -30,15 +30,38 @@ func Normalize(value string) (string, error) {
 			}
 		}
 	}
-	// "s" as the FIRST segment collides with the public subscription feeds
-	// at /s/{token}, which intentionally bypass the secret mount: every panel
-	// URL under an /s/… mount would be misclassified as a feed and never
-	// stripped, and the session cookie scoped to /s/… would leak onto the
-	// public endpoint (issue #662).
-	if segments[0] == "s" {
-		return "", fmt.Errorf("first segment %q is reserved for public subscription links", segments[0])
+	// A reserved FIRST segment collides with a route registered on the root
+	// mux before stripBasePathMiddleware runs (issues #662, #765):
+	//   - "s" is the public /s/{token} subscription bypass: panel URLs under
+	//     an /s/… mount would be misclassified as feeds and never stripped,
+	//     and the session cookie scoped to /s/… would leak onto the public
+	//     endpoint.
+	//   - "api", "metrics", "healthz", "livez", "readyz", "assets", and the
+	//     panel file names are fixed root mounts: mounting at /api/ serves
+	//     the SPA at /api and moves the real API to /api/api/…, while a
+	//     /metrics/ mount answers scrapes with panel HTML instead of
+	//     Prometheus output.
+	if reason, reserved := reservedFirstSegments[segments[0]]; reserved {
+		return "", fmt.Errorf("first segment %q is reserved for %s", segments[0], reason)
 	}
 	return "/" + strings.Join(segments, "/") + "/", nil
+}
+
+// reservedFirstSegments maps each root-mux first segment to a short reason
+// used in validation errors. Only the first segment is checked: mounts like
+// /panel/api/… cannot collide because requests outside the mount never reach
+// the router at all.
+var reservedFirstSegments = map[string]string{
+	"s":           "public subscription links",
+	"api":         "the management API",
+	"metrics":     "the Prometheus metrics endpoint",
+	"healthz":     "the health check endpoint",
+	"livez":       "the liveness endpoint",
+	"readyz":      "the readiness endpoint",
+	"assets":      "the static asset mount",
+	"favicon.ico": "the favicon endpoint",
+	"favicon.svg": "the favicon endpoint",
+	"robots.txt":  "the robots.txt endpoint",
 }
 
 // NormalizeOptional uses the settings representation where root is stored as

@@ -114,8 +114,10 @@ CI_SMOLVM_MIN_VERSION="1.6.13"
 # --- Test parameters -----------------------------------------------------------
 CI_COVERAGE_THRESHOLD="70.0"
 # sdk/go is merged into the coverprofile so it is measured (#438), but it is a
-# thin client surface outside the 70% product contract — it gates on its own
-# floor instead (the suite must produce real coverage, not just run).
+# generated thin client outside the 70% product contract — measured statement
+# coverage is ~1%. This floor is a SMOKE gate only: it proves the merged
+# profile really contains sdk statements (a profile that dropped them fails
+# closed), it does not claim meaningful sdk coverage (issue #791).
 CI_SDK_COVERAGE_FLOOR="1.0"
 
 # --- Locale / timezone (parity contract) ---------------------------------------

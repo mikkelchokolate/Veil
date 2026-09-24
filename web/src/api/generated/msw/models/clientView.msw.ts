@@ -42,30 +42,33 @@
  */
 import type { BindingView } from './bindingView.msw.ts';
 import type { ClientViewStatus } from './clientViewStatus.msw.ts';
+import type { ExpirationEnforcement } from './expirationEnforcement.msw.ts';
 
 export interface ClientView {
   id: string;
   name: string;
   email?: string;
-  enabled?: boolean;
+  enabled: boolean;
   groupId?: string;
   /**
      * @minimum 0
      * @maximum 9007199254740991
      */
   quotaBytes?: number;
-  quotaResetPolicy?: string;
+  quotaResetPolicy: string;
   quotaResetAt?: number;
   expiresAt?: number;
   deviceLimit?: number;
   notes?: string;
-  depleted?: boolean;
+  depleted: boolean;
   /** Effective status. */
   status: ClientViewStatus;
   inboundIds?: string[];
-  hasCreds?: boolean;
-  createdAt?: number;
-  updatedAt?: number;
-  version?: number;
+  /** Whether any binding holds an issued credential. */
+  hasCredentials: boolean;
+  expirationEnforcement?: ExpirationEnforcement;
+  createdAt: number;
+  updatedAt: number;
+  version: number;
   bindings?: BindingView[];
 }

@@ -2,6 +2,7 @@ package backup
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -16,7 +17,9 @@ func TestBackupManifestStoreWritesAndReadsManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(loaded.Entries) != 1 || loaded.Entries[0].OriginalPath != manifest.Entries[0].OriginalPath {
-		t.Fatalf("loaded = %+v", loaded)
+	// The complete manifest entry must round-trip — OriginalPath, BackupPath,
+	// and Size alike — not merely the original path.
+	if !reflect.DeepEqual(loaded.Entries, manifest.Entries) {
+		t.Fatalf("loaded entries = %+v, want %+v", loaded.Entries, manifest.Entries)
 	}
 }

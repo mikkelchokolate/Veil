@@ -3,15 +3,19 @@
 package atomicfile
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"syscall"
 )
 
-// chownFile/geteuid are test hooks so ownership preservation can be exercised
-// without relying on real account state or privileges.
+// chownFile/geteuid/statFile are test hooks so ownership preservation can be
+// exercised without relying on real account state or privileges.
 var (
 	chownFile = os.Chown
 	geteuid   = os.Geteuid
+	statFile  = os.Stat
 )
 
 // preserveOwner copies the replaced file's uid/gid onto the staged temp file
@@ -22,17 +26,25 @@ var (
 // tls.crt permission denied between WriteFile and the later chown pass).
 // Non-root writers cannot chown; their temp file already carries the writer's
 // uid, which is the only ownership they could have produced anyway.
+//
+// Only a missing target skips preservation (new file — nothing to preserve).
+// Any other Stat failure (EACCES, IO errors, …) aborts the write before
+// rename: soft-succeeding would re-open the root-owned window for a file that
+// does exist.
 func preserveOwner(tmpPath, target string) error {
 	if geteuid() != 0 {
 		return nil
 	}
-	info, err := os.Stat(target)
+	info, err := statFile(target)
 	if err != nil {
-		return nil // new file — nothing to preserve
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil // new file — nothing to preserve
+		}
+		return fmt.Errorf("stat %s before preserving owner: %w", target, err)
 	}
 	st, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
-		return nil
+		return fmt.Errorf("stat %s: cannot determine owner from %T", target, info.Sys())
 	}
 	return chownFile(tmpPath, int(st.Uid), int(st.Gid))
 }

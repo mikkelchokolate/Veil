@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -162,7 +163,34 @@ func (s *managementState) handleBackupPrune(w http.ResponseWriter, r *http.Reque
 		Fence: fence,
 	})
 	if err != nil {
-		writePrivilegedError(w, err)
+		// A prune can fail mid-operation after already deleting archives. The
+		// partial lists travel with the error so the operator can reconcile
+		// which backups are actually gone rather than guessing.
+		s.recordRequestAudit(r, audit.Record{
+			Action:  "backup.prune",
+			Target:  "managed-backups",
+			Success: false,
+			Error:   err.Error(),
+			Details: map[string]any{"deleted": len(result.Pruned), "kept": len(result.Kept)},
+		})
+		if privilegedHelperSocketUnavailable(err) {
+			writePrivilegedHelperUnavailable(w)
+			return
+		}
+		code, message, status := classifyPrivilegedError(err)
+		setJSONHeaders(w)
+		w.WriteHeader(status)
+		if encodeErr := json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]string{
+				"code":      code,
+				"message":   message,
+				"requestId": w.Header().Get("X-Request-ID"),
+			},
+			"deleted": result.Pruned,
+			"kept":    result.Kept,
+		}); encodeErr != nil {
+			log.Printf("write prune error: %v", encodeErr)
+		}
 		return
 	}
 	s.recordRequestAudit(r, audit.Record{
@@ -190,6 +218,13 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 			methodNotAllowed(w, http.MethodGet)
 			return
 		}
+		// The download shares the backup mutation fence with create/prune/
+		// delete/restore so a concurrent mutation cannot remove or replace the
+		// archive mid-transfer (#963).
+		if !s.beginBackupRead(w) {
+			return
+		}
+		defer s.backupMutationMu.RUnlock()
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, name))
 		w.Header().Set("Cache-Control", "no-store")
@@ -208,10 +243,17 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 			if err != nil {
 				if offset == 0 {
 					writePrivilegedError(w, err)
+					return
 				}
+				abortTruncatedDownload()
 				return
 			}
 			if len(result.Archives) != 1 {
+				if offset == 0 {
+					writeError(w, "backup helper did not return the archive", http.StatusBadGateway)
+					return
+				}
+				abortTruncatedDownload()
 				return
 			}
 			identity := result.Archives[0]
@@ -226,9 +268,22 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 			} else if identity.Size != expectedSize || identity.CreatedAt != expectedCreatedAt ||
 				result.BoundSize != expectedSize || result.TransactionID != transactionID ||
 				result.ContentDigest != contentDigest || result.InodeGeneration != inodeGeneration {
+				// Stream identity drifted after Content-Length was committed:
+				// fail closed by aborting the connection so the truncated body
+				// cannot be mistaken for a complete archive (#963).
+				abortTruncatedDownload()
 				return
 			}
 			if len(result.Data) == 0 && result.More {
+				if offset == 0 {
+					// Content-Length was already declared for the archive; drop
+					// it before writing the error body so the error response is
+					// not itself truncated.
+					w.Header().Del("Content-Length")
+					writeError(w, "backup helper stalled the bound stream", http.StatusBadGateway)
+					return
+				}
+				abortTruncatedDownload()
 				return
 			}
 			if _, err := w.Write(result.Data); err != nil {
@@ -237,6 +292,7 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 			offset += int64(len(result.Data))
 			if !result.More {
 				if offset != expectedSize {
+					abortTruncatedDownload()
 					return
 				}
 				break
@@ -293,6 +349,14 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 	default:
 		writeNotFound(w)
 	}
+}
+
+// abortTruncatedDownload fails a download closed after the response headers
+// were already committed: net/http closes the connection without completing
+// the declared Content-Length, so the client gets an unambiguous truncation
+// error instead of a short body that could pass for a complete archive.
+func abortTruncatedDownload() {
+	panic(http.ErrAbortHandler)
 }
 
 func (s *managementState) queuePanelBackupRestore(w http.ResponseWriter, r *http.Request, archiveName string) {
@@ -460,7 +524,12 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 	helperErr := err
 	finalizationErr := fenceReleaseErr
 	revalidationErr := errors.Join(reopenErr, convergenceErr)
-	if helperErr == nil && result.Restored && revalidationErr == nil {
+	if result.Restored {
+		// A committed restore loads the backup-era session store regardless of
+		// whether reopen/convergence/finalization later degraded the outcome.
+		// Bulk-revoke every session except the restore owner's whenever the
+		// restore landed; a degraded restore must not leave restored backup
+		// sessions authorized (#964).
 		_, sessionErr := s.sessionRegistry().DeleteAllExceptPersisted(ownerSessionToken)
 		finalizationErr = errors.Join(finalizationErr, sessionErr)
 	}

@@ -68,10 +68,53 @@ required = {
     # turns the coverage stage into a no-op (issue #682).
     "CI_COVERAGE_THRESHOLD",
     "CI_SDK_COVERAGE_FLOOR",
+    # Every remaining pin is load-bearing somewhere — toolchain tarballs,
+    # Docker CLI/buildx, nfpm/pebble/staticcheck/govulncheck/redocly tool
+    # pins, the smoke distro images, smolvm floor. Omitting one from this set
+    # means deleting it greens the job while its consumer breaks later or,
+    # worse, downloads unverified bits (issue #747).
+    "CI_DOCKER_BUILDX_SHA256",
+    "CI_DOCKER_BUILDX_VERSION",
+    "CI_DOCKER_CLI_SHA256",
+    "CI_DOCKER_CLI_VERSION",
+    "CI_GOVULNCHECK_VERSION",
+    "CI_GO_GODEBUG",
+    "CI_GO_GOPROXY",
+    "CI_NFPM_VERSION",
+    "CI_NODE_MUSL_TARBALL_SHA256",
+    "CI_NODE_TARBALL_SHA256",
+    "CI_NODE_TARBALL_SHA256_ARM64",
+    "CI_NPM_VERSION",
+    "CI_PEBBLE_VERSION",
+    "CI_REDOCLY_VERSION",
+    "CI_SMOKE_ALPINE_IMAGE",
+    "CI_SMOKE_DEBIAN_IMAGE",
+    "CI_SMOKE_ROCKYLINUX_IMAGE",
+    "CI_SMOLVM_MIN_VERSION",
+    "CI_STATICCHECK_VERSION",
 }
 missing = sorted(required - versions.keys())
 if missing:
     fail(f"versions.sh is missing {', '.join(missing)}")
+
+# Presence alone is not the contract: every *_SHA256 pin must be a full
+# 64-hex digest, every image digest a sha256:<64-hex>, and every image
+# reference digest-pinned — a truncated or floating pin downloads unverified
+# bits while this job stays green (issue #747).
+for name, value in sorted(versions.items()):
+    if name.endswith("_SHA256") and not re.fullmatch(r"[0-9a-f]{64}", value):
+        fail(f"{name} is not a 64-hex sha256 pin: {value!r}")
+for name in ("CI_NODE_IMAGE_DIGEST", "CI_GO_IMAGE_DIGEST", "CI_ALPINE_IMAGE_DIGEST"):
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", versions[name]):
+        fail(f"{name} is not a sha256:<64-hex> digest pin: {versions[name]!r}")
+for name in (
+    "CI_UBUNTU_BASE",
+    "CI_SMOKE_DEBIAN_IMAGE",
+    "CI_SMOKE_ROCKYLINUX_IMAGE",
+    "CI_SMOKE_ALPINE_IMAGE",
+):
+    if not re.search(r"@sha256:[0-9a-f]{64}$", versions[name]):
+        fail(f"{name} must be pinned by digest (image:tag@sha256:<64-hex>): {versions[name]!r}")
 
 
 def require_numeric_floor(name: str, minimum: float) -> None:
@@ -83,10 +126,13 @@ def require_numeric_floor(name: str, minimum: float) -> None:
         fail(f"{name}={value} is below the documented minimum {minimum}")
 
 
-# The product coverage threshold implements the documented 70% contract and
-# the SDK floor proves the merged sdk profile is really measured — both must
-# stay numeric and non-zero or `test.sh`'s `cov >= min` awk check goes soft
-# (issue #682). Raising a floor is allowed; lowering it is a policy change.
+# The product coverage threshold implements the documented 70% contract.
+# CI_SDK_COVERAGE_FLOOR is deliberately a SMOKE floor, not a coverage
+# contract: sdk/go is a generated thin client whose measured statement
+# coverage is ~1%, and the floor exists only to prove the merged coverprofile
+# actually contains sdk statements — `test.sh` fails closed when the merged
+# profile has no sdk entries at all (issues #438, #682, #791). Raising the
+# floor is allowed; treating 1.0 as a real coverage claim is not.
 require_numeric_floor("CI_COVERAGE_THRESHOLD", 70.0)
 require_numeric_floor("CI_SDK_COVERAGE_FLOOR", 1.0)
 

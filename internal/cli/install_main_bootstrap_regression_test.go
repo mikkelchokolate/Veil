@@ -172,6 +172,25 @@ func TestMainInstallerReportsBootstrappedNodeFailure(t *testing.T) {
 			t.Fatalf("install-main.sh missing bootstrapped node path/diagnostic %q", want)
 		}
 	}
+	// #787: every bootstrapped-node failure path must run diagnose_node before
+	// exiting — a bare `exit 1` loses the ldd/PATH/node -v evidence needed to
+	// repair the host. Assert the ordering in the real script, not a comment.
+	stripped := stripHashComments(t, script)
+	failureSites := strings.Count(stripped, "Bootstrapped Node.js is not usable")
+	if failureSites < 3 {
+		t.Fatalf("install-main.sh must fail closed at all three bootstrap checkpoints (missing node, missing libs, unusable node); found %d", failureSites)
+	}
+	segments := strings.Split(stripped, "Bootstrapped Node.js is not usable")
+	for i, segment := range segments[:failureSites] {
+		lines := strings.Split(strings.TrimRight(segment, " \t\n"), "\n")
+		window := lines
+		if len(window) > 3 {
+			window = window[len(window)-3:]
+		}
+		if !strings.Contains(strings.Join(window, "\n"), "diagnose_node") {
+			t.Fatalf("bootstrap failure path %d exits without running diagnose_node first", i+1)
+		}
+	}
 
 	dir := t.TempDir()
 	stubDir := filepath.Join(dir, "bin")

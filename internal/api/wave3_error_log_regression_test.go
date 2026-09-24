@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
 const expectedMaxServiceLogResponseBytes = 256 * 1024
@@ -70,7 +72,17 @@ func TestLogsAreRedactedAndByteBounded(t *testing.T) {
 	if strings.Contains(rec.Body.String(), secret) || strings.Contains(rec.Body.String(), "secret value with spaces") || strings.Contains(rec.Body.String(), "PEMSECRET") || !strings.Contains(rec.Body.String(), "[REDACTED]") {
 		t.Fatalf("secret was not redacted: %.300s", rec.Body.String())
 	}
-	if rec.Body.Len() > expectedMaxServiceLogResponseBytes+1024 {
-		t.Fatalf("response bytes=%d, limit=%d", rec.Body.Len(), expectedMaxServiceLogResponseBytes)
+	// The product bound applies to the sanitized output the client reads, so
+	// assert on the decoded field rather than the JSON-encoded envelope (the
+	// envelope legitimately differs because JSON escapes control characters).
+	var result service.LogResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode log response: %v", err)
+	}
+	if len(result.Output) > expectedMaxServiceLogResponseBytes {
+		t.Fatalf("log output bytes=%d exceeds the %d-byte bound", len(result.Output), expectedMaxServiceLogResponseBytes)
+	}
+	if !strings.Contains(result.Output, "[TRUNCATED]") {
+		t.Fatalf("oversized log output missing truncation marker")
 	}
 }

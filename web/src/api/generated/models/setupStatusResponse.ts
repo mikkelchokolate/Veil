@@ -45,5 +45,6 @@ import type { SetupStatusResponsePanelAccess } from './setupStatusResponsePanelA
 export interface SetupStatusResponse {
   required: boolean;
   allowed: boolean;
+  /** Effective panel access mode. An unset value is reported as `local`. */
   panelAccess: SetupStatusResponsePanelAccess;
 }
