@@ -25,7 +25,9 @@ func TestTrafficSummaryIsPendingBeforeFirstSuccessfulObservation(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body["state"] == "healthy" {
-		t.Fatalf("summary reported healthy before any observation: %#v", body)
+	// A provider that has never completed a successful observation must report
+	// exactly "pending" — "healthy", "degraded", or "" would all be lies.
+	if body["state"] != "pending" {
+		t.Fatalf("summary state=%v want \"pending\" before first successful observation: %#v", body["state"], body)
 	}
 }

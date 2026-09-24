@@ -43,6 +43,8 @@
 
 export interface TLSCertInfo {
   path: string;
+  /** Where the certificate was loaded from — "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage). */
+  source?: string;
   subject: string;
   issuer: string;
   notBefore: string;
