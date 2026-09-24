@@ -3,12 +3,14 @@
 package e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestFullInboundToApplyFlow drives the complete management lifecycle over a
@@ -37,14 +39,23 @@ func TestFullInboundToApplyFlow(t *testing.T) {
 	}
 	drain(resp)
 
-	// Client links should aggregate the enabled Mieru transports.
+	// Client links should aggregate the enabled Mieru transports — assert the
+	// mieru link is actually present, not just any non-empty count (#899).
 	resp = srv.do(http.MethodGet, "/api/client-links", "")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("client links expected 200, got %d", resp.StatusCode)
 	}
 	links := readJSON(t, resp)
-	if count, ok := links["count"].(float64); !ok || count < 1 {
-		t.Fatalf("expected at least one client link, got %v", links["count"])
+	linkItems, _ := links["links"].([]any)
+	foundMieru := false
+	for _, item := range linkItems {
+		m, _ := item.(map[string]any)
+		if m["protocol"] == "mieru" {
+			foundMieru = true
+		}
+	}
+	if !foundMieru {
+		t.Fatalf("client links carry no mieru entry: %v", links)
 	}
 
 	// Plan, then apply; expect generated mieru config under the apply root.
@@ -54,26 +65,73 @@ func TestFullInboundToApplyFlow(t *testing.T) {
 	}
 	drain(resp)
 
-	resp = srv.do(http.MethodPost, "/api/apply", `{"confirm":true}`)
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
-		t.Fatalf("apply expected 200/409, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	// Stage-only apply must report a clean 200 — a 409 means an auto-apply
+	// from the earlier mutations is still in flight, so retry briefly instead
+	// of accepting either code (#899).
+	var applyResp *http.Response
+	for attempt := 0; attempt < 10; attempt++ {
+		applyResp = srv.do(http.MethodPost, "/api/apply", `{"confirm":true}`)
+		if applyResp.StatusCode != http.StatusConflict {
+			break
+		}
+		drain(applyResp)
+		time.Sleep(500 * time.Millisecond)
 	}
-	drain(resp)
+	if applyResp.StatusCode != http.StatusOK {
+		t.Fatalf("apply expected 200, got %d: %v", applyResp.StatusCode, readJSON(t, applyResp))
+	}
+	// A 200 alone is not proof the stage wrote anything — the plan must be
+	// valid and writtenFiles must carry the mieru artifact (#899). `applied`
+	// stays false here: this request stages configs without promoting live.
+	applyBody := readJSON(t, applyResp)
+	if plan, _ := applyBody["plan"].(map[string]any); plan["valid"] != true {
+		t.Fatalf("stage apply plan not valid: %v", applyBody)
+	}
+	written, _ := applyBody["writtenFiles"].([]any)
+	foundWritten := false
+	for _, f := range written {
+		if s, _ := f.(string); strings.HasSuffix(s, "mieru/server_config.json") || strings.Contains(s, "mieru") {
+			foundWritten = true
+		}
+	}
+	if !foundWritten {
+		t.Fatalf("writtenFiles lacks the mieru artifact: %v", written)
+	}
 
-	// A generated mieru config artifact should exist somewhere under the
-	// apply root after staging.
-	found := false
-	_ = filepath.Walk(srv.applyRoot, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
-		}
-		if strings.Contains(strings.ToLower(path), "mieru") {
-			found = true
-		}
-		return nil
-	})
-	if !found {
-		t.Fatalf("expected a generated mieru artifact under apply root %s", srv.applyRoot)
+	// The generated mieru artifact lands at a fixed path under the apply root —
+	// lock the exact artifact and that it parses as the server config, instead
+	// of a substring walk that greens any file with "mieru" in the name (#899).
+	mieruConfig := filepath.Join(srv.applyRoot, "generated", "mieru", "server_config.json")
+	data, err := os.ReadFile(mieruConfig)
+	if err != nil {
+		t.Fatalf("expected generated mieru config at %s: %v", mieruConfig, err)
+	}
+	var rendered struct {
+		Users []struct {
+			Name string `json:"name"`
+		} `json:"users"`
+		PortBindings []struct {
+			Protocol string `json:"protocol"`
+		} `json:"portBindings"`
+	}
+	if err := json.Unmarshal(data, &rendered); err != nil {
+		t.Fatalf("mieru server_config.json is not JSON: %v", err)
+	}
+	// Both inbounds must be represented: the profile user from mieru-tcp, the
+	// fallback inbound user from mieru-udp, and both transport bindings.
+	userNames := map[string]bool{}
+	for _, u := range rendered.Users {
+		userNames[u.Name] = true
+	}
+	if !userNames["alice"] || !userNames["mieru-udp"] {
+		t.Fatalf("mieru users = %v, want alice+mieru-udp: %s", userNames, data)
+	}
+	transports := map[string]bool{}
+	for _, pb := range rendered.PortBindings {
+		transports[strings.ToUpper(pb.Protocol)] = true
+	}
+	if !transports["TCP"] || !transports["UDP"] {
+		t.Fatalf("mieru portBindings = %v, want TCP+UDP: %s", transports, data)
 	}
 }
 
@@ -88,34 +146,40 @@ func TestRejectsDuplicateMieruUsernamesEndToEnd(t *testing.T) {
 	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev"}`)
 	drain(resp)
 
-	// Two Mieru inbounds whose sole client profile shares the same name.
-	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"dup","protocol":"mieru","transport":"tcp","port":%d,"enabled":true,"password":"pw1"}`, inboundPort))
+	// Two DIFFERENTLY-named Mieru inbounds whose profiles share one username —
+	// the safeguard under test is the cross-inbound duplicate user name, not
+	// the inbound-name uniqueness check (#899).
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"mieru-dup-a","protocol":"mieru","transport":"tcp","port":%d,"enabled":true,"profiles":[{"name":"shared-user","password":"pw-one","enabled":true}]}`, inboundPort))
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("inbound 1 expected 201, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}
 	drain(resp)
-	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"dup","protocol":"mieru","transport":"udp","port":%d,"enabled":true,"password":"pw2"}`, inboundPort))
-	// The catalog may reject the duplicate name at creation, or the conflict
-	// may surface at plan/apply time. Either is an acceptable safeguard; what
-	// matters is that it never silently succeeds end-to-end.
-	if resp.StatusCode == http.StatusCreated {
-		drain(resp)
-		planResp := srv.do(http.MethodPost, "/api/apply/plan", "")
-		planBody := readJSON(t, planResp)
-		if planResp.StatusCode == http.StatusOK {
-			// If plan is OK, apply must fail with the duplicate-user error.
-			applyResp := srv.do(http.MethodPost, "/api/apply", `{"confirm":true}`)
-			if applyResp.StatusCode == http.StatusOK {
-				t.Fatalf("expected duplicate mieru user names to be rejected, but apply succeeded: %v", planBody)
-			}
-			drain(applyResp)
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"mieru-dup-b","protocol":"mieru","transport":"udp","port":%d,"enabled":true,"profiles":[{"name":"shared-user","password":"pw-two","enabled":true}]}`, freePort(t)))
+	// Live validation may reject the duplicate username at create time, or
+	// the conflict may surface at plan/apply — either way the response must
+	// carry the mieru_duplicate_username issue, not an unrelated error.
+	if resp.StatusCode != http.StatusCreated {
+		body := readJSON(t, resp)
+		if !jsonContainsIssue(body, "mieru_duplicate_username") {
+			t.Fatalf("duplicate-username create rejected without mieru_duplicate_username: %d %v", resp.StatusCode, body)
 		}
 		return
 	}
-	if resp.StatusCode < 400 {
-		t.Fatalf("expected duplicate inbound to be rejected, got %d: %v", resp.StatusCode, readJSON(t, resp))
-	}
 	drain(resp)
+	planResp := srv.do(http.MethodPost, "/api/apply/plan", "")
+	planBody := readJSON(t, planResp)
+	if planResp.StatusCode == http.StatusOK {
+		if valid, _ := planBody["valid"].(bool); valid {
+			t.Fatalf("plan reported valid despite duplicate mieru username: %v", planBody)
+		}
+		if !jsonContainsIssue(planBody, "mieru_duplicate_username") {
+			t.Fatalf("invalid plan lacks mieru_duplicate_username issue: %v", planBody)
+		}
+		return
+	}
+	if !jsonContainsIssue(planBody, "mieru_duplicate_username") {
+		t.Fatalf("plan rejection lacks mieru_duplicate_username: %d %v", planResp.StatusCode, planBody)
+	}
 }
 
 // TestConfigValidateCLI exercises the `veil config validate` subcommand

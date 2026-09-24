@@ -45,12 +45,18 @@ func NewHTTPServer(opts HTTPServerOptions) HTTPServer {
 	return HTTPServer{opts: opts}
 }
 
+// resolvedHelperSocket is the socket path Build will actually wire into the
+// privileged client — the packaged default when the option is empty.
+func (s HTTPServer) resolvedHelperSocket() string {
+	if s.opts.HelperSocket == "" {
+		return privileged.DefaultSocketPath
+	}
+	return s.opts.HelperSocket
+}
+
 func (s HTTPServer) Build() (*http.Server, api.Reloader) {
 	opts := s.opts
-	helperSocket := opts.HelperSocket
-	if helperSocket == "" {
-		helperSocket = privileged.DefaultSocketPath
-	}
+	helperSocket := s.resolvedHelperSocket()
 	validator := livevalidation.Validator{
 		Ports:    livevalidation.HostPortProbe{},
 		DNS:      livevalidation.HostDNSResolver{},

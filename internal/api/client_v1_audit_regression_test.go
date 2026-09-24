@@ -45,10 +45,19 @@ func TestV1ClientAuditIgnoresUnrelatedNameTargets(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
+	// Negative-only filtering greens a broken matcher returning [] — the
+	// client event targeted at "demo" must be positively present (#874).
+	foundClientEvent := false
 	for _, item := range body.Items {
 		if item.Action == "create_inbound" {
 			t.Fatalf("inbound event leaked into client audit: %+v", item)
 		}
+		if item.Action == "create_client" && item.Target == "demo" {
+			foundClientEvent = true
+		}
+	}
+	if len(body.Items) == 0 || !foundClientEvent {
+		t.Fatalf("client audit lost its own event (items=%v)", body.Items)
 	}
 
 	rename := v1Request(t, r, http.MethodPatch, "/api/v1/clients/"+id, `{"version":1,"name":"renamed"}`)
@@ -59,10 +68,20 @@ func TestV1ClientAuditIgnoresUnrelatedNameTargets(t *testing.T) {
 	if err := json.NewDecoder(after.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
+	foundClientEvent = false
 	for _, item := range body.Items {
 		if item.Action == "create_inbound" {
 			t.Fatalf("rename pulled inbound history into client audit: %+v", item)
 		}
+		// Real client audit events are recorded against the client id, which
+		// survives the rename; a positive match proves the matcher still
+		// returns this client's own history rather than an empty page.
+		if item.Target == id {
+			foundClientEvent = true
+		}
+	}
+	if len(body.Items) == 0 || !foundClientEvent {
+		t.Fatalf("client audit after rename lost its own event (items=%v)", body.Items)
 	}
 }
 

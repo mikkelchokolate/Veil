@@ -158,7 +158,7 @@ func TestV1ClientListPaginationAndSearch(t *testing.T) {
 
 func TestV1DeleteBindingKeepsClient(t *testing.T) {
 	r, _ := newApplyTrackedRouter(t)
-	v1Request(t, r, http.MethodPost, "/api/inbounds", `{"name":"hy2-d","protocol":"hysteria2","transport":"udp","port":9443,"enabled":true}`)
+	v1Request(t, r, http.MethodPost, "/api/inbounds", `{"name":"hy2-d","protocol":"hysteria2","transport":"udp","port":9443,"enabled":false}`)
 	w := v1Request(t, r, http.MethodPost, "/api/v1/clients", `{"name":"alice","bindings":[{"inboundId":"hy2-d","credential":"pw"}]}`)
 	created := unwrapClient(t, w.Body.Bytes())
 	id := created["id"].(string)
@@ -167,16 +167,48 @@ func TestV1DeleteBindingKeepsClient(t *testing.T) {
 		t.Fatalf("expected binding")
 	}
 
-	// Find the binding id via the client detail (bindings are exposed via view).
-	// We delete by listing bindings through the service is not exposed; instead
-	// assert client survives with orphaned status after removing the inbound
-	// binding via the bindings endpoint. We need the binding id; fetch client.
-	// For simplicity, delete client->binding through the subresource using the
-	// inbound id we bound (binding id is internal; we verify orphan via status).
+	// Resolve the binding id from the client read model, then actually DELETE
+	// the binding through the subresource — the old body fetched the view and
+	// discarded it, so the delete path was never exercised (#840).
 	w2 := v1Request(t, r, http.MethodGet, "/api/v1/clients/"+id, "")
 	var view map[string]any
-	_ = json.NewDecoder(w2.Body).Decode(&view)
-	_ = view
+	if err := json.NewDecoder(w2.Body).Decode(&view); err != nil {
+		t.Fatalf("decode client view: %v", err)
+	}
+	bindings, _ := view["bindings"].([]any)
+	if len(bindings) == 0 {
+		t.Fatalf("client view exposes no bindings: %v", view)
+	}
+	bindingID, _ := bindings[0].(map[string]any)["id"].(string)
+	if bindingID == "" {
+		t.Fatalf("binding missing id: %v", bindings[0])
+	}
+
+	w3 := v1Request(t, r, http.MethodDelete, "/api/v1/clients/"+id+"/bindings/"+bindingID, "")
+	if w3.Code != http.StatusOK {
+		t.Fatalf("delete binding: %d %s", w3.Code, w3.Body.String())
+	}
+	var del map[string]any
+	if err := json.NewDecoder(w3.Body).Decode(&del); err != nil {
+		t.Fatalf("decode delete response: %v", err)
+	}
+	if del["success"] != true {
+		t.Fatalf("delete binding success = %v, want true: %v", del["success"], del)
+	}
+
+	// The client itself must survive the binding delete — assert it is still
+	// retrievable and now reports zero bindings.
+	w4 := v1Request(t, r, http.MethodGet, "/api/v1/clients/"+id, "")
+	if w4.Code != http.StatusOK {
+		t.Fatalf("client must survive binding delete: %d %s", w4.Code, w4.Body.String())
+	}
+	var after map[string]any
+	if err := json.NewDecoder(w4.Body).Decode(&after); err != nil {
+		t.Fatalf("decode post-delete view: %v", err)
+	}
+	if remaining, _ := after["bindings"].([]any); len(remaining) != 0 {
+		t.Fatalf("binding still present after delete: %v", remaining)
+	}
 }
 
 func TestV1OrphanClientDetection(t *testing.T) {
