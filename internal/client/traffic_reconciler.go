@@ -2,6 +2,7 @@ package client
 
 import (
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -180,7 +181,7 @@ func (r *Reconciler) pendingEnforcementTargets(clientIDs []string) (map[string]s
 	for i, id := range clientIDs {
 		placeholders[i], args[i] = "?", id
 	}
-	query := "SELECT client_id,state,next_retry_at,target_generation,target_payload_hash,target_depleted,target_period_epoch FROM quota_enforcement WHERE client_id IN (" + strings.Join(placeholders, ",") + ") AND state<>'superseded'"
+	query := "SELECT client_id,state,next_retry_at,target_generation,target_payload_hash,target_depleted,target_period_epoch,target_reset_period,target_next_reset_at,target_period_start FROM quota_enforcement WHERE client_id IN (" + strings.Join(placeholders, ",") + ") AND state<>'superseded'"
 	rows, err := r.repo.db.Query(query, args...)
 	if err != nil {
 		return nil, err
@@ -188,12 +189,21 @@ func (r *Reconciler) pendingEnforcementTargets(clientIDs []string) (map[string]s
 	defer rows.Close()
 	for rows.Next() {
 		var id, state, hash string
-		var nextRetry, generation, period int64
-		var depleted int
-		if err := rows.Scan(&id, &state, &nextRetry, &generation, &hash, &depleted, &period); err != nil {
+		var nextRetry, generation, period, periodStart int64
+		var depleted, resetPeriod int
+		var nextReset sql.NullInt64
+		if err := rows.Scan(&id, &state, &nextRetry, &generation, &hash, &depleted, &period, &resetPeriod, &nextReset, &periodStart); err != nil {
 			return nil, err
 		}
-		mutation := QuotaMutation{ClientID: id, TargetGeneration: generation, TargetPayloadHash: hash, TargetPeriodEpoch: period, Depleted: depleted != 0}
+		mutation := QuotaMutation{
+			ClientID: id, TargetGeneration: generation, TargetPayloadHash: hash,
+			TargetPeriodEpoch: period, Depleted: depleted != 0,
+			ResetPeriod: resetPeriod != 0, CurrentPeriodStart: periodStart,
+		}
+		if nextReset.Valid {
+			next := nextReset.Int64
+			mutation.NextResetAt = &next
+		}
 		pending := state == "pending" || state == "applying" || state == "failed"
 		if state == "failed" && nextRetry > r.now().UTC().Unix() {
 			pending = false
@@ -242,19 +252,28 @@ WHERE client_id=? AND state<>'superseded' AND (target_generation<>? OR target_pa
 			if mutation.Depleted {
 				depleted = 1
 			}
+			resetPeriod := 0
+			if mutation.ResetPeriod {
+				resetPeriod = 1
+			}
 			if _, err := tx.Exec(`INSERT INTO quota_enforcement
-  (client_id,target_generation,target_payload_hash,target_depleted,target_period_epoch,state,next_retry_at,last_error,attempts,updated_at)
-  SELECT ?,?,?,?,?,?,?,?,1,? WHERE EXISTS(SELECT 1 FROM clients WHERE id=?)
+  (client_id,target_generation,target_payload_hash,target_depleted,target_period_epoch,
+   target_reset_period,target_next_reset_at,target_period_start,state,next_retry_at,last_error,attempts,updated_at)
+  SELECT ?,?,?,?,?,?,?,?,?,?,?,1,? WHERE EXISTS(SELECT 1 FROM clients WHERE id=?)
   ON CONFLICT(client_id,target_generation) DO UPDATE SET
     target_payload_hash=excluded.target_payload_hash,
     target_depleted=excluded.target_depleted,
     target_period_epoch=excluded.target_period_epoch,
+    target_reset_period=excluded.target_reset_period,
+    target_next_reset_at=excluded.target_next_reset_at,
+    target_period_start=excluded.target_period_start,
     state=excluded.state,
     desired_revision=CASE WHEN quota_enforcement.target_payload_hash=excluded.target_payload_hash THEN quota_enforcement.desired_revision ELSE 0 END,
     applied_revision=CASE WHEN quota_enforcement.target_payload_hash=excluded.target_payload_hash THEN quota_enforcement.applied_revision ELSE 0 END,
     next_retry_at=excluded.next_retry_at,last_error=excluded.last_error,
     attempts=quota_enforcement.attempts+1,updated_at=excluded.updated_at`,
 				update.clientID, mutation.TargetGeneration, mutation.TargetPayloadHash, depleted, mutation.TargetPeriodEpoch,
+				resetPeriod, mutation.NextResetAt, mutation.CurrentPeriodStart,
 				update.state, nextRetry, message, now, update.clientID); err != nil {
 				return err
 			}

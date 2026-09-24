@@ -45,58 +45,61 @@ type livePromotionRecord = applyflow.PromotionRecord
 type managementSnapshot = model.ManagementSnapshot
 
 type managementState struct {
-	mu                             sync.Mutex
-	clientLifecycleMu              sync.RWMutex
-	clientRequestMu                sync.RWMutex
-	passwordHasher                 PasswordHasher
-	databaseOpener                 func(string) (*sql.DB, error)
-	lifecycleCtx                   context.Context
-	lifecycleCancel                context.CancelFunc
-	statePath                      string
-	applyRoot                      string
-	liveRoot                       string
-	systemdWantsDir                string
-	keyPath                        string
-	cipher                         *secrets.Cipher
-	authToken                      string
-	allowDevAnonymous              bool
-	startupStateLoadFailed         bool
-	startupStateLoadErr            error
-	startupPrivilegedFailure       bool
-	storageDegradedErr             error
-	subscriptionLimiter            subscriptionRateLimiter
-	appliedProjectionMu            sync.Mutex
-	appliedProjectionRevision      uint64
-	appliedProjections             map[string]managementSnapshot
-	runtimeVerificationUnknown     bool
-	requirePrivilegedHelper        bool
-	requireApplyTracking           bool
-	setupAllowed                   bool
-	setup                          SetupState
-	serveWebBasePath               string
-	servePanelListen               string
-	servePanelAccess               string
-	settings                       Settings
-	inbounds                       []Inbound
-	rules                          []RoutingRule
-	routingPreset                  string
-	routingSource                  RoutingSource
-	warp                           WarpConfig
-	users                          []User
-	orphanedUnits                  []string
-	sessions                       *SessionRegistry
-	loginUsernameLimiter           *observability.RateLimiterEngine
-	httpRateLimiter                *observability.RateLimiter
-	idempotency                    *idempotencyStore
-	loginBackoff                   map[string]loginBackoffState
-	loginBackoffNow                func() time.Time
-	audit                          *audit.Recorder
-	auditHealthMu                  sync.RWMutex
-	auditDegraded                  bool
-	version                        string
-	backupDir                      string
-	backupPassphrasePath           string
-	backupMutationMu               sync.Mutex
+	mu                         sync.Mutex
+	clientLifecycleMu          sync.RWMutex
+	clientRequestMu            sync.RWMutex
+	passwordHasher             PasswordHasher
+	databaseOpener             func(string) (*sql.DB, error)
+	lifecycleCtx               context.Context
+	lifecycleCancel            context.CancelFunc
+	statePath                  string
+	applyRoot                  string
+	liveRoot                   string
+	systemdWantsDir            string
+	keyPath                    string
+	cipher                     *secrets.Cipher
+	authToken                  string
+	allowDevAnonymous          bool
+	startupStateLoadFailed     bool
+	startupStateLoadErr        error
+	startupPrivilegedFailure   bool
+	storageDegradedErr         error
+	subscriptionLimiter        subscriptionRateLimiter
+	appliedProjectionMu        sync.Mutex
+	appliedProjectionRevision  uint64
+	appliedProjections         map[string]managementSnapshot
+	runtimeVerificationUnknown bool
+	requirePrivilegedHelper    bool
+	requireApplyTracking       bool
+	setupAllowed               bool
+	setup                      SetupState
+	serveWebBasePath           string
+	servePanelListen           string
+	servePanelAccess           string
+	settings                   Settings
+	inbounds                   []Inbound
+	rules                      []RoutingRule
+	routingPreset              string
+	routingSource              RoutingSource
+	warp                       WarpConfig
+	users                      []User
+	orphanedUnits              []string
+	sessions                   *SessionRegistry
+	loginUsernameLimiter       *observability.RateLimiterEngine
+	httpRateLimiter            *observability.RateLimiter
+	idempotency                *idempotencyStore
+	loginBackoff               map[string]loginBackoffState
+	loginBackoffNow            func() time.Time
+	audit                      *audit.Recorder
+	auditHealthMu              sync.RWMutex
+	auditDegraded              bool
+	version                    string
+	backupDir                  string
+	backupPassphrasePath       string
+	// Mutations (create/prune/delete/restore) take the write lock; downloads
+	// take the read lock so a concurrent mutation cannot remove or replace an
+	// archive mid-transfer while parallel downloads remain possible (#963).
+	backupMutationMu               sync.RWMutex
 	backupJobsMu                   sync.Mutex
 	backupJobs                     map[string]BackupRestoreJob
 	backupJobsPath                 string

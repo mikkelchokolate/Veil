@@ -128,12 +128,15 @@ func PruneArchives(dir string, policy RetentionPolicy, dryRun bool) (PruneResult
 			result.Kept = append(result.Kept, entry.Name)
 			continue
 		}
-		result.Deleted = append(result.Deleted, entry.Name)
 		if !dryRun {
 			if err := retentionRemove(entry.Path); err != nil {
+				// Deleted only lists archives that were actually removed —
+				// the failed name travels in the error so callers can report
+				// a partial prune without overstating what was deleted.
 				return result, fmt.Errorf("remove backup archive %s: %w", entry.Name, err)
 			}
 		}
+		result.Deleted = append(result.Deleted, entry.Name)
 	}
 	return result, nil
 }

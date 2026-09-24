@@ -82,6 +82,12 @@ func TestVerifyRejectsMalformedBundleBeforeTrustingChecksums(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected malformed bundle rejection")
 	}
+	// The checksum bundle must be rejected at its own parse stage — before the
+	// provenance bundle is parsed and before the trusted root is fetched —
+	// so the failure names the checksum bundle specifically.
+	if !strings.Contains(err.Error(), "parse checksum bundle") {
+		t.Fatalf("malformed checksum bundle should fail checksum parsing, got: %v", err)
+	}
 }
 
 func TestProvenanceRejectsWrongSourceCommitWithOtherwiseValidStatement(t *testing.T) {

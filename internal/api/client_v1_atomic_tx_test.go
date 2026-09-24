@@ -15,6 +15,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/storage"
 )
 
 // Blocker-A1 tests: client state, desired revision, and the immutable snapshot
@@ -325,6 +326,45 @@ func TestStartupMigrateLegacyMarkerBackupAndIdempotency(t *testing.T) {
 	_ = dbBak.Close()
 	if string(magic) != "SQLite format 3\x00" {
 		t.Fatalf("veil.db.bak is not a SQLite image (magic %q)", magic)
+	}
+	// The safety copy must be the real pre-migration bytes, not an empty file.
+	stateBackup, err := os.ReadFile(filepath.Join(backups[0], "state.json.bak"))
+	if err != nil {
+		t.Fatalf("read state backup: %v", err)
+	}
+	if string(stateBackup) != string(seededState) {
+		t.Fatalf("state.json.bak does not match the pre-migration state file")
+	}
+	// The database copy is produced by VACUUM INTO; prove it is a consistent,
+	// queryable SQLite database with the migrated schema, not a partial copy.
+	backupDB, err := storage.OpenExisting(filepath.Join(backups[0], "veil.db.bak"))
+	if err != nil {
+		t.Fatalf("open veil.db.bak: %v", err)
+	}
+	defer backupDB.Close()
+	var integrity string
+	if err := backupDB.QueryRow(`PRAGMA integrity_check`).Scan(&integrity); err != nil {
+		t.Fatalf("integrity_check on veil.db.bak: %v", err)
+	}
+	if integrity != "ok" {
+		t.Fatalf("veil.db.bak integrity_check = %q, want ok", integrity)
+	}
+	var migratedClients int
+	if err := backupDB.QueryRow(`SELECT COUNT(*) FROM clients`).Scan(&migratedClients); err != nil {
+		t.Fatalf("veil.db.bak missing clients table: %v", err)
+	}
+	if migratedClients != 0 {
+		t.Fatalf("veil.db.bak already contains %d migrated clients; backup must precede the migration", migratedClients)
+	}
+	var backupSchemaVersion, liveSchemaVersion int
+	if err := backupDB.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&backupSchemaVersion); err != nil {
+		t.Fatalf("veil.db.bak missing schema_migrations: %v", err)
+	}
+	if err := st1.db.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&liveSchemaVersion); err != nil {
+		t.Fatalf("live veil.db missing schema_migrations: %v", err)
+	}
+	if backupSchemaVersion != liveSchemaVersion {
+		t.Fatalf("veil.db.bak schema version = %d, want the live migration tip %d", backupSchemaVersion, liveSchemaVersion)
 	}
 
 	// Issue 1: the migration ran through the mutation orchestration — a

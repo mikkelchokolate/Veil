@@ -1,8 +1,16 @@
 package managementstate
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+)
+
+// chownFile and chmodFile are seams for failure injection in tests; production
+// uses the real os.File methods.
+var (
+	chownFile = func(file *os.File, uid, gid int) error { return file.Chown(uid, gid) }
+	chmodFile = func(file *os.File, mode os.FileMode) error { return file.Chmod(mode) }
 )
 
 func writeStoreFileAtomic(path string, body []byte, previous *fileInfo) error {
@@ -30,10 +38,16 @@ func writeStoreFileAtomicWithSync(path string, body []byte, previous *fileInfo, 
 		return err
 	}
 	if previous != nil {
+		// Fail closed: a state file written without the preserved
+		// ownership/mode can lock the service account out of its own state.
 		if previous.uid >= 0 || previous.gid >= 0 {
-			_ = tmp.Chown(previous.uid, previous.gid)
+			if err := chownFile(tmp, previous.uid, previous.gid); err != nil {
+				return fmt.Errorf("preserve state file ownership: %w", err)
+			}
 		}
-		_ = tmp.Chmod(previous.mode)
+		if err := chmodFile(tmp, previous.mode); err != nil {
+			return fmt.Errorf("preserve state file mode: %w", err)
+		}
 	}
 	if err := syncFile(tmp); err != nil {
 		return err
