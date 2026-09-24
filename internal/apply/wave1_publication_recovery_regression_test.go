@@ -3,6 +3,7 @@ package apply
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -35,9 +36,14 @@ FROM runtime_publications WHERE revision=?`, gotRevision).
 		if err != nil {
 			return Result{}, errors.New("publication intent was not durable before executor mutation: " + err.Error())
 		}
-		if persistedRevision != gotRevision || generation != fence.Generation || owner != fence.Owner || operationID == "" ||
-			leaseExpiresAt <= time.Now().Unix() || phase != "intent" || len(snapshotDigest) != 64 {
-			return Result{}, errors.New("incomplete publication intent before executor mutation")
+		// Lock the intent row exactly: the digest must be the real SHA-256 of
+		// the snapshot body and the operation id must be the fence's — a
+		// 64-char junk digest or unrelated non-empty id would green the
+		// presence-only version of this gate (#909).
+		const wantSnapshotSHA256 = "552b9fd928b532a90a6ef1cea970ddc4146b2fc3f18e4b4a60e4769dff0e14ca" // sha256(`{"effectiveAt":1}`)
+		if persistedRevision != gotRevision || generation != fence.Generation || owner != fence.Owner || operationID != fence.OperationID ||
+			operationID == "" || leaseExpiresAt <= time.Now().Unix() || phase != "intent" || snapshotDigest != wantSnapshotSHA256 {
+			return Result{}, fmt.Errorf("incomplete publication intent before executor mutation: op=%q digest=%q", operationID, snapshotDigest)
 		}
 		observed = true
 		if err := markTestRuntimeConverged(ctx); err != nil {

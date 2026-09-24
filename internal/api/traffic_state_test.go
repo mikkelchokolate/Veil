@@ -18,18 +18,17 @@ func TestV1TrafficReportsProviderState(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/traffic/summary", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	if w.Code == http.StatusNotFound {
-		t.Fatalf("summary endpoint missing (A9)")
+	if w.Code != http.StatusOK {
+		t.Fatalf("summary endpoint must return 200, got %d: %s", w.Code, w.Body.String())
 	}
 	var resp map[string]any
-	_ = json.NewDecoder(w.Body).Decode(&resp)
-	state, _ := resp["state"].(string)
-	if state == "" {
-		t.Errorf("summary missing telemetry state: %v", resp)
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode summary body: %v: %s", err, w.Body.String())
 	}
-	// With no providers registered the state must be the honest
-	// "unsupported"/"no_providers" marker, not "collecting".
-	if state == "collecting" {
-		t.Errorf("state=collecting with zero providers registered (dishonest)")
+	// With no providers registered the state must be exactly the honest
+	// "unsupported" marker — "collecting", "pending", "" or any other state
+	// would lie about telemetry that does not exist (A9).
+	if state, _ := resp["state"].(string); state != "unsupported" {
+		t.Errorf("summary state=%q want %q with zero providers registered: %v", resp["state"], "unsupported", resp)
 	}
 }

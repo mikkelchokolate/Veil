@@ -3,6 +3,7 @@ package managementstate
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 
@@ -41,20 +42,33 @@ func TestCodecDecodeRejectsMultipleJSONValues(t *testing.T) {
 }
 
 func TestCodecDecodeNoMigrationNeededForCurrentVersion(t *testing.T) {
+	// Feed the body at CurrentSchemaVersion itself and trap every migration
+	// slot: decoding current state must be a pure no-migration read (#928).
+	for v := range migrations {
+		v := v
+		orig := migrations[v]
+		migrations[v] = func(map[string]interface{}) (map[string]interface{}, error) {
+			return nil, fmt.Errorf("migration v%d must not run for current-version input", v)
+		}
+		defer func() { migrations[v] = orig }()
+	}
 	codec := NewManagementStateCodec()
-	body := []byte(`{
-		"schemaVersion":4,
+	body := []byte(fmt.Sprintf(`{
+		"schemaVersion":%d,
 		"settings":{"panelListen":"127.0.0.1:2096","mode":"server"},
 		"inbounds":[],
 		"routingRules":[],
 		"warp":{"enabled":false,"endpoint":"engage.cloudflareclient.com:2408"}
-	}`)
+	}`, CurrentSchemaVersion))
 	snapshot, err := codec.Decode(body)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
 	if snapshot.SchemaVersion != CurrentSchemaVersion {
 		t.Fatalf("schema version = %d, want %d", snapshot.SchemaVersion, CurrentSchemaVersion)
+	}
+	if snapshot.Settings.PanelListen != "127.0.0.1:2096" || snapshot.Settings.Mode != "server" {
+		t.Fatalf("current-version decode mangled settings: %+v", snapshot.Settings)
 	}
 }
 

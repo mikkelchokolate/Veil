@@ -164,13 +164,20 @@ func TestDetectPublicIPNilContextDoesNotPanic(t *testing.T) {
 }
 
 func TestDefaultPublicIPEndpointsAreHTTPS(t *testing.T) {
-	endpoints := DefaultPublicIPEndpoints()
-	if len(endpoints) == 0 {
-		t.Fatalf("expected endpoints")
+	// Lock the concrete default endpoints — a bare https:// prefix check would
+	// green a swapped-in single point of failure or a plaintext mirror (#889).
+	want := []string{
+		"https://api.ipify.org",
+		"https://ifconfig.me/ip",
+		"https://icanhazip.com",
 	}
-	for _, endpoint := range endpoints {
-		if len(endpoint) < len("https://") || endpoint[:len("https://")] != "https://" {
-			t.Fatalf("endpoint must use https: %s", endpoint)
+	endpoints := DefaultPublicIPEndpoints()
+	if len(endpoints) != len(want) {
+		t.Fatalf("endpoints = %v, want %v", endpoints, want)
+	}
+	for i := range want {
+		if endpoints[i] != want[i] {
+			t.Fatalf("endpoints[%d] = %q, want %q", i, endpoints[i], want[i])
 		}
 	}
 }

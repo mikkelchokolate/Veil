@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -25,19 +26,45 @@ func TestMetricsEndpointReturnsPrometheusFormat(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
+	// Prometheus exposition format requires the versioned text/plain type —
+	// a bare text/plain prefix would also match unrelated text responses.
 	ct := w.Header().Get("Content-Type")
-	if !strings.Contains(ct, "text/plain") {
-		t.Errorf("expected text/plain content-type, got %q", ct)
+	if ct != "text/plain; version=0.0.4; charset=utf-8" {
+		t.Errorf("expected Prometheus exposition content-type, got %q", ct)
 	}
 	body := w.Body.String()
+	// Always-rendered series must carry HELP + TYPE + at least one numeric
+	// sample line; a HELP-only catalog with zero samples must not green.
+	for _, series := range []struct {
+		name string
+		typ  string
+	}{
+		{"veil_uptime_seconds", "gauge"},
+		{"veil_http_requests_total", "counter"},
+		{"veil_http_requests_duration_seconds_avg", "gauge"},
+		{"veil_http_requests_active", "gauge"},
+		{"veil_rate_limit_hits_total", "counter"},
+	} {
+		for _, want := range []string{
+			"# HELP " + series.name,
+			"# TYPE " + series.name + " " + series.typ,
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("metrics output missing %q", want)
+			}
+		}
+		sample := regexp.MustCompile(`(?m)^` + series.name + ` [-+0-9.eE]+$`)
+		if !sample.MatchString(body) {
+			t.Errorf("metrics output missing a numeric sample line for %q", series.name)
+		}
+	}
+	// Labelled series render HELP/TYPE unconditionally; samples appear once a
+	// non-/metrics request has been tracked, so only the headers are locked.
 	for _, want := range []string{
-		"# HELP veil_uptime_seconds",
-		"# TYPE veil_uptime_seconds gauge",
-		"veil_uptime_seconds",
-		"# HELP veil_http_requests_total",
-		"# TYPE veil_http_requests_total counter",
-		"# HELP veil_http_requests_active",
-		"# HELP veil_rate_limit_hits_total",
+		"# HELP veil_http_requests_by_code_total",
+		"# TYPE veil_http_requests_by_code_total counter",
+		"# HELP veil_http_requests_by_path_total",
+		"# TYPE veil_http_requests_by_path_total counter",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("metrics output missing %q", want)
