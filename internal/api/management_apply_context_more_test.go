@@ -90,11 +90,21 @@ func TestHysteria2CertDomainsIgnoresMissingAndNonHysteria2Files(t *testing.T) {
 
 type recordingFirewallApplier struct {
 	applySafelyErr error
+	pruneCalls     int
+	pruneGotRules  []firewall.Rule
+	pruneResult    int
+	pruneErr       error
 }
 
 func (f *recordingFirewallApplier) ApplySafely(rules []firewall.Rule) error {
 	_ = rules
 	return f.applySafelyErr
+}
+
+func (f *recordingFirewallApplier) PruneStaleManagedRules(desired []firewall.Rule) (int, error) {
+	f.pruneCalls++
+	f.pruneGotRules = desired
+	return f.pruneResult, f.pruneErr
 }
 
 func boolPtr(v bool) *bool {

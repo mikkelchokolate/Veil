@@ -143,9 +143,10 @@ func TestSanitizeServiceLogOutputSecretFormats(t *testing.T) {
 		{
 			name: "query-escaped password in query string",
 			in:   "hysteria2://alice:p%40ss@example.com:443/?insecure=1#veil",
-			// percent-encoded secret must be redacted too (value survives only
-			// if the regex is greedy over the userinfo; encoded '@' protects it).
-			wantClean: false, // encoded form is not plaintext; just must not crash
+			// Percent-encoding is not a redaction: p%40ss decodes to the real
+			// password, so the escaped form must be redacted too.
+			wantClean:   true,
+			secretValue: "p%40ss",
 		},
 	}
 

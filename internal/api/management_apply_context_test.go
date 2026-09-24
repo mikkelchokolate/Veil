@@ -16,12 +16,22 @@ type fakeFirewallApplier struct {
 	applySafelyCalled bool
 	gotRules          []firewall.Rule
 	applySafelyErr    error
+	pruneCalls        int
+	pruneGotRules     []firewall.Rule
+	pruneResult       int
+	pruneErr          error
 }
 
 func (f *fakeFirewallApplier) ApplySafely(rules []firewall.Rule) error {
 	f.applySafelyCalled = true
 	f.gotRules = rules
 	return f.applySafelyErr
+}
+
+func (f *fakeFirewallApplier) PruneStaleManagedRules(desired []firewall.Rule) (int, error) {
+	f.pruneCalls++
+	f.pruneGotRules = desired
+	return f.pruneResult, f.pruneErr
 }
 
 func TestManagementApplyContextBuildsApplyPlanFromState(t *testing.T) {
@@ -197,6 +207,56 @@ func TestPrepareFirewallLockedReturnsEmptyWhenNothingApplied(t *testing.T) {
 	}
 	if err := ctx.RollbackFirewallLocked(""); err != nil {
 		t.Fatalf("empty rollback should be a no-op, got %v", err)
+	}
+	// Even a no-op desired set still reaches the prune pass: the privileged
+	// reconcile would run it, so the local path must too (#782).
+	if fake.pruneCalls != 1 {
+		t.Fatalf("PruneStaleManagedRules calls = %d, want 1 (empty desired still prunes stale rules)", fake.pruneCalls)
+	}
+	if len(fake.pruneGotRules) != 0 {
+		t.Fatalf("prune desired set = %+v, want empty", fake.pruneGotRules)
+	}
+}
+
+// #782: removing every managed port on the local/dev path (nil helper or
+// privilegedLocal) must still prune stale Veil-managed UFW rules, matching
+// the privileged empty-set reconcile — and a prune that deleted rules is a
+// real firewall change that carries the local sentinel.
+func TestPrepareFirewallLockedPrunesStaleRulesOnEmptyLocalSync(t *testing.T) {
+	state := newManagementState(ServerInfo{Version: "test", Mode: "dev"})
+	state.settings.PanelListen = "127.0.0.1:2096" // loopback → empty desired set
+
+	fake := &fakeFirewallApplier{pruneResult: 2}
+	old := currentFirewallApplier()
+	swapFirewallApplier(fake)
+	t.Cleanup(func() { swapFirewallApplier(old) })
+
+	ctx := NewManagementApplyContext(state)
+	txn, err := ctx.PrepareFirewallLocked()
+	if err != nil {
+		t.Fatalf("PrepareFirewallLocked: %v", err)
+	}
+	if fake.pruneCalls != 1 {
+		t.Fatalf("PruneStaleManagedRules calls = %d, want 1", fake.pruneCalls)
+	}
+	if txn != localFirewallSyncTransactionID {
+		t.Fatalf("a sync that pruned stale rules is a real change: transaction = %q, want %q", txn, localFirewallSyncTransactionID)
+	}
+}
+
+func TestSyncFirewallLockedPruneErrorIsNonFatal(t *testing.T) {
+	state := newManagementState(ServerInfo{Version: "test", Mode: "dev"})
+	state.settings.PanelListen = "127.0.0.1:2096"
+
+	fake := &fakeFirewallApplier{pruneErr: errors.New("ufw status failed")}
+	old := currentFirewallApplier()
+	swapFirewallApplier(fake)
+	t.Cleanup(func() { swapFirewallApplier(old) })
+
+	ctx := NewManagementApplyContext(state)
+	results := ctx.syncFirewall()
+	if len(results) != 1 || results[0].Success || results[0].Error != "ufw status failed" {
+		t.Fatalf("expected non-fatal prune error, got %+v", results)
 	}
 }
 

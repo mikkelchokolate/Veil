@@ -112,7 +112,10 @@ func TestReconcilerNoQuotaNeverDepleted(t *testing.T) {
 	b, _ := repo.CreateBinding(Binding{ClientID: c.ID, InboundID: "in-1", Enabled: true})
 	_ = ts.RecordSample(Sample{BindingID: b.ID, UploadBytes: 1 << 40, DownloadBytes: 1 << 40, AtUnix: 1})
 	rec := NewReconciler(repo, ts, 0, nil)
-	changed, _ := rec.ReconcileOnce()
+	changed, err := rec.ReconcileOnce()
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
 	if changed != 0 {
 		t.Fatalf("changed = %d, want 0 (no quota)", changed)
 	}

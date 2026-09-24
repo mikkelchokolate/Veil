@@ -159,6 +159,12 @@ func (c *SocketClient) call(ctx context.Context, request RequestEnvelope, result
 		return newError(ErrorOperationFailed, "helper response correlation mismatch")
 	}
 	if !response.OK {
+		// The helper may attach a partial result to a failure (for example the
+		// archives a prune already deleted). Surface it to the caller while the
+		// error still reports the operation as failed.
+		if result != nil && len(response.Result) > 0 {
+			_ = json.Unmarshal(response.Result, result)
+		}
 		if response.Error != nil {
 			return response.Error
 		}
