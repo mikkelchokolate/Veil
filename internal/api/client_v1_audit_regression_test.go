@@ -45,6 +45,9 @@ func TestV1ClientAuditIgnoresUnrelatedNameTargets(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
+	if len(body.Items) == 0 {
+		t.Fatal("client audit returned no items for a client that was just created")
+	}
 	// Negative-only filtering greens a broken matcher returning [] — the
 	// client event targeted at "demo" must be positively present (#874).
 	foundClientEvent := false
@@ -56,7 +59,7 @@ func TestV1ClientAuditIgnoresUnrelatedNameTargets(t *testing.T) {
 			foundClientEvent = true
 		}
 	}
-	if len(body.Items) == 0 || !foundClientEvent {
+	if !foundClientEvent {
 		t.Fatalf("client audit lost its own event (items=%v)", body.Items)
 	}
 
@@ -67,6 +70,9 @@ func TestV1ClientAuditIgnoresUnrelatedNameTargets(t *testing.T) {
 	after := v1Request(t, r, http.MethodGet, "/api/v1/clients/"+id+"/audit", "")
 	if err := json.NewDecoder(after.Body).Decode(&body); err != nil {
 		t.Fatal(err)
+	}
+	if len(body.Items) == 0 {
+		t.Fatal("client audit returned no items after rename")
 	}
 	foundClientEvent = false
 	for _, item := range body.Items {
@@ -80,7 +86,7 @@ func TestV1ClientAuditIgnoresUnrelatedNameTargets(t *testing.T) {
 			foundClientEvent = true
 		}
 	}
-	if len(body.Items) == 0 || !foundClientEvent {
+	if !foundClientEvent {
 		t.Fatalf("client audit after rename lost its own event (items=%v)", body.Items)
 	}
 }
@@ -116,6 +122,7 @@ func TestV1ClientAuditPagesPastUnrelatedGlobalEvents(t *testing.T) {
 	}
 	var body struct {
 		Items []struct {
+			Action string `json:"action"`
 			Target string `json:"target"`
 		} `json:"items"`
 		NextBefore string `json:"nextBefore"`
@@ -126,13 +133,18 @@ func TestV1ClientAuditPagesPastUnrelatedGlobalEvents(t *testing.T) {
 	if len(body.Items) == 0 {
 		t.Fatal("older client event was hidden by 500 newer unrelated records")
 	}
-	found := false
+	// Every returned item must belong to this client — the paged scan must not
+	// leak the 500 unrelated global events into the per-client feed.
+	sawUpdate := false
 	for _, item := range body.Items {
-		if item.Target == id {
-			found = true
+		if item.Target != id {
+			t.Fatalf("unrelated event leaked into client audit feed: %+v", item)
+		}
+		if item.Action == "update_client" {
+			sawUpdate = true
 		}
 	}
-	if !found {
-		t.Fatalf("client event missing: %+v", body.Items)
+	if !sawUpdate {
+		t.Fatalf("client update_client event paged past 500 unrelated records is missing: %+v", body.Items)
 	}
 }

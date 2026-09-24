@@ -34,7 +34,9 @@ func TestRenderWarpRoutingRulesUsesEnabledRulesOnly(t *testing.T) {
 		{Match: "geoip:ru", Outbound: "direct", Enabled: true},
 		{Match: "all", Outbound: "warp", Enabled: false},
 	})
-	if len(rules) != 1 || rules[0].Match != "geoip:ru" {
+	// Match alone greens a rule whose outbound was dropped or rewritten —
+	// lock the surviving rule completely (#857).
+	if len(rules) != 1 || rules[0].Match != "geoip:ru" || rules[0].Outbound != "direct" {
 		t.Fatalf("rules = %+v", rules)
 	}
 }

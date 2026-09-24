@@ -424,6 +424,29 @@ export const PostApiV1ClientsIdBindingsResponse = zod.object({
 }))
 
 /**
+ * @summary Get a single client binding read model
+ */
+
+
+
+export const GetApiV1ClientsIdBindingsBindingIdParams = zod.object({
+  "id": zod.string().min(1),
+  "bindingId": zod.string()
+})
+
+export const GetApiV1ClientsIdBindingsBindingIdResponse = zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "inboundId": zod.string(),
+  "runtimeIdentity": zod.string(),
+  "enabled": zod.boolean(),
+  "protocolSettings": zod.string().optional().describe('JSON object string with per-binding protocol options.'),
+  "createdAt": zod.int(),
+  "updatedAt": zod.int(),
+  "version": zod.int()
+}).describe('Durable client↔inbound binding as stored (write responses).')
+
+/**
  * @summary Update a binding (toggle enabled, optimistic locking)
  */
 

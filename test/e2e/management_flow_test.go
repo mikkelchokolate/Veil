@@ -141,44 +141,56 @@ func TestFullInboundToApplyFlow(t *testing.T) {
 // a broken config.
 func TestRejectsDuplicateMieruUsernamesEndToEnd(t *testing.T) {
 	srv := startServer(t, serverOptions{token: "tok"})
-	inboundPort := freePort(t)
+	tcpPort := freePort(t)
+	udpPort := freePort(t)
 
 	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev"}`)
 	drain(resp)
 
-	// Two DIFFERENTLY-named Mieru inbounds whose profiles share one username —
-	// the safeguard under test is the cross-inbound duplicate user name, not
-	// the inbound-name uniqueness check (#899).
-	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"mieru-dup-a","protocol":"mieru","transport":"tcp","port":%d,"enabled":true,"profiles":[{"name":"shared-user","password":"pw-one","enabled":true}]}`, inboundPort))
+	// Two DIFFERENT Mieru inbounds that share the same client username. Mieru
+	// aggregates all users into one global list, so this is the collision the
+	// validator must catch — distinct inbound names are required so a mere
+	// duplicate-name rejection cannot mask the username check.
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"dup-a","protocol":"mieru","transport":"tcp","port":%d,"enabled":true,"profiles":[{"name":"shared-user","password":"pw1","enabled":true}]}`, tcpPort))
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("inbound 1 expected 201, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}
 	drain(resp)
-	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"mieru-dup-b","protocol":"mieru","transport":"udp","port":%d,"enabled":true,"profiles":[{"name":"shared-user","password":"pw-two","enabled":true}]}`, freePort(t)))
-	// Live validation may reject the duplicate username at create time, or
-	// the conflict may surface at plan/apply — either way the response must
-	// carry the mieru_duplicate_username issue, not an unrelated error.
-	if resp.StatusCode != http.StatusCreated {
-		body := readJSON(t, resp)
-		if !jsonContainsIssue(body, "mieru_duplicate_username") {
-			t.Fatalf("duplicate-username create rejected without mieru_duplicate_username: %d %v", resp.StatusCode, body)
-		}
-		return
-	}
-	drain(resp)
-	planResp := srv.do(http.MethodPost, "/api/apply/plan", "")
-	planBody := readJSON(t, planResp)
-	if planResp.StatusCode == http.StatusOK {
-		if valid, _ := planBody["valid"].(bool); valid {
-			t.Fatalf("plan reported valid despite duplicate mieru username: %v", planBody)
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"dup-b","protocol":"mieru","transport":"udp","port":%d,"enabled":true,"profiles":[{"name":"shared-user","password":"pw2","enabled":true}]}`, udpPort))
+	// The duplicate username may be rejected at creation, or the conflict may
+	// surface at plan/apply time. Either is an acceptable safeguard; what
+	// matters is that it never silently succeeds end-to-end — and wherever it
+	// surfaces, the mieru_duplicate_username issue must be named.
+	if resp.StatusCode == http.StatusCreated {
+		drain(resp)
+		planResp := srv.do(http.MethodPost, "/api/apply/plan", "")
+		planBody := readJSON(t, planResp)
+		if planResp.StatusCode == http.StatusOK {
+			if valid, _ := planBody["valid"].(bool); valid {
+				t.Fatalf("plan reported valid despite duplicate mieru username: %v", planBody)
+			}
+			if !jsonContainsIssue(planBody, "mieru_duplicate_username") {
+				t.Fatalf("plan invalid but missing mieru_duplicate_username issue: %v", planBody)
+			}
+			// Apply must refuse to render the invalid plan.
+			applyResp := srv.do(http.MethodPost, "/api/apply", `{"confirm":true}`)
+			if applyResp.StatusCode == http.StatusOK {
+				t.Fatalf("expected duplicate mieru user names to be rejected, but apply succeeded: %v", readJSON(t, applyResp))
+			}
+			drain(applyResp)
+			return
 		}
 		if !jsonContainsIssue(planBody, "mieru_duplicate_username") {
-			t.Fatalf("invalid plan lacks mieru_duplicate_username issue: %v", planBody)
+			t.Fatalf("plan failed but without mieru_duplicate_username issue: %v", planBody)
 		}
 		return
 	}
-	if !jsonContainsIssue(planBody, "mieru_duplicate_username") {
-		t.Fatalf("plan rejection lacks mieru_duplicate_username: %d %v", planResp.StatusCode, planBody)
+	if resp.StatusCode < 400 {
+		t.Fatalf("expected duplicate inbound to be rejected, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
+	body := readJSON(t, resp)
+	if !jsonContainsIssue(body, "mieru_duplicate_username") {
+		t.Fatalf("create rejected but without mieru_duplicate_username issue: %v", body)
 	}
 }
 
@@ -228,25 +240,29 @@ func TestVersionAndDoctorCLI(t *testing.T) {
 // an apply/plan error over the HTTP surface.
 func TestRejectsDuplicatePortsEndToEnd(t *testing.T) {
 	srv := startServer(t, serverOptions{token: "tok"})
+	// Free ports from the kernel — hardcoded ports flake when a CI worker or
+	// leftover process already holds them.
+	port1 := freePort(t)
+	port2 := freePort(t)
 
 	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","defaultAcmeEmail":"admin@example.com","naiveUsername":"sysadmin","naivePassword":"syspassword"}`)
 	drain(resp)
 
-	// First NaiveProxy inbound on port 20001
-	resp = srv.do(http.MethodPost, "/api/inbounds", `{"name":"naive-1","protocol":"naiveproxy","transport":"tcp","port":20001,"enabled":true,"naiveUsername":"u1","naivePassword":"p1"}`)
+	// First NaiveProxy inbound on the first free port.
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"naive-1","protocol":"naiveproxy","transport":"tcp","port":%d,"enabled":true,"naiveUsername":"u1","naivePassword":"p1"}`, port1))
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("inbound 1 expected 201, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}
 	drain(resp)
 
-	// Second NaiveProxy inbound on DIFFERENT port 20002
-	resp = srv.do(http.MethodPost, "/api/inbounds", `{"name":"naive-2","protocol":"naiveproxy","transport":"tcp","port":20002,"enabled":true,"naiveUsername":"u2","naivePassword":"p2"}`)
+	// Second NaiveProxy inbound on a DIFFERENT free port.
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"naive-2","protocol":"naiveproxy","transport":"tcp","port":%d,"enabled":true,"naiveUsername":"u2","naivePassword":"p2"}`, port2))
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("inbound 2 expected 201, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}
 	drain(resp)
 
-	// This should successfully plan
+	// This should successfully plan.
 	planResp := srv.do(http.MethodPost, "/api/apply/plan", "")
 	if planResp.StatusCode != http.StatusOK {
 		t.Fatalf("apply plan for different ports expected 200, got %d: %v", planResp.StatusCode, readJSON(t, planResp))
@@ -257,9 +273,10 @@ func TestRejectsDuplicatePortsEndToEnd(t *testing.T) {
 	}
 	drain(planResp)
 
-	// Third inbound on SAME port as naive-2 (20002)
-	resp = srv.do(http.MethodPost, "/api/inbounds", `{"name":"dup-port","protocol":"naiveproxy","transport":"tcp","port":20002,"enabled":true,"naiveUsername":"u3","naivePassword":"p3"}`)
-
+	// Third inbound on the SAME port as naive-2: wherever the conflict
+	// surfaces, the duplicate_binding issue must be named — a bare 4xx could
+	// be any unrelated validation error.
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"dup-port","protocol":"naiveproxy","transport":"tcp","port":%d,"enabled":true,"naiveUsername":"u3","naivePassword":"p3"}`, port2))
 	if resp.StatusCode == http.StatusCreated {
 		drain(resp)
 		planResp = srv.do(http.MethodPost, "/api/apply/plan", "")
@@ -268,17 +285,32 @@ func TestRejectsDuplicatePortsEndToEnd(t *testing.T) {
 			if valid, ok := planBody["valid"].(bool); ok && valid {
 				t.Fatalf("expected duplicate port to be rejected during plan, but it was valid: %v", planBody)
 			}
-			// If plan is OK (but invalid), apply must fail with 400
+			if !jsonContainsIssue(planBody, "duplicate_binding") {
+				t.Fatalf("plan invalid but missing duplicate_binding issue: %v", planBody)
+			}
+			// If plan is OK (but invalid), apply must fail.
 			applyResp := srv.do(http.MethodPost, "/api/apply", `{"confirm":true}`)
 			if applyResp.StatusCode == http.StatusOK {
 				t.Fatalf("expected duplicate port to be rejected, but apply succeeded: %v", readJSON(t, applyResp))
 			}
 			drain(applyResp)
+			return
+		}
+		if !jsonContainsIssue(planBody, "duplicate_binding") {
+			t.Fatalf("plan failed but without duplicate_binding issue: %v", planBody)
 		}
 		return
 	}
 	if resp.StatusCode < 400 {
 		t.Fatalf("expected duplicate port inbound to be rejected, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}
-	drain(resp)
+	// Create-time duplicate rejection is a structured conflict error that must
+	// name the transport/port collision — a bare 4xx could be any unrelated
+	// validation failure.
+	body := readJSON(t, resp)
+	errObj, _ := body["error"].(map[string]any)
+	errMsg, _ := errObj["message"].(string)
+	if errObj["code"] != "conflict" || !strings.Contains(errMsg, "port") {
+		t.Fatalf("create rejected but not with the port-conflict error: %v", body)
+	}
 }

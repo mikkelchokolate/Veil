@@ -32,18 +32,26 @@ func TestViewerMayRunReadOnlyDiagnosticsButNotMutations(t *testing.T) {
 		})
 	}
 
-	for _, path := range []string{
-		"/api/inbounds",
-		"/api/backups",
-		"/api/backups/archive/verify",
+	for _, tc := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPost, "/api/inbounds"},
+		{http.MethodPost, "/api/backups"},
+		{http.MethodPost, "/api/backups/archive/verify"},
+		// Users mutations are admin-only (#838): a viewer with valid CSRF must
+		// still be denied on create/update/delete.
+		{http.MethodPost, "/api/users"},
+		{http.MethodPut, "/api/users/admin"},
+		{http.MethodDelete, "/api/users/admin"},
 	} {
-		req := httptest.NewRequest(http.MethodPost, path, nil)
+		req := httptest.NewRequest(tc.method, tc.path, nil)
 		req.AddCookie(&http.Cookie{Name: "veil_session", Value: session.Token})
 		req.Header.Set("X-CSRF-Token", session.CSRFToken)
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, req)
 		if w.Code != http.StatusForbidden {
-			t.Fatalf("viewer mutation %s expected 403, got %d", path, w.Code)
+			t.Fatalf("viewer mutation %s %s expected 403, got %d", tc.method, tc.path, w.Code)
 		}
 	}
 }

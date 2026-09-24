@@ -134,11 +134,29 @@ func Probe(ctx context.Context, contract ContainerHealthContract, token string) 
 		return fmt.Errorf("container health probe %s: %w", url, err)
 	}
 	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("container health probe %s: %s", url, resp.Status)
 	}
+	// A bare 200 is not enough: the endpoint must be the Veil health probe
+	// reporting status "ok", otherwise an unrelated service or an unhealthy
+	// payload could be mistaken for readiness.
+	if !HealthzStatusOK(body) {
+		return fmt.Errorf("container health probe %s: expected status \"ok\" body, got %q", url, strings.TrimSpace(string(body)))
+	}
 	return nil
+}
+
+// HealthzStatusOK reports whether a /healthz response body is the Veil health
+// contract: JSON with status "ok".
+func HealthzStatusOK(body []byte) bool {
+	var payload struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return false
+	}
+	return payload.Status == "ok"
 }
 
 var HealthHTTPClient = defaultHealthHTTPClient

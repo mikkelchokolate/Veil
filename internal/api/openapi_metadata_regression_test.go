@@ -3,6 +3,8 @@ package api
 import (
 	"fmt"
 	"os"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -58,6 +60,49 @@ func TestOpenAPIOperationsDeclareRolesAndProductionErrors(t *testing.T) {
 	for key := range criticalMutations {
 		if !seenCritical[key] {
 			t.Errorf("critical OpenAPI mutation not found: %s", key)
+		}
+	}
+}
+
+// TestOpenAPIRolesMatchEndpointCapability pins docs/openapi.yaml to the live
+// authorization policy (#837): for every documented operation, x-roles must
+// equal exactly the role set the endpoint capability allows, and every
+// documented operation must resolve to a defined policy (fail closed).
+func TestOpenAPIRolesMatchEndpointCapability(t *testing.T) {
+	document := loadOpenAPIMap(t)
+	paths := mapValue(t, document, "paths")
+	for path, rawPath := range paths {
+		pathItem, _ := rawPath.(map[string]any)
+		for _, method := range []string{"get", "head", "post", "put", "patch", "delete"} {
+			operation, ok := pathItem[method].(map[string]any)
+			if !ok {
+				continue
+			}
+			goMethod := strings.ToUpper(method)
+			capability, known := capabilityForEndpoint(goMethod, path)
+			if !known {
+				t.Errorf("%s %s is documented but resolves to no authorization policy", goMethod, path)
+				continue
+			}
+			var want []string
+			if capability == capabilityPublic {
+				want = []string{"public"}
+			} else {
+				want = []string{"admin"}
+				if capabilityAllowsRole(capability, "viewer") {
+					want = append(want, "viewer")
+				}
+			}
+			rolesRaw, _ := operation["x-roles"].([]any)
+			got := make([]string, 0, len(rolesRaw))
+			for _, role := range rolesRaw {
+				got = append(got, fmt.Sprint(role))
+			}
+			sort.Strings(got)
+			sort.Strings(want)
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("%s %s x-roles=%v, want %v for capability %q", goMethod, path, got, want, capability)
+			}
 		}
 	}
 }

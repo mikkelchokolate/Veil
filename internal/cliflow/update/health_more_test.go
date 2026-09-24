@@ -28,6 +28,7 @@ func TestWaitForHealthyRetriesOnNon200(t *testing.T) {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	}))
 	defer server.Close()
 
@@ -54,6 +55,7 @@ func TestWaitForHealthyReturnsWhenHTTPSucceedsWithoutToken(t *testing.T) {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	}))
 	defer server.Close()
 

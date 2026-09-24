@@ -54,6 +54,19 @@ func TestRegisteredLogoutReadsPanelAccessUnderStateLock(t *testing.T) {
 	}
 	close(stop)
 	writer.Wait()
+
+	// Every response in the loop carried the logout contract: one final
+	// request asserts the expiring cookie explicitly (#827).
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("logout status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	expired := sessionSetCookie(rec)
+	if expired == nil || expired.Value != "" || expired.MaxAge >= 0 {
+		t.Fatalf("logout cookie does not expire the session: %+v", expired)
+	}
 }
 
 func TestLogoutSnapshotKeepsCaddyCookieSecure(t *testing.T) {
@@ -73,5 +86,11 @@ func TestLogoutSnapshotKeepsCaddyCookieSecure(t *testing.T) {
 	cookie := rec.Header().Get("Set-Cookie")
 	if !strings.Contains(cookie, "veil_session=") || !strings.Contains(cookie, "Secure") || !strings.Contains(cookie, "HttpOnly") {
 		t.Fatalf("unexpected logout cookie: %q", cookie)
+	}
+	// Secure/HttpOnly on a cookie that still carries a value would be a lie:
+	// the logout cookie must expire the session (empty value, MaxAge<0, #827).
+	expired := sessionSetCookie(rec)
+	if expired == nil || expired.Value != "" || expired.MaxAge >= 0 {
+		t.Fatalf("logout cookie does not expire the session: %+v", expired)
 	}
 }

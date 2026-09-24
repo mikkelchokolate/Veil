@@ -4205,6 +4205,11 @@ type ClientInterface interface {
 	// Corresponds with DELETE /api/v1/clients/{id}/bindings/{bindingId} (the `DeleteApiV1ClientsIdBindingsBindingId` operationId).
 	DeleteApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, params *DeleteApiV1ClientsIdBindingsBindingIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetApiV1ClientsIdBindingsBindingId Get a single client binding read model
+	//
+	// Corresponds with GET /api/v1/clients/{id}/bindings/{bindingId} (the `GetApiV1ClientsIdBindingsBindingId` operationId).
+	GetApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PatchApiV1ClientsIdBindingsBindingIdWithBody Update a binding (toggle enabled, optimistic locking)
 	//
 	// Takes any type of body and a specified content type.
@@ -6258,6 +6263,21 @@ func (c *Client) PostApiV1ClientsIdBindings(ctx context.Context, id ClientId, pa
 // Corresponds with DELETE /api/v1/clients/{id}/bindings/{bindingId} (the `DeleteApiV1ClientsIdBindingsBindingId` operationId).
 func (c *Client) DeleteApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, params *DeleteApiV1ClientsIdBindingsBindingIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteApiV1ClientsIdBindingsBindingIdRequest(c.Server, id, bindingId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetApiV1ClientsIdBindingsBindingId Get a single client binding read model
+//
+// Corresponds with GET /api/v1/clients/{id}/bindings/{bindingId} (the `GetApiV1ClientsIdBindingsBindingId` operationId).
+func (c *Client) GetApiV1ClientsIdBindingsBindingId(ctx context.Context, id ClientId, bindingId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ClientsIdBindingsBindingIdRequest(c.Server, id, bindingId)
 	if err != nil {
 		return nil, err
 	}
@@ -10338,6 +10358,47 @@ func NewDeleteApiV1ClientsIdBindingsBindingIdRequest(server string, id ClientId,
 	return req, nil
 }
 
+// NewGetApiV1ClientsIdBindingsBindingIdRequest constructs an http.Request for the GetApiV1ClientsIdBindingsBindingId method
+func NewGetApiV1ClientsIdBindingsBindingIdRequest(server string, id ClientId, bindingId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "bindingId", bindingId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clients/%s/bindings/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewPatchApiV1ClientsIdBindingsBindingIdRequest calls the generic PatchApiV1ClientsIdBindingsBindingId builder with application/json body
 func NewPatchApiV1ClientsIdBindingsBindingIdRequest(server string, id ClientId, bindingId string, params *PatchApiV1ClientsIdBindingsBindingIdParams, body PatchApiV1ClientsIdBindingsBindingIdJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -12443,6 +12504,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with DELETE /api/v1/clients/{id}/bindings/{bindingId} (the `DeleteApiV1ClientsIdBindingsBindingId` operationId).
 	DeleteApiV1ClientsIdBindingsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, params *DeleteApiV1ClientsIdBindingsBindingIdParams, reqEditors ...RequestEditorFn) (*DeleteApiV1ClientsIdBindingsBindingIdResponse, error)
+
+	// GetApiV1ClientsIdBindingsBindingIdWithResponse Get a single client binding read model
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/clients/{id}/bindings/{bindingId} (the `GetApiV1ClientsIdBindingsBindingId` operationId).
+	GetApiV1ClientsIdBindingsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdBindingsBindingIdResponse, error)
 
 	// PatchApiV1ClientsIdBindingsBindingIdWithBodyWithResponse Update a binding (toggle enabled, optimistic locking)
 	//
@@ -18361,6 +18429,75 @@ func (r DeleteApiV1ClientsIdBindingsBindingIdResponse) ContentType() string {
 	return ""
 }
 
+// GetApiV1ClientsIdBindingsBindingIdResponse401Headers the declared response headers of an HTTP 401 response for GetApiV1ClientsIdBindingsBindingId
+type GetApiV1ClientsIdBindingsBindingIdResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type GetApiV1ClientsIdBindingsBindingIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ClientBinding
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetApiV1ClientsIdBindingsBindingIdResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiV1ClientsIdBindingsBindingIdResponse) GetJSON200() *ClientBinding {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiV1ClientsIdBindingsBindingIdResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetApiV1ClientsIdBindingsBindingIdResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetApiV1ClientsIdBindingsBindingIdResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiV1ClientsIdBindingsBindingIdResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ClientsIdBindingsBindingIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ClientsIdBindingsBindingIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiV1ClientsIdBindingsBindingIdResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type PatchApiV1ClientsIdBindingsBindingIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -21449,6 +21586,19 @@ func (c *ClientWithResponses) DeleteApiV1ClientsIdBindingsBindingIdWithResponse(
 		return nil, err
 	}
 	return ParseDeleteApiV1ClientsIdBindingsBindingIdResponse(rsp)
+}
+
+// GetApiV1ClientsIdBindingsBindingIdWithResponse Get a single client binding read model
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/clients/{id}/bindings/{bindingId} (the `GetApiV1ClientsIdBindingsBindingId` operationId).
+func (c *ClientWithResponses) GetApiV1ClientsIdBindingsBindingIdWithResponse(ctx context.Context, id ClientId, bindingId string, reqEditors ...RequestEditorFn) (*GetApiV1ClientsIdBindingsBindingIdResponse, error) {
+	rsp, err := c.GetApiV1ClientsIdBindingsBindingId(ctx, id, bindingId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ClientsIdBindingsBindingIdResponse(rsp)
 }
 
 // PatchApiV1ClientsIdBindingsBindingIdWithBodyWithResponse Update a binding (toggle enabled, optimistic locking)
@@ -26385,6 +26535,66 @@ func ParseDeleteApiV1ClientsIdBindingsBindingIdResponse(rsp *http.Response) (*De
 		}
 		response.JSON503 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1ClientsIdBindingsBindingIdResponse parses an HTTP response from a GetApiV1ClientsIdBindingsBindingIdWithResponse call
+func ParseGetApiV1ClientsIdBindingsBindingIdResponse(rsp *http.Response) (*GetApiV1ClientsIdBindingsBindingIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ClientsIdBindingsBindingIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ClientBinding
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetApiV1ClientsIdBindingsBindingIdResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
 	}
 
 	return response, nil

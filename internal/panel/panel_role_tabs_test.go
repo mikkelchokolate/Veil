@@ -20,6 +20,21 @@ func TestViewerRoleGuardHidesAdminOnlyTabs(t *testing.T) {
 			t.Fatalf("viewer tab guard missing %q", want)
 		}
 	}
+	// The guard must actually run as the viewer (#838): it wraps and
+	// re-invokes the base applyViewerRoleGuard, derives `viewer` from
+	// isViewerRole(), and iterates the adminOnlyTabIds list — dropping any of
+	// that wiring leaves admin tabs visible to viewers while the substring
+	// checks above stay green.
+	for _, want := range []string{
+		`const baseApplyViewerRoleGuard = applyViewerRoleGuard;`,
+		`const viewer = isViewerRole();`,
+		`adminOnlyTabIds.forEach`,
+		`applyViewerRoleGuard();`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("viewer tab guard not wired to run as viewer, missing %q", want)
+		}
+	}
 }
 
 func TestPanelCatalogMountsViewerTabVisibilityGuardOnce(t *testing.T) {

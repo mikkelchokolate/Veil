@@ -3,6 +3,7 @@ package update
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -49,8 +50,15 @@ func WaitForHealthyAt(addr, token, webBasePath string, timeout time.Duration) er
 			resp, err := statusflow.HTTPClient(url).Do(req)
 			cancel()
 			if err == nil && resp.StatusCode == http.StatusOK {
+				// Require the Veil health contract ({"status":"ok"}): any
+				// other 200 — e.g. a foreign service or a stale listener on
+				// the same port — must not be treated as the restarted panel.
+				body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
 				resp.Body.Close()
-				return nil
+				if statusflow.HealthzStatusOK(body) {
+					return nil
+				}
+				continue
 			}
 			if resp != nil {
 				resp.Body.Close()

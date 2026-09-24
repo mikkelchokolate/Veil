@@ -580,7 +580,115 @@ export const usePostApiV1ClientsIdBindings = <TError = ConflictResponse | Valida
       > => {
       return useMutation(getPostApiV1ClientsIdBindingsMutationOptions(options), queryClient);
     }
-    export const getPatchApiV1ClientsIdBindingsBindingIdUrl = (id: string,
+    export const getGetApiV1ClientsIdBindingsBindingIdUrl = (id: string,
+    bindingId: string,) => {
+
+
+
+
+  return `/api/v1/clients/${id}/bindings/${bindingId}`
+}
+
+/**
+ * @summary Get a single client binding read model
+ */
+export const getApiV1ClientsIdBindingsBindingId = async (id: string,
+    bindingId: string, options?: Parameters<typeof apiFetch>[1]): Promise<ClientBinding> => {
+
+  return apiFetch<ClientBinding>(getGetApiV1ClientsIdBindingsBindingIdUrl(id,bindingId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1ClientsIdBindingsBindingIdQueryKey = (id: string,
+    bindingId: string,) => {
+    return [
+    `/api/v1/clients/${id}/bindings/${bindingId}`
+    ] as const;
+    }
+
+
+export const getGetApiV1ClientsIdBindingsBindingIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(id: string,
+    bindingId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiV1ClientsIdBindingsBindingIdQueryKey(id,bindingId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>> = ({ signal }) => getApiV1ClientsIdBindingsBindingId(id,bindingId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && bindingId !== null && bindingId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiV1ClientsIdBindingsBindingIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>>
+export type GetApiV1ClientsIdBindingsBindingIdQueryError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+
+
+export function useGetApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ id: string,
+    bindingId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ id: string,
+    bindingId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ id: string,
+    bindingId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get a single client binding read model
+ */
+
+export function useGetApiV1ClientsIdBindingsBindingId<TData = Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+ id: string,
+    bindingId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiV1ClientsIdBindingsBindingIdQueryOptions(id,bindingId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getPatchApiV1ClientsIdBindingsBindingIdUrl = (id: string,
     bindingId: string,) => {
 
 

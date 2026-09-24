@@ -30,16 +30,23 @@ func TestGeneratedConfigSetConsolidatesMultipleEnabledNaiveproxyInbounds(t *test
 	if err != nil {
 		t.Fatalf("expected no error for multiple enabled naiveproxy inbounds, got %v", err)
 	}
-	// Both inbounds consolidate into the single Caddy JSON artifact: the map
-	// has exactly one naive artifact and it carries BOTH listeners.
+	// Discarding the map greens a set that dropped the consolidated caddy
+	// config or either inbound's credential — lock the artifact and both
+	// passwords (#857). Both inbounds consolidate into the single Caddy JSON
+	// artifact: it carries BOTH listeners.
 	caddyPath := filepath.Join(applyRoot, "generated", "caddy", "config.json")
 	caddy, ok := configs[caddyPath]
 	if !ok {
 		t.Fatalf("consolidated caddy config %s missing from config map: %v", caddyPath, generatedConfigKeys(configs))
 	}
-	for _, port := range []string{":443", ":8443"} {
-		if !strings.Contains(caddy, port) {
-			t.Fatalf("consolidated caddy config missing listener port %s:\n%s", port, caddy)
+	for _, want := range []string{
+		"forward_proxy",
+		":443", ":8443",
+		forwardProxyJSONCredential("veil", "a"),
+		forwardProxyJSONCredential("veil", "b"),
+	} {
+		if !strings.Contains(caddy, want) {
+			t.Fatalf("Caddy JSON missing %q:\n%s", want, caddy)
 		}
 	}
 	// And no per-inbound naiveproxy artifacts exist — naiveproxy has no own
@@ -57,6 +64,7 @@ func generatedConfigKeys(m map[string]string) []string {
 		keys = append(keys, k)
 	}
 	return keys
+
 }
 
 func TestGeneratedConfigSetUsesClientProfiles(t *testing.T) {

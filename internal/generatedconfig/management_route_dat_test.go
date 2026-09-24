@@ -194,6 +194,11 @@ func TestDownloadRouteDatLogsRetries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	// The log check alone greens a download that never retried — pin the
+	// attempt count like the give-up sister does (#857).
+	if attempts != 3 {
+		t.Fatalf("expected 3 attempts before success, got %d", attempts)
+	}
 	logOutput := buf.String()
 	if !strings.Contains(logOutput, "retry") && !strings.Contains(logOutput, "Retry") && !strings.Contains(logOutput, "attempt") {
 		t.Fatalf("expected retry message in log output, got: %s", logOutput)

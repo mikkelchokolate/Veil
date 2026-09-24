@@ -613,7 +613,82 @@ export function usePostApiV1ClientsIdBindings<TData = Awaited<ReturnType<typeof 
 
 
 
-export const getPatchApiV1ClientsIdBindingsBindingIdUrl = (id: string,
+export const getGetApiV1ClientsIdBindingsBindingIdUrl = (id: string,
+    bindingId: string,) => {
+
+
+
+
+  return `/api/v1/clients/${id}/bindings/${bindingId}`
+}
+
+/**
+ * @summary Get a single client binding read model
+ */
+export const getApiV1ClientsIdBindingsBindingId = async (id: string,
+    bindingId: string, options?: Parameters<typeof apiFetch>[1]): Promise<ClientBinding> => {
+
+  return apiFetch<ClientBinding>(getGetApiV1ClientsIdBindingsBindingIdUrl(id,bindingId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1ClientsIdBindingsBindingIdMutationKey = () => ['getApiV1ClientsIdBindingsBindingId'] as const;
+
+export const getGetApiV1ClientsIdBindingsBindingIdMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>, TError,GetApiV1ClientsIdBindingsBindingIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>, TError,GetApiV1ClientsIdBindingsBindingIdMutationVariables, TContext> => {
+
+const mutationKey = getGetApiV1ClientsIdBindingsBindingIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>, GetApiV1ClientsIdBindingsBindingIdMutationVariables> = (props) => {
+          const {id,bindingId} = props ?? {};
+
+          return  getApiV1ClientsIdBindingsBindingId(id,bindingId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1ClientsIdBindingsBindingIdMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>>
+
+    export type GetApiV1ClientsIdBindingsBindingIdMutationError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+    export type GetApiV1ClientsIdBindingsBindingIdMutationVariables = {id: string;bindingId: string}
+
+    /**
+ * @summary Get a single client binding read model
+ */
+export const useGetApiV1ClientsIdBindingsBindingId = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>, TError,GetApiV1ClientsIdBindingsBindingIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1ClientsIdBindingsBindingId>>,
+        TError,
+        GetApiV1ClientsIdBindingsBindingIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getGetApiV1ClientsIdBindingsBindingIdMutationOptions(options), queryClient);
+    }
+    export const getPatchApiV1ClientsIdBindingsBindingIdUrl = (id: string,
     bindingId: string,) => {
 
 
