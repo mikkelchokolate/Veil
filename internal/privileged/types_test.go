@@ -2,6 +2,9 @@ package privileged
 
 import (
 	"encoding/json"
+	"os"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -105,26 +108,77 @@ func TestRequestContractRejectsUnknownOperationAndPayloadMismatch(t *testing.T) 
 	}
 }
 
-func TestSupportedOperationContract(t *testing.T) {
-	operations := []Operation{
-		OperationPromote,
-		OperationServiceAction,
-		OperationServiceStatus,
-		OperationJournal,
-		OperationBackupCreate,
-		OperationBackupList,
-		OperationBackupVerify,
-		OperationBackupRead,
-		OperationBackupPrune,
-		OperationBackupRestore,
-		OperationBackupDelete,
-		OperationRotateKey,
-		OperationRecoverKeyRotation,
-		OperationFirewallApply,
-		OperationStageUpdate,
-		OperationRestartPanel,
+// operationConstants scrapes every `OperationX Operation = "..."` constant
+// declared in types.go so the contract tests cannot silently miss a newly
+// added operation (issue #925). The const block is the authoritative catalog;
+// Operation.Valid() must accept each member.
+var operationConstantRE = regexp.MustCompile(`Operation[A-Za-z0-9]+\s+Operation\s*=\s*"([^"]+)"`)
+
+func operationConstants(t *testing.T) []Operation {
+	t.Helper()
+	body, err := os.ReadFile("types.go")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, operation := range operations {
+	var ops []Operation
+	for _, match := range operationConstantRE.FindAllStringSubmatch(string(body), -1) {
+		ops = append(ops, Operation(match[1]))
+	}
+	if len(ops) < 10 {
+		t.Fatalf("scraped %d operations from types.go — the scrape broke", len(ops))
+	}
+	return ops
+}
+
+// operationPayloadField is the contract between an operation and the
+// RequestEnvelope field that must carry its payload. Keyed by the scraped
+// operation set, so an unmapped new operation fails the payload test below.
+var operationPayloadField = map[Operation]string{
+	OperationPromote:            "Promote",
+	OperationServiceAction:      "ServiceAction",
+	OperationServiceStatus:      "ServiceStatus",
+	OperationJournal:            "Journal",
+	OperationBackupCreate:       "Backup",
+	OperationBackupList:         "Backup",
+	OperationBackupVerify:       "Backup",
+	OperationBackupRead:         "Backup",
+	OperationBackupPrune:        "Backup",
+	OperationBackupRestore:      "Backup",
+	OperationBackupDelete:       "Backup",
+	OperationRotateKey:          "RotateKey",
+	OperationRecoverKeyRotation: "RecoverKeyRotation",
+	OperationFirewallApply:      "Firewall",
+	OperationStageUpdate:        "Update",
+	OperationRestartPanel:       "RestartPanel",
+	OperationSyncCaddyCert:      "SyncCaddyCert",
+	OperationCaddyLoad:          "CaddyLoad",
+}
+
+// payloadFieldNames enumerates the RequestEnvelope payload slots by
+// reflection: every pointer-to-*Request field is a payload.
+func payloadFieldNames(t *testing.T) []string {
+	t.Helper()
+	typ := reflect.TypeOf(RequestEnvelope{})
+	var fields []string
+	for i := 0; i < typ.NumField(); i++ {
+		f := typ.Field(i)
+		if f.Type.Kind() == reflect.Ptr && strings.HasSuffix(f.Type.Elem().Name(), "Request") {
+			fields = append(fields, f.Name)
+		}
+	}
+	if len(fields) < 10 {
+		t.Fatalf("found %d payload fields on RequestEnvelope — reflection broke", len(fields))
+	}
+	return fields
+}
+
+func TestSupportedOperationContract(t *testing.T) {
+	seen := map[Operation]bool{}
+	for _, operation := range operationConstants(t) {
+		if seen[operation] {
+			t.Errorf("operation %q declared twice", operation)
+		}
+		seen[operation] = true
 		if !operation.Valid() {
 			t.Errorf("supported operation %q is invalid", operation)
 		}
@@ -155,36 +209,34 @@ func TestBackupReadContractUsesManagedArchiveNameOnly(t *testing.T) {
 	}
 }
 
+// TestPayloadMatchesOperationForAllOperations exercises the full matrix:
+// every declared operation against every payload slot. The operation set is
+// scraped from the const block and the payload slots are reflected from
+// RequestEnvelope, so adding an operation or a payload field extends the
+// matrix automatically instead of drifting (issue #925).
 func TestPayloadMatchesOperationForAllOperations(t *testing.T) {
-	cases := []struct {
-		op        Operation
-		payload   func(*RequestEnvelope)
-		wantMatch bool
-	}{
-		{OperationPromote, func(r *RequestEnvelope) { r.Promote = &PromoteRequest{} }, true},
-		{OperationPromote, func(r *RequestEnvelope) { r.RestartPanel = &RestartPanelRequest{} }, false},
-		{OperationServiceAction, func(r *RequestEnvelope) { r.ServiceAction = &ServiceActionRequest{} }, true},
-		{OperationServiceStatus, func(r *RequestEnvelope) { r.ServiceStatus = &ServiceStatusRequest{} }, true},
-		{OperationJournal, func(r *RequestEnvelope) { r.Journal = &JournalRequest{} }, true},
-		{OperationBackupCreate, func(r *RequestEnvelope) { r.Backup = &BackupRequest{} }, true},
-		{OperationBackupList, func(r *RequestEnvelope) { r.Backup = &BackupRequest{} }, true},
-		{OperationBackupVerify, func(r *RequestEnvelope) { r.Backup = &BackupRequest{} }, true},
-		{OperationBackupRead, func(r *RequestEnvelope) { r.Backup = &BackupRequest{} }, true},
-		{OperationBackupPrune, func(r *RequestEnvelope) { r.Backup = &BackupRequest{} }, true},
-		{OperationBackupRestore, func(r *RequestEnvelope) { r.Backup = &BackupRequest{} }, true},
-		{OperationBackupDelete, func(r *RequestEnvelope) { r.Backup = &BackupRequest{} }, true},
-		{OperationRotateKey, func(r *RequestEnvelope) { r.RotateKey = &RotateKeyRequest{} }, true},
-		{OperationRecoverKeyRotation, func(r *RequestEnvelope) { r.RecoverKeyRotation = &RecoverKeyRotationRequest{} }, true},
-		{OperationFirewallApply, func(r *RequestEnvelope) { r.Firewall = &FirewallRequest{} }, true},
-		{OperationStageUpdate, func(r *RequestEnvelope) { r.Update = &UpdateRequest{} }, true},
-		{OperationRestartPanel, func(r *RequestEnvelope) { r.RestartPanel = &RestartPanelRequest{} }, true},
-		{OperationSyncCaddyCert, func(r *RequestEnvelope) { r.SyncCaddyCert = &SyncCaddyCertRequest{} }, true},
-	}
-	for _, tc := range cases {
-		r := RequestEnvelope{Version: ProtocolVersion, RequestID: "x", Operation: tc.op}
-		tc.payload(&r)
-		if got := r.payloadMatchesOperation(); got != tc.wantMatch {
-			t.Fatalf("payloadMatchesOperation(%q) = %v, want %v", tc.op, got, tc.wantMatch)
+	fields := payloadFieldNames(t)
+	for _, op := range operationConstants(t) {
+		wantField, ok := operationPayloadField[op]
+		if !ok {
+			t.Errorf("operation %q has no entry in operationPayloadField", op)
+			continue
+		}
+		mapped := false
+		for _, field := range fields {
+			r := RequestEnvelope{Version: ProtocolVersion, RequestID: "x", Operation: op}
+			slot := reflect.ValueOf(&r).Elem().FieldByName(field)
+			slot.Set(reflect.New(slot.Type().Elem()))
+			want := field == wantField
+			if got := r.payloadMatchesOperation(); got != want {
+				t.Errorf("operation %q with payload %s: payloadMatchesOperation=%v, want %v", op, field, got, want)
+			}
+			if want {
+				mapped = true
+			}
+		}
+		if !mapped {
+			t.Errorf("operation %q maps to RequestEnvelope.%s which is not a payload field", op, wantField)
 		}
 	}
 }

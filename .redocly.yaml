@@ -1,7 +1,14 @@
 extends:
   - recommended
 
+# Deliberately-disabled recommended rules — the locked allowlist enforced by
+# TestRedoclyDisabledRulesAllowlistIsLocked (internal/api). Adding a rule here
+# silently weakens the lint gate, so the test fails on any new entry.
 rules:
+  # OperationIds are generated prose summaries today; tracking issue-level.
   operation-operationId: off
+  # Several mutating endpoints intentionally return only success + typed
+  # failures (409/422/423/503) rather than a blanket 4xx.
   operation-4xx-response: off
+  # Tag names are self-describing; per-tag description prose is not required.
   tag-description: off

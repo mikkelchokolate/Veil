@@ -69,6 +69,13 @@ func (s *managementState) handleSettings(w http.ResponseWriter, r *http.Request)
 		switch r.Method {
 		case http.MethodGet:
 			settings := mutation.Settings()
+			// Settings() returns a redacted copy, so normalizing here does not
+			// mutate live state. An unset panelAccess behaves like "local"
+			// everywhere else; emit the effective mode instead of the empty
+			// keep-current write sentinel.
+			if settings.PanelAccess == "" {
+				settings.PanelAccess = "local"
+			}
 			if role, _ := r.Context().Value(contextKeyRole).(string); role == "viewer" {
 				writeJSON(w, newViewerSettingsMetadata(settings))
 			} else {

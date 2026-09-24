@@ -50,7 +50,7 @@ import * as zod from 'zod';
 export const GetApiSetupStatusResponse = zod.object({
   "required": zod.boolean(),
   "allowed": zod.boolean(),
-  "panelAccess": zod.enum(['local', 'direct', 'caddy', ''])
+  "panelAccess": zod.enum(['local', 'direct', 'caddy']).describe('Effective panel access mode. An unset value is reported as `local`.')
 })
 
 /**
