@@ -42,6 +42,12 @@ func TestManagementAPIExposesSettingsInboundsRoutingAndWarp(t *testing.T) {
 }
 
 func TestManagementAPIUpdatesWarpConfig(t *testing.T) {
+	// No apply infrastructure here — without it the legacy auto-apply cannot
+	// converge and would report success:false for environmental reasons, so
+	// success asserts the committed-mutation contract deterministically (#835).
+	origAutoApply := autoApplyAfterMutation
+	autoApplyAfterMutation = false
+	t.Cleanup(func() { autoApplyAfterMutation = origAutoApply })
 	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
 	body := strings.NewReader(`{"enabled":true,"licenseKey":"","endpoint":"engage.cloudflareclient.com:2408","privateKey":"warp-private-key","localAddress":"172.16.0.2/32","peerPublicKey":"warp-peer-key","socksPort":40000}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/warp", body)
@@ -52,6 +58,9 @@ func TestManagementAPIUpdatesWarpConfig(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
+	// The mutation envelope is part of the contract: config fields can decode
+	// while "success":false reports a failed apply (#834).
+	requireMutationEnvelopeSuccess(t, w.Body.Bytes(), "warp PUT")
 	var response WarpConfig
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)

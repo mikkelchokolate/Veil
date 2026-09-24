@@ -336,9 +336,10 @@ func naiveHasCredential(inb Inbound, settings Settings) bool {
 	if password == "" {
 		password = strings.TrimSpace(inb.NaivePassword)
 	}
-	// InboundPasswordPolicy.ApplyCreate generates the top-level inbound.Password
-	// for fresh naiveproxy inbounds; the renderer (naiveUsers) honours it, so the
-	// validator must too, otherwise create-then-apply is wrongly rejected.
+	// clientaccess.InboundCredentialPolicy.ApplyCreate generates the top-level
+	// inbound.Password for fresh naiveproxy inbounds; the renderer (naiveUsers)
+	// honours it, so the validator must too, otherwise create-then-apply is
+	// wrongly rejected.
 	if password == "" {
 		password = strings.TrimSpace(inb.Password)
 	}

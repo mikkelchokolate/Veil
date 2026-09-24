@@ -1,6 +1,7 @@
 package acmeip
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -298,24 +299,27 @@ func (f *fakeSystem) setAcmeInstalled() {
 	f.files[acme] = &fakeFileInfo{name: "acme.sh", mode: 0o755}
 }
 
-func TestIssueIPCertRequiresPublicIPv4(t *testing.T) {
+// TestIssueIPCertRequiresPublicIP locks the actual product contract: an IP
+// certificate needs a public address of EITHER family — IPv6-only hosts are
+// supported, so the old IPv4-only name/expectation was wrong (#883).
+func TestIssueIPCertRequiresPublicIP(t *testing.T) {
 	_, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: "", System: newFakeSystem()})
-	if err == nil {
-		t.Fatal("expected error for missing IPv4")
+	if err == nil || err.Error() != "a public IPv4 or IPv6 address is required" {
+		t.Fatalf("err = %v, want exact requirement message", err)
 	}
 }
 
 func TestIssueIPCertRejectsInvalidIPv4(t *testing.T) {
 	_, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: "not-an-ip", System: newFakeSystem()})
-	if err == nil {
-		t.Fatal("expected error for invalid IPv4")
+	if err == nil || !strings.Contains(err.Error(), `public IPv4 "not-an-ip" is not a valid IPv4 address`) {
+		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestIssueIPCertRejectsInvalidIPv6(t *testing.T) {
 	_, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: "1.2.3.4", PublicIPv6: "bad", System: newFakeSystem()})
-	if err == nil {
-		t.Fatal("expected error for invalid IPv6")
+	if err == nil || !strings.Contains(err.Error(), `public IPv6 "bad" is not a valid IPv6 address`) {
+		t.Fatalf("err = %v", err)
 	}
 }
 
@@ -325,8 +329,15 @@ func TestIssueIPCertRejectsBusyPort(t *testing.T) {
 	sys.lookPaths["socat"] = "/usr/bin/socat"
 	sys.portFree[80] = false
 	_, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: "1.2.3.4", System: sys})
-	if err == nil {
-		t.Fatal("expected error when port 80 is busy")
+	if err == nil || !strings.Contains(err.Error(), "port 80 is already in use") {
+		t.Fatalf("err = %v, want busy-port message", err)
+	}
+	// Fail closed: no ACME issue/install command may run when the HTTP-01
+	// port is already taken (#883).
+	for _, call := range sys.execCalls {
+		if strings.Contains(call, "--issue") || strings.Contains(call, "--installcert") {
+			t.Fatalf("acme command ran despite busy port: %q (all: %v)", call, sys.execCalls)
+		}
 	}
 }
 
@@ -403,12 +414,30 @@ func TestIssueIPCertInstallsSocatWhenMissing(t *testing.T) {
 	sys.commands[sys.key(acmeSh, "--installcert", "-d", "1.2.3.4", "--key-file", "/etc/veil/panel/tls.key", "--fullchain-file", "/etc/veil/panel/tls.crt", "--reloadcmd", renewReloadCmd("/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key"))] = commandResult{out: "Installed"}
 
 	// socat not in lookPaths, but apt-get is.
+	sys.installSocat = true
 	sys.lookPaths["apt-get"] = "/usr/bin/apt-get"
-	sys.commands[sys.key("sh", "-c", "apt-get update >/dev/null 2>&1 && apt-get install -y socat")] = commandResult{out: "done"}
+	installScript := "apt-get update >/dev/null 2>&1 && apt-get install -y socat"
+	sys.commands[sys.key("sh", "-c", installScript)] = commandResult{out: "done"}
 
 	_, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: "1.2.3.4", System: sys})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	// The socat install command must actually have executed — the fake records
+	// every exec, and a passing test without it would mean standalone HTTP-01
+	// silently had no listener (#948). execCalls stores the space-joined
+	// argv, not the commands-map key format.
+	installed := false
+	for _, call := range sys.execCalls {
+		if call == "sh -c "+installScript {
+			installed = true
+		}
+	}
+	if !installed {
+		t.Fatalf("socat install command never ran; calls: %v", sys.execCalls)
+	}
+	if sys.lookPaths["socat"] != "/usr/bin/socat" {
+		t.Fatalf("socat not on PATH after install: %v", sys.lookPaths)
 	}
 }
 
@@ -445,14 +474,32 @@ func TestIssueIPCertAcceptsNewCertWhenInstallcertReloadFails(t *testing.T) {
 	sys.setAcmeInstalled()
 	sys.lookPaths["socat"] = "/usr/bin/socat"
 
+	// Seed stale material so the test proves the destination was actually
+	// rewritten — accepting "reload failed" without verifying the new pair
+	// would green a no-op install (#952).
+	prevCert, prevKey := generateIPCertPEM(time.Now().Add(time.Hour), "198.51.100.7")
+	sys.fileData["/etc/veil/panel/tls.crt"] = prevCert
+	sys.fileData["/etc/veil/panel/tls.key"] = prevKey
+
 	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
 	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", "letsencrypt")] = commandResult{out: "OK"}
 	sys.commands[sys.key(acmeSh, "--issue", "-d", "1.2.3.4", "--standalone", "--server", "letsencrypt", "--certificate-profile", "shortlived", "--days", "3", "--httpport", "80", "--force")] = commandResult{out: "Cert issued"}
 	sys.commands[sys.key(acmeSh, "--installcert", "-d", "1.2.3.4", "--key-file", "/etc/veil/panel/tls.key", "--fullchain-file", "/etc/veil/panel/tls.crt", "--reloadcmd", renewReloadCmd("/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key"))] = commandResult{err: errors.New("reload failed"), writeFiles: true}
 
-	_, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: "1.2.3.4", System: sys})
+	cert, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: "1.2.3.4", System: sys})
 	if err != nil {
 		t.Fatalf("expected success when installcert wrote a new valid pair: %v", err)
+	}
+	newCert := sys.fileData[cert.CertPath]
+	newKey := sys.fileData[cert.KeyPath]
+	if len(newCert) == 0 || len(newKey) == 0 {
+		t.Fatalf("installed material missing: cert=%dB key=%dB", len(newCert), len(newKey))
+	}
+	if bytes.Equal(newCert, prevCert) || bytes.Equal(newKey, prevKey) {
+		t.Fatal("installed material is still the previous pair")
+	}
+	if err := validateIssuedMaterial(newCert, newKey, "1.2.3.4", ""); err != nil {
+		t.Fatalf("installed pair does not cover 1.2.3.4: %v", err)
 	}
 }
 

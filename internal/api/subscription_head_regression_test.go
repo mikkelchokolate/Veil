@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -97,11 +98,19 @@ func TestSubscriptionIgnoresAnotherClientsCorruptCredential(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/s/"+firstToken, nil)
+	req := httptest.NewRequest(http.MethodGet, "/s/"+firstToken+"?format=raw", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("unrelated corrupt credential broke subscription: status=%d body=%s", w.Code, w.Body.String())
+	}
+	// A bare 200 is not enough — the healthy client's own credential must
+	// still render while the other client's corrupt ciphertext is ignored.
+	if !strings.Contains(w.Body.String(), "pw-alice") {
+		t.Fatalf("subscription body lost the healthy credential after unrelated corruption: %q", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "second-password") {
+		t.Fatalf("subscription leaked the corrupt client's credential: %q", w.Body.String())
 	}
 }
 

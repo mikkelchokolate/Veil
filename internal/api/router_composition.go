@@ -97,7 +97,7 @@ func (RouterComposition) registerMux(mux *http.ServeMux, info ServerInfo, state 
 			_, _ = io.WriteString(w, state.trafficCollector.PrometheusMetrics())
 		}
 	})
-	RuntimeRoutes{}.Register(mux)
+	RuntimeRoutes{State: state}.Register(mux)
 	mux.HandleFunc("/api/services/", state.handleServiceActionRoute)
 	state.register(mux)
 	panelRoutes := PanelRoutes{Info: info, BasePath: basePath, State: state}
