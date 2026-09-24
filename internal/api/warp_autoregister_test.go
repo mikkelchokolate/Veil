@@ -18,6 +18,12 @@ import (
 func TestManagementAPIWarpEnableAutoRegisters(t *testing.T) {
 	orig := warpRegisterFunc
 	t.Cleanup(func() { warpRegisterFunc = orig })
+	// No apply infrastructure here — without it the legacy auto-apply cannot
+	// converge and would report success:false for environmental reasons, so
+	// success asserts the committed-mutation contract deterministically (#835).
+	origAutoApply := autoApplyAfterMutation
+	autoApplyAfterMutation = false
+	t.Cleanup(func() { autoApplyAfterMutation = origAutoApply })
 	var called bool
 	warpRegisterFunc = func(ctx context.Context) (veilwarp.Registration, error) {
 		called = true
