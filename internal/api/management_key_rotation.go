@@ -31,10 +31,18 @@ func (s *managementState) handleRotateKey(w http.ResponseWriter, r *http.Request
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err := s.privileged.RotateKey(r.Context(), privileged.RotateKeyRequest{}); err != nil {
+	fence, releaseFence, fenceErr := s.acquireRuntimeFence("security-key-rotate")
+	if fenceErr != nil {
+		writeError(w, "state key rotation fencing lease is unavailable: "+fenceErr.Error(), http.StatusConflict)
+		return
+	}
+
+	if err := s.privileged.RotateKey(r.Context(), privileged.RotateKeyRequest{Fence: fence}); err != nil {
 		lifecycle := NewManagementStateLifecycle(s)
 		recoveryCtx, cancelRecovery := context.WithTimeout(context.Background(), 30*time.Second)
-		recoveryErr := lifecycle.RecoverPendingKeyRotationContext(recoveryCtx)
+		// The same fencing lease covers the recovery mutation; a second
+		// acquisition would deadlock against the lease we still hold.
+		recoveryErr := lifecycle.recoverPendingKeyRotationWithFence(recoveryCtx, fence)
 		cancelRecovery()
 		var reloadErr error
 		if recoveryErr != nil {
@@ -42,6 +50,9 @@ func (s *managementState) handleRotateKey(w http.ResponseWriter, r *http.Request
 		} else {
 			reloadErr = lifecycle.ReloadLocked()
 		}
+		// The fenced mutation section ends here; the lease must not leak into
+		// later auto-apply runs that acquire it themselves.
+		releaseFence()
 		if reloadErr != nil {
 			s.startupStateLoadFailed = true
 			s.startupStateLoadErr = reloadErr
@@ -60,6 +71,7 @@ func (s *managementState) handleRotateKey(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := NewManagementStateLifecycle(s).ReloadLocked(); err != nil {
+		releaseFence()
 		s.startupStateLoadFailed = true
 		s.startupStateLoadErr = err
 		s.allowDevAnonymous = false
@@ -69,6 +81,9 @@ func (s *managementState) handleRotateKey(w http.ResponseWriter, r *http.Request
 		writeError(w, "state key rotated but Panel reload failed", http.StatusInternalServerError)
 		return
 	}
+	// Release before session revocation/auto-apply: the durable lease is
+	// singleton, and a later apply run must be able to claim it.
+	releaseFence()
 	s.startupStateLoadFailed = false
 	s.startupStateLoadErr = nil
 	revoked, err := s.sessionRegistry().DeleteAllExceptPersisted(currentSessionToken(r))

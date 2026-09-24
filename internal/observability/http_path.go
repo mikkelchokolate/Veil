@@ -20,6 +20,7 @@ var metricPathPatterns = []string{
 	"/api/status",
 	"/api/version",
 	"/api/version/update",
+	"/api/version/update/jobs/{id}",
 	"/api/health",
 	"/api/settings",
 	"/api/protocols",

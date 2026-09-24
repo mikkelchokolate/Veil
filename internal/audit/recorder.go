@@ -59,6 +59,10 @@ type Recorder struct {
 	backpressurePolicy string
 	maxSpoolBytes      int64
 	degraded           error
+	// spoolDurable records whether the most recent required spool write
+	// completed and fsynced, so health reporting can distinguish "primary
+	// down, spool durably accepting" from "durability unverified".
+	spoolDurable bool
 }
 
 func NewRecorder(path string, options RecorderOptions) *Recorder {
@@ -135,8 +139,10 @@ func (r *Recorder) Append(record Record) error {
 		r.degraded = err
 		if r.spoolPath != "" && r.backpressurePolicy == "spool_critical" && criticalAuditAction(record.Action) {
 			if spoolErr := r.appendSpoolLocked(body); spoolErr == nil {
+				r.spoolDurable = true
 				return nil
 			} else {
+				r.spoolDurable = false
 				return errors.Join(err, spoolErr)
 			}
 		}
@@ -152,6 +158,20 @@ func (r *Recorder) Degraded() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.degraded
+}
+
+// SpoolDurable reports whether the last required critical-spool write
+// completed and fsynced. It only carries meaning while Degraded() is non-nil:
+// when the primary is healthy the spool is idle. A configured spool that has
+// never been written returns false (durability unverified), as does a
+// recorder with no spool path.
+func (r *Recorder) SpoolDurable() bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.spoolDurable
 }
 
 func (r *Recorder) appendPrimaryLocked(body []byte) error {
@@ -256,16 +276,46 @@ func (r *Recorder) replaySpoolLocked() error {
 	return syncDirectory(filepath.Dir(r.spoolPath))
 }
 
+// criticalAuditAction reports whether an action is security-relevant enough
+// that a primary-log write failure must fall back to the durable spool rather
+// than silently dropping the event (issue #981). This covers every audit
+// action the panel and CLI emit for authentication, account, credential,
+// backup, apply/rollback, and configuration mutations.
 func criticalAuditAction(action string) bool {
 	for _, prefix := range []string{
-		"backup.restore",
-		"security.key.rotate",
+		// Authentication and session lifecycle (login, logout, session
+		// revoke, role changes, setup auth, rate-limited attempts).
+		"auth.",
+		// Account lifecycle.
+		"user.",
+		// First-run setup completion.
 		"setup.complete",
-		"user.update",
+		// Backup lifecycle: create exports state, delete/prune destroy it.
+		"backup.",
+		// Panel update staging/install jobs.
 		"update.",
-		"auth.role",
-		"auth.setup",
+		// State encryption key rotation and recovery.
+		"security.key.",
 		"key.rotate",
+		// Apply/rollback change the live security configuration.
+		"apply.rollback",
+		"install.apply",
+		"repair.apply",
+		"rollback.",
+		// Management-plane mutations recorded via logUserAction.
+		"create_",
+		"update_",
+		"delete_",
+		"add_binding",
+		"remove_binding",
+		"set_credential",
+		"rotate_credential",
+		"issue_subscription_token",
+		"revoke_subscription_token",
+		"rotate_subscription_token",
+		"migrate_legacy",
+		"bulk_",
+		"service_",
 	} {
 		if action == prefix || strings.HasPrefix(action, prefix) {
 			return true
