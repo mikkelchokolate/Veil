@@ -3,12 +3,16 @@ package applyplan
 import (
 	"errors"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
+// TestBuildCollectsInboundValidationErrors asserts the COMPLETE error set for
+// each input: wantErr is the exact multiset expected, so duplicate-producing
+// inputs prove their multiplicity and nothing extra is emitted.
 func TestBuildCollectsInboundValidationErrors(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -26,7 +30,15 @@ func TestBuildCollectsInboundValidationErrors(t *testing.T) {
 				},
 				Capabilities: []ProtocolCapability{{Protocol: "mieru"}},
 			},
-			wantErr:   []string{"enabled inbounds require name, protocol, and transport"},
+			// Dedup keys on transport:port — the third inbound's EMPTY
+			// transport keys ":443", distinct from "tcp:443", so only the
+			// second inbound duplicates. Exact multiset proves it.
+			wantErr: []string{
+				"enabled inbounds require name, protocol, and transport",
+				"enabled inbounds require name, protocol, and transport",
+				"enabled inbounds require name, protocol, and transport",
+				"duplicate enabled inbound transport/port",
+			},
 			wantValid: false,
 		},
 		{
@@ -38,7 +50,12 @@ func TestBuildCollectsInboundValidationErrors(t *testing.T) {
 				},
 				Capabilities: []ProtocolCapability{{Protocol: "mieru"}},
 			},
-			wantErr:   []string{"enabled inbounds require a positive port"},
+			// tcp:0 and tcp:-1 are distinct keys — no duplicate error, just
+			// one positive-port error per offending inbound.
+			wantErr: []string{
+				"enabled inbounds require a positive port",
+				"enabled inbounds require a positive port",
+			},
 			wantValid: false,
 		},
 		{
@@ -68,6 +85,9 @@ func TestBuildCollectsInboundValidationErrors(t *testing.T) {
 				Inbounds:     []model.Inbound{{Name: "edge", Protocol: "", Transport: "tcp", Port: 443, Enabled: true}},
 				Capabilities: []ProtocolCapability{{Protocol: "mieru"}},
 			},
+			// An empty protocol is already covered by the required-fields
+			// error; it must NOT additionally emit "unsupported inbound
+			// protocol:" — the exact-match assertion proves that.
 			wantErr:   []string{"enabled inbounds require name, protocol, and transport"},
 			wantValid: false,
 		},
@@ -103,13 +123,21 @@ func TestBuildCollectsInboundValidationErrors(t *testing.T) {
 			if plan.Valid != tt.wantValid {
 				t.Errorf("Valid = %v, want %v", plan.Valid, tt.wantValid)
 			}
-			joined := strings.Join(plan.Errors, "\n")
-			for _, want := range tt.wantErr {
-				if !strings.Contains(joined, want) {
-					t.Errorf("errors missing %q: %v", want, plan.Errors)
-				}
-			}
+			assertExactErrorMultiset(t, plan.Errors, tt.wantErr)
 		})
+	}
+}
+
+// assertExactErrorMultiset compares the collected errors against the expected
+// list as a multiset — same entries, same multiplicities, nothing extra.
+func assertExactErrorMultiset(t *testing.T, got, want []string) {
+	t.Helper()
+	gotSorted := append([]string(nil), got...)
+	wantSorted := append([]string(nil), want...)
+	sort.Strings(gotSorted)
+	sort.Strings(wantSorted)
+	if !reflect.DeepEqual(gotSorted, wantSorted) {
+		t.Errorf("errors mismatch:\n got: %v\nwant: %v", gotSorted, wantSorted)
 	}
 }
 
@@ -137,7 +165,12 @@ func TestBuildRoutingRulesAndSources(t *testing.T) {
 					{Name: "rule", Match: "geosite:test", Outbound: "", Enabled: true},
 				},
 			},
-			wantErr:   []string{"enabled routing rules require name, match, and outbound"},
+			// Each offending rule produces its own error entry.
+			wantErr: []string{
+				"enabled routing rules require name, match, and outbound",
+				"enabled routing rules require name, match, and outbound",
+				"enabled routing rules require name, match, and outbound",
+			},
 			wantValid: false,
 		},
 		{
@@ -177,7 +210,12 @@ func TestBuildRoutingRulesAndSources(t *testing.T) {
 					{Name: "", URL: ""},
 				}},
 			},
-			wantErr:   []string{"routing source files require name and URL"},
+			// Each offending file produces its own error entry.
+			wantErr: []string{
+				"routing source files require name and URL",
+				"routing source files require name and URL",
+				"routing source files require name and URL",
+			},
 			wantValid: false,
 		},
 	}
@@ -188,18 +226,7 @@ func TestBuildRoutingRulesAndSources(t *testing.T) {
 			if plan.Valid != tt.wantValid {
 				t.Errorf("Valid = %v, want %v", plan.Valid, tt.wantValid)
 			}
-			joined := strings.Join(plan.Errors, "\n")
-			for _, want := range tt.wantErr {
-				if !strings.Contains(joined, want) {
-					t.Errorf("errors missing %q: %v", want, plan.Errors)
-				}
-			}
-			for _, err := range plan.Errors {
-				if tt.wantErr == nil {
-					t.Errorf("unexpected error: %q", err)
-					continue
-				}
-			}
+			assertExactErrorMultiset(t, plan.Errors, tt.wantErr)
 		})
 	}
 }

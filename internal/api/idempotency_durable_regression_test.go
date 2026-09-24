@@ -45,6 +45,9 @@ func TestIdempotencyReplayAndConflictSurviveRestart(t *testing.T) {
 	if conflict.Status != http.StatusConflict || conflict.Replayed != "" {
 		t.Fatalf("restart payload conflict not rejected: %+v", conflict)
 	}
+	if !strings.Contains(conflict.Body, `"error"`) || !strings.Contains(conflict.Body, "Idempotency-Key") {
+		t.Fatalf("restart conflict missing error envelope: %s", conflict.Body)
+	}
 }
 
 func TestIdempotencyReservationIsSharedAcrossOSProcesses(t *testing.T) {
