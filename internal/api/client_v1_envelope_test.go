@@ -30,8 +30,10 @@ func TestV1ClientCreateReturnsMutationEnvelope(t *testing.T) {
 	if _, ok := resp["revision"]; !ok {
 		t.Errorf("create response missing revision: %v", keysOf(resp))
 	}
-	if _, ok := resp["success"]; !ok {
-		t.Errorf("create response missing success: %v", keysOf(resp))
+	// success must be present AND true — presence alone passes even when the
+	// apply outcome failed and reported success:false (#808).
+	if resp["success"] != true {
+		t.Errorf("create success = %v, want true: %v", resp["success"], resp)
 	}
 }
 
@@ -55,8 +57,8 @@ func TestV1ClientUpdateReturnsMutationEnvelope(t *testing.T) {
 	if _, ok := resp["revision"]; !ok {
 		t.Errorf("update response missing revision: %v", keysOf(resp))
 	}
-	if _, ok := resp["success"]; !ok {
-		t.Errorf("update response missing success: %v", keysOf(resp))
+	if resp["success"] != true {
+		t.Errorf("update success = %v, want true: %v", resp["success"], resp)
 	}
 }
 
@@ -76,6 +78,11 @@ func TestV1ClientDeleteReturnsMutationEnvelope(t *testing.T) {
 	}
 	if _, ok := resp["revision"]; !ok {
 		t.Errorf("delete response missing revision: %v", keysOf(resp))
+	}
+	// DELETE responses must carry the same honest mutation envelope — success
+	// present and true, not silently absent (#772).
+	if resp["success"] != true {
+		t.Errorf("delete success = %v, want true: %v", resp["success"], resp)
 	}
 }
 

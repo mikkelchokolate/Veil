@@ -138,6 +138,29 @@ func TestRouterProtectsHealthzWhenPublicListenIsProtected(t *testing.T) {
 		if w.Code != http.StatusOK && w.Code != http.StatusServiceUnavailable {
 			t.Fatalf("expected authenticated %s to return 200 or 503, got %d: %s", path, w.Code, w.Body.String())
 		}
+		// A bare status code greens an empty or wrong payload — lock the body
+		// contract for each probe (#829).
+		var body map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatalf("authenticated %s did not return a JSON body: %v (%q)", path, err, w.Body.String())
+		}
+		switch path {
+		case "/livez":
+			if body["status"] != "alive" {
+				t.Fatalf("livez status = %v, want alive: %v", body["status"], body)
+			}
+		case "/readyz":
+			if _, ok := body["status"].(string); !ok {
+				t.Fatalf("readyz missing status field: %v", body)
+			}
+			if _, ok := body["components"].(map[string]any); !ok {
+				t.Fatalf("readyz missing components object: %v", body)
+			}
+		default: // /healthz
+			if body["status"] != "ok" && body["status"] != "unhealthy" {
+				t.Fatalf("healthz status = %v, want ok|unhealthy: %v", body["status"], body)
+			}
+		}
 	}
 }
 
@@ -397,6 +420,15 @@ func TestRouterLeavesHealthzPublicWhenAuthTokenConfigured(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected public healthz 200, got %d: %s", w.Code, w.Body.String())
+	}
+	// Lock the body contract, not just the status code: the panel health
+	// probe reports {"status":"ok"} when healthy (#829).
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("public healthz did not return a JSON body: %v (%q)", err, w.Body.String())
+	}
+	if body["status"] != "ok" {
+		t.Fatalf("public healthz status = %v, want ok: %v", body["status"], body)
 	}
 }
 

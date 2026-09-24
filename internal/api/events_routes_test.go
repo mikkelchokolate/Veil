@@ -2,6 +2,7 @@ package api
 
 import (
 	"bufio"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -83,16 +84,42 @@ func TestV1EventsSSE(t *testing.T) {
 		t.Error("missing apply event")
 	}
 
-	// Verify traffic event contains client data.
+	// Verify the traffic event carries real JSON substance — substring checks
+	// green an error/message body containing the same words (#871).
 	if data, ok := events["traffic"]; ok {
-		if !strings.Contains(data, "clients") {
-			t.Error("traffic event missing clients")
+		var traffic struct {
+			At      int64 `json:"at"`
+			Clients map[string]struct {
+				Upload   int64 `json:"upload"`
+				Download int64 `json:"download"`
+			} `json:"clients"`
+		}
+		if err := json.Unmarshal([]byte(data), &traffic); err != nil {
+			t.Fatalf("traffic event data is not JSON: %v (%q)", err, data)
+		}
+		entry, ok := traffic.Clients[view.ID]
+		if !ok {
+			t.Fatalf("traffic event missing created client %s: %q", view.ID, data)
+		}
+		if entry.Upload != 0 || entry.Download != 0 {
+			t.Fatalf("fresh client must report zeroed counters, got %+v", entry)
 		}
 	}
-	// Verify apply event contains revision data.
+	// Verify the apply event carries real JSON substance — desiredRevision must
+	// be a numeric field, not a substring match (#871).
 	if data, ok := events["apply"]; ok {
-		if !strings.Contains(data, "desiredRevision") {
-			t.Error("apply event missing desiredRevision")
+		var applyEvent map[string]any
+		if err := json.Unmarshal([]byte(data), &applyEvent); err != nil {
+			t.Fatalf("apply event data is not JSON: %v (%q)", err, data)
+		}
+		if _, ok := applyEvent["desiredRevision"].(float64); !ok {
+			t.Fatalf("apply event desiredRevision is not a number: %q", data)
+		}
+		if _, ok := applyEvent["appliedRevision"].(float64); !ok {
+			t.Fatalf("apply event appliedRevision is not a number: %q", data)
+		}
+		if _, ok := applyEvent["state"].(string); !ok {
+			t.Fatalf("apply event missing state field: %q", data)
 		}
 	}
 }
