@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -32,15 +33,25 @@ func TestKeyFileStoreCreateRandReadError(t *testing.T) {
 	}
 }
 
+// The previous version of this test put a regular file where the key's parent
+// directory belonged, so LoadOrCreate failed at os.Stat (ENOTDIR) and never
+// reached the write path it claimed to cover. Injecting at the sync seam
+// exercises the real create path: temp file, write, failed flush, no publish.
 func TestKeyFileStoreCreateWriteError(t *testing.T) {
-	root := t.TempDir()
-	blockedParent := filepath.Join(root, "not-a-directory")
-	if err := os.WriteFile(blockedParent, []byte("blocked"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	store := NewKeyFileStore(filepath.Join(blockedParent, "state.key"))
+	old := syncKeyFile
+	syncKeyFile = func(*os.File) error { return errors.New("injected sync error") }
+	defer func() { syncKeyFile = old }()
+
+	store := NewKeyFileStore(filepath.Join(t.TempDir(), "state.key"))
 	_, err := store.LoadOrCreate()
 	if err == nil {
 		t.Fatal("expected error when key file cannot be written")
+	}
+	if !strings.Contains(err.Error(), "sync temporary key file") {
+		t.Fatalf("error did not come from the write/publish path: %v", err)
+	}
+	// A failed publish must not leave a usable key file behind.
+	if _, statErr := os.Stat(store.Path); !errors.Is(statErr, fs.ErrNotExist) {
+		t.Fatalf("key file exists after failed publish: %v", statErr)
 	}
 }

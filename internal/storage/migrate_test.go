@@ -12,12 +12,26 @@ func TestMigrateCreatesSchemaMigrationsAndSetsVersion(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
 
-	var version int
-	if err := db.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&version); err != nil {
+	// Lock the migration tip: every registered migration must be recorded,
+	// so a truncated chain cannot silently pass.
+	const wantTipVersion = 28
+	const wantTipName = "quota_enforcement_reset_target_fields"
+	var version, count int
+	if err := db.QueryRow(`SELECT COALESCE(MAX(version),0), COUNT(*) FROM schema_migrations`).Scan(&version, &count); err != nil {
 		t.Fatalf("query schema_migrations: %v", err)
 	}
-	if version < 1 {
-		t.Fatalf("expected at least one migration applied, got %d", version)
+	if version != wantTipVersion || version != len(migrations) {
+		t.Fatalf("migration tip version = %d, want %d (registered: %d)", version, wantTipVersion, len(migrations))
+	}
+	if count != len(migrations) {
+		t.Fatalf("applied migration count = %d, want %d", count, len(migrations))
+	}
+	var tipName string
+	if err := db.QueryRow(`SELECT name FROM schema_migrations WHERE version=?`, wantTipVersion).Scan(&tipName); err != nil {
+		t.Fatalf("query tip migration name: %v", err)
+	}
+	if tipName != wantTipName {
+		t.Fatalf("migration tip name = %q, want %q", tipName, wantTipName)
 	}
 }
 
@@ -59,9 +73,23 @@ func TestMigrateCreatesDomainTables(t *testing.T) {
 	for _, table := range []string{
 		"revisions",
 		"apply_jobs",
+		"apply_lease",
+		"apply_rollbacks",
 		"clients",
 		"client_bindings",
 		"client_credentials",
+		"domain_operations",
+		"expiration_enforcement",
+		"idempotency_records",
+		"idempotency_results",
+		"migration_markers",
+		"panel_update_jobs",
+		"quota_enforcement",
+		"revision_snapshots",
+		"runtime_publication_history",
+		"runtime_publication_phases",
+		"runtime_publications",
+		"runtime_verification",
 		"subscription_tokens",
 		"traffic_counters",
 		"traffic_runtime_state",

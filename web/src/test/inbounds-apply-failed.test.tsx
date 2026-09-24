@@ -126,4 +126,43 @@ describe("InboundsPage apply-failed outcomes", () => {
 			screen.getByRole("button", { name: /confirm delete/i }),
 		).toBeInTheDocument();
 	});
+
+	// #758: the row enable/disable confirm runs the same update mutation as
+	// the editor — a committed-but-unapplied PUT must keep the toggle dialog
+	// open with the failure visible, like the delete twin above.
+	it("keeps the row toggle confirm open when the disable commits but apply fails", async () => {
+		server.use(
+			http.get("/api/inbounds", () =>
+				HttpResponse.json([
+					{
+						name: "edge",
+						protocol: "hysteria2",
+						transport: "udp",
+						port: 443,
+						enabled: true,
+					},
+				]),
+			),
+			http.get("/api/protocols", () => HttpResponse.json(catalog)),
+			http.put("/api/inbounds/edge", () =>
+				HttpResponse.json({
+					name: "edge",
+					enabled: false,
+					...failedOutcome,
+				}),
+			),
+		);
+		renderInbounds();
+		fireEvent.click(await screen.findByRole("button", { name: /^disable$/i }));
+		fireEvent.click(
+			await screen.findByRole("button", { name: /confirm disable/i }),
+		);
+		expect(await screen.findAllByText(/applying it failed/i)).not.toHaveLength(
+			0,
+		);
+		// The toggle dialog did not dismiss itself on a failed apply.
+		expect(
+			screen.getByRole("button", { name: /confirm disable/i }),
+		).toBeInTheDocument();
+	});
 });

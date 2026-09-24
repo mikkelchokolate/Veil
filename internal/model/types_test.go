@@ -1,8 +1,8 @@
 package model
 
 import (
-	"bytes"
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -28,16 +28,35 @@ func TestApplyPlanResponseIncludesStructuredPreview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{
-		`"issues"`,
-		`"operations"`,
-		`"interruptionRisk"`,
-		`"rollbackAvailable"`,
-		`"validationSource"`,
-	} {
-		if !bytes.Contains(data, []byte(key)) {
-			t.Fatalf("missing %s in %s", key, data)
-		}
+	var decoded ApplyPlanResponse
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("plan JSON does not round-trip: %v", err)
+	}
+	if !reflect.DeepEqual(decoded, value) {
+		t.Fatalf("plan JSON round-trip mismatch:\n got %+v\nwant %+v", decoded, value)
+	}
+	// Lock the wire field names explicitly so a tag rename is caught even if
+	// the Go struct round-trips.
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	issues, ok := raw["issues"].([]any)
+	if !ok || len(issues) != 1 {
+		t.Fatalf("issues field missing or wrong shape: %s", data)
+	}
+	issue := issues[0].(map[string]any)
+	if issue["code"] != "port_in_use" || issue["severity"] != "error" || issue["source"] != "live-host" {
+		t.Fatalf("issue fields = %v", issue)
+	}
+	operations, ok := raw["operations"].([]any)
+	if !ok || len(operations) != 1 {
+		t.Fatalf("operations field missing or wrong shape: %s", data)
+	}
+	operation := operations[0].(map[string]any)
+	if operation["type"] != "promote_file" || operation["interruptionRisk"] != "reload" ||
+		operation["rollbackAvailable"] != true || operation["validationSource"] != "live-host" {
+		t.Fatalf("operation fields = %v", operation)
 	}
 }
 
@@ -53,22 +72,60 @@ func TestManagementStateModelTypesKeepJSONShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	for _, want := range []string{"\"settings\"", "\"panelListen\"", "\"inbounds\"", "\"profiles\"", "\"routingRules\"", "\"routingSource\"", "\"warp\""} {
-		if !containsStringInBytes(body, want) {
-			t.Fatalf("JSON missing %s: %s", want, string(body))
-		}
+	var raw map[string]any
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("snapshot JSON is not an object: %v", err)
 	}
-}
-
-func containsStringInBytes(body []byte, want string) bool {
-	return len(want) == 0 || json.Valid(body) && stringContains(string(body), want)
-}
-
-func stringContains(value, want string) bool {
-	for i := 0; i+len(want) <= len(value); i++ {
-		if value[i:i+len(want)] == want {
-			return true
-		}
+	settings, ok := raw["settings"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing settings object: %s", body)
 	}
-	return false
+	if settings["panelListen"] != "127.0.0.1:2096" || settings["panelAccess"] != "caddy" ||
+		settings["webBasePath"] != "/panel/" || settings["mode"] != "server" {
+		t.Fatalf("settings values = %v", settings)
+	}
+	inbounds, ok := raw["inbounds"].([]any)
+	if !ok || len(inbounds) != 1 {
+		t.Fatalf("missing inbounds array: %s", body)
+	}
+	inbound := inbounds[0].(map[string]any)
+	if inbound["name"] != "mieru" || inbound["protocol"] != "mieru" || inbound["port"] != float64(443) || inbound["enabled"] != true {
+		t.Fatalf("inbound values = %v", inbound)
+	}
+	profiles, ok := inbound["profiles"].([]any)
+	if !ok || len(profiles) != 1 {
+		t.Fatalf("missing profiles array: %s", body)
+	}
+	profile := profiles[0].(map[string]any)
+	if profile["username"] != "alice" || profile["password"] != "secret" || profile["enabled"] != true {
+		t.Fatalf("profile values = %v", profile)
+	}
+	rules, ok := raw["routingRules"].([]any)
+	if !ok || len(rules) != 1 {
+		t.Fatalf("missing routingRules array: %s", body)
+	}
+	rule := rules[0].(map[string]any)
+	if rule["name"] != "default" || rule["outbound"] != "direct" || rule["enabled"] != true {
+		t.Fatalf("routing rule values = %v", rule)
+	}
+	source, ok := raw["routingSource"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing routingSource object: %s", body)
+	}
+	files, ok := source["files"].([]any)
+	if !ok || len(files) != 1 {
+		t.Fatalf("missing routingSource.files array: %s", body)
+	}
+	file := files[0].(map[string]any)
+	if file["name"] != "geoip.dat" || file["url"] != "https://example.com/geoip.dat" ||
+		file["sha256Url"] != "https://example.com/geoip.dat.sha256sum" {
+		t.Fatalf("routing source file values = %v", file)
+	}
+	warp, ok := raw["warp"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing warp object: %s", body)
+	}
+	if warp["enabled"] != true || warp["endpoint"] != "engage.cloudflareclient.com:2408" {
+		t.Fatalf("warp values = %v", warp)
+	}
 }

@@ -73,7 +73,7 @@ for required_root in \
     TestIntegrationPanelPermissionMatrix \
     TestIntegrationHelperSocketCanonicalLayout \
     TestIntegrationHelperSocketRejectsProxyUID \
-    TestIntegrationHelperSocketAuthenticatesPeerAndDispatches \
+    TestIntegrationHelperSocketAcceptsAllowedUIDAndDispatches \
     TestIntegrationPrivilegedKeyRotationRecoveryAcrossDurablePhases; do
   ci_assert_test_passed "${CI_ARTIFACT_DIR}/privilege-access-matrix.log" "${required_root}"
 done
