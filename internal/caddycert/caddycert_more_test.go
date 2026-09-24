@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -60,7 +61,12 @@ func TestFindPairMore(t *testing.T) {
 					t.Fatalf("write file: %v", err)
 				}
 				return root, Pair{}, func(err error) bool {
-					return err != nil && !errors.Is(err, ErrCertificateNotFound)
+					// The root-read failure must surface its own wrapped
+					// cause — collapsing it into ErrCertificateNotFound would
+					// silently skip a real filesystem problem (#969).
+					return err != nil && !errors.Is(err, ErrCertificateNotFound) &&
+						strings.Contains(err.Error(), "read Caddy certificates root") &&
+						errors.Unwrap(err) != nil
 				}
 			},
 		},

@@ -39,10 +39,18 @@ func TestSubscriptionUserinfoUsesRealTraffic(t *testing.T) {
 		t.Fatalf("subscription: %d %s", w.Code, w.Body.String())
 	}
 	h := w.Header().Get("Subscription-Userinfo")
-	up := headerIntField(h, "upload")
-	down := headerIntField(h, "download")
-	if up == 0 && down == 0 {
-		t.Errorf("Subscription-Userinfo carries zeros despite recorded traffic (A11): %q", h)
+	// Lock the exact recorded totals — a non-zero-but-wrong pair must fail
+	// just as hard as zeros (#831).
+	if up := headerIntField(h, "upload"); up != 1234 {
+		t.Errorf("Subscription-Userinfo upload=%d want 1234: %q", up, h)
+	}
+	if down := headerIntField(h, "download"); down != 5678 {
+		t.Errorf("Subscription-Userinfo download=%d want 5678: %q", down, h)
+	}
+	if total := headerIntField(h, "total"); total != 0 {
+		// No quota was configured for this client; the field must be absent
+		// or zero rather than echoing a fabricated cap.
+		t.Errorf("Subscription-Userinfo total=%d want unset/0: %q", total, h)
 	}
 }
 

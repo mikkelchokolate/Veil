@@ -42,6 +42,7 @@ func panelApplyCardHTML() string {
             <option value="services">services</option>
             <option value="validation">validation</option>
             <option value="rollback">rollback</option>
+            <option value="ambiguous">ambiguous</option>
           </select>
         </div>
         <div>

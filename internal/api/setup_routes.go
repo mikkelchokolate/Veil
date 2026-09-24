@@ -32,10 +32,17 @@ func (s *managementState) handleSetupStatus(w http.ResponseWriter, r *http.Reque
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	required := !s.setup.Completed && len(s.users) == 0
+	// Settings may not have been normalized yet (e.g. before first save); an
+	// unset panelAccess behaves identically to "local" everywhere else, so
+	// report the effective mode instead of leaking the empty sentinel.
+	panelAccess := s.settings.PanelAccess
+	if panelAccess == "" {
+		panelAccess = "local"
+	}
 	writeJSON(w, SetupStatusResponse{
 		Required:    required,
 		Allowed:     s.setupAllowed && required,
-		PanelAccess: s.settings.PanelAccess,
+		PanelAccess: panelAccess,
 	})
 }
 

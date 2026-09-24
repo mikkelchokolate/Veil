@@ -16,6 +16,23 @@ func newSubscriptionTestRouter(t *testing.T) (http.Handler, *managementState) {
 	return router, state
 }
 
+// requireMutationEnvelopeSuccess fail-closes on the mutation outcome envelope:
+// OpenAPI requires "success" (see #687), so a missing key is just as fatal as
+// an explicit false — tolerating absence would green a codegen/omitempty
+// regression (#771).
+func requireMutationEnvelopeSuccess(t *testing.T, body []byte, what string) {
+	t.Helper()
+	var envelope struct {
+		Success *bool `json:"success"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		t.Fatalf("%s: decode mutation envelope: %v body=%s", what, err, body)
+	}
+	if envelope.Success == nil || !*envelope.Success {
+		t.Fatalf("%s did not apply: body=%s", what, body)
+	}
+}
+
 // seedClientWithToken creates a client + binding + credential + token and
 // returns the plaintext token. The subscription endpoint then renders links.
 func seedClientWithToken(t *testing.T, r http.Handler) (plaintext, clientID string) {
@@ -24,22 +41,15 @@ func seedClientWithToken(t *testing.T, r http.Handler) (plaintext, clientID stri
 	if inbound.Code != http.StatusCreated && inbound.Code != http.StatusOK {
 		t.Fatalf("seed inbound: %d %s", inbound.Code, inbound.Body.String())
 	}
-	var inboundEnvelope struct {
-		Success bool `json:"success"`
-	}
-	if err := json.Unmarshal(inbound.Body.Bytes(), &inboundEnvelope); err != nil || !inboundEnvelope.Success {
-		t.Fatalf("seed inbound did not apply: decode=%v body=%s", err, inbound.Body.String())
-	}
+	requireMutationEnvelopeSuccess(t, inbound.Body.Bytes(), "seed inbound")
 	w := v1Request(t, r, http.MethodPost, "/api/v1/clients", `{"name":"alice","bindings":[{"inboundId":"hy2-sub","credential":"pw-alice"}]}`)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("seed client: %d %s", w.Code, w.Body.String())
 	}
+	requireMutationEnvelopeSuccess(t, w.Body.Bytes(), "seed client")
 	var c map[string]any
-	if err := json.NewDecoder(w.Body).Decode(&c); err != nil {
+	if err := json.Unmarshal(w.Body.Bytes(), &c); err != nil {
 		t.Fatalf("decode seeded client: %v", err)
-	}
-	if success, ok := c["success"].(bool); ok && !success {
-		t.Fatalf("seed client did not apply: %s", w.Body.String())
 	}
 	// S2 nested the created client under "client"; tolerate both shapes.
 	if nested, ok := c["client"].(map[string]any); ok {
@@ -179,12 +189,15 @@ func TestTokenRotateIssuesNewInvalidatesOld(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("old token must be dead after rotate, got %d", w.Code)
 	}
-	// New works.
-	req2 := httptest.NewRequest(http.MethodGet, "/s/"+rotated.Plaintext, nil)
+	// New works — and must serve the client credential, not an empty 200.
+	req2 := httptest.NewRequest(http.MethodGet, "/s/"+rotated.Plaintext+"?format=raw", nil)
 	w2 := httptest.NewRecorder()
 	r.ServeHTTP(w2, req2)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("new token must work after rotate, got %d", w2.Code)
+	}
+	if !strings.Contains(w2.Body.String(), "pw-alice") {
+		t.Fatalf("rotated token subscription must carry the credential, got %q", w2.Body.String())
 	}
 }
 
@@ -215,8 +228,10 @@ func TestClientLinksAndTokenRevealStayAvailableAfterIssue(t *testing.T) {
 	if links.Code != http.StatusOK {
 		t.Fatalf("links: %d %s", links.Code, links.Body.String())
 	}
-	if !strings.Contains(links.Body.String(), "pw-alice") && !strings.Contains(links.Body.String(), "hysteria2") {
-		t.Fatalf("expected connection URI in links body, got %s", links.Body.String())
+	// The link list must carry the connection URI — a bare protocol name or
+	// a credential-less entry would still satisfy a soft substring check.
+	if !strings.Contains(links.Body.String(), "hysteria2://") || !strings.Contains(links.Body.String(), "pw-alice") {
+		t.Fatalf("expected hysteria2 URI with the binding credential in links body, got %s", links.Body.String())
 	}
 
 	listed := v1Request(t, r, http.MethodGet, "/api/v1/clients/"+clientID+"/tokens", "")
@@ -240,7 +255,13 @@ func TestClientLinksAndTokenRevealStayAvailableAfterIssue(t *testing.T) {
 	if revealed.Code != http.StatusOK {
 		t.Fatalf("reveal: %d %s", revealed.Code, revealed.Body.String())
 	}
-	if !strings.Contains(revealed.Body.String(), `"/s/`) && !strings.Contains(revealed.Body.String(), "/s/") {
-		t.Fatalf("reveal should include subscription URL, got %s", revealed.Body.String())
+	var revealBody struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(revealed.Body.Bytes(), &revealBody); err != nil {
+		t.Fatalf("decode reveal body: %v body=%s", err, revealed.Body.String())
+	}
+	if !strings.Contains(revealBody.URL, "/s/") {
+		t.Fatalf("reveal should include the subscription URL field, got %s", revealed.Body.String())
 	}
 }

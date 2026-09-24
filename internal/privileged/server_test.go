@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -398,6 +399,61 @@ func TestServerDispatchesAllOperations(t *testing.T) {
 				t.Fatalf("rejected request reached executor %d times", calls)
 			}
 		})
+	}
+}
+
+// Regression for #965: an operation that fails after producing partial
+// evidence (a prune that already deleted archives) must still ship that
+// evidence in the error response instead of returning an empty result.
+func TestServerErrorResponsePreservesPartialResult(t *testing.T) {
+	partial := BackupResult{
+		Pruned: []string{"veil_backup_20260101_120000.tar.gz.enc"},
+		Kept:   []string{"veil_backup_20260301_120000.tar.gz.enc"},
+	}
+	server := NewServer(NewLocalAdapter(testPolicy(t), Executor{
+		Backup: func(context.Context, ResolvedBackup) (BackupResult, error) {
+			return partial, errors.New("remove backup archive veil_backup_20260201_120000.tar.gz.enc: injected")
+		},
+	}))
+	request := RequestEnvelope{
+		Version:   ProtocolVersion,
+		RequestID: "partial-prune",
+		Operation: OperationBackupPrune,
+		Backup:    &BackupRequest{Action: BackupActionPrune, Daily: 1},
+	}
+	response := servePipeRequest(t, server, request)
+	if response.OK || response.Error == nil {
+		t.Fatalf("expected error response, got %+v", response)
+	}
+	var result BackupResult
+	if err := json.Unmarshal(response.Result, &result); err != nil {
+		t.Fatalf("error response dropped the partial result: %v", err)
+	}
+	if len(result.Pruned) != 1 || result.Pruned[0] != partial.Pruned[0] ||
+		len(result.Kept) != 1 || result.Kept[0] != partial.Kept[0] {
+		t.Fatalf("partial prune result not preserved: %+v", result)
+	}
+}
+
+// The client side of #965: a failed call must still decode the helper's
+// partial result so callers can report what was already done.
+func TestSocketClientDecodesPartialResultOnError(t *testing.T) {
+	path := socketTestServer(t, func(request *RequestEnvelope) ResponseEnvelope {
+		raw, _ := json.Marshal(BackupResult{Pruned: []string{"deleted.enc"}, Kept: []string{"kept.enc"}})
+		return ResponseEnvelope{
+			Version: ProtocolVersion, RequestID: request.RequestID, OK: false,
+			Result: raw,
+			Error:  &Error{Code: ErrorOperationFailed, Message: "remove failed"},
+		}
+	})
+	client := NewSocketClient(path)
+	result, err := client.Backup(context.Background(), BackupRequest{Action: BackupActionPrune})
+	if err == nil {
+		t.Fatal("expected prune error")
+	}
+	if len(result.Pruned) != 1 || result.Pruned[0] != "deleted.enc" ||
+		len(result.Kept) != 1 || result.Kept[0] != "kept.enc" {
+		t.Fatalf("client dropped the partial prune result: %+v", result)
 	}
 }
 

@@ -124,7 +124,7 @@ func TestPromotionManifestContainsDurableTransactionEvidence(t *testing.T) {
 
 func TestPromotionCrashProcess(t *testing.T) {
 	if os.Getenv(promotionCrashHelperEnv) != "1" {
-		return
+		t.Skip("subprocess helper")
 	}
 	root := os.Getenv("VEIL_PROMOTION_ROOT")
 	mode := os.Getenv("VEIL_PROMOTION_MODE")
@@ -271,28 +271,119 @@ func fixedPromotionBackupID() string {
 	return fixedPromotionNow().UTC().Format("20060102T150405.000000000Z")
 }
 
-// withStubbedArtifactOwnership runs the promotion transaction machinery with
-// the runtime-artifact ownership contract applied against recorded no-op
-// hooks: the process reports root and veil/veil-proxy resolve so the fail-
-// closed ownership enforcement (audit #522) is exercised end to end without
-// real chown/chmod on the host.
+// Distinct fake group IDs so tests can prove promotion chowns to the resolved
+// veil-proxy group (preferred) rather than any coincidental value like the
+// process gid or the veil fallback group.
+const (
+	promotionTestProxyGID = 977
+	promotionTestVeilGID  = 978
+)
+
+type recordedOwnership struct {
+	chowns []recordedChown
+	chmods []recordedChmod
+}
+
+type recordedChown struct {
+	path string
+	uid  int
+	gid  int
+}
+
+type recordedChmod struct {
+	path string
+	mode os.FileMode
+}
+
+// withStubbedArtifactOwnership runs the promotion transaction machinery as
+// root with veil/veil-proxy resolvable so the ownership enforcement path
+// (#522) executes, while the chown/chmod syscalls themselves are recorded
+// no-ops. Callers that need to prove the ownership contract use
+// withRecordingArtifactOwnership and assert the recorded calls.
 func withStubbedArtifactOwnership(t *testing.T, run func()) {
+	t.Helper()
+	withRecordingArtifactOwnership(t, func(*recordedOwnership) { run() })
+}
+
+// withRecordingArtifactOwnership is withStubbedArtifactOwnership plus a
+// recorder: every chown/chmod the transaction issues is captured so tests can
+// assert target paths, uid 0, the veil-proxy gid, and the 0750/0640 modes.
+func withRecordingArtifactOwnership(t *testing.T, run func(*recordedOwnership)) {
 	t.Helper()
 	originalEffectiveUID := effectiveUID
 	originalLookupGroup := lookupGroup
 	originalChownPath := chownPath
 	originalChmodPath := chmodPath
+	recorded := &recordedOwnership{}
 	effectiveUID = func() int { return 0 }
-	lookupGroup = func(string) (*user.Group, error) { return &user.Group{Gid: "0"}, nil }
-	chownPath = func(string, int, int) error { return nil }
-	chmodPath = func(string, os.FileMode) error { return nil }
+	lookupGroup = func(name string) (*user.Group, error) {
+		switch name {
+		case "veil-proxy":
+			return &user.Group{Gid: strconv.Itoa(promotionTestProxyGID)}, nil
+		case "veil":
+			return &user.Group{Gid: strconv.Itoa(promotionTestVeilGID)}, nil
+		default:
+			return nil, fmt.Errorf("unknown group %q", name)
+		}
+	}
+	chownPath = func(path string, uid, gid int) error {
+		recorded.chowns = append(recorded.chowns, recordedChown{path: path, uid: uid, gid: gid})
+		return nil
+	}
+	chmodPath = func(path string, mode os.FileMode) error {
+		recorded.chmods = append(recorded.chmods, recordedChmod{path: path, mode: mode})
+		return nil
+	}
 	defer func() {
 		effectiveUID = originalEffectiveUID
 		lookupGroup = originalLookupGroup
 		chownPath = originalChownPath
 		chmodPath = originalChmodPath
 	}()
-	run()
+	run(recorded)
+}
+
+func TestPromotionAppliesRuntimeArtifactOwnershipContract(t *testing.T) {
+	root := t.TempDir()
+	request := preparePromotionFixture(t, root, 2)
+	var recorded *recordedOwnership
+	withRecordingArtifactOwnership(t, func(r *recordedOwnership) {
+		recorded = r
+		if _, err := promoteResolvedArtifacts(filepath.Join(root, "backups"), fixedPromotionNow, request); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	// Each artifact id is "mieru/config-N.json", so the contract is: artifact
+	// directory 0:veil-proxy 0750, generated root 0:veil-proxy 0750, then the
+	// file 0:veil-proxy 0640 — in that order, per artifact.
+	type wantCall struct {
+		path string
+		gid  int
+		mode os.FileMode
+	}
+	var want []wantCall
+	for _, artifact := range request.Artifacts {
+		dir := filepath.Dir(artifact.Destination)
+		generatedRoot := filepath.Dir(dir)
+		want = append(want,
+			wantCall{dir, promotionTestProxyGID, 0o750},
+			wantCall{generatedRoot, promotionTestProxyGID, 0o750},
+			wantCall{artifact.Destination, promotionTestProxyGID, 0o640},
+		)
+	}
+	if len(recorded.chowns) != len(want) || len(recorded.chmods) != len(want) {
+		t.Fatalf("ownership calls: %d chowns %d chmods, want %d each: chowns=%+v chmods=%+v",
+			len(recorded.chowns), len(recorded.chmods), len(want), recorded.chowns, recorded.chmods)
+	}
+	for i, expected := range want {
+		if got := recorded.chowns[i]; got.path != expected.path || got.uid != 0 || got.gid != expected.gid {
+			t.Errorf("chown[%d] = %+v, want path=%s uid=0 gid=%d", i, got, expected.path, expected.gid)
+		}
+		if got := recorded.chmods[i]; got.path != expected.path || got.mode != expected.mode {
+			t.Errorf("chmod[%d] = %+v, want path=%s mode=%o", i, got, expected.path, expected.mode)
+		}
+	}
 }
 
 func classifyPromotionSet(t *testing.T, request ResolvedPromotion) string {

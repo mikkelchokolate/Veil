@@ -118,11 +118,16 @@ func TestDNSLookupEndpoint(t *testing.T) {
 		if result.Hostname != "example.com" {
 			t.Errorf("hostname: want example.com, got %q", result.Hostname)
 		}
-		if len(result.Addresses) != 2 {
-			t.Fatalf("expected 2 addresses, got %d: %v", len(result.Addresses), result.Addresses)
+		// Lock both resolved addresses exactly — a count/first-element check
+		// would green a truncated or reordered answer (#908).
+		wantAddrs := []string{"93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946"}
+		if len(result.Addresses) != len(wantAddrs) {
+			t.Fatalf("addresses = %v, want %v", result.Addresses, wantAddrs)
 		}
-		if result.Addresses[0] != "93.184.216.34" {
-			t.Errorf("addresses[0]: want 93.184.216.34, got %q", result.Addresses[0])
+		for i := range wantAddrs {
+			if result.Addresses[i] != wantAddrs[i] {
+				t.Fatalf("addresses[%d] = %q, want %q", i, result.Addresses[i], wantAddrs[i])
+			}
 		}
 		if result.CNAME != "example.com." {
 			t.Errorf("cname: want example.com., got %q", result.CNAME)

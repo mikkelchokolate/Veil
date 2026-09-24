@@ -14,7 +14,13 @@ func TestClientSubscriptionDeliveryHeadersAppliesCacheContentAndDisposition(t *t
 	if header.Get("Content-Disposition") != `attachment; filename="veil.txt"` {
 		t.Fatalf("content-disposition = %q", header.Get("Content-Disposition"))
 	}
-	if header.Get("Cache-Control") == "" || header.Get("X-Content-Type-Options") == "" {
-		t.Fatalf("missing base client link headers: %+v", header)
+	// These two headers are the security contract for subscription delivery:
+	// no-store keeps credentials out of caches and nosniff stops content-type
+	// confusion — lock the exact values, not just presence (#892).
+	if got := header.Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q, want no-store", got)
+	}
+	if got := header.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q, want nosniff", got)
 	}
 }

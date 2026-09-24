@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -30,16 +31,35 @@ func TestIdempotencyDoesNotCacheTransientPrecommit5xx(t *testing.T) {
 		handler.ServeHTTP(response, req)
 		return response
 	}
-	if first := issue(); first.Code != http.StatusServiceUnavailable {
+	first := issue()
+	if first.Code != http.StatusServiceUnavailable {
 		t.Fatalf("first status=%d body=%s", first.Code, first.Body.String())
 	}
-	if second := issue(); second.Code != http.StatusCreated || calls.Load() != 2 {
+	// The transient 5xx must not be cached: the same key retries the handler.
+	second := issue()
+	if second.Code != http.StatusCreated || calls.Load() != 2 {
 		t.Fatalf("retry status=%d body=%s calls=%d", second.Code, second.Body.String(), calls.Load())
+	}
+	if second.Header().Get("Idempotency-Replayed") == "true" {
+		t.Fatalf("retried response must not be marked replayed: %v", second.Header())
+	}
+	// The committed outcome IS cached: a third identical request replays the
+	// recorded success without running the mutation again.
+	third := issue()
+	if third.Code != http.StatusCreated || third.Body.String() != second.Body.String() {
+		t.Fatalf("third replay status=%d body=%s, want identical to %d/%s", third.Code, third.Body.String(), second.Code, second.Body.String())
+	}
+	if third.Header().Get("Idempotency-Replayed") != "true" {
+		t.Fatalf("third response must carry Idempotency-Replayed: true, got %v", third.Header())
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("cached success was not replayed: calls=%d", calls.Load())
 	}
 }
 
 func TestIdempotencyOversizeResponseIsBoundedAndReplayIdentical(t *testing.T) {
 	db := openApplyTestDB(t)
+	defer db.Close()
 	store := newIdempotencyStore(db)
 	defer store.Close()
 	var calls atomic.Int32
@@ -57,11 +77,55 @@ func TestIdempotencyOversizeResponseIsBoundedAndReplayIdentical(t *testing.T) {
 	}
 	first := issue()
 	second := issue()
-	if first.Code != http.StatusAccepted || second.Code != first.Code || second.Body.String() != first.Body.String() || calls.Load() != 1 {
-		t.Fatalf("first=%d/%q second=%d/%q calls=%d", first.Code, first.Body.String(), second.Code, second.Body.String(), calls.Load())
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("oversized success must be bounded to 202, got %d body=%q", first.Code, first.Body.String())
 	}
-	if first.Body.Len() > 1024 {
-		t.Fatalf("bounded response unexpectedly large: %d", first.Body.Len())
+	assertResponseTooLargeEnvelope(t, first)
+	if first.Header().Get("Idempotency-Replayed") == "true" {
+		t.Fatalf("first response must not be marked replayed: %v", first.Header())
+	}
+	if second.Code != first.Code || second.Body.String() != first.Body.String() {
+		t.Fatalf("replay mismatch first=%d/%q second=%d/%q", first.Code, first.Body.String(), second.Code, second.Body.String())
+	}
+	if second.Header().Get("Idempotency-Replayed") != "true" {
+		t.Fatalf("replay must carry Idempotency-Replayed: true, got %v", second.Header())
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("oversized response repeated the mutation: calls=%d", calls.Load())
+	}
+	// The durable record must hold the bounded envelope — never the truncated
+	// payload — so a later replay cannot serve bytes the handler never meant.
+	var storedStatus int
+	var storedBody []byte
+	if err := db.QueryRow(`SELECT response_status,response_body FROM idempotency_results`).Scan(&storedStatus, &storedBody); err != nil {
+		t.Fatalf("read durable idempotency result: %v", err)
+	}
+	if storedStatus != http.StatusAccepted || strings.Contains(string(storedBody), "x") ||
+		!strings.Contains(string(storedBody), "response_too_large") {
+		t.Fatalf("durable record stored wrong body: status=%d body=%q", storedStatus, storedBody)
+	}
+}
+
+// assertResponseTooLargeEnvelope locks the exact bounded envelope: 202 with a
+// small JSON body identifying the committed-but-too-large outcome and no
+// fragment of the truncated payload.
+func assertResponseTooLargeEnvelope(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	if rec.Body.Len() > 1024 {
+		t.Fatalf("bounded response unexpectedly large: %d", rec.Body.Len())
+	}
+	var envelope struct {
+		Status string `json:"status"`
+		Result string `json:"result"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("bounded response is not the JSON envelope: %q", rec.Body.String())
+	}
+	if envelope.Status != "committed" || envelope.Result != "response_too_large" {
+		t.Fatalf("unexpected bounded envelope: %q", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "x") {
+		t.Fatalf("bounded response leaked truncated payload: %q", rec.Body.String())
 	}
 }
 

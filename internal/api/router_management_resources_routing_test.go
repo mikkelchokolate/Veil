@@ -47,6 +47,15 @@ func TestManagementAPIRoutingRulesRejectOversizedJSONBodies(t *testing.T) {
 }
 
 func TestManagementAPIUpdatesAndDeletesRoutingRuleByName(t *testing.T) {
+	// The mutation envelope is part of every mutating response here — without
+	// apply infrastructure in this test the legacy auto-apply cannot converge
+	// and would report success:false for unrelated environmental reasons, so
+	// auto-apply is disabled and success:true asserts the committed-mutation
+	// contract deterministically (#835).
+	origAutoApply := autoApplyAfterMutation
+	autoApplyAfterMutation = false
+	t.Cleanup(func() { autoApplyAfterMutation = origAutoApply })
+
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath})
 
@@ -55,12 +64,14 @@ func TestManagementAPIUpdatesAndDeletesRoutingRuleByName(t *testing.T) {
 	if create.Code != http.StatusCreated {
 		t.Fatalf("create routing rule expected 201, got %d: %s", create.Code, create.Body.String())
 	}
+	requireMutationEnvelopeSuccess(t, create.Body.Bytes(), "create routing rule")
 
 	update := httptest.NewRecorder()
 	r.ServeHTTP(update, httptest.NewRequest(http.MethodPut, "/api/routing/rules/non-ru", strings.NewReader(`{"match":"geosite:openai","outbound":"direct","enabled":true}`)))
 	if update.Code != http.StatusOK {
 		t.Fatalf("update routing rule expected 200, got %d: %s", update.Code, update.Body.String())
 	}
+	requireMutationEnvelopeSuccess(t, update.Body.Bytes(), "update routing rule")
 	var updated RoutingRule
 	if err := json.NewDecoder(update.Body).Decode(&updated); err != nil {
 		t.Fatalf("decode updated rule: %v", err)
@@ -82,6 +93,7 @@ func TestManagementAPIUpdatesAndDeletesRoutingRuleByName(t *testing.T) {
 	if deleteRecorder.Code != http.StatusOK {
 		t.Fatalf("delete routing rule expected 200, got %d: %s", deleteRecorder.Code, deleteRecorder.Body.String())
 	}
+	requireMutationEnvelopeSuccess(t, deleteRecorder.Body.Bytes(), "delete routing rule")
 
 	readAfterDelete := httptest.NewRecorder()
 	restarted.ServeHTTP(readAfterDelete, httptest.NewRequest(http.MethodGet, "/api/routing/rules", nil))

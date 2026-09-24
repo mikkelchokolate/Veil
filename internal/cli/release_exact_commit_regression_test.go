@@ -14,25 +14,37 @@ func TestReleaseWorkflowBindsEveryArtifactAndNotesToExactCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	workflow := string(body)
+	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
+	// Every assertion is scoped to the job block that must contain it, with
+	// comments stripped — a `# --source-commit` note or a marker in a sibling
+	// job cannot satisfy the contract (#867, #926).
+	releaseJob := stripHashComments(t, workflowJobBlock(t, workflow, "release"))
 	for _, required := range []string{
 		`git rev-parse "${GITHUB_REF_NAME}^{commit}"`,
-		`GITHUB_SHA`,
-		`--source-commit "${GITHUB_SHA}"`,
+		`test "${tag_commit}" = "${GITHUB_SHA}"`,
 		`-X main.commit=${GITHUB_SHA}`,
+	} {
+		if !strings.Contains(releaseJob, required) {
+			t.Errorf("release job lacks exact-source requirement %q", required)
+		}
+	}
+	publishJob := stripHashComments(t, workflowJobBlock(t, workflow, "publish"))
+	for _, required := range []string{
+		`git rev-parse "${GITHUB_REF_NAME}^{commit}"`,
+		`--source-commit "${GITHUB_SHA}"`,
 		`CHANGELOG.md`,
 		`release-notes.md`,
 		`--notes-file`,
-		`dependency-manifest`,
-		`go-version`,
-		`node-version`,
-		`pnpm-version`,
+		`--dependency-manifest go.sum`,
+		`--go-version`,
+		`--node-version`,
+		`--pnpm-version`,
 	} {
-		if !strings.Contains(workflow, required) {
-			t.Errorf("release workflow lacks exact-source requirement %q", required)
+		if !strings.Contains(publishJob, required) {
+			t.Errorf("publish job lacks exact-source requirement %q", required)
 		}
 	}
-	if strings.Contains(workflow, `--notes "Automated Veil release`) {
+	if strings.Contains(stripHashComments(t, workflow), `--notes "Automated Veil release`) {
 		t.Error("release still publishes generic notes unrelated to the tagged changelog section")
 	}
 }

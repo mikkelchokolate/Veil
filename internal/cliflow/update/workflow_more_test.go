@@ -116,12 +116,30 @@ func TestRunWorkflowUpdatesWhenOlder(t *testing.T) {
 func TestRunWorkflowDryRun(t *testing.T) {
 	var out bytes.Buffer
 	deps, _ := newValidWorkflowDeps(t)
-	err := RunWorkflow(WorkflowOptions{CurrentVersion: "v1.2.3", DryRun: true}, &out, deps)
+	// A printed "Dry run" line is not proof nothing changed: the binary must
+	// never be replaced (issue #865).
+	replaced := 0
+	deps.ReplaceBinaryFromArchive = func(string, []byte, bool) (string, error) {
+		replaced++
+		return "", nil
+	}
+	restartCalled := false
+	deps.RestartUpdated = func(string, string, WorkflowOptions) error {
+		restartCalled = true
+		return nil
+	}
+	err := RunWorkflow(WorkflowOptions{CurrentVersion: "v1.2.3", DryRun: true, Restart: true}, &out, deps)
 	if err != nil {
 		t.Fatalf("RunWorkflow: %v", err)
 	}
 	if !strings.Contains(out.String(), "Dry run") {
 		t.Fatalf("output = %q", out.String())
+	}
+	if replaced != 0 {
+		t.Fatalf("dry run replaced the binary %d times", replaced)
+	}
+	if restartCalled {
+		t.Fatal("dry run invoked the restart callback")
 	}
 }
 
@@ -184,7 +202,13 @@ func TestRunWorkflowRestartsWhenRequested(t *testing.T) {
 		_ = os.WriteFile(path, []byte("old"), 0o755)
 		return path, nil
 	}
+	// Record the invocation: without this assertion the test would pass even
+	// if the workflow skipped the restart callback entirely (issue #865).
+	var restartCalled bool
+	var gotCurrentPath, gotBackupPath string
 	deps.RestartUpdated = func(currentPath, backupPath string, opts WorkflowOptions) error {
+		restartCalled = true
+		gotCurrentPath, gotBackupPath = currentPath, backupPath
 		if opts.Restart != true {
 			return errors.New("restart flag not propagated")
 		}
@@ -193,6 +217,12 @@ func TestRunWorkflowRestartsWhenRequested(t *testing.T) {
 	err := RunWorkflow(WorkflowOptions{CurrentVersion: "v1.2.3", Yes: true, Restart: true}, &out, deps)
 	if err != nil {
 		t.Fatalf("RunWorkflow: %v", err)
+	}
+	if !restartCalled {
+		t.Fatal("RestartUpdated was not invoked for --restart")
+	}
+	if gotCurrentPath == "" || gotBackupPath == "" {
+		t.Fatalf("RestartUpdated got empty paths: current=%q backup=%q", gotCurrentPath, gotBackupPath)
 	}
 	if !strings.Contains(out.String(), "Updated to v1.2.4") {
 		t.Fatalf("output = %q", out.String())

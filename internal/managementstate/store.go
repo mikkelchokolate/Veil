@@ -2,6 +2,7 @@ package managementstate
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -9,6 +10,10 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
+
+// statStoreFile is a seam for failure injection in tests; production uses
+// os.Stat.
+var statStoreFile = os.Stat
 
 type Store struct {
 	path   string
@@ -72,8 +77,16 @@ func (s Store) SaveEncoded(body []byte) error {
 	// Preserve ownership and permissions of an existing state file so that
 	// CLI commands (e.g. `veil admin reset`) do not lock out the veil user.
 	var prev *fileInfo
-	if fi, err := os.Stat(s.path); err == nil {
+	fi, err := statStoreFile(s.path)
+	switch {
+	case err == nil:
 		prev = &fileInfo{uid: fileOwnerUID(fi), gid: fileOwnerGID(fi), mode: fi.Mode().Perm()}
+	case errors.Is(err, os.ErrNotExist):
+		// First write: nothing to preserve.
+	default:
+		// Fail closed: a state file written without the preserved
+		// ownership/mode can lock the service account out of its own state.
+		return fmt.Errorf("stat existing state file for ownership preservation: %w", err)
 	}
 
 	return writeStoreFileAtomic(s.path, body, prev)

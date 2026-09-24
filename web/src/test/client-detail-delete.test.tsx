@@ -33,6 +33,45 @@ function renderClientDetail() {
 // delete committed but the auto-apply failed — the page must surface that
 // instead of navigating away as if the delete cleanly converged.
 describe("ClientDetailPage delete apply outcome", () => {
+	// #813: the delete is already gated behind the AlertDialog — lock the
+	// no-request-until-confirm contract so a one-click DELETE regression
+	// cannot pass on confirm-UI coverage alone.
+	it("does not DELETE the client until delete is confirmed", async () => {
+		const user = userEvent.setup();
+		const deletes: string[] = [];
+		server.use(
+			http.get("/api/inbounds", () => HttpResponse.json([])),
+			http.get("/api/v1/clients/c1", () =>
+				HttpResponse.json({
+					id: "c1",
+					name: "Alice",
+					enabled: true,
+					version: 1,
+					status: "active",
+					bindings: [],
+				}),
+			),
+			http.get("/api/v1/clients", () =>
+				HttpResponse.json({ items: [], total: 0, page: 1, pageSize: 25 }),
+			),
+			http.delete("/api/v1/clients/c1", () => {
+				deletes.push("c1");
+				return HttpResponse.json({
+					id: "c1",
+					success: true,
+					revision: { desired: 2, applied: 2, state: "synced" },
+				});
+			}),
+		);
+		renderClientDetail();
+		await screen.findByText("Alice");
+		await user.click(screen.getByRole("button", { name: /^delete$/i }));
+		expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+		expect(deletes).toEqual([]);
+		await user.click(screen.getByRole("button", { name: /confirm delete/i }));
+		await waitFor(() => expect(deletes).toEqual(["c1"]));
+	});
+
 	it("stays on the page with an apply-failed badge when the delete commits but apply fails", async () => {
 		const user = userEvent.setup();
 		let detailGets = 0;

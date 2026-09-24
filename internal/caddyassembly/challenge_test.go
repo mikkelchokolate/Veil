@@ -88,6 +88,9 @@ func TestPlanAcmeChallengeBindsTLSALPN01Conflict(t *testing.T) {
 	if issues[0].Code != "acme_tlsalpn_port_in_use" {
 		t.Fatalf("expected acme_tlsalpn_port_in_use issue, got %v", issues[0])
 	}
+	if issues[0].Severity != "error" {
+		t.Fatalf("expected error severity for tls-alpn port conflict, got %q", issues[0].Severity)
+	}
 }
 
 func TestPlanAcmeChallengeBindsHTTP01ReusesPanelCaddyListener(t *testing.T) {
@@ -165,6 +168,9 @@ func TestPlanAcmeChallengeBindsHysteria2OnlyDomainSwitchesToHTTP01(t *testing.T)
 	if owner.ChallengeMode != "http-01" {
 		t.Fatalf("expected http-01 challenge mode for hysteria2-only domain, got %q", owner.ChallengeMode)
 	}
+	if len(owner.Domains) != 1 || owner.Domains[0] != "hy.example.net" {
+		t.Fatalf("challenge bind owner must list the hysteria2-only domain, got %v", owner.Domains)
+	}
 }
 
 // When :80 is owned by a non-Caddy service, a hysteria2-only domain produces a
@@ -237,6 +243,9 @@ func TestPlanAcmeChallengeBindsHysteria2OnPanelDomainKeepsTLSALPN(t *testing.T) 
 	if owner.ChallengeMode != "tls-alpn-01" {
 		t.Fatalf("expected tls-alpn-01 kept for panel domain, got %q", owner.ChallengeMode)
 	}
+	if len(owner.Domains) != 1 || owner.Domains[0] != "panel.example.com" {
+		t.Fatalf("challenge bind owner must list the panel domain, got %v", owner.Domains)
+	}
 	httpKey := bindregistry.BindKey{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}
 	if _, ok := planned[httpKey]; ok {
 		t.Fatal("must not add an :80 http-01 bind for a panel-owned domain")
@@ -266,5 +275,8 @@ func TestPlanAcmeChallengeBindsHysteria2OnNaiveDomainKeepsTLSALPN(t *testing.T) 
 	}
 	if owner.ChallengeMode != "tls-alpn-01" {
 		t.Fatalf("expected tls-alpn-01 kept for naive domain, got %q", owner.ChallengeMode)
+	}
+	if len(owner.Domains) != 1 || owner.Domains[0] != "naive.example.com" {
+		t.Fatalf("challenge bind owner must list the naive domain, got %v", owner.Domains)
 	}
 }

@@ -121,9 +121,18 @@ func TestLinuxServeUnixRejectsPeerBeforeExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial helper: %v", err)
 	}
-	_, _ = conn.Write([]byte(`{"version":1,"requestId":"peer","operation":"restart_panel","restartPanel":{}}`))
+	if _, err := conn.Write([]byte(`{"version":1,"requestId":"peer","operation":"restart_panel","restartPanel":{}}`)); err != nil {
+		t.Fatalf("write request: %v", err)
+	}
+	// Rejected peers get no response — the helper closes the connection right
+	// after verifyPeer fails. Reading to EOF is the barrier proving the peer
+	// check ran before dispatch; a fixed sleep could pass without one.
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if n, readErr := conn.Read(make([]byte, 1)); n != 0 || readErr == nil {
+		_ = conn.Close()
+		t.Fatalf("rejected peer received a response or stayed connected: n=%d err=%v", n, readErr)
+	}
 	_ = conn.Close()
-	time.Sleep(25 * time.Millisecond)
 	if calls.Load() != 0 {
 		t.Fatalf("executor called for rejected peer: %d", calls.Load())
 	}

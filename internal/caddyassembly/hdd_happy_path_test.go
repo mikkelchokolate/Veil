@@ -62,6 +62,15 @@ func TestBuildFinalRenderPlan_NaiveTCP443HappyPath(t *testing.T) {
 	if server.Kind != caddyassembly.CaddyOwnerNaive {
 		t.Fatalf("expected naive server, got %+v", server)
 	}
+	// The configured challenge mode must reach the plan, and tls-alpn-01 must
+	// reuse the Caddy-owned :443 listener instead of adding a challenge-only
+	// bind that would replace it (#970).
+	if plan.DefaultChallengeMode != "tls-alpn-01" {
+		t.Errorf("plan.DefaultChallengeMode = %q, want tls-alpn-01", plan.DefaultChallengeMode)
+	}
+	if len(plan.ACMEChallenges) != 0 {
+		t.Errorf("expected no standalone ACME challenge binds for a :443-served domain, got %+v", plan.ACMEChallenges)
+	}
 	if server.Domain != "vpn.example.com" {
 		t.Errorf("server.Domain = %q, want vpn.example.com", server.Domain)
 	}
@@ -147,6 +156,13 @@ func TestBuildFinalRenderPlan_NaiveTCP443MergesWithPanelCaddy(t *testing.T) {
 	}
 	if len(naiveSpec.Owners.NaiveInboundNames) != 1 || naiveSpec.Owners.NaiveInboundNames[0] != "test" {
 		t.Errorf("naive domain owners wrong: %+v", naiveSpec.Owners)
+	}
+	if plan.DefaultChallengeMode != "tls-alpn-01" {
+		t.Errorf("plan.DefaultChallengeMode = %q, want tls-alpn-01", plan.DefaultChallengeMode)
+	}
+	if len(plan.ACMEChallenges) != 0 {
+		t.Errorf("shared :443 listener must not gain standalone challenge binds, got %+v", plan.ACMEChallenges)
+
 	}
 }
 

@@ -18,6 +18,12 @@ import (
 func TestManagementAPIWarpEnableAutoRegisters(t *testing.T) {
 	orig := warpRegisterFunc
 	t.Cleanup(func() { warpRegisterFunc = orig })
+	// No apply infrastructure here — without it the legacy auto-apply cannot
+	// converge and would report success:false for environmental reasons, so
+	// success asserts the committed-mutation contract deterministically (#835).
+	origAutoApply := autoApplyAfterMutation
+	autoApplyAfterMutation = false
+	t.Cleanup(func() { autoApplyAfterMutation = origAutoApply })
 	var called bool
 	warpRegisterFunc = func(ctx context.Context) (veilwarp.Registration, error) {
 		called = true
@@ -42,6 +48,9 @@ func TestManagementAPIWarpEnableAutoRegisters(t *testing.T) {
 	if !called {
 		t.Fatal("warp registrar was not invoked")
 	}
+	// The mutation envelope must report the apply outcome — a green config
+	// body with success:false would mean WARP never reached the runtime.
+	requireMutationEnvelopeSuccess(t, w.Body.Bytes(), "warp auto-register PUT")
 	var resp WarpConfig
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode warp response: %v", err)

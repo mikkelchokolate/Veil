@@ -10,10 +10,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/webbasepath"
 )
 
@@ -29,8 +31,25 @@ type ContainerHealthContract struct {
 	ServerName  string `json:"serverName,omitempty"`
 }
 
+// ContractPathFromEnv returns the explicitly configured health contract path —
+// empty when VEIL_CONTAINER_HEALTH_PATH is unset. `veil serve` writes the
+// contract only when this is set, keeping the file opt-in for container
+// deployments (the image entrypoint exports it).
 func ContractPathFromEnv() string {
 	return strings.TrimSpace(os.Getenv(containerHealthPathEnv))
+}
+
+// ContractProbePath resolves the path `veil healthcheck` reads. An explicit
+// VEIL_CONTAINER_HEALTH_PATH wins; otherwise it derives from the state root —
+// VEIL_VAR_DIR, then the VEIL_STATE_PATH parent, then the packaged default —
+// mirroring the entrypoint leaf-path derivation. Docker HEALTHCHECK execs do
+// not pass through the entrypoint, so the probe must derive the same path the
+// serve side wrote rather than relying on an exported variable (issue #753).
+func ContractProbePath() string {
+	if explicit := ContractPathFromEnv(); explicit != "" {
+		return explicit
+	}
+	return filepath.Join(hostenv.VarDir(), "container-health.json")
 }
 
 func ContractFromServe(listen string, tlsEnabled bool, webBasePath, tlsCert, serverName string) ContainerHealthContract {

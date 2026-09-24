@@ -8,47 +8,64 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 )
 
-func TestDiskEndpointHasKnownPaths(t *testing.T) {
-	// Create temp dirs to simulate veil paths
+// TestDirSizeReportsSubdirectoryTotals exercises the DirSize helper — the
+// /api/disk endpoint itself is covered in internal/api (#931/#932 keep helper
+// tests honestly named).
+func TestDirSizeReportsSubdirectoryTotals(t *testing.T) {
 	dir := t.TempDir()
 	etcDir := filepath.Join(dir, "etc", "veil")
 	varDir := filepath.Join(dir, "var", "lib", "veil")
-	os.MkdirAll(etcDir, 0o755)
-	os.MkdirAll(varDir, 0o755)
-	os.WriteFile(filepath.Join(etcDir, "test.conf"), []byte("hello"), 0o644)
-	os.WriteFile(filepath.Join(varDir, "state.json"), []byte("world"), 0o644)
+	if err := os.MkdirAll(etcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(varDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(etcDir, "test.conf"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(varDir, "state.json"), []byte("world"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	stats := DirSize(dir)
-	if len(stats) == 0 {
-		t.Error("expected at least one directory stat")
+	if len(stats) != 2 {
+		t.Fatalf("expected etc+var entries, got %+v", stats)
 	}
-	// Find the entry for our dir
-	sizes := make(map[string]int64)
+	sizes := make(map[string]DirSizeInfo)
 	for _, s := range stats {
-		sizes[s.Path] = s.SizeBytes
+		sizes[s.Path] = s
 	}
-	// Check that etc subdirectory has positive size
-	etcPath := filepath.Join(dir, "etc")
-	if v, ok := sizes[etcPath]; !ok || v <= 0 {
-		t.Errorf("expected positive size for %s, got %d", etcPath, v)
+	for _, sub := range []string{"etc", "var"} {
+		entry, ok := sizes[filepath.Join(dir, sub)]
+		if !ok {
+			t.Fatalf("missing %s entry: %+v", sub, stats)
+		}
+		if entry.SizeBytes != 5 || entry.SizeHuman != "5 B" {
+			t.Fatalf("%s size = %d (%q), want 5 (5 B)", sub, entry.SizeBytes, entry.SizeHuman)
+		}
 	}
 }
 
-func TestDiskEndpointFieldsPresent(t *testing.T) {
+func TestDirSizeFieldsArePopulated(t *testing.T) {
 	dir := t.TempDir()
 	sub := filepath.Join(dir, "sub")
-	os.MkdirAll(sub, 0o755)
-	os.WriteFile(filepath.Join(sub, "f.txt"), []byte("data"), 0o644)
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "f.txt"), []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	stats := DirSize(dir)
-	if len(stats) == 0 {
-		t.Fatal("expected at least one subdirectory stat")
+	if len(stats) != 1 {
+		t.Fatalf("expected one subdirectory stat, got %+v", stats)
 	}
 	first := stats[0]
-	if first.Path == "" {
-		t.Error("expected non-empty path")
+	if first.Path != sub {
+		t.Errorf("path = %q, want %q", first.Path, sub)
 	}
-	if first.SizeBytes < 0 {
-		t.Errorf("expected non-negative size, got %d", first.SizeBytes)
+	if first.SizeBytes != 4 || first.SizeHuman != "4 B" {
+		t.Errorf("size = %d (%q), want 4 (4 B)", first.SizeBytes, first.SizeHuman)
 	}
 }
 

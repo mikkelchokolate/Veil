@@ -854,6 +854,9 @@ func (s *managementState) handleV1GetClientBinding(w http.ResponseWriter, r *htt
 func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.Request, clientID string, parts []string) {
 	if len(parts) == 1 { // /bindings
 		if r.Method == http.MethodGet {
+			// The OpenAPI contract documents this list endpoint; the same
+			// enriched view is also embedded as ClientView.bindings on
+			// GET /api/v1/clients/{id}.
 			s.handleV1ListClientBindings(w, r, clientID)
 			return
 		}

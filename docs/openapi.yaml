@@ -3111,6 +3111,17 @@ paths:
       responses:
         '200':
           description: Bindings.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BindingView'
       x-roles:
       - admin
       - viewer
@@ -4315,11 +4326,11 @@ components:
           type: boolean
         panelAccess:
           type: string
+          description: Effective panel access mode. An unset value is reported as `local`.
           enum:
           - local
           - direct
           - caddy
-          - ''
     SetupCompleteRequest:
       type: object
       required:
@@ -4819,11 +4830,12 @@ components:
           - 127.0.0.1:2096
         panelAccess:
           type: string
+          description: Panel access mode. Always emitted on read; on write, an omitted field keeps the current
+            value.
           enum:
           - local
           - direct
           - caddy
-          - ''
         webBasePath:
           type: string
           examples:
@@ -5997,6 +6009,9 @@ components:
       properties:
         path:
           type: string
+        source:
+          type: string
+          description: Where the certificate was loaded from — "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage).
         subject:
           type: string
         issuer:
@@ -6453,7 +6468,14 @@ components:
       required:
       - id
       - name
+      - enabled
+      - quotaResetPolicy
+      - depleted
       - status
+      - hasCredentials
+      - createdAt
+      - updatedAt
+      - version
       properties:
         id:
           type: string
@@ -6499,8 +6521,11 @@ components:
           type: array
           items:
             type: string
-        hasCreds:
+        hasCredentials:
           type: boolean
+          description: Whether any binding holds an issued credential.
+        expirationEnforcement:
+          $ref: '#/components/schemas/ExpirationEnforcement'
         createdAt:
           type: integer
           format: int64
@@ -6543,6 +6568,9 @@ components:
       - transports
       - perClientCredentials
       - requiresCaddy
+      - trafficAccounting
+      - quotaEnforcement
+      - expirationEnforcement
       properties:
         protocol:
           type: string
@@ -6554,6 +6582,44 @@ components:
           type: boolean
         requiresCaddy:
           type: boolean
+        trafficAccounting:
+          type: boolean
+          description: Whether traffic on this binding counts toward the client's recorded usage.
+        quotaEnforcement:
+          type: boolean
+          description: Whether the runtime rejects traffic once the client's quota is depleted.
+        credentialKinds:
+          type: array
+          description: Credential kinds the protocol can issue for this binding. Omitted when empty.
+          items:
+            type: string
+        expirationEnforcement:
+          type: boolean
+          description: Whether expiry enforcement is applied for credentials on this binding.
+    ExpirationEnforcement:
+      type: object
+      required:
+      - state
+      - desiredRevision
+      - appliedRevision
+      - attempts
+      properties:
+        state:
+          type: string
+          description: Current enforcement state for the client's expiry.
+        desiredRevision:
+          type: integer
+          format: int64
+        appliedRevision:
+          type: integer
+          format: int64
+        attempts:
+          type: integer
+        nextRetryAt:
+          type: integer
+          format: int64
+        lastError:
+          type: string
     CredentialMeta:
       type: object
       required:

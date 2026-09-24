@@ -13,6 +13,7 @@ import (
 	"time"
 
 	veilapply "github.com/mikkelchokolate/Veil/internal/apply"
+	"github.com/mikkelchokolate/Veil/internal/applyflow"
 	"github.com/mikkelchokolate/Veil/internal/caddyadmin"
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
@@ -36,6 +37,10 @@ type firewallApplier interface {
 	// ApplySafely stages rules, refuses to enable an inactive firewall with
 	// no SSH management access, and rolls back on failure.
 	ApplySafely(rules []firewall.Rule) error
+	// PruneStaleManagedRules deletes Veil-managed UFW rules absent from the
+	// desired set — the local counterpart of the privileged reconcile's
+	// stale-rule pass — and returns the number deleted.
+	PruneStaleManagedRules(desired []firewall.Rule) (int, error)
 }
 
 var (
@@ -158,7 +163,7 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 		}
 		relative, err := filepath.Rel(generatedRoot, stagedPath)
 		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-			return nil, nil, nil, fmt.Errorf("staged config escapes generated root: %s", stagedPath)
+			return nil, nil, nil, applyflow.MarkPreMutationError(fmt.Errorf("staged config escapes generated root: %s", stagedPath))
 		}
 		artifactIDs = append(artifactIDs, filepath.ToSlash(relative))
 	}
@@ -168,13 +173,13 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 	}
 	orphans, err := scanLiveConfigOrphans(ctx.state.liveRoot, activeFiles)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, applyflow.MarkPreMutationError(err)
 	}
 	var removeIDs []string
 	for _, orphan := range orphans {
 		relative, relErr := filepath.Rel(ctx.state.liveRoot, orphan)
 		if relErr != nil {
-			return nil, nil, nil, relErr
+			return nil, nil, nil, applyflow.MarkPreMutationError(relErr)
 		}
 		removeIDs = append(removeIDs, filepath.ToSlash(relative))
 	}
@@ -208,12 +213,12 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 		return nil, nil, nil, nil
 	}
 	if ctx.state.privileged == nil {
-		return nil, nil, nil, fmt.Errorf("privileged helper is unavailable")
+		return nil, nil, nil, applyflow.MarkPreMutationError(fmt.Errorf("privileged helper is unavailable"))
 	}
 	publicationArtifacts := append(append([]string(nil), artifactIDs...), removeIDs...)
 	expectedManifest, previousManifest, err := publicationArtifactDigests(generatedRoot, ctx.state.liveRoot, artifactIDs, removeIDs)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("build publication manifest: %w", err)
+		return nil, nil, nil, applyflow.MarkPreMutationError(fmt.Errorf("build publication manifest: %w", err))
 	}
 	if err := veilapply.MarkRuntimeMutationStarting(ctx.operationContext(), veilapply.PublicationDetails{
 		ExpectedLiveManifestSHA256: expectedManifest,
@@ -680,9 +685,6 @@ func (ctx ManagementApplyContext) syncFirewall() []ServiceActionResult {
 		return nil
 	}
 	rules := desiredFirewallUFWRules(ctx.state.settings, ctx.state.inbounds)
-	if len(rules) == 0 {
-		return nil
-	}
 	result := ServiceActionResult{
 		Name:    "sync-firewall",
 		Command: []string{"ufw", "sync-rules"},
@@ -701,11 +703,26 @@ func (ctx ManagementApplyContext) syncFirewall() []ServiceActionResult {
 	} else {
 		// ApplySafely refuses to enable an inactive UFW that has no SSH
 		// management access — enabling there would lock the operator out —
-		// and rolls staged rules back on any failure.
+		// and rolls staged rules back on any failure. For an empty desired
+		// set it is a no-op; pruning below still reconciles stale rules.
 		applier := currentFirewallApplier()
 		if err := applier.ApplySafely(rules); err != nil {
 			result.Error = err.Error()
 			return []ServiceActionResult{result}
+		}
+		// The privileged reconcile also deletes stale Veil-managed rules
+		// absent from the desired set — including when that set is empty
+		// (#356). The local path must do the same or clearing every managed
+		// port leaves stale UFW allows behind forever (#782).
+		pruned, err := applier.PruneStaleManagedRules(rules)
+		if err != nil {
+			result.Error = err.Error()
+			return []ServiceActionResult{result}
+		}
+		if len(rules) == 0 && pruned == 0 {
+			// Nothing was staged or pruned — report no result so the
+			// workflow does not claim a firewall change that never ran.
+			return nil
 		}
 	}
 	result.Success = true

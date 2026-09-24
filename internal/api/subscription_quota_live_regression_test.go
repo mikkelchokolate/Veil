@@ -26,25 +26,15 @@ func TestPublicSubscriptionDropsLinksWhenLiveTotalsReachQuota(t *testing.T) {
 	// returns 201 with success:false (apply job failed) leaves the client out
 	// of it and the feed would 404 — assert convergence like
 	// seedClientWithToken does instead of racing the snapshot.
-	var inboundEnvelope struct {
-		Success bool `json:"success"`
-	}
-	if err := json.Unmarshal(inbound.Body.Bytes(), &inboundEnvelope); err != nil || !inboundEnvelope.Success {
-		t.Fatalf("inbound did not apply: decode=%v body=%s", err, inbound.Body.String())
-	}
+	requireMutationEnvelopeSuccess(t, inbound.Body.Bytes(), "inbound")
 	created := v1Request(t, r, http.MethodPost, "/api/v1/clients",
 		`{"name":"quota-feed","quotaBytes":1000,"bindings":[{"inboundId":"hy2-quota-feed","credential":"pw-quota-feed"}]}`)
 	if created.Code != http.StatusCreated {
 		t.Fatalf("client: %d %s", created.Code, created.Body.String())
 	}
-	// "success" is a top-level envelope field (see seedClientWithToken);
-	// tolerate its absence but fail on an explicit false.
-	var createEnvelope map[string]any
-	if err := json.Unmarshal(created.Body.Bytes(), &createEnvelope); err == nil {
-		if success, ok := createEnvelope["success"].(bool); ok && !success {
-			t.Fatalf("client did not apply: %s", created.Body.String())
-		}
-	}
+	// "success" is a required top-level envelope field (see #687); fail closed
+	// on a missing key exactly like seedClientWithToken (#748).
+	requireMutationEnvelopeSuccess(t, created.Body.Bytes(), "client")
 	clientID := unwrapClient(t, created.Body.Bytes())["id"].(string)
 	tokens := v1Request(t, r, http.MethodPost, "/api/v1/clients/"+clientID+"/tokens", `{"label":"feed"}`)
 	if tokens.Code != http.StatusCreated {

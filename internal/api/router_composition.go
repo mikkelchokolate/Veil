@@ -31,22 +31,7 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	mux := http.NewServeMux()
 	state := newManagementStateProduction(info)
 	metrics := observability.NewMetricsCollector()
-	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-		metrics.ServeHTTP(w, r)
-		if r.Method == http.MethodGet && state.trafficCollector != nil {
-			_, _ = io.WriteString(w, state.trafficCollector.PrometheusMetrics())
-		}
-	})
-	RuntimeRoutes{}.Register(mux)
-	mux.HandleFunc("/api/services/", state.handleServiceActionRoute)
-	state.register(mux)
-	panelRoutes := PanelRoutes{Info: info, BasePath: basePath, State: state}
-	panelRoutes.Register(mux)
-	DiagnosticToolRoutes{}.Register(mux)
-	StatusRoutes{Info: info, State: state}.Register(mux)
-	HealthRoutes{State: state}.Register(mux)
-	ProfilePreviewRoutes{}.Register(mux)
-	LogRoutes{State: state}.Register(mux)
+	c.registerMux(mux, info, state, metrics, basePath)
 
 	state.idempotency = newIdempotencyStore(state.db)
 	if err := state.idempotency.setReplayCipher(state.cipher); err != nil {
@@ -97,4 +82,26 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	secured := securityHeadersMiddleware(handler)
 	healthAware := auditHealthMiddleware(state, metrics.MetricsMiddleware(secured))
 	return requestIDMiddleware(degradedStateMiddleware(state, healthAware)), state
+}
+
+// registerMux wires every route registration onto mux in one place so
+// contract tests can interrogate the exact live registration set through
+// mux.Handler instead of a hand-maintained route list (issue #923).
+func (RouterComposition) registerMux(mux *http.ServeMux, info ServerInfo, state *managementState, metrics *observability.MetricsCollector, basePath string) {
+	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		metrics.ServeHTTP(w, r)
+		if r.Method == http.MethodGet && state.trafficCollector != nil {
+			_, _ = io.WriteString(w, state.trafficCollector.PrometheusMetrics())
+		}
+	})
+	RuntimeRoutes{State: state}.Register(mux)
+	mux.HandleFunc("/api/services/", state.handleServiceActionRoute)
+	state.register(mux)
+	panelRoutes := PanelRoutes{Info: info, BasePath: basePath, State: state}
+	panelRoutes.Register(mux)
+	DiagnosticToolRoutes{}.Register(mux)
+	StatusRoutes{Info: info, State: state}.Register(mux)
+	HealthRoutes{State: state}.Register(mux)
+	ProfilePreviewRoutes{}.Register(mux)
+	LogRoutes{State: state}.Register(mux)
 }

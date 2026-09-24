@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"fmt"
-
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 	statusflow "github.com/mikkelchokolate/Veil/internal/cliflow/status"
 	"github.com/spf13/cobra"
@@ -14,10 +12,10 @@ func newHealthcheckCommand() *cobra.Command {
 		Short:  "Probe the local container health contract",
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path := statusflow.ContractPathFromEnv()
-			if path == "" {
-				return fmt.Errorf("VEIL_CONTAINER_HEALTH_PATH is not set")
-			}
+			// ContractProbePath follows the VEIL_VAR_DIR-derived state root so
+			// custom-root containers probe the same file the serve side wrote
+			// (HEALTHCHECK execs bypass the entrypoint — issue #753).
+			path := statusflow.ContractProbePath()
 			contract, err := statusflow.ReadContract(path)
 			if err != nil {
 				return err

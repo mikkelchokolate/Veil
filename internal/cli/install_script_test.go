@@ -25,7 +25,7 @@ func TestCurlInstallScriptDownloadsVerifiedReleaseBinary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	for _, want := range []string{
 		`OFFICIAL_REPO="mikkelchokolate/Veil"`,
 		`REPO="${OFFICIAL_REPO}"`,
@@ -74,7 +74,7 @@ func TestCurlInstallScriptHidesLegacyStackAndPortOptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	for _, unwanted := range []string{`PORT="443"`, `STACK=`, "default 443", "preferred shared TCP/UDP port", "Shared proxy port passed to veil install", "--port PORT", "--stack STACK", `--stack "${STACK}"`} {
 		if strings.Contains(script, unwanted) {
 			t.Fatalf("install.sh should not expose legacy stack/port option %q:\n%s", unwanted, script)
@@ -90,7 +90,7 @@ func TestCurlInstallScriptNeverPipesIntoSudo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	if strings.Contains(script, "| sudo sh") || strings.Contains(script, "| sudo bash") {
 		t.Fatalf("unprivileged bootstrap must never pipe remote bytes into sudo:\n%s", script)
 	}
@@ -104,7 +104,7 @@ func TestCurlInstallScriptRunsInteractiveInstallFromTTY(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	for _, want := range []string{"run_veil_install()", "< /dev/tty", "run_veil_install"} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh should run interactive veil install from /dev/tty when launched through curl pipe; missing %q:\n%s", want, script)
@@ -117,7 +117,7 @@ func TestCurlInstallScriptDryRunDoesNotForceInteractivePrompt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	if strings.Contains(script, `else args+=(--interactive); fi`) {
 		t.Fatalf("install.sh should not pass --interactive when --dry-run is set:\n%s", script)
 	}
@@ -131,7 +131,7 @@ func TestCurlInstallScriptDoesNotForcePanelAccessInInteractiveMode(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	if strings.Contains(script, `PANEL_ACCESS="local"`) || strings.Contains(script, `args=(--profile "${PROFILE}" --panel-access "${PANEL_ACCESS}")`) {
 		t.Fatalf("install.sh should let interactive veil install ask for panel access mode by default:\n%s", script)
 	}
@@ -147,7 +147,7 @@ func TestCurlInstallScriptResolvesRunBinaryAfterInstallDirFlag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	verifyAt := strings.LastIndex(script, "verify_installer_bytes")
 	runAt := strings.Index(script, `RUN_BIN="${INSTALL_DIR}/veil"`)
 	if verifyAt < 0 || runAt < 0 || runAt < verifyAt {
@@ -160,7 +160,7 @@ func TestCurlInstallScriptDryRunDoesNotExecTempBinaryBeforeCleanup(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	for _, want := range []string{`if [[ -n "${DRY_RUN}" ]]; then`, `"${RUN_BIN}" install "${args[@]}"`, `return $?`} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh dry-run should run temp binary without exec so cleanup trap can run; missing %q:\n%s", want, script)
@@ -173,7 +173,7 @@ func TestCurlInstallScriptDryRunUsesTempBinaryWithoutInstalling(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	for _, want := range []string{`RUN_BIN="${tmpdir}/veil"`, `if [[ -n "${DRY_RUN}" ]]; then`, `RUN_BIN="${INSTALL_DIR}/veil"`, `run_veil_install`} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("install.sh dry-run should execute downloaded temp binary without installing; missing %q:\n%s", want, script)
@@ -192,7 +192,7 @@ func TestCurlInstallScriptRequiresRootForPanelServiceInstall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	if strings.Contains(script, `&& "${INSTALL_DIR}" == "/usr/local/bin"`) {
 		t.Fatalf("install.sh should require root for systemd Panel install even with custom install-dir:\n%s", script)
 	}
@@ -208,7 +208,7 @@ func TestPrivilegedInstallerForwardsLeIPCertFalse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	for _, want := range []string{
 		"--le-ip-cert=*)",
 		"--no-le-ip-cert",
@@ -289,20 +289,128 @@ func TestUninstallScriptFailsClosedWhenBinaryMissingButStateRemains(t *testing.T
 		t.Fatalf("leftover uninstall without --yes must not claim success:\n%s", out)
 	}
 
-	emptyRoot := t.TempDir()
+	// Issue #755: execute the real removal path — a dry-run/exit-code gate
+	// cannot prove leftovers are deleted. VEIL_UNINSTALL_ALLOW_NONROOT keeps
+	// the fixture runnable without root; every planted artifact must be gone.
+	for _, dir := range []string{
+		filepath.Join(systemdDir, "multi-user.target.wants"),
+		filepath.Join(systemdDir, "sockets.target.wants"),
+		filepath.Join(systemdDir, "timers.target.wants"),
+		filepath.Join(systemdDir, "veil.service.d"),
+		filepath.Join(root, "vendor", "multi-user.target.wants"),
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plant := func(path string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte("leftover"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	leftovers := []string{
+		filepath.Join(systemdDir, "veil.service"),
+		filepath.Join(systemdDir, "veil-helper.socket"),
+		filepath.Join(systemdDir, "veil-backup.timer"),
+		filepath.Join(systemdDir, "veil.service.d", "10-veil-install.conf"),
+		filepath.Join(systemdDir, "multi-user.target.wants", "veil.service"),
+		filepath.Join(systemdDir, "multi-user.target.wants", "veil-hysteria2@hy2.service"),
+		filepath.Join(systemdDir, "multi-user.target.wants", "veil-caddy@legacy.service"),
+		filepath.Join(systemdDir, "sockets.target.wants", "veil-helper.socket"),
+		filepath.Join(systemdDir, "timers.target.wants", "veil-backup.timer"),
+		filepath.Join(root, "vendor", "veil.service"),
+		filepath.Join(root, "vendor", "multi-user.target.wants", "veil.service"),
+		filepath.Join(root, "sysctl.conf"),
+	}
+	for _, path := range leftovers {
+		plant(path)
+	}
+
 	cmd := exec.Command("bash", "../../scripts/uninstall.sh",
+		"--install-dir", installDir,
+		"--etc-dir", etcDir,
+		"--var-dir", varDir,
+		"--systemd-dir", systemdDir,
+		"--yes",
+	)
+	cmd.Env = append(os.Environ(),
+		"VEIL_UNINSTALL_ALLOW_NONROOT=1",
+		"VEIL_VENDOR_SYSTEMD_DIRS="+filepath.Join(root, "vendor"),
+		"VEIL_SYSCTL_CONF="+filepath.Join(root, "sysctl.conf"),
+		"VEIL_CADDY_STATE_DIR="+filepath.Join(root, "caddy-state"),
+		"VEIL_MITA_STATE_DIR="+filepath.Join(root, "mita-state"),
+	)
+	outBytes, err := cmd.CombinedOutput()
+	out = string(outBytes)
+	if err != nil {
+		t.Fatalf("leftover uninstall with --yes failed: %v\n%s", err, out)
+	}
+	for _, path := range leftovers {
+		if _, statErr := os.Lstat(path); !os.IsNotExist(statErr) {
+			t.Fatalf("leftover cleanup did not remove %s:\n%s", path, out)
+		}
+	}
+	// The drop-in DIR must be gone, not just its contents.
+	if _, statErr := os.Lstat(filepath.Join(systemdDir, "veil.service.d")); !os.IsNotExist(statErr) {
+		t.Fatalf("leftover cleanup did not remove drop-in dir:\n%s", out)
+	}
+	if _, statErr := os.Lstat(etcDir); !os.IsNotExist(statErr) {
+		t.Fatalf("leftover cleanup did not remove %s:\n%s", etcDir, out)
+	}
+
+	// Issue #788: each new wants glob alone must mark the host dirty — a host
+	// with ONLY a helper-socket link or backup-timer link is still leftover.
+	for _, link := range []struct{ rel string }{
+		{filepath.Join("sockets.target.wants", "veil-helper.socket")},
+		{filepath.Join("timers.target.wants", "veil-backup.timer")},
+		{filepath.Join("multi-user.target.wants", "veil.service")},
+		{filepath.Join("multi-user.target.wants", "veil-olcrtc@room.service")},
+	} {
+		wantsRoot := t.TempDir()
+		wantsDir := filepath.Join(wantsRoot, "systemd")
+		if err := os.MkdirAll(filepath.Join(wantsDir, filepath.Dir(link.rel)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(wantsDir, link.rel), []byte("link"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		detect := exec.Command("bash", "../../scripts/uninstall.sh",
+			"--install-dir", filepath.Join(wantsRoot, "bin"),
+			"--etc-dir", filepath.Join(wantsRoot, "etc"),
+			"--var-dir", filepath.Join(wantsRoot, "var"),
+			"--systemd-dir", wantsDir,
+			"--dry-run",
+		)
+		detect.Env = append(os.Environ(),
+			"VEIL_VENDOR_SYSTEMD_DIRS="+filepath.Join(wantsRoot, "vendor"),
+			"VEIL_SYSCTL_CONF="+filepath.Join(wantsRoot, "sysctl.conf"),
+			"VEIL_CADDY_STATE_DIR="+filepath.Join(wantsRoot, "caddy-state"),
+			"VEIL_MITA_STATE_DIR="+filepath.Join(wantsRoot, "mita-state"),
+		)
+		detectOut, detectErr := detect.CombinedOutput()
+		if detectErr != nil {
+			t.Fatalf("wants-link detection dry-run failed for %s: %v\n%s", link.rel, detectErr, detectOut)
+		}
+		if strings.Contains(string(detectOut), "Nothing to uninstall") {
+			t.Fatalf("lone wants link %s was not detected as leftover state:\n%s", link.rel, detectOut)
+		}
+	}
+
+	emptyRoot := t.TempDir()
+	emptyCmd := exec.Command("bash", "../../scripts/uninstall.sh",
 		"--install-dir", filepath.Join(emptyRoot, "bin"),
 		"--etc-dir", filepath.Join(emptyRoot, "etc"),
 		"--var-dir", filepath.Join(emptyRoot, "var"),
 		"--systemd-dir", filepath.Join(emptyRoot, "systemd"),
 		"--dry-run",
 	)
-	outBytes, err := cmd.CombinedOutput()
+	emptyOut, err := emptyCmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("empty uninstall dry-run failed: %v\n%s", err, outBytes)
+		t.Fatalf("empty uninstall dry-run failed: %v\n%s", err, emptyOut)
 	}
-	if !strings.Contains(string(outBytes), "Nothing to uninstall") {
-		t.Fatalf("empty host should still report nothing to uninstall:\n%s", outBytes)
+	if !strings.Contains(string(emptyOut), "Nothing to uninstall") {
+		t.Fatalf("empty host should still report nothing to uninstall:\n%s", emptyOut)
 	}
 }
 
@@ -311,7 +419,7 @@ func TestCurlUninstallScriptSupportsSudoAndCustomPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	for _, want := range []string{
 		"| sudo bash",
 		`ETC_DIR="${VEIL_ETC_DIR:-/etc/veil}"`,
@@ -333,11 +441,13 @@ func TestCurlUninstallScriptDryRunDoesNotRequireRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	if strings.Contains(script, `if [[ "${EUID}" -ne 0 ]]; then`) {
 		t.Fatalf("uninstall.sh should not require root for --dry-run:\n%s", script)
 	}
-	if !strings.Contains(script, `if [[ "${EUID}" -ne 0 && -z "${DRY_RUN}" ]]; then`) {
+	if !strings.Contains(script, `"${EUID}" -ne 0 && -z "${DRY_RUN}"`) {
+		// The guard must exempt --dry-run (and the explicit test-only nonroot
+		// escape); a bare `EUID -ne 0` check would gate dry-run too.
 		t.Fatalf("uninstall.sh root check should be skipped for dry-run:\n%s", script)
 	}
 }
@@ -347,7 +457,7 @@ func TestReleaseWorkflowBuildsChecksummedLinuxArchives(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
+	workflow := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	for _, want := range []string{
 		"on:",
 		"tags:",
@@ -375,10 +485,12 @@ func TestReleaseWorkflowEnforcesQualityGatesBeforePublish(t *testing.T) {
 		t.Fatal(err)
 	}
 	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
+	// #668: the release gate runs the same shared Required scripts as
+	// ci.yml — a hand-rolled subset is not the ship gate. Every marker is
+	// asserted inside the quality job's own block: a script path in a
+	// sibling job or a comment is not evidence the gate runs (#762).
+	quality := stripHashComments(t, workflowJobBlock(t, workflow, "quality"))
 	for _, want := range []string{
-		"quality:",
-		// #668: the release gate runs the same shared Required scripts as
-		// ci.yml — a hand-rolled subset is not the ship gate.
 		"scripts/ci/frontend.sh",
 		"scripts/ci/test.sh",
 		"scripts/ci/lint.sh",
@@ -386,7 +498,6 @@ func TestReleaseWorkflowEnforcesQualityGatesBeforePublish(t *testing.T) {
 		"scripts/ci/multi-process.sh",
 		"scripts/ci/sigkill.sh",
 		"scripts/ci/filesystem-faults.sh",
-		"scripts/ci/install-acceptance.sh",
 		"go vet ./...",
 		"make build",
 		"gofmt -l",
@@ -400,12 +511,17 @@ func TestReleaseWorkflowEnforcesQualityGatesBeforePublish(t *testing.T) {
 		"bash scripts/uninstall.sh --help >/dev/null",
 		"bash scripts/install-main.sh --help >/dev/null",
 		"git diff --check",
-		"needs: [quality, release, docker-publish]",
 	} {
-		if !strings.Contains(workflow, want) {
-			t.Fatalf("release workflow missing required release gate %q:\n%s", want, workflow)
+		if !strings.Contains(quality, want) {
+			t.Fatalf("release quality job missing required release gate %q", want)
 		}
 	}
+	installAcceptance := stripHashComments(t, workflowJobBlock(t, workflow, "install-acceptance"))
+	if !strings.Contains(installAcceptance, "scripts/ci/install-acceptance.sh") {
+		t.Fatal("release install-acceptance job does not invoke the shared install-acceptance script")
+	}
+	// The publish job's dependency chain is asserted structurally in
+	// TestReleaseWorkflowRequiresBrowserAndPackageGates (parsed YAML needs).
 }
 
 func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
@@ -417,9 +533,9 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return strings.ReplaceAll(string(body), "\r\n", "\n")
+		return stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	}
-	workflow := read("../../.github/workflows/ci.yml")
+	workflow := stripHashComments(t, read("../../.github/workflows/ci.yml"))
 	for _, want := range []string{
 		"scripts/ci/frontend.sh",
 		"scripts/ci/test.sh",
@@ -452,7 +568,7 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 		}
 	}
 
-	testScript := read("../../scripts/ci/test.sh")
+	testScript := stripHashComments(t, read("../../scripts/ci/test.sh"))
 	for _, want := range []string{
 		"go test ./sdk/go -race -count=1",
 		"go list ./... | grep -v '/sdk/go$'",
@@ -470,13 +586,13 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 		}
 	}
 
-	frontendScript := read("../../scripts/ci/frontend.sh")
+	frontendScript := stripHashComments(t, read("../../scripts/ci/frontend.sh"))
 	for _, want := range []string{"frontend_dist_artifact_dir", "source.sha", "git -C \"${CI_ROOT}\" rev-parse HEAD"} {
 		if !strings.Contains(frontendScript, want) {
 			t.Fatalf("scripts/ci/frontend.sh missing source-keyed artifact gate %q", want)
 		}
 	}
-	prepareFrontendScript := read("../../scripts/ci/prepare-frontend-dist.sh")
+	prepareFrontendScript := stripHashComments(t, read("../../scripts/ci/prepare-frontend-dist.sh"))
 	for _, want := range []string{"CI_FRONTEND_DIST_ARTIFACT_DIR", "git rev-parse HEAD", "source.sha", "frontend-install-build"} {
 		if !strings.Contains(prepareFrontendScript, want) {
 			t.Fatalf("prepare-frontend-dist.sh missing artifact gate %q", want)
@@ -486,7 +602,7 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 	// The live API shard path is test-orchestrator.py (bounded LPT scheduler)
 	// verified by verify-test-shards.py — the retired api-shards.sh was a dead
 	// comment contract (issue #429).
-	orchestrator := read("../../scripts/ci/test-orchestrator.py")
+	orchestrator := stripHashComments(t, read("../../scripts/ci/test-orchestrator.py"))
 	for _, want := range []string{
 		"--api-shards",
 		"--serial-roots",
@@ -500,7 +616,7 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 		}
 	}
 
-	lintScript := read("../../scripts/ci/lint.sh")
+	lintScript := stripHashComments(t, read("../../scripts/ci/lint.sh"))
 	for _, want := range []string{
 		"staticcheck",
 		"govulncheck ./...",
@@ -517,7 +633,7 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 		}
 	}
 
-	fastScript := read("../../scripts/ci/fast.sh")
+	fastScript := stripHashComments(t, read("../../scripts/ci/fast.sh"))
 	if !strings.Contains(fastScript, "git diff --check") {
 		t.Fatalf("scripts/ci/fast.sh missing required gate %q", "git diff --check")
 	}
@@ -529,17 +645,37 @@ func TestReadmeDocumentsBackupRollbackAuditWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	readme := strings.ReplaceAll(string(body), "\r\n", "\n")
+
+	// The runnable commands must appear inside fenced code blocks — prose
+	// mentions of "rollback restore" do not prove an operator-run example
+	// exists.
+	var fenced strings.Builder
+	inFence := false
+	for _, line := range strings.Split(readme, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			fenced.WriteString(line + "\n")
+		}
+	}
+	examples := fenced.String()
 	for _, want := range []string{
-		"repair --backup-dir",
-		"rollback list --backup-dir",
-		"rollback restore",
-		"rollback cleanup",
+		"veil repair --backup-dir",
+		"veil rollback list --backup-dir",
+		"veil rollback restore",
+		"veil rollback cleanup",
 		"--audit-log",
-		"audit",
-		"JSONL",
-		"dry-run",
-		"writable",
 	} {
+		if !strings.Contains(examples, want) {
+			t.Fatalf("README.md has no fenced example running %q:\n%s", want, examples)
+		}
+	}
+
+	// The surrounding prose must still explain the audit format and the
+	// destructive/preview split.
+	for _, want := range []string{"JSONL", "dry-run", "writable"} {
 		if !strings.Contains(readme, want) {
 			t.Fatalf("README.md missing %q:\n%s", want, readme)
 		}
@@ -551,7 +687,7 @@ func TestCurlInstallScriptSkipsWhenBinaryExists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	found := false
 	for _, want := range []string{
 		"-f \"${INSTALL_DIR}/veil\"",
@@ -574,7 +710,7 @@ func TestCurlInstallScriptForceReinstalls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	for _, want := range []string{
 		"--force",
 		"FORCE",
@@ -590,7 +726,7 @@ func TestCurlInstallScriptUpgradesExistingOlderBinary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	for _, want := range []string{
 		"installed_veil_version()",
 		"resolve_target_version()",
@@ -612,7 +748,7 @@ func TestCurlInstallScriptChecksumRequiresExactlyOneMatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	for _, want := range []string{
 		`count=$(awk -v asset="${asset}" '($2 == asset || $2 == "./" asset) { count++ } END { print count+0 }' checksums.txt)`,
 		`if [[ "${count}" -ne 1 ]]; then`,
@@ -630,7 +766,7 @@ func TestBootstrapChecksumAcceptsCanonicalAndDotSlashAssetNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	for _, want := range []string{
 		`count="$(awk -v asset="$asset" '($2 == asset || $2 == "./" asset) { count++ } END { print count+0 }' checksums.txt)"`,
 		`awk -v asset="$asset" '($2 == asset || $2 == "./" asset) { print }' checksums.txt | sha256sum -c - >/dev/null`,

@@ -711,6 +711,15 @@ BEGIN SELECT RAISE(ABORT,'invalid expiration enforcement target'); END;
 ALTER TABLE subscription_tokens ADD COLUMN token_ciphertext TEXT NOT NULL DEFAULT '';
 `,
 	},
+	{
+		version: 28,
+		name:    "quota_enforcement_reset_target_fields",
+		sql: `
+ALTER TABLE quota_enforcement ADD COLUMN target_reset_period INTEGER NOT NULL DEFAULT 0 CHECK(target_reset_period IN (0,1));
+ALTER TABLE quota_enforcement ADD COLUMN target_next_reset_at INTEGER;
+ALTER TABLE quota_enforcement ADD COLUMN target_period_start INTEGER NOT NULL DEFAULT 0;
+`,
+	},
 }
 
 func migrationChecksum(m migration) string {

@@ -52,7 +52,8 @@ func TestRenderCaddyJSONEnrollsHysteria2OnlyDomainViaAutomate(t *testing.T) {
 }
 
 // TestRenderCaddyJSONPanelAndNaiveDomainsNotAutomated ensures host-matched
-// domains are not redundantly enrolled (audit #308).
+// domains — both the panel domain and a Naive inbound domain — are not
+// redundantly enrolled through certificates.automate (audit #308, #847).
 func TestRenderCaddyJSONPanelAndNaiveDomainsNotAutomated(t *testing.T) {
 	plan := caddyassembly.CaddyRenderPlan{
 		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{},
@@ -61,6 +62,11 @@ func TestRenderCaddyJSONPanelAndNaiveDomainsNotAutomated(t *testing.T) {
 				Domain: "panel.example.com",
 				Email:  "a@example.com",
 				Owners: caddyassembly.CaddyDomainOwners{Panel: true},
+			},
+			"naive.example.com": {
+				Domain: "naive.example.com",
+				Email:  "a@example.com",
+				Owners: caddyassembly.CaddyDomainOwners{NaiveInboundNames: []string{"n1"}},
 			},
 		},
 	}

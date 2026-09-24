@@ -29,8 +29,13 @@ func TestNewRunnerClosesSupersededRecoveryPendingJob(t *testing.T) {
 	if err := jobs.Create(job); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO runtime_publications(job_id, revision, generation, snapshot_sha256, operations_json, published_at)
-VALUES(?,?,?,?,?,?)`, job.ID, first, 1, "", "[]", time.Now().Unix()); err != nil {
+	// A mid-flight phase keeps the receipt unresolved: startup recovery
+	// transfers the lease and re-marks the job recovery_pending, which is the
+	// state the supersede check closes as SUPERSEDED. (The column default
+	// 'published' would instead finalize the job as succeeded — a different
+	// contract than the one under test.)
+	if _, err := db.Exec(`INSERT INTO runtime_publications(job_id, revision, generation, snapshot_sha256, operations_json, published_at, phase)
+VALUES(?,?,?,?,?,?,?)`, job.ID, first, 1, "", "[]", time.Now().Unix(), "services_planned"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -52,8 +57,14 @@ VALUES(?,?,?,?,?,?)`, job.ID, first, 1, "", "[]", time.Now().Unix()); err != nil
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !persisted.Terminal() {
-		t.Fatalf("job still active: %+v", persisted)
+	if persisted.Status != StatusFailed {
+		t.Fatalf("superseded recovery job status=%q, want %q: %+v", persisted.Status, StatusFailed, persisted)
+	}
+	if persisted.ErrorCode != "SUPERSEDED" {
+		t.Fatalf("superseded recovery job errorCode=%q, want SUPERSEDED: %+v", persisted.ErrorCode, persisted)
+	}
+	if persisted.ErrorMessage == "" {
+		t.Fatalf("superseded recovery job has no diagnostic message: %+v", persisted)
 	}
 }
 

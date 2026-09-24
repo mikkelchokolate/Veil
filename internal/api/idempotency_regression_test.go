@@ -36,6 +36,13 @@ func TestIdempotencyKeyReplaysWithoutRepeatingMutation(t *testing.T) {
 	if conflict.Code != http.StatusConflict || calls.Load() != 1 {
 		t.Fatalf("conflict status=%d calls=%d body=%s", conflict.Code, calls.Load(), conflict.Body.String())
 	}
+	if conflict.Header().Get("Idempotency-Replayed") == "true" {
+		t.Fatalf("conflict must not be marked replayed: %v", conflict.Header())
+	}
+	if !strings.Contains(conflict.Body.String(), `"error"`) ||
+		!strings.Contains(conflict.Body.String(), "Idempotency-Key") {
+		t.Fatalf("conflict response missing error envelope: %s", conflict.Body.String())
+	}
 }
 
 func TestIdempotencyKeyCoalescesConcurrentMutation(t *testing.T) {
@@ -72,6 +79,17 @@ func TestIdempotencyKeyCoalescesConcurrentMutation(t *testing.T) {
 	wg.Wait()
 	if calls.Load() != 1 || responses[0].Code != http.StatusCreated || responses[1].Code != http.StatusCreated || responses[0].Body.String() != responses[1].Body.String() {
 		t.Fatalf("calls=%d responses=%v/%v", calls.Load(), responses[0], responses[1])
+	}
+	// Coalescing is observable: the loser waited for the winner's outcome and
+	// replays it — exactly one response carries the replay marker.
+	replays := 0
+	for _, response := range responses {
+		if response.Header().Get("Idempotency-Replayed") == "true" {
+			replays++
+		}
+	}
+	if replays != 1 {
+		t.Fatalf("coalesced replay markers=%d want=1 responses=%v/%v", replays, responses[0].Header(), responses[1].Header())
 	}
 }
 

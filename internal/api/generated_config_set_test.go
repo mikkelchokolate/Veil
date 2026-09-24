@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestGeneratedConfigSetAllowsMultipleEnabledInboundsPerProtocol(t *testing.T) {
+func TestGeneratedConfigSetConsolidatesMultipleEnabledNaiveproxyInbounds(t *testing.T) {
 	applyRoot := t.TempDir()
 	configs, err := BuildGeneratedConfigSet(GeneratedConfigInput{
 		ApplyRoot: applyRoot,
@@ -32,17 +32,16 @@ func TestGeneratedConfigSetAllowsMultipleEnabledInboundsPerProtocol(t *testing.T
 	}
 	// Discarding the map greens a set that dropped the consolidated caddy
 	// config or either inbound's credential — lock the artifact and both
-	// passwords (#857).
-	caddy, ok := configs[filepath.Join(applyRoot, "generated", "caddy", "config.json")]
+	// passwords (#857). Both inbounds consolidate into the single Caddy JSON
+	// artifact: it carries BOTH listeners.
+	caddyPath := filepath.Join(applyRoot, "generated", "caddy", "config.json")
+	caddy, ok := configs[caddyPath]
 	if !ok {
-		keys := make([]string, 0, len(configs))
-		for k := range configs {
-			keys = append(keys, k)
-		}
-		t.Fatalf("config set missing consolidated caddy config.json, got keys %v", keys)
+		t.Fatalf("consolidated caddy config %s missing from config map: %v", caddyPath, generatedConfigKeys(configs))
 	}
 	for _, want := range []string{
 		"forward_proxy",
+		":443", ":8443",
 		forwardProxyJSONCredential("veil", "a"),
 		forwardProxyJSONCredential("veil", "b"),
 	} {
@@ -50,6 +49,22 @@ func TestGeneratedConfigSetAllowsMultipleEnabledInboundsPerProtocol(t *testing.T
 			t.Fatalf("Caddy JSON missing %q:\n%s", want, caddy)
 		}
 	}
+	// And no per-inbound naiveproxy artifacts exist — naiveproxy has no own
+	// config file, it lives inside the Caddy JSON.
+	for path := range configs {
+		if strings.Contains(path, "naive") && path != caddyPath {
+			t.Fatalf("unexpected per-inbound naiveproxy artifact %s; config map keys: %v", path, generatedConfigKeys(configs))
+		}
+	}
+}
+
+func generatedConfigKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+
 }
 
 func TestGeneratedConfigSetUsesClientProfiles(t *testing.T) {

@@ -103,15 +103,33 @@ func TestSubscriptionRateLimitIgnoresUntrustedForwardedFor(t *testing.T) {
 }
 
 func TestSubscriptionRateLimitDistinctForwardedClientsDoNotShareBucket(t *testing.T) {
-	router, _ := newSubscriptionRouterWithTrustedProxies(t)
-	for i := 0; i < 8; i++ {
+	router, state := newSubscriptionRouterWithTrustedProxies(t)
+	now := time.Now()
+	// Exhaust one forwarded client's source bucket to prove the limiter can
+	// trip on this path — a shared bucket would 429 for everyone below.
+	for i := 0; i < 300; i++ {
+		if !state.subscriptionLimiter.allow(fmt.Sprintf("prefill-%d", i), "198.51.100.1", now) {
+			t.Fatalf("prefill %d rejected", i)
+		}
+	}
+	req := httptest.NewRequest(http.MethodGet, "/s/dummy-token", nil)
+	req.RemoteAddr = "127.0.0.1:40000"
+	req.Header.Set("X-Forwarded-For", "198.51.100.1")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("saturated forwarded client was not rate limited: %d %s", w.Code, w.Body.String())
+	}
+	// Distinct forwarded clients keep independent source budgets and reach
+	// the token lookup (404 for the unknown token), never 429.
+	for i := 1; i < 9; i++ {
 		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/s/dummy-token-%d", i), nil)
 		req.RemoteAddr = "127.0.0.1:40000"
 		req.Header.Set("X-Forwarded-For", fmt.Sprintf("198.51.100.%d", i+1))
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
-		if w.Code == http.StatusTooManyRequests {
-			t.Fatalf("independent forwarded client %d was rate limited", i)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("independent forwarded client %d: expected 404 past the limiter, got %d %s", i, w.Code, w.Body.String())
 		}
 	}
 }
@@ -144,5 +162,19 @@ func TestSubscriptionRateLimitIPv6Peer(t *testing.T) {
 	req.RemoteAddr = "[2001:db8::1]:9999"
 	if got := clientIP(req); got != "2001:db8::1" {
 		t.Fatalf("clientIP = %q", got)
+	}
+	// Exhaust the IPv6 source bucket (300/minute) with distinct tokens so
+	// only the source limit can trip — the test name must prove the bucket
+	// is actually enforced, not merely that parsing works.
+	for i := 0; i < 299; i++ {
+		if !limiter.allow(fmt.Sprintf("token-%d", i), "[2001:db8::1]:9999", now) {
+			t.Fatalf("IPv6 source request %d rejected before the limit", i)
+		}
+	}
+	if limiter.allow("token-over", "[2001:db8::1]:8888", now) {
+		t.Fatal("IPv6 source bucket did not trip at the limit")
+	}
+	if !limiter.allow("token-over", "[2001:db8::2]:8888", now) {
+		t.Fatal("distinct IPv6 peer shared the saturated bucket")
 	}
 }
