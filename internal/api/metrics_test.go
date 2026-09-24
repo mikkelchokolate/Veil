@@ -89,6 +89,14 @@ func TestMetricsEndpointRequiresAuthWhenPolicyEnabled(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected authenticated metrics to return 200, got %d: %s", w.Code, w.Body.String())
 	}
+	// 200 alone greens an empty body — lock the Prometheus exposition
+	// contract (content type + a real series header) (#829).
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+		t.Fatalf("metrics Content-Type = %q, want text/plain exposition", ct)
+	}
+	if !strings.Contains(w.Body.String(), "# HELP veil_") {
+		t.Fatalf("authenticated metrics body has no veil_ series: %q", w.Body.String())
+	}
 }
 
 func TestMetricsPathLabelsUseTemplatesNotRawPaths(t *testing.T) {

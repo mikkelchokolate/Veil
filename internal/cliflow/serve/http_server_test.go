@@ -3,6 +3,7 @@ package serve
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -95,6 +96,18 @@ func TestServeHTTPServerLoadsAuthWithoutHelperSocket(t *testing.T) {
 	}
 	if response.Code != http.StatusOK {
 		t.Fatalf("auth status=%d body=%s", response.Code, response.Body.String())
+	}
+	// 200 alone greens an empty/wrong payload — the auth status contract is a
+	// JSON object carrying an authenticated flag and an authMethod (#875).
+	var body map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("auth status body is not JSON: %v (%q)", err, response.Body.String())
+	}
+	if _, ok := body["authenticated"].(bool); !ok {
+		t.Fatalf("auth status missing boolean authenticated field: %v", body)
+	}
+	if method, _ := body["authMethod"].(string); method == "" {
+		t.Fatalf("auth status missing authMethod: %v", body)
 	}
 }
 
@@ -251,6 +264,24 @@ func TestServeHTTPServerBuildsPlainServer(t *testing.T) {
 }
 
 func TestServeHTTPServerUsesDefaultHelperSocket(t *testing.T) {
+	opts := HTTPServerOptions{
+		Listen:      "127.0.0.1:2096",
+		Version:     "test",
+		AuthToken:   "token",
+		StatePath:   filepath.Join(t.TempDir(), "state.json"),
+		ApplyRoot:   filepath.Join(t.TempDir(), "apply"),
+		KeyPath:     filepath.Join(t.TempDir(), "state.key"),
+		WebBasePath: "/",
+	}
+	// The name claims the default helper socket — lock the path Build actually
+	// wires, not just that a server object came back (#875).
+	if got := NewHTTPServer(opts).resolvedHelperSocket(); got != privileged.DefaultSocketPath {
+		t.Fatalf("resolved helper socket = %q, want %q", got, privileged.DefaultSocketPath)
+	}
+	opts.HelperSocket = "/custom/helper.sock"
+	if got := NewHTTPServer(opts).resolvedHelperSocket(); got != "/custom/helper.sock" {
+		t.Fatalf("explicit helper socket overridden: %q", got)
+	}
 	server, _ := NewHTTPServer(HTTPServerOptions{
 		Listen:      "127.0.0.1:2096",
 		Version:     "test",

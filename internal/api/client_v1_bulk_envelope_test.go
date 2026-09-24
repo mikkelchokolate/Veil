@@ -15,13 +15,9 @@ import (
 func TestV1BulkReturnsRevisionAndSkipped(t *testing.T) {
 	r, _ := newApplyTrackedRouter(t)
 
-	inboundBody := strings.NewReader(`{"name":"hy2","protocol":"hysteria2","transport":"udp","port":18443,"enabled":true}`)
-	iw := httptest.NewRecorder()
-	ireq := httptest.NewRequest(http.MethodPost, "/api/inbounds", inboundBody)
-	ireq.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(iw, ireq)
-
-	id := createV1ClientWithBinding(t, r, "bulk-c", "hy2", "p")
+	// An unbound client keeps the apply trivially fast and deterministic: the
+	// envelope contract under test does not depend on any inbound provider.
+	id := createV1Client(t, r, "bulk-c")
 
 	body := strings.NewReader(`{"action":"reset_traffic","clientIds":["` + id + `","missing-id"]}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/clients/bulk", body)
@@ -35,9 +31,14 @@ func TestV1BulkReturnsRevisionAndSkipped(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	// mutation envelope present
+	// mutation envelope present — ClientBulkResponse is allOf MutationOutcome,
+	// so success is required and reflects the apply outcome, not per-item
+	// failures (#772).
 	if _, ok := resp["revision"]; !ok {
 		t.Errorf("bulk missing revision envelope: %v", keysOf(resp))
+	}
+	if resp["success"] != true {
+		t.Errorf("bulk success = %v, want true (apply outcome, not per-item): %v", resp["success"], resp)
 	}
 	if _, ok := resp["applyJob"]; !ok {
 		t.Errorf("bulk missing applyJob: %v", keysOf(resp))

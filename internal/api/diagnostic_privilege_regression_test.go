@@ -1,8 +1,10 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -25,6 +27,14 @@ func TestPublicMetricsAlwaysRequireAuthentication(t *testing.T) {
 	router.ServeHTTP(authenticated, authenticatedRequest)
 	if authenticated.Code != http.StatusOK {
 		t.Fatalf("authenticated metrics status=%d body=%s", authenticated.Code, authenticated.Body.String())
+	}
+	// 200 alone greens an empty body — lock the Prometheus exposition
+	// contract (#829).
+	if ct := authenticated.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+		t.Fatalf("metrics Content-Type = %q, want text/plain exposition", ct)
+	}
+	if !strings.Contains(authenticated.Body.String(), "# HELP veil_") {
+		t.Fatalf("authenticated metrics body has no veil_ series: %q", authenticated.Body.String())
 	}
 }
 
@@ -62,6 +72,16 @@ func TestProductionDiagnosticsFailClosedWithoutRootHelper(t *testing.T) {
 			if response.Code != http.StatusServiceUnavailable {
 				t.Fatalf("diagnostic without helper status=%d want=503 body=%s", response.Code, response.Body.String())
 			}
+			// The fail-closed gate must answer with the stable error envelope,
+			// not a bare 503 or an unrelated payload (#829).
+			var body map[string]any
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatalf("503 body is not JSON: %v (%q)", err, response.Body.String())
+			}
+			errObj, _ := body["error"].(map[string]any)
+			if errObj["code"] != "dependency_unavailable" {
+				t.Fatalf("diagnostic 503 error.code = %v, want dependency_unavailable: %v", errObj["code"], body)
+			}
 		})
 	}
 }
@@ -80,5 +100,16 @@ func TestProductionSystemStatsDoNotRequireRootHelper(t *testing.T) {
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("system stats status=%d want=200 body=%s", response.Code, response.Body.String())
+	}
+	// Lock the payload contract: /api/system must carry the telemetry fields,
+	// not an empty object (#829).
+	var stats map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &stats); err != nil {
+		t.Fatalf("system stats body is not JSON: %v (%q)", err, response.Body.String())
+	}
+	for _, field := range []string{"cpuPercent", "memoryTotalMB", "uptimeSeconds"} {
+		if _, ok := stats[field]; !ok {
+			t.Fatalf("system stats missing %q: %v", field, stats)
+		}
 	}
 }
