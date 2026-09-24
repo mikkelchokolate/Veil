@@ -12,8 +12,13 @@ func TestBuildClientLinksBuildsProtocolLinksOutsideHTTPAdapter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildClientLinks: %v", err)
 	}
-	if response.Count != 1 || len(response.Links) != 1 || !strings.HasPrefix(response.Links[0].URI, "naive+https://") {
+	if response.Count != 1 || len(response.Links) != 1 {
 		t.Fatalf("response = %+v", response)
+	}
+	// Lock the whole URI — scheme, credential userinfo, host, and the omitted
+	// default port — so a mangled link cannot pass on the prefix alone (#892).
+	if want := "naive+https://veil:secret@vpn.example.com"; response.Links[0].URI != want {
+		t.Fatalf("link URI = %q, want %q", response.Links[0].URI, want)
 	}
 }
 

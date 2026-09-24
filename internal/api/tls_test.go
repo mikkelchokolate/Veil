@@ -13,9 +13,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/caddycert"
 	veilruntime "github.com/mikkelchokolate/Veil/internal/runtime"
 )
 
@@ -36,7 +38,7 @@ func TestTLSEndpointReturnsCertInfoWhenConfigured(t *testing.T) {
 	keyPath := filepath.Join(dir, "key.pem")
 
 	// Generate a self-signed cert using openssl if available, else write a minimal PEM
-	certPEM, _ := generateSelfSignedCert()
+	certPEM, _ := generateSelfSignedCert("test.example.com")
 	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
 		t.Fatalf("write cert: %v", err)
 	}
@@ -63,19 +65,173 @@ func TestTLSEndpointReturnsCertInfoWhenConfigured(t *testing.T) {
 	if info.Path != certPath {
 		t.Errorf("expected path %s, got %s", certPath, info.Path)
 	}
+	if info.Source != "env" {
+		t.Errorf("expected source=env for VEIL_TLS_CERT, got %q", info.Source)
+	}
 	if info.DaysRemaining <= 0 {
 		t.Errorf("expected positive days remaining, got %d", info.DaysRemaining)
+	}
+	// Identity fields are part of the endpoint contract (#847): operators use
+	// them to spot the wrong certificate, not only an expired one.
+	if len(info.DNSNames) != 1 || info.DNSNames[0] != "test.example.com" {
+		t.Errorf("expected dnsNames [test.example.com], got %v", info.DNSNames)
+	}
+	if !strings.Contains(info.Subject, "test.example.com") {
+		t.Errorf("expected subject to name test.example.com, got %q", info.Subject)
+	}
+	if info.Issuer == "" {
+		t.Error("expected issuer to be reported")
+	}
+}
+
+func TestTLSEndpointReportsSANMismatchForConfiguredDomain(t *testing.T) {
+	// A still-unexpired certificate that no longer covers the served domain
+	// is drift — Valid must not be a date-only check (#905).
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "cert.pem")
+	certPEM, _ := generateSelfSignedCert("old.example.com")
+	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+	t.Setenv("VEIL_TLS_CERT", certPath)
+
+	r, reloader := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
+	state, ok := reloader.(*managementState)
+	if !ok {
+		t.Fatalf("reloader is not *managementState: %T", reloader)
+	}
+	t.Cleanup(func() { _ = state.Close() })
+	state.mu.Lock()
+	state.settings.Domain = "new.example.com"
+	state.mu.Unlock()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/tls", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var info veilruntime.TLSCertInfo
+	if err := json.NewDecoder(w.Body).Decode(&info); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if info.Valid {
+		t.Fatalf("cert without the configured domain SAN must not be valid: %+v", info)
+	}
+	if !strings.Contains(info.Error, "new.example.com") {
+		t.Fatalf("SAN mismatch error should name the expected domain, got %q", info.Error)
+	}
+}
+
+func TestTLSEndpointSurfacesCaddyManagedCertificate(t *testing.T) {
+	// panelAccess=caddy leaves VEIL_TLS_CERT unset: Caddy terminates TLS from
+	// its own ACME storage. The endpoint must surface that pair (#905).
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "panel.crt")
+	certPEM, _ := generateSelfSignedCert("panel.example.com")
+	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+	t.Setenv("VEIL_TLS_CERT", "")
+
+	var gotDomain string
+	orig := findCaddyTLSCertPair
+	findCaddyTLSCertPair = func(_, domain string) (caddycert.Pair, error) {
+		gotDomain = domain
+		return caddycert.Pair{CertPath: certPath, KeyPath: filepath.Join(dir, "panel.key")}, nil
+	}
+	t.Cleanup(func() { findCaddyTLSCertPair = orig })
+
+	r, reloader := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
+	state, ok := reloader.(*managementState)
+	if !ok {
+		t.Fatalf("reloader is not *managementState: %T", reloader)
+	}
+	t.Cleanup(func() { _ = state.Close() })
+	state.mu.Lock()
+	state.settings.PanelAccess = "caddy"
+	state.settings.PanelDomain = "panel.example.com"
+	state.settings.Domain = "vpn.example.com"
+	state.mu.Unlock()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/tls", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var info veilruntime.TLSCertInfo
+	if err := json.NewDecoder(w.Body).Decode(&info); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if gotDomain != "panel.example.com" {
+		t.Fatalf("Caddy lookup domain = %q, want panel.example.com", gotDomain)
+	}
+	if !info.Valid {
+		t.Fatalf("expected valid Caddy-managed cert, got %+v", info)
+	}
+	if info.Source != "caddy" {
+		t.Fatalf("expected source=caddy, got %q", info.Source)
+	}
+	if info.Path != certPath {
+		t.Fatalf("expected path %s, got %s", certPath, info.Path)
+	}
+	if len(info.DNSNames) != 1 || info.DNSNames[0] != "panel.example.com" {
+		t.Fatalf("expected dnsNames [panel.example.com], got %v", info.DNSNames)
+	}
+}
+
+func TestTLSEndpointReportsMissingCaddyCertificate(t *testing.T) {
+	t.Setenv("VEIL_TLS_CERT", "")
+	orig := findCaddyTLSCertPair
+	findCaddyTLSCertPair = func(_, _ string) (caddycert.Pair, error) {
+		return caddycert.Pair{}, caddycert.ErrCertificateNotFound
+	}
+	t.Cleanup(func() { findCaddyTLSCertPair = orig })
+
+	r, reloader := newTestRouter(ServerInfo{Version: "test", Mode: "dev"})
+	state, ok := reloader.(*managementState)
+	if !ok {
+		t.Fatalf("reloader is not *managementState: %T", reloader)
+	}
+	t.Cleanup(func() { _ = state.Close() })
+	state.mu.Lock()
+	state.settings.PanelAccess = "caddy"
+	state.settings.PanelDomain = "panel.example.com"
+	state.mu.Unlock()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/tls", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var info veilruntime.TLSCertInfo
+	if err := json.NewDecoder(w.Body).Decode(&info); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if info.Valid {
+		t.Fatalf("missing Caddy cert must not be valid: %+v", info)
+	}
+	if info.Source != "caddy" || !strings.Contains(info.Error, "panel.example.com") {
+		t.Fatalf("expected Caddy-source error naming the domain, got %+v", info)
 	}
 }
 
 func TestTLSEndpointReturnsErrorWhenNoCertConfigured(t *testing.T) {
+	t.Setenv("VEIL_TLS_CERT", "")
 	r, _ := newTestRouter(ServerInfo{Version: "test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/tls", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
 	var info veilruntime.TLSCertInfo
-	json.NewDecoder(w.Body).Decode(&info)
+	if err := json.NewDecoder(w.Body).Decode(&info); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
 	if info.Valid {
 		t.Error("expected invalid cert when none configured")
 	}
@@ -84,18 +240,19 @@ func TestTLSEndpointReturnsErrorWhenNoCertConfigured(t *testing.T) {
 	}
 }
 
-// generateSelfSignedCert creates a self-signed certificate valid for 365 days.
-func generateSelfSignedCert() (certPEM, keyPEM []byte) {
+// generateSelfSignedCert creates a self-signed certificate for domain valid
+// for 365 days.
+func generateSelfSignedCert(domain string) (certPEM, keyPEM []byte) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		panic(err)
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{CommonName: "test.example.com"},
+		Subject:      pkix.Name{CommonName: domain},
 		NotBefore:    time.Now().Add(-1 * time.Hour),
 		NotAfter:     time.Now().Add(365 * 24 * time.Hour),
-		DNSNames:     []string{"test.example.com"},
+		DNSNames:     []string{domain},
 	}
 	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	if err != nil {

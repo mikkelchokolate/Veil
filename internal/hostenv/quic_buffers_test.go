@@ -10,9 +10,16 @@ import (
 
 func TestQUICSysctlContentSets16MiBBuffers(t *testing.T) {
 	body := QUICSysctlContent()
+	// Match whole lines: strings.Contains would green "167772160" or a
+	// commented-out "rmem_max = 16777216" — the 16 MiB value must be exact
+	// and active (#889).
+	lines := map[string]bool{}
+	for _, line := range strings.Split(body, "\n") {
+		lines[strings.TrimSpace(line)] = true
+	}
 	for _, want := range []string{"net.core.rmem_max = 16777216", "net.core.wmem_max = 16777216"} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("missing %q in:\n%s", want, body)
+		if !lines[want] {
+			t.Fatalf("missing exact line %q in:\n%s", want, body)
 		}
 	}
 }
