@@ -116,7 +116,12 @@ run_as_veil ./dist/veil admin set --username browser-admin --password 'Browser-E
 # limit plus its workspace reserve; that does not fit every CI container.
 # --peer-unit "": this harness spawns the panel directly, not inside a
 # veil.service cgroup, so the unit-membership peer check cannot pass here.
+# The helper resolves promoted artifacts through its own VEIL_APPLY_ROOT /
+# VEIL_LIVE_ROOT (packaged veil-helper.service exports them too), so it must
+# share the :2098 panel's roots or Promote cannot find staged files.
 ${SUDO} env VEIL_BACKUP_MAX_BYTES=8388608 \
+  VEIL_STATE_PATH=/var/lib/veil/state.json VEIL_KEY_PATH=/etc/veil/state.key \
+  VEIL_APPLY_ROOT=/var/lib/veil/apply VEIL_LIVE_ROOT=/var/lib/veil/live \
   ./dist/veil helper serve --socket /run/veil/helper.sock --peer-unit "" >"${WORK}/helper.log" 2>&1 &
 PIDS+=($!)
 for _ in $(seq 1 30); do [ -S /run/veil/helper.sock ] && break; sleep 1; done
