@@ -46,8 +46,6 @@ func cancelAfterFirst() context.Context {
 	return ctx
 }
 
-func contains(s, sub string) bool { return strings.Contains(s, sub) }
-
 // seedTrafficClient creates a client+binding and records one sample directly
 // in the store.
 func seedTrafficClient(t *testing.T, r http.Handler, st *managementState, name string, up, down int64) string {
