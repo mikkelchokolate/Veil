@@ -860,7 +860,7 @@ export const PatchApiV1ClientsIdBody = zod.object({
   "enabled": zod.boolean().nullish(),
   "groupId": zod.string().nullish(),
   "quotaBytes": zod.int().min(patchApiV1ClientsIdBodyQuotaBytesMin).max(patchApiV1ClientsIdBodyQuotaBytesMax).nullish(),
-  "quotaResetPolicy": zod.enum(['never', 'daily', 'weekly', 'monthly']).nullish(),
+  "quotaResetPolicy": zod.union([zod.literal('never'),zod.literal('daily'),zod.literal('weekly'),zod.literal('monthly'),zod.literal(null)]).nullish(),
   "quotaResetAt": zod.int().nullish(),
   "expiresAt": zod.int().nullish(),
   "deviceLimit": zod.int().min(patchApiV1ClientsIdBodyDeviceLimitMin).nullish(),
