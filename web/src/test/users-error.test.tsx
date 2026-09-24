@@ -181,6 +181,32 @@ describe("UsersPage errors", () => {
 		).toBeInTheDocument();
 	});
 
+	// #757: user Delete was already gated before #702 added the session
+	// revoke gate next to it — lock the same no-request-until-confirm
+	// contract on the user row Delete.
+	it("does not DELETE a user until delete is confirmed", async () => {
+		const user = userEvent.setup();
+		const deletes: string[] = [];
+		server.use(
+			http.get("/api/users", () =>
+				HttpResponse.json([
+					{ username: "alice", role: "viewer", locale: "en" },
+				]),
+			),
+			http.get("/api/auth/sessions", () => HttpResponse.json([])),
+			http.delete("/api/users/:name", ({ params }) => {
+				deletes.push(String(params.name));
+				return HttpResponse.json({ success: true });
+			}),
+		);
+		renderUsers();
+		await user.click(await screen.findByRole("button", { name: /^delete$/i }));
+		expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+		expect(deletes).toEqual([]);
+		await user.click(screen.getByRole("button", { name: /confirm delete/i }));
+		await waitFor(() => expect(deletes).toEqual(["alice"]));
+	});
+
 	// #702: session revoke is a remote sign-out — the DELETE must not fire
 	// until the confirm dialog action, like the user Delete next to it.
 	it("does not DELETE a session until revoke is confirmed", async () => {

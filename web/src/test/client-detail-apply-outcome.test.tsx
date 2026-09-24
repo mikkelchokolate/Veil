@@ -173,4 +173,47 @@ describe("ClientDetailPage mutation apply outcome", () => {
 		);
 		await expectApplyFailedBadge();
 	});
+
+	// #758: the header enable/disable toggle is confirm-gated AND feeds the
+	// same MutationOutcome path as save — a success=false PATCH must paint
+	// the apply-failed badge, not a green "saved".
+	it("shows the apply-failed badge when the header disable commits but apply fails", async () => {
+		const user = userEvent.setup();
+		server.use(
+			...baseHandlers(),
+			http.patch("/api/v1/clients/c1", () =>
+				HttpResponse.json({ ...CLIENT, enabled: false, ...failedOutcome }),
+			),
+		);
+		renderClientDetail();
+		await screen.findByText("Alice");
+		await user.click(screen.getByRole("button", { name: /disable client/i }));
+		// #713: the header toggle is gated — confirm before the PATCH fires.
+		await user.click(
+			await screen.findByRole("button", { name: /confirm disable/i }),
+		);
+		await expectApplyFailedBadge();
+	});
+
+	// #758: the binding enable/disable row toggle shares the confirm dialog
+	// and the MutationOutcome contract — success=false must surface as the
+	// apply-failed badge like its save/detach twins.
+	it("shows the apply-failed badge when a binding disable commits but apply fails", async () => {
+		const user = userEvent.setup();
+		server.use(
+			...baseHandlers(),
+			http.patch("/api/v1/clients/c1/bindings/b1", () =>
+				HttpResponse.json({ ...failedOutcome }),
+			),
+		);
+		renderClientDetail();
+		await screen.findByText("Alice");
+		await user.click(screen.getByRole("tab", { name: /^access$/i }));
+		await user.click(screen.getByRole("button", { name: /^disable$/i }));
+		// #710: the binding toggle is gated — confirm before the PATCH fires.
+		await user.click(
+			await screen.findByRole("button", { name: /confirm disable/i }),
+		);
+		await expectApplyFailedBadge();
+	});
 });
