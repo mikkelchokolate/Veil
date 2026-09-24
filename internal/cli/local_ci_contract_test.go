@@ -16,7 +16,7 @@ func TestLocalCISmolvmAndDockerBoundaryContract(t *testing.T) {
 		}
 		return strings.ReplaceAll(string(body), "\r\n", "\n")
 	}
-	runJob := read("../../scripts/ci/run-job.sh")
+	runJob := stripHashComments(t, read("../../scripts/ci/run-job.sh"))
 	for _, want := range []string{
 		"CI_BACKEND=docker CI_FULL_PHASE=docker",
 		"CI_BACKEND=docker \"${CI_SCRIPTS_DIR}/vm-run.sh\" --image system --job image-build",
@@ -26,11 +26,11 @@ func TestLocalCISmolvmAndDockerBoundaryContract(t *testing.T) {
 			t.Errorf("run-job.sh missing host-Docker boundary %q", want)
 		}
 	}
-	imageBuild := read("../../scripts/ci/image-build.sh")
+	imageBuild := stripHashComments(t, read("../../scripts/ci/image-build.sh"))
 	if strings.Contains(imageBuild, "rootless OCI builder") {
 		t.Fatal("image-build.sh falsely claims the Docker-only job runs inside smolvm")
 	}
-	full := read("../../scripts/ci/full.sh")
+	full := stripHashComments(t, read("../../scripts/ci/full.sh"))
 	systemStart := strings.Index(full, "  system)")
 	dockerStart := strings.Index(full, "  docker)")
 	if systemStart < 0 || dockerStart <= systemStart {
@@ -43,8 +43,8 @@ func TestLocalCISmolvmAndDockerBoundaryContract(t *testing.T) {
 	if strings.Contains(full, "  all)") {
 		t.Fatal("full.sh retains a mixed-backend all phase")
 	}
-	vmRun := read("../../scripts/ci/vm-run.sh")
-	guestRun := read("../../ci/vm/guest-run.sh")
+	vmRun := stripHashComments(t, read("../../scripts/ci/vm-run.sh"))
+	guestRun := stripHashComments(t, read("../../ci/vm/guest-run.sh"))
 	if !strings.Contains(guestRun, `system|docker) JOB_USER="root"`) {
 		t.Fatal("guest-run does not run explicit Docker full phase as root")
 	}
@@ -62,8 +62,8 @@ func TestLocalCISmolvmAndDockerBoundaryContract(t *testing.T) {
 	if strings.Contains(vmRun, "smolvm machine exec") {
 		t.Fatal("systemd is exec'd after machine start instead of booting as the persistent PID-1 workload")
 	}
-	runner := read("../../ci/vm/systemd/run-job.sh")
-	unit := read("../../ci/vm/systemd/veil-ci-runner.service")
+	runner := stripHashComments(t, read("../../ci/vm/systemd/run-job.sh"))
+	unit := stripHashComments(t, read("../../ci/vm/systemd/veil-ci-runner.service"))
 	for _, want := range []string{"/opt/ci/systemd/poc.sh", "/opt/ci/guest-run.sh", "systemctl --no-block poweroff", `${exchange}/result`} {
 		if !strings.Contains(runner, want) {
 			t.Errorf("systemd runner missing %q", want)
@@ -83,13 +83,13 @@ func TestLocalCIPrerequisiteContract(t *testing.T) {
 		}
 		return string(body)
 	}
-	preflight := read("../../scripts/ci/vm-preflight.sh")
+	preflight := stripHashComments(t, read("../../scripts/ci/vm-preflight.sh"))
 	for _, want := range []string{"CI_SMOLVM_MIN_VERSION", "sort -V", "amd64/x86_64 only", "Docker daemon is required"} {
 		if !strings.Contains(preflight, want) {
 			t.Errorf("preflight missing %q", want)
 		}
 	}
-	browserScript := read("../../scripts/ci/browser-e2e.sh")
+	browserScript := stripHashComments(t, read("../../scripts/ci/browser-e2e.sh"))
 	if strings.Contains(browserScript, "${SUDO} -u") {
 		t.Fatal("browser E2E root path tries to execute -u when SUDO is empty")
 	}
@@ -99,7 +99,7 @@ func TestLocalCIPrerequisiteContract(t *testing.T) {
 		}
 	}
 
-	workflow := read("../../.github/workflows/ci.yml")
+	workflow := stripHashComments(t, read("../../.github/workflows/ci.yml"))
 	for _, want := range []string{"runs-on: ubuntu-24.04", "bash scripts/ci/frontend.sh", "bash scripts/ci/test.sh", "bash scripts/ci/e2e.sh", "bash scripts/ci/package-smoke.sh", "bash scripts/ci/image-build.sh"} {
 		if !strings.Contains(workflow, want) {
 			t.Errorf("normal GitHub CI does not invoke shared hosted-runner contract %q", want)
@@ -144,10 +144,10 @@ func TestLocalCIPrerequisiteContract(t *testing.T) {
 	}
 
 	dirtyEscape := "CI_" + "ALLOW_DIRTY"
-	if strings.Contains(read("../../scripts/ci/snapshot.sh"), dirtyEscape) {
+	if strings.Contains(stripHashComments(t, read("../../scripts/ci/snapshot.sh")), dirtyEscape) {
 		t.Fatal("undeclared dirty-tree escape remains")
 	}
-	if strings.Contains(read("../../scripts/ci/vm-build.sh"), "bc -l") {
+	if strings.Contains(stripHashComments(t, read("../../scripts/ci/vm-build.sh")), "bc -l") {
 		t.Fatal("vm-build has undeclared bc dependency")
 	}
 }

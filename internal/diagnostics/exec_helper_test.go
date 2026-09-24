@@ -12,7 +12,7 @@ import (
 // replace execCommandContext. It is a no-op unless GO_WANT_EXEC_HELPER is set.
 func TestExecHelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_EXEC_HELPER") != "1" {
-		return
+		t.Skip("subprocess helper")
 	}
 	defer os.Exit(0)
 

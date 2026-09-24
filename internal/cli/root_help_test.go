@@ -77,6 +77,64 @@ func TestReadmeDocumentsOperatorHelpCatalog(t *testing.T) {
 			t.Fatalf("README.md missing %q", want)
 		}
 	}
+	// #927: every row of the README Commands table must resolve to a real
+	// registered subcommand — a documented-but-unwired command is a broken
+	// contract, and a row deleted from the table while the command still
+	// exists means the table silently lost coverage.
+	root := NewRootCommand("veil")
+	root.InitDefaultHelpCmd() // cobra registers `help` lazily at Execute time
+	required := []string{
+		"veil help",
+		"veil install",
+		"veil serve",
+		"veil status",
+		"veil doctor",
+		"veil admin reset",
+		"veil admin set",
+		"veil admin show",
+		"veil admin rotate-key",
+		"veil config validate",
+		"veil runtime install",
+		"veil backup create",
+		"veil backup list",
+		"veil backup verify",
+		"veil backup restore",
+		"veil backup prune",
+		"veil backup schedule enable",
+		"veil backup schedule disable",
+		"veil repair",
+		"veil rollback list",
+		"veil rollback restore",
+		"veil rollback cleanup",
+		"veil update",
+		"veil uninstall",
+		"veil version",
+	}
+	tableRows := map[string]bool{}
+	for _, line := range strings.Split(readme, "\n") {
+		fields := strings.Split(line, "|")
+		if len(fields) < 3 {
+			continue
+		}
+		cell := strings.TrimSpace(fields[1])
+		cell = strings.Trim(cell, "`")
+		if strings.HasPrefix(cell, "veil ") && !strings.ContainsAny(cell, "*[]") {
+			tableRows[cell] = true
+		}
+	}
+	for _, want := range required {
+		if !tableRows[want] {
+			t.Fatalf("README Commands table missing row %q", want)
+		}
+		// Resolve the documented command against the real command tree —
+		// Find returns the deepest match; it must be a non-root command and
+		// the flag-error path must not fire (unknown args return the root).
+		args := strings.Fields(strings.TrimPrefix(want, "veil "))
+		found, _, findErr := root.Find(args)
+		if findErr != nil || found == root {
+			t.Fatalf("README documents %q but no such command is registered", want)
+		}
+	}
 }
 
 func TestHelpCommandStillDocumentsSubcommandDetails(t *testing.T) {
