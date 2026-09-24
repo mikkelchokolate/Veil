@@ -96,6 +96,59 @@ func TestWriteContainerHealthContractPersistsListenSchemeAndBasePath(t *testing.
 	}
 }
 
+// TestContractProbePathFollowsVarDirRoot pins issue #753: the probe path must
+// derive from the state root so custom-root containers health-check the file
+// `veil serve` actually wrote — not a packaged /var/lib/veil literal.
+func TestContractProbePathFollowsVarDirRoot(t *testing.T) {
+	varDir := t.TempDir()
+	t.Setenv("VEIL_CONTAINER_HEALTH_PATH", "")
+	t.Setenv("VEIL_STATE_PATH", "")
+	t.Setenv("VEIL_VAR_DIR", varDir)
+	if got, want := statusflow.ContractProbePath(), filepath.Join(varDir, "container-health.json"); got != want {
+		t.Fatalf("ContractProbePath() = %q, want %q", got, want)
+	}
+}
+
+// TestContractProbePathHonoursExplicitOverride keeps the explicit leaf env
+// authoritative over the derived root — same precedence as the other leaf
+// paths in the entrypoint.
+func TestContractProbePathHonoursExplicitOverride(t *testing.T) {
+	explicit := filepath.Join(t.TempDir(), "custom-health.json")
+	t.Setenv("VEIL_CONTAINER_HEALTH_PATH", explicit)
+	t.Setenv("VEIL_VAR_DIR", t.TempDir())
+	if got := statusflow.ContractProbePath(); got != explicit {
+		t.Fatalf("ContractProbePath() = %q, want explicit %q", got, explicit)
+	}
+}
+
+// TestHealthcheckReadsDerivedContract exercises the full probe path without an
+// explicit VEIL_CONTAINER_HEALTH_PATH — the shape a HEALTHCHECK exec sees when
+// the image runs with a custom VEIL_VAR_DIR.
+func TestHealthcheckReadsDerivedContract(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	varDir := t.TempDir()
+	path := filepath.Join(varDir, "container-health.json")
+	if err := statusflow.WriteContract(path, statusflow.ContractFromServe(server.Listener.Addr().String(), false, "/", "", "")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("VEIL_CONTAINER_HEALTH_PATH", "")
+	t.Setenv("VEIL_STATE_PATH", "")
+	t.Setenv("VEIL_VAR_DIR", varDir)
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"healthcheck"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("healthcheck against derived path: %v\n%s", err, out.String())
+	}
+}
+
 func TestHealthcheckCommandIsHiddenFromRootHelp(t *testing.T) {
 	help := executeHelp(t, "--help")
 	if strings.Contains(help, "healthcheck") {

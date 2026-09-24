@@ -1089,6 +1089,17 @@ func validateRuntimeDescriptor(runtime Runtime) error {
 	return nil
 }
 
+// execBuildCommand runs one toolchain command and returns its combined
+// output. It is a var so regression tests can capture the exact argv the
+// naive source build invokes — module-graph verification and the pinned
+// -mod=readonly build are contract obligations, not comments (issue #913).
+var execBuildCommand = func(ctx context.Context, dir string, env []string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	cmd.Dir = dir
+	cmd.Env = env
+	return cmd.CombinedOutput()
+}
+
 // runCaddyNaiveBuild builds a Caddy binary with the klzgrad/forwardproxy
 // (naive) fork. It creates a self-contained Go module in cacheDir/build-caddy,
 // pins Caddy v2.11.4 and the naive forwardproxy fork via a replace directive,
@@ -1135,10 +1146,7 @@ func main() {
 		{goBin, "mod", "verify"},
 	}
 	for _, args := range cmds {
-		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-		cmd.Dir = buildDir
-		cmd.Env = goBuildEnv(ctx, goBin)
-		out, err := cmd.CombinedOutput()
+		out, err := execBuildCommand(ctx, buildDir, goBuildEnv(ctx, goBin), args...)
 		if err != nil {
 			return fmt.Errorf("%s: %s: %w", strings.Join(args, " "), strings.TrimSpace(string(out)), err)
 		}
@@ -1146,10 +1154,7 @@ func main() {
 
 	// Build the binary.
 	buildArgs := []string{goBin, "build", "-mod=readonly", "-o", outPath, "-ldflags=-s -w", "-trimpath", "."}
-	cmd := exec.CommandContext(ctx, buildArgs[0], buildArgs[1:]...)
-	cmd.Dir = buildDir
-	cmd.Env = append(goBuildEnv(ctx, goBin), "CGO_ENABLED=0")
-	out, err := cmd.CombinedOutput()
+	out, err := execBuildCommand(ctx, buildDir, append(goBuildEnv(ctx, goBin), "CGO_ENABLED=0"), buildArgs...)
 	if err != nil {
 		return fmt.Errorf("caddy build: %s: %w", strings.TrimSpace(string(out)), err)
 	}

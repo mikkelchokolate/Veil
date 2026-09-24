@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -239,30 +240,62 @@ func TestGitHubActionsArePinnedAndSecurityScanned(t *testing.T) {
 }
 
 // TestNfpmConfigShipsBinaryAndUnits verifies the package definition delivers
-// the Panel binary and the managed systemd units.
+// the Panel binary and the managed systemd units. The config is parsed as
+// YAML — a `# dst:` comment or a stray key in an overrides block cannot
+// satisfy a content/script assertion (issue #774).
 func TestNfpmConfigShipsBinaryAndUnits(t *testing.T) {
 	body, err := os.ReadFile("../../packaging/nfpm.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	config := strings.ReplaceAll(string(body), "\r\n", "\n")
-	for _, want := range []string{
-		"name: veil",
-		"dst: /usr/local/bin/veil",
-		"veil.service",
-		"veil-backup.service",
-		"veil-backup.timer",
-		"veil-caddy.service",
-		"veil-hysteria2@.service",
-		"veil-olcrtc@.service",
-		"veil-mieru.service",
-		"veil-warp.service",
-		"postinstall: packaging/scripts/postinstall.sh",
-		"preremove: packaging/scripts/preremove.sh",
-		"postremove: packaging/scripts/postremove.sh",
+	var cfg struct {
+		Name     string `yaml:"name"`
+		Contents []struct {
+			Dst string `yaml:"dst"`
+			Src string `yaml:"src"`
+		} `yaml:"contents"`
+		Scripts map[string]string `yaml:"scripts"`
+	}
+	if err := yaml.Unmarshal(body, &cfg); err != nil {
+		t.Fatalf("nfpm.yaml is not valid YAML: %v", err)
+	}
+	if cfg.Name != "veil" {
+		t.Fatalf("nfpm package name = %q, want veil", cfg.Name)
+	}
+	dsts := map[string]string{}
+	for _, entry := range cfg.Contents {
+		dsts[entry.Dst] = entry.Src
+	}
+	for _, dst := range []string{
+		"/usr/local/bin/veil",
+		"/lib/systemd/system/veil.service",
+		"/lib/systemd/system/veil-helper.service",
+		"/lib/systemd/system/veil-helper.socket",
+		"/lib/systemd/system/veil-backup.service",
+		"/lib/systemd/system/veil-backup.timer",
+		"/lib/systemd/system/veil-caddy.service",
+		"/lib/systemd/system/veil-hysteria2@.service",
+		"/lib/systemd/system/veil-olcrtc@.service",
+		"/lib/systemd/system/veil-mieru.service",
+		"/lib/systemd/system/veil-warp.service",
 	} {
-		if !strings.Contains(config, want) {
-			t.Fatalf("nfpm config missing %q:\n%s", want, config)
+		src, ok := dsts[dst]
+		if !ok {
+			t.Fatalf("nfpm contents missing dst %q", dst)
+		}
+		// src and dst must name the same file so a swapped src cannot
+		// silently ship a different unit under a required path.
+		if filepath.ToSlash(filepath.Base(src)) != filepath.ToSlash(filepath.Base(dst)) {
+			t.Fatalf("nfpm contents entry for %s ships mismatched src %s", dst, src)
+		}
+	}
+	for hook, want := range map[string]string{
+		"postinstall": "packaging/scripts/postinstall.sh",
+		"preremove":   "packaging/scripts/preremove.sh",
+		"postremove":  "packaging/scripts/postremove.sh",
+	} {
+		if cfg.Scripts[hook] != want {
+			t.Fatalf("nfpm scripts.%s = %q, want %q", hook, cfg.Scripts[hook], want)
 		}
 	}
 }
@@ -305,7 +338,7 @@ func TestPackageScriptsExist(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.ReplaceAll(string(preremove), "\r\n", "\n")
+	script := stripHashComments(t, strings.ReplaceAll(string(preremove), "\r\n", "\n"))
 	for _, want := range []string{"is_upgrade", "upgrade|deconfigure|failed-upgrade", "[ \"$arg\" -gt 0 ]"} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("preremove.sh missing upgrade guard %q:\n%s", want, script)
@@ -315,9 +348,29 @@ func TestPackageScriptsExist(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	postinstallScript := strings.ReplaceAll(string(postinstall), "\r\n", "\n")
-	if !strings.Contains(postinstallScript, "Backup members store restore mode") {
-		t.Fatal("postinstall must preserve backup member permission metadata")
+	postinstallScript := stripHashComments(t, strings.ReplaceAll(string(postinstall), "\r\n", "\n"))
+	// #775: backup members store restore mode in their own permission bits.
+	// The real contract is structural — the backup-dir loop must chmod
+	// directories only; a `-type f` normalization would silently flatten
+	// member modes and rollback would restore the wrong mode. Asserting the
+	// comment would be comment-satisfiable.
+	loopStart := strings.Index(postinstallScript, "for dir in backups promotion-backups migration-backups")
+	if loopStart < 0 {
+		t.Fatal("postinstall.sh lost the backup-dir ownership loop over backups/promotion-backups/migration-backups")
+	}
+	loopEnd := strings.Index(postinstallScript[loopStart:], "\ndone")
+	if loopEnd < 0 {
+		t.Fatal("postinstall.sh backup-dir loop is not terminated by done")
+	}
+	backupLoop := postinstallScript[loopStart : loopStart+loopEnd]
+	if !strings.Contains(backupLoop, `install -d -m 0700 -o root -g root "/var/lib/veil/$dir"`) {
+		t.Fatalf("backup dirs must be root-owned 0700:\n%s", backupLoop)
+	}
+	if !strings.Contains(backupLoop, "-type d -exec chmod 0700") {
+		t.Fatalf("backup-dir loop must normalize directories to 0700:\n%s", backupLoop)
+	}
+	if strings.Contains(backupLoop, "-type f -exec chmod") {
+		t.Fatalf("backup-dir loop must NOT normalize member files — restore mode lives in member permission bits:\n%s", backupLoop)
 	}
 	if !strings.Contains(postinstallScript, "/etc/veil/panel") {
 		t.Fatal("postinstall.sh must migrate Panel TLS material under /etc/veil/panel")

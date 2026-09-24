@@ -145,38 +145,60 @@ systemd-analyze verify packaging/systemd/*.service packaging/systemd/*.socket pa
 ci_step "packaged unit hardening contract"
 # Static guard rail: the shipped units must carry the privilege-boundary
 # contract, not just render it under test. Fail loudly if a unit regresses.
-assert_unit() { # unit regex
-  grep -Eq "$2" "packaging/systemd/$1" || {
-    echo "unit contract violation: $1 missing /$2/" >&2
+# Exact-line matching only — a regex like '^SupplementaryGroups=.*veil-proxy'
+# would also accept 'SupplementaryGroups=aveil-proxy' or a widened extra
+# group, and an unanchored InaccessiblePaths match would accept a reordered
+# or partial mask (issues #754, #816).
+assert_unit() { # unit literal-line
+  grep -qxF "$2" "packaging/systemd/$1" || {
+    echo "unit contract violation: $1 missing literal line '$2'" >&2
     exit 1
   }
 }
-assert_unit veil.service '^User=veil$'
-assert_unit veil.service '^Group=veil$'
+# The panel carries NO capabilities — empty bounding AND ambient sets are the
+# contract, not just a missing CAP_* line (issue #754).
+assert_unit veil.service 'User=veil'
+assert_unit veil.service 'Group=veil'
+assert_unit veil.service 'CapabilityBoundingSet='
+assert_unit veil.service 'AmbientCapabilities='
 for unit in veil-caddy.service veil-hysteria2@.service veil-olcrtc@.service veil-warp.service; do
-  assert_unit "$unit" '^User=veil-proxy$'
-  assert_unit "$unit" '^Group=veil-proxy$'
-  assert_unit "$unit" '^InaccessiblePaths=.*[[:space:]/]run/veil/helper\.sock'
-  assert_unit "$unit" '^InaccessiblePaths=.*[[:space:]/]var/lib/veil'
+  assert_unit "$unit" 'User=veil-proxy'
+  assert_unit "$unit" 'Group=veil-proxy'
+  assert_unit "$unit" 'InaccessiblePaths=/run/veil/helper.sock /var/lib/veil'
+  assert_unit "$unit" 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE'
+  assert_unit "$unit" 'AmbientCapabilities=CAP_NET_BIND_SERVICE'
 done
 # veil-mieru.service is deliberately NOT a veil-proxy unit (issue #624): the
 # dedicated veil-mita identity owns the appctl socket and state dir, keeps
 # veil-proxy only as a supplementary group for reading generated config, and
 # locks the socket directory down so edge peers cannot even traverse it.
-assert_unit veil-mieru.service '^User=veil-mita$'
-assert_unit veil-mieru.service '^Group=veil-mita$'
-assert_unit veil-mieru.service '^SupplementaryGroups=.*veil-proxy'
-assert_unit veil-mieru.service '^RuntimeDirectory=veil-mieru$'
-assert_unit veil-mieru.service '^RuntimeDirectoryMode=0750$'
-assert_unit veil-mieru.service '^UMask=0007$'
-assert_unit veil-mieru.service '^InaccessiblePaths=.*[[:space:]/]run/veil/helper\.sock'
-assert_unit veil-mieru.service '^InaccessiblePaths=.*[[:space:]/]var/lib/veil'
-assert_unit veil-helper.socket '^SocketUser=root$'
-assert_unit veil-helper.socket '^SocketGroup=veil$'
-assert_unit veil-helper.socket '^SocketMode=0660$'
-assert_unit veil-helper.socket '^DirectoryMode=0711$'
-assert_unit veil-helper.socket '^RemoveOnStop=true$'
-assert_unit veil-helper.service '^User=root$'
+assert_unit veil-mieru.service 'User=veil-mita'
+assert_unit veil-mieru.service 'Group=veil-mita'
+assert_unit veil-mieru.service 'SupplementaryGroups=veil-proxy'
+assert_unit veil-mieru.service 'RuntimeDirectory=veil-mieru'
+assert_unit veil-mieru.service 'RuntimeDirectoryMode=0750'
+assert_unit veil-mieru.service 'UMask=0007'
+assert_unit veil-mieru.service 'InaccessiblePaths=/run/veil/helper.sock /var/lib/veil'
+assert_unit veil-mieru.service 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE'
+assert_unit veil-mieru.service 'AmbientCapabilities=CAP_NET_BIND_SERVICE'
+assert_unit veil-helper.socket 'SocketUser=root'
+assert_unit veil-helper.socket 'SocketGroup=veil'
+assert_unit veil-helper.socket 'SocketMode=0660'
+assert_unit veil-helper.socket 'DirectoryMode=0711'
+assert_unit veil-helper.socket 'RemoveOnStop=true'
+# The privileged helper runs as root with the exact capability set it needs —
+# no more (issue #816).
+assert_unit veil-helper.service 'User=root'
+assert_unit veil-helper.service 'Group=root'
+assert_unit veil-helper.service 'CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_NET_ADMIN CAP_NET_RAW'
+assert_unit veil-helper.service 'AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW'
+# The backup unit is root but tightly bounded: its caps cover backup member
+# reads, its only writable root is the state dir (issue #816).
+assert_unit veil-backup.service 'User=root'
+assert_unit veil-backup.service 'Group=root'
+assert_unit veil-backup.service 'CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH'
+assert_unit veil-backup.service 'ReadWritePaths=/var/lib/veil'
+assert_unit veil-backup.service 'ProtectSystem=strict'
 # The helper must not be able to write the runtime dir holding its own socket.
 if grep -Eq '^ReadWritePaths=.*[[:space:]](/run|/var/run)([[:space:]]|$)' packaging/systemd/veil-helper.service; then
   echo "veil-helper.service still has a writable /run path" >&2
