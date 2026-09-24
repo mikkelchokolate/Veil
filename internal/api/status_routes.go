@@ -54,6 +54,9 @@ func (routes StatusRoutes) handleStatus(w http.ResponseWriter, r *http.Request) 
 		statuses := make([]ServiceStatus, 0, len(runtimes))
 		for _, runtime := range runtimes {
 			status := byUnit[runtime.Unit]
+			if routes.State.metrics != nil {
+				routes.State.metrics.SetServiceStatus(runtime.Name, status.ActiveState == "active")
+			}
 			statuses = append(statuses, ServiceStatus{
 				Name: runtime.Name, ActionName: runtime.ActionName,
 				Managed: true, Restartable: runtime.ManualRestart,

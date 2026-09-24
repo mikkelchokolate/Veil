@@ -110,6 +110,9 @@ type managementState struct {
 	enforceConfigurationValidation bool
 	privileged                     privileged.Client
 	privilegedLocal                bool
+	// metrics is the collector served at /metrics. RouterComposition assigns it
+	// after constructing the state; nil in bare test-constructed states.
+	metrics *observability.MetricsCollector
 
 	// Architecture rework (durable apply + normalized store). db is nil when no
 	// StatePath is configured; the apply subsystem and revision/job tracking are
