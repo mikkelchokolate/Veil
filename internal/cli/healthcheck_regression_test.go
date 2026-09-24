@@ -128,7 +128,9 @@ func TestContractProbePathHonoursExplicitOverride(t *testing.T) {
 // the image runs with a custom VEIL_VAR_DIR.
 func TestHealthcheckReadsDerivedContract(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+		// The probe requires the {"status":"ok"} body — a bare 200 fails.
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	}))
 	defer server.Close()
 
