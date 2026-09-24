@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/client"
 )
 
 // TestV1BindingPatchAndServerRotate covers the A7 binding endpoints:
@@ -102,4 +104,76 @@ func itoa(f float64) string {
 func jsonNumber(f float64) string {
 	b, _ := json.Marshal(f)
 	return string(b)
+}
+
+// TestV1BindingPatchEnableRequiresActiveCredential covers #986: PATCH
+// enabled=true must reject a binding that has no active credential instead of
+// committing a client that can never authenticate and failing at render/apply.
+func TestV1BindingPatchEnableRequiresActiveCredential(t *testing.T) {
+	r, st := newApplyTrackedRouterWithState(t)
+
+	inboundBody := strings.NewReader(`{"name":"hy2","protocol":"hysteria2","transport":"udp","port":18443,"enabled":true}`)
+	iw := httptest.NewRecorder()
+	ireq := httptest.NewRequest(http.MethodPost, "/api/inbounds", inboundBody)
+	ireq.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(iw, ireq)
+	if iw.Code != http.StatusOK && iw.Code != http.StatusCreated {
+		t.Fatalf("create inbound: %d %s", iw.Code, iw.Body.String())
+	}
+
+	id := createV1ClientWithBinding(t, r, "gated-client", "hy2", "pass-1")
+	bindingsOf := func() (string, float64, bool) {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/clients/"+id, nil))
+		var v map[string]any
+		if err := json.NewDecoder(w.Body).Decode(&v); err != nil {
+			t.Fatalf("decode view: %v", err)
+		}
+		bindings, _ := v["bindings"].([]any)
+		if len(bindings) == 0 {
+			t.Fatalf("no bindings in view: %v", v)
+		}
+		b0, _ := bindings[0].(map[string]any)
+		bindingID, _ := b0["id"].(string)
+		version, _ := b0["version"].(float64)
+		enabled, _ := b0["enabled"].(bool)
+		return bindingID, version, enabled
+	}
+	bindingID, version, enabled := bindingsOf()
+	if !enabled {
+		t.Fatal("test expects the created binding to start enabled")
+	}
+
+	// Disabling must keep working without any credential check.
+	patch := func(v float64, en bool) *httptest.ResponseRecorder {
+		pw := httptest.NewRecorder()
+		preq := httptest.NewRequest(http.MethodPatch, "/api/v1/clients/"+id+"/bindings/"+bindingID,
+			strings.NewReader(`{"enabled":`+map[bool]string{true: "true", false: "false"}[en]+`,"version":`+itoa(v)+`}`))
+		preq.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(pw, preq)
+		return pw
+	}
+	if w := patch(version, false); w.Code != http.StatusOK {
+		t.Fatalf("disable binding: %d %s", w.Code, w.Body.String())
+	}
+
+	// Drop the credential to model the invalid persisted shape (interrupted
+	// migration or revoked credential).
+	if err := st.clientRepo.WithTx(func(tx *client.Tx) error {
+		_, err := tx.Exec(`DELETE FROM client_credentials WHERE binding_id=?`, bindingID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, version, _ = bindingsOf()
+	if w := patch(version, true); w.Code != http.StatusBadRequest {
+		t.Fatalf("enable without credential: %d %s, want 400", w.Code, w.Body.String())
+	}
+
+	// The binding must stay disabled — the mutation was rejected before commit.
+	_, _, enabled = bindingsOf()
+	if enabled {
+		t.Fatal("binding was enabled despite having no active credential")
+	}
 }

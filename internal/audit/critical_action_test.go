@@ -47,14 +47,30 @@ func criticalActionPrefixes(t *testing.T) []string {
 // update/auth producers that emit dotted actions, so a representative member
 // stands in for the family.
 var criticalActionProbes = map[string]string{
-	"backup.restore":      "backup.restore.start",
-	"security.key.rotate": "security.key.rotate",
-	"setup.complete":      "setup.complete",
-	"user.update":         "user.update",
-	"update.":             "update.apply",
-	"auth.role":           "auth.role.change",
-	"auth.setup":          "auth.setup.complete",
-	"key.rotate":          "key.rotate",
+	"auth.":                     "auth.login",
+	"user.":                     "user.create",
+	"setup.complete":            "setup.complete",
+	"backup.":                   "backup.create",
+	"update.":                   "update.apply",
+	"security.key.":             "security.key.rotate",
+	"key.rotate":                "key.rotate",
+	"apply.rollback":            "apply.rollback",
+	"install.apply":             "install.apply",
+	"repair.apply":              "repair.apply",
+	"rollback.":                 "rollback.runtime",
+	"create_":                   "create_client",
+	"update_":                   "update_settings",
+	"delete_":                   "delete_inbound",
+	"add_binding":               "add_binding",
+	"remove_binding":            "remove_binding",
+	"set_credential":            "set_credential",
+	"rotate_credential":         "rotate_credential",
+	"issue_subscription_token":  "issue_subscription_token",
+	"revoke_subscription_token": "revoke_subscription_token",
+	"rotate_subscription_token": "rotate_subscription_token",
+	"migrate_legacy":            "migrate_legacy",
+	"bulk_":                     "bulk_create",
+	"service_":                  "service_restart",
 }
 
 func TestCriticalAuditActionMatchesLivePanelActions(t *testing.T) {
@@ -75,15 +91,44 @@ func TestCriticalAuditActionMatchesLivePanelActions(t *testing.T) {
 			t.Errorf("criticalAuditAction(%q) = false", probe)
 		}
 	}
-	// The bare family names are also critical (exact-match arm).
-	for _, action := range []string{"backup.restore", "security.key.rotate", "setup.complete", "user.update", "key.rotate"} {
+	// Representative live panel actions across every spooled family (#981):
+	// bare family names exercise the exact-match arm, dotted members the
+	// prefix arm.
+	for _, action := range []string{
+		"security.key.rotate",
+		"setup.complete",
+		"user.create",
+		"user.update",
+		"user.delete",
+		"backup.create",
+		"backup.prune",
+		"backup.delete",
+		"backup.verify",
+		"backup.restore",
+		"backup.restore.start",
+		"auth.login",
+		"auth.login.rate_limited",
+		"auth.logout",
+		"auth.session.revoke",
+		"apply.rollback",
+		"migrate_legacy",
+		"set_credential",
+		"rotate_credential",
+		"issue_subscription_token",
+		"revoke_subscription_token",
+		"create_client",
+		"update_settings",
+		"delete_inbound",
+		"service_restart",
+		"key.rotate",
+	} {
 		if !criticalAuditAction(action) {
 			t.Errorf("criticalAuditAction(%q) = false", action)
 		}
 	}
-	for _, action := range []string{"security.test", "auth.login", "backup.create", "client.create", "update_settings"} {
+	for _, action := range []string{"security.test", "client.list", "request.test"} {
 		if criticalAuditAction(action) {
-			t.Errorf("non-critical %q must not spool", action)
+			t.Errorf("non-critical %s must not spool", action)
 		}
 	}
 }
@@ -99,7 +144,7 @@ func TestProductionAuditPathLayoutSpoolsCriticalEventsWithoutOptions(t *testing.
 		t.Fatal(err)
 	}
 	recorder := NewRecorder(primary, RecorderOptions{})
-	for _, action := range []string{"security.key.rotate", "backup.restore"} {
+	for _, action := range []string{"security.key.rotate", "backup.restore", "backup.create", "user.delete", "auth.login"} {
 		if err := recorder.Append(Record{Actor: "admin", Action: action, Success: true}); err != nil {
 			t.Fatalf("critical %s was dropped instead of spooled: %v", action, err)
 		}
@@ -110,5 +155,34 @@ func TestProductionAuditPathLayoutSpoolsCriticalEventsWithoutOptions(t *testing.
 	}
 	if info.Size() <= 0 {
 		t.Fatal("production spool was not written")
+	}
+	if !recorder.SpoolDurable() {
+		t.Fatal("recorder did not mark the accepted spool write durable")
+	}
+}
+
+// TestSpoolDurableReflectsLastWrite (#981): a spool that has never accepted a
+// write, or whose last write failed, must not report durable.
+func TestSpoolDurableReflectsLastWrite(t *testing.T) {
+	root := t.TempDir()
+	// Primary is a directory so every primary append fails.
+	primary := filepath.Join(root, "primary-dir")
+	if err := os.Mkdir(primary, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Spool path is also a directory so spool writes fail too.
+	spoolDir := filepath.Join(root, "spool-dir")
+	if err := os.Mkdir(spoolDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	recorder := NewRecorder(primary, RecorderOptions{SpoolPath: spoolDir, BackpressurePolicy: "spool_critical"})
+	if recorder.SpoolDurable() {
+		t.Fatal("unwritten spool reported durable")
+	}
+	if err := recorder.Append(Record{Action: "backup.create", Success: true}); err == nil {
+		t.Fatal("append with both sinks broken should fail")
+	}
+	if recorder.SpoolDurable() {
+		t.Fatal("failed spool write reported durable")
 	}
 }

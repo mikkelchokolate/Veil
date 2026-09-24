@@ -13,6 +13,7 @@ func TestNormalizeHTTPPathTemplatesSensitiveAndUniqueSegments(t *testing.T) {
 		{path: "/api/users/alice", want: "/api/users/{username}"},
 		{path: "/api/inbounds/hy2-main", want: "/api/inbounds/{name}"},
 		{path: "/api/backups/veil_backup_1.tar.gz.enc", want: "/api/backups/{name}"},
+		{path: "/api/version/update/jobs/9f3d2c", want: "/api/version/update/jobs/{id}"},
 		{path: "/api/status", want: "/api/status"},
 		{path: "/probe/unique-aaaa", want: unmatchedHTTPPath},
 		{path: "/probe/unique-bbbb", want: unmatchedHTTPPath},

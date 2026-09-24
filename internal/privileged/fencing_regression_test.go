@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func setRegressionFenceToken(t *testing.T, request any, owner string, generation uint64) {
@@ -147,6 +148,58 @@ func TestPrivilegedRuntimeMutationsRejectOlderFencingGeneration(t *testing.T) {
 				return err
 			},
 		},
+		{
+			name: "key-rotation",
+			run: func(t *testing.T, adapter *LocalAdapter, generation uint64) error {
+				request := RotateKeyRequest{}
+				setRegressionFenceToken(t, &request, "apply-owner", generation)
+				return adapter.RotateKey(context.Background(), request)
+			},
+		},
+		{
+			name: "key-rotation-recovery",
+			run: func(t *testing.T, adapter *LocalAdapter, generation uint64) error {
+				request := RecoverKeyRotationRequest{}
+				setRegressionFenceToken(t, &request, "apply-owner", generation)
+				return adapter.RecoverKeyRotation(context.Background(), request)
+			},
+		},
+		{
+			name: "backup-create",
+			run: func(t *testing.T, adapter *LocalAdapter, generation uint64) error {
+				request := BackupRequest{Action: BackupActionCreate}
+				setRegressionFenceToken(t, &request, "apply-owner", generation)
+				_, err := adapter.Backup(context.Background(), request)
+				return err
+			},
+		},
+		{
+			name: "backup-delete",
+			run: func(t *testing.T, adapter *LocalAdapter, generation uint64) error {
+				request := BackupRequest{Action: BackupActionDelete, ArchiveName: "backup-1.enc"}
+				setRegressionFenceToken(t, &request, "apply-owner", generation)
+				_, err := adapter.Backup(context.Background(), request)
+				return err
+			},
+		},
+		{
+			name: "backup-prune",
+			run: func(t *testing.T, adapter *LocalAdapter, generation uint64) error {
+				request := BackupRequest{Action: BackupActionPrune}
+				setRegressionFenceToken(t, &request, "apply-owner", generation)
+				_, err := adapter.Backup(context.Background(), request)
+				return err
+			},
+		},
+		{
+			name: "backup-restore",
+			run: func(t *testing.T, adapter *LocalAdapter, generation uint64) error {
+				request := BackupRequest{Action: BackupActionRestore, ArchiveName: "backup-1.enc"}
+				setRegressionFenceToken(t, &request, "apply-owner", generation)
+				_, err := adapter.Backup(context.Background(), request)
+				return err
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -174,6 +227,18 @@ func TestPrivilegedRuntimeMutationsRejectOlderFencingGeneration(t *testing.T) {
 					calls.Add(1)
 					return SyncCaddyCertResult{Found: true}, nil
 				},
+				RotateKey: func(context.Context, RotateKeyRequest) error {
+					calls.Add(1)
+					return nil
+				},
+				RecoverKeyRotation: func(context.Context) error {
+					calls.Add(1)
+					return nil
+				},
+				Backup: func(context.Context, ResolvedBackup) (BackupResult, error) {
+					calls.Add(1)
+					return BackupResult{}, nil
+				},
 			}
 			executorValue := reflect.ValueOf(&executor).Elem()
 			if caddyLoad := executorValue.FieldByName("CaddyLoad"); caddyLoad.IsValid() && caddyLoad.CanSet() && caddyLoad.Kind() == reflect.Func {
@@ -190,6 +255,117 @@ func TestPrivilegedRuntimeMutationsRejectOlderFencingGeneration(t *testing.T) {
 			assertStaleFenceRejected(t, test.run(t, adapter, 1))
 			if got := calls.Load(); got != 1 {
 				t.Errorf("executor calls = %d, want exactly the current-generation operation", got)
+			}
+		})
+	}
+}
+
+// validRegressionFenceToken builds a complete fencing token; fenceGuard only
+// enforces OperationID and LeaseExpiresAt when the policy requires fencing.
+func validRegressionFenceToken(owner string, generation uint64) FenceToken {
+	return FenceToken{
+		Owner:          owner,
+		Generation:     generation,
+		OperationID:    "apply-operation",
+		LeaseExpiresAt: time.Now().UTC().Add(time.Hour).Unix(),
+	}
+}
+
+// TestNewlyFencedMutationsRequireValidFence locks in the required-fence
+// behavior for operations that previously skipped fenceGuard entirely
+// (#982 key rotation/recovery) or only fenced restore (#985 backup
+// create/delete/prune).
+func TestNewlyFencedMutationsRequireValidFence(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(adapter *LocalAdapter, token FenceToken) error
+	}{
+		{
+			name: "key-rotation",
+			run: func(adapter *LocalAdapter, token FenceToken) error {
+				return adapter.RotateKey(context.Background(), RotateKeyRequest{Fence: token})
+			},
+		},
+		{
+			name: "key-rotation-recovery",
+			run: func(adapter *LocalAdapter, token FenceToken) error {
+				return adapter.RecoverKeyRotation(context.Background(), RecoverKeyRotationRequest{Fence: token})
+			},
+		},
+		{
+			name: "backup-create",
+			run: func(adapter *LocalAdapter, token FenceToken) error {
+				_, err := adapter.Backup(context.Background(), BackupRequest{Action: BackupActionCreate, Fence: token})
+				return err
+			},
+		},
+		{
+			name: "backup-delete",
+			run: func(adapter *LocalAdapter, token FenceToken) error {
+				_, err := adapter.Backup(context.Background(), BackupRequest{Action: BackupActionDelete, ArchiveName: "backup-1.enc", Fence: token})
+				return err
+			},
+		},
+		{
+			name: "backup-prune",
+			run: func(adapter *LocalAdapter, token FenceToken) error {
+				_, err := adapter.Backup(context.Background(), BackupRequest{Action: BackupActionPrune, Fence: token})
+				return err
+			},
+		},
+		{
+			name: "backup-restore",
+			run: func(adapter *LocalAdapter, token FenceToken) error {
+				_, err := adapter.Backup(context.Background(), BackupRequest{Action: BackupActionRestore, ArchiveName: "backup-1.enc", Fence: token})
+				return err
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			policy := testPolicy(t)
+			policy.RequireFence = true
+			var calls atomic.Int32
+			executor := Executor{
+				RotateKey: func(context.Context, RotateKeyRequest) error {
+					calls.Add(1)
+					return nil
+				},
+				RecoverKeyRotation: func(context.Context) error {
+					calls.Add(1)
+					return nil
+				},
+				Backup: func(context.Context, ResolvedBackup) (BackupResult, error) {
+					calls.Add(1)
+					return BackupResult{}, nil
+				},
+			}
+			adapter := NewLocalAdapter(policy, executor)
+
+			// Missing token must be rejected before the executor runs.
+			assertStaleFenceRejected(t, test.run(adapter, FenceToken{}))
+			if got := calls.Load(); got != 0 {
+				t.Fatalf("executor ran %d times for an unfenced operation", got)
+			}
+			// An expired lease must be rejected as well.
+			expired := validRegressionFenceToken("apply-owner", 1)
+			expired.LeaseExpiresAt = time.Now().UTC().Add(-time.Minute).Unix()
+			assertStaleFenceRejected(t, test.run(adapter, expired))
+			if got := calls.Load(); got != 0 {
+				t.Fatalf("executor ran %d times for an expired-fence operation", got)
+			}
+			// A current, unexpired token is accepted once.
+			if err := test.run(adapter, validRegressionFenceToken("apply-owner", 3)); err != nil {
+				t.Fatalf("current fencing token rejected: %v", err)
+			}
+			if got := calls.Load(); got != 1 {
+				t.Fatalf("executor calls = %d, want 1", got)
+			}
+			// A foreign owner replaying the same generation is rejected.
+			assertStaleFenceRejected(t, test.run(adapter, validRegressionFenceToken("other-owner", 3)))
+			if got := calls.Load(); got != 1 {
+				t.Fatalf("executor ran %d times for a foreign-owner fence", got)
 			}
 		})
 	}

@@ -33,6 +33,9 @@ type recordingPrivilegedClient struct {
 	firewallResult        privileged.FirewallResult
 	rotateCalls           int
 	recoverRotationCalls  int
+	rotateRequests        []privileged.RotateKeyRequest
+	recoverRequests       []privileged.RecoverKeyRotationRequest
+	recoverErr            error
 	restartCalls          atomic.Int32
 	restartErr            error
 	stageUpdate           func(privileged.UpdateRequest) (privileged.UpdateResult, error)
@@ -302,13 +305,18 @@ func (c *recordingPrivilegedClient) Backup(_ context.Context, request privileged
 	}
 }
 
-func (c *recordingPrivilegedClient) RotateKey(context.Context, privileged.RotateKeyRequest) error {
+func (c *recordingPrivilegedClient) RotateKey(_ context.Context, request privileged.RotateKeyRequest) error {
 	c.rotateCalls++
+	c.rotateRequests = append(c.rotateRequests, request)
 	return c.err
 }
 
-func (c *recordingPrivilegedClient) RecoverKeyRotation(context.Context, privileged.RecoverKeyRotationRequest) error {
+func (c *recordingPrivilegedClient) RecoverKeyRotation(_ context.Context, request privileged.RecoverKeyRotationRequest) error {
 	c.recoverRotationCalls++
+	c.recoverRequests = append(c.recoverRequests, request)
+	if c.recoverErr != nil {
+		return c.recoverErr
+	}
 	return c.err
 }
 
