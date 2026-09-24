@@ -40,15 +40,8 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import type { BindingView } from './bindingView.msw.ts';
 
-/**
- * Panel access mode. Always emitted on read; on write, an omitted field keeps the current value.
- */
-export type SettingsPanelAccess = typeof SettingsPanelAccess[keyof typeof SettingsPanelAccess];
-
-
-export const SettingsPanelAccess = {
-  local: 'local',
-  direct: 'direct',
-  caddy: 'caddy',
-} as const;
+export type GetApiV1ClientsIdBindings200 = {
+  items: BindingView[];
+};
