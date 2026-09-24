@@ -727,6 +727,12 @@ for _ in $(seq 1 24); do
   sleep 5
 done
 [ "${api_ready}" -eq 0 ] || ci_die "custom-root management API did not become ready (last code ${ready_code:-none})"
+# The legs above intentionally left the same-named protocol units running on
+# these ports (assert_protocol_units "after controlled-CA reinstall"). Unit
+# names are global, so the custom-root apply would restart them anyway — but
+# the API rejects the inbound create while the old processes still hold the
+# ports. Stop them first.
+${SUDO} systemctl stop veil-hysteria2@ci-hy2.service veil-mieru.service veil-olcrtc@ci-olc.service
 create_inbound ci-hy2 '{"name":"ci-hy2","protocol":"hysteria2","transport":"udp","port":34443,"enabled":true,"password":"ci-pass"}'
 create_inbound ci-mieru-tcp '{"name":"ci-mieru-tcp","protocol":"mieru","transport":"tcp","port":34444,"enabled":true,"profiles":[{"name":"alice","password":"alice-pass","enabled":true}]}'
 create_inbound ci-mieru-udp '{"name":"ci-mieru-udp","protocol":"mieru","transport":"udp","port":34445,"enabled":true,"password":"udp-pass"}'

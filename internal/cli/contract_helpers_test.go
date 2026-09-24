@@ -5,9 +5,6 @@ package cli
 // comment or an unrelated job/step can satisfy.
 
 import (
-	"go/parser"
-	"go/printer"
-	"go/token"
 	"strings"
 	"testing"
 
@@ -60,22 +57,6 @@ func stripHashComments(t *testing.T, text string) string {
 		default:
 			b.WriteByte(c)
 		}
-	}
-	return b.String()
-}
-
-// stripGoComments parses a Go source file and reprints it without comments,
-// so source-level substring assertions cannot be satisfied by doc comments.
-func stripGoComments(t *testing.T, path string) string {
-	t.Helper()
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, 0)
-	if err != nil {
-		t.Fatalf("parse %s: %v", path, err)
-	}
-	var b strings.Builder
-	if err := printer.Fprint(&b, fset, file); err != nil {
-		t.Fatalf("reprint %s: %v", path, err)
 	}
 	return b.String()
 }
