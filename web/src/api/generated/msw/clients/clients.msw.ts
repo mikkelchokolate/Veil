@@ -77,6 +77,7 @@ import type {
   DeleteApiV1ClientsIdBindingsBindingId200,
   ForbiddenResponse,
   GetApiV1ClientsIdAuditParams,
+  GetApiV1ClientsIdBindings200,
   GetApiV1ClientsIdLinks200,
   LockedResponse,
   MutationOutcome,
@@ -402,9 +403,9 @@ export const usePostApiV1ClientsBulk = <TError = ConflictResponse | ValidationFa
 /**
  * @summary List client bindings
  */
-export const getApiV1ClientsIdBindings = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
+export const getApiV1ClientsIdBindings = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<GetApiV1ClientsIdBindings200> => {
 
-  return apiFetch<void>(getGetApiV1ClientsIdBindingsUrl(id),
+  return apiFetch<GetApiV1ClientsIdBindings200>(getGetApiV1ClientsIdBindingsUrl(id),
   {
     ...options,
     method: 'GET'

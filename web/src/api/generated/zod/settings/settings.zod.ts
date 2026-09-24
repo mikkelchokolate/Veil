@@ -56,7 +56,7 @@ export const getApiSettingsResponseDefaultInboundPublicPortMax = 65535;
 
 export const GetApiSettingsResponse = zod.object({
   "panelListen": zod.string(),
-  "panelAccess": zod.enum(['local', 'direct', 'caddy', '']).optional(),
+  "panelAccess": zod.enum(['local', 'direct', 'caddy']).optional().describe('Panel access mode. Always emitted on read; on write, an omitted field keeps the current value.'),
   "webBasePath": zod.string().optional(),
   "mode": zod.string(),
   "domain": zod.string().optional(),
@@ -103,7 +103,7 @@ export const putApiSettingsBodyDefaultInboundPublicPortMax = 65535;
 
 export const PutApiSettingsBody = zod.object({
   "panelListen": zod.string(),
-  "panelAccess": zod.enum(['local', 'direct', 'caddy', '']).optional(),
+  "panelAccess": zod.enum(['local', 'direct', 'caddy']).optional().describe('Panel access mode. Always emitted on read; on write, an omitted field keeps the current value.'),
   "webBasePath": zod.string().optional(),
   "mode": zod.string(),
   "domain": zod.string().optional(),
@@ -137,7 +137,7 @@ export const putApiSettingsResponseOneDefaultInboundPublicPortMax = 65535;
 
 export const PutApiSettingsResponse = zod.object({
   "panelListen": zod.string(),
-  "panelAccess": zod.enum(['local', 'direct', 'caddy', '']).optional(),
+  "panelAccess": zod.enum(['local', 'direct', 'caddy']).optional().describe('Panel access mode. Always emitted on read; on write, an omitted field keeps the current value.'),
   "webBasePath": zod.string().optional(),
   "mode": zod.string(),
   "domain": zod.string().optional(),

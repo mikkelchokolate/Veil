@@ -25,14 +25,22 @@ const NON_TERMINAL_JOB_STATUSES = new Set([
 //                      every apply honestly fails. Even then the response
 //                      must carry the failed apply job as evidence — a bare
 //                      success=false would hide a half-reported mutation.
-async function assertMutationOutcome(resp, { label = 'mutation', allowApplyFailure = false } = {}) {
+//   nonEnvelope:       true only for endpoints documented as NOT returning a
+//                      MutationOutcome envelope. Default false: a missing or
+//                      non-boolean `success` fails the seed instead of letting
+//                      it green on HTTP status alone (#789).
+async function assertMutationOutcome(resp, { label = 'mutation', allowApplyFailure = false, nonEnvelope = false } = {}) {
   const text = await resp.text();
   expect(resp.status(), `${label}: HTTP ${resp.status()} ${text}`).toBeLessThan(300);
   let body = {};
   try {
     body = JSON.parse(text);
   } catch {
-    // Not every endpoint returns a JSON envelope; the status check stands.
+    expect(
+      nonEnvelope,
+      `${label}: 2xx without a JSON body — only documented non-envelope endpoints may pass { nonEnvelope: true } — ${text}`,
+    ).toBe(true);
+    return body;
   }
   if (body.success === false) {
     expect(
@@ -47,6 +55,13 @@ async function assertMutationOutcome(resp, { label = 'mutation', allowApplyFailu
       NON_TERMINAL_JOB_STATUSES.has(body.applyJob?.status),
       `${label}: apply job still in flight — wait for a terminal status instead of seeding on it — ${text}`,
     ).toBe(false);
+    return body;
+  }
+  if (body.success !== true) {
+    expect(
+      nonEnvelope,
+      `${label}: mutation response has no boolean success — not a MutationOutcome envelope — ${text}`,
+    ).toBe(true);
   }
   return body;
 }

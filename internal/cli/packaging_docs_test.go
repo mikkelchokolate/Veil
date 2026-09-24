@@ -10,54 +10,146 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestReleaseWorkflowBuildsSignedPackagesAndSBOM locks in the supply-chain
-// release gates: native deb/rpm/apk packages, an SBOM, and keyless signatures.
-func TestReleaseWorkflowBuildsSignedPackagesAndSBOM(t *testing.T) {
+// releaseWorkflowStep is the subset of a GitHub Actions step the supply-chain
+// gates inspect. Parsing YAML (instead of grepping raw text) means a comment
+// or dead key cannot satisfy the test — the gates only pass when a real
+// `uses:`/`run:`/`with:` field carries the value.
+type releaseWorkflowStep struct {
+	Name string         `yaml:"name"`
+	Uses string         `yaml:"uses"`
+	Run  string         `yaml:"run"`
+	With map[string]any `yaml:"with"`
+}
+
+func releaseWorkflowSteps(t *testing.T) (map[string]string, []releaseWorkflowStep) {
+	t.Helper()
 	body, err := os.ReadFile("../../.github/workflows/release.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
-	// Every marker must live in the job that produces the artifact — a
-	// step-name or comment elsewhere in the file is not evidence (#774).
-	releaseJob := stripHashComments(t, workflowJobBlock(t, workflow, "release"))
-	for _, want := range []string{
-		"Build native packages (deb/rpm/apk)",
-		"packaging/nfpm.yaml",
-		"dist/*.deb",
-		"dist/*.rpm",
-		"dist/*.apk",
-	} {
-		if !strings.Contains(releaseJob, want) {
-			t.Fatalf("release job missing supply-chain gate %q", want)
+	var workflow struct {
+		Permissions map[string]string `yaml:"permissions"`
+		Jobs        map[string]struct {
+			Steps []releaseWorkflowStep `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(body, &workflow); err != nil {
+		t.Fatalf("release.yml must parse as workflow YAML: %v", err)
+	}
+	var steps []releaseWorkflowStep
+	for _, job := range workflow.Jobs {
+		steps = append(steps, job.Steps...)
+	}
+	if len(steps) == 0 {
+		t.Fatal("release.yml has no job steps")
+	}
+	return workflow.Permissions, steps
+}
+
+func stepHasUse(steps []releaseWorkflowStep, prefix string) bool {
+	for _, step := range steps {
+		if strings.HasPrefix(step.Uses, prefix) {
+			return true
 		}
 	}
-	dockerJob := stripHashComments(t, workflowJobBlock(t, workflow, "docker-publish"))
-	for _, want := range []string{
-		"cosign",
-		"provenance: mode=max",
-	} {
-		if !strings.Contains(dockerJob, want) {
-			t.Fatalf("docker-publish job missing supply-chain gate %q", want)
+	return false
+}
+
+func stepRunContains(steps []releaseWorkflowStep, want string) bool {
+	for _, step := range steps {
+		if strings.Contains(step.Run, want) {
+			return true
 		}
 	}
-	publishJob := stripHashComments(t, workflowJobBlock(t, workflow, "publish"))
-	for _, want := range []string{
-		"Generate SBOM",
-		"veil.sbom.spdx.json",
-		"sign-blob",
-		"attest-build-provenance",
-	} {
-		if !strings.Contains(publishJob, want) {
-			t.Fatalf("publish job missing supply-chain gate %q", want)
+	return false
+}
+
+// TestReleaseWorkflowBuildsSignedPackagesAndSBOM locks in the supply-chain
+// release gates by walking the parsed workflow steps: native deb/rpm/apk
+// packages built by nfpm, an SPDX SBOM, keyless cosign signatures, and build
+// provenance attestation — each proven by an actual `uses:`/`run:`/`with:`
+// field, never by a comment or step name alone.
+func TestReleaseWorkflowBuildsSignedPackagesAndSBOM(t *testing.T) {
+	permissions, steps := releaseWorkflowSteps(t)
+
+	for _, perm := range []string{"id-token", "attestations"} {
+		if got := permissions[perm]; got != "write" {
+			t.Fatalf("release workflow permissions[%q] = %q, want \"write\" (keyless signing/attestation)", perm, got)
 		}
 	}
-	// OIDC permissions are top-level workflow keys, not job steps.
-	header := stripHashComments(t, workflow[:strings.Index(workflow, "\njobs:")])
-	for _, want := range []string{"id-token: write", "attestations: write"} {
-		if !strings.Contains(header, want) {
-			t.Fatalf("release workflow missing top-level permission %q", want)
+
+	// Native packages: an actual nfpm invocation against the packaged config.
+	// The binary is invoked as `"$(go env GOPATH)/bin/nfpm" package ..., so
+	// match the invocation arguments rather than a single `nfpm package` token.
+	var nfpmStep bool
+	for _, step := range steps {
+		if strings.Contains(step.Run, "nfpm") && strings.Contains(step.Run, "package --config packaging/nfpm.yaml") {
+			nfpmStep = true
 		}
+	}
+	if !nfpmStep {
+		t.Fatal("release workflow has no `run:` step invoking `nfpm package --config packaging/nfpm.yaml`")
+	}
+
+	// SBOM: a real sbom-action step plus a run step that stages the SPDX file
+	// into dist/ for signing and upload.
+	if !stepHasUse(steps, "anchore/sbom-action@") {
+		t.Fatal("release workflow has no `uses: anchore/sbom-action@…` step")
+	}
+	if !stepRunContains(steps, "dist/veil.sbom.spdx.json") {
+		t.Fatal("release workflow has no `run:` step staging dist/veil.sbom.spdx.json")
+	}
+
+	// Keyless signatures: the installer action must be pinned, and a run step
+	// must actually invoke cosign sign-blob.
+	if !stepHasUse(steps, "sigstore/cosign-installer@") {
+		t.Fatal("release workflow has no `uses: sigstore/cosign-installer@…` step")
+	}
+	if !stepRunContains(steps, "cosign sign-blob") {
+		t.Fatal("release workflow has no `run:` step invoking `cosign sign-blob`")
+	}
+
+	// Provenance: an attest-build-provenance step whose subject-path lists the
+	// real release artifacts — including every native package glob.
+	var attested bool
+	for _, step := range steps {
+		if !strings.HasPrefix(step.Uses, "actions/attest-build-provenance@") {
+			continue
+		}
+		attested = true
+		var subjects string
+		for _, key := range []string{"subject-path", "subject-paths"} {
+			if v, ok := step.With[key].(string); ok {
+				subjects += "\n" + v
+			}
+		}
+		for _, want := range []string{
+			"dist/checksums.txt",
+			"dist/veil.sbom.spdx.json",
+			"dist/veil.provenance.json",
+			"dist/veil_linux_*.tar.gz",
+			"dist/*.deb",
+			"dist/*.rpm",
+			"dist/*.apk",
+		} {
+			if !strings.Contains(subjects, want) {
+				t.Fatalf("attest-build-provenance subject paths missing %q:\n%s", want, subjects)
+			}
+		}
+	}
+	if !attested {
+		t.Fatal("release workflow has no `uses: actions/attest-build-provenance@…` step")
+	}
+
+	// Container image: the build-push step must emit max-mode provenance.
+	var maxProvenance bool
+	for _, step := range steps {
+		if strings.HasPrefix(step.Uses, "docker/build-push-action@") && step.With["provenance"] == "mode=max" {
+			maxProvenance = true
+		}
+	}
+	if !maxProvenance {
+		t.Fatal("release workflow docker/build-push-action step missing `with: provenance: mode=max`")
 	}
 }
 
@@ -208,21 +300,38 @@ func TestNfpmConfigShipsBinaryAndUnits(t *testing.T) {
 	}
 }
 
+// shellCode strips comment lines so a `# systemctl …` remark cannot satisfy a
+// check that is meant to prove a live invocation.
+func shellCode(body string) string {
+	var lines []string
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n")
+}
+
 // TestPackageScriptsExist ensures the packaging maintainer scripts are present
-// and reference systemd lifecycle handling.
+// and perform real systemctl lifecycle invocations — not just comments that
+// mention systemd.
 func TestPackageScriptsExist(t *testing.T) {
-	for _, script := range []string{
-		"../../packaging/scripts/postinstall.sh",
-		"../../packaging/scripts/preremove.sh",
-		"../../packaging/scripts/postremove.sh",
-	} {
+	scripts := map[string][]string{
+		"../../packaging/scripts/postinstall.sh": {"systemctl daemon-reload", "systemctl enable", "systemctl try-restart"},
+		"../../packaging/scripts/preremove.sh":   {"systemctl stop", "systemctl disable"},
+		"../../packaging/scripts/postremove.sh":  {"systemctl daemon-reload"},
+	}
+	for script, invocations := range scripts {
 		body, err := os.ReadFile(script)
 		if err != nil {
 			t.Fatalf("missing packaging script %s: %v", script, err)
 		}
-		// Comments stripped: a `# handles systemctl` note is not evidence.
-		if !strings.Contains(stripHashComments(t, string(body)), "systemctl") {
-			t.Fatalf("packaging script %s does not handle systemd", script)
+		code := shellCode(strings.ReplaceAll(string(body), "\r\n", "\n"))
+		for _, want := range invocations {
+			if !strings.Contains(code, want) {
+				t.Fatalf("packaging script %s has no live %q invocation", script, want)
+			}
 		}
 	}
 	preremove, err := os.ReadFile("../../packaging/scripts/preremove.sh")
@@ -471,33 +580,53 @@ func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 	}
 }
 
-// TestOpenAPISpecCoversCoreRoutes verifies the OpenAPI document exists and
-// documents the core management routes and the bearer/token auth schemes.
+// TestOpenAPISpecCoversCoreRoutes parses the OpenAPI document and verifies it
+// documents the core management routes and the bearer/token auth schemes —
+// parsed `paths:`/`securitySchemes:` keys, so the check cannot pass on a
+// prose mention or a comment.
 func TestOpenAPISpecCoversCoreRoutes(t *testing.T) {
 	body, err := os.ReadFile("../../docs/openapi.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec := strings.ReplaceAll(string(body), "\r\n", "\n")
-	for _, want := range []string{
-		"openapi: 3.1.0",
+	var doc struct {
+		OpenAPI    string         `yaml:"openapi"`
+		Paths      map[string]any `yaml:"paths"`
+		Components map[string]any `yaml:"components"`
+	}
+	if err := yaml.Unmarshal(body, &doc); err != nil {
+		t.Fatalf("openapi.yaml must parse as YAML: %v", err)
+	}
+	if doc.OpenAPI != "3.1.0" {
+		t.Fatalf("openapi version = %q, want 3.1.0", doc.OpenAPI)
+	}
+	for _, path := range []string{
 		"/api/auth/login",
 		"/api/auth/status",
-		"sessionCookie",
-		"csrfToken",
-		"--metrics-access",
 		"/api/status",
 		"/api/settings",
 		"/api/inbounds",
 		"/api/apply",
 		"/api/warp",
 		"/api/routing/rules",
-		"X-Veil-Token",
-		"bearerAuth",
 	} {
-		if !strings.Contains(spec, want) {
-			t.Fatalf("openapi.yaml missing %q", want)
+		if _, ok := doc.Paths[path]; !ok {
+			t.Fatalf("openapi.yaml paths missing %q", path)
 		}
+	}
+	schemes, _ := doc.Components["securitySchemes"].(map[string]any)
+	for _, scheme := range []string{"bearerAuth", "sessionCookie", "csrfToken", "veilToken"} {
+		if _, ok := schemes[scheme]; !ok {
+			t.Fatalf("openapi.yaml securitySchemes missing %q", scheme)
+		}
+	}
+	// The apiKey scheme must bind the documented header name.
+	if veilToken, _ := schemes["veilToken"].(map[string]any); veilToken["name"] != "X-Veil-Token" {
+		t.Fatalf("veilToken security scheme name = %v, want X-Veil-Token", veilToken["name"])
+	}
+	spec := strings.ReplaceAll(string(body), "\r\n", "\n")
+	if !strings.Contains(spec, "--metrics-access") {
+		t.Fatal("openapi.yaml missing --metrics-access policy documentation")
 	}
 	for _, dangerous := range []string{
 		"the API is open at the application layer",
@@ -510,22 +639,39 @@ func TestOpenAPISpecCoversCoreRoutes(t *testing.T) {
 }
 
 // TestHardeningGuideExists ensures the hardening guide is present and covers
-// the key operational topics.
+// the key operational topics as real sections with concrete procedures — not
+// isolated token mentions that could appear anywhere in prose.
 func TestHardeningGuideExists(t *testing.T) {
 	body, err := os.ReadFile("../../docs/HARDENING.md")
 	if err != nil {
 		t.Fatal(err)
 	}
 	guide := strings.ReplaceAll(string(body), "\r\n", "\n")
-	for _, want := range []string{
-		"bearer token",
-		"checksum",
-		"cosign",
-		"SBOM",
-		"systemd",
+
+	// Each operational topic must have a dedicated section heading.
+	for _, heading := range []string{
+		"## 2. API authentication",
+		"## 4. Encrypted backups and key lifecycle",
+		"## 5. Panel audit history",
+		"## 6. Supply-chain integrity",
+		"## 7. Host and runtime hardening",
+		"## 8. Updates and rollback",
 	} {
-		if !strings.Contains(guide, want) {
-			t.Fatalf("HARDENING.md missing %q", want)
+		if !strings.Contains(guide, heading) {
+			t.Fatalf("HARDENING.md missing section heading %q", heading)
+		}
+	}
+
+	// And the guide must ship the concrete verification/recovery commands an
+	// operator runs — a section heading alone proves nothing.
+	for _, procedure := range []string{
+		"cosign verify-blob",
+		"gh attestation verify",
+		"sha256sum -c",
+		"veil rollback restore",
+	} {
+		if !strings.Contains(guide, procedure) {
+			t.Fatalf("HARDENING.md missing procedure %q", procedure)
 		}
 	}
 }
@@ -570,12 +716,15 @@ func TestPrivilegeBoundaryDocumentation(t *testing.T) {
 		},
 	}
 
+	htmlComment := regexp.MustCompile(`(?s)<!--.*?-->`)
 	for path, wants := range documents {
 		body, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		content := strings.ReplaceAll(string(body), "\r\n", "\n")
+		// Strip HTML comments so a marker like <!-- TODO: document
+		// SO_PEERCRED --> cannot satisfy the privilege-boundary requirement.
+		content := htmlComment.ReplaceAllString(strings.ReplaceAll(string(body), "\r\n", "\n"), "")
 		for _, want := range wants {
 			if !strings.Contains(content, want) {
 				t.Errorf("%s missing privilege-boundary documentation %q", path, want)
