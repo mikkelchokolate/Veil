@@ -5979,6 +5979,9 @@ components:
       properties:
         path:
           type: string
+        source:
+          type: string
+          description: Where the certificate was loaded from — "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage).
         subject:
           type: string
         issuer:

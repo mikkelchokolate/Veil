@@ -73,6 +73,13 @@ func TestHandleRoutingPresetByNameValidation(t *testing.T) {
 }
 
 func TestHandleRoutingRules(t *testing.T) {
+	// This is a handler-level test with no apply infrastructure; without a
+	// StatePath the legacy auto-apply cannot converge and would report
+	// success:false for unrelated environmental reasons. Disable auto-apply
+	// so the success assertion checks the mutation contract deterministically.
+	origAutoApply := autoApplyAfterMutation
+	autoApplyAfterMutation = false
+	t.Cleanup(func() { autoApplyAfterMutation = origAutoApply })
 	state := newManagementState(ServerInfo{Mode: "dev"})
 
 	get := httptest.NewRequest(http.MethodGet, "/api/routing/rules", nil)
@@ -90,5 +97,15 @@ func TestHandleRoutingRules(t *testing.T) {
 	state.handleRoutingRules(rec, post)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	// The mutation envelope must report the apply outcome honestly (#835).
+	requireMutationEnvelopeSuccess(t, rec.Body.Bytes(), "create routing rule")
+	// Creating an enabled geosite rule must materialize the default dat
+	// source via ensureRoutingDatSourceLocked — otherwise the matcher is
+	// silently dropped at render time.
+	if len(state.routingSource.Files) != 2 ||
+		state.routingSource.Files[0].Name != "geoip.dat" ||
+		state.routingSource.Files[1].Name != "geosite.dat" {
+		t.Fatalf("geosite rule did not materialize dat source files: %+v", state.routingSource.Files)
 	}
 }

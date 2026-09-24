@@ -111,10 +111,13 @@ func TestHandleSettingsRejectsInvalidPanelListen(t *testing.T) {
 		name        string
 		panelListen string
 		wantStatus  int
+		wantErr     string // expected response body substring for rejections (#862)
 	}{
-		{"valid panelListen", "127.0.0.1:2096", http.StatusOK},
-		{"panelListen without port", "127.0.0.1", http.StatusBadRequest},
-		{"panelListen without host", ":2096", http.StatusBadRequest},
+		{"valid panelListen", "127.0.0.1:2096", http.StatusOK, ""},
+		{"panelListen without port", "127.0.0.1", http.StatusBadRequest, "panelListen must be host:port"},
+		{"panelListen without host", ":2096", http.StatusBadRequest, "panelListen must be host:port"},
+		{"panelListen bad port", "127.0.0.1:99999", http.StatusBadRequest, "panelListen port must be a valid integer between 1 and 65535"},
+		{"panelListen non-numeric port", "127.0.0.1:abc", http.StatusBadRequest, "panelListen port must be a valid integer between 1 and 65535"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -125,6 +128,17 @@ func TestHandleSettingsRejectsInvalidPanelListen(t *testing.T) {
 			mux.ServeHTTP(rec, req)
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d; body = %s", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+			if tt.wantErr != "" && !strings.Contains(rec.Body.String(), tt.wantErr) {
+				t.Fatalf("error body = %q, want substring %q", rec.Body.String(), tt.wantErr)
+			}
+			if tt.wantStatus == http.StatusOK {
+				state.mu.Lock()
+				got := state.settings.PanelListen
+				state.mu.Unlock()
+				if got != tt.panelListen {
+					t.Fatalf("persisted panelListen = %q, want %q", got, tt.panelListen)
+				}
 			}
 		})
 	}

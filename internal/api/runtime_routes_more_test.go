@@ -24,7 +24,7 @@ func TestRuntimeRoutesMethodNotAllowed(t *testing.T) {
 			case "/api/system":
 				handleSystemRuntime(rec, req)
 			case "/api/tls":
-				handleTLSRuntime(rec, req, nil)
+				handleTLSRuntime(rec, req)
 			case "/api/network":
 				handleNetworkRuntime(rec, req)
 			case "/api/connections":

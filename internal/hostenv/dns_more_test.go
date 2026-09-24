@@ -72,6 +72,10 @@ func TestCheckDomainDNSWarnsNoRecordsWithPublicIP(t *testing.T) {
 	if len(check.Warnings) != 2 {
 		t.Fatalf("expected 2 warnings, got %d: %+v", len(check.Warnings), check)
 	}
+	// Both warnings are user-facing copy: lock them verbatim (#854).
+	if check.Warnings[0] != "domain example.com does not resolve to public IP 203.0.113.10" {
+		t.Fatalf("unexpected first warning: %q", check.Warnings[0])
+	}
 	if check.Warnings[1] != "domain example.com has no A/AAAA records" {
 		t.Fatalf("unexpected second warning: %q", check.Warnings[1])
 	}

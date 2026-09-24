@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,33 +17,21 @@ import (
 
 var runtimeTelemetryPolicy = protocols.ManagedProcessPolicy()
 
+// findCaddyTLSCertPair locates a Caddy-managed certificate pair for the panel
+// domain in Caddy's ACME storage. It is a package variable so tests can stub
+// the filesystem search.
+var findCaddyTLSCertPair = caddycert.FindPair
+
 type RuntimeRoutes struct {
-	// TLSInfo reports the certificate status shown by /api/tls. When nil the
-	// handler only reads the VEIL_TLS_CERT file. RouterComposition wires the
-	// management-state variant so the Caddy-managed panel cert (and which
-	// issuer actually served it) is visible too (#906).
-	TLSInfo func() veilruntime.TLSCertInfo
+	// State supplies the panel settings (panelAccess/domain) the TLS endpoint
+	// needs to locate and validate the served certificate. Nil keeps the
+	// legacy VEIL_TLS_CERT-only behavior for embedded/test routers.
+	State *managementState
 }
-
-// defaultTLSInfo is the environment-only certificate reader used when no
-// management state is wired into RuntimeRoutes.
-func defaultTLSInfo() veilruntime.TLSCertInfo {
-	return veilruntime.NewRuntimeTelemetryWithPolicy(runtimeTelemetryPolicy).TLS()
-}
-
-// caddyPanelCertPair is a seam so tests can exercise the Caddy-certificate
-// fallback without touching /var/lib/caddy.
-var caddyPanelCertPair = caddycert.FindPair
 
 func (r RuntimeRoutes) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/system", handleSystemRuntime)
-	tlsInfo := r.TLSInfo
-	if tlsInfo == nil {
-		tlsInfo = defaultTLSInfo
-	}
-	mux.HandleFunc("/api/tls", func(w http.ResponseWriter, req *http.Request) {
-		handleTLSRuntime(w, req, tlsInfo)
-	})
+	mux.HandleFunc("/api/tls", r.handleTLSRuntime)
 	mux.HandleFunc("/api/network", handleNetworkRuntime)
 	mux.HandleFunc("/api/connections", handleConnectionsRuntime)
 	mux.HandleFunc("/api/processes", handleProcessesRuntime)
@@ -67,60 +56,79 @@ func handleSystemRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleTLSRuntime(w http.ResponseWriter, r *http.Request, tlsInfo func() veilruntime.TLSCertInfo) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+// handleTLSRuntime reports the certificate the panel actually serves. Direct
+// TLS mode points VEIL_TLS_CERT at a cert file; caddy panel access leaves the
+// env unset because Caddy terminates TLS from its own ACME storage — in that
+// case surface the Caddy-managed pair instead of a blind "no certificate
+// path configured" (#905).
+func (r RuntimeRoutes) handleTLSRuntime(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet && req.Method != http.MethodHead {
 		methodNotAllowed(w, http.MethodGet, http.MethodHead)
 		return
 	}
 	setJSONHeaders(w)
-	if r.Method == http.MethodGet {
-		if tlsInfo == nil {
-			tlsInfo = defaultTLSInfo
-		}
-		writeJSON(w, tlsInfo())
+	if req.Method == http.MethodGet {
+		writeJSON(w, r.tlsCertInfo())
 	}
 }
 
-// tlsCertInfo reports the certificate status for /api/tls. When the panel runs
-// behind the managed Caddy site (panelAccess=caddy) and no explicit
-// VEIL_TLS_CERT is configured, the public certificate lives in Caddy's issuer
-// storage — report it with its issuer source so an ACME failure that silently
-// fell back to Caddy's internal CA is visible instead of showing "no path"
-// (#906).
-func (s *managementState) tlsCertInfo() veilruntime.TLSCertInfo {
-	info := defaultTLSInfo()
-	if info.Path != "" {
-		return info
+// handleTLSRuntime preserves the legacy env-only behavior for callers that
+// invoke the handler without a management state (tests, embedded routers).
+func handleTLSRuntime(w http.ResponseWriter, req *http.Request) {
+	(RuntimeRoutes{}).handleTLSRuntime(w, req)
+}
+
+func (r RuntimeRoutes) tlsCertInfo() veilruntime.TLSCertInfo {
+	var settings Settings
+	var serveAccess string
+	if r.State != nil {
+		r.State.mu.Lock()
+		settings = r.State.settings
+		serveAccess = r.State.servePanelAccess
+		r.State.mu.Unlock()
 	}
-	s.mu.Lock()
-	settings := s.settings
-	serveAccess := s.servePanelAccess
-	s.mu.Unlock()
+	envPath := strings.TrimSpace(os.Getenv("VEIL_TLS_CERT"))
+	// A serve-time panelAccess override wins over the stored setting (#906).
 	access := strings.TrimSpace(serveAccess)
 	if access == "" {
 		access = strings.TrimSpace(settings.PanelAccess)
 	}
-	if access != "caddy" {
+	expectedDomain := tlsExpectedDomain(settings)
+	if envPath == "" && strings.EqualFold(access, "caddy") && expectedDomain != "" {
+		pair, err := findCaddyTLSCertPair("", expectedDomain)
+		if err == nil {
+			info := veilruntime.ReadTLSCertForDomain(pair.CertPath, expectedDomain)
+			info.Source = "caddy"
+			// Surface which issuer actually served the managed certificate —
+			// an ACME failure that silently fell back to Caddy's internal CA
+			// is a degraded state, not a trusted issuance (#906).
+			info.ManagedBy = "caddy"
+			info.IssuerSource = pair.IssuerName
+			info.IssuerKind = caddycert.IssuerKind(pair.IssuerName)
+			return info
+		}
+		info := veilruntime.TLSCertInfo{Source: "caddy", ManagedBy: "caddy"}
+		info.Error = fmt.Sprintf("no Caddy-managed certificate for %s: %v", expectedDomain, err)
 		return info
 	}
-	domain := strings.TrimSpace(settings.PanelDomain)
-	if domain == "" {
-		domain = strings.TrimSpace(settings.Domain)
+	info := veilruntime.ReadTLSCertForDomain(envPath, expectedDomain)
+	if info.Path != "" {
+		info.Source = "env"
 	}
-	if domain == "" {
-		info.Error = "caddy panel certificate: no panel domain configured"
-		return info
-	}
-	pair, err := caddyPanelCertPair("", domain)
-	if err != nil {
-		info.Error = "caddy panel certificate: " + err.Error()
-		return info
-	}
-	info = veilruntime.ReadTLSCert(pair.CertPath)
-	info.ManagedBy = "caddy"
-	info.IssuerSource = pair.IssuerName
-	info.IssuerKind = caddycert.IssuerKind(pair.IssuerName)
 	return info
+}
+
+// tlsExpectedDomain returns the hostname the panel TLS certificate must
+// cover: the panel domain under caddy access (PanelDomain falling back to
+// Domain, matching caddyassembly.ResolveDomainCertSpecs), otherwise the
+// primary domain. An empty result skips the SAN check.
+func tlsExpectedDomain(settings Settings) string {
+	if strings.EqualFold(strings.TrimSpace(settings.PanelAccess), "caddy") {
+		if d := strings.Trim(strings.TrimSpace(settings.PanelDomain), "[]"); d != "" {
+			return d
+		}
+	}
+	return strings.Trim(strings.TrimSpace(settings.Domain), "[]")
 }
 
 func handleNetworkRuntime(w http.ResponseWriter, r *http.Request) {

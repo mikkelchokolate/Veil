@@ -6,9 +6,10 @@ import (
 )
 
 // naiveHasCredential must accept the top-level inbound.Password that
-// InboundPasswordPolicy.ApplyCreate always generates for a fresh naiveproxy
-// inbound. The renderer (naiveUsers) already honours inbound.Password, but the
-// validator did not, so a create-then-apply flow was incorrectly rejected.
+// clientaccess.InboundCredentialPolicy.ApplyCreate always generates for a
+// fresh naiveproxy inbound. The renderer (naiveUsers) already honours
+// inbound.Password, but the validator did not, so a create-then-apply flow was
+// incorrectly rejected.
 func TestBuildApplyPlanAcceptsNaiveProxyWithTopLevelPassword(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
 		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev", Domain: "vpn.example.com", DefaultAcmeEmail: "admin@example.com"},

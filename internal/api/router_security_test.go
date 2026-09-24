@@ -111,9 +111,13 @@ func TestAuthMiddleware(t *testing.T) {
 		},
 	}
 
+	// The stub echoes the authenticated identity the middleware injected so a
+	// pass-through bug (empty user/role) cannot hide behind a bare 200 (#826).
 	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		username, _ := r.Context().Value(contextKeyUsername).(string)
+		role, _ := r.Context().Value(contextKeyRole).(string)
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok user=" + username + " role=" + role))
 	})
 
 	handler := authMiddleware(state, "static-secret-token", nextHandler)
@@ -139,8 +143,8 @@ func TestAuthMiddleware(t *testing.T) {
 	req.Header.Set("X-Veil-Token", "static-secret-token")
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("static token in header expected 200, got %d", w.Code)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "user=api-token role=admin") {
+		t.Fatalf("static token in header expected 200 as api-token/admin, got %d %q", w.Code, w.Body.String())
 	}
 
 	// 4. Static token authentication (Authorization Bearer)
@@ -148,8 +152,8 @@ func TestAuthMiddleware(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer static-secret-token")
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("static token in authorization expected 200, got %d", w.Code)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "user=api-token role=admin") {
+		t.Fatalf("static token in authorization expected 200 as api-token/admin, got %d %q", w.Code, w.Body.String())
 	}
 
 	// 5. Dev mode bypass when no users exist
@@ -158,8 +162,8 @@ func TestAuthMiddleware(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/api/inbounds", nil)
 	w = httptest.NewRecorder()
 	devHandler.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("dev mode expected 200 when no users and no token, got %d", w.Code)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "user=dev-anonymous role=admin") {
+		t.Fatalf("dev mode expected 200 as dev-anonymous/admin when no users and no token, got %d %q", w.Code, w.Body.String())
 	}
 
 	// 6. Cookie session
@@ -170,8 +174,8 @@ func TestAuthMiddleware(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: "veil_session", Value: sess.Token})
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("cookie session GET expected 200, got %d", w.Code)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "user=admin-user role=admin") {
+		t.Fatalf("cookie session GET expected 200 as admin-user/admin, got %d %q", w.Code, w.Body.String())
 	}
 
 	// 7. Cookie session mutating POST request without CSRF should fail (403)
@@ -189,8 +193,8 @@ func TestAuthMiddleware(t *testing.T) {
 	req.Header.Set("X-CSRF-Token", sess.CSRFToken)
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("mutating cookie session with CSRF expected 200, got %d", w.Code)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "user=admin-user role=admin") {
+		t.Fatalf("mutating cookie session with CSRF expected 200 as admin-user/admin, got %d %q", w.Code, w.Body.String())
 	}
 
 	// 9. RBAC: viewer role cannot perform mutating request even with CSRF (403)
@@ -212,8 +216,8 @@ func TestAuthMiddleware(t *testing.T) {
 	req.Header.Set("X-CSRF-Token", viewerSess.CSRFToken)
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("viewer locale update expected 200, got %d", w.Code)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "user=viewer-user role=viewer") {
+		t.Fatalf("viewer locale update expected 200 as viewer-user/viewer, got %d %q", w.Code, w.Body.String())
 	}
 }
 

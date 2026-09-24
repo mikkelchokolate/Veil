@@ -5,12 +5,14 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
 // TLSCertInfo holds TLS certificate information.
 type TLSCertInfo struct {
 	Path          string   `json:"path"`
+	Source        string   `json:"source,omitempty"` // "env" for VEIL_TLS_CERT, "caddy" for Caddy-managed storage
 	Subject       string   `json:"subject"`
 	Issuer        string   `json:"issuer"`
 	NotBefore     string   `json:"notBefore"`
@@ -32,6 +34,18 @@ type TLSCertInfo struct {
 
 // ReadTLSCert reads and parses a TLS certificate file.
 func ReadTLSCert(path string) TLSCertInfo {
+	return readTLSCert(path, "")
+}
+
+// ReadTLSCertForDomain reads and parses a TLS certificate file and reports it
+// valid only when it also covers domain — an unexpired certificate whose SANs
+// no longer match the served hostname is reported invalid so domain/SAN drift
+// is visible to operators (#905). An empty domain skips the hostname check.
+func ReadTLSCertForDomain(path, domain string) TLSCertInfo {
+	return readTLSCert(path, strings.TrimSpace(domain))
+}
+
+func readTLSCert(path, domain string) TLSCertInfo {
 	info := TLSCertInfo{Path: path, Valid: false}
 	if path == "" {
 		info.Error = "no certificate path configured"
@@ -60,5 +74,11 @@ func ReadTLSCert(path string) TLSCertInfo {
 	info.DaysRemaining = int(cert.NotAfter.Sub(now).Hours() / 24)
 	info.DNSNames = cert.DNSNames
 	info.Valid = now.Before(cert.NotAfter) && now.After(cert.NotBefore)
+	if info.Valid && domain != "" {
+		if err := cert.VerifyHostname(domain); err != nil {
+			info.Valid = false
+			info.Error = fmt.Sprintf("certificate does not cover %s: %v", domain, err)
+		}
+	}
 	return info
 }
