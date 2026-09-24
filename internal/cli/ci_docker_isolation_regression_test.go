@@ -20,7 +20,10 @@ func TestDockerBuildsNeverUseHostNetworking(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if strings.Contains(string(body), "--network host") {
+		// Comments stripped: `# never use --network host` must not trip the
+		// forbidden check, and a commented-out `--network host` must not
+		// silently count as compliant either way (issue #916).
+		if strings.Contains(stripHashComments(t, string(body)), "--network host") {
 			t.Errorf("%s uses forbidden host networking", path)
 		}
 		return nil
@@ -36,7 +39,7 @@ func TestDockerCIBackendDoesNotShareHostNetworkOrRuntimeNamespace(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := string(data)
+	script := stripHashComments(t, string(data))
 	for _, forbidden := range []string{
 		"--network host",
 		"--cgroupns=host",
@@ -62,7 +65,7 @@ func TestHostedRuntimeProbeUsesPrivilegedSandbox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := string(data)
+	script := stripHashComments(t, string(data))
 	for _, required := range []string{
 		`[ "$(id -u)" -ne 0 ]`,
 		`command -v sudo`,

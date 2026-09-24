@@ -11,7 +11,7 @@ func TestDockerComposeExampleUsesLoopbackServe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	compose := strings.ReplaceAll(string(body), "\r\n", "\n")
+	compose := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
 	if strings.Contains(compose, "--listen 0.0.0.0") {
 		t.Fatal("compose example still binds a public listen that first-run exposure policy rejects")
 	}
