@@ -61,7 +61,9 @@ func TestAutoMigrateLegacyOnReload(t *testing.T) {
 	// Verify bindings and credential material survive the reload-driven
 	// migration: each migrated credential must reveal the legacy password.
 	creds := client.NewCredentialStore(state.db, state.cipher)
-	wantPasswords := map[string]string{"alice": "alice-pass", "bob": "bob-pass"}
+	// Migrated clients take Name from the legacy profile record
+	// ("legacy-alice"), not the embedded credential username.
+	wantPasswords := map[string]string{"legacy-alice": "alice-pass", "legacy-bob": "bob-pass"}
 	for _, c := range clients {
 		bindings, err := repo.BindingsForClient(c.ID)
 		if err != nil {
