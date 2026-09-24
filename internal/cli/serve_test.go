@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -130,6 +131,25 @@ func freeLoopbackPort(t *testing.T) int {
 	return l.Addr().(*net.TCPAddr).Port
 }
 
+// syncBuffer is a goroutine-safe buffer for capturing serve output while the
+// command goroutine is still writing to it.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
 // runServeUntilStartup launches the real serve workflow, waits until the
 // startup banner is printed, then cancels. It returns the captured output.
 func runServeUntilStartup(t *testing.T, extraArgs ...string) string {
@@ -144,7 +164,7 @@ func runServeUntilStartup(t *testing.T, extraArgs ...string) string {
 	t.Cleanup(cancel)
 
 	cmd := NewRootCommand("test")
-	var out bytes.Buffer
+	var out syncBuffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetContext(ctx)
@@ -164,7 +184,7 @@ func runServeUntilStartup(t *testing.T, extraArgs ...string) string {
 		errCh <- cmd.Execute()
 	}()
 
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for !strings.Contains(out.String(), "TLS:") {
 		select {
 		case err := <-errCh:

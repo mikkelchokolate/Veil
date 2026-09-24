@@ -95,15 +95,6 @@ func goJSONFieldSets(typ reflect.Type) (props, required map[string]bool) {
 	return props, required
 }
 
-func sortedKeys(m map[string]bool) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
 // assertSchemaMatchesGoWire locks an OpenAPI object schema to a Go wire
 // struct: property names must be exactly the Go JSON names, and `required`
 // must be exactly the non-omitempty fields (every field the runtime always
