@@ -192,6 +192,39 @@ describe("OverviewPage version", () => {
 		).not.toBeInTheDocument();
 	});
 
+	// #813: "Update panel" only opens the confirm dialog — the staging POST
+	// must not fire until the dialog action is clicked.
+	it("does not POST the update until the dialog action", async () => {
+		overviewApis();
+		const posts: string[] = [];
+		server.use(
+			http.post("/api/version/update", () => {
+				posts.push("update");
+				return HttpResponse.json(
+					{
+						jobId: "job-1",
+						status: "restart_pending",
+						staged: true,
+						installed: true,
+						version: "v0.6.4",
+					},
+					{ status: 202 },
+				);
+			}),
+		);
+		renderOverview();
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Update panel" }),
+			).toBeEnabled(),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Update panel" }));
+		expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+		expect(posts).toEqual([]);
+		fireEvent.click(screen.getByRole("button", { name: "Start update" }));
+		await waitFor(() => expect(posts).toEqual(["update"]));
+	});
+
 	it("reloads after a successful staged update", async () => {
 		overviewApis();
 		panelUpdateMocks.waitForPanelVersion.mockResolvedValue({

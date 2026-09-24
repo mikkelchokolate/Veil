@@ -49,7 +49,41 @@ describe("ApplyPage", () => {
 		await waitFor(() =>
 			expect(screen.getByText(/behind desired/i)).toBeInTheDocument(),
 		);
-		// Reconcile is admin-only; the drift indicator is the honest signal here.
+		// #851: the default session fixture is admin — the Reconcile button
+		// must actually render when drifted, not just be skipped in a comment.
+		expect(
+			await screen.findByRole("button", { name: /reconcile now/i }),
+		).toBeInTheDocument();
+	});
+
+	// #851: Reconcile is admin-only — a viewer sees the same drift text but
+	// must not get the action (contrast overview.test.tsx viewer coverage).
+	it("shows drift but hides Reconcile from viewers", async () => {
+		server.use(
+			http.get("/api/auth/status", () =>
+				HttpResponse.json({
+					authenticated: true,
+					username: "viewer",
+					role: "viewer",
+					csrfToken: "test-csrf",
+				}),
+			),
+			http.get("/api/apply/state", () =>
+				HttpResponse.json({
+					desiredRevision: 3,
+					appliedRevision: 1,
+					state: "pending",
+				}),
+			),
+			http.get("/api/apply/jobs", () => HttpResponse.json({ items: [] })),
+		);
+		renderApply();
+		await waitFor(() =>
+			expect(screen.getByText(/behind desired/i)).toBeInTheDocument(),
+		);
+		expect(
+			screen.queryByRole("button", { name: /reconcile now/i }),
+		).not.toBeInTheDocument();
 	});
 
 	it("renders job rows with status", async () => {

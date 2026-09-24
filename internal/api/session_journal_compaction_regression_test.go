@@ -71,8 +71,17 @@ func TestSessionJournalCompactsToCheckpoint(t *testing.T) {
 	if info.Size() > 1024*1024 {
 		t.Fatalf("journal was not compacted: %d bytes", info.Size())
 	}
-	if _, err := NewSessionRegistry(path); err != nil {
+	reloaded, err := NewSessionRegistry(path)
+	if err != nil {
 		t.Fatalf("compacted checkpoint did not reload: %v", err)
+	}
+	// Compaction must not drop the live session recorded in the checkpoint.
+	got, ok := reloaded.Get(session.Token)
+	if !ok {
+		t.Fatal("session missing after journal compaction reload")
+	}
+	if got.Username != "compact" || got.Role != "admin" {
+		t.Fatalf("session after compaction = %+v, want username=compact role=admin", got)
 	}
 }
 
