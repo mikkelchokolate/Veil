@@ -815,6 +815,22 @@ func (s *managementState) bindingInboundExistsLocked(inboundID string) bool {
 
 func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.Request, clientID string, parts []string) {
 	if len(parts) == 1 { // /bindings
+		if r.Method == http.MethodGet {
+			// The OpenAPI contract documents this list endpoint; the same
+			// enriched view is also embedded as ClientView.bindings on
+			// GET /api/v1/clients/{id}.
+			view, err := s.clientService.Get(clientID)
+			if err != nil {
+				s.writeV1ClientError(w, err)
+				return
+			}
+			bindings := view.Bindings
+			if bindings == nil {
+				bindings = []client.BindingView{}
+			}
+			writeJSON(w, map[string]any{"items": bindings})
+			return
+		}
 		if r.Method == http.MethodPost {
 			var req v1BindingRequest
 			if !decodeJSONRequest(w, r, &req) {
@@ -881,7 +897,7 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 			s.writeMutationResponse(w, http.StatusCreated, resp, outcome)
 			return
 		}
-		methodNotAllowed(w, http.MethodPost)
+		methodNotAllowed(w, http.MethodGet, http.MethodPost)
 		return
 	}
 	// /bindings/{bindingId}

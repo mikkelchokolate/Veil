@@ -1,6 +1,9 @@
 package webbasepath
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestNormalize(t *testing.T) {
 	tests := []struct {
@@ -29,6 +32,27 @@ func TestNormalize(t *testing.T) {
 		{"s2", "/s2/", false},
 		{"panel/s", "/panel/s/", false},
 		{"subscriptions", "/subscriptions/", false},
+		// Root-mux first segments are reserved as a FIRST segment only —
+		// a same-named mount would shadow the real endpoint or serve the
+		// SPA in its place (#765).
+		{"api", "", true},
+		{"/api/", "", true},
+		{"api/v2", "", true},
+		{"metrics", "", true},
+		{"metrics/panel", "", true},
+		{"healthz", "", true},
+		{"livez", "", true},
+		{"readyz", "", true},
+		{"assets", "", true},
+		{"favicon.ico", "", true},
+		{"favicon.svg", "", true},
+		{"robots.txt", "", true},
+		{"apis", "/apis/", false},
+		{"panel/api", "/panel/api/", false},
+		{"panel/metrics", "/panel/metrics/", false},
+		{"api2", "/api2/", false},
+		{"myassets", "/myassets/", false},
+		{"API", "/API/", false}, // mux patterns are case-sensitive
 	}
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
@@ -46,6 +70,21 @@ func TestNormalize(t *testing.T) {
 				t.Fatalf("Normalize(%q) = %q, want %q", tc.input, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestNormalizeReservedFirstSegmentMessage locks the operator-facing error:
+// it must name the offending segment so a rejected webBasePath is actionable
+// in settings validation output.
+func TestNormalizeReservedFirstSegmentMessage(t *testing.T) {
+	for _, input := range []string{"api", "metrics", "healthz", "assets", "s"} {
+		_, err := Normalize(input)
+		if err == nil {
+			t.Fatalf("Normalize(%q): expected reserved-segment error", input)
+		}
+		if !strings.Contains(err.Error(), input) || !strings.Contains(err.Error(), "reserved") {
+			t.Fatalf("Normalize(%q) error = %q, want segment name + reserved reason", input, err)
+		}
 	}
 }
 
