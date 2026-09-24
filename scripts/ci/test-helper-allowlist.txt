@@ -1,0 +1,27 @@
+# test-helper-allowlist.txt — subprocess-helper roots allowed to report
+# `helper` (a skip relabeled) in the `test` job.
+#
+# These roots are child-process entrypoints: they run real code only inside a
+# subprocess the parent test spawns with a gate env var set. In the parent
+# suite the env is absent, so the root MUST skip — and that skip is execution
+# evidence of the *child* path, not of a standalone assertion. Naming the root
+# here is the explicit declaration that its skip is a helper boundary, not a
+# soft-disabled test (issue #790).
+#
+# A helper-candidate skip NOT on this list fails the inventory (it lands in
+# disallowed-skips, same as any unexpected skip). A root on this list that
+# reports `pass` also fails — the allowlist exists because the root cannot
+# produce standalone assertions, so a standalone pass means the env gate was
+# bypassed.
+#
+# Format: <package><TAB><root>   (one per line; # comments allowed)
+
+github.com/mikkelchokolate/Veil/internal/api	TestIdempotencyProcessHelper
+github.com/mikkelchokolate/Veil/internal/apply	TestApplyFenceSubprocessHelper
+github.com/mikkelchokolate/Veil/internal/backup	TestRestoreCrashProcess
+github.com/mikkelchokolate/Veil/internal/diagnostics	TestExecHelperProcess
+github.com/mikkelchokolate/Veil/internal/privileged	TestFirewallTransactionSubprocessHelper
+github.com/mikkelchokolate/Veil/internal/privileged	TestPromotionCrashProcess
+github.com/mikkelchokolate/Veil/internal/privileged	TestPromotionLockSubprocessHelper
+github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestRuntimeActivationCrashHelper
+github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestRuntimeProbeMaliciousHelper

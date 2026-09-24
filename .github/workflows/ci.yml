@@ -424,14 +424,22 @@ jobs:
           path: .artifacts/ci/
           if-no-files-found: ignore
 
-  # Aggregates both matrix legs into the literal "package-smoke" check
-  # context the branch ruleset requires — fails/skips if either arch fails.
+  # Literal `package-smoke` check context required by branch protection. It
+  # fails closed: `if: always()` keeps the aggregator running when a matrix
+  # leg is cancelled or fails fast, and the step refuses any matrix result
+  # other than `success` (skipped legs report "skipped", not "success").
   package-smoke:
     needs: package-smoke-matrix
+    if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - run: 'true'
+      - name: Fail unless every package-smoke matrix leg succeeded
+        env:
+          PACKAGE_SMOKE_MATRIX_RESULT: ${{ needs.package-smoke-matrix.result }}
+        run: |
+          echo "package-smoke-matrix result: ${PACKAGE_SMOKE_MATRIX_RESULT}"
+          [ "${PACKAGE_SMOKE_MATRIX_RESULT}" = "success" ]
 
   image-build:
     runs-on: ubuntu-24.04

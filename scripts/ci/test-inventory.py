@@ -168,26 +168,33 @@ def load_skip_allowlist(path: Path | None) -> set[tuple[str, str]]:
     if not path:
         return allowed
     if not path.exists():
-        raise SystemExit(f"skip allowlist does not exist: {path}")
+        raise SystemExit(f"test allowlist does not exist: {path}")
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
         package, _, root = line.partition("\t")
         if not package or not root:
-            raise SystemExit(f"skip allowlist line is not 'package<TAB>root': {line!r}")
+            raise SystemExit(f"allowlist line in {path} is not 'package<TAB>root': {line!r}")
         allowed.add((package.strip(), root.strip()))
     return allowed
 
 
-def write_report(repo: Path, artifact: Path, roots: list[dict[str, Any]], logs: list[Path], skip_allowlist: set[tuple[str, str]] | None = None) -> None:
+def write_report(repo: Path, artifact: Path, roots: list[dict[str, Any]], logs: list[Path], skip_allowlist: set[tuple[str, str]] | None = None, helper_allowlist: set[tuple[str, str]] | None = None) -> None:
     artifact.mkdir(parents=True, exist_ok=True)
     by_key = {(row["package"], row["root"]): row for row in roots}
     timing_map, observed = parse_logs(logs)
+    helper_allowed = helper_allowlist or set()
     for key, row in by_key.items():
         if key in timing_map:
             row.update(timing_map[key])
-            if row.get("helperCandidate") and row.get("status") == "skip":
+            # A subprocess-helper root skips by design in the parent suite —
+            # its real execution is the child process the parent spawns.
+            # Relabel it `helper` only when the root is *named* on the helper
+            # allowlist: any other helper-candidate skip stays `skip` and fails
+            # the disallowed-skip gate below, so a newly-added helper can never
+            # silently false-green (issue #790).
+            if row.get("status") == "skip" and key in helper_allowed:
                 row["status"] = "helper"
         elif key not in observed:
             row["status"] = "missing"
@@ -267,9 +274,20 @@ def write_report(repo: Path, artifact: Path, roots: list[dict[str, Any]], logs: 
     disallowed_skips = [key for key in skipped if key not in allowed]
     (artifact / "skipped-roots.txt").write_text(
         "\n".join(f"{p}\t{r}" for p, r in skipped) + ("\n" if skipped else ""), encoding="utf-8")
-    if missing or unexpected or disallowed_skips:
+    # A root named on the helper allowlist that reported *pass* instead of
+    # skip is suspicious too: the allowlist exists because the root cannot
+    # produce standalone assertions, so a standalone pass means the env gate
+    # was bypassed (issue #790).
+    unexpected_helper_passes = sorted(
+        key for key in helper_allowed
+        if key in by_key and by_key[key].get("status") == "pass"
+    )
+    (artifact / "helper-roots.txt").write_text(
+        "\n".join(f"{p}\t{r}\t{by_key[(p, r)].get('status', '')}" for p, r in sorted(helper_allowed) if (p, r) in by_key)
+        + ("\n" if helper_allowed else ""), encoding="utf-8")
+    if missing or unexpected or disallowed_skips or unexpected_helper_passes:
         print(
-            f"inventory verification failed: missing={len(missing)} unexpected={len(unexpected)} disallowed-skips={len(disallowed_skips)}",
+            f"inventory verification failed: missing={len(missing)} unexpected={len(unexpected)} disallowed-skips={len(disallowed_skips)} helper-passes={len(unexpected_helper_passes)}",
             file=sys.stderr,
         )
         if missing:
@@ -278,8 +296,11 @@ def write_report(repo: Path, artifact: Path, roots: list[dict[str, Any]], logs: 
             print("unexpected: " + ", ".join(f"{p}:{r}" for p, r in unexpected[:20]), file=sys.stderr)
         if disallowed_skips:
             print("skipped (not on allowlist): " + ", ".join(f"{p}:{r}" for p, r in disallowed_skips[:20]), file=sys.stderr)
+        if unexpected_helper_passes:
+            print("helper allowlist roots that reported pass: " + ", ".join(f"{p}:{r}" for p, r in unexpected_helper_passes[:20]), file=sys.stderr)
         raise SystemExit(1)
-    print(f"inventory verified: {len(roots)} expected roots, {len(observed)} executed roots, {len(skipped)} allowed skips")
+    helper_count = sum(1 for row in by_key.values() if row.get("status") == "helper")
+    print(f"inventory verified: {len(roots)} expected roots, {len(observed)} executed roots, {len(skipped)} allowed skips, {helper_count} helper roots")
 
 
 def main() -> int:
@@ -289,6 +310,7 @@ def main() -> int:
     parser.add_argument("--packages-file", type=Path)
     parser.add_argument("--roots-json", type=Path)
     parser.add_argument("--skip-allowlist", type=Path)
+    parser.add_argument("--helper-allowlist", type=Path)
     parser.add_argument("--log", type=Path, action="append", default=[])
     args = parser.parse_args()
     repo = args.repo.resolve()
@@ -302,7 +324,7 @@ def main() -> int:
             packages = run(["go", "list", "./..."], repo).splitlines()
         roots = discover(repo, packages)
     if args.log:
-        write_report(repo, args.artifact_dir, roots, args.log, load_skip_allowlist(args.skip_allowlist))
+        write_report(repo, args.artifact_dir, roots, args.log, load_skip_allowlist(args.skip_allowlist), load_skip_allowlist(args.helper_allowlist))
     else:
         args.artifact_dir.mkdir(parents=True, exist_ok=True)
         (args.artifact_dir / "test-roots.json").write_text(json.dumps(roots, indent=2, sort_keys=True) + "\n", encoding="utf-8")
