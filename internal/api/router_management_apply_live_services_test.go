@@ -631,8 +631,11 @@ func TestManagementApplyWritesAuditHistoryForRollback(t *testing.T) {
 	if err := json.Unmarshal(body, &history); err != nil {
 		t.Fatalf("decode history: %v", err)
 	}
-	if len(history) != 1 || history[0].Success || history[0].Stage != "rollback" || history[0].RolledBack || len(history[0].RollbackFiles) != 1 || len(history[0].RollbackActions) < 1 {
-		t.Fatalf("expected incomplete rollback history entry with preserved evidence: %+v", history)
+	// #968: an incomplete rollback (RolledBack=false, health still failing) is
+	// an unproven outcome — history records stage "ambiguous" rather than
+	// claiming a rollback happened, while keeping the rollback evidence.
+	if len(history) != 1 || history[0].Success || history[0].Stage != "ambiguous" || !history[0].Ambiguous || history[0].RolledBack || len(history[0].RollbackFiles) != 1 || len(history[0].RollbackActions) < 1 {
+		t.Fatalf("expected ambiguous incomplete-rollback history entry with preserved evidence: %+v", history)
 	}
 }
 
