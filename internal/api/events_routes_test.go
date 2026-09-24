@@ -103,6 +103,8 @@ func TestV1EventsSSE(t *testing.T) {
 		}
 		if _, ok := traffic.Clients[view.ID]; !ok {
 			t.Errorf("traffic event clients map lacks created client %q: %s", view.ID, data)
+		} else if c := traffic.Clients[view.ID]; c.Upload != 0 || c.Download != 0 {
+			t.Errorf("fresh client must report zeroed counters: %+v", c)
 		}
 	}
 	// The apply payload must decode to a revision object that actually

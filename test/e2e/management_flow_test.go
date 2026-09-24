@@ -3,12 +3,14 @@
 package e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestFullInboundToApplyFlow drives the complete management lifecycle over a
@@ -37,14 +39,23 @@ func TestFullInboundToApplyFlow(t *testing.T) {
 	}
 	drain(resp)
 
-	// Client links should aggregate the enabled Mieru transports.
+	// Client links should aggregate the enabled Mieru transports — assert the
+	// mieru link is actually present, not just any non-empty count (#899).
 	resp = srv.do(http.MethodGet, "/api/client-links", "")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("client links expected 200, got %d", resp.StatusCode)
 	}
 	links := readJSON(t, resp)
-	if count, ok := links["count"].(float64); !ok || count < 1 {
-		t.Fatalf("expected at least one client link, got %v", links["count"])
+	linkItems, _ := links["links"].([]any)
+	foundMieru := false
+	for _, item := range linkItems {
+		m, _ := item.(map[string]any)
+		if m["protocol"] == "mieru" {
+			foundMieru = true
+		}
+	}
+	if !foundMieru {
+		t.Fatalf("client links carry no mieru entry: %v", links)
 	}
 
 	// Plan, then apply; expect generated mieru config under the apply root.
@@ -54,36 +65,73 @@ func TestFullInboundToApplyFlow(t *testing.T) {
 	}
 	drain(resp)
 
-	resp = srv.do(http.MethodPost, "/api/apply", `{"confirm":true}`)
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
-		t.Fatalf("apply expected 200/409, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	// Stage-only apply must report a clean 200 — a 409 means an auto-apply
+	// from the earlier mutations is still in flight, so retry briefly instead
+	// of accepting either code (#899).
+	var applyResp *http.Response
+	for attempt := 0; attempt < 10; attempt++ {
+		applyResp = srv.do(http.MethodPost, "/api/apply", `{"confirm":true}`)
+		if applyResp.StatusCode != http.StatusConflict {
+			break
+		}
+		drain(applyResp)
+		time.Sleep(500 * time.Millisecond)
 	}
-	drain(resp)
+	if applyResp.StatusCode != http.StatusOK {
+		t.Fatalf("apply expected 200, got %d: %v", applyResp.StatusCode, readJSON(t, applyResp))
+	}
+	// A 200 alone is not proof the stage wrote anything — the plan must be
+	// valid and writtenFiles must carry the mieru artifact (#899). `applied`
+	// stays false here: this request stages configs without promoting live.
+	applyBody := readJSON(t, applyResp)
+	if plan, _ := applyBody["plan"].(map[string]any); plan["valid"] != true {
+		t.Fatalf("stage apply plan not valid: %v", applyBody)
+	}
+	written, _ := applyBody["writtenFiles"].([]any)
+	foundWritten := false
+	for _, f := range written {
+		if s, _ := f.(string); strings.HasSuffix(s, "mieru/server_config.json") || strings.Contains(s, "mieru") {
+			foundWritten = true
+		}
+	}
+	if !foundWritten {
+		t.Fatalf("writtenFiles lacks the mieru artifact: %v", written)
+	}
 
-	// A generated mieru config artifact should exist somewhere under the
-	// apply root after staging — and it must be a real, non-empty config,
-	// not just a file whose name mentions mieru.
-	foundPath := ""
-	var foundSize int64
-	_ = filepath.Walk(srv.applyRoot, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
-		}
-		if strings.Contains(strings.ToLower(path), "mieru") && info.Size() > 0 {
-			foundPath = path
-			foundSize = info.Size()
-		}
-		return nil
-	})
-	if foundPath == "" {
-		t.Fatalf("expected a non-empty generated mieru artifact under apply root %s", srv.applyRoot)
-	}
-	content, err := os.ReadFile(foundPath)
+	// The generated mieru artifact lands at a fixed path under the apply root —
+	// lock the exact artifact and that it parses as the server config, instead
+	// of a substring walk that greens any file with "mieru" in the name (#899).
+	mieruConfig := filepath.Join(srv.applyRoot, "generated", "mieru", "server_config.json")
+	data, err := os.ReadFile(mieruConfig)
 	if err != nil {
-		t.Fatalf("read generated mieru artifact %s: %v", foundPath, err)
+		t.Fatalf("expected generated mieru config at %s: %v", mieruConfig, err)
 	}
-	if !strings.Contains(string(content), "alice") && !strings.Contains(string(content), "mieru") {
-		t.Fatalf("generated mieru artifact %s (%d bytes) lacks expected config content: %s", foundPath, foundSize, content)
+	var rendered struct {
+		Users []struct {
+			Name string `json:"name"`
+		} `json:"users"`
+		PortBindings []struct {
+			Protocol string `json:"protocol"`
+		} `json:"portBindings"`
+	}
+	if err := json.Unmarshal(data, &rendered); err != nil {
+		t.Fatalf("mieru server_config.json is not JSON: %v", err)
+	}
+	// Both inbounds must be represented: the profile user from mieru-tcp, the
+	// fallback inbound user from mieru-udp, and both transport bindings.
+	userNames := map[string]bool{}
+	for _, u := range rendered.Users {
+		userNames[u.Name] = true
+	}
+	if !userNames["alice"] || !userNames["mieru-udp"] {
+		t.Fatalf("mieru users = %v, want alice+mieru-udp: %s", userNames, data)
+	}
+	transports := map[string]bool{}
+	for _, pb := range rendered.PortBindings {
+		transports[strings.ToUpper(pb.Protocol)] = true
+	}
+	if !transports["TCP"] || !transports["UDP"] {
+		t.Fatalf("mieru portBindings = %v, want TCP+UDP: %s", transports, data)
 	}
 }
 

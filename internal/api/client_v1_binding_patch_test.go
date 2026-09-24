@@ -15,7 +15,9 @@ import (
 func TestV1BindingPatchAndServerRotate(t *testing.T) {
 	r, _ := newApplyTrackedRouter(t)
 
-	inboundBody := strings.NewReader(`{"name":"hy2","protocol":"hysteria2","transport":"udp","port":18443,"enabled":true}`)
+	// A disabled inbound keeps the apply path deterministic: the envelope
+	// contract under test is the same, but no external provider is probed.
+	inboundBody := strings.NewReader(`{"name":"hy2","protocol":"hysteria2","transport":"udp","port":18443,"enabled":false}`)
 	iw := httptest.NewRecorder()
 	ireq := httptest.NewRequest(http.MethodPost, "/api/inbounds", inboundBody)
 	ireq.Header.Set("Content-Type", "application/json")
@@ -64,6 +66,12 @@ func TestV1BindingPatchAndServerRotate(t *testing.T) {
 	if en, _ := patched["enabled"].(bool); en != false {
 		t.Fatalf("binding not disabled: %v", patched)
 	}
+	// writeMutationResponse can report success:false on a 200 when the apply
+	// outcome failed — a green status alone is not proof the patch landed
+	// (#841).
+	if patched["success"] != true {
+		t.Fatalf("patch binding success = %v, want true: %v", patched["success"], patched)
+	}
 
 	// Server-generated rotate.
 	rw := httptest.NewRecorder()
@@ -81,6 +89,9 @@ func TestV1BindingPatchAndServerRotate(t *testing.T) {
 	}
 	if len(pt) < 32 {
 		t.Fatalf("generated plaintext too weak (len=%d)", len(pt))
+	}
+	if rot["success"] != true {
+		t.Fatalf("rotate success = %v, want true: %v", rot["success"], rot)
 	}
 }
 

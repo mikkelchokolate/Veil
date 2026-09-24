@@ -271,11 +271,28 @@ func TestServeHTTPServerBuildsPlainServer(t *testing.T) {
 
 func TestServeHTTPServerUsesDefaultHelperSocket(t *testing.T) {
 	// No HelperSocket option: Build must fall back to
-	// privileged.DefaultSocketPath (/run/veil/helper.sock). The socket is
-	// absent in tests, so a privileged request must surface the dedicated
-	// helper-unavailable envelope — which the API only emits when the dial
-	// error names the helper.sock path. A missing default ("") would instead
-	// produce a generic privileged-operation failure.
+	// privileged.DefaultSocketPath (/run/veil/helper.sock). Lock the resolved
+	// path directly — the name claims the default, so prove it (#875).
+	opts := HTTPServerOptions{
+		Listen:      "127.0.0.1:2096",
+		Version:     "test",
+		AuthToken:   "token",
+		StatePath:   filepath.Join(t.TempDir(), "state.json"),
+		ApplyRoot:   filepath.Join(t.TempDir(), "apply"),
+		KeyPath:     filepath.Join(t.TempDir(), "state.key"),
+		WebBasePath: "/",
+	}
+	if got := NewHTTPServer(opts).resolvedHelperSocket(); got != privileged.DefaultSocketPath {
+		t.Fatalf("resolved helper socket = %q, want %q", got, privileged.DefaultSocketPath)
+	}
+	opts.HelperSocket = "/custom/helper.sock"
+	if got := NewHTTPServer(opts).resolvedHelperSocket(); got != "/custom/helper.sock" {
+		t.Fatalf("explicit helper socket overridden: %q", got)
+	}
+	// The socket is absent in tests, so a privileged request must surface the
+	// dedicated helper-unavailable envelope — which the API only emits when
+	// the dial error names the helper.sock path. A missing default ("") would
+	// instead produce a generic privileged-operation failure.
 	server, reloader := NewHTTPServer(HTTPServerOptions{
 		Listen:      "127.0.0.1:2096",
 		Version:     "test",

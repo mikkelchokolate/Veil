@@ -162,7 +162,7 @@ func TestV1ClientListPaginationAndSearch(t *testing.T) {
 // client survives as an orphan with zero bindings.
 func TestV1DeleteBindingKeepsClient(t *testing.T) {
 	r, _ := newApplyTrackedRouter(t)
-	v1Request(t, r, http.MethodPost, "/api/inbounds", `{"name":"hy2-d","protocol":"hysteria2","transport":"udp","port":9443,"enabled":true}`)
+	v1Request(t, r, http.MethodPost, "/api/inbounds", `{"name":"hy2-d","protocol":"hysteria2","transport":"udp","port":9443,"enabled":false}`)
 	w := v1Request(t, r, http.MethodPost, "/api/v1/clients", `{"name":"alice","bindings":[{"inboundId":"hy2-d","credential":"pw"}]}`)
 	created := unwrapClient(t, w.Body.Bytes())
 	id := created["id"].(string)

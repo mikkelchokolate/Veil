@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -26,6 +27,14 @@ func TestPublicMetricsAlwaysRequireAuthentication(t *testing.T) {
 	router.ServeHTTP(authenticated, authenticatedRequest)
 	if authenticated.Code != http.StatusOK {
 		t.Fatalf("authenticated metrics status=%d body=%s", authenticated.Code, authenticated.Body.String())
+	}
+	// 200 alone greens an empty body — lock the Prometheus exposition
+	// contract (#829).
+	if ct := authenticated.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+		t.Fatalf("metrics Content-Type = %q, want text/plain exposition", ct)
+	}
+	if !strings.Contains(authenticated.Body.String(), "# HELP veil_") {
+		t.Fatalf("authenticated metrics body has no veil_ series: %q", authenticated.Body.String())
 	}
 }
 

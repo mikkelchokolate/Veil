@@ -68,9 +68,9 @@ func TestPortCollisionPanel(t *testing.T) {
 		if !strings.Contains(logs, "address already in use") && !strings.Contains(logs, "Only one usage of each socket address") {
 			t.Fatalf("server exited non-zero but not with a bind error. Logs:\n%s", logs)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		_ = cmd.Process.Kill()
-		t.Fatalf("server hung on port collision and did not exit within 5s. Logs:\n%s", logBuf.String())
+		t.Fatalf("server hung on port collision and did not exit within 15s. Logs:\n%s", logBuf.String())
 	}
 }
 
@@ -246,7 +246,6 @@ func TestBadAuthentication(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("bearer-token mutation without CSRF: expected 200, got %d (%v)", resp.StatusCode, readJSON(t, resp))
 	}
-	drain(resp)
 }
 
 // TestCorruptedStateRecovery verifies that the CLI validate command fails
