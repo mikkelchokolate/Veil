@@ -22,21 +22,17 @@ func TestEnsureAccountCreatesSystemGroupAndUser(t *testing.T) {
 			if !groups[name] {
 				return nil, errors.New("missing group")
 			}
-			gid := "4242"
-			if name == "veil-proxy" {
-				gid = "4243"
-			}
+			// Distinct gid per account — an identical gid for every name would
+			// let a regression that aliases veil-mita to veil pass silently.
+			gid := map[string]string{"veil": "4242", "veil-proxy": "4243", "veil-mita": "4244"}[name]
 			return &user.Group{Name: name, Gid: gid}, nil
 		},
 		LookupUser: func(name string) (*user.User, error) {
 			if !users[name] {
 				return nil, errors.New("missing user")
 			}
-			uid, gid := "4242", "4242"
-			if name == "veil-proxy" {
-				uid, gid = "4243", "4243"
-			}
-			return &user.User{Username: name, Uid: uid, Gid: gid}, nil
+			uid := map[string]string{"veil": "4242", "veil-proxy": "4243", "veil-mita": "4244"}[name]
+			return &user.User{Username: name, Uid: uid, Gid: uid}, nil
 		},
 		Run: func(name string, args ...string) error {
 			commands = append(commands, name+" "+strings.Join(args, " "))
@@ -56,7 +52,7 @@ func TestEnsureAccountCreatesSystemGroupAndUser(t *testing.T) {
 	if identity.UID != 4242 || identity.GID != 4242 || identity.ProxyUID != 4243 || identity.ProxyGID != 4243 {
 		t.Fatalf("identity=%+v", identity)
 	}
-	if identity.MitaUID != 4242 || identity.MitaGID != 4242 {
+	if identity.MitaUID != 4244 || identity.MitaGID != 4244 {
 		t.Fatalf("identity mita fields=%+v", identity)
 	}
 	want := []string{
@@ -74,7 +70,51 @@ func TestEnsureAccountCreatesSystemGroupAndUser(t *testing.T) {
 	}
 }
 
-func TestMigrateCreatesSafetyCopiesAndScopedPermissions(t *testing.T) {
+// Safety-copy coverage is deliberately separate from the permission-scoping
+// test below: a regression in one must not mask the other. The clock is
+// injected so the snapshot directory name is deterministic.
+func TestMigrateCreatesTimestampedSafetyCopies(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX ownership and mode test")
+	}
+	root := t.TempDir()
+	etcDir := filepath.Join(root, "etc", "veil")
+	varDir := filepath.Join(root, "var", "lib", "veil")
+	for _, path := range []string{
+		filepath.Join(etcDir, "state.key"),
+		filepath.Join(etcDir, "veil.env"),
+		filepath.Join(varDir, "state.json"),
+		filepath.Join(varDir, "sessions.json"),
+		filepath.Join(etcDir, "backup.passphrase"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(filepath.Base(path)), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+	current, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	uid, _ := strconv.Atoi(current.Uid)
+	gid, _ := strconv.Atoi(current.Gid)
+	err = Migrate(Paths{EtcDir: etcDir, VarDir: varDir, RootUID: uid, RootGID: gid}, Identity{UID: uid, GID: gid}, func() time.Time {
+		return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC)
+	})
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	safetyRoot := filepath.Join(varDir, "migration-backups", "20260605T120000Z")
+	for _, name := range []string{"state.key", "veil.env", "state.json", "sessions.json"} {
+		if _, err := os.Stat(filepath.Join(safetyRoot, name)); err != nil {
+			t.Fatalf("safety copy %s: %v", name, err)
+		}
+	}
+}
+
+func TestMigrateScopesPermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX ownership and mode test")
 	}
@@ -113,6 +153,8 @@ func TestMigrateCreatesSafetyCopiesAndScopedPermissions(t *testing.T) {
 	assertMode(t, filepath.Join(varDir, "state.json"), 0o600)
 	assertMode(t, filepath.Join(varDir, "sessions.json"), 0o600)
 	assertMode(t, filepath.Join(varDir, "backups"), 0o700)
+	// A second migrate must re-scope files added under backups/ without
+	// clobbering them — 0640 stays 0640, it does not get forced to 0600.
 	backupMember := filepath.Join(varDir, "backups", "config.json")
 	if err := os.MkdirAll(filepath.Dir(backupMember), 0o755); err != nil {
 		t.Fatal(err)
@@ -130,12 +172,6 @@ func TestMigrateCreatesSafetyCopiesAndScopedPermissions(t *testing.T) {
 		t.Fatalf("remigrate: %v", err)
 	}
 	assertMode(t, backupMember, 0o640)
-	safetyRoot := filepath.Join(varDir, "migration-backups", "20260605T120000Z")
-	for _, name := range []string{"state.key", "veil.env", "state.json", "sessions.json"} {
-		if _, err := os.Stat(filepath.Join(safetyRoot, name)); err != nil {
-			t.Fatalf("safety copy %s: %v", name, err)
-		}
-	}
 }
 
 func TestMigrateMakesPanelTLSGroupReadable(t *testing.T) {
@@ -371,6 +407,47 @@ func TestMigrateRefusesNonDirectoryMitaStateDir(t *testing.T) {
 	}
 }
 
+// Callers that did not run EnsureAccount carry a zero mita identity — Migrate
+// must skip the mita pass entirely rather than chowning the tree to uid 0
+// (that would hand daemon state to root and break the dedicated identity).
+func TestMigrateSkipsMitaStateDirWithoutMitaIdentity(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX ownership and mode test")
+	}
+	root := t.TempDir()
+	etcDir := filepath.Join(root, "etc", "veil")
+	varDir := filepath.Join(root, "var", "lib", "veil")
+	mitaDir := filepath.Join(root, "var", "lib", "mita")
+	for _, dir := range []string{etcDir, varDir, mitaDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	uid, gid := os.Getuid(), os.Getgid()
+
+	var chowned []string
+	originalChown := testHooks.chown
+	defer func() { testHooks.chown = originalChown }()
+	testHooks.chown = func(path string, u, g int) error {
+		chowned = append(chowned, path)
+		return nil
+	}
+
+	err := Migrate(
+		Paths{EtcDir: etcDir, VarDir: varDir, RootUID: uid, RootGID: gid, MitaDir: mitaDir},
+		Identity{UID: uid, GID: gid}, // MitaUID/MitaGID deliberately zero
+		time.Now,
+	)
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	for _, path := range chowned {
+		if path == mitaDir || strings.HasPrefix(path, mitaDir+string(os.PathSeparator)) {
+			t.Fatalf("mita tree was chowned without a mita identity: %v", chowned)
+		}
+	}
+}
+
 func assertMode(t *testing.T, path string, want os.FileMode) {
 	t.Helper()
 	info, err := os.Stat(path)
@@ -420,18 +497,12 @@ func TestEnsureAccount(t *testing.T) {
 		var commands []string
 		deps := AccountDependencies{
 			LookupGroup: func(name string) (*user.Group, error) {
-				gid := "100"
-				if name == "veil-proxy" {
-					gid = "101"
-				}
+				gid := map[string]string{"veil": "100", "veil-proxy": "101", "veil-mita": "102"}[name]
 				return &user.Group{Name: name, Gid: gid}, nil
 			},
 			LookupUser: func(name string) (*user.User, error) {
-				uid, gid := "100", "100"
-				if name == "veil-proxy" {
-					uid, gid = "101", "101"
-				}
-				return &user.User{Username: name, Uid: uid, Gid: gid}, nil
+				uid := map[string]string{"veil": "100", "veil-proxy": "101", "veil-mita": "102"}[name]
+				return &user.User{Username: name, Uid: uid, Gid: uid}, nil
 			},
 			Run: func(name string, args ...string) error {
 				commands = append(commands, name+" "+strings.Join(args, " "))
@@ -445,7 +516,7 @@ func TestEnsureAccount(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ensure account: %v", err)
 		}
-		if id.UID != 100 || id.GID != 100 || id.ProxyUID != 101 || id.ProxyGID != 101 {
+		if id.UID != 100 || id.GID != 100 || id.ProxyUID != 101 || id.ProxyGID != 101 || id.MitaUID != 102 || id.MitaGID != 102 {
 			t.Fatalf("identity=%+v", id)
 		}
 		if strings.Join(commands, "\n") != "usermod -aG veil-proxy veil\nusermod -aG veil-mita veil" {
@@ -487,21 +558,15 @@ func TestEnsureAccount(t *testing.T) {
 				if !groups[name] {
 					return nil, errors.New("missing group")
 				}
-				gid := "4242"
-				if name == "veil-proxy" {
-					gid = "4243"
-				}
+				gid := map[string]string{"veil": "4242", "veil-proxy": "4243", "veil-mita": "4244"}[name]
 				return &user.Group{Name: name, Gid: gid}, nil
 			},
 			LookupUser: func(name string) (*user.User, error) {
 				if !users[name] {
 					return nil, errors.New("missing user")
 				}
-				uid, gid := "4242", "4242"
-				if name == "veil-proxy" {
-					uid, gid = "4243", "4243"
-				}
-				return &user.User{Username: name, Uid: uid, Gid: gid}, nil
+				uid := map[string]string{"veil": "4242", "veil-proxy": "4243", "veil-mita": "4244"}[name]
+				return &user.User{Username: name, Uid: uid, Gid: uid}, nil
 			},
 			Run: func(name string, args ...string) error {
 				commands = append(commands, name+" "+strings.Join(args, " "))
@@ -521,7 +586,7 @@ func TestEnsureAccount(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ensure account: %v", err)
 		}
-		if id.UID != 4242 || id.GID != 4242 || id.ProxyUID != 4243 || id.ProxyGID != 4243 {
+		if id.UID != 4242 || id.GID != 4242 || id.ProxyUID != 4243 || id.ProxyGID != 4243 || id.MitaUID != 4244 || id.MitaGID != 4244 {
 			t.Fatalf("identity=%+v", id)
 		}
 		want := []string{

@@ -50,19 +50,44 @@ func TestCommittedRestoreRecoveryActuallyCleansWALAndSHMBeforeJournalRemoval(t *
 	if err := writeRestoreJournal(root, journal); err != nil {
 		t.Fatal(err)
 	}
+	// Instrument both removal seams into one ordered event log: the sidecar
+	// deletes must be observed BEFORE the journal file is removed, or a crash
+	// between them would re-enter recovery with live WAL state.
 	oldRemove := restoreRemove
-	defer func() { restoreRemove = oldRemove }()
-	removed := map[string]bool{}
+	oldJournalRemove := restoreJournalRemove
+	defer func() { restoreRemove, restoreJournalRemove = oldRemove, oldJournalRemove }()
+	var removalOrder []string
 	restoreRemove = func(path string) error {
-		removed[path] = true
+		removalOrder = append(removalOrder, path)
+		return os.Remove(path)
+	}
+	journalPath := filepath.Join(root, restoreTransactionJournalName)
+	restoreJournalRemove = func(path string) error {
+		removalOrder = append(removalOrder, path)
 		return os.Remove(path)
 	}
 	if err := RecoverInterruptedRestore(statePath, keyPath, databasePath); err != nil {
 		t.Fatal(err)
 	}
+	indexOf := func(path string) int {
+		for i, p := range removalOrder {
+			if p == path {
+				return i
+			}
+		}
+		return -1
+	}
+	journalIdx := indexOf(journalPath)
+	if journalIdx < 0 {
+		t.Fatalf("recovery never removed the transaction journal; removals=%v", removalOrder)
+	}
 	for _, suffix := range []string{"-wal", "-shm"} {
-		if !removed[databasePath+suffix] {
-			t.Fatalf("committed recovery skipped %s cleanup", suffix)
+		idx := indexOf(databasePath + suffix)
+		if idx < 0 {
+			t.Fatalf("committed recovery skipped %s cleanup; removals=%v", suffix, removalOrder)
+		}
+		if idx > journalIdx {
+			t.Fatalf("%s cleanup ran AFTER journal removal (order %v)", suffix, removalOrder)
 		}
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
 	"errors"
@@ -45,11 +46,17 @@ func TestWithDefaultsSetsAllDefaults(t *testing.T) {
 	if opts.Arch != "amd64" {
 		t.Errorf("Arch = %q", opts.Arch)
 	}
+	if opts.CaddyCacheDir == "" {
+		t.Error("CaddyCacheDir not set")
+	}
 	if opts.HTTPClient == nil {
 		t.Error("HTTPClient not set")
 	}
 	if opts.FetchRelease == nil {
 		t.Error("FetchRelease not set")
+	}
+	if opts.FetchReleaseVersion == nil {
+		t.Error("FetchReleaseVersion not set")
 	}
 	if opts.Download == nil {
 		t.Error("Download not set")
@@ -66,8 +73,45 @@ func TestWithDefaultsSetsAllDefaults(t *testing.T) {
 	if opts.LookPath == nil {
 		t.Error("LookPath not set")
 	}
+	if opts.RunVersion == nil {
+		t.Error("RunVersion not set")
+	}
+	if opts.VerifyPinnedSHA256 == nil {
+		t.Error("VerifyPinnedSHA256 not set")
+	}
+	if opts.ReadGoBuildInfo == nil {
+		t.Error("ReadGoBuildInfo not set")
+	}
 	if opts.Now == nil {
 		t.Error("Now not set")
+	}
+	// Spot-check two defaults actually behave: the checksum verifier accepts a
+	// matching digest and rejects a mismatch, and Now returns a real clock.
+	sum := sha256.Sum256([]byte("payload"))
+	if err := opts.VerifyPinnedSHA256([]byte("payload"), hex.EncodeToString(sum[:])); err != nil {
+		t.Fatalf("VerifyPinnedSHA256 should accept a matching digest: %v", err)
+	}
+	if err := opts.VerifyPinnedSHA256([]byte("payload"), strings.Repeat("0", 64)); err == nil {
+		t.Fatal("VerifyPinnedSHA256 should reject a mismatched digest")
+	}
+	if opts.Now().IsZero() {
+		t.Fatal("Now default must be the real clock, not the zero time")
+	}
+}
+
+// A legacy FetchRelease-only Options must still produce a working
+// FetchReleaseVersion so callers that ignore the version keep compiling
+// against the new field (the wrapper delegates to the legacy func).
+func TestWithDefaultsFetchReleaseVersionWrapsLegacyFetch(t *testing.T) {
+	called := false
+	legacy := func(ctx context.Context, repo string) (*Release, error) {
+		called = true
+		return &Release{TagName: "v9.9.9"}, nil
+	}
+	opts := Options{FetchRelease: legacy}.withDefaults()
+	release, err := opts.FetchReleaseVersion(context.Background(), "owner/repo", "v1.2.3")
+	if err != nil || !called || release.TagName != "v9.9.9" {
+		t.Fatalf("FetchReleaseVersion wrapper: called=%v release=%+v err=%v", called, release, err)
 	}
 }
 

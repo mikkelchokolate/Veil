@@ -91,8 +91,12 @@ func TestBackupRoutesRequireAdminAndServerSidePassphrase(t *testing.T) {
 	if createResponse.Code != http.StatusCreated {
 		t.Fatalf("missing passphrase status=%d body=%s", createResponse.Code, createResponse.Body.String())
 	}
-	if _, err := os.Stat(state.backupPassphrasePath); err != nil {
+	passInfo, err := os.Stat(state.backupPassphrasePath)
+	if err != nil {
 		t.Fatalf("create should write a backup passphrase: %v", err)
+	}
+	if passInfo.Mode().Perm() != 0o600 {
+		t.Fatalf("backup passphrase mode = %o, want exactly 0600", passInfo.Mode().Perm())
 	}
 }
 
