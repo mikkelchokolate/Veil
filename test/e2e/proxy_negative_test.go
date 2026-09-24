@@ -46,8 +46,9 @@ func TestPortCollisionPanel(t *testing.T) {
 	cmd.Stderr = logBuf
 
 	if err := cmd.Start(); err != nil {
-		// If it fails to even start, that is a clean exit/failure.
-		return
+		// A Start failure means the binary/env is broken — that is a test
+		// harness failure, not evidence of clean bind-error handling (#898).
+		t.Fatalf("veil serve did not start: %v", err)
 	}
 
 	// 3. The process should exit with an error because the port is in use
@@ -59,9 +60,15 @@ func TestPortCollisionPanel(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected server to exit with bind error, but exited with code 0. Logs:\n%s", logBuf.String())
 		}
-	case <-time.After(5 * time.Second):
+		// A non-zero exit alone greens any crash — the log must carry the
+		// bind/address-in-use evidence (#898).
+		logs := strings.ToLower(logBuf.String())
+		if !strings.Contains(logs, "address already in use") && !strings.Contains(logs, "bind") && !strings.Contains(logs, "listen") {
+			t.Fatalf("server exited %v but logs lack a bind/collision error: %s", err, logBuf.String())
+		}
+	case <-time.After(15 * time.Second):
 		_ = cmd.Process.Kill()
-		t.Fatalf("server hung on port collision and did not exit within 5s. Logs:\n%s", logBuf.String())
+		t.Fatalf("server hung on port collision and did not exit within 15s. Logs:\n%s", logBuf.String())
 	}
 }
 
@@ -156,23 +163,70 @@ func TestBadAuthentication(t *testing.T) {
 	}
 	drain(resp)
 
-	// 3. Mutating Cookie Session without CSRF -> 403
-	// We first need to login to get a valid session cookie, but no CSRF token.
-	// Wait, we can test this by providing a session cookie and a wrong CSRF token header.
-	req, _ = http.NewRequest(http.MethodPut, srv.baseURL+"/api/settings", strings.NewReader(`{}`))
-	req.AddCookie(&http.Cookie{Name: "veil_session", Value: "some-session-id"})
-	req.Header.Set("X-CSRF-Token", "invalid-csrf-token")
-	resp, err = http.DefaultClient.Do(req)
+	// 3. Mutating request on a REAL cookie session with a bad CSRF token -> 403.
+	// The old version sent an invalid session cookie and accepted 401||403 —
+	// the CSRF gate never even ran because auth rejected the session first
+	// (#898). Create a user, log in for a live session, then prove the CSRF
+	// check fires.
+	createUser := srv.do(http.MethodPost, "/api/users", `{"username":"csrf-admin","password":"csrf-pass-12345678","role":"admin"}`)
+	if createUser.StatusCode != http.StatusCreated && createUser.StatusCode != http.StatusOK {
+		t.Fatalf("create user for CSRF check: %d", createUser.StatusCode)
+	}
+	drain(createUser)
+
+	loginReq, _ := http.NewRequest(http.MethodPost, srv.baseURL+"/api/auth/login", strings.NewReader(`{"username":"csrf-admin","password":"csrf-pass-12345678"}`))
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginResp, err := http.DefaultClient.Do(loginReq)
 	if err != nil {
-		t.Fatalf("request failed: %v", err)
+		t.Fatalf("login request failed: %v", err)
 	}
-	// It should return 401 (Unauthorized) if session cookie is invalid, or 403 (Forbidden) if session is valid but CSRF is invalid.
-	// Since "some-session-id" is invalid, it returns 401, which is also safe.
-	// But let's check: if we pass a valid token, CSRF check is bypassed (which is correct for static token).
-	if resp.StatusCode != http.StatusUnauthorized && resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("expected 401 or 403, got %d", resp.StatusCode)
+	loginBody := readJSON(t, loginResp)
+	if loginResp.StatusCode != http.StatusOK {
+		t.Fatalf("login failed: %d %v", loginResp.StatusCode, loginBody)
 	}
-	drain(resp)
+	var sessionCookie *http.Cookie
+	for _, c := range loginResp.Cookies() {
+		if c.Name == "veil_session" {
+			sessionCookie = c
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatalf("login set no veil_session cookie: %v", loginResp.Header)
+	}
+	csrf, _ := loginBody["csrfToken"].(string)
+	if csrf == "" {
+		t.Fatalf("login response missing csrfToken: %v", loginBody)
+	}
+
+	// 3a. Live session + missing CSRF on a mutating request -> 403.
+	mutate := func(csrfHeader string) *http.Response {
+		req, _ := http.NewRequest(http.MethodPut, srv.baseURL+"/api/settings", strings.NewReader(`{"panelListen":"127.0.0.1:2096"}`))
+		req.AddCookie(sessionCookie)
+		if csrfHeader != "" {
+			req.Header.Set("X-CSRF-Token", csrfHeader)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("mutating request failed: %v", err)
+		}
+		return resp
+	}
+	if resp := mutate(""); resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("cookie-session mutation without CSRF = %d, want 403", resp.StatusCode)
+	} else {
+		drain(resp)
+	}
+	if resp := mutate("invalid-csrf-token"); resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("cookie-session mutation with bad CSRF = %d, want 403", resp.StatusCode)
+	} else {
+		drain(resp)
+	}
+	// 3b. Same request WITH the real CSRF token must pass the gate.
+	if resp := mutate(csrf); resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+		t.Fatalf("cookie-session mutation with valid CSRF = %d, want 2xx/4xx non-auth", resp.StatusCode)
+	} else {
+		drain(resp)
+	}
 }
 
 // TestCorruptedStateRecovery verifies that the CLI validate command fails

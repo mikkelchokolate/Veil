@@ -568,6 +568,20 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 		}
 	}
 
+	// #770: superseded PR runs must cancel instead of stacking (#461), while
+	// main and merge-group runs are never cancelled mid-flight. Lock the
+	// concurrency group (keyed by PR number, falling back to ref) and the
+	// PR-only cancel-in-progress guard.
+	for _, want := range []string{
+		"concurrency:",
+		"group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}",
+		"cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+	} {
+		if !strings.Contains(workflow, want) {
+			t.Fatalf("ci.yml lost the concurrency/cancel-in-progress contract %q:\n%s", want, workflow)
+		}
+	}
+
 	testScript := stripHashComments(t, read("../../scripts/ci/test.sh"))
 	for _, want := range []string{
 		"go test ./sdk/go -race -count=1",
