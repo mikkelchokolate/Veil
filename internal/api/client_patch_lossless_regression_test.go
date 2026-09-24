@@ -74,6 +74,14 @@ func TestV1ClientEnablePatchDoesNotRewriteUnrelatedFields(t *testing.T) {
 	assertDurableClientFieldsEqual(t, created, updated, map[string]bool{"enabled": true, "version": true, "updatedAt": true, "status": true})
 }
 
+// durableClientFields is the authoritative list of fields a PATCH must be able
+// to address plus the optimistic-concurrency token. "version" is required
+// input, not a durable value, but must be present in both schema and SDK.
+var durableClientFields = []string{
+	"version", "name", "email", "enabled", "groupId", "quotaBytes",
+	"quotaResetPolicy", "quotaResetAt", "expiresAt", "deviceLimit", "notes",
+}
+
 func TestClientPatchOpenAPIAndGeneratedContractIncludesEveryDurableField(t *testing.T) {
 	body, err := os.ReadFile("../../docs/openapi.yaml")
 	if err != nil {
@@ -95,12 +103,36 @@ func TestClientPatchOpenAPIAndGeneratedContractIncludesEveryDurableField(t *test
 
 	for _, schemaName := range []string{"ClientPatchRequest", "ClientView"} {
 		block := openAPISchemaBlock(t, spec, schemaName)
-		for _, field := range []string{
-			"name", "email", "enabled", "groupId", "quotaBytes", "quotaResetPolicy",
-			"quotaResetAt", "expiresAt", "deviceLimit", "notes",
-		} {
+		for _, field := range durableClientFields {
 			if !strings.Contains(block, "\n        "+field+":\n") {
 				t.Errorf("schema %s omits durable field %s", schemaName, field)
+			}
+		}
+	}
+
+	// The spec alone is not the contract: the generated Go SDK is what callers
+	// actually compile against. Assert every durable field survives codegen as
+	// a JSON tag on the generated structs so a spec edit that oapi-codegen
+	// drops (or a stale generated file) cannot pass unnoticed.
+	generated, err := os.ReadFile("../../sdk/go/veilclient.gen.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gen := string(generated)
+	for _, structName := range []string{"ClientPatchRequest", "ClientView"} {
+		start := strings.Index(gen, "type "+structName+" struct {")
+		if start < 0 {
+			t.Fatalf("generated SDK struct %s not found; run go generate ./sdk/go", structName)
+		}
+		rest := gen[start:]
+		end := strings.Index(rest, "\n}")
+		if end < 0 {
+			t.Fatalf("generated SDK struct %s has no closing brace", structName)
+		}
+		block := rest[:end]
+		for _, field := range durableClientFields {
+			if !strings.Contains(block, "`json:\""+field) {
+				t.Errorf("generated SDK %s omits durable field %s; run go generate ./sdk/go", structName, field)
 			}
 		}
 	}

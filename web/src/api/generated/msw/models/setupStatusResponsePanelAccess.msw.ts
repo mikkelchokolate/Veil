@@ -41,6 +41,9 @@
  * OpenAPI spec version: 0.6.3
  */
 
+/**
+ * Effective panel access mode. An unset value is reported as `local`.
+ */
 export type SetupStatusResponsePanelAccess = typeof SetupStatusResponsePanelAccess[keyof typeof SetupStatusResponsePanelAccess];
 
 
@@ -48,5 +51,4 @@ export const SetupStatusResponsePanelAccess = {
   local: 'local',
   direct: 'direct',
   caddy: 'caddy',
-  '': '',
 } as const;

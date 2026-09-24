@@ -7,14 +7,54 @@ import (
 	"testing"
 )
 
+// captureStdout swaps os.Stdout for a pipe, runs fn, and returns whatever was
+// written — the cobra default help path writes to stdout, so a bare exit-code
+// assertion would pass even if run() printed nothing at all.
+func captureStdout(t *testing.T, fn func() int) (int, string) {
+	t.Helper()
+	origStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = origStdout }()
+
+	code := fn()
+	if err := w.Close(); err != nil {
+		t.Fatalf("close pipe writer: %v", err)
+	}
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("read captured stdout: %v", err)
+	}
+	return code, buf.String()
+}
+
+// helpOutputTokens are the tokens that prove the help path printed the real
+// command catalog rather than an empty page or an error placeholder.
+var helpOutputTokens = []string{
+	"Usage:",
+	"Commands:",
+	"veil serve",
+	"veil install",
+	"veil doctor",
+	"veil version",
+}
+
 func TestRunHelp(t *testing.T) {
 	origArgs := os.Args
 	os.Args = []string{"veil"}
 	defer func() { os.Args = origArgs }()
 
-	code := run()
+	code, output := captureStdout(t, run)
 	if code != 0 {
 		t.Fatalf("expected exit code 0 for default (help) command, got: %d", code)
+	}
+	for _, want := range helpOutputTokens {
+		if !strings.Contains(output, want) {
+			t.Errorf("help output missing %q:\n%s", want, output)
+		}
 	}
 }
 
@@ -23,9 +63,14 @@ func TestRunHelpFlag(t *testing.T) {
 	os.Args = []string{"veil", "--help"}
 	defer func() { os.Args = origArgs }()
 
-	code := run()
+	code, output := captureStdout(t, run)
 	if code != 0 {
 		t.Fatalf("expected exit code 0 for --help, got: %d", code)
+	}
+	for _, want := range helpOutputTokens {
+		if !strings.Contains(output, want) {
+			t.Errorf("--help output missing %q:\n%s", want, output)
+		}
 	}
 }
 
@@ -125,30 +170,30 @@ func TestRunInvalidCommandWithoutSubcommand(t *testing.T) {
 
 func TestRunDoctorDispatch(t *testing.T) {
 	origArgs := os.Args
-	origStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("failed to create pipe: %v", err)
-	}
-	os.Stdout = w
 	os.Args = []string{"veil", "doctor"}
-	defer func() {
-		os.Args = origArgs
-		os.Stdout = origStdout
-	}()
+	defer func() { os.Args = origArgs }()
 
-	code := run()
-	w.Close()
-
+	code, output := captureStdout(t, run)
 	if code != 0 {
 		t.Fatalf("expected exit code 0 for doctor command, got: %d", code)
 	}
 
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	output := buf.String()
-	if output == "" {
-		t.Error("expected doctor command to produce output")
+	// Lock the readiness summary shape: a doctor that printed nothing, or a
+	// stubbed "not implemented" placeholder, must fail here.
+	for _, want := range []string{
+		"Veil doctor",
+		"Version:",
+		"Runtime:",
+		"Ready:",
+		"Required commands:",
+		"systemctl",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("doctor output missing %q:\n%s", want, output)
+		}
+	}
+	if strings.Contains(output, "not implemented") {
+		t.Errorf("doctor output still contains a stub placeholder:\n%s", output)
 	}
 }
 
