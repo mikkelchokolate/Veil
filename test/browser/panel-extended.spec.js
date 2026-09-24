@@ -360,9 +360,20 @@ test.describe('Veil Panel — extended critical flows', () => {
       const subURL = (await urlEl.textContent()).trim();
       expect(subURL).toContain('/s/');
 
-      // The live token serves the applied subscription…
+      // The live token serves the applied subscription — a bare 200 could
+      // still be an empty/error body, so lock the metadata headers that only
+      // the real subscription writer emits.
       const live = await request.get(subURL);
       expect(live.status(), `live token fetch: ${live.status()}`).toBe(200);
+      const liveHeaders = live.headers();
+      expect(
+        liveHeaders['subscription-userinfo'],
+        'live token must carry Subscription-Userinfo metadata',
+      ).toBeTruthy();
+      expect(
+        liveHeaders['x-veil-configuration-state'],
+        'live token must report the applied configuration state',
+      ).toBe('applied');
 
       // …until revoked. Revoke is confirm-gated (#699/#812): the card button
       // only opens the AlertDialog — the DELETE fires from the dialog

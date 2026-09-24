@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/curve25519"
 )
 
 func TestGenerateKeypairProducesDistinctValidKeys(t *testing.T) {
@@ -39,19 +42,18 @@ func TestGenerateKeypairProducesDistinctValidKeys(t *testing.T) {
 }
 
 func TestRegistrarRegisterParsesCloudflareResponse(t *testing.T) {
-	var gotKey string
+	var requestBody []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || !strings.HasSuffix(r.URL.Path, "/reg") {
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
-		if r.Header.Get("CF-Client-Version") == "" {
-			t.Fatal("missing CF-Client-Version header")
+		// Cloudflare gates API versions on this header — lock the exact
+		// client version the registrar claims (#936).
+		if got := r.Header.Get("CF-Client-Version"); got != "a-6.30-3596" {
+			t.Fatalf("CF-Client-Version = %q, want a-6.30-3596", got)
 		}
 		body, _ := io.ReadAll(r.Body)
-		if !strings.Contains(string(body), `"key"`) {
-			t.Fatalf("request body missing key: %s", body)
-		}
-		gotKey = string(body)
+		requestBody = body
 		w.Write([]byte(`{
 			"id":"device-123","token":"tok-456",
 			"account":{"license":"LICENSE-KEY"},
@@ -68,8 +70,25 @@ func TestRegistrarRegisterParsesCloudflareResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Register: %v", err)
 	}
-	if gotKey == "" {
-		t.Fatal("registrar did not send a public key")
+	// The request "key" must be the WireGuard public key derived from the
+	// returned private key — presence-only would green a garbage or stale
+	// field (#936).
+	var reqFields struct {
+		Key string `json:"key"`
+	}
+	if err := json.Unmarshal(requestBody, &reqFields); err != nil {
+		t.Fatalf("request body not JSON: %v (%s)", err, requestBody)
+	}
+	privBytes, err := base64.StdEncoding.DecodeString(reg.PrivateKey)
+	if err != nil {
+		t.Fatalf("decode returned private key: %v", err)
+	}
+	pubBytes, err := x25519(privBytes, curve25519.Basepoint)
+	if err != nil {
+		t.Fatalf("derive public key: %v", err)
+	}
+	if want := base64.StdEncoding.EncodeToString(pubBytes); reqFields.Key != want {
+		t.Fatalf("request key = %q, want derived public key %q", reqFields.Key, want)
 	}
 	if reg.PeerPublicKey != "PEERPUBKEY=" {
 		t.Fatalf("peer public key = %q", reg.PeerPublicKey)

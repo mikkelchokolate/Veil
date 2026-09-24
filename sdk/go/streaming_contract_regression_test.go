@@ -5,9 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 )
@@ -106,14 +104,27 @@ func TestBackupDownloadStreamingMethodReturnsTypedUnbufferedResponse(t *testing.
 }
 
 func TestSDKURLResolutionRejectsAbsoluteOperationInput(t *testing.T) {
-	body, err := os.ReadFile("veilclient_streaming.gen.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := string(body)
-	for _, required := range []string{"resolveRelativeURL", "IsAbs()", "absolute API path"} {
-		if !strings.Contains(source, required) {
-			t.Errorf("generated URL construction lacks %q", required)
+	// Exercise the resolver itself: a generated client must never let an
+	// absolute or root-relative operation path escape the configured server
+	// base (#908) — source-grep alone cannot prove that.
+	server := "http://panel.example.com/panel/"
+	for _, apiPath := range []string{
+		"https://evil.example.com/x",
+		"//evil.example.com/x",
+		"/api/settings",
+	} {
+		if u, err := resolveRelativeURL(server, apiPath); err == nil {
+			t.Errorf("apiPath %q resolved to %s, want rejection", apiPath, u)
 		}
+	}
+	if _, err := resolveRelativeURL("not-a-url", "api/x"); err == nil {
+		t.Error("relative server URL must be rejected")
+	}
+	u, err := resolveRelativeURL(server, "api/backups/a.enc/download")
+	if err != nil {
+		t.Fatalf("relative path rejected: %v", err)
+	}
+	if got, want := u.String(), "http://panel.example.com/panel/api/backups/a.enc/download"; got != want {
+		t.Fatalf("resolved %q, want %q", got, want)
 	}
 }
