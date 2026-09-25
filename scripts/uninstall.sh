@@ -140,6 +140,33 @@ print_leftover_plan() {
   echo "  - ${SYSCTL_CONF}"
 }
 
+# is_safe_state_dir gates operator-supplied dirs before rm -rf: a leftover
+# cleanup must never escalate an env/flag-supplied directory (VEIL_ETC_DIR,
+# --var-dir, ...) into wiping a system tree (issue #1025). A directory is
+# removable when it is absent/not a dir, carries a Veil marker, has a
+# Veil-managed basename, or is empty — anything else fails closed.
+is_safe_state_dir() {
+  local dir="$1" base marker
+  [ -e "$dir" ] || [ -L "$dir" ] || return 0
+  # Symlinks and regular files are single-node removals; only real
+  # directories can contain a tree worth guarding.
+  [ -d "$dir" ] && [ ! -L "$dir" ] || return 0
+  base="$(basename "$dir")"
+  case "$base" in
+    veil | caddy | mita | veil-* | veil.*) return 0 ;;
+  esac
+  for marker in veil.env state.json state.key generated www panel tls certs \
+    backup.passphrase backups staging autocert .local .config certificates acme; do
+    [ -e "$dir/$marker" ] && return 0
+  done
+  # An empty directory holds nothing to lose — but a directory that cannot be
+  # listed is unknown, not empty, so a failed ls must fail closed too.
+  local listing
+  listing="$(ls -A "$dir" 2>/dev/null)" || return 1
+  [ -z "$listing" ] && return 0
+  return 1
+}
+
 remove_leftover_state() {
   if command -v systemctl >/dev/null 2>&1; then
     systemctl stop veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.service veil-backup.timer >/dev/null 2>&1 || true
@@ -166,6 +193,13 @@ remove_leftover_state() {
     done
   fi
   if [[ -z "${KEEP_DATA}" ]]; then
+    local state_dir
+    for state_dir in "${ETC_DIR}" "${VAR_DIR}" "${CADDY_STATE_DIR}" "${MITA_STATE_DIR}"; do
+      if ! is_safe_state_dir "${state_dir}"; then
+        echo "Refusing to remove ${state_dir}: not a Veil-managed directory (no marker found). Remove it manually or pass --keep-data." >&2
+        exit 1
+      fi
+    done
     rm -rf "${ETC_DIR}" "${VAR_DIR}" "${CADDY_STATE_DIR}" "${MITA_STATE_DIR}"
   fi
   local dir

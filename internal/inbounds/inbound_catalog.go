@@ -12,7 +12,7 @@ var (
 	ErrInboundUnsupportedProtocolTransport = errors.New("unsupported inbound protocol/transport")
 )
 
-type InboundPasswordGenerator func() string
+type InboundPasswordGenerator func() (string, error)
 
 type InboundCatalog struct {
 	inbounds         []Inbound
@@ -52,7 +52,9 @@ func (c InboundCatalog) Create(inbound Inbound) (Inbound, InboundCatalog, error)
 	if c.hasTransportPort(inbound.Transport, inbound.Port, -1) {
 		return Inbound{}, c, ErrInboundDuplicateTransportPort
 	}
-	NewInboundCredentialPolicy(c.passwordGenerate).ApplyCreate(&inbound)
+	if err := NewInboundCredentialPolicy(c.passwordGenerate).ApplyCreate(&inbound); err != nil {
+		return Inbound{}, c, err
+	}
 	next := NewInboundCatalogWithPasswordGenerator(append(c.List(), inbound), c.passwordGenerate)
 	return inbound, next, nil
 }
@@ -71,7 +73,9 @@ func (c InboundCatalog) Update(name string, update Inbound) (Inbound, InboundCat
 	if c.hasTransportPort(update.Transport, update.Port, idx) {
 		return Inbound{}, c, ErrInboundDuplicateTransportPort
 	}
-	NewInboundCredentialPolicy(c.passwordGenerate).ApplyUpdate(&update, c.inbounds[idx])
+	if err := NewInboundCredentialPolicy(c.passwordGenerate).ApplyUpdate(&update, c.inbounds[idx]); err != nil {
+		return Inbound{}, c, err
+	}
 	nextInbounds := c.List()
 	nextInbounds[idx] = update
 	return update, NewInboundCatalogWithPasswordGenerator(nextInbounds, c.passwordGenerate), nil

@@ -12,6 +12,10 @@ import (
 type ufwSnapshot struct {
 	Active bool
 	Rules  map[string]string
+	// Allows records only the inbound ALLOW entries (destination → comment).
+	// A deny/reject/limit on the SSH port does not pass management traffic,
+	// so it must not satisfy the enable gate (#1007).
+	Allows map[string]string
 }
 
 // ApplySafely stages every requested allow rule, including SSH management
@@ -135,7 +139,7 @@ func (a UFWApplier) runUFW(timeout time.Duration, args ...string) veilruntime.Ru
 }
 
 func parseUFWStatus(output string) (ufwSnapshot, error) {
-	snap := ufwSnapshot{Rules: map[string]string{}}
+	snap := ufwSnapshot{Rules: map[string]string{}, Allows: map[string]string{}}
 	statusKnown := false
 	for _, raw := range strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n") {
 		line := strings.TrimSpace(raw)
@@ -163,11 +167,42 @@ func parseUFWStatus(output string) (ufwSnapshot, error) {
 			comment = strings.TrimSpace(parts[1])
 		}
 		snap.Rules[fields[0]] = comment
+		actionIdx := -1
+		for i, field := range fields {
+			if isUFWStatusAction(field) {
+				actionIdx = i
+				break
+			}
+		}
+		if actionIdx < 1 {
+			continue
+		}
+		direction := "in"
+		if actionIdx+1 < len(fields) {
+			switch d := strings.ToLower(fields[actionIdx+1]); d {
+			case "in", "out":
+				direction = d
+			}
+		}
+		if strings.EqualFold(fields[actionIdx], "allow") && direction != "out" {
+			snap.Allows[strings.Join(fields[:actionIdx], " ")] = comment
+		}
 	}
 	if !statusKnown {
 		return snap, errors.New("ufw status did not contain a status line")
 	}
 	return snap, nil
+}
+
+// isUFWStatusAction reports whether a status field is a ufw rule action
+// (ALLOW/DENY/REJECT/LIMIT), matching the privileged reconcile's action set.
+func isUFWStatusAction(field string) bool {
+	switch strings.ToLower(strings.TrimSpace(field)) {
+	case "allow", "deny", "reject", "limit":
+		return true
+	default:
+		return false
+	}
 }
 
 func containsSSHManagementRule(rules []Rule) bool {
@@ -184,7 +219,7 @@ func isSSHManagementRule(args []string) bool {
 }
 
 func snapshotHasSSH(snap ufwSnapshot) bool {
-	for target, comment := range snap.Rules {
+	for target, comment := range snap.Allows {
 		if strings.Contains(strings.ToLower(comment), "ssh") {
 			return true
 		}

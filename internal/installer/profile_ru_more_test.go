@@ -43,12 +43,16 @@ func TestBuildRURecommendedInstallPropagatesProfileBuildError(t *testing.T) {
 	}
 }
 
-func TestBuildRURecommendedProfileFallsBackWhenRandomSuffixFails(t *testing.T) {
+// TestBuildRURecommendedProfileFailsWhenRandomSuffixFails is the #1022
+// regression: a crypto/rand failure must abort the build, not degrade to the
+// known "admin_admin" credential.
+func TestBuildRURecommendedProfileFailsWhenRandomSuffixFails(t *testing.T) {
 	orig := randomReader
 	defer func() { randomReader = orig }()
+	sentinel := fmt.Errorf("random suffix failure")
 	randomReader = func(b []byte) (int, error) {
 		if len(b) == 2 {
-			return 0, fmt.Errorf("random suffix failure")
+			return 0, sentinel
 		}
 		return orig(b)
 	}
@@ -57,20 +61,24 @@ func TestBuildRURecommendedProfileFallsBackWhenRandomSuffixFails(t *testing.T) {
 		PanelAccess: "local",
 		Secret:      func(label string) string { return "secret" },
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatalf("expected error, got profile %+v", profile)
 	}
-	if profile.Username != "admin_admin" {
-		t.Fatalf("expected fallback username %q, got %q", "admin_admin", profile.Username)
+	if profile.Username == "admin_admin" {
+		t.Fatalf("known-credential fallback must never be installed: %+v", profile)
 	}
 }
 
-func TestBuildRURecommendedProfileFallsBackWhenRandomPasswordFails(t *testing.T) {
+// TestBuildRURecommendedProfileFailsWhenRandomPasswordFails is the #1022
+// regression: a crypto/rand failure must abort the build, not degrade to the
+// known "change-me" password.
+func TestBuildRURecommendedProfileFailsWhenRandomPasswordFails(t *testing.T) {
 	orig := randomReader
 	defer func() { randomReader = orig }()
+	sentinel := fmt.Errorf("random password failure")
 	randomReader = func(b []byte) (int, error) {
 		if len(b) == 8 {
-			return 0, fmt.Errorf("random password failure")
+			return 0, sentinel
 		}
 		return orig(b)
 	}
@@ -79,11 +87,26 @@ func TestBuildRURecommendedProfileFallsBackWhenRandomPasswordFails(t *testing.T)
 		PanelAccess: "local",
 		Secret:      func(label string) string { return "secret" },
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatalf("expected error, got profile %+v", profile)
 	}
-	if profile.Password != "change-me" {
-		t.Fatalf("expected fallback password %q, got %q", "change-me", profile.Password)
+	if profile.Password == "change-me" {
+		t.Fatalf("known-credential fallback must never be installed: %+v", profile)
+	}
+}
+
+// TestBuildRURecommendedProfileFailsWhenSecretReturnsEmpty is the #1022
+// regression: an empty token is the generator's fail-closed signal.
+func TestBuildRURecommendedProfileFailsWhenSecretReturnsEmpty(t *testing.T) {
+	profile, err := BuildRURecommendedProfile(RURecommendedInput{
+		PanelAccess: "local",
+		Secret:      func(label string) string { return "" },
+	})
+	if err == nil {
+		t.Fatalf("expected error, got profile %+v", profile)
+	}
+	if profile.PanelAuthToken != "" {
+		t.Fatalf("expected no token on failure, got %q", profile.PanelAuthToken)
 	}
 }
 

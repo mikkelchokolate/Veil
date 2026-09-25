@@ -23,5 +23,15 @@ ci_assert_test_passed "${CI_ARTIFACT_DIR}/sigkill-firewall.log" TestFirewallTran
 ci_run sigkill-restore \
   go test ./internal/backup -run '^TestRestoreRecoversSIGKILLAfterEveryFilePublication$' -count=1 -v -timeout=2m
 ci_assert_test_passed "${CI_ARTIFACT_DIR}/sigkill-restore.log" TestRestoreRecoversSIGKILLAfterEveryFilePublication
+# Every Test*SIGKILL*/*ProcessKill* root in the tree must be named here (or in
+# scripts/ci/named-root-exemptions.txt) — verify-named-roots.py enforces the
+# reconciliation so a new durability root cannot silently bypass this job
+# (issue #1014).
+ci_run sigkill-apply-publication \
+  go test ./internal/apply -run '^TestApplyPublicationSIGKILLMatrix$' -count=1 -v -timeout=2m
+ci_assert_test_passed "${CI_ARTIFACT_DIR}/sigkill-apply-publication.log" TestApplyPublicationSIGKILLMatrix
+ci_run sigkill-runtime-activation \
+  go test ./internal/runtimeinstall -run '^TestRuntimeActivationRecoversSIGKILLAtIrreversiblePhases$' -count=1 -v -timeout=60s
+ci_assert_test_passed "${CI_ARTIFACT_DIR}/sigkill-runtime-activation.log" TestRuntimeActivationRecoversSIGKILLAtIrreversiblePhases
 
 ci_log "sigkill job passed"

@@ -101,6 +101,29 @@ ci_assert_tests_ran "${CI_ARTIFACT_DIR}/privilege-runtime-probe-sandbox.log"
 ci_assert_test_passed "${CI_ARTIFACT_DIR}/privilege-runtime-probe-sandbox.log" TestRuntimeVersionProbeExecutesProtectedHomeBinaryThroughSystemdBind
 ci_assert_test_passed "${CI_ARTIFACT_DIR}/privilege-runtime-probe-sandbox.log" TestMaliciousRuntimeProbeCannotReadHostSecretsEnvironmentDescriptorsOrNetwork
 
+ci_step "root-gated regression roots (allowlisted skips in the test job)"
+# These roots need root but NOT systemd — they soft-skip in the unprivileged
+# `test` job under test-skip-allowlist.txt, and this leg is their only
+# execution evidence (issue #1013). Assert each root PASSes by name so a
+# soft-skip here cannot green the gate.
+if [ "$(id -u)" -eq 0 ]; then
+  ci_run privilege-root-gated \
+    go test ./internal/apply ./internal/hostaccess ./internal/cli -count=1 -v \
+    -run '^(TestUpdateRecoveryAcceptsOnlyExactHelperCommittedEvidence|TestPrepare|TestPrivilegedInstallFailureRestoresPreviousBinary)$'
+else
+  ci_run privilege-root-gated \
+    sudo env "PATH=${PATH}" "HOME=${HOME}" \
+    go test ./internal/apply ./internal/hostaccess ./internal/cli -count=1 -v \
+    -run '^(TestUpdateRecoveryAcceptsOnlyExactHelperCommittedEvidence|TestPrepare|TestPrivilegedInstallFailureRestoresPreviousBinary)$'
+fi
+ci_assert_tests_ran "${CI_ARTIFACT_DIR}/privilege-root-gated.log"
+for required_root in \
+    TestUpdateRecoveryAcceptsOnlyExactHelperCommittedEvidence \
+    TestPrepare \
+    TestPrivilegedInstallFailureRestoresPreviousBinary; do
+  ci_assert_test_passed "${CI_ARTIFACT_DIR}/privilege-root-gated.log" "${required_root}"
+done
+
 ci_step "custom --etc-dir/--var-dir install contract (issue #664)"
 # Every leg above exercises only the packaged /etc/veil + /var/lib/veil
 # layout. The custom-root contract — drop-in ReadWritePaths/InaccessiblePaths

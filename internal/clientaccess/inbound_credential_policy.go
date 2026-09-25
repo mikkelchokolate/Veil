@@ -17,24 +17,28 @@ func NewInboundCredentialPolicy(generate InboundPasswordGenerator) InboundCreden
 	return InboundCredentialPolicy{generate: generate}
 }
 
-func (p InboundCredentialPolicy) ApplyCreate(inbound *Inbound) {
+func (p InboundCredentialPolicy) ApplyCreate(inbound *Inbound) error {
 	if inbound == nil {
-		return
+		return nil
 	}
 	if model.EffectiveInboundPassword(*inbound) == "" && len(inbound.Profiles) == 0 {
-		inbound.Password = p.generate()
+		password, err := p.generate()
+		if err != nil {
+			return err
+		}
+		inbound.Password = password
 	}
-	p.completeProfilePasswords(inbound, nil)
+	return p.completeProfilePasswords(inbound, nil)
 }
 
-func (p InboundCredentialPolicy) ApplyUpdate(inbound *Inbound, previous Inbound) {
+func (p InboundCredentialPolicy) ApplyUpdate(inbound *Inbound, previous Inbound) error {
 	if inbound == nil {
-		return
+		return nil
 	}
 	if model.EffectiveInboundPassword(*inbound) == "" {
 		inbound.Password = previous.Password
 	}
-	p.completeProfilePasswords(inbound, previous.Profiles)
+	return p.completeProfilePasswords(inbound, previous.Profiles)
 }
 
 func (p InboundCredentialPolicy) ClientCredentials(inbound Inbound) ([]ClientCredential, error) {
@@ -53,6 +57,11 @@ func (p InboundCredentialPolicy) ClientCredentials(inbound Inbound) ([]ClientCre
 	return credentials, nil
 }
 
-func (p InboundCredentialPolicy) completeProfilePasswords(inbound *Inbound, previous []ClientProfile) {
-	inbound.Profiles = NewClientProfileCatalogWithPasswordGenerator(inbound.Profiles, p.generate).WithCompletedPasswords(previous)
+func (p InboundCredentialPolicy) completeProfilePasswords(inbound *Inbound, previous []ClientProfile) error {
+	completed, err := NewClientProfileCatalogWithPasswordGenerator(inbound.Profiles, p.generate).WithCompletedPasswords(previous)
+	if err != nil {
+		return err
+	}
+	inbound.Profiles = completed
+	return nil
 }

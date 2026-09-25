@@ -3,7 +3,7 @@ package inbounds
 import "testing"
 
 func TestCatalogCreatesInboundWithGeneratedCredentials(t *testing.T) {
-	catalog := NewCatalogWithPasswordGenerator(nil, func() string { return "generated" })
+	catalog := NewCatalogWithPasswordGenerator(nil, func() (string, error) { return "generated", nil })
 	created, next, err := catalog.Create(Inbound{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true})
 	if err != nil {
 		t.Fatalf("Create: %v", err)

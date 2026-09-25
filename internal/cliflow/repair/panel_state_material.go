@@ -66,7 +66,13 @@ func (m panelStateRepairMaterial) addRuntimeUnitActions(plan *installer.RepairPl
 		return nil
 	}
 	snapshot := m.snapshot
-	units := renderer.RenderSystemdUnits(renderer.SystemdConfig{EtcDir: m.opts.EtcDir, CaddyBinary: m.deps.resolvedBinaryPath("caddy")})
+	cfg := renderer.SystemdConfig{EtcDir: m.opts.EtcDir, CaddyBinary: m.deps.resolvedBinaryPath("caddy")}
+	// EtcDir/resolved binary paths feed unit directives; a control character
+	// would inject extra unit lines (issue #1001), so validate before render.
+	if err := renderer.ValidateSystemdConfig(cfg); err != nil {
+		return err
+	}
+	units := renderer.RenderSystemdUnits(cfg)
 	unitNames := runtimeUnitNamesForState(snapshot.Settings, snapshot.Inbounds, snapshot.Warp)
 	if snapshot.Settings.PanelAccess == "caddy" {
 		unitNames = appendRepairUnit(unitNames, renderer.UnitCaddy)

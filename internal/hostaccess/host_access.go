@@ -28,10 +28,34 @@ var testHooks = struct {
 }{
 	prepareAccountDeps: DefaultAccountDependencies,
 	lstat:              os.Lstat,
-	chmod:              os.Chmod,
-	chown:              os.Chown,
+	chmod:              chmodManagedNoFollow,
+	chown:              chownManagedNoFollow,
 	walkDir:            filepath.WalkDir,
 	copy:               io.Copy,
+}
+
+// chmodManagedNoFollow applies the mode change on an O_NOFOLLOW-opened
+// descriptor instead of resolving the path again: a symlink swapped in after
+// the caller's lstat/walk check is rejected (ELOOP) rather than followed to a
+// target outside the managed tree (#1009).
+func chmodManagedNoFollow(path string, mode os.FileMode) error {
+	file, err := openManagedNoFollow(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	return file.Chmod(mode)
+}
+
+// chownManagedNoFollow is the ownership counterpart of chmodManagedNoFollow:
+// fchown on the opened descriptor never follows a swapped symlink (#1009).
+func chownManagedNoFollow(path string, uid, gid int) error {
+	file, err := openManagedNoFollow(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	return file.Chown(uid, gid)
 }
 
 type Identity struct {
@@ -402,7 +426,9 @@ func copyLegacyWWWTree(src, dst string) error {
 }
 
 func copyRegularFile(source, destination string) error {
-	input, err := os.Open(source)
+	// O_NOFOLLOW: the lstat regular-file check and this open are separated by
+	// time; a swapped symlink must be rejected, not followed (#1009).
+	input, err := openManagedNoFollow(source)
 	if err != nil {
 		return err
 	}

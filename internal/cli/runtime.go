@@ -19,23 +19,24 @@ var runtimeInstallFunc = func(ctx context.Context, opts runtimeinstall.Options, 
 	return protocols.InstallSelectedRuntimes(ctx, opts, only)
 }
 
-// installRuntimesFunc provisions protocol runtimes during `veil install`. It is
-// intentionally non-fatal: a fresh Panel install must still succeed even if a
-// single upstream release download fails, so failures are reported as warnings
-// and the operator can re-run `veil runtime install` later.
+// installRuntimesFunc provisions protocol runtimes during `veil install`. A
+// failed runtime install must fail the install closed: reporting success
+// leaves protocol systemd units that can never exec their missing binaries
+// (systemd status 203/EXEC), which is worse than aborting before any file is
+// applied (issue #1029).
 var installRuntimesFunc = defaultInstallRuntimesDuringInstall
 
-func defaultInstallRuntimesDuringInstall(cmd *cobra.Command, opts ruRecommendedInstallOptions) {
+func defaultInstallRuntimesDuringInstall(cmd *cobra.Command, opts ruRecommendedInstallOptions) error {
 	arch, err := hostenv.NormalizeArch(hostenv.CurrentPlatform().Arch)
 	if err != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "warning: skipping runtime install: %v\n", err)
-		return
+		return fmt.Errorf("protocol runtime install: %w", err)
 	}
 	fmt.Fprintln(cmd.OutOrStdout())
 	if err := runRuntimeInstall(cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.Context(), runtimeInstallOptions{Arch: arch}); err != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "warning: some protocol runtimes could not be installed: %v\n", err)
 		fmt.Fprintln(cmd.ErrOrStderr(), "You can retry later with: sudo veil runtime install")
+		return fmt.Errorf("install protocol runtimes: %w", err)
 	}
+	return nil
 }
 
 // runtimeNames returns the sorted list of protocol runtime names from the
