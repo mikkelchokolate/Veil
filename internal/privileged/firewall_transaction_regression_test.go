@@ -13,8 +13,11 @@ import (
 )
 
 type transactionalUFWModel struct {
-	enabled   bool
-	rules     map[string]string
+	enabled bool
+	rules   map[string]string
+	// actions overrides the ALLOW verb a status line reports per target, so
+	// tests can stage deny/reject/limit or outbound rules (#1007).
+	actions   map[string]string
 	calls     [][]string
 	mutations []string
 	failAt    int
@@ -55,7 +58,11 @@ func (m *transactionalUFWModel) runner(_ context.Context, command []string, _ ti
 		}
 		sort.Strings(targets)
 		for _, target := range targets {
-			fmt.Fprintf(&output, "%s ALLOW Anywhere # %s\n", target, m.rules[target])
+			action := "ALLOW"
+			if override, ok := m.actions[target]; ok {
+				action = override
+			}
+			fmt.Fprintf(&output, "%s %s Anywhere # %s\n", target, action, m.rules[target])
 		}
 		return output.String(), nil
 	case "--dry-run":
@@ -271,6 +278,57 @@ func TestFirewallReconcilesActiveUFWWithoutManagementAccess(t *testing.T) {
 	for _, mutation := range model.mutations {
 		if mutation == "enable" {
 			t.Fatalf("already-active ufw was re-enabled: %v", model.mutations)
+		}
+	}
+}
+
+// #1007: a pre-existing deny/reject/limit (or outbound-only) rule on the SSH
+// port does not pass management traffic — it must not satisfy the UFW enable
+// gate. Only an inbound ALLOW counts.
+func TestFirewallEnableGateIgnoresNonAllowSSHRules(t *testing.T) {
+	for _, action := range []string{"DENY", "REJECT", "LIMIT", "ALLOW OUT"} {
+		t.Run(action, func(t *testing.T) {
+			model := &transactionalUFWModel{
+				rules:   map[string]string{"22/tcp": "OpenSSH"},
+				actions: map[string]string{"22/tcp": action},
+			}
+			request := ResolvedFirewall{
+				RuleIDs: []string{"inbound-hy2"},
+				Rules:   []FirewallRule{{Command: "ufw", Args: []string{"allow", "4315/udp", "comment", "Veil Hysteria2"}}},
+			}
+			if _, err := runFirewallRules(context.Background(), model.runner, request); err == nil {
+				t.Fatalf("inactive ufw was enabled on an existing %s 22/tcp rule", action)
+			}
+			if model.enabled {
+				t.Fatal("management lockout preflight failure still enabled ufw")
+			}
+		})
+	}
+}
+
+// #1007: the matching unit-level check on the parsed status — only inbound
+// ALLOW entries prove the SSH channel survives an enable.
+func TestHasExistingManagementAccessRequiresInboundAllow(t *testing.T) {
+	for _, tc := range []struct {
+		line string
+		want bool
+	}{
+		{"22/tcp                     ALLOW       Anywhere                   # OpenSSH", true},
+		{"22/tcp                     ALLOW IN    Anywhere                   # OpenSSH", true},
+		{"22/tcp                     DENY        Anywhere                   # OpenSSH", false},
+		{"22/tcp                     REJECT      Anywhere                   # OpenSSH", false},
+		{"22/tcp                     LIMIT       Anywhere                   # OpenSSH", false},
+		{"22/tcp                     ALLOW OUT   Anywhere                   # OpenSSH", false},
+		{"443/tcp                    ALLOW       Anywhere                   # ssh tunnel", true},
+		{"443/tcp                    DENY        Anywhere                   # ssh tunnel", false},
+		{"2222/tcp                   ALLOW       Anywhere                   # remote desktop", false},
+	} {
+		state, err := parseUFWStatus("Status: inactive\n" + tc.line + "\n")
+		if err != nil {
+			t.Fatalf("parse %q: %v", tc.line, err)
+		}
+		if got := hasExistingManagementAccess(state); got != tc.want {
+			t.Fatalf("hasExistingManagementAccess(%q) = %v, want %v", tc.line, got, tc.want)
 		}
 	}
 }
