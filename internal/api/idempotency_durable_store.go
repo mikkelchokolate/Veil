@@ -114,8 +114,29 @@ func (s *idempotencyStore) serveDurable(w http.ResponseWriter, r *http.Request, 
 
 	capture := newBufferedResponse(w.Header())
 	r = r.WithContext(withIdempotencyDomainOperation(r.Context(), idempotencyDomainOperation{ID: record.OperationID, Scope: scope, Generation: record.Generation}))
+	s.trackOperation(record.OperationID)
 	stopHeartbeat := s.startDurableHeartbeat(scope, fingerprint, record)
+	// Settlement is guaranteed on EVERY exit — normal return, settlement
+	// failure, and panic. Without the defer a handler panic kills the request
+	// goroutine mid-middleware: the heartbeat goroutine keeps the lease fresh
+	// forever and the 'reserved' row can never be taken over, wedging the key
+	// on a permanent 409 (#1039). A failed completeDurable must likewise
+	// release (or settle) the reservation instead of leaving a dead 'reserved'
+	// row (#1056).
+	settled := false
+	defer func() {
+		stopHeartbeat()
+		if !settled {
+			_ = s.abortDurable(scope, fingerprint, record)
+		}
+		// The request is gone — mark the operation dead last so a racing
+		// takeover during settlement still saw it as in-flight.
+		s.untrackOperation(record.OperationID)
+	}()
 	next.ServeHTTP(capture, r)
+	// The heartbeat covers handler execution only; settlement must not extend
+	// the lease or a hung finalize would wedge the key. abortDurable stays
+	// fenced by owner+generation, so a stopped heartbeat is safe here.
 	stopHeartbeat()
 	status := capture.status
 	if status == 0 {
@@ -139,6 +160,9 @@ func (s *idempotencyStore) serveDurable(w http.ResponseWriter, r *http.Request, 
 		outcome = "committed_response_pending"
 	}
 	if outcome == "not_started_retryable" {
+		// Transient refusal or pre-commit failure: release the reservation so
+		// a same-key retry re-executes — the refusal is never stored (#1058).
+		// settled stays false so the deferred abort retries if this fails.
 		_ = s.abortDurable(scope, fingerprint, record)
 		copyHTTPHeader(w.Header(), capture.header)
 		w.WriteHeader(responseStatus)
@@ -146,9 +170,13 @@ func (s *idempotencyStore) serveDurable(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	if err := s.completeDurable(scope, fingerprint, record, responseStatus, capture.header, responseBody, outcome); err != nil {
+		// Do not mark settled: the deferred abort releases a never-committed
+		// operation or promotes a committed one, so the key is not left
+		// reserved until the lease lapses (#1056, #1057).
 		writeError(w, "failed to finalize idempotent response", http.StatusServiceUnavailable)
 		return
 	}
+	settled = true
 	if responseStatus >= 200 && responseStatus < 400 && (r.Method == http.MethodDelete || strings.HasSuffix(r.URL.Path, "/rotate")) {
 		_ = s.invalidateSecretReplayEnvelopes(record.Actor, scope)
 	}
@@ -166,7 +194,11 @@ func classifyIdempotencyOutcome(header http.Header, status int) string {
 			return explicit
 		}
 	}
-	if status >= 500 {
+	if status >= 500 || transientIdempotencyRefusal(status) {
+		// 5xx and transient refusals mean the mutation was never attempted (or
+		// its outcome is unknown): they must never be stored as the durable
+		// terminal result — the reservation is released so a same-key retry
+		// re-executes (#1058, #1003).
 		return "not_started_retryable"
 	}
 	if status >= 400 {
@@ -175,7 +207,50 @@ func classifyIdempotencyOutcome(header http.Header, status int) string {
 	return "committed"
 }
 
+// transientIdempotencyRefusal reports statuses that mean "not attempted, try
+// again later" — time-bound refusals that must never be replayed as the
+// operation's terminal outcome: 423 Locked (restore in progress), 429 rate
+// limiting, 425 Too Early and 408 request timeout. Unlike a deterministic 4xx
+// validation failure, re-issuing the identical request later is expected to
+// succeed, so caching the refusal would burn the key (#1058).
+func transientIdempotencyRefusal(status int) bool {
+	switch status {
+	case http.StatusRequestTimeout,
+		http.StatusLocked,
+		http.StatusTooEarly,
+		http.StatusTooManyRequests:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *idempotencyStore) abortDurable(scope, fingerprint string, record durableIdempotencyRecord) error {
+	// A committed domain mutation must never be deleted with the reservation:
+	// the record is the only proof the operation ran, and a same-key retry
+	// would otherwise re-execute a non-idempotent mutation (#1057). Settle it
+	// as committed_response_pending, mirroring the reserveDurable recovery
+	// path, so the retry replays the committed outcome instead.
+	var domainState, domainResult string
+	err := s.db.QueryRow(`SELECT state,domain_result_json FROM domain_operations WHERE id=? AND scope=? AND operation_generation=?`,
+		record.OperationID, scope, record.Generation).Scan(&domainState, &domainResult)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		// No tracked domain operation — the mutation never bound; release below.
+	case err != nil:
+		return err
+	case domainState == "mutation_committed":
+		body := []byte(domainResult)
+		if len(body) == 0 {
+			body = []byte(`{"status":"committed_response_pending"}`)
+		}
+		return s.completeDurable(scope, fingerprint, record, http.StatusAccepted,
+			http.Header{"Content-Type": []string{"application/json"}}, body, "committed_response_pending")
+	case domainState != "reserved":
+		// Already settled by a racing path (committed or abandoned) — nothing
+		// to release; the guarded DELETE below would be a no-op anyway.
+		return nil
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -198,6 +273,38 @@ func (s *idempotencyStore) durableClosed() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.closed
+}
+
+// trackOperation marks a durable reservation as actively served by a request
+// in this process; untrackOperation clears it when the request exits for any
+// reason. operationInFlight lets reserveDurable tell a dead same-owner row
+// apart from a live request whose heartbeat failed to extend the lease.
+func (s *idempotencyStore) trackOperation(operationID string) {
+	if operationID == "" {
+		return
+	}
+	s.mu.Lock()
+	s.liveOperations[operationID] = struct{}{}
+	s.mu.Unlock()
+}
+
+func (s *idempotencyStore) untrackOperation(operationID string) {
+	if operationID == "" {
+		return
+	}
+	s.mu.Lock()
+	delete(s.liveOperations, operationID)
+	s.mu.Unlock()
+}
+
+func (s *idempotencyStore) operationInFlight(operationID string) bool {
+	if operationID == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.liveOperations[operationID]
+	return ok
 }
 
 func (s *idempotencyStore) cleanupDurableIdempotency(nowUnix int64) error {
@@ -306,7 +413,15 @@ WHERE scope=? AND payload_hash=? AND owner_process=? AND operation_generation=? 
 	if current.ReservedUntil > nowUnix {
 		return false, current, nil
 	}
-	if current.Owner == s.owner {
+	// The lease has lapsed, so a FOREIGN owner is gone — a live owner keeps
+	// reserved_until fresh via the heartbeat. For a reservation owned by THIS
+	// process (current.Owner == s.owner) expiry alone is ambiguous: a finished
+	// request whose settlement failed transiently leaves exactly such a dead
+	// row, and refusing takeover wedges the key on a permanent 409 (#1056) —
+	// but a request still in its handler with a stalled heartbeat is just as
+	// expired, and taking it over would run a second concurrent domain
+	// mutation. The live-operations set decides which case this is.
+	if current.Owner == s.owner && s.operationInFlight(current.OperationID) {
 		return false, current, nil
 	}
 	operationID = uuid.NewString()

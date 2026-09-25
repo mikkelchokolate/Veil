@@ -1,5 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createContext, type ReactNode, useContext, useState } from "react";
+import {
+	createContext,
+	type ReactNode,
+	useContext,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { postApiAuthLocale } from "../api/generated/auth/auth";
 import type { Locale } from "../api/generated/models";
 import { en } from "./locales/en";
@@ -36,6 +43,24 @@ export function I18nProvider({
 }) {
 	const [locale, setLocaleState] = useState<Locale>(initialLocale ?? "en");
 	const qc = useQueryClient();
+
+	// Sync the session-provided locale when it changes after mount (login, or
+	// the auth refresh landing after setLocale). An effect — not a keyed
+	// remount — keeps the whole subtree (router, open dialogs, draft forms)
+	// alive across the switch (#1044). Only a REAL change in initialLocale
+	// syncs: a local setLocale already updated state and must not be clobbered
+	// by the still-stale session value while its POST is in flight.
+	const appliedInitial = useRef(initialLocale);
+	useEffect(() => {
+		if (
+			initialLocale &&
+			initialLocale in translations &&
+			initialLocale !== appliedInitial.current
+		) {
+			appliedInitial.current = initialLocale;
+			setLocaleState(initialLocale);
+		}
+	}, [initialLocale]);
 
 	const setLocaleMutation = useMutation({
 		mutationFn: (loc: Locale) => postApiAuthLocale({ locale: loc }),
