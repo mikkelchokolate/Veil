@@ -166,7 +166,7 @@ export function RoutingPage() {
 				) : null}
 				{del.isError ? (
 					<FormMessage>
-						{mutationErrorMessage(del.error, t("routing.deleteFailed"))}
+						{mutationErrorMessage(del.error, t("routing.deleteFailed"), t)}
 					</FormMessage>
 				) : null}
 				{applyFailed && !(creating || editing !== null) ? (
@@ -265,7 +265,7 @@ export function RoutingPage() {
 							</div>
 							{save.isError ? (
 								<FormMessage>
-									{mutationErrorMessage(save.error, t("routing.saveFailed"))}
+									{mutationErrorMessage(save.error, t("routing.saveFailed"), t)}
 								</FormMessage>
 							) : null}
 							{applyFailed ? (
@@ -281,7 +281,7 @@ export function RoutingPage() {
 					<p className="muted">{t("common.loading")}</p>
 				) : rules.isError ? (
 					<FormMessage>
-						{mutationErrorMessage(rules.error, t("routing.loadFailed"))}
+						{mutationErrorMessage(rules.error, t("routing.loadFailed"), t)}
 					</FormMessage>
 				) : (
 					<Table>
@@ -354,7 +354,7 @@ export function RoutingPage() {
 						visible here, not only behind the overlay (#649 pattern). */}
 					{del.isError ? (
 						<FormMessage>
-							{mutationErrorMessage(del.error, t("routing.deleteFailed"))}
+							{mutationErrorMessage(del.error, t("routing.deleteFailed"), t)}
 						</FormMessage>
 					) : null}
 					<AlertDialogFooter>
