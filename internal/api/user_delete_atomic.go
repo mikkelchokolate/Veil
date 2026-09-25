@@ -46,7 +46,18 @@ func (s *managementState) handleAtomicUserDelete(w http.ResponseWriter, r *http.
 		// save fails the mutation rolls back and the user's sessions must
 		// remain valid rather than being revoked for a delete that never
 		// committed.
+		//
+		// Journal the revocation intent BEFORE the delete commits: a crash
+		// between the commit and the delete_many record must not resurrect
+		// the deleted user's sessions at next load (#1059).
+		intent, intentErr := s.sessionRegistry().MarkUsernameRevocationPending(username)
+		if intentErr != nil {
+			return fmt.Errorf("%w: %v", errSessionRevocationPersistence, intentErr)
+		}
 		if deleteErr := mutation.DeleteUser(username); deleteErr != nil {
+			// The delete rolled back, so retract the intent: the user's
+			// sessions must stay valid for a change that never committed.
+			_ = s.sessionRegistry().CancelUsernameRevocation(intent)
 			return deleteErr
 		}
 		if _, revokeErr := s.sessionRegistry().DeleteUsernamePersisted(username); revokeErr != nil {
@@ -56,6 +67,7 @@ func (s *managementState) handleAtomicUserDelete(w http.ResponseWriter, r *http.
 			if _, restoreErr := mutation.CreateUser(prior); restoreErr != nil {
 				return fmt.Errorf("%w: %v (restore user: %v)", errSessionRevocationPersistence, revokeErr, restoreErr)
 			}
+			_ = s.sessionRegistry().CancelUsernameRevocation(intent)
 			return fmt.Errorf("%w: %v", errSessionRevocationPersistence, revokeErr)
 		}
 		return nil

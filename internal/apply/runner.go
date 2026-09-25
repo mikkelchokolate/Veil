@@ -290,7 +290,17 @@ func newRunner(revs *RevisionStore, jobs *JobStore, executor any, deferStartupRe
 	_, err := runner.recoverStartup()
 	if err != nil {
 		runner.startupErr = err
-		close(runner.monitorDone)
+		if testing.Testing() {
+			// Tests drive the recovery monitor explicitly via
+			// startMonitorForTest so a retained lease cannot deadlock
+			// RunLatest the way an autonomous monitor would.
+			close(runner.monitorDone)
+			return runner
+		}
+		// A transient startup failure must not brick apply for the process
+		// lifetime: the monitor re-runs recovery every tick and clears
+		// startupErr on the first clean pass (#1038).
+		go runner.monitorRecovery()
 		return runner
 	}
 	// Package tests share process-wide apply stubs and lifecycle contexts
@@ -450,11 +460,11 @@ func (r *Runner) resumeRecoveryPendingWithRetry(ctx context.Context, retry bool)
 	}
 	var job Job
 	var servicePhase string
-	err := r.revs.db.QueryRowContext(ctx, `SELECT j.id,j.desired_revision,j.base_revision,j.trigger,j.actor_id,j.owner_process,j.lease_generation,p.service_phase
+	err := r.revs.db.QueryRowContext(ctx, `SELECT j.id,j.desired_revision,j.base_revision,j.trigger,j.actor_id,j.owner_process,j.lease_generation,j.created_at,p.service_phase
 FROM apply_jobs j JOIN runtime_publications p ON p.job_id=j.id
 WHERE j.status=? ORDER BY j.created_at,j.id LIMIT 1`, StatusRecoveryPending).Scan(
 		&job.ID, &job.DesiredRevision, &job.BaseRevision, &job.Trigger, &job.ActorID,
-		&job.OwnerProcess, &job.LeaseGeneration, &servicePhase)
+		&job.OwnerProcess, &job.LeaseGeneration, &job.CreatedAt, &servicePhase)
 	if err == sql.ErrNoRows {
 		return nil
 	}
@@ -468,14 +478,28 @@ WHERE j.status=? ORDER BY j.created_at,j.id LIMIT 1`, StatusRecoveryPending).Sca
 	if job.DesiredRevision <= revs.Applied {
 		// A later job already marked the panel applied. Re-running this
 		// revision would fail finalize (`applied_revision<=desired` is false)
-		// and pin startupErr, blocking every subsequent apply.
-		if err := r.jobs.Finish(job.ID, StatusFailed, "SUPERSEDED",
-			fmt.Sprintf("recovery-pending revision %d is already covered by applied revision %d", job.DesiredRevision, revs.Applied)); err != nil {
+		// and pin startupErr, blocking every subsequent apply. The job's
+		// receipt must be consumed here too: otherwise the next recovery pass
+		// resurrects it and re-holds the lease forever (#1034).
+		if err := r.closeRecoveryPendingJob(job, "SUPERSEDED",
+			fmt.Sprintf("recovery-pending revision %d is already covered by applied revision %d", job.DesiredRevision, revs.Applied),
+			"superseded"); err != nil {
 			return fmt.Errorf("apply: close superseded recovery job: %w", err)
 		}
 		return r.resumeRecoveryPendingWithRetry(ctx, retry)
 	}
 	if servicePhase == "restart-panel" || servicePhase == "update-install" {
+		if job.CreatedAt > 0 && r.now().UTC().Unix()-job.CreatedAt > sideEffectEvidenceGraceSeconds {
+			// Helper-owned commit evidence never materialized. Waiting longer
+			// cannot resolve it, so abandon the publication instead of
+			// wedging every apply on the evidence check (#1036).
+			if err := r.closeRecoveryPendingJob(job, "SIDE_EFFECT_EVIDENCE_EXPIRED",
+				fmt.Sprintf("side-effect publication %s received no helper commit evidence within %ds", job.ID, sideEffectEvidenceGraceSeconds),
+				"side_effect_expired"); err != nil {
+				return fmt.Errorf("apply: abandon expired side-effect recovery: %w", err)
+			}
+			return r.resumeRecoveryPendingWithRetry(ctx, retry)
+		}
 		return fmt.Errorf("apply: side-effect publication %s requires helper-owned commit evidence", job.ID)
 	}
 	if job.OwnerProcess != r.ownerID || job.LeaseGeneration == 0 {
@@ -488,6 +512,52 @@ WHERE j.status=? ORDER BY j.created_at,j.id LIMIT 1`, StatusRecoveryPending).Sca
 		return nil
 	}
 	return r.retryRecoveryJob(ctx, job)
+}
+
+// sideEffectEvidenceGraceSeconds bounds how long a recovery-pending
+// publication may wait for helper-owned commit evidence (panel update
+// install/restart) before it is abandoned. It matches the 300s bound
+// reconcilePanelUpdateJobs applies to the companion panel_update_jobs row.
+const sideEffectEvidenceGraceSeconds int64 = 300
+
+// closeRecoveryPendingJob durably fails a recovery-pending job, archives and
+// consumes its runtime_publications receipt, and releases the durable lease
+// while it is still fenced to this runner. finalizeFencedJob cannot express
+// these outcomes (it requires a live fenced lease and only consumes
+// rolled-back/committed phases), and a bare jobs.Finish leaves the receipt
+// behind to resurrect the job on every recovery pass (#1034).
+func (r *Runner) closeRecoveryPendingJob(job Job, code, message, finalPhase string) error {
+	finished := r.now().UTC().Unix()
+	tx, err := r.revs.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(`UPDATE apply_jobs SET status=?, started_at=COALESCE(started_at,?), finished_at=?,
+  error_code=?, error_message=? WHERE id=? AND status=?`,
+		StatusFailed, finished, finished, code, message, job.ID, StatusRecoveryPending)
+	if err != nil {
+		return fmt.Errorf("apply: close recovery job: %w", err)
+	}
+	if rows, _ := result.RowsAffected(); rows != 1 {
+		// Another transition already landed; a later pass converges on the
+		// receipt through the terminal-job consume path.
+		return nil
+	}
+	if err := archiveRuntimePublicationTx(tx, job.ID, finalPhase, finished); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM runtime_publications WHERE job_id=?`, job.ID); err != nil {
+		return fmt.Errorf("apply: consume recovered publication receipt: %w", err)
+	}
+	// Release only while this runner still owns the fence; a lease another
+	// process acquired must not be stolen by a supersede/abandon close.
+	if _, err := tx.Exec(`UPDATE apply_lease
+SET owner_process='', lease_expires_at=0, heartbeat_at=0, current_operation=''
+WHERE id=1 AND owner_process=? AND generation=?`, r.ownerID, job.LeaseGeneration); err != nil {
+		return fmt.Errorf("apply: release recovery lease: %w", err)
+	}
+	return tx.Commit()
 }
 
 func (r *Runner) recoveryInterval() time.Duration {

@@ -85,9 +85,20 @@ func (s *managementState) handleAtomicUserUpdate(w http.ResponseWriter, r *http.
 		// save fails the mutation rolls back and the user's sessions must
 		// remain valid rather than being revoked for a change that never
 		// committed.
+		//
+		// Journal the revocation intent BEFORE the mutation commits: a crash
+		// between the commit and the delete_many record would otherwise leave
+		// sessions minted under the old credential valid past restart (#1059).
+		intent, intentErr := s.sessionRegistry().MarkUsernameRevocationPending(username)
+		if intentErr != nil {
+			return fmt.Errorf("%w: %v", errSessionRevocationPersistence, intentErr)
+		}
 		var updateErr error
 		updated, updateErr = mutation.UpdateUser(username, update)
 		if updateErr != nil {
+			// The mutation rolled back, so retract the intent: the user's
+			// sessions must stay valid for a change that never committed.
+			_ = s.sessionRegistry().CancelUsernameRevocation(intent)
 			return updateErr
 		}
 		if _, revokeErr := s.sessionRegistry().DeleteUsernamePersisted(username); revokeErr != nil {
@@ -97,6 +108,10 @@ func (s *managementState) handleAtomicUserUpdate(w http.ResponseWriter, r *http.
 			if _, restoreErr := mutation.UpdateUser(username, prior); restoreErr != nil {
 				return fmt.Errorf("%w: %v (restore user: %v)", errSessionRevocationPersistence, revokeErr, restoreErr)
 			}
+			// The restore committed, so the revocation intent is retracted;
+			// when the cancel cannot be journaled the stale intent is a safe
+			// re-login at worst.
+			_ = s.sessionRegistry().CancelUsernameRevocation(intent)
 			return fmt.Errorf("%w: %v", errSessionRevocationPersistence, revokeErr)
 		}
 		return nil
