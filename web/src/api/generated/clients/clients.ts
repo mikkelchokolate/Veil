@@ -91,6 +91,7 @@ import type {
   PostApiV1ClientsIdTokensTokenIdRotateBody,
   RotatedCredential,
   ServiceUnavailableResponse,
+  SubscriptionTokenListResponse,
   SubscriptionTokenResponse,
   UnauthorizedResponse,
   ValidationFailedResponse
@@ -1745,9 +1746,9 @@ export const useGetApiV1ClientsIdLinks = <TError = UnauthorizedResponse | Forbid
 /**
  * @summary List a client's subscription tokens with recoverable subscription URLs
  */
-export const getApiV1ClientsIdTokens = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
+export const getApiV1ClientsIdTokens = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<SubscriptionTokenListResponse> => {
 
-  return apiFetch<void>(getGetApiV1ClientsIdTokensUrl(id),
+  return apiFetch<SubscriptionTokenListResponse>(getGetApiV1ClientsIdTokensUrl(id),
   {
     ...options,
     method: 'GET'

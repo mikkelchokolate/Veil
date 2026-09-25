@@ -40,11 +40,15 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import type { SubscriptionToken } from './subscriptionToken.msw.ts';
 
+/**
+ * Token management response. `plaintext` is emitted only by issue and rotate; `url` carries the rebuilt /s/ subscription URL.
+ */
 export interface SubscriptionTokenResponse {
-  /** Full plaintext token, returned only once at issuance. */
-  token: string;
-  /** Public prefix used to identify the token. */
-  prefix: string;
-  expiresAt?: number;
+  token: SubscriptionToken;
+  /** Full plaintext token, returned only once at issuance or rotation. Never stored or repeated. */
+  plaintext?: string;
+  /** /s/ subscription URL built from the plaintext. */
+  url?: string;
 }

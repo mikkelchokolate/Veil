@@ -54,6 +54,7 @@ import type {
   GetApiV1EventsParams,
   GetApiV1TrafficIdHistoryParams,
   TrafficHistoryResponse,
+  TrafficSummaryResponse,
   TrafficTopResponse,
   TrafficTotals
 } from '../models';
@@ -76,9 +77,9 @@ export const getGetApiV1TrafficSummaryUrl = () => {
 /**
  * @summary Aggregate traffic totals + honest telemetry provider state
  */
-export const getApiV1TrafficSummary = async ( options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
+export const getApiV1TrafficSummary = async ( options?: Parameters<typeof apiFetch>[1]): Promise<TrafficSummaryResponse> => {
 
-  return apiFetch<void>(getGetApiV1TrafficSummaryUrl(),
+  return apiFetch<TrafficSummaryResponse>(getGetApiV1TrafficSummaryUrl(),
   {
     ...options,
     method: 'GET'

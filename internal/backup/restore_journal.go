@@ -579,6 +579,10 @@ func validateRestoredSQLite(db *sql.DB) error {
 		}
 		ok = true
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("restore quick_check iteration: %w", err)
+	}
 	if err := rows.Close(); err != nil {
 		return err
 	}

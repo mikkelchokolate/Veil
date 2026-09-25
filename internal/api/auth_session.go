@@ -20,6 +20,13 @@ import (
 
 var errUserNotFound = errors.New("user not found")
 
+// dummyLoginPasswordHash is a syntactically valid bcrypt hash (cost 10)
+// compared against the supplied password whenever the username does not map
+// to a stored account. Discarding the result keeps the response time of a
+// failed login identical for existing and nonexistent usernames, so the login
+// endpoint cannot be used to enumerate accounts (#1064).
+var dummyLoginPasswordHash = []byte("$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy")
+
 const maxFallbackPasswordBytes = 4096
 
 func constantTimePasswordEqual(supplied, expected string) bool {
@@ -113,10 +120,15 @@ func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
 			role = matchedUser.Role
 			locale = panel.NormalizeLocale(matchedUser.Locale)
 		}
-	} else if userCount == 0 && fallbackPassword != "" && req.Username == "admin" {
-		if constantTimePasswordEqual(req.Password, fallbackPassword) {
-			valid = true
-			role = "admin"
+	} else {
+		// Unknown usernames still pay the bcrypt cost so the response time
+		// cannot reveal whether the account exists (#1064).
+		_ = bcrypt.CompareHashAndPassword(dummyLoginPasswordHash, []byte(req.Password))
+		if userCount == 0 && fallbackPassword != "" && req.Username == "admin" {
+			if constantTimePasswordEqual(req.Password, fallbackPassword) {
+				valid = true
+				role = "admin"
+			}
 		}
 	}
 
@@ -209,12 +221,18 @@ func (s *managementState) recordInvalidLogin(w http.ResponseWriter, r *http.Requ
 	writeError(w, "invalid username or password", http.StatusUnauthorized)
 }
 
+// maxLoginUsernameBuckets bounds the per-(clientIP, username) limiter map.
+// Without a cap an unauthenticated login spray minting a fresh username per
+// attempt grows the bucket map without bound (#997); eviction drops the
+// stalest budgets first and never fails the current request.
+const maxLoginUsernameBuckets = 10000
+
 // allowLoginUsername applies the per-(clientIP, username) login budget — the
 // key is already scoped to the caller's address by loginThrottleKey.
 func (s *managementState) allowLoginUsername(scopedKey string) (bool, time.Duration) {
 	s.mu.Lock()
 	if s.loginUsernameLimiter == nil {
-		s.loginUsernameLimiter = observability.NewRateLimiterEngine()
+		s.loginUsernameLimiter = observability.NewBoundedRateLimiterEngine(maxLoginUsernameBuckets)
 	}
 	limiter := s.loginUsernameLimiter
 	s.mu.Unlock()

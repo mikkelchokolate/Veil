@@ -101,21 +101,35 @@ func NormalizeHTTPPath(path string) string {
 		return unmatchedHTTPPath
 	}
 	best := ""
-	bestParts := 0
+	bestLiterals := -1
 	for _, pattern := range metricPathPatterns {
 		if !matchMetricPathPattern(pattern, path) {
 			continue
 		}
-		parts := splitMetricPath(pattern)
-		if len(parts) > bestParts || (len(parts) == bestParts && len(pattern) > len(best)) {
+		// Every matching pattern has the same segment count as the path, so
+		// specificity is decided by literal segments: a concrete route like
+		// /api/v1/traffic/top must win over /api/v1/traffic/{clientId}
+		// regardless of which pattern string is longer (#1032).
+		literals := literalMetricPathSegments(pattern)
+		if literals > bestLiterals || (literals == bestLiterals && len(pattern) > len(best)) {
 			best = pattern
-			bestParts = len(parts)
+			bestLiterals = literals
 		}
 	}
 	if best != "" {
 		return best
 	}
 	return unmatchedHTTPPath
+}
+
+func literalMetricPathSegments(pattern string) int {
+	count := 0
+	for _, part := range splitMetricPath(pattern) {
+		if !(strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}")) {
+			count++
+		}
+	}
+	return count
 }
 
 func matchMetricPathPattern(pattern, path string) bool {

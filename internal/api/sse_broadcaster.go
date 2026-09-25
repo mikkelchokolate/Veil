@@ -104,6 +104,11 @@ func (h *sseBroadcaster) buildSnapshot() sseSnapshot {
 	h.state.mu.Lock()
 	h.state.clientLifecycleMu.RLock()
 	view := h.state.applyStateViewLocked()
+	if view.LastError != nil {
+		// The snapshot is broadcast to every subscriber — viewers included —
+		// so privileged subprocess output is always redacted here (#1065).
+		view.LastError.Message = sanitizeServiceLogOutput(view.LastError.Message)
+	}
 	trafficStore := h.state.trafficStore
 	clientRepo := h.state.clientRepo
 	clientService := h.state.clientService

@@ -89,13 +89,20 @@ func preserveRedactedInbound(update Inbound, current Inbound) Inbound {
 	}
 	// Per-profile credentials are echoed back from the redacted GET
 	// representation on save; restore the stored values so the sentinel is
-	// never persisted as a live credential.
+	// never persisted as a live credential. Matching is by stable profile
+	// identity (Name), not position — reordering or deleting a middle profile
+	// must not graft another profile's stored password onto it (#1051).
 	if update.Profiles != nil && current.Profiles != nil {
+		storedByName := make(map[string][]string, len(current.Profiles))
+		for _, profile := range current.Profiles {
+			storedByName[profile.Name] = append(storedByName[profile.Name], profile.Password)
+		}
 		preserved.Profiles = make([]model.ClientProfile, len(update.Profiles))
 		for i := range update.Profiles {
 			preserved.Profiles[i] = update.Profiles[i]
-			if i < len(current.Profiles) {
-				preserved.Profiles[i].Password = disclosure.PreserveRedacted(update.Profiles[i].Password, current.Profiles[i].Password)
+			if queue := storedByName[update.Profiles[i].Name]; len(queue) > 0 {
+				preserved.Profiles[i].Password = disclosure.PreserveRedacted(update.Profiles[i].Password, queue[0])
+				storedByName[update.Profiles[i].Name] = queue[1:]
 			} else {
 				preserved.Profiles[i].Password = disclosure.PreserveRedacted(update.Profiles[i].Password, "")
 			}

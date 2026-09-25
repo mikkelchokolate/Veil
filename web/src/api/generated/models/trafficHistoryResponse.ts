@@ -42,10 +42,12 @@
  */
 import type { TrafficBucket } from './trafficBucket.ts';
 
+/**
+ * Time-ordered bucketed deltas; items carry per-bucket deltas, not cumulative totals (#1066).
+ */
 export interface TrafficHistoryResponse {
-  clientId: string;
-  from: number;
-  to: number;
-  bucket: number;
-  items: TrafficBucket[];
+  /** @nullable */
+  items: TrafficBucket[] | null;
+  /** Number of buckets in items. */
+  count: number;
 }

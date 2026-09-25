@@ -42,7 +42,12 @@
  */
 
 export interface TrafficBucket {
-  at: number;
-  uploadBytes: number;
-  downloadBytes: number;
+  /** Unix start of the bucket. */
+  bucketStart: number;
+  clientId: string;
+  bindingId: string;
+  /** Bytes uploaded inside this bucket. */
+  uploadDelta: number;
+  /** Bytes downloaded inside this bucket. */
+  downloadDelta: number;
 }

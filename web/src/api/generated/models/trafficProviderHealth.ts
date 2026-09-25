@@ -40,14 +40,12 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { TrafficBucket } from './trafficBucket.msw.ts';
+import type { TrafficProviderHealthState } from './trafficProviderHealthState.ts';
 
-/**
- * Time-ordered bucketed deltas; items carry per-bucket deltas, not cumulative totals (#1066).
- */
-export interface TrafficHistoryResponse {
-  /** @nullable */
-  items: TrafficBucket[] | null;
-  /** Number of buckets in items. */
-  count: number;
+export interface TrafficProviderHealth {
+  key: string;
+  state: TrafficProviderHealthState;
+  lastSuccessfulObservationAt?: number;
+  lastError?: string;
+  errorsTotal: number;
 }
