@@ -10,6 +10,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/applyflow"
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/client"
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/observability"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
@@ -76,23 +77,28 @@ type managementState struct {
 	serveWebBasePath           string
 	servePanelListen           string
 	servePanelAccess           string
-	settings                   Settings
-	inbounds                   []Inbound
-	rules                      []RoutingRule
-	routingPreset              string
-	routingSource              RoutingSource
-	warp                       WarpConfig
-	users                      []User
-	orphanedUnits              []string
-	sessions                   *SessionRegistry
-	loginUsernameLimiter       *observability.RateLimiterEngine
-	httpRateLimiter            *observability.RateLimiter
-	idempotency                *idempotencyStore
-	loginBackoff               map[string]loginBackoffState
-	loginBackoffNow            func() time.Time
-	audit                      *audit.Recorder
-	auditHealthMu              sync.RWMutex
-	auditDegraded              bool
+	// defaultInput reproduces the serve-time inputs BuildDefaultState used at
+	// construction. Backup restore rewinds the mutable snapshot-managed fields
+	// to these defaults so the post-restore reload replaces state instead of
+	// merging over stale pre-restore values (#1053).
+	defaultInput         managementstate.DefaultInput
+	settings             Settings
+	inbounds             []Inbound
+	rules                []RoutingRule
+	routingPreset        string
+	routingSource        RoutingSource
+	warp                 WarpConfig
+	users                []User
+	orphanedUnits        []string
+	sessions             *SessionRegistry
+	loginUsernameLimiter *observability.RateLimiterEngine
+	httpRateLimiter      *observability.RateLimiter
+	idempotency          *idempotencyStore
+	loginBackoff         map[string]loginBackoffState
+	loginBackoffNow      func() time.Time
+	audit                *audit.Recorder
+	auditHealthMu        sync.RWMutex
+	auditDegraded        bool
 	// auditSpoolDurable is true when the last degraded append was durably
 	// accepted by the critical spool, so /health can report an honest
 	// audit_spool status instead of a blanket durability_unverified (#981).

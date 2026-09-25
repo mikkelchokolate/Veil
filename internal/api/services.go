@@ -91,7 +91,10 @@ func (s *managementState) handleServiceAction(w http.ResponseWriter, r *http.Req
 		writeError(w, "service operation fence unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	_, err = s.applyRunner.RunOperationContext(r.Context(), revision, "service:"+action, actorFromRequest(r),
+	// Durable service actions must outlive the HTTP request: a disconnect must
+	// not cancel the converge + fenced action + post-action verification
+	// phases mid-flight (#1052).
+	_, err = s.applyRunner.RunOperationContext(s.mutationApplyContext(), revision, "service:"+action, actorFromRequest(r),
 		veilapply.ContextExecutorFunc(func(ctx context.Context, pinnedRevision uint64) (veilapply.Result, error) {
 			result, err := s.convergeRevisionForSideEffect(ctx, pinnedRevision)
 			if err != nil {

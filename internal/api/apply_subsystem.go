@@ -87,6 +87,20 @@ func closeClientSubsystem(s *managementState) error {
 // is configured (in-memory/test servers) — revision/apply tracking then
 // degrades gracefully and apply falls back to the legacy synchronous path.
 func initApplySubsystem(s *managementState) {
+	initApplySubsystemMode(s, false)
+}
+
+// initApplySubsystemDeferredRecovery is the under-s.mu variant used by
+// ReloadLocked callers: runner construction must not synchronously resume
+// recovery-pending jobs, because that resume invokes the apply executor —
+// which locks s.mu to load the pinned revision snapshot — and re-entering a
+// held mutex on the same goroutine deadlocked the whole panel (#1067). The
+// runner's monitor goroutine performs the same resume asynchronously.
+func initApplySubsystemDeferredRecovery(s *managementState) {
+	initApplySubsystemMode(s, true)
+}
+
+func initApplySubsystemMode(s *managementState, deferStartupRecovery bool) {
 	s.clientLifecycleMu.Lock()
 	defer s.clientLifecycleMu.Unlock()
 	if s.statePath == "" {
@@ -113,7 +127,11 @@ func initApplySubsystem(s *managementState) {
 	s.applyRevisions = apply.NewRevisionStore(s.db)
 	s.applyJobs = apply.NewJobStore(s.db)
 	s.applySnapshots = apply.NewSnapshotStore(s.db)
-	s.applyRunner = apply.NewRunner(s.applyRevisions, s.applyJobs, apply.ContextExecutorFunc(s.executeApplyRevisionContext))
+	if deferStartupRecovery {
+		s.applyRunner = apply.NewRunnerDeferredStartupRecovery(s.applyRevisions, s.applyJobs, apply.ContextExecutorFunc(s.executeApplyRevisionContext))
+	} else {
+		s.applyRunner = apply.NewRunner(s.applyRevisions, s.applyJobs, apply.ContextExecutorFunc(s.executeApplyRevisionContext))
+	}
 	var runtimeStatus string
 	if err := s.db.QueryRow(`SELECT status FROM runtime_verification WHERE id=1`).Scan(&runtimeStatus); err != nil {
 		s.storageDegradedErr = fmt.Errorf("read runtime verification state: %w", err)

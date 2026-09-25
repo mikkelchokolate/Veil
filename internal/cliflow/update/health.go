@@ -48,18 +48,23 @@ func WaitForHealthyAt(addr, token, webBasePath string, timeout time.Duration) er
 				req.Header.Set("X-Veil-Token", token)
 			}
 			resp, err := statusflow.HTTPClient(url).Do(req)
-			cancel()
 			if err == nil && resp.StatusCode == http.StatusOK {
 				// Require the Veil health contract ({"status":"ok"}): any
 				// other 200 — e.g. a foreign service or a stale listener on
 				// the same port — must not be treated as the restarted panel.
+				// The request context must stay live until the body has been
+				// fully consumed and closed: cancelling right after Do()
+				// returns aborts the in-flight body read and can reject a
+				// healthy probe (#1047).
 				body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
 				resp.Body.Close()
+				cancel()
 				if statusflow.HealthzStatusOK(body) {
 					return nil
 				}
 				continue
 			}
+			cancel()
 			if resp != nil {
 				resp.Body.Close()
 			}

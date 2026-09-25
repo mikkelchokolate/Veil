@@ -107,6 +107,69 @@ func TestReconcilePanelUpdateJobsMatchesReleaseDisplayVersion(t *testing.T) {
 	}
 }
 
+// TestGetPanelUpdateJobReconcilesStaleRestart covers #1019: the 300s restart
+// timeout used to be evaluated only once — inside reconcilePanelUpdateJobs at
+// route registration — so a job that entered restart_pending/restarting while
+// the process kept running could never reach a terminal state. The job read
+// path now folds in the same verdict, because the SPA polls it continuously.
+func TestGetPanelUpdateJobReconcilesStaleRestart(t *testing.T) {
+	state := &managementState{db: testdb.Open(t), version: "v0.6.2"}
+	now := time.Now().UTC().Unix()
+	insert := func(id, version, status string, updatedAt int64) {
+		t.Helper()
+		if _, err := state.db.Exec(
+			`INSERT INTO panel_update_jobs(id,target_version,status,created_at,updated_at) VALUES(?,?,?,?,?)`,
+			id, version, status, updatedAt, updatedAt,
+		); err != nil {
+			t.Fatalf("insert job %s: %v", id, err)
+		}
+	}
+	insert("stale-restarting", "v0.6.3", "restarting", now-400)
+	insert("stale-pending", "v0.6.3", "restart_pending", now-400)
+	insert("fresh-restarting", "v0.6.3", "restarting", now-10)
+	insert("arrived", "v0.6.2", "restarting", now-10)
+	insert("live-staging", "v0.6.3", "staging", now-400)
+
+	stale, err := state.getPanelUpdateJob("stale-restarting")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stale.Status != "failed" || !strings.Contains(stale.Error, "without expected version v0.6.3") {
+		t.Fatalf("stale restarting job: %+v", stale)
+	}
+	pending, err := state.getPanelUpdateJob("stale-pending")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pending.Status != "failed" {
+		t.Fatalf("stale restart_pending job: %+v", pending)
+	}
+	fresh, err := state.getPanelUpdateJob("fresh-restarting")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh.Status != "restarting" {
+		t.Fatalf("fresh restarting job must stay in flight, got %q", fresh.Status)
+	}
+	arrived, err := state.getPanelUpdateJob("arrived")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if arrived.Status != "succeeded" {
+		t.Fatalf("job whose version matches the running binary must succeed on read, got %q", arrived.Status)
+	}
+	// A staging row can belong to a live update request still in flight —
+	// the read path must not declare it interrupted the way startup reconcile
+	// legitimately does.
+	live, err := state.getPanelUpdateJob("live-staging")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if live.Status != "staging" {
+		t.Fatalf("staging job must be left alone on the read path, got %q", live.Status)
+	}
+}
+
 func TestReconcilePanelUpdateJobsPrunesTerminalHistory(t *testing.T) {
 	state := &managementState{db: testdb.Open(t)}
 	now := time.Now().UTC().Unix()
