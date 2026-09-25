@@ -171,7 +171,7 @@ func (p Policy) ResolveJournal(request JournalRequest) (ResolvedJournal, error) 
 func (p Policy) ResolvePromotion(request PromoteRequest) (ResolvedPromotion, error) {
 	if request.RestoreBackupID != "" {
 		if len(request.ArtifactIDs) != 0 || len(request.RemoveArtifactIDs) != 0 ||
-			!opaquePromotionIDPattern.MatchString(request.RestoreBackupID) {
+			!isValidPromotionBackupID(request.RestoreBackupID) {
 			return ResolvedPromotion{}, newError(ErrorInvalidRequest, "invalid promotion restore request")
 		}
 		return ResolvedPromotion{RestoreBackupID: request.RestoreBackupID, FenceGeneration: request.Fence.Generation,
@@ -271,6 +271,20 @@ func legacyCaddyArtifactPath(id string) (ArtifactPath, bool) {
 	}
 	path := filepath.FromSlash(clean)
 	return ArtifactPath{Staged: path, Generated: path}, true
+}
+
+// isValidPromotionBackupID reports whether id is a canonical, single-segment
+// promotion backup identifier. The opaque pattern alone admits "." and ".."
+// (and names containing a ".." sequence), which resolve a restore manifest
+// outside the backup root — a manifest planted there is trusted for
+// root-level write/delete/symlink operations (#1005). filepath.IsLocal does
+// not reject "." (it resolves inside the root, to the root itself), so the
+// dot names are excluded explicitly.
+func isValidPromotionBackupID(id string) bool {
+	return opaquePromotionIDPattern.MatchString(id) &&
+		filepath.IsLocal(id) &&
+		id != "." &&
+		!strings.Contains(id, "..")
 }
 
 var (
