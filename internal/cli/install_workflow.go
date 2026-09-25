@@ -171,8 +171,12 @@ func (w RURecommendedInstallWorkflow) Run() error {
 		return err
 	}
 	// Protocol runtimes are needed before Caddy prerequisite validation, but
-	// only after the operator has accepted the plan.
-	installRuntimesFunc(cmd, opts)
+	// only after the operator has accepted the plan. A failed runtime install
+	// fails the whole install — reporting success would leave protocol units
+	// that can never exec their binaries (issue #1029).
+	if err := installRuntimesFunc(cmd, opts); err != nil {
+		return err
+	}
 	caddyBinary, err := validateInstallRuntimePrerequisites(built)
 	if err != nil {
 		return err

@@ -9,7 +9,12 @@ import (
 	"testing"
 )
 
-func TestReadinessTreatsProtocolRuntimesAsOptional(t *testing.T) {
+// TestReadinessTreatsProtocolRuntimesAsRequired is the #1027 regression:
+// every managed protocol unit execs one of these binaries, so a missing
+// runtime leaves a unit dead on systemd 203/EXEC — "Ready: yes" with all
+// protocol runtimes absent was a lie. Only ufw stays optional (local-access
+// installs do not manage a firewall).
+func TestReadinessTreatsProtocolRuntimesAsRequired(t *testing.T) {
 	readiness := NewReadiness("test", func(name string) (string, error) {
 		if name == "systemctl" {
 			return "/bin/systemctl", nil
@@ -17,23 +22,33 @@ func TestReadinessTreatsProtocolRuntimesAsOptional(t *testing.T) {
 		return "", errors.New("missing")
 	})
 	summary := readiness.Summary()
-	if !summary.Ready {
-		t.Fatalf("summary should be ready when only optional commands are missing: %+v", summary)
+	if summary.Ready {
+		t.Fatalf("summary must not be ready when every protocol runtime is missing: %+v", summary)
 	}
-	// Lock the protocol-runtime set: every optional runtime must be listed and
-	// flagged optional so a missing one can never flip readiness again.
-	wantOptional := map[string]bool{
+	// Lock the required set: every protocol runtime must be listed and NOT
+	// flagged optional so a missing one always flips readiness.
+	wantRequired := map[string]bool{
 		"caddy": false, "hysteria": false, "mita": false,
-		"olcrtc": false, "sing-box": false, "ufw": false,
+		"olcrtc": false, "sing-box": false,
 	}
+	ufwSeen := false
 	for _, command := range summary.Commands {
-		if _, ok := wantOptional[command.Name]; ok {
-			wantOptional[command.Name] = command.Optional && !command.Present
+		if _, ok := wantRequired[command.Name]; ok {
+			wantRequired[command.Name] = !command.Optional && !command.Present
+		}
+		if command.Name == "ufw" {
+			ufwSeen = true
+			if !command.Optional {
+				t.Fatalf("ufw must remain optional: %+v", command)
+			}
 		}
 	}
-	for name, seen := range wantOptional {
+	if !ufwSeen {
+		t.Fatalf("ufw must remain listed as optional: %+v", summary.Commands)
+	}
+	for name, seen := range wantRequired {
 		if !seen {
-			t.Fatalf("optional runtime %q missing, mislabeled, or unexpectedly present: %+v", name, summary.Commands)
+			t.Fatalf("required runtime %q missing, mislabeled optional, or unexpectedly present: %+v", name, summary.Commands)
 		}
 	}
 }

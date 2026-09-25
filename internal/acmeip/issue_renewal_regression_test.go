@@ -20,7 +20,9 @@ func TestRenewReloadCmdRepairsOwnershipBeforeRestart(t *testing.T) {
 	// fallback would mask a provisioning break and report a successful
 	// renewal while veil-proxy units lose key readability.
 	chgrp := strings.Index(cmd, "&& chgrp veil-proxy '/etc/veil/panel/tls.crt' '/etc/veil/panel/tls.key' &&")
-	restart := strings.Index(cmd, "systemctl restart veil.service")
+	// Issue #999: try-restart, not restart — a renewal must never revive a
+	// panel the operator deliberately stopped.
+	restart := strings.Index(cmd, "systemctl try-restart veil.service")
 	for name, idx := range map[string]int{"chmod cert": chmodCert, "chmod key": chmodKey, "chgrp": chgrp, "restart": restart} {
 		if idx < 0 {
 			t.Fatalf("reloadcmd missing %s step: %q", name, cmd)
@@ -69,7 +71,7 @@ func TestRenewReloadCmdPinsDirOwnershipAndProtocolRestart(t *testing.T) {
 	// Directory repair must run before the restarts as well.
 	dirChgrp := strings.Index(cmd, "chgrp veil-proxy '"+dir+"'")
 	dirChmod := strings.Index(cmd, "chmod 0750 '"+dir+"'")
-	restart := strings.Index(cmd, "systemctl restart veil.service")
+	restart := strings.Index(cmd, "systemctl try-restart veil.service")
 	if !(dirChgrp < restart && dirChmod < restart) {
 		t.Fatalf("directory repair must precede the restart: %q", cmd)
 	}
@@ -88,9 +90,14 @@ func TestRenewReloadCmdFailsClosed(t *testing.T) {
 		t.Fatalf("reloadcmd must not hide command failures: %q", cmd)
 	}
 	// The veil.service restart is the last hard step before the optional
-	// instance restarts; it must propagate its status.
-	if !strings.Contains(cmd, "&& systemctl restart veil.service &&") {
-		t.Fatalf("veil.service restart must be a hard step: %q", cmd)
+	// instance restarts; it must propagate its status. Issue #999: it is
+	// try-restart so a deliberately stopped panel is skipped, while a genuine
+	// restart failure on an active panel still fails the renewal.
+	if !strings.Contains(cmd, "&& systemctl try-restart veil.service &&") {
+		t.Fatalf("veil.service restart must be a hard try-restart step: %q", cmd)
+	}
+	if strings.Contains(cmd, "systemctl restart veil.service") {
+		t.Fatalf("veil.service must never be hard-restarted by a renewal: %q", cmd)
 	}
 	// Instance restarts must fail the command too (exit 1 on restart failure).
 	// try-restart (not restart) so an instance that went inactive after being

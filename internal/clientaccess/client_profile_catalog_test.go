@@ -5,9 +5,12 @@ import "testing"
 func TestClientProfileCatalogGeneratesMissingPasswords(t *testing.T) {
 	catalog := NewClientProfileCatalogWithPasswordGenerator([]ClientProfile{
 		{Name: "alice", Username: "alice", Enabled: true},
-	}, func() string { return "generated-pass" })
+	}, func() (string, error) { return "generated-pass", nil })
 
-	profiles := catalog.WithCompletedPasswords(nil)
+	profiles, err := catalog.WithCompletedPasswords(nil)
+	if err != nil {
+		t.Fatalf("WithCompletedPasswords: %v", err)
+	}
 	if got := profiles[0].Password; got != "generated-pass" {
 		t.Fatalf("generated password = %q", got)
 	}
@@ -16,11 +19,14 @@ func TestClientProfileCatalogGeneratesMissingPasswords(t *testing.T) {
 func TestClientProfileCatalogPreservesExistingPasswords(t *testing.T) {
 	catalog := NewClientProfileCatalogWithPasswordGenerator([]ClientProfile{
 		{Name: "alice", Username: "alice", Enabled: true},
-	}, func() string { return "generated-pass" })
+	}, func() (string, error) { return "generated-pass", nil })
 
-	profiles := catalog.WithCompletedPasswords([]ClientProfile{
+	profiles, err := catalog.WithCompletedPasswords([]ClientProfile{
 		{Name: "alice", Username: "alice", Password: "existing-pass", Enabled: true},
 	})
+	if err != nil {
+		t.Fatalf("WithCompletedPasswords: %v", err)
+	}
 	if got := profiles[0].Password; got != "existing-pass" {
 		t.Fatalf("preserved password = %q", got)
 	}

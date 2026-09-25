@@ -2,16 +2,19 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/mikkelchokolate/Veil/internal/installer"
 )
 
 func TestInstallDoesNotInstallRuntimesWithoutYes(t *testing.T) {
 	calls := 0
 	old := installRuntimesFunc
-	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) { calls++ }
+	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) error { calls++; return nil }
 	t.Cleanup(func() { installRuntimesFunc = old })
 
 	cmd := NewRootCommand("test")
@@ -31,7 +34,7 @@ func TestInstallDoesNotInstallRuntimesWithoutYes(t *testing.T) {
 func TestInstallInteractiveCancelDoesNotInstallRuntimes(t *testing.T) {
 	calls := 0
 	old := installRuntimesFunc
-	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) { calls++ }
+	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) error { calls++; return nil }
 	t.Cleanup(func() { installRuntimesFunc = old })
 
 	cmd := NewRootCommand("test")
@@ -49,10 +52,47 @@ func TestInstallInteractiveCancelDoesNotInstallRuntimes(t *testing.T) {
 	}
 }
 
+// TestInstallFailsWhenRuntimeInstallFails is the #1029 regression: a failed
+// protocol-runtime install must abort the install, not degrade to a warning —
+// reporting success would leave protocol units that can never exec their
+// missing binaries.
+func TestInstallFailsWhenRuntimeInstallFails(t *testing.T) {
+	withMockedInstallRuntimes(t)
+	sentinel := errors.New("release download failed")
+	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) error { return sentinel }
+	applyRan := false
+	oldApply := installApplyFunc
+	installApplyFunc = func(installer.RURecommendedProfile, installer.ApplyPaths) (installer.ApplyResult, error) {
+		applyRan = true
+		return installer.ApplyResult{}, nil
+	}
+	t.Cleanup(func() { installApplyFunc = oldApply })
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"install",
+		"--profile", "ru-recommended",
+		"--panel-access", "local",
+		"--etc-dir", t.TempDir(),
+		"--var-dir", t.TempDir(),
+		"--systemd-dir", t.TempDir(),
+		"--yes",
+	})
+	if err := cmd.Execute(); !errors.Is(err, sentinel) {
+		t.Fatalf("install --yes must fail closed on runtime failure, got %v\n%s", err, out.String())
+	}
+	if applyRan {
+		t.Fatal("install apply must not run after a failed runtime install")
+	}
+}
+
 func TestInstallYesInstallsRuntimesOnce(t *testing.T) {
 	withMockedInstallRuntimes(t)
 	calls := 0
-	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) { calls++ }
+	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) error { calls++; return nil }
 
 	cmd := NewRootCommand("test")
 	var out bytes.Buffer

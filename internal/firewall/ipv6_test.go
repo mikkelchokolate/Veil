@@ -181,3 +181,43 @@ func TestApplySafelyRepairsIPv6BeforeStagingRules(t *testing.T) {
 		t.Fatalf("IPV6=no must be repaired in place before rules install v6 twins:\n%s", data)
 	}
 }
+
+// TestEnsureIPv6ManagedRepairsExportedIPv6 is the #1010 regression: an
+// `export IPV6=no` line assigns the same variable when /etc/default/ufw is
+// sourced — missing it leaves the disable in force while Veil believes IPv6
+// is managed. The export must be repaired in place, keeping `export`.
+func TestEnsureIPv6ManagedRepairsExportedIPv6(t *testing.T) {
+	seeds := map[string]string{
+		"export IPV6=no\n":                 "export IPV6=yes\n",
+		"export IPV6=\"no\"\n":             "export IPV6=yes\n",
+		"export\tIPV6=no\n":                "export IPV6=yes\n",
+		"  export IPV6=no # hardened\n":    "export IPV6=yes\n",
+		"export IPV6=no # off\nIPV6=yes\n": "export IPV6=yes\nIPV6=yes\n",
+		"IPV6=yes\nexport IPV6=no\n":       "IPV6=yes\nexport IPV6=yes\n",
+	}
+	for seed, want := range seeds {
+		path := withUFWDefaultsFile(t, seed)
+		if err := EnsureIPv6Managed(); err != nil {
+			t.Fatalf("EnsureIPv6Managed(%q): %v", seed, err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read ufw defaults: %v", err)
+		}
+		if string(data) != want {
+			t.Fatalf("exported IPV6 disable must be repaired in place, seed %q got:\n%s", seed, data)
+		}
+	}
+	// An already-enabled export is left byte-identical.
+	path := withUFWDefaultsFile(t, "export IPV6=yes\n")
+	if err := EnsureIPv6Managed(); err != nil {
+		t.Fatalf("EnsureIPv6Managed: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read ufw defaults: %v", err)
+	}
+	if string(data) != "export IPV6=yes\n" {
+		t.Fatalf("enabled export must not be rewritten:\n%s", data)
+	}
+}

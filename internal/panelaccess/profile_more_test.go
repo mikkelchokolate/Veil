@@ -27,7 +27,10 @@ func TestRecommendedListenDefaultsPort(t *testing.T) {
 
 func TestNewWebBasePathPolicyUsesDefaultReaderWhenNil(t *testing.T) {
 	policy := NewWebBasePathPolicy(nil)
-	path := policy.Generate()
+	path, err := policy.Generate()
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
 	if path == "" || !strings.HasPrefix(path, "/") || !strings.HasSuffix(path, "/") {
 		t.Fatalf("unexpected path %q", path)
 	}

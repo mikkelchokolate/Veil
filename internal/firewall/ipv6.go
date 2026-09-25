@@ -37,13 +37,29 @@ func EnsureIPv6Managed() error {
 			continue
 		}
 		key, value, ok := strings.Cut(trimmed, "=")
-		if !ok || !strings.EqualFold(strings.TrimSpace(key), "IPV6") {
+		if !ok {
+			continue
+		}
+		// A `export IPV6=no` line assigns the same variable when the file is
+		// sourced — missing it leaves the disable in place while Veil believes
+		// IPv6 is managed (issue #1010).
+		keyField := strings.TrimSpace(key)
+		exported := false
+		if f := strings.Fields(keyField); len(f) == 2 && f[0] == "export" {
+			keyField = f[1]
+			exported = true
+		}
+		if !strings.EqualFold(keyField, "IPV6") {
 			continue
 		}
 		if ufwIPv6Enabled(value) {
 			continue
 		}
-		lines[i] = "IPV6=yes"
+		if exported {
+			lines[i] = "export IPV6=yes"
+		} else {
+			lines[i] = "IPV6=yes"
+		}
 		repaired = true
 	}
 	if !repaired {
