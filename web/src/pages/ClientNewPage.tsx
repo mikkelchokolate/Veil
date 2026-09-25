@@ -105,7 +105,10 @@ export function ClientNewPage() {
 				throw new ApiError(400, t("clientNew.quotaTooLarge"));
 			}
 			const body: Record<string, unknown> = {
-				name,
+				// The server rejects TrimSpace != Name with a 400 — trim here so
+				// padded input commits as the intended name rather than erroring
+				// (#1043).
+				name: name.trim(),
 				enabled: true,
 			};
 			if (email) body.email = email;
@@ -146,7 +149,7 @@ export function ClientNewPage() {
 			setStep(3);
 		},
 		onError: (err) => {
-			setError(mutationErrorMessage(err, t("clientNew.createError")));
+			setError(mutationErrorMessage(err, t("clientNew.createError"), t));
 		},
 	});
 
@@ -479,7 +482,8 @@ export function ClientNewPage() {
 									type="button"
 									variant="primary"
 									disabled={
-										(step === 0 && !name) || (step === 1 && quotaError != null)
+										(step === 0 && !name.trim()) ||
+										(step === 1 && quotaError != null)
 									}
 									onClick={() => setStep((s) => s + 1)}
 								>

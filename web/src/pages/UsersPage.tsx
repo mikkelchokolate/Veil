@@ -86,7 +86,7 @@ export function UsersPage() {
 			invalidate();
 		},
 		onError: (err) =>
-			setError(mutationErrorMessage(err, t("users.error.create"))),
+			setError(mutationErrorMessage(err, t("users.error.create"), t)),
 	});
 
 	const update = useMutation({
@@ -118,7 +118,7 @@ export function UsersPage() {
 			invalidate();
 		},
 		onError: (err) =>
-			setError(mutationErrorMessage(err, t("users.error.update"))),
+			setError(mutationErrorMessage(err, t("users.error.update"), t)),
 	});
 
 	const remove = useMutation({
@@ -131,7 +131,7 @@ export function UsersPage() {
 			invalidate();
 		},
 		onError: (err) =>
-			setError(mutationErrorMessage(err, t("users.error.delete"))),
+			setError(mutationErrorMessage(err, t("users.error.delete"), t)),
 	});
 
 	const revoke = useMutation({
@@ -146,7 +146,7 @@ export function UsersPage() {
 			invalidate();
 		},
 		onError: (err) =>
-			setError(mutationErrorMessage(err, t("users.error.revoke"))),
+			setError(mutationErrorMessage(err, t("users.error.revoke"), t)),
 	});
 
 	function onSubmit(e: FormEvent) {
@@ -231,7 +231,10 @@ export function UsersPage() {
 												<Button
 													size="sm"
 													variant="danger"
-													onClick={() => setConfirmDelete(u.username)}
+													onClick={() => {
+														setError(null);
+														setConfirmDelete(u.username);
+													}}
 												>
 													{t("common.delete")}
 												</Button>
@@ -463,6 +466,9 @@ export function UsersPage() {
 							})}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
+					{/* A failed delete keeps this dialog open — the error must be
+						visible here, not only behind the overlay (#649 pattern). */}
+					{error ? <FormMessage>{error}</FormMessage> : null}
 					<AlertDialogFooter>
 						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
 						<AlertDialogAction

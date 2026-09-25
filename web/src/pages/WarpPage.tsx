@@ -67,7 +67,7 @@ export function WarpPage() {
 		return (
 			<div className="card">
 				<FormMessage>
-					{mutationErrorMessage(warp.error, t("warp.unavailable"))}
+					{mutationErrorMessage(warp.error, t("warp.unavailable"), t)}
 				</FormMessage>
 			</div>
 		);
@@ -125,7 +125,7 @@ export function WarpPage() {
 			) : null}
 			{toggle.isError ? (
 				<FormMessage>
-					{mutationErrorMessage(toggle.error, t("warp.toggleFailed"))}
+					{mutationErrorMessage(toggle.error, t("warp.toggleFailed"), t)}
 				</FormMessage>
 			) : null}
 			{applyFailed && !toggle.isError ? (
@@ -150,7 +150,7 @@ export function WarpPage() {
 					</AlertDialogHeader>
 					{toggle.isError ? (
 						<FormMessage>
-							{mutationErrorMessage(toggle.error, t("warp.toggleFailed"))}
+							{mutationErrorMessage(toggle.error, t("warp.toggleFailed"), t)}
 						</FormMessage>
 					) : null}
 					<AlertDialogFooter>

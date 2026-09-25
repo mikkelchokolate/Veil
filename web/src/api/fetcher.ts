@@ -219,14 +219,18 @@ const defaultTimeoutMs = 15_000;
 // while the host kept applying.
 const defaultMutationTimeoutMs = 60_000;
 
-export function mutationErrorMessage(error: unknown, fallback: string): string {
-	if (
-		error instanceof ApiError ||
-		error instanceof TimeoutError ||
-		error instanceof CancelledError
-	) {
-		return error.message;
-	}
+// TimeoutError/CancelledError carry hardcoded English defaults — surfacing
+// them raw bypasses the active locale (#1018). Callers pass t() so those two
+// transport failures resolve through the catalog; ApiError keeps the
+// server-provided message.
+export function mutationErrorMessage(
+	error: unknown,
+	fallback: string,
+	t: (key: string) => string,
+): string {
+	if (error instanceof TimeoutError) return t("common.error.timeout");
+	if (error instanceof CancelledError) return t("common.error.cancelled");
+	if (error instanceof ApiError) return error.message;
 	return fallback;
 }
 
