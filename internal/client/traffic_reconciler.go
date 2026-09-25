@@ -101,11 +101,17 @@ func (r *Reconciler) ReconcileOnce() (changed int, err error) {
 			}
 			pendingEntry := pendingTargets[current.ID]
 			pendingMutation, pending := pendingEntry.mutation, pendingEntry.pending
-			// A pending target at-or-behind the client's current version can
-			// never apply: ApplyQuotaMutationTx requires
-			// Version == TargetGeneration-1, so retrying it only churns
-			// ErrVersionConflict forever (#1000).
-			if pending && pendingMutation.TargetGeneration <= int64(current.Version) {
+			// A pending target strictly behind the client's current version is
+			// stale: a newer mutation already committed, so retrying its bound
+			// revision only replays superseded config. A target at exactly the
+			// current version with no bound revision never committed its write -
+			// ApplyQuotaMutationTx requires Version == TargetGeneration-1, so it
+			// can only churn ErrVersionConflict forever (#1000). A bound revision
+			// at TargetGeneration==Version is the committed-but-runtime-unapplied
+			// retry path and must stay pending.
+			stale := pendingMutation.TargetGeneration < int64(current.Version) ||
+				(pendingMutation.TargetGeneration == int64(current.Version) && pendingEntry.desiredRevision == 0)
+			if pending && stale {
 				if superErr := r.supersedeQuotaTarget(pendingMutation, now.Unix()); superErr != nil {
 					reconcileErrors = append(reconcileErrors, fmt.Errorf("client %s: %w", current.ID, superErr))
 				}
@@ -170,12 +176,14 @@ func BindQuotaTarget(current Client, mutation QuotaMutation) QuotaMutation {
 }
 
 func (r *Reconciler) pendingEnforcementTargets(clientIDs []string) (map[string]struct {
-	mutation QuotaMutation
-	pending  bool
+	mutation        QuotaMutation
+	pending         bool
+	desiredRevision int64
 }, error) {
 	out := make(map[string]struct {
-		mutation QuotaMutation
-		pending  bool
+		mutation        QuotaMutation
+		pending         bool
+		desiredRevision int64
 	}, len(clientIDs))
 	if len(clientIDs) == 0 || r == nil || r.repo == nil || r.repo.db == nil {
 		return out, nil
@@ -185,7 +193,7 @@ func (r *Reconciler) pendingEnforcementTargets(clientIDs []string) (map[string]s
 	for i, id := range clientIDs {
 		placeholders[i], args[i] = "?", id
 	}
-	query := "SELECT client_id,state,next_retry_at,target_generation,target_payload_hash,target_depleted,target_period_epoch,target_reset_period,target_next_reset_at,target_period_start FROM quota_enforcement WHERE client_id IN (" + strings.Join(placeholders, ",") + ") AND state<>'superseded'"
+	query := "SELECT client_id,state,next_retry_at,target_generation,target_payload_hash,target_depleted,target_period_epoch,target_reset_period,target_next_reset_at,target_period_start,desired_revision FROM quota_enforcement WHERE client_id IN (" + strings.Join(placeholders, ",") + ") AND state<>'superseded'"
 	rows, err := r.repo.db.Query(query, args...)
 	if err != nil {
 		return nil, err
@@ -193,10 +201,10 @@ func (r *Reconciler) pendingEnforcementTargets(clientIDs []string) (map[string]s
 	defer rows.Close()
 	for rows.Next() {
 		var id, state, hash string
-		var nextRetry, generation, period, periodStart int64
+		var nextRetry, generation, period, periodStart, desiredRevision int64
 		var depleted, resetPeriod int
 		var nextReset sql.NullInt64
-		if err := rows.Scan(&id, &state, &nextRetry, &generation, &hash, &depleted, &period, &resetPeriod, &nextReset, &periodStart); err != nil {
+		if err := rows.Scan(&id, &state, &nextRetry, &generation, &hash, &depleted, &period, &resetPeriod, &nextReset, &periodStart, &desiredRevision); err != nil {
 			return nil, err
 		}
 		mutation := QuotaMutation{
@@ -213,9 +221,10 @@ func (r *Reconciler) pendingEnforcementTargets(clientIDs []string) (map[string]s
 			pending = false
 		}
 		out[id] = struct {
-			mutation QuotaMutation
-			pending  bool
-		}{mutation: mutation, pending: pending}
+			mutation        QuotaMutation
+			pending         bool
+			desiredRevision int64
+		}{mutation: mutation, pending: pending, desiredRevision: desiredRevision}
 	}
 	return out, rows.Err()
 }
