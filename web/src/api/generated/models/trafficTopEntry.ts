@@ -44,7 +44,8 @@
 export interface TrafficTopEntry {
   clientId: string;
   name: string;
-  uploadBytes?: number;
-  downloadBytes?: number;
-  totalBytes: number;
+  uploadBytes: number;
+  downloadBytes: number;
+  /** uploadBytes + downloadBytes for the ranking window. */
+  usedBytes: number;
 }

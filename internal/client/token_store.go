@@ -364,30 +364,40 @@ func (s *TokenStore) ListForClient(clientID string) ([]SubscriptionToken, error)
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	s.markRecoverableSecrets(clientID, out)
+	if err := s.markRecoverableSecrets(clientID, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
-func (s *TokenStore) markRecoverableSecrets(clientID string, tokens []SubscriptionToken) {
+// markRecoverableSecrets sets HasSecret on each token whose ciphertext is
+// still stored. A mid-iteration failure must fail the listing rather than
+// silently downgrading flags — otherwise recoverable tokens look
+// unrecoverable (#1063).
+func (s *TokenStore) markRecoverableSecrets(clientID string, tokens []SubscriptionToken) error {
 	if len(tokens) == 0 {
-		return
+		return nil
 	}
 	rows, err := s.db.Query(`SELECT id FROM subscription_tokens WHERE client_id=? AND token_ciphertext IS NOT NULL AND token_ciphertext<>''`, clientID)
 	if err != nil {
-		return
+		return fmt.Errorf("client: list recoverable token secrets: %w", err)
 	}
 	defer rows.Close()
 	have := map[string]struct{}{}
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			return
+			return fmt.Errorf("client: scan recoverable token secret: %w", err)
 		}
 		have[id] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("client: iterate recoverable token secrets: %w", err)
 	}
 	for i := range tokens {
 		_, tokens[i].HasSecret = have[tokens[i].ID]
 	}
+	return nil
 }
 
 func (s *TokenStore) encryptPlaintext(plaintext string) (string, error) {

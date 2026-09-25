@@ -43,7 +43,7 @@
 import type { UpdateResponseStatus } from './updateResponseStatus.ts';
 
 /**
- * Durable update job accepted by POST /api/version/update. The panel restarts asynchronously; poll /api/version to confirm the new version.
+ * Durable update job accepted by POST /api/version/update. The panel restarts asynchronously; poll GET /api/version/update/jobs/{jobId} to follow the job to a terminal status, then confirm the binary via GET /api/version.
  */
 export interface UpdateResponse {
   /** Durable panel update job identifier. */

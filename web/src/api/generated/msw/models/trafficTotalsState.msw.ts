@@ -40,14 +40,16 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { TrafficBucket } from './trafficBucket.msw.ts';
 
 /**
- * Time-ordered bucketed deltas; items carry per-bucket deltas, not cumulative totals (#1066).
+ * Honest telemetry state: pending when accounting is enabled but no observation landed yet, stale when a provider is degraded, unsupported when no binding counts traffic. Never trust upload/download numbers without checking state (#1066).
  */
-export interface TrafficHistoryResponse {
-  /** @nullable */
-  items: TrafficBucket[] | null;
-  /** Number of buckets in items. */
-  count: number;
-}
+export type TrafficTotalsState = typeof TrafficTotalsState[keyof typeof TrafficTotalsState];
+
+
+export const TrafficTotalsState = {
+  healthy: 'healthy',
+  pending: 'pending',
+  stale: 'stale',
+  unsupported: 'unsupported',
+} as const;

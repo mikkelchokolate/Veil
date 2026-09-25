@@ -42,6 +42,9 @@ func (snapshot loginCredentialSnapshot) passwordMatches(password string) bool {
 	if snapshot.FoundUser {
 		return bcrypt.CompareHashAndPassword([]byte(snapshot.PasswordHash), []byte(password)) == nil
 	}
+	// Unknown usernames still pay the bcrypt cost so the login response time
+	// cannot reveal whether the account exists (#1064).
+	_ = bcrypt.CompareHashAndPassword(dummyLoginPasswordHash, []byte(password))
 	return snapshot.FallbackAllowed && constantTimePasswordEqual(password, snapshot.FallbackPassword)
 }
 

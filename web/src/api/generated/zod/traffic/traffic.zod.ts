@@ -46,7 +46,20 @@ import * as zod from 'zod';
 /**
  * @summary Aggregate traffic totals + honest telemetry provider state
  */
-export const GetApiV1TrafficSummaryResponse = zod.unknown()
+export const GetApiV1TrafficSummaryResponse = zod.object({
+  "state": zod.enum(['healthy', 'degraded', 'pending', 'unsupported']).describe('Honest aggregate telemetry state — pending when providers exist but none has landed a successful observation, degraded when any provider is failing, unsupported when no provider is configured.'),
+  "providerCount": zod.int(),
+  "providers": zod.array(zod.object({
+  "key": zod.string(),
+  "state": zod.enum(['unknown', 'healthy', 'degraded']),
+  "lastSuccessfulObservationAt": zod.int().optional(),
+  "lastError": zod.string().optional(),
+  "errorsTotal": zod.int()
+})).nullable(),
+  "uploadBytes": zod.int().optional(),
+  "downloadBytes": zod.int().optional(),
+  "usedBytes": zod.int().optional()
+})
 
 /**
  * @summary Top talkers ranked by cumulative usage
@@ -55,9 +68,9 @@ export const GetApiV1TrafficTopResponse = zod.object({
   "items": zod.array(zod.object({
   "clientId": zod.string(),
   "name": zod.string(),
-  "uploadBytes": zod.int().optional(),
-  "downloadBytes": zod.int().optional(),
-  "totalBytes": zod.int()
+  "uploadBytes": zod.int(),
+  "downloadBytes": zod.int(),
+  "usedBytes": zod.int().describe('uploadBytes + downloadBytes for the ranking window.')
 }))
 })
 
@@ -80,10 +93,12 @@ export const GetApiV1TrafficIdResponse = zod.object({
   "clientId": zod.string(),
   "uploadBytes": zod.int(),
   "downloadBytes": zod.int(),
-  "totalBytes": zod.int(),
-  "quotaBytes": zod.int().min(getApiV1TrafficIdResponseQuotaBytesMin).max(getApiV1TrafficIdResponseQuotaBytesMax).optional(),
-  "remainingBytes": zod.int().optional(),
-  "depleted": zod.boolean()
+  "usedBytes": zod.int().describe('uploadBytes + downloadBytes — the total counted against quota.'),
+  "quotaBytes": zod.int().min(getApiV1TrafficIdResponseQuotaBytesMin).max(getApiV1TrafficIdResponseQuotaBytesMax).nullish(),
+  "remainingBytes": zod.int().nullish(),
+  "depleted": zod.boolean(),
+  "state": zod.enum(['healthy', 'pending', 'stale', 'unsupported']).describe('Honest telemetry state: pending when accounting is enabled but no observation landed yet, stale when a provider is degraded, unsupported when no binding counts traffic. Never trust upload/download numbers without checking state (#1066).'),
+  "collectedAt": zod.int().nullish().describe('Unix timestamp of the last successful observation; null before the first sample.')
 })
 
 /**
@@ -104,16 +119,15 @@ export const GetApiV1TrafficIdHistoryQueryParams = zod.object({
 })
 
 export const GetApiV1TrafficIdHistoryResponse = zod.object({
-  "clientId": zod.string(),
-  "from": zod.int(),
-  "to": zod.int(),
-  "bucket": zod.int(),
   "items": zod.array(zod.object({
-  "at": zod.int(),
-  "uploadBytes": zod.int(),
-  "downloadBytes": zod.int()
-}))
-})
+  "bucketStart": zod.int().describe('Unix start of the bucket.'),
+  "clientId": zod.string(),
+  "bindingId": zod.string(),
+  "uploadDelta": zod.int().describe('Bytes uploaded inside this bucket.'),
+  "downloadDelta": zod.int().describe('Bytes downloaded inside this bucket.')
+})).nullable(),
+  "count": zod.int().describe('Number of buckets in items.')
+}).describe('Time-ordered bucketed deltas; items carry per-bucket deltas, not cumulative totals (#1066).')
 
 /**
  * Emits a JSON snapshot per client every ~5s as SSE data frames.

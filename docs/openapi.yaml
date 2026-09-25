@@ -1347,6 +1347,42 @@ paths:
           $ref: '#/components/responses/Locked'
       x-roles:
       - admin
+  /api/version/update/jobs/{id}:
+    get:
+      x-veil-role: viewer
+      tags:
+      - version
+      summary: Poll a durable panel update job
+      description: >-
+        Returns the update job keyed by the `jobId` in the 202 response of
+        POST /api/version/update — the only way to follow an install after the
+        panel begins restarting. The restart drops in-flight connections, so
+        callers should re-poll until the job reaches a terminal status
+        (succeeded or failed), then confirm the binary via GET /api/version.
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Update job.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateJob'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      x-roles:
+      - admin
+      - viewer
   /api/settings:
     get:
       x-veil-role: viewer
@@ -3617,6 +3653,10 @@ paths:
       responses:
         '200':
           description: Token list; every recoverable token includes its /s/ subscription URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionTokenListResponse'
       x-roles:
       - admin
     post:
@@ -3779,7 +3819,11 @@ paths:
       - veilToken: []
       responses:
         '200':
-          description: '{"state,providerCount,uploadBytes,downloadBytes,usedBytes}'
+          description: Aggregate totals plus honest telemetry provider state; the byte fields are absent when no traffic store is configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrafficSummaryResponse'
       x-roles:
       - admin
       - viewer
@@ -5905,7 +5949,9 @@ components:
       additionalProperties: false
       description: >-
         Durable update job accepted by POST /api/version/update. The panel
-        restarts asynchronously; poll /api/version to confirm the new version.
+        restarts asynchronously; poll GET /api/version/update/jobs/{jobId} to
+        follow the job to a terminal status, then confirm the binary via
+        GET /api/version.
       properties:
         jobId:
           type: string
@@ -5922,6 +5968,45 @@ components:
           type: string
         message:
           type: string
+    UpdateJob:
+      type: object
+      required:
+      - id
+      - version
+      - status
+      - createdAt
+      - updatedAt
+      additionalProperties: false
+      description: >-
+        Durable panel update job returned by GET /api/version/update/jobs/{id}.
+      properties:
+        id:
+          type: string
+        version:
+          type: string
+          description: Target release tag the job is installing.
+        status:
+          type: string
+          enum:
+          - staging
+          - restart_pending
+          - restarting
+          - succeeded
+          - failed
+        stageApplyJobId:
+          type: string
+          description: Apply job that staged/installed the update.
+        restartApplyJobId:
+          type: string
+          description: Apply job driving the post-install restart.
+        error:
+          type: string
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
     RURecommendedPreviewRequest:
       type: object
       required:
@@ -6842,29 +6927,97 @@ components:
                 skipped:
                   type: integer
       - $ref: '#/components/schemas/MutationOutcome'
+    SubscriptionToken:
+      type: object
+      required:
+      - id
+      - clientId
+      - prefix
+      - enabled
+      - createdAt
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        clientId:
+          type: string
+        prefix:
+          type: string
+          description: Public prefix used to identify the token.
+        label:
+          type: string
+        createdBy:
+          type: string
+        enabled:
+          type: boolean
+        expiresAt:
+          type:
+          - integer
+          - 'null'
+          format: int64
+        createdAt:
+          type: integer
+          format: int64
+        rotatedAt:
+          type:
+          - integer
+          - 'null'
+          format: int64
+        revokedAt:
+          type:
+          - integer
+          - 'null'
+          format: int64
+        lastUsedAt:
+          type:
+          - integer
+          - 'null'
+          format: int64
+        hasSecret:
+          type: boolean
+          description: Whether the recoverable ciphertext is still stored; tokens without it cannot re-emit a subscription URL.
+        url:
+          type: string
+          description: >-
+            Recoverable /s/ subscription URL, present only on list entries
+            whose stored secret is recoverable and the token is still active.
     SubscriptionTokenResponse:
       type: object
       required:
       - token
-      - prefix
+      additionalProperties: false
+      description: >-
+        Token management response. `plaintext` is emitted only by issue and
+        rotate; `url` carries the rebuilt /s/ subscription URL.
       properties:
         token:
+          $ref: '#/components/schemas/SubscriptionToken'
+        plaintext:
           type: string
-          description: Full plaintext token, returned only once at issuance.
-        prefix:
+          description: Full plaintext token, returned only once at issuance or rotation. Never stored or repeated.
+        url:
           type: string
-          description: Public prefix used to identify the token.
-        expiresAt:
-          type: integer
-          format: int64
+          description: /s/ subscription URL built from the plaintext.
+    SubscriptionTokenListResponse:
+      type: object
+      required:
+      - items
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubscriptionToken'
     TrafficTotals:
       type: object
       required:
       - clientId
       - uploadBytes
       - downloadBytes
-      - totalBytes
+      - usedBytes
       - depleted
+      - state
+      additionalProperties: false
       properties:
         clientId:
           type: string
@@ -6874,64 +7027,96 @@ components:
         downloadBytes:
           type: integer
           format: int64
-        totalBytes:
+        usedBytes:
           type: integer
           format: int64
+          description: uploadBytes + downloadBytes — the total counted against quota.
         quotaBytes:
-          type: integer
+          type:
+          - integer
+          - 'null'
           format: int64
           minimum: 0
           maximum: 9007199254740991
         remainingBytes:
-          type: integer
+          type:
+          - integer
+          - 'null'
           format: int64
         depleted:
           type: boolean
+        state:
+          type: string
+          enum:
+          - healthy
+          - pending
+          - stale
+          - unsupported
+          description: >-
+            Honest telemetry state: pending when accounting is enabled but no
+            observation landed yet, stale when a provider is degraded,
+            unsupported when no binding counts traffic. Never trust
+            upload/download numbers without checking state (#1066).
+        collectedAt:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: Unix timestamp of the last successful observation; null before the first sample.
     TrafficBucket:
       type: object
       required:
-      - at
-      - uploadBytes
-      - downloadBytes
+      - bucketStart
+      - clientId
+      - bindingId
+      - uploadDelta
+      - downloadDelta
+      additionalProperties: false
       properties:
-        at:
+        bucketStart:
           type: integer
           format: int64
-        uploadBytes:
+          description: Unix start of the bucket.
+        clientId:
+          type: string
+        bindingId:
+          type: string
+        uploadDelta:
           type: integer
           format: int64
-        downloadBytes:
+          description: Bytes uploaded inside this bucket.
+        downloadDelta:
           type: integer
           format: int64
+          description: Bytes downloaded inside this bucket.
     TrafficHistoryResponse:
       type: object
       required:
-      - clientId
-      - from
-      - to
-      - bucket
       - items
+      - count
+      additionalProperties: false
       properties:
-        clientId:
-          type: string
-        from:
-          type: integer
-          format: int64
-        to:
-          type: integer
-          format: int64
-        bucket:
-          type: integer
         items:
-          type: array
+          type:
+          - array
+          - 'null'
           items:
             $ref: '#/components/schemas/TrafficBucket'
+        count:
+          type: integer
+          description: Number of buckets in items.
+      description: >-
+        Time-ordered bucketed deltas; items carry per-bucket deltas, not
+        cumulative totals (#1066).
     TrafficTopEntry:
       type: object
       required:
       - clientId
       - name
-      - totalBytes
+      - uploadBytes
+      - downloadBytes
+      - usedBytes
+      additionalProperties: false
       properties:
         clientId:
           type: string
@@ -6943,9 +7128,10 @@ components:
         downloadBytes:
           type: integer
           format: int64
-        totalBytes:
+        usedBytes:
           type: integer
           format: int64
+          description: uploadBytes + downloadBytes for the ranking window.
     TrafficTopResponse:
       type: object
       required:
@@ -6955,6 +7141,66 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TrafficTopEntry'
+    TrafficProviderHealth:
+      type: object
+      required:
+      - key
+      - state
+      - errorsTotal
+      additionalProperties: false
+      properties:
+        key:
+          type: string
+        state:
+          type: string
+          enum:
+          - unknown
+          - healthy
+          - degraded
+        lastSuccessfulObservationAt:
+          type: integer
+          format: int64
+        lastError:
+          type: string
+        errorsTotal:
+          type: integer
+          format: int64
+    TrafficSummaryResponse:
+      type: object
+      required:
+      - state
+      - providerCount
+      - providers
+      additionalProperties: false
+      properties:
+        state:
+          type: string
+          enum:
+          - healthy
+          - degraded
+          - pending
+          - unsupported
+          description: >-
+            Honest aggregate telemetry state — pending when providers exist
+            but none has landed a successful observation, degraded when any
+            provider is failing, unsupported when no provider is configured.
+        providerCount:
+          type: integer
+        providers:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/TrafficProviderHealth'
+        uploadBytes:
+          type: integer
+          format: int64
+        downloadBytes:
+          type: integer
+          format: int64
+        usedBytes:
+          type: integer
+          format: int64
   headers:
     Location:
       description: URI of the created resource.

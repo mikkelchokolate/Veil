@@ -700,15 +700,111 @@ func (e SetupStatusResponsePanelAccess) Valid() bool {
 	}
 }
 
+// Defines values for TrafficProviderHealthState.
+const (
+	TrafficProviderHealthStateDegraded TrafficProviderHealthState = "degraded"
+	TrafficProviderHealthStateHealthy  TrafficProviderHealthState = "healthy"
+	TrafficProviderHealthStateUnknown  TrafficProviderHealthState = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the TrafficProviderHealthState enum.
+func (e TrafficProviderHealthState) Valid() bool {
+	switch e {
+	case TrafficProviderHealthStateDegraded:
+		return true
+	case TrafficProviderHealthStateHealthy:
+		return true
+	case TrafficProviderHealthStateUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TrafficSummaryResponseState.
+const (
+	TrafficSummaryResponseStateDegraded    TrafficSummaryResponseState = "degraded"
+	TrafficSummaryResponseStateHealthy     TrafficSummaryResponseState = "healthy"
+	TrafficSummaryResponseStatePending     TrafficSummaryResponseState = "pending"
+	TrafficSummaryResponseStateUnsupported TrafficSummaryResponseState = "unsupported"
+)
+
+// Valid indicates whether the value is a known member of the TrafficSummaryResponseState enum.
+func (e TrafficSummaryResponseState) Valid() bool {
+	switch e {
+	case TrafficSummaryResponseStateDegraded:
+		return true
+	case TrafficSummaryResponseStateHealthy:
+		return true
+	case TrafficSummaryResponseStatePending:
+		return true
+	case TrafficSummaryResponseStateUnsupported:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TrafficTotalsState.
+const (
+	TrafficTotalsStateHealthy     TrafficTotalsState = "healthy"
+	TrafficTotalsStatePending     TrafficTotalsState = "pending"
+	TrafficTotalsStateStale       TrafficTotalsState = "stale"
+	TrafficTotalsStateUnsupported TrafficTotalsState = "unsupported"
+)
+
+// Valid indicates whether the value is a known member of the TrafficTotalsState enum.
+func (e TrafficTotalsState) Valid() bool {
+	switch e {
+	case TrafficTotalsStateHealthy:
+		return true
+	case TrafficTotalsStatePending:
+		return true
+	case TrafficTotalsStateStale:
+		return true
+	case TrafficTotalsStateUnsupported:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateJobStatus.
+const (
+	UpdateJobStatusFailed         UpdateJobStatus = "failed"
+	UpdateJobStatusRestartPending UpdateJobStatus = "restart_pending"
+	UpdateJobStatusRestarting     UpdateJobStatus = "restarting"
+	UpdateJobStatusStaging        UpdateJobStatus = "staging"
+	UpdateJobStatusSucceeded      UpdateJobStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the UpdateJobStatus enum.
+func (e UpdateJobStatus) Valid() bool {
+	switch e {
+	case UpdateJobStatusFailed:
+		return true
+	case UpdateJobStatusRestartPending:
+		return true
+	case UpdateJobStatusRestarting:
+		return true
+	case UpdateJobStatusStaging:
+		return true
+	case UpdateJobStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UpdateResponseStatus.
 const (
-	RestartPending UpdateResponseStatus = "restart_pending"
+	UpdateResponseStatusRestartPending UpdateResponseStatus = "restart_pending"
 )
 
 // Valid indicates whether the value is a known member of the UpdateResponseStatus enum.
 func (e UpdateResponseStatus) Valid() bool {
 	switch e {
-	case RestartPending:
+	case UpdateResponseStatusRestartPending:
 		return true
 	default:
 		return false
@@ -2279,15 +2375,42 @@ type StatusResponse struct {
 	Version       string          `json:"version"`
 }
 
-// SubscriptionTokenResponse defines model for SubscriptionTokenResponse.
-type SubscriptionTokenResponse struct {
-	ExpiresAt *int64 `json:"expiresAt,omitempty"`
+// SubscriptionToken defines model for SubscriptionToken.
+type SubscriptionToken struct {
+	ClientId  string                   `json:"clientId"`
+	CreatedAt int64                    `json:"createdAt"`
+	CreatedBy *string                  `json:"createdBy,omitempty"`
+	Enabled   bool                     `json:"enabled"`
+	ExpiresAt nullable.Nullable[int64] `json:"expiresAt,omitempty"`
+
+	// HasSecret Whether the recoverable ciphertext is still stored; tokens without it cannot re-emit a subscription URL.
+	HasSecret  *bool                    `json:"hasSecret,omitempty"`
+	Id         string                   `json:"id"`
+	Label      *string                  `json:"label,omitempty"`
+	LastUsedAt nullable.Nullable[int64] `json:"lastUsedAt,omitempty"`
 
 	// Prefix Public prefix used to identify the token.
-	Prefix string `json:"prefix"`
+	Prefix    string                   `json:"prefix"`
+	RevokedAt nullable.Nullable[int64] `json:"revokedAt,omitempty"`
+	RotatedAt nullable.Nullable[int64] `json:"rotatedAt,omitempty"`
 
-	// Token Full plaintext token, returned only once at issuance.
-	Token string `json:"token"`
+	// Url Recoverable /s/ subscription URL, present only on list entries whose stored secret is recoverable and the token is still active.
+	Url *string `json:"url,omitempty"`
+}
+
+// SubscriptionTokenListResponse defines model for SubscriptionTokenListResponse.
+type SubscriptionTokenListResponse struct {
+	Items []SubscriptionToken `json:"items"`
+}
+
+// SubscriptionTokenResponse Token management response. `plaintext` is emitted only by issue and rotate; `url` carries the rebuilt /s/ subscription URL.
+type SubscriptionTokenResponse struct {
+	// Plaintext Full plaintext token, returned only once at issuance or rotation. Never stored or repeated.
+	Plaintext *string           `json:"plaintext,omitempty"`
+	Token     SubscriptionToken `json:"token"`
+
+	// Url /s/ subscription URL built from the plaintext.
+	Url *string `json:"url,omitempty"`
 }
 
 // SuccessResponse defines model for SuccessResponse.
@@ -2335,27 +2458,62 @@ type TLSCertInfo struct {
 
 // TrafficBucket defines model for TrafficBucket.
 type TrafficBucket struct {
-	At            int64 `json:"at"`
-	DownloadBytes int64 `json:"downloadBytes"`
-	UploadBytes   int64 `json:"uploadBytes"`
+	BindingId string `json:"bindingId"`
+
+	// BucketStart Unix start of the bucket.
+	BucketStart int64  `json:"bucketStart"`
+	ClientId    string `json:"clientId"`
+
+	// DownloadDelta Bytes downloaded inside this bucket.
+	DownloadDelta int64 `json:"downloadDelta"`
+
+	// UploadDelta Bytes uploaded inside this bucket.
+	UploadDelta int64 `json:"uploadDelta"`
 }
 
-// TrafficHistoryResponse defines model for TrafficHistoryResponse.
+// TrafficHistoryResponse Time-ordered bucketed deltas; items carry per-bucket deltas, not cumulative totals (#1066).
 type TrafficHistoryResponse struct {
-	Bucket   int             `json:"bucket"`
-	ClientId string          `json:"clientId"`
-	From     int64           `json:"from"`
-	Items    []TrafficBucket `json:"items"`
-	To       int64           `json:"to"`
+	// Count Number of buckets in items.
+	Count int                                `json:"count"`
+	Items nullable.Nullable[[]TrafficBucket] `json:"items"`
 }
+
+// TrafficProviderHealth defines model for TrafficProviderHealth.
+type TrafficProviderHealth struct {
+	ErrorsTotal                 int64                      `json:"errorsTotal"`
+	Key                         string                     `json:"key"`
+	LastError                   *string                    `json:"lastError,omitempty"`
+	LastSuccessfulObservationAt *int64                     `json:"lastSuccessfulObservationAt,omitempty"`
+	State                       TrafficProviderHealthState `json:"state"`
+}
+
+// TrafficProviderHealthState defines model for TrafficProviderHealth.State.
+type TrafficProviderHealthState string
+
+// TrafficSummaryResponse defines model for TrafficSummaryResponse.
+type TrafficSummaryResponse struct {
+	DownloadBytes *int64                                     `json:"downloadBytes,omitempty"`
+	ProviderCount int                                        `json:"providerCount"`
+	Providers     nullable.Nullable[[]TrafficProviderHealth] `json:"providers"`
+
+	// State Honest aggregate telemetry state — pending when providers exist but none has landed a successful observation, degraded when any provider is failing, unsupported when no provider is configured.
+	State       TrafficSummaryResponseState `json:"state"`
+	UploadBytes *int64                      `json:"uploadBytes,omitempty"`
+	UsedBytes   *int64                      `json:"usedBytes,omitempty"`
+}
+
+// TrafficSummaryResponseState Honest aggregate telemetry state — pending when providers exist but none has landed a successful observation, degraded when any provider is failing, unsupported when no provider is configured.
+type TrafficSummaryResponseState string
 
 // TrafficTopEntry defines model for TrafficTopEntry.
 type TrafficTopEntry struct {
 	ClientId      string `json:"clientId"`
-	DownloadBytes *int64 `json:"downloadBytes,omitempty"`
+	DownloadBytes int64  `json:"downloadBytes"`
 	Name          string `json:"name"`
-	TotalBytes    int64  `json:"totalBytes"`
-	UploadBytes   *int64 `json:"uploadBytes,omitempty"`
+	UploadBytes   int64  `json:"uploadBytes"`
+
+	// UsedBytes uploadBytes + downloadBytes for the ranking window.
+	UsedBytes int64 `json:"usedBytes"`
 }
 
 // TrafficTopResponse defines model for TrafficTopResponse.
@@ -2365,16 +2523,48 @@ type TrafficTopResponse struct {
 
 // TrafficTotals defines model for TrafficTotals.
 type TrafficTotals struct {
-	ClientId       string `json:"clientId"`
-	Depleted       bool   `json:"depleted"`
-	DownloadBytes  int64  `json:"downloadBytes"`
-	QuotaBytes     *int64 `json:"quotaBytes,omitempty"`
-	RemainingBytes *int64 `json:"remainingBytes,omitempty"`
-	TotalBytes     int64  `json:"totalBytes"`
-	UploadBytes    int64  `json:"uploadBytes"`
+	ClientId string `json:"clientId"`
+
+	// CollectedAt Unix timestamp of the last successful observation; null before the first sample.
+	CollectedAt    nullable.Nullable[int64] `json:"collectedAt,omitempty"`
+	Depleted       bool                     `json:"depleted"`
+	DownloadBytes  int64                    `json:"downloadBytes"`
+	QuotaBytes     nullable.Nullable[int64] `json:"quotaBytes,omitempty"`
+	RemainingBytes nullable.Nullable[int64] `json:"remainingBytes,omitempty"`
+
+	// State Honest telemetry state: pending when accounting is enabled but no observation landed yet, stale when a provider is degraded, unsupported when no binding counts traffic. Never trust upload/download numbers without checking state (#1066).
+	State       TrafficTotalsState `json:"state"`
+	UploadBytes int64              `json:"uploadBytes"`
+
+	// UsedBytes uploadBytes + downloadBytes — the total counted against quota.
+	UsedBytes int64 `json:"usedBytes"`
 }
 
-// UpdateResponse Durable update job accepted by POST /api/version/update. The panel restarts asynchronously; poll /api/version to confirm the new version.
+// TrafficTotalsState Honest telemetry state: pending when accounting is enabled but no observation landed yet, stale when a provider is degraded, unsupported when no binding counts traffic. Never trust upload/download numbers without checking state (#1066).
+type TrafficTotalsState string
+
+// UpdateJob Durable panel update job returned by GET /api/version/update/jobs/{id}.
+type UpdateJob struct {
+	CreatedAt int64   `json:"createdAt"`
+	Error     *string `json:"error,omitempty"`
+	Id        string  `json:"id"`
+
+	// RestartApplyJobId Apply job driving the post-install restart.
+	RestartApplyJobId *string `json:"restartApplyJobId,omitempty"`
+
+	// StageApplyJobId Apply job that staged/installed the update.
+	StageApplyJobId *string         `json:"stageApplyJobId,omitempty"`
+	Status          UpdateJobStatus `json:"status"`
+	UpdatedAt       int64           `json:"updatedAt"`
+
+	// Version Target release tag the job is installing.
+	Version string `json:"version"`
+}
+
+// UpdateJobStatus defines model for UpdateJob.Status.
+type UpdateJobStatus string
+
+// UpdateResponse Durable update job accepted by POST /api/version/update. The panel restarts asynchronously; poll GET /api/version/update/jobs/{jobId} to follow the job to a terminal status, then confirm the binary via GET /api/version.
 type UpdateResponse struct {
 	Installed bool `json:"installed"`
 
@@ -4390,6 +4580,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /api/version/update (the `PostApiVersionUpdate` operationId).
 	PostApiVersionUpdate(ctx context.Context, params *PostApiVersionUpdateParams, body PostApiVersionUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiVersionUpdateJobsId Poll a durable panel update job
+	//
+	// Returns the update job keyed by the `jobId` in the 202 response of POST /api/version/update — the only way to follow an install after the panel begins restarting. The restart drops in-flight connections, so callers should re-poll until the job reaches a terminal status (succeeded or failed), then confirm the binary via GET /api/version.
+	//
+	// Corresponds with GET /api/version/update/jobs/{id} (the `GetApiVersionUpdateJobsId` operationId).
+	GetApiVersionUpdateJobsId(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiWarp Read WARP state with secrets redacted
 	//
@@ -6710,6 +6907,23 @@ func (c *Client) PostApiVersionUpdateWithBody(ctx context.Context, params *PostA
 // Corresponds with POST /api/version/update (the `PostApiVersionUpdate` operationId).
 func (c *Client) PostApiVersionUpdate(ctx context.Context, params *PostApiVersionUpdateParams, body PostApiVersionUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostApiVersionUpdateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetApiVersionUpdateJobsId Poll a durable panel update job
+//
+// Returns the update job keyed by the `jobId` in the 202 response of POST /api/version/update — the only way to follow an install after the panel begins restarting. The restart drops in-flight connections, so callers should re-poll until the job reaches a terminal status (succeeded or failed), then confirm the binary via GET /api/version.
+//
+// Corresponds with GET /api/version/update/jobs/{id} (the `GetApiVersionUpdateJobsId` operationId).
+func (c *Client) GetApiVersionUpdateJobsId(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiVersionUpdateJobsIdRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -11314,6 +11528,40 @@ func NewPostApiVersionUpdateRequestWithBody(server string, params *PostApiVersio
 	return req, nil
 }
 
+// NewGetApiVersionUpdateJobsIdRequest constructs an http.Request for the GetApiVersionUpdateJobsId method
+func NewGetApiVersionUpdateJobsIdRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/version/update/jobs/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetApiWarpRequest constructs an http.Request for the GetApiWarp method
 func NewGetApiWarpRequest(server string) (*http.Request, error) {
 	var err error
@@ -12714,6 +12962,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /api/version/update (the `PostApiVersionUpdate` operationId).
 	PostApiVersionUpdateWithResponse(ctx context.Context, params *PostApiVersionUpdateParams, body PostApiVersionUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiVersionUpdateResponse, error)
+
+	// GetApiVersionUpdateJobsIdWithResponse Poll a durable panel update job
+	//
+	// Returns the update job keyed by the `jobId` in the 202 response of POST /api/version/update — the only way to follow an install after the panel begins restarting. The restart drops in-flight connections, so callers should re-poll until the job reaches a terminal status (succeeded or failed), then confirm the binary via GET /api/version.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/version/update/jobs/{id} (the `GetApiVersionUpdateJobsId` operationId).
+	GetApiVersionUpdateJobsIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetApiVersionUpdateJobsIdResponse, error)
 
 	// GetApiWarpWithResponse Read WARP state with secrets redacted
 	//
@@ -18880,6 +19137,13 @@ func (r GetApiV1ClientsIdLinksResponse) ContentType() string {
 type GetApiV1ClientsIdTokensResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SubscriptionTokenListResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiV1ClientsIdTokensResponse) GetJSON200() *SubscriptionTokenListResponse {
+	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
@@ -19265,6 +19529,13 @@ func (r GetApiV1TrafficStreamResponse) ContentType() string {
 type GetApiV1TrafficSummaryResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TrafficSummaryResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiV1TrafficSummaryResponse) GetJSON200() *TrafficSummaryResponse {
+	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
@@ -19655,6 +19926,61 @@ func (r PostApiVersionUpdateResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PostApiVersionUpdateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetApiVersionUpdateJobsIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *UpdateJob
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiVersionUpdateJobsIdResponse) GetJSON200() *UpdateJob {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r GetApiVersionUpdateJobsIdResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetApiVersionUpdateJobsIdResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiVersionUpdateJobsIdResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiVersionUpdateJobsIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiVersionUpdateJobsIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiVersionUpdateJobsIdResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -21953,6 +22279,21 @@ func (c *ClientWithResponses) PostApiVersionUpdateWithResponse(ctx context.Conte
 		return nil, err
 	}
 	return ParsePostApiVersionUpdateResponse(rsp)
+}
+
+// GetApiVersionUpdateJobsIdWithResponse Poll a durable panel update job
+//
+// Returns the update job keyed by the `jobId` in the 202 response of POST /api/version/update — the only way to follow an install after the panel begins restarting. The restart drops in-flight connections, so callers should re-poll until the job reaches a terminal status (succeeded or failed), then confirm the binary via GET /api/version.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/version/update/jobs/{id} (the `GetApiVersionUpdateJobsId` operationId).
+func (c *ClientWithResponses) GetApiVersionUpdateJobsIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetApiVersionUpdateJobsIdResponse, error) {
+	rsp, err := c.GetApiVersionUpdateJobsId(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiVersionUpdateJobsIdResponse(rsp)
 }
 
 // GetApiWarpWithResponse Read WARP state with secrets redacted
@@ -26891,6 +27232,16 @@ func ParseGetApiV1ClientsIdTokensResponse(rsp *http.Response) (*GetApiV1ClientsI
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SubscriptionTokenListResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
 	return response, nil
 }
 
@@ -27180,6 +27531,16 @@ func ParseGetApiV1TrafficSummaryResponse(rsp *http.Response) (*GetApiV1TrafficSu
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TrafficSummaryResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
 	return response, nil
 }
 
@@ -27467,6 +27828,46 @@ func ParsePostApiVersionUpdateResponse(rsp *http.Response) (*PostApiVersionUpdat
 			return nil, err
 		}
 		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiVersionUpdateJobsIdResponse parses an HTTP response from a GetApiVersionUpdateJobsIdWithResponse call
+func ParseGetApiVersionUpdateJobsIdResponse(rsp *http.Response) (*GetApiVersionUpdateJobsIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiVersionUpdateJobsIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UpdateJob
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 

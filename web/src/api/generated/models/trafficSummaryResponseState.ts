@@ -40,14 +40,16 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { TrafficBucket } from './trafficBucket.msw.ts';
 
 /**
- * Time-ordered bucketed deltas; items carry per-bucket deltas, not cumulative totals (#1066).
+ * Honest aggregate telemetry state — pending when providers exist but none has landed a successful observation, degraded when any provider is failing, unsupported when no provider is configured.
  */
-export interface TrafficHistoryResponse {
-  /** @nullable */
-  items: TrafficBucket[] | null;
-  /** Number of buckets in items. */
-  count: number;
-}
+export type TrafficSummaryResponseState = typeof TrafficSummaryResponseState[keyof typeof TrafficSummaryResponseState];
+
+
+export const TrafficSummaryResponseState = {
+  healthy: 'healthy',
+  degraded: 'degraded',
+  pending: 'pending',
+  unsupported: 'unsupported',
+} as const;

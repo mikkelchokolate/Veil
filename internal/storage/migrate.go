@@ -831,6 +831,10 @@ func Migrate(db *sql.DB) error {
 		}
 		quickOK = true
 	}
+	if err := quickRows.Err(); err != nil {
+		quickRows.Close()
+		return fmt.Errorf("storage: quick_check iteration: %w", err)
+	}
 	if err := quickRows.Close(); err != nil {
 		return fmt.Errorf("storage: close quick_check: %w", err)
 	}

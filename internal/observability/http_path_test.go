@@ -25,6 +25,37 @@ func TestNormalizeHTTPPathTemplatesSensitiveAndUniqueSegments(t *testing.T) {
 	}
 }
 
+// TestNormalizeHTTPPathPrefersLiteralRouteOverPlaceholder (#1032): when a
+// literal route and a {placeholder} template both match, the literal must win.
+// The old tie-break preferred the longer pattern string, so
+// /api/v1/traffic/{clientId} (27 bytes) shadowed /api/v1/traffic/top (19
+// bytes) and the real endpoint's metrics folded into the templated label.
+func TestNormalizeHTTPPathPrefersLiteralRouteOverPlaceholder(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+	}{
+		{path: "/api/v1/traffic/top", want: "/api/v1/traffic/top"},
+		{path: "/api/v1/traffic/summary", want: "/api/v1/traffic/summary"},
+		{path: "/api/v1/traffic/stream", want: "/api/v1/traffic/stream"},
+		{path: "/api/v1/traffic/client-9", want: "/api/v1/traffic/{clientId}"},
+		{path: "/api/v1/clients/bulk", want: "/api/v1/clients/bulk"},
+		{path: "/api/v1/clients/migrate-legacy", want: "/api/v1/clients/migrate-legacy"},
+		{path: "/api/v1/clients/abc", want: "/api/v1/clients/{id}"},
+		{path: "/api/apply/state", want: "/api/apply/state"},
+		{path: "/api/apply/jobs/job-1", want: "/api/apply/jobs/{id}"},
+		{path: "/api/services/sing-box/restart", want: "/api/services/{name}/restart"},
+		{path: "/api/services/sing-box/status", want: "/api/services/{name}/{action}"},
+		{path: "/api/backups/prune", want: "/api/backups/prune"},
+		{path: "/api/backups/snapshot.tar.gz", want: "/api/backups/{name}"},
+	}
+	for _, test := range tests {
+		if got := NormalizeHTTPPath(test.path); got != test.want {
+			t.Errorf("NormalizeHTTPPath(%q)=%q want %q", test.path, got, test.want)
+		}
+	}
+}
+
 func TestNormalizeHTTPPathBoundsUnauthenticatedProbes(t *testing.T) {
 	first := NormalizeHTTPPath("/no-such/" + "aaaaaaaaaaaaaaaa")
 	second := NormalizeHTTPPath("/no-such/" + "bbbbbbbbbbbbbbbb")
