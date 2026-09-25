@@ -122,12 +122,24 @@ type sessionStoreFile struct {
 	Sessions []storedSession `json:"sessions"`
 }
 
+// sessionRevocationIntent is a durable "revoke every session for this user
+// created at or before Through" marker. It is journaled before a credential
+// mutation commits so a crash between the mutation commit and the delete_many
+// record cannot leave old-credential sessions valid past restart (#1059).
+type sessionRevocationIntent struct {
+	Username string    `json:"username"`
+	Through  time.Time `json:"through"`
+}
+
 type sessionJournalRecord struct {
-	Operation   string          `json:"operation"`
-	TokenHash   string          `json:"tokenHash,omitempty"`
-	Session     *storedSession  `json:"session,omitempty"`
-	TokenHashes []string        `json:"tokenHashes,omitempty"`
-	Sessions    []storedSession `json:"sessions,omitempty"`
+	Operation   string                    `json:"operation"`
+	TokenHash   string                    `json:"tokenHash,omitempty"`
+	Session     *storedSession            `json:"session,omitempty"`
+	TokenHashes []string                  `json:"tokenHashes,omitempty"`
+	Sessions    []storedSession           `json:"sessions,omitempty"`
+	Username    string                    `json:"username,omitempty"`
+	Through     time.Time                 `json:"through,omitempty"`
+	Revocations []sessionRevocationIntent `json:"revocations,omitempty"`
 }
 
 const maxActiveSessions = 1024
@@ -142,6 +154,11 @@ type SessionRegistry struct {
 	absoluteTimeout time.Duration
 	persistInterval time.Duration
 	storageErr      error
+	// pendingRevocations holds journaled revoke_username intents that have
+	// not yet been fulfilled or cancelled. The list is rebuilt by journal
+	// replay at load and serialized into replace_all checkpoints so an
+	// intent outstanding across a compaction still applies (#1059).
+	pendingRevocations []sessionRevocationIntent
 }
 
 var globalSessions = mustNewSessionRegistry("")
@@ -469,6 +486,80 @@ func (r *SessionRegistry) deleteManyLocked(hashes []string) error {
 	return nil
 }
 
+// MarkUsernameRevocationPending journals a durable intent to revoke every
+// session for username created at or before the returned intent's Through
+// bound. Callers must mark the intent BEFORE committing the credential
+// mutation it pairs with: a crash between the mutation commit and the
+// delete_many record would otherwise resurrect the old-credential sessions
+// at the next load (#1059). The intent is fulfilled by a later
+// delete/delete_many covering those sessions, or cancelled with
+// CancelUsernameRevocation when the mutation rolls back.
+func (r *SessionRegistry) MarkUsernameRevocationPending(username string) (sessionRevocationIntent, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	intent := sessionRevocationIntent{Username: username, Through: r.now().UTC()}
+	// Record the intent in memory BEFORE journaling it: a large journal makes
+	// appendJournalLocked compact to a replace_all checkpoint that serializes
+	// pendingRevocations, and an intent tracked only by the just-written line
+	// would silently drop out of the checkpoint.
+	r.pendingRevocations = append(r.pendingRevocations, intent)
+	if r.path != "" {
+		if err := r.appendJournalLocked(sessionJournalRecord{
+			Operation: "revoke_username", Username: username, Through: intent.Through,
+		}); err != nil {
+			// Keep the pending intent: the caller aborts its mutation on this
+			// error, and a stale intent only costs an extra re-login.
+			return sessionRevocationIntent{}, err
+		}
+	}
+	return intent, nil
+}
+
+// CancelUsernameRevocation retracts the outstanding revocation intents for
+// the intent's username, used when the credential mutation they guard rolls
+// back cleanly. A failed cancel only leaves a stale intent that forces an
+// extra re-login after restart — safe, so callers may ignore the error.
+func (r *SessionRegistry) CancelUsernameRevocation(intent sessionRevocationIntent) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.path != "" {
+		if err := r.appendJournalLocked(sessionJournalRecord{
+			Operation: "revoke_cancel", Username: intent.Username,
+		}); err != nil {
+			return err
+		}
+	}
+	r.pendingRevocations = dropPendingRevocations(r.pendingRevocations, intent.Username)
+	return nil
+}
+
+func dropPendingRevocations(intents []sessionRevocationIntent, username string) []sessionRevocationIntent {
+	kept := intents[:0]
+	for _, intent := range intents {
+		if intent.Username != username {
+			kept = append(kept, intent)
+		}
+	}
+	return kept
+}
+
+// applyPendingRevocationsLocked enforces every outstanding revocation intent
+// against the loaded session map: sessions created at or before the intent's
+// Through bound are deleted. Intents are positional — sessions created after
+// Through (for example a post-change re-login whose upsert was journaled
+// after the intent) survive. Applied intents are consumed and dropped.
+func (r *SessionRegistry) applyPendingRevocationsLocked() {
+	for _, intent := range r.pendingRevocations {
+		for tokenHash, session := range r.sessions {
+			if session.Username == intent.Username && !session.CreatedAt.After(intent.Through) {
+				delete(r.sessions, tokenHash)
+				delete(r.rawCSRF, tokenHash)
+			}
+		}
+	}
+	r.pendingRevocations = nil
+}
+
 func (r *SessionRegistry) load() error {
 	if r.path == "" {
 		return nil
@@ -656,6 +747,10 @@ func (r *SessionRegistry) compactJournalLocked() error {
 	for _, session := range r.sessions {
 		record.Sessions = append(record.Sessions, session)
 	}
+	// Carry outstanding revocation intents into the checkpoint: an intent
+	// whose mutation committed but whose delete_many never journaled must
+	// still fire after the compaction rewrote the journal (#1059).
+	record.Revocations = append(record.Revocations, r.pendingRevocations...)
 	body, err := json.Marshal(record)
 	if err != nil {
 		return err
@@ -709,10 +804,35 @@ func (r *SessionRegistry) loadJournalLocked() error {
 				}
 				r.sessions[session.TokenHash] = session
 			}
+			// The checkpoint is authoritative for outstanding intents: it
+			// carries every intent pending when it was written (#1059).
+			r.pendingRevocations = nil
+			for _, intent := range record.Revocations {
+				if intent.Username == "" || intent.Through.IsZero() {
+					return errors.New("invalid session journal revocation intent")
+				}
+				r.pendingRevocations = append(r.pendingRevocations, intent)
+			}
+		case "revoke_username":
+			if record.Username == "" || record.Through.IsZero() {
+				return errors.New("invalid session journal revocation intent")
+			}
+			r.pendingRevocations = append(r.pendingRevocations, sessionRevocationIntent{
+				Username: record.Username, Through: record.Through,
+			})
+		case "revoke_cancel":
+			if record.Username == "" {
+				return errors.New("invalid session journal revocation cancel")
+			}
+			r.pendingRevocations = dropPendingRevocations(r.pendingRevocations, record.Username)
 		default:
 			return errors.New("invalid session journal operation")
 		}
 	}
+	// Replay is complete: enforce every intent that was never cancelled or
+	// fulfilled — this is where a crash between the credential mutation
+	// commit and the delete_many record is settled (#1059).
+	r.applyPendingRevocationsLocked()
 	return nil
 }
 

@@ -4,100 +4,93 @@ import "errors"
 
 var errSessionRevocationPersistence = errors.New("failed to persist session revocation")
 
-func cloneStoredSessionMap(source map[string]storedSession) map[string]storedSession {
-	clone := make(map[string]storedSession, len(source))
-	for key, value := range source {
-		clone[key] = value
-	}
-	return clone
-}
-
-func cloneSessionSecretMap(source map[string]string) map[string]string {
-	clone := make(map[string]string, len(source))
-	for key, value := range source {
-		clone[key] = value
-	}
-	return clone
-}
-
-func (r *SessionRegistry) mutateAndPersistSessions(mutate func() int) (int, error) {
+// mutateAndPersistSessions collects the token hashes selected by the caller and
+// deletes them through a single delete_many journal record. Persisting each
+// deletion separately would commit sessions 1..N-1 on disk before a failure on
+// N forced a full in-memory restore, leaving sessions dead-on-disk but live in
+// memory (#1060).
+func (r *SessionRegistry) mutateAndPersistSessions(collect func() []string) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	previousSessions := cloneStoredSessionMap(r.sessions)
-	previousCSRF := cloneSessionSecretMap(r.rawCSRF)
-	changed := mutate()
-	if changed == 0 {
+	hashes := collect()
+	if len(hashes) == 0 {
 		return 0, nil
 	}
-	for tokenHash := range previousSessions {
-		if _, stillPresent := r.sessions[tokenHash]; stillPresent {
-			continue
-		}
-		if err := r.persistDeleteLocked(tokenHash); err != nil {
-			r.sessions = previousSessions
-			r.rawCSRF = previousCSRF
-			return changed, err
-		}
+	if err := r.deleteManyLocked(hashes); err != nil {
+		// The count reports how many sessions were selected for deletion even
+		// though the durable delete failed and the in-memory rows were
+		// restored; callers rely on it to report the attempted revocation.
+		return len(hashes), err
 	}
-	return changed, nil
+	return len(hashes), nil
 }
 
 func (r *SessionRegistry) DeleteTokenPersisted(token string) (bool, error) {
 	tokenHash := hashSessionSecret(token)
-	changed, err := r.mutateAndPersistSessions(func() int {
+	changed, err := r.mutateAndPersistSessions(func() []string {
 		if _, ok := r.sessions[tokenHash]; !ok {
-			return 0
+			return nil
 		}
-		delete(r.sessions, tokenHash)
-		delete(r.rawCSRF, tokenHash)
-		return 1
+		return []string{tokenHash}
 	})
 	return changed > 0, err
 }
 
 func (r *SessionRegistry) DeleteByIDPersisted(id string) (bool, error) {
-	changed, err := r.mutateAndPersistSessions(func() int {
+	changed, err := r.mutateAndPersistSessions(func() []string {
 		for tokenHash, session := range r.sessions {
 			if session.ID != id {
 				continue
 			}
-			delete(r.sessions, tokenHash)
-			delete(r.rawCSRF, tokenHash)
-			return 1
+			return []string{tokenHash}
 		}
-		return 0
+		return nil
 	})
 	return changed > 0, err
 }
 
 func (r *SessionRegistry) DeleteUsernamePersisted(username string) (int, error) {
-	return r.mutateAndPersistSessions(func() int {
-		deleted := 0
+	changed, err := r.mutateAndPersistSessions(func() []string {
+		var hashes []string
 		for tokenHash, session := range r.sessions {
 			if session.Username != username {
 				continue
 			}
-			delete(r.sessions, tokenHash)
-			delete(r.rawCSRF, tokenHash)
-			deleted++
+			hashes = append(hashes, tokenHash)
 		}
-		return deleted
+		return hashes
 	})
+	if err == nil {
+		// Every session the pending revocation intents for this user could
+		// still reach is now durably deleted, so the intents are fulfilled
+		// and must not be carried into the next journal checkpoint (#1059).
+		r.mu.Lock()
+		r.pendingRevocations = dropPendingRevocations(r.pendingRevocations, username)
+		r.mu.Unlock()
+	}
+	return changed, err
 }
 
 func (r *SessionRegistry) DeleteAllExceptPersisted(currentToken string) (int, error) {
 	currentHash := hashSessionSecret(currentToken)
-	return r.mutateAndPersistSessions(func() int {
-		deleted := 0
+	changed, err := r.mutateAndPersistSessions(func() []string {
+		var hashes []string
 		for tokenHash := range r.sessions {
 			if tokenHash == currentHash {
 				continue
 			}
-			delete(r.sessions, tokenHash)
-			delete(r.rawCSRF, tokenHash)
-			deleted++
+			hashes = append(hashes, tokenHash)
 		}
-		return deleted
+		return hashes
 	})
+	if err == nil {
+		// The surviving current session must still be alive after a journal
+		// replay, so every pending revocation intent (which would delete it
+		// at load when its username matches) is resolved here (#1059).
+		r.mu.Lock()
+		r.pendingRevocations = nil
+		r.mu.Unlock()
+	}
+	return changed, err
 }
