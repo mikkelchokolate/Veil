@@ -154,7 +154,7 @@ export function BackupsPage() {
 			void qc.invalidateQueries({ queryKey: ["backups"] });
 		},
 		onError: (e) =>
-			setError(mutationErrorMessage(e, t("backups.error.create"))),
+			setError(mutationErrorMessage(e, t("backups.error.create"), t)),
 	});
 
 	function parseRetention(value: string, fallback: number): number {
@@ -189,7 +189,8 @@ export function BackupsPage() {
 			);
 			void qc.invalidateQueries({ queryKey: ["backups"] });
 		},
-		onError: (e) => setError(mutationErrorMessage(e, t("backups.error.prune"))),
+		onError: (e) =>
+			setError(mutationErrorMessage(e, t("backups.error.prune"), t)),
 	});
 
 	const verify = useMutation({
@@ -213,7 +214,7 @@ export function BackupsPage() {
 		// Stamp the row too — a failed verify that only raises the top banner
 		// leaves the cell at "—" as if the archive was never checked (#698).
 		onError: (e, name) => {
-			const message = mutationErrorMessage(e, t("backups.error.verify"));
+			const message = mutationErrorMessage(e, t("backups.error.verify"), t);
 			setError(message);
 			setVerifyResult((prev) => ({
 				...prev,
@@ -234,7 +235,7 @@ export function BackupsPage() {
 			void qc.invalidateQueries({ queryKey: ["backups"] });
 		},
 		onError: (e) =>
-			setError(mutationErrorMessage(e, t("backups.error.delete"))),
+			setError(mutationErrorMessage(e, t("backups.error.delete"), t)),
 	});
 
 	const restore = useMutation({
@@ -255,7 +256,7 @@ export function BackupsPage() {
 			setActiveJob(j);
 		},
 		onError: (e) =>
-			setError(mutationErrorMessage(e, t("backups.error.restore"))),
+			setError(mutationErrorMessage(e, t("backups.error.restore"), t)),
 	});
 
 	async function download(name: string) {
@@ -303,7 +304,10 @@ export function BackupsPage() {
 						<>
 							<Button
 								disabled={prune.isPending}
-								onClick={() => setConfirmPrune(true)}
+								onClick={() => {
+									setError(null);
+									setConfirmPrune(true);
+								}}
 							>
 								{prune.isPending ? t("backups.pruning") : t("backups.prune")}
 							</Button>
@@ -482,14 +486,20 @@ export function BackupsPage() {
 														<Button
 															size="sm"
 															variant="danger"
-															onClick={() => setConfirmRestore(b.name)}
+															onClick={() => {
+																setError(null);
+																setConfirmRestore(b.name);
+															}}
 														>
 															{t("backups.restore")}
 														</Button>
 														<Button
 															size="sm"
 															variant="danger"
-															onClick={() => setConfirmDelete(b.name)}
+															onClick={() => {
+																setError(null);
+																setConfirmDelete(b.name);
+															}}
 														>
 															{t("common.delete")}
 														</Button>
@@ -557,6 +567,9 @@ export function BackupsPage() {
 							/>
 						</FormItem>
 					</div>
+					{/* A failed prune keeps this dialog open — the error must be
+						visible here, not only behind the overlay (#649). */}
+					{error ? <FormMessage>{error}</FormMessage> : null}
 					<AlertDialogFooter>
 						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
 						<AlertDialogAction
@@ -591,6 +604,9 @@ export function BackupsPage() {
 							})}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
+					{/* A failed delete keeps this dialog open — the error must be
+						visible here, not only behind the overlay (#649). */}
+					{error ? <FormMessage>{error}</FormMessage> : null}
 					<AlertDialogFooter>
 						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
 						<AlertDialogAction
@@ -632,6 +648,9 @@ export function BackupsPage() {
 								))}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
+					{/* A failed restore keeps this dialog open — the error must be
+						visible here, not only behind the overlay (#649). */}
+					{error ? <FormMessage>{error}</FormMessage> : null}
 					<AlertDialogFooter>
 						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
 						<AlertDialogAction

@@ -55,12 +55,13 @@ function Gate() {
 	const setup = useSetupStatus();
 	const { session } = useAuth();
 
-	// I18nProvider wraps every branch (login/setup views also use t()). The key
-	// remounts the provider when the authenticated locale becomes known or the
-	// user switches language, so initialLocale always matches the session.
+	// I18nProvider wraps every branch (login/setup views also use t()). It is
+	// intentionally NOT keyed on the session locale: a key would remount the
+	// provider and with it the whole router subtree, silently discarding open
+	// dialogs and unsaved form state when the delayed auth refresh lands
+	// (#1044). The provider syncs prop changes itself via useEffect.
 	return (
 		<I18nProvider
-			key={session?.locale ?? "anon"}
 			initialLocale={(session?.locale as "en" | "ru" | undefined) ?? "en"}
 		>
 			{setup.data?.required && setup.data.allowed ? (
