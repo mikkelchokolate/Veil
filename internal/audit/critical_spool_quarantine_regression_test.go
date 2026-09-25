@@ -42,8 +42,8 @@ func TestCorruptSpoolLineQuarantinedAndReplayContinues(t *testing.T) {
 
 	// NewRecorder replays the spool immediately.
 	recorder := NewRecorder(primary, RecorderOptions{SpoolPath: spool})
-	if err := recorder.Degraded(); err != nil {
-		t.Fatalf("replay stayed degraded: %v", err)
+	if recorder.Degraded() == nil {
+		t.Fatal("quarantined corrupt spool line was not surfaced as degraded")
 	}
 	if _, err := os.Stat(spool); !os.IsNotExist(err) {
 		t.Fatalf("spool still present after replay: %v", err)

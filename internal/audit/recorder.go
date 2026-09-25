@@ -258,6 +258,7 @@ func (r *Recorder) replaySpoolLocked() error {
 		return errors.New("critical audit spool exceeds configured limit")
 	}
 	lines := bytes.Split(body, []byte{'\n'})
+	quarantined := 0
 	for i, line := range lines {
 		if len(bytes.TrimSpace(line)) == 0 {
 			continue
@@ -268,6 +269,7 @@ func (r *Recorder) replaySpoolLocked() error {
 			// the surviving records still reach the primary and the spool is
 			// drained (#1033). Quarantining immediately also keeps the bad
 			// line out of any un-replayed tail rewrite below.
+			quarantined++
 			if qerr := r.quarantineCorruptSpoolLocked(line); qerr != nil {
 				// Even when quarantine itself fails, drain the replayed prefix
 				// so a retry does not duplicate it; the un-quarantined line
@@ -288,7 +290,15 @@ func (r *Recorder) replaySpoolLocked() error {
 	if err := os.Remove(r.spoolPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	return syncDirectory(filepath.Dir(r.spoolPath))
+	if err := syncDirectory(filepath.Dir(r.spoolPath)); err != nil {
+		return err
+	}
+	// Quarantined lines are still lost audit evidence: surface the replay
+	// degradation even though the drain succeeded (#981 stays visible).
+	if quarantined > 0 {
+		return fmt.Errorf("critical audit spool: %d undecodable line(s) quarantined to %s.corrupt", quarantined, r.spoolPath)
+	}
+	return nil
 }
 
 // rewriteSpoolTailLocked best-effort replaces the spool with only the lines
