@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -12,7 +13,7 @@ import (
 )
 
 // TestServeHealthLifecycle verifies the readiness endpoint reflects state
-// presence: 503 before the state file exists, 200 after a settings write
+// presence: 503 before the state file exists, 200 after a state mutation
 // persists it.
 func TestServeHealthLifecycle(t *testing.T) {
 	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
@@ -27,6 +28,16 @@ func TestServeHealthLifecycle(t *testing.T) {
 	if body["status"] != "unhealthy" {
 		t.Fatalf("expected unhealthy status, got %v", body)
 	}
+
+	// Remove the default-direct geoip:private rule before the first apply so
+	// no mutation fetches route-dat over the network — the deletion's own
+	// apply already runs with the rule gone, so it is local and fast.
+	resp = srv.do(http.MethodDelete, "/api/routing/rules/default-direct", "")
+	if resp.StatusCode != http.StatusOK {
+		drain(resp)
+		t.Fatalf("delete default-direct rule expected 200, got %d", resp.StatusCode)
+	}
+	drain(resp)
 
 	// Persist settings -> state file is created -> health flips to ok.
 	resp = srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev"}`)
@@ -50,7 +61,7 @@ func TestServeHealthLifecycle(t *testing.T) {
 // socket: missing token => 401 with WWW-Authenticate, valid token => 200,
 // while public routes stay open.
 func TestServeAuthGate(t *testing.T) {
-	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
+	srv := startServer(t, serverOptions{token: "e2e-secret-token", seedState: seedStateNoRouteDat})
 
 	resp := srv.doNoAuth(http.MethodGet, "/api/version")
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -75,7 +86,7 @@ func TestServeAuthGate(t *testing.T) {
 // reachable without credentials and the startup log says auth is disabled.
 func TestServeAuthDisabled(t *testing.T) {
 	srv := startServer(t, serverOptions{
-		seedState: `{"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"}}`,
+		seedState: `{"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"},"routingRules":[]}`,
 	})
 
 	resp := srv.doNoAuth(http.MethodGet, "/api/version")
@@ -95,7 +106,7 @@ func TestServeAuthDisabled(t *testing.T) {
 // TestGracefulShutdownExitsClean verifies SIGINT triggers a clean drain and
 // exit-0 with the expected lifecycle log lines.
 func TestGracefulShutdownExitsClean(t *testing.T) {
-	srv := startServer(t, serverOptions{token: "tok"})
+	srv := startServer(t, serverOptions{token: "tok", seedState: seedStateNoRouteDat})
 	resp := srv.doNoAuth(http.MethodGet, "/healthz")
 	drain(resp)
 	logs := srv.gracefulShutdown()
@@ -110,10 +121,13 @@ func TestGracefulShutdownExitsClean(t *testing.T) {
 // one serve process is durable: a second process started against the same
 // state file serves the same inbound.
 func TestStatePersistsAcrossRestart(t *testing.T) {
-	srv := startServer(t, serverOptions{token: "tok"})
+	srv := startServer(t, serverOptions{token: "tok", seedState: seedStateNoRouteDat})
 	resp := srv.do(http.MethodPut, "/api/settings", `{"panelListen":"127.0.0.1:2096","mode":"dev"}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("settings write expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
+	}
 	drain(resp)
-	resp = srv.do(http.MethodPost, "/api/inbounds", `{"name":"persist-me","protocol":"mieru","transport":"tcp","port":9443,"enabled":true,"password":"pw"}`)
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"persist-me","protocol":"mieru","transport":"tcp","port":%d,"enabled":true,"password":"pw"}`, freePort(t)))
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("inbound expected 201, got %d", resp.StatusCode)
 	}

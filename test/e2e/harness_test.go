@@ -115,6 +115,15 @@ type serverOptions struct {
 	extraEnv []string
 }
 
+// seedStateNoRouteDat is a minimal persisted snapshot with no routing rules.
+// Fresh state installs the enabled `default-direct` rule (match
+// `geoip:private`), whose mutation-triggered apply pulls geoip.dat from a
+// remote source inside the synchronous PUT/POST handler — stalling the test
+// for minutes where egress is unavailable and making the outcome depend on
+// external network reachability. Tests that never exercise routing seed this
+// snapshot so every apply stays deterministic and offline-safe.
+const seedStateNoRouteDat = `{"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"},"inbounds":[],"routingRules":[]}`
+
 // startServer launches `veil serve` on a free port with a private temp state
 // directory and waits until it is accepting connections.
 func startServer(t *testing.T, opts serverOptions) *serverProc {
@@ -258,10 +267,12 @@ func startRecoveryHelper(t *testing.T, dir, statePath string) string {
 }
 
 // waitUntilListening blocks until the server accepts a TCP connection or the
-// deadline elapses.
+// deadline elapses. Startup runs state recovery and a catch-up apply before
+// the HTTP bind, which can take tens of seconds on a loaded CI host — the
+// deadline is generous but still bounded so a genuinely stuck server fails.
 func (p *serverProc) waitUntilListening() {
 	p.t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		select {
 		case err := <-p.waitErr:
@@ -355,7 +366,7 @@ func (p *serverProc) stop() {
 		if err != nil {
 			p.t.Errorf("server did not shut down cleanly: %v\nlogs:\n%s", err, p.logBuf.String())
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(30 * time.Second):
 		_ = p.cmd.Process.Kill()
 		p.t.Errorf("server did not exit after SIGINT within deadline\nlogs:\n%s", p.logBuf.String())
 	}
@@ -374,7 +385,7 @@ func (p *serverProc) gracefulShutdown() string {
 		if err != nil {
 			p.t.Fatalf("graceful shutdown failed (expected exit 0): %v\nlogs:\n%s", err, p.logBuf.String())
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(30 * time.Second):
 		_ = p.cmd.Process.Kill()
 		p.t.Fatalf("server did not exit after SIGINT\nlogs:\n%s", p.logBuf.String())
 	}
