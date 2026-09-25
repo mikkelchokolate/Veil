@@ -599,7 +599,7 @@ func TestGeneratedConfigRegistryFromMockRenderers(t *testing.T) {
 		ApplyRoot: root,
 		Settings:  model.Settings{},
 		Inbounds: []model.Inbound{
-			{Name: "m1", Protocol: "mieru", Transport: "tcp", Port: 1000, Enabled: true},
+			{Name: "m1", Protocol: "mieru", Transport: "tcp", Port: 1000, Enabled: true, Password: "pw"},
 		},
 	})
 	if err != nil {
