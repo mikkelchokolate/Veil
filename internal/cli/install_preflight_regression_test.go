@@ -264,7 +264,7 @@ func TestInstallCheckFlagPrintsReportAndRefuses(t *testing.T) {
 	})
 	oldRuntimes := installRuntimesFunc
 	runtimesRan := false
-	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) { runtimesRan = true }
+	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) error { runtimesRan = true; return nil }
 	t.Cleanup(func() { installRuntimesFunc = oldRuntimes })
 
 	cmd := NewRootCommand("test")

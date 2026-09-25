@@ -64,7 +64,10 @@ func TestEnvContentEdgeCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			m := NewManagedMaterial(tt.input)
-			got := m.EnvContent()
+			got, err := m.EnvContent()
+			if err != nil {
+				t.Fatalf("EnvContent: %v", err)
+			}
 			if tt.wantEmpty && got != "" {
 				t.Fatalf("expected empty EnvContent, got:\n%s", got)
 			}

@@ -6,7 +6,7 @@ import (
 	"io"
 )
 
-type PasswordGenerator func() string
+type PasswordGenerator func() (string, error)
 
 type InboundPasswordGenerator = PasswordGenerator
 
@@ -21,14 +21,16 @@ func NewManagementPasswordGenerator(random io.Reader) ManagementPasswordGenerato
 	return ManagementPasswordGenerator{random: random}
 }
 
-func (g ManagementPasswordGenerator) Generate() string {
+// Generate mints a random password. A crypto/rand failure fails closed: the
+// historical "change-me" fallback installed a known credential (issue #1022).
+func (g ManagementPasswordGenerator) Generate() (string, error) {
 	buf := make([]byte, 9)
 	if _, err := io.ReadFull(g.random, buf); err != nil {
-		return "change-me"
+		return "", err
 	}
-	return base64.RawURLEncoding.EncodeToString(buf)
+	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-func generateInboundPassword() string {
+func generateInboundPassword() (string, error) {
 	return NewManagementPasswordGenerator(rand.Reader).Generate()
 }

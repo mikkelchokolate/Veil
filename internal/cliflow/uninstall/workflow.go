@@ -71,23 +71,36 @@ func Run(opts Options, out io.Writer, errOut io.Writer, deps Dependencies) error
 	if !opts.Yes {
 		return fmt.Errorf("uninstall requires --yes; rerun with --dry-run to preview")
 	}
+	// Every step still runs so the cleanup attempt is maximal, but failures
+	// are counted and the command fails closed afterwards: units that stayed
+	// enabled or files that could not be removed must never be reported as a
+	// successful uninstall (issue #1026).
+	failures := 0
+	warn := func(format string, args ...any) {
+		failures++
+		fmt.Fprintf(errOut, "warning: "+format+"\n", args...)
+	}
 	for _, svc := range Services() {
 		if err := deps.ServiceStopper(svc); err != nil {
-			fmt.Fprintf(errOut, "warning: service %s: %v\n", svc, err)
+			warn("service %s: %v", svc, err)
 		}
 	}
 	for _, svc := range TemplateInstanceUnits(opts) {
 		if err := deps.ServiceStopper(svc); err != nil {
-			fmt.Fprintf(errOut, "warning: service %s: %v\n", svc, err)
+			warn("service %s: %v", svc, err)
 		}
 	}
 	for _, path := range Paths(opts) {
 		if err := deps.FileRemover(path); err != nil {
-			fmt.Fprintf(errOut, "warning: remove %s: %v\n", path, err)
+			warn("remove %s: %v", path, err)
 		}
 	}
 	if err := deps.SystemdReloader(); err != nil {
-		fmt.Fprintf(errOut, "warning: systemd daemon-reload: %v\n", err)
+		warn("systemd daemon-reload: %v", err)
+	}
+	if failures > 0 {
+		fmt.Fprintf(errOut, "Veil uninstall incomplete: %d step(s) failed; units may still be enabled and files may remain. Re-run after resolving the errors above.\n", failures)
+		return fmt.Errorf("uninstall incomplete: %d step(s) failed", failures)
 	}
 	fmt.Fprintln(out, "Uninstalled Veil")
 	if opts.PreservesData() {

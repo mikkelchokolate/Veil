@@ -39,8 +39,13 @@ func (d Readiness) Summary() Summary {
 		Runtime: runtime.GOOS + "/" + runtime.GOARCH,
 		Ready:   true,
 	}
-	required := []string{"systemctl"}
-	optional := []string{"caddy", "hysteria", "mita", "olcrtc", "sing-box", "ufw"}
+	// The protocol runtime binaries are required, not optional: every managed
+	// protocol unit execs one of them, so a missing binary leaves a unit that
+	// fails with systemd 203/EXEC — reporting "Ready: yes" in that state was a
+	// lie (issue #1027). Only ufw stays optional: local-access installs do not
+	// manage a firewall.
+	required := []string{"systemctl", "caddy", "hysteria", "mita", "olcrtc", "sing-box"}
+	optional := []string{"ufw"}
 	for _, name := range required {
 		status := CommandStatus{Name: name}
 		path, err := d.lookup(name)

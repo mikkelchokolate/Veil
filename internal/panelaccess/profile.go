@@ -87,7 +87,11 @@ var probeCaddyCapabilities = caddycapabilities.Probe
 func (p Profile) Build() (ProfileMaterial, error) {
 	input := p.input
 	material := ProfileMaterial{PanelListen: RecommendedListen(input.PanelAccess, input.PanelPort)}
-	material.WebBasePath = NewWebBasePathPolicy(rand.Reader).Generate()
+	webBasePath, err := NewWebBasePathPolicy(rand.Reader).Generate()
+	if err != nil {
+		return ProfileMaterial{}, err
+	}
+	material.WebBasePath = webBasePath
 	panelCaddy := input.PanelAccess == "caddy"
 	if panelCaddy {
 		if err := hostenv.ValidateDomain(input.Domain); err != nil {
@@ -161,12 +165,16 @@ func NewWebBasePathPolicy(random io.Reader) WebBasePathPolicy {
 	return WebBasePathPolicy{random: random}
 }
 
-func (p WebBasePathPolicy) Generate() string {
+// Generate returns a random web base path. A crypto/rand failure fails
+// closed: falling back to a fixed /veil-panel/ path would silently install a
+// predictable panel URL, defeating the unguessable-path property (issue
+// #1022).
+func (p WebBasePathPolicy) Generate() (string, error) {
 	buf := make([]byte, 9)
 	if _, err := io.ReadFull(p.random, buf); err != nil {
-		return "/veil-panel/"
+		return "", fmt.Errorf("generate web base path: %w", err)
 	}
-	return "/" + base64.RawURLEncoding.EncodeToString(buf) + "/"
+	return "/" + base64.RawURLEncoding.EncodeToString(buf) + "/", nil
 }
 
 type TLS struct{}

@@ -2,6 +2,7 @@ package installer
 
 import (
 	"encoding/hex"
+	"fmt"
 	"path/filepath"
 
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
@@ -100,15 +101,18 @@ func BuildRURecommendedInstall(input RURecommendedInstallInput) (RURecommendedIn
 func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	input := m.normalizedInput()
 
+	// A crypto/rand failure must not degrade to a known credential: admin_admin
+	// and a "change-me" password are exactly the pair a fail-open build would
+	// silently install (issue #1022).
 	suffix, err := generateRandomHex(4)
 	if err != nil {
-		suffix = "admin"
+		return RURecommendedProfile{}, fmt.Errorf("generate admin username: %w", err)
 	}
 	username := "admin_" + suffix
 
 	password, err := generateRandomHex(16)
 	if err != nil {
-		password = "change-me"
+		return RURecommendedProfile{}, fmt.Errorf("generate admin password: %w", err)
 	}
 
 	masqueradeURL := "https://www.bing.com/"
@@ -125,7 +129,12 @@ func (m RURecommendedProfileModule) Build() (RURecommendedProfile, error) {
 	if err != nil {
 		return RURecommendedProfile{}, err
 	}
+	// An empty token is the secret generator's fail-closed signal (crypto/rand
+	// failure); installing with a known token is not an option (issue #1022).
 	panelAuthToken := input.Secret("panel")
+	if panelAuthToken == "" {
+		return RURecommendedProfile{}, fmt.Errorf("generate panel auth token: secret generator returned empty")
+	}
 
 	return RURecommendedProfile{
 		Domain:            input.Domain,

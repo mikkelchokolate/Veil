@@ -20,8 +20,12 @@ func TestRenderSystemdUnitsIncludesMieruUnit(t *testing.T) {
 		"Environment=MITA_CONFIG_FILE=/run/veil-mieru/server.conf.pb",
 		"Environment=MITA_UDS_PATH=/run/veil-mieru/mita.sock",
 		"RuntimeDirectory=veil-mieru",
-		"/usr/local/bin/mita apply config /etc/veil/generated/mieru/server_config.json",
-		"/usr/local/bin/mita start",
+		// Issue #1024: the activation script receives the binary and config
+		// paths as argv ($1/$2 in the shell), never interpolated into the
+		// single-quoted script text where metacharacters would execute.
+		`"$$1" apply config "$$2"`,
+		`"$$1" start`,
+		"' sh /usr/local/bin/mita /etc/veil/generated/mieru/server_config.json",
 	} {
 		if !strings.Contains(unit, want) {
 			t.Fatalf("Mieru unit missing %q:\n%s", want, unit)
