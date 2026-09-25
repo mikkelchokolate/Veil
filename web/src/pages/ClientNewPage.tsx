@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, apiFetch, mutationErrorMessage } from "../api/fetcher";
 // Generated from docs/openapi.yaml via Orval — do NOT hand-write DTOs for the
 // client create contract (blocker W4).
@@ -68,6 +68,14 @@ export function ClientNewPage() {
 	const [issuedCreds, setIssuedCreds] = useState<IssuedCredential[]>([]);
 	const [error, setError] = useState<string | null>(null);
 
+	// #1016: clients have no server-side UNIQUE(name) and issued credentials
+	// are returned exactly once. A timed-out create keeps committing
+	// server-side, so a retry must reuse the SAME Idempotency-Key — the durable
+	// reservation then dedupes/replays instead of inserting a second client.
+	// The key is stable per request payload: an edited form is a new operation
+	// and mints a fresh key (the same key with a different body is a 409).
+	const idempotencyRef = useRef<{ body: string; key: string } | null>(null);
+
 	const clearIssued = () => setIssuedCreds([]);
 
 	// Clear issued credentials on unmount (navigation away) and after a
@@ -130,9 +138,16 @@ export function ClientNewPage() {
 					...(b.credential ? { credential: b.credential } : {}),
 				}));
 			}
+			const serialized = JSON.stringify(body);
+			let idempotency = idempotencyRef.current;
+			if (!idempotency || idempotency.body !== serialized) {
+				idempotency = { body: serialized, key: crypto.randomUUID() };
+				idempotencyRef.current = idempotency;
+			}
 			return apiFetch<ClientCreateResponse>("/api/v1/clients", {
 				method: "POST",
-				body: JSON.stringify(body),
+				headers: { "Idempotency-Key": idempotency.key },
+				body: serialized,
 			});
 		},
 		onSuccess: (resp) => {

@@ -139,6 +139,42 @@ func TestIdempotencyRecoversCommittedDomainOperationAfterPIDReuse(t *testing.T) 
 	}
 }
 
+// #1056: an expired reservation owned by THIS process is dead — a live owner
+// would still be extending the lease via heartbeat — so expiry alone must
+// allow takeover. Before the fix, reserveDurable refused same-owner takeover
+// and every same-key request waited on the dead row until a permanent 409.
+func TestSameProcessExpiredReservationIsTakenOver(t *testing.T) {
+	db := openApplyTestDB(t)
+	defer db.Close()
+	now := time.Unix(1_900_000_000, 0).UTC()
+	request, scope, fingerprint := pidReuseIdempotencyRequest()
+
+	store := newIdempotencyStore(db)
+	store.now = func() time.Time { return now }
+	owned, first, err := store.reserveDurable(request, "same", scope, fingerprint)
+	if err != nil || !owned || first.Generation != 1 {
+		t.Fatalf("initial reservation: owned=%v record=%+v err=%v", owned, first, err)
+	}
+	// Settlement failed transiently after the handler finished: the row stays
+	// 'reserved', the heartbeat is dead, and the lease lapses.
+	if _, err := db.Exec(`UPDATE idempotency_records SET reserved_until=? WHERE scope=?`, now.Add(-time.Second).Unix(), scope); err != nil {
+		t.Fatal(err)
+	}
+	owned, second, err := store.reserveDurable(request, "same", scope, fingerprint)
+	if err != nil || !owned || second.Generation != 2 {
+		t.Fatalf("same-process expired reservation was not taken over: owned=%v record=%+v err=%v", owned, second, err)
+	}
+	// The abandoned first-generation domain operation is fenced, and the new
+	// owner can settle normally.
+	if err := store.completeDurable(scope, fingerprint, second, http.StatusCreated, http.Header{}, []byte("done"), "committed"); err != nil {
+		t.Fatalf("takeover owner completion: %v", err)
+	}
+	persisted, err := store.readDurable(scope)
+	if err != nil || persisted.State != "completed" || string(persisted.Body) != "done" {
+		t.Fatalf("persisted takeover result=%+v err=%v", persisted, err)
+	}
+}
+
 func TestIdempotencyOwnerAliveUsesNumericPIDOnly(t *testing.T) {
 	if !idempotencyOwnerAlive(fmt.Sprintf("pid:%d:%s", os.Getpid(), uuid.NewString())) {
 		t.Fatal("current process PID should be treated as alive")
