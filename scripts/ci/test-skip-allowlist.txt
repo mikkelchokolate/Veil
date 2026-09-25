@@ -13,6 +13,10 @@
 #
 # Format: <package><TAB><root>   (one per line; # comments allowed)
 
+# The three roots below need root (but not systemd), so they skip in this
+# unprivileged job; their execution evidence is the `privilege-boundary` job,
+# whose privilege-root-gated leg asserts each root PASSes by name (issue
+# #1013). A skip here is an environment boundary, not disabled coverage.
 github.com/mikkelchokolate/Veil/internal/hostaccess	TestPrepare
 github.com/mikkelchokolate/Veil/internal/cli	TestPrivilegedInstallFailureRestoresPreviousBinary
 github.com/mikkelchokolate/Veil/internal/apply	TestUpdateRecoveryAcceptsOnlyExactHelperCommittedEvidence

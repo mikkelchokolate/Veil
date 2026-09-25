@@ -57,6 +57,179 @@ func TestIdempotencyDoesNotCacheTransientPrecommit5xx(t *testing.T) {
 	}
 }
 
+// #1058/#1003: a transient 423 restore-lock refusal is "not attempted, try
+// later" — it must never be durably stored as the operation's terminal
+// result, or every same-key retry replays Locked forever while telling the
+// client to retry.
+func TestIdempotencyDoesNotCacheTransient423Refusal(t *testing.T) {
+	db := openApplyTestDB(t)
+	defer db.Close()
+	store := newIdempotencyStore(db)
+	defer store.Close()
+	var calls atomic.Int32
+	handler := store.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			w.Header().Set("Retry-After", "5")
+			writeError(w, "management mutation is locked while restore is in progress", http.StatusLocked)
+			return
+		}
+		writeJSONStatus(w, http.StatusCreated, map[string]any{"committed": true})
+	}))
+	issue := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/test/restore-lock", strings.NewReader(`{"a":1}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Idempotency-Key", "restore-locked")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		return response
+	}
+	first := issue()
+	if first.Code != http.StatusLocked {
+		t.Fatalf("first status=%d body=%s", first.Code, first.Body.String())
+	}
+	// The transient refusal must have released the reservation: nothing may be
+	// left in the durable store for a later retry to replay.
+	var stored int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM idempotency_records`).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != 0 {
+		t.Fatalf("transient 423 refusal was persisted; idempotency_records=%d", stored)
+	}
+	// After the lock lifts the identical request executes the mutation.
+	second := issue()
+	if second.Code != http.StatusCreated || calls.Load() != 2 {
+		t.Fatalf("retry status=%d body=%s calls=%d", second.Code, second.Body.String(), calls.Load())
+	}
+	if second.Header().Get("Idempotency-Replayed") == "true" {
+		t.Fatalf("retried response must not be marked replayed: %v", second.Header())
+	}
+	// The real outcome is terminal and IS cached — a third identical request
+	// replays it without re-running the mutation.
+	third := issue()
+	if third.Code != http.StatusCreated || third.Body.String() != second.Body.String() {
+		t.Fatalf("third replay status=%d body=%s, want identical to %d/%s", third.Code, third.Body.String(), second.Code, second.Body.String())
+	}
+	if third.Header().Get("Idempotency-Replayed") != "true" || calls.Load() != 2 {
+		t.Fatalf("committed result was not durably replayed: replayed=%v calls=%d", third.Header(), calls.Load())
+	}
+}
+
+// #1057: when the mutation committed inside the domain transaction but the
+// handler then fails with 5xx (post-commit read), aborting must NOT delete
+// the idempotency record — that would erase the only proof the operation ran
+// and a same-key retry would re-execute a non-idempotent mutation. The record
+// is settled as committed_response_pending and the retry replays it.
+func TestIdempotencyAbortAfterCommittedMutationDoesNotReExecute(t *testing.T) {
+	db := openApplyTestDB(t)
+	defer db.Close()
+	store := newIdempotencyStore(db)
+	defer store.Close()
+	var calls atomic.Int32
+	handler := store.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		operation, ok := idempotencyDomainOperationFromContext(r.Context())
+		if !ok {
+			http.Error(w, "missing domain operation", http.StatusInternalServerError)
+			return
+		}
+		// Simulate withClientMutation's domain binding: the client mutation +
+		// revision committed in one tx; only the post-commit response read
+		// fails.
+		if _, err := db.Exec(`UPDATE domain_operations SET state='mutation_committed',domain_result_json=? WHERE id=? AND scope=? AND operation_generation=?`,
+			`{"revision":7}`, operation.ID, operation.Scope, operation.Generation); err != nil {
+			http.Error(w, "bind failed", http.StatusInternalServerError)
+			return
+		}
+		http.Error(w, "post-commit read failed", http.StatusInternalServerError)
+	}))
+	issue := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPut, "/api/test/commit-then-500", strings.NewReader(`{"a":1}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Idempotency-Key", "commit-then-500")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		return response
+	}
+	first := issue()
+	if first.Code != http.StatusInternalServerError {
+		t.Fatalf("first status=%d body=%s", first.Code, first.Body.String())
+	}
+	// The record must be settled completed (committed_response_pending), not
+	// deleted — deleting would let the retry below re-run the mutation.
+	var state, outcome string
+	if err := db.QueryRow(`SELECT state,outcome_class FROM idempotency_records`).Scan(&state, &outcome); err != nil {
+		t.Fatalf("committed mutation's idempotency record was deleted: %v", err)
+	}
+	if state != "completed" || outcome != "committed_response_pending" {
+		t.Fatalf("record state=%q outcome=%q, want completed/committed_response_pending", state, outcome)
+	}
+	second := issue()
+	if second.Code != http.StatusAccepted || !strings.Contains(second.Body.String(), `"revision":7`) {
+		t.Fatalf("retry status=%d body=%s, want replayed committed_response_pending", second.Code, second.Body.String())
+	}
+	if second.Header().Get("Idempotency-Replayed") != "true" {
+		t.Fatalf("retry must carry Idempotency-Replayed: true, got %v", second.Header())
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("committed mutation re-executed on retry: calls=%d", calls.Load())
+	}
+}
+
+// #1039: a handler panic must release the durable reservation. Without the
+// deferred settle, the leaked heartbeat keeps the lease fresh forever and the
+// key wedges on 409 "idempotent operation is still pending" until restart.
+func TestIdempotencyHandlerPanicReleasesDurableReservation(t *testing.T) {
+	db := openApplyTestDB(t)
+	defer db.Close()
+	store := newIdempotencyStore(db)
+	defer store.Close()
+	var calls atomic.Int32
+	handler := store.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			panic("handler exploded")
+		}
+		writeJSONStatus(w, http.StatusCreated, map[string]any{"committed": true})
+	}))
+	issue := func() (response *httptest.ResponseRecorder, panicked bool) {
+		response = httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/test/panic", strings.NewReader(`{"a":1}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Idempotency-Key", "panic")
+		defer func() {
+			if recover() != nil {
+				panicked = true
+			}
+		}()
+		handler.ServeHTTP(response, req)
+		return response, false
+	}
+	if _, panicked := issue(); !panicked {
+		t.Fatal("handler panic did not propagate through the middleware")
+	}
+	// The reservation must be released, not left 'reserved' with a live
+	// heartbeat lease.
+	var stored int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM idempotency_records`).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != 0 {
+		t.Fatalf("panicked request left a wedged reservation; idempotency_records=%d", stored)
+	}
+	// The same key retries cleanly and re-executes the mutation.
+	second, panicked := issue()
+	if panicked || second.Code != http.StatusCreated || calls.Load() != 2 {
+		t.Fatalf("retry status=%v panicked=%v calls=%d", second.Code, panicked, calls.Load())
+	}
+	third, panicked := issue()
+	if panicked || third.Code != http.StatusCreated || third.Body.String() != second.Body.String() {
+		t.Fatalf("third replay status=%v body=%s panicked=%v", third.Code, third.Body.String(), panicked)
+	}
+	if third.Header().Get("Idempotency-Replayed") != "true" || calls.Load() != 2 {
+		t.Fatalf("completed result was not durably replayed: replayed=%v calls=%d", third.Header(), calls.Load())
+	}
+}
+
 func TestIdempotencyOversizeResponseIsBoundedAndReplayIdentical(t *testing.T) {
 	db := openApplyTestDB(t)
 	defer db.Close()

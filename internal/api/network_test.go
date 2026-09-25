@@ -37,18 +37,30 @@ func TestNetworkEndpointReturnsJSON(t *testing.T) {
 	}
 }
 
+// getNetwork issues GET /api/network and returns the decoded stats, asserting
+// the 200 status and a clean decode — a 500 {"error":…} body must not decode
+// into an empty-but-valid stats struct (issue #1012).
+func getNetwork(t *testing.T, r http.Handler) veilruntime.NetworkStats {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/network", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var stats veilruntime.NetworkStats
+	if err := json.NewDecoder(w.Body).Decode(&stats); err != nil {
+		t.Fatalf("decode /api/network: %v (body: %s)", err, w.Body.String())
+	}
+	return stats
+}
+
 func TestNetworkEndpointHasLoopback(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
 	r, _ := newTestRouter(ServerInfo{Version: "test"})
-	req := httptest.NewRequest(http.MethodGet, "/api/network", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	var stats veilruntime.NetworkStats
-	if err := json.NewDecoder(w.Body).Decode(&stats); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	stats := getNetwork(t, r)
 	found := false
 	for _, iface := range stats.Interfaces {
 		if iface.Name == "lo" {
@@ -66,11 +78,12 @@ func TestNetworkEndpointBytesPositive(t *testing.T) {
 		t.Skip("skipping on Windows")
 	}
 	r, _ := newTestRouter(ServerInfo{Version: "test"})
-	req := httptest.NewRequest(http.MethodGet, "/api/network", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	var stats veilruntime.NetworkStats
-	json.NewDecoder(w.Body).Decode(&stats)
+	stats := getNetwork(t, r)
+	// /proc/net/dev always reports at least the loopback interface — an empty
+	// collection here is a broken response, not a quiet environment.
+	if len(stats.Interfaces) == 0 {
+		t.Fatal("expected non-empty interfaces — loopback is always present")
+	}
 	for _, iface := range stats.Interfaces {
 		if iface.RxBytes < 0 || iface.TxBytes < 0 {
 			t.Errorf("interface %s: rxBytes=%d txBytes=%d should be non-negative", iface.Name, iface.RxBytes, iface.TxBytes)
@@ -86,8 +99,13 @@ func TestNetworkEndpointHasPackets(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/network", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
 	var raw map[string]interface{}
-	json.NewDecoder(w.Body).Decode(&raw)
+	if err := json.NewDecoder(w.Body).Decode(&raw); err != nil {
+		t.Fatalf("decode /api/network: %v (body: %s)", err, w.Body.String())
+	}
 	ifaces, ok := raw["interfaces"].([]interface{})
 	if !ok || len(ifaces) == 0 {
 		t.Fatal("expected non-empty interfaces array")

@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { ApiError, apiFetch } from "../api/fetcher";
+import { ApiError, apiFetch, mutationErrorMessage } from "../api/fetcher";
 import { useI18n } from "../i18n/I18nContext";
 import { useAuth } from "./AuthContext";
 
@@ -44,7 +44,13 @@ export function SetupView() {
 				await refresh();
 				return;
 			}
-			setError(err instanceof Error ? err.message : t("auth.setup.failed"));
+			// Route through mutationErrorMessage so a timeout/cancel surfaces
+			// localized rather than the Error's hardcoded English (#1018).
+			setError(
+				err instanceof Error
+					? mutationErrorMessage(err, err.message, t)
+					: t("auth.setup.failed"),
+			);
 		} finally {
 			setBusy(false);
 		}

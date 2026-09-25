@@ -11,6 +11,12 @@ cd "${CI_ROOT}"
 
 ci_run version-consistency python3 scripts/ci/verify_versions.py
 
+# Named-root job scripts (e2e/sigkill/filesystem-faults/multi-process and the
+# privilege-boundary named legs) select coverage by literal test name; the
+# test-job inventory cannot see those roots, so reconcile the lists against
+# package contents here or a new gated root silently bypasses CI (issue #1014).
+ci_run named-roots python3 scripts/ci/verify-named-roots.py
+
 ci_step "stub web/dist for analysis (go:embed must resolve)"
 if [ ! -f web/dist/index.html ]; then
   mkdir -p web/dist
