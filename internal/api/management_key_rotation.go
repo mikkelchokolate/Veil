@@ -36,6 +36,22 @@ func (s *managementState) handleRotateKey(w http.ResponseWriter, r *http.Request
 		writeError(w, "state key rotation fencing lease is unavailable: "+fenceErr.Error(), http.StatusConflict)
 		return
 	}
+	// The lease must be released even if the fenced section panics: the
+	// panel process stays alive after a recovered panic, so the dead-owner
+	// rescue never fires and every fenced mutation would be blocked until
+	// the 2h lease TTL expired (#1045). The wrapped release is idempotent so
+	// the early releases below still fire at their exact points — before the
+	// recovery path, before session revocation, and before auto-apply
+	// re-acquires the lease.
+	released := false
+	release := func() {
+		if released {
+			return
+		}
+		released = true
+		releaseFence()
+	}
+	defer release()
 
 	if err := s.privileged.RotateKey(r.Context(), privileged.RotateKeyRequest{Fence: fence}); err != nil {
 		lifecycle := NewManagementStateLifecycle(s)
@@ -52,7 +68,7 @@ func (s *managementState) handleRotateKey(w http.ResponseWriter, r *http.Request
 		}
 		// The fenced mutation section ends here; the lease must not leak into
 		// later auto-apply runs that acquire it themselves.
-		releaseFence()
+		release()
 		if reloadErr != nil {
 			s.startupStateLoadFailed = true
 			s.startupStateLoadErr = reloadErr
@@ -71,7 +87,7 @@ func (s *managementState) handleRotateKey(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := NewManagementStateLifecycle(s).ReloadLocked(); err != nil {
-		releaseFence()
+		release()
 		s.startupStateLoadFailed = true
 		s.startupStateLoadErr = err
 		s.allowDevAnonymous = false
@@ -83,7 +99,7 @@ func (s *managementState) handleRotateKey(w http.ResponseWriter, r *http.Request
 	}
 	// Release before session revocation/auto-apply: the durable lease is
 	// singleton, and a later apply run must be able to claim it.
-	releaseFence()
+	release()
 	s.startupStateLoadFailed = false
 	s.startupStateLoadErr = nil
 	revoked, err := s.sessionRegistry().DeleteAllExceptPersisted(currentSessionToken(r))

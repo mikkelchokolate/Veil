@@ -32,10 +32,11 @@ import (
 )
 
 const (
-	maxBackupPassphraseBytes int64 = 64 * 1024
-	maxUpdateArchiveBytes    int64 = 64 * 1024 * 1024
-	maxChecksumsBytes        int64 = 1024 * 1024
-	maxReleaseEvidenceBytes  int64 = 8 * 1024 * 1024
+	maxBackupPassphraseBytes  int64 = 64 * 1024
+	maxUpdateArchiveBytes     int64 = 64 * 1024 * 1024
+	maxChecksumsBytes         int64 = 1024 * 1024
+	maxReleaseEvidenceBytes   int64 = 8 * 1024 * 1024
+	maxCaddyCertMaterialBytes int64 = 1024 * 1024
 )
 
 // Test hooks for functions that touch global runtime state or external
@@ -602,10 +603,22 @@ func backupPromotionDestination(root, backupID string, artifact ResolvedArtifact
 }
 
 func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
+	// Defense in depth: the restore ID reaches the helper through persisted
+	// promotion records, so it is re-validated here even though
+	// ResolvePromotion already rejects non-canonical IDs — "." or ".." would
+	// resolve the manifest outside the backup root and let planted records
+	// drive root-level writes, deletes, and symlink creation (#1005).
+	if !isValidPromotionBackupID(backupID) {
+		return PromoteResult{}, newError(ErrorInvalidRequest, "invalid promotion backup id")
+	}
 	if err := recoverPromotionTransaction(root); err != nil {
 		return PromoteResult{}, fmt.Errorf("recover interrupted promotion: %w", err)
 	}
-	body, err := os.ReadFile(filepath.Join(root, backupID, "manifest.json"))
+	manifestPath := filepath.Join(root, backupID, "manifest.json")
+	if !pathWithin(filepath.Clean(root), manifestPath) {
+		return PromoteResult{}, newError(ErrorForbiddenOperation, "promotion backup manifest escapes backup root")
+	}
+	body, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return PromoteResult{}, err
 	}
@@ -1144,11 +1157,17 @@ func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config 
 		}
 		return SyncCaddyCertResult{}, fmt.Errorf("locate Caddy certificate for %q: %w", request.Domain, err)
 	}
-	certData, err := os.ReadFile(pair.CertPath)
+	// Caddy's certificate tree lives under the veil-proxy-owned
+	// StateDirectory, so the leaf files are attacker-replaceable: a .crt or
+	// .key swapped for a symlink would be read as root and copied into the
+	// veil-proxy-readable output directory — arbitrary root file exfiltration.
+	// Open with O_NOFOLLOW and verify a regular file on the descriptor so the
+	// bytes written below are exactly the bytes that were validated (#1006).
+	certData, err := readBoundedRegularFile(pair.CertPath, maxCaddyCertMaterialBytes)
 	if err != nil {
 		return SyncCaddyCertResult{}, fmt.Errorf("read Caddy certificate: %w", err)
 	}
-	keyData, err := os.ReadFile(pair.KeyPath)
+	keyData, err := readBoundedRegularFile(pair.KeyPath, maxCaddyCertMaterialBytes)
 	if err != nil {
 		return SyncCaddyCertResult{}, fmt.Errorf("read Caddy key: %w", err)
 	}
