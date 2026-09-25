@@ -333,6 +333,14 @@ WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND desired_
 				return fmt.Errorf("apply: confirm %s enforcement: %w", confirmation.Kind, err)
 			}
 			if rows, _ := result.RowsAffected(); rows != 1 {
+				if recovery {
+					// The enforcement row was superseded, rebound, or deleted
+					// after this receipt was published; the newer target
+					// carries its own confirmation. Replaying stale evidence
+					// here would wedge recovery on a row the world already
+					// moved past (#1035).
+					continue
+				}
 				return fmt.Errorf("apply: %s enforcement confirmation is stale", confirmation.Kind)
 			}
 		}
@@ -390,7 +398,10 @@ WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND desired_
 			return fmt.Errorf("apply: consume staged-only publication intent: %w", err)
 		}
 	} else if status == StatusSucceeded && !markApplied {
-		if _, err := tx.Exec(`DELETE FROM runtime_publications WHERE job_id=? AND phase='artifacts_committed'`, job.ID); err != nil {
+		// 'published' must match too: recovery of a published receipt whose
+		// desired revision is already covered lands here, and without it the
+		// receipt is replayed forever (#1035).
+		if _, err := tx.Exec(`DELETE FROM runtime_publications WHERE job_id=? AND phase IN ('artifacts_committed','published')`, job.ID); err != nil {
 			return fmt.Errorf("apply: consume artifact-only publication receipt: %w", err)
 		}
 	}
@@ -723,6 +734,39 @@ func readRestartHelperEvidence(details PublicationDetails) (string, PublicationD
 	return "committed", details, nil
 }
 
+// acquireRecoveryLease returns the lease the recovery owner already holds when
+// an earlier receipt transfer deliberately retained it. Acquire has no
+// same-owner re-entrant path, so without this the second receipt in a pass
+// fails with ErrApplyBusy and aborts recovery (#1040).
+func acquireRecoveryLease(leases *LeaseStore, owner, operation string, now time.Time, ttl time.Duration) (Lease, bool, error) {
+	current, err := leases.Current()
+	if err != nil {
+		return Lease{}, false, err
+	}
+	if current.Owner == owner && current.ExpiresAt > now.UTC().Unix() {
+		return current, true, nil
+	}
+	return leases.Acquire(owner, operation, now, ttl)
+}
+
+// consumeTerminalPublication archives and deletes the receipt of a job that
+// already reached a terminal state. Resurrecting such jobs via the transfer
+// path would flip-flop their status and re-hold the lease forever (#1034).
+func consumeTerminalPublication(db *sql.DB, jobID string, finalizedAt int64) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := archiveRuntimePublicationTx(tx, jobID, "superseded", finalizedAt); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM runtime_publications WHERE job_id=?`, jobID); err != nil {
+		return fmt.Errorf("apply: consume terminal publication receipt: %w", err)
+	}
+	return tx.Commit()
+}
+
 func recoverRuntimePublications(db *sql.DB, leases *LeaseStore, jobs *JobStore, owner string, now func() time.Time, ttl time.Duration) error {
 	receipts, err := listRuntimePublications(db)
 	if err != nil {
@@ -780,7 +824,7 @@ func recoverRuntimePublications(db *sql.DB, leases *LeaseStore, jobs *JobStore, 
 		if digest != receipt.SnapshotSHA256 {
 			return fmt.Errorf("apply: publication receipt %s snapshot digest mismatch", receipt.JobID)
 		}
-		lease, acquired, err := leases.Acquire(owner, "recover-publication:"+receipt.JobID, now(), ttl)
+		lease, acquired, err := acquireRecoveryLease(leases, owner, "recover-publication:"+receipt.JobID, now(), ttl)
 		if err != nil {
 			return err
 		}
@@ -874,6 +918,20 @@ func recoverRuntimePublications(db *sql.DB, leases *LeaseStore, jobs *JobStore, 
 			continue
 		}
 		if receipt.Phase != PublicationPhasePublished {
+			if job.Terminal() {
+				// The job already reached a terminal state (for example a
+				// superseded recovery close). Resurrecting it to
+				// recovery_pending would flip-flop its status and re-hold the
+				// lease every pass, so consume the receipt instead (#1034).
+				if err := consumeTerminalPublication(db, receipt.JobID, now().UTC().Unix()); err != nil {
+					_ = leases.Release(owner, lease.Generation)
+					return err
+				}
+				if err := leases.Release(owner, lease.Generation); err != nil && !errors.Is(err, ErrApplyLeaseLost) {
+					return err
+				}
+				continue
+			}
 			// Transfer the durable lease and evidence to the recovery owner. No
 			// later publication can proceed while this exact runtime generation is
 			// unresolved.

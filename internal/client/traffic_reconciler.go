@@ -101,7 +101,11 @@ func (r *Reconciler) ReconcileOnce() (changed int, err error) {
 			}
 			pendingEntry := pendingTargets[current.ID]
 			pendingMutation, pending := pendingEntry.mutation, pendingEntry.pending
-			if pending && pendingMutation.TargetGeneration < int64(current.Version) {
+			// A pending target at-or-behind the client's current version can
+			// never apply: ApplyQuotaMutationTx requires
+			// Version == TargetGeneration-1, so retrying it only churns
+			// ErrVersionConflict forever (#1000).
+			if pending && pendingMutation.TargetGeneration <= int64(current.Version) {
 				if superErr := r.supersedeQuotaTarget(pendingMutation, now.Unix()); superErr != nil {
 					reconcileErrors = append(reconcileErrors, fmt.Errorf("client %s: %w", current.ID, superErr))
 				}
