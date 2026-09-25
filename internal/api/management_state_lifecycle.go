@@ -79,14 +79,15 @@ func newManagementStateProduction(info ServerInfo) *managementState {
 	// process-global side effects leak production default paths into unrelated
 	// tests (and, when tests run as root, let them modify live state). All
 	// in-process consumers must read paths from this state's own fields.
-	model := managementstate.BuildDefaultState(managementstate.DefaultInput{
+	defaultInput := managementstate.DefaultInput{
 		PanelListen: info.PanelListen,
 		PanelAccess: info.PanelAccess,
 		WebBasePath: info.WebBasePath,
 		Mode:        info.Mode,
 		Domain:      info.Domain,
 		Email:       info.Email,
-	})
+	}
+	model := managementstate.BuildDefaultState(defaultInput)
 	configurationValidator := info.ConfigurationValidator
 	enforceConfigurationValidation := configurationValidator != nil
 	if configurationValidator == nil {
@@ -112,6 +113,7 @@ func newManagementStateProduction(info ServerInfo) *managementState {
 		serveWebBasePath:               info.WebBasePath,
 		servePanelListen:               info.PanelListen,
 		servePanelAccess:               info.PanelAccess,
+		defaultInput:                   defaultInput,
 		settings:                       model.Settings,
 		inbounds:                       model.Inbounds,
 		rules:                          model.Rules,
@@ -299,6 +301,18 @@ func pendingPrivilegedRecoveryJournal(statePath string) bool {
 }
 
 func (l ManagementStateLifecycle) loadCoherentStateLocked() error {
+	return l.loadCoherentStateModeLocked(false)
+}
+
+// loadCoherentStateReloadLocked is the under-s.mu reload variant: apply-runner
+// construction must defer its recovery-pending resume to the monitor
+// goroutine, because the resume invokes the apply executor — which locks
+// s.mu — and the reload caller already holds that mutex (#1067).
+func (l ManagementStateLifecycle) loadCoherentStateReloadLocked() error {
+	return l.loadCoherentStateModeLocked(true)
+}
+
+func (l ManagementStateLifecycle) loadCoherentStateModeLocked(deferApplyRecovery bool) error {
 	if err := l.RecoverPendingKeyRotation(); err != nil {
 		return err
 	}
@@ -312,7 +326,11 @@ func (l ManagementStateLifecycle) loadCoherentStateLocked() error {
 		}
 		// Backup restore closes the SQLite domain before replacing veil.db.
 		if l.state.statePath != "" && l.state.db == nil {
-			initApplySubsystem(l.state)
+			if deferApplyRecovery {
+				initApplySubsystemDeferredRecovery(l.state)
+			} else {
+				initApplySubsystem(l.state)
+			}
 			if l.state.db == nil {
 				return errors.New("reload database: open restored veil.db failed")
 			}
@@ -557,7 +575,7 @@ func (l ManagementStateLifecycle) Load() error {
 }
 
 func (l ManagementStateLifecycle) ReloadLocked() error {
-	if err := l.loadCoherentStateLocked(); err != nil {
+	if err := l.loadCoherentStateReloadLocked(); err != nil {
 		return err
 	}
 	l.state.appliedProjectionMu.Lock()
@@ -594,6 +612,26 @@ func (l ManagementStateLifecycle) ReloadLocked() error {
 // fast path) defined in startup_migration.go. Caller must hold l.state.mu.
 func (l ManagementStateLifecycle) AutoMigrateLegacyLocked() error {
 	return l.StartupMigrateLegacyLocked()
+}
+
+// resetMutableStateToDefaultsLocked rewinds every snapshot-managed mutable
+// field to the serve-time defaults so a subsequent load replaces in-memory
+// state exactly like a cold start. managementstate.ApplySnapshot deliberately
+// merges into the target — skipping empty fields and filling unset settings
+// from current defaults — which is correct for startup/reload, but after a
+// committed backup restore that merge would resurrect pre-restore
+// settings/inbounds/routing the backup does not carry and re-persist them as
+// if they were restored (#1053). Caller must hold s.mu.
+func (s *managementState) resetMutableStateToDefaultsLocked() {
+	defaults := managementstate.BuildDefaultState(s.defaultInput)
+	s.setup = SetupState{}
+	s.settings = defaults.Settings
+	s.inbounds = defaults.Inbounds
+	s.rules = defaults.Rules
+	s.routingPreset = ""
+	s.routingSource = RoutingSource{}
+	s.warp = defaults.Warp
+	s.users = nil
 }
 
 func ApplyManagementSnapshot(state *managementState, snapshot managementSnapshot) {

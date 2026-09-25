@@ -56,12 +56,55 @@ func (s *managementState) updatePanelUpdateJob(id, status, stageJobID, restartJo
 	return err
 }
 
+// panelUpdateRestartTimeoutSeconds bounds how long a restart_pending or
+// restarting job may go without the running binary reporting the staged
+// version before it is reconciled to failed.
+const panelUpdateRestartTimeoutSeconds int64 = 300
+
 func (s *managementState) getPanelUpdateJob(id string) (panelUpdateJob, error) {
 	var job panelUpdateJob
 	err := s.db.QueryRow(`SELECT id,target_version,status,stage_apply_job_id,restart_apply_job_id,error_message,created_at,updated_at
 FROM panel_update_jobs WHERE id=?`, id).Scan(&job.ID, &job.Version, &job.Status, &job.StageApplyJobID,
 		&job.RestartApplyJobID, &job.Error, &job.CreatedAt, &job.UpdatedAt)
-	return job, err
+	if err != nil {
+		return job, err
+	}
+	return s.refreshPanelUpdateJob(job), nil
+}
+
+// refreshPanelUpdateJob folds the restart verdict into the read path so a job
+// that entered restart_pending/restarting while this process kept running
+// cannot wedge in that state forever — startup reconcile evaluates the
+// version/timeout only once at boot, but the SPA keeps polling the job status
+// (#1019). A staging row is deliberately left alone here: unlike the startup
+// pass it may belong to a live update request still in flight.
+func (s *managementState) refreshPanelUpdateJob(job panelUpdateJob) panelUpdateJob {
+	if job.Status != "restart_pending" && job.Status != "restarting" {
+		return job
+	}
+	if versionflow.ReleaseTag(job.Version) == versionflow.ReleaseTag(s.version) {
+		if err := s.updatePanelUpdateJob(job.ID, "succeeded", "", "", nil); err != nil {
+			log.Printf("panel update job %s: mark succeeded on read: %v", job.ID, err)
+			return job
+		}
+		job.Status = "succeeded"
+		job.Error = ""
+		job.UpdatedAt = time.Now().UTC().Unix()
+		return job
+	}
+	now := time.Now().UTC().Unix()
+	if now-job.UpdatedAt <= panelUpdateRestartTimeoutSeconds {
+		return job
+	}
+	timeoutErr := fmt.Errorf("panel restarted without expected version %s", job.Version)
+	if err := s.updatePanelUpdateJob(job.ID, "failed", "", "", timeoutErr); err != nil {
+		log.Printf("panel update job %s: record restart timeout on read: %v", job.ID, err)
+		return job
+	}
+	job.Status = "failed"
+	job.Error = timeoutErr.Error()
+	job.UpdatedAt = now
+	return job
 }
 
 func (s *managementState) reconcilePanelUpdateJobs(runningVersion string) {
@@ -101,7 +144,7 @@ func (s *managementState) reconcilePanelUpdateJobs(runningVersion string) {
 			updateErr = s.updatePanelUpdateJob(job.id, "failed", "", "", errors.New("panel update was interrupted before the staged version was installed"))
 		case versionflow.ReleaseTag(job.version) == versionflow.ReleaseTag(runningVersion):
 			updateErr = s.updatePanelUpdateJob(job.id, "succeeded", "", "", nil)
-		case now-job.updated > 300:
+		case now-job.updated > panelUpdateRestartTimeoutSeconds:
 			updateErr = s.updatePanelUpdateJob(job.id, "failed", "", "", fmt.Errorf("panel restarted without expected version %s", job.version))
 		}
 		if updateErr != nil {
@@ -111,7 +154,13 @@ func (s *managementState) reconcilePanelUpdateJobs(runningVersion string) {
 }
 
 func (s *managementState) installPanelUpdate(ctx context.Context, version string) (privileged.UpdateResult, veilapply.Job, error) {
-	if !s.applyTrackingEnabled() || s.applyRunner == nil {
+	// Snapshot the runner under s.mu: backup restore nils and rebuilds the
+	// apply subsystem while a request like this can still be in flight.
+	s.mu.Lock()
+	tracked := s.applyTrackingEnabled()
+	runner := s.applyRunner
+	s.mu.Unlock()
+	if !tracked || runner == nil {
 		return privileged.UpdateResult{}, veilapply.Job{}, errors.New("durable apply runner is unavailable")
 	}
 	revision, err := s.ensureRunnableRevision()
@@ -119,7 +168,7 @@ func (s *managementState) installPanelUpdate(ctx context.Context, version string
 		return privileged.UpdateResult{}, veilapply.Job{}, err
 	}
 	var updateResult privileged.UpdateResult
-	job, runErr := s.applyRunner.RunOperationContext(ctx, revision, "panel-update-install", "admin",
+	job, runErr := runner.RunOperationContext(ctx, revision, "panel-update-install", "admin",
 		veilapply.ContextExecutorFunc(func(operationContext context.Context, pinnedRevision uint64) (veilapply.Result, error) {
 			result, err := s.convergeRevisionForSideEffect(operationContext, pinnedRevision)
 			if err != nil {
@@ -162,7 +211,14 @@ func (s *managementState) installPanelUpdate(ctx context.Context, version string
 
 func (s *managementState) restartPanelForUpdate(updateJobID string) {
 	defer s.endPanelUpdate()
-	if !s.applyTrackingEnabled() || s.applyRunner == nil {
+	// Snapshot the runner under s.mu: a backup restore nils and rebuilds the
+	// apply subsystem, and this goroutine can still be in flight while the
+	// swap happens — an unguarded read raced a nil pointer panic (#1068).
+	s.mu.Lock()
+	tracked := s.applyTrackingEnabled()
+	runner := s.applyRunner
+	s.mu.Unlock()
+	if !tracked || runner == nil {
 		if err := s.updatePanelUpdateJob(updateJobID, "failed", "", "", errors.New("durable apply runner is unavailable")); err != nil {
 			log.Printf("panel update job %s: record failure status: %v", updateJobID, err)
 		}
@@ -175,7 +231,7 @@ func (s *managementState) restartPanelForUpdate(updateJobID string) {
 		}
 		return
 	}
-	job, runErr := s.applyRunner.RunOperationContext(s.lifecycleContext(), revision, "panel-update-restart", "system",
+	job, runErr := runner.RunOperationContext(s.lifecycleContext(), revision, "panel-update-restart", "system",
 		veilapply.ContextExecutorFunc(func(operationContext context.Context, pinnedRevision uint64) (veilapply.Result, error) {
 			result, err := s.convergeRevisionForSideEffect(operationContext, pinnedRevision)
 			if err != nil {

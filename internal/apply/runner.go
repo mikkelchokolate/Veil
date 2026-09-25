@@ -243,6 +243,22 @@ type Runner struct {
 }
 
 func NewRunner(revs *RevisionStore, jobs *JobStore, executor any) *Runner {
+	return newRunner(revs, jobs, executor, false)
+}
+
+// NewRunnerDeferredStartupRecovery builds a Runner whose recovery-pending
+// resume is left to the background monitor instead of running synchronously
+// inside the constructor. Callers that already hold a lock the executor
+// re-enters — management-state reloads run under managementState.mu while the
+// executor locks that same mutex to load the pinned revision snapshot — must
+// defer the resume or the same-goroutine re-entry deadlocks the caller
+// (#1067). Publication/lease repair in recoverStartup still runs inline; only
+// the job executor is deferred to the monitor goroutine.
+func NewRunnerDeferredStartupRecovery(revs *RevisionStore, jobs *JobStore, executor any) *Runner {
+	return newRunner(revs, jobs, executor, true)
+}
+
+func newRunner(revs *RevisionStore, jobs *JobStore, executor any, deferStartupRecovery bool) *Runner {
 	var resolved Executor
 	switch value := executor.(type) {
 	case ContextExecutor:
@@ -281,12 +297,20 @@ func NewRunner(revs *RevisionStore, jobs *JobStore, executor any) *Runner {
 	// Package tests share process-wide apply stubs and lifecycle contexts
 	// that never cancel. Close superseded recovery rows at startup, but do
 	// not re-enter ApplyLive+ApplyServices or start the 1s monitor; RunLatest
-	// waits forever on ErrApplyBusy when that monitor holds the lease.
+	// waits forever on ErrApplyBusy when that monitor holds the lease. The
+	// deferred variant performs no synchronous resume at all so lock-held
+	// callers can verify nothing ran inline (#1067).
 	if testing.Testing() {
-		if err := runner.resumeRecoveryPendingWithRetry(runner.recoverCtx, false); err != nil {
-			runner.startupErr = err
+		if !deferStartupRecovery {
+			if err := runner.resumeRecoveryPendingWithRetry(runner.recoverCtx, false); err != nil {
+				runner.startupErr = err
+			}
 		}
 		close(runner.monitorDone)
+		return runner
+	}
+	if deferStartupRecovery {
+		go runner.monitorRecovery()
 		return runner
 	}
 	if err := runner.resumeRecoveryPending(runner.recoverCtx); err != nil {

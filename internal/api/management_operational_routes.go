@@ -156,7 +156,10 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 		var response ApplyResponse
 		status := http.StatusInternalServerError
 		var workflowErr error
-		_, runErr := s.applyRunner.RunOperationContext(r.Context(), desiredRevision, "manual", actorFromRequest(r),
+		// The durable apply must outlive the HTTP request: the SPA aborts its
+		// fetch at its own timeout while health polling and rollback still
+		// have to finish (#1052).
+		_, runErr := s.applyRunner.RunOperationContext(s.mutationApplyContext(), desiredRevision, "manual", actorFromRequest(r),
 			apply.ContextExecutorFunc(func(ctx context.Context, revision uint64) (apply.Result, error) {
 				var result apply.Result
 				response, status, result, workflowErr = s.executeApplyRevisionRequestContext(ctx, revision, req)
@@ -190,7 +193,7 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.mu.Lock()
-	response, status, err := NewApplyWorkflow(NewManagementApplyContextWithContext(s, r.Context())).RunLocked(req)
+	response, status, err := NewApplyWorkflow(NewManagementApplyContextWithContext(s, s.mutationApplyContext())).RunLocked(req)
 	s.mu.Unlock()
 	if status == http.StatusBadRequest && len(response.Plan.Issues) > 0 {
 		status = http.StatusUnprocessableEntity

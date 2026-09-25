@@ -102,7 +102,9 @@ func (s *managementState) handleApplyJobRetry(w http.ResponseWriter, r *http.Req
 	}
 	actor, _ := r.Context().Value(contextKeyUsername).(string)
 
-	job, runErr := s.applyRunner.RunContext(r.Context(), orig.DesiredRevision, "retry", actor)
+	// The durable apply must outlive the HTTP request: a client disconnect
+	// mid-apply must not cancel rendering, health polling, or rollback (#1052).
+	job, runErr := s.applyRunner.RunContext(s.mutationApplyContext(), orig.DesiredRevision, "retry", actor)
 	after, _ := s.applyRevisions.Get()
 
 	resp := map[string]any{
@@ -158,7 +160,7 @@ func (s *managementState) handleApplyReconcile(w http.ResponseWriter, r *http.Re
 	}
 	runner := s.applyRunner
 	s.mu.Unlock()
-	job, runErr := runner.RunLatest(r.Context(), "reconcile", actor)
+	job, runErr := runner.RunLatest(s.mutationApplyContext(), "reconcile", actor)
 	s.mu.Lock()
 	after, _ := s.applyRevisions.Get()
 	state := s.applyStateViewLocked()
