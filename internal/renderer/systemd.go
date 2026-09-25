@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"fmt"
 	"path"
 	"strings"
 )
@@ -65,7 +66,15 @@ var systemdHardeningBlockMieru = strings.Replace(
 	1,
 )
 
+// systemdQuote renders one value for a unit directive line. %% escapes the
+// specifier introducer in every context — an unescaped % in an operator-chosen
+// path (--etc-dir/--var-dir/binary overrides) would specifier-expand at unit
+// load and silently point directives at a different path (issue #1001).
+// Newlines cannot be represented at all; ValidateSystemdConfig rejects them
+// before rendering so they can never break out of the directive line and
+// inject additional unit directives.
 func systemdQuote(p string) string {
+	p = strings.ReplaceAll(p, "%", "%%")
 	if p == "" || !strings.ContainsAny(p, " \t\"'\\") {
 		return p
 	}
@@ -73,11 +82,65 @@ func systemdQuote(p string) string {
 	return `"` + escaped + `"`
 }
 
-func systemdAssign(key, value string) string {
-	if value == "" || !strings.ContainsAny(value, " \t\"'\\") {
-		return key + "=" + value
+// systemdQuoteInstanceConfig is systemdQuote for template-unit config paths:
+// the render itself appends a %i instance specifier (veil-hysteria2@.service,
+// veil-olcrtc@.service resolve %i to the instance name), so it must stay a
+// specifier while every other % — e.g. one inside an operator-chosen
+// --etc-dir — is still escaped (issue #1001). Escaping %i wholesale would
+// point the units at a literal "%i.yaml" file.
+func systemdQuoteInstanceConfig(p string) string {
+	var b strings.Builder
+	b.Grow(len(p))
+	for i := 0; i < len(p); i++ {
+		if p[i] != '%' {
+			b.WriteByte(p[i])
+			continue
+		}
+		if i+1 < len(p) && p[i+1] == 'i' {
+			b.WriteString("%i")
+			i++
+		} else {
+			b.WriteString("%%")
+		}
 	}
+	escaped := b.String()
+	if escaped == "" || !strings.ContainsAny(escaped, " \t\"'\\") {
+		return escaped
+	}
+	quoted := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(escaped)
+	return `"` + quoted + `"`
+}
+
+func systemdAssign(key, value string) string {
 	return key + "=" + systemdQuote(value)
+}
+
+// ValidateSystemdConfig fails closed on unit-render inputs that cannot be
+// represented safely in a unit file: a newline, carriage return, or NUL
+// inside any path breaks out of its directive line and injects arbitrary
+// unit directives (issue #1001). RenderSystemdUnits/RenderInstallDropIn have
+// no error return, so callers that accept operator-supplied paths must
+// validate before rendering.
+func ValidateSystemdConfig(cfg SystemdConfig) error {
+	cfg = defaultSystemdConfig(cfg)
+	for _, field := range []struct {
+		name  string
+		value string
+	}{
+		{"VeilBinary", cfg.VeilBinary},
+		{"CaddyBinary", cfg.CaddyBinary},
+		{"HysteriaBinary", cfg.HysteriaBinary},
+		{"SingBoxBinary", cfg.SingBoxBinary},
+		{"MieruBinary", cfg.MieruBinary},
+		{"OlcrtcBinary", cfg.OlcrtcBinary},
+		{"EtcDir", cfg.EtcDir},
+		{"VarDir", cfg.VarDir},
+	} {
+		if strings.ContainsAny(field.value, "\n\r\x00") {
+			return fmt.Errorf("systemd unit path %s %q contains a control character", field.name, field.value)
+		}
+	}
+	return nil
 }
 
 // defaultSystemdConfig fills unset fields with the packaged defaults shared
@@ -126,8 +189,8 @@ func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 	varDir := systemdQuote(cfg.VarDir)
 	envFile := systemdQuote(path.Join(cfg.EtcDir, "veil.env"))
 	caddyConfig := systemdQuote(path.Join(cfg.EtcDir, "generated", "caddy", "config.json"))
-	hysteriaConfig := systemdQuote(path.Join(cfg.EtcDir, "generated", "hysteria2", "%i.yaml"))
-	olcrtcConfig := systemdQuote(path.Join(cfg.EtcDir, "generated", "olcrtc", "%i.yaml"))
+	hysteriaConfig := systemdQuoteInstanceConfig(path.Join(cfg.EtcDir, "generated", "hysteria2", "%i.yaml"))
+	olcrtcConfig := systemdQuoteInstanceConfig(path.Join(cfg.EtcDir, "generated", "olcrtc", "%i.yaml"))
 	warpConfig := systemdQuote(path.Join(cfg.EtcDir, "generated", "sing-box", "warp.json"))
 	mieruConfig := systemdQuote(path.Join(cfg.EtcDir, "generated", "mieru", "server_config.json"))
 	stateKey := systemdQuote(keyPath)
@@ -497,8 +560,13 @@ func dropInInaccessiblePaths(varDir string) string {
 // the mita RPC socket, applies the generated config, and starts the daemon.
 // Shared by the full unit render and the install drop-in so the packaged unit
 // override cannot drift from it (issue #625).
+//
+// The binary and config paths are passed as trailing systemd argv words
+// ($$1/$$2 reach the shell as "$1"/"$2"), never interpolated into the script
+// text: embedding them would let shell metacharacters inside an operator
+// path execute at unit start (issue #1024).
 func mieruActivationExecStartPost(mieruBin, mieruConfig string) string {
-	return "/bin/sh -c 'i=0; while [ $$i -lt 50 ]; do if [ -S /run/veil-mieru/mita.sock ]; then " + mieruBin + " apply config " + mieruConfig + " && " + mieruBin + " start && exit 0; fi; i=$$((i+1)); sleep 0.2; done; echo \"mita activation timed out\" >&2; exit 1'"
+	return "/bin/sh -c 'i=0; while [ $$i -lt 50 ]; do if [ -S /run/veil-mieru/mita.sock ]; then \"$$1\" apply config \"$$2\" && \"$$1\" start && exit 0; fi; i=$$((i+1)); sleep 0.2; done; echo \"mita activation timed out\" >&2; exit 1' sh " + mieruBin + " " + mieruConfig
 }
 
 // dropInServiceOverrides renders the [Service]-section overrides a packaged
@@ -558,11 +626,11 @@ func dropInServiceOverrides(name string, cfg SystemdConfig) string {
 		b.WriteString(dropInInaccessiblePaths(cfg.VarDir))
 	case UnitHysteria2:
 		b.WriteString("ExecStart=\n")
-		b.WriteString("ExecStart=" + systemdQuote(cfg.HysteriaBinary) + " server --config " + systemdQuote(path.Join(cfg.EtcDir, "generated", "hysteria2", "%i.yaml")) + "\n")
+		b.WriteString("ExecStart=" + systemdQuote(cfg.HysteriaBinary) + " server --config " + systemdQuoteInstanceConfig(path.Join(cfg.EtcDir, "generated", "hysteria2", "%i.yaml")) + "\n")
 		b.WriteString(dropInInaccessiblePaths(cfg.VarDir))
 	case UnitOlcrtc:
 		b.WriteString("ExecStart=\n")
-		b.WriteString("ExecStart=" + systemdQuote(cfg.OlcrtcBinary) + " " + systemdQuote(path.Join(cfg.EtcDir, "generated", "olcrtc", "%i.yaml")) + "\n")
+		b.WriteString("ExecStart=" + systemdQuote(cfg.OlcrtcBinary) + " " + systemdQuoteInstanceConfig(path.Join(cfg.EtcDir, "generated", "olcrtc", "%i.yaml")) + "\n")
 		b.WriteString(dropInInaccessiblePaths(cfg.VarDir))
 	case UnitWarp:
 		config := systemdQuote(path.Join(cfg.EtcDir, "generated", "sing-box", "warp.json"))

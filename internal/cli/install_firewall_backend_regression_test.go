@@ -153,8 +153,9 @@ func TestInstallFirewallBackendCheckRunsBeforeRuntimes(t *testing.T) {
 		return nil
 	}
 	installFirewallApplyFunc = func([]firewall.Rule) error { return nil }
-	installRuntimesFunc = func(cmd *cobra.Command, _ ruRecommendedInstallOptions) {
+	installRuntimesFunc = func(cmd *cobra.Command, _ ruRecommendedInstallOptions) error {
 		order = append(order, "runtimes")
+		return nil
 	}
 	installApplyFunc = func(installer.RURecommendedProfile, installer.ApplyPaths) (installer.ApplyResult, error) {
 		return installer.ApplyResult{}, nil

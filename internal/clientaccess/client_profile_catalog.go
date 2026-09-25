@@ -30,7 +30,7 @@ func (c ClientProfileCatalog) Enabled() []ClientProfile {
 	return profiles
 }
 
-func (c ClientProfileCatalog) WithCompletedPasswords(previous []ClientProfile) []ClientProfile {
+func (c ClientProfileCatalog) WithCompletedPasswords(previous []ClientProfile) ([]ClientProfile, error) {
 	return NewClientProfilePasswordPolicy(c.passwordGenerate).Complete(c.profiles, previous)
 }
 

@@ -25,6 +25,6 @@ func NewInboundCredentialPolicy(generate InboundPasswordGenerator) InboundCreden
 	return clientaccess.NewInboundCredentialPolicy(clientaccess.InboundPasswordGenerator(generate))
 }
 
-func generateInboundPassword() string {
+func generateInboundPassword() (string, error) {
 	return clientaccess.NewManagementPasswordGenerator(nil).Generate()
 }

@@ -198,7 +198,7 @@ func backupScheduleDropInRequired(systemdDir, passphrasePath string) bool {
 		return !scheduledPassphrasePathIsDefault(passphrasePath)
 	}
 	configured := passphraseFileFromExecStart(execStart)
-	condition := effectiveSystemdDirective(fragments, "ConditionPathExists")
+	condition := unquoteSystemdToken(effectiveSystemdDirective(fragments, "ConditionPathExists"))
 	return !(sameScheduledPath(passphrasePath, configured) && sameScheduledPath(passphrasePath, condition))
 }
 
@@ -225,13 +225,18 @@ func renderBackupScheduleDropIn(systemdDir, passphrasePath string) string {
 			quoteSystemdExecArg(unitPath) +
 			" --output-dir /var/lib/veil/backups --prune --daily 7 --weekly 4 --monthly 12"
 	}
+	// The passphrase path is operator-supplied: it must be quoted for the
+	// Condition/ReadOnlyPaths directives too, and %% is the only escape for a
+	// literal % — an unescaped % specifier-expands at unit load and points the
+	// oneshot at a different file (issue #1028).
+	quotedPath := quoteSystemdExecArg(unitPath)
 	return "[Unit]\n" +
 		"ConditionPathExists=\n" +
-		"ConditionPathExists=" + unitPath + "\n" +
+		"ConditionPathExists=" + quotedPath + "\n" +
 		"\n[Service]\n" +
 		"ExecStart=\n" +
 		"ExecStart=" + execStart + "\n" +
-		"ReadOnlyPaths=" + unitPath + "\n"
+		"ReadOnlyPaths=" + quotedPath + "\n"
 }
 
 // rewriteExecStartPassphraseFile replaces the value of --passphrase-file in
@@ -271,38 +276,70 @@ func rewriteExecStartPassphraseFile(execStart, newPath string) string {
 }
 
 // scanExecArgValue measures one ExecStart value token starting at s[0],
-// returning its unquoted extent length. Double-quoted tokens honor backslash
-// escapes so a quoted value is replaced as a whole.
+// returning its resolved value and raw extent length. Double-quoted tokens
+// honor backslash escapes so a quoted value is replaced as a whole; the
+// returned value reverses quoteSystemdExecArg (quotes stripped, \\ and \"
+// unescaped, %% collapsed back to a literal %) so a path read back from a
+// rendered unit resolves to the real filesystem location (issue #1028).
 func scanExecArgValue(s string) (value string, end int) {
 	if s == "" {
 		return "", 0
 	}
 	if s[0] == '"' {
+		var b strings.Builder
 		i := 1
 		for i < len(s) {
 			if s[i] == '\\' && i+1 < len(s) {
+				b.WriteByte(s[i+1])
 				i += 2
 				continue
 			}
 			if s[i] == '"' {
-				return s[1:i], i + 1
+				return strings.ReplaceAll(b.String(), "%%", "%"), i + 1
 			}
+			b.WriteByte(s[i])
 			i++
 		}
-		return s[1:], len(s)
+		return strings.ReplaceAll(b.String(), "%%", "%"), len(s)
 	}
 	i := 0
 	for i < len(s) && s[i] != ' ' && s[i] != '\t' && s[i] != '\n' {
 		i++
 	}
-	return s[:i], i
+	return strings.ReplaceAll(s[:i], "%%", "%"), i
 }
 
+// quoteSystemdExecArg renders one token for a systemd directive line. %% is
+// the only escape for a literal % — an unescaped % specifier-expands at unit
+// load (issue #1028) — and tokens containing whitespace or quote characters
+// are wrapped in double quotes with backslash escaping.
 func quoteSystemdExecArg(arg string) string {
-	if strings.ContainsAny(arg, " \t\"") {
-		return `"` + strings.ReplaceAll(arg, `"`, `\"`) + `"`
+	arg = strings.ReplaceAll(arg, "%", "%%")
+	if !strings.ContainsAny(arg, " \t\"'\\") {
+		return arg
 	}
-	return arg
+	escaped := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(arg)
+	return `"` + escaped + `"`
+}
+
+// unquoteSystemdToken reverses quoteSystemdExecArg/systemdQuote on a raw
+// directive value: strips one level of double quoting with \\ and \"
+// unescaping, and collapses %% back to a literal % (issue #1028).
+func unquoteSystemdToken(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		var b strings.Builder
+		for i := 1; i < len(s)-1; i++ {
+			if s[i] == '\\' && i+1 < len(s)-1 {
+				b.WriteByte(s[i+1])
+				i++
+				continue
+			}
+			b.WriteByte(s[i])
+		}
+		s = b.String()
+	}
+	return strings.ReplaceAll(s, "%%", "%")
 }
 
 func scheduledPassphrasePathFromDropIn(systemdDir string) string {
@@ -313,7 +350,7 @@ func scheduledPassphrasePathFromDropIn(systemdDir string) string {
 	if path := passphraseFileFromExecStart(effectiveSystemdDirective([]string{string(body)}, "ExecStart")); path != "" {
 		return path
 	}
-	if path := effectiveSystemdDirective([]string{string(body)}, "ConditionPathExists"); path != "" {
+	if path := unquoteSystemdToken(effectiveSystemdDirective([]string{string(body)}, "ConditionPathExists")); path != "" {
 		return filepath.Clean(filepath.FromSlash(path))
 	}
 	return ""

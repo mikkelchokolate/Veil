@@ -7,16 +7,25 @@ import (
 )
 
 func TestWebBasePathPolicyGeneratesBase64URLPath(t *testing.T) {
-	path := NewWebBasePathPolicy(bytes.NewReader([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9})).Generate()
+	path, err := NewWebBasePathPolicy(bytes.NewReader([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9})).Generate()
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
 	if path != "/AQIDBAUGBwgJ/" {
 		t.Fatalf("path = %q", path)
 	}
 }
 
-func TestWebBasePathPolicyFallsBackWhenRandomFails(t *testing.T) {
-	path := NewWebBasePathPolicy(failingReader{}).Generate()
-	if path != "/veil-panel/" {
-		t.Fatalf("path = %q", path)
+// TestWebBasePathPolicyFailsClosedWhenRandomFails is the #1022 regression: a
+// crypto/rand failure must return an error, never the predictable
+// "/veil-panel/" path.
+func TestWebBasePathPolicyFailsClosedWhenRandomFails(t *testing.T) {
+	path, err := NewWebBasePathPolicy(failingReader{}).Generate()
+	if err == nil {
+		t.Fatalf("expected error, got path %q", path)
+	}
+	if path == "/veil-panel/" {
+		t.Fatalf("predictable-path fallback must never be returned")
 	}
 }
 

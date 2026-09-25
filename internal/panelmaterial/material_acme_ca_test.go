@@ -17,7 +17,10 @@ func TestEnvContentPersistsControlledCA(t *testing.T) {
 		ACMECAURL:      "https://127.0.0.1:14000/dir",
 		ACMECARoot:     "/etc/veil/acme-root.pem",
 	})
-	env := m.EnvContent()
+	env, err := m.EnvContent()
+	if err != nil {
+		t.Fatalf("EnvContent: %v", err)
+	}
 	for _, want := range []string{
 		"VEIL_ACME_CA_URL=https://127.0.0.1:14000/dir\n",
 		"VEIL_ACME_CA_ROOT=/etc/veil/acme-root.pem\n",
@@ -35,7 +38,10 @@ func TestEnvContentOmitsCAWhenUnset(t *testing.T) {
 		Paths:          Paths{EtcDir: t.TempDir()},
 		PanelAuthToken: "tok",
 	})
-	env := m.EnvContent()
+	env, err := m.EnvContent()
+	if err != nil {
+		t.Fatalf("EnvContent: %v", err)
+	}
 	if strings.Contains(env, "VEIL_ACME_CA_URL") || strings.Contains(env, "VEIL_ACME_CA_ROOT") {
 		t.Fatalf("EnvContent must not emit CA settings when unset:\n%s", env)
 	}

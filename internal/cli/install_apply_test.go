@@ -27,7 +27,7 @@ import (
 
 func withMockedInstallRuntimes(t *testing.T) {
 	old := installRuntimesFunc
-	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) {}
+	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) error { return nil }
 	oldWait := installWaitPanelReadyFunc
 	installWaitPanelReadyFunc = func(*cobra.Command, installer.RURecommendedProfile, ruRecommendedInstallOptions) error {
 		return nil

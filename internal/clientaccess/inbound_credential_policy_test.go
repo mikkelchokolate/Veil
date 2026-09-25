@@ -4,14 +4,16 @@ import "testing"
 
 func TestInboundCredentialPolicyCompletesCreateAndUpdateCredentials(t *testing.T) {
 	generated := []string{"first", "second"}
-	policy := NewInboundCredentialPolicy(func() string {
+	policy := NewInboundCredentialPolicy(func() (string, error) {
 		value := generated[0]
 		generated = generated[1:]
-		return value
+		return value, nil
 	})
 
 	inbound := Inbound{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Profiles: []ClientProfile{{Name: "alice", Enabled: true}}}
-	policy.ApplyCreate(&inbound)
+	if err := policy.ApplyCreate(&inbound); err != nil {
+		t.Fatalf("ApplyCreate: %v", err)
+	}
 	if inbound.Password != "" {
 		t.Fatalf("inbound password should stay empty when client profiles exist: %+v", inbound)
 	}
@@ -20,7 +22,9 @@ func TestInboundCredentialPolicyCompletesCreateAndUpdateCredentials(t *testing.T
 	}
 
 	update := Inbound{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443, Profiles: []ClientProfile{{Name: "alice", Enabled: true}, {Name: "bob", Enabled: true}}}
-	policy.ApplyUpdate(&update, inbound)
+	if err := policy.ApplyUpdate(&update, inbound); err != nil {
+		t.Fatalf("ApplyUpdate: %v", err)
+	}
 	if update.Profiles[0].Password != "first" || update.Profiles[1].Password != "second" {
 		t.Fatalf("update profile passwords = %+v", update.Profiles)
 	}
