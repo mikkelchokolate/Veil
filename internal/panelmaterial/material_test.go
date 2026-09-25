@@ -21,7 +21,10 @@ func TestManagedMaterialBuildsEnvContent(t *testing.T) {
 		WebBasePath:     "/panel/",
 		PanelTLSEnabled: true,
 	})
-	env := material.EnvContent()
+	env, err := material.EnvContent()
+	if err != nil {
+		t.Fatalf("EnvContent: %v", err)
+	}
 	for _, want := range []string{
 		"VEIL_API_TOKEN=token\n",
 		"VEIL_LISTEN=127.0.0.1:2096\n",
@@ -68,7 +71,10 @@ func TestManagedMaterialFilesIncludePanelCaddyAndSystemdMaterial(t *testing.T) {
 
 func TestManagedMaterialOmitsPanelTLSForCaddyAccess(t *testing.T) {
 	material := NewManagedMaterial(Input{Paths: Paths{EtcDir: "/etc/veil"}, PanelAuthToken: "token", PanelAccess: "caddy", PanelTLSEnabled: false})
-	env := material.EnvContent()
+	env, err := material.EnvContent()
+	if err != nil {
+		t.Fatalf("EnvContent: %v", err)
+	}
 	if strings.Contains(env, "VEIL_TLS_CERT") || strings.Contains(env, "VEIL_TLS_KEY") {
 		t.Fatalf("Panel Caddy access env should not include Panel TLS paths:\n%s", env)
 	}

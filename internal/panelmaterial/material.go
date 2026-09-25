@@ -50,56 +50,75 @@ func NewManagedMaterial(input Input) ManagedMaterial {
 	return ManagedMaterial{input: input}
 }
 
-func (m ManagedMaterial) EnvContent() string {
+// EnvContent renders the KEY=value body of veil.env. Every value is checked
+// for control characters first: a newline inside a value (e.g. a PanelListen
+// loaded back from panel state) would terminate the assignment and inject
+// arbitrary KEY=value lines into a file that the root-run veil-backup.service
+// sources as EnvironmentFile (issue #1023). There is no way to escape a
+// newline in this format, so the render fails closed.
+func (m ManagedMaterial) EnvContent() (string, error) {
 	input := m.input
 	if input.PanelAuthToken == "" {
-		return ""
+		return "", nil
 	}
-	var env strings.Builder
-	env.WriteString("VEIL_API_TOKEN=" + input.PanelAuthToken + "\n")
+	type envKV struct {
+		key   string
+		value string
+	}
+	entries := []envKV{{key: "VEIL_API_TOKEN", value: input.PanelAuthToken}}
 	if input.PanelListen != "" {
-		env.WriteString("VEIL_LISTEN=" + input.PanelListen + "\n")
+		entries = append(entries, envKV{"VEIL_LISTEN", input.PanelListen})
 	}
 	if input.PanelAccess != "" {
-		env.WriteString("VEIL_PANEL_ACCESS=" + input.PanelAccess + "\n")
+		entries = append(entries, envKV{"VEIL_PANEL_ACCESS", input.PanelAccess})
 	}
 	if input.Domain != "" {
-		env.WriteString("VEIL_DOMAIN=" + input.Domain + "\n")
+		entries = append(entries, envKV{"VEIL_DOMAIN", input.Domain})
 	}
 	if input.Email != "" {
-		env.WriteString("VEIL_EMAIL=" + input.Email + "\n")
+		entries = append(entries, envKV{"VEIL_EMAIL", input.Email})
 	}
 	if input.PanelTLSEnabled {
-		env.WriteString("VEIL_TLS_CERT=" + filepath.ToSlash(m.PanelTLSCertPath()) + "\n")
-		env.WriteString("VEIL_TLS_KEY=" + filepath.ToSlash(m.PanelTLSKeyPath()) + "\n")
+		entries = append(entries,
+			envKV{"VEIL_TLS_CERT", filepath.ToSlash(m.PanelTLSCertPath())},
+			envKV{"VEIL_TLS_KEY", filepath.ToSlash(m.PanelTLSKeyPath())})
 	}
 	if input.WebBasePath != "" && input.WebBasePath != "/" {
-		env.WriteString("VEIL_WEB_BASE_PATH=" + input.WebBasePath + "\n")
+		entries = append(entries, envKV{"VEIL_WEB_BASE_PATH", input.WebBasePath})
 	}
 	// Persist the controlled-CA configuration so veil.service (EnvironmentFile)
 	// keeps rendering Caddy issuers against the same ACME directory after
 	// install-time env is gone (audit #304 controlled-CA leg).
 	if input.ACMECAURL != "" {
-		env.WriteString("VEIL_ACME_CA_URL=" + input.ACMECAURL + "\n")
+		entries = append(entries, envKV{"VEIL_ACME_CA_URL", input.ACMECAURL})
 	}
 	if input.ACMECARoot != "" {
-		env.WriteString("VEIL_ACME_CA_ROOT=" + input.ACMECARoot + "\n")
+		entries = append(entries, envKV{"VEIL_ACME_CA_ROOT", input.ACMECARoot})
 	}
 	if paths := input.Paths; paths.EtcDir != "" {
-		env.WriteString("VEIL_ETC_DIR=" + filepath.ToSlash(paths.EtcDir) + "\n")
-		env.WriteString("VEIL_KEY_PATH=" + filepath.ToSlash(filepath.Join(paths.EtcDir, "state.key")) + "\n")
-		env.WriteString("VEIL_LIVE_ROOT=" + filepath.ToSlash(filepath.Join(paths.EtcDir, "generated")) + "\n")
+		entries = append(entries,
+			envKV{"VEIL_ETC_DIR", filepath.ToSlash(paths.EtcDir)},
+			envKV{"VEIL_KEY_PATH", filepath.ToSlash(filepath.Join(paths.EtcDir, "state.key"))},
+			envKV{"VEIL_LIVE_ROOT", filepath.ToSlash(filepath.Join(paths.EtcDir, "generated"))})
 	}
 	if paths := input.Paths; paths.VarDir != "" {
-		env.WriteString("VEIL_VAR_DIR=" + filepath.ToSlash(paths.VarDir) + "\n")
-		env.WriteString("VEIL_STATE_PATH=" + filepath.ToSlash(filepath.Join(paths.VarDir, "state.json")) + "\n")
-		env.WriteString("VEIL_APPLY_ROOT=" + filepath.ToSlash(filepath.Join(paths.VarDir, "staging")) + "\n")
+		entries = append(entries,
+			envKV{"VEIL_VAR_DIR", filepath.ToSlash(paths.VarDir)},
+			envKV{"VEIL_STATE_PATH", filepath.ToSlash(filepath.Join(paths.VarDir, "state.json"))},
+			envKV{"VEIL_APPLY_ROOT", filepath.ToSlash(filepath.Join(paths.VarDir, "staging"))})
 		// Persist the autocert cache root too: VEIL_VAR_DIR already drives the
 		// default, but an explicit VEIL_AUTO_TLS_DIR keeps the resolved path
 		// visible and stable if the derivation ever changes (issue #640).
-		env.WriteString("VEIL_AUTO_TLS_DIR=" + filepath.ToSlash(filepath.Join(paths.VarDir, "autocert")) + "\n")
+		entries = append(entries, envKV{"VEIL_AUTO_TLS_DIR", filepath.ToSlash(filepath.Join(paths.VarDir, "autocert"))})
 	}
-	return env.String()
+	var env strings.Builder
+	for _, kv := range entries {
+		if strings.ContainsAny(kv.key, "\n\r\x00=") || strings.ContainsAny(kv.value, "\n\r\x00") {
+			return "", fmt.Errorf("%s contains a control character; refusing to write veil.env", kv.key)
+		}
+		env.WriteString(kv.key + "=" + kv.value + "\n")
+	}
+	return env.String(), nil
 }
 
 func (m ManagedMaterial) PanelTLSCertPath() string {
@@ -136,11 +155,19 @@ func (m ManagedMaterial) Files() ([]File, error) {
 			File{Path: m.PanelTLSKeyPath(), Content: input.PanelTLSKeyPEM, Mode: 0o640},
 		)
 	}
-	if envContent := m.EnvContent(); envContent != "" {
+	if envContent, err := m.EnvContent(); err != nil {
+		return nil, err
+	} else if envContent != "" {
 		files = append(files, File{Path: filepath.Join(paths.EtcDir, "veil.env"), Content: envContent, Mode: 0o640})
 	}
 	if paths.SystemdDir != "" {
 		cfg := renderer.SystemdConfig{EtcDir: paths.EtcDir, VarDir: paths.VarDir, VeilBinary: paths.VeilBinary, CaddyBinary: paths.CaddyBinary}
+		// Unit paths come from --etc-dir/--var-dir/binary resolution: a
+		// control character would inject extra directives into the rendered
+		// units (issue #1001), so validate before rendering.
+		if err := renderer.ValidateSystemdConfig(cfg); err != nil {
+			return nil, fmt.Errorf("invalid systemd unit paths: %w", err)
+		}
 		units := systemdunits.Render(cfg)
 		vendorDir := paths.VendorSystemdDir
 		if vendorDir == "" {

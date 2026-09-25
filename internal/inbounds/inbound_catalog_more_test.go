@@ -8,7 +8,7 @@ func TestInboundCatalogGet(t *testing.T) {
 		Protocol:  "naiveproxy",
 		Transport: "tcp",
 		Port:      443,
-	}}, func() string { return "p" })
+	}}, func() (string, error) { return "p", nil })
 
 	if got, ok := catalog.Get("naive"); !ok || got.Name != "naive" {
 		t.Fatalf("expected to find naive, got %+v ok=%v", got, ok)
@@ -54,7 +54,7 @@ func TestInboundCatalogDelete(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			catalog := NewInboundCatalogWithPasswordGenerator(tc.inbounds, func() string { return "p" })
+			catalog := NewInboundCatalogWithPasswordGenerator(tc.inbounds, func() (string, error) { return "p", nil })
 			next, err := catalog.Delete(tc.delete)
 			if err != tc.wantErr {
 				t.Fatalf("Delete error = %v, want %v", err, tc.wantErr)
@@ -75,7 +75,7 @@ func TestInboundCatalogCreateErrors(t *testing.T) {
 		Protocol:  "naiveproxy",
 		Transport: "tcp",
 		Port:      443,
-	}}, func() string { return "p" })
+	}}, func() (string, error) { return "p", nil })
 
 	cases := []struct {
 		name    string
@@ -130,7 +130,7 @@ func TestInboundCatalogUpdateErrors(t *testing.T) {
 	catalog := NewInboundCatalogWithPasswordGenerator([]Inbound{
 		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443},
 		{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 444},
-	}, func() string { return "p" })
+	}, func() (string, error) { return "p", nil })
 
 	cases := []struct {
 		name    string
@@ -178,7 +178,7 @@ func TestInboundCatalogUpdateKeepsSameTransportPort(t *testing.T) {
 	catalog := NewInboundCatalogWithPasswordGenerator([]Inbound{
 		{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443},
 		{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 444},
-	}, func() string { return "p" })
+	}, func() (string, error) { return "p", nil })
 
 	updated, _, err := catalog.Update("naive", Inbound{Protocol: "naiveproxy", Transport: "tcp", Port: 443})
 	if err != nil {

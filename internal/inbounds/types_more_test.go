@@ -3,7 +3,10 @@ package inbounds
 import "testing"
 
 func TestGenerateInboundPassword(t *testing.T) {
-	p := generateInboundPassword()
+	p, err := generateInboundPassword()
+	if err != nil {
+		t.Fatalf("generateInboundPassword: %v", err)
+	}
 	if p == "" {
 		t.Fatal("expected generated password")
 	}

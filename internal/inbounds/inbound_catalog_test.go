@@ -3,7 +3,7 @@ package inbounds
 import "testing"
 
 func TestInboundCatalogCreatesInboundWithGeneratedPassword(t *testing.T) {
-	catalog := NewInboundCatalogWithPasswordGenerator(nil, func() string { return "generated-pass" })
+	catalog := NewInboundCatalogWithPasswordGenerator(nil, func() (string, error) { return "generated-pass", nil })
 
 	created, next, err := catalog.Create(Inbound{
 		Name:      "hy2-vip",
@@ -28,7 +28,7 @@ func TestInboundCatalogCreatesInboundWithGeneratedPassword(t *testing.T) {
 }
 
 func TestInboundCatalogCreatesClientProfilesWithGeneratedPasswords(t *testing.T) {
-	catalog := NewInboundCatalogWithPasswordGenerator(nil, func() string { return "generated-pass" })
+	catalog := NewInboundCatalogWithPasswordGenerator(nil, func() (string, error) { return "generated-pass", nil })
 
 	created, _, err := catalog.Create(Inbound{
 		Name:      "naive",
@@ -56,7 +56,7 @@ func TestInboundCatalogUpdatePreservesClientProfilePasswordWhenEmpty(t *testing.
 		Port:      443,
 		Enabled:   true,
 		Profiles:  []ClientProfile{{Name: "alice", Username: "alice", Password: "existing-pass", Enabled: true}},
-	}}, func() string { return "generated-pass" })
+	}}, func() (string, error) { return "generated-pass", nil })
 
 	updated, _, err := catalog.Update("naive", Inbound{
 		Protocol:  "naiveproxy",
@@ -81,7 +81,7 @@ func TestInboundCatalogUpdatePreservesPasswordWhenEmpty(t *testing.T) {
 		Port:      8443,
 		Enabled:   true,
 		Password:  "existing-pass",
-	}}, func() string { return "generated-pass" })
+	}}, func() (string, error) { return "generated-pass", nil })
 
 	updated, _, err := catalog.Update("hy2-vip", Inbound{
 		Protocol:  "hysteria2",
@@ -104,7 +104,7 @@ func TestInboundCatalogRejectsDuplicateTransportPort(t *testing.T) {
 		Transport: "tcp",
 		Port:      443,
 		Enabled:   true,
-	}}, func() string { return "generated-pass" })
+	}}, func() (string, error) { return "generated-pass", nil })
 
 	_, _, err := catalog.Create(Inbound{
 		Name:      "naive-alt",
