@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { ApiError, apiFetch } from "../api/fetcher";
+import { ApiError, apiFetch, mutationErrorMessage } from "../api/fetcher";
 import { useIsAdmin } from "../auth/AuthContext";
 import {
 	AlertDialog,
@@ -128,9 +128,7 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 			void qc.invalidateQueries({ queryKey: ["clients", clientId, "tokens"] });
 		},
 		onError: (err) =>
-			setError(
-				err instanceof ApiError ? err.message : t("subTokens.error.create"),
-			),
+			setError(mutationErrorMessage(err, t("subTokens.error.create"), t)),
 	});
 
 	const rotate = useMutation({
@@ -157,9 +155,7 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 			void qc.invalidateQueries({ queryKey: ["clients", clientId, "tokens"] });
 		},
 		onError: (err) =>
-			setError(
-				err instanceof ApiError ? err.message : t("subTokens.error.rotate"),
-			),
+			setError(mutationErrorMessage(err, t("subTokens.error.rotate"), t)),
 	});
 
 	const revoke = useMutation({
@@ -173,9 +169,7 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 			void qc.invalidateQueries({ queryKey: ["clients", clientId, "tokens"] });
 		},
 		onError: (err) =>
-			setError(
-				err instanceof ApiError ? err.message : t("subTokens.error.revoke"),
-			),
+			setError(mutationErrorMessage(err, t("subTokens.error.revoke"), t)),
 	});
 
 	async function copy(text: string) {
@@ -395,6 +389,10 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 							onChange={(e) => setRenewExpiry(e.target.value)}
 						/>
 					</FormItem>
+					{/* A failed renew keeps this dialog open — the error (incl. the
+						local expiry validation) must be visible here, not only
+						behind the overlay (#649). */}
+					{error ? <p className="form-error">{error}</p> : null}
 					<AlertDialogFooter>
 						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
 						<AlertDialogAction

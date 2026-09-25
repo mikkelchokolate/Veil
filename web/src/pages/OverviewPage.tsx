@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { ApiError, apiFetch } from "../api/fetcher";
+import { ApiError, apiFetch, mutationErrorMessage } from "../api/fetcher";
 import type { VersionResponse } from "../api/generated/models";
 import {
 	PanelRestartTimeoutError,
@@ -151,10 +151,14 @@ function PanelVersionCard() {
 			{update.isError && phase !== "slow" ? (
 				<FormMessage>
 					{t("overview.updateFailed", {
-						details:
-							update.error instanceof ApiError
-								? update.error.message
-								: String(update.error),
+						// mutationErrorMessage localizes the transport-level
+						// timeout/cancel strings (#1018); PanelUpdateFailedError's
+						// server-reported message passes through unchanged.
+						details: mutationErrorMessage(
+							update.error,
+							String(update.error),
+							t,
+						),
 					})}
 				</FormMessage>
 			) : null}
