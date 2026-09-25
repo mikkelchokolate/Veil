@@ -199,11 +199,16 @@ func containsManagementAccessRule(rules []ufwDesiredRule) bool {
 // preserves an SSH management channel. A leftover "Veil panel" allow does NOT
 // qualify: the panel may now bind loopback only, so a stale panel rule can be
 // an open port with nothing reachable behind it — treating it as management
-// access would enable UFW with no working way back in (#356).
+// access would enable UFW with no working way back in (#356). Only an inbound
+// ALLOW entry counts: a pre-existing deny/reject/limit on port 22 does not
+// pass SSH traffic, so it cannot satisfy the lockout check (#1007).
 func hasExistingManagementAccess(state ufwState) bool {
-	for target, comment := range state.Rules {
-		lowerTarget := strings.ToLower(target)
-		lowerComment := strings.ToLower(comment)
+	for _, entry := range state.Entries {
+		if entry.Action != "allow" || strings.EqualFold(entry.Direction, "out") {
+			continue
+		}
+		lowerTarget := strings.ToLower(entry.Destination)
+		lowerComment := strings.ToLower(entry.Comment)
 		if strings.HasPrefix(lowerTarget, "22/") || strings.Contains(lowerComment, "ssh") {
 			return true
 		}
