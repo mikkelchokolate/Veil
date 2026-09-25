@@ -66,4 +66,4 @@ async function assertMutationOutcome(resp, { label = 'mutation', allowApplyFailu
   return body;
 }
 
-module.exports = { assertMutationOutcome };
+module.exports = { assertMutationOutcome, NON_TERMINAL_JOB_STATUSES };

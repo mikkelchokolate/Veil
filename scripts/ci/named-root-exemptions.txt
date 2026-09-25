@@ -1,0 +1,16 @@
+# named-root-exemptions.txt — roots matching a named-job family pattern that
+# are deliberately NOT selected by that job (issue #1014).
+#
+# verify-named-roots.py requires every test root matching a job's family
+# pattern to appear in that job's script:
+#
+#   scripts/ci/e2e.sh                 <- TestRequired* under test/e2e
+#   scripts/ci/sigkill.sh             <- Test*SIGKILL* / Test*ProcessKill*
+#   scripts/ci/multi-process.sh       <- Test*AcrossOSProcesses* / *AcrossProcesses*
+#   scripts/ci/privilege-boundary.sh  <- every root under test/linuxintegration
+#
+# Add an entry ONLY when a root matches a family pattern by name but must not
+# run in the named job — and say why. Roots listed here still execute in the
+# unprivileged `test` job; an exemption never means "uncovered".
+#
+# Format: <package-or-dir><TAB><root>   (one per line; # comments allowed)

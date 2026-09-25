@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -62,10 +61,10 @@ func installRuntimeSet(ctx context.Context, opts Options, runtimes []Runtime) []
 		return runtimeSetFailure(results, runtimes, fmt.Errorf("open runtime activation lock: %w", err))
 	}
 	defer lockFile.Close()
-	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+	if err := runtimeActivationLock(lockFile); err != nil {
 		return runtimeSetFailure(results, runtimes, fmt.Errorf("lock runtime activation: %w", err))
 	}
-	defer syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+	defer func() { _ = runtimeActivationUnlock(lockFile) }()
 	if err := recoverRuntimeSetActivation(opts.BinDir); err != nil {
 		return runtimeSetFailure(results, runtimes, err)
 	}

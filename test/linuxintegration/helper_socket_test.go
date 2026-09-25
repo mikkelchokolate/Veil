@@ -72,11 +72,25 @@ func TestIntegrationHelperSocketAcceptsAllowedUIDAndDispatches(t *testing.T) {
 	}
 }
 
+// helperPanelChildEnv marks the child process that connects to the canonical
+// helper socket AS the veil panel identity (dropped credential re-exec).
+const helperPanelChildEnv = "VEIL_HELPER_PANEL_PROBE_CHILD"
+
 // TestIntegrationHelperSocketCanonicalLayout covers audits #513/#514/#523:
 // starting the helper manually on the packaged layout must normalize
 // /run/veil to root:root 0711 (so no veil-uid process can replace the socket)
 // and deliver the socket itself as root:veil 0660.
 func TestIntegrationHelperSocketCanonicalLayout(t *testing.T) {
+	if os.Getenv(helperPanelChildEnv) == "1" {
+		// Re-exec'd under the veil UID: connect through the traverse-only dir
+		// and dispatch. Exit 3 signals the panel identity was rejected.
+		err := privileged.NewSocketClient(os.Getenv("VEIL_HELPER_PROBE_SOCK")).RestartPanel(context.Background())
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "panel identity rejected:", err)
+			os.Exit(3)
+		}
+		os.Exit(0)
+	}
 	if os.Geteuid() != 0 {
 		t.Skip("helper socket layout requires root")
 	}
@@ -146,9 +160,23 @@ func TestIntegrationHelperSocketCanonicalLayout(t *testing.T) {
 	if sockStat.Uid != 0 || int(sockStat.Gid) != veilGID || sockInfo.Mode().Perm() != 0o660 {
 		t.Fatalf("helper socket uid=%d gid=%d mode=%#o, want root:veil 0660", sockStat.Uid, sockStat.Gid, sockInfo.Mode().Perm())
 	}
-	// The panel identity can still connect through the traverse-only dir.
-	if err := privileged.NewSocketClient(privileged.DefaultSocketPath).RestartPanel(context.Background()); err != nil {
-		t.Fatalf("root peer restart through canonical socket: %v", err)
+	// The panel identity — not root — must be able to connect through the
+	// traverse-only dir. A call from this root test process would pass through
+	// PeerPolicy.AllowRoot and prove nothing about the AllowedUID path, so
+	// re-exec the test binary with the veil credential and drive RestartPanel
+	// over the canonical socket (issue #1050).
+	probeBinary := copyCurrentTestBinary(t)
+	command := exec.Command(probeBinary, "-test.run=^TestIntegrationHelperSocketCanonicalLayout$", "-test.count=1", "-test.v")
+	command.Env = append(os.Environ(),
+		helperPanelChildEnv+"=1",
+		"VEIL_HELPER_PROBE_SOCK="+privileged.DefaultSocketPath,
+	)
+	command.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{Uid: uint32(veilUID), Gid: uint32(veilGID)},
+	}
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("veil panel identity rejected by the canonical helper socket: %v\n%s", err, output)
 	}
 }
 

@@ -17,6 +17,10 @@
 # Format: <package><TAB><root>   (one per line; # comments allowed)
 
 github.com/mikkelchokolate/Veil/internal/api	TestIdempotencyProcessHelper
+# Re-exec'd under the managed name "veil" so /api/processes discovery has a
+# real entry to assert on (issue #1012); the parent-suite skip is the helper
+# boundary, not a disabled test.
+github.com/mikkelchokolate/Veil/internal/api	TestManagedProcessFixtureHelper
 github.com/mikkelchokolate/Veil/internal/apply	TestApplyFenceSubprocessHelper
 github.com/mikkelchokolate/Veil/internal/backup	TestRestoreCrashProcess
 github.com/mikkelchokolate/Veil/internal/diagnostics	TestExecHelperProcess

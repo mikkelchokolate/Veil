@@ -35,6 +35,12 @@ func TestPortCollisionPanel(t *testing.T) {
 	applyRoot := filepath.Join(dir, "apply")
 	keyPath := filepath.Join(dir, "state.key")
 
+	// Seed empty routing rules: any startup apply must stay local — a
+	// route-dat fetch would delay the bind long enough to fake a hang.
+	if err := os.WriteFile(statePath, []byte(seedStateNoRouteDat), 0o600); err != nil {
+		t.Fatalf("seed state: %v", err)
+	}
+
 	cmd := execCommand(bin, "serve")
 	cmd.Env = append(os.Environ(),
 		"VEIL_LISTEN="+addr,
@@ -68,17 +74,19 @@ func TestPortCollisionPanel(t *testing.T) {
 		if !strings.Contains(logs, "address already in use") && !strings.Contains(logs, "Only one usage of each socket address") {
 			t.Fatalf("server exited non-zero but not with a bind error. Logs:\n%s", logs)
 		}
-	case <-time.After(15 * time.Second):
+	case <-time.After(45 * time.Second):
 		_ = cmd.Process.Kill()
-		t.Fatalf("server hung on port collision and did not exit within 15s. Logs:\n%s", logBuf.String())
+		t.Fatalf("server hung on port collision and did not exit within 45s. Logs:\n%s", logBuf.String())
 	}
 }
 
-// TestPortCollisionInbound verifies that setting up an inbound port that
-// is already in use by another process causes the apply command to detect the service
-// restart failure and correctly report or handle the conflict.
+// TestPortCollisionInbound verifies that creating an inbound on a port already
+// bound by another process is rejected at create time: live validation
+// (livevalidation's host port probe, always wired by cliflow/serve) returns a
+// deterministic 422 port_in_use before any state mutation, so the collision
+// can never reach apply.
 func TestPortCollisionInbound(t *testing.T) {
-	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
+	srv := startServer(t, serverOptions{token: "e2e-secret-token", seedState: seedStateNoRouteDat})
 	inboundPort := freePort(t)
 
 	// Setup settings
@@ -95,42 +103,25 @@ func TestPortCollisionInbound(t *testing.T) {
 	}
 	defer ln.Close()
 
-	// Try to add inbound on the same port
-	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"mieru-tcp-coll","protocol":"mieru","transport":"tcp","port":%d,"enabled":true,"password":"pass"}`, inboundPort))
-	// Live validation rejects a host-level collision before state mutation.
-	if resp.StatusCode == http.StatusUnprocessableEntity {
-		body := readJSON(t, resp)
-		if !jsonContainsIssue(body, "port_in_use") {
-			t.Fatalf("422 response missing port_in_use issue: %+v", body)
-		}
-		return
+	// Create must fail with exactly 422 carrying a port_in_use issue — live
+	// validation is always wired in this harness, so the rejection is
+	// deterministic and no apply path is reachable with a colliding candidate.
+	resp = srv.do(http.MethodPost, "/api/inbounds", fmt.Sprintf(`{"name":"mieru-tcp-coll","protocol":"mieru","transport":"tcp","port":%d,"enabled":true,"password":"collision-secret"}`, inboundPort))
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 port_in_use rejection, got %d: %v", resp.StatusCode, readJSON(t, resp))
 	}
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("expected 201 Created or 422 Unprocessable Entity, got %d: %v", resp.StatusCode, readJSON(t, resp))
-	}
-	drain(resp)
-
-	// Build apply plan
-	resp = srv.do(http.MethodPost, "/api/apply/plan", "")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("plan expected 200, got %d: %v", resp.StatusCode, readJSON(t, resp))
-	}
-	drain(resp)
-
-	// Apply. Since systemd is not present on Windows, the service reload step will fail.
-	// We verify that the API returns a failure/conflict or correctly rolls back.
-	resp = srv.do(http.MethodPost, "/api/apply", `{"confirm":true,"applyLive":true,"applyServices":true}`)
 	body := readJSON(t, resp)
-	if resp.StatusCode == http.StatusOK {
-		// If it succeeded, verify if the service actions report failure/rollback because of the missing systemd or collision
-		// Wait, if systemd reload fails, the code returns 400 Bad Request with rollback status.
-		// If it's Windows, reload fails, so it should roll back.
-		if rolledBack, ok := body["rolledBack"].(bool); !ok || !rolledBack {
-			t.Fatalf("expected reload failure to trigger rollback on port collision, got: %+v", body)
-		}
-	} else if resp.StatusCode != http.StatusBadRequest && resp.StatusCode != http.StatusConflict {
-		t.Fatalf("expected apply error or rollback, got %d: %+v", resp.StatusCode, body)
+	if !jsonContainsIssue(body, "port_in_use") {
+		t.Fatalf("422 response missing port_in_use issue: %+v", body)
 	}
+
+	// The rejected inbound must not have persisted — the rejection is the
+	// whole contract, not a soft-fail that still commits state.
+	resp = srv.do(http.MethodGet, "/api/inbounds/mieru-tcp-coll", "")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("rejected inbound persisted despite port_in_use: GET /api/inbounds/mieru-tcp-coll = %d, want 404", resp.StatusCode)
+	}
+	drain(resp)
 }
 
 // TestBadAuthentication validates rejections for invalid tokens, invalid
@@ -144,9 +135,13 @@ func TestBadAuthentication(t *testing.T) {
 	}
 	srv := startServer(t, serverOptions{
 		token: "e2e-secret-token",
+		// routingRules:[] keeps the CSRF-probe PUTs offline-deterministic —
+		// the default geoip:private rule would otherwise pull geoip.dat inside
+		// every mutation-triggered apply.
 		seedState: `{"schemaVersion":4,` +
 			`"setup":{"completed":true},` +
 			`"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com"},` +
+			`"routingRules":[],` +
 			`"users":[{"username":"e2e-admin","passwordHash":"` + string(passwordHash) + `","role":"admin"}]}`,
 	})
 	sessionsPath := filepath.Join(filepath.Dir(srv.statePath), "sessions.json")
