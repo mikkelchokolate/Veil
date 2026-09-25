@@ -257,16 +257,31 @@ func (r *Recorder) replaySpoolLocked() error {
 	if int64(len(body)) > r.maxSpoolBytes {
 		return errors.New("critical audit spool exceeds configured limit")
 	}
-	for _, line := range bytes.Split(body, []byte{'\n'}) {
+	lines := bytes.Split(body, []byte{'\n'})
+	for i, line := range lines {
 		if len(bytes.TrimSpace(line)) == 0 {
 			continue
 		}
 		var record Record
 		if err := json.Unmarshal(line, &record); err != nil {
-			return fmt.Errorf("decode critical audit spool: %w", err)
+			// A corrupt line must not abort replay forever: quarantine it so
+			// the surviving records still reach the primary and the spool is
+			// drained (#1033). Quarantining immediately also keeps the bad
+			// line out of any un-replayed tail rewrite below.
+			if qerr := r.quarantineCorruptSpoolLocked(line); qerr != nil {
+				// Even when quarantine itself fails, drain the replayed prefix
+				// so a retry does not duplicate it; the un-quarantined line
+				// stays spooled in the tail until evidence preservation works.
+				r.rewriteSpoolTailLocked(lines[i:])
+				return fmt.Errorf("decode critical audit spool: %w (quarantine failed: %v)", err, qerr)
+			}
+			continue
 		}
 		encoded := append(append([]byte(nil), line...), '\n')
 		if err := r.appendPrimaryLocked(encoded); err != nil {
+			// Shrink the spool to the un-replayed tail so a later retry does
+			// not rewrite already-replayed records as duplicates (#1033).
+			r.rewriteSpoolTailLocked(lines[i:])
 			return err
 		}
 	}
@@ -274,6 +289,53 @@ func (r *Recorder) replaySpoolLocked() error {
 		return err
 	}
 	return syncDirectory(filepath.Dir(r.spoolPath))
+}
+
+// rewriteSpoolTailLocked best-effort replaces the spool with only the lines
+// that have not been replayed yet, so the next replay does not duplicate the
+// records that already reached the primary. A rewrite failure only forfeits
+// the deduplication, not the spooled data, so it is swallowed.
+func (r *Recorder) rewriteSpoolTailLocked(remaining [][]byte) {
+	var body []byte
+	for _, line := range remaining {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		body = append(body, line...)
+		body = append(body, '\n')
+	}
+	tmp := r.spoolPath + ".replaying"
+	if err := os.WriteFile(tmp, body, 0o600); err != nil {
+		return
+	}
+	if err := os.Rename(tmp, r.spoolPath); err != nil {
+		_ = os.Remove(tmp)
+		return
+	}
+	_ = syncDirectory(filepath.Dir(r.spoolPath))
+}
+
+// quarantineCorruptSpoolLocked preserves an undecodable spool line in a
+// sibling file instead of aborting replay or silently discarding audit
+// evidence.
+func (r *Recorder) quarantineCorruptSpoolLocked(line []byte) error {
+	path := r.spoolPath + ".corrupt"
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(append(append([]byte(nil), line...), '\n')); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := fileSync(file); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return syncDirectory(filepath.Dir(path))
 }
 
 // criticalAuditAction reports whether an action is security-relevant enough
@@ -297,8 +359,13 @@ func criticalAuditAction(action string) bool {
 		// State encryption key rotation and recovery.
 		"security.key.",
 		"key.rotate",
-		// Apply/rollback change the live security configuration.
+		// Apply/rollback change the live security configuration. The primary
+		// apply path records underscored actions via logUserAction
+		// (apply_configuration, auto_apply_configuration, apply_routing_preset)
+		// — they must spool like every other state mutation (#1072/#1046).
 		"apply.rollback",
+		"apply_",
+		"auto_apply_",
 		"install.apply",
 		"repair.apply",
 		"rollback.",

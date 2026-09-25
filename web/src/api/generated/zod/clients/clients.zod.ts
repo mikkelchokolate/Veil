@@ -1074,7 +1074,23 @@ export const GetApiV1ClientsIdTokensParams = zod.object({
   "id": zod.string().min(1)
 })
 
-export const GetApiV1ClientsIdTokensResponse = zod.unknown()
+export const GetApiV1ClientsIdTokensResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "prefix": zod.string().describe('Public prefix used to identify the token.'),
+  "label": zod.string().optional(),
+  "createdBy": zod.string().optional(),
+  "enabled": zod.boolean(),
+  "expiresAt": zod.int().nullish(),
+  "createdAt": zod.int(),
+  "rotatedAt": zod.int().nullish(),
+  "revokedAt": zod.int().nullish(),
+  "lastUsedAt": zod.int().nullish(),
+  "hasSecret": zod.boolean().optional().describe('Whether the recoverable ciphertext is still stored; tokens without it cannot re-emit a subscription URL.'),
+  "url": zod.string().optional().describe('Recoverable /s/ subscription URL, present only on list entries whose stored secret is recoverable and the token is still active.')
+}))
+})
 
 /**
  * @summary Issue a subscription token; plaintext returned once
@@ -1102,10 +1118,24 @@ export const PostApiV1ClientsIdTokensBody = zod.object({
 })
 
 export const PostApiV1ClientsIdTokensResponse = zod.object({
-  "token": zod.string().describe('Full plaintext token, returned only once at issuance.'),
+  "token": zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
   "prefix": zod.string().describe('Public prefix used to identify the token.'),
-  "expiresAt": zod.int().optional()
-})
+  "label": zod.string().optional(),
+  "createdBy": zod.string().optional(),
+  "enabled": zod.boolean(),
+  "expiresAt": zod.int().nullish(),
+  "createdAt": zod.int(),
+  "rotatedAt": zod.int().nullish(),
+  "revokedAt": zod.int().nullish(),
+  "lastUsedAt": zod.int().nullish(),
+  "hasSecret": zod.boolean().optional().describe('Whether the recoverable ciphertext is still stored; tokens without it cannot re-emit a subscription URL.'),
+  "url": zod.string().optional().describe('Recoverable /s/ subscription URL, present only on list entries whose stored secret is recoverable and the token is still active.')
+}),
+  "plaintext": zod.string().optional().describe('Full plaintext token, returned only once at issuance or rotation. Never stored or repeated.'),
+  "url": zod.string().optional().describe('/s/ subscription URL built from the plaintext.')
+}).describe('Token management response. `plaintext` is emitted only by issue and rotate; `url` carries the rebuilt /s/ subscription URL.')
 
 /**
  * @summary Rebuild the subscription URL for a stored token
@@ -1119,10 +1149,24 @@ export const GetApiV1ClientsIdTokensTokenIdParams = zod.object({
 })
 
 export const GetApiV1ClientsIdTokensTokenIdResponse = zod.object({
-  "token": zod.string().describe('Full plaintext token, returned only once at issuance.'),
+  "token": zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
   "prefix": zod.string().describe('Public prefix used to identify the token.'),
-  "expiresAt": zod.int().optional()
-})
+  "label": zod.string().optional(),
+  "createdBy": zod.string().optional(),
+  "enabled": zod.boolean(),
+  "expiresAt": zod.int().nullish(),
+  "createdAt": zod.int(),
+  "rotatedAt": zod.int().nullish(),
+  "revokedAt": zod.int().nullish(),
+  "lastUsedAt": zod.int().nullish(),
+  "hasSecret": zod.boolean().optional().describe('Whether the recoverable ciphertext is still stored; tokens without it cannot re-emit a subscription URL.'),
+  "url": zod.string().optional().describe('Recoverable /s/ subscription URL, present only on list entries whose stored secret is recoverable and the token is still active.')
+}),
+  "plaintext": zod.string().optional().describe('Full plaintext token, returned only once at issuance or rotation. Never stored or repeated.'),
+  "url": zod.string().optional().describe('/s/ subscription URL built from the plaintext.')
+}).describe('Token management response. `plaintext` is emitted only by issue and rotate; `url` carries the rebuilt /s/ subscription URL.')
 
 /**
  * @summary Revoke a subscription token
@@ -1173,8 +1217,22 @@ export const PostApiV1ClientsIdTokensTokenIdRotateBody = zod.object({
 })
 
 export const PostApiV1ClientsIdTokensTokenIdRotateResponse = zod.object({
-  "token": zod.string().describe('Full plaintext token, returned only once at issuance.'),
+  "token": zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
   "prefix": zod.string().describe('Public prefix used to identify the token.'),
-  "expiresAt": zod.int().optional()
-})
+  "label": zod.string().optional(),
+  "createdBy": zod.string().optional(),
+  "enabled": zod.boolean(),
+  "expiresAt": zod.int().nullish(),
+  "createdAt": zod.int(),
+  "rotatedAt": zod.int().nullish(),
+  "revokedAt": zod.int().nullish(),
+  "lastUsedAt": zod.int().nullish(),
+  "hasSecret": zod.boolean().optional().describe('Whether the recoverable ciphertext is still stored; tokens without it cannot re-emit a subscription URL.'),
+  "url": zod.string().optional().describe('Recoverable /s/ subscription URL, present only on list entries whose stored secret is recoverable and the token is still active.')
+}),
+  "plaintext": zod.string().optional().describe('Full plaintext token, returned only once at issuance or rotation. Never stored or repeated.'),
+  "url": zod.string().optional().describe('/s/ subscription URL built from the plaintext.')
+}).describe('Token management response. `plaintext` is emitted only by issue and rotate; `url` carries the rebuilt /s/ subscription URL.')
 

@@ -76,5 +76,24 @@ export const PostApiVersionUpdateResponse = zod.object({
   "installed": zod.boolean(),
   "version": zod.string(),
   "message": zod.string()
-}).describe('Durable update job accepted by POST /api/version/update. The panel restarts asynchronously; poll /api/version to confirm the new version.')
+}).describe('Durable update job accepted by POST /api/version/update. The panel restarts asynchronously; poll GET /api/version/update/jobs/{jobId} to follow the job to a terminal status, then confirm the binary via GET /api/version.')
+
+/**
+ * Returns the update job keyed by the `jobId` in the 202 response of POST /api/version/update — the only way to follow an install after the panel begins restarting. The restart drops in-flight connections, so callers should re-poll until the job reaches a terminal status (succeeded or failed), then confirm the binary via GET /api/version.
+ * @summary Poll a durable panel update job
+ */
+export const GetApiVersionUpdateJobsIdParams = zod.object({
+  "id": zod.string()
+})
+
+export const GetApiVersionUpdateJobsIdResponse = zod.object({
+  "id": zod.string(),
+  "version": zod.string().describe('Target release tag the job is installing.'),
+  "status": zod.enum(['staging', 'restart_pending', 'restarting', 'succeeded', 'failed']),
+  "stageApplyJobId": zod.string().optional().describe('Apply job that staged/installed the update.'),
+  "restartApplyJobId": zod.string().optional().describe('Apply job driving the post-install restart.'),
+  "error": zod.string().optional(),
+  "createdAt": zod.int(),
+  "updatedAt": zod.int()
+}).describe('Durable panel update job returned by GET /api/version/update/jobs/{id}.')
 

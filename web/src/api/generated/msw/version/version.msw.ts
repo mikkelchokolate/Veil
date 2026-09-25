@@ -65,9 +65,11 @@ import type {
   EmptyObject,
   ErrorEnvelope,
   LockedResponse,
+  NotFoundResponse,
   PrivilegedFailureResponse,
   ServiceUnavailableResponse,
   UnauthorizedResponse,
+  UpdateJob,
   UpdateResponse,
   ValidationFailedResponse,
   VersionResponse
@@ -282,3 +284,104 @@ export const usePostApiVersionUpdate = <TError = BadRequestResponse | ConflictRe
       > => {
       return useMutation(getPostApiVersionUpdateMutationOptions(options), queryClient);
     }
+    export const getGetApiVersionUpdateJobsIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/version/update/jobs/${id}`
+}
+
+/**
+ * Returns the update job keyed by the `jobId` in the 202 response of POST /api/version/update — the only way to follow an install after the panel begins restarting. The restart drops in-flight connections, so callers should re-poll until the job reaches a terminal status (succeeded or failed), then confirm the binary via GET /api/version.
+ * @summary Poll a durable panel update job
+ */
+export const getApiVersionUpdateJobsId = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<UpdateJob> => {
+
+  return apiFetch<UpdateJob>(getGetApiVersionUpdateJobsIdUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiVersionUpdateJobsIdQueryKey = (id: string,) => {
+    return [
+    `/api/version/update/jobs/${id}`
+    ] as const;
+    }
+
+
+export const getGetApiVersionUpdateJobsIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>, TError = BadRequestResponse | NotFoundResponse>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiVersionUpdateJobsIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>> = ({ signal }) => getApiVersionUpdateJobsId(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiVersionUpdateJobsIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>>
+export type GetApiVersionUpdateJobsIdQueryError = BadRequestResponse | NotFoundResponse
+
+
+export function useGetApiVersionUpdateJobsId<TData = Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>, TError = BadRequestResponse | NotFoundResponse>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiVersionUpdateJobsId<TData = Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>, TError = BadRequestResponse | NotFoundResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiVersionUpdateJobsId<TData = Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>, TError = BadRequestResponse | NotFoundResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Poll a durable panel update job
+ */
+
+export function useGetApiVersionUpdateJobsId<TData = Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>, TError = BadRequestResponse | NotFoundResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiVersionUpdateJobsIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+

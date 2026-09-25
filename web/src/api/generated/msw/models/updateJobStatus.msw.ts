@@ -40,14 +40,14 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { TrafficBucket } from './trafficBucket.msw.ts';
 
-/**
- * Time-ordered bucketed deltas; items carry per-bucket deltas, not cumulative totals (#1066).
- */
-export interface TrafficHistoryResponse {
-  /** @nullable */
-  items: TrafficBucket[] | null;
-  /** Number of buckets in items. */
-  count: number;
-}
+export type UpdateJobStatus = typeof UpdateJobStatus[keyof typeof UpdateJobStatus];
+
+
+export const UpdateJobStatus = {
+  staging: 'staging',
+  restart_pending: 'restart_pending',
+  restarting: 'restarting',
+  succeeded: 'succeeded',
+  failed: 'failed',
+} as const;

@@ -188,3 +188,80 @@ func TestPreserveRedactedInboundKeepsNewProfilePassword(t *testing.T) {
 		t.Errorf("real new profile secret replaced: %q", out.Profiles[0].Password)
 	}
 }
+
+// TestPreserveRedactedInboundMatchesProfilesByName (#1051): the stored
+// password must follow the profile NAME, not its position. Reordering or
+// deleting a middle profile must not graft another profile's credential onto
+// the sentinel-echoed entry.
+func TestPreserveRedactedInboundMatchesProfilesByName(t *testing.T) {
+	current := Inbound{
+		Name: "x",
+		Profiles: []model.ClientProfile{
+			{Name: "alice", Password: "live-alice"},
+			{Name: "bob", Password: "live-bob"},
+			{Name: "carol", Password: "live-carol"},
+		},
+	}
+	// bob deleted; alice and carol swapped order — every surviving name must
+	// recover ITS OWN stored password, not the one sitting at its index.
+	update := Inbound{
+		Name: "x",
+		Profiles: []model.ClientProfile{
+			{Name: "carol", Password: veilsettings.RedactedSecret},
+			{Name: "alice", Password: veilsettings.RedactedSecret},
+		},
+	}
+	out := preserveRedactedInbound(update, current)
+	if out.Profiles[0].Password != "live-carol" {
+		t.Errorf("carol got %q — positional restore would have grafted live-alice", out.Profiles[0].Password)
+	}
+	if out.Profiles[1].Password != "live-alice" {
+		t.Errorf("alice got %q — positional restore would have grafted live-bob", out.Profiles[1].Password)
+	}
+}
+
+// TestPreserveRedactedInboundNewProfileSentinelGetsEmpty (#1051): a profile
+// that does not exist in the stored config has no stored credential to
+// restore — the sentinel must degrade to empty rather than borrowing the
+// password positionally adjacent in the stored list.
+func TestPreserveRedactedInboundNewProfileSentinelGetsEmpty(t *testing.T) {
+	current := Inbound{
+		Name:     "x",
+		Profiles: []model.ClientProfile{{Name: "alice", Password: "live-alice"}},
+	}
+	update := Inbound{
+		Name: "x",
+		Profiles: []model.ClientProfile{
+			{Name: "mallory", Password: veilsettings.RedactedSecret},
+		},
+	}
+	out := preserveRedactedInbound(update, current)
+	if out.Profiles[0].Password != "" {
+		t.Errorf("unknown profile gained credential %q", out.Profiles[0].Password)
+	}
+}
+
+// TestPreserveRedactedInboundDuplicateNamesRestoreInOrder (#1051): profiles
+// are allowed to share a display name; the stored passwords for duplicate
+// names must be consumed in order, exactly like the old positional restore
+// behaved for the common non-reordered case.
+func TestPreserveRedactedInboundDuplicateNamesRestoreInOrder(t *testing.T) {
+	current := Inbound{
+		Name: "x",
+		Profiles: []model.ClientProfile{
+			{Name: "shared", Password: "live-first"},
+			{Name: "shared", Password: "live-second"},
+		},
+	}
+	update := Inbound{
+		Name: "x",
+		Profiles: []model.ClientProfile{
+			{Name: "shared", Password: veilsettings.RedactedSecret},
+			{Name: "shared", Password: veilsettings.RedactedSecret},
+		},
+	}
+	out := preserveRedactedInbound(update, current)
+	if out.Profiles[0].Password != "live-first" || out.Profiles[1].Password != "live-second" {
+		t.Errorf("duplicate-name restore order wrong: %+v", out.Profiles)
+	}
+}

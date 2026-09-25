@@ -65,9 +65,11 @@ import type {
   EmptyObject,
   ErrorEnvelope,
   LockedResponse,
+  NotFoundResponse,
   PrivilegedFailureResponse,
   ServiceUnavailableResponse,
   UnauthorizedResponse,
+  UpdateJob,
   UpdateResponse,
   ValidationFailedResponse,
   VersionResponse
@@ -282,3 +284,77 @@ export function usePostApiVersionUpdate<TData = Awaited<ReturnType<typeof postAp
 
 
 
+export const getGetApiVersionUpdateJobsIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/version/update/jobs/${id}`
+}
+
+/**
+ * Returns the update job keyed by the `jobId` in the 202 response of POST /api/version/update — the only way to follow an install after the panel begins restarting. The restart drops in-flight connections, so callers should re-poll until the job reaches a terminal status (succeeded or failed), then confirm the binary via GET /api/version.
+ * @summary Poll a durable panel update job
+ */
+export const getApiVersionUpdateJobsId = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<UpdateJob> => {
+
+  return apiFetch<UpdateJob>(getGetApiVersionUpdateJobsIdUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiVersionUpdateJobsIdMutationKey = () => ['getApiVersionUpdateJobsId'] as const;
+
+export const getGetApiVersionUpdateJobsIdMutationOptions = <TError = BadRequestResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>, TError,GetApiVersionUpdateJobsIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>, TError,GetApiVersionUpdateJobsIdMutationVariables, TContext> => {
+
+const mutationKey = getGetApiVersionUpdateJobsIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>, GetApiVersionUpdateJobsIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  getApiVersionUpdateJobsId(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiVersionUpdateJobsIdMutationResult = NonNullable<Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>>
+
+    export type GetApiVersionUpdateJobsIdMutationError = BadRequestResponse | NotFoundResponse
+    export type GetApiVersionUpdateJobsIdMutationVariables = {id: string}
+
+    /**
+ * @summary Poll a durable panel update job
+ */
+export const useGetApiVersionUpdateJobsId = <TError = BadRequestResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>, TError,GetApiVersionUpdateJobsIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiVersionUpdateJobsId>>,
+        TError,
+        GetApiVersionUpdateJobsIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getGetApiVersionUpdateJobsIdMutationOptions(options), queryClient);
+    }
