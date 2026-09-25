@@ -68,12 +68,20 @@ type idempotencyStore struct {
 	replayCipher   *secrets.Cipher
 	reservationTTL time.Duration
 	notifications  map[string]chan struct{}
+	// liveOperations holds the domain_operation_id of every durable
+	// reservation a request is currently serving in THIS process. s.owner is
+	// process-wide, so the row alone cannot distinguish "request finished
+	// without settling" (dead — take over, #1056) from "handler still
+	// running with a stalled heartbeat" (live — takeover would double-run
+	// the mutation). This set is the only unambiguous signal.
+	liveOperations map[string]struct{}
 }
 
 func newIdempotencyStore(databases ...*sql.DB) *idempotencyStore {
 	store := &idempotencyStore{
 		entries: make(map[string]*idempotencyEntry), now: time.Now,
 		reservationTTL: 2 * time.Minute, notifications: make(map[string]chan struct{}),
+		liveOperations: make(map[string]struct{}),
 	}
 	if len(databases) > 0 {
 		store.db = databases[0]

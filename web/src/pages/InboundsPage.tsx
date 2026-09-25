@@ -132,9 +132,26 @@ const EMPTY: InboundForm = {
 };
 
 function parsePort(value: string): number | undefined {
-	if (value === "") return undefined;
-	const port = Number.parseInt(value, 10);
-	return Number.isFinite(port) ? port : undefined;
+	const trimmed = value.trim();
+	if (trimmed === "") return undefined;
+	// Strict digits only — parseInt("12abc") truncates to 12 and would ship a
+	// port the operator never typed; refuse non-integers instead (#1043).
+	if (!PORT_DIGITS_PATTERN.test(trimmed)) return undefined;
+	const port = Number(trimmed);
+	return Number.isSafeInteger(port) ? port : undefined;
+}
+
+// Mirror of the server contract (internal/inbounds/inbound_validation.go):
+// names are URL/catalog keys restricted to ^[A-Za-z0-9_-]+$, ports are
+// integers in [1, 65535]. parseInt silently corrupts malformed input
+// ("12abc" → 12), so the gate below rejects non-digits outright instead of
+// letting them reach the wire as a different value or a raw 400 (#1043).
+const INBOUND_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
+const PORT_DIGITS_PATTERN = /^\d+$/;
+
+interface InboundFieldErrors {
+	name?: string;
+	port?: string;
 }
 
 function schemaFieldDefault(
@@ -225,7 +242,48 @@ export function InboundsPage() {
 	// gate it like the Delete next to it.
 	const [confirmToggle, setConfirmToggle] = useState<Inbound | null>(null);
 	const [form, setForm] = useState<InboundForm>(EMPTY);
+	const [fieldErrors, setFieldErrors] = useState<InboundFieldErrors>({});
 	const [generateError, setGenerateError] = useState<string | null>(null);
+
+	function clearFieldError(key: keyof InboundFieldErrors) {
+		setFieldErrors((prev) =>
+			prev[key] === undefined ? prev : { ...prev, [key]: undefined },
+		);
+	}
+
+	// Client-side gate for the name/port contract — without it a bad value
+	// sails to a raw server 400, or worse: parseInt("12abc") silently ships a
+	// DIFFERENT port than the operator typed (#1043).
+	function validateForm(f: InboundForm): boolean {
+		const next: InboundFieldErrors = {};
+		if (!f.name.trim()) {
+			next.name = t("inbounds.validation.nameRequired");
+		} else if (!INBOUND_NAME_PATTERN.test(f.name.trim())) {
+			next.name = t("inbounds.validation.nameCharset");
+		}
+		const port = f.port.trim();
+		if (!PORT_DIGITS_PATTERN.test(port)) {
+			next.port = t("inbounds.validation.portRange");
+		} else {
+			const n = Number(port);
+			if (!Number.isSafeInteger(n) || n < 1 || n > 65535) {
+				next.port = t("inbounds.validation.portRange");
+			}
+		}
+		setFieldErrors(next);
+		return next.name === undefined && next.port === undefined;
+	}
+
+	function submitForm() {
+		setError(null);
+		setIssues(null);
+		if (!validateForm(form)) return;
+		if (creating) {
+			create.mutate(form);
+		} else if (editing) {
+			update.mutate({ ...form, original: editing });
+		}
+	}
 
 	// generateFieldValue fills a dynamic protocol field marked with a
 	// generateAction. Passwords/keys are produced client-side with a CSPRNG;
@@ -425,7 +483,7 @@ export function InboundsPage() {
 			}
 		}
 		const body: Record<string, unknown> = {
-			name: keepName ?? f.name,
+			name: keepName ?? f.name.trim(),
 			protocol: f.protocol,
 			transport: f.transport,
 			enabled: f.enabled,
@@ -475,7 +533,7 @@ export function InboundsPage() {
 		},
 		onError: (e) => {
 			setIssues(e instanceof ApiError ? (e.issues ?? null) : null);
-			setError(mutationErrorMessage(e, t("inbounds.error.createFailed")));
+			setError(mutationErrorMessage(e, t("inbounds.error.createFailed"), t));
 		},
 	});
 
@@ -501,7 +559,7 @@ export function InboundsPage() {
 		},
 		onError: (e) => {
 			setIssues(e instanceof ApiError ? (e.issues ?? null) : null);
-			setError(mutationErrorMessage(e, t("inbounds.error.updateFailed")));
+			setError(mutationErrorMessage(e, t("inbounds.error.updateFailed"), t));
 		},
 	});
 
@@ -526,7 +584,7 @@ export function InboundsPage() {
 		},
 		onError: (e) => {
 			setIssues(e instanceof ApiError ? (e.issues ?? null) : null);
-			setError(mutationErrorMessage(e, t("inbounds.error.deleteFailed")));
+			setError(mutationErrorMessage(e, t("inbounds.error.deleteFailed"), t));
 		},
 	});
 
@@ -547,6 +605,7 @@ export function InboundsPage() {
 			settingsPort,
 		);
 		setForm({ ...EMPTY, port, protocolFields });
+		setFieldErrors({});
 		setCreating(true);
 		setEditing(null);
 	}
@@ -586,6 +645,7 @@ export function InboundsPage() {
 			),
 			originalRecord: ib,
 		});
+		setFieldErrors({});
 		setEditing(ib.name);
 		setCreating(false);
 	}
@@ -594,6 +654,7 @@ export function InboundsPage() {
 		setCreating(false);
 		setEditing(null);
 		setForm(EMPTY);
+		setFieldErrors({});
 	}
 
 	// Row enable/disable fires a full PUT echoing the list record — the same
@@ -649,8 +710,15 @@ export function InboundsPage() {
 							id="ib-name"
 							value={form.name}
 							disabled={!!editing}
-							onChange={(e) => setForm({ ...form, name: e.target.value })}
+							aria-invalid={fieldErrors.name ? true : undefined}
+							onChange={(e) => {
+								setForm({ ...form, name: e.target.value });
+								clearFieldError("name");
+							}}
 						/>
+						{fieldErrors.name ? (
+							<FormMessage>{fieldErrors.name}</FormMessage>
+						) : null}
 					</FormItem>
 					<FormItem>
 						<Label htmlFor="ib-proto">{t("inbounds.protocol")}</Label>
@@ -715,6 +783,7 @@ export function InboundsPage() {
 							id="ib-port"
 							inputMode="numeric"
 							value={form.port}
+							aria-invalid={fieldErrors.port ? true : undefined}
 							onChange={(e) => {
 								const port = e.target.value;
 								const nextFields = { ...form.protocolFields };
@@ -727,8 +796,12 @@ export function InboundsPage() {
 									}
 								}
 								setForm({ ...form, port, protocolFields: nextFields });
+								clearFieldError("port");
 							}}
 						/>
+						{fieldErrors.port ? (
+							<FormMessage>{fieldErrors.port}</FormMessage>
+						) : null}
 					</FormItem>
 					{!hasDynamicField("masqueradeURL") ? (
 						<FormItem>
@@ -890,13 +963,7 @@ export function InboundsPage() {
 					<Button
 						variant="primary"
 						disabled={create.isPending || update.isPending}
-						onClick={() => {
-							if (creating) {
-								create.mutate(form);
-							} else if (editing) {
-								update.mutate({ ...form, original: editing });
-							}
-						}}
+						onClick={submitForm}
 					>
 						{creating ? t("common.create") : t("common.save")}
 					</Button>
@@ -1124,7 +1191,10 @@ export function InboundsPage() {
 													<Button
 														size="sm"
 														variant="danger"
-														onClick={() => setConfirmDelete(ib.name)}
+														onClick={() => {
+															setError(null);
+															setConfirmDelete(ib.name);
+														}}
 													>
 														{t("common.delete")}
 													</Button>

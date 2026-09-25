@@ -171,7 +171,8 @@ export function SettingsPage() {
 			void qc.invalidateQueries({ queryKey: ["settings"] });
 			void qc.invalidateQueries({ queryKey: ["apply"] });
 		},
-		onError: (e) => setError(mutationErrorMessage(e, t("settings.saveFailed"))),
+		onError: (e) =>
+			setError(mutationErrorMessage(e, t("settings.saveFailed"), t)),
 	});
 
 	const rotateKey = useMutation({
@@ -209,7 +210,7 @@ export function SettingsPage() {
 			);
 		},
 		onError: (e) => {
-			setError(mutationErrorMessage(e, t("settings.rotateFailed")));
+			setError(mutationErrorMessage(e, t("settings.rotateFailed"), t));
 		},
 	});
 
@@ -609,7 +610,13 @@ export function SettingsPage() {
 				<div className="card">
 					<h2 style={{ fontSize: 15 }}>{t("settings.security")}</h2>
 					<p className="muted">{t("settings.rotateDescription")}</p>
-					<Button variant="danger" onClick={() => setConfirmRotate(true)}>
+					<Button
+						variant="danger"
+						onClick={() => {
+							setError(null);
+							setConfirmRotate(true);
+						}}
+					>
 						{t("settings.rotate")}
 					</Button>
 					<AlertDialog open={confirmRotate} onOpenChange={setConfirmRotate}>
@@ -622,6 +629,10 @@ export function SettingsPage() {
 									{t("settings.rotateConfirmDescription")}
 								</AlertDialogDescription>
 							</AlertDialogHeader>
+							{/* A failed rotation keeps this dialog open — the error
+								must be visible here, not only behind the overlay
+								(#649). */}
+							{error ? <FormMessage>{error}</FormMessage> : null}
 							<AlertDialogFooter>
 								<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
 								<AlertDialogAction
