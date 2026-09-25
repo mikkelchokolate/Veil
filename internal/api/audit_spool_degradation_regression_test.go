@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
@@ -64,8 +65,14 @@ func TestAuditSpoolReplayFailureRemainsVisible(t *testing.T) {
 	if recorder.Degraded() == nil {
 		t.Fatal("startup swallowed audit spool replay failure")
 	}
-	if _, err := os.Stat(spool); err != nil {
-		t.Fatalf("failed spool was discarded: %v", err)
+	// The corrupt line is quarantined to <spool>.corrupt: evidence must be
+	// preserved even though the replay drains and degrades (#1033).
+	quarantine, err := os.ReadFile(spool + ".corrupt")
+	if err != nil {
+		t.Fatalf("corrupt spool line was discarded: %v", err)
+	}
+	if !strings.Contains(string(quarantine), "not-json") {
+		t.Fatalf("quarantine lost the corrupt evidence: %q", quarantine)
 	}
 }
 

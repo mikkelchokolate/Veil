@@ -40,17 +40,28 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import type { TrafficTotalsState } from './trafficTotalsState.msw.ts';
 
 export interface TrafficTotals {
   clientId: string;
   uploadBytes: number;
   downloadBytes: number;
-  totalBytes: number;
+  /** uploadBytes + downloadBytes — the total counted against quota. */
+  usedBytes: number;
   /**
      * @minimum 0
      * @maximum 9007199254740991
+     * @nullable
      */
-  quotaBytes?: number;
-  remainingBytes?: number;
+  quotaBytes?: number | null;
+  /** @nullable */
+  remainingBytes?: number | null;
   depleted: boolean;
+  /** Honest telemetry state: pending when accounting is enabled but no observation landed yet, stale when a provider is degraded, unsupported when no binding counts traffic. Never trust upload/download numbers without checking state (#1066). */
+  state: TrafficTotalsState;
+  /**
+     * Unix timestamp of the last successful observation; null before the first sample.
+     * @nullable
+     */
+  collectedAt?: number | null;
 }

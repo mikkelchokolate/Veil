@@ -124,6 +124,11 @@ func (s *managementState) handleApplyHistory(w http.ResponseWriter, r *http.Requ
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if requestIsViewer(r) {
+		// History entries embed privileged subprocess output; viewers get a
+		// redacted copy (#1065).
+		history = sanitizeApplyHistoryForViewer(history)
+	}
 	writeJSON(w, history)
 }
 

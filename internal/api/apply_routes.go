@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/apply"
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 // registerApplyRoutes registers the durable apply workflow endpoints. These
@@ -29,7 +30,13 @@ func (s *managementState) handleApplyState(w http.ResponseWriter, r *http.Reques
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	writeJSON(w, s.applyStateViewLocked())
+	resp := s.applyStateViewLocked()
+	if requestIsViewer(r) && resp.LastError != nil {
+		// Job error text embeds privileged subprocess output; viewers get a
+		// redacted copy (#1065).
+		resp.LastError.Message = sanitizeServiceLogOutput(resp.LastError.Message)
+	}
+	writeJSON(w, resp)
 }
 
 // handleApplyJobs lists apply jobs, newest first.
@@ -50,6 +57,11 @@ func (s *managementState) handleApplyJobs(w http.ResponseWriter, r *http.Request
 	}
 	if jobs == nil {
 		jobs = []apply.Job{}
+	}
+	if requestIsViewer(r) {
+		for i := range jobs {
+			jobs[i] = sanitizeApplyJobForViewer(jobs[i])
+		}
 	}
 	writeJSON(w, map[string]any{"items": jobs})
 }
@@ -78,6 +90,9 @@ func (s *managementState) handleApplyJobByID(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		writeNotFound(w)
 		return
+	}
+	if requestIsViewer(r) {
+		job = sanitizeApplyJobForViewer(job)
 	}
 	writeJSON(w, job)
 }
@@ -176,4 +191,97 @@ func (s *managementState) handleApplyReconcile(w http.ResponseWriter, r *http.Re
 		"revision":   map[string]any{"desired": after.Desired, "applied": after.Applied},
 		"state":      state,
 	})
+}
+
+// requestIsViewer reports whether the authenticated caller lacks admin
+// privileges. Anything that is not an explicit admin sanitizes — a missing
+// role must not widen exposure (#1065).
+func requestIsViewer(r *http.Request) bool {
+	role, _ := r.Context().Value(contextKeyRole).(string)
+	return role != "admin"
+}
+
+// sanitizeApplyJobForViewer returns a copy of job with privileged subprocess
+// output (error text, operation details) redacted for viewer-role readers.
+func sanitizeApplyJobForViewer(job apply.Job) apply.Job {
+	job.ErrorMessage = sanitizeServiceLogOutput(job.ErrorMessage)
+	if len(job.Operations) > 0 {
+		sanitized := make([]apply.OperationResult, len(job.Operations))
+		for i, op := range job.Operations {
+			op.Detail = sanitizeServiceLogOutput(op.Detail)
+			sanitized[i] = op
+		}
+		job.Operations = sanitized
+	}
+	return job
+}
+
+// sanitizeApplyHistoryForViewer returns a copy of entries with privileged
+// subprocess output redacted from validation, service-action, health-check,
+// and plan detail fields for viewer-role readers (#1065).
+func sanitizeApplyHistoryForViewer(entries []model.ApplyHistoryEntry) []model.ApplyHistoryEntry {
+	sanitized := make([]model.ApplyHistoryEntry, len(entries))
+	for i, entry := range entries {
+		entry.Plan.Errors = sanitizeOutputStrings(entry.Plan.Errors)
+		for j := range entry.Plan.Issues {
+			entry.Plan.Issues[j].Message = sanitizeServiceLogOutput(entry.Plan.Issues[j].Message)
+			entry.Plan.Issues[j].Remediation = sanitizeServiceLogOutput(entry.Plan.Issues[j].Remediation)
+		}
+		entry.Validations = sanitizeValidationResults(entry.Validations)
+		entry.ServiceActions = sanitizeServiceActionResults(entry.ServiceActions)
+		entry.HealthChecks = sanitizeHealthCheckResults(entry.HealthChecks)
+		entry.RollbackActions = sanitizeServiceActionResults(entry.RollbackActions)
+		sanitized[i] = entry
+	}
+	return sanitized
+}
+
+func sanitizeOutputStrings(values []string) []string {
+	if len(values) == 0 {
+		return values
+	}
+	out := make([]string, len(values))
+	for i, value := range values {
+		out[i] = sanitizeServiceLogOutput(value)
+	}
+	return out
+}
+
+func sanitizeValidationResults(results []model.ConfigValidationResult) []model.ConfigValidationResult {
+	if len(results) == 0 {
+		return results
+	}
+	out := make([]model.ConfigValidationResult, len(results))
+	for i, result := range results {
+		result.Output = sanitizeServiceLogOutput(result.Output)
+		result.Error = sanitizeServiceLogOutput(result.Error)
+		out[i] = result
+	}
+	return out
+}
+
+func sanitizeServiceActionResults(results []model.ServiceActionResult) []model.ServiceActionResult {
+	if len(results) == 0 {
+		return results
+	}
+	out := make([]model.ServiceActionResult, len(results))
+	for i, result := range results {
+		result.Output = sanitizeServiceLogOutput(result.Output)
+		result.Error = sanitizeServiceLogOutput(result.Error)
+		out[i] = result
+	}
+	return out
+}
+
+func sanitizeHealthCheckResults(results []model.ServiceHealthResult) []model.ServiceHealthResult {
+	if len(results) == 0 {
+		return results
+	}
+	out := make([]model.ServiceHealthResult, len(results))
+	for i, result := range results {
+		result.Output = sanitizeServiceLogOutput(result.Output)
+		result.Error = sanitizeServiceLogOutput(result.Error)
+		out[i] = result
+	}
+	return out
 }

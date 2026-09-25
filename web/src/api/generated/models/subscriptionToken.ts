@@ -40,14 +40,26 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { TrafficBucket } from './trafficBucket.msw.ts';
 
-/**
- * Time-ordered bucketed deltas; items carry per-bucket deltas, not cumulative totals (#1066).
- */
-export interface TrafficHistoryResponse {
+export interface SubscriptionToken {
+  id: string;
+  clientId: string;
+  /** Public prefix used to identify the token. */
+  prefix: string;
+  label?: string;
+  createdBy?: string;
+  enabled: boolean;
   /** @nullable */
-  items: TrafficBucket[] | null;
-  /** Number of buckets in items. */
-  count: number;
+  expiresAt?: number | null;
+  createdAt: number;
+  /** @nullable */
+  rotatedAt?: number | null;
+  /** @nullable */
+  revokedAt?: number | null;
+  /** @nullable */
+  lastUsedAt?: number | null;
+  /** Whether the recoverable ciphertext is still stored; tokens without it cannot re-emit a subscription URL. */
+  hasSecret?: boolean;
+  /** Recoverable /s/ subscription URL, present only on list entries whose stored secret is recoverable and the token is still active. */
+  url?: string;
 }

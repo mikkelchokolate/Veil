@@ -55,6 +55,8 @@ var criticalActionProbes = map[string]string{
 	"security.key.":             "security.key.rotate",
 	"key.rotate":                "key.rotate",
 	"apply.rollback":            "apply.rollback",
+	"apply_":                    "apply_configuration",
+	"auto_apply_":               "auto_apply_configuration",
 	"install.apply":             "install.apply",
 	"repair.apply":              "repair.apply",
 	"rollback.":                 "rollback.runtime",
@@ -111,6 +113,10 @@ func TestCriticalAuditActionMatchesLivePanelActions(t *testing.T) {
 		"auth.logout",
 		"auth.session.revoke",
 		"apply.rollback",
+		// #1072/#1046: the primary apply mutations emitted via logUserAction.
+		"apply_configuration",
+		"auto_apply_configuration",
+		"apply_routing_preset",
 		"migrate_legacy",
 		"set_credential",
 		"rotate_credential",
@@ -163,6 +169,35 @@ func TestProductionAuditPathLayoutSpoolsCriticalEventsWithoutOptions(t *testing.
 
 // TestSpoolDurableReflectsLastWrite (#981): a spool that has never accepted a
 // write, or whose last write failed, must not report durable.
+// TestApplyActionsSurvivePrimaryOutageViaSpool (#1072/#1046): the primary
+// apply mutations recorded via logUserAction must reach the durable spool
+// when the primary log is unavailable — they were silently dropped before
+// because the underscored names never matched a dotted apply.* prefix.
+func TestApplyActionsSurvivePrimaryOutageViaSpool(t *testing.T) {
+	root := t.TempDir()
+	// A directory in the primary's slot makes every primary append fail.
+	primary := filepath.Join(root, "primary-dir")
+	if err := os.Mkdir(primary, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	spool := filepath.Join(root, "critical.spool")
+	recorder := NewRecorder(primary, RecorderOptions{SpoolPath: spool, BackpressurePolicy: "spool_critical"})
+	for _, action := range []string{"apply_configuration", "auto_apply_configuration", "apply_routing_preset"} {
+		if err := recorder.Append(Record{Actor: "admin", Action: action, Success: true}); err != nil {
+			t.Fatalf("critical apply action %s dropped instead of spooled: %v", action, err)
+		}
+	}
+	body, err := os.ReadFile(spool)
+	if err != nil {
+		t.Fatalf("spool missing: %v", err)
+	}
+	for _, action := range []string{"apply_configuration", "auto_apply_configuration", "apply_routing_preset"} {
+		if !strings.Contains(string(body), action) {
+			t.Fatalf("spool does not contain %s: %s", action, body)
+		}
+	}
+}
+
 func TestSpoolDurableReflectsLastWrite(t *testing.T) {
 	root := t.TempDir()
 	// Primary is a directory so every primary append fails.

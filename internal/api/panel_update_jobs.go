@@ -118,20 +118,18 @@ func (s *managementState) reconcilePanelUpdateJobs(runningVersion string) {
 	if err != nil {
 		return
 	}
-	type pendingJob struct {
-		id, version, status string
-		updated             int64
-	}
-	var pending []pendingJob
-	for rows.Next() {
-		var job pendingJob
-		if rows.Scan(&job.id, &job.version, &job.status, &job.updated) == nil {
-			pending = append(pending, job)
-		}
+	pending, err := collectPendingUpdateJobs(rows)
+	if err != nil {
+		// A partially iterated result must not be reconciled: jobs skipped by
+		// a mid-iteration failure would stay in-flight forever (#1063).
+		rows.Close()
+		log.Printf("panel update jobs: read pending jobs: %v", err)
+		return
 	}
 	// The pool holds a single connection; updates must run after the cursor
 	// closes or they wait on the conn the scan still occupies.
-	if err := rows.Close(); err != nil {
+	if closeErr := rows.Close(); closeErr != nil {
+		log.Printf("panel update jobs: close pending jobs cursor: %v", closeErr)
 		return
 	}
 	for _, job := range pending {
@@ -151,6 +149,29 @@ func (s *managementState) reconcilePanelUpdateJobs(runningVersion string) {
 			log.Printf("panel update job %s: reconcile status failed: %v", job.id, updateErr)
 		}
 	}
+}
+
+// pendingUpdateJob is one in-flight panel update row awaiting reconcile.
+type pendingUpdateJob struct {
+	id, version, status string
+	updated             int64
+}
+
+// collectPendingUpdateJobs drains rows into a slice, surfacing both Scan and
+// mid-iteration errors instead of silently accepting a partial result.
+func collectPendingUpdateJobs(rows *sql.Rows) ([]pendingUpdateJob, error) {
+	var pending []pendingUpdateJob
+	for rows.Next() {
+		var job pendingUpdateJob
+		if err := rows.Scan(&job.id, &job.version, &job.status, &job.updated); err != nil {
+			return nil, err
+		}
+		pending = append(pending, job)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return pending, nil
 }
 
 func (s *managementState) installPanelUpdate(ctx context.Context, version string) (privileged.UpdateResult, veilapply.Job, error) {
@@ -295,6 +316,11 @@ func (routes PanelRoutes) handlePanelUpdateJob(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		writeError(w, "read update job", http.StatusInternalServerError)
 		return
+	}
+	if requestIsViewer(r) {
+		// The stored error text can embed privileged subprocess output from
+		// the apply runner; viewers get a redacted copy (#1065).
+		job.Error = sanitizeServiceLogOutput(job.Error)
 	}
 	writeJSON(w, job)
 }

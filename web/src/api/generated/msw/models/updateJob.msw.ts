@@ -40,14 +40,21 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { TrafficBucket } from './trafficBucket.msw.ts';
+import type { UpdateJobStatus } from './updateJobStatus.msw.ts';
 
 /**
- * Time-ordered bucketed deltas; items carry per-bucket deltas, not cumulative totals (#1066).
+ * Durable panel update job returned by GET /api/version/update/jobs/{id}.
  */
-export interface TrafficHistoryResponse {
-  /** @nullable */
-  items: TrafficBucket[] | null;
-  /** Number of buckets in items. */
-  count: number;
+export interface UpdateJob {
+  id: string;
+  /** Target release tag the job is installing. */
+  version: string;
+  status: UpdateJobStatus;
+  /** Apply job that staged/installed the update. */
+  stageApplyJobId?: string;
+  /** Apply job driving the post-install restart. */
+  restartApplyJobId?: string;
+  error?: string;
+  createdAt: number;
+  updatedAt: number;
 }
