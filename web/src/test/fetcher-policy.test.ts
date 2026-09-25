@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fetcher from "../api/fetcher";
+import { en } from "../i18n/locales/en";
+import { ru } from "../i18n/locales/ru";
 
 type FetcherExports = typeof fetcher & Record<string, unknown>;
 
@@ -180,18 +182,42 @@ describe("apiFetch request policy", () => {
 	});
 
 	it("surfaces timeout and API errors instead of a generic fallback", () => {
+		const t = (key: string) => en[key] ?? key;
 		expect(
 			fetcher.mutationErrorMessage(
 				new fetcher.ApiError(422, "port in use"),
 				"Create failed",
+				t,
 			),
 		).toBe("port in use");
 		expect(
-			fetcher.mutationErrorMessage(new fetcher.TimeoutError(), "Create failed"),
-		).toBe("API request timed out");
+			fetcher.mutationErrorMessage(
+				new fetcher.TimeoutError(),
+				"Create failed",
+				t,
+			),
+		).toBe(en["common.error.timeout"]);
 		expect(
-			fetcher.mutationErrorMessage(new Error("boom"), "Create failed"),
+			fetcher.mutationErrorMessage(
+				new fetcher.CancelledError(),
+				"Create failed",
+				t,
+			),
+		).toBe(en["common.error.cancelled"]);
+		expect(
+			fetcher.mutationErrorMessage(new Error("boom"), "Create failed", t),
 		).toBe("Create failed");
+	});
+
+	it("localizes timeout/cancel errors through the caller's t (#1018)", () => {
+		const t = (key: string) => ru[key] ?? key;
+		const message = fetcher.mutationErrorMessage(
+			new fetcher.TimeoutError(),
+			"Create failed",
+			t,
+		);
+		expect(message).toBe(ru["common.error.timeout"]);
+		expect(message).not.toContain("timed out");
 	});
 
 	it("retries safe GET failures but never retries a mutation", async () => {
