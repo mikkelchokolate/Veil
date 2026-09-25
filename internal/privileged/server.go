@@ -17,17 +17,29 @@ const maxRequestBytes int64 = 1 << 20
 var ErrUnixPeerCredentialsUnsupported = errors.New("unix peer credential verification is unsupported on this platform")
 
 type Server struct {
-	client  Client
+	client Client
+	// timeout bounds how long a client may take to deliver its request —
+	// the pre-decode connection deadline that protects the helper from idle
+	// or trickling peers.
 	timeout time.Duration
+	// mutationLimit/backupLimit bound the post-decode connection deadline by
+	// operation class, mirroring the budgets SocketClient waits on.
+	mutationLimit time.Duration
+	backupLimit   time.Duration
 }
 
 func NewServer(client Client) *Server {
-	return &Server{client: client, timeout: 30 * time.Second}
+	return &Server{
+		client:        client,
+		timeout:       defaultOperationBudget,
+		mutationLimit: mutationOperationBudget,
+		backupLimit:   backupOperationBudget,
+	}
 }
 
 func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
-	s.setDeadline(ctx, conn)
+	s.setDeadline(ctx, conn, s.timeout)
 
 	request, err := decodeRequest(conn)
 	if err != nil {
@@ -45,6 +57,12 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
 		})
 		return
 	}
+	// The operation is authenticated and known now: extend the connection
+	// deadline to that operation's budget so dispatch plus the response write
+	// are covered. A fixed short deadline here silently discarded results of
+	// operations the caller budgets minutes (mutations) or hours (backups)
+	// for (#1008).
+	s.setDeadline(ctx, conn, s.operationTimeout(request.Operation))
 	result, err := s.dispatch(ctx, request)
 	if err != nil {
 		var operationError *Error
@@ -84,12 +102,16 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
 	})
 }
 
-func (s *Server) setDeadline(ctx context.Context, conn net.Conn) {
-	deadline := time.Now().Add(s.timeout)
+func (s *Server) setDeadline(ctx context.Context, conn net.Conn, budget time.Duration) {
+	deadline := time.Now().Add(budget)
 	if contextDeadline, ok := ctx.Deadline(); ok && contextDeadline.Before(deadline) {
 		deadline = contextDeadline
 	}
 	_ = conn.SetDeadline(deadline)
+}
+
+func (s *Server) operationTimeout(operation Operation) time.Duration {
+	return operationBudget(operation, s.timeout, s.mutationLimit, s.backupLimit)
 }
 
 func decodeRequest(reader io.Reader) (RequestEnvelope, error) {

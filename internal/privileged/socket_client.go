@@ -25,9 +25,9 @@ var randRead = rand.Read
 func NewSocketClient(path string) *SocketClient {
 	return &SocketClient{
 		path:          path,
-		timeout:       30 * time.Second,
-		mutationLimit: 15 * time.Minute,
-		backupLimit:   2 * time.Hour,
+		timeout:       defaultOperationBudget,
+		mutationLimit: mutationOperationBudget,
+		backupLimit:   backupOperationBudget,
 	}
 }
 
@@ -180,14 +180,30 @@ func (c *SocketClient) call(ctx context.Context, request RequestEnvelope, result
 }
 
 func (c *SocketClient) operationTimeout(operation Operation) time.Duration {
+	return operationBudget(operation, c.timeout, c.mutationLimit, c.backupLimit)
+}
+
+// Default wall-clock budgets for one helper request. Backup operations
+// stream large archives and mutations restart units, so both get wider
+// budgets than a quick status probe. The server derives its post-decode
+// connection deadline from the same classification via
+// Server.operationTimeout, so a result the client still waits for is never
+// discarded by a shorter helper-side deadline (#1008).
+const (
+	defaultOperationBudget  = 30 * time.Second
+	mutationOperationBudget = 15 * time.Minute
+	backupOperationBudget   = 2 * time.Hour
+)
+
+func operationBudget(operation Operation, fallback, mutation, backup time.Duration) time.Duration {
 	switch operation {
 	case OperationBackupCreate, OperationBackupList, OperationBackupVerify,
 		OperationBackupRead, OperationBackupPrune, OperationBackupRestore, OperationBackupDelete:
-		return c.backupLimit
+		return backup
 	case OperationPromote, OperationStageUpdate, OperationRotateKey, OperationRecoverKeyRotation:
-		return c.mutationLimit
+		return mutation
 	default:
-		return c.timeout
+		return fallback
 	}
 }
 

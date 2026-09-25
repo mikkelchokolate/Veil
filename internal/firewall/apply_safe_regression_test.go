@@ -12,8 +12,11 @@ import (
 )
 
 type safeUFWModel struct {
-	enabled   bool
-	rules     map[string]string
+	enabled bool
+	rules   map[string]string
+	// actions overrides the ALLOW verb a status line reports per target, so
+	// tests can stage deny/reject/limit or outbound rules (#1007).
+	actions   map[string]string
 	calls     [][]string
 	mutations []string
 	failAt    int
@@ -81,7 +84,11 @@ func (m *safeUFWModel) statusOutput() string {
 	}
 	sort.Strings(targets)
 	for _, target := range targets {
-		fmt.Fprintf(&b, "%s ALLOW Anywhere # %s\n", target, m.rules[target])
+		action := "ALLOW"
+		if override, ok := m.actions[target]; ok {
+			action = override
+		}
+		fmt.Fprintf(&b, "%s %s Anywhere # %s\n", target, action, m.rules[target])
 	}
 	return b.String()
 }
