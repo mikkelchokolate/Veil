@@ -15,7 +15,7 @@ func TestProtocolRegistryValidatesAndRendersEnabledInbounds(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected max enabled validation error")
 	}
-	configs, err := registry.Render(ConfigInput{ApplyRoot: "/etc/veil", Inbounds: []Inbound{{Name: "one", Protocol: "mieru", Enabled: true}}})
+	configs, err := registry.Render(ConfigInput{ApplyRoot: "/etc/veil", Inbounds: []Inbound{{Name: "one", Protocol: "mieru", Enabled: true, Password: "pw"}}})
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}

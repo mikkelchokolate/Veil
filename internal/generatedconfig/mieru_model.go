@@ -1,6 +1,7 @@
 package generatedconfig
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -43,7 +44,18 @@ func (m MieruGeneratedConfigModel) Build(inbounds []Inbound) (renderer.MieruConf
 			if hasProfiles(inbound) {
 				continue
 			}
-			if err := addUser(inbound.Name, mieruEffectivePassword(inbound)); err != nil {
+			// A credential-less inbound (e.g. restored from an old backup that
+			// predates credential_required validation) must NOT render a user
+			// with an empty password — anyone guessing the inbound name could
+			// authenticate, and the client-access aggregator already skips the
+			// same fallback when the password resolves empty. Fail the build
+			// honestly instead (#1062); the message matches RenderMieru's
+			// user check so every consumer reports the same contract.
+			password := mieruEffectivePassword(inbound)
+			if password == "" {
+				return renderer.MieruConfig{}, false, errors.New("mieru user name and password are required")
+			}
+			if err := addUser(inbound.Name, password); err != nil {
 				return renderer.MieruConfig{}, false, err
 			}
 			continue

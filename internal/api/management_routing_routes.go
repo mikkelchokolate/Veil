@@ -27,16 +27,15 @@ func (s *managementState) handleRoutingRules(w http.ResponseWriter, r *http.Requ
 			if !decodeJSONRequest(w, r, &rule) {
 				return nil
 			}
+			prevSource := s.stageRoutingDatSourceLocked(append(mutation.RoutingRules(), rule))
 			created, err := mutation.CreateRoutingRule(rule)
-			s.logUserAction(r, "create_routing_rule", rule.Name, err == nil, "")
 			if err != nil {
+				s.routingSource = prevSource
+				s.logUserAction(r, "create_routing_rule", rule.Name, false, err.Error())
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
-			if err := s.ensureRoutingDatSourceLocked(); err != nil {
-				writeError(w, err.Error(), http.StatusInternalServerError)
-				return nil
-			}
+			s.logUserAction(r, "create_routing_rule", rule.Name, true, "")
 			actor, _ := r.Context().Value(contextKeyUsername).(string)
 			outcome := s.autoApplyResultLocked(r, actor)
 			s.writeMutationResponse(w, http.StatusCreated, created, outcome)
@@ -67,16 +66,23 @@ func (s *managementState) handleRoutingRuleByName(w http.ResponseWriter, r *http
 			if !decodeJSONRequest(w, r, &update) {
 				return nil
 			}
+			update.Name = name
+			candidate := mutation.RoutingRules()
+			for i := range candidate {
+				if candidate[i].Name == name {
+					candidate[i] = update
+					break
+				}
+			}
+			prevSource := s.stageRoutingDatSourceLocked(candidate)
 			updated, err := mutation.UpdateRoutingRule(name, update)
-			s.logUserAction(r, "update_routing_rule", name, err == nil, "")
 			if err != nil {
+				s.routingSource = prevSource
+				s.logUserAction(r, "update_routing_rule", name, false, err.Error())
 				writeRoutingRuleManagementError(w, err)
 				return nil
 			}
-			if err := s.ensureRoutingDatSourceLocked(); err != nil {
-				writeError(w, err.Error(), http.StatusInternalServerError)
-				return nil
-			}
+			s.logUserAction(r, "update_routing_rule", name, true, "")
 			actor, _ := r.Context().Value(contextKeyUsername).(string)
 			outcome := s.autoApplyResultLocked(r, actor)
 			s.writeMutationResponse(w, http.StatusOK, updated, outcome)
@@ -112,22 +118,17 @@ func writeRoutingRuleManagementError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (s *managementState) ensureRoutingDatSourceLocked() error {
-	next := routing.EnsureDatSource(s.routingSource, s.rules)
-	if len(next.Files) == len(s.routingSource.Files) {
-		same := true
-		for i := range next.Files {
-			if i >= len(s.routingSource.Files) || next.Files[i].Name != s.routingSource.Files[i].Name {
-				same = false
-				break
-			}
-		}
-		if same {
-			return nil
-		}
-	}
-	s.routingSource = next
-	return s.saveLocked()
+// stageRoutingDatSourceLocked assigns the dat source the candidate rule set
+// needs BEFORE the rule mutation's own save runs, so the rules and the
+// source persist in ONE atomic write (#998/#1054). The previous separate
+// "ensure then save again" step left a committed rule behind a 500 and an
+// in-memory source diverged from disk whenever the second save failed. The
+// caller must restore the returned previous source when the mutation fails:
+// the mutation's own rollback covers only the rules slice.
+func (s *managementState) stageRoutingDatSourceLocked(candidate []RoutingRule) RoutingSource {
+	previous := s.routingSource
+	s.routingSource = routing.EnsureDatSource(s.routingSource, candidate)
+	return previous
 }
 
 func (s *managementState) handleRoutingPresets(w http.ResponseWriter, r *http.Request) {
@@ -256,12 +257,18 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 				writeValidationFailure(w, validation)
 				return nil
 			}
+			// The candidate mutation already produced the post-update rule
+			// list: stage the dat source it needs so the WARP toggle and the
+			// geosite material for its auto-rule commit in one save.
+			prevSource := s.stageRoutingDatSourceLocked(candidateRules)
 			updated, err := mutation.UpdateWarp(warp)
-			s.logUserAction(r, "update_warp", "warp", err == nil, "")
 			if err != nil {
+				s.routingSource = prevSource
+				s.logUserAction(r, "update_warp", "warp", false, err.Error())
 				writeError(w, err.Error(), http.StatusInternalServerError)
 				return nil
 			}
+			s.logUserAction(r, "update_warp", "warp", true, "")
 			actor, _ := r.Context().Value(contextKeyUsername).(string)
 			outcome := s.autoApplyResultLocked(r, actor)
 			s.writeMutationResponse(w, http.StatusOK, updated, outcome)

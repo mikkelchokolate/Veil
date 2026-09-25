@@ -15,7 +15,7 @@ func TestSetBuilderCombinesProtocolPanelFallbackAndWarpArtifacts(t *testing.T) {
 		Warp: func(Paths) (GeneratedConfigArtifact, bool, error) {
 			return GeneratedConfigArtifact{Path: paths.Warp(), Body: "warp"}, true, nil
 		},
-		Inbounds: []Inbound{{Name: "mieru", Protocol: "mieru", Enabled: true}},
+		Inbounds: []Inbound{{Name: "mieru", Protocol: "mieru", Enabled: true, Password: "pw"}},
 	})
 	configs, err := builder.Build()
 	if err != nil {

@@ -22,7 +22,7 @@ func TestManagementApplyIntentCanSkipRenderValidationForOfflineStateChecks(t *te
 	intent := NewManagementApplyIntent(ManagementApplyIntentInput{
 		ApplyRoot:       "/apply",
 		Settings:        Settings{PanelListen: "127.0.0.1:2096", Mode: "dev"},
-		Inbounds:        []Inbound{{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true}},
+		Inbounds:        []Inbound{{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "legacy-pass"}},
 		SkipRenderCheck: true,
 	})
 

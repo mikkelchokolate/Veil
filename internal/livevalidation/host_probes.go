@@ -19,6 +19,31 @@ type HostPortProbe struct {
 	readProcNet func(string) ([]byte, error)
 }
 
+// probeBindHosts are the wildcard addresses Veil's runtimes bind. A wildcard
+// bind conflicts with ANY existing listener on the port — including one bound
+// to a specific non-loopback address (192.168.x.x:port) or the IPv6 loopback
+// (::1:port) — while a loopback-only probe would happily succeed past them
+// and let the runtime's own wildcard bind fail at apply (#1031). The IPv6
+// probe is skipped when the host has no IPv6 stack.
+var probeBindHosts = []string{"0.0.0.0", "::"}
+
+// availableAfterBindsSucceeded cross-checks /proc/net after the wildcard
+// binds all succeeded. A successful bind alone is not conclusive on Linux:
+// SO_REUSEADDR (set on every Go socket) lets a wildcard bind coexist with a
+// socket bound to a specific address on the same port once BOTH sockets opt
+// into reuse — UDP most notably, where no LISTEN state forces exclusivity —
+// so the incumbent shadows the runtime on that address. /proc/net lists the
+// bound socket regardless of reuse flags (#1031). When the tables are
+// unavailable (non-Linux host) the successful wildcard binds are the only
+// evidence available and stand.
+func (p HostPortProbe) availableAfterBindsSucceeded(transport string, port int) (bool, error) {
+	inUse, err := p.procNetBound(transport, port)
+	if err != nil {
+		return true, nil
+	}
+	return !inUse, nil
+}
+
 func (p HostPortProbe) Available(ctx context.Context, transport string, port int) (bool, error) {
 	if port < 1 || port > 65535 {
 		return false, fmt.Errorf("invalid port %d", port)
@@ -29,7 +54,6 @@ func (p HostPortProbe) Available(ctx context.Context, transport string, port int
 	default:
 	}
 
-	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
 	var listenConfig net.ListenConfig
 	switch strings.ToLower(strings.TrimSpace(transport)) {
 	case "tcp":
@@ -39,14 +63,19 @@ func (p HostPortProbe) Available(ctx context.Context, transport string, port int
 				return lc.Listen(ctx, "tcp", addr)
 			}
 		}
-		listener, err := listen(ctx, &listenConfig, address)
-		if err != nil {
-			return p.availableAfterListenError(ctx, "tcp", port, err)
+		for _, host := range probeBindHosts {
+			listener, err := listen(ctx, &listenConfig, net.JoinHostPort(host, strconv.Itoa(port)))
+			if err != nil {
+				if isAddressUnavailable(err) {
+					continue
+				}
+				return p.availableAfterListenError(ctx, "tcp", port, err)
+			}
+			if err := listener.Close(); err != nil {
+				return false, fmt.Errorf("close TCP probe: %w", err)
+			}
 		}
-		if err := listener.Close(); err != nil {
-			return false, fmt.Errorf("close TCP probe: %w", err)
-		}
-		return true, nil
+		return p.availableAfterBindsSucceeded("tcp", port)
 	case "udp":
 		listen := p.listenUDP
 		if listen == nil {
@@ -54,14 +83,19 @@ func (p HostPortProbe) Available(ctx context.Context, transport string, port int
 				return lc.ListenPacket(ctx, "udp", addr)
 			}
 		}
-		packet, err := listen(ctx, &listenConfig, address)
-		if err != nil {
-			return p.availableAfterListenError(ctx, "udp", port, err)
+		for _, host := range probeBindHosts {
+			packet, err := listen(ctx, &listenConfig, net.JoinHostPort(host, strconv.Itoa(port)))
+			if err != nil {
+				if isAddressUnavailable(err) {
+					continue
+				}
+				return p.availableAfterListenError(ctx, "udp", port, err)
+			}
+			if err := packet.Close(); err != nil {
+				return false, fmt.Errorf("close UDP probe: %w", err)
+			}
 		}
-		if err := packet.Close(); err != nil {
-			return false, fmt.Errorf("close UDP probe: %w", err)
-		}
-		return true, nil
+		return p.availableAfterBindsSucceeded("udp", port)
 	default:
 		return false, fmt.Errorf("unsupported transport %q", transport)
 	}

@@ -43,7 +43,7 @@ func TestProtocolRegistryRenderPropagatesRenderError(t *testing.T) {
 			return nil, false, errors.New("render failed")
 		}},
 	})
-	_, err := registry.Render(ConfigInput{ApplyRoot: "/etc/veil", Inbounds: []Inbound{{Name: "mieru", Protocol: "mieru", Enabled: true}}})
+	_, err := registry.Render(ConfigInput{ApplyRoot: "/etc/veil", Inbounds: []Inbound{{Name: "mieru", Protocol: "mieru", Enabled: true, Password: "pw"}}})
 	if err == nil || err.Error() != "render failed" {
 		t.Fatalf("expected render error, got %v", err)
 	}
@@ -59,7 +59,7 @@ func TestProtocolRegistryRenderCollectsMultipleArtifacts(t *testing.T) {
 		}},
 	})
 	paths := NewPaths("/etc/veil")
-	configs, err := registry.Render(ConfigInput{ApplyRoot: "/etc/veil", Inbounds: []Inbound{{Name: "mieru", Protocol: "mieru", Enabled: true}}})
+	configs, err := registry.Render(ConfigInput{ApplyRoot: "/etc/veil", Inbounds: []Inbound{{Name: "mieru", Protocol: "mieru", Enabled: true, Password: "pw"}}})
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}

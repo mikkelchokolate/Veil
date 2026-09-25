@@ -2,6 +2,7 @@ package managementstate
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/mikkelchokolate/Veil/internal/inbounds"
 	"github.com/mikkelchokolate/Veil/internal/model"
@@ -201,6 +202,25 @@ func (m Mutation) DeleteRoutingRule(name string) error {
 	return m.replaceRoutingRules(next)
 }
 
+// uniqueAutoWarpRuleName picks a name for the auto-inserted WARP rule that
+// no existing rule occupies: "warp-routing", then "warp-routing-N".
+func uniqueAutoWarpRuleName(rules []RoutingRule) string {
+	name := "warp-routing"
+	for suffix := 1; ; suffix++ {
+		taken := false
+		for _, r := range rules {
+			if r.Name == name {
+				taken = true
+				break
+			}
+		}
+		if !taken {
+			return name
+		}
+		name = fmt.Sprintf("warp-routing-%d", suffix)
+	}
+}
+
 func (m Mutation) routingRuleIndex(name string) int {
 	if m.target.Rules == nil {
 		return -1
@@ -251,8 +271,13 @@ func (m Mutation) UpdateWarp(update WarpConfig) (WarpConfig, error) {
 				}
 			}
 			if !hasWarp {
+				// The auto-rule's name must not collide with an existing rule
+				// named "warp-routing" pointing at another outbound — a
+				// duplicate name violates the unique-name invariant
+				// CreateRoutingRule enforces and breaks name-addressed
+				// updates/deletes (#1004).
 				warpRule := RoutingRule{
-					Name:     "warp-routing",
+					Name:     uniqueAutoWarpRuleName(*m.target.Rules),
 					Match:    "geosite:openai",
 					Outbound: "warp",
 					Enabled:  true,

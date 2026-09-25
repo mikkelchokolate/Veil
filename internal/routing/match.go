@@ -61,16 +61,58 @@ func ParseMatch(raw string) ([]Matcher, error) {
 	return out, nil
 }
 
+// splitMatchAtoms splits a match field on atom-separating commas. Inside a
+// regexp atom a comma is a literal pattern character ({m,n} quantifiers,
+// character classes, alternation lists) — there is no escape mechanism — so
+// a comma only ends a regexp atom when the segment after it opens a new
+// prefixed atom such as ",geoip:" or ",domain:" (#1071). A bare domain or
+// CIDR intended as a separate matcher must be written before the regexp
+// atom.
 func splitMatchAtoms(raw string) []string {
-	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part != "" {
-			out = append(out, part)
+	var atoms []string
+	var atom strings.Builder
+	flush := func() {
+		if trimmed := strings.TrimSpace(atom.String()); trimmed != "" {
+			atoms = append(atoms, trimmed)
 		}
+		atom.Reset()
 	}
-	return out
+	for index, segment := range strings.Split(raw, ",") {
+		if index > 0 {
+			if isRegexpMatchAtom(atom.String()) && matchAtomKind(segment) == "" {
+				atom.WriteByte(',')
+			} else {
+				flush()
+			}
+		}
+		atom.WriteString(segment)
+	}
+	flush()
+	return atoms
+}
+
+// isRegexpMatchAtom reports whether the atom accumulated so far opened with
+// a regexp:/regex: prefix.
+func isRegexpMatchAtom(atom string) bool {
+	kind := matchAtomKind(atom)
+	return kind == "regexp" || kind == "regex"
+}
+
+// matchAtomKind returns the recognized lowercase `kind:` prefix of a match
+// atom, or "" when the atom carries no known prefix.
+func matchAtomKind(atom string) string {
+	trimmed := strings.TrimSpace(atom)
+	idx := strings.IndexByte(trimmed, ':')
+	if idx <= 0 {
+		return ""
+	}
+	kind := strings.ToLower(trimmed[:idx])
+	switch kind {
+	case "geosite", "geoip", "regexp", "regex", "full", "domain", "suffix", "keyword", "cidr", "ip":
+		return kind
+	default:
+		return ""
+	}
 }
 
 func parseMatchAtom(part string) (Matcher, error) {
@@ -92,6 +134,14 @@ func parseMatchAtom(part string) (Matcher, error) {
 			}
 			return Matcher{Kind: MatchIPCIDR, Value: ip.String() + "/128"}, nil
 		}
+		// A ':' the prefix table did not recognize is a typo'd kind
+		// (gip:cn), a host:port, or an ext:-style dat reference — never a
+		// resolvable domain. Reject it instead of minting a domain_suffix
+		// matcher that can never match anything (#1071). Bare IPv6 literals
+		// and CIDRs already returned above, so reaching ':' here is safe.
+		if strings.ContainsRune(part, ':') {
+			return Matcher{}, fmt.Errorf("%w: unknown matcher %q", ErrRoutingMatchInvalid, part)
+		}
 		if !validDomainToken(part) {
 			return Matcher{}, fmt.Errorf("%w: %q", ErrRoutingMatchInvalid, part)
 		}
@@ -99,6 +149,11 @@ func parseMatchAtom(part string) (Matcher, error) {
 	}
 	switch kind {
 	case "geosite":
+		// Normalize to lowercase: the pinned dat artifacts and the SagerNet
+		// rule-set URLs index geo codes lowercase, so a canonically
+		// uppercase code like geosite:Category-RU or geoip:CN would
+		// otherwise be a silently dead matcher (#1070).
+		value = strings.ToLower(value)
 		if !validGeoCode(value) {
 			return Matcher{}, fmt.Errorf("%w: geosite code %q", ErrRoutingMatchInvalid, value)
 		}
@@ -107,6 +162,7 @@ func parseMatchAtom(part string) (Matcher, error) {
 		if strings.EqualFold(value, "private") {
 			return Matcher{Kind: MatchPrivateIP}, nil
 		}
+		value = strings.ToLower(value)
 		if !validGeoCode(value) {
 			return Matcher{}, fmt.Errorf("%w: geoip code %q", ErrRoutingMatchInvalid, value)
 		}
@@ -152,18 +208,14 @@ func parseMatchAtom(part string) (Matcher, error) {
 }
 
 func splitPrefix(part string) (kind, value string, ok bool) {
-	idx := strings.IndexByte(part, ':')
-	if idx <= 0 {
+	kind = matchAtomKind(part)
+	if kind == "" {
 		return "", "", false
 	}
-	kind = strings.ToLower(part[:idx])
-	value = strings.TrimSpace(part[idx+1:])
-	switch kind {
-	case "geosite", "geoip", "regexp", "regex", "full", "domain", "suffix", "keyword", "cidr", "ip":
-		return kind, value, true
-	default:
-		return "", "", false
-	}
+	// matchAtomKind found the ':' on the trimmed atom, so locate it again on
+	// the same trimmed view rather than the raw part.
+	trimmed := strings.TrimSpace(part)
+	return kind, strings.TrimSpace(trimmed[strings.IndexByte(trimmed, ':')+1:]), true
 }
 
 // Hysteria2ACLAddress renders a matcher into the address field of a Hysteria2

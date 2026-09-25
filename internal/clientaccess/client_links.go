@@ -101,13 +101,21 @@ func Hysteria2ClientURI(domain string, port int, password string, name string, i
 }
 
 func escapeUserInfoComponent(value string) string {
+	return escapeShareURIComponent(value, "")
+}
+
+// escapeShareURIComponent percent-encodes every byte outside the RFC 3986
+// unreserved set plus the caller-listed extraSafe characters. Strictly
+// unreserved output is safe in any URI slot — userinfo, host, path segment,
+// or fragment sub-component — because the consumer can never misread a '%'.
+func escapeShareURIComponent(value, extraSafe string) string {
 	const hexDigits = "0123456789ABCDEF"
 	var b strings.Builder
 	for i := 0; i < len(value); i++ {
 		c := value[i]
 		switch {
 		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9',
-			c == '-', c == '.', c == '_', c == '~':
+			c == '-', c == '.', c == '_', c == '~', strings.IndexByte(extraSafe, c) >= 0:
 			b.WriteByte(c)
 		default:
 			b.WriteByte('%')
@@ -165,6 +173,13 @@ func MieruClientURIWithBindings(domain, username, password, profile string, bind
 	return fmt.Sprintf("mierus://%s@%s?%s", userinfo, shareURIHost(domain), query.Encode())
 }
 
+// OlcrtcClientURI builds the olcRTC share URI
+// `olcrtc://<auth>?<transport>@<roomID>#<key>$<mimo>`. Every interpolated
+// field is percent-encoded so a validator-accepted room ID carrying '#',
+// '?', '$', or whitespace cannot displace the key fragment or corrupt the
+// key/mimo split (#1002). ':' and '/' stay literal in the room slot because
+// jitsi room IDs are pasted as "host/room" or "scheme://host/room" and must
+// keep that shape; the mimo suffix and key encode strictly.
 func OlcrtcClientURI(auth, transport, roomID, key, mimo string) string {
 	if auth == "" {
 		auth = "jitsi"
@@ -172,5 +187,10 @@ func OlcrtcClientURI(auth, transport, roomID, key, mimo string) string {
 	if transport == "" {
 		transport = "datachannel"
 	}
-	return fmt.Sprintf("olcrtc://%s?%s@%s#%s$%s", auth, transport, roomID, key, mimo)
+	return fmt.Sprintf("olcrtc://%s?%s@%s#%s$%s",
+		escapeShareURIComponent(auth, ""),
+		escapeShareURIComponent(transport, ""),
+		escapeShareURIComponent(roomID, ":/"),
+		escapeShareURIComponent(key, ""),
+		escapeShareURIComponent(mimo, ""))
 }

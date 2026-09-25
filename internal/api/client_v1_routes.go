@@ -370,65 +370,37 @@ func (s *managementState) handleV1MigrateLegacy(w http.ResponseWriter, r *http.R
 		writeError(w, "client migration unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	s.mu.Lock()
-	inbounds := append([]Inbound(nil), s.inbounds...)
-	s.mu.Unlock()
-
-	type inboundResult struct {
-		Inbound            string `json:"inbound"`
-		ClientsCreated     int    `json:"clientsCreated"`
-		BindingsCreated    int    `json:"bindingsCreated"`
-		CredentialsCreated int    `json:"credentialsCreated"`
-		Skipped            int    `json:"skipped"`
-	}
-	s.logUserAction(r, "migrate_legacy", "", true, "")
-	results := []inboundResult{}
-	totalCreated := 0
-	totalBindings := 0
-	totalCredentials := 0
+	var results []inboundMigrateResult
 	outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
-		anyApplied := false
-		for _, in := range inbounds {
-			if len(in.Profiles) == 0 {
-				continue
-			}
-			profiles := make([]client.LegacyProfile, 0, len(in.Profiles))
-			for _, p := range in.Profiles {
-				profiles = append(profiles, client.LegacyProfile{
-					Name: p.Name, Username: p.Username, Password: p.Password, Enabled: p.Enabled,
-				})
-			}
-			res, err := s.clientMigrator.MigrateInboundProfilesTx(tx, in.Name, in.Protocol, profiles)
-			if err != nil {
-				return fmt.Errorf("migrate inbound %s: %w", in.Name, err)
-			}
-			totalCreated += res.ClientsCreated
-			totalBindings += res.BindingsCreated
-			totalCredentials += res.CredentialsCreated
-			// Repair writes count too: an interrupted earlier migration can
-			// leave a committed client whose binding/credential never made it.
-			// Rolling those back while reporting success leaves the client
-			// permanently broken (#983).
-			if res.ClientsCreated > 0 || res.BindingsCreated > 0 || res.CredentialsCreated > 0 {
-				anyApplied = true
-			}
-			results = append(results, inboundResult{
-				Inbound:            in.Name,
-				ClientsCreated:     res.ClientsCreated,
-				BindingsCreated:    res.BindingsCreated,
-				CredentialsCreated: res.CredentialsCreated,
-				Skipped:            res.Skipped,
-			})
+		// The inbound set is read INSIDE the mutation lock: withClientMutation
+		// holds s.mu for the whole transaction, so the profile set iterated
+		// here is exactly the state the commit pins. A snapshot taken before
+		// the lock could resurrect just-deleted profiles or commit bindings
+		// referencing a concurrently-deleted inbound (#1055/#1020).
+		res, applied, err := s.migrateLegacyInboundsLocked(tx, s.inbounds)
+		if err != nil {
+			return err
 		}
-		if !anyApplied {
+		results = res
+		if !applied {
 			// Everything already migrated (idempotent re-run): no revision.
 			return errNoClientChanges
 		}
 		return nil
 	})
 	if err != nil {
+		s.logUserAction(r, "migrate_legacy", "", false, err.Error())
 		s.writeV1ClientError(w, err)
 		return
+	}
+	s.logUserAction(r, "migrate_legacy", "", true, "")
+	totalCreated := 0
+	totalBindings := 0
+	totalCredentials := 0
+	for _, res := range results {
+		totalCreated += res.ClientsCreated
+		totalBindings += res.BindingsCreated
+		totalCredentials += res.CredentialsCreated
 	}
 	s.writeMutationResponse(w, http.StatusOK, map[string]any{
 		"results":            results,
@@ -436,6 +408,57 @@ func (s *managementState) handleV1MigrateLegacy(w http.ResponseWriter, r *http.R
 		"bindingsCreated":    totalBindings,
 		"credentialsCreated": totalCredentials,
 	}, outcome)
+}
+
+// migrateLegacyInboundsLocked migrates the embedded legacy profiles of every
+// inbound in `inbounds` that still exists in desired state. Caller must hold
+// s.mu (the withClientMutation closure does) and passes the live s.inbounds
+// slice, so the migrated set and the commit are atomic. Each entry is
+// additionally re-checked via bindingInboundExistsLocked so a caller-held
+// snapshot can never resurrect just-deleted profiles or commit a binding to
+// a missing inbound (#1055/#1020). Returns the per-inbound result rows and
+// whether any write was applied.
+func (s *managementState) migrateLegacyInboundsLocked(tx *client.Tx, inbounds []Inbound) ([]inboundMigrateResult, bool, error) {
+	results := make([]inboundMigrateResult, 0, len(inbounds))
+	anyApplied := false
+	for _, in := range inbounds {
+		if len(in.Profiles) == 0 || !s.bindingInboundExistsLocked(in.Name) {
+			continue
+		}
+		profiles := make([]client.LegacyProfile, 0, len(in.Profiles))
+		for _, p := range in.Profiles {
+			profiles = append(profiles, client.LegacyProfile{
+				Name: p.Name, Username: p.Username, Password: p.Password, Enabled: p.Enabled,
+			})
+		}
+		res, err := s.clientMigrator.MigrateInboundProfilesTx(tx, in.Name, in.Protocol, profiles)
+		if err != nil {
+			return nil, false, fmt.Errorf("migrate inbound %s: %w", in.Name, err)
+		}
+		// Repair writes count too: an interrupted earlier migration can
+		// leave a committed client whose binding/credential never made it.
+		// Rolling those back while reporting success leaves the client
+		// permanently broken (#983).
+		if res.ClientsCreated > 0 || res.BindingsCreated > 0 || res.CredentialsCreated > 0 {
+			anyApplied = true
+		}
+		results = append(results, inboundMigrateResult{
+			Inbound:            in.Name,
+			ClientsCreated:     res.ClientsCreated,
+			BindingsCreated:    res.BindingsCreated,
+			CredentialsCreated: res.CredentialsCreated,
+			Skipped:            res.Skipped,
+		})
+	}
+	return results, anyApplied, nil
+}
+
+type inboundMigrateResult struct {
+	Inbound            string `json:"inbound"`
+	ClientsCreated     int    `json:"clientsCreated"`
+	BindingsCreated    int    `json:"bindingsCreated"`
+	CredentialsCreated int    `json:"credentialsCreated"`
+	Skipped            int    `json:"skipped"`
 }
 
 func nowUnixAPI() int64 { return time.Now().Unix() }
