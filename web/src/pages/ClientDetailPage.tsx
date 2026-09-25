@@ -185,7 +185,7 @@ export function ClientDetailPage() {
 		setError(
 			isConflict
 				? t("clientDetail.error.conflict")
-				: mutationErrorMessage(err, t(fallbackKey)),
+				: mutationErrorMessage(err, t(fallbackKey), t),
 		);
 		if (isConflict) {
 			adoptRefetchedVersion.current = true;

@@ -181,7 +181,7 @@ export function ClientsPage() {
 		onError: (err) => {
 			setBulkResults(null);
 			setBulkApplyFailed(null);
-			setBulkError(mutationErrorMessage(err, t("clients.error.bulk")));
+			setBulkError(mutationErrorMessage(err, t("clients.error.bulk"), t));
 		},
 	});
 

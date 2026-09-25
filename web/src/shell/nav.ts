@@ -2,6 +2,7 @@
 // layout does not change globally. Icons come from lucide-react (tree-shaken,
 // no icon-font/CDN — satisfies the strict CSP).
 import {
+	Activity,
 	ArrowLeftRight,
 	ChartLine,
 	DatabaseBackup,
@@ -29,6 +30,7 @@ export const NAV_ENTRIES: NavEntry[] = [
 	{ to: "/traffic", labelKey: "nav.traffic", icon: ChartLine },
 	{ to: "/warp", labelKey: "nav.warp", icon: Shield },
 	{ to: "/system", labelKey: "nav.system", icon: Gauge },
+	{ to: "/diagnostics", labelKey: "nav.diagnostics", icon: Activity },
 	{ to: "/backups", labelKey: "nav.backups", icon: DatabaseBackup },
 	{ to: "/users", labelKey: "nav.users", icon: Users },
 	{ to: "/settings", labelKey: "nav.settings", icon: Settings },
