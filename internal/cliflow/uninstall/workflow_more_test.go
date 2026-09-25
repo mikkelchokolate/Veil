@@ -26,6 +26,9 @@ func TestRunRequiresYes(t *testing.T) {
 	}
 }
 
+// TestRunServiceStopperError is the #1026 regression: a failed step still
+// warns so cleanup continues, but the command fails closed afterwards and
+// never prints "Uninstalled Veil" for an incomplete run.
 func TestRunServiceStopperError(t *testing.T) {
 	var out, errOut bytes.Buffer
 	err := Run(Options{
@@ -41,14 +44,19 @@ func TestRunServiceStopperError(t *testing.T) {
 		FileRemover:     func(string) error { return nil },
 		SystemdReloader: func() error { return nil },
 	})
-	if err != nil {
-		t.Fatalf("Run: %v", err)
+	if err == nil {
+		t.Fatal("uninstall must fail closed when a service stop fails")
 	}
 	if !strings.Contains(errOut.String(), "warning: service veil.service: stop failed") {
 		t.Fatalf("errOut = %s", errOut.String())
 	}
+	if strings.Contains(out.String(), "Uninstalled Veil") {
+		t.Fatalf("incomplete uninstall must not claim success: %s", out.String())
+	}
 }
 
+// TestRunFileRemoverError is the #1026 regression: a file that cannot be
+// removed must fail the command, not degrade to a success print.
 func TestRunFileRemoverError(t *testing.T) {
 	var out, errOut bytes.Buffer
 	installDir := t.TempDir()
@@ -65,14 +73,22 @@ func TestRunFileRemoverError(t *testing.T) {
 		},
 		SystemdReloader: func() error { return nil },
 	})
-	if err != nil {
-		t.Fatalf("Run: %v", err)
+	if err == nil {
+		t.Fatal("uninstall must fail closed when a file removal fails")
 	}
 	if !strings.Contains(errOut.String(), "warning: remove") {
 		t.Fatalf("errOut = %s", errOut.String())
 	}
+	if !strings.Contains(errOut.String(), "uninstall incomplete") {
+		t.Fatalf("errOut should report the incomplete uninstall: %s", errOut.String())
+	}
+	if strings.Contains(out.String(), "Uninstalled Veil") {
+		t.Fatalf("incomplete uninstall must not claim success: %s", out.String())
+	}
 }
 
+// TestRunSystemdReloaderError is the #1026 regression: a failed
+// daemon-reload leaves stale units loaded, so it fails the command.
 func TestRunSystemdReloaderError(t *testing.T) {
 	var out, errOut bytes.Buffer
 	err := Run(Options{
@@ -83,8 +99,8 @@ func TestRunSystemdReloaderError(t *testing.T) {
 		FileRemover:     func(string) error { return nil },
 		SystemdReloader: func() error { return errors.New("reload failed") },
 	})
-	if err != nil {
-		t.Fatalf("Run: %v", err)
+	if err == nil {
+		t.Fatal("uninstall must fail closed when daemon-reload fails")
 	}
 	if !strings.Contains(errOut.String(), "warning: systemd daemon-reload: reload failed") {
 		t.Fatalf("errOut = %s", errOut.String())

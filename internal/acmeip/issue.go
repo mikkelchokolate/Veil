@@ -308,9 +308,14 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 // (or whose unit file was removed), and try-restart never revives an instance
 // that went inactive between listing and restarting — while a genuine restart
 // failure on an active unit still aborts the renewal (issue #620).
+//
+// veil.service itself gets the same treatment: a cert renewal must never
+// revive a panel the operator deliberately stopped, so `try-restart` restarts
+// it only when it is already active — while still failing closed when the
+// restart of an active panel genuinely fails (issue #999).
 func renewReloadCmd(certPath, keyPath string) string {
 	dir := filepath.Dir(certPath)
-	return fmt.Sprintf("chmod 0644 %s && chmod 0640 %s && chgrp veil-proxy %s %s && chgrp veil-proxy %s && chmod 0750 %s && systemctl restart veil.service && for u in $(systemctl list-units --plain --no-legend --state=active 'veil-hysteria2@*.service' | awk '{print $1}'); do systemctl try-restart \"$u\" || exit 1; done",
+	return fmt.Sprintf("chmod 0644 %s && chmod 0640 %s && chgrp veil-proxy %s %s && chgrp veil-proxy %s && chmod 0750 %s && systemctl try-restart veil.service && for u in $(systemctl list-units --plain --no-legend --state=active 'veil-hysteria2@*.service' | awk '{print $1}'); do systemctl try-restart \"$u\" || exit 1; done",
 		shellQuote(certPath), shellQuote(keyPath),
 		shellQuote(certPath), shellQuote(keyPath),
 		shellQuote(dir), shellQuote(dir))

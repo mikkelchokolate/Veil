@@ -94,10 +94,12 @@ func writeAuditInstall(auditLog, backupID string, success bool, errMsg string, w
 	})
 }
 
+// randomSecret returns "" on crypto/rand failure so callers fail closed
+// instead of persisting a known credential (issue #1022).
 func randomSecret(label string) string {
 	buf := make([]byte, 18)
 	if _, err := rand.Read(buf); err != nil {
-		return label + "-change-me"
+		return ""
 	}
 	return base64.RawURLEncoding.EncodeToString(buf)
 }

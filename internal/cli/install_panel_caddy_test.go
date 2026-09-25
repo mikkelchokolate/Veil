@@ -82,7 +82,7 @@ func TestInstallPanelCaddyAccessUsesResolvedCaddyBinaryInSystemdUnit(t *testing.
 	}
 	installSystemdRunFunc = func([]service.SystemdAction) error { return nil }
 	installExecutableFunc = func() (string, error) { return "/usr/local/bin/veil", nil }
-	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) {}
+	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) error { return nil }
 	installEnsureFirewallBackendFunc = func(context.Context, installer.RURecommendedProfile, ruRecommendedInstallOptions) error {
 		return nil
 	}
@@ -124,18 +124,23 @@ func TestInstallPanelCaddyAccessRequiresCaddyBinaryForApply(t *testing.T) {
 	withMockedInstallPreflight(t)
 	oldLookPath := commandLookPath
 	oldFirewallBackend := installEnsureFirewallBackendFunc
+	oldRuntimes := installRuntimesFunc
 	commandLookPath = func(name string) (string, error) {
 		if name == "caddy" {
 			return "", errors.New("missing caddy")
 		}
 		return "/usr/bin/" + name, nil
 	}
+	// Runtimes succeed so the flow reaches the Caddy prerequisite check — a
+	// runtime failure now aborts the install first (issue #1029).
+	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) error { return nil }
 	installEnsureFirewallBackendFunc = func(context.Context, installer.RURecommendedProfile, ruRecommendedInstallOptions) error {
 		return nil
 	}
 	t.Cleanup(func() {
 		commandLookPath = oldLookPath
 		installEnsureFirewallBackendFunc = oldFirewallBackend
+		installRuntimesFunc = oldRuntimes
 	})
 
 	cmd := NewRootCommand("test")

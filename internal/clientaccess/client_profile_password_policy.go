@@ -11,7 +11,7 @@ func NewClientProfilePasswordPolicy(generate InboundPasswordGenerator) ClientPro
 	return ClientProfilePasswordPolicy{generate: generate}
 }
 
-func (p ClientProfilePasswordPolicy) Complete(profiles []ClientProfile, previous []ClientProfile) []ClientProfile {
+func (p ClientProfilePasswordPolicy) Complete(profiles []ClientProfile, previous []ClientProfile) ([]ClientProfile, error) {
 	completed := cloneClientProfiles(profiles)
 	previousByName := map[string]ClientProfile{}
 	for _, profile := range previous {
@@ -25,7 +25,11 @@ func (p ClientProfilePasswordPolicy) Complete(profiles []ClientProfile, previous
 			completed[i].Password = previous.Password
 			continue
 		}
-		completed[i].Password = p.generate()
+		password, err := p.generate()
+		if err != nil {
+			return nil, err
+		}
+		completed[i].Password = password
 	}
-	return completed
+	return completed, nil
 }

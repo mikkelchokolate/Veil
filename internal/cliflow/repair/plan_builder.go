@@ -71,7 +71,11 @@ func BuildPlanFromOptions(opts Options, deps PlanDependencies) (installer.Repair
 		}
 	}
 
-	if opts.LEIPCert && built.PanelAccess == "direct" {
+	// --dry-run must not mutate the host: ACME issuance installs packages,
+	// pipes curl|sh, binds the HTTP-01 port, and writes cert material — all
+	// real changes that belong to the apply phase, not plan building
+	// (issue #1021).
+	if opts.LEIPCert && built.PanelAccess == "direct" && !opts.DryRun {
 		if err := maybeIssueLEIPCert(context.Background(), &built, opts); err != nil {
 			// Repair should not fail because a certificate could not be renewed;
 			// the existing self-signed cert from the profile is still usable.
@@ -164,9 +168,13 @@ func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts Options, s
 	// install persisted; dropping it would silently move the running panel's
 	// Caddy issuers back to Let's Encrypt (audit #340).
 	acmeCAURL, acmeCARoot := repairACMEEnv(opts.EtcDir)
+	token, err := repairPanelAuthToken(*plan, opts.EtcDir, secret)
+	if err != nil {
+		return err
+	}
 	material := panelmaterial.NewManagedMaterial(panelmaterial.Input{
 		Paths:           panelmaterial.Paths{EtcDir: opts.EtcDir},
-		PanelAuthToken:  repairPanelAuthToken(*plan, opts.EtcDir, secret),
+		PanelAuthToken:  token,
 		PanelListen:     listen,
 		PanelAccess:     settings.PanelAccess,
 		Domain:          settings.Domain,
@@ -179,18 +187,27 @@ func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts Options, s
 	if settings.PanelAccess == "caddy" {
 		removeRepairActions(plan, material.PanelTLSCertPath(), material.PanelTLSKeyPath())
 	}
-	return setRepairFileAction(plan, filepath.Join(opts.EtcDir, "veil.env"), material.EnvContent(), 0o600)
+	envContent, err := material.EnvContent()
+	if err != nil {
+		return err
+	}
+	return setRepairFileAction(plan, filepath.Join(opts.EtcDir, "veil.env"), envContent, 0o600)
 }
 
-func repairPanelAuthToken(plan installer.RepairPlan, etcDir string, secret installer.SecretFunc) string {
+func repairPanelAuthToken(plan installer.RepairPlan, etcDir string, secret installer.SecretFunc) (string, error) {
 	token := repairPlanEnvValue(plan, "VEIL_API_TOKEN")
 	if token == "" {
 		token = readRepairEnv(filepath.Join(etcDir, "veil.env"))["VEIL_API_TOKEN"]
 	}
 	if token == "" {
+		// An empty return is the generator's fail-closed signal: a repair that
+		// cannot mint a new token must not write a known one (issue #1022).
 		token = secret("panel")
 	}
-	return token
+	if token == "" {
+		return "", fmt.Errorf("generate panel auth token: secret generator returned empty")
+	}
+	return token, nil
 }
 
 func preserveExistingPanelRepairMaterial(profile *installer.RURecommendedProfile, etcDir string) {
