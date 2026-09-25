@@ -13,7 +13,7 @@
 //     panel instance with --web-base-path for this)
 const { test, expect } = require('@playwright/test');
 const { waitForSpa } = require('./spa-boot');
-const { assertMutationOutcome } = require('./mutation-outcome');
+const { assertMutationOutcome, NON_TERMINAL_JOB_STATUSES } = require('./mutation-outcome');
 
 const adminUsername = process.env.VEIL_BROWSER_USERNAME || 'browser-admin';
 const adminPassword = process.env.VEIL_BROWSER_PASSWORD || 'Browser-E2E-Password-123!';
@@ -70,6 +70,10 @@ async function createClientAPI(request, name, extra = {}, outcome = {}) {
   return (await createClientMutation(request, name, extra, outcome)).client;
 }
 
+// Apply jobs use the internal/apply status vocabulary — pending, planning,
+// validating, applying, health_check, recovery_pending and rolling_back are
+// non-terminal. 'queued'/'running' belong to backup-restore jobs and never
+// appear here (#1049).
 async function waitForApplyJob(request, jobID) {
   let job;
   await expect
@@ -78,9 +82,7 @@ async function waitForApplyJob(request, jobID) {
         job = await (
           await request.get(`/api/apply/jobs/${jobID}`, { headers: tokenHeaders })
         ).json();
-        return ['queued', 'running', 'applying', 'rolling_back'].includes(job.status)
-          ? null
-          : job.status;
+        return NON_TERMINAL_JOB_STATUSES.has(job.status) ? null : job.status;
       },
       { timeout: 30_000, intervals: [250, 500, 1000] },
     )
@@ -294,7 +296,7 @@ test.describe('Veil Panel — extended critical flows', () => {
           const job = await (
             await request.get(`/api/apply/jobs/${newJob.id}`, { headers: tokenHeaders })
           ).json();
-          return ['queued', 'running', 'applying', 'rolling_back'].includes(job.status) ? null : job.status;
+          return NON_TERMINAL_JOB_STATUSES.has(job.status) ? null : job.status;
         },
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )

@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -603,7 +602,7 @@ func readUpdateHelperEvidence(details PublicationDetails) (string, PublicationDe
 	if directoryErr != nil {
 		return "invalid", details, directoryErr
 	}
-	if stat, ok := directoryInfo.Sys().(*syscall.Stat_t); !ok || stat.Uid != 0 || directoryInfo.Mode().Perm()&0o022 != 0 {
+	if !helperEvidenceDirRootControlled(directoryInfo) {
 		return "invalid", details, errors.New("update helper evidence directory is not root-controlled")
 	}
 	info, err := os.Lstat(path)
@@ -616,7 +615,7 @@ func readUpdateHelperEvidence(details PublicationDetails) (string, PublicationDe
 	if !info.Mode().IsRegular() || info.Mode().Perm()&0o022 != 0 {
 		return "invalid", details, errors.New("update helper evidence is not immutable root-owned data")
 	}
-	if stat, ok := info.Sys().(*syscall.Stat_t); !ok || stat.Uid != 0 || stat.Nlink != 1 {
+	if !helperEvidenceFileRootOwned(info) {
 		return "invalid", details, errors.New("update helper evidence ownership is invalid")
 	}
 	body, err := os.ReadFile(path)
@@ -649,11 +648,8 @@ func readUpdateHelperEvidence(details PublicationDetails) (string, PublicationDe
 	if err != nil {
 		return "invalid", details, err
 	}
-	if stat, ok := binaryInfo.Sys().(*syscall.Stat_t); ok {
-		inode := fmt.Sprintf("%d:%d:%d:%d", stat.Dev, stat.Ino, stat.Ctim.Sec, stat.Ctim.Nsec)
-		if inode != evidence.InstalledPathInode {
-			return "invalid", details, errors.New("installed panel inode differs from helper evidence")
-		}
+	if inode, ok := installedPathInodeTag(binaryInfo); ok && inode != evidence.InstalledPathInode {
+		return "invalid", details, errors.New("installed panel inode differs from helper evidence")
 	}
 	details.ExpectedBinaryDigest = evidence.ExpectedBinaryDigest
 	details.OldBinaryDigest = evidence.OldBinaryDigest
@@ -689,7 +685,7 @@ func readRestartHelperEvidence(details PublicationDetails) (string, PublicationD
 	if !info.Mode().IsRegular() || info.Mode().Perm()&0o022 != 0 {
 		return "invalid", details, errors.New("restart helper evidence is not immutable")
 	}
-	if stat, ok := info.Sys().(*syscall.Stat_t); !ok || stat.Uid != 0 || stat.Nlink != 1 {
+	if !helperEvidenceFileRootOwned(info) {
 		return "invalid", details, errors.New("restart helper evidence ownership is invalid")
 	}
 	body, err := os.ReadFile(path)
