@@ -293,7 +293,10 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		writeError(w, "create durable update job", http.StatusInternalServerError)
 		return
 	}
-	result, applyJob, err := routes.State.installPanelUpdate(r.Context(), version)
+	// The install runs as a durable apply operation: it must outlive the
+	// request context so a client disconnect cannot abort it mid-flight
+	// (#1052).
+	result, applyJob, err := routes.State.installPanelUpdate(routes.State.mutationApplyContext(), version)
 	if err != nil {
 		if updateErr := routes.State.updatePanelUpdateJob(updateJob.ID, "failed", applyJob.ID, "", err); updateErr != nil {
 			log.Printf("panel update job %s: record failure status: %v", updateJob.ID, updateErr)

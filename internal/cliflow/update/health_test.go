@@ -74,6 +74,29 @@ func TestWaitForHealthyRejectsBareOK(t *testing.T) {
 	}
 }
 
+// TestWaitForHealthyReadsBodyBeforeCancelling verifies the request context
+// stays alive until the /healthz body has been consumed: a server that
+// flushes response headers first and streams the verdict body afterwards must
+// still pass the probe (#1047).
+func TestWaitForHealthyReadsBodyBeforeCancelling(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		// Delay the verdict body past the client's Do() return: a probe that
+		// cancels its request context at that point reads an aborted body and
+		// can never observe {"status":"ok"}.
+		time.Sleep(150 * time.Millisecond)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer server.Close()
+
+	if err := WaitForHealthy(server.URL, "", 2*time.Second); err != nil {
+		t.Fatalf("WaitForHealthy rejected a healthy server that streamed its body: %v", err)
+	}
+}
+
 // TestWaitForHealthyRejectsUnhealthyPayload verifies a 200 carrying a
 // non-ok status is not treated as healthy.
 func TestWaitForHealthyRejectsUnhealthyPayload(t *testing.T) {

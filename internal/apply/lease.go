@@ -77,6 +77,29 @@ WHERE id=1 AND owner_process=? AND generation=?`, owner, generation)
 	return requireOneLeaseRow(result, "release")
 }
 
+// FloorAndRelease clears the lease while guaranteeing the persisted fencing
+// generation never regresses below the released lease's generation. Unlike
+// Release it does not match on owner/generation: it is used when the database
+// file itself was swapped (backup restore), where the surviving apply_lease
+// row may carry an older or absent generation while the lease token that
+// covered the swap must still be retired (#996).
+func (s *LeaseStore) FloorAndRelease(lease Lease) error {
+	if s == nil || s.db == nil {
+		return errors.New("apply lease store is not configured")
+	}
+	if lease.Generation == 0 {
+		return nil
+	}
+	now := time.Now().UTC().Unix()
+	_, err := s.db.Exec(`INSERT INTO apply_lease
+  (id, owner_process, current_operation, heartbeat_at, lease_expires_at, generation)
+  VALUES(1, '', '', ?, 0, ?)
+  ON CONFLICT(id) DO UPDATE SET
+    owner_process='', current_operation='', heartbeat_at=excluded.heartbeat_at, lease_expires_at=0,
+    generation=MAX(apply_lease.generation, excluded.generation)`, now, lease.Generation)
+	return err
+}
+
 func (s *LeaseStore) Expire(owner string, generation uint64) error {
 	if s == nil || s.db == nil {
 		return errors.New("apply lease store is not configured")

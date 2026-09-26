@@ -271,26 +271,41 @@ func (s *managementState) Reload() error {
 // shutdown. RunLifecycle calls it after HTTP draining, while backup restore
 // uses the same detach/stop/close primitives around its DB swap.
 func (s *managementState) Close() error {
+	s.mu.Lock()
+	s.clientSubsystemStopping = true
+	hub := s.sse
+	s.sse = nil
+	s.mu.Unlock()
+	if hub != nil {
+		hub.Close()
+	}
+
+	// Exclude an in-flight backup restore before touching the lifecycle
+	// context: runPanelBackupRestore holds clientRequestMu for its whole
+	// duration and drives both the privileged helper call and post-restore
+	// convergence on lifecycleContext. Cancelling first would abort a restore
+	// that already committed (#1069).
+	s.clientRequestMu.Lock()
+	defer s.clientRequestMu.Unlock()
 	if s.lifecycleCancel != nil {
 		s.lifecycleCancel()
 	}
 	s.updateWG.Wait()
-	if s.applyRunner != nil {
-		s.applyRunner.Close()
-	}
+
 	s.mu.Lock()
-	s.clientSubsystemStopping = true
 	workers := detachClientBackgroundWorkers(s)
-	hub := s.sse
-	s.sse = nil
 	limiter := s.httpRateLimiter
 	s.httpRateLimiter = nil
 	idempotency := s.idempotency
 	s.idempotency = nil
+	// The runner pointer must be read under s.mu: a restore that was still
+	// finishing reload replaced it while closeClientDatabase nilled the old
+	// one (#1069).
+	runner := s.applyRunner
 	s.mu.Unlock()
 
-	if hub != nil {
-		hub.Close()
+	if runner != nil {
+		runner.Close()
 	}
 	if limiter != nil {
 		_ = limiter.Close()
@@ -300,8 +315,6 @@ func (s *managementState) Close() error {
 	}
 	stopClientBackgroundWorkers(workers)
 
-	s.clientRequestMu.Lock()
-	defer s.clientRequestMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return closeClientDatabase(s)

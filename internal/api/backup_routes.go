@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"crypto/subtle"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -472,6 +471,12 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 	// mutex to finish its final mutation. The stopping flag prevents any reload
 	// in this interval from starting replacement workers.
 	stopClientBackgroundWorkers(workers)
+	// Join the panel-update restart goroutine before the database swap: it
+	// reads s.applyRunner/s.db outside s.mu, and letting it run across the
+	// close would race a nil-pointer panic against the replacement (#1068).
+	// Holding clientRequestMu already prevents new update goroutines from
+	// starting, so this Wait cannot be overtaken.
+	s.updateWG.Wait()
 
 	s.mu.Lock()
 	closeErr := closeClientDatabase(s)
@@ -493,11 +498,20 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 	s.clientSubsystemStopping = false
 	if result.Restored {
 		s.runtimeVerificationUnknown = true
+		// The helper committed a replacement state file + database. Rewind
+		// the snapshot-managed mutable fields to serve-time defaults BEFORE
+		// reloading so the load replaces them instead of merging the
+		// restored snapshot over stale pre-restore in-memory state (#1053).
+		s.resetMutableStateToDefaultsLocked()
 	}
 	reopenErr := NewManagementStateLifecycle(s).ReloadLocked()
+	// The lease row lives in whatever veil.db is on disk — when the reload
+	// failed to reopen it, s.db is nil while the rolled-back database still
+	// carries a live-owner lease that would wedge every fenced operation for
+	// the two-hour TTL. Release through the on-disk store regardless (#996).
 	var fenceReleaseErr error
-	if restoreLease.Generation > 0 && s.db != nil {
-		fenceReleaseErr = restoreLeaseFloorAndRelease(s.db, restoreLease)
+	if restoreLease.Generation > 0 {
+		fenceReleaseErr = s.releaseRestoreLease(restoreLease)
 	}
 	s.mu.Unlock()
 	var convergenceErr error
@@ -573,18 +587,27 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 	}
 }
 
-func restoreLeaseFloorAndRelease(db *sql.DB, lease veilapply.Lease) error {
-	if db == nil || lease.Generation == 0 {
+// releaseRestoreLease floors the fencing generation and releases the lease a
+// restore acquired. It must also work when the post-restore reload failed to
+// reopen veil.db (s.db == nil): the lease row lives in whatever database file
+// is on disk — a rolled-back original still carries the live-owner lease and
+// would wedge every fenced operation until its two-hour expiry — so the
+// on-disk store is opened just long enough to release it (#996). A nil store
+// means no database file exists to hold the lease and there is nothing to
+// release.
+func (s *managementState) releaseRestoreLease(lease veilapply.Lease) error {
+	if lease.Generation == 0 {
 		return nil
 	}
-	now := time.Now().UTC().Unix()
-	_, err := db.Exec(`INSERT INTO apply_lease
-  (id, owner_process, current_operation, heartbeat_at, lease_expires_at, generation)
-  VALUES(1, '', '', ?, 0, ?)
-  ON CONFLICT(id) DO UPDATE SET
-    owner_process='', current_operation='', heartbeat_at=excluded.heartbeat_at, lease_expires_at=0,
-    generation=MAX(apply_lease.generation, excluded.generation)`, now, lease.Generation)
-	return err
+	store, cleanup, err := s.fencingLeaseStore()
+	if err != nil {
+		return err
+	}
+	if store == nil {
+		return nil
+	}
+	defer cleanup()
+	return store.FloorAndRelease(lease)
 }
 
 func classifyRestoreOutcome(result privileged.BackupResult, helperErr, revalidationErr, finalizationErr error) (status, outcome, phase string, restored bool, httpStatus int) {
