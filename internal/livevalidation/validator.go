@@ -12,6 +12,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/clientaccess"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 	"github.com/mikkelchokolate/Veil/internal/service"
 )
 
@@ -148,6 +149,16 @@ func (v Validator) validateInbound(
 				fmt.Sprintf("TCP port %d is reserved by the Panel", listenPort),
 				"Choose another inbound port or move the Panel listener.", "candidate",
 			))
+		}
+
+		if inbound.Transport == "tcp" {
+			if owner, reserved := reservedInternalTCPPorts[listenPort]; reserved {
+				issues = append(issues, issue(
+					"reserved_internal_port", SeverityError, "port", id,
+					fmt.Sprintf("TCP port %d is reserved by %s", listenPort, owner),
+					"Choose another inbound port; Veil services bind this port on loopback.", "candidate",
+				))
+			}
 		}
 
 		if v.Ports != nil &&
@@ -470,12 +481,29 @@ func inboundListenPort(settings model.Settings, inbound model.Inbound) int {
 	return inbound.Port
 }
 
+// reservedInternalTCPPorts are the loopback TCP ports Veil's own services
+// bind whenever the corresponding feature exists. A public TCP inbound on
+// one of these ports collides with Veil regardless of start order (#1061):
+// the wildcard listener claims the loopback address first (the service then
+// fails to bind), or the already-bound service blocks the inbound. These are
+// reserved unconditionally — the stats/admin listeners may appear later
+// (e.g. the first Hysteria2 inbound added after the TCP rule).
+var reservedInternalTCPPorts = map[int]string{
+	runtimeports.Hysteria2TrafficStatsPort: "the Hysteria2 traffic stats API",
+	runtimeports.CaddyAdminPort:            "the managed Caddy admin API",
+}
+
 func ownedBinding(settings model.Settings, candidate model.Inbound, current []model.Inbound) bool {
 	candidatePort := inboundListenPort(settings, candidate)
 	for _, inbound := range current {
+		// The protocol is deliberately not compared: the catalog keys
+		// inbounds by name, so a same-name inbound holding the same
+		// transport+port is THIS inbound being reconfigured — the apply its
+		// update gates will stop the old-protocol unit before the new
+		// listener binds. Requiring a protocol match made a protocol change
+		// report the inbound's own port as port_in_use (#1030).
 		if inbound.Enabled &&
 			inbound.Name == candidate.Name &&
-			inbound.Protocol == candidate.Protocol &&
 			inbound.Transport == candidate.Transport &&
 			inboundListenPort(settings, inbound) == candidatePort {
 			return true

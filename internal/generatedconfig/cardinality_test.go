@@ -48,9 +48,9 @@ func TestGeneratedConfigCardinalityIgnoresDisabledAndProtocolsWithoutLimit(t *te
 	registry := NewProtocolRegistry([]Protocol{{Protocol: "naiveproxy", MaxEnabled: 1}, {Protocol: "mieru"}})
 	err := NewGeneratedConfigCardinality(Settings{}, registry).Validate([]Inbound{
 		{Name: "a", Protocol: "naiveproxy", Enabled: true},
-		{Name: "b", Protocol: "mieru", Enabled: true},
+		{Name: "b", Protocol: "mieru", Enabled: true, Password: "pw"},
 		{Name: "c", Protocol: "naiveproxy", Enabled: false},
-		{Name: "d", Protocol: "mieru", Enabled: true},
+		{Name: "d", Protocol: "mieru", Enabled: true, Password: "pw"},
 	})
 	if err != nil {
 		t.Fatalf("Validate: %v", err)

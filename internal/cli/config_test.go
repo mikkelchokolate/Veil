@@ -116,8 +116,8 @@ func TestConfigValidateMieruState(t *testing.T) {
 	state := `{
   "settings": {"panelListen": "127.0.0.1:2096", "mode": "server"},
   "inbounds": [
-    {"name": "mieru-tcp", "protocol": "mieru", "transport": "tcp", "port": 443, "enabled": true},
-    {"name": "mieru-udp", "protocol": "mieru", "transport": "udp", "port": 443, "enabled": true}
+    {"name": "mieru-tcp", "protocol": "mieru", "transport": "tcp", "port": 443, "enabled": true, "password": "secret"},
+    {"name": "mieru-udp", "protocol": "mieru", "transport": "udp", "port": 443, "enabled": true, "password": "secret"}
   ],
   "routingRules": [],
   "warp": {"enabled": false}

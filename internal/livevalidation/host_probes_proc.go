@@ -20,6 +20,16 @@ func isPermissionDenied(err error) bool {
 	return false
 }
 
+// isAddressUnavailable reports whether a probe bind failed because the host
+// lacks that address family at all (IPv6 disabled, no IPv4 stack) — a
+// condition that means the probe is inapplicable, not that the port is busy.
+// EADDRINUSE and other errors still report the port as occupied.
+func isAddressUnavailable(err error) bool {
+	return errors.Is(err, syscall.EADDRNOTAVAIL) ||
+		errors.Is(err, syscall.EAFNOSUPPORT) ||
+		errors.Is(err, syscall.EPROTONOSUPPORT)
+}
+
 func (p HostPortProbe) availableFromProcNet(transport string, port int) (bool, error) {
 	inUse, err := p.procNetBound(transport, port)
 	if err != nil {

@@ -11,7 +11,7 @@ func TestSetBuilderPropagatesRegistryRenderError(t *testing.T) {
 		Registry: NewProtocolRegistry([]Protocol{{Protocol: "mieru", Render: func(input ProtocolRenderInput) ([]GeneratedConfigArtifact, bool, error) {
 			return nil, false, errors.New("registry render failed")
 		}}}),
-		Inbounds: []Inbound{{Name: "mieru", Protocol: "mieru", Enabled: true}},
+		Inbounds: []Inbound{{Name: "mieru", Protocol: "mieru", Enabled: true, Password: "pw"}},
 	})
 	_, err := builder.Build()
 	if err == nil || err.Error() != "registry render failed" {
