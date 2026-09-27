@@ -31,9 +31,10 @@ UMask=0077
 # protocol, so the kernel must refuse private/loopback destinations here too:
 # sing-box resolves client domains itself and could otherwise dial a resolved
 # private address via the direct outbound (issue #1096/#1097). The allow list
-# keeps the resolved stubs plus the 127.41/16 socks band (clients of this
-# listener connect from that band as source).
-IPAddressAllow=127.0.0.53/32 127.0.0.54/32 127.41.0.0/16
+# keeps the resolved stubs plus 127.0.0.1 — the source address every local
+# SOCKS peer presents, since the kernel does not source from the 127.41/16
+# band when connecting into it.
+IPAddressAllow=127.0.0.1/32 127.0.0.53/32 127.0.0.54/32
 IPAddressDeny=0.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 224.0.0.0/4 240.0.0.0/4 ::/128 ::1/128 ::ffff:0:0/96 64:ff9b::/96 fc00::/7 fe80::/10 ff00::/8
 InaccessiblePaths=/run/veil/helper.sock /var/lib/veil
 
