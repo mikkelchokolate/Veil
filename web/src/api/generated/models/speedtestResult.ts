@@ -46,5 +46,4 @@ export interface SpeedtestResult {
   pingMs: number;
   downloadMbps: number;
   uploadMbps: number;
-  raw?: string;
 }

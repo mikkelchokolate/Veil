@@ -27,6 +27,8 @@ func TestSensitiveReadPathsUseDedicatedLimits(t *testing.T) {
 		"/api/warp",
 		"/api/disk",
 		"/api/connections",
+		// #1144: /api/processes walks the host process table — expensive.
+		"/api/processes",
 		"/api/runtime/observation",
 		"/api/v1/events",
 		"/api/v1/traffic/stream",
@@ -42,7 +44,6 @@ func TestSensitiveReadPathsUseDedicatedLimits(t *testing.T) {
 		// /api/settings is polled by the UI and stays off the read-path list
 		// deliberately (its GET response redacts secrets for viewers).
 		"/api/settings",
-		"/api/processes",
 		"/api/system",
 		"/api/network",
 		"/api/status",
