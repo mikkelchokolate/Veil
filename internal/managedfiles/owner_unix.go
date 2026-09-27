@@ -5,6 +5,8 @@ package managedfiles
 import (
 	"os"
 	"syscall"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 // ownerOf extracts the numeric owner of an existing file. The second return
@@ -17,7 +19,11 @@ func ownerOf(info os.FileInfo) (uid, gid int, ok bool) {
 	return int(stat.Uid), int(stat.Gid), true
 }
 
-// chownFile applies the numeric ownership contract to a managed file.
+// chownFile applies the numeric ownership contract to a managed file on an
+// O_NOFOLLOW-pinned descriptor: between atomicfile.Write's rename and this
+// call an attacker who controls the file's parent directory can swap the
+// leaf for a symlink, and a path-based os.Chown would follow it to an
+// arbitrary victim (#1129).
 func chownFile(path string, uid, gid int) error {
-	return os.Chown(path, uid, gid)
+	return safefs.ChownNoFollow(path, uid, gid)
 }

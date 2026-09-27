@@ -39,7 +39,7 @@ func ApplyPlan(plan installer.RepairPlan, opts Options, out io.Writer, deps Appl
 		}
 		backupID = id
 	}
-	result, err := installer.ApplyRepairPlan(plan)
+	result, err := installer.ApplyRepairPlan(plan, opts.EtcDir)
 	if err != nil {
 		_ = writeAuditRepair(opts.AuditLog, backupID, false, err.Error(), nil)
 		return err
