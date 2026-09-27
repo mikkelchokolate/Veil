@@ -362,7 +362,7 @@ func TestPackageScriptsExist(t *testing.T) {
 			t.Fatalf("postinstall.sh must not walk service-owned trees with %q — leaf swap races chmod arbitrary targets (#1143)", banned)
 		}
 	}
-	if !strings.Contains(postinstallScript, "/etc/veil/panel") {
+	if !strings.Contains(string(postinstall), "/etc/veil/panel") {
 		t.Fatal("postinstall.sh must migrate Panel TLS material under /etc/veil/panel")
 	}
 	if strings.Contains(postinstallScript, "usermod -aG veil-proxy veil || true") ||

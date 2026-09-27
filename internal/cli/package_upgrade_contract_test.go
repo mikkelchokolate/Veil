@@ -24,8 +24,11 @@ func TestPostinstallGroupsPanelTLSForProxyReaders(t *testing.T) {
 		t.Fatalf("postinstall.sh must delegate ownership normalization to `veil helper migrate`:\n%s", script)
 	}
 	// /etc/veil/panel must stay inside the documented runtime-shared contract
-	// (the delegate implements root:veil-proxy grouping for it).
-	if !strings.Contains(script, "/etc/veil/panel") {
+	// (the delegate implements root:veil-proxy grouping for it; the grouping
+	// itself is asserted by the hostaccess tests). The script documents the
+	// coverage in the delegation comment, which stripHashComments removes —
+	// so check the raw body.
+	if !strings.Contains(string(body), "/etc/veil/panel") {
 		t.Fatalf("postinstall.sh must keep /etc/veil/panel in the runtime-shared contract:\n%s", script)
 	}
 	// #1143: service-owned trees must never be walked by path-following shell

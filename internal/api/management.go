@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -110,6 +111,15 @@ func (s *managementState) mutationLocked() managementstate.Mutation {
 
 func (s *managementState) applyHistoryPathLocked() string {
 	return filepath.Join(s.applyRoot, "generated", "veil", "apply-history.json")
+}
+
+// databaseHandle snapshots the SQLite handle under s.mu; background workers
+// that run without the mutex must use it instead of reading s.db directly,
+// because restore reload replaces the handle concurrently.
+func (s *managementState) databaseHandle() *sql.DB {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.db
 }
 
 func (s *managementState) applyHistoryLocked() applyhistory.ApplyHistory {
