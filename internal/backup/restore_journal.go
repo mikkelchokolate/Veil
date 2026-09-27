@@ -82,16 +82,25 @@ func RecoverInterruptedRestore(statePath, keyPath, databasePath string) error {
 	journalPath := filepath.Join(root, restoreTransactionJournalName)
 	body, err := os.ReadFile(journalPath)
 	if errors.Is(err, os.ErrNotExist) {
+		// No live journal means no interrupted restore can still reference
+		// staged temps — sweep crash leftovers (.veil-restore-*, atomicfile
+		// .tmp-*, backup db snapshots) before proceeding (#1125).
+		sweepInterruptedRestoreResidue(root)
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	expected := map[string]string{"state.json": filepath.Clean(statePath), "state.key": filepath.Clean(keyPath)}
-	if databasePath != "" {
-		expected["veil.db"] = filepath.Clean(databasePath)
+	var disk restoreJournalDisk
+	if err := json.Unmarshal(body, &disk); err != nil {
+		return fmt.Errorf("decode restore transaction journal: %w", err)
 	}
-	journal, err := decodeRestoreJournal(body, expected)
+	// The expected member set is derived from the journal's own member names:
+	// a legacy restore journal legitimately carries only state.json+state.key
+	// even when a live database exists at databasePath, so keying expected
+	// members off databasePath != "" would reject such journals forever and
+	// wedge recovery on "missing restore journal member veil.db" (#1116).
+	journal, err := decodeRestoreJournal(body, restoreJournalExpectedTargets(disk, statePath, keyPath, databasePath))
 	if err != nil {
 		return err
 	}
@@ -106,17 +115,23 @@ func RecoverInterruptedRestore(statePath, keyPath, databasePath string) error {
 		return err
 	}
 	if journal.Phase == "committed" || intended {
-		if err := cleanupRestoreDatabaseSidecars(root, databasePath, &journal); err != nil {
-			return err
-		}
-		if err := verifyRestoreRevisionBinding(databasePath, journal.IntendedRevision, restoreJournalDigest(journal.Files, "state.json", true), journal.FenceGeneration > 0); err != nil {
-			return err
-		}
-		if err := ensureRestoreFencingFloor(databasePath, journal.FenceGeneration); err != nil {
-			return err
-		}
-		if err := refreshRestoreDatabaseDigest(&journal, databasePath); err != nil {
-			return err
+		// Database-side recovery is meaningful only when this journal
+		// actually staged veil.db: a two-member legacy journal must not
+		// delete sidecars or verify a revision binding on a live database
+		// the interrupted restore never touched (#1116).
+		if journalDatabase := restoreJournalMemberTarget(journal.Files, "veil.db"); journalDatabase != "" {
+			if err := cleanupRestoreDatabaseSidecars(root, journalDatabase, &journal); err != nil {
+				return err
+			}
+			if err := verifyRestoreRevisionBinding(journalDatabase, journal.IntendedRevision, restoreJournalDigest(journal.Files, "state.json", true), journal.FenceGeneration > 0); err != nil {
+				return err
+			}
+			if err := ensureRestoreFencingFloor(journalDatabase, journal.FenceGeneration); err != nil {
+				return err
+			}
+			if err := refreshRestoreDatabaseDigest(&journal, journalDatabase); err != nil {
+				return err
+			}
 		}
 		journal.Phase = "committed"
 		journal.WALCleanupPhase = "committed"
@@ -132,6 +147,41 @@ func RecoverInterruptedRestore(statePath, keyPath, databasePath string) error {
 		return removeRestoreJournal(root)
 	}
 	return rollbackRestoreJournal(root, &journal)
+}
+
+// restoreJournalExpectedTargets maps journal member names to the live targets
+// the recoverer was asked to check. Members are keyed off the journal itself:
+// unknown member names yield no expected entry so decodeRestoreJournal still
+// rejects foreign member sets, while a journal that simply does not carry
+// veil.db decodes cleanly instead of reporting a missing member (#1116).
+func restoreJournalExpectedTargets(disk restoreJournalDisk, statePath, keyPath, databasePath string) map[string]string {
+	expected := make(map[string]string, len(disk.Files))
+	for _, file := range disk.Files {
+		switch file.Name {
+		case "state.json":
+			expected[file.Name] = filepath.Clean(statePath)
+		case "state.key":
+			expected[file.Name] = filepath.Clean(keyPath)
+		case "veil.db":
+			dbPath := databasePath
+			if dbPath == "" {
+				dbPath = filepath.Join(filepath.Dir(statePath), "veil.db")
+			}
+			expected[file.Name] = filepath.Clean(dbPath)
+		}
+	}
+	return expected
+}
+
+// restoreJournalMemberTarget returns the journal-recorded target path for a
+// member, or "" when the journal does not carry that member.
+func restoreJournalMemberTarget(files []restoreJournalFile, name string) string {
+	for _, file := range files {
+		if file.Name == name {
+			return file.TargetPath
+		}
+	}
+	return ""
 }
 
 func prepareRestoreJournal(statePath string, staged []*stagedRestoreFile, names []string, previousRevision, intendedRevision uint64) (restoreTransactionJournal, error) {
@@ -181,7 +231,7 @@ func prepareRestoreJournalFenced(statePath string, staged []*stagedRestoreFile, 
 				return restoreTransactionJournal{}, err
 			}
 			record.PreviousDigest = backupChecksum(previous)
-			info, err := os.Stat(item.target)
+			info, err := os.Lstat(item.target)
 			if err != nil {
 				return restoreTransactionJournal{}, err
 			}

@@ -211,97 +211,31 @@ func VerifyBackupWithOptions(data []byte, passphrase string, crypto CryptoOption
 	return verified.report, nil
 }
 
+// RestoreBackupWithOptions restores a caller-supplied archive byte slice. The
+// bytes are staged to a bounded temporary file and routed through the same
+// journaled file-based path as RestoreBackupFileWithOptions: durable journal +
+// interrupted-restore recovery + snapshot barrier, instead of the unjournalled
+// stagedRestoreFile.commit path that left a torn triple plus unrecoverable
+// .pre-restore-* files on a crash (#1124). The MaxBytes policy bounds the
+// caller-supplied input before it is staged.
 func RestoreBackupWithOptions(data []byte, statePath, keyPath, passphrase string, options RestoreOptions) (RestoreResult, error) {
-	verified, err := inspectBackupWithOptions(data, passphrase, options.Crypto)
+	maxBytes, err := normalizeBackupMaxBytes(options.MaxBytes)
 	if err != nil {
 		return RestoreResult{}, err
 	}
-	result := RestoreResult{
-		Verified:     true,
-		CheckOnly:    options.CheckOnly,
-		Verification: verified.report,
+	if int64(len(data)) > maxBytes {
+		return RestoreResult{}, backupPolicyError(int64(len(data)), maxBytes)
 	}
-	if options.CheckOnly {
-		return result, nil
-	}
-	if len(verified.database) != 0 {
-		if options.DatabasePath == "" {
-			options.DatabasePath = filepath.Join(filepath.Dir(statePath), "veil.db")
-		}
-		if err := checkpointSQLiteRestoreBoundary(options.DatabasePath); err != nil {
-			return RestoreResult{}, fmt.Errorf("prepare database restore boundary: %w", err)
-		}
-	}
-	now := options.Now
-	if now == nil {
-		now = time.Now
-	}
-	suffix := now().UTC().Format("20060102T150405.000000000Z")
-	stateSafety := statePath + ".pre-restore-" + suffix
-	keySafety := keyPath + ".pre-restore-" + suffix
-	stateBackup, err := stageRestoreFile(statePath, verified.state, stateSafety)
+	workDir, err := os.MkdirTemp("", "veil-restore-archive-*")
 	if err != nil {
-		return RestoreResult{}, fmt.Errorf("stage state restore: %w", err)
+		return RestoreResult{}, err
 	}
-	keyBackup, err := stageRestoreFile(keyPath, verified.key, keySafety)
-	if err != nil {
-		_ = stateBackup.cleanupStaged()
-		return RestoreResult{}, fmt.Errorf("stage key restore: %w", err)
+	defer os.RemoveAll(workDir)
+	archivePath := filepath.Join(workDir, "archive.tar.gz")
+	if err := os.WriteFile(archivePath, data, 0o600); err != nil {
+		return RestoreResult{}, err
 	}
-	staged := []*stagedRestoreFile{stateBackup, keyBackup}
-	var databaseBackup *stagedRestoreFile
-	databaseSafety := ""
-	if len(verified.database) != 0 {
-		if options.DatabasePath == "" {
-			options.DatabasePath = filepath.Join(filepath.Dir(statePath), "veil.db")
-		}
-		databaseSafety = options.DatabasePath + ".pre-restore-" + suffix
-		databaseBackup, err = stageRestoreFile(options.DatabasePath, verified.database, databaseSafety)
-		if err != nil {
-			_ = stateBackup.cleanupStaged()
-			_ = keyBackup.cleanupStaged()
-			return RestoreResult{}, fmt.Errorf("stage database restore: %w", err)
-		}
-		if err := prepareRestoredDatabaseRuntimeUnknown(databaseBackup.temp, options.FencingGeneration); err != nil {
-			_ = stateBackup.cleanupStaged()
-			_ = keyBackup.cleanupStaged()
-			_ = databaseBackup.cleanupStaged()
-			return RestoreResult{}, fmt.Errorf("mark restored runtime unverified: %w", err)
-		}
-		staged = append(staged, databaseBackup)
-	}
-	for i, file := range staged {
-		if err := file.commit(); err != nil {
-			for j := len(staged) - 1; j >= 0; j-- {
-				if j < i {
-					_ = staged[j].rollback()
-				} else {
-					_ = staged[j].cleanupStaged()
-				}
-			}
-			return RestoreResult{}, fmt.Errorf("replace backup member %d: %w", i, err)
-		}
-	}
-	if databaseBackup != nil {
-		for _, suffix := range []string{"-wal", "-shm"} {
-			if err := restoreRemove(options.DatabasePath + suffix); err != nil && !os.IsNotExist(err) {
-				for j := len(staged) - 1; j >= 0; j-- {
-					_ = staged[j].rollback()
-				}
-				return RestoreResult{}, fmt.Errorf("remove stale database sidecar %s: %w", suffix, err)
-			}
-		}
-	}
-	if stateBackup.hadOriginal {
-		result.SafetyStatePath = stateSafety
-	}
-	if keyBackup.hadOriginal {
-		result.SafetyKeyPath = keySafety
-	}
-	if databaseBackup != nil && databaseBackup.hadOriginal {
-		result.SafetyDatabasePath = databaseSafety
-	}
-	return result, nil
+	return RestoreBackupFileWithOptions(archivePath, statePath, keyPath, passphrase, options)
 }
 
 func inspectBackup(data []byte, passphrase string) (verifiedBackup, error) {
@@ -604,6 +538,7 @@ func readArchiveTarballWithMax(tarball []byte, maxBytes int64) (archiveContents,
 	reader := tar.NewReader(gzipReader)
 	seen := make(map[string]bool)
 	var contents archiveContents
+	var expandedBytes int64
 	for {
 		header, err := reader.Next()
 		if err == io.EOF {
@@ -624,6 +559,12 @@ func readArchiveTarballWithMax(tarball []byte, maxBytes int64) (archiveContents,
 		}
 		if header.Size < 0 || header.Size > maxBytes {
 			return archiveContents{}, fmt.Errorf("invalid backup: %q exceeds size limit", name)
+		}
+		// Bound aggregate expanded bytes, not just each member: per-member
+		// limits alone let a crafted multi-member tarball expand far beyond the
+		// configured policy in memory (#1124).
+		if expandedBytes, err = addPolicyBytes(expandedBytes, header.Size, maxBytes); err != nil {
+			return archiveContents{}, err
 		}
 		body, err := io.ReadAll(io.LimitReader(reader, maxBytes+1))
 		if err != nil {
@@ -764,9 +705,20 @@ func stageRestoreFile(target string, body []byte, safety string) (*stagedRestore
 	// correct).
 	mode := os.FileMode(0o600)
 	var info os.FileInfo
-	if existing, statErr := os.Stat(target); statErr == nil {
+	existing, statErr := os.Lstat(target)
+	if statErr == nil {
+		if !existing.Mode().IsRegular() {
+			// A symlinked live target would be renamed into the safety slot,
+			// where safety retention later rejects it as non-regular and
+			// permanently poisons pruning (#1125).
+			_ = restoreRemove(tempPath)
+			return nil, fmt.Errorf("restore target %s is not a regular file", target)
+		}
 		info = existing
 		mode = existing.Mode().Perm()
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		_ = restoreRemove(tempPath)
+		return nil, statErr
 	}
 	if err := restoreChmod(tempPath, mode); err != nil {
 		_ = restoreRemove(tempPath)
@@ -782,7 +734,7 @@ func stageRestoreFile(target string, body []byte, safety string) (*stagedRestore
 		_ = restoreRemove(tempPath)
 		return nil, err
 	}
-	_, statErr := os.Stat(target)
+	_, statErr = os.Lstat(target)
 	return &stagedRestoreFile{
 		target:      target,
 		temp:        tempPath,
