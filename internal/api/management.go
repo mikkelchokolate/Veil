@@ -329,8 +329,12 @@ func (s *managementState) Close() error {
 	stopClientBackgroundWorkers(workers)
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return closeClientDatabase(s)
+	// Detach under s.mu; the blocking runner/token/db Close calls run after
+	// the mutex is released so a recovery monitor inside the apply executor
+	// cannot deadlock shutdown or a restore reusing this path (#1087).
+	detached, _ := detachClientDatabase(s)
+	s.mu.Unlock()
+	return detached.close()
 }
 
 func (s *managementState) lifecycleContext() context.Context {

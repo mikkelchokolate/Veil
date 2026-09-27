@@ -54,22 +54,7 @@ func RestoreTransactionCommitted(statePath, keyPath, databasePath string) (bool,
 		if unmarshalErr := json.Unmarshal(body, &disk); unmarshalErr != nil {
 			return false, unmarshalErr
 		}
-		expected := map[string]string{}
-		for _, file := range disk.Files {
-			switch file.Name {
-			case "state.json":
-				expected[file.Name] = filepath.Clean(statePath)
-			case "state.key":
-				expected[file.Name] = filepath.Clean(keyPath)
-			case "veil.db":
-				dbPath := databasePath
-				if dbPath == "" {
-					dbPath = filepath.Join(root, "veil.db")
-				}
-				expected[file.Name] = filepath.Clean(dbPath)
-			}
-		}
-		journal, decodeErr := decodeRestoreJournal(body, expected)
+		journal, decodeErr := decodeRestoreJournal(body, restoreJournalExpectedTargets(disk, statePath, keyPath, databasePath))
 		if decodeErr != nil {
 			return false, decodeErr
 		}
