@@ -479,8 +479,13 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 	s.updateWG.Wait()
 
 	s.mu.Lock()
-	closeErr := closeClientDatabase(s)
+	// Detach under s.mu, then close after releasing it: runner.Close waits on
+	// the recovery monitor, and the monitor re-enters s.mu through the apply
+	// executor — closing while the mutex is held deadlocked restore against a
+	// due recovery-pending job (#1087).
+	detached, _ := detachClientDatabase(s)
 	s.mu.Unlock()
+	closeErr := detached.close()
 	var result privileged.BackupResult
 	var err error
 	if closeErr != nil {
@@ -505,6 +510,19 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 		s.resetMutableStateToDefaultsLocked()
 	}
 	reopenErr := NewManagementStateLifecycle(s).ReloadLocked()
+	if reopenErr != nil {
+		// Fail closed exactly like Reload() and key rotation do. The
+		// pre-reload reset left serve-time defaults (0 users, 0 inbounds,
+		// setup incomplete) in memory; without this flag the next mutation
+		// would persist those defaults over the committed restored state
+		// file — a total user/inbound wipe on disk (#1084).
+		s.startupStateLoadFailed = true
+		s.startupStateLoadErr = reopenErr
+		s.allowDevAnonymous = false
+	} else {
+		s.startupStateLoadFailed = false
+		s.startupStateLoadErr = nil
+	}
 	// The lease row lives in whatever veil.db is on disk — when the reload
 	// failed to reopen it, s.db is nil while the rolled-back database still
 	// carries a live-owner lease that would wedge every fenced operation for
