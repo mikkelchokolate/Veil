@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/client"
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
@@ -190,6 +191,63 @@ func TestClientBindingsFallbackReturnsOnlyAfterAllBindingsRemoved(t *testing.T) 
 	}
 	if inbounds[0].HasClientBindings {
 		t.Fatal("inbound still credential-managed after its last binding was removed")
+	}
+}
+
+// #1098 hardening: when every credential field is empty, the rendered
+// sentinel must still be unguessable — keyed by the per-install derivation
+// secret the state layer injects, not publicly computable from the inbound
+// name alone.
+func TestRevokedSentinelKeyedByInstallSecret(t *testing.T) {
+	s, svc := newBindingTestState(t)
+	// Strip all credential material so only the injected secret can key the
+	// sentinel — the exact hole CodeQL/#1098 flagged.
+	s.inbounds[0].Password = ""
+	view, err := svc.Create(client.Client{Name: "alice", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := svc.AddBinding(view.ID, "hy2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetCredential(b.ID, "password", "client-pass"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetBindingEnabled(b.ID, false, b.Version); err != nil {
+		t.Fatal(err)
+	}
+	// SnapshotLocked back-fills live settings with the derived per-install
+	// secret, matching what Store.decryptSnapshot injects on every load.
+	snap, err := s.snapshotLocked()
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	secret := snap.Settings.CredentialDerivationSecret
+	if secret == "" {
+		t.Fatal("snapshot settings did not carry the credential derivation secret")
+	}
+	inbounds, err := s.inboundsWithRuntimeCredentialsLocked()
+	if err != nil {
+		t.Fatalf("resolve runtime credentials: %v", err)
+	}
+	body, err := generatedconfig.NewInboundRenderer(
+		snap.Settings,
+		generatedconfig.NewPathsWithLiveRoot(s.applyRoot, s.liveRoot),
+		s.warp,
+	).RenderHysteria2(inbounds[0])
+	if err != nil {
+		t.Fatalf("render hy2: %v", err)
+	}
+	_, wantPass := model.RevokedClientCredential(
+		model.Settings{CredentialDerivationSecret: secret},
+		model.Inbound{Name: "hy2"},
+	)
+	if !strings.Contains(body, "veil-revoked-hy2") {
+		t.Fatalf("rendered config missing the revoked sentinel account:\n%s", body)
+	}
+	if !strings.Contains(body, wantPass) {
+		t.Fatalf("sentinel password not keyed by the install secret:\n%s", body)
 	}
 }
 

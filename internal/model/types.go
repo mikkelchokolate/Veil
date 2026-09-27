@@ -30,7 +30,22 @@ type Settings struct {
 	// A nil pointer means "enabled" for backward compatibility with states created
 	// before this field existed.
 	FirewallManagement *bool `json:"firewallManagement,omitempty"`
+
+	// CredentialDerivationSecret is a per-install secret injected into settings
+	// at state-load / snapshot-build time (derived from the management-state
+	// encryption key via secrets.DeriveToken). RevokedClientCredential mixes it
+	// into sentinel credentials so a revoked inbound's rendered password stays
+	// unguessable even when every credential field is empty (issue #1098).
+	// Runtime-only: never serialized to state, never accepted from API input —
+	// settings mutations preserve the current value. Empty means the render
+	// context has no per-install secret available.
+	CredentialDerivationSecret string `json:"-"`
 }
+
+// CredentialDerivationLabel is the domain label passed to secrets.DeriveToken
+// when producing Settings.CredentialDerivationSecret. Keep it stable:
+// changing it changes every sentinel credential on every install.
+const CredentialDerivationLabel = "veil-revoked-credential-v1"
 
 type ClientProfile struct {
 	Name     string `json:"name"`
