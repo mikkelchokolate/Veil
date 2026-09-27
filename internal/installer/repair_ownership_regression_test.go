@@ -49,7 +49,7 @@ func TestApplyRepairPlanRestoresRuntimeSharedOwnership(t *testing.T) {
 		{Path: envPath, Reason: RepairReasonMissing, Content: "VEIL_API_TOKEN=x\n", Mode: 0o600},
 	}}
 
-	result, err := ApplyRepairPlan(plan)
+	result, err := ApplyRepairPlan(plan, dir)
 	if err != nil {
 		t.Fatalf("apply repair: %v", err)
 	}

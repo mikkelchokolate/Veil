@@ -262,7 +262,11 @@ func TestIsValidCertificate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			certPath, domain := tt.prepare(t)
-			if got := isValidCertificate(certPath, domain); got != tt.want {
+			// isValidCertificate now validates bytes, not a path (#1086): a
+			// path that cannot be read as a file yields nil data, which must
+			// fail the same way unreadable material did before.
+			data, _ := os.ReadFile(certPath)
+			if got := isValidCertificate(data, domain); got != tt.want {
 				t.Fatalf("isValidCertificate(%q, %q) = %v, want %v", certPath, domain, got, tt.want)
 			}
 		})

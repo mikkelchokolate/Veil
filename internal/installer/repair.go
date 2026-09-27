@@ -24,7 +24,11 @@ func BuildRepairPlan(profile RURecommendedProfile, paths ApplyPaths) (RepairPlan
 	return managedfiles.NewSet(files).Plan()
 }
 
-func ApplyRepairPlan(plan RepairPlan) (RepairResult, error) {
+// ApplyRepairPlan applies the planned repairs and restores the ownership
+// contract. etcDir is the configured Veil etc directory: runtime-shared
+// classification is prefix-matched against it so a custom install layout
+// cannot mark unrelated paths veil-proxy-shared (#1130).
+func ApplyRepairPlan(plan RepairPlan, etcDir string) (RepairResult, error) {
 	result, err := managedfiles.Apply(plan)
 	if err != nil {
 		return RepairResult{}, err
@@ -33,7 +37,7 @@ func ApplyRepairPlan(plan RepairPlan) (RepairResult, error) {
 	// ownership contract (veil.env/state keys → root:veil 0640, generated and
 	// panel TLS → root:veil-proxy 0640) so the runtime units can read them
 	// again (audit #379).
-	if err := chownSecretsForVeilGroup(result.WrittenFiles); err != nil {
+	if err := chownSecretsForVeilGroup(result.WrittenFiles, etcDir); err != nil {
 		return result, err
 	}
 	return result, nil
@@ -83,20 +87,20 @@ func desiredManagedFiles(profile RURecommendedProfile, paths ApplyPaths) ([]mana
 		return nil, err
 	}
 	for i := range managed {
-		managed[i].Owner = desiredFileOwner(managed[i].Path, veilGID, proxyGID)
+		managed[i].Owner = desiredFileOwner(managed[i].Path, paths.EtcDir, veilGID, proxyGID)
 	}
 	return managed, nil
 }
 
 // desiredFileOwner maps a managed file onto the post-#601 ownership contract:
-// runtime-shared material (generated/, tls/, panel/, certs/, www/) is
+// runtime-shared material (<etcDir>/{generated,tls,panel,certs,www}) is
 // root:veil-proxy, panel-only secrets are root:veil, and everything else
 // (systemd units) stays root:root.
-func desiredFileOwner(path string, veilGID, proxyGID int) *managedfiles.FileOwner {
+func desiredFileOwner(path, etcDir string, veilGID, proxyGID int) *managedfiles.FileOwner {
 	switch {
-	case isRuntimeSharedConfig(path):
+	case isRuntimeSharedConfig(path, etcDir):
 		return &managedfiles.FileOwner{UID: 0, GID: proxyGID}
-	case needsVeilGroupRead(path):
+	case needsVeilGroupRead(path, etcDir):
 		return &managedfiles.FileOwner{UID: 0, GID: veilGID}
 	default:
 		return &managedfiles.FileOwner{UID: 0, GID: 0}

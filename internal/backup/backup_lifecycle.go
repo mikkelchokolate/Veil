@@ -7,13 +7,18 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 // Test hooks for lifecycle operations that are hard to trigger via the filesystem.
 var (
-	lifecycleMkdirAll     = os.MkdirAll
-	lifecycleManifestSave = func(path string, manifest Manifest) error {
-		return NewBackupManifestStore(path).Save(manifest)
+	lifecycleMkdirAll = os.MkdirAll
+	// lifecycleManifestSave writes manifest.json inside the pinned backup
+	// directory via a temp+rename — never through a re-resolved path, because
+	// the backup root lives under a service-account-owned tree (#1131).
+	lifecycleManifestSave = func(dir *safefs.Dir, manifest Manifest) error {
+		return saveManifestInDir(dir, manifest)
 	}
 	restoreCommitRename = os.Rename
 )
@@ -38,10 +43,17 @@ func (l Lifecycle) BackupExisting(paths []string) (string, error) {
 		return "", err
 	}
 
-	backupPath := filepath.Join(l.Dir, backupID)
-	if err := lifecycleMkdirAll(backupPath, 0o700); err != nil {
-		return "", fmt.Errorf("create backup directory: %w", err)
+	// l.Dir typically sits inside the service-owned /var/lib/veil, so a plain
+	// MkdirAll on <l.Dir>/<backupID> follows a "backups" component swapped
+	// for a symlink — root would create directories and drop file copies
+	// under an attacker-chosen target (#1131). Pin the parent, create or
+	// verify the root descriptor-relative (a symlinked leaf fails ELOOP),
+	// and keep every member and manifest write under the pinned backup dir.
+	backupDir, err := l.openPinnedBackupDir(backupID)
+	if err != nil {
+		return "", err
 	}
+	defer backupDir.Close()
 
 	manifest := backupManifest{}
 	seen := make(map[string]struct{})
@@ -70,9 +82,8 @@ func (l Lifecycle) BackupExisting(paths []string) (string, error) {
 
 		member := backupMemberName(memberIndex, src)
 		memberIndex++
-		dst := filepath.Join(backupPath, member)
 
-		if err := copyFile(src, dst, srcInfo.Mode()); err != nil {
+		if err := copyFileIntoPinnedDir(backupDir, src, member, srcInfo.Mode()); err != nil {
 			return "", fmt.Errorf("backup %s: %w", src, err)
 		}
 
@@ -83,12 +94,136 @@ func (l Lifecycle) BackupExisting(paths []string) (string, error) {
 		})
 	}
 
-	manifestPath := filepath.Join(backupPath, backupManifestName)
-	if err := lifecycleManifestSave(manifestPath, manifest); err != nil {
+	if err := lifecycleManifestSave(backupDir, manifest); err != nil {
 		return "", err
 	}
 
 	return backupID, nil
+}
+
+// openPinnedBackupDir creates (if needed) and opens <l.Dir>/<backupID> as a
+// pinned directory handle. The parent is opened follow-symlinks — it is the
+// caller-configured root — but the backups leaf and the per-backup dir are
+// created and opened descriptor-relative with O_NOFOLLOW, so neither can be a
+// symlink planted by the service identity that owns the parent (#1131).
+func (l Lifecycle) openPinnedBackupDir(backupID string) (*safefs.Dir, error) {
+	parent := filepath.Dir(l.Dir)
+	leaf := filepath.Base(l.Dir)
+	if err := lifecycleMkdirAll(parent, 0o700); err != nil {
+		return nil, fmt.Errorf("create backup directory: %w", err)
+	}
+	parentDir, err := safefs.OpenDirFollow(parent)
+	if err != nil {
+		return nil, fmt.Errorf("open backup parent directory: %w", err)
+	}
+	defer parentDir.Close()
+	if _, err := parentDir.StatAt(leaf); err != nil {
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("stat backup root: %w", err)
+		}
+		if err := parentDir.MkdirAt(leaf, 0o700); err != nil {
+			return nil, fmt.Errorf("create backup directory: %w", err)
+		}
+	}
+	rootDir, err := parentDir.OpenDirAt(leaf)
+	if err != nil {
+		// A swapped-in symlink fails ELOOP here instead of being followed.
+		return nil, fmt.Errorf("open backup root: %w", err)
+	}
+	defer rootDir.Close()
+	if err := rootDir.MkdirAt(backupID, 0o700); err != nil {
+		return nil, fmt.Errorf("create backup directory: %w", err)
+	}
+	backupDir, err := rootDir.OpenDirAt(backupID)
+	if err != nil {
+		return nil, fmt.Errorf("open backup directory: %w", err)
+	}
+	return backupDir, nil
+}
+
+// copyFileIntoPinnedDir copies src into dir as name via temp+rename, never
+// resolving the destination by path. The source is opened
+// O_NOFOLLOW|O_NONBLOCK and fstat-checked, so a managed file swapped for a
+// symlink is refused rather than followed and a swapped FIFO cannot block
+// the copy (#1083, #1131).
+func copyFileIntoPinnedDir(dir *safefs.Dir, src, name string, mode os.FileMode) error {
+	srcFile, err := safefs.OpenNoFollow(src)
+	if err != nil {
+		return fmt.Errorf("open source: %w", err)
+	}
+	defer srcFile.Close()
+	srcStat, err := srcFile.Stat()
+	if err != nil {
+		return err
+	}
+	if !srcStat.Mode().IsRegular() {
+		return fmt.Errorf("backup source %s is not a regular file", src)
+	}
+
+	tmp, tmpName, err := dir.CreateTempAt(".veil-copy-", 0o600)
+	if err != nil {
+		return fmt.Errorf("create destination: %w", err)
+	}
+	committed := false
+	defer func() {
+		_ = tmp.Close()
+		if !committed {
+			_ = dir.RemoveAt(tmpName)
+		}
+	}()
+
+	if _, err := fileCopierCopy(tmp, srcFile); err != nil {
+		return fmt.Errorf("copy: %w", err)
+	}
+	if err := tmp.Chmod(mode.Perm()); err != nil {
+		return err
+	}
+	if err := fileCopierSync(tmp); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := dir.RenameAt(tmpName, name); err != nil {
+		return fmt.Errorf("create destination: %w", err)
+	}
+	committed = true
+	return dir.File().Sync()
+}
+
+// saveManifestInDir writes manifest.json inside the pinned backup directory
+// with the same write-temp/fsync/rename/dirsync ordering atomicfile.Write
+// uses, but never re-resolving a path under the service-influenced tree.
+func saveManifestInDir(dir *safefs.Dir, manifest Manifest) error {
+	manifestData, err := manifestMarshal(manifest)
+	if err != nil {
+		return fmt.Errorf("marshal manifest: %w", err)
+	}
+	tmp, tmpName, err := dir.CreateTempAt(".veil-manifest-", 0o600)
+	if err != nil {
+		return fmt.Errorf("write manifest: %w", err)
+	}
+	committed := false
+	defer func() {
+		_ = tmp.Close()
+		if !committed {
+			_ = dir.RemoveAt(tmpName)
+		}
+	}()
+	if _, err := tmp.Write(manifestData); err != nil {
+		return fmt.Errorf("write manifest: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		return fmt.Errorf("write manifest: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("write manifest: %w", err)
+	}
+	if err := dir.RenameAt(tmpName, backupManifestName); err != nil {
+		return fmt.Errorf("write manifest: %w", err)
+	}
+	committed = true
+	return dir.File().Sync()
 }
 
 func (l Lifecycle) Restore(backupID string) ([]string, error) {
