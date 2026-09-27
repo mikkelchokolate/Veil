@@ -88,13 +88,26 @@ func RunLifecycle(opts LifecycleOptions) (result error) {
 			return nil
 		case <-opts.Context.Done():
 			fmt.Fprintln(opts.Out, "Shutting down...")
+			// Close long-lived SSE streams BEFORE the drain wait:
+			// http.Server.Shutdown only returns once every active connection
+			// goes idle, but event-stream handlers stay open until their
+			// broadcaster channel closes — previously every stop with a
+			// monitoring client attached burned the whole drain timeout and
+			// exited 1 (issue #1110).
+			if streams, ok := opts.StateReloader.(interface{ CloseStreams() }); ok {
+				streams.CloseStreams()
+			}
 			// Graceful shutdown with drain timeout.
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), opts.DrainTimeout)
-			if err := opts.Server.Shutdown(shutdownCtx); err != nil {
-				shutdownCancel()
-				return fmt.Errorf("shutdown error: %w", err)
-			}
+			shutdownErr := opts.Server.Shutdown(shutdownCtx)
 			shutdownCancel()
+			if shutdownErr != nil {
+				// A drain timeout must not turn `systemctl stop` into a
+				// recorded failure: warn and force-close whatever is left
+				// (issue #1110).
+				fmt.Fprintf(opts.Err, "shutdown drain did not finish (%v); closing remaining connections\n", shutdownErr)
+				_ = opts.Server.Close()
+			}
 			// Wait for the server goroutine to finish before returning so callers
 			// can safely mutate shared test hooks such as lifecycleListenAndServe.
 			<-serveErr

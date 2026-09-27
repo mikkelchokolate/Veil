@@ -15,10 +15,12 @@ import (
 )
 
 type fakeReloader struct {
-	reloadCalled int32
-	reloadErr    error
-	closeCalled  int32
-	closeErr     error
+	reloadCalled       int32
+	reloadErr          error
+	closeCalled        int32
+	closeErr           error
+	closeStreamsCalled int32
+	closeStreamsHook   func()
 }
 
 func (f *fakeReloader) Reload() error {
@@ -29,6 +31,13 @@ func (f *fakeReloader) Reload() error {
 func (f *fakeReloader) Close() error {
 	atomic.AddInt32(&f.closeCalled, 1)
 	return f.closeErr
+}
+
+func (f *fakeReloader) CloseStreams() {
+	atomic.AddInt32(&f.closeStreamsCalled, 1)
+	if f.closeStreamsHook != nil {
+		f.closeStreamsHook()
+	}
 }
 
 func TestRunServeLifecycleClosesStateWorkersOnShutdown(t *testing.T) {
@@ -221,6 +230,10 @@ func TestRunLifecycleDefaults(t *testing.T) {
 	}
 }
 
+// A connection that can never go idle (e.g. an SSE stream whose hub was
+// never closed) no longer turns `systemctl stop` into a failure: after the
+// drain timeout the lifecycle warns and force-closes, returning nil
+// (issue #1110).
 func TestRunLifecycleShutdownTimeout(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -243,12 +256,13 @@ func TestRunLifecycleShutdownTimeout(t *testing.T) {
 	defer func() { lifecycleListenAndServe = func(srv *http.Server) error { return srv.ListenAndServe() } }()
 
 	ctx, cancel := context.WithCancel(context.Background())
+	var out, errOut bytes.Buffer
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- RunLifecycle(LifecycleOptions{
 			Context:      ctx,
-			Out:          &bytes.Buffer{},
-			Err:          &bytes.Buffer{},
+			Out:          &out,
+			Err:          &errOut,
 			Server:       server,
 			DrainTimeout: 1 * time.Nanosecond,
 		})
@@ -276,11 +290,87 @@ func TestRunLifecycleShutdownTimeout(t *testing.T) {
 
 	select {
 	case err := <-errCh:
-		if err == nil || !strings.Contains(err.Error(), "shutdown error") {
-			t.Fatalf("expected shutdown error, got %v", err)
+		if err != nil {
+			t.Fatalf("drain timeout must be a warning, not a fatal error: %v", err)
+		}
+		if !strings.Contains(errOut.String(), "shutdown drain did not finish") {
+			t.Fatalf("missing drain warning:\n%s", errOut.String())
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatalf("timeout waiting for lifecycle to finish")
+	}
+}
+
+// TestRunLifecycleClosesStreamsBeforeDrain is the #1110 regression: an open
+// SSE-style connection (handler returns only when its stream channel closes)
+// must not hold the shutdown hostage for the whole drain timeout — the
+// reloader's CloseStreams hook runs first, so Shutdown finishes promptly and
+// returns nil.
+func TestRunLifecycleClosesStreamsBeforeDrain(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer listener.Close()
+
+	streamClosed := make(chan struct{})
+	entered := make(chan struct{})
+	server := &http.Server{
+		Addr: listener.Addr().String(),
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			close(entered)
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			select {
+			case <-streamClosed:
+			case <-r.Context().Done():
+			}
+		}),
+	}
+
+	lifecycleListenAndServe = func(srv *http.Server) error {
+		return srv.Serve(listener)
+	}
+	defer func() { lifecycleListenAndServe = func(srv *http.Server) error { return srv.ListenAndServe() } }()
+
+	reloader := &fakeReloader{closeStreamsHook: func() { close(streamClosed) }}
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- RunLifecycle(LifecycleOptions{
+			Context:       ctx,
+			Out:           &bytes.Buffer{},
+			Err:           &bytes.Buffer{},
+			Server:        server,
+			StateReloader: reloader,
+			DrainTimeout:  5 * time.Second,
+		})
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	resp, err := http.Get("http://" + listener.Addr().String() + "/")
+	if err != nil {
+		t.Fatalf("open stream: %v", err)
+	}
+	defer resp.Body.Close()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream handler did not start")
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("shutdown with an open stream must still succeed: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("shutdown blocked behind the open stream")
+	}
+	if got := atomic.LoadInt32(&reloader.closeStreamsCalled); got != 1 {
+		t.Fatalf("CloseStreams calls=%d, want 1", got)
 	}
 }
 
