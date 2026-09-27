@@ -84,7 +84,12 @@ func preflightBackupOperationSpace(archivePath, statePath, keyPath, databasePath
 		return backupPolicyError(archiveInfo.Size(), maxBytes)
 	}
 	requirements := map[string][]int64{
-		filepath.Dir(archivePath): {archiveInfo.Size(), maxBytes},
+		// The archive dir also hosts the .veil-backup-inspect-* workspace,
+		// which can hold a decrypted tarball (≤maxBytes) AND the extracted
+		// members (≤maxBytes aggregate) at once for encrypted archives —
+		// charging a single maxBytes undercounted restores of encrypted
+		// archives (#1119).
+		filepath.Dir(archivePath): {archiveInfo.Size(), maxBytes, maxBytes},
 	}
 	if restoring {
 		stateDir := filepath.Dir(statePath)
@@ -380,87 +385,103 @@ func RestoreBackupFileWithOptions(archivePath, statePath, keyPath, passphrase st
 	if options.CheckOnly {
 		return result, nil
 	}
-	if verified.databasePath != "" {
-		if err := checkpointSQLiteRestoreBoundary(options.DatabasePath); err != nil {
-			return RestoreResult{}, fmt.Errorf("prepare database restore boundary: %w", err)
+	var stateBackup, keyBackup, databaseBackup *stagedRestoreFile
+	var stateSafety, keySafety, databaseSafety string
+	// Hold the cross-process snapshot barrier for the whole capture→publish
+	// window — safety pruning, WAL boundary check, previous-revision/digest
+	// capture, staging, journal writes and member replacement. A racing commit
+	// or second restore between the PreviousDigest capture and the safety
+	// rename would leave safeties the journal cannot verify; backup creation
+	// already serializes its capture the same way (#1123).
+	publishErr := managementstate.WithSnapshotBarrier(statePath, func() error {
+		// Prune retained safeties before staging so restores that never went
+		// through the privileged helper (CLI included) cannot accumulate
+		// .pre-restore-* copies forever (#1125).
+		if _, err := PruneRestoreSafetyFiles(statePath, keyPath, options.DatabasePath, 2); err != nil {
+			return fmt.Errorf("prune restore safety files: %w", err)
 		}
-	}
-	previousRevision, err := readRestoreRevision(options.DatabasePath)
-	if err != nil {
-		return RestoreResult{}, fmt.Errorf("read previous restore revision: %w", err)
-	}
-	now := options.Now
-	if now == nil {
-		now = time.Now
-	}
-	suffix := now().UTC().Format("20060102T150405.000000000Z")
-	stateSafety := statePath + ".pre-restore-" + suffix
-	keySafety := keyPath + ".pre-restore-" + suffix
-	stateBackup, err := stageRestoreFile(statePath, verified.state, stateSafety)
-	if err != nil {
-		return RestoreResult{}, fmt.Errorf("stage state restore: %w", err)
-	}
-	keyBackup, err := stageRestoreFile(keyPath, verified.key, keySafety)
-	if err != nil {
-		_ = stateBackup.cleanupStaged()
-		return RestoreResult{}, fmt.Errorf("stage key restore: %w", err)
-	}
-	staged := []*stagedRestoreFile{stateBackup, keyBackup}
-	names := []string{"state.json", "state.key"}
-	var databaseBackup *stagedRestoreFile
-	databaseSafety := ""
-	if verified.databasePath != "" {
-		databaseSafety = options.DatabasePath + ".pre-restore-" + suffix
-		databaseBackup, err = stageRestoreFileFromPath(options.DatabasePath, verified.databasePath, databaseSafety)
+		if verified.databasePath != "" {
+			if err := checkpointSQLiteRestoreBoundary(options.DatabasePath); err != nil {
+				return fmt.Errorf("prepare database restore boundary: %w", err)
+			}
+		}
+		previousRevision, err := readRestoreRevision(options.DatabasePath)
+		if err != nil {
+			return fmt.Errorf("read previous restore revision: %w", err)
+		}
+		now := options.Now
+		if now == nil {
+			now = time.Now
+		}
+		suffix := now().UTC().Format("20060102T150405.000000000Z")
+		stateSafety = statePath + ".pre-restore-" + suffix
+		keySafety = keyPath + ".pre-restore-" + suffix
+		stateBackup, err = stageRestoreFile(statePath, verified.state, stateSafety)
+		if err != nil {
+			return fmt.Errorf("stage state restore: %w", err)
+		}
+		keyBackup, err = stageRestoreFile(keyPath, verified.key, keySafety)
 		if err != nil {
 			_ = stateBackup.cleanupStaged()
-			_ = keyBackup.cleanupStaged()
-			return RestoreResult{}, fmt.Errorf("stage database restore: %w", err)
+			return fmt.Errorf("stage key restore: %w", err)
 		}
-		if err := prepareRestoredDatabaseRuntimeUnknown(databaseBackup.temp, options.FencingGeneration); err != nil {
-			_ = stateBackup.cleanupStaged()
-			_ = keyBackup.cleanupStaged()
-			_ = databaseBackup.cleanupStaged()
-			return RestoreResult{}, fmt.Errorf("mark restored runtime unverified: %w", err)
-		}
-		staged = append(staged, databaseBackup)
-		names = append(names, "veil.db")
-	}
-	journal, err := prepareRestoreJournalFenced(statePath, staged, names, previousRevision, verified.report.DesiredRevision, options.FencingGeneration)
-	if err != nil {
-		for _, file := range staged {
-			_ = file.cleanupStaged()
-		}
-		return RestoreResult{}, fmt.Errorf("prepare durable restore journal: %w", err)
-	}
-	root := filepath.Dir(statePath)
-	for index := range staged {
-		if err := publishRestoreJournalFile(root, &journal, index); err != nil {
-			if rollbackErr := rollbackRestoreJournal(root, &journal); rollbackErr != nil {
-				return RestoreResult{}, fmt.Errorf("replace backup member %d: %v; rollback: %w", index, err, rollbackErr)
+		staged := []*stagedRestoreFile{stateBackup, keyBackup}
+		names := []string{"state.json", "state.key"}
+		if verified.databasePath != "" {
+			databaseSafety = options.DatabasePath + ".pre-restore-" + suffix
+			databaseBackup, err = stageRestoreFileFromPath(options.DatabasePath, verified.databasePath, databaseSafety)
+			if err != nil {
+				_ = stateBackup.cleanupStaged()
+				_ = keyBackup.cleanupStaged()
+				return fmt.Errorf("stage database restore: %w", err)
 			}
-			return RestoreResult{}, fmt.Errorf("replace backup member %d: %w", index, err)
+			if err := prepareRestoredDatabaseRuntimeUnknown(databaseBackup.temp, options.FencingGeneration); err != nil {
+				_ = stateBackup.cleanupStaged()
+				_ = keyBackup.cleanupStaged()
+				_ = databaseBackup.cleanupStaged()
+				return fmt.Errorf("mark restored runtime unverified: %w", err)
+			}
+			staged = append(staged, databaseBackup)
+			names = append(names, "veil.db")
 		}
-	}
-	if err := completeRestoreJournal(root, func() string {
+		journal, err := prepareRestoreJournalFenced(statePath, staged, names, previousRevision, verified.report.DesiredRevision, options.FencingGeneration)
+		if err != nil {
+			for _, file := range staged {
+				_ = file.cleanupStaged()
+			}
+			return fmt.Errorf("prepare durable restore journal: %w", err)
+		}
+		root := filepath.Dir(statePath)
+		for index := range staged {
+			if err := publishRestoreJournalFile(root, &journal, index); err != nil {
+				if rollbackErr := rollbackRestoreJournal(root, &journal); rollbackErr != nil {
+					return fmt.Errorf("replace backup member %d: %v; rollback: %w", index, err, rollbackErr)
+				}
+				return fmt.Errorf("replace backup member %d: %w", index, err)
+			}
+		}
+		databaseTarget := ""
 		if databaseBackup != nil {
-			return options.DatabasePath
+			databaseTarget = options.DatabasePath
 		}
-		return ""
-	}(), &journal); err != nil {
-		if errors.Is(err, errRestoreCommitted) {
-			// The exact intended set, revision binding and fencing floor are
-			// already durable. Leave the marker for idempotent startup cleanup;
-			// never roll a committed restore back because unlink failed.
-			goto restoreCommitted
+		if err := completeRestoreJournal(root, databaseTarget, &journal); err != nil {
+			if errors.Is(err, errRestoreCommitted) {
+				// The exact intended set, revision binding and fencing floor
+				// are already durable. Leave the marker for idempotent startup
+				// cleanup; never roll a committed restore back because unlink
+				// failed.
+				return nil
+			}
+			if rollbackErr := rollbackRestoreJournal(root, &journal); rollbackErr != nil {
+				return fmt.Errorf("finalize restored backup: %v; rollback: %w", err, rollbackErr)
+			}
+			return fmt.Errorf("finalize restored backup: %w", err)
 		}
-		if rollbackErr := rollbackRestoreJournal(root, &journal); rollbackErr != nil {
-			return RestoreResult{}, fmt.Errorf("finalize restored backup: %v; rollback: %w", err, rollbackErr)
-		}
-		return RestoreResult{}, fmt.Errorf("finalize restored backup: %w", err)
+		return nil
+	})
+	if publishErr != nil {
+		return RestoreResult{}, publishErr
 	}
-
-restoreCommitted:
 	if stateBackup.hadOriginal {
 		result.SafetyStatePath = stateSafety
 	}
@@ -492,6 +513,10 @@ func inspectBackupFileWithOptions(path, passphrase string, configuredMax int64, 
 	if info.Size() < 0 || info.Size() > maxBytes {
 		return nil, backupPolicyError(info.Size(), maxBytes)
 	}
+	// Sweep stale .veil-backup-* workspaces a crashed create/verify/restore
+	// left behind; fresh entries (< restoreResidueMinAge) may belong to a live
+	// operation and are kept (#1125).
+	sweepBackupWorkspaceResidue(filepath.Dir(path))
 	workDir, err := os.MkdirTemp(filepath.Dir(path), ".veil-backup-inspect-*")
 	if err != nil {
 		return nil, fmt.Errorf("create backup inspection workspace: %w", err)
@@ -932,9 +957,20 @@ func stageRestoreFileFromPath(target, source, safety string) (*stagedRestoreFile
 	}
 	mode := os.FileMode(0o600)
 	var info os.FileInfo
-	if existing, statErr := os.Stat(target); statErr == nil {
+	existing, statErr := os.Lstat(target)
+	if statErr == nil {
+		if !existing.Mode().IsRegular() {
+			// A symlinked live target would be renamed into the safety slot,
+			// where safety retention later rejects it as non-regular and
+			// permanently poisons pruning (#1125).
+			_ = restoreRemove(tempPath)
+			return nil, fmt.Errorf("restore target %s is not a regular file", target)
+		}
 		info = existing
 		mode = existing.Mode().Perm()
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		_ = restoreRemove(tempPath)
+		return nil, statErr
 	}
 	if err := restoreChmod(tempPath, mode); err != nil {
 		_ = restoreRemove(tempPath)
@@ -946,7 +982,7 @@ func stageRestoreFileFromPath(target, source, safety string) (*stagedRestoreFile
 			return nil, err
 		}
 	}
-	_, statErr := os.Stat(target)
+	_, statErr = os.Lstat(target)
 	return &stagedRestoreFile{target: target, temp: tempPath, safety: safety, hadOriginal: statErr == nil}, nil
 }
 
