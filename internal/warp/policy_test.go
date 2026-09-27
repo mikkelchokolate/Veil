@@ -8,7 +8,7 @@ import (
 func TestPolicyAppliesDefaultsAndRedactsSecrets(t *testing.T) {
 	cfg := Config{PrivateKey: "private", LicenseKey: "license"}
 	SetDefaults(&cfg)
-	if cfg.Endpoint != "engage.cloudflareclient.com:2408" || cfg.SocksListen != "127.0.0.1" || cfg.SocksPort != 40000 || cfg.MTU != 1280 {
+	if cfg.Endpoint != "engage.cloudflareclient.com:2408" || cfg.SocksListen != "127.41.0.1" || cfg.SocksPort != 40000 || cfg.MTU != 1280 {
 		t.Fatalf("defaults = %+v", cfg)
 	}
 	redacted := Redact(cfg)
@@ -82,7 +82,7 @@ func TestSetDefaultsPartialConfig(t *testing.T) {
 	if cfg.SocksPort != 2222 {
 		t.Errorf("SocksPort overwritten, got %d", cfg.SocksPort)
 	}
-	if cfg.SocksListen != "127.0.0.1" {
+	if cfg.SocksListen != "127.41.0.1" {
 		t.Errorf("SocksListen default wrong, got %q", cfg.SocksListen)
 	}
 	if cfg.MTU != 1280 {

@@ -343,7 +343,7 @@ func TestRenderConfigWithWarpUpstream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(artifacts[0].Body, "addr: 127.0.0.1:40001") {
+	if !strings.Contains(artifacts[0].Body, "addr: 127.41.0.1:40001") {
 		t.Errorf("expected warp upstream, got:\n%s", artifacts[0].Body)
 	}
 }
@@ -432,7 +432,7 @@ func TestRenderConfigWithWarpDefaultSocksPort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(artifacts[0].Body, "addr: 127.0.0.1:40000") {
+	if !strings.Contains(artifacts[0].Body, "addr: 127.41.0.1:40000") {
 		t.Errorf("expected default warp socks port, got:\n%s", artifacts[0].Body)
 	}
 }

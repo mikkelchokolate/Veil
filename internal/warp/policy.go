@@ -34,7 +34,10 @@ func SetDefaults(warp *Config) {
 		warp.Endpoint = "engage.cloudflareclient.com:2408"
 	}
 	if warp.SocksListen == "" {
-		warp.SocksListen = "127.0.0.1"
+		// Reserved 127.41.0.0/16 band: the per-unit egress filter allow-lists
+		// it so proxy daemons can dial this SOCKS listener without gaining
+		// reachability to the rest of 127/8 (issue #1097).
+		warp.SocksListen = "127.41.0.1"
 	}
 	if warp.SocksPort == 0 {
 		warp.SocksPort = 40000
@@ -78,7 +81,7 @@ func Validate(warp Config) error {
 func validateSocksListen(listen string) error {
 	listen = strings.TrimSpace(listen)
 	if listen == "" {
-		return nil // normalized to 127.0.0.1 by SetDefaults and the renderer
+		return nil // normalized to 127.41.0.1 by SetDefaults and the renderer
 	}
 	addr, err := netip.ParseAddr(listen)
 	if err != nil {

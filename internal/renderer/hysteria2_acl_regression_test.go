@@ -116,7 +116,10 @@ func compileHysteriaACLInline(t *testing.T, inline []string) [][2]string {
 	compiled := make([][2]string, 0, len(rules))
 	for _, rule := range rules {
 		switch rule.outbound {
-		case "direct", "proxy", "warp":
+		// reject is a built-in ACL outbound in upstream Hysteria — it refuses
+		// the session without contacting any egress, which is exactly what
+		// the leading deny block needs (#1095).
+		case "direct", "proxy", "warp", "reject":
 		default:
 			t.Fatalf("hysteria ACL compile failed at line %d: outbound %s not found", rule.lineNum, rule.outbound)
 		}
@@ -177,7 +180,13 @@ func TestRenderHysteria2ACLCompilesUnderUpstreamGrammar(t *testing.T) {
 		t.Fatalf("expected acl.inline entries:\n%s", cfg)
 	}
 	compiled := compileHysteriaACLInline(t, inline)
-	want := [][2]string{
+	// #1095: the deny block precedes every operator rule so no user route can
+	// reopen loopback/private/link-local/CGNAT destinations.
+	want := make([][2]string, 0, len(egressDenyCIDRs)+8)
+	for range egressDenyCIDRs {
+		want = append(want, [2]string{"reject", "cidr"})
+	}
+	want = append(want, [][2]string{
 		{"direct", "geosite"},
 		{"direct", "domain"},
 		{"direct", "geoip"},
@@ -186,7 +195,7 @@ func TestRenderHysteria2ACLCompilesUnderUpstreamGrammar(t *testing.T) {
 		{"direct", "cidr"},
 		{"warp", "suffix"},
 		{"proxy", "all"},
-	}
+	}...)
 	if len(compiled) != len(want) {
 		t.Fatalf("compiled %d rules %v, want %d: %v\ninline: %v", len(compiled), compiled, len(want), want, inline)
 	}
@@ -248,11 +257,15 @@ func TestRenderHysteria2ACLOmitsUnsupportedMatchers(t *testing.T) {
 	}
 	inline := hysteria2ACLInline(t, cfg)
 	compiled := compileHysteriaACLInline(t, inline)
-	want := [][2]string{
+	want := make([][2]string, 0, len(egressDenyCIDRs)+3)
+	for range egressDenyCIDRs {
+		want = append(want, [2]string{"reject", "cidr"})
+	}
+	want = append(want, [][2]string{
 		{"direct", "suffix"},
 		{"direct", "domain"},
 		{"warp", "all"},
-	}
+	}...)
 	if len(compiled) != len(want) {
 		t.Fatalf("compiled %v, want %v\ninline: %v", compiled, want, inline)
 	}

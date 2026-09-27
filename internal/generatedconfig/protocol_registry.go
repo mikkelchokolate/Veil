@@ -81,7 +81,14 @@ func validateAggregatedMieruUsers(settings Settings, inbounds []Inbound) error {
 	if err != nil {
 		return err
 	}
-	if !ok || len(config.Users) == 0 {
+	if !ok {
+		// No port bindings survived: every enabled mieru inbound is
+		// credential-managed and fully revoked, so the aggregate config is
+		// dropped and the unit stopped on apply — a deliberate fail-closed
+		// state, not a misconfiguration (issue #1098).
+		return nil
+	}
+	if len(config.Users) == 0 {
 		return fmt.Errorf("this inbound has no usable client credential")
 	}
 	return nil

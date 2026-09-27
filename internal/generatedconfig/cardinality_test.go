@@ -13,7 +13,11 @@ func TestGeneratedConfigCardinalityRejectsMultipleEnabledSameProtocol(t *testing
 	}
 }
 
-func TestGeneratedConfigCardinalityRejectsMieruWithNoUsableUsers(t *testing.T) {
+func TestGeneratedConfigCardinalityDropsFullyRevokedMieruInbound(t *testing.T) {
+	// A credential-managed inbound with zero usable users is deliberate
+	// revocation, not misconfiguration: the aggregate model drops it (and the
+	// unit stops on apply) instead of reviving the fallback password or
+	// erroring the whole render (issue #1098).
 	registry := NewProtocolRegistry([]Protocol{{Protocol: "mieru"}})
 	err := NewGeneratedConfigCardinality(Settings{}, registry).Validate([]Inbound{{
 		Name:     "mieru",
@@ -22,8 +26,8 @@ func TestGeneratedConfigCardinalityRejectsMieruWithNoUsableUsers(t *testing.T) {
 		Password: "leftover",
 		Profiles: []ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: false}},
 	}})
-	if err == nil || err.Error() != "this inbound has no usable client credential" {
-		t.Fatalf("err = %v", err)
+	if err != nil {
+		t.Fatalf("err = %v, want nil — a fully revoked inbound must drop, not error", err)
 	}
 }
 

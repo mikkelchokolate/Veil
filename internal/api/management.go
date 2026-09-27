@@ -151,6 +151,18 @@ func (s *managementState) inboundsWithRuntimeCredentialsLocked() ([]Inbound, err
 		if err != nil {
 			return nil, fmt.Errorf("resolve runtime credentials for inbound %s: %w", out[i].Name, err)
 		}
+		// Any binding row — even disabled, expired, depleted, or with a revoked
+		// credential — marks the inbound as credential-managed. Renderers and
+		// link builders rely on this to fail closed instead of reviving the
+		// legacy inbound fallback password when every normalized credential is
+		// gone (issue #1098).
+		if s.clientRepo != nil {
+			count, err := s.clientRepo.CountBindingsForInbound(out[i].Name)
+			if err != nil {
+				return nil, fmt.Errorf("count bindings for inbound %s: %w", out[i].Name, err)
+			}
+			out[i].HasClientBindings = count > 0
+		}
 		if len(creds) == 0 {
 			continue
 		}
@@ -184,15 +196,21 @@ func (s *managementState) inboundsWithPinnedCredentialsLocked() ([]Inbound, erro
 			credByBinding[key] = cr
 		}
 	}
-	// Group enabled bindings by inbound.
+	// Group enabled bindings by inbound. HasClientBindings counts EVERY pinned
+	// binding row — including disabled ones — so a pinned snapshot that still
+	// carries revoked bindings cannot resurrect the legacy fallback either
+	// (issue #1098).
 	bindingsByInbound := make(map[string][]model.BindingSnapshot)
+	anyBindingByInbound := make(map[string]int)
 	for _, b := range s.renderBindings {
+		anyBindingByInbound[b.InboundID]++
 		if !b.Enabled {
 			continue
 		}
 		bindingsByInbound[b.InboundID] = append(bindingsByInbound[b.InboundID], b)
 	}
 	for i := range out {
+		out[i].HasClientBindings = anyBindingByInbound[out[i].Name] > 0
 		bindings := bindingsByInbound[out[i].Name]
 		if len(bindings) == 0 {
 			continue

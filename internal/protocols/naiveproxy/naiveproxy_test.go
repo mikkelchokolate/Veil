@@ -45,8 +45,40 @@ func TestLiveNaiveUsersOmitsFallbackWhenAllProfilesDisabled(t *testing.T) {
 		Password: "inbound-pass",
 		Profiles: []model.ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: false}},
 	})
-	if len(users) != 0 {
-		t.Fatalf("users = %+v, want none", users)
+	// All-disabled profiles are revocation, so the legacy fallback must not
+	// appear — but an EMPTY user list makes forward_proxy an open relay, so a
+	// deterministic sentinel that can never authenticate is rendered instead
+	// (issue #1098).
+	wantUser, wantPass := model.RevokedClientCredential(settings, model.Inbound{Name: "naive", Password: "inbound-pass"})
+	if len(users) != 1 || users[0].Username != wantUser || users[0].Password != wantPass {
+		t.Fatalf("users = %+v, want sentinel %q", users, wantUser)
+	}
+	for _, user := range users {
+		if user.Username == "alice" || user.Password == "alice-pass" || user.Password == "inbound-pass" || user.Password == "global" {
+			t.Fatalf("fallback/profile credential leaked into revoked render: %+v", users)
+		}
+	}
+}
+
+func TestLiveNaiveUsersSentinelWhenBindingsRevoked(t *testing.T) {
+	// #1098: normalized bindings exist but every credential is
+	// revoked/expired/depleted — the sentinel replaces the fallback so the
+	// forward_proxy never reopens (and never becomes an unauthenticated
+	// relay via an empty user list).
+	settings := model.Settings{NaiveUsername: "veil", NaivePassword: "global"}
+	inbound := model.Inbound{
+		Name: "naive", Protocol: "naiveproxy", Enabled: true,
+		Password: "inbound-pass", HasClientBindings: true,
+	}
+	users := liveNaiveUsers(settings, inbound)
+	wantUser, wantPass := model.RevokedClientCredential(settings, inbound)
+	if len(users) != 1 || users[0].Username != wantUser || users[0].Password != wantPass {
+		t.Fatalf("users = %+v, want sentinel %q", users, wantUser)
+	}
+	for _, user := range users {
+		if user.Password == "inbound-pass" || user.Password == "global" {
+			t.Fatalf("fallback credential leaked for a revoked client-managed inbound: %+v", users)
+		}
 	}
 }
 
@@ -197,7 +229,7 @@ func TestRenderConfigWithWarp(t *testing.T) {
 	if artifacts[0].Path != filepath.Join("/tmp/veil", "generated", "caddy", "config.json") {
 		t.Errorf("unexpected path %q", artifacts[0].Path)
 	}
-	if !strings.Contains(artifacts[0].Body, `"upstream": "socks5://127.0.0.1:40001"`) {
+	if !strings.Contains(artifacts[0].Body, `"upstream": "socks5://127.41.0.1:40001"`) {
 		t.Fatalf("WARP upstream is missing from Caddy JSON: %s", artifacts[0].Body)
 	}
 

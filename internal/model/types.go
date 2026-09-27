@@ -76,6 +76,16 @@ type Inbound struct {
 	// never persisted or serialized. The access model merges these so normalized
 	// clients are rendered into the live config.
 	RuntimeCredentials []RuntimeCredential `json:"-"`
+
+	// HasClientBindings reports that the normalized Client+Binding+Credential
+	// store has at least one binding (enabled or not) for this inbound. Once a
+	// binding exists the inbound is credential-managed: renderers and link
+	// builders must treat "zero usable credentials" as revoked — never as a
+	// reason to revive the legacy inbound fallback password — so disabling,
+	// expiring, depleting or deleting the last normalized client fails closed
+	// (issue #1098). Runtime-only; set by the management layer next to
+	// RuntimeCredentials and never persisted.
+	HasClientBindings bool `json:"-"`
 }
 
 type RoutingRule struct {
@@ -128,12 +138,14 @@ type WarpConfig struct {
 }
 
 // SocksDialAddr is the address protocol upstreams dial to reach the local
-// WARP SOCKS listener. It defaults to 127.0.0.1 so renderers never diverge
-// from the configured sing-box bind (#576). Validate restricts SocksListen to
-// loopback literals, so this is always a safe local dial target.
+// WARP SOCKS listener. It defaults to 127.41.0.1 — the reserved loopback band
+// the per-unit egress filter allow-lists for protocol daemons — so renderers
+// never diverge from the configured sing-box bind (#576, #1097). Validate
+// restricts SocksListen to loopback literals, so this is always a safe local
+// dial target.
 func (c WarpConfig) SocksDialAddr() string {
 	if c.SocksListen == "" {
-		return "127.0.0.1"
+		return "127.41.0.1"
 	}
 	return c.SocksListen
 }

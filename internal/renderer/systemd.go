@@ -352,7 +352,15 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlock + `InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
+` + systemdHardeningBlock + `# Kernel egress/ingress filter, evaluated allow-before-deny
+# (systemd.resource-control): proxy sessions must never reach loopback,
+# private, link-local, CGNAT, multicast or unspecified destinations even if
+# the rendered ACL regresses (issues #1095, #1097). The allow list pierces
+# only the carve-outs Veil owns: the systemd-resolved stubs for DNS, the
+# 127.40/16 traffic-stats band and the 127.41/16 WARP SOCKS band.
+IPAddressAllow=` + egressAllowHysteria2Unit + `
+IPAddressDeny=` + egressDenySystemd() + `
+InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
 
 [Install]
 WantedBy=multi-user.target
@@ -375,7 +383,13 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlockOlcrtc + `InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
+` + systemdHardeningBlockOlcrtc + `# Kernel egress/ingress filter (issue #1097): proxy sessions must never
+# reach loopback/private/link-local/CGNAT/multicast/unspecified destinations.
+# The allow list pierces only the resolved DNS stubs and the 127.41/16 WARP
+# SOCKS band olcRTC dials when WARP is enabled.
+IPAddressAllow=` + egressAllowOlcrtcUnit + `
+IPAddressDeny=` + egressDenySystemd() + `
+InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
 
 [Install]
 WantedBy=multi-user.target
@@ -409,6 +423,15 @@ LockPersonality=true
 RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
+# The SOCKS bridge is the shared egress choke point for every WARP-enabled
+# protocol, so the kernel must refuse private/loopback destinations here too:
+# sing-box resolves client domains itself and could otherwise dial a resolved
+# private address via the direct outbound (issue #1096/#1097). The allow list
+# keeps the resolved stubs plus 127.0.0.1 — the source address every local
+# SOCKS peer presents, since the kernel does not source from the 127.41/16
+# band when connecting into it.
+IPAddressAllow=` + egressAllowWarpUnit + `
+IPAddressDeny=` + egressDenySystemd() + `
 InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
 
 [Install]
@@ -448,7 +471,14 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlockMieru + `InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
+` + systemdHardeningBlockMieru + `# Kernel egress/ingress filter (issue #1097): Mieru's own egress rules only
+# reject private/loopback LITERAL destinations and let unresolved FQDNs pass
+# through as DIRECT, so the kernel must deny resolved restricted addresses,
+# link-local, CGNAT, ULA, multicast and unspecified targets itself. Only the
+# systemd-resolved stubs stay reachable for DNS.
+IPAddressAllow=` + egressAllowMieruUnit + `
+IPAddressDeny=` + egressDenySystemd() + `
+InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
 
 [Install]
 WantedBy=multi-user.target

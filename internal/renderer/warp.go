@@ -42,7 +42,11 @@ func RenderWarpSingBox(cfg WarpSingBoxConfig) (string, error) {
 		cfg.Endpoint = "engage.cloudflareclient.com:2408"
 	}
 	if cfg.SocksListen == "" {
-		cfg.SocksListen = "127.0.0.1"
+		// The default lives on the reserved 127.41.0.0/16 loopback band so the
+		// per-unit egress filter can let protocol daemons reach this SOCKS
+		// listener without also opening the rest of 127/8 (Caddy admin, panel
+		// backend) to them (issue #1097).
+		cfg.SocksListen = "127.41.0.1"
 	}
 	if cfg.SocksPort == 0 {
 		cfg.SocksPort = 40000
@@ -106,6 +110,12 @@ func RenderWarpSingBox(cfg WarpSingBoxConfig) (string, error) {
 				"type": "direct",
 				"tag":  "proxy",
 			},
+			{
+				// The route's leading rule rejects every restricted
+				// destination through this outbound (issue #1096).
+				"type": "block",
+				"tag":  "block",
+			},
 		},
 		"route": renderWarpRoute(cfg.RoutingRules),
 	}
@@ -120,8 +130,19 @@ func RenderWarpSingBox(cfg WarpSingBoxConfig) (string, error) {
 // WARP endpoint (final="warp"); rules bypass or redirect specific traffic.
 // geoip:private maps to ip_is_private, and country geoip/geosite matches become
 // remote rule_set references (the inline geoip/geosite fields were removed).
+//
+// The first rule is always a non-overridable reject of the canonical egress
+// deny set: everything that reaches this sing-box (Hysteria2, NaiveProxy via
+// forward_proxy upstream, olcRTC) is SOCKS-bridged local traffic, and a later
+// operator rule or an unfiltered upstream hop must never be able to route a
+// client to server-local, private, link-local or otherwise non-public
+// destinations (#1096). sing-box evaluates the leading rule first and reports
+// the destination as blocked before the request ever leaves the kernel.
 func renderWarpRoute(rules []WarpRoutingRule) map[string]any {
-	rendered := []map[string]any{}
+	rendered := []map[string]any{{
+		"outbound": "block",
+		"ip_cidr":  EgressDenyCIDRs(),
+	}}
 	ruleSets := []map[string]any{}
 	seen := map[string]bool{}
 	final := "warp"

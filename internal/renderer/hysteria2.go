@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -148,29 +147,34 @@ func RenderHysteria2(cfg Hysteria2Config) (string, error) {
 		MaxIdleTimeout:  "2m",
 		KeepAlivePeriod: "10s",
 	}
+	// The egress ACL is ALWAYS emitted — with or without a WARP upstream —
+	// because without it Hysteria2 proxies client requests to ANY destination
+	// the server can reach, including loopback control planes (Caddy admin on
+	// 127.0.0.1:2019, the panel backend, DNS stubs) and private/link-local
+	// infrastructure (#1095). The leading reject() rules are evaluated before
+	// every operator routing rule, so no user rule can reopen them; Hysteria's
+	// ACL engine matches resolved IPv4/IPv6 too, so a domain name that resolves
+	// into a denied range is rejected the same as a literal IP.
+	acl := renderHysteria2ACL(cfg)
+	doc.Outbounds = append(doc.Outbounds,
+		hysteria2OutboundYAML{Name: "direct", Type: "direct"},
+		hysteria2OutboundYAML{Name: "proxy", Type: "direct"},
+	)
 	if cfg.Upstream != "" {
-		acl := renderHysteria2ACL(cfg)
-		if len(acl) > 0 {
-			doc.Outbounds = append(doc.Outbounds,
-				hysteria2OutboundYAML{Name: "direct", Type: "direct"},
-				hysteria2OutboundYAML{Name: "proxy", Type: "direct"},
-			)
-		}
 		socks := hysteria2OutboundYAML{Name: "warp", Type: "socks5"}
 		socks.Socks5 = &struct {
 			Addr string `yaml:"addr"`
 		}{Addr: cfg.Upstream}
 		doc.Outbounds = append(doc.Outbounds, socks)
-		if len(acl) > 0 {
-			doc.ACL = &hysteria2ACLYAML{Inline: acl}
-			if path := usableRoutingDat(cfg.GeoIPPath); path != "" {
-				doc.ACL.GeoIP = path
-			}
-			if path := usableRoutingDat(cfg.GeoSitePath); path != "" {
-				doc.ACL.GeoSite = path
-			}
-		}
 	}
+	doc.ACL = &hysteria2ACLYAML{Inline: acl}
+	// GeoIPPath/GeoSitePath carry the LIVE rules/*.dat locations; the protocol
+	// layer only sets them when the artifact will exist post-promotion
+	// (#1132). The values are trusted as configured — stat()ing them here
+	// would race promotion, which copies the staged files to the live root
+	// after this render.
+	doc.ACL.GeoIP = cfg.GeoIPPath
+	doc.ACL.GeoSite = cfg.GeoSitePath
 
 	if cfg.TrafficStatsListen != "" || cfg.TrafficStatsSecret != "" {
 		if cfg.TrafficStatsListen == "" || cfg.TrafficStatsSecret == "" {
@@ -195,11 +199,21 @@ func RenderHysteria2(cfg Hysteria2Config) (string, error) {
 }
 
 func renderHysteria2ACL(cfg Hysteria2Config) []string {
-	hasGeoIP := usableRoutingDat(cfg.GeoIPPath) != ""
-	hasGeoSite := usableRoutingDat(cfg.GeoSitePath) != ""
+	hasUpstream := cfg.Upstream != ""
+	// geoip:/geosite: ACL lines need their database on disk; the caller only
+	// sets the path when the artifact exists (or will exist post-promotion).
+	hasGeoIP := cfg.GeoIPPath != ""
+	hasGeoSite := cfg.GeoSitePath != ""
 	lines := []string{}
-	final := "warp"
-	explicitFinal := false
+	// Non-overridable rejects first: every restricted destination class is
+	// refused before any operator rule is consulted (#1095).
+	for _, cidr := range egressDenyCIDRs {
+		lines = append(lines, "reject("+cidr+")")
+	}
+	final := "direct"
+	if hasUpstream {
+		final = "warp"
+	}
 	for _, rule := range cfg.RoutingRules {
 		if rule.Match == "" || rule.Outbound == "" {
 			continue
@@ -208,11 +222,10 @@ func renderHysteria2ACL(cfg Hysteria2Config) []string {
 		if err != nil {
 			continue
 		}
-		outbound := hysteria2ACLOutbound(rule.Outbound)
+		outbound := hysteria2ACLOutbound(rule.Outbound, hasUpstream)
 		for _, matcher := range matchers {
 			if matcher.Kind == routing.MatchAll {
 				final = outbound
-				explicitFinal = true
 				continue
 			}
 			line, ok := hysteria2ACLLine(outbound, matcher, hasGeoIP, hasGeoSite)
@@ -221,22 +234,29 @@ func renderHysteria2ACL(cfg Hysteria2Config) []string {
 			}
 		}
 	}
-	if len(lines) == 0 && !explicitFinal {
-		return nil
-	}
 	return append(lines, final+"(all)")
 }
 
-func hysteria2ACLOutbound(outbound string) string {
+// hysteria2ACLOutbound maps an operator routing outbound name onto an outbound
+// the rendered config actually defines. "warp" only exists when a WARP
+// upstream is configured; without it the safest equivalent is "direct" —
+// never the missing name, which would fail ACL compilation at config load.
+func hysteria2ACLOutbound(outbound string, hasUpstream bool) string {
 	switch strings.ToLower(strings.TrimSpace(outbound)) {
 	case "direct":
 		return "direct"
 	case "proxy":
 		return "proxy"
 	case "warp":
-		return "warp"
+		if hasUpstream {
+			return "warp"
+		}
+		return "direct"
 	default:
-		return "warp"
+		if hasUpstream {
+			return "warp"
+		}
+		return "direct"
 	}
 }
 
@@ -264,17 +284,6 @@ func hysteria2ACLLine(outbound string, matcher routing.Matcher, hasGeoIP, hasGeo
 		return "", false
 	}
 	return fmt.Sprintf("%s(%s)", outbound, address), true
-}
-
-func usableRoutingDat(path string) string {
-	if path == "" {
-		return ""
-	}
-	info, err := os.Stat(path)
-	if err != nil || !info.Mode().IsRegular() {
-		return ""
-	}
-	return path
 }
 
 func itoa(i int) string {
