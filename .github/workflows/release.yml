@@ -6,15 +6,17 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
-  id-token: write
-  packages: write
-  attestations: write
+  # Least privilege floor — publishing jobs escalate explicitly (#1146). A
+  # gate job that only reads the tree must never run with contents:write,
+  # packages:write, attestations:write and an OIDC token.
+  contents: read
 
 jobs:
   quality:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify exact tagged source
@@ -33,6 +35,7 @@ jobs:
             echo "node_version=${CI_NODE_VERSION}"
             echo "pnpm_version=${CI_PNPM_VERSION}"
             echo "shellcheck_version=${CI_SHELLCHECK_VERSION}"
+            echo "shellcheck_sha256=${CI_SHELLCHECK_TARBALL_SHA256}"
           } >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -81,13 +84,22 @@ jobs:
           govulncheck ./...
       - name: Unstick Ubuntu apt mirrors
         run: bash scripts/ci/apt-bootstrap.sh
-      - name: shellcheck (pinned upstream release via versions.sh)
+      - name: shellcheck (pinned + checksum-verified upstream release via versions.sh)
         run: |
+          set -euo pipefail
           sc_ver="${{ steps.versions.outputs.shellcheck_version }}"
+          sc_sha="${{ steps.versions.outputs.shellcheck_sha256 }}"
           # apt's shellcheck package lags the pin; fetch the version-bound
           # upstream static binary so the lint gate cannot silently drift (#420).
-          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${sc_ver}/shellcheck-v${sc_ver}.linux.x86_64.tar.xz" \
-            | sudo tar -xJ -C /usr/local/bin --strip-components=1 "shellcheck-v${sc_ver}/shellcheck"
+          # The tarball is downloaded to a file and sha256-verified BEFORE
+          # extraction — the old pipe fed an unverified stream straight into
+          # `sudo tar`, so a tampered/MITM'd release would have executed as
+          # root in a job that carried write + OIDC permissions (#1146).
+          tarball="$(mktemp "${RUNNER_TEMP}/shellcheck.XXXXXX")"
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${sc_ver}/shellcheck-v${sc_ver}.linux.x86_64.tar.xz" -o "${tarball}"
+          echo "${sc_sha}  ${tarball}" | sha256sum --check
+          sudo tar -xJ -C /usr/local/bin --strip-components=1 -f "${tarball}" "shellcheck-v${sc_ver}/shellcheck"
+          rm -f "${tarball}"
           shellcheck --version | grep -F "version: ${sc_ver}"
           shellcheck scripts/*.sh scripts/ci/*.sh packaging/scripts/*.sh ci/vm/*.sh ci/vm/systemd/*.sh packaging/docker/entrypoint.sh
       - run: make build
@@ -150,6 +162,8 @@ jobs:
         arch: [amd64, arm64]
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify exact tagged source
@@ -188,6 +202,8 @@ jobs:
   browser-e2e:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify exact tagged source
@@ -250,6 +266,9 @@ jobs:
         arch: [amd64, arm64]
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify exact tagged source
@@ -302,6 +321,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     needs: [quality, browser-e2e, install-acceptance]
+    permissions:
+      contents: read
     strategy:
       matrix:
         include:
@@ -392,6 +413,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     needs: [quality, browser-e2e, package-smoke]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify exact tagged source
@@ -417,6 +442,18 @@ jobs:
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # 'latest' is earned only by an exact stable semver tag vMAJOR.MINOR.PATCH
+      # — prereleases (v1.2.3-rc.1) and non-semver tags must not move the
+      # floating tag (#1148). GHA expressions have no regex, so the test runs
+      # in a step and feeds the metadata action's per-tag `enable=` switch.
+      - name: Detect stable semver release tag
+        id: stable
+        run: |
+          if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "stable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "stable=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -426,7 +463,7 @@ jobs:
             latest=false
           tags: |
             type=semver,pattern={{version}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ steps.stable.outputs.stable }}
       - name: Build and push multi-arch Docker image
         id: build-and-push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -476,6 +513,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     needs: [quality, browser-e2e, package-smoke, release, docker-publish]
+    permissions:
+      contents: write
+      actions: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify exact tagged source

@@ -267,6 +267,36 @@ func TestValidationReportsEveryBadRoutingRule(t *testing.T) {
 	}
 }
 
+// #1082: stored rules bypass RoutingRuleValidation, so a match the stricter
+// ParseMatch rejects must be a snapshot validation error — otherwise every
+// renderer silently drops the whole rule while `veil config validate` and
+// rollback validation still report the state as fine.
+func TestValidationRejectsUnparseableRoutingRuleMatch(t *testing.T) {
+	body := []byte(`{
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"},
+		"inbounds":[],
+		"routingRules":[
+			{"name":"ok","match":"geoip:private","outbound":"direct","enabled":true},
+			{"name":"dead","match":"geosite:category-ru,example.com:443","outbound":"direct","enabled":true},
+			{"name":"typo","match":"geoip:ru,gip:cn","outbound":"proxy","enabled":false}
+		],
+		"warp":{"enabled":false}
+	}`)
+	result, err := NewValidation().ValidateBytes(body)
+	if err != nil {
+		t.Fatalf("ValidateBytes: %v", err)
+	}
+	expected := []string{
+		`routingRules[1].match is invalid: routing match is invalid: unknown matcher "example.com:443"`,
+		`routingRules[2].match is invalid: routing match is invalid: unknown matcher "gip:cn"`,
+	}
+	for _, want := range expected {
+		if !containsError(result.Errors, want) {
+			t.Fatalf("missing error %q in %+v", want, result)
+		}
+	}
+}
+
 func TestValidateSnapshotPortsAndWarpDefault(t *testing.T) {
 	v := NewValidation()
 	snapshot := model.ManagementSnapshot{

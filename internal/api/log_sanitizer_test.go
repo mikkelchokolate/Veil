@@ -18,7 +18,8 @@ func TestSanitizeServiceLogOutputSecretFormats(t *testing.T) {
 		name        string
 		in          string
 		wantClean   bool
-		secretValue string // optional per-case secret to assert against (defaults to secret)
+		secretValue string   // optional per-case secret to assert against (defaults to secret)
+		wantPresent []string // optional substrings that must survive redaction
 	}{
 		{
 			name: "hysteria2 password-only userinfo",
@@ -148,6 +149,131 @@ func TestSanitizeServiceLogOutputSecretFormats(t *testing.T) {
 			wantClean:   true,
 			secretValue: "p%40ss",
 		},
+		{
+			// #1091: "[^"]*" stops at the first escaped quote, leaking the
+			// remainder of the JSON string.
+			name:        "JSON password with escaped quote",
+			in:          `{"password":"ab\"` + secret + `tail"}`,
+			wantClean:   true,
+			secretValue: secret + `tail`,
+		},
+		{
+			// #1091: same escape blind spot for backslash and \n escapes.
+			name:        "JSON token with escapes",
+			in:          `{"token":"a\\b` + secret + `\n"}`,
+			wantClean:   true,
+			secretValue: "b" + secret,
+		},
+		{
+			// #1091: "[^]]*" stops at a ] INSIDE a quoted array element —
+			// everything after it leaked.
+			name:        "JSON array element containing bracket",
+			in:          `{"auth_credentials":["a]` + secret + `","x` + secret + `y"]}`,
+			wantClean:   true,
+			secretValue: "x" + secret + "y",
+		},
+		{
+			// #1091: YAML key match was case-sensitive; echoed config may
+			// use any capitalization.
+			name:      "YAML Password capitalized key",
+			in:        "auth:\n  Password: " + secret,
+			wantClean: true,
+		},
+		{
+			name:      "YAML KEY uppercase key",
+			in:        "crypto:\n  KEY: " + secret,
+			wantClean: true,
+		},
+		{
+			name:      "YAML Auth_Credentials mixed-case key",
+			in:        "auth:\n  Auth_Credentials: " + secret,
+			wantClean: true,
+		},
+		{
+			// #1091: generic secret= terminator excluded , " ' } ; so
+			// token=abc,def leaked ",def" after "abc" was redacted.
+			name:        "secret value containing comma",
+			in:          "token=" + secret + `,leaked`,
+			wantClean:   true,
+			secretValue: "leaked",
+		},
+		{
+			// #1091: a quoted value with a space lost everything after the
+			// space — the opening " was consumed by the key arm.
+			name:        "quoted password value containing space",
+			in:          `password="` + secret + ` tail"`,
+			wantClean:   true,
+			secretValue: secret + " tail",
+		},
+		{
+			name:        "single-quoted secret value containing space",
+			in:          "secret='" + secret + " tail'",
+			wantClean:   true,
+			secretValue: secret + " tail",
+		},
+		{
+			// #1091: unclosed quoted value must redact through end of line.
+			name:        "unterminated quoted password",
+			in:          `password="` + secret + ` unclosed`,
+			wantClean:   true,
+			secretValue: secret + " unclosed",
+		},
+		{
+			// #1091: userpass block required exactly 4-space entry indent;
+			// canonical 2-space YAML maps leaked entirely.
+			name:      "hysteria2 userpass two-space indent",
+			in:        "userpass:\n  alice: " + secret + "\n  bob: " + secret + "2",
+			wantClean: true,
+		},
+		{
+			name:      "USERPASS uppercase key",
+			in:        "USERPASS:\n  alice: " + secret,
+			wantClean: true,
+		},
+		{
+			// #1091: flow-style map on the key line.
+			name:      "userpass flow-style map",
+			in:        "userpass: {alice: " + secret + ", bob: " + secret + "2}",
+			wantClean: true,
+		},
+		{
+			// #1091: a PEM truncated upstream has no END marker — the old
+			// pattern required both markers and leaked every captured line.
+			name:        "unterminated PEM private key",
+			in:          "-----BEGIN RSA PRIVATE KEY-----\nMII" + secret + "x\nA" + secret + "B\nnextlog: no-secret-here",
+			wantClean:   true,
+			secretValue: "A" + secret + "B",
+		},
+		{
+			// #1091: the unclosed-PEM fallback must NOT eat a following
+			// keyword line — the keyword's value must still be redacted.
+			name:      "unterminated PEM followed by keyword secret",
+			in:        "-----BEGIN PRIVATE KEY-----\nMII" + secret + "x\npassword: " + secret,
+			wantClean: true,
+		},
+		{
+			// #1091: well-formed PEM must still collapse fully.
+			name:        "terminated PEM private key",
+			in:          "-----BEGIN EC PRIVATE KEY-----\n" + secret + "\n-----END EC PRIVATE KEY-----\ntrailing: visible",
+			wantClean:   true,
+			wantPresent: []string{"trailing: visible"},
+		},
+		{
+			// #1091: indented userpass sibling key at the same level ends the
+			// map — deeper content after it must not be redacted away.
+			name:        "userpass sibling ends map",
+			in:          "  userpass:\n    alice: " + secret + "\n  sibling: keepme\n    deeper: keepme2",
+			wantClean:   true,
+			wantPresent: []string{"sibling: keepme", "deeper: keepme2"},
+		},
+		{
+			// #1091: a keyword line following a truncated PEM keeps its key
+			// visible while its value is redacted by the keyword matchers.
+			name:        "unterminated PEM preserves following line",
+			in:          "-----BEGIN PRIVATE KEY-----\nMII" + secret + "x\nother: keepme",
+			wantClean:   true,
+			wantPresent: []string{"other: keepme"},
+		},
 	}
 
 	for _, tc := range cases {
@@ -164,6 +290,11 @@ func TestSanitizeServiceLogOutputSecretFormats(t *testing.T) {
 			}
 			if tc.wantClean && !strings.Contains(out, redacted) {
 				t.Fatalf("expected redaction marker in output:\n in:  %s\n out: %s", tc.in, out)
+			}
+			for _, want := range tc.wantPresent {
+				if !strings.Contains(out, want) {
+					t.Fatalf("sanitizer removed non-secret content %q:\n in:  %s\n out: %s", want, tc.in, out)
+				}
 			}
 		})
 	}

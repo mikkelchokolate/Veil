@@ -37,3 +37,6 @@ internal/api/generated/
 
 # pnpm content-addressable store — never a source artifact.
 .pnpm-store/
+
+# Python bytecode caches produced when CI verifier scripts run locally.
+__pycache__/
