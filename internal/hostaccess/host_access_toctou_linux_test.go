@@ -80,7 +80,7 @@ func TestApplyTreeOwnershipLeafSwapCannotEscape(t *testing.T) {
 		return info, err
 	}
 
-	err := applyTreeOwnership(root, 0o700, 0o600, os.Getuid(), os.Getgid())
+	err := applyTreeOwnership(root, 0o700, 0o600, os.Getuid(), os.Getgid(), true)
 	if err == nil {
 		t.Fatal("applyTreeOwnership followed a mid-walk leaf swap")
 	}
@@ -130,7 +130,7 @@ func TestApplyTreeOwnershipDirSwapCannotEscape(t *testing.T) {
 		return err
 	}
 
-	err := applyTreeOwnership(root, 0o700, 0o600, os.Getuid(), os.Getgid())
+	err := applyTreeOwnership(root, 0o700, 0o600, os.Getuid(), os.Getgid(), true)
 	if err == nil {
 		t.Fatal("applyTreeOwnership descended through a swapped directory symlink")
 	}
@@ -155,7 +155,7 @@ func TestApplyTreeOwnershipRefusesSymlinkedSubdir(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(root, "linked")); err != nil {
 		t.Fatal(err)
 	}
-	err := applyTreeOwnership(root, 0o700, 0o600, os.Getuid(), os.Getgid())
+	err := applyTreeOwnership(root, 0o700, 0o600, os.Getuid(), os.Getgid(), true)
 	if err == nil || !strings.Contains(err.Error(), "symlink") {
 		t.Fatalf("expected symlink refusal, got %v", err)
 	}
@@ -230,7 +230,7 @@ func TestApplyTreeOwnershipFIFORefusedFast(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		done <- applyTreeOwnership(root, 0o700, 0o600, os.Getuid(), os.Getgid())
+		done <- applyTreeOwnership(root, 0o700, 0o600, os.Getuid(), os.Getgid(), true)
 	}()
 	select {
 	case err := <-done:
@@ -253,7 +253,7 @@ func TestApplyTreeOwnershipSocketRefusedFast(t *testing.T) {
 	defer listener.Close()
 	done := make(chan error, 1)
 	go func() {
-		done <- applyTreeOwnership(root, 0o700, 0o600, os.Getuid(), os.Getgid())
+		done <- applyTreeOwnership(root, 0o700, 0o600, os.Getuid(), os.Getgid(), true)
 	}()
 	select {
 	case err := <-done:

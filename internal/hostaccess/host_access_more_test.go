@@ -279,7 +279,7 @@ func TestApplyTreeOwnershipWalkError(t *testing.T) {
 		return errors.New("walk failed")
 	}
 
-	err := applyTreeOwnership(tree, 0o700, 0o600, os.Getuid(), os.Getgid())
+	err := applyTreeOwnership(tree, 0o700, 0o600, os.Getuid(), os.Getgid(), true)
 	if err == nil || !strings.Contains(err.Error(), "walk failed") {
 		t.Fatalf("expected walk error, got: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestApplyTreeOwnershipEntryInfoError(t *testing.T) {
 		return nil, errors.New("info error")
 	}
 
-	err := applyTreeOwnership(tree, 0o700, 0o600, os.Getuid(), os.Getgid())
+	err := applyTreeOwnership(tree, 0o700, 0o600, os.Getuid(), os.Getgid(), true)
 	if err == nil || !strings.Contains(err.Error(), "info error") {
 		t.Fatalf("expected info error, got: %v", err)
 	}
@@ -333,7 +333,7 @@ func TestApplyTreeOwnershipChmodError(t *testing.T) {
 		return originalChmod(e, mode)
 	}
 
-	err := applyTreeOwnership(tree, 0o700, 0o600, os.Getuid(), os.Getgid())
+	err := applyTreeOwnership(tree, 0o700, 0o600, os.Getuid(), os.Getgid(), true)
 	if err == nil || !strings.Contains(err.Error(), "chmod file failed") {
 		t.Fatalf("expected chmod file error, got: %v", err)
 	}

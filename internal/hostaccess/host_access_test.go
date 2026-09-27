@@ -1267,7 +1267,7 @@ func TestApplyTreeOwnership(t *testing.T) {
 			t.Fatal(err)
 		}
 		uid, gid := os.Getuid(), os.Getgid()
-		if err := applyTreeOwnership(dir, 0o700, 0o600, uid, gid); err != nil {
+		if err := applyTreeOwnership(dir, 0o700, 0o600, uid, gid, true); err != nil {
 			t.Fatalf("apply tree ownership: %v", err)
 		}
 		assertMode(t, dir, 0o700)
@@ -1284,7 +1284,7 @@ func TestApplyTreeOwnership(t *testing.T) {
 		if err := os.Symlink("/etc", filepath.Join(dir, "link")); err != nil {
 			t.Fatal(err)
 		}
-		err := applyTreeOwnership(dir, 0o700, 0o600, os.Getuid(), os.Getgid())
+		err := applyTreeOwnership(dir, 0o700, 0o600, os.Getuid(), os.Getgid(), true)
 		if err == nil || !strings.Contains(err.Error(), "refuse to migrate symlink") {
 			t.Fatalf("expected symlink error, got: %v", err)
 		}
@@ -1302,7 +1302,7 @@ func TestApplyTreeOwnership(t *testing.T) {
 		if err := syscall.Mkfifo(filepath.Join(dir, "fifo"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		err := applyTreeOwnership(dir, 0o700, 0o600, os.Getuid(), os.Getgid())
+		err := applyTreeOwnership(dir, 0o700, 0o600, os.Getuid(), os.Getgid(), true)
 		if err == nil || !strings.Contains(err.Error(), "refuse to migrate non-regular path") {
 			t.Fatalf("expected non-regular error, got: %v", err)
 		}
