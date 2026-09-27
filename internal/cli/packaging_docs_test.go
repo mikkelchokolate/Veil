@@ -30,8 +30,8 @@ func releaseWorkflowSteps(t *testing.T) (topLevel map[string]string, effective m
 	var workflow struct {
 		Permissions map[string]string `yaml:"permissions"`
 		Jobs        map[string]struct {
-			Permissions map[string]string       `yaml:"permissions"`
-			Steps       []releaseWorkflowStep   `yaml:"steps"`
+			Permissions map[string]string     `yaml:"permissions"`
+			Steps       []releaseWorkflowStep `yaml:"steps"`
 		} `yaml:"jobs"`
 	}
 	if err := yaml.Unmarshal(body, &workflow); err != nil {
