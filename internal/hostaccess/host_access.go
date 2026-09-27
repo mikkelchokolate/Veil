@@ -322,8 +322,39 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 		if err := copyLegacyWWWTree(legacyWWW, filepath.Join(paths.EtcDir, "www")); err != nil {
 			return err
 		}
-		if err := applyTreeOwnership(legacyWWW, 0o750, 0o640, panel.UID, panel.GID); err != nil {
+		// The legacy tree is operator content, not a secrets tree: symlinked
+		// leaves are skipped (never followed) instead of aborting the whole
+		// package upgrade the way applyManagedTreeEntries does (#622).
+		dir, err := safefs.OpenDir(legacyWWW)
+		if err != nil {
 			return err
+		}
+		if err := testHooks.chmodDir(dir, 0o750); err == nil {
+			err = testHooks.chownDir(dir, panel.UID, panel.GID)
+		}
+		if err != nil {
+			_ = dir.Close()
+			return err
+		}
+		walkErr := walkManagedDir(dir, func(e *managedEntry) error {
+			info := e.Info()
+			if info.Mode()&os.ModeSymlink != 0 || (!e.IsDir() && !info.Mode().IsRegular()) {
+				return nil
+			}
+			mode := os.FileMode(0o640)
+			if e.IsDir() {
+				mode = 0o750
+			}
+			if err := e.chmod(mode); err != nil {
+				return err
+			}
+			return e.chown(panel.UID, panel.GID)
+		})
+		if closeErr := dir.Close(); walkErr == nil {
+			walkErr = closeErr
+		}
+		if walkErr != nil {
+			return walkErr
 		}
 	case !os.IsNotExist(err):
 		return err
