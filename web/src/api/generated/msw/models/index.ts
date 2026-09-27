@@ -164,6 +164,7 @@ export * from './mutationOutcome.msw.ts';
 export * from './networkInterface.msw.ts';
 export * from './networkStats.msw.ts';
 export * from './notFoundResponse.msw.ts';
+export * from './panelUpdateRequest.msw.ts';
 export * from './patchApiV1ClientsIdBindingsBindingIdBody.msw.ts';
 export * from './pingRequest.msw.ts';
 export * from './pingResult.msw.ts';
