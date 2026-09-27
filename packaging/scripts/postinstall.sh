@@ -84,52 +84,6 @@ if [ -f /etc/sysctl.d/99-veil-quic.conf ]; then
     fi
 fi
 
-install -d -m 0751 -o root -g veil /etc/veil
-install -d -m 0750 -o veil -g veil /var/lib/veil
-
-safety_sources="/etc/veil/state.key /etc/veil/veil.env /var/lib/veil/state.json /var/lib/veil/sessions.json"
-has_safety_source=false
-for source in $safety_sources; do
-    if [ -e "$source" ]; then
-        if [ -L "$source" ] || [ ! -f "$source" ]; then
-            echo "Refusing to migrate non-regular managed file: $source" >&2
-            exit 1
-        fi
-        has_safety_source=true
-    fi
-done
-if [ "$has_safety_source" = true ]; then
-    stamp=$(date -u +%Y%m%dT%H%M%SZ)
-    safety_dir="/var/lib/veil/migration-backups/$stamp"
-    suffix=0
-    while [ -e "$safety_dir" ]; do
-        suffix=$((suffix + 1))
-        safety_dir="/var/lib/veil/migration-backups/$stamp-$suffix"
-    done
-    install -d -m 0700 -o root -g root "$safety_dir"
-    for source in $safety_sources; do
-        if [ -f "$source" ]; then
-            install -m 0600 -o root -g root "$source" "$safety_dir/$(basename "$source")"
-        fi
-    done
-fi
-
-for dir in audit staging updates autocert; do
-    install -d -m 0700 -o veil -g veil "/var/lib/veil/$dir"
-    chown -R veil:veil "/var/lib/veil/$dir"
-    find "/var/lib/veil/$dir" -type d -exec chmod 0700 {} \;
-    find "/var/lib/veil/$dir" -type f -exec chmod 0600 {} \;
-done
-# /var/lib/veil/www is no longer provisioned: veil-caddy.service runs as
-# veil-proxy with /var/lib/veil in InaccessiblePaths, so the old fallback root
-# is unreachable. Existing content is migrated to /etc/veil/www below.
-for dir in backups promotion-backups migration-backups; do
-    install -d -m 0700 -o root -g root "/var/lib/veil/$dir"
-    chown -R root:root "/var/lib/veil/$dir"
-    find "/var/lib/veil/$dir" -type d -exec chmod 0700 {} \;
-    # Backup members store restore mode in their own permission bits. Do not
-    # normalize files to 0600 or rollback will restore the wrong mode.
-done
 if [ -d /lib/systemd/system ] && [ -d /etc/systemd/system ]; then
     for unit in /lib/systemd/system/veil*.service /lib/systemd/system/veil*.socket /lib/systemd/system/veil*.timer; do
         [ -f "$unit" ] || continue
@@ -145,88 +99,40 @@ if [ -d /lib/systemd/system ] && [ -d /etc/systemd/system ]; then
         fi
     done
 fi
-for file in /var/lib/veil/state.json /var/lib/veil/sessions.json; do
-    if [ -f "$file" ] && [ ! -L "$file" ]; then
-        chown veil:veil "$file"
-        chmod 0600 "$file"
-    fi
-done
-# The naive fallback site moved from /var/lib/veil/www to /etc/veil/www:
-# veil-caddy.service runs as veil-proxy with /var/lib/veil in
-# InaccessiblePaths, so the old location is unreadable to it. Carry over any
-# operator content not already present in the new root — regular files and
-# directories only; symlinks are never copied into a veil-proxy-readable tree.
-# The copy is idempotent and never touches destination entries: unlike the
-# old `cp -Rp` + `find -type l -delete` pass it neither clones symlinks nor
-# sweeps operator-created links under /etc/veil/www on every upgrade while
-# the legacy tree exists (issue #622). Matches hostaccess.copyLegacyWWWTree.
-if [ -d /var/lib/veil/www ] && [ ! -L /var/lib/veil/www ]; then
-    install -d -m 0750 -o root -g veil-proxy /etc/veil/www
-    find /var/lib/veil/www -mindepth 1 \( -type f -o -type d \) -exec sh -c '
-        for src do
-            rel=${src#/var/lib/veil/www/}
-            dst=/etc/veil/www/$rel
-            # Existing destination entries (including symlinks) win over
-            # legacy content — never overwrite or remove operator material.
-            if [ -e "$dst" ] || [ -L "$dst" ]; then
-                continue
-            fi
-            if [ -d "$src" ]; then
-                mkdir -p "$dst"
-            else
-                mkdir -p "${dst%/*}"
-                cp -p "$src" "$dst"
-            fi
-        done
-    ' _ {} +
-fi
-for dir in /etc/veil/generated /etc/veil/tls /etc/veil/certs /etc/veil/www /etc/veil/panel; do
-    if [ -L "$dir" ]; then
-        echo "Refusing to repair symlinked managed directory: $dir" >&2
-        exit 1
-    fi
-    # Runtime-shared material is root:veil-proxy 0750/0640 so the protocol
-    # units (User=veil-proxy) and the panel (supplementary veil-proxy member)
-    # can read generated config, TLS keys, and ACME output (audit #525/#531).
-    install -d -m 0750 -o root -g veil-proxy "$dir"
-    chown -R root:veil-proxy "$dir"
-    find "$dir" -type d -exec chmod 0750 {} \;
-    find "$dir" -type f -exec chmod 0640 {} \;
-done
-for file in /etc/veil/state.key /etc/veil/veil.env; do
-    if [ -f "$file" ] && [ ! -L "$file" ]; then
-        chown root:veil "$file"
-        chmod 0640 "$file"
-    fi
-done
-if [ -f /etc/veil/backup.passphrase ] && [ ! -L /etc/veil/backup.passphrase ]; then
-    chown root:root /etc/veil/backup.passphrase
-    chmod 0600 /etc/veil/backup.passphrase
-fi
+
+# Ownership/permission normalization over /etc/veil, /var/lib/veil,
+# /var/lib/caddy and /var/lib/mita is delegated to the installed binary, which
+# runs the descriptor-pinned hostaccess.Prepare -> Migrate pass. These trees
+# are writable by the veil* service accounts — including the daemons still
+# running while this upgrade executes — so a shell `find -exec chmod` /
+# `chown -R` walk would race a leaf or directory swapped for a symlink: find
+# decides -type from an lstat and the mode change then follows the path onto
+# an arbitrary root-owned target (e.g. /usr/bin/sudo), and `install -d` /
+# `chown -R` follow a swapped top-level component the same way (#1143).
+# hostaccess opens each directory O_NOFOLLOW|O_DIRECTORY relative to its
+# pinned parent and applies fchmod/fchown on held descriptors, so a swapped
+# entry fails the pass instead of being followed. The single invocation covers
+# everything the old hand-rolled blocks did: /etc/veil (0751 root:veil) and
+# /var/lib/veil (0750 veil:veil); the safety snapshot into
+# /var/lib/veil/migration-backups; /var/lib/veil/{audit,staging,updates,
+# autocert} at veil:veil with dirs 0700 and files 0600; the root-owned
+# backups/promotion-backups/migration-backups trees (directories 0700 only —
+# backup member modes carry restore semantics and are never flattened);
+# /var/lib/veil/{state.json,sessions.json} at veil:veil 0600; the legacy
+# /var/lib/veil/www carry-over into /etc/veil/www (regular files and real
+# directories only, never symlinks); the runtime-shared subtrees
+# /etc/veil/{generated,tls,certs,www} and /etc/veil/panel at root:veil-proxy
+# 0750/0640 so the veil-proxy units and the panel (supplementary member) can
+# read them;
+# /etc/veil/{state.key,veil.env} at root:veil 0640 and backup.passphrase at
+# root:root 0600; and the /var/lib/caddy (veil-proxy) plus /var/lib/mita
+# (veil-mita) StateDirectory re-owns.
+/usr/local/bin/veil helper migrate
 
 # The helper socket parent must be root-owned and traverse-only. Older units
 # created it via the panel's RuntimeDirectory=veil (veil:veil 0750), which let
 # any veil-uid process replace the helper socket; normalize on upgrade.
 install -d -m 0711 -o root -g root /run/veil
-
-# veil-caddy.service switched from User=veil to User=veil-proxy (#497).
-# systemd does not re-own an existing StateDirectory, so an ACME data dir
-# left at veil:veil would be unwritable for the new account — re-own it.
-if [ -d /var/lib/caddy ] && [ ! -L /var/lib/caddy ]; then
-    chown -R veil-proxy:veil-proxy /var/lib/caddy
-fi
-
-# veil-mieru.service switched from User=veil-proxy to the dedicated veil-mita
-# identity (#624): a mita StateDirectory left at veil-proxy:veil-proxy would
-# be unwritable for the daemon — same re-own as caddy above. Match the
-# hostaccess.Migrate mode contract too (dirs 0700, files 0600): find does not
-# follow symlinks, so a planted link is skipped rather than tightened.
-if [ -d /var/lib/mita ] && [ ! -L /var/lib/mita ]; then
-    chown -R veil-mita:veil-mita /var/lib/mita
-    find /var/lib/mita -type d -exec chmod 0700 {} +
-    find /var/lib/mita -type f -exec chmod 0600 {} +
-
-fi
 
 # Only drive systemd when it is the running init. Containers building images
 # or chroots may ship a systemctl binary with no live systemd behind it —

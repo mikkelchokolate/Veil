@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 func TestEnsureAccountCreatesSystemGroupAndUser(t *testing.T) {
@@ -229,10 +231,15 @@ func TestMigrateGroupsPanelTLSForProxyReaders(t *testing.T) {
 	proxyGID := gid + 1
 
 	originalChown := testHooks.chown
-	defer func() { testHooks.chown = originalChown }()
+	originalChownEntry := testHooks.chownEntryAt
+	defer func() { testHooks.chown, testHooks.chownEntryAt = originalChown, originalChownEntry }()
 	gids := map[string]int{}
 	testHooks.chown = func(path string, _, g int) error {
 		gids[path] = g
+		return nil
+	}
+	testHooks.chownEntryAt = func(e *managedEntry, _, g int) error {
+		gids[e.Path()] = g
 		return nil
 	}
 
@@ -283,11 +290,16 @@ func TestMigrateReownsMitaStateDirForDedicatedIdentity(t *testing.T) {
 	defaultMitaStateDir = mitaDir
 
 	originalChown := testHooks.chown
-	defer func() { testHooks.chown = originalChown }()
+	originalChownEntry := testHooks.chownEntryAt
+	defer func() { testHooks.chown, testHooks.chownEntryAt = originalChown, originalChownEntry }()
 	type owner struct{ uid, gid int }
 	owners := map[string]owner{}
 	testHooks.chown = func(path string, u, g int) error {
 		owners[path] = owner{u, g}
+		return nil
+	}
+	testHooks.chownEntryAt = func(e *managedEntry, u, g int) error {
+		owners[e.Path()] = owner{u, g}
 		return nil
 	}
 
@@ -354,9 +366,14 @@ func TestMigrateMitaDirDefaultIgnoresVarDirSibling(t *testing.T) {
 	type owner struct{ uid, gid int }
 	owners := map[string]owner{}
 	originalChown := testHooks.chown
-	defer func() { testHooks.chown = originalChown }()
+	originalChownEntry := testHooks.chownEntryAt
+	defer func() { testHooks.chown, testHooks.chownEntryAt = originalChown, originalChownEntry }()
 	testHooks.chown = func(path string, u, g int) error {
 		owners[path] = owner{u, g}
+		return nil
+	}
+	testHooks.chownEntryAt = func(e *managedEntry, u, g int) error {
+		owners[e.Path()] = owner{u, g}
 		return nil
 	}
 
@@ -427,9 +444,14 @@ func TestMigrateSkipsMitaStateDirWithoutMitaIdentity(t *testing.T) {
 
 	var chowned []string
 	originalChown := testHooks.chown
-	defer func() { testHooks.chown = originalChown }()
+	originalChownEntry := testHooks.chownEntryAt
+	defer func() { testHooks.chown, testHooks.chownEntryAt = originalChown, originalChownEntry }()
 	testHooks.chown = func(path string, u, g int) error {
 		chowned = append(chowned, path)
+		return nil
+	}
+	testHooks.chownEntryAt = func(e *managedEntry, u, g int) error {
+		chowned = append(chowned, e.Path())
 		return nil
 	}
 
@@ -1004,8 +1026,8 @@ func TestCreateSafetyCopies(t *testing.T) {
 		if err != nil {
 			t.Fatalf("create safety copies: %v", err)
 		}
-		if safety != "" {
-			t.Fatalf("expected empty safety root, got %q", safety)
+		if safety != nil {
+			t.Fatalf("expected nil safety root, got %q", safety.Path())
 		}
 	})
 
@@ -1032,12 +1054,13 @@ func TestCreateSafetyCopies(t *testing.T) {
 		if err != nil {
 			t.Fatalf("create safety copies: %v", err)
 		}
+		defer safety.Close()
 		wantBase := filepath.Join(varDir, "migration-backups", "20260605T120000Z")
-		if safety != wantBase {
-			t.Fatalf("safety root=%q want=%q", safety, wantBase)
+		if safety.Path() != wantBase {
+			t.Fatalf("safety root=%q want=%q", safety.Path(), wantBase)
 		}
 		for _, name := range []string{"state.key", "veil.env", "state.json", "sessions.json"} {
-			data, err := os.ReadFile(filepath.Join(safety, name))
+			data, err := os.ReadFile(filepath.Join(safety.Path(), name))
 			if err != nil {
 				t.Fatalf("read safety copy %s: %v", name, err)
 			}
@@ -1060,12 +1083,16 @@ func TestCreateSafetyCopies(t *testing.T) {
 		}
 		now := time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC)
 		paths := Paths{EtcDir: etcDir, VarDir: varDir, RootUID: os.Getuid(), RootGID: os.Getgid()}
-		if _, err := createSafetyCopies(paths, now); err != nil {
+		first, err := createSafetyCopies(paths, now)
+		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := createSafetyCopies(paths, now); err != nil {
+		_ = first.Close()
+		second, err := createSafetyCopies(paths, now)
+		if err != nil {
 			t.Fatal(err)
 		}
+		_ = second.Close()
 		if _, err := os.Stat(filepath.Join(varDir, "migration-backups", "20260605T120000Z-1")); err != nil {
 			t.Fatalf("expected suffix collision dir: %v", err)
 		}
@@ -1111,30 +1138,32 @@ func TestCreateSafetyCopies(t *testing.T) {
 		}
 	})
 
-	t.Run("path too long for backup directory", func(t *testing.T) {
+	t.Run("timestamped root mkdir error propagates", func(t *testing.T) {
 		root := t.TempDir()
 		etcDir := filepath.Join(root, "etc")
+		varDir := filepath.Join(root, "var")
 		if err := os.MkdirAll(etcDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(varDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(etcDir, "state.key"), []byte("key"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		// Build a deeply-nested varDir whose full length is valid but whose backup
-		// timestamp candidate exceeds PATH_MAX, causing os.Mkdir to fail with a
-		// non-IsExist error inside the suffix loop.
-		wantLen := 4065
-		varDir := root
-		for len(varDir) < wantLen-256 {
-			varDir = filepath.Join(varDir, strings.Repeat("x", 200))
-		}
-		if remaining := wantLen - len(varDir) - 1; remaining > 0 {
-			varDir = filepath.Join(varDir, strings.Repeat("x", remaining))
+		// The timestamped root is created fd-relative (safefs.MkdirAt), so a
+		// non-EEXIST failure can no longer be provoked via PATH_MAX — inject
+		// it through the hook instead.
+		wantErr := errors.New("mkdir boom")
+		originalMkdir := testHooks.mkdirEntryAt
+		defer func() { testHooks.mkdirEntryAt = originalMkdir }()
+		testHooks.mkdirEntryAt = func(_ *safefs.Dir, _ string, _ os.FileMode) error {
+			return wantErr
 		}
 		paths := Paths{EtcDir: etcDir, VarDir: varDir, RootUID: os.Getuid(), RootGID: os.Getgid()}
 		_, err := createSafetyCopies(paths, time.Now())
-		if err == nil {
-			t.Fatal("expected error for path too long")
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("expected injected mkdir error, got: %v", err)
 		}
 	})
 }

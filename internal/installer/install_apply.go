@@ -12,13 +12,19 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/managedfiles"
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 var (
-	effectiveUID        = os.Geteuid
-	lookupGroup         = user.LookupGroup
-	chownPath           = os.Chown
-	chmodPath           = os.Chmod
+	effectiveUID = os.Geteuid
+	lookupGroup  = user.LookupGroup
+	// chownPath/chmodPath mutate managed paths on O_NOFOLLOW-pinned
+	// descriptors: between atomicfile.Write's rename and these calls an
+	// attacker who controls a managed file's parent directory can swap the
+	// leaf for a symlink, and the path-based os.Chown/os.Chmod variants would
+	// follow it to an arbitrary victim (#1129).
+	chownPath           = safefs.ChownNoFollow
+	chmodPath           = safefs.ChmodNoFollow
 	applyQUICUDPBuffers = hostenv.ApplyQUICUDPBuffers
 	quicBufferWarn      = func(format string, args ...any) { fmt.Fprintf(os.Stderr, format, args...) }
 )
@@ -89,7 +95,7 @@ func (a InstallApply) Apply() (ApplyResult, error) {
 		}
 		result.WrittenFiles = append(result.WrittenFiles, file.Path)
 	}
-	if err := chownSecretsForVeilGroup(result.WrittenFiles); err != nil {
+	if err := chownSecretsForVeilGroup(result.WrittenFiles, a.paths.EtcDir); err != nil {
 		return result, err
 	}
 	if err := backup.EnsurePassphraseFile(filepath.Join(a.paths.EtcDir, "backup.passphrase")); err != nil {
@@ -127,14 +133,14 @@ func ApplyRURecommendedProfileWithPlan(profile RURecommendedProfile, paths Apply
 // outermost shared subtree (generated/, tls/, panel/, certs/, www/) so a tree
 // created without a prior Migrate stays traversable by veil-proxy
 // (audit #531).
-func chownSecretsForVeilGroup(paths []string) error {
+func chownSecretsForVeilGroup(paths []string, etcDir string) error {
 	if effectiveUID() != 0 {
 		// A non-root process cannot chown at all; on the packaged layout this
 		// would silently leave secrets unreadable, so fail closed there
 		// (audit #532). Scratch/test trees keep the historical skip because
 		// no production ownership contract applies to them.
 		for _, path := range paths {
-			if needsVeilGroupRead(path) && underProductionVeilRoot(path) {
+			if needsVeilGroupRead(path, etcDir) && underProductionVeilRoot(path) {
 				return fmt.Errorf("cannot establish managed file ownership as non-root user (euid=%d): %s", effectiveUID(), path)
 			}
 		}
@@ -153,11 +159,11 @@ func chownSecretsForVeilGroup(paths []string) error {
 	}
 	seenDirs := map[string]struct{}{}
 	for _, path := range paths {
-		if !needsVeilGroupRead(path) {
+		if !needsVeilGroupRead(path, etcDir) {
 			continue
 		}
 		ownerGid := veilGID
-		if isRuntimeSharedConfig(path) {
+		if isRuntimeSharedConfig(path, etcDir) {
 			ownerGid = proxyGID
 		}
 		if err := chownPath(path, 0, ownerGid); err != nil {
@@ -166,10 +172,10 @@ func chownSecretsForVeilGroup(paths []string) error {
 		if err := chmodPath(path, 0o640); err != nil {
 			return fmt.Errorf("chmod %s for veil group: %w", path, err)
 		}
-		if !isRuntimeSharedConfig(path) {
+		if !isRuntimeSharedConfig(path, etcDir) {
 			continue
 		}
-		for _, dir := range runtimeSharedParentDirs(path) {
+		for _, dir := range runtimeSharedParentDirs(path, etcDir) {
 			if _, ok := seenDirs[dir]; ok {
 				continue
 			}
@@ -209,61 +215,66 @@ func underProductionVeilRoot(path string) bool {
 		slash == "/var/lib/veil" || strings.HasPrefix(slash, "/var/lib/veil/")
 }
 
+// runtimeSharedSubtreeNames are the managed subtrees directly under the
+// configured etc dir that the protocol units (User=veil-proxy) read.
+var runtimeSharedSubtreeNames = []string{"generated", "tls", "panel", "certs", "www"}
+
+// runtimeSharedSubtreeRoot returns the <etcDir>/<subtree> root that contains
+// path, or "" when path lives outside every runtime-shared subtree. Matching
+// is path-prefix based against the configured etc dir (#1130): the previous
+// bare substring check marked ANY path containing "/panel/"-style components
+// runtime-shared, so a custom --etc-dir/--systemd-dir like /opt/panel/units
+// spilled the veil-proxy group onto unrelated sibling material.
+func runtimeSharedSubtreeRoot(path, etcDir string) string {
+	if etcDir == "" {
+		return ""
+	}
+	for _, name := range runtimeSharedSubtreeNames {
+		root := filepath.Join(etcDir, name)
+		if path == root || strings.HasPrefix(path, root+string(filepath.Separator)) {
+			return root
+		}
+	}
+	return ""
+}
+
 // runtimeSharedParentDirs returns the ancestor directories of path from the
-// file's directory up to and including the outermost runtime-shared subtree
-// component (generated, tls, panel, certs, www). The subtree root's parent
-// (e.g. /etc/veil, which stays root:veil) is deliberately excluded.
-func runtimeSharedParentDirs(path string) []string {
+// file's directory up to and including the runtime-shared subtree root
+// (<etcDir>/generated|tls|panel|certs|www). The subtree root's parent (the
+// etc dir itself, which stays root:veil) is deliberately excluded.
+func runtimeSharedParentDirs(path, etcDir string) []string {
+	root := runtimeSharedSubtreeRoot(path, etcDir)
+	if root == "" || path == root {
+		return nil
+	}
+	// path is strictly beneath root, so the ascent always terminates there.
 	var dirs []string
 	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
 		dirs = append(dirs, dir)
-		parent := filepath.Dir(dir)
-		if sharedSubtreeName(filepath.Base(dir)) && !sharedSubtreeName(filepath.Base(parent)) {
-			break
-		}
-		if parent == dir {
+		if dir == root {
 			break
 		}
 	}
 	return dirs
 }
 
-// sharedSubtreeName reports whether base names a managed runtime-shared
-// subtree directly under the Veil etc directory.
-func sharedSubtreeName(base string) bool {
-	switch base {
-	case "generated", "tls", "panel", "certs", "www":
-		return true
-	}
-	return false
-}
-
-func needsVeilGroupRead(path string) bool {
+func needsVeilGroupRead(path, etcDir string) bool {
 	base := filepath.Base(path)
 	if base == "veil.env" || strings.HasSuffix(base, ".key") || strings.HasSuffix(base, ".crt") {
 		return true
 	}
 	// Everything under a runtime-shared subtree must stay group-readable:
 	// that is what makes the subtree shared in the first place.
-	return isRuntimeSharedConfig(path)
-}
-
-func isGeneratedConfig(path string) bool {
-	return strings.Contains(filepath.ToSlash(path), "/generated/")
+	return isRuntimeSharedConfig(path, etcDir)
 }
 
 // isRuntimeSharedConfig reports paths the protocol units (User=veil-proxy)
-// read directly: generated configs and the shared panel TLS material. The
-// panel account is a supplementary veil-proxy member, so a single group
-// covers both readers. Panel-only secrets such as state.key and veil.env
-// stay in the veil group.
-func isRuntimeSharedConfig(path string) bool {
-	slash := filepath.ToSlash(path)
-	return isGeneratedConfig(path) ||
-		strings.Contains(slash, "/panel/") ||
-		strings.Contains(slash, "/tls/") ||
-		strings.Contains(slash, "/certs/") ||
-		strings.Contains(slash, "/www/")
+// read directly: generated configs and the shared panel TLS material under
+// the configured etc dir. The panel account is a supplementary veil-proxy
+// member, so a single group covers both readers. Panel-only secrets such as
+// state.key and veil.env stay in the veil group.
+func isRuntimeSharedConfig(path, etcDir string) bool {
+	return runtimeSharedSubtreeRoot(path, etcDir) != ""
 }
 
 func writeManagedFile(path string, content string, mode os.FileMode) error {

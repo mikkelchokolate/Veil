@@ -56,7 +56,7 @@ func TestApplyRepairPlanWritesOnlyPlannedFiles(t *testing.T) {
 		t.Fatalf("build repair plan: %v", err)
 	}
 
-	repairResult, err := ApplyRepairPlan(plan)
+	repairResult, err := ApplyRepairPlan(plan, paths.EtcDir)
 
 	if err != nil {
 		t.Fatalf("apply repair: %v", err)

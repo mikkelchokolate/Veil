@@ -4,13 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 // testHooks are package-level indirections that allow tests to inject errors
@@ -23,39 +25,113 @@ var testHooks = struct {
 	lstat              func(string) (os.FileInfo, error)
 	chmod              func(string, os.FileMode) error
 	chown              func(string, int, int) error
-	walkDir            func(string, fs.WalkDirFunc) error
 	copy               func(io.Writer, io.Reader) (int64, error)
+	// Tree walks are descriptor-pinned (#1127): every per-entry mutation is
+	// resolved relative to the held parent descriptor, never by re-resolving
+	// a multi-component path the service accounts can influence. The walk
+	// driver itself cannot live in this struct — its default calls back into
+	// testHooks, which the compiler would flag as an initialization cycle —
+	// so tests override walkManagedDirHook instead.
+	statEntryAt    func(dir *safefs.Dir, name string) (os.FileInfo, error)
+	chmodDir       func(dir *safefs.Dir, mode os.FileMode) error
+	chownDir       func(dir *safefs.Dir, uid, gid int) error
+	chmodEntryAt   func(e *managedEntry, mode os.FileMode) error
+	chownEntryAt   func(e *managedEntry, uid, gid int) error
+	openEntryAt    func(e *managedEntry) (*os.File, error)
+	mkdirEntryAt   func(dir *safefs.Dir, name string, mode os.FileMode) error
+	openDirEntryAt func(dir *safefs.Dir, name string) (*safefs.Dir, error)
 }{
 	prepareAccountDeps: DefaultAccountDependencies,
 	lstat:              os.Lstat,
-	chmod:              chmodManagedNoFollow,
-	chown:              chownManagedNoFollow,
-	walkDir:            filepath.WalkDir,
+	chmod:              safefs.ChmodNoFollow,
+	chown:              safefs.ChownNoFollow,
 	copy:               io.Copy,
+	statEntryAt:        func(dir *safefs.Dir, name string) (os.FileInfo, error) { return dir.StatAt(name) },
+	chmodDir:           func(dir *safefs.Dir, mode os.FileMode) error { return dir.File().Chmod(mode) },
+	chownDir:           func(dir *safefs.Dir, uid, gid int) error { return dir.File().Chown(uid, gid) },
+	chmodEntryAt:       func(e *managedEntry, mode os.FileMode) error { return e.parent.ChmodAt(e.name, mode) },
+	chownEntryAt:       func(e *managedEntry, uid, gid int) error { return e.parent.ChownAt(e.name, uid, gid) },
+	openEntryAt:        func(e *managedEntry) (*os.File, error) { return e.parent.OpenFileAt(e.name) },
+	mkdirEntryAt:       func(dir *safefs.Dir, name string, mode os.FileMode) error { return dir.MkdirAt(name, mode) },
+	openDirEntryAt:     func(dir *safefs.Dir, name string) (*safefs.Dir, error) { return dir.OpenDirAt(name) },
 }
 
-// chmodManagedNoFollow applies the mode change on an O_NOFOLLOW-opened
-// descriptor instead of resolving the path again: a symlink swapped in after
-// the caller's lstat/walk check is rejected (ELOOP) rather than followed to a
-// target outside the managed tree (#1009).
-func chmodManagedNoFollow(path string, mode os.FileMode) error {
-	file, err := openManagedNoFollow(path)
+// walkManagedDirHook is the test-only override for walkManagedDir; nil means
+// use the real descriptor-pinned implementation.
+var walkManagedDirHook func(dir *safefs.Dir, visit func(*managedEntry) error) error
+
+func walkManagedDir(dir *safefs.Dir, visit func(*managedEntry) error) error {
+	if walkManagedDirHook != nil {
+		return walkManagedDirHook(dir, visit)
+	}
+	return walkManagedDirEntries(dir, visit)
+}
+
+// managedEntry is one non-root entry discovered by walkManagedDirEntries.
+// Mutations are pinned to the parent directory descriptor the walk holds
+// open, so a symlink swapped into any ancestor component — or the leaf —
+// cannot redirect chmod/chown/open outside the managed tree (#1127). Path()
+// is a display path for errors; the operations never resolve it.
+type managedEntry struct {
+	parent *safefs.Dir
+	name   string
+	info   os.FileInfo
+}
+
+// Path returns the display path for error messages.
+func (e *managedEntry) Path() string { return filepath.Join(e.parent.Path(), e.name) }
+
+// Info returns the descriptor-pinned lstat-equivalent metadata.
+func (e *managedEntry) Info() os.FileInfo { return e.info }
+
+// IsDir reports whether the pinned stat saw a directory.
+func (e *managedEntry) IsDir() bool { return e.info.IsDir() }
+
+func (e *managedEntry) chmod(mode os.FileMode) error { return testHooks.chmodEntryAt(e, mode) }
+func (e *managedEntry) chown(uid, gid int) error     { return testHooks.chownEntryAt(e, uid, gid) }
+func (e *managedEntry) open() (*os.File, error)      { return testHooks.openEntryAt(e) }
+
+// walkManagedDirEntries enumerates dir in lexical order and calls visit for
+// each entry, recursing into real directories. Every entry is statted
+// relative to the held descriptor (Fstatat + AT_SYMLINK_NOFOLLOW), and
+// descent opens children relative to it too — a directory swapped for a
+// symlink between the stat and the descent fails ELOOP instead of escaping
+// the tree (#1127).
+func walkManagedDirEntries(dir *safefs.Dir, visit func(*managedEntry) error) error {
+	dirents, err := dir.ReadDir()
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-	return file.Chmod(mode)
-}
-
-// chownManagedNoFollow is the ownership counterpart of chmodManagedNoFollow:
-// fchown on the opened descriptor never follows a swapped symlink (#1009).
-func chownManagedNoFollow(path string, uid, gid int) error {
-	file, err := openManagedNoFollow(path)
-	if err != nil {
-		return err
+	sort.Slice(dirents, func(i, j int) bool { return dirents[i].Name() < dirents[j].Name() })
+	for _, de := range dirents {
+		name := de.Name()
+		if name == "." || name == ".." {
+			continue
+		}
+		info, err := testHooks.statEntryAt(dir, name)
+		if err != nil {
+			return err
+		}
+		e := &managedEntry{parent: dir, name: name, info: info}
+		if err := visit(e); err != nil {
+			return err
+		}
+		if info.IsDir() {
+			sub, err := testHooks.openDirEntryAt(dir, name)
+			if err != nil {
+				return err
+			}
+			err = walkManagedDir(sub, visit)
+			closeErr := sub.Close()
+			if err != nil {
+				return err
+			}
+			if closeErr != nil {
+				return closeErr
+			}
+		}
 	}
-	defer file.Close()
-	return file.Chown(uid, gid)
+	return nil
 }
 
 type Identity struct {
@@ -207,13 +283,22 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 	if err := ensureOwnedDirectory(paths.VarDir, 0o750, panel.UID, panel.GID); err != nil {
 		return err
 	}
-	safetyRoot, err := createSafetyCopies(paths, now())
+	safetyDir, err := createSafetyCopies(paths, now())
 	if err != nil {
 		return err
 	}
-	if safetyRoot != "" {
-		if err := applyTreeOwnership(safetyRoot, 0o700, 0o600, paths.RootUID, paths.RootGID); err != nil {
+	if safetyDir != nil {
+		// The safety tree is owned on the pinned descriptor, never by
+		// re-resolving its path: migration-backups sits inside the
+		// service-owned VarDir and could be swapped for a symlink between
+		// createSafetyCopies and a path-based pass (#1127).
+		err := applyManagedDirOwnership(safetyDir, 0o700, 0o600, paths.RootUID, paths.RootGID)
+		closeErr := safetyDir.Close()
+		if err != nil {
 			return err
+		}
+		if closeErr != nil {
+			return closeErr
 		}
 	}
 
@@ -327,7 +412,12 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 	return nil
 }
 
-func createSafetyCopies(paths Paths, now time.Time) (string, error) {
+// createSafetyCopies snapshots the managed secret files into a fresh
+// timestamped directory under VarDir/migration-backups. It returns the
+// timestamped root as an open *safefs.Dir (nil when there is nothing to
+// copy) so the caller can apply ownership without re-resolving the path
+// (#1127).
+func createSafetyCopies(paths Paths, now time.Time) (*safefs.Dir, error) {
 	type source struct {
 		path string
 		name string
@@ -345,58 +435,78 @@ func createSafetyCopies(paths Paths, now time.Time) (string, error) {
 			continue
 		}
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-			return "", fmt.Errorf("refuse to migrate non-regular managed file %s", source.path)
+			return nil, fmt.Errorf("refuse to migrate non-regular managed file %s", source.path)
 		}
 		existing = append(existing, source)
 	}
 	if len(existing) == 0 {
-		return "", nil
+		return nil, nil
 	}
 	base := filepath.Join(paths.VarDir, "migration-backups")
 	if err := ensureOwnedDirectory(base, 0o700, paths.RootUID, paths.RootGID); err != nil {
-		return "", err
+		return nil, err
 	}
-	root := filepath.Join(base, now.UTC().Format("20060102T150405Z"))
+	// migration-backups is a direct child of the service-owned VarDir, so a
+	// compromised service identity can rename it or swap it for a symlink at
+	// any point after the ownership pass above. Pin the directory descriptor
+	// and create the timestamped root and member copies fd-relative — no
+	// path under the service-influenced tree is ever re-resolved (#1127).
+	baseDir, err := safefs.OpenDir(base)
+	if err != nil {
+		return nil, err
+	}
+	defer baseDir.Close()
+	stamp := now.UTC().Format("20060102T150405Z")
+	rootName := stamp
 	for suffix := 0; ; suffix++ {
-		candidate := root
+		candidate := stamp
 		if suffix > 0 {
-			candidate = fmt.Sprintf("%s-%d", root, suffix)
+			candidate = fmt.Sprintf("%s-%d", stamp, suffix)
 		}
-		err := os.Mkdir(candidate, 0o700)
+		err := testHooks.mkdirEntryAt(baseDir, candidate, 0o700)
 		if err == nil {
-			root = candidate
+			rootName = candidate
 			break
 		}
-		if !os.IsExist(err) {
-			return "", err
+		if !errors.Is(err, os.ErrExist) {
+			return nil, err
 		}
+	}
+	rootDir, err := testHooks.openDirEntryAt(baseDir, rootName)
+	if err != nil {
+		return nil, err
 	}
 	for _, source := range existing {
-		if err := copyRegularFile(source.path, filepath.Join(root, source.name)); err != nil {
-			return "", err
+		if err := copyRegularFileAt(rootDir, source.path, source.name); err != nil {
+			_ = rootDir.Close()
+			return nil, err
 		}
 	}
-	return root, nil
+	return rootDir, nil
 }
 
 // copyLegacyWWWTree copies regular files and directories from the legacy
 // fallback root into the new one, never overwriting existing destination
-// entries and never following or copying symlinks.
+// entries and never following or copying symlinks. The source tree is
+// service-account-owned, so the walk and every source open are pinned to
+// held directory descriptors: an ancestor directory or leaf swapped for a
+// symlink cannot redirect reads outside the legacy root (#1127).
 func copyLegacyWWWTree(src, dst string) error {
-	return testHooks.walkDir(src, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		// DirEntry never follows links, so a symlink reports IsDir()==false;
-		// skip it outright rather than copying a link into a
-		// veil-proxy-readable tree.
-		if entry.Type()&os.ModeSymlink != 0 {
+	dir, err := safefs.OpenDir(src)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return walkManagedDir(dir, func(e *managedEntry) error {
+		info := e.Info()
+		if info.Mode()&os.ModeSymlink != 0 {
+			// Never copy a link into a veil-proxy-readable tree.
 			return nil
 		}
-		rel, err := filepath.Rel(src, path)
+		rel, err := filepath.Rel(src, e.Path())
 		if err != nil {
 			return err
 		}
@@ -408,12 +518,8 @@ func copyLegacyWWWTree(src, dst string) error {
 		} else if !os.IsNotExist(err) {
 			return err
 		}
-		if entry.IsDir() {
+		if e.IsDir() {
 			return os.MkdirAll(target, 0o750)
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
 		}
 		if !info.Mode().IsRegular() {
 			return nil
@@ -421,18 +527,71 @@ func copyLegacyWWWTree(src, dst string) error {
 		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 			return err
 		}
-		return copyRegularFile(path, target)
+		input, err := e.open()
+		if err != nil {
+			return err
+		}
+		// A regular file swapped for a FIFO between the walk stat and this
+		// open must not be copied (O_NONBLOCK keeps the open itself from
+		// hanging — #1083).
+		openInfo, err := input.Stat()
+		if err != nil {
+			return errors.Join(err, input.Close())
+		}
+		if !openInfo.Mode().IsRegular() {
+			return input.Close()
+		}
+		err = copyOpenedRegularFile(input, target)
+		return errors.Join(err, input.Close())
 	})
 }
 
-func copyRegularFile(source, destination string) error {
-	// O_NOFOLLOW: the lstat regular-file check and this open are separated by
-	// time; a swapped symlink must be rejected, not followed (#1009).
-	input, err := openManagedNoFollow(source)
+// copyRegularFileAt copies the leaf file srcPath into dstDir as name. The
+// destination write is descriptor-relative so no component under the
+// service-influenced tree is re-resolved (#1127).
+func copyRegularFileAt(dstDir *safefs.Dir, srcPath, name string) error {
+	input, err := safefs.OpenNoFollow(srcPath)
 	if err != nil {
 		return err
 	}
 	defer input.Close()
+	info, err := input.Stat()
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("refuse to migrate non-regular managed file %s", srcPath)
+	}
+	output, err := dstDir.CreateFileAt(name, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := testHooks.copy(output, input); err != nil {
+		return errors.Join(err, output.Close())
+	}
+	return output.Close()
+}
+
+func copyRegularFile(source, destination string) error {
+	// O_NOFOLLOW|O_NONBLOCK: the lstat regular-file check and this open are
+	// separated by time; a swapped symlink must be rejected, not followed
+	// (#1009), and a swapped FIFO must not block the copy (#1083).
+	input, err := safefs.OpenNoFollow(source)
+	if err != nil {
+		return err
+	}
+	defer input.Close()
+	info, err := input.Stat()
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("refuse to migrate non-regular managed file %s", source)
+	}
+	return copyOpenedRegularFile(input, destination)
+}
+
+func copyOpenedRegularFile(input *os.File, destination string) error {
 	output, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
@@ -472,16 +631,24 @@ func reownProxyStateDir(root string, uid, gid int) error {
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 		return nil
 	}
-	return testHooks.walkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.Type()&os.ModeSymlink != 0 {
+	if err := testHooks.chown(root, uid, gid); err != nil {
+		return err
+	}
+	dir, err := safefs.OpenDir(root)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return walkManagedDir(dir, func(e *managedEntry) error {
+		if e.Info().Mode()&os.ModeSymlink != 0 {
 			// Never chown through a link: only the tree's own entries are
 			// re-owned, like `chown -R` without -L.
 			return nil
 		}
-		return testHooks.chown(path, uid, gid)
+		// Fchownat(AT_SYMLINK_NOFOLLOW) chowns the entry without opening it,
+		// so FIFOs and sockets are re-owned exactly like `chown -R` instead
+		// of blocking on open(O_RDONLY) or failing ENXIO (#1083).
+		return e.chown(uid, gid)
 	})
 }
 
@@ -499,23 +666,24 @@ func applyBackupTreeOwnership(root string, uid, gid int) error {
 	if err := ensureOwnedDirectory(root, 0o700, uid, gid); err != nil {
 		return err
 	}
-	return testHooks.walkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
+	dir, err := safefs.OpenDir(root)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return walkManagedDir(dir, func(e *managedEntry) error {
+		info := e.Info()
 		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("refuse to migrate symlink %s", path)
+			return fmt.Errorf("refuse to migrate symlink %s", e.Path())
 		}
-		if entry.IsDir() {
-			if err := testHooks.chmod(path, 0o700); err != nil {
+		if e.IsDir() {
+			if err := e.chmod(0o700); err != nil {
 				return err
 			}
 		}
-		return testHooks.chown(path, uid, gid)
+		// Backup members keep their own permission bits (restore reads them
+		// back), so files are re-owned only — never chmodded.
+		return e.chown(uid, gid)
 	})
 }
 
@@ -523,27 +691,46 @@ func applyTreeOwnership(root string, dirMode, fileMode os.FileMode, uid, gid int
 	if err := ensureOwnedDirectory(root, dirMode, uid, gid); err != nil {
 		return err
 	}
-	return testHooks.walkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
+	dir, err := safefs.OpenDir(root)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return applyManagedTreeEntries(dir, dirMode, fileMode, uid, gid)
+}
+
+// applyManagedDirOwnership applies the ownership contract to an already
+// pinned directory handle and its tree — used where the root itself must not
+// be re-resolved by path (the service accounts can swap ancestors of the
+// safety-copy root inside VarDir, #1127).
+func applyManagedDirOwnership(dir *safefs.Dir, dirMode, fileMode os.FileMode, uid, gid int) error {
+	if err := testHooks.chmodDir(dir, dirMode); err != nil {
+		return err
+	}
+	if err := testHooks.chownDir(dir, uid, gid); err != nil {
+		return err
+	}
+	return applyManagedTreeEntries(dir, dirMode, fileMode, uid, gid)
+}
+
+// applyManagedTreeEntries walks dir's children with descriptor-pinned
+// stat/chmod/chown operations (#1127).
+func applyManagedTreeEntries(dir *safefs.Dir, dirMode, fileMode os.FileMode, uid, gid int) error {
+	return walkManagedDir(dir, func(e *managedEntry) error {
+		info := e.Info()
 		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("refuse to migrate symlink %s", path)
+			return fmt.Errorf("refuse to migrate symlink %s", e.Path())
 		}
 		mode := fileMode
-		if entry.IsDir() {
+		if e.IsDir() {
 			mode = dirMode
 		} else if !info.Mode().IsRegular() {
-			return fmt.Errorf("refuse to migrate non-regular path %s", path)
+			return fmt.Errorf("refuse to migrate non-regular path %s", e.Path())
 		}
-		if err := testHooks.chmod(path, mode); err != nil {
+		if err := e.chmod(mode); err != nil {
 			return err
 		}
-		return testHooks.chown(path, uid, gid)
+		return e.chown(uid, gid)
 	})
 }
 

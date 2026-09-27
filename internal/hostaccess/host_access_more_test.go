@@ -3,7 +3,6 @@ package hostaccess
 import (
 	"errors"
 	"io"
-	"io/fs"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 func TestPreparePropagatesEnsureAccountError(t *testing.T) {
@@ -52,13 +53,13 @@ func TestMigrateSafetyCopyOwnershipError(t *testing.T) {
 	uid, gid := os.Getuid(), os.Getgid()
 	safetyRoot := filepath.Join(varDir, "migration-backups", now.UTC().Format("20060102T150405Z"))
 
-	originalChmod := testHooks.chmod
-	defer func() { testHooks.chmod = originalChmod }()
-	testHooks.chmod = func(path string, mode os.FileMode) error {
-		if path == safetyRoot {
+	originalChmodDir := testHooks.chmodDir
+	defer func() { testHooks.chmodDir = originalChmodDir }()
+	testHooks.chmodDir = func(d *safefs.Dir, mode os.FileMode) error {
+		if d.Path() == safetyRoot {
 			return errors.New("chmod safety root failed")
 		}
-		return originalChmod(path, mode)
+		return originalChmodDir(d, mode)
 	}
 
 	err := Migrate(
@@ -181,7 +182,10 @@ func TestCreateSafetyCopiesLstatError(t *testing.T) {
 		return originalLstat(path)
 	}
 
-	_, err := createSafetyCopies(Paths{EtcDir: etcDir, VarDir: varDir}, time.Now())
+	dir, err := createSafetyCopies(Paths{EtcDir: etcDir, VarDir: varDir}, time.Now())
+	if dir != nil {
+		_ = dir.Close()
+	}
 	if err == nil || !strings.Contains(err.Error(), "lstat failed") {
 		t.Fatalf("expected lstat error, got: %v", err)
 	}
@@ -211,7 +215,10 @@ func TestCreateSafetyCopiesCopyError(t *testing.T) {
 		return 0, errors.New("copy failed")
 	}
 
-	_, err := createSafetyCopies(Paths{EtcDir: etcDir, VarDir: varDir, RootUID: os.Getuid(), RootGID: os.Getgid()}, time.Now())
+	dir, err := createSafetyCopies(Paths{EtcDir: etcDir, VarDir: varDir, RootUID: os.Getuid(), RootGID: os.Getgid()}, time.Now())
+	if dir != nil {
+		_ = dir.Close()
+	}
 	if err == nil || !strings.Contains(err.Error(), "copy failed") {
 		t.Fatalf("expected copy error, got: %v", err)
 	}
@@ -266,10 +273,10 @@ func TestApplyTreeOwnershipWalkError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	originalWalkDir := testHooks.walkDir
-	defer func() { testHooks.walkDir = originalWalkDir }()
-	testHooks.walkDir = func(path string, fn fs.WalkDirFunc) error {
-		return fn(path, nil, errors.New("walk failed"))
+	originalWalk := walkManagedDirHook
+	defer func() { walkManagedDirHook = originalWalk }()
+	walkManagedDirHook = func(dir *safefs.Dir, visit func(*managedEntry) error) error {
+		return errors.New("walk failed")
 	}
 
 	err := applyTreeOwnership(tree, 0o700, 0o600, os.Getuid(), os.Getgid())
@@ -287,11 +294,14 @@ func TestApplyTreeOwnershipEntryInfoError(t *testing.T) {
 	if err := os.MkdirAll(tree, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(tree, "x"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
-	originalWalkDir := testHooks.walkDir
-	defer func() { testHooks.walkDir = originalWalkDir }()
-	testHooks.walkDir = func(path string, fn fs.WalkDirFunc) error {
-		return fn(filepath.Join(path, "x"), failingInfoEntry{name: "x"}, nil)
+	originalStat := testHooks.statEntryAt
+	defer func() { testHooks.statEntryAt = originalStat }()
+	testHooks.statEntryAt = func(dir *safefs.Dir, name string) (os.FileInfo, error) {
+		return nil, errors.New("info error")
 	}
 
 	err := applyTreeOwnership(tree, 0o700, 0o600, os.Getuid(), os.Getgid())
@@ -314,13 +324,13 @@ func TestApplyTreeOwnershipChmodError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	originalChmod := testHooks.chmod
-	defer func() { testHooks.chmod = originalChmod }()
-	testHooks.chmod = func(path string, mode os.FileMode) error {
-		if path == file {
+	originalChmod := testHooks.chmodEntryAt
+	defer func() { testHooks.chmodEntryAt = originalChmod }()
+	testHooks.chmodEntryAt = func(e *managedEntry, mode os.FileMode) error {
+		if e.Path() == file {
 			return errors.New("chmod file failed")
 		}
-		return originalChmod(path, mode)
+		return originalChmod(e, mode)
 	}
 
 	err := applyTreeOwnership(tree, 0o700, 0o600, os.Getuid(), os.Getgid())
@@ -371,16 +381,6 @@ func TestSetOptionalFileChmodError(t *testing.T) {
 	}
 }
 
-// failingInfoEntry is a DirEntry whose Info() method always returns an error.
-type failingInfoEntry struct {
-	name string
-}
-
-func (e failingInfoEntry) Name() string               { return e.name }
-func (e failingInfoEntry) IsDir() bool                { return false }
-func (e failingInfoEntry) Type() fs.FileMode          { return 0 }
-func (e failingInfoEntry) Info() (fs.FileInfo, error) { return nil, errors.New("info error") }
-
 // Issue #623: veil-caddy.service declares StateDirectory=caddy and runs as
 // veil-proxy, but systemd never re-owns an existing state dir — an old
 // veil-owned /var/lib/caddy stays unwritable to the unit. Migrate must
@@ -423,9 +423,14 @@ func TestMigrateReownsProxyStateDirs(t *testing.T) {
 	}
 	var chowned []chownCall
 	originalChown := testHooks.chown
-	defer func() { testHooks.chown = originalChown }()
+	originalChownEntry := testHooks.chownEntryAt
+	defer func() { testHooks.chown, testHooks.chownEntryAt = originalChown, originalChownEntry }()
 	testHooks.chown = func(path string, uid, gid int) error {
 		chowned = append(chowned, chownCall{path, uid, gid})
+		return nil
+	}
+	testHooks.chownEntryAt = func(e *managedEntry, uid, gid int) error {
+		chowned = append(chowned, chownCall{e.Path(), uid, gid})
 		return nil
 	}
 
