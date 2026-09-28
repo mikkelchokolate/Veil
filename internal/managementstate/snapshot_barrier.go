@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"golang.org/x/sys/unix"
 )
 
 const snapshotBarrierFilename = ".veil-snapshot.lock"
@@ -40,20 +38,14 @@ func WithSnapshotBarrier(statePath string, fn func() error) (resultErr error) {
 			return fmt.Errorf("set management snapshot barrier mode: %w", err)
 		}
 	}
-	for {
-		err = unix.Flock(int(file.Fd()), unix.LOCK_EX)
-		if !errors.Is(err, unix.EINTR) {
-			break
-		}
-	}
-	if err != nil {
+	if err := snapshotBarrierLock(file); err != nil {
 		return fmt.Errorf("lock management snapshot barrier: %w", err)
 	}
 	return fn()
 }
 
 func releaseSnapshotBarrier(file *os.File) error {
-	unlockErr := unix.Flock(int(file.Fd()), unix.LOCK_UN)
+	unlockErr := snapshotBarrierUnlock(file)
 	closeErr := file.Close()
 	if unlockErr != nil {
 		unlockErr = fmt.Errorf("unlock management snapshot barrier: %w", unlockErr)

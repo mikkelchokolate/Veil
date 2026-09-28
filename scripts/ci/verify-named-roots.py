@@ -13,12 +13,14 @@ selected — CI stays green while the gate silently covers less (issue #1014).
 Two directions are enforced:
 
 * forward — every ``func Test<name>(`` root matching a job's declared family
-  pattern must appear in that job's script, unless the root is explicitly
-  exempted in scripts/ci/named-root-exemptions.txt;
-* reverse — every ``Test<name>`` token a named-root script carries (in -run
-  expressions, ci_assert_test_passed calls, or comments) must resolve to a
-  real test root in this repository, so a renamed or deleted test cannot
-  leave a stale name behind.
+  pattern must appear in that job's script in *executable* position (shell
+  comments are stripped first — a root mentioned only in a comment, or on a
+  commented-out run line, is not selection evidence, issue #1089), unless
+  the root is explicitly exempted in scripts/ci/named-root-exemptions.txt;
+* reverse — every ``Test<name>`` token a named-root script carries in
+  executable position (-run expressions, ci_assert_test_passed calls) must
+  resolve to a real test root in this repository, so a renamed or deleted
+  test cannot leave a stale name behind.
 
 Exit 2 is a script/configuration error; exit 1 reports the reconciliation
 failures.
@@ -27,12 +29,15 @@ from __future__ import annotations
 
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 
 FUNC_RE = re.compile(r"^func\s+(Test[A-Za-z0-9_]+)\s*\(", re.MULTILINE)
 NAME_TOKEN_RE = re.compile(r"Test[A-Za-z0-9_]+")
+# A `#` opens a shell comment only at start-of-word (line start, whitespace,
+# or a command separator); `a#b` and `${x#y}` keep their literal `#`.
+COMMENT_RE = re.compile(r"(^|[\s;&|()])#.*$", re.MULTILINE)
 
 # Forward reconciliation: (job script, directories scanned for roots, name
 # pattern). Membership is by name family — a new root matching the pattern
@@ -99,12 +104,20 @@ def iter_test_roots(directories: list[str]) -> dict[str, set[str]]:
             except OSError:
                 continue
             for name in FUNC_RE.findall(text):
-                roots.setdefault(name, set()).add(str(path.relative_to(ROOT)))
+                roots.setdefault(name, set()).add(path.relative_to(ROOT).as_posix())
     return roots
 
 
-def load_exemptions() -> set[str]:
-    exemptions: set[str] = set()
+def root_dirs(files: set[str]) -> set[str]:
+    """Repo-relative directories that directly contain a root's files."""
+    return {str(PurePosixPath(f).parent) for f in files}
+
+
+def load_exemptions() -> set[tuple[str, str]]:
+    """Exemptions keyed by (package-or-dir, root) as the file format implies —
+    an entry written for one package must not silently exempt a same-named
+    root repo-wide (issue #1089)."""
+    exemptions: set[tuple[str, str]] = set()
     if not EXEMPTIONS_PATH.exists():
         return exemptions
     for line in EXEMPTIONS_PATH.read_text(encoding="utf-8").splitlines():
@@ -112,9 +125,9 @@ def load_exemptions() -> set[str]:
         if not line or line.startswith("#"):
             continue
         parts = line.split("\t")
-        if len(parts) != 2:
+        if len(parts) != 2 or not parts[0].strip() or not parts[1].strip():
             raise SystemExit(f"{EXEMPTIONS_PATH}: malformed line {line!r} — want <package-or-dir><TAB><root>")
-        exemptions.add(parts[1].strip())
+        exemptions.add((parts[0].strip().rstrip("/"), parts[1].strip()))
     return exemptions
 
 
@@ -125,6 +138,13 @@ def script_text(script: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def script_tokens(script: str) -> set[str]:
+    """Test<name> tokens in EXECUTABLE position only: shell comments are
+    stripped first so a root named in prose — or on a commented-out run
+    line — cannot satisfy (or trip) the reconciliation (issue #1089)."""
+    return set(NAME_TOKEN_RE.findall(COMMENT_RE.sub(r"\1", script_text(script))))
+
+
 def main() -> int:
     exemptions = load_exemptions()
     all_roots = iter_test_roots(["internal", "test", "cmd", "pkg"])
@@ -132,18 +152,17 @@ def main() -> int:
 
     # Forward: family membership.
     for script, directories, pattern, description in FAMILIES:
-        text = script_text(script)
-        # Match on whole tokens — a comment mentioning the root is not
-        # selection evidence unless it is the -run/assert name itself; the
-        # token check is intentionally simple because every naming site in
-        # the job scripts (run flags, ci_assert_test_passed args, required
-        # loops) carries the bare name.
-        named = set(NAME_TOKEN_RE.findall(text))
+        # Match on whole tokens in executable position — a comment mentioning
+        # the root is not selection evidence (issue #1089); the token check
+        # is intentionally simple because every naming site in the job
+        # scripts (run flags, ci_assert_test_passed args, required loops)
+        # carries the bare name.
+        named = script_tokens(script)
         roots = iter_test_roots(directories)
         for name, files in sorted(roots.items()):
             if not pattern.search(name):
                 continue
-            if name in exemptions:
+            if {(pkg, name) for pkg in root_dirs(files)} & exemptions:
                 continue
             if name not in named:
                 failures.append(
@@ -156,7 +175,7 @@ def main() -> int:
     # root here (or a declared external root).
     for script in NAMED_ROOT_SCRIPTS:
         external = EXTERNAL_ROOTS.get(script, set())
-        for token in sorted(set(NAME_TOKEN_RE.findall(script_text(script)))):
+        for token in sorted(script_tokens(script)):
             if token in external:
                 continue
             if token not in all_roots:
@@ -167,11 +186,16 @@ def main() -> int:
                 )
 
     # The exemptions file must not rot: every entry must still exist as a
-    # root, or it hides nothing and misleads the next audit.
-    for name in sorted(exemptions):
+    # root in the package it names, or it hides nothing and misleads the next
+    # audit (issue #1089).
+    for pkg, name in sorted(exemptions):
         if name not in all_roots:
             failures.append(
                 f"named-root-exemptions.txt: {name} is not a test root — remove the stale exemption"
+            )
+        elif pkg not in root_dirs(all_roots[name]):
+            failures.append(
+                f"named-root-exemptions.txt: {name} does not live in {pkg} — fix the package column"
             )
 
     if failures:

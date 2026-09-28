@@ -28,4 +28,21 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 git archive --format=tar "${TREEISH}" > "${OUT}"
+
+# `git archive` honors .gitattributes export-ignore/export-subst: a marked
+# file is silently dropped (or its $Format:$ content rewritten), so the VM
+# would test a tree that differs from the commit while appearing green
+# (#1149). Prove parity — every tracked blob in the tree must appear in the
+# archive; a miss means export-ignore started excluding paths.
+missing="$(comm -23 \
+  <(git ls-tree -r --name-only "${TREEISH}" | LC_ALL=C sort) \
+  <(tar -tf "${OUT}" | grep -v '/$' | LC_ALL=C sort) || true)"
+if [ -n "${missing}" ]; then
+  printf 'snapshot is missing tracked files (export-ignore?):\n%s\n' "${missing}" >&2
+  ci_die "git archive snapshot dropped tracked files — VM/test parity broken"
+fi
+# export-subst keeps the file but rewrites content; flag it loudly too.
+if git ls-files -z | git check-attr -z --stdin export-subst 2>/dev/null | tr '\0' '\n' | grep -qx 'set'; then
+  ci_warn "tracked files carry export-subst — archived content may differ from the worktree (#1149)"
+fi
 ci_log "snapshot: ${TREEISH} -> ${OUT} ($(du -h "${OUT}" | cut -f1))"
