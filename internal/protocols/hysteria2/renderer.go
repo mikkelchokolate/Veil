@@ -24,13 +24,14 @@ func (Plugin) RenderConfig(input generatedconfig.ProtocolRenderInput) ([]generat
 		if err != nil {
 			return nil, false, err
 		}
-		if len(access.Hysteria2Users()) == 0 && (len(inbound.Profiles) > 0 || inbound.HasClientBindings) {
-			// Profiles exist but none are enabled, or the normalized client
-			// store still has bindings whose credentials are all revoked,
-			// expired, depleted or disabled: do not revive the inbound
-			// password (issue #1098). Skipping the artifact orphans the live
-			// YAML, so promotion removes it and the veil-hysteria2@<name>
-			// instance is stopped — the inbound fails fully closed.
+		if len(access.Hysteria2Users()) == 0 && inbound.HadClientProfiles() {
+			// Profiles exist but none are enabled, were suppressed
+			// post-migration, or the normalized client store still has
+			// bindings whose credentials are all revoked, expired, depleted
+			// or disabled: do not revive the inbound password (issues #1098,
+			// #1117). Skipping the artifact orphans the live YAML, so
+			// promotion removes it and the veil-hysteria2@<name> instance is
+			// stopped — the inbound fails fully closed.
 			continue
 		}
 		body, err := renderHysteria2(input.Settings, inbound, input.Warp, input.Rules, input.Paths)

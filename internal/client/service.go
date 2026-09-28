@@ -148,6 +148,15 @@ func validate(c Client) error {
 	default:
 		return fmt.Errorf("%w: invalid quotaResetPolicy %q", ErrValidation, c.QuotaResetPolicy)
 	}
+	// expiresAt has exactly one meaning: a positive unix deadline. A stored
+	// zero/negative value used to be "active" for ComputeStatus while every
+	// enforcement path (runtime bindings, render filter, expiration
+	// reconciler, expiresBefore filter) treated it as already expired — a
+	// silent outage with no operator signal (#1108). Reject it at the boundary
+	// instead of letting the two interpretations diverge.
+	if c.ExpiresAt != nil && *c.ExpiresAt <= 0 {
+		return fmt.Errorf("%w: expiresAt must be a positive unix timestamp or null (never)", ErrValidation)
+	}
 	return nil
 }
 
@@ -171,7 +180,7 @@ func normalizeClearedQuota(c *Client) {
 // rejects impossible nil-quota/depleted combinations if a caller bypasses this.
 func prepareQuotaClear(store quotaClearStore, c *Client) error {
 	if c.QuotaBytes != nil {
-		return nil
+		return prepareQuotaResetTransition(store, c)
 	}
 	existing, err := store.Get(c.ID)
 	if err != nil {
@@ -185,6 +194,43 @@ func prepareQuotaClear(store quotaClearStore, c *Client) error {
 		}
 	}
 	return nil
+}
+
+// prepareQuotaResetTransition keeps quotaResetAt honest across a policy
+// change. The reconciler only recomputes the boundary when quotaResetAt is
+// nil or already past, so a monthly->daily switch used to keep the stale
+// monthly boundary for weeks — the client stayed depleted under a policy
+// that says it resets daily (#1109). When the caller changes the policy
+// without moving the boundary (same value or absent), clear the stored
+// boundary so the reconciler schedules the first boundary of the NEW policy,
+// and supersede any pending enforcement target bound to the old plan. A
+// caller-supplied quotaResetAt different from the stored one is an explicit
+// boundary move and is respected.
+func prepareQuotaResetTransition(store quotaClearStore, c *Client) error {
+	existing, err := store.Get(c.ID)
+	if err != nil {
+		return err
+	}
+	policyChanged := existing.QuotaResetPolicy != c.QuotaResetPolicy
+	boundaryChanged := !sameInt64Ptr(existing.QuotaResetAt, c.QuotaResetAt)
+	if !policyChanged && !boundaryChanged {
+		return nil
+	}
+	if policyChanged && !boundaryChanged {
+		// The boundary predates the policy change and was computed under the
+		// old policy: drop it so the reconciler reschedules.
+		c.QuotaResetAt = nil
+	}
+	// Any effective plan change supersedes the pending enforcement target
+	// bound to the old one; the reconciler replans against the new policy.
+	return store.SupersedeQuotaEnforcement(c.ID)
+}
+
+func sameInt64Ptr(a, b *int64) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 // Create validates and creates a client. The caller (HTTP layer) is

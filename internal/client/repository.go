@@ -60,8 +60,13 @@ func (r *Repository) ExpirationEnforcement(clientID string) (*ExpirationEnforcem
 	var desired, applied uint64
 	var attempts int
 	var nextRetry int64
+	// Since v25 the table keeps supersession history per client, so an
+	// unfiltered QueryRow could return a stale superseded row (lowest rowid).
+	// The partial unique index keeps at most one non-superseded target per
+	// client; ORDER BY is belt-and-braces for that contract (#1140).
 	err := r.db.QueryRow(`SELECT state,desired_revision,applied_revision,attempts,next_retry_at,last_error
-FROM expiration_enforcement WHERE client_id=?`, clientID).
+FROM expiration_enforcement WHERE client_id=? AND state<>'superseded'
+ORDER BY target_generation DESC, id DESC LIMIT 1`, clientID).
 		Scan(&state, &desired, &applied, &attempts, &nextRetry, &lastError)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -166,6 +171,20 @@ func (t *Tx) RollbackToSavepoint(name string) error {
 // supported way to perform a logical Client mutation that spans clients,
 // bindings, and credentials — compensating deletes across public service
 // methods are not a substitute for a real ROLLBACK.
+// QuotaBoundBindingCount reports how many ENABLED bindings on the inbound
+// belong to clients carrying a quota. An inbound update that removes quota
+// enforcement (protocol change away from hysteria2, or disabling the inbound)
+// while any are attached would silently strip their accounting — the API
+// layer rejects such updates (#1118), mirroring the DELETE binding guard.
+func (q queries) QuotaBoundBindingCount(inboundID string) (int, error) {
+	var count int
+	if err := q.q.QueryRow(`SELECT COUNT(*) FROM client_bindings b JOIN clients c ON c.id=b.client_id
+WHERE b.inbound_id=? AND b.enabled=1 AND c.quota_bytes IS NOT NULL`, inboundID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("client: count quota-bound bindings: %w", err)
+	}
+	return count, nil
+}
+
 func (r *Repository) CountBindingsForInbound(inboundID string) (int, error) {
 	var count int
 	if err := r.db.QueryRow(`SELECT COUNT(*) FROM client_bindings WHERE inbound_id=?`, inboundID).Scan(&count); err != nil {

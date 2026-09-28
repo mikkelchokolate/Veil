@@ -279,7 +279,7 @@ export const en: Record<string, string> = {
 		"This provider cannot auto-create a room. Create the room on the service and paste the id.",
 	"inbounds.validation.nameRequired": "Name is required.",
 	"inbounds.validation.nameCharset":
-		"Name may contain only Latin letters, digits, '-' and '_'.",
+		"Name must be 1-64 Latin letters, digits, '-' or '_'.",
 	"inbounds.validation.portRange":
 		"Port must be a whole number between 1 and 65535.",
 	"inbounds.error.createFailed": "Create failed",

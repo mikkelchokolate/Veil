@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,7 +32,9 @@ type recordingPrivilegedClient struct {
 	journalLines          []string
 	backups               []privileged.BackupRequest
 	updates               []privileged.UpdateRequest
+	syncCaddyCertMu       sync.Mutex
 	syncCaddyCertRequests []privileged.SyncCaddyCertRequest
+	syncCaddyCertResult   *privileged.SyncCaddyCertResult
 	firewallRequests      []privileged.FirewallRequest
 	firewallResult        privileged.FirewallResult
 	rotateCalls           int
@@ -352,8 +355,22 @@ func (c *recordingPrivilegedClient) RestartPanel(context.Context) error {
 }
 
 func (c *recordingPrivilegedClient) SyncCaddyCert(_ context.Context, request privileged.SyncCaddyCertRequest) (privileged.SyncCaddyCertResult, error) {
+	c.syncCaddyCertMu.Lock()
+	defer c.syncCaddyCertMu.Unlock()
 	c.syncCaddyCertRequests = append(c.syncCaddyCertRequests, request)
+	if c.syncCaddyCertResult != nil {
+		return *c.syncCaddyCertResult, c.err
+	}
 	return privileged.SyncCaddyCertResult{Found: true, CertPath: "/etc/veil/certs/test.crt", KeyPath: "/etc/veil/certs/test.key"}, c.err
+}
+
+// syncRequests returns a stable snapshot of recorded SyncCaddyCert calls —
+// the cert-sync worker appends from its own goroutine, so tests must not
+// read the slice field directly.
+func (c *recordingPrivilegedClient) syncRequests() []privileged.SyncCaddyCertRequest {
+	c.syncCaddyCertMu.Lock()
+	defer c.syncCaddyCertMu.Unlock()
+	return append([]privileged.SyncCaddyCertRequest(nil), c.syncCaddyCertRequests...)
 }
 
 func TestPrivilegedServiceStatusAndLogsUseManagedUnits(t *testing.T) {

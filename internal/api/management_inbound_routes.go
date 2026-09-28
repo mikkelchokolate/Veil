@@ -317,6 +317,24 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 				writeValidationFailure(w, validation)
 				return nil
 			}
+			// An update that strips quota enforcement — changing the protocol
+			// away from hysteria2 or disabling the inbound — while quota-bound
+			// clients are still bound would silently stop enforcing their
+			// quotas (#1118). Mirror the DELETE guard and reject with 409.
+			hadQuotaSupport := inbound.Enabled && inbound.Protocol == "hysteria2"
+			hasQuotaSupport := updated.Enabled && updated.Protocol == "hysteria2"
+			if hadQuotaSupport && !hasQuotaSupport && s.clientRepo != nil {
+				count, countErr := s.clientRepo.QuotaBoundBindingCount(name)
+				if countErr != nil {
+					writeError(w, "failed to check inbound quota bindings", http.StatusInternalServerError)
+					return nil
+				}
+				if count > 0 {
+					s.logUserAction(r, "update_inbound", name, false, "quota-bound clients attached")
+					writeError(w, "inbound update would remove quota enforcement for bound clients", http.StatusConflict)
+					return nil
+				}
+			}
 			updated, err = mutation.UpdateInbound(name, updated)
 			s.logUserAction(r, "update_inbound", name, err == nil, "")
 			if err != nil {
@@ -396,7 +414,7 @@ func (s *managementState) handleProtocols(w http.ResponseWriter, r *http.Request
 func writeInboundManagementError(w http.ResponseWriter, err error) {
 	switch err {
 	case inbounds.ErrInboundInvalid:
-		writeError(w, "name must contain only letters, digits, underscore, or hyphen; protocol, transport, and positive port are required", http.StatusBadRequest)
+		writeError(w, "name must be 1-64 letters, digits, underscore, or hyphen; protocol, transport, and positive port are required", http.StatusBadRequest)
 	case inbounds.ErrInboundDuplicateName:
 		writeError(w, "inbound name already exists", http.StatusConflict)
 	case inbounds.ErrInboundDuplicateTransportPort:

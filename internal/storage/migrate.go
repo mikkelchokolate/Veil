@@ -12,6 +12,11 @@ type migration struct {
 	version int
 	name    string
 	sql     string
+	// legacySQL lists superseded bodies previously shipped under this version.
+	// A database that already applied one recorded ITS checksum in
+	// schema_migrations, so fixing a migration body in place (#1139) must
+	// still accept the historical digest instead of declaring tampering.
+	legacySQL []string
 }
 
 // migrations is the ordered list of schema changes. Each runs exactly once, in
@@ -434,10 +439,33 @@ CREATE TABLE quota_enforcement (
   updated_at INTEGER NOT NULL
 );
 INSERT INTO quota_enforcement(client_id,state,desired_revision,next_retry_at,last_error,attempts,updated_at)
-SELECT client_id,state,desired_revision,next_retry_at,last_error,attempts,updated_at FROM quota_enforcement_old;
+SELECT o.client_id,o.state,o.desired_revision,o.next_retry_at,o.last_error,o.attempts,o.updated_at
+FROM quota_enforcement_old o JOIN clients c ON c.id=o.client_id;
 DROP TABLE quota_enforcement_old;
 CREATE INDEX idx_quota_enforcement_retry ON quota_enforcement(state,next_retry_at,client_id);
 `,
+		// The original copy carried orphan enforcement rows over verbatim;
+		// they violate the new REFERENCES clients(id) clause and aborted the
+		// whole migration on databases with leftover rows (#1139). The JOIN
+		// drops them instead.
+		legacySQL: []string{`
+ALTER TABLE runtime_publications ADD COLUMN confirmations_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE quota_enforcement RENAME TO quota_enforcement_old;
+CREATE TABLE quota_enforcement (
+  client_id TEXT PRIMARY KEY REFERENCES clients(id) ON DELETE CASCADE,
+  state TEXT NOT NULL CHECK(state IN ('pending','applying','failed','enforced')),
+  desired_revision INTEGER NOT NULL DEFAULT 0,
+  applied_revision INTEGER NOT NULL DEFAULT 0,
+  next_retry_at INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT NOT NULL DEFAULT '',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL
+);
+INSERT INTO quota_enforcement(client_id,state,desired_revision,next_retry_at,last_error,attempts,updated_at)
+SELECT client_id,state,desired_revision,next_retry_at,last_error,attempts,updated_at FROM quota_enforcement_old;
+DROP TABLE quota_enforcement_old;
+CREATE INDEX idx_quota_enforcement_retry ON quota_enforcement(state,next_retry_at,client_id);
+`},
 	},
 	{
 		version: 17,
@@ -502,8 +530,15 @@ END;
 		name:    "subscription_token_label",
 		sql: `
 ALTER TABLE subscription_tokens ADD COLUMN label TEXT NOT NULL DEFAULT '';
-UPDATE subscription_tokens SET label=created_by,created_by='';
+UPDATE subscription_tokens SET label=COALESCE(created_by,''),created_by='';
 `,
+		// created_by was nullable in the pre-rebuild subscription_tokens table,
+		// so copying it into the NOT NULL label column aborted the migration on
+		// any row that carried NULL (#1139).
+		legacySQL: []string{`
+ALTER TABLE subscription_tokens ADD COLUMN label TEXT NOT NULL DEFAULT '';
+UPDATE subscription_tokens SET label=created_by,created_by='';
+`},
 	},
 	{
 		version: 21,
@@ -663,12 +698,71 @@ CREATE TABLE expiration_enforcement (
   UNIQUE(client_id,target_generation)
 );
 INSERT INTO expiration_enforcement(client_id,target_generation,target_payload_hash,target_expires_at,desired_revision,applied_revision,state,effective_at,next_retry_at,last_error,attempts,updated_at)
-SELECT client_id,1,printf('%064x',rowid),expires_at,desired_revision,applied_revision,state,effective_at,next_retry_at,last_error,attempts,updated_at FROM expiration_enforcement_legacy;
+SELECT e.client_id,1,printf('%064x',e.rowid),e.expires_at,e.desired_revision,e.applied_revision,e.state,e.effective_at,e.next_retry_at,e.last_error,e.attempts,e.updated_at
+FROM expiration_enforcement_legacy e JOIN clients c ON c.id=e.client_id;
 DROP TABLE expiration_enforcement_legacy;
 CREATE UNIQUE INDEX idx_expiration_enforcement_active_target ON expiration_enforcement(client_id) WHERE state<>'superseded';
 CREATE INDEX idx_expiration_enforcement_retry ON expiration_enforcement(state,next_retry_at,target_expires_at,client_id,target_generation);
 CREATE INDEX idx_clients_next_expiry ON clients(enabled,expires_at,created_at,id);
 `,
+		// The original expiration copy carried orphan rows over verbatim; they
+		// violate the new REFERENCES clients(id) clause and aborted the whole
+		// migration on databases with leftover rows (#1139).
+		legacySQL: []string{`
+DROP INDEX IF EXISTS idx_quota_enforcement_retry;
+ALTER TABLE quota_enforcement RENAME TO quota_enforcement_legacy;
+CREATE TABLE quota_enforcement (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  target_generation INTEGER NOT NULL CHECK(target_generation>0),
+  target_payload_hash TEXT NOT NULL CHECK(length(target_payload_hash)=64),
+  target_depleted INTEGER NOT NULL CHECK(target_depleted IN (0,1)),
+  target_period_epoch INTEGER NOT NULL DEFAULT 0,
+  target_expires_at INTEGER NOT NULL DEFAULT 0,
+  desired_revision INTEGER NOT NULL DEFAULT 0,
+  applied_revision INTEGER NOT NULL DEFAULT 0,
+  superseded_revision INTEGER NOT NULL DEFAULT 0,
+  state TEXT NOT NULL CHECK(state IN ('pending','applying','failed','enforced','superseded')),
+  next_retry_at INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT NOT NULL DEFAULT '',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(client_id,target_generation)
+);
+INSERT INTO quota_enforcement(client_id,target_generation,target_payload_hash,target_depleted,desired_revision,applied_revision,state,next_retry_at,last_error,attempts,updated_at)
+SELECT q.client_id,1,printf('%064x',q.rowid),COALESCE(c.depleted,0),q.desired_revision,q.applied_revision,q.state,q.next_retry_at,q.last_error,q.attempts,q.updated_at
+FROM quota_enforcement_legacy q JOIN clients c ON c.id=q.client_id;
+DROP TABLE quota_enforcement_legacy;
+CREATE UNIQUE INDEX idx_quota_enforcement_active_target ON quota_enforcement(client_id) WHERE state<>'superseded';
+CREATE INDEX idx_quota_enforcement_retry ON quota_enforcement(state,next_retry_at,client_id,target_generation);
+DROP INDEX IF EXISTS idx_expiration_enforcement_retry;
+ALTER TABLE expiration_enforcement RENAME TO expiration_enforcement_legacy;
+CREATE TABLE expiration_enforcement (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  target_generation INTEGER NOT NULL CHECK(target_generation>0),
+  target_payload_hash TEXT NOT NULL CHECK(length(target_payload_hash)=64),
+  target_depleted INTEGER NOT NULL DEFAULT 1 CHECK(target_depleted IN (0,1)),
+  target_period_epoch INTEGER NOT NULL DEFAULT 0,
+  target_expires_at INTEGER NOT NULL,
+  desired_revision INTEGER NOT NULL DEFAULT 0,
+  applied_revision INTEGER NOT NULL DEFAULT 0,
+  superseded_revision INTEGER NOT NULL DEFAULT 0,
+  state TEXT NOT NULL CHECK(state IN ('pending','applying','enforced','failed','superseded')),
+  effective_at INTEGER NOT NULL,
+  next_retry_at INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT NOT NULL DEFAULT '',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(client_id,target_generation)
+);
+INSERT INTO expiration_enforcement(client_id,target_generation,target_payload_hash,target_expires_at,desired_revision,applied_revision,state,effective_at,next_retry_at,last_error,attempts,updated_at)
+SELECT client_id,1,printf('%064x',rowid),expires_at,desired_revision,applied_revision,state,effective_at,next_retry_at,last_error,attempts,updated_at FROM expiration_enforcement_legacy;
+DROP TABLE expiration_enforcement_legacy;
+CREATE UNIQUE INDEX idx_expiration_enforcement_active_target ON expiration_enforcement(client_id) WHERE state<>'superseded';
+CREATE INDEX idx_expiration_enforcement_retry ON expiration_enforcement(state,next_retry_at,target_expires_at,client_id,target_generation);
+CREATE INDEX idx_clients_next_expiry ON clients(enabled,expires_at,created_at,id);
+`},
 	},
 	{
 		version: 26,
@@ -720,11 +814,61 @@ ALTER TABLE quota_enforcement ADD COLUMN target_next_reset_at INTEGER;
 ALTER TABLE quota_enforcement ADD COLUMN target_period_start INTEGER NOT NULL DEFAULT 0;
 `,
 	},
+	{
+		version: 29,
+		name:    "runtime_identity_lowercase",
+		sql: `
+-- Runtime identities are canonical lowercase (#1111): hysteria2 folds
+-- usernames before reporting them, so stored mixed-case identities never
+-- matched their own counters, and two identities differing only by case
+-- collapse into the same runtime user. Fold stored rows before the NOCASE
+-- index makes case-only collisions impossible — a genuine collision fails
+-- the CREATE UNIQUE INDEX loudly rather than merging rows silently.
+UPDATE client_bindings SET runtime_identity=lower(runtime_identity)
+WHERE runtime_identity<>lower(runtime_identity);
+-- Migration 7 derived v_<full id> without the 32-char truncation
+-- GenerateRuntimeIdentity applies; realign generated identities so runtime
+-- rendering and traffic accounting derive the same value (#1140).
+UPDATE client_bindings
+SET runtime_identity='v_'||substr(lower(replace(id,'-','')),1,32)
+WHERE runtime_identity='v_'||lower(replace(id,'-','')) AND length(runtime_identity)>34;
+DROP INDEX IF EXISTS idx_client_bindings_inbound_runtime_identity;
+CREATE UNIQUE INDEX idx_client_bindings_inbound_runtime_identity
+ON client_bindings(inbound_id, runtime_identity COLLATE NOCASE);
+-- Suffix-compare instead of LIKE so a restored binding id containing a LIKE
+-- wildcard can never over-delete runtime state (#1140).
+DROP TRIGGER IF EXISTS traffic_binding_cleanup;
+CREATE TRIGGER traffic_binding_cleanup AFTER DELETE ON client_bindings BEGIN
+  DELETE FROM traffic_counters WHERE binding_id=OLD.id;
+  DELETE FROM traffic_samples WHERE binding_id=OLD.id;
+  DELETE FROM traffic_runtime_state WHERE substr(provider_key, -(length(OLD.id)+1)) = ':' || OLD.id;
+END;
+`,
+	},
+}
+
+func migrationChecksumText(name, sql string) string {
+	digest := sha256.Sum256([]byte(name + "\x00" + sql))
+	return hex.EncodeToString(digest[:])
 }
 
 func migrationChecksum(m migration) string {
-	digest := sha256.Sum256([]byte(m.name + "\x00" + m.sql))
-	return hex.EncodeToString(digest[:])
+	return migrationChecksumText(m.name, m.sql)
+}
+
+// acceptsChecksum reports whether the recorded digest is valid history for
+// this migration: the canonical body or any superseded body that older
+// releases wrote under the same version.
+func (m migration) acceptsChecksum(checksum string) bool {
+	if checksum == migrationChecksum(m) {
+		return true
+	}
+	for _, legacy := range m.legacySQL {
+		if checksum == migrationChecksumText(m.name, legacy) {
+			return true
+		}
+	}
+	return false
 }
 
 // Migrate applies all pending migrations in order. Each migration runs in its
@@ -775,7 +919,7 @@ func Migrate(db *sql.DB) error {
 				version  int
 				checksum string
 			}{version: version, checksum: expectedChecksum})
-		} else if checksum != expectedChecksum {
+		} else if !migrations[version-1].acceptsChecksum(checksum) {
 			rows.Close()
 			return fmt.Errorf("storage: historical migration checksum mismatch at version %d", version)
 		}
@@ -801,6 +945,19 @@ func Migrate(db *sql.DB) error {
 		tx, err := db.Begin()
 		if err != nil {
 			return fmt.Errorf("storage: begin migration %d: %w", m.version, err)
+		}
+		// The version scan above ran before this transaction, so a concurrent
+		// opener could have applied the same migration in between (#1140).
+		// Rechecking inside the transaction makes the schema_migrations row —
+		// guarded by its PRIMARY KEY — the single arbiter of "applied".
+		var alreadyApplied int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version=?`, m.version).Scan(&alreadyApplied); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("storage: recheck migration %d: %w", m.version, err)
+		}
+		if alreadyApplied > 0 {
+			_ = tx.Rollback()
+			continue
 		}
 		if _, err := tx.Exec(m.sql); err != nil {
 			tx.Rollback()

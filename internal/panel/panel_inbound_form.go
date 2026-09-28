@@ -58,7 +58,7 @@ func panelInboundFormHTML() string {
             <div class="form-grid">
               <div>
                 <label for="inbound-name">Name</label>
-                <input id="inbound-name" required pattern="[A-Za-z0-9_-]+" autocomplete="off" placeholder="naive" title="Use letters, digits, underscore, or hyphen." aria-invalid="false" aria-describedby="inbound-name-validation">
+                <input id="inbound-name" required pattern="[A-Za-z0-9_-]{1,64}" maxlength="64" autocomplete="off" placeholder="naive" title="Use 1-64 letters, digits, underscore, or hyphen." aria-invalid="false" aria-describedby="inbound-name-validation">
                 <p id="inbound-name-validation" class="field-validation" hidden></p>
               </div>
               <div>

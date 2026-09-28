@@ -5002,6 +5002,7 @@ components:
       properties:
         name:
           type: string
+          pattern: ^[A-Za-z0-9_-]{1,64}$
         protocol:
           type: string
           enum:
@@ -6418,6 +6419,10 @@ components:
           - integer
           - 'null'
           format: int64
+          minimum: 1
+          description: Unix expiry timestamp; null means never. Non-positive
+            values are rejected — every enforcement path already treats them
+            as expired while status would report active.
         deviceLimit:
           type:
           - integer
@@ -6483,6 +6488,8 @@ components:
           - integer
           - 'null'
           format: int64
+          minimum: 1
+          description: Unix expiry timestamp; null clears the expiry. Non-positive values are rejected.
         deviceLimit:
           type:
           - integer
@@ -6501,7 +6508,10 @@ components:
           type: string
         runtimeIdentity:
           type: string
-          pattern: ^[A-Za-z0-9_-]{1,48}$
+          pattern: ^[a-z0-9_-]{1,48}$
+          description: Canonical lowercase runtime identity. Uppercase is
+            rejected — runtimes fold case, so mixed-case identities break
+            traffic accounting and enable case-only collisions.
         credential:
           type: string
           description: Optional explicit credential; server-generated when empty.

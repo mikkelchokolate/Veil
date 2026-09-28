@@ -1,6 +1,9 @@
 package inbounds
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestInboundValidationCreateRequiresNameProtocolTransportAndPort(t *testing.T) {
 	validator := NewInboundValidation()
@@ -45,6 +48,31 @@ func TestInboundValidationUpdateRequiresSafeName(t *testing.T) {
 		inbound := Inbound{Name: name, Protocol: "naiveproxy", Transport: "tcp", Port: 443}
 		if err := validator.ValidateUpdate(inbound); err != ErrInboundInvalid {
 			t.Fatalf("ValidateUpdate(%q) = %v, want ErrInboundInvalid", name, err)
+		}
+	}
+}
+
+// TestInboundValidationBoundsNameLength pins the length cap: inbound names
+// land in <name>.yaml artifact paths and veil-<proto>@<name>.service unit
+// names, so a name that fits the request-body cap but exceeds NAME_MAX or
+// systemd's unit limit used to commit to state and never converge during
+// apply. 64 chars stays safely below both limits.
+func TestInboundValidationBoundsNameLength(t *testing.T) {
+	validator := NewInboundValidation()
+	long := strings.Repeat("a", 65)
+	for _, name := range []string{long, strings.Repeat("a", 255), strings.Repeat("a", 4096)} {
+		inbound := Inbound{Name: name, Protocol: "naiveproxy", Transport: "tcp", Port: 443}
+		if err := validator.ValidateCreate(inbound); err != ErrInboundInvalid {
+			t.Fatalf("ValidateCreate(len=%d) = %v, want ErrInboundInvalid", len(name), err)
+		}
+		if err := validator.ValidateUpdate(inbound); err != ErrInboundInvalid {
+			t.Fatalf("ValidateUpdate(len=%d) = %v, want ErrInboundInvalid", len(name), err)
+		}
+	}
+	for _, name := range []string{"a", strings.Repeat("a", 64)} {
+		inbound := Inbound{Name: name, Protocol: "naiveproxy", Transport: "tcp", Port: 443}
+		if err := validator.ValidateCreate(inbound); err != nil {
+			t.Fatalf("ValidateCreate(len=%d) = %v, want valid", len(name), err)
 		}
 	}
 }

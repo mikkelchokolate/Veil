@@ -42,9 +42,8 @@ import (
 //   - IDEMPOTENT: stable derived client IDs make re-runs no-ops.
 
 const (
-	legacyProfilesMarkerKey      = "legacy_profiles"
-	legacyProfileMarkerKeyPrefix = "legacy_profile/"
-	legacyProfilesMarkerVersion  = 2
+	legacyProfilesMarkerKey     = "legacy_profiles"
+	legacyProfilesMarkerVersion = client.LegacyProfileMarkerVersion
 )
 
 // StartupMigrateLegacyLocked migrates legacy inbound-embedded profiles to
@@ -174,7 +173,7 @@ func (l ManagementStateLifecycle) StartupMigrateLegacyLocked() error {
 }
 
 func legacyProfileMarkerKey(inboundName, username string) string {
-	return legacyProfileMarkerKeyPrefix + client.StableClientID(inboundName, username)
+	return client.LegacyProfileMarkerKey(inboundName, username)
 }
 
 func legacyProfileFingerprint(inboundName, protocol string, profile client.LegacyProfile) string {

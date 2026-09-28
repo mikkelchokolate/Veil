@@ -44,8 +44,12 @@ func TestTrafficMonotonicAsymmetricResetAndStaleTimestamp(t *testing.T) {
 		t.Fatal(err)
 	}
 	up, down, _ := store.TotalsForClient(client.ID)
-	if up != 0 || down != 50 {
-		t.Fatalf("asymmetric reset totals=%d/%d, want 0/50", up, down)
+	// #1102: a counter that moved backwards is a runtime restart — the bytes
+	// accumulated since the reset are still observable in the absolute
+	// reading and are credited as the delta (50), while the unaffected
+	// counter deltas normally (+50).
+	if up != 50 || down != 50 {
+		t.Fatalf("asymmetric reset totals=%d/%d, want 50/50", up, down)
 	}
 	if err := store.RecordSample(Sample{BindingID: binding.ID, UploadBytes: 60, DownloadBytes: 160, AtUnix: 9, Monotonic: true, ProviderKey: "provider:one"}); err == nil {
 		t.Fatal("accepted stale provider timestamp")

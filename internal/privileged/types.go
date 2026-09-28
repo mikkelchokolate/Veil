@@ -256,6 +256,10 @@ type SyncCaddyCertResult struct {
 	CertPath string `json:"certPath,omitempty"`
 	KeyPath  string `json:"keyPath,omitempty"`
 	Found    bool   `json:"found"`
+	// Changed reports whether the destination bytes were actually rewritten.
+	// The periodic cert-sync worker restarts the serving runtime only on a
+	// real change (#1103).
+	Changed bool `json:"changed,omitempty"`
 }
 
 type RequestEnvelope struct {

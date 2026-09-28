@@ -24,7 +24,10 @@ func TestLinksForSnapshotAggregatesMieruTCPAndUDP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	udp, err := repo.CreateBinding(Binding{ClientID: c.ID, InboundID: "mieru-udp", Enabled: true})
+	// Bindings sharing the same credential (identity+password) aggregate into
+	// ONE config; the NOCASE identity index is per-inbound, so reusing the
+	// identity on another inbound is allowed (#1121).
+	udp, err := repo.CreateBinding(Binding{ClientID: c.ID, InboundID: "mieru-udp", RuntimeIdentity: tcp.RuntimeIdentity, Enabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,5 +123,66 @@ func TestLinksForSnapshotSingleMieruInboundStaysSingleBinding(t *testing.T) {
 	}
 	if strings.Count(links[0].URI, "port=2999") != 1 {
 		t.Fatalf("single inbound URI = %q", links[0].URI)
+	}
+}
+
+// TestLinksForSnapshotGroupsMieruByCredential (#1121): bindings with
+// different binding credentials cannot share one aggregated config — every
+// portBinding authenticates with the config's credential, so borrowing the
+// first binding's secret would serve wrong credentials for the rest.
+func TestLinksForSnapshotGroupsMieruByCredential(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	cipher := newTestCipher(t)
+	repo := NewRepository(db)
+	cs := NewCredentialStore(db, cipher)
+	r := NewSubscriptionRenderer(repo, cs).WithSettings(clientaccess.Settings{Domain: "vpn.example.com"})
+
+	c, err := repo.Create(Client{Name: "carol", Enabled: true, QuotaResetPolicy: ResetNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tcp, _ := repo.CreateBinding(Binding{ClientID: c.ID, InboundID: "mieru-tcp", Enabled: true})
+	udp, _ := repo.CreateBinding(Binding{ClientID: c.ID, InboundID: "mieru-udp", Enabled: true})
+	if _, err := cs.Set(tcp.ID, "password", "pass-tcp"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cs.Set(udp.ID, "password", "pass-udp"); err != nil {
+		t.Fatal(err)
+	}
+
+	resolve := func(inboundID string) (InboundSnapshot, bool) {
+		switch inboundID {
+		case "mieru-tcp":
+			return InboundSnapshot{Name: "mieru-tcp", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true}, true
+		case "mieru-udp":
+			return InboundSnapshot{Name: "mieru-udp", Protocol: "mieru", Transport: "udp", Port: 444, Enabled: true}, true
+		default:
+			return InboundSnapshot{}, false
+		}
+	}
+	links, err := r.LinksForClient(c, resolve)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if len(links) != 2 {
+		t.Fatalf("expected 2 links (one per credential), got %d", len(links))
+	}
+	// Each link carries exactly its own credential's port binding.
+	seen := map[string]bool{}
+	for _, link := range links {
+		for _, want := range []string{"pass-tcp", "pass-udp"} {
+			if strings.Contains(link.Config, want) || strings.Contains(link.URI, want) {
+				seen[want] = true
+			}
+		}
+	}
+	if !seen["pass-tcp"] || !seen["pass-udp"] {
+		t.Fatalf("both credentials must appear across links: %v", seen)
+	}
+	for _, link := range links {
+		if strings.Contains(link.Config, "pass-tcp") && strings.Contains(link.Config, "pass-udp") {
+			t.Fatalf("one config carries both credentials: %s", link.Config)
+		}
 	}
 }

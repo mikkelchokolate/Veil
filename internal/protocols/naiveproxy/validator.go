@@ -113,10 +113,11 @@ func (p Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bo
 			return true
 		}
 	}
-	// Bindings whose credentials are all revoked/expired/depleted are treated
-	// like all-disabled profiles: the inbound is credential-managed and the
-	// legacy fallback must not count as a usable credential (issue #1098).
-	if len(inbound.Profiles) > 0 || inbound.HasClientBindings {
+	// All-disabled profiles, migration-suppressed profiles, and bindings
+	// whose credentials are all revoked/expired/depleted are treated alike:
+	// the inbound is credential-managed and the legacy fallback must not
+	// count as a usable credential (issues #1098, #1117).
+	if inbound.HadClientProfiles() {
 		return false
 	}
 	username := naiveUsername(settings, inbound)

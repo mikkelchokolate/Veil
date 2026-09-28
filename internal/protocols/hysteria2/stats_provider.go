@@ -27,6 +27,11 @@ type StatsProvider struct {
 	secret     string
 	bindings   map[string]string
 	httpClient *http.Client
+	// instanceSource resolves the serving process's instance identity (set
+	// via WithInstanceSource). Queried on every read so a daemon restart is
+	// visible at the next poll even when its counters already grew past the
+	// pre-restart baseline (#1102).
+	instanceSource func(context.Context) string
 }
 
 func NewStatsProvider(key, endpoint string, bindings map[string]string) *StatsProvider {
@@ -34,9 +39,23 @@ func NewStatsProvider(key, endpoint string, bindings map[string]string) *StatsPr
 		parsed.Path = "/traffic"
 		endpoint = parsed.String()
 	}
+	// Hysteria2 lowercases usernames internally — both the credentials it
+	// authenticates and the keys it reports in per-user traffic stats. Fold
+	// the identity map so a stored identity still resolves to its binding
+	// even when a pre-migration row carries uppercase, and iterate input keys
+	// in sorted order so case-only collisions resolve deterministically
+	// (#1111).
 	copyBindings := make(map[string]string, len(bindings))
-	for runtimeIdentity, bindingID := range bindings {
-		copyBindings[runtimeIdentity] = bindingID
+	identityKeys := make([]string, 0, len(bindings))
+	for runtimeIdentity := range bindings {
+		identityKeys = append(identityKeys, runtimeIdentity)
+	}
+	sort.Strings(identityKeys)
+	for _, runtimeIdentity := range identityKeys {
+		folded := strings.ToLower(runtimeIdentity)
+		if _, exists := copyBindings[folded]; !exists {
+			copyBindings[folded] = bindings[runtimeIdentity]
+		}
 	}
 	return &StatsProvider{
 		key:        key,
@@ -84,6 +103,15 @@ func productionTrafficStatsEndpoint(endpoint string) string {
 		return endpoint
 	}
 	return runtimeports.Hysteria2TrafficStatsEndpoint(port)
+}
+
+// WithInstanceSource wires a lookup that reports the hysteria2 unit's
+// current process instance (systemd start timestamp + main PID). A restart
+// changes the value, letting the traffic store credit the post-reset counter
+// in full instead of silently subtracting the stale baseline (#1102).
+func (p *StatsProvider) WithInstanceSource(source func(context.Context) string) *StatsProvider {
+	p.instanceSource = source
+	return p
 }
 
 func (p *StatsProvider) Key() string { return p.key }
@@ -149,7 +177,7 @@ func (p *StatsProvider) ReadContext(ctx context.Context) (client.ProviderBatch, 
 	merged := make(map[string]trafficStats, len(payload))
 	var unknown []string
 	for runtimeIdentity, counters := range payload {
-		bindingID, ok := p.bindings[runtimeIdentity]
+		bindingID, ok := p.bindings[strings.ToLower(runtimeIdentity)]
 		if !ok || bindingID == "" {
 			unknown = append(unknown, runtimeIdentity)
 			continue
@@ -178,7 +206,12 @@ func (p *StatsProvider) ReadContext(ctx context.Context) (client.ProviderBatch, 
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].BindingID < out[j].BindingID })
 	sort.Strings(unknown)
+	instanceID := ""
+	if p.instanceSource != nil {
+		instanceID = p.instanceSource(ctx)
+	}
 	return client.ProviderBatch{
-		Readings: out, UnknownIdentities: unknown, ObservedAt: time.Now().UTC(), RuntimeInstance: p.key,
+		Readings: out, UnknownIdentities: unknown, ObservedAt: time.Now().UTC(),
+		RuntimeInstance: p.key, RuntimeInstanceID: instanceID,
 	}, nil
 }

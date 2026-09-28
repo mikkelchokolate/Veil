@@ -11,15 +11,18 @@ func TestConstantTimePasswordEqualDoesNotHashPasswords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	functionStart := strings.Index(string(source), "func constantTimePasswordEqual")
+	// Windows checkouts keep CRLF endings; normalize before matching
+	// line-oriented patterns so the scan is checkout-agnostic.
+	normalized := strings.ReplaceAll(string(source), "\r\n", "\n")
+	functionStart := strings.Index(normalized, "func constantTimePasswordEqual")
 	if functionStart < 0 {
 		t.Fatal("constantTimePasswordEqual source not found")
 	}
-	functionEnd := strings.Index(string(source)[functionStart:], "\n}\n")
+	functionEnd := strings.Index(normalized[functionStart:], "\n}\n")
 	if functionEnd < 0 {
 		t.Fatal("constantTimePasswordEqual source not found")
 	}
-	body := string(source)[functionStart : functionStart+functionEnd]
+	body := normalized[functionStart : functionStart+functionEnd]
 	if strings.Contains(body, "sha256") {
 		t.Fatal("constantTimePasswordEqual must not pass passwords through a fast hash")
 	}

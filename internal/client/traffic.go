@@ -21,6 +21,13 @@ type Sample struct {
 	Monotonic     bool   // when true, values are absolute provider counters
 	ProviderKey   string // identifies the monotonic source (for runtime state)
 	ClientID      string // denormalized attribution; resolved when empty
+	// RuntimeInstanceID identifies the OS process instance that produced the
+	// absolute counters (e.g. systemd start timestamp + main PID). It is
+	// empty when the provider cannot determine it. A change while the
+	// provider key stays the same means the runtime restarted and its
+	// cumulative counters reset — the whole reading is post-restart usage
+	// (#1102).
+	RuntimeInstanceID string
 }
 
 // TrafficStore persists current-quota-period counters and lifetime bucketed
@@ -135,8 +142,9 @@ func (s *TrafficStore) recordSampleTx(tx *sql.Tx, sm Sample) error {
 	if sm.Monotonic {
 		var lastUp, lastDown int64
 		var lastObserved int64
-		row := tx.QueryRow(`SELECT last_upload_raw, last_download_raw, last_observed_at FROM traffic_runtime_state WHERE provider_key=?`, sm.ProviderKey)
-		scanErr := row.Scan(&lastUp, &lastDown, &lastObserved)
+		var lastInstance string
+		row := tx.QueryRow(`SELECT last_upload_raw, last_download_raw, last_observed_at, runtime_instance FROM traffic_runtime_state WHERE provider_key=?`, sm.ProviderKey)
+		scanErr := row.Scan(&lastUp, &lastDown, &lastObserved, &lastInstance)
 		if scanErr == sql.ErrNoRows {
 			// First observation of this provider: establish baseline, no delta.
 			upDelta, downDelta = 0, 0
@@ -148,18 +156,45 @@ func (s *TrafficStore) recordSampleTx(tx *sql.Tx, sm Sample) error {
 			}
 			upDelta = sm.UploadBytes - lastUp
 			downDelta = sm.DownloadBytes - lastDown
+			// A changed process instance means the daemon restarted: its
+			// cumulative counters reset to zero at exec, so the entire new
+			// reading is post-restart usage. This also catches the case the
+			// negative-delta heuristic cannot — a counter that already grew
+			// past the old baseline before the next poll (#1102). Only
+			// compare when both sides report an instance; rows predating
+			// instance tracking carry an empty runtime_instance and fall
+			// through to the delta heuristic below.
+			if sm.RuntimeInstanceID != "" && lastInstance != "" && sm.RuntimeInstanceID != lastInstance {
+				upDelta = sm.UploadBytes
+				downDelta = sm.DownloadBytes
+			}
 			if upDelta < 0 {
-				upDelta = 0
+				// The provider's cumulative counter moved backwards — the
+				// runtime restarted (or the counter wrapped). The bytes
+				// accumulated SINCE the reset are still observable in the new
+				// absolute reading, so credit it as the delta instead of
+				// dropping post-restart usage entirely (#1102). Bytes in the
+				// unobserved gap between lastObserved and the reset are
+				// unrecoverable through polling; the apply path flushes
+				// counters before planned restarts to close that gap.
+				upDelta = sm.UploadBytes
 			}
 			if downDelta < 0 {
-				downDelta = 0
+				downDelta = sm.DownloadBytes
 			}
 		}
-		if _, err := tx.Exec(`INSERT INTO traffic_runtime_state (provider_key, last_upload_raw, last_download_raw, last_observed_at)
-		  VALUES(?,?,?,?)
-		  ON CONFLICT(provider_key) DO UPDATE SET last_upload_raw=excluded.last_upload_raw,
+		// Persist the reported instance so the next poll can compare. A sample
+		// without an instance id keeps the previously recorded one.
+		effectiveInstance := sm.RuntimeInstanceID
+		if effectiveInstance == "" {
+			effectiveInstance = lastInstance
+		}
+		if _, err := tx.Exec(`INSERT INTO traffic_runtime_state (provider_key, runtime_instance, last_upload_raw, last_download_raw, last_observed_at)
+		  VALUES(?,?,?,?,?)
+		  ON CONFLICT(provider_key) DO UPDATE SET runtime_instance=excluded.runtime_instance,
+		    last_upload_raw=excluded.last_upload_raw,
 		    last_download_raw=excluded.last_download_raw, last_observed_at=excluded.last_observed_at`,
-			sm.ProviderKey, sm.UploadBytes, sm.DownloadBytes, sm.AtUnix); err != nil {
+			sm.ProviderKey, effectiveInstance, sm.UploadBytes, sm.DownloadBytes, sm.AtUnix); err != nil {
 			return fmt.Errorf("client: traffic runtime state update: %w", err)
 		}
 	}
@@ -348,6 +383,31 @@ type SampleRow struct {
 	BindingID     string `json:"bindingId"`
 	UploadDelta   int64  `json:"uploadDelta"`
 	DownloadDelta int64  `json:"downloadDelta"`
+}
+
+// DefaultSampleRetention bounds how long bucketed samples are retained
+// (#1138: traffic_samples previously grew forever). The floor must exceed the
+// longest period ResetQuotaPeriodTx can rebuild: a monthly reset re-reads
+// samples back to the previous boundary (~31 days), so pruning never reaches
+// into any window a quota rebuild could still need. Manual tests can pass a
+// smaller retention but the store enforces this floor.
+const DefaultSampleRetention = 90 * 24 * time.Hour
+const minSampleRetention = 45 * 24 * time.Hour
+
+// PruneSamplesBefore deletes bucketed samples older than now-retention.
+// Samples at or after the protected floor are always kept so a pending quota
+// rollover can still rebuild current-period counters. Returns rows removed.
+func (s *TrafficStore) PruneSamples(retention time.Duration, now time.Time) (int64, error) {
+	if retention < minSampleRetention {
+		retention = minSampleRetention
+	}
+	cutoff := now.Unix() - int64(retention/time.Second)
+	res, err := s.db.Exec(`DELETE FROM traffic_samples WHERE bucket_start < ?`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("client: prune traffic samples: %w", err)
+	}
+	affected, _ := res.RowsAffected()
+	return affected, nil
 }
 
 // HistoryForBinding returns bucketed deltas for a binding within [from,to].

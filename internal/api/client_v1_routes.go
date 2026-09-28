@@ -701,6 +701,13 @@ func (s *managementState) handleV1UpdateClient(w http.ResponseWriter, r *http.Re
 	if req.QuotaResetAt.Present {
 		c.QuotaResetAt = optionalInt64Patch(req.QuotaResetAt)
 	}
+	// A policy switch invalidates a boundary computed under the old policy:
+	// when the caller did not move quotaResetAt in the same patch, drop the
+	// stale boundary so the reconciler schedules the first boundary of the
+	// NEW policy instead of keeping the old one for days (#1109).
+	if req.QuotaResetPolicy.Present && !req.QuotaResetAt.Present && c.QuotaResetPolicy != existing.Client.QuotaResetPolicy {
+		c.QuotaResetAt = nil
+	}
 	if req.ExpiresAt.Present {
 		c.ExpiresAt = optionalInt64Patch(req.ExpiresAt)
 	}

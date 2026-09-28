@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
+	"time"
 )
 
 // LegacyProfile is the inbound-embedded client profile shape being migrated
@@ -114,19 +116,35 @@ func (m *Migrator) MigrateInboundProfilesTx(tx *Tx, inboundID, protocol string, 
 				}
 				res.CredentialsCreated++
 			}
+			if err := tx.PutMigrationMarker(MigrationMarker{
+				Key: LegacyProfileMarkerKey(inboundID, p.Username), Version: LegacyProfileMarkerVersion,
+				AppliedAt: time.Now().Unix(),
+			}); err != nil {
+				return res, fmt.Errorf("client: migration marker %q: %w", p.Username, err)
+			}
 			res.Skipped++
 			continue
 		}
-		name := p.Name
+		// Migrated names go through the same validate() rules as API-created
+		// clients (#1122): a name with control/format characters or >128 runes
+		// would produce a client every subsequent UpdateTx rejects. Fall back
+		// to the username, then a deterministic placeholder, rather than
+		// committing an un-editable client.
+		name := migrationClientName(p, clientID)
 		if name == "" {
-			name = p.Username
+			res.Skipped++
+			continue
 		}
-		cl, err := tx.CreateClient(Client{
+		cl := Client{
 			ID:               clientID,
 			Name:             name,
 			Enabled:          p.Enabled,
 			QuotaResetPolicy: ResetNever,
-		})
+		}
+		if err := validate(cl); err != nil {
+			return res, fmt.Errorf("client: migrate create %q: %w", p.Username, err)
+		}
+		cl, err := tx.CreateClient(cl)
 		if err != nil {
 			return res, fmt.Errorf("client: migrate create %q: %w", p.Username, err)
 		}
@@ -136,6 +154,16 @@ func (m *Migrator) MigrateInboundProfilesTx(tx *Tx, inboundID, protocol string, 
 		}
 		if _, err := tx.SetCredential(m.creds, b.ID, "password", p.Password); err != nil {
 			return res, fmt.Errorf("client: migrate credential %q: %w", p.Username, err)
+		}
+		// Record provenance in the SAME transaction: the marker is what render
+		// suppression uses to keep the legacy profile out of live configs, and
+		// it persists even after the normalized client is deleted so deletion
+		// cannot resurrect the legacy credential (#1117).
+		if err := tx.PutMigrationMarker(MigrationMarker{
+			Key: LegacyProfileMarkerKey(inboundID, p.Username), Version: LegacyProfileMarkerVersion,
+			AppliedAt: time.Now().Unix(),
+		}); err != nil {
+			return res, fmt.Errorf("client: migration marker %q: %w", p.Username, err)
 		}
 		res.ClientsCreated++
 		res.BindingsCreated++
@@ -226,6 +254,23 @@ func (m *Migrator) VerifyInboundProfiles(tx *Tx, inboundID string, profiles []Le
 	return nil
 }
 
+// migrationClientName picks a validate()-clean display name for a migrated
+// profile: the profile name, then the username, then a deterministic
+// placeholder derived from the stable client ID. Returns "" only when no
+// candidate is usable.
+func migrationClientName(p LegacyProfile, clientID string) string {
+	for _, candidate := range []string{p.Name, p.Username, "migrated-" + clientID} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if validate(Client{Name: candidate}) == nil {
+			return candidate
+		}
+	}
+	return ""
+}
+
 // stableClientID derives a deterministic client ID from (inbound, username)
 // so migration is idempotent. It is a UUID-shaped hex string to stay
 // compatible with the clients.id TEXT column.
@@ -240,4 +285,15 @@ func stableClientID(inboundID, username string) string {
 // profiles are already represented without duplicating the derivation.
 func StableClientID(inboundID, username string) string {
 	return stableClientID(inboundID, username)
+}
+
+// LegacyProfileMarkerVersion is the schema version of per-profile migration
+// markers written by MigrateInboundProfilesTx.
+const LegacyProfileMarkerVersion = 2
+
+// LegacyProfileMarkerKey is the migration-marker key recording that the
+// legacy profile (inboundID, username) was handed over to the normalized
+// client domain. Render suppression and startup fingerprinting both use it.
+func LegacyProfileMarkerKey(inboundID, username string) string {
+	return "legacy_profile/" + StableClientID(inboundID, username)
 }

@@ -34,7 +34,7 @@ func TestWriteInboundManagementError(t *testing.T) {
 		wantStatus int
 		wantBody   string
 	}{
-		{inbounds.ErrInboundInvalid, http.StatusBadRequest, "name must contain only letters"},
+		{inbounds.ErrInboundInvalid, http.StatusBadRequest, "name must be 1-64"},
 		{inbounds.ErrInboundDuplicateName, http.StatusConflict, "inbound name already exists"},
 		{inbounds.ErrInboundDuplicateTransportPort, http.StatusConflict, "transport/port already exists"},
 		{inbounds.ErrInboundUnsupportedProtocolTransport, http.StatusBadRequest, "unsupported inbound"},

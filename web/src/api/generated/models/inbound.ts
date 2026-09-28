@@ -46,6 +46,7 @@ import type { InboundProtocolFields } from './inboundProtocolFields.ts';
 import type { InboundTransport } from './inboundTransport.ts';
 
 export interface Inbound {
+  /** @pattern ^[A-Za-z0-9_-]{1,64}$ */
   name: string;
   protocol: InboundProtocol;
   transport: InboundTransport;

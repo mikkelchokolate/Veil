@@ -53,14 +53,14 @@ func TestReloadPromotedServicesSyncsCaddyCertBeforeHysteria2(t *testing.T) {
 	ctx := NewManagementApplyContext(state)
 	results := ctx.reloadPromotedServices([]string{hyPath, caddyPath})
 
-	if len(client.syncCaddyCertRequests) != 1 {
-		t.Fatalf("expected 1 sync request, got %+v", client.syncCaddyCertRequests)
+	if len(client.syncRequests()) != 1 {
+		t.Fatalf("expected 1 sync request, got %+v", client.syncRequests())
 	}
 	// The cert-sync destination follows the configured etc root — the parent
 	// of the state's live generated tree — not a hardcoded /etc/veil (#628).
 	want := privileged.SyncCaddyCertRequest{Domain: "hy2.example.com", OutDir: filepath.Join(filepath.Dir(liveRoot), "certs")}
-	if !reflect.DeepEqual(client.syncCaddyCertRequests[0], want) {
-		t.Fatalf("sync request = %+v, want %+v", client.syncCaddyCertRequests[0], want)
+	if !reflect.DeepEqual(client.syncRequests()[0], want) {
+		t.Fatalf("sync request = %+v, want %+v", client.syncRequests()[0], want)
 	}
 	// The cert sync result should come after the Caddy admin/reload result.
 	if len(results) < 2 || !results[0].Success {
@@ -109,7 +109,7 @@ func TestReloadPromotedServicesSkipsCertSyncWithoutHysteria2Domain(t *testing.T)
 	ctx := NewManagementApplyContext(state)
 	_ = ctx.reloadPromotedServices([]string{hyPath})
 
-	if len(client.syncCaddyCertRequests) != 0 {
-		t.Fatalf("expected no sync requests without hysteria2 domain, got %+v", client.syncCaddyCertRequests)
+	if len(client.syncRequests()) != 0 {
+		t.Fatalf("expected no sync requests without hysteria2 domain, got %+v", client.syncRequests())
 	}
 }

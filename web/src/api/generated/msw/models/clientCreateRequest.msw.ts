@@ -59,7 +59,11 @@ export interface ClientCreateRequest {
   quotaResetPolicy?: ClientCreateRequestQuotaResetPolicy;
   /** @nullable */
   quotaResetAt?: number | null;
-  /** @nullable */
+  /**
+     * Unix expiry timestamp; null means never. Non-positive values are rejected — every enforcement path already treats them as expired while status would report active.
+     * @minimum 1
+     * @nullable
+     */
   expiresAt?: number | null;
   /**
      * @minimum 0

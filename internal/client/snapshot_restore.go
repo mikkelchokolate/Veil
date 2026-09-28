@@ -120,11 +120,31 @@ func ReplaceSnapshotTx(tx *Tx, clients []Client, bindings []Binding, credentials
 			return fmt.Errorf("client: restore snapshot binding version %s: %w", item.ID, err)
 		}
 		item.Version = version
-		if _, err := tx.Exec(`UPDATE client_bindings SET client_id=?, inbound_id=?, runtime_identity=?,
-    enabled=?, protocol_settings=?, updated_at=?, version=? WHERE id=?`,
-			item.ClientID, item.InboundID, item.RuntimeIdentity,
-			boolToInt(item.Enabled), item.ProtocolSettings, item.UpdatedAt,
-			item.Version, item.ID); err != nil {
+		// A binding whose live row sits under a different client must be
+		// deleted and re-inserted, not updated in place: the UPDATE path
+		// never fires traffic_binding_cleanup, so counters/samples keyed
+		// (old client, binding) would survive and trip the next
+		// foreign-key/domain integrity check at storage.Open (#1140).
+		var existingClient string
+		switch err := tx.QueryRow(`SELECT client_id FROM client_bindings WHERE id=?`, item.ID).Scan(&existingClient); {
+		case errors.Is(err, sql.ErrNoRows):
+		case err != nil:
+			return fmt.Errorf("client: read existing binding %s: %w", item.ID, err)
+		case existingClient != item.ClientID:
+			if _, err := tx.Exec(`DELETE FROM client_bindings WHERE id=?`, item.ID); err != nil {
+				return fmt.Errorf("client: reparent snapshot binding %s: %w", item.ID, err)
+			}
+		}
+		if _, err := tx.Exec(`INSERT INTO client_bindings
+  (id, client_id, inbound_id, runtime_identity, enabled, protocol_settings, created_at, updated_at, version)
+  VALUES(?,?,?,?,?,?,?,?,?)
+  ON CONFLICT(id) DO UPDATE SET client_id=excluded.client_id, inbound_id=excluded.inbound_id,
+    runtime_identity=excluded.runtime_identity, enabled=excluded.enabled,
+    protocol_settings=excluded.protocol_settings, created_at=excluded.created_at,
+    updated_at=excluded.updated_at, version=excluded.version`,
+			item.ID, item.ClientID, item.InboundID, item.RuntimeIdentity,
+			boolToInt(item.Enabled), item.ProtocolSettings, item.CreatedAt, item.UpdatedAt,
+			item.Version); err != nil {
 			return fmt.Errorf("client: restore snapshot binding %s: %w", item.ID, err)
 		}
 	}

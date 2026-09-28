@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestV1ClientLinksAggregatesMieruTransportBindings(t *testing.T) {
-	router, _ := newApplyTrackedRouterWithState(t)
+	router, state := newApplyTrackedRouterWithState(t)
+	t.Cleanup(func() { _ = state.Close() })
 	tcp := v1Request(t, router, http.MethodPost, "/api/inbounds",
 		`{"name":"mieru-tcp-link","protocol":"mieru","transport":"tcp","port":2443,"enabled":true,"password":"inbound-pass"}`)
 	if tcp.Code != http.StatusCreated && tcp.Code != http.StatusOK {
@@ -19,12 +21,41 @@ func TestV1ClientLinksAggregatesMieruTransportBindings(t *testing.T) {
 	if udp.Code != http.StatusCreated && udp.Code != http.StatusOK {
 		t.Fatalf("udp inbound: %d %s", udp.Code, udp.Body.String())
 	}
+	// Both bindings carry the SAME credential (identity + password), so they
+	// aggregate into one link — a per-inbound NOCASE index permits reusing an
+	// identity across inbounds (#1121).
 	created := v1Request(t, router, http.MethodPost, "/api/v1/clients",
-		`{"name":"mieru-link-client","bindings":[{"inboundId":"mieru-tcp-link","credential":"alice-pass"},{"inboundId":"mieru-udp-link","credential":"alice-pass"}]}`)
+		`{"name":"mieru-link-client","bindings":[{"inboundId":"mieru-tcp-link","runtimeIdentity":"shared_mieru","credential":"alice-pass"},{"inboundId":"mieru-udp-link","runtimeIdentity":"shared_mieru","credential":"alice-pass"}]}`)
 	if created.Code != http.StatusCreated {
 		t.Fatalf("create: %d %s", created.Code, created.Body.String())
 	}
 	id := unwrapClient(t, created.Body.Bytes())["id"].(string)
+	// The links endpoint serves the applied snapshot. The async apply executor
+	// cannot converge in this environment — the mieru runtime probe needs a
+	// mita binary CI deliberately does not ship — so wait for the desired
+	// snapshot to carry this client, then promote the applied marker directly.
+	// That is the same applied-snapshot store the endpoint reads, so the link
+	// aggregation assertions below stay honest.
+	var desired uint64
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		rev, _ := state.applyRevisions.Get()
+		if rev.Desired > 0 {
+			if payload, err := state.applySnapshots.Load(rev.Desired); err == nil {
+				if projection, perr := state.appliedClientProjection(rev.Desired, payload, id); perr == nil && len(projection.Clients) == 1 {
+					desired = rev.Desired
+					break
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("desired snapshot never carried the client (rev=%+v)", rev)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if err := state.applyRevisions.MarkApplied(desired); err != nil {
+		t.Fatalf("mark applied: %v", err)
+	}
 	linksResp := v1Request(t, router, http.MethodGet, "/api/v1/clients/"+id+"/links", "")
 	if linksResp.Code != http.StatusOK {
 		t.Fatalf("links: %d %s", linksResp.Code, linksResp.Body.String())

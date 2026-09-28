@@ -142,11 +142,12 @@ function parsePort(value: string): number | undefined {
 }
 
 // Mirror of the server contract (internal/inbounds/inbound_validation.go):
-// names are URL/catalog keys restricted to ^[A-Za-z0-9_-]+$, ports are
-// integers in [1, 65535]. parseInt silently corrupts malformed input
+// names are URL/catalog keys restricted to ^[A-Za-z0-9_-]{1,64}$ (the 64-char
+// cap keeps names below filesystem NAME_MAX and systemd unit limits), ports
+// are integers in [1, 65535]. parseInt silently corrupts malformed input
 // ("12abc" → 12), so the gate below rejects non-digits outright instead of
 // letting them reach the wire as a different value or a raw 400 (#1043).
-const INBOUND_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
+const INBOUND_NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const PORT_DIGITS_PATTERN = /^\d+$/;
 
 interface InboundFieldErrors {

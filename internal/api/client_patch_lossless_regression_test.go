@@ -87,7 +87,9 @@ func TestClientPatchOpenAPIAndGeneratedContractIncludesEveryDurableField(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec := string(body)
+	// Windows checkouts keep CRLF endings; normalize before matching
+	// line-oriented path patterns so the scan is checkout-agnostic.
+	spec := strings.ReplaceAll(string(body), "\r\n", "\n")
 	pathStart := strings.Index(spec, "  /api/v1/clients/{id}:\n")
 	pathEnd := strings.Index(spec[pathStart+1:], "\n  /api/v1/clients/{id}/")
 	if pathStart < 0 || pathEnd < 0 {

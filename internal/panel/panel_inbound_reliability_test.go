@@ -24,7 +24,8 @@ func TestPanelInboundReliabilityKeepsAddAndEditPersistenceModesSeparate(t *testi
 func TestPanelInboundReliabilityValidatesDisabledDraftsAndRetriesSchemas(t *testing.T) {
 	form := panelInboundFormHTML()
 	for _, want := range []string{
-		`id="inbound-name" required pattern="[A-Za-z0-9_-]+"`,
+		`id="inbound-name" required pattern="[A-Za-z0-9_-]{1,64}"`,
+		`maxlength="64"`,
 		`id="inbound-port" type="number" required min="1" max="65535"`,
 	} {
 		if !strings.Contains(form, want) {

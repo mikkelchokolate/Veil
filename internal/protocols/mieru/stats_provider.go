@@ -36,6 +36,11 @@ type StatsProvider struct {
 	bindings map[string]string
 	mitaPath string
 	sockPath string
+	// instanceSource resolves the daemon's current process instance (set via
+	// WithInstanceSource). Queried on every read so a restart is visible at
+	// the next poll even when counters already passed the stale baseline
+	// (#1102).
+	instanceSource func(context.Context) string
 }
 
 func NewStatsProvider(key string, bindings map[string]string) *StatsProvider {
@@ -44,6 +49,14 @@ func NewStatsProvider(key string, bindings map[string]string) *StatsProvider {
 		copyBindings[runtimeIdentity] = bindingID
 	}
 	return &StatsProvider{key: key, bindings: copyBindings, mitaPath: MitaBinaryPath, sockPath: MitaUDSPath}
+}
+
+// WithInstanceSource wires a lookup reporting veil-mieru.service's current
+// process instance (systemd start timestamp + main PID) so a restart credits
+// the post-reset counter in full (#1102).
+func (p *StatsProvider) WithInstanceSource(source func(context.Context) string) *StatsProvider {
+	p.instanceSource = source
+	return p
 }
 
 func (p *StatsProvider) Key() string { return p.key }
@@ -95,8 +108,13 @@ func (p *StatsProvider) ReadContext(ctx context.Context) (client.ProviderBatch, 
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].BindingID < out[j].BindingID })
 	sort.Strings(unknown)
+	instanceID := ""
+	if p.instanceSource != nil {
+		instanceID = p.instanceSource(ctx)
+	}
 	return client.ProviderBatch{
-		Readings: out, UnknownIdentities: unknown, ObservedAt: time.Now().UTC(), RuntimeInstance: p.key,
+		Readings: out, UnknownIdentities: unknown, ObservedAt: time.Now().UTC(),
+		RuntimeInstance: p.key, RuntimeInstanceID: instanceID,
 	}, nil
 }
 

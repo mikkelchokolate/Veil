@@ -144,11 +144,13 @@ func (r ClientAccessProtocolRegistry) BuildLinks(settings Settings, inbound Inbo
 		return nil
 	}
 	if len(credentials) == 0 {
-		if inbound.HasClientBindings {
-			// Normalized bindings exist for this inbound but none resolve to a
-			// usable credential (revoked/expired/depleted/disabled). Emitting
-			// the legacy fallback link would re-publish a credential the
-			// operator deliberately stopped using (issue #1098) — emit nothing.
+		if inbound.HadClientProfiles() {
+			// Client-managed credentials exist (or existed, before legacy
+			// profiles were suppressed by migration) but none resolve to a
+			// usable credential: revoked, expired, depleted, or disabled.
+			// Emitting the legacy fallback link would re-publish a credential
+			// the operator deliberately stopped using (issues #1098, #1117)
+			// — emit nothing.
 			return nil
 		}
 		link, ok := protocol.FallbackLink(ClientAccessLinkInput{Settings: settings, Inbound: inbound, LinkName: inbound.Name})
@@ -198,7 +200,7 @@ func naiveRegistryScheme(input ClientAccessLinkInput) string {
 }
 
 func naiveFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
-	if len(input.Inbound.Profiles) > 0 || input.Inbound.HasClientBindings {
+	if input.Inbound.HadClientProfiles() {
 		return ClientLink{}, false
 	}
 	if !hasClientEndpoint(input) {
@@ -239,7 +241,7 @@ func hysteria2ProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) 
 }
 
 func hysteria2FallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
-	if len(input.Inbound.Profiles) > 0 || input.Inbound.HasClientBindings {
+	if input.Inbound.HadClientProfiles() {
 		// Profiles exist but are all disabled, or bindings exist: the inbound
 		// is credential-managed, so the shared fallback password must never be
 		// advertised again (issue #1098) — matching the naive/mieru fallback
@@ -275,7 +277,7 @@ func mieruClientConfigLink(input ClientAccessLinkInput) (ClientLink, bool) {
 }
 
 func mieruFallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
-	if len(input.Inbound.Profiles) > 0 || input.Inbound.HasClientBindings {
+	if input.Inbound.HadClientProfiles() {
 		return ClientLink{}, false
 	}
 	input.Credential = ClientCredential{Name: input.Inbound.Name, Username: input.Inbound.Name, Password: input.Inbound.Password}

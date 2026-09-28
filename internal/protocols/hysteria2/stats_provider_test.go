@@ -95,3 +95,51 @@ func TestStatsProviderReadInvalidJSON(t *testing.T) {
 }
 
 var _ client.TrafficProvider = (*StatsProvider)(nil)
+
+// TestStatsProviderFoldsMixedCaseStoredIdentity (#1111): hysteria2 reports
+// per-user stats keyed by the lowercase username. A pre-migration binding
+// row carrying "Alice" must still attribute the reported "alice" counters to
+// its binding instead of dropping them as an unknown identity.
+func TestStatsProviderFoldsMixedCaseStoredIdentity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"alice":{"tx":100,"rx":200}}`))
+	}))
+	defer server.Close()
+	provider := NewStatsProvider("test", server.URL+"/traffic", map[string]string{"Alice": "binding-1"})
+	batch, err := provider.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(batch.Readings) != 1 || batch.Readings[0].BindingID != "binding-1" {
+		t.Fatalf("readings=%+v", batch.Readings)
+	}
+	if batch.Readings[0].UploadBytes != 100 || batch.Readings[0].DownloadBytes != 200 {
+		t.Fatalf("counters=%+v", batch.Readings[0])
+	}
+	if len(batch.UnknownIdentities) != 0 {
+		t.Fatalf("folded identity reported unknown: %v", batch.UnknownIdentities)
+	}
+}
+
+// TestStatsProviderCaseOnlyCollisionResolvesDeterministically (#1111): two
+// stored identities differing only by case map to the same runtime user —
+// folding must pick one binding deterministically (sorted input order) so a
+// hand-edited pre-migration row cannot flip attribution between reads.
+func TestStatsProviderCaseOnlyCollisionResolvesDeterministically(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"user":{"tx":5,"rx":6}}`))
+	}))
+	defer server.Close()
+	provider := NewStatsProvider("test", server.URL+"/traffic", map[string]string{
+		"USER": "binding-a",
+		"user": "binding-b",
+	})
+	batch, err := provider.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(batch.Readings) != 1 || batch.Readings[0].BindingID != "binding-a" {
+		// "USER" sorts before "user"; the first folded write wins.
+		t.Fatalf("collision resolved to %+v, want deterministic binding-a", batch.Readings)
+	}
+}
