@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -231,10 +230,6 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 	}
 	previousStates := ctx.captureServiceLifecycle(desiredUnits, lifecycleUnits)
 	ctx.state.previousServiceStates = previousStates
-	// Byte-identical staged artifacts are not promoted: an apply that
-	// converges to the bytes already live must report a no-op instead of
-	// falsifying LiveApplied/ArtifactsChanged evidence (#1134).
-	artifactIDs = filterByteIdenticalArtifacts(generatedRoot, ctx.state.liveRoot, artifactIDs)
 	if len(artifactIDs) == 0 && len(removeIDs) == 0 {
 		// No files to promote, but leftover enabled template units still need
 		// stop/disable on the subsequent service reload.
@@ -287,33 +282,6 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 	}
 	ctx.state.orphanedUnits = mergeOrphanedUnits(orphanedUnits, wantsOrphans)
 	return liveFiles, backupFiles, records, nil
-}
-
-// filterByteIdenticalArtifacts drops staged artifacts whose live counterpart
-// already holds the exact desired bytes: re-promoting them falsifies
-// LiveApplied/ArtifactsChanged evidence for a no-op apply and needlessly
-// restarts their units (#1134). Files that cannot be compared — a missing
-// destination, a root-owned live tree the panel cannot read, a non-regular
-// file — stay in the set so the safe assumption is always "changed".
-func filterByteIdenticalArtifacts(generatedRoot, liveRoot string, artifactIDs []string) []string {
-	changed := make([]string, 0, len(artifactIDs))
-	for _, id := range artifactIDs {
-		staged, err := os.ReadFile(filepath.Join(generatedRoot, filepath.FromSlash(id)))
-		if err != nil {
-			changed = append(changed, id)
-			continue
-		}
-		liveInfo, err := os.Lstat(filepath.Join(liveRoot, filepath.FromSlash(id)))
-		if err != nil || !liveInfo.Mode().IsRegular() {
-			changed = append(changed, id)
-			continue
-		}
-		live, err := os.ReadFile(filepath.Join(liveRoot, filepath.FromSlash(id)))
-		if err != nil || !bytes.Equal(staged, live) {
-			changed = append(changed, id)
-		}
-	}
-	return changed
 }
 
 func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []ServiceActionResult {
