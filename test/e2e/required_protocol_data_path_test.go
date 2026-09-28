@@ -574,18 +574,6 @@ func registerNonDeniedLoopbackAlias(t *testing.T, ip string) {
 
 func registerLoopbackHostname(t *testing.T, hostname string) {
 	t.Helper()
-	registerE2EHostname(t, hostname, "127.0.0.1")
-}
-
-// registerE2EHostname maps hostname to ip in /etc/hosts. Any destination IP
-// may be used — e.g. a loopback alias registered via
-// registerNonDeniedLoopbackAlias when the protocol under test resolves and
-// then ACL-checks the resolved address.
-func registerE2EHostname(t *testing.T, hostname, ip string) {
-	t.Helper()
-	if net.ParseIP(ip) == nil {
-		t.Fatalf("invalid E2E hostname IP %q", ip)
-	}
 	if hostname == "" || strings.ContainsAny(hostname, " \t\r\n") {
 		t.Fatalf("invalid E2E hostname %q", hostname)
 	}
@@ -593,7 +581,7 @@ func registerE2EHostname(t *testing.T, hostname, ip string) {
 	// appended, never a pre-existing entry that merely shares the hostname.
 	marker := "veil-e2e-" + strings.NewReplacer("-", "", ".", "").Replace(t.Name()) + "-" + hostname
 	cmd := exec.Command("sudo", "tee", "-a", "/etc/hosts")
-	cmd.Stdin = strings.NewReader(ip + " " + hostname + " # " + marker + "\n")
+	cmd.Stdin = strings.NewReader("127.0.0.1 " + hostname + " # " + marker + "\n")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("register local E2E hostname: %v: %s", err, output)
 	}

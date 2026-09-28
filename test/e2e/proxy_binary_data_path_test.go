@@ -294,15 +294,16 @@ func testHysteria2DataPath(t *testing.T, hysteriaPath string) {
 
 	// 1. Start backend HTTP server
 	expectedResponse := "hello from hysteria2"
-	// The hysteria2 egress ACL evaluates the RESOLVED destination IP, so
-	// /etc/hosts names that map to 127.0.0.1 are still denied by
-	// reject(127.0.0.0/8) (issue #1095). Bind the backend to a loopback
-	// alias in TEST-NET-1 (192.0.2.0/24) — outside egressDenyCIDRs — and
-	// still reach it by hostname so the ACL sees the domain→IP path.
+	// The hysteria2 egress ACL evaluates the destination IP — deny rules
+	// fire on resolved addresses, not just the literal request target — and
+	// hysteria resolves proxied domains through its own resolver path rather
+	// than getaddrinfo, so /etc/hosts names cannot reach a loopback backend
+	// at all (issue #1095). Bind the backend to a loopback alias in
+	// TEST-NET-1 (192.0.2.0/24) — outside egressDenyCIDRs; even where
+	// geoip:private classifies it, direct(geoip:private) routes direct —
+	// and request the literal IP so no resolution is involved at all.
 	const backendIP = "192.0.2.42"
 	registerNonDeniedLoopbackAlias(t, backendIP)
-	const backendHost = "veil-hy2-e2e.test"
-	registerE2EHostname(t, backendHost, backendIP)
 	backend := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(expectedResponse))
@@ -314,7 +315,6 @@ func testHysteria2DataPath(t *testing.T, hysteriaPath string) {
 	backend.Listener = backendListener
 	backend.Start()
 	defer backend.Close()
-	backendURL := strings.Replace(backend.URL, backendIP, backendHost, 1)
 
 	// 2. Start Veil serving panel
 	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
@@ -491,7 +491,7 @@ socks5:
 		Timeout: 5 * time.Second,
 	}
 
-	res, err := httpClient.Get(backendURL)
+	res, err := httpClient.Get(backend.URL)
 	if err != nil {
 		t.Fatalf("GET request failed: %v", err)
 	}
