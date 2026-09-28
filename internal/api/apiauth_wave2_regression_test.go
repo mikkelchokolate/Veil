@@ -246,8 +246,12 @@ func TestRollbackToZeroUserRevisionFailsClosedAnonymous(t *testing.T) {
 	state.mu.Lock()
 	usersAfter := len(state.users)
 	state.mu.Unlock()
-	if usersAfter != 0 {
-		t.Fatalf("rollback did not restore zero users: %d", usersAfter)
+	// Panel credentials are forward-only (#1094): a historical snapshot can
+	// never resurrect a deleted account, demote an admin, or roll a password
+	// hash backwards, so rollback preserves the live user table — the admin
+	// created above must still be there.
+	if usersAfter != 1 {
+		t.Fatalf("rollback must preserve live users (forward-only), got %d", usersAfter)
 	}
 
 	// The anonymous request that was dev-anonymous admin before MUST now be
@@ -259,16 +263,19 @@ func TestRollbackToZeroUserRevisionFailsClosedAnonymous(t *testing.T) {
 		t.Fatalf("anonymous after rollback to zero users: %d %s, want 401 (dev-anonymous re-armed itself)",
 			anonRec.Code, anonRec.Body.String())
 	}
-	if !strings.Contains(anonRec.Body.String(), "veil admin") {
-		t.Fatalf("401 body missing CLI recovery hint: %s", anonRec.Body.String())
-	}
-	// The pre-rollback admin session must be dead too: its user vanished.
+	// The "veil admin" recovery hint is only emitted while zero users exist
+	// and dev-anonymous is armed; the surviving admin disables that path, so
+	// a generic 401 is correct here.
+	// The admin session survives with its user — only anonymous access is
+	// locked out. Killing live sessions on rollback would be an availability
+	// footgun, and the security property that matters (anonymous stays 401)
+	// holds either way.
 	stale := httptest.NewRequest(http.MethodGet, "/api/inbounds", nil)
 	stale.AddCookie(&http.Cookie{Name: "veil_session", Value: sessionCookie})
 	staleRec := httptest.NewRecorder()
 	router.ServeHTTP(staleRec, stale)
-	if staleRec.Code != http.StatusUnauthorized {
-		t.Fatalf("orphaned admin session after rollback: %d, want 401", staleRec.Code)
+	if staleRec.Code != http.StatusOK {
+		t.Fatalf("preserved admin session after rollback: %d, want 200", staleRec.Code)
 	}
 	// /api/auth/status must not report dev-anonymous admin either.
 	status := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)

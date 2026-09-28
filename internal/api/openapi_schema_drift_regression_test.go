@@ -94,7 +94,10 @@ func TestOpenAPIApplySchemasMatchRuntime(t *testing.T) {
 	}
 
 	// #562: planner only emits these operation types.
-	wantOps := []string{"promote_file", "reload_service", "restart_service"}
+	wantOps := []string{
+		"disable_service", "enable_service", "promote_file", "reconcile_firewall",
+		"reload_service", "remove_file", "restart_service", "stop_service",
+	}
 	if got := propertyEnum(t, "ApplyOperation", "type"); !equalStrings(got, wantOps) {
 		t.Errorf("ApplyOperation.type enum = %v, want %v", got, wantOps)
 	}

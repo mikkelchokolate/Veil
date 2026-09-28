@@ -660,11 +660,13 @@ func TestManagementApplyServicesCleansOrphanedInstances(t *testing.T) {
 	oldRunner := serviceActionRunner
 	oldHealth := serviceHealthChecker
 	oldCaddyLoader := caddyAdminLoader
+	oldStatusReader := serviceStatusReader
 	defer func() {
 		stagedConfigValidator = oldValidator
 		serviceActionRunner = oldRunner
 		serviceHealthChecker = oldHealth
 		caddyAdminLoader = oldCaddyLoader
+		serviceStatusReader = oldStatusReader
 	}()
 
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
@@ -747,11 +749,13 @@ func TestManagementApplyServicesRestoresOrphanedInstancesOnRollback(t *testing.T
 	oldRunner := serviceActionRunner
 	oldHealth := serviceHealthChecker
 	oldCaddyLoader := caddyAdminLoader
+	oldStatusReader := serviceStatusReader
 	defer func() {
 		stagedConfigValidator = oldValidator
 		serviceActionRunner = oldRunner
 		serviceHealthChecker = oldHealth
 		caddyAdminLoader = oldCaddyLoader
+		serviceStatusReader = oldStatusReader
 	}()
 
 	stagedConfigValidator = func(paths []string) []ConfigValidationResult {
@@ -774,6 +778,14 @@ func TestManagementApplyServicesRestoresOrphanedInstancesOnRollback(t *testing.T
 	}
 
 	caddyAdminLoader = func(_ []byte) error { return nil }
+
+	// The orphaned unit was enabled and running before the apply removed its
+	// config, so rollback's captured-state lifecycle restore (#1135) must emit
+	// enable+start. An enabled-but-stopped unit would get enable only, and an
+	// unknown unit falls back to enable+start — all via serviceCalls.
+	serviceStatusReader = func(unit string) ServiceRuntimeStatus {
+		return ServiceRuntimeStatus{Unit: unit, LoadState: "loaded", ActiveState: "active", SubState: "running", UnitFileState: "enabled"}
+	}
 
 	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
