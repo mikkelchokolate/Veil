@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // SubscriptionMetaHeaders extends the base delivery headers with the
@@ -53,13 +54,14 @@ func (h SubscriptionMetaHeaders) Apply(header http.Header) {
 	if h.SupportURL != "" {
 		header.Set("Support-URL", h.SupportURL)
 	}
-	if h.ProfileTitle != "" {
-		header.Set("Profile-Title", h.ProfileTitle)
+	if title := sanitizeHeaderText(h.ProfileTitle); title != "" {
+		header.Set("Profile-Title", title)
 		header.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, sanitizeFilename(h.ProfileTitle)+".txt"))
 	}
 }
 
 func sanitizeFilename(name string) string {
+	name = sanitizeHeaderText(name)
 	name = strings.Map(func(r rune) rune {
 		if r == '/' || r == '\\' || r == '"' || r == ';' {
 			return '-'
@@ -71,4 +73,17 @@ func sanitizeFilename(name string) string {
 		return "veil-subscription"
 	}
 	return name
+}
+
+// sanitizeHeaderText strips characters that are illegal or unsafe in an HTTP
+// header value (control/format runes, CR/LF). Client names are validated at
+// write time, but rows predating that validation can still carry them, so
+// emission sanitizes as defence in depth (#1122).
+func sanitizeHeaderText(value string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.Is(unicode.Cc, r) || unicode.Is(unicode.Cf, r) {
+			return -1
+		}
+		return r
+	}, value)
 }

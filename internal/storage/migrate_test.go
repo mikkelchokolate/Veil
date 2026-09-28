@@ -14,8 +14,8 @@ func TestMigrateCreatesSchemaMigrationsAndSetsVersion(t *testing.T) {
 
 	// Lock the migration tip: every registered migration must be recorded,
 	// so a truncated chain cannot silently pass.
-	const wantTipVersion = 28
-	const wantTipName = "quota_enforcement_reset_target_fields"
+	const wantTipVersion = 29
+	const wantTipName = "runtime_identity_lowercase"
 	var version, count int
 	if err := db.QueryRow(`SELECT COALESCE(MAX(version),0), COUNT(*) FROM schema_migrations`).Scan(&version, &count); err != nil {
 		t.Fatalf("query schema_migrations: %v", err)

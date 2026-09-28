@@ -34,7 +34,7 @@ func (MieruClientAccessAggregator) Build(settings Settings, inbounds []Inbound) 
 		}
 		if len(credentials) == 0 {
 			password := model.EffectiveInboundPassword(inbound)
-			if len(inbound.Profiles) > 0 || password == "" {
+			if inbound.HadClientProfiles() || password == "" {
 				continue
 			}
 			credential := ClientCredential{Name: inbound.Name, Username: inbound.Name, Password: password}

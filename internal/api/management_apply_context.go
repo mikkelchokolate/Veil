@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -357,6 +358,17 @@ func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []S
 		results = append(results, ctx.syncCaddyCertForHysteria2(domain))
 		if !results[len(results)-1].Success {
 			return results
+		}
+	}
+
+	// Phase 3 prelude: flush traffic counters before the protocol runtimes
+	// restart. Hysteria2/mieru report cumulative per-user counters that reset
+	// on restart; the bytes since the last collection are otherwise
+	// unobservable and lost (#1102). Best-effort: a failed flush never blocks
+	// the reload.
+	if ctx.state.trafficCollector != nil {
+		if err := ctx.state.trafficCollector.CollectOnceContext(ctx.operationContext()); err != nil {
+			log.Printf("traffic: pre-restart counter flush failed: %v", err)
 		}
 	}
 

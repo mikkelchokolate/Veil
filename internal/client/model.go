@@ -89,7 +89,11 @@ func ComputeStatus(c Client, now time.Time, applyFailed, pendingApply, orphaned 
 	switch {
 	case applyFailed:
 		return StatusApplyFailed
-	case c.ExpiresAt != nil && *c.ExpiresAt > 0 && now.Unix() >= *c.ExpiresAt:
+	case c.ExpiresAt != nil && now.Unix() >= *c.ExpiresAt:
+		// Any non-null expiry at or before now is expired — including the
+		// <=0 values legacy rows can still carry. This matches the runtime
+		// binding filter, the render filter and the expiration reconciler,
+		// which all treat expires_at<=now as expired (#1108).
 		return StatusExpired
 	case c.Depleted:
 		return StatusDepleted

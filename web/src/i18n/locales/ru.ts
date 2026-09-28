@@ -180,7 +180,7 @@ export const ru: Record<string, string> = {
 		"Этот провайдер не умеет создавать комнату автоматически. Создайте её в сервисе и вставьте идентификатор.",
 	"inbounds.validation.nameRequired": "Укажите имя.",
 	"inbounds.validation.nameCharset":
-		"Имя может содержать только латинские буквы, цифры, «-» и «_».",
+		"Имя должно содержать 1-64 латинские буквы, цифры, «-» или «_».",
 	"inbounds.validation.portRange":
 		"Порт должен быть целым числом от 1 до 65535.",
 	"inbounds.error.createFailed": "Ошибка создания",

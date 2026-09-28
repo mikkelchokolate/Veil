@@ -145,6 +145,7 @@ type managementState struct {
 	trafficCollector        *client.Collector
 	trafficReconciler       *client.Reconciler
 	expirationReconciler    *expirationReconciler
+	certSyncWorker          *certSyncWorker
 	sse                     *sseBroadcaster
 	clientSubsystemStopping bool
 	applyReadinessMu        sync.Mutex

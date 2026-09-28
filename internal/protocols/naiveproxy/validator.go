@@ -113,7 +113,7 @@ func (p Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bo
 			return true
 		}
 	}
-	if len(inbound.Profiles) > 0 {
+	if inbound.HadClientProfiles() {
 		return false
 	}
 	username := naiveUsername(settings, inbound)

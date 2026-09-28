@@ -24,8 +24,9 @@ func (Plugin) RenderConfig(input generatedconfig.ProtocolRenderInput) ([]generat
 		if err != nil {
 			return nil, false, err
 		}
-		if len(access.Hysteria2Users()) == 0 && len(inbound.Profiles) > 0 {
-			// Profiles exist but none are enabled: do not revive the inbound password.
+		if len(access.Hysteria2Users()) == 0 && inbound.HadClientProfiles() {
+			// Profiles exist (or were suppressed post-migration) but none are
+			// enabled: do not revive the inbound password (#1117).
 			continue
 		}
 		body, err := renderHysteria2(input.Settings, inbound, input.Warp, input.Rules, input.Paths)

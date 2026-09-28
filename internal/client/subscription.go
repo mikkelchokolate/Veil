@@ -114,9 +114,11 @@ func (r *SubscriptionRenderer) LinksForSnapshot(c Client, bindings []Binding, pl
 		mieru      bool
 	}
 	resolved := make([]resolvedBinding, 0, len(bindings))
-	var mieruInbounds []model.Inbound
-	var mieruCredential clientaccess.ClientCredential
-	haveMieruCred := false
+	// Mieru bindings aggregate into one config per credential: every
+	// portBinding in the config authenticates with that credential, so
+	// bindings whose binding credential differs must become separate links
+	// instead of borrowing the first binding's secret (#1121).
+	mieruGroups := make(map[string]*mieruLinkGroup)
 	for _, b := range bindings {
 		if !b.Enabled {
 			continue
@@ -138,22 +140,32 @@ func (r *SubscriptionRenderer) LinksForSnapshot(c Client, bindings []Binding, pl
 		isMieru := inbound.Protocol == "mieru"
 		resolved = append(resolved, resolvedBinding{inbound: inbound, credential: credential, mieru: isMieru})
 		if isMieru {
-			mieruInbounds = append(mieruInbounds, inbound)
-			if !haveMieruCred {
-				mieruCredential = credential
-				haveMieruCred = true
+			key := credential.Username + "\x00" + credential.Password
+			group, ok := mieruGroups[key]
+			if !ok {
+				group = &mieruLinkGroup{credential: credential}
+				mieruGroups[key] = group
 			}
+			group.inbounds = append(group.inbounds, inbound)
 		}
 	}
 	var out []model.ClientLink
-	emittedMieru := false
+	emittedMieru := make(map[string]bool, len(mieruGroups))
+	mieruSeq := 0
 	for _, item := range resolved {
 		if item.mieru {
-			if emittedMieru {
+			key := item.credential.Username + "\x00" + item.credential.Password
+			if emittedMieru[key] {
 				continue
 			}
-			emittedMieru = true
-			if link, ok := clientaccess.BuildMieruAggregatedLink(r.settings, mieruInbounds, "mieru/"+c.Name, mieruCredential); ok {
+			emittedMieru[key] = true
+			group := mieruGroups[key]
+			linkName := "mieru/" + c.Name
+			if mieruSeq > 0 {
+				linkName = fmt.Sprintf("%s-%d", linkName, mieruSeq+1)
+			}
+			mieruSeq++
+			if link, ok := clientaccess.BuildMieruAggregatedLink(r.settings, group.inbounds, linkName, group.credential); ok {
 				out = append(out, link)
 			}
 			continue
@@ -161,6 +173,13 @@ func (r *SubscriptionRenderer) LinksForSnapshot(c Client, bindings []Binding, pl
 		out = append(out, registry.BuildLinks(r.settings, item.inbound, []clientaccess.ClientCredential{item.credential})...)
 	}
 	return out, nil
+}
+
+// mieruLinkGroup accumulates the inbounds that share one binding credential
+// so a per-client export emits one aggregated config per distinct credential.
+type mieruLinkGroup struct {
+	credential clientaccess.ClientCredential
+	inbounds   []model.Inbound
 }
 
 func snapshotToInbound(s InboundSnapshot) model.Inbound {

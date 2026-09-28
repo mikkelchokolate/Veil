@@ -76,6 +76,21 @@ type Inbound struct {
 	// never persisted or serialized. The access model merges these so normalized
 	// clients are rendered into the live config.
 	RuntimeCredentials []RuntimeCredential `json:"-"`
+
+	// LegacyProfilesSuppressed is set by the render pipeline when one or more
+	// embedded Profiles were filtered out because they were migrated into the
+	// normalized client domain (#1117). It preserves the "profiles exist"
+	// signal — all-disabled profile sets must never revive the inbound-level
+	// fallback credential — while keeping the migrated profiles themselves out
+	// of rendered configs and exported links. Runtime-only; never persisted.
+	LegacyProfilesSuppressed bool `json:"-"`
+}
+
+// HadClientProfiles reports whether the inbound carries (or carried, before
+// migration suppression) embedded client profiles. Renderers/validators use
+// it wherever "profiles exist" gates the inbound-level credential fallback.
+func (in Inbound) HadClientProfiles() bool {
+	return len(in.Profiles) > 0 || in.LegacyProfilesSuppressed
 }
 
 type RoutingRule struct {

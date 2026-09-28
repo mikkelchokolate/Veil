@@ -121,3 +121,58 @@ func TestMigrationIdempotentByStableID(t *testing.T) {
 		t.Fatalf("expected first migration to record client id, got %+v", first)
 	}
 }
+
+// TestMigrateProfileWithInvalidNameFallsBack (#1122): a legacy profile whose
+// name fails normal client validation (control characters, >128 chars) must
+// not bypass it — migration falls back to the username, then a deterministic
+// placeholder.
+func TestMigrateProfileWithInvalidNameFallsBack(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	cipher := newTestCipher(t)
+	repo := NewRepository(db)
+	cs := NewCredentialStore(db, cipher)
+	mig := NewMigrator(repo, cs)
+
+	legacy := []LegacyProfile{
+		// Control characters in the display name — username is clean.
+		{Name: "bad\nname", Username: "clean-user", Password: "pw-1", Enabled: true},
+		// Neither name nor username is valid -> deterministic placeholder.
+		{Name: "\x00", Username: "bad\nuser", Password: "pw-2", Enabled: true},
+	}
+	res, err := mig.MigrateInboundProfiles("in-m", "mieru", legacy)
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if res.ClientsCreated != 2 {
+		t.Fatalf("created=%d, want 2", res.ClientsCreated)
+	}
+	clients, total, err := repo.List(ListFilter{InboundID: "in-m"})
+	if err != nil || total != 2 {
+		t.Fatalf("list: total=%d err=%v", total, err)
+	}
+	names := map[string]bool{}
+	for _, c := range clients {
+		if err := validate(c); err != nil {
+			t.Fatalf("migrated client %q fails normal validation: %v", c.Name, err)
+		}
+		names[c.Name] = true
+	}
+	if !names["clean-user"] {
+		t.Fatalf("username fallback missing: %v", names)
+	}
+	placeholder := "migrated-" + StableClientID("in-m", "bad\nuser")
+	if !names[placeholder] {
+		t.Fatalf("placeholder %q missing: %v", placeholder, names)
+	}
+	// The per-profile markers suppress the legacy credentials at render.
+	for _, username := range []string{"clean-user", "bad\nuser"} {
+		marker, err := repo.GetMigrationMarker(LegacyProfileMarkerKey("in-m", username))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if marker == nil {
+			t.Fatalf("no migration marker for %q — legacy profile would stay live", username)
+		}
+	}
+}

@@ -124,7 +124,7 @@ export const postApiV1ClientsBodyQuotaBytesMax = 9007199254740991;
 
 export const postApiV1ClientsBodyDeviceLimitMin = 0;
 
-export const postApiV1ClientsBodyBindingsItemRuntimeIdentityRegExp = new RegExp('^[A-Za-z0-9_-]{1,48}$');
+export const postApiV1ClientsBodyBindingsItemRuntimeIdentityRegExp = new RegExp('^[a-z0-9_-]{1,48}$');
 
 
 export const PostApiV1ClientsBody = zod.object({

@@ -26,6 +26,11 @@ type ProviderBatch struct {
 	UnknownIdentities []string
 	ObservedAt        time.Time
 	RuntimeInstance   string
+	// RuntimeInstanceID identifies the OS process instance that produced the
+	// absolute counters (e.g. systemd start timestamp + main PID). Empty when
+	// the provider cannot determine it — accounting then falls back to the
+	// negative-delta reset heuristic (#1102).
+	RuntimeInstanceID string
 }
 
 type ProviderReading struct {
@@ -193,7 +198,8 @@ func (c *Collector) CollectOnceContext(ctx context.Context) error {
 					samples = append(samples, Sample{
 						BindingID: reading.BindingID, UploadBytes: reading.UploadBytes, DownloadBytes: reading.DownloadBytes,
 						AtUnix: batch.ObservedAt.Unix(), Monotonic: true,
-						ProviderKey: batch.RuntimeInstance + ":" + reading.BindingID,
+						ProviderKey:       batch.RuntimeInstance + ":" + reading.BindingID,
+						RuntimeInstanceID: batch.RuntimeInstanceID,
 					})
 				}
 				if recordErr := c.store.RecordSamples(samples); recordErr != nil {

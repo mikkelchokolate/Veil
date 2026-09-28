@@ -92,6 +92,21 @@ func ReplaceSnapshotTx(tx *Tx, clients []Client, bindings []Binding, credentials
 			return fmt.Errorf("client: restore snapshot binding version %s: %w", item.ID, err)
 		}
 		item.Version = version
+		// A binding that moved to a different client must be deleted and
+		// re-inserted, not updated in place: the UPDATE path never fires
+		// traffic_binding_cleanup, so counters/samples keyed (old client,
+		// binding) would survive and trip the next foreign-key/domain
+		// integrity check at storage.Open (#1140).
+		var existingClient string
+		switch err := tx.QueryRow(`SELECT client_id FROM client_bindings WHERE id=?`, item.ID).Scan(&existingClient); {
+		case errors.Is(err, sql.ErrNoRows):
+		case err != nil:
+			return fmt.Errorf("client: read existing binding %s: %w", item.ID, err)
+		case existingClient != item.ClientID:
+			if _, err := tx.Exec(`DELETE FROM client_bindings WHERE id=?`, item.ID); err != nil {
+				return fmt.Errorf("client: reparent snapshot binding %s: %w", item.ID, err)
+			}
+		}
 		if _, err := tx.Exec(`INSERT INTO client_bindings
   (id, client_id, inbound_id, runtime_identity, enabled, protocol_settings, created_at, updated_at, version)
   VALUES(?,?,?,?,?,?,?,?,?)

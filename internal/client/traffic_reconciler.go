@@ -37,10 +37,12 @@ type Reconciler struct {
 	onChange   func(clientID string, depleted bool) error
 	onMutation func(QuotaMutation) error
 
-	mu      sync.Mutex
-	running bool
-	stop    chan struct{}
-	done    chan struct{}
+	mu               sync.Mutex
+	running          bool
+	stop             chan struct{}
+	done             chan struct{}
+	sampleRetention  time.Duration
+	lastSamplePruned int64
 }
 
 func NewReconciler(repo *Repository, traffic *TrafficStore, interval time.Duration, onChange func(string, bool) error) *Reconciler {
@@ -58,6 +60,7 @@ func newReconciler(repo *Repository, traffic *TrafficStore, interval time.Durati
 	return &Reconciler{
 		repo: repo, traffic: traffic, interval: interval, now: time.Now,
 		onChange: onChange, onMutation: onMutation,
+		sampleRetention: DefaultSampleRetention,
 	}
 }
 
@@ -157,7 +160,31 @@ func (r *Reconciler) ReconcileOnce() (changed int, err error) {
 			break
 		}
 	}
+	// Bound traffic_samples growth (#1138): once a day, drop buckets older
+	// than the retention window. The store enforces a floor that always keeps
+	// any window a quota rollover can still rebuild.
+	if pruneErr := r.pruneSamplesDue(now); pruneErr != nil {
+		reconcileErrors = append(reconcileErrors, fmt.Errorf("prune traffic samples: %w", pruneErr))
+	}
 	return changed, errors.Join(reconcileErrors...)
+}
+
+const samplePruneInterval = 24 * time.Hour
+
+func (r *Reconciler) pruneSamplesDue(now time.Time) error {
+	r.mu.Lock()
+	if now.Unix()-r.lastSamplePruned < int64(samplePruneInterval/time.Second) {
+		r.mu.Unlock()
+		return nil
+	}
+	r.lastSamplePruned = now.Unix()
+	retention := r.sampleRetention
+	r.mu.Unlock()
+	if r.traffic == nil {
+		return nil
+	}
+	_, err := r.traffic.PruneSamples(retention, now)
+	return err
 }
 
 func BindQuotaTarget(current Client, mutation QuotaMutation) QuotaMutation {

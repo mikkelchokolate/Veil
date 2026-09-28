@@ -131,7 +131,7 @@ func liveNaiveUsers(settings model.Settings, inbound model.Inbound) []caddyassem
 			delete(runtimeUsers, strings.TrimSpace(credential.Username))
 		}
 	}
-	if len(users) > 0 || len(inbound.Profiles) > 0 {
+	if len(users) > 0 || inbound.HadClientProfiles() {
 		return users
 	}
 	username := naiveUsername(settings, inbound)

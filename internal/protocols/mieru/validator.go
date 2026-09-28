@@ -36,7 +36,7 @@ func (Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bool
 			return true
 		}
 	}
-	if len(inbound.Profiles) > 0 {
+	if inbound.HadClientProfiles() {
 		return false
 	}
 	return strings.TrimSpace(model.EffectiveInboundPassword(inbound)) != ""

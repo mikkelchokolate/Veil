@@ -7,9 +7,10 @@ import { HttpResponse, http, server } from "./server";
 
 // #1043: the create/edit form must enforce the server contract
 // (internal/inbounds/inbound_validation.go) client-side — name
-// ^[A-Za-z0-9_-]+$, port an integer in [1, 65535] — and block the POST/PUT
+// ^[A-Za-z0-9_-]{1,64}$, port an integer in [1, 65535] — and block the POST/PUT
 // instead of letting malformed values sail to a raw 400 or get silently
-// corrupted by parseInt ("12abc" -> 12).
+// corrupted by parseInt ("12abc" -> 12). The 64-char name cap keeps names
+// below filesystem NAME_MAX and systemd unit limits (#1142).
 
 function renderInbounds(locale?: "en" | "ru") {
 	const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -78,7 +79,7 @@ describe("InboundsPage client-side validation (#1043)", () => {
 		fireEvent.click(screen.getByRole("button", { name: /^create$/i }));
 		expect(
 			await screen.findByText(
-				"Name may contain only Latin letters, digits, '-' and '_'.",
+				"Name must be 1-64 Latin letters, digits, '-' or '_'.",
 			),
 		).toBeInTheDocument();
 		expect(posts).toEqual([]);
@@ -86,9 +87,32 @@ describe("InboundsPage client-side validation (#1043)", () => {
 		fireEvent.change(name, { target: { value: "edge-1" } });
 		expect(
 			screen.queryByText(
-				"Name may contain only Latin letters, digits, '-' and '_'.",
+				"Name must be 1-64 Latin letters, digits, '-' or '_'.",
 			),
 		).not.toBeInTheDocument();
+	});
+
+	it("blocks a name longer than 64 chars without POSTing", async () => {
+		const posts: string[] = [];
+		stubCatalog();
+		server.use(
+			http.post("/api/inbounds", () => {
+				posts.push("post");
+				return HttpResponse.json({ name: "x", success: true });
+			}),
+		);
+		renderInbounds();
+		await openCreate();
+		fireEvent.change(screen.getByLabelText(/^name$/i), {
+			target: { value: "a".repeat(65) },
+		});
+		fireEvent.click(screen.getByRole("button", { name: /^create$/i }));
+		expect(
+			await screen.findByText(
+				"Name must be 1-64 Latin letters, digits, '-' or '_'.",
+			),
+		).toBeInTheDocument();
+		expect(posts).toEqual([]);
 	});
 
 	it.each(["", "12abc", "3.14", "0", "65536", "-1"])(

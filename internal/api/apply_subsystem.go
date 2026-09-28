@@ -15,6 +15,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/protocols/hysteria2"
 	"github.com/mikkelchokolate/Veil/internal/protocols/mieru"
 	"github.com/mikkelchokolate/Veil/internal/storage"
@@ -24,13 +25,16 @@ type clientBackgroundWorkers struct {
 	collector  *client.Collector
 	reconciler *client.Reconciler
 	expiration *expirationReconciler
+	certSync   *certSyncWorker
 }
 
 func detachClientBackgroundWorkers(s *managementState) clientBackgroundWorkers {
-	workers := clientBackgroundWorkers{collector: s.trafficCollector, reconciler: s.trafficReconciler, expiration: s.expirationReconciler}
+	workers := clientBackgroundWorkers{collector: s.trafficCollector, reconciler: s.trafficReconciler,
+		expiration: s.expirationReconciler, certSync: s.certSyncWorker}
 	s.trafficCollector = nil
 	s.trafficReconciler = nil
 	s.expirationReconciler = nil
+	s.certSyncWorker = nil
 	return workers
 }
 
@@ -43,6 +47,9 @@ func stopClientBackgroundWorkers(workers clientBackgroundWorkers) {
 	}
 	if workers.expiration != nil {
 		workers.expiration.Stop()
+	}
+	if workers.certSync != nil {
+		workers.certSync.Stop()
 	}
 }
 
@@ -251,6 +258,12 @@ func initClientSubsystem(s *managementState) {
 		s.expirationReconciler = newExpirationReconciler(s)
 		s.expirationReconciler.Start()
 	}
+	// Periodic Caddy->hysteria2 certificate resync (#1103): ACME renewals
+	// happen between applies, so the copies hysteria2 serves must be polled.
+	if s.certSyncWorker == nil {
+		s.certSyncWorker = newCertSyncWorker(s)
+		s.certSyncWorker.Start()
+	}
 }
 
 // registerTrafficProvidersLocked creates and registers TrafficProviders for
@@ -308,6 +321,7 @@ func (s *managementState) buildTrafficProvidersLocked() ([]client.TrafficProvide
 			secret = renderedSecret
 		}
 		provider := hysteria2.NewAuthenticatedStatsProvider("hysteria2:"+inbound.Name, endpoint, secret, bindings)
+		provider.WithInstanceSource(s.runtimeInstanceSource("veil-hysteria2@" + inbound.Name + ".service"))
 		providers = append(providers, provider)
 		log.Printf("traffic: registered authenticated hysteria2 provider for inbound %s", inbound.Name)
 	}
@@ -331,10 +345,40 @@ func (s *managementState) buildTrafficProvidersLocked() ([]client.TrafficProvide
 		}
 	}
 	if mieruEnabled {
-		providers = append(providers, mieru.NewStatsProvider("mieru:server", mieruIdentities))
+		providers = append(providers, mieru.NewStatsProvider("mieru:server", mieruIdentities).
+			WithInstanceSource(s.runtimeInstanceSource("veil-mieru.service")))
 		log.Printf("traffic: registered mieru metrics provider for shared daemon")
 	}
 	return providers, nil
+}
+
+// runtimeInstanceSource returns a lookup resolving a unit's current process
+// instance for traffic counter-reset detection (#1102). Both hysteria2 and
+// mieru report cumulative per-user counters that restart at zero on exec; a
+// changed instance id tells the traffic store to credit the whole post-reset
+// reading. The pair (ExecMainStartMonotonic, MainPID) is stable for the
+// process lifetime and unique across restarts. Looked up per poll — not at
+// registration — so restarts between provider rebuilds are still seen.
+// Unavailable (non-systemd, helper down) resolves to "", which degrades to
+// the negative-delta heuristic rather than failing the read.
+func (s *managementState) runtimeInstanceSource(unit string) func(context.Context) string {
+	backend := s.privileged
+	if backend == nil {
+		return nil
+	}
+	return func(ctx context.Context) string {
+		result, err := backend.ServiceStatus(ctx, privileged.ServiceStatusRequest{Units: []string{unit}})
+		if err != nil {
+			return ""
+		}
+		for _, status := range result.Services {
+			if status.Unit != unit || status.MainPID <= 0 {
+				continue
+			}
+			return fmt.Sprintf("%d-%d", status.ExecMainStartMonotonic, status.MainPID)
+		}
+		return ""
+	}
 }
 
 func (s *managementState) liveTrafficObservationConfigLocked() ([]Inbound, Settings) {

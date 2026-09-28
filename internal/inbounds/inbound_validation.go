@@ -2,7 +2,13 @@ package inbounds
 
 import "regexp"
 
-var inboundNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+// Inbound names are embedded in filesystem paths (<name>.yaml) and systemd
+// template instance names (veil-hysteria2@<name>.service, ...). The previous
+// unbounded pattern let a ~1 MiB legal-charset name commit to state but fail
+// promotion forever (ENAMETOOLONG / systemd's 256-char unit limit), leaving an
+// unapplyable record. Cap at 64 — DNS-label sized and comfortably below both
+// limits — so a name that validates can always converge.
+var inboundNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
 type InboundValidation struct{}
 

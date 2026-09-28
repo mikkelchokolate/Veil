@@ -291,7 +291,30 @@ func (s *managementState) appliedSubscription(clientID string) (client.View, []m
 	// in the past cannot keep serving credentials until the next apply.
 	view := client.View{Client: current, Status: client.ComputeStatus(current, time.Now().UTC(), false, false, len(bindings) == 0), InboundIDs: inboundIDs, HasCreds: len(plaintext) > 0}
 	links := []model.ClientLink{}
-	if view.Status == client.StatusActive {
+	// The public feed must honor the CURRENT lifecycle state, not just the
+	// applied snapshot's (#1126): a disable/expire/deplete committed but not
+	// yet converged would otherwise keep handing out credentials until the
+	// next apply. Read the live row and fail closed when it says the client
+	// is no longer active; a missing row means the client was deleted since
+	// the snapshot. When the client store is unavailable the applied snapshot
+	// check alone governs (degraded mode).
+	liveActive := true
+	if s.clientRepo != nil {
+		live, liveErr := s.clientRepo.Get(clientID)
+		switch {
+		case liveErr == nil:
+			liveBindings, bindErr := s.clientRepo.BindingsForClient(clientID)
+			if bindErr != nil {
+				return client.View{}, nil, revisions.Applied, revisions.Desired, bindErr
+			}
+			liveActive = client.ComputeStatus(live, time.Now().UTC(), false, false, len(liveBindings) == 0) == client.StatusActive
+		case errors.Is(liveErr, client.ErrNotFound):
+			liveActive = false
+		default:
+			return client.View{}, nil, revisions.Applied, revisions.Desired, liveErr
+		}
+	}
+	if view.Status == client.StatusActive && liveActive {
 		renderer := s.subRenderer.WithSettings(clientaccess.CloneSettings(snapshot.Settings))
 		links, err = renderer.LinksForSnapshot(current, bindings, plaintext, func(inboundID string) (client.InboundSnapshot, bool) {
 			value, ok := inbounds[inboundID]

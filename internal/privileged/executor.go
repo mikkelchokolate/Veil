@@ -1,6 +1,7 @@
 package privileged
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -1189,6 +1190,17 @@ func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config 
 	}
 	certOut := filepath.Join(request.OutDir, request.Domain+".crt")
 	keyOut := filepath.Join(request.OutDir, request.Domain+".key")
+	// Skip the rewrite when the destination already holds identical bytes.
+	// The periodic cert-sync worker polls on a schedule (#1103) — only a real
+	// change warrants rewriting the files and restarting the runtime serving
+	// them. The comparison happens AFTER the ownership checks above so the
+	// operation still fails closed for a non-root caller. A missing or
+	// unreadable destination still takes the write path.
+	if existingCert, certErr := readBoundedRegularFile(certOut, maxCaddyCertMaterialBytes); certErr == nil && bytes.Equal(existingCert, certData) {
+		if existingKey, keyErr := readBoundedRegularFile(keyOut, maxCaddyCertMaterialBytes); keyErr == nil && bytes.Equal(existingKey, keyData) {
+			return SyncCaddyCertResult{Found: true, CertPath: certOut, KeyPath: keyOut}, nil
+		}
+	}
 	if err := atomicfile.Write(certOut, certData, 0o600, 0o700); err != nil {
 		return SyncCaddyCertResult{}, fmt.Errorf("write certificate: %w", err)
 	}
@@ -1201,7 +1213,7 @@ func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config 
 	if err := chownForProxyReadFile(keyOut, proxyGID); err != nil {
 		return SyncCaddyCertResult{}, fmt.Errorf("set certificate key ownership: %w", err)
 	}
-	return SyncCaddyCertResult{Found: true, CertPath: certOut, KeyPath: keyOut}, nil
+	return SyncCaddyCertResult{Found: true, CertPath: certOut, KeyPath: keyOut, Changed: true}, nil
 }
 
 // caddyCertOutDirAllowed reports whether dir is exactly one of the allowed

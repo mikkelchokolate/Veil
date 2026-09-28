@@ -29,6 +29,7 @@ type recordingPrivilegedClient struct {
 	backups               []privileged.BackupRequest
 	updates               []privileged.UpdateRequest
 	syncCaddyCertRequests []privileged.SyncCaddyCertRequest
+	syncCaddyCertResult   *privileged.SyncCaddyCertResult
 	firewallRequests      []privileged.FirewallRequest
 	firewallResult        privileged.FirewallResult
 	rotateCalls           int
@@ -345,6 +346,9 @@ func (c *recordingPrivilegedClient) RestartPanel(context.Context) error {
 
 func (c *recordingPrivilegedClient) SyncCaddyCert(_ context.Context, request privileged.SyncCaddyCertRequest) (privileged.SyncCaddyCertResult, error) {
 	c.syncCaddyCertRequests = append(c.syncCaddyCertRequests, request)
+	if c.syncCaddyCertResult != nil {
+		return *c.syncCaddyCertResult, c.err
+	}
 	return privileged.SyncCaddyCertResult{Found: true, CertPath: "/etc/veil/certs/test.crt", KeyPath: "/etc/veil/certs/test.key"}, c.err
 }
 

@@ -19,8 +19,11 @@ func TestV1ClientLinksAggregatesMieruTransportBindings(t *testing.T) {
 	if udp.Code != http.StatusCreated && udp.Code != http.StatusOK {
 		t.Fatalf("udp inbound: %d %s", udp.Code, udp.Body.String())
 	}
+	// Both bindings carry the SAME credential (identity + password), so they
+	// aggregate into one link — a per-inbound NOCASE index permits reusing an
+	// identity across inbounds (#1121).
 	created := v1Request(t, router, http.MethodPost, "/api/v1/clients",
-		`{"name":"mieru-link-client","bindings":[{"inboundId":"mieru-tcp-link","credential":"alice-pass"},{"inboundId":"mieru-udp-link","credential":"alice-pass"}]}`)
+		`{"name":"mieru-link-client","bindings":[{"inboundId":"mieru-tcp-link","runtimeIdentity":"shared_mieru","credential":"alice-pass"},{"inboundId":"mieru-udp-link","runtimeIdentity":"shared_mieru","credential":"alice-pass"}]}`)
 	if created.Code != http.StatusCreated {
 		t.Fatalf("create: %d %s", created.Code, created.Body.String())
 	}
