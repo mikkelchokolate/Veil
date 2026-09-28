@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -365,11 +366,78 @@ func rewriteUnspecifiedHost(host string) string {
 	return host
 }
 
+// CandidateAddrs lists the addresses to try for a status probe. For a bare
+// host:port we try https:// then http:// — upgrade only, never downgrade.
+// The cleartext fallback sends the request — including the X-Veil-Token
+// admin credential — unencrypted, so off-loopback it requires the explicit
+// VEIL_UNSAFE_ALLOW_PUBLIC_HTTP opt-in (issue #1113).
 func CandidateAddrs(addr string) []string {
 	if strings.Contains(addr, "://") {
 		return []string{addr}
 	}
-	return []string{"https://" + addr, "http://" + addr}
+	candidates := []string{"https://" + addr}
+	if allowCleartextProbe(addr) {
+		candidates = append(candidates, "http://"+addr)
+	}
+	return candidates
+}
+
+// allowCleartextProbe reports whether probing a bare host:port over plain
+// http:// is acceptable: loopback targets stay allowed (veil status against
+// a local panel before TLS is issued), anything else needs the operator's
+// explicit unsafe opt-in.
+func allowCleartextProbe(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return true
+	}
+	return unsafeAllowPublicHTTP()
+}
+
+func unsafeAllowPublicHTTP() bool {
+	allowed, err := strconv.ParseBool(strings.TrimSpace(os.Getenv("VEIL_UNSAFE_ALLOW_PUBLIC_HTTP")))
+	return err == nil && allowed
+}
+
+// ProbeHTTPClient returns the base probe client with the admin-token
+// redirect policy applied (issue #1113): Go forwards every request header —
+// X-Veil-Token included — verbatim through 30x redirects, so a redirect to a
+// different origin has the credential stripped. Same-origin redirects keep
+// working.
+func ProbeHTTPClient(rawURL string) *http.Client {
+	return tokenSafeClient(HTTPClient(rawURL))
+}
+
+func tokenSafeClient(client *http.Client) *http.Client {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	clone := *client
+	inner := clone.CheckRedirect
+	clone.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) > 0 && !sameRequestOrigin(req.URL, via[0].URL) {
+			req.Header.Del("X-Veil-Token")
+		}
+		if inner != nil {
+			return inner(req, via)
+		}
+		if len(via) >= 10 {
+			return fmt.Errorf("stopped after 10 redirects")
+		}
+		return nil
+	}
+	return &clone
+}
+
+func sameRequestOrigin(a, b *url.URL) bool {
+	return strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Host, b.Host)
 }
 
 func (q Query) Render(status *Response) error {
@@ -409,7 +477,9 @@ func Fetch(ctx context.Context, url string, token string) (*Response, error) {
 	if token != "" {
 		req.Header.Set("X-Veil-Token", token)
 	}
-	resp, err := HTTPClient(url).Do(req)
+	// ProbeHTTPClient strips X-Veil-Token when a redirect crosses origins —
+	// Go forwards custom headers verbatim (issue #1113).
+	resp, err := ProbeHTTPClient(url).Do(req)
 	if err != nil {
 		return nil, err
 	}

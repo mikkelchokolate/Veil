@@ -164,6 +164,7 @@ export * from './mutationOutcome.ts';
 export * from './networkInterface.ts';
 export * from './networkStats.ts';
 export * from './notFoundResponse.ts';
+export * from './panelUpdateRequest.ts';
 export * from './patchApiV1ClientsIdBindingsBindingIdBody.ts';
 export * from './pingRequest.ts';
 export * from './pingResult.ts';

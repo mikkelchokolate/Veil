@@ -122,6 +122,9 @@ func Probe(ctx context.Context, contract ContainerHealthContract, token string) 
 	if err != nil {
 		return err
 	}
+	// Strip X-Veil-Token on cross-origin redirects — Go forwards custom
+	// headers verbatim (issue #1113).
+	client = tokenSafeClient(client)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err

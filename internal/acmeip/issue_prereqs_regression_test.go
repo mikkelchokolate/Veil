@@ -24,7 +24,7 @@ func TestIssueIPCertProvisionsCronAndOpenSSLBeforeAcmeInstall(t *testing.T) {
 	sys.commands[sys.key("sh", "-c", "apt-get update >/dev/null 2>&1 && apt-get install -y openssl")] = commandResult{out: "done"}
 	sys.commands[sys.key("sh", "-c", "apt-get update >/dev/null 2>&1 && apt-get install -y cron")] = commandResult{out: "done"}
 	sys.commands[sys.key("sh", "-c", "apt-get update >/dev/null 2>&1 && apt-get install -y socat")] = commandResult{out: "done"}
-	sys.commands[sys.key("sh", "-c", "curl -fsSL https://get.acme.sh | sh")] = commandResult{out: "installed"}
+	sys.commands[sys.key("sh", "-c", acmeShInstallScript())] = commandResult{out: "installed"}
 	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", "letsencrypt")] = commandResult{out: "OK"}
 	sys.commands[sys.key(acmeSh, "--issue", "-d", "1.2.3.4", "--standalone", "--server", "letsencrypt", "--certificate-profile", "shortlived", "--days", "3", "--httpport", "80", "--force")] = commandResult{out: "Cert issued"}
 	sys.commands[sys.key(acmeSh, "--installcert", "-d", "1.2.3.4", "--key-file", "/etc/veil/panel/tls.key", "--fullchain-file", "/etc/veil/panel/tls.crt", "--reloadcmd", renewReloadCmd("/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key"))] = commandResult{out: "Installed"}
@@ -41,7 +41,7 @@ func TestIssueIPCertProvisionsCronAndOpenSSLBeforeAcmeInstall(t *testing.T) {
 		}
 		return -1
 	}
-	installAcme := indexOf("get.acme.sh")
+	installAcme := indexOf(acmeShTarballSHA256)
 	if installAcme < 0 {
 		t.Fatalf("acme.sh install never ran: %v", sys.execCalls)
 	}
@@ -70,7 +70,7 @@ func TestIssueIPCertFailsWhenCrontabCannotBeProvisioned(t *testing.T) {
 		t.Fatalf("error must name the missing scheduler prerequisite, got: %v", err)
 	}
 	for _, call := range sys.execCalls {
-		if strings.Contains(call, "get.acme.sh") {
+		if strings.Contains(call, acmeShTarballSHA256) || strings.Contains(call, "get.acme.sh") {
 			t.Fatalf("acme.sh install must not run when prerequisites fail: %v", sys.execCalls)
 		}
 	}

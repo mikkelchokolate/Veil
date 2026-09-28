@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
+	versionflow "github.com/mikkelchokolate/Veil/internal/cliflow/version"
 	"github.com/mikkelchokolate/Veil/internal/releaseverify"
 )
 
@@ -27,8 +29,17 @@ type panelUpdateManifest struct {
 	Directory string `json:"directory"`
 }
 
+// updateRefusedError marks an update target the stager refused on version
+// grounds (the running build is already at or newer than the latest release,
+// or is a non-release build). The handler maps it to 409 instead of the
+// 502 used for download/verification failures (issue #1104).
+type updateRefusedError struct{ reason string }
+
+func (e *updateRefusedError) Error() string { return e.reason }
+
 type panelUpdateStager struct {
 	root          string
+	version       string
 	assetName     string
 	latest        func(context.Context) (*updateflow.Release, error)
 	download      func(context.Context, string) ([]byte, error)
@@ -36,12 +47,13 @@ type panelUpdateStager struct {
 	resolveCommit func(context.Context, string) (string, error)
 }
 
-func newPanelUpdateStager(root string) panelUpdateStager {
+func newPanelUpdateStager(root string, version string) panelUpdateStager {
 	catalog := updateflow.NewReleaseCatalog(updateflow.RepoOwner, updateflow.RepoName)
 	client := &http.Client{Timeout: 30 * time.Second}
 	catalog.HTTPClient = client
 	return panelUpdateStager{
 		root:      root,
+		version:   version,
 		assetName: updateflow.AssetName(),
 		latest: func(ctx context.Context) (*updateflow.Release, error) {
 			return catalog.LatestContext(ctx)
@@ -56,13 +68,23 @@ func newPanelUpdateStager(root string) panelUpdateStager {
 	}
 }
 
-func (s panelUpdateStager) Stage(ctx context.Context) (string, error) {
+func (s panelUpdateStager) Stage(ctx context.Context, force bool) (string, error) {
 	if s.root == "" || s.latest == nil || s.download == nil || s.assetName == "" || s.verify == nil || s.resolveCommit == nil {
 		return "", errors.New("panel update stager is not configured")
 	}
 	release, err := s.latest(ctx)
 	if err != nil {
 		return "", fmt.Errorf("fetch latest release: %w", err)
+	}
+	// Refuse targets that are not strictly newer than the running version
+	// BEFORE downloading anything: installing the latest tag over a newer
+	// build silently downgrades, and when the running build carries a newer
+	// DB schema the downgraded binary refuses to open state.json, leaving
+	// the panel dead after the restart (issue #1104). Non-release builds
+	// (main-<sha>, dev) never order against tags, so they always require
+	// force.
+	if err := s.checkUpdateTarget(release.TagName, force); err != nil {
+		return "", err
 	}
 	sourceCommit, err := s.resolveCommit(ctx, release.TagName)
 	if err != nil {
@@ -111,6 +133,55 @@ func (s panelUpdateStager) Stage(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("publish update manifest: %w", err)
 	}
 	return release.TagName, nil
+}
+
+// checkUpdateTarget refuses an update that is not strictly newer than the
+// running version unless the operator forced it. A current version that does
+// not parse as a release (install-main "main-<sha>" stamps, dev builds) is
+// always refused without force: Compare sorts it before every tag, which is
+// exactly the silent-downgrade path from issue #1104.
+func (s panelUpdateStager) checkUpdateTarget(tag string, force bool) error {
+	current := strings.TrimSpace(s.version)
+	if !versionflow.IsReleaseVersion(current) {
+		if force {
+			return nil
+		}
+		return &updateRefusedError{reason: fmt.Sprintf("running build %q is not a release version; refusing to replace it with %s (set force to override)", current, tag)}
+	}
+	if versionflow.Compare(current, tag) >= 0 && !force {
+		return &updateRefusedError{reason: fmt.Sprintf("running version %s is already at or newer than the latest release %s", current, tag)}
+	}
+	return nil
+}
+
+// decodePanelUpdateRequest reads the optional update request body. The body
+// is empty (or "{}") for a normal update; {"force": true} overrides the
+// stager's not-strictly-newer refusal — the operator-side escape hatch for
+// intentionally replacing a main/prerelease build (issue #1104).
+func decodePanelUpdateRequest(r *http.Request) (bool, error) {
+	if ct := r.Header.Get("Content-Type"); ct != "" && !isJSONMediaType(ct) {
+		return false, errUnsupportedJSONMediaType
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, maxJSONBodyBytes))
+	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			return false, errJSONBodyTooLarge
+		}
+		return false, err
+	}
+	if trimmed := strings.TrimSpace(string(body)); trimmed == "" || trimmed == "{}" {
+		return false, nil
+	}
+	var request struct {
+		Force bool `json:"force"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		return false, errors.New("invalid JSON update request; expected {} or {\"force\":true}")
+	}
+	return request.Force, nil
 }
 
 func resolveGitHubTagCommit(ctx context.Context, client *http.Client, owner, repository, tag string) (string, error) {

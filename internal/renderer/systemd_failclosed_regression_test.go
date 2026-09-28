@@ -37,6 +37,63 @@ func TestSystemdQuotePreservesInstanceSpecifier(t *testing.T) {
 	}
 }
 
+// TestSystemdQuoteExecEscapesDollar is the #1092 regression: ExecStart/
+// ExecReload perform $FOO/${FOO} variable expansion and quoting does NOT
+// suppress it, so a literal $ in an operator-chosen path must render as $$ —
+// while non-Exec directives (EnvironmentFile=, ReadOnlyPaths=,
+// InaccessiblePaths=) treat $ literally and must keep a single $.
+func TestSystemdQuoteExecEscapesDollar(t *testing.T) {
+	if got := systemdQuoteExec("/opt/$team/veil/bin/caddy"); got != "/opt/$$team/veil/bin/caddy" {
+		t.Fatalf("systemdQuoteExec = %q, want $ escaped to $$", got)
+	}
+	// Plain systemdQuote must NOT escape $ — a $$ on an Environment= line
+	// would change the literal value systemd stores.
+	if got := systemdQuote("/opt/$team/veil"); got != "/opt/$team/veil" {
+		t.Fatalf("systemdQuote = %q, want $ left literal for non-Exec lines", got)
+	}
+
+	units := RenderSystemdUnits(SystemdConfig{
+		EtcDir:      "/opt/$team/veil",
+		VarDir:      "/var/lib/veil",
+		VeilBinary:  "/usr/local/bin/veil",
+		CaddyBinary: "/usr/local/bin/caddy",
+	})
+	// The Caddy unit puts the EtcDir-derived --config path on ExecStart/
+	// ExecReload and the EtcDir itself on ReadOnlyPaths=.
+	caddy := units[UnitCaddy]
+	if !strings.Contains(caddy, "--config /opt/$$team/veil/generated/caddy/config.json") {
+		t.Fatalf("caddy ExecStart must carry the $$-escaped config path:\n%s", caddy)
+	}
+	if !strings.Contains(caddy, "ReadOnlyPaths=/opt/$team/veil") {
+		t.Fatalf("caddy ReadOnlyPaths must keep the literal $ path:\n%s", caddy)
+	}
+
+	// Sweep every rendered unit: no Exec* line may carry an expandable bare
+	// $team from the operator path. Strip the literal-$$ escapes first so a
+	// legitimately escaped "$$team" doesn't read as a bare "$team".
+	sawExecEscape := false
+	for name, unit := range units {
+		for _, line := range strings.Split(unit, "\n") {
+			isExec := strings.HasPrefix(line, "ExecStart=") ||
+				strings.HasPrefix(line, "ExecReload=") ||
+				strings.HasPrefix(line, "ExecStop=") ||
+				strings.HasPrefix(line, "ExecStartPost=")
+			if !isExec {
+				continue
+			}
+			if strings.Contains(line, "$$team") {
+				sawExecEscape = true
+			}
+			if strings.Contains(strings.ReplaceAll(line, "$$", "\x00"), "$team") {
+				t.Fatalf("unit %s leaves an expandable $ on an Exec line:\n%s", name, line)
+			}
+		}
+	}
+	if !sawExecEscape {
+		t.Fatal("no Exec line carried the $$-escaped operator path; the assert is vacuous")
+	}
+}
+
 // TestValidateSystemdConfigRejectsControlCharacters is the #1001 fail-closed
 // half: a newline, carriage return, or NUL in any rendered path would break
 // out of its directive line and inject arbitrary unit directives.

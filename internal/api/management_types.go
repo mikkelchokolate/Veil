@@ -129,7 +129,7 @@ type managementState struct {
 	serviceActionMu                sync.Mutex
 	updateMu                       sync.Mutex
 	updateWG                       sync.WaitGroup
-	updateStager                   func(context.Context) (string, error)
+	updateStager                   func(context.Context, bool) (string, error)
 	configurationValidator         ConfigurationValidator
 	enforceConfigurationValidation bool
 	privileged                     privileged.Client

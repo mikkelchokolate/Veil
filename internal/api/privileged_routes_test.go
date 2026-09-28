@@ -431,7 +431,7 @@ func TestPrivilegedUpdateStagesArtifactAndRestartsPanel(t *testing.T) {
 	client := &recordingPrivilegedClient{}
 	_, state := newApplyTrackedRouterWithState(t)
 	state.privileged = client
-	state.updateStager = func(context.Context) (string, error) { return "v0.6.0", nil }
+	state.updateStager = func(context.Context, bool) (string, error) { return "v0.6.0", nil }
 	routes := PanelRoutes{Info: ServerInfo{Version: "0.6.0"}, State: state}
 	response := httptest.NewRecorder()
 	routes.handleUpdateVersion(response, httptest.NewRequest(http.MethodPost, "/api/version/update", nil))
@@ -477,7 +477,7 @@ func TestPanelUpdateNotInstalledMarksJobFailed(t *testing.T) {
 	}
 	_, state := newApplyTrackedRouterWithState(t)
 	state.privileged = client
-	state.updateStager = func(context.Context) (string, error) { return "v0.6.0", nil }
+	state.updateStager = func(context.Context, bool) (string, error) { return "v0.6.0", nil }
 	routes := PanelRoutes{Info: ServerInfo{Version: "0.5.0"}, State: state}
 	response := httptest.NewRecorder()
 	routes.handleUpdateVersion(response, httptest.NewRequest(http.MethodPost, "/api/version/update", nil))
@@ -506,7 +506,7 @@ func TestPanelUpdateRestartFailureIsDurablyReported(t *testing.T) {
 	client := &recordingPrivilegedClient{restartErr: errors.New("restart unavailable")}
 	_, state := newApplyTrackedRouterWithState(t)
 	state.privileged = client
-	state.updateStager = func(context.Context) (string, error) { return "v0.6.0", nil }
+	state.updateStager = func(context.Context, bool) (string, error) { return "v0.6.0", nil }
 	routes := PanelRoutes{Info: ServerInfo{Version: "0.5.0"}, State: state}
 	response := httptest.NewRecorder()
 	routes.handleUpdateVersion(response, httptest.NewRequest(http.MethodPost, "/api/version/update", nil))
@@ -539,7 +539,7 @@ func TestPrivilegedUpdateUnavailableTellsOperatorHowToRepair(t *testing.T) {
 		State: newManagementState(ServerInfo{
 			Mode:                    "dev",
 			RequirePrivilegedHelper: true,
-			UpdateStager: func(context.Context) (string, error) {
+			UpdateStager: func(context.Context, bool) (string, error) {
 				t.Fatal("update should fail before staging when helper is unavailable")
 				return "", nil
 			},

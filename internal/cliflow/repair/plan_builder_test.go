@@ -274,7 +274,7 @@ func TestBuildRepairPlanFromOptionsIssuesLEIPCertForDirectMode(t *testing.T) {
 		t.Fatalf("write invalid cert: %v", err)
 	}
 
-	plan, err := buildRepairPlanFromOptions(Options{Profile: "ru-recommended", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, LEIPCert: true, LEIPCertPort: 80, PublicIP: "127.0.0.1"})
+	plan, err := buildRepairPlanFromOptions(Options{Profile: "ru-recommended", Yes: true, EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, LEIPCert: true, LEIPCertPort: 80, PublicIP: "127.0.0.1"})
 	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
@@ -339,7 +339,7 @@ func TestBuildRepairPlanFromOptionsFillsDomainForDirectMode(t *testing.T) {
 		t.Fatalf("save state: %v", err)
 	}
 
-	plan, err := buildRepairPlanFromOptions(Options{Profile: "ru-recommended", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, PublicIP: "203.0.113.1"})
+	plan, err := buildRepairPlanFromOptions(Options{Profile: "ru-recommended", Yes: true, EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, PublicIP: "203.0.113.1"})
 	if err != nil {
 		t.Fatalf("buildRepairPlanFromOptions: %v", err)
 	}
