@@ -60,23 +60,36 @@ func RunWorkflow(opts WorkflowOptions, out io.Writer, deps WorkflowDependencies)
 	}
 	fmt.Fprintf(out, "Latest release: %s\n", release.TagName)
 
-	// 2. Compare versions
-	cmp := versionflow.Compare(opts.CurrentVersion, release.TagName)
-	switch {
-	case cmp > 0:
-		fmt.Fprintf(out, "Current version (%s) is newer than latest release (%s).\n", opts.CurrentVersion, release.TagName)
+	// 2. Compare versions. A non-release build (main-<sha>, dev) does not
+	// order against tags — Compare sorts it before every release, which would
+	// silently downgrade a newer source build to the latest release and can
+	// strand the panel on an older DB schema (issue #1104). Only --force may
+	// proceed.
+	if !versionflow.IsReleaseVersion(opts.CurrentVersion) {
+		fmt.Fprintf(out, "Current version (%s) is not a release build; installing %s may be a downgrade.\n", opts.CurrentVersion, release.TagName)
 		if !opts.Force {
-			fmt.Fprintln(out, "Use --force to reinstall anyway.")
+			fmt.Fprintln(out, "Use --force to install it anyway.")
 			return nil
 		}
-	case cmp == 0:
-		fmt.Fprintf(out, "Veil is already at the latest version (%s).\n", opts.CurrentVersion)
-		if !opts.Force {
-			fmt.Fprintln(out, "Use --force to reinstall anyway.")
-			return nil
+		fmt.Fprintf(out, "Updating %s → %s (forced)\n", opts.CurrentVersion, release.TagName)
+	} else {
+		cmp := versionflow.Compare(opts.CurrentVersion, release.TagName)
+		switch {
+		case cmp > 0:
+			fmt.Fprintf(out, "Current version (%s) is newer than latest release (%s).\n", opts.CurrentVersion, release.TagName)
+			if !opts.Force {
+				fmt.Fprintln(out, "Use --force to reinstall anyway.")
+				return nil
+			}
+		case cmp == 0:
+			fmt.Fprintf(out, "Veil is already at the latest version (%s).\n", opts.CurrentVersion)
+			if !opts.Force {
+				fmt.Fprintln(out, "Use --force to reinstall anyway.")
+				return nil
+			}
+		default:
+			fmt.Fprintf(out, "Updating %s → %s\n", opts.CurrentVersion, release.TagName)
 		}
-	default:
-		fmt.Fprintf(out, "Updating %s → %s\n", opts.CurrentVersion, release.TagName)
 	}
 
 	assetName := AssetName()

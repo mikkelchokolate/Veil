@@ -82,6 +82,28 @@ func systemdQuote(p string) string {
 	return `"` + escaped + `"`
 }
 
+// systemdQuoteExec is systemdQuote for values that land on an Exec*
+// directive line (ExecStart/ExecReload/ExecStop/ExecStartPost). systemd.exec
+// performs ${FOO}/$FOO variable expansion on Exec lines — quoting does NOT
+// suppress it — so a literal $ inside an operator-chosen path (--etc-dir
+// '/opt/$team/veil', a binary override, ...) would expand at unit start to an
+// empty or unrelated value and silently point the unit at the wrong file
+// (issue #1092). $$ is the literal-$ escape for command lines.
+// Non-Exec directives (Environment=, EnvironmentFile=, ReadOnlyPaths=,
+// ConditionPathExists=, InaccessiblePaths=) must keep plain systemdQuote:
+// they treat $ literally, so $$ there would change the value itself.
+func systemdQuoteExec(p string) string {
+	return strings.ReplaceAll(systemdQuote(p), "$", "$$")
+}
+
+// systemdQuoteExecInstanceConfig combines systemdQuoteInstanceConfig's %i
+// preservation with the Exec-line $$ escape: template-unit config paths land
+// on ExecStart of veil-hysteria2@.service and veil-olcrtc@.service (issue
+// #1092).
+func systemdQuoteExecInstanceConfig(p string) string {
+	return strings.ReplaceAll(systemdQuoteInstanceConfig(p), "$", "$$")
+}
+
 // systemdQuoteInstanceConfig is systemdQuote for template-unit config paths:
 // the render itself appends a %i instance specifier (veil-hysteria2@.service,
 // veil-olcrtc@.service resolve %i to the instance name), so it must stay a
@@ -179,24 +201,28 @@ func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 	statePath := path.Join(cfg.VarDir, "state.json")
 	keyPath := path.Join(cfg.EtcDir, "state.key")
 	backupDir := path.Join(cfg.VarDir, "backups")
-	veilBin := systemdQuote(cfg.VeilBinary)
-	caddyBin := systemdQuote(cfg.CaddyBinary)
-	hysteriaBin := systemdQuote(cfg.HysteriaBinary)
-	singBoxBin := systemdQuote(cfg.SingBoxBinary)
-	mieruBin := systemdQuote(cfg.MieruBinary)
-	olcrtcBin := systemdQuote(cfg.OlcrtcBinary)
+	// Exec-destined values use systemdQuoteExec so a literal $ in an
+	// operator-chosen path renders as $$ and survives Exec-line variable
+	// expansion; Environment=/EnvironmentFile=/path-list values stay literal.
+	veilBin := systemdQuoteExec(cfg.VeilBinary)
+	caddyBin := systemdQuoteExec(cfg.CaddyBinary)
+	hysteriaBin := systemdQuoteExec(cfg.HysteriaBinary)
+	singBoxBin := systemdQuoteExec(cfg.SingBoxBinary)
+	mieruBin := systemdQuoteExec(cfg.MieruBinary)
+	olcrtcBin := systemdQuoteExec(cfg.OlcrtcBinary)
 	etcDir := systemdQuote(cfg.EtcDir)
 	varDir := systemdQuote(cfg.VarDir)
 	envFile := systemdQuote(path.Join(cfg.EtcDir, "veil.env"))
-	caddyConfig := systemdQuote(path.Join(cfg.EtcDir, "generated", "caddy", "config.json"))
-	hysteriaConfig := systemdQuoteInstanceConfig(path.Join(cfg.EtcDir, "generated", "hysteria2", "%i.yaml"))
-	olcrtcConfig := systemdQuoteInstanceConfig(path.Join(cfg.EtcDir, "generated", "olcrtc", "%i.yaml"))
-	warpConfig := systemdQuote(path.Join(cfg.EtcDir, "generated", "sing-box", "warp.json"))
-	mieruConfig := systemdQuote(path.Join(cfg.EtcDir, "generated", "mieru", "server_config.json"))
-	stateKey := systemdQuote(keyPath)
+	caddyConfig := systemdQuoteExec(path.Join(cfg.EtcDir, "generated", "caddy", "config.json"))
+	hysteriaConfig := systemdQuoteExecInstanceConfig(path.Join(cfg.EtcDir, "generated", "hysteria2", "%i.yaml"))
+	olcrtcConfig := systemdQuoteExecInstanceConfig(path.Join(cfg.EtcDir, "generated", "olcrtc", "%i.yaml"))
+	warpConfig := systemdQuoteExec(path.Join(cfg.EtcDir, "generated", "sing-box", "warp.json"))
+	mieruConfig := systemdQuoteExec(path.Join(cfg.EtcDir, "generated", "mieru", "server_config.json"))
+	stateKey := systemdQuoteExec(keyPath)
 	passphraseFile := systemdQuote(path.Join(cfg.EtcDir, "backup.passphrase"))
-	quotedState := systemdQuote(statePath)
-	quotedBackupDir := systemdQuote(backupDir)
+	passphraseFileExec := systemdQuoteExec(path.Join(cfg.EtcDir, "backup.passphrase"))
+	quotedState := systemdQuoteExec(statePath)
+	quotedBackupDir := systemdQuoteExec(backupDir)
 	return map[string]string{
 		UnitVeil: `[Unit]
 Description=Veil panel
@@ -352,7 +378,15 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlock + `InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
+` + systemdHardeningBlock + `# Kernel egress/ingress filter, evaluated allow-before-deny
+# (systemd.resource-control): proxy sessions must never reach loopback,
+# private, link-local, CGNAT, multicast or unspecified destinations even if
+# the rendered ACL regresses (issues #1095, #1097). The allow list pierces
+# only the carve-outs Veil owns: the systemd-resolved stubs for DNS, the
+# 127.40/16 traffic-stats band and the 127.41/16 WARP SOCKS band.
+IPAddressAllow=` + egressAllowHysteria2Unit + `
+IPAddressDeny=` + egressDenySystemd() + `
+InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
 
 [Install]
 WantedBy=multi-user.target
@@ -375,7 +409,13 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlockOlcrtc + `InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
+` + systemdHardeningBlockOlcrtc + `# Kernel egress/ingress filter (issue #1097): proxy sessions must never
+# reach loopback/private/link-local/CGNAT/multicast/unspecified destinations.
+# The allow list pierces only the resolved DNS stubs and the 127.41/16 WARP
+# SOCKS band olcRTC dials when WARP is enabled.
+IPAddressAllow=` + egressAllowOlcrtcUnit + `
+IPAddressDeny=` + egressDenySystemd() + `
+InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
 
 [Install]
 WantedBy=multi-user.target
@@ -409,6 +449,15 @@ LockPersonality=true
 RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
+# The SOCKS bridge is the shared egress choke point for every WARP-enabled
+# protocol, so the kernel must refuse private/loopback destinations here too:
+# sing-box resolves client domains itself and could otherwise dial a resolved
+# private address via the direct outbound (issue #1096/#1097). The allow list
+# keeps the resolved stubs plus 127.0.0.1 — the source address every local
+# SOCKS peer presents, since the kernel does not source from the 127.41/16
+# band when connecting into it.
+IPAddressAllow=` + egressAllowWarpUnit + `
+IPAddressDeny=` + egressDenySystemd() + `
 InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
 
 [Install]
@@ -448,7 +497,14 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=true
-` + systemdHardeningBlockMieru + `InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
+` + systemdHardeningBlockMieru + `# Kernel egress/ingress filter (issue #1097): Mieru's own egress rules only
+# reject private/loopback LITERAL destinations and let unresolved FQDNs pass
+# through as DIRECT, so the kernel must deny resolved restricted addresses,
+# link-local, CGNAT, ULA, multicast and unspecified targets itself. Only the
+# systemd-resolved stubs stay reachable for DNS.
+IPAddressAllow=` + egressAllowMieruUnit + `
+IPAddressDeny=` + egressDenySystemd() + `
+InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
 
 [Install]
 WantedBy=multi-user.target
@@ -462,7 +518,7 @@ After=local-fs.target
 [Service]
 Type=oneshot
 EnvironmentFile=-` + envFile + `
-ExecStart=` + veilBin + ` backup create --state ` + quotedState + ` --key-path ` + stateKey + ` --passphrase-file ` + passphraseFile + ` --output-dir ` + quotedBackupDir + ` --prune --daily 7 --weekly 4 --monthly 12
+ExecStart=` + veilBin + ` backup create --state ` + quotedState + ` --key-path ` + stateKey + ` --passphrase-file ` + passphraseFileExec + ` --output-dir ` + quotedBackupDir + ` --prune --daily 7 --weekly 4 --monthly 12
 User=root
 Group=root
 NoNewPrivileges=true
@@ -578,7 +634,7 @@ func mieruActivationExecStartPost(mieruBin, mieruConfig string) string {
 // and friends are reset before their replacement the same way.
 func dropInServiceOverrides(name string, cfg SystemdConfig) string {
 	var b strings.Builder
-	veilBin := systemdQuote(cfg.VeilBinary)
+	veilBin := systemdQuoteExec(cfg.VeilBinary)
 	envFile := systemdQuote(path.Join(cfg.EtcDir, "veil.env"))
 	writePanelEnvironment := func() {
 		b.WriteString("Environment=" + systemdAssign("VEIL_STATE_PATH", path.Join(cfg.VarDir, "state.json")) + "\n")
@@ -607,16 +663,16 @@ func dropInServiceOverrides(name string, cfg SystemdConfig) string {
 		b.WriteString("ReadWritePaths=\n")
 		b.WriteString("ReadWritePaths=" + systemdQuote(cfg.EtcDir) + " " + systemdQuote(cfg.VarDir) + " /usr/local/bin /etc/ufw\n")
 	case UnitBackupService:
-		passphraseFile := systemdQuote(path.Join(cfg.EtcDir, "backup.passphrase"))
+		passphraseFile := systemdQuoteExec(path.Join(cfg.EtcDir, "backup.passphrase"))
 		b.WriteString("ExecStart=\n")
-		b.WriteString("ExecStart=" + veilBin + " backup create --state " + systemdQuote(path.Join(cfg.VarDir, "state.json")) + " --key-path " + systemdQuote(path.Join(cfg.EtcDir, "state.key")) + " --passphrase-file " + passphraseFile + " --output-dir " + systemdQuote(path.Join(cfg.VarDir, "backups")) + " --prune --daily 7 --weekly 4 --monthly 12\n")
+		b.WriteString("ExecStart=" + veilBin + " backup create --state " + systemdQuoteExec(path.Join(cfg.VarDir, "state.json")) + " --key-path " + systemdQuoteExec(path.Join(cfg.EtcDir, "state.key")) + " --passphrase-file " + passphraseFile + " --output-dir " + systemdQuoteExec(path.Join(cfg.VarDir, "backups")) + " --prune --daily 7 --weekly 4 --monthly 12\n")
 		b.WriteString("EnvironmentFile=\n")
 		b.WriteString("EnvironmentFile=-" + envFile + "\n")
 		b.WriteString("ReadWritePaths=\n")
 		b.WriteString("ReadWritePaths=" + systemdQuote(cfg.VarDir) + "\n")
 	case UnitCaddy:
-		config := systemdQuote(path.Join(cfg.EtcDir, "generated", "caddy", "config.json"))
-		caddyBin := systemdQuote(cfg.CaddyBinary)
+		config := systemdQuoteExec(path.Join(cfg.EtcDir, "generated", "caddy", "config.json"))
+		caddyBin := systemdQuoteExec(cfg.CaddyBinary)
 		b.WriteString("ExecStart=\n")
 		b.WriteString("ExecStart=" + caddyBin + " run --config " + config + "\n")
 		b.WriteString("ExecReload=\n")
@@ -626,23 +682,23 @@ func dropInServiceOverrides(name string, cfg SystemdConfig) string {
 		b.WriteString(dropInInaccessiblePaths(cfg.VarDir))
 	case UnitHysteria2:
 		b.WriteString("ExecStart=\n")
-		b.WriteString("ExecStart=" + systemdQuote(cfg.HysteriaBinary) + " server --config " + systemdQuoteInstanceConfig(path.Join(cfg.EtcDir, "generated", "hysteria2", "%i.yaml")) + "\n")
+		b.WriteString("ExecStart=" + systemdQuoteExec(cfg.HysteriaBinary) + " server --config " + systemdQuoteExecInstanceConfig(path.Join(cfg.EtcDir, "generated", "hysteria2", "%i.yaml")) + "\n")
 		b.WriteString(dropInInaccessiblePaths(cfg.VarDir))
 	case UnitOlcrtc:
 		b.WriteString("ExecStart=\n")
-		b.WriteString("ExecStart=" + systemdQuote(cfg.OlcrtcBinary) + " " + systemdQuoteInstanceConfig(path.Join(cfg.EtcDir, "generated", "olcrtc", "%i.yaml")) + "\n")
+		b.WriteString("ExecStart=" + systemdQuoteExec(cfg.OlcrtcBinary) + " " + systemdQuoteExecInstanceConfig(path.Join(cfg.EtcDir, "generated", "olcrtc", "%i.yaml")) + "\n")
 		b.WriteString(dropInInaccessiblePaths(cfg.VarDir))
 	case UnitWarp:
-		config := systemdQuote(path.Join(cfg.EtcDir, "generated", "sing-box", "warp.json"))
-		singBoxBin := systemdQuote(cfg.SingBoxBinary)
+		config := systemdQuoteExec(path.Join(cfg.EtcDir, "generated", "sing-box", "warp.json"))
+		singBoxBin := systemdQuoteExec(cfg.SingBoxBinary)
 		b.WriteString("ExecStart=\n")
 		b.WriteString("ExecStart=" + singBoxBin + " run -c " + config + "\n")
 		b.WriteString("ExecReload=\n")
 		b.WriteString("ExecReload=" + singBoxBin + " check -c " + config + "\n")
 		b.WriteString(dropInInaccessiblePaths(cfg.VarDir))
 	case UnitMieru:
-		mieruBin := systemdQuote(cfg.MieruBinary)
-		mieruConfig := systemdQuote(path.Join(cfg.EtcDir, "generated", "mieru", "server_config.json"))
+		mieruBin := systemdQuoteExec(cfg.MieruBinary)
+		mieruConfig := systemdQuoteExec(path.Join(cfg.EtcDir, "generated", "mieru", "server_config.json"))
 		b.WriteString("ExecStart=\n")
 		b.WriteString("ExecStart=" + mieruBin + " run\n")
 		b.WriteString("ExecStartPost=\n")

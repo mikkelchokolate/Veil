@@ -52,7 +52,7 @@ func TestRepairLEIPCertHonoursControlledCA(t *testing.T) {
 		t.Fatalf("write key: %v", err)
 	}
 
-	if _, err := BuildPlanFromOptions(Options{Profile: "ru-recommended", EtcDir: etcDir, VarDir: t.TempDir(), SystemdDir: t.TempDir(), LEIPCert: true, PublicIP: "203.0.113.10"}, PlanDependencies{Secret: func(label string) string { return "x-" + label }}); err != nil {
+	if _, err := BuildPlanFromOptions(Options{Profile: "ru-recommended", Yes: true, EtcDir: etcDir, VarDir: t.TempDir(), SystemdDir: t.TempDir(), LEIPCert: true, PublicIP: "203.0.113.10"}, PlanDependencies{Secret: func(label string) string { return "x-" + label }}); err != nil {
 		t.Fatalf("BuildPlanFromOptions: %v", err)
 	}
 	if got.CAServer != "https://ca.internal/acme" {

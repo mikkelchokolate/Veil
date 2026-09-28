@@ -21,7 +21,7 @@ type releaseWorkflowStep struct {
 	With map[string]any `yaml:"with"`
 }
 
-func releaseWorkflowSteps(t *testing.T) (map[string]string, []releaseWorkflowStep) {
+func releaseWorkflowSteps(t *testing.T) (topLevel map[string]string, effective map[string]string, steps []releaseWorkflowStep) {
 	t.Helper()
 	body, err := os.ReadFile("../../.github/workflows/release.yml")
 	if err != nil {
@@ -30,20 +30,29 @@ func releaseWorkflowSteps(t *testing.T) (map[string]string, []releaseWorkflowSte
 	var workflow struct {
 		Permissions map[string]string `yaml:"permissions"`
 		Jobs        map[string]struct {
-			Steps []releaseWorkflowStep `yaml:"steps"`
+			Permissions map[string]string     `yaml:"permissions"`
+			Steps       []releaseWorkflowStep `yaml:"steps"`
 		} `yaml:"jobs"`
 	}
 	if err := yaml.Unmarshal(body, &workflow); err != nil {
 		t.Fatalf("release.yml must parse as workflow YAML: %v", err)
 	}
-	var steps []releaseWorkflowStep
+	effective = map[string]string{}
+	for k, v := range workflow.Permissions {
+		effective[k] = v
+	}
 	for _, job := range workflow.Jobs {
 		steps = append(steps, job.Steps...)
+		// Publishing jobs escalate per-job (#1146): the effective permission
+		// set is the top-level floor plus any per-job grants.
+		for k, v := range job.Permissions {
+			effective[k] = v
+		}
 	}
 	if len(steps) == 0 {
 		t.Fatal("release.yml has no job steps")
 	}
-	return workflow.Permissions, steps
+	return workflow.Permissions, effective, steps
 }
 
 func stepHasUse(steps []releaseWorkflowStep, prefix string) bool {
@@ -70,11 +79,16 @@ func stepRunContains(steps []releaseWorkflowStep, want string) bool {
 // provenance attestation — each proven by an actual `uses:`/`run:`/`with:`
 // field, never by a comment or step name alone.
 func TestReleaseWorkflowBuildsSignedPackagesAndSBOM(t *testing.T) {
-	permissions, steps := releaseWorkflowSteps(t)
+	topLevel, permissions, steps := releaseWorkflowSteps(t)
 
 	for _, perm := range []string{"id-token", "attestations"} {
 		if got := permissions[perm]; got != "write" {
 			t.Fatalf("release workflow permissions[%q] = %q, want \"write\" (keyless signing/attestation)", perm, got)
+		}
+		// The grants must live on the publishing job, not the workflow floor:
+		// a top-level write token defeats the least-privilege gate (#1146).
+		if got := topLevel[perm]; got == "write" {
+			t.Fatalf("release workflow top-level permissions[%q] = \"write\" — publishing grants must be per-job", perm)
 		}
 	}
 
@@ -349,30 +363,20 @@ func TestPackageScriptsExist(t *testing.T) {
 		t.Fatal(err)
 	}
 	postinstallScript := stripHashComments(t, strings.ReplaceAll(string(postinstall), "\r\n", "\n"))
-	// #775: backup members store restore mode in their own permission bits.
-	// The real contract is structural — the backup-dir loop must chmod
-	// directories only; a `-type f` normalization would silently flatten
-	// member modes and rollback would restore the wrong mode. Asserting the
-	// comment would be comment-satisfiable.
-	loopStart := strings.Index(postinstallScript, "for dir in backups promotion-backups migration-backups")
-	if loopStart < 0 {
-		t.Fatal("postinstall.sh lost the backup-dir ownership loop over backups/promotion-backups/migration-backups")
+	// #1143: the recursive ownership/mode pass moved out of shell — find's
+	// -type lstat and a following chmod/chown race a swapped symlink onto an
+	// arbitrary target. The script must invoke the descriptor-pinned Go
+	// migrator (which also preserves the #775 contract: backup member modes
+	// carry restore semantics, so only directories are normalized).
+	if !strings.Contains(postinstallScript, "/usr/local/bin/veil helper migrate") {
+		t.Fatal("postinstall.sh must delegate the managed-tree permission pass to `veil helper migrate`")
 	}
-	loopEnd := strings.Index(postinstallScript[loopStart:], "\ndone")
-	if loopEnd < 0 {
-		t.Fatal("postinstall.sh backup-dir loop is not terminated by done")
+	for _, banned := range []string{"-exec chmod", "chown -R", "find /var/lib", `find "/var/lib`} {
+		if strings.Contains(postinstallScript, banned) {
+			t.Fatalf("postinstall.sh must not walk service-owned trees with %q — leaf swap races chmod arbitrary targets (#1143)", banned)
+		}
 	}
-	backupLoop := postinstallScript[loopStart : loopStart+loopEnd]
-	if !strings.Contains(backupLoop, `install -d -m 0700 -o root -g root "/var/lib/veil/$dir"`) {
-		t.Fatalf("backup dirs must be root-owned 0700:\n%s", backupLoop)
-	}
-	if !strings.Contains(backupLoop, "-type d -exec chmod 0700") {
-		t.Fatalf("backup-dir loop must normalize directories to 0700:\n%s", backupLoop)
-	}
-	if strings.Contains(backupLoop, "-type f -exec chmod") {
-		t.Fatalf("backup-dir loop must NOT normalize member files — restore mode lives in member permission bits:\n%s", backupLoop)
-	}
-	if !strings.Contains(postinstallScript, "/etc/veil/panel") {
+	if !strings.Contains(string(postinstall), "/etc/veil/panel") {
 		t.Fatal("postinstall.sh must migrate Panel TLS material under /etc/veil/panel")
 	}
 	if strings.Contains(postinstallScript, "usermod -aG veil-proxy veil || true") ||

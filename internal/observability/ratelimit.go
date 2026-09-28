@@ -119,7 +119,10 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 		}
 		r = clientaddr.WithContext(r, ip)
 
-		decision := NewRateLimitDecisionModule(int(rl.rate*60), rl.burst, limits, readLimits).Decide(r.Method, r.URL.Path, ip)
+		// Bucket identities aggregate IPv6 clients at /64 granularity so
+		// prefix rotation cannot mint unlimited buckets; the request context
+		// keeps the exact address for handlers/audit (#1101).
+		decision := NewRateLimitDecisionModule(int(rl.rate*60), rl.burst, limits, readLimits).Decide(r.Method, r.URL.Path, clientaddr.RateLimitKey(ip))
 		if !decision.Limited {
 			next.ServeHTTP(w, r)
 			return

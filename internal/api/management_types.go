@@ -81,29 +81,40 @@ type managementState struct {
 	// construction. Backup restore rewinds the mutable snapshot-managed fields
 	// to these defaults so the post-restore reload replaces state instead of
 	// merging over stale pre-restore values (#1053).
-	defaultInput         managementstate.DefaultInput
-	settings             Settings
-	inbounds             []Inbound
-	rules                []RoutingRule
-	routingPreset        string
-	routingSource        RoutingSource
-	warp                 WarpConfig
-	users                []User
-	orphanedUnits        []string
+	defaultInput  managementstate.DefaultInput
+	settings      Settings
+	inbounds      []Inbound
+	rules         []RoutingRule
+	routingPreset string
+	routingSource RoutingSource
+	warp          WarpConfig
+	users         []User
+	// usersEverExisted is the "provisioned" latch: once a panel user exists
+	// it stays set even if users later drop to zero via rollback/restore, so
+	// loopback dev-anonymous admin and the NaivePassword fallback can never
+	// be re-enabled on an already-configured instance (#1100). The matching
+	// marker file beside state.json makes the latch durable across restarts.
+	usersEverExisted              bool
+	usersProvisionedMarkerWritten bool
+	orphanedUnits                 []string
 	// previousServiceStates captures each touched unit's "active|unitFileState"
 	// before an apply mutates it, so a promotion rollback restores the exact
 	// lifecycle state instead of unconditionally enable+starting units that
 	// may have been stopped or disabled (#1135).
 	previousServiceStates map[string]string
-	sessions             *SessionRegistry
-	loginUsernameLimiter *observability.RateLimiterEngine
-	httpRateLimiter      *observability.RateLimiter
-	idempotency          *idempotencyStore
-	loginBackoff         map[string]loginBackoffState
-	loginBackoffNow      func() time.Time
-	audit                *audit.Recorder
-	auditHealthMu        sync.RWMutex
-	auditDegraded        bool
+	sessions              *SessionRegistry
+	loginUsernameLimiter  *observability.RateLimiterEngine
+	// loginGlobalLimiter is the process-wide per-username login budget that
+	// backs delayGlobalUsernameAttempt; per-(client,username) buckets alone
+	// cannot stop a spray distributed across many IPv6 prefixes (#1101).
+	loginGlobalLimiter *observability.RateLimiterEngine
+	httpRateLimiter    *observability.RateLimiter
+	idempotency        *idempotencyStore
+	loginBackoff       map[string]loginBackoffState
+	loginBackoffNow    func() time.Time
+	audit              *audit.Recorder
+	auditHealthMu      sync.RWMutex
+	auditDegraded      bool
 	// auditSpoolDurable is true when the last degraded append was durably
 	// accepted by the critical spool, so /health can report an honest
 	// audit_spool status instead of a blanket durability_unverified (#981).
@@ -123,7 +134,7 @@ type managementState struct {
 	serviceActionMu                sync.Mutex
 	updateMu                       sync.Mutex
 	updateWG                       sync.WaitGroup
-	updateStager                   func(context.Context) (string, error)
+	updateStager                   func(context.Context, bool) (string, error)
 	configurationValidator         ConfigurationValidator
 	enforceConfigurationValidation bool
 	privileged                     privileged.Client

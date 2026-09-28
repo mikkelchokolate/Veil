@@ -42,8 +42,24 @@ func NewStatsProvider(key, endpoint string, bindings map[string]string) *StatsPr
 		key:        key,
 		endpoint:   endpoint,
 		bindings:   copyBindings,
-		httpClient: &http.Client{Timeout: 5 * time.Second},
+		httpClient: &http.Client{Timeout: 5 * time.Second, Transport: statsTransport(endpoint)},
 	}
+}
+
+// statsTransport binds the dial source to the loopback endpoint address. The
+// veil-hysteria2@.service ingress filter (IPAddressAllow) accepts traffic only
+// from the 127.40.0.0/16 stats band — binding LocalAddr to the destination
+// address makes the panel's source deterministic instead of depending on
+// kernel source-address selection for 127/8 (#1095).
+func statsTransport(endpoint string) *http.Transport {
+	transport := &http.Transport{}
+	if parsed, err := url.Parse(endpoint); err == nil {
+		if ip := net.ParseIP(parsed.Hostname()); ip != nil && ip.IsLoopback() {
+			dialer := &net.Dialer{LocalAddr: &net.TCPAddr{IP: ip}}
+			transport.DialContext = dialer.DialContext
+		}
+	}
+	return transport
 }
 
 // NewAuthenticatedStatsProvider is the production constructor. The management

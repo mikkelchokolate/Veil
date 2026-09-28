@@ -419,6 +419,10 @@ func applyManagementSnapshotExact(state *managementState, snapshot managementSna
 	state.routingPreset = cloned.RoutingPreset
 	state.routingSource = cloned.RoutingSource
 	state.warp = cloned.Warp
+	state.users = cloned.Users
+	// Rolling back TO a user-bearing snapshot provisions the instance too;
+	// rolling back to a zero-user snapshot can never clear the latch (#1100).
+	state.noteUsersProvisionedLocked()
 }
 
 func roleFromRequestContext(r *http.Request) string {

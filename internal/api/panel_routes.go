@@ -181,7 +181,11 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 			if !authenticated {
 				routes.State.mu.Lock()
 				noUsers := len(routes.State.users) == 0
-				setupRequired := routes.State.setupAllowed && !routes.State.setup.Completed && noUsers
+				// A provisioned-then-emptied instance must not render the
+				// first-run setup page again — setup stays closed and the
+				// operator recovers via `veil admin reset` (#1100).
+				setupRequired := routes.State.setupAllowed && !routes.State.setup.Completed && noUsers &&
+					!routes.State.usersProvisionedLocked()
 				routes.State.mu.Unlock()
 				if setupRequired {
 					writeLegacyHTML(panel.ReliableSetupHTML(routes.BasePath, locale))
@@ -261,7 +265,8 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		methodNotAllowed(w, http.MethodPost)
 		return
 	}
-	if err := validateEmptyJSONBody(r); err != nil {
+	force, err := decodePanelUpdateRequest(r)
+	if err != nil {
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -283,9 +288,17 @@ func (routes PanelRoutes) handleUpdateVersion(w http.ResponseWriter, r *http.Req
 		writeError(w, "panel update staging is unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	version, err := routes.State.updateStager(r.Context())
+	version, err := routes.State.updateStager(r.Context(), force)
 	if err != nil {
-		writeError(w, err.Error(), http.StatusBadGateway)
+		var refused *updateRefusedError
+		if errors.As(err, &refused) {
+			// A refused target (already at/newer, or a non-release build
+			// without force) is a client-level conflict, not an upstream
+			// failure (issue #1104).
+			writeError(w, refused.Error(), http.StatusConflict)
+		} else {
+			writeError(w, err.Error(), http.StatusBadGateway)
+		}
 		return
 	}
 	updateJob, err := routes.State.createPanelUpdateJob(version)

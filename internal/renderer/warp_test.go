@@ -37,7 +37,9 @@ func TestRenderWarpSingBoxConfigWritesWireGuardEndpointAndLocalSocksInbound(t *t
 	// sing-box >= 1.11 schema: WireGuard is an endpoint, not an outbound.
 	for _, want := range []string{
 		`"type": "socks"`,
-		`"listen": "127.0.0.1"`,
+		// the historical default is migrated to the reserved 127.41.0.0/16 band
+		// so the systemd egress allow-list covers it
+		`"listen": "127.41.0.1"`,
 		`"listen_port": 40000`,
 		`"endpoints":`,
 		`"type": "wireguard"`,
@@ -285,5 +287,23 @@ func TestRenderWarpSingBoxConfigKeepsProxyOffWarp(t *testing.T) {
 	}
 	if strings.Contains(body, `"final": "warp"`) {
 		t.Fatalf("all → proxy must not default to warp:\n%s", body)
+	}
+}
+
+func TestRenderWarpSingBoxPreservesExplicitLoopbackAlternative(t *testing.T) {
+	body, err := RenderWarpSingBox(WarpSingBoxConfig{
+		Endpoint:      "engage.cloudflareclient.com:2408",
+		PrivateKey:    "warp-private-key",
+		LocalAddress:  "172.16.0.2/32",
+		PeerPublicKey: "bmXOC+F1L2oi7pR9...",
+		SocksListen:   "127.0.0.5",
+		SocksPort:     40000,
+		MTU:           1280,
+	})
+	if err != nil {
+		t.Fatalf("render warp sing-box: %v", err)
+	}
+	if !strings.Contains(body, `"listen": "127.0.0.5"`) {
+		t.Fatalf("explicit SocksListen must be preserved:\n%s", body)
 	}
 }

@@ -17,7 +17,11 @@ func (p Plugin) BuildLinks(settings model.Settings, inbound model.Inbound) ([]mo
 	}
 	insecure := hysteria2Insecure(settings, inbound)
 	if len(creds) == 0 {
-		if len(inbound.Profiles) > 0 {
+		if len(inbound.Profiles) > 0 || inbound.HasClientBindings {
+			// Profiles exist but are all disabled, or normalized bindings
+			// exist with no usable credential: the inbound is
+			// credential-managed — never re-advertise the shared fallback
+			// password (issue #1098; mirrors the registry fallback gate).
 			return nil, nil
 		}
 		password := hysteria2Password(settings, inbound)

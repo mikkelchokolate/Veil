@@ -300,6 +300,15 @@ func naiveUsers(inbound model.Inbound, settings model.Settings) []CaddyNaiveUser
 	if len(users) > 0 {
 		return users
 	}
+	if len(inbound.Profiles) > 0 || inbound.HasClientBindings {
+		// Profiles exist but are all disabled, or normalized bindings exist
+		// with every credential revoked/expired/depleted: never revive the
+		// inbound fallback — and never emit zero users, which forward_proxy
+		// treats as unauthenticated open relay. The sentinel account can
+		// never authenticate (issue #1098).
+		user, pass := model.RevokedClientCredential(settings, inbound)
+		return []CaddyNaiveUser{{Username: user, Password: pass}}
+	}
 	username := model.EffectiveProtocolString(inbound, settings, "naiveUsername", inbound.NaiveUsername, settings.NaiveUsername)
 	if username == "" {
 		username = model.DefaultNaiveUsername

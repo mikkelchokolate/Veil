@@ -10,6 +10,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/inbounds"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
+	"github.com/mikkelchokolate/Veil/internal/routing"
 	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 )
 
@@ -187,6 +188,11 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 			}
 			if rule.Match == "" {
 				errs = append(errs, "routingRules["+itoa(i)+"].match is required")
+			} else if _, err := routing.ParseMatch(rule.Match); err != nil {
+				// Stored rules bypass RoutingRuleValidation, so a match the
+				// stricter ParseMatch rejects must fail validation loudly —
+				// otherwise renderers silently drop the whole rule (#1082).
+				errs = append(errs, "routingRules["+itoa(i)+"].match is invalid: "+err.Error())
 			}
 			if rule.Outbound == "" {
 				errs = append(errs, "routingRules["+itoa(i)+"].outbound is required")

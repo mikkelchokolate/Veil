@@ -71,11 +71,12 @@ func BuildPlanFromOptions(opts Options, deps PlanDependencies) (installer.Repair
 		}
 	}
 
-	// --dry-run must not mutate the host: ACME issuance installs packages,
-	// pipes curl|sh, binds the HTTP-01 port, and writes cert material — all
-	// real changes that belong to the apply phase, not plan building
-	// (issue #1021).
-	if opts.LEIPCert && built.PanelAccess == "direct" && !opts.DryRun {
+	// Plan building stays read-only until the operator authorizes mutation:
+	// ACME issuance installs packages, downloads/verifies acme.sh, binds the
+	// HTTP-01 port, and writes cert material — all real changes that belong
+	// to the apply phase. Without --yes a bare `veil repair` is refused by
+	// ApplyPlan, so it must not mutate here either (issues #1021, #1128).
+	if opts.LEIPCert && built.PanelAccess == "direct" && opts.mutates() {
 		if err := maybeIssueLEIPCert(context.Background(), &built, opts); err != nil {
 			// Repair should not fail because a certificate could not be renewed;
 			// the existing self-signed cert from the profile is still usable.
@@ -134,7 +135,7 @@ func addPanelStateRepairActions(plan installer.RepairPlan, opts Options, deps Pl
 	// Direct mode needs a domain for client links. Re-check the field after
 	// acquiring the cross-process barrier so repair cannot overwrite a newer
 	// Panel mutation observed after the read-only plan snapshot above.
-	if resolvedIP != "" && snapshot.Settings.Domain == "" && !opts.DryRun {
+	if resolvedIP != "" && snapshot.Settings.Domain == "" && opts.mutates() {
 		keyPath := filepath.Join(opts.EtcDir, "state.key")
 		if _, err := statecommit.Update(statecommit.UpdateOptions{
 			StatePath: statePath, KeyPath: keyPath,

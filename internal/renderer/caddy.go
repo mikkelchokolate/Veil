@@ -31,6 +31,11 @@ type NaiveConfig struct {
 	PanelPort    int
 	WebBasePath  string
 	Upstream     string
+	// ACLDeny lists the forward_proxy `deny` subjects emitted inside the
+	// acl{} block before any allow rule. RenderNaiveCaddyfile fills it with
+	// the canonical egress deny set when unset so no caller can omit the
+	// restricted-destination denies (issues #1096, #1097).
+	ACLDeny []string
 }
 
 func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
@@ -75,6 +80,9 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 		return "", fmt.Errorf("fallback root must be within %s: %s", fallbackBase, cfg.FallbackRoot)
 	}
 	cfg.FallbackRoot = filepath.ToSlash(cfg.FallbackRoot)
+	if len(cfg.ACLDeny) == 0 {
+		cfg.ACLDeny = EgressDenyCIDRs()
+	}
 
 	// Keep this layout aligned with the NaiveProxy upstream server example.
 	// In particular, :port must be the first site address and production must
@@ -108,6 +116,9 @@ func RenderNaiveCaddyfile(cfg NaiveConfig) (string, error) {
 {{- if .Upstream }}
     upstream {{ .Upstream }}
 {{- end }}
+    acl {
+      deny{{ range .ACLDeny }} {{ . }}{{ end }}
+    }
   }
 
 {{- if .PanelPort }}

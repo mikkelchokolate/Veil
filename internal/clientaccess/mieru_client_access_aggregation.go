@@ -34,7 +34,11 @@ func (MieruClientAccessAggregator) Build(settings Settings, inbounds []Inbound) 
 		}
 		if len(credentials) == 0 {
 			password := model.EffectiveInboundPassword(inbound)
-			if len(inbound.Profiles) > 0 || password == "" {
+			// Never fall back to the inbound password when the inbound is
+			// credential-managed: disabled profiles or revoked/expired/depleted
+			// normalized bindings mean the operator revoked every client
+			// (issue #1098).
+			if len(inbound.Profiles) > 0 || inbound.HasClientBindings || password == "" {
 				continue
 			}
 			credential := ClientCredential{Name: inbound.Name, Username: inbound.Name, Password: password}

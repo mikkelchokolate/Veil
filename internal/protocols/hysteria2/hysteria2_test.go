@@ -343,7 +343,7 @@ func TestRenderConfigWithWarpUpstream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(artifacts[0].Body, "addr: 127.0.0.1:40001") {
+	if !strings.Contains(artifacts[0].Body, "addr: 127.41.0.1:40001") {
 		t.Errorf("expected warp upstream, got:\n%s", artifacts[0].Body)
 	}
 }
@@ -432,7 +432,7 @@ func TestRenderConfigWithWarpDefaultSocksPort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(artifacts[0].Body, "addr: 127.0.0.1:40000") {
+	if !strings.Contains(artifacts[0].Body, "addr: 127.41.0.1:40000") {
 		t.Errorf("expected default warp socks port, got:\n%s", artifacts[0].Body)
 	}
 }
@@ -1108,5 +1108,36 @@ func TestHysteria2InsecureFallbackChain(t *testing.T) {
 	}
 	if !strings.Contains(links[0].URI, "insecure=1") {
 		t.Errorf("settings ProtocolFields insecure should win: %q", links[0].URI)
+	}
+}
+
+func TestBuildLinksOmitsFallbackWhenInboundHasClientBindings(t *testing.T) {
+	p := New()
+	settings := model.Settings{Domain: "example.com"}
+	links, err := p.BuildLinks(settings, model.Inbound{
+		Name: "h2", Protocol: "hysteria2", Transport: "udp", Port: 8443,
+		Password: "shared-pass", HasClientBindings: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(links) != 0 {
+		t.Fatalf("credential-managed inbound must not emit fallback link, got %+v", links)
+	}
+}
+
+func TestBuildLinksOmitsFallbackWhenAllProfilesDisabled(t *testing.T) {
+	p := New()
+	settings := model.Settings{Domain: "example.com"}
+	links, err := p.BuildLinks(settings, model.Inbound{
+		Name: "h2", Protocol: "hysteria2", Transport: "udp", Port: 8443,
+		Password: "shared-pass",
+		Profiles: []model.ClientProfile{{Name: "alice", Password: "alice-pass", Enabled: false}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(links) != 0 {
+		t.Fatalf("all-disabled profiles must not revive fallback link, got %+v", links)
 	}
 }

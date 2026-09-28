@@ -56,11 +56,14 @@ func TestResolveListen(t *testing.T) {
 }
 
 func TestCandidateAddrs(t *testing.T) {
+	t.Setenv("VEIL_UNSAFE_ALLOW_PUBLIC_HTTP", "")
 	cases := []struct {
 		in   string
 		want []string
 	}{
 		{"127.0.0.1:2096", []string{"https://127.0.0.1:2096", "http://127.0.0.1:2096"}},
+		{"localhost:2096", []string{"https://localhost:2096", "http://localhost:2096"}},
+		{"[::1]:2096", []string{"https://[::1]:2096", "http://[::1]:2096"}},
 		{"https://example.com", []string{"https://example.com"}},
 		{"http://example.com", []string{"http://example.com"}},
 		{"tcp://example.com", []string{"tcp://example.com"}},
@@ -75,6 +78,86 @@ func TestCandidateAddrs(t *testing.T) {
 				t.Fatalf("CandidateAddrs(%q) = %+v, want %+v", c.in, got, c.want)
 			}
 		}
+	}
+}
+
+// Issue #1113: off-loopback probes must not fall back to cleartext http:// —
+// the request carries the X-Veil-Token admin credential — unless the operator
+// explicitly opts in with VEIL_UNSAFE_ALLOW_PUBLIC_HTTP.
+func TestCandidateAddrsPublicHTTPOptIn(t *testing.T) {
+	t.Setenv("VEIL_UNSAFE_ALLOW_PUBLIC_HTTP", "")
+	if got := CandidateAddrs("203.0.113.10:2096"); len(got) != 1 || got[0] != "https://203.0.113.10:2096" {
+		t.Fatalf("public candidate without opt-in = %+v", got)
+	}
+	if got := CandidateAddrs("panel.example.com:2096"); len(got) != 1 || got[0] != "https://panel.example.com:2096" {
+		t.Fatalf("public hostname candidate without opt-in = %+v", got)
+	}
+	t.Setenv("VEIL_UNSAFE_ALLOW_PUBLIC_HTTP", "true")
+	if got := CandidateAddrs("203.0.113.10:2096"); len(got) != 2 || got[1] != "http://203.0.113.10:2096" {
+		t.Fatalf("public candidate with opt-in = %+v", got)
+	}
+}
+
+// Issue #1113: X-Veil-Token is a custom header — Go's default redirect
+// handling would forward it verbatim to ANY 30x target, including a
+// different origin. ProbeHTTPClient strips it once the redirect crosses
+// origins; same-origin redirects keep it.
+func TestFetchStripsTokenOnCrossOriginRedirect(t *testing.T) {
+	var leakedToken string
+	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		leakedToken = r.Header.Get("X-Veil-Token")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(&Response{Version: "1.0.0"})
+	}))
+	defer foreign.Close()
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, foreign.URL+"/status", http.StatusFound)
+	}))
+	defer origin.Close()
+
+	old := HTTPClient
+	HTTPClient = func(string) *http.Client { return origin.Client() }
+	t.Cleanup(func() { HTTPClient = old })
+
+	resp, err := Fetch(context.Background(), origin.URL+"/api/status", "secret-token")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if resp.Version != "1.0.0" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if leakedToken != "" {
+		t.Fatalf("X-Veil-Token leaked to foreign origin: %q", leakedToken)
+	}
+}
+
+func TestFetchKeepsTokenOnSameOriginRedirect(t *testing.T) {
+	var gotToken string
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/status" {
+			http.Redirect(w, r, "/api/status2", http.StatusFound)
+			return
+		}
+		gotToken = r.Header.Get("X-Veil-Token")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(&Response{Version: "1.0.0"})
+	}))
+	defer origin.Close()
+
+	old := HTTPClient
+	HTTPClient = func(string) *http.Client { return origin.Client() }
+	t.Cleanup(func() { HTTPClient = old })
+
+	resp, err := Fetch(context.Background(), origin.URL+"/api/status", "secret-token")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if resp.Version != "1.0.0" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if gotToken != "secret-token" {
+		t.Fatalf("same-origin redirect lost the token: %q", gotToken)
 	}
 }
 

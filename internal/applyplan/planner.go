@@ -149,6 +149,29 @@ func Build(input Input) model.ApplyPlanResponse {
 		default:
 			plan.Errors = append(plan.Errors, "unsupported routing outbound: "+rule.Outbound)
 		}
+		// Stored, restored, rolled-back, and imported rules never pass
+		// RoutingRuleValidation, so a match the stricter ParseMatch rejects
+		// must fail loudly here — otherwise every renderer just drops the
+		// whole rule and traffic silently falls through to final (#1082).
+		if _, err := routing.ParseMatch(rule.Match); err != nil {
+			plan.Errors = append(plan.Errors, "routing rule "+rule.Name+" has an invalid match: "+err.Error())
+			continue
+		}
+		// A match that still parses but re-splits differently than a plain
+		// comma split silently changed meaning when the regexp atom swallowed
+		// trailing bare segments under the #1071 comma semantics — warn
+		// instead of letting the dead regexp ship (#1082).
+		if routing.MatchResplitsAtoms(rule.Match) {
+			plan.Issues = append(plan.Issues, model.ValidationIssue{
+				Code:     "routing_match_resplit",
+				Severity: "warning",
+				Field:    "match",
+				Message: fmt.Sprintf(
+					"routing rule %q: match %q contains a regexp atom followed by comma-separated terms; the whole tail is parsed as a single regexp, so terms like domains or CIDRs after the comma no longer match anything", rule.Name, rule.Match),
+				Remediation: "Move bare domain/CIDR atoms before the regexp atom, or split them into separate routing rules.",
+				Source:      "routing",
+			})
+		}
 	}
 	for _, file := range input.RoutingSource.Files {
 		if file.Name == "" || file.URL == "" {

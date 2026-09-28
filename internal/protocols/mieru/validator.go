@@ -36,7 +36,10 @@ func (Plugin) HasCredential(settings model.Settings, inbound model.Inbound) bool
 			return true
 		}
 	}
-	if len(inbound.Profiles) > 0 {
+	// All-disabled profiles and normalized bindings with no usable credential
+	// are both deliberate revocation states — the legacy inbound password does
+	// not count as a live user (issue #1098).
+	if len(inbound.Profiles) > 0 || inbound.HasClientBindings {
 		return false
 	}
 	return strings.TrimSpace(model.EffectiveInboundPassword(inbound)) != ""

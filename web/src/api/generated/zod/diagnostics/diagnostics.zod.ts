@@ -123,7 +123,6 @@ export const PostApiToolsSpeedtestResponse = zod.object({
   "server": zod.string().optional(),
   "pingMs": zod.number(),
   "downloadMbps": zod.number(),
-  "uploadMbps": zod.number(),
-  "raw": zod.string().optional()
+  "uploadMbps": zod.number()
 })
 

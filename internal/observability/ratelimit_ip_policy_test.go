@@ -208,10 +208,12 @@ func TestIsRateLimitedReadPath(t *testing.T) {
 		{"/api/v1/clients/client-1/tokens/token-1/rotate", true},
 		// #617: admin GET /api/warp returns privateKey/licenseKey.
 		{"/api/warp", true},
-		// #641/#645/#648: expensive host diagnostics (recursive dir walk,
-		// per-listener /proc/*/fd attribution, and the aggregate of both).
+		// #641/#645/#648/#1144: expensive host diagnostics (recursive dir
+		// walk, per-listener /proc/*/fd attribution, host process table, and
+		// the aggregate of all three).
 		{"/api/disk", true},
 		{"/api/connections", true},
+		{"/api/processes", true},
 		{"/api/runtime/observation", true},
 		{"/api/backups/veil_backup_20260101.tar.gz.enc/download", true},
 		{"/api/backups/veil_backup_20260101.tar.gz.enc/verify", false},
@@ -225,7 +227,6 @@ func TestIsRateLimitedReadPath(t *testing.T) {
 		// scans above are gated.
 		{"/api/system", false},
 		{"/api/network", false},
-		{"/api/processes", false},
 		{"/api/runtime/provenance", false},
 		{"/api/status", false},
 		{"/metrics", false},

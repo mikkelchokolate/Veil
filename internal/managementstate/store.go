@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
@@ -113,20 +112,6 @@ type fileInfo struct {
 	mode os.FileMode
 }
 
-func fileOwnerUID(fi os.FileInfo) int {
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
-		return int(st.Uid)
-	}
-	return -1
-}
-
-func fileOwnerGID(fi os.FileInfo) int {
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
-		return int(st.Gid)
-	}
-	return -1
-}
-
 func (s Store) Marshal(snapshot model.ManagementSnapshot) ([]byte, error) {
 	// Work on a deep copy so encryption does not mutate the caller's snapshot.
 	snapshot = BuildSnapshot(SnapshotInput{
@@ -171,7 +156,14 @@ func (s Store) decryptSnapshot(snapshot *model.ManagementSnapshot) error {
 		}
 		return s.cipher.Decrypt(v)
 	}
-	return NewSecretPolicy().Transform(snapshot, decrypt)
+	if err := NewSecretPolicy().Transform(snapshot, decrypt); err != nil {
+		return err
+	}
+	// Inject the per-install credential-derivation secret so revoked-client
+	// sentinels render unguessable even when all credential fields are empty
+	// (issue #1098). Runtime-only: never serialized back to disk.
+	snapshot.Settings.CredentialDerivationSecret = secrets.DeriveToken(s.cipher, model.CredentialDerivationLabel)
+	return nil
 }
 
 func EncryptSnapshot(snapshot *model.ManagementSnapshot, cipher *secrets.Cipher) error {

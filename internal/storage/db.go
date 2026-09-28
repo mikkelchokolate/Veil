@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -80,5 +81,34 @@ func sqliteFileDSN(path string, existingOnly bool) string {
 		query.Add("_pragma", "journal_mode(WAL)")
 	}
 	query.Add("_pragma", "synchronous(FULL)")
-	return (&url.URL{Scheme: "file", Path: path, RawQuery: query.Encode()}).String()
+	return (&url.URL{Scheme: "file", Path: sqliteFileURIPath(path), RawQuery: query.Encode()}).String()
+}
+
+// sqliteFileURIPath normalizes a filesystem path into a file: URI path. An
+// absolute Windows path (C:\...\veil.db) must not be handed to url.URL
+// verbatim: the "C:" prefix would be parsed as a URI authority and rejected
+// by modernc.org/sqlite ("invalid uri authority"), so every absolute-path DB
+// open fails on Windows (issue #1145). Resolve to an absolute path, convert
+// separators, and add the leading "/" that turns a drive-letter path into a
+// URI path — file:///C:/... — while leaving Unix paths and UNC shares well
+// formed.
+func sqliteFileURIPath(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		abs = path
+	}
+	return fileURIPathFromSlash(filepath.ToSlash(abs))
+}
+
+// fileURIPathFromSlash adds the leading "/" a file: URI path needs when the
+// slash-separated absolute path lacks one. A Windows drive-letter path
+// (C:/...) has none, so file:///C:/... results; a Unix path (already /...)
+// and a UNC share (//server/...) already start with one and are unchanged.
+// Kept separate from filepath.Abs/ToSlash so the drive-letter contract is
+// testable on any GOOS.
+func fileURIPathFromSlash(slash string) string {
+	if !strings.HasPrefix(slash, "/") {
+		slash = "/" + slash
+	}
+	return slash
 }

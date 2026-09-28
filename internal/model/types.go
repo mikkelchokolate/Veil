@@ -30,7 +30,22 @@ type Settings struct {
 	// A nil pointer means "enabled" for backward compatibility with states created
 	// before this field existed.
 	FirewallManagement *bool `json:"firewallManagement,omitempty"`
+
+	// CredentialDerivationSecret is a per-install secret injected into settings
+	// at state-load / snapshot-build time (derived from the management-state
+	// encryption key via secrets.DeriveToken). RevokedClientCredential mixes it
+	// into sentinel credentials so a revoked inbound's rendered password stays
+	// unguessable even when every credential field is empty (issue #1098).
+	// Runtime-only: never serialized to state, never accepted from API input —
+	// settings mutations preserve the current value. Empty means the render
+	// context has no per-install secret available.
+	CredentialDerivationSecret string `json:"-"`
 }
+
+// CredentialDerivationLabel is the domain label passed to secrets.DeriveToken
+// when producing Settings.CredentialDerivationSecret. Keep it stable:
+// changing it changes every sentinel credential on every install.
+const CredentialDerivationLabel = "veil-revoked-credential-v1"
 
 type ClientProfile struct {
 	Name     string `json:"name"`
@@ -76,6 +91,16 @@ type Inbound struct {
 	// never persisted or serialized. The access model merges these so normalized
 	// clients are rendered into the live config.
 	RuntimeCredentials []RuntimeCredential `json:"-"`
+
+	// HasClientBindings reports that the normalized Client+Binding+Credential
+	// store has at least one binding (enabled or not) for this inbound. Once a
+	// binding exists the inbound is credential-managed: renderers and link
+	// builders must treat "zero usable credentials" as revoked — never as a
+	// reason to revive the legacy inbound fallback password — so disabling,
+	// expiring, depleting or deleting the last normalized client fails closed
+	// (issue #1098). Runtime-only; set by the management layer next to
+	// RuntimeCredentials and never persisted.
+	HasClientBindings bool `json:"-"`
 }
 
 type RoutingRule struct {
@@ -128,12 +153,17 @@ type WarpConfig struct {
 }
 
 // SocksDialAddr is the address protocol upstreams dial to reach the local
-// WARP SOCKS listener. It defaults to 127.0.0.1 so renderers never diverge
-// from the configured sing-box bind (#576). Validate restricts SocksListen to
-// loopback literals, so this is always a safe local dial target.
+// WARP SOCKS listener. It defaults to 127.41.0.1 — the reserved loopback band
+// the per-unit egress filter allow-lists for protocol daemons — so renderers
+// never diverge from the configured sing-box bind (#576, #1097). Validate
+// restricts SocksListen to loopback literals, so this is always a safe local
+// dial target.
 func (c WarpConfig) SocksDialAddr() string {
-	if c.SocksListen == "" {
-		return "127.0.0.1"
+	if c.SocksListen == "" || c.SocksListen == "127.0.0.1" {
+		// "" means unset; "127.0.0.1" is the pre-#1097 persisted default —
+		// SetDefaults migrates it, but dial-side readers that bypass
+		// SetDefaults must not return a loopback the egress filter denies.
+		return "127.41.0.1"
 	}
 	return c.SocksListen
 }

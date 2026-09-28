@@ -191,7 +191,13 @@ func startRecoveryHelper(t *testing.T, dir, statePath string) string {
 	applyRoot := filepath.Join(dir, "apply")
 	policy := privileged.DefaultPolicy()
 	policy.StagingRoot = filepath.Join(applyRoot, "generated")
-	policy.GeneratedRoot = filepath.Join(applyRoot, "live")
+	// The helper's promotion destination must equal the live root the serve
+	// process resolves (VEIL_LIVE_ROOT unset → <etcDir>/generated, where
+	// EtcDir derives from VEIL_KEY_PATH's parent = dir). Rendered Hysteria2
+	// configs embed <liveRoot>/rules/*.dat references (issue #1132); if the
+	// helper promotes into a different tree those references dangle and the
+	// daemon fails to load the config.
+	policy.GeneratedRoot = filepath.Join(dir, "generated")
 	policy.StateRoot = dir
 	policy.StatePath = statePath
 	policy.KeyPath = filepath.Join(dir, "state.key")

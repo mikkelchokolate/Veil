@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 func makeCircularSymlink(t *testing.T, dir, name string) string {
@@ -260,7 +262,7 @@ func TestBackupLifecycleBackupExistingManifestSaveError(t *testing.T) {
 
 	orig := lifecycleManifestSave
 	defer func() { lifecycleManifestSave = orig }()
-	lifecycleManifestSave = func(string, Manifest) error {
+	lifecycleManifestSave = func(*safefs.Dir, Manifest) error {
 		return errors.New("injected manifest save error")
 	}
 
@@ -285,7 +287,7 @@ func TestBackupLifecycleRestoreSafetyBackupError(t *testing.T) {
 
 	orig := lifecycleManifestSave
 	defer func() { lifecycleManifestSave = orig }()
-	lifecycleManifestSave = func(string, Manifest) error {
+	lifecycleManifestSave = func(*safefs.Dir, Manifest) error {
 		return errors.New("injected safety manifest save error")
 	}
 

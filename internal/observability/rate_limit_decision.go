@@ -87,11 +87,13 @@ func isRateLimitedReadPath(path string) bool {
 	// /api/warp returns the full WARP privateKey/licenseKey to admin readers
 	// (#617). Expensive host diagnostics: /api/disk walks Veil state trees
 	// recursively (#641), /api/connections attributes every listener through
-	// per-pid /proc/*/fd scans (#645), and /api/runtime/observation pays all
-	// of those plus a process scan in a single request (#648).
+	// per-pid /proc/*/fd scans (#645), /api/processes walks the host process
+	// table (#1144), and /api/runtime/observation pays all of those plus a
+	// process scan in a single request (#648).
 	if path == "/api/warp" ||
 		path == "/api/disk" ||
 		path == "/api/connections" ||
+		path == "/api/processes" ||
 		path == "/api/runtime/observation" {
 		return true
 	}

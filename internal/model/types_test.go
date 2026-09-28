@@ -129,3 +129,15 @@ func TestManagementStateModelTypesKeepJSONShape(t *testing.T) {
 		t.Fatalf("warp values = %v", warp)
 	}
 }
+
+func TestWarpConfigSocksDialAddrMigratesLegacyDefault(t *testing.T) {
+	if got := (WarpConfig{SocksListen: "127.0.0.1"}).SocksDialAddr(); got != "127.41.0.1" {
+		t.Fatalf("legacy SocksListen must dial the reserved band, got %q", got)
+	}
+	if got := (WarpConfig{}).SocksDialAddr(); got != "127.41.0.1" {
+		t.Fatalf("unset SocksListen must dial the reserved band, got %q", got)
+	}
+	if got := (WarpConfig{SocksListen: "127.0.0.5"}).SocksDialAddr(); got != "127.0.0.5" {
+		t.Fatalf("explicit SocksListen rewritten, got %q", got)
+	}
+}

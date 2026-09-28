@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -95,7 +96,12 @@ func (s *managementState) registerProtocolRoomRoutes(mux *http.ServeMux) {
 func (s *managementState) withMutation(fn func(managementstate.Mutation) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return fn(s.mutationLocked())
+	err := fn(s.mutationLocked())
+	// Latch provisioning whenever a mutation leaves users non-empty (user
+	// create, admin reset reload, snapshot restore) so anonymous first-run
+	// access can never be re-armed on a configured instance (#1100).
+	s.noteUsersProvisionedLocked()
+	return err
 }
 
 func (s *managementState) mutationLocked() managementstate.Mutation {
@@ -110,6 +116,15 @@ func (s *managementState) mutationLocked() managementstate.Mutation {
 
 func (s *managementState) applyHistoryPathLocked() string {
 	return filepath.Join(s.applyRoot, "generated", "veil", "apply-history.json")
+}
+
+// databaseHandle snapshots the SQLite handle under s.mu; background workers
+// that run without the mutex must use it instead of reading s.db directly,
+// because restore reload replaces the handle concurrently.
+func (s *managementState) databaseHandle() *sql.DB {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.db
 }
 
 func (s *managementState) applyHistoryLocked() applyhistory.ApplyHistory {
@@ -151,6 +166,18 @@ func (s *managementState) inboundsWithRuntimeCredentialsLocked() ([]Inbound, err
 		if err != nil {
 			return nil, fmt.Errorf("resolve runtime credentials for inbound %s: %w", out[i].Name, err)
 		}
+		// Any binding row — even disabled, expired, depleted, or with a revoked
+		// credential — marks the inbound as credential-managed. Renderers and
+		// link builders rely on this to fail closed instead of reviving the
+		// legacy inbound fallback password when every normalized credential is
+		// gone (issue #1098).
+		if s.clientRepo != nil {
+			count, err := s.clientRepo.CountBindingsForInbound(out[i].Name)
+			if err != nil {
+				return nil, fmt.Errorf("count bindings for inbound %s: %w", out[i].Name, err)
+			}
+			out[i].HasClientBindings = count > 0
+		}
 		if len(creds) == 0 {
 			continue
 		}
@@ -184,15 +211,21 @@ func (s *managementState) inboundsWithPinnedCredentialsLocked() ([]Inbound, erro
 			credByBinding[key] = cr
 		}
 	}
-	// Group enabled bindings by inbound.
+	// Group enabled bindings by inbound. HasClientBindings counts EVERY pinned
+	// binding row — including disabled ones — so a pinned snapshot that still
+	// carries revoked bindings cannot resurrect the legacy fallback either
+	// (issue #1098).
 	bindingsByInbound := make(map[string][]model.BindingSnapshot)
+	anyBindingByInbound := make(map[string]int)
 	for _, b := range s.renderBindings {
+		anyBindingByInbound[b.InboundID]++
 		if !b.Enabled {
 			continue
 		}
 		bindingsByInbound[b.InboundID] = append(bindingsByInbound[b.InboundID], b)
 	}
 	for i := range out {
+		out[i].HasClientBindings = anyBindingByInbound[out[i].Name] > 0
 		bindings := bindingsByInbound[out[i].Name]
 		if len(bindings) == 0 {
 			continue
@@ -265,12 +298,13 @@ func (s *managementState) Reload() error {
 	return nil
 }
 
-// Close stops and joins every normalized-domain background worker before
-// closing the SQLite store. The SSE broadcaster is joined before taking
-// clientRequestMu so an in-flight snapshot refresh cannot deadlock against
-// shutdown. RunLifecycle calls it after HTTP draining, while backup restore
-// uses the same detach/stop/close primitives around its DB swap.
-func (s *managementState) Close() error {
+// CloseStreams detaches and closes the shared SSE broadcaster so open
+// event-stream handlers return immediately and http.Server.Shutdown can
+// finish draining (issue #1110). The subsystem is marked stopping so an
+// in-flight request arriving during the drain cannot re-create the hub.
+// RunLifecycle calls this BEFORE Server.Shutdown; Close remains safe to run
+// afterwards (the hub pointer is already nil).
+func (s *managementState) CloseStreams() {
 	s.mu.Lock()
 	s.clientSubsystemStopping = true
 	hub := s.sse
@@ -279,6 +313,18 @@ func (s *managementState) Close() error {
 	if hub != nil {
 		hub.Close()
 	}
+}
+
+// Close stops and joins every normalized-domain background worker before
+// closing the SQLite store. The SSE broadcaster is joined before taking
+// clientRequestMu so an in-flight snapshot refresh cannot deadlock against
+// shutdown. RunLifecycle calls it after HTTP draining, while backup restore
+// uses the same detach/stop/close primitives around its DB swap.
+func (s *managementState) Close() error {
+	// Detach/close the SSE hub first (same primitive RunLifecycle uses for
+	// graceful shutdown, issue #1110) so an in-flight snapshot refresh
+	// cannot deadlock against shutdown.
+	s.CloseStreams()
 
 	// Exclude an in-flight backup restore before touching the lifecycle
 	// context: runPanelBackupRestore holds clientRequestMu for its whole
@@ -316,8 +362,12 @@ func (s *managementState) Close() error {
 	stopClientBackgroundWorkers(workers)
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return closeClientDatabase(s)
+	// Detach under s.mu; the blocking runner/token/db Close calls run after
+	// the mutex is released so a recovery monitor inside the apply executor
+	// cannot deadlock shutdown or a restore reusing this path (#1087).
+	detached, _ := detachClientDatabase(s)
+	s.mu.Unlock()
+	return detached.close()
 }
 
 func (s *managementState) lifecycleContext() context.Context {

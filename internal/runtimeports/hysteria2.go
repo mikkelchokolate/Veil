@@ -13,14 +13,18 @@ import (
 const Hysteria2TrafficStatsPort = 61000
 
 // Hysteria2TrafficStatsHost maps a validated public UDP port to a stable,
-// distinct loopback address. Linux treats the entire 127/8 prefix as loopback.
-// Public Hysteria2 ports are unique in desired-state validation, making this
-// mapping collision-free across enabled Hysteria2 inbounds.
+// distinct loopback address in the reserved 127.40.0.0/16 band. Linux treats
+// the entire 127/8 prefix as loopback, and the dedicated band lets the
+// unit-level egress filter (IPAddressAllow/IPAddressDeny on
+// veil-hysteria2@.service) pierce just this listener while the rest of 127/8
+// stays denied to proxy sessions (#1095/#1097). Public Hysteria2 ports are
+// unique in desired-state validation, making this mapping collision-free
+// across enabled Hysteria2 inbounds.
 func Hysteria2TrafficStatsHost(publicPort int) string {
 	if publicPort < 1 || publicPort > 65535 {
 		return "127.0.0.1"
 	}
-	return fmt.Sprintf("127.%d.%d.1", (publicPort>>8)&0xff, publicPort&0xff)
+	return fmt.Sprintf("127.40.%d.%d", (publicPort>>8)&0xff, publicPort&0xff)
 }
 
 func Hysteria2TrafficStatsAddress(publicPort int) string {

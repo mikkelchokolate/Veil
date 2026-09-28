@@ -17,6 +17,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	veilmodel "github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/statecommit"
@@ -135,7 +136,7 @@ func newManagementStateProduction(info ServerInfo) *managementState {
 		if info.StatePath != "" {
 			updateRoot = filepath.Join(filepath.Dir(info.StatePath), "updates")
 		}
-		stager := newPanelUpdateStager(updateRoot)
+		stager := newPanelUpdateStager(updateRoot, info.Version)
 		state.updateStager = stager.Stage
 	}
 	sessionPath := ""
@@ -352,6 +353,14 @@ func (l ManagementStateLifecycle) loadCoherentStateModeLocked(deferApplyRecovery
 }
 
 func (l ManagementStateLifecycle) SnapshotLocked() (managementSnapshot, error) {
+	// Ensure live settings carry the per-install credential-derivation secret
+	// before building the snapshot. Settings loaded from disk already have it
+	// (Store.decryptSnapshot injects it); freshly-built default settings do
+	// not. Back-filling here also covers render paths that read s.settings
+	// directly rather than through a snapshot (issue #1098).
+	if l.state.settings.CredentialDerivationSecret == "" && l.state.cipher != nil {
+		l.state.settings.CredentialDerivationSecret = secrets.DeriveToken(l.state.cipher, veilmodel.CredentialDerivationLabel)
+	}
 	input := managementstate.SnapshotInput{
 		EffectiveAt:   time.Now().UTC().Unix(),
 		Setup:         l.state.setup,
@@ -568,6 +577,13 @@ func (l ManagementStateLifecycle) Load() error {
 		return err
 	}
 	if !ok {
+		// Fresh state: live settings still carry the serve-time defaults, which
+		// never passed through Store.decryptSnapshot. Inject the derived
+		// credential secret so revoked-client sentinels are unguessable from
+		// the very first render (issue #1098).
+		if l.state.settings.CredentialDerivationSecret == "" && l.state.cipher != nil {
+			l.state.settings.CredentialDerivationSecret = secrets.DeriveToken(l.state.cipher, veilmodel.CredentialDerivationLabel)
+		}
 		return nil
 	}
 	ApplyManagementSnapshot(l.state, snapshot)
@@ -626,6 +642,10 @@ func (s *managementState) resetMutableStateToDefaultsLocked() {
 	defaults := managementstate.BuildDefaultState(s.defaultInput)
 	s.setup = SetupState{}
 	s.settings = defaults.Settings
+	// Defaults carry no credential-derivation secret; re-derive it from the
+	// state key so revoked-client sentinels stay unguessable after a reset
+	// (issue #1098).
+	s.settings.CredentialDerivationSecret = secrets.DeriveToken(s.cipher, veilmodel.CredentialDerivationLabel)
 	s.inbounds = defaults.Inbounds
 	s.rules = defaults.Rules
 	s.routingPreset = ""
@@ -648,6 +668,9 @@ func ApplyManagementSnapshot(state *managementState, snapshot managementSnapshot
 		Warp:          &state.warp,
 		Users:         &state.users,
 	}, snapshot)
+	// Any user-bearing load/reload/restore latches the instance as
+	// provisioned; a later zero-user state must fail closed (#1100).
+	state.noteUsersProvisionedLocked()
 }
 
 func defaultApplyRoot(root string) string {
