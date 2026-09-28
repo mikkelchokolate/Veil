@@ -50,10 +50,10 @@ func TestRollbackSyncsRestoredHysteria2Domain(t *testing.T) {
 	}}
 	_, _, actions := ctx.rollbackPromotedConfigs(records, []string{livePath})
 
-	if len(client.syncCaddyCertRequests) != 1 {
-		t.Fatalf("expected exactly one cert sync, got %+v (actions=%+v)", client.syncCaddyCertRequests, actions)
+	if len(client.syncRequests()) != 1 {
+		t.Fatalf("expected exactly one cert sync, got %+v (actions=%+v)", client.syncRequests(), actions)
 	}
-	if got := client.syncCaddyCertRequests[0].Domain; got != "old.example.com" {
+	if got := client.syncRequests()[0].Domain; got != "old.example.com" {
 		t.Fatalf("cert sync domain = %q, want restored domain old.example.com", got)
 	}
 }
@@ -91,8 +91,8 @@ func TestRollbackSkipsCertSyncForDeletedNewConfig(t *testing.T) {
 	if len(removedFiles) != 1 || removedFiles[0] != livePath {
 		t.Fatalf("deleted new config must be reported as removed: %v", removedFiles)
 	}
-	if len(client.syncCaddyCertRequests) != 0 {
-		t.Fatalf("cert sync must not run for a deleted new config: %+v", client.syncCaddyCertRequests)
+	if len(client.syncRequests()) != 0 {
+		t.Fatalf("cert sync must not run for a deleted new config: %+v", client.syncRequests())
 	}
 	stopped, disabled := false, false
 	for _, a := range client.serviceActions {

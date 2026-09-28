@@ -44,10 +44,10 @@ func TestCertSyncWorkerRestartsOnlyOnChange(t *testing.T) {
 	if err := worker.SyncOnce(context.Background()); err != nil {
 		t.Fatalf("unchanged sync: %v", err)
 	}
-	if len(client.syncCaddyCertRequests) != 1 {
-		t.Fatalf("sync requests=%d, want 1", len(client.syncCaddyCertRequests))
+	if len(client.syncRequests()) != 1 {
+		t.Fatalf("sync requests=%d, want 1", len(client.syncRequests()))
 	}
-	if got := client.syncCaddyCertRequests[0].Domain; got != "vpn.example.com" {
+	if got := client.syncRequests()[0].Domain; got != "vpn.example.com" {
 		t.Fatalf("synced domain %q, want vpn.example.com", got)
 	}
 	if len(client.serviceActions) != 0 {
@@ -93,10 +93,10 @@ func TestCertSyncWorkerLifecycle(t *testing.T) {
 	worker.Start()
 	worker.Signal()
 	deadline := time.Now().Add(5 * time.Second)
-	for len(client.syncCaddyCertRequests) == 0 && time.Now().Before(deadline) {
+	for len(client.syncRequests()) == 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if len(client.syncCaddyCertRequests) == 0 {
+	if len(client.syncRequests()) == 0 {
 		t.Fatal("signaled sync pass never ran")
 	}
 	worker.Stop()
