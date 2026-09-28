@@ -294,17 +294,27 @@ func testHysteria2DataPath(t *testing.T, hysteriaPath string) {
 
 	// 1. Start backend HTTP server
 	expectedResponse := "hello from hysteria2"
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// The hysteria2 egress ACL evaluates the RESOLVED destination IP, so
+	// /etc/hosts names that map to 127.0.0.1 are still denied by
+	// reject(127.0.0.0/8) (issue #1095). Bind the backend to a loopback
+	// alias in TEST-NET-1 (192.0.2.0/24) — outside egressDenyCIDRs — and
+	// still reach it by hostname so the ACL sees the domain→IP path.
+	const backendIP = "192.0.2.42"
+	registerNonDeniedLoopbackAlias(t, backendIP)
+	const backendHost = "veil-hy2-e2e.test"
+	registerE2EHostname(t, backendHost, backendIP)
+	backend := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(expectedResponse))
 	}))
+	backendListener, err := net.Listen("tcp", net.JoinHostPort(backendIP, "0"))
+	if err != nil {
+		t.Fatalf("bind E2E backend on %s: %v", backendIP, err)
+	}
+	backend.Listener = backendListener
+	backend.Start()
 	defer backend.Close()
-	// The hysteria2 egress ACL rejects literal loopback destinations
-	// (reject(127.0.0.0/8), issue #1095), so the request must name a hostname —
-	// same approach as the naive/mieru data-path tests.
-	backendHost := "veil-hy2-e2e.test"
-	registerLoopbackHostname(t, backendHost)
-	backendURL := strings.Replace(backend.URL, "127.0.0.1", backendHost, 1)
+	backendURL := strings.Replace(backend.URL, backendIP, backendHost, 1)
 
 	// 2. Start Veil serving panel
 	srv := startServer(t, serverOptions{token: "e2e-secret-token"})

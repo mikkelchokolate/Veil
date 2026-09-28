@@ -548,16 +548,52 @@ func caddyRouteMatcher(server map[string]any, handlerName string) map[string]any
 	return nil
 }
 
+// registerNonDeniedLoopbackAlias binds a documentation-range IP to the
+// loopback interface for the duration of the test. Hysteria2's egress ACL
+// evaluates the RESOLVED destination IP, so a backend that must be reachable
+// through the ACL has to listen on an address outside egressDenyCIDRs —
+// TEST-NET-1 (192.0.2.0/24) is not denied, and even where geoip classifies
+// it, direct(geoip:private) routes it direct anyway. Uses `addr replace`
+// (add-or-change) so a stale alias from a killed run cannot wedge CI;
+// failures are fatal so regressions surface instead of silently degrading.
+func registerNonDeniedLoopbackAlias(t *testing.T, ip string) {
+	t.Helper()
+	if net.ParseIP(ip) == nil {
+		t.Fatalf("invalid E2E loopback alias IP %q", ip)
+	}
+	cidr := ip + "/32"
+	if output, err := exec.Command("sudo", "ip", "addr", "replace", cidr, "dev", "lo").CombinedOutput(); err != nil {
+		t.Fatalf("register E2E loopback alias %s: %v: %s", cidr, err, output)
+	}
+	t.Cleanup(func() {
+		if output, err := exec.Command("sudo", "ip", "addr", "del", cidr, "dev", "lo").CombinedOutput(); err != nil {
+			t.Errorf("remove E2E loopback alias %s: %v: %s", cidr, err, output)
+		}
+	})
+}
+
 func registerLoopbackHostname(t *testing.T, hostname string) {
 	t.Helper()
-	if hostname == "" || strings.ContainsAny(hostname, " 	\r\n") {
+	registerE2EHostname(t, hostname, "127.0.0.1")
+}
+
+// registerE2EHostname maps hostname to ip in /etc/hosts. Any destination IP
+// may be used — e.g. a loopback alias registered via
+// registerNonDeniedLoopbackAlias when the protocol under test resolves and
+// then ACL-checks the resolved address.
+func registerE2EHostname(t *testing.T, hostname, ip string) {
+	t.Helper()
+	if net.ParseIP(ip) == nil {
+		t.Fatalf("invalid E2E hostname IP %q", ip)
+	}
+	if hostname == "" || strings.ContainsAny(hostname, " \t\r\n") {
 		t.Fatalf("invalid E2E hostname %q", hostname)
 	}
 	// Unique marker so cleanup removes only the exact line this invocation
 	// appended, never a pre-existing entry that merely shares the hostname.
 	marker := "veil-e2e-" + strings.NewReplacer("-", "", ".", "").Replace(t.Name()) + "-" + hostname
 	cmd := exec.Command("sudo", "tee", "-a", "/etc/hosts")
-	cmd.Stdin = strings.NewReader("127.0.0.1 " + hostname + " # " + marker + "\n")
+	cmd.Stdin = strings.NewReader(ip + " " + hostname + " # " + marker + "\n")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("register local E2E hostname: %v: %s", err, output)
 	}
