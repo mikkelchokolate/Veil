@@ -110,6 +110,10 @@ func TestSetDefaultsMigratesOutOfBandLoopbackSocksListen(t *testing.T) {
 	for _, listen := range []string{
 		"127.0.0.1", "127.0.0.5", "127.0.0.53", "127.40.0.1", "127.42.0.1",
 		"::1", "::ffff:127.0.0.5",
+		// The band's own .0/.255 endpoints are not usable bind targets —
+		// persisted pre-tightening values migrate instead of wedging on
+		// Validate.
+		"127.41.0.0", "127.41.255.255",
 	} {
 		cfg := Config{SocksListen: listen}
 		SetDefaults(&cfg)

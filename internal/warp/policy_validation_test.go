@@ -44,6 +44,8 @@ func TestValidateRejectsSocksListenOutsideBand(t *testing.T) {
 		"169.254.1.1", "fe80::1",
 		// Loopback, but outside the egress-pierced band (#1160).
 		"127.0.0.1", "127.0.0.5", "127.0.0.53", "127.40.0.1", "127.42.0.1", "::1",
+		// Band network/broadcast-looking endpoints are not usable bind targets.
+		"127.41.0.0", "127.41.255.255",
 		// IPv4-mapped IPv6 and host:port forms are not plain IPv4 literals.
 		"::ffff:127.41.0.1", "127.41.0.1:40000",
 		// Hostnames and garbage: the bind must be a deterministic literal.
@@ -62,8 +64,6 @@ func TestValidateAcceptsSocksListenInBand(t *testing.T) {
 	for _, listen := range []string{
 		"",
 		"127.41.0.1",
-		"127.41.0.0",     // band lower boundary
-		"127.41.255.255", // band upper boundary
 		"127.41.0.5",
 		"127.41.255.254",
 	} {

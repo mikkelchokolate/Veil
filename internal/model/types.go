@@ -1,6 +1,9 @@
 package model
 
-import "net/netip"
+import (
+	"net/netip"
+	"strings"
+)
 
 type Settings struct {
 	PanelListen              string `json:"panelListen"`
@@ -191,8 +194,20 @@ var warpSocksEgressPrefix = netip.MustParsePrefix(WarpSocksEgressBand)
 // WarpSocksEgressBand — the only socksListen values the protocol units can
 // reach under their IPAddressAllow egress filters (#1160).
 func WarpSocksListenInBand(listen string) bool {
-	addr, err := netip.ParseAddr(listen)
-	return err == nil && addr.Is4() && warpSocksEgressPrefix.Contains(addr)
+	addr, err := netip.ParseAddr(strings.TrimSpace(listen))
+	if err != nil || !addr.Is4() || !warpSocksEgressPrefix.Contains(addr) {
+		return false
+	}
+	// Exclude the band's network/broadcast-looking endpoints: unusable as a
+	// bind target in practice and confusing to advertise as valid.
+	return !warpSocksBandEndpoint(addr)
+}
+
+// warpSocksBandEndpoint reports whether addr is one of the band's .0/.255
+// endpoints. Callers pass an already-IPv4 address.
+func warpSocksBandEndpoint(addr netip.Addr) bool {
+	o := addr.As4()
+	return o[2] == 0 && o[3] == 0 || o[2] == 255 && o[3] == 255
 }
 
 // NormalizeWarpSocksListen rewrites values that cannot function as the WARP
@@ -203,8 +218,10 @@ func WarpSocksListenInBand(listen string) bool {
 // #1160). Everything else is returned untouched: non-canonical in-band
 // encodings (e.g. ::ffff:127.41.0.1) and non-loopback/non-IP garbage are left
 // for warp.Validate to reject loudly, never silently rewritten into a stored
-// value.
+// value. Whitespace is trimmed before parsing so the dial/bind view can never
+// disagree with warp.Validate, which TrimSpace's the same input.
 func NormalizeWarpSocksListen(listen string) string {
+	listen = strings.TrimSpace(listen)
 	if listen == "" {
 		return WarpSocksListenDefault
 	}
@@ -212,7 +229,8 @@ func NormalizeWarpSocksListen(listen string) string {
 	if err != nil {
 		return listen
 	}
-	if unmapped := addr.Unmap(); unmapped.IsLoopback() && !warpSocksEgressPrefix.Contains(unmapped) {
+	if unmapped := addr.Unmap(); unmapped.IsLoopback() &&
+		(!warpSocksEgressPrefix.Contains(unmapped) || (addr.Is4() && warpSocksBandEndpoint(unmapped))) {
 		return WarpSocksListenDefault
 	}
 	return listen

@@ -138,7 +138,7 @@ func TestWarpConfigSocksDialAddr(t *testing.T) {
 	if got := (WarpConfig{}).SocksDialAddr(); got != "127.41.0.1" {
 		t.Fatalf("unset SocksListen must dial the reserved band, got %q", got)
 	}
-	for _, listen := range []string{"127.0.0.1", "127.0.0.5", "127.0.0.53", "::1"} {
+	for _, listen := range []string{"127.0.0.1", "127.0.0.5", "127.0.0.53", "::1", "127.41.0.0", "127.41.255.255"} {
 		if got := (WarpConfig{SocksListen: listen}).SocksDialAddr(); got != "127.41.0.1" {
 			t.Fatalf("out-of-band SocksListen %q must dial the reserved band, got %q", listen, got)
 		}
