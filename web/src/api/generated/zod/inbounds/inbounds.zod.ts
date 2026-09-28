@@ -46,12 +46,13 @@ import * as zod from 'zod';
 /**
  * @summary List inbounds
  */
+export const getApiInboundsResponseNameRegExp = new RegExp('^[A-Za-z0-9_-]{1,64}$');
 export const getApiInboundsResponsePortMax = 65535;
 
 
 
 export const GetApiInboundsResponseItem = zod.object({
-  "name": zod.string(),
+  "name": zod.string().regex(getApiInboundsResponseNameRegExp),
   "protocol": zod.enum(['naiveproxy', 'hysteria2', 'olcrtc', 'mieru']),
   "transport": zod.enum(['tcp', 'udp']),
   "port": zod.int().min(1).max(getApiInboundsResponsePortMax),
@@ -89,12 +90,13 @@ export const PostApiInboundsHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(postApiInboundsHeaderIdempotencyKeyMax).regex(postApiInboundsHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
+export const postApiInboundsBodyNameRegExp = new RegExp('^[A-Za-z0-9_-]{1,64}$');
 export const postApiInboundsBodyPortMax = 65535;
 
 
 
 export const PostApiInboundsBody = zod.object({
-  "name": zod.string(),
+  "name": zod.string().regex(postApiInboundsBodyNameRegExp),
   "protocol": zod.enum(['naiveproxy', 'hysteria2', 'olcrtc', 'mieru']),
   "transport": zod.enum(['tcp', 'udp']),
   "port": zod.int().min(1).max(postApiInboundsBodyPortMax),
@@ -118,12 +120,13 @@ export const PostApiInboundsBody = zod.object({
   "protocolFields": zod.record(zod.string(), zod.unknown()).optional().describe('Protocol-specific inbound fields keyed by field identifier.')
 })
 
+export const postApiInboundsResponseOneNameRegExp = new RegExp('^[A-Za-z0-9_-]{1,64}$');
 export const postApiInboundsResponseOnePortMax = 65535;
 
 
 
 export const PostApiInboundsResponse = zod.object({
-  "name": zod.string(),
+  "name": zod.string().regex(postApiInboundsResponseOneNameRegExp),
   "protocol": zod.enum(['naiveproxy', 'hysteria2', 'olcrtc', 'mieru']),
   "transport": zod.enum(['tcp', 'udp']),
   "port": zod.int().min(1).max(postApiInboundsResponseOnePortMax),
@@ -185,12 +188,13 @@ export const GetApiInboundsNameParams = zod.object({
   "name": zod.string().min(1)
 })
 
+export const getApiInboundsNameResponseNameRegExp = new RegExp('^[A-Za-z0-9_-]{1,64}$');
 export const getApiInboundsNameResponsePortMax = 65535;
 
 
 
 export const GetApiInboundsNameResponse = zod.object({
-  "name": zod.string(),
+  "name": zod.string().regex(getApiInboundsNameResponseNameRegExp),
   "protocol": zod.enum(['naiveproxy', 'hysteria2', 'olcrtc', 'mieru']),
   "transport": zod.enum(['tcp', 'udp']),
   "port": zod.int().min(1).max(getApiInboundsNameResponsePortMax),
@@ -234,12 +238,13 @@ export const PutApiInboundsNameHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(putApiInboundsNameHeaderIdempotencyKeyMax).regex(putApiInboundsNameHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
+export const putApiInboundsNameBodyNameRegExp = new RegExp('^[A-Za-z0-9_-]{1,64}$');
 export const putApiInboundsNameBodyPortMax = 65535;
 
 
 
 export const PutApiInboundsNameBody = zod.object({
-  "name": zod.string(),
+  "name": zod.string().regex(putApiInboundsNameBodyNameRegExp),
   "protocol": zod.enum(['naiveproxy', 'hysteria2', 'olcrtc', 'mieru']),
   "transport": zod.enum(['tcp', 'udp']),
   "port": zod.int().min(1).max(putApiInboundsNameBodyPortMax),
@@ -263,12 +268,13 @@ export const PutApiInboundsNameBody = zod.object({
   "protocolFields": zod.record(zod.string(), zod.unknown()).optional().describe('Protocol-specific inbound fields keyed by field identifier.')
 })
 
+export const putApiInboundsNameResponseOneNameRegExp = new RegExp('^[A-Za-z0-9_-]{1,64}$');
 export const putApiInboundsNameResponseOnePortMax = 65535;
 
 
 
 export const PutApiInboundsNameResponse = zod.object({
-  "name": zod.string(),
+  "name": zod.string().regex(putApiInboundsNameResponseOneNameRegExp),
   "protocol": zod.enum(['naiveproxy', 'hysteria2', 'olcrtc', 'mieru']),
   "transport": zod.enum(['tcp', 'udp']),
   "port": zod.int().min(1).max(putApiInboundsNameResponseOnePortMax),

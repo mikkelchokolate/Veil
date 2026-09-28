@@ -68,7 +68,11 @@ export interface ClientPatchRequest {
   quotaResetPolicy?: ClientPatchRequestQuotaResetPolicy;
   /** @nullable */
   quotaResetAt?: number | null;
-  /** @nullable */
+  /**
+     * Unix expiry timestamp; null clears the expiry. Non-positive values are rejected.
+     * @minimum 1
+     * @nullable
+     */
   expiresAt?: number | null;
   /**
      * @minimum 0

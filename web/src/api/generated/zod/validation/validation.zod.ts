@@ -66,6 +66,7 @@ export const postApiValidationBodySettingsPanelPublicPortMax = 65535;
 export const postApiValidationBodySettingsDefaultInboundPublicPortMin = 0;
 export const postApiValidationBodySettingsDefaultInboundPublicPortMax = 65535;
 
+export const postApiValidationBodyInboundsItemNameRegExp = new RegExp('^[A-Za-z0-9_-]{1,64}$');
 export const postApiValidationBodyInboundsItemPortMax = 65535;
 
 
@@ -97,7 +98,7 @@ export const PostApiValidationBody = zod.object({
   "acmeChallengeMode": zod.enum(['http-01', 'tls-alpn-01']).optional().describe('ACME challenge mode used for inbound certificates.')
 }),
   "inbounds": zod.array(zod.object({
-  "name": zod.string(),
+  "name": zod.string().regex(postApiValidationBodyInboundsItemNameRegExp),
   "protocol": zod.enum(['naiveproxy', 'hysteria2', 'olcrtc', 'mieru']),
   "transport": zod.enum(['tcp', 'udp']),
   "port": zod.int().min(1).max(postApiValidationBodyInboundsItemPortMax),

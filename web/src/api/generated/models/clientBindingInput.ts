@@ -43,7 +43,10 @@
 
 export interface ClientBindingInput {
   inboundId: string;
-  /** @pattern ^[a-z0-9_-]{1,48}$ */
+  /**
+     * Canonical lowercase runtime identity. Uppercase is rejected — runtimes fold case, so mixed-case identities break traffic accounting and enable case-only collisions.
+     * @pattern ^[a-z0-9_-]{1,48}$
+     */
   runtimeIdentity?: string;
   /** Optional explicit credential; server-generated when empty. */
   credential?: string;

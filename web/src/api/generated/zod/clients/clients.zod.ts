@@ -122,6 +122,7 @@ export const PostApiV1ClientsHeader = zod.object({
 export const postApiV1ClientsBodyQuotaBytesMin = 0;
 export const postApiV1ClientsBodyQuotaBytesMax = 9007199254740991;
 
+
 export const postApiV1ClientsBodyDeviceLimitMin = 0;
 
 export const postApiV1ClientsBodyBindingsItemRuntimeIdentityRegExp = new RegExp('^[a-z0-9_-]{1,48}$');
@@ -135,12 +136,12 @@ export const PostApiV1ClientsBody = zod.object({
   "quotaBytes": zod.int().min(postApiV1ClientsBodyQuotaBytesMin).max(postApiV1ClientsBodyQuotaBytesMax).nullish(),
   "quotaResetPolicy": zod.enum(['never', 'daily', 'weekly', 'monthly']).optional(),
   "quotaResetAt": zod.int().nullish(),
-  "expiresAt": zod.int().nullish(),
+  "expiresAt": zod.int().min(1).nullish().describe('Unix expiry timestamp; null means never. Non-positive values are rejected — every enforcement path already treats them as expired while status would report active.'),
   "deviceLimit": zod.int().min(postApiV1ClientsBodyDeviceLimitMin).nullish(),
   "notes": zod.string().optional(),
   "bindings": zod.array(zod.object({
   "inboundId": zod.string(),
-  "runtimeIdentity": zod.string().regex(postApiV1ClientsBodyBindingsItemRuntimeIdentityRegExp).optional(),
+  "runtimeIdentity": zod.string().regex(postApiV1ClientsBodyBindingsItemRuntimeIdentityRegExp).optional().describe('Canonical lowercase runtime identity. Uppercase is rejected — runtimes fold case, so mixed-case identities break traffic accounting and enable case-only collisions.'),
   "credential": zod.string().optional().describe('Optional explicit credential; server-generated when empty.'),
   "enabled": zod.boolean().optional()
 })).optional().describe('Bind the client to inbounds atomically with creation. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials.')
@@ -849,6 +850,7 @@ export const PatchApiV1ClientsIdHeader = zod.object({
 export const patchApiV1ClientsIdBodyQuotaBytesMin = 0;
 export const patchApiV1ClientsIdBodyQuotaBytesMax = 9007199254740991;
 
+
 export const patchApiV1ClientsIdBodyDeviceLimitMin = 0;
 
 
@@ -862,7 +864,7 @@ export const PatchApiV1ClientsIdBody = zod.object({
   "quotaBytes": zod.int().min(patchApiV1ClientsIdBodyQuotaBytesMin).max(patchApiV1ClientsIdBodyQuotaBytesMax).nullish(),
   "quotaResetPolicy": zod.union([zod.literal('never'),zod.literal('daily'),zod.literal('weekly'),zod.literal('monthly'),zod.literal(null)]).nullish(),
   "quotaResetAt": zod.int().nullish(),
-  "expiresAt": zod.int().nullish(),
+  "expiresAt": zod.int().min(1).nullish().describe('Unix expiry timestamp; null clears the expiry. Non-positive values are rejected.'),
   "deviceLimit": zod.int().min(patchApiV1ClientsIdBodyDeviceLimitMin).nullish(),
   "notes": zod.string().nullish()
 }).describe('Presence-aware patch. Omitted fields are preserved, explicit null clears nullable/defaultable fields, and supplied values replace them.')
