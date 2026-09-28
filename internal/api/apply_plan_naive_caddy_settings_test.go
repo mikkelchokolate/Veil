@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -77,7 +78,7 @@ func TestBuildApplyPlanAcceptsNaiveProxyWithCaddySettings(t *testing.T) {
 	// host caddy binary (#846): a Valid naive plan must still carry the
 	// caddy config leg, the reload action, and the consolidated runtime —
 	// the same golden the Panel sister locks.
-	stubCaddyProbe(t, func(string) (caddycapabilities.CaddyCapabilities, error) {
+	stubCaddyProbe(t, func(context.Context, string) (caddycapabilities.CaddyCapabilities, error) {
 		return caddycapabilities.CaddyCapabilities{ForwardProxy: true, HTTP3: true}, nil
 	})
 	plan := BuildApplyPlan(ApplyPlanInput{
@@ -94,7 +95,7 @@ func TestBuildApplyPlanAcceptsNaiveProxyWithCaddySettings(t *testing.T) {
 }
 
 func TestBuildApplyPlanAcceptsNaiveProxyWithInboundCredentials(t *testing.T) {
-	stubCaddyProbe(t, func(string) (caddycapabilities.CaddyCapabilities, error) {
+	stubCaddyProbe(t, func(context.Context, string) (caddycapabilities.CaddyCapabilities, error) {
 		return caddycapabilities.CaddyCapabilities{ForwardProxy: true, HTTP3: true}, nil
 	})
 	plan := BuildApplyPlan(ApplyPlanInput{

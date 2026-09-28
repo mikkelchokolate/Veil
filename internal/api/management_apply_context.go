@@ -117,13 +117,15 @@ func (ctx ManagementApplyContext) advancePublicationPhaseLocked(phase string) er
 func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
 	s := ctx.state
 	plan := NewManagementApplyIntent(ManagementApplyIntentInput{
-		ApplyRoot:     s.applyRoot,
-		LiveRoot:      s.liveRoot,
-		Settings:      s.settings,
-		Inbounds:      s.inbounds,
-		Rules:         s.rules,
-		RoutingSource: routing.EnsureDatSource(s.routingSource, s.rules),
-		Warp:          s.warp,
+		ApplyRoot:       s.applyRoot,
+		LiveRoot:        s.liveRoot,
+		Context:         ctx.operationContext(),
+		SystemdWantsDir: s.systemdWantsDir,
+		Settings:        s.settings,
+		Inbounds:        s.inbounds,
+		Rules:           s.rules,
+		RoutingSource:   routing.EnsureDatSource(s.routingSource, s.rules),
+		Warp:            s.warp,
 	}).BuildPlan()
 	if validation, ok := s.enforceValidationLocked(ctx.operationContext(), s.settings, s.inbounds, s.warp); !ok {
 		plan.Valid = false
@@ -186,12 +188,15 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 	}
 	// When WARP is disabled its config is never staged, and the live sing-box
 	// directory is root-owned so the panel's orphan scan can't see warp.json.
-	// Drive teardown from desired state instead: if the unit is still running,
-	// remove the artifact, which both deletes the live config and (via
+	// Drive teardown from desired state instead: if the unit is still present
+	// — running, enabled, merely loaded, or its config still on disk — remove
+	// the artifact, which both deletes the live config and (via
 	// UnitForArtifactID) stops and disables veil-warp.service so the egress
-	// actually turns off. Gating on the running unit keeps the teardown to
-	// exactly once and leaves applies that never used WARP untouched.
-	if !ctx.state.warp.Enabled && ctx.warpUnitActiveLocked() &&
+	// actually turns off. Gating on the unit's *presence* rather than its
+	// active state covers enabled-but-inactive and status-errored services
+	// that would otherwise keep their stale configuration (#1133) while
+	// leaving applies that never used WARP untouched.
+	if !ctx.state.warp.Enabled && ctx.unitTeardownPending(renderer.UnitWarp, generatedconfig.WarpConfigSubpath) &&
 		!slices.Contains(removeIDs, generatedconfig.WarpConfigSubpath) {
 		removeIDs = append(removeIDs, generatedconfig.WarpConfigSubpath)
 	}
@@ -200,13 +205,32 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 	// orphan scan will never touch it (config.json is excluded as a shared
 	// singleton artifact) and veil-caddy.service would keep serving the
 	// STALE auth_credentials forever (audit #123). Removing the artifact
-	// stops and disables the unit via UnitForArtifactID.
-	if !caddyRequired(ctx.state.settings, ctx.state.inbounds) && ctx.caddyUnitActiveLocked() &&
+	// stops and disables the unit via UnitForArtifactID — again whenever the
+	// unit or its config is still present, not only while it is active
+	// (#1133).
+	if !caddyRequired(ctx.state.settings, ctx.state.inbounds) && ctx.unitTeardownPending(unitCaddy, generatedconfig.CaddyJSONConfigSubpath) &&
 		!slices.Contains(removeIDs, generatedconfig.CaddyJSONConfigSubpath) {
 		removeIDs = append(removeIDs, generatedconfig.CaddyJSONConfigSubpath)
 	}
 	desiredUnits := desiredRuntimeUnits(ctx.state.settings, ctx.state.inbounds, ctx.state.warp)
 	wantsOrphans := scanEnabledOrphanTemplateUnits(ctx.state.systemdWantsDir, desiredUnits)
+	// Capture the lifecycle state of every unit this apply can touch BEFORE
+	// the promotion mutates anything: desired units, orphaned enabled units,
+	// and the units of every promoted/removed artifact. A later rollback
+	// restores exactly these states instead of blanket enable+start (#1135).
+	lifecycleUnits := mergeOrphanedUnits(nil, wantsOrphans)
+	for _, id := range artifactIDs {
+		if unit, ok := UnitForArtifactID(id); ok {
+			lifecycleUnits = mergeOrphanedUnits(lifecycleUnits, []string{unit})
+		}
+	}
+	for _, id := range removeIDs {
+		if unit, ok := UnitForArtifactID(id); ok {
+			lifecycleUnits = mergeOrphanedUnits(lifecycleUnits, []string{unit})
+		}
+	}
+	previousStates := ctx.captureServiceLifecycle(desiredUnits, lifecycleUnits)
+	ctx.state.previousServiceStates = previousStates
 	if len(artifactIDs) == 0 && len(removeIDs) == 0 {
 		// No files to promote, but leftover enabled template units still need
 		// stop/disable on the subsequent service reload.
@@ -228,6 +252,7 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 		ServicePhase:               "pending",
 		FirewallPhase:              "pending",
 		LiveRoot:                   ctx.state.liveRoot,
+		PreviousServiceStates:      previousStates,
 	}); err != nil {
 		return nil, nil, nil, fmt.Errorf("persist publication phase before promotion: %w", err)
 	}
@@ -534,10 +559,7 @@ func (ctx ManagementApplyContext) rollbackPromotedConfigs(records []livePromotio
 			}
 		}
 		for _, unit := range restoredUnits {
-			rollbackActions = append(rollbackActions,
-				ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionEnable),
-				ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionStart),
-			)
+			rollbackActions = append(rollbackActions, ctx.restoreUnitLifecycle(unit)...)
 		}
 	}
 	return rollbackFiles, removedFiles, rollbackActions
@@ -784,44 +806,136 @@ func (ctx ManagementApplyContext) runPrivilegedServiceAction(unit string, action
 	return result
 }
 
-// warpUnitActiveLocked reports whether veil-warp.service is currently running,
-// so a WARP teardown only happens when there is actually something to stop.
-func (ctx ManagementApplyContext) warpUnitActiveLocked() bool {
-	if ctx.state.privileged == nil {
+// unitFileStateEnabled reports whether a systemd UnitFileState means the unit
+// starts on boot — the enablement a teardown must remove even when the unit
+// is not running right now (#1133).
+func unitFileStateEnabled(state string) bool {
+	switch state {
+	case "enabled", "enabled-runtime", "linked", "alias", "indirect", "generated", "transient":
+		return true
+	default:
 		return false
 	}
-	statuses, err := ctx.state.privileged.ServiceStatus(ctx.operationContext(), privileged.ServiceStatusRequest{
-		Units: []string{renderer.UnitWarp},
-	})
-	if err != nil {
-		return false
+}
+
+// unitTeardownPending reports whether a no-longer-desired managed unit still
+// needs its artifact removed. The gate is evidence of life, not just the
+// active state: a unit that is running, enabled-but-inactive, or in a
+// status-error state must still lose its config and its enablement so it
+// cannot come back after a reboot with stale material (#1133). A unit that
+// is merely loaded while disabled and inactive — with no artifact on disk —
+// is inert and must be left untouched.
+func (ctx ManagementApplyContext) unitTeardownPending(unit, artifactID string) bool {
+	if ctx.state.privileged != nil {
+		if statuses, err := ctx.state.privileged.ServiceStatus(ctx.operationContext(), privileged.ServiceStatusRequest{
+			Units: []string{unit},
+		}); err == nil {
+			for _, status := range statuses.Services {
+				if status.Unit != unit {
+					continue
+				}
+				if status.Error != "" {
+					// The unit could not be queried; treat presence as
+					// unknown rather than absent so an errored service does
+					// not keep stale configuration (#1133).
+					return true
+				}
+				if status.ActiveState == "active" || unitFileStateEnabled(status.UnitFileState) {
+					return true
+				}
+			}
+		}
 	}
-	for _, status := range statuses.Services {
-		if status.Unit == renderer.UnitWarp && status.ActiveState == "active" {
+	// Evidence the apply can observe directly: a live artifact still on disk
+	// or an enablement symlink in the systemd wants directory. A permission
+	// error on the artifact means the panel cannot determine presence —
+	// fail toward retiring it so root-owned leftovers do not linger.
+	artifactPath := filepath.Join(ctx.state.liveRoot, filepath.FromSlash(artifactID))
+	if _, err := os.Lstat(artifactPath); err == nil || os.IsPermission(err) {
+		return true
+	}
+	if ctx.state.systemdWantsDir != "" {
+		if _, err := os.Lstat(filepath.Join(ctx.state.systemdWantsDir, unit)); err == nil {
 			return true
 		}
 	}
 	return false
 }
 
-// caddyUnitActiveLocked reports whether veil-caddy.service is currently
-// active, used to gate Caddy config teardown on desired state.
-func (ctx ManagementApplyContext) caddyUnitActiveLocked() bool {
+// captureServiceLifecycle snapshots "activeState|unitFileState" for every
+// unit the apply can touch. Desired units come from the runtime catalog;
+// extra units are orphaned/removed-artifact units. Template names without an
+// instance (veil-hysteria2@.service) carry no runtime state and are skipped.
+func (ctx ManagementApplyContext) captureServiceLifecycle(desired map[string]struct{}, extra []string) map[string]string {
+	states := map[string]string{}
 	if ctx.state.privileged == nil {
-		return false
+		return states
 	}
-	statuses, err := ctx.state.privileged.ServiceStatus(ctx.operationContext(), privileged.ServiceStatusRequest{
-		Units: []string{unitCaddy},
-	})
+	seen := map[string]struct{}{}
+	units := make([]string, 0, len(desired)+len(extra))
+	for unit := range desired {
+		seen[unit] = struct{}{}
+		units = append(units, unit)
+	}
+	for _, unit := range extra {
+		if _, ok := seen[unit]; ok {
+			continue
+		}
+		seen[unit] = struct{}{}
+		units = append(units, unit)
+	}
+	concrete := units[:0]
+	for _, unit := range units {
+		if unit == "" || strings.Contains(unit, "@.") {
+			continue
+		}
+		concrete = append(concrete, unit)
+	}
+	if len(concrete) == 0 {
+		return states
+	}
+	statuses, err := ctx.state.privileged.ServiceStatus(ctx.operationContext(), privileged.ServiceStatusRequest{Units: concrete})
 	if err != nil {
-		return false
+		return states
 	}
 	for _, status := range statuses.Services {
-		if status.Unit == unitCaddy && status.ActiveState == "active" {
-			return true
+		if status.Unit == "" {
+			continue
+		}
+		states[status.Unit] = status.ActiveState + "|" + status.UnitFileState
+	}
+	return states
+}
+
+// restoreUnitLifecycle returns the service actions that put a restored unit
+// back into its pre-apply lifecycle state: previously enabled units are
+// re-enabled, previously active units are restarted, and units that were
+// stopped or disabled stay down (#1135). When no evidence was captured the
+// historical enable+start fallback is kept so the restored config is served.
+func (ctx ManagementApplyContext) restoreUnitLifecycle(unit string) []ServiceActionResult {
+	prev, known := ctx.state.previousServiceStates[unit]
+	if !known {
+		return []ServiceActionResult{
+			ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionEnable),
+			ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionStart),
 		}
 	}
-	return false
+	parts := strings.SplitN(prev, "|", 2)
+	wasActive := parts[0] == "active" || parts[0] == "activating"
+	wasEnabled := len(parts) == 2 && unitFileStateEnabled(parts[1])
+	var out []ServiceActionResult
+	if wasEnabled {
+		out = append(out, ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionEnable))
+	}
+	if wasActive {
+		out = append(out, ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionStart))
+	} else {
+		out = append(out, ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionStop))
+	}
+	if !wasEnabled {
+		out = append(out, ctx.runPrivilegedServiceAction(unit, privileged.ServiceActionDisable))
+	}
+	return out
 }
 
 func livePathsForArtifactIDs(liveRoot string, ids []string) []string {

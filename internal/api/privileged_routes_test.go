@@ -25,6 +25,9 @@ type recordingPrivilegedClient struct {
 	statusRequests        []privileged.ServiceStatusRequest
 	statusActiveState     string
 	statusActiveStates    []string
+	statusLoadState       string
+	statusUnitFileState   string
+	statusError           string
 	journals              []privileged.JournalRequest
 	journalLines          []string
 	backups               []privileged.BackupRequest
@@ -255,10 +258,15 @@ func (c *recordingPrivilegedClient) ServiceStatus(_ context.Context, request pri
 	if activeState != "active" {
 		subState = "dead"
 	}
+	loadState := c.statusLoadState
+	if loadState == "" {
+		loadState = "loaded"
+	}
 	result := privileged.ServiceStatusResult{}
 	for _, unit := range request.Units {
 		result.Services = append(result.Services, privileged.ServiceStatus{
-			Unit: unit, LoadState: "loaded", ActiveState: activeState, SubState: subState,
+			Unit: unit, LoadState: loadState, ActiveState: activeState, SubState: subState,
+			UnitFileState: c.statusUnitFileState, Error: c.statusError,
 		})
 	}
 	return result, nil

@@ -49,4 +49,7 @@ export const ApplyOperationInterruptionRisk = {
   reload: 'reload',
   'connection-drop': 'connection-drop',
   'lockout-risk': 'lockout-risk',
+  teardown: 'teardown',
+  'boot-persistence': 'boot-persistence',
+  'firewall-change': 'firewall-change',
 } as const;

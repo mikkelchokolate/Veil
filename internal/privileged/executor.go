@@ -256,7 +256,10 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 				}
 				result.Services = append(result.Services, ServiceStatus{
 					Unit: status.Unit, LoadState: status.LoadState, ActiveState: status.ActiveState, SubState: status.SubState,
-					MainPID: status.MainPID, ExecMainStartMonotonic: status.ExecMainStartMonotonic, ExecutableDigest: executableDigest,
+					UnitFileState:          status.UnitFileState,
+					MainPID:                status.MainPID,
+					ExecMainStartMonotonic: status.ExecMainStartMonotonic,
+					ExecutableDigest:       executableDigest,
 				})
 			}
 			return result, nil

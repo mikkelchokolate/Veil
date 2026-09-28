@@ -49,6 +49,11 @@ export type ApplyOperationType = typeof ApplyOperationType[keyof typeof ApplyOpe
 
 export const ApplyOperationType = {
   promote_file: 'promote_file',
+  remove_file: 'remove_file',
   reload_service: 'reload_service',
   restart_service: 'restart_service',
+  stop_service: 'stop_service',
+  disable_service: 'disable_service',
+  enable_service: 'enable_service',
+  reconcile_firewall: 'reconcile_firewall',
 } as const;

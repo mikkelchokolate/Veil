@@ -155,6 +155,10 @@ func TestLiveConfigOrphanDirsComeFromTemplateAndAggregateProtocolPlugins(t *test
 		{subpath: "hysteria2", ext: ".yaml", exclude: "*.yaml"},
 		{subpath: "mieru", ext: ".json"},
 		{subpath: "olcrtc", ext: ".yaml", exclude: "*.yaml"},
+		// Route databases live under rules/ by name; stale *.dat files are
+		// orphaned once no routing source stages them (#1135). The list is
+		// sorted by subpath, so rules scans last.
+		{subpath: "rules", ext: ".dat"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("liveConfigOrphanDirs = %+v, want %+v", got, want)
