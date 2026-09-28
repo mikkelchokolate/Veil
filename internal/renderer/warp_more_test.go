@@ -77,7 +77,7 @@ func TestRenderWarpSingBoxDefaults(t *testing.T) {
 	for _, want := range []string{
 		`"address": "engage.cloudflareclient.com"`,
 		`"port": 2408`,
-		`"listen": "127.0.0.1"`,
+		`"listen": "127.41.0.1"`,
 		`"listen_port": 40000`,
 		`"mtu": 1280`,
 		`"final": "warp"`,

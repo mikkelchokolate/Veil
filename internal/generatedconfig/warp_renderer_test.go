@@ -54,8 +54,10 @@ func TestGeneratedWarpConfigRendererRendersEnabledWarpArtifact(t *testing.T) {
 	if doc.Route.Final != "warp" {
 		t.Fatalf("route.final = %q, want warp", doc.Route.Final)
 	}
-	if len(doc.Route.Rules) != 1 || doc.Route.Rules[0].RuleSet != "geosite-openai" || doc.Route.Rules[0].Outbound != "warp" {
-		t.Fatalf("route.rules = %+v, want one geosite-openai→warp rule_set rule", doc.Route.Rules)
+	// The leading rule is the non-overridable egress deny (issue #1096); the
+	// operator geosite rule follows it.
+	if len(doc.Route.Rules) != 2 || doc.Route.Rules[0].Outbound != "block" || doc.Route.Rules[1].RuleSet != "geosite-openai" || doc.Route.Rules[1].Outbound != "warp" {
+		t.Fatalf("route.rules = %+v, want leading block rule then one geosite-openai→warp rule_set rule", doc.Route.Rules)
 	}
 	if len(doc.Route.RuleSet) != 1 || doc.Route.RuleSet[0].Tag != "geosite-openai" || doc.Route.RuleSet[0].Type != "remote" ||
 		doc.Route.RuleSet[0].URL != "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-openai.srs" {

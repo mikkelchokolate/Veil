@@ -121,7 +121,7 @@ func TestRenderConfigWithWarpSOCKS(t *testing.T) {
 	if len(on) != 1 {
 		t.Fatalf("artifacts = %d", len(on))
 	}
-	if !strings.Contains(on[0].Body, "proxy_addr: 127.0.0.1") || !strings.Contains(on[0].Body, "proxy_port: 40001") {
+	if !strings.Contains(on[0].Body, "proxy_addr: 127.41.0.1") || !strings.Contains(on[0].Body, "proxy_port: 40001") {
 		t.Fatalf("WARP on missing SOCKS:\n%s", on[0].Body)
 	}
 

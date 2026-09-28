@@ -20,15 +20,16 @@ func TestMieruGeneratedConfigModelAllDisabledProfilesDoNotReviveInboundCredentia
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if !ok {
-		t.Fatal("expected Mieru config model")
+	// All-disabled profiles are full revocation: the inbound must NOT render
+	// the legacy fallback credential, and — so the daemon does not even
+	// listen on a port nobody can authenticate to — the port binding is
+	// dropped too. With nothing left the model itself is omitted (ok=false)
+	// so promotion stops the unit (issue #1098).
+	if ok {
+		t.Fatalf("expected the model to be dropped for a fully revoked inbound, got %+v", config)
 	}
-	if len(config.Users) != 0 {
-		t.Fatalf("users = %+v, want none (all profiles disabled must revoke the user, not fall back)", config.Users)
-	}
-	// The binding is still rendered (the inbound is enabled).
-	if len(config.PortBindings) != 1 {
-		t.Fatalf("bindings = %+v", config.PortBindings)
+	if len(config.Users) != 0 || len(config.PortBindings) != 0 {
+		t.Fatalf("revoked inbound leaked users/bindings: %+v", config)
 	}
 }
 
@@ -107,5 +108,33 @@ func TestMieruGeneratedConfigModelAllowsDistinctUsernames(t *testing.T) {
 	}
 	if len(config.Users) != 2 {
 		t.Fatalf("users = %+v", config.Users)
+	}
+}
+
+// TestMieruGeneratedConfigModelClientBindingsDoNotReviveInboundCredential is
+// the #1098 normalization analogue of the all-disabled-profiles case: the
+// binding rows still exist but every usable credential is gone — the inbound
+// drops out of the aggregate instead of resurrecting the fallback password.
+func TestMieruGeneratedConfigModelClientBindingsDoNotReviveInboundCredential(t *testing.T) {
+	config, ok, err := NewMieruGeneratedConfigModel(Settings{}).Build([]Inbound{
+		{
+			Name:      "mieru-a",
+			Protocol:  "mieru",
+			Transport: "tcp",
+			Port:      443,
+			Enabled:   true,
+			Password:  "legacy-inbound-pass",
+			// Equivalent to a binding list whose credentials are all revoked.
+			HasClientBindings: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if ok {
+		t.Fatalf("expected the model to be dropped for a revoked client-managed inbound, got %+v", config)
+	}
+	if len(config.Users) != 0 || len(config.PortBindings) != 0 {
+		t.Fatalf("revoked inbound leaked users/bindings: %+v", config)
 	}
 }

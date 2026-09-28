@@ -31,19 +31,27 @@ func (m MieruGeneratedConfigModel) Build(inbounds []Inbound) (renderer.MieruConf
 		if !m.includes(inbound) {
 			continue
 		}
-		config.PortBindings = append(config.PortBindings, renderer.MieruPortBinding{Port: inbound.Port, Protocol: inbound.Transport})
 		credentials, err := BuildClientCredentials(inbound)
 		if err != nil {
 			return renderer.MieruConfig{}, false, err
 		}
-		if len(credentials) == 0 {
+		if len(credentials) == 0 && (hasProfiles(inbound) || inbound.HasClientBindings) {
 			// Fall back to the inbound credential only when the inbound has no
-			// client profiles at all. If profiles exist but every one of them
-			// is disabled, the user deliberately revoked all clients: falling
-			// back would silently re-enable the legacy inbound user.
-			if hasProfiles(inbound) {
-				continue
-			}
+			// client profiles at all AND no normalized bindings. Profiles that
+			// exist but are all disabled, or bindings whose credentials are all
+			// revoked/expired/depleted, mean the operator revoked every client:
+			// falling back would silently re-enable the legacy inbound user
+			// (issue #1098). Skip the inbound entirely — no user AND no port
+			// binding, so the daemon doesn't even listen for it. When every
+			// enabled mieru inbound is drained this way the artifact itself is
+			// dropped (ok=false): promotion removes server_config.json and the
+			// veil-mieru unit is stopped, which is strictly fail-closed and —
+			// unlike a render error — does not leave the previously promoted
+			// user table running.
+			continue
+		}
+		config.PortBindings = append(config.PortBindings, renderer.MieruPortBinding{Port: inbound.Port, Protocol: inbound.Transport})
+		if len(credentials) == 0 {
 			// A credential-less inbound (e.g. restored from an old backup that
 			// predates credential_required validation) must NOT render a user
 			// with an empty password — anyone guessing the inbound name could

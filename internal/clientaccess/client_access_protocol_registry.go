@@ -144,6 +144,13 @@ func (r ClientAccessProtocolRegistry) BuildLinks(settings Settings, inbound Inbo
 		return nil
 	}
 	if len(credentials) == 0 {
+		if inbound.HasClientBindings {
+			// Normalized bindings exist for this inbound but none resolve to a
+			// usable credential (revoked/expired/depleted/disabled). Emitting
+			// the legacy fallback link would re-publish a credential the
+			// operator deliberately stopped using (issue #1098) — emit nothing.
+			return nil
+		}
 		link, ok := protocol.FallbackLink(ClientAccessLinkInput{Settings: settings, Inbound: inbound, LinkName: inbound.Name})
 		if !ok {
 			return nil
@@ -232,6 +239,13 @@ func hysteria2ProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) 
 }
 
 func hysteria2FallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
+	if len(input.Inbound.Profiles) > 0 || input.Inbound.HasClientBindings {
+		// Profiles exist but are all disabled, or bindings exist: the inbound
+		// is credential-managed, so the shared fallback password must never be
+		// advertised again (issue #1098) — matching the naive/mieru fallback
+		// suppression.
+		return ClientLink{}, false
+	}
 	if !hasClientEndpoint(input) {
 		return ClientLink{}, false
 	}

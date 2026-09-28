@@ -25,8 +25,13 @@ func (Plugin) RenderConfig(input generatedconfig.ProtocolRenderInput) ([]generat
 			return nil, false, err
 		}
 		if len(access.Hysteria2Users()) == 0 && inbound.HadClientProfiles() {
-			// Profiles exist (or were suppressed post-migration) but none are
-			// enabled: do not revive the inbound password (#1117).
+			// Profiles exist but none are enabled, were suppressed
+			// post-migration, or the normalized client store still has
+			// bindings whose credentials are all revoked, expired, depleted
+			// or disabled: do not revive the inbound password (issues #1098,
+			// #1117). Skipping the artifact orphans the live YAML, so
+			// promotion removes it and the veil-hysteria2@<name> instance is
+			// stopped — the inbound fails fully closed.
 			continue
 		}
 		body, err := renderHysteria2(input.Settings, inbound, input.Warp, input.Rules, input.Paths)
@@ -76,39 +81,65 @@ func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.
 		hystConfig.CertPath = paths.PanelCertPath()
 		hystConfig.KeyPath = paths.PanelKeyPath()
 	}
+	// The egress ACL is emitted for every Hysteria2 config (with or without
+	// WARP), so routing rules and the geo databases are wired unconditionally —
+	// a user rule naming "warp" degrades to "direct" when no upstream exists
+	// rather than silently dropping the ACL entirely (#1095).
 	if warp.Enabled {
 		socksPort := warp.SocksPort
 		if socksPort == 0 {
 			socksPort = 40000
 		}
 		hystConfig.Upstream = net.JoinHostPort(warp.SocksDialAddr(), strconv.Itoa(socksPort))
-		hystConfig.GeoIPPath = routingDatPath(paths, "geoip.dat")
-		hystConfig.GeoSitePath = routingDatPath(paths, "geosite.dat")
-		for _, rule := range rules {
-			if !rule.Enabled {
-				continue
-			}
-			hystConfig.RoutingRules = append(hystConfig.RoutingRules, renderer.Hysteria2RoutingRule{
-				Match:    rule.Match,
-				Outbound: rule.Outbound,
-			})
+	}
+	hystConfig.GeoIPPath = routingDatPath(paths, "geoip.dat")
+	hystConfig.GeoSitePath = routingDatPath(paths, "geosite.dat")
+	for _, rule := range rules {
+		if !rule.Enabled {
+			continue
 		}
+		hystConfig.RoutingRules = append(hystConfig.RoutingRules, renderer.Hysteria2RoutingRule{
+			Match:    rule.Match,
+			Outbound: rule.Outbound,
+		})
 	}
 	return renderer.RenderHysteria2(hystConfig)
 }
 
+// routingDatPath resolves the geoip.dat/geosite.dat path embedded in the
+// generated Hysteria2 YAML. The file is staged under
+// <applyRoot>/generated/rules and then PROMOTED to
+// <liveRoot>/rules/<name> before services reload, so the rendered config must
+// reference the live location — embedding the staging path leaves the running
+// server pointing at a file it may not be able to read (issue #1132).
+// When no live root is configured the staging path is used (tests and
+// pre-promotion renders). An empty string means the dat is absent everywhere
+// and must not be referenced.
 func routingDatPath(paths generatedconfig.Paths, name string) string {
-	candidates := []string{paths.Generated("rules/" + name)}
-	if paths.LiveRoot != "" {
-		candidates = append(candidates, filepath.Join(paths.LiveRoot, "rules", name))
+	// The live location is <liveRoot>/rules/<name> when a real live root is
+	// configured; in single-root compat mode (tests, previews) the generated
+	// tree IS the live location.
+	live := ""
+	if paths.LiveRoot != "" && paths.LiveRoot != paths.ApplyRoot {
+		live = filepath.Join(paths.LiveRoot, "rules", name)
+	} else {
+		live = paths.Generated("rules/" + name)
 	}
-	for _, candidate := range candidates {
-		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
-			return candidate
-		}
+	staged := paths.Generated("rules/" + name)
+	if regularFileExists(live) {
+		return live
 	}
-	if paths.LiveRoot != "" {
-		return filepath.Join(paths.LiveRoot, "rules", name)
+	if regularFileExists(staged) {
+		// Promotion copies rules/*.dat to the live root before reload, so the
+		// generated YAML must name the destination, not the source (#1132).
+		return live
 	}
-	return candidates[0]
+	// The dat exists nowhere: emit no reference rather than a path that can
+	// never load — acl.geoip pointing at a missing file fails config load.
+	return ""
+}
+
+func regularFileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
 }

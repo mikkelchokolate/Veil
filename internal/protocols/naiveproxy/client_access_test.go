@@ -124,3 +124,19 @@ func TestBuildLinksEmitsNaivePlusHTTPSAndBracketsIPv6(t *testing.T) {
 		t.Fatalf("hostname = %q", parsed.Hostname())
 	}
 }
+
+func TestBuildLinksOmitsFallbackWhenInboundHasClientBindings(t *testing.T) {
+	settings := model.Settings{Domain: "vpn.example.com", NaiveUsername: "veil", NaivePassword: "global"}
+	inbound := model.Inbound{
+		Name: "naive", Protocol: "naiveproxy", Enabled: true,
+		HasClientBindings: true,
+		ProtocolFields:    map[string]any{"domain": "vpn.example.com", "transport": "tcp"},
+	}
+	links, err := BuildLinks(settings, inbound)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(links) != 0 {
+		t.Fatalf("credential-managed inbound must not revive fallback URI, got %+v", links)
+	}
+}

@@ -31,6 +31,11 @@ func BuildLinks(settings model.Settings, inbound model.Inbound) ([]model.ClientL
 	}
 	if len(resolved) == 0 {
 		if inbound.HadClientProfiles() {
+			// Profiles exist but are all disabled, are suppressed
+			// post-migration, or normalized bindings exist with no usable
+			// credential: credential-managed inbound — do not fall back to
+			// the legacy shared password (issues #1098, #1117; mirrors the
+			// registry fallback gate).
 			return nil, nil
 		}
 		username := naiveUsername(settings, inbound)

@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 )
@@ -83,6 +84,23 @@ func DeriveCipher(source *Cipher, label string) (*Cipher, error) {
 	var key [KeySize]byte
 	copy(key[:], digest[:])
 	return NewCipher(key)
+}
+
+// DeriveToken returns a deterministic 64-hex-char token derived from the
+// cipher's key material and a domain label (SHA-256 of key bytes concatenated
+// with the label — the same construction as DeriveCipher). Unlike Encrypt,
+// the output is stable across calls, which is what render paths need: a
+// per-install secret for values that must be unguessable to a remote peer but
+// byte-identical across renders so generated configs do not churn (and so
+// services do not reload spuriously). Rotating the source key rotates the
+// token. A nil source returns "" so callers can detect "no secret available".
+func DeriveToken(source *Cipher, label string) string {
+	if source == nil {
+		return ""
+	}
+	material := append(source.KeyBytes(), []byte(label)...)
+	digest := sha256.Sum256(material)
+	return hex.EncodeToString(digest[:])
 }
 
 // Encrypt encrypts a plaintext string and returns a "ve1:<base64url>" string.

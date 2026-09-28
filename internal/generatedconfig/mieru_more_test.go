@@ -49,8 +49,14 @@ func TestGeneratedMieruConfigRendererKeepsSiblingUsersAndBindings(t *testing.T) 
 	if err != nil || !ok {
 		t.Fatalf("Render ok=%v err=%v", ok, err)
 	}
-	if !strings.Contains(artifact.Body, `"name": "alice"`) || !strings.Contains(artifact.Body, `"protocol": "TCP"`) || !strings.Contains(artifact.Body, `"protocol": "UDP"`) {
-		t.Fatalf("aggregated config missing alice or both bindings:\n%s", artifact.Body)
+	if !strings.Contains(artifact.Body, `"name": "alice"`) || !strings.Contains(artifact.Body, `"protocol": "TCP"`) {
+		t.Fatalf("aggregated config missing alice or the TCP binding:\n%s", artifact.Body)
+	}
+	// The sibling inbound is credential-managed (a disabled profile) with zero
+	// usable users: its UDP binding must drop too — the daemon must not even
+	// listen for a fully revoked inbound (issue #1098).
+	if strings.Contains(artifact.Body, `"protocol": "UDP"`) {
+		t.Fatalf("revoked inbound's UDP binding must drop:\n%s", artifact.Body)
 	}
 	// A substring sweep is not enough: forbid the disabled profile's name and
 	// password as JSON values, not just the leftover inbound password (#822).

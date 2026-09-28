@@ -73,6 +73,12 @@ func (m Mutation) UpdateSettings(update Settings) (Settings, error) {
 	if err := veilsettings.NewSettingsValidationWithFieldSchemas(m.settingsFieldSchemas).NormalizeAndValidate(&update, current); err != nil {
 		return Settings{}, err
 	}
+	// The credential-derivation secret is runtime-only (json:"-"), injected
+	// from the state key at load — a PUT body can never carry it. Preserve the
+	// current value so a settings update does not silently strip the secret
+	// and degrade revoked-client sentinels back to publicly derivable values
+	// (issue #1098).
+	update.CredentialDerivationSecret = current.CredentialDerivationSecret
 	if m.target.Settings != nil {
 		*m.target.Settings = update
 	}

@@ -76,7 +76,7 @@ func TestInboundRendererNaiveUsesFallbackPasswordsAndDefaultWarpPort(t *testing.
 	if !strings.Contains(body, "inbound-secret") {
 		t.Fatalf("expected inbound naive password:\n%s", body)
 	}
-	if !strings.Contains(body, "upstream socks5://127.0.0.1:40000") {
+	if !strings.Contains(body, "upstream socks5://127.41.0.1:40000") {
 		t.Fatalf("expected default warp socks port:\n%s", body)
 	}
 }
@@ -122,7 +122,7 @@ func TestInboundRendererHysteria2UsesFallbackPasswordsAndDefaultWarpPort(t *test
 	if !strings.Contains(body, "inbound-secret") {
 		t.Fatalf("expected inbound hysteria2 password:\n%s", body)
 	}
-	if !strings.Contains(body, "addr: 127.0.0.1:40000") {
+	if !strings.Contains(body, "addr: 127.41.0.1:40000") {
 		t.Fatalf("expected default warp upstream port:\n%s", body)
 	}
 }
