@@ -1565,9 +1565,11 @@ type ClientBindingCreateResponse struct {
 // ClientBindingInput defines model for ClientBindingInput.
 type ClientBindingInput struct {
 	// Credential Optional explicit credential; server-generated when empty.
-	Credential      *string `json:"credential,omitempty"`
-	Enabled         *bool   `json:"enabled,omitempty"`
-	InboundId       string  `json:"inboundId"`
+	Credential *string `json:"credential,omitempty"`
+	Enabled    *bool   `json:"enabled,omitempty"`
+	InboundId  string  `json:"inboundId"`
+
+	// RuntimeIdentity Canonical lowercase runtime identity. Uppercase is rejected — runtimes fold case, so mixed-case identities break traffic accounting and enable case-only collisions.
 	RuntimeIdentity *string `json:"runtimeIdentity,omitempty"`
 }
 
@@ -1599,10 +1601,12 @@ type ClientBulkResult struct {
 // ClientCreateRequest defines model for ClientCreateRequest.
 type ClientCreateRequest struct {
 	// Bindings Bind the client to inbounds atomically with creation. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials.
-	Bindings         *[]ClientBindingInput                `json:"bindings,omitempty"`
-	DeviceLimit      nullable.Nullable[int]               `json:"deviceLimit,omitempty"`
-	Email            nullable.Nullable[string]            `json:"email,omitempty"`
-	Enabled          *bool                                `json:"enabled,omitempty"`
+	Bindings    *[]ClientBindingInput     `json:"bindings,omitempty"`
+	DeviceLimit nullable.Nullable[int]    `json:"deviceLimit,omitempty"`
+	Email       nullable.Nullable[string] `json:"email,omitempty"`
+	Enabled     *bool                     `json:"enabled,omitempty"`
+
+	// ExpiresAt Unix expiry timestamp; null means never. Non-positive values are rejected — every enforcement path already treats them as expired while status would report active.
 	ExpiresAt        nullable.Nullable[int64]             `json:"expiresAt,omitempty"`
 	GroupId          nullable.Nullable[string]            `json:"groupId,omitempty"`
 	Name             string                               `json:"name"`
@@ -1692,9 +1696,11 @@ type ClientMigrateResponse struct {
 
 // ClientPatchRequest Presence-aware patch. Omitted fields are preserved, explicit null clears nullable/defaultable fields, and supplied values replace them.
 type ClientPatchRequest struct {
-	DeviceLimit      nullable.Nullable[int]                                `json:"deviceLimit,omitempty"`
-	Email            nullable.Nullable[string]                             `json:"email,omitempty"`
-	Enabled          nullable.Nullable[bool]                               `json:"enabled,omitempty"`
+	DeviceLimit nullable.Nullable[int]    `json:"deviceLimit,omitempty"`
+	Email       nullable.Nullable[string] `json:"email,omitempty"`
+	Enabled     nullable.Nullable[bool]   `json:"enabled,omitempty"`
+
+	// ExpiresAt Unix expiry timestamp; null clears the expiry. Non-positive values are rejected.
 	ExpiresAt        nullable.Nullable[int64]                              `json:"expiresAt,omitempty"`
 	GroupId          nullable.Nullable[string]                             `json:"groupId,omitempty"`
 	Name             *string                                               `json:"name,omitempty"`
