@@ -34,6 +34,7 @@ export const defaultHandlers = [
 	http.get("/api/inbounds/:name/clients", () =>
 		HttpResponse.json({ items: [], total: 0, page: 1, pageSize: 500 }),
 	),
+	http.get("/api/processes", () => HttpResponse.json({ processes: [] })),
 ];
 
 export { HttpResponse, http };
