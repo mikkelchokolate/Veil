@@ -15,7 +15,9 @@ func TestInstallApplyModuleWritesManagedFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if len(result.WrittenFiles) != 2 {
+	// Two managed-dir markers (.veil-managed under etc and var, #1145) plus
+	// the caddy config and fallback index make up the written set.
+	if len(result.WrittenFiles) != 4 {
 		t.Fatalf("written files = %+v", result.WrittenFiles)
 	}
 	body, err := os.ReadFile(filepath.Join(paths.EtcDir, "generated", "caddy", "config.json"))

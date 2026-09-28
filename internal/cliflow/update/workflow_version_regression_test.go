@@ -35,6 +35,56 @@ func TestRunWorkflowUpdatesReleaseCandidateToStable(t *testing.T) {
 	}
 }
 
+// TestRunWorkflowRefusesNonReleaseBuildWithoutForce is the CLI half of
+// #1104: a main-<sha> install-main build (or any non-release stamp) does not
+// order against release tags — Compare sorts it before every tag, so the old
+// code happily "updated" a newer source build to the latest release and could
+// strand the panel on an older DB schema. Without --force it must refuse.
+func TestRunWorkflowRefusesNonReleaseBuildWithoutForce(t *testing.T) {
+	for _, current := range []string{"main-abcdef1", "dev"} {
+		var out bytes.Buffer
+		downloaded := false
+		deps, _ := newValidWorkflowDeps(t)
+		origDownload := deps.DownloadAsset
+		deps.DownloadAsset = func(url string) ([]byte, error) {
+			downloaded = true
+			return origDownload(url)
+		}
+		if err := RunWorkflow(WorkflowOptions{CurrentVersion: current}, &out, deps); err != nil {
+			t.Fatalf("RunWorkflow(%q): %v", current, err)
+		}
+		got := out.String()
+		if downloaded || strings.Contains(got, "Updating") {
+			t.Fatalf("non-release build %q proceeded to update without --force:\n%s", current, got)
+		}
+		if !strings.Contains(got, "not a release build") || !strings.Contains(got, "--force") {
+			t.Fatalf("non-release build %q missing refusal guidance:\n%s", current, got)
+		}
+	}
+}
+
+// TestRunWorkflowForcesNonReleaseBuild covers the --force escape hatch: the
+// operator may intentionally replace a main-<sha> build with a release.
+func TestRunWorkflowForcesNonReleaseBuild(t *testing.T) {
+	var out bytes.Buffer
+	downloaded := false
+	deps, _ := newValidWorkflowDeps(t)
+	origDownload := deps.DownloadAsset
+	deps.DownloadAsset = func(url string) ([]byte, error) {
+		downloaded = true
+		return origDownload(url)
+	}
+	deps.ReplaceBinaryFromArchive = func(currentPath string, archive []byte, yes bool) (string, error) {
+		return currentPath + ".backup", nil
+	}
+	if err := RunWorkflow(WorkflowOptions{CurrentVersion: "main-abcdef1", Force: true, Yes: true}, &out, deps); err != nil {
+		t.Fatalf("RunWorkflow forced: %v", err)
+	}
+	if !downloaded {
+		t.Fatal("forced non-release update did not download the release")
+	}
+}
+
 func TestRunWorkflowTreatsReleaseDisplayVersionAsLatest(t *testing.T) {
 	var out bytes.Buffer
 	display := "v1.2.3 (" + strings.Repeat("a", 40) + ")"

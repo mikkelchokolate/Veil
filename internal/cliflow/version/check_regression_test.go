@@ -52,6 +52,43 @@ func TestReleaseTagStripsCommitDisplaySuffix(t *testing.T) {
 	}
 }
 
+// TestIsReleaseVersion is the #1104 discriminator: only a parseable semver
+// release (optionally with prerelease/build metadata or the release display
+// suffix) counts as a release build. install-main "main-<sha>" stamps, dev
+// builds, and empty strings are non-release — callers must not treat them as
+// merely "older than" a tag or they silently downgrade a source build.
+func TestIsReleaseVersion(t *testing.T) {
+	for _, v := range []string{"v0.7.2", "0.7.2", "v0.8.0-rc1", "v1.2.3+build.9", "v1.2.3 (" + strings.Repeat("a", 40) + ")"} {
+		if !IsReleaseVersion(v) {
+			t.Errorf("IsReleaseVersion(%q) = false, want true", v)
+		}
+	}
+	for _, v := range []string{"main-abcdef1", "dev", "(devel)", "", "bogus"} {
+		if IsReleaseVersion(v) {
+			t.Errorf("IsReleaseVersion(%q) = true, want false", v)
+		}
+	}
+}
+
+// TestCheckReportsNonReleaseBuild is the #1104 regression on the version-check
+// side: a main-<sha> build must be reported as a non-release build against the
+// latest tag — not as "newer release available", which reads as advice to
+// downgrade.
+func TestCheckReportsNonReleaseBuild(t *testing.T) {
+	var out bytes.Buffer
+	check := NewCheck("main-abcdef1", &out, func() (string, error) { return "v0.7.2", nil })
+	if err := check.Run(); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	got := out.String()
+	if strings.Contains(got, "Newer release available") {
+		t.Fatalf("non-release build read as downgrade advice:\n%s", got)
+	}
+	if !strings.Contains(got, "non-release build") {
+		t.Fatalf("expected non-release build notice, got:\n%s", got)
+	}
+}
+
 func TestCheckReportsUpToDateWithReleaseCommitDisplay(t *testing.T) {
 	var out bytes.Buffer
 	display := "v1.2.3 (" + strings.Repeat("a", 40) + ")"

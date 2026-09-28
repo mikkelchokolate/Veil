@@ -280,12 +280,13 @@ func (s *managementState) Reload() error {
 	return nil
 }
 
-// Close stops and joins every normalized-domain background worker before
-// closing the SQLite store. The SSE broadcaster is joined before taking
-// clientRequestMu so an in-flight snapshot refresh cannot deadlock against
-// shutdown. RunLifecycle calls it after HTTP draining, while backup restore
-// uses the same detach/stop/close primitives around its DB swap.
-func (s *managementState) Close() error {
+// CloseStreams detaches and closes the shared SSE broadcaster so open
+// event-stream handlers return immediately and http.Server.Shutdown can
+// finish draining (issue #1110). The subsystem is marked stopping so an
+// in-flight request arriving during the drain cannot re-create the hub.
+// RunLifecycle calls this BEFORE Server.Shutdown; Close remains safe to run
+// afterwards (the hub pointer is already nil).
+func (s *managementState) CloseStreams() {
 	s.mu.Lock()
 	s.clientSubsystemStopping = true
 	hub := s.sse
@@ -294,6 +295,18 @@ func (s *managementState) Close() error {
 	if hub != nil {
 		hub.Close()
 	}
+}
+
+// Close stops and joins every normalized-domain background worker before
+// closing the SQLite store. The SSE broadcaster is joined before taking
+// clientRequestMu so an in-flight snapshot refresh cannot deadlock against
+// shutdown. RunLifecycle calls it after HTTP draining, while backup restore
+// uses the same detach/stop/close primitives around its DB swap.
+func (s *managementState) Close() error {
+	// Detach/close the SSE hub first (same primitive RunLifecycle uses for
+	// graceful shutdown, issue #1110) so an in-flight snapshot refresh
+	// cannot deadlock against shutdown.
+	s.CloseStreams()
 
 	// Exclude an in-flight backup restore before touching the lifecycle
 	// context: runPanelBackupRestore holds clientRequestMu for its whole

@@ -1310,7 +1310,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EmptyObject'
+              $ref: '#/components/schemas/PanelUpdateRequest'
       responses:
         '202':
           description: Release archive was staged, re-verified by the helper, installed, and a durable update job now drives the Panel restart.
@@ -4251,6 +4251,23 @@ components:
     EmptyObject:
       type: object
       additionalProperties: false
+    PanelUpdateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        force:
+          type: boolean
+          default: false
+          description: >-
+            Install the latest release even when the running build is not
+            strictly older (e.g. a main-<sha> install-main build or a newer
+            version than the latest tag). Without force such requests are
+            refused with 409 to prevent a silent downgrade.
+      description: >-
+        Optional body for POST /api/version/update. An empty body (or {})
+        requests a normal update, which is refused when the running version
+        is already at or newer than the latest release, or when the running
+        version is not a release build.
     ErrorEnvelope:
       type: object
       required:

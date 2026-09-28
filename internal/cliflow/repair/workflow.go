@@ -22,6 +22,14 @@ type Options struct {
 	PublicIP     string
 }
 
+// mutates reports whether this run is authorized to change the host. Plan
+// building must stay read-only until the operator passes --yes: ACME
+// issuance installs packages, pipes a remote script as root, binds :80 and
+// rewrites cert material, and the state commit rewrites state.json — none of
+// that may run for a bare `veil repair` that ApplyPlan will refuse anyway
+// (issue #1128). --dry-run stays read-only even combined with --yes.
+func (o Options) mutates() bool { return o.Yes && !o.DryRun }
+
 type Dependencies struct {
 	BuildPlan func(Options) (installer.RepairPlan, error)
 	ApplyPlan func(installer.RepairPlan, Options) error

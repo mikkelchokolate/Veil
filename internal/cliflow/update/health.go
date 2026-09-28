@@ -47,7 +47,9 @@ func WaitForHealthyAt(addr, token, webBasePath string, timeout time.Duration) er
 			if token != "" {
 				req.Header.Set("X-Veil-Token", token)
 			}
-			resp, err := statusflow.HTTPClient(url).Do(req)
+			// ProbeHTTPClient strips X-Veil-Token on cross-origin redirects
+			// (issue #1113).
+			resp, err := statusflow.ProbeHTTPClient(url).Do(req)
 			if err == nil && resp.StatusCode == http.StatusOK {
 				// Require the Veil health contract ({"status":"ok"}): any
 				// other 200 — e.g. a foreign service or a stale listener on
