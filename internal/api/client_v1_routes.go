@@ -507,10 +507,15 @@ func (s *managementState) handleV1ListClients(w http.ResponseWriter, r *http.Req
 	writeJSON(w, map[string]any{"items": items, "total": total, "page": f.Page, "pageSize": f.PageSize})
 }
 
+// quotaSupportedForInboundLocked reports whether quotaBytes may be set on a
+// client bound to the named inbound: the inbound must be enabled and its
+// protocol must enforce quota — the same verdict the binding capability
+// surface advertises as quotaEnforcement (both derive from
+// protocolQuotaEnforcement, so they cannot drift apart).
 func (s *managementState) quotaSupportedForInboundLocked(inboundID string) bool {
 	for _, inbound := range s.inbounds {
 		if inbound.Name == inboundID {
-			return inbound.Enabled && inbound.Protocol == "hysteria2"
+			return inbound.Enabled && protocolQuotaEnforcement(inbound.Protocol)
 		}
 	}
 	return false
