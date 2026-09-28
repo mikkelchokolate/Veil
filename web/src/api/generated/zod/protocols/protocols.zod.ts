@@ -53,6 +53,8 @@ export const GetApiProtocolsResponseItem = zod.object({
   "requiresCaddy": zod.boolean().optional(),
   "firewallService": zod.string().optional(),
   "maxEnabled": zod.int().optional(),
+  "trafficAccounting": zod.boolean().optional(),
+  "quotaEnforcement": zod.boolean().optional(),
   "inboundFieldSchema": zod.array(zod.object({
   "key": zod.string(),
   "label": zod.string(),

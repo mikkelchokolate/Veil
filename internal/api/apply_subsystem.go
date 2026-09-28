@@ -192,16 +192,14 @@ func initApplySubsystemMode(s *managementState, deferStartupRecovery bool) {
 	}
 }
 
-// protocolQuotaEnforcement is the single source of truth for whether a
-// protocol's runtime rejects traffic once a bound client's quota is
-// depleted. The binding capability surface (bindingCapabilityForInbound →
-// BindingCapability.QuotaEnforcement) and quota write validation
-// (quotaSupportedForInboundLocked) both derive from it so the API never
-// advertises a capability the validator would reject. Only hysteria2
-// qualifies: mieru already counts per-user traffic but its rendered user
-// table does not carry quota limits yet.
+// protocolQuotaEnforcement reports whether a protocol's runtime rejects
+// traffic once a bound client's quota is depleted. The binding capability
+// surface (bindingCapabilityForInbound → BindingCapability.QuotaEnforcement),
+// quota write validation (quotaSupportedForInboundLocked), and the
+// /api/protocols catalog all derive from protocols.TelemetrySupportOf so the
+// API never advertises a capability the validator would reject.
 func protocolQuotaEnforcement(protocol string) bool {
-	return protocol == "hysteria2"
+	return protocols.TelemetrySupportOf(protocol).QuotaEnforcement
 }
 
 // bindingCapabilityForInbound resolves the protocol capabilities of the named
@@ -238,12 +236,10 @@ func (s *managementState) bindingCapabilityForInbound(inboundID string) *client.
 		Transports:           meta.Transports,
 		PerClientCredentials: perClient,
 		RequiresCaddy:        meta.RequiresCaddy,
-		// Hysteria2 and mieru expose per-user counters the collector can read;
-		// quota enforcement stays hysteria2-only until mieru limits are wired
-		// into its rendered user table. protocolQuotaEnforcement is shared
-		// with the quota write validator — never widen it here alone.
-		TrafficAccounting:     meta.Protocol == "hysteria2" || meta.Protocol == "mieru",
-		QuotaEnforcement:      protocolQuotaEnforcement(meta.Protocol),
+		// TelemetrySupportOf is shared with the quota write validator and the
+		// /api/protocols catalog — never widen a protocol here alone.
+		TrafficAccounting:     protocols.TelemetrySupportOf(meta.Protocol).TrafficAccounting,
+		QuotaEnforcement:      protocols.TelemetrySupportOf(meta.Protocol).QuotaEnforcement,
 		CredentialKinds:       []string{"password"},
 		ExpirationEnforcement: perClient,
 	}

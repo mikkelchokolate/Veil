@@ -49,6 +49,8 @@ export interface ProtocolInfo {
   requiresCaddy?: boolean;
   firewallService?: string;
   maxEnabled?: number;
+  trafficAccounting?: boolean;
+  quotaEnforcement?: boolean;
   inboundFieldSchema?: FieldSchema[];
   settingsFieldSchema?: FieldSchema[];
 }

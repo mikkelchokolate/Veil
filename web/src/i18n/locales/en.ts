@@ -656,8 +656,6 @@ export const en: Record<string, string> = {
 	"clientDetail.email": "Email",
 	"clientDetail.quotaLabel": "Quota (bytes, blank = unlimited)",
 	"clientDetail.quotaHint": "Quota is enforced only on Hysteria2 inbounds.",
-	"clientDetail.quotaHy2Only":
-		"Quota can be set only when every enabled binding is Hysteria2.",
 	"clientDetail.quotaUnsupported":
 		"Quota can't be enforced on {inbounds} — clear the quota or detach/disable those bindings.",
 	"clientDetail.quotaNotEnforced": "quota not enforced",
@@ -786,8 +784,6 @@ export const en: Record<string, string> = {
 	"clientNew.notesLabel": "Notes (optional)",
 	"clientNew.quotaLabel": "Quota (bytes, optional)",
 	"clientNew.quotaHint": "Quota is enforced only on Hysteria2 inbounds.",
-	"clientNew.quotaHy2Only":
-		"Quota can be set only when every selected inbound is Hysteria2.",
 	"clientNew.quotaUnsupported":
 		"Quota can't be enforced on {inbounds} — clear the quota or uncheck those inbounds.",
 	"clientNew.quotaNotEnforced": "quota not enforced",

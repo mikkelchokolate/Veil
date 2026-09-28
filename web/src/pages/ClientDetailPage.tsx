@@ -117,22 +117,37 @@ interface InboundOption {
 /** Enabled bindings that make a quota unenforceable server-side. Mirrors the
  * backend validator (quotaSupportedForInboundLocked): the verdict prefers the
  * binding's advertised capability.quotaEnforcement and falls back to the
- * protocol name only when the binding carries no capability; a disabled
- * inbound blocks quota regardless. A null verdict (unknown inbound, no
- * capability) is NOT a blocker here — server validation decides on submit. */
+ * /api/protocols catalog verdict for the binding's protocol; a disabled
+ * inbound blocks quota regardless. A null verdict (unknown inbound, catalog
+ * not loaded) is NOT a blocker here — server validation decides on submit. */
 function unsupportedQuotaBindings(
 	c: ClientDetail,
 	inboundList: InboundOption[],
+	protocolQuota: ReadonlyMap<string, boolean>,
 ): BindingView[] {
 	return (c.bindings ?? []).filter((b) => {
 		if (!b.enabled) return false;
 		const ib = inboundList.find((item) => item.name === b.inboundId);
+		const proto = b.capability?.protocol ?? ib?.protocol;
 		const supported = quotaEnforcementVerdict(
 			b.capability,
-			b.capability?.protocol ?? ib?.protocol,
+			proto != null ? (protocolQuota.get(proto) ?? null) : null,
 		);
 		return supported === false || ib?.enabled === false;
 	});
+}
+
+/** Label for a binding in quota-blocked hints: `name (protocol)`, suffixed
+ * with the disabled marker when the inbound itself is off. */
+function quotaBlockedLabel(
+	b: BindingView,
+	inboundList: InboundOption[],
+	disabledLabel: string,
+): string {
+	const ib = inboundList.find((item) => item.name === b.inboundId);
+	const proto = b.capability?.protocol ?? ib?.protocol;
+	const label = proto ? `${b.inboundId} (${proto})` : b.inboundId;
+	return ib?.enabled === false ? `${label} — ${disabledLabel}` : label;
 }
 
 interface AuditEntry {
@@ -182,6 +197,20 @@ export function ClientDetailPage() {
 	const inboundList: InboundOption[] = Array.isArray(inbounds.data)
 		? inbounds.data
 		: (inbounds.data?.items ?? []);
+	// Protocol → quota-enforcement verdict from the /api/protocols catalog —
+	// the same source the server validator uses, so the UI never hardcodes
+	// protocol names.
+	const protocolCatalog = useQuery<
+		Array<{ protocol?: string; quotaEnforcement?: boolean }>
+	>({
+		queryKey: ["protocols"],
+		queryFn: () => apiFetch("/api/protocols"),
+	});
+	const protocolQuota = new Map<string, boolean>(
+		(protocolCatalog.data ?? [])
+			.filter((p) => p.protocol != null)
+			.map((p) => [p.protocol as string, p.quotaEnforcement === true]),
+	);
 
 	const audit = useQuery<{ items?: AuditEntry[] } | AuditEntry[]>({
 		queryKey: ["clients", clientId, "audit"],
@@ -271,11 +300,20 @@ export function ClientDetailPage() {
 			// Submit-time backstop: the inline hint usually catches this, but the
 			// check runs again here in case bindings changed mid-edit. The
 			// backend re-validates independently.
-			if (
-				quota != null &&
-				unsupportedQuotaBindings(c, inboundList).length > 0
-			) {
-				throw new ApiError(400, t("clientDetail.quotaHy2Only"));
+			if (quota != null) {
+				const blocked = unsupportedQuotaBindings(c, inboundList, protocolQuota);
+				if (blocked.length > 0) {
+					throw new ApiError(
+						400,
+						t("clientDetail.quotaUnsupported", {
+							inbounds: blocked
+								.map((b) =>
+									quotaBlockedLabel(b, inboundList, t("common.disabled")),
+								)
+								.join(", "),
+						}),
+					);
+				}
 			}
 			const expires = v.expiresAt ? dateInputToUnix(v.expiresAt) : undefined;
 			const expiresUnix =
@@ -442,13 +480,8 @@ export function ClientDetailPage() {
 	// Enabled bindings whose protocol/inbound state cannot enforce a quota.
 	// Surfaced inline under the quota field while the draft quota is filled —
 	// honest about enforcement instead of failing only on submit.
-	const quotaBlocked = unsupportedQuotaBindings(c, inboundList);
-	const quotaBlockedLabel = (b: BindingView): string => {
-		const ib = inboundList.find((item) => item.name === b.inboundId);
-		const proto = b.capability?.protocol ?? ib?.protocol;
-		const label = proto ? `${b.inboundId} (${proto})` : b.inboundId;
-		return ib?.enabled === false ? `${label} — ${t("common.disabled")}` : label;
-	};
+	const quotaBlocked = unsupportedQuotaBindings(c, inboundList, protocolQuota);
+	const disabledLabel = t("common.disabled");
 	const tabs: { id: Tab; label: string }[] = [
 		{ id: "overview", label: t("clientDetail.tab.overview") },
 		{ id: "access", label: t("clientDetail.tab.access") },
@@ -692,7 +725,11 @@ export function ClientDetailPage() {
 								{(quotaDraft ?? "") !== "" && quotaBlocked.length > 0 ? (
 									<FormMessage>
 										{t("clientDetail.quotaUnsupported", {
-											inbounds: quotaBlocked.map(quotaBlockedLabel).join(", "),
+											inbounds: quotaBlocked
+												.map((b) =>
+													quotaBlockedLabel(b, inboundList, disabledLabel),
+												)
+												.join(", "),
 										})}
 									</FormMessage>
 								) : null}
@@ -857,11 +894,17 @@ export function ClientDetailPage() {
 										{/* #729: attaching to a disabled inbound produces
 										 * no usable links — label the state. The quota
 										 * marker mirrors the capability surface: catalog
-										 * items carry no capability object, so the protocol
-										 * fallback is the only client-side signal here. */}
+										 * items carry no capability object, so the
+										 * /api/protocols verdict is the only client-side
+										 * signal here. */}
 										{ib.name} ({ib.protocol})
 										{ib.enabled === false ? ` — ${t("common.disabled")}` : ""}
-										{quotaEnforcementVerdict(null, ib.protocol) === false
+										{quotaEnforcementVerdict(
+											null,
+											ib.protocol != null
+												? (protocolQuota.get(ib.protocol) ?? null)
+												: null,
+										) === false
 											? ` — ${t("clientDetail.quotaNotEnforced")}`
 											: ""}
 									</option>

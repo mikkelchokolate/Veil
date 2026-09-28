@@ -29,17 +29,25 @@ type Metadata struct {
 	RequiresCaddy   bool     `json:"requiresCaddy"`
 	FirewallService string   `json:"firewallService"`
 	MaxEnabled      int      `json:"maxEnabled"`
+	// TrafficAccounting/QuotaEnforcement mirror TelemetrySupportOf so the
+	// /api/protocols catalog carries the same capability verdict the binding
+	// surface and the quota validator use.
+	TrafficAccounting bool `json:"trafficAccounting"`
+	QuotaEnforcement  bool `json:"quotaEnforcement"`
 }
 
 // MetadataOf returns a Metadata struct for a plugin.
 func MetadataOf(p ProtocolPlugin) Metadata {
+	telemetry := TelemetrySupportOf(p.Protocol())
 	return Metadata{
-		Protocol:        p.Protocol(),
-		DisplayName:     p.DisplayName(),
-		Transports:      append([]string(nil), p.Transports()...),
-		RequiresCaddy:   p.RequiresCaddy(),
-		FirewallService: p.FirewallService(),
-		MaxEnabled:      p.MaxEnabled(),
+		Protocol:          p.Protocol(),
+		DisplayName:       p.DisplayName(),
+		Transports:        append([]string(nil), p.Transports()...),
+		RequiresCaddy:     p.RequiresCaddy(),
+		FirewallService:   p.FirewallService(),
+		MaxEnabled:        p.MaxEnabled(),
+		TrafficAccounting: telemetry.TrafficAccounting,
+		QuotaEnforcement:  telemetry.QuotaEnforcement,
 	}
 }
 

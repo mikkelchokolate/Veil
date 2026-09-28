@@ -2091,8 +2091,10 @@ type ProtocolInfo struct {
 	InboundFieldSchema  *[]FieldSchema `json:"inboundFieldSchema,omitempty"`
 	MaxEnabled          *int           `json:"maxEnabled,omitempty"`
 	Protocol            string         `json:"protocol"`
+	QuotaEnforcement    *bool          `json:"quotaEnforcement,omitempty"`
 	RequiresCaddy       *bool          `json:"requiresCaddy,omitempty"`
 	SettingsFieldSchema *[]FieldSchema `json:"settingsFieldSchema,omitempty"`
+	TrafficAccounting   *bool          `json:"trafficAccounting,omitempty"`
 	Transports          []string       `json:"transports"`
 }
 

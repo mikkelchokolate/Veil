@@ -63,6 +63,30 @@ function mieruCapability() {
 	};
 }
 
+// The /api/protocols catalog carries the same verdict as the binding
+// capability surface — the fallback signal for drafts and capability-less
+// payloads.
+function protocolsCatalogMock() {
+	return http.get("/api/protocols", () =>
+		HttpResponse.json([
+			{
+				protocol: "hysteria2",
+				displayName: "Hysteria2",
+				transports: ["udp"],
+				trafficAccounting: true,
+				quotaEnforcement: true,
+			},
+			{
+				protocol: "mieru",
+				displayName: "Mieru",
+				transports: ["tcp"],
+				trafficAccounting: true,
+				quotaEnforcement: false,
+			},
+		]),
+	);
+}
+
 describe("ClientDetailPage quota capability hints", () => {
 	it("warns inline while filling quota and blocks save when an enabled binding can't enforce it", async () => {
 		const patches: Array<Record<string, unknown>> = [];
@@ -90,6 +114,7 @@ describe("ClientDetailPage quota capability hints", () => {
 				patches.push((await request.json()) as Record<string, unknown>);
 				return HttpResponse.json({ success: true });
 			}),
+			protocolsCatalogMock(),
 		);
 		const user = userEvent.setup();
 		renderClientDetail();
@@ -102,8 +127,8 @@ describe("ClientDetailPage quota capability hints", () => {
 		).toBeInTheDocument();
 		await user.click(screen.getByRole("button", { name: /save changes/i }));
 		expect(
-			await screen.findByText(/quota can be set only/i),
-		).toBeInTheDocument();
+			await screen.findAllByText(/can't be enforced on edge \(mieru\)/i),
+		).not.toHaveLength(0);
 		expect(patches).toHaveLength(0);
 	});
 
@@ -137,7 +162,7 @@ describe("ClientDetailPage quota capability hints", () => {
 		expect(await screen.findByText(/quota not enforced/i)).toBeInTheDocument();
 	});
 
-	it("falls back to the inbound protocol when the binding carries no capability", async () => {
+	it("falls back to the /api/protocols verdict when the binding carries no capability", async () => {
 		const patches: Array<Record<string, unknown>> = [];
 		server.use(
 			http.get("/api/v1/clients/c1", () =>
@@ -146,8 +171,8 @@ describe("ClientDetailPage quota capability hints", () => {
 					name: "Alice",
 					enabled: true,
 					version: 1,
-					// No capability object — the catalog's protocol is the only
-					// client-side signal, exactly like a pre-enrichment payload.
+					// No capability object — the /api/protocols catalog is the
+					// fallback signal, exactly like a pre-enrichment payload.
 					bindings: [{ id: "b1", inboundId: "edge", enabled: true }],
 				}),
 			),
@@ -158,6 +183,7 @@ describe("ClientDetailPage quota capability hints", () => {
 				patches.push((await request.json()) as Record<string, unknown>);
 				return HttpResponse.json({ success: true });
 			}),
+			protocolsCatalogMock(),
 		);
 		const user = userEvent.setup();
 		renderClientDetail();
@@ -168,8 +194,8 @@ describe("ClientDetailPage quota capability hints", () => {
 		).toBeInTheDocument();
 		await user.click(screen.getByRole("button", { name: /save changes/i }));
 		expect(
-			await screen.findByText(/quota can be set only/i),
-		).toBeInTheDocument();
+			await screen.findAllByText(/can't be enforced on edge \(mieru\)/i),
+		).not.toHaveLength(0);
 		expect(patches).toHaveLength(0);
 	});
 
@@ -209,6 +235,7 @@ describe("ClientDetailPage quota capability hints", () => {
 				patches.push((await request.json()) as Record<string, unknown>);
 				return HttpResponse.json({ success: true });
 			}),
+			protocolsCatalogMock(),
 		);
 		const user = userEvent.setup();
 		renderClientDetail();
@@ -231,6 +258,7 @@ describe("ClientNewPage quota capability hints", () => {
 					{ name: "mi", protocol: "mieru", enabled: true },
 				]),
 			),
+			protocolsCatalogMock(),
 			http.post("/api/v1/clients", () => {
 				posts += 1;
 				return HttpResponse.json(
@@ -265,8 +293,8 @@ describe("ClientNewPage quota capability hints", () => {
 		await user.click(screen.getByRole("button", { name: /^review$/i }));
 		await user.click(screen.getByRole("button", { name: /create client/i }));
 		expect(
-			await screen.findByText(/quota can be set only/i),
-		).toBeInTheDocument();
+			await screen.findAllByText(/can't be enforced on mi \(mieru\)/i),
+		).not.toHaveLength(0);
 		expect(posts).toBe(0);
 	});
 });

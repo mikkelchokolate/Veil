@@ -93,16 +93,33 @@ export function ClientNewPage() {
 	const inboundList: InboundOption[] = Array.isArray(inbounds.data)
 		? inbounds.data
 		: (inbounds.data?.items ?? []);
+	// Protocol → quota-enforcement verdict from the /api/protocols catalog —
+	// the same source the server validator uses, so the UI never hardcodes
+	// protocol names.
+	const protocolCatalog = useQuery<
+		Array<{ protocol?: string; quotaEnforcement?: boolean }>
+	>({
+		queryKey: ["protocols"],
+		queryFn: () => apiFetch("/api/protocols"),
+	});
+	const protocolQuota = new Map<string, boolean>(
+		(protocolCatalog.data ?? [])
+			.filter((p) => p.protocol != null)
+			.map((p) => [p.protocol as string, p.quotaEnforcement === true]),
+	);
 
 	// Selected binding drafts whose inbound cannot enforce a quota. Drafts are
-	// not persisted, so no BindingCapability exists yet — the catalog's
-	// protocol+enabled flags are the only client-side signal (the documented
-	// fallback inside quotaEnforcementVerdict); the server re-validates on
-	// create. A draft whose inbound vanished from a freshly refetched catalog
-	// is stale state — supported === null here, still treated as blocked.
+	// not persisted, so no BindingCapability exists yet — the /api/protocols
+	// catalog verdict is the client-side signal (the documented fallback
+	// inside quotaEnforcementVerdict); the server re-validates on create. A
+	// draft whose inbound vanished from a freshly refetched catalog is stale
+	// state — supported === null here, still treated as blocked.
 	const quotaBlockedBindings = bindings.filter((b) => {
 		const ib = inboundList.find((item) => item.name === b.inboundId);
-		const supported = quotaEnforcementVerdict(null, ib?.protocol);
+		const supported = quotaEnforcementVerdict(
+			null,
+			ib?.protocol != null ? (protocolQuota.get(ib.protocol) ?? null) : null,
+		);
 		return supported !== true || ib?.enabled === false;
 	});
 	const quotaBlockedLabel = (b: BindingDraft): string => {
@@ -144,7 +161,12 @@ export function ClientNewPage() {
 			// check runs again here in case the catalog/binding picks changed
 			// between renders. The backend re-validates independently.
 			if (quotaBytes && quotaBlockedBindings.length > 0) {
-				throw new ApiError(400, t("clientNew.quotaHy2Only"));
+				throw new ApiError(
+					400,
+					t("clientNew.quotaUnsupported", {
+						inbounds: quotaBlockedBindings.map(quotaBlockedLabel).join(", "),
+					}),
+				);
 			}
 			if (expiresAt) {
 				const expires = dateInputToUnix(expiresAt);
@@ -356,9 +378,15 @@ export function ClientNewPage() {
 													{/* Quota support mirrors the verdict a
 													 * persisted binding's capability would
 													 * advertise — catalog items carry no
-													 * capability, so the protocol fallback
-													 * applies (see quotaEnforcementVerdict). */}
-													{quotaEnforcementVerdict(null, ib.protocol) === false
+													 * capability, so the /api/protocols
+													 * verdict applies (see
+													 * quotaEnforcementVerdict). */}
+													{quotaEnforcementVerdict(
+														null,
+														ib.protocol != null
+															? (protocolQuota.get(ib.protocol) ?? null)
+															: null,
+													) === false
 														? ` · ${t("clientNew.quotaNotEnforced")}`
 														: ""}
 												</span>

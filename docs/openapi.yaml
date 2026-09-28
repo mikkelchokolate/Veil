@@ -5071,6 +5071,10 @@ components:
           type: string
         maxEnabled:
           type: integer
+        trafficAccounting:
+          type: boolean
+        quotaEnforcement:
+          type: boolean
         inboundFieldSchema:
           type: array
           items:
