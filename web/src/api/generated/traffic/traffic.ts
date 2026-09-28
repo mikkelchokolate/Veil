@@ -54,6 +54,7 @@ import type {
   GetApiV1EventsParams,
   GetApiV1TrafficHistoryParams,
   GetApiV1TrafficIdHistoryParams,
+  PresenceResponse,
   TrafficHistoryResponse,
   TrafficSummaryResponse,
   TrafficTopResponse,
@@ -67,7 +68,81 @@ type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 
 
-export const getGetApiV1TrafficSummaryUrl = () => {
+export const getGetApiV1PresenceUrl = () => {
+
+
+
+
+  return `/api/v1/presence`
+}
+
+/**
+ * One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
+ * @summary Live per-client presence (who is online right now)
+ */
+export const getApiV1Presence = async ( options?: Parameters<typeof apiFetch>[1]): Promise<PresenceResponse> => {
+
+  return apiFetch<PresenceResponse>(getGetApiV1PresenceUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1PresenceMutationKey = () => ['getApiV1Presence'] as const;
+
+export const getGetApiV1PresenceMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1Presence>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1Presence>>, TError,void, TContext> => {
+
+const mutationKey = getGetApiV1PresenceMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1Presence>>, void> = () => {
+
+
+          return  getApiV1Presence(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1PresenceMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1Presence>>>
+
+    export type GetApiV1PresenceMutationError = unknown
+
+
+    /**
+ * @summary Live per-client presence (who is online right now)
+ */
+export const useGetApiV1Presence = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1Presence>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1Presence>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiV1PresenceMutationOptions(options), queryClient);
+    }
+    export const getGetApiV1TrafficSummaryUrl = () => {
 
 
 

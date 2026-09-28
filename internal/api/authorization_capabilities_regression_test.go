@@ -130,6 +130,7 @@ func productionAuthorizationMatrix() []routeAuthorizationExpectation {
 		{http.MethodGet, "/api/v1/traffic/client-1", false, true, "viewer metadata"},
 		{http.MethodGet, "/api/v1/traffic/client-1/history", false, true, "viewer metadata"},
 		{http.MethodGet, "/api/v1/traffic/stream", false, true, "viewer stream"},
+		{http.MethodGet, "/api/v1/presence", false, true, "viewer metadata"},
 		{http.MethodGet, "/api/v1/events", false, true, "viewer stream"},
 		{http.MethodGet, "/s/public-token", true, true, "public token capability"},
 		{http.MethodHead, "/s/public-token", true, true, "public token capability"},

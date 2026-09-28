@@ -59,6 +59,7 @@ import type {
   GetApiV1EventsParams,
   GetApiV1TrafficHistoryParams,
   GetApiV1TrafficIdHistoryParams,
+  PresenceResponse,
   TrafficHistoryResponse,
   TrafficSummaryResponse,
   TrafficTopResponse,
@@ -86,6 +87,107 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetApiV1PresenceUrl = () => {
+
+
+
+
+  return `/api/v1/presence`
+}
+
+/**
+ * One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
+ * @summary Live per-client presence (who is online right now)
+ */
+export const getApiV1Presence = async ( options?: Parameters<typeof apiFetch>[1]): Promise<PresenceResponse> => {
+
+  return apiFetch<PresenceResponse>(getGetApiV1PresenceUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1PresenceQueryKey = () => {
+    return [
+    `/api/v1/presence`
+    ] as const;
+    }
+
+
+export const getGetApiV1PresenceQueryOptions = <TData = Awaited<ReturnType<typeof getApiV1Presence>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1Presence>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiV1PresenceQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiV1Presence>>> = ({ signal }) => getApiV1Presence({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiV1Presence>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiV1PresenceQueryResult = NonNullable<Awaited<ReturnType<typeof getApiV1Presence>>>
+export type GetApiV1PresenceQueryError = unknown
+
+
+export function useGetApiV1Presence<TData = Awaited<ReturnType<typeof getApiV1Presence>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1Presence>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1Presence>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1Presence>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1Presence<TData = Awaited<ReturnType<typeof getApiV1Presence>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1Presence>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1Presence>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1Presence>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1Presence<TData = Awaited<ReturnType<typeof getApiV1Presence>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1Presence>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Live per-client presence (who is online right now)
+ */
+
+export function useGetApiV1Presence<TData = Awaited<ReturnType<typeof getApiV1Presence>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1Presence>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiV1PresenceQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
 
 export const getGetApiV1TrafficSummaryUrl = () => {
 
