@@ -135,6 +135,7 @@ export * from './getApiV1ClientsIdAuditParams.ts';
 export * from './getApiV1ClientsIdBindings200.ts';
 export * from './getApiV1ClientsIdLinks200.ts';
 export * from './getApiV1EventsParams.ts';
+export * from './getApiV1TrafficHistoryParams.ts';
 export * from './getApiV1TrafficIdHistoryParams.ts';
 export * from './getRuntimeProvenance200.ts';
 export * from './getSTokenFormat.ts';
