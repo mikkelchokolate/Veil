@@ -159,7 +159,10 @@ type WarpConfig struct {
 // restricts SocksListen to loopback literals, so this is always a safe local
 // dial target.
 func (c WarpConfig) SocksDialAddr() string {
-	if c.SocksListen == "" {
+	if c.SocksListen == "" || c.SocksListen == "127.0.0.1" {
+		// "" means unset; "127.0.0.1" is the pre-#1097 persisted default —
+		// SetDefaults migrates it, but dial-side readers that bypass
+		// SetDefaults must not return a loopback the egress filter denies.
 		return "127.41.0.1"
 	}
 	return c.SocksListen

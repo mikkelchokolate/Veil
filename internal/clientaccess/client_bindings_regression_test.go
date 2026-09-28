@@ -44,3 +44,24 @@ func TestFallbackLinksSuppressedWhenInboundHasClientBindings(t *testing.T) {
 		t.Fatal("hysteria2 fallback link missing for an unmanaged inbound")
 	}
 }
+
+// #1098 hardening: an inbound whose legacy profiles are all disabled must not
+// re-advertise the shared fallback link either — the hysteria2 fallback gate
+// previously only consulted HasClientBindings.
+func TestHysteria2FallbackLinkSuppressedWhenAllProfilesDisabled(t *testing.T) {
+	settings := model.Settings{Domain: "vpn.example.com"}
+	input := ClientAccessLinkInput{
+		Settings: settings,
+		Inbound: model.Inbound{
+			Name: "h2", Protocol: "hysteria2", Transport: "udp", Port: 443,
+			Enabled:  true,
+			Password: "inbound-fallback-pass",
+			Profiles: []model.ClientProfile{{Name: "alice", Password: "alice-pass", Enabled: false}},
+		},
+		LinkName:   "h2/fallback",
+		Credential: ClientCredential{Name: "h2", Username: "h2", Password: "inbound-fallback-pass"},
+	}
+	if link, ok := hysteria2FallbackClientLink(input); ok {
+		t.Fatalf("hysteria2 fallback link advertised despite all-disabled profiles: %+v", link)
+	}
+}

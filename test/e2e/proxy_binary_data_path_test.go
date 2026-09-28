@@ -299,6 +299,12 @@ func testHysteria2DataPath(t *testing.T, hysteriaPath string) {
 		_, _ = w.Write([]byte(expectedResponse))
 	}))
 	defer backend.Close()
+	// The hysteria2 egress ACL rejects literal loopback destinations
+	// (reject(127.0.0.0/8), issue #1095), so the request must name a hostname —
+	// same approach as the naive/mieru data-path tests.
+	backendHost := "veil-hy2-e2e.test"
+	registerLoopbackHostname(t, backendHost)
+	backendURL := strings.Replace(backend.URL, "127.0.0.1", backendHost, 1)
 
 	// 2. Start Veil serving panel
 	srv := startServer(t, serverOptions{token: "e2e-secret-token"})
@@ -475,7 +481,7 @@ socks5:
 		Timeout: 5 * time.Second,
 	}
 
-	res, err := httpClient.Get(backend.URL)
+	res, err := httpClient.Get(backendURL)
 	if err != nil {
 		t.Fatalf("GET request failed: %v", err)
 	}

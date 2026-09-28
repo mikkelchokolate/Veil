@@ -239,9 +239,11 @@ func hysteria2ProfileClientLink(input ClientAccessLinkInput) (ClientLink, bool) 
 }
 
 func hysteria2FallbackClientLink(input ClientAccessLinkInput) (ClientLink, bool) {
-	if input.Inbound.HasClientBindings {
-		// Bindings exist: the inbound is credential-managed, so the shared
-		// fallback password must never be advertised again (issue #1098).
+	if len(input.Inbound.Profiles) > 0 || input.Inbound.HasClientBindings {
+		// Profiles exist but are all disabled, or bindings exist: the inbound
+		// is credential-managed, so the shared fallback password must never be
+		// advertised again (issue #1098) — matching the naive/mieru fallback
+		// suppression.
 		return ClientLink{}, false
 	}
 	if !hasClientEndpoint(input) {

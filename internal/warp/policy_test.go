@@ -100,3 +100,22 @@ func TestRedactedMarkerValue(t *testing.T) {
 		t.Errorf("expected [REDACTED], got %q", redacted.LicenseKey)
 	}
 }
+
+// Upgrade migration (#1097 follow-up): states persisted before the reserved
+// loopback band still carry the old default. Only the exact historical
+// default is rewritten — explicit operator alternatives stay untouched.
+func TestSetDefaultsMigratesLegacySocksListenDefault(t *testing.T) {
+	cfg := Config{SocksListen: "127.0.0.1"}
+	SetDefaults(&cfg)
+	if cfg.SocksListen != "127.41.0.1" {
+		t.Fatalf("legacy default not migrated, got %q", cfg.SocksListen)
+	}
+}
+
+func TestSetDefaultsPreservesExplicitLoopbackAlternative(t *testing.T) {
+	cfg := Config{SocksListen: "127.0.0.5"}
+	SetDefaults(&cfg)
+	if cfg.SocksListen != "127.0.0.5" {
+		t.Fatalf("explicit SocksListen rewritten, got %q", cfg.SocksListen)
+	}
+}

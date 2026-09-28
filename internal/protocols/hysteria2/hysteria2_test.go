@@ -1110,3 +1110,34 @@ func TestHysteria2InsecureFallbackChain(t *testing.T) {
 		t.Errorf("settings ProtocolFields insecure should win: %q", links[0].URI)
 	}
 }
+
+func TestBuildLinksOmitsFallbackWhenInboundHasClientBindings(t *testing.T) {
+	p := New()
+	settings := model.Settings{Domain: "example.com"}
+	links, err := p.BuildLinks(settings, model.Inbound{
+		Name: "h2", Protocol: "hysteria2", Transport: "udp", Port: 8443,
+		Password: "shared-pass", HasClientBindings: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(links) != 0 {
+		t.Fatalf("credential-managed inbound must not emit fallback link, got %+v", links)
+	}
+}
+
+func TestBuildLinksOmitsFallbackWhenAllProfilesDisabled(t *testing.T) {
+	p := New()
+	settings := model.Settings{Domain: "example.com"}
+	links, err := p.BuildLinks(settings, model.Inbound{
+		Name: "h2", Protocol: "hysteria2", Transport: "udp", Port: 8443,
+		Password: "shared-pass",
+		Profiles: []model.ClientProfile{{Name: "alice", Password: "alice-pass", Enabled: false}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(links) != 0 {
+		t.Fatalf("all-disabled profiles must not revive fallback link, got %+v", links)
+	}
+}

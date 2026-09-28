@@ -38,6 +38,16 @@ func SetDefaults(warp *Config) {
 		// it so proxy daemons can dial this SOCKS listener without gaining
 		// reachability to the rest of 127/8 (issue #1097).
 		warp.SocksListen = "127.41.0.1"
+	} else if warp.SocksListen == "127.0.0.1" {
+		// Upgrade migration: 127.0.0.1 was the SocksListen default before the
+		// reserved-band change (#1097). Persisted states carry it, but the
+		// protocol-unit egress filters now only pierce 127.41.0.0/16, so the
+		// old value silently breaks WARP upstream reachability. Rewriting is
+		// strictly corrective: 127.0.0.1 can no longer function as a dial
+		// target, so an explicit post-upgrade choice of it is unambiguously
+		// the stale default rather than a deliberate operator override.
+		// Other loopback literals (e.g. 127.0.0.5) are left untouched.
+		warp.SocksListen = "127.41.0.1"
 	}
 	if warp.SocksPort == 0 {
 		warp.SocksPort = 40000
