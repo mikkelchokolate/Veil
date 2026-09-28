@@ -146,23 +146,35 @@ type managementState struct {
 	// Architecture rework (durable apply + normalized store). db is nil when no
 	// StatePath is configured; the apply subsystem and revision/job tracking are
 	// then disabled and handlers fall back to legacy behavior.
-	db                      *sql.DB
-	applyRevisions          *apply.RevisionStore
-	applyJobs               *apply.JobStore
-	applySnapshots          *apply.SnapshotStore
-	applyRunner             *apply.Runner
-	clientService           *client.Service
-	clientRepo              *client.Repository
-	clientCreds             *client.CredentialStore
-	clientMigrator          *client.Migrator
-	tokenStore              *client.TokenStore
-	subRenderer             *client.SubscriptionRenderer
-	trafficStore            *client.TrafficStore
-	trafficCollector        *client.Collector
-	trafficReconciler       *client.Reconciler
-	expirationReconciler    *expirationReconciler
-	certSyncWorker          *certSyncWorker
-	sse                     *sseBroadcaster
+	db                   *sql.DB
+	applyRevisions       *apply.RevisionStore
+	applyJobs            *apply.JobStore
+	applySnapshots       *apply.SnapshotStore
+	applyRunner          *apply.Runner
+	clientService        *client.Service
+	clientRepo           *client.Repository
+	clientCreds          *client.CredentialStore
+	clientMigrator       *client.Migrator
+	tokenStore           *client.TokenStore
+	subRenderer          *client.SubscriptionRenderer
+	trafficStore         *client.TrafficStore
+	trafficCollector     *client.Collector
+	trafficReconciler    *client.Reconciler
+	expirationReconciler *expirationReconciler
+	certSyncWorker       *certSyncWorker
+	sse                  *sseBroadcaster
+	// Internal Hysteria2 auth callback (#1173): the listener is started by
+	// initClientSubsystem, survives restores (it only reads live state per
+	// request), and is closed by Close. hy2AuthListenAddr overrides the
+	// default bind address and hy2AuthOnline replaces the production
+	// /online reader — both are test seams, empty/nil in production.
+	hy2Auth           *hy2AuthServer
+	hy2AuthListenAddr string
+	hy2AuthOnline     func(ctx context.Context, settings model.Settings, inbound model.Inbound, identities map[string]string) (map[string]int64, []string, error)
+	hy2IPTracker      *hy2IPTracker
+	// hy2SessionTracker bridges the auth-ok → /online-registration gap so
+	// concurrent admissions cannot race past deviceLimit (#1173).
+	hy2SessionTracker       *hy2SessionTracker
 	clientSubsystemStopping bool
 	applyReadinessMu        sync.Mutex
 	applyReadinessCache     clientApplyReadinessCache

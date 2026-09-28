@@ -53,6 +53,7 @@ func cloneProjectionClients(clients []model.ClientSnapshot) []model.ClientSnapsh
 		out[i].QuotaResetAt = cloneInt64Pointer(row.QuotaResetAt)
 		out[i].ExpiresAt = cloneInt64Pointer(row.ExpiresAt)
 		out[i].DeviceLimit = cloneIntPointer(row.DeviceLimit)
+		out[i].IPLimit = cloneIntPointer(row.IPLimit)
 	}
 	return out
 }

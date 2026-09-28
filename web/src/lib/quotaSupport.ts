@@ -25,3 +25,18 @@ export function quotaEnforcementVerdict(
 	}
 	return protocolSupport ?? null;
 }
+
+/** Connection-limit (deviceLimit/ipLimit) enforcement support for one bound
+ * inbound — same precedence contract as quotaEnforcementVerdict, keyed on
+ * `BindingCapability.deviceLimits` / `ProtocolInfo.deviceLimits` instead. The
+ * server re-validates on write; a null verdict must not be treated as
+ * "unsupported". */
+export function deviceLimitsVerdict(
+	capability: { deviceLimits?: boolean } | null | undefined,
+	protocolSupport: boolean | null | undefined,
+): boolean | null {
+	if (capability?.deviceLimits != null) {
+		return capability.deviceLimits;
+	}
+	return protocolSupport ?? null;
+}

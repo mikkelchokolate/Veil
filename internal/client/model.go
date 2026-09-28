@@ -27,12 +27,19 @@ type Client struct {
 	QuotaResetPolicy string  `json:"quotaResetPolicy"`
 	QuotaResetAt     *int64  `json:"quotaResetAt,omitempty"`
 	ExpiresAt        *int64  `json:"expiresAt,omitempty"`
-	DeviceLimit      *int    `json:"deviceLimit,omitempty"`
-	Notes            string  `json:"notes,omitempty"`
-	Depleted         bool    `json:"depleted"`
-	CreatedAt        int64   `json:"createdAt"`
-	UpdatedAt        int64   `json:"updatedAt"`
-	Version          int     `json:"version"`
+	// DeviceLimit caps the number of concurrent sessions the client may hold.
+	// IPLimit caps the number of distinct source IPs those sessions may come
+	// from. Both are per-client (aggregate across the client's enabled
+	// bindings), both are nullable (nil = unlimited), and both are enforced
+	// only by protocols that advertise connection-limit enforcement
+	// (currently Hysteria2, via its HTTP auth callback).
+	DeviceLimit *int   `json:"deviceLimit,omitempty"`
+	IPLimit     *int   `json:"ipLimit,omitempty"`
+	Notes       string `json:"notes,omitempty"`
+	Depleted    bool   `json:"depleted"`
+	CreatedAt   int64  `json:"createdAt"`
+	UpdatedAt   int64  `json:"updatedAt"`
+	Version     int    `json:"version"`
 }
 
 // Binding associates a client with one inbound. ProtocolSettings holds

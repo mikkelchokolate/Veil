@@ -1142,3 +1142,91 @@ func TestBuildLinksOmitsFallbackWhenAllProfilesDisabled(t *testing.T) {
 		t.Fatalf("all-disabled profiles must not revive fallback link, got %+v", links)
 	}
 }
+
+// #1173: a limited runtime credential switches the rendered auth mode to the
+// internal HTTP callback — the only place device/ip limits can be enforced.
+func TestRenderConfigHTTPAuthWhenCredentialLimited(t *testing.T) {
+	p := New()
+	paths := generatedconfig.NewPaths("/tmp/veil")
+	settings := model.Settings{Domain: "example.com", Hysteria2Password: "global-secret"}
+	limited := model.Inbound{
+		Name: "h2-lim", Protocol: "hysteria2", Transport: "udp", Port: 8443, Enabled: true,
+		RuntimeCredentials: []model.RuntimeCredential{
+			{Name: "alice", Username: "alice", Password: "pw", DeviceLimit: intRef(2)},
+		},
+	}
+	artifacts, rendered, err := p.RenderConfig(generatedconfig.ProtocolRenderInput{
+		Settings: settings, Paths: paths, Inbounds: []model.Inbound{limited},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !rendered || len(artifacts) != 1 {
+		t.Fatalf("expected one rendered artifact, got %d (rendered=%v)", len(artifacts), rendered)
+	}
+	body := artifacts[0].Body
+	for _, want := range []string{
+		"type: http",
+		"url: " + HTTPAuthURL(settings, limited),
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("rendered config missing %q:\n%s", want, body)
+		}
+	}
+	// HTTP auth replaces the static modes entirely.
+	if strings.Contains(body, "userpass") || strings.Contains(body, "type: password") {
+		t.Errorf("static auth leaked into an http-auth config:\n%s", body)
+	}
+	if !strings.Contains(body, "type: http\n") && !strings.Contains(body, "type: http\r\n") {
+		t.Errorf("auth type is not http:\n%s", body)
+	}
+}
+
+func TestRenderConfigKeepsUserpassWhenNoCredentialLimited(t *testing.T) {
+	p := New()
+	paths := generatedconfig.NewPaths("/tmp/veil")
+	inbound := model.Inbound{
+		Name: "h2-plain", Protocol: "hysteria2", Transport: "udp", Port: 8443, Enabled: true,
+		RuntimeCredentials: []model.RuntimeCredential{
+			{Name: "alice", Username: "alice", Password: "pw"},
+		},
+	}
+	artifacts, rendered, err := p.RenderConfig(generatedconfig.ProtocolRenderInput{
+		Settings: model.Settings{Domain: "example.com", Hysteria2Password: "global-secret"},
+		Paths:    paths, Inbounds: []model.Inbound{inbound},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !rendered || len(artifacts) != 1 {
+		t.Fatalf("expected one rendered artifact, got %d", len(artifacts))
+	}
+	body := artifacts[0].Body
+	if strings.Contains(body, "type: http") || strings.Contains(body, HTTPAuthPathPrefix) {
+		t.Errorf("unlimited credentials must not switch to http auth:\n%s", body)
+	}
+	if !strings.Contains(body, "type: userpass") {
+		t.Errorf("expected userpass auth for normalized creds:\n%s", body)
+	}
+}
+
+// HTTPAuthSecret must derive the SAME value the callback handler recomputes —
+// a drift here silently denies every session.
+func TestHTTPAuthURLRoundTripsSecret(t *testing.T) {
+	settings := model.Settings{Domain: "example.com", Hysteria2Password: "global-secret"}
+	inbound := model.Inbound{Name: "h2", Protocol: "hysteria2", Port: 8443}
+	url := HTTPAuthURL(settings, inbound)
+	parts := strings.Split(strings.TrimPrefix(url, "http://"), "/")
+	// host / api / internal / hy2-auth / <inbound> / <secret>
+	if len(parts) != 6 {
+		t.Fatalf("unexpected auth URL shape: %q", url)
+	}
+	if parts[4] != inbound.Name {
+		t.Fatalf("auth URL inbound segment = %q, want %q", parts[4], inbound.Name)
+	}
+	if parts[5] != HTTPAuthSecret(settings, inbound) {
+		t.Fatal("auth URL does not embed the derived per-inbound secret")
+	}
+}
+
+func intRef(v int) *int { return &v }

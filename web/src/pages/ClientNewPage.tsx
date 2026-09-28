@@ -25,7 +25,10 @@ import { Label } from "../components/ui/label";
 import { useI18n } from "../i18n/I18nContext";
 import { decimalWithinSafeInteger, parseQuotaDecimal } from "../lib/bytes";
 import { dateInputToUnix } from "../lib/localDate";
-import { quotaEnforcementVerdict } from "../lib/quotaSupport";
+import {
+	deviceLimitsVerdict,
+	quotaEnforcementVerdict,
+} from "../lib/quotaSupport";
 
 interface InboundOption {
 	name: string;
@@ -63,6 +66,8 @@ export function ClientNewPage() {
 	const [email, setEmail] = useState("");
 	const [notes, setNotes] = useState("");
 	const [quotaBytes, setQuotaBytes] = useState("");
+	const [deviceLimit, setDeviceLimit] = useState("");
+	const [ipLimit, setIpLimit] = useState("");
 	const [expiresAt, setExpiresAt] = useState("");
 	const [bindings, setBindings] = useState<BindingDraft[]>([]);
 	// One-time issued credentials. Held ONLY in local state, cleared eagerly.
@@ -97,7 +102,11 @@ export function ClientNewPage() {
 	// the same source the server validator uses, so the UI never hardcodes
 	// protocol names.
 	const protocolCatalog = useQuery<
-		Array<{ protocol?: string; quotaEnforcement?: boolean }>
+		Array<{
+			protocol?: string;
+			quotaEnforcement?: boolean;
+			deviceLimits?: boolean;
+		}>
 	>({
 		queryKey: ["protocols"],
 		queryFn: () => apiFetch("/api/protocols"),
@@ -106,6 +115,11 @@ export function ClientNewPage() {
 		(protocolCatalog.data ?? [])
 			.filter((p) => p.protocol != null)
 			.map((p) => [p.protocol as string, p.quotaEnforcement === true]),
+	);
+	const protocolDeviceLimits = new Map<string, boolean>(
+		(protocolCatalog.data ?? [])
+			.filter((p) => p.protocol != null)
+			.map((p) => [p.protocol as string, p.deviceLimits === true]),
 	);
 
 	// Selected binding drafts whose inbound cannot enforce a quota. Drafts are
@@ -136,6 +150,34 @@ export function ClientNewPage() {
 		const label = ib ? `${b.inboundId} (${ib.protocol})` : b.inboundId;
 		return ib?.enabled === false ? `${label} — ${t("common.disabled")}` : label;
 	};
+
+	// Same filter for connection limits: drafts whose inbound protocol cannot
+	// enforce deviceLimit/ipLimit at session admission.
+	const limitsBlockedBindings = bindings.filter((b) => {
+		const ib = inboundList.find((item) => item.name === b.inboundId);
+		if (ib?.enabled === false) {
+			return true;
+		}
+		if (!protocolCatalog.isSuccess) {
+			return false;
+		}
+		const supported = deviceLimitsVerdict(
+			null,
+			ib?.protocol != null
+				? (protocolDeviceLimits.get(ib.protocol) ?? null)
+				: null,
+		);
+		return supported !== true;
+	});
+
+	// A limit is "" (unset) or a positive integer — 0/negatives/garbage fail
+	// server-side too (minimum 1 in the OpenAPI schema).
+	const limitFieldError = (v: string): string | null =>
+		v === "" || (/^\d+$/.test(v) && Number.parseInt(v, 10) >= 1)
+			? null
+			: t("clientNew.limitInvalid");
+	const deviceLimitError = limitFieldError(deviceLimit);
+	const ipLimitError = limitFieldError(ipLimit);
 
 	// Issue 3: quotaBytes crosses the wire as a JSON number — reject anything
 	// above Number.MAX_SAFE_INTEGER (compared as an exact decimal string) and
@@ -174,6 +216,17 @@ export function ClientNewPage() {
 					400,
 					t("clientNew.quotaUnsupported", {
 						inbounds: quotaBlockedBindings.map(quotaBlockedLabel).join(", "),
+					}),
+				);
+			}
+			if (deviceLimit) body.deviceLimit = Number.parseInt(deviceLimit, 10);
+			if (ipLimit) body.ipLimit = Number.parseInt(ipLimit, 10);
+			// Same submit-time backstop for connection limits.
+			if ((deviceLimit || ipLimit) && limitsBlockedBindings.length > 0) {
+				throw new ApiError(
+					400,
+					t("clientNew.limitsUnsupported", {
+						inbounds: limitsBlockedBindings.map(quotaBlockedLabel).join(", "),
 					}),
 				);
 			}
@@ -330,6 +383,38 @@ export function ClientNewPage() {
 									onChange={(e) => setExpiresAt(e.target.value)}
 								/>
 							</FormItem>
+							<FormItem>
+								<Label htmlFor="nc-devlim">
+									{t("clientNew.deviceLimitLabel")}
+								</Label>
+								<Input
+									id="nc-devlim"
+									type="number"
+									min="1"
+									value={deviceLimit}
+									onChange={(e) => setDeviceLimit(e.target.value)}
+								/>
+								<FormDescription>
+									{t("clientNew.deviceLimitHint")}
+								</FormDescription>
+								{deviceLimitError ? (
+									<FormMessage>{deviceLimitError}</FormMessage>
+								) : null}
+							</FormItem>
+							<FormItem>
+								<Label htmlFor="nc-iplim">{t("clientNew.ipLimitLabel")}</Label>
+								<Input
+									id="nc-iplim"
+									type="number"
+									min="1"
+									value={ipLimit}
+									onChange={(e) => setIpLimit(e.target.value)}
+								/>
+								<FormDescription>{t("clientNew.ipLimitHint")}</FormDescription>
+								{ipLimitError ? (
+									<FormMessage>{ipLimitError}</FormMessage>
+								) : null}
+							</FormItem>
 						</div>
 					) : null}
 
@@ -397,6 +482,14 @@ export function ClientNewPage() {
 															: null,
 													) === false
 														? ` · ${t("clientNew.quotaNotEnforced")}`
+														: ""}
+													{deviceLimitsVerdict(
+														null,
+														ib.protocol != null
+															? (protocolDeviceLimits.get(ib.protocol) ?? null)
+															: null,
+													) === false
+														? ` · ${t("clientNew.limitsNotEnforced")}`
 														: ""}
 												</span>
 											</Label>
@@ -520,6 +613,17 @@ export function ClientNewPage() {
 											{expiresAt}
 										</p>
 									) : null}
+									{deviceLimit ? (
+										<p>
+											<strong>{t("clientNew.reviewDeviceLimit")}:</strong>{" "}
+											{deviceLimit}
+										</p>
+									) : null}
+									{ipLimit ? (
+										<p>
+											<strong>{t("clientNew.reviewIpLimit")}:</strong> {ipLimit}
+										</p>
+									) : null}
 									<p>
 										<strong>{t("clientNew.reviewBindings")}:</strong>{" "}
 										{bindings.length}
@@ -536,6 +640,17 @@ export function ClientNewPage() {
 						<FormMessage style={{ marginTop: 8 }}>
 							{t("clientNew.quotaUnsupported", {
 								inbounds: quotaBlockedBindings
+									.map(quotaBlockedLabel)
+									.join(", "),
+							})}
+						</FormMessage>
+					) : null}
+
+					{(deviceLimit !== "" || ipLimit !== "") &&
+					limitsBlockedBindings.length > 0 ? (
+						<FormMessage style={{ marginTop: 8 }}>
+							{t("clientNew.limitsUnsupported", {
+								inbounds: limitsBlockedBindings
 									.map(quotaBlockedLabel)
 									.join(", "),
 							})}
@@ -571,7 +686,10 @@ export function ClientNewPage() {
 									variant="primary"
 									disabled={
 										(step === 0 && !name.trim()) ||
-										(step === 1 && quotaError != null)
+										(step === 1 &&
+											(quotaError != null ||
+												deviceLimitError != null ||
+												ipLimitError != null))
 									}
 									onClick={() => setStep((s) => s + 1)}
 								>

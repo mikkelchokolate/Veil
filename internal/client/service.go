@@ -98,12 +98,15 @@ type CredentialMeta struct {
 
 // BindingCapability captures the protocol capabilities of a bound inbound.
 type BindingCapability struct {
-	Protocol              string   `json:"protocol"`
-	Transports            []string `json:"transports"`
-	PerClientCredentials  bool     `json:"perClientCredentials"`
-	RequiresCaddy         bool     `json:"requiresCaddy"`
-	TrafficAccounting     bool     `json:"trafficAccounting"`
-	QuotaEnforcement      bool     `json:"quotaEnforcement"`
+	Protocol             string   `json:"protocol"`
+	Transports           []string `json:"transports"`
+	PerClientCredentials bool     `json:"perClientCredentials"`
+	RequiresCaddy        bool     `json:"requiresCaddy"`
+	TrafficAccounting    bool     `json:"trafficAccounting"`
+	QuotaEnforcement     bool     `json:"quotaEnforcement"`
+	// DeviceLimits reports whether the protocol enforces deviceLimit/ipLimit
+	// for clients on this inbound (Hysteria2 via its HTTP auth callback).
+	DeviceLimits          bool     `json:"deviceLimits"`
 	CredentialKinds       []string `json:"credentialKinds,omitempty"`
 	ExpirationEnforcement bool     `json:"expirationEnforcement"`
 }
@@ -156,6 +159,16 @@ func validate(c Client) error {
 	// instead of letting the two interpretations diverge.
 	if c.ExpiresAt != nil && *c.ExpiresAt <= 0 {
 		return fmt.Errorf("%w: expiresAt must be a positive unix timestamp or null (never)", ErrValidation)
+	}
+	// Connection limits have exactly one meaning: a positive integer bound.
+	// Zero was historically admitted by the old "non-negative" rule and would
+	// read as "block everything", while null means unlimited — rejecting 0
+	// keeps the two intents unambiguous.
+	if c.DeviceLimit != nil && *c.DeviceLimit < 1 {
+		return fmt.Errorf("%w: deviceLimit must be a positive integer or null (unlimited)", ErrValidation)
+	}
+	if c.IPLimit != nil && *c.IPLimit < 1 {
+		return fmt.Errorf("%w: ipLimit must be a positive integer or null (unlimited)", ErrValidation)
 	}
 	return nil
 }
@@ -593,10 +606,17 @@ func (s *Service) SetBindingEnabled(bindingID string, enabled bool, version int)
 
 // BindingCredential pairs a normalized client's resolved credential with its
 // identity, for render-time injection into an inbound's runtime access model.
+// ClientID and the Device/IP limit pointers describe the owning client so
+// renderers can detect credentials whose sessions need connection-limit
+// enforcement (nil = unlimited).
 type BindingCredential struct {
-	Name     string
-	Username string
-	Password string
+	ClientID    string
+	BindingID   string
+	Name        string
+	Username    string
+	Password    string
+	DeviceLimit *int
+	IPLimit     *int
 }
 
 // CredentialsForInbound resolves the active credential plaintext for every
@@ -625,7 +645,11 @@ func (s *Service) CredentialsForInbound(inboundID string) ([]BindingCredential, 
 			if rerr != nil {
 				return nil, rerr
 			}
-			out = append(out, BindingCredential{Name: row.Client.Name, Username: row.Binding.RuntimeIdentity, Password: plaintext})
+			out = append(out, BindingCredential{
+				ClientID: row.Client.ID, BindingID: row.Binding.ID,
+				Name: row.Client.Name, Username: row.Binding.RuntimeIdentity, Password: plaintext,
+				DeviceLimit: row.Client.DeviceLimit, IPLimit: row.Client.IPLimit,
+			})
 		}
 		if !foundActive {
 			return nil, fmt.Errorf("%w: enabled binding %s has no active credential", ErrValidation, row.Binding.ID)

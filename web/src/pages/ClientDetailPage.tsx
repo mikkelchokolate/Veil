@@ -53,7 +53,10 @@ import {
 	parseQuotaDecimal,
 } from "../lib/bytes";
 import { dateInputToUnix, unixToDateInput } from "../lib/localDate";
-import { quotaEnforcementVerdict } from "../lib/quotaSupport";
+import {
+	deviceLimitsVerdict,
+	quotaEnforcementVerdict,
+} from "../lib/quotaSupport";
 import { ClientConnectionLinks } from "../subscription/ClientConnectionLinks";
 import { ClientTrafficPanel } from "../subscription/ClientTrafficPanel";
 import { SubscriptionTokensPanel } from "../subscription/SubscriptionTokensPanel";
@@ -90,6 +93,18 @@ function buildEditSchema(t: (key: string) => string) {
 				(v) => v === "" || decimalWithinSafeInteger(v),
 				t("clientDetail.validation.quotaTooLarge"),
 			),
+		deviceLimit: z.string().refine(
+			// Positive integer or empty — the API minimum is 1 (zero,
+			// negatives, and non-numeric input are validation errors).
+			(v) => v === "" || (/^\d+$/.test(v) && Number.parseInt(v, 10) >= 1),
+			t("clientDetail.validation.positiveInt"),
+		),
+		ipLimit: z
+			.string()
+			.refine(
+				(v) => v === "" || (/^\d+$/.test(v) && Number.parseInt(v, 10) >= 1),
+				t("clientDetail.validation.positiveInt"),
+			),
 		expiresAt: z.string(),
 		notes: z.string(),
 	});
@@ -103,6 +118,8 @@ function valuesFromClient(c: ClientDetail): EditValues {
 		email: c.email ?? "",
 		enabled: c.enabled ?? true,
 		quotaBytes: c.quotaBytes != null ? String(c.quotaBytes) : "",
+		deviceLimit: c.deviceLimit != null ? String(c.deviceLimit) : "",
+		ipLimit: c.ipLimit != null ? String(c.ipLimit) : "",
 		expiresAt: c.expiresAt ? unixToDateInput(c.expiresAt) : "",
 		notes,
 	};
@@ -148,6 +165,26 @@ function quotaBlockedLabel(
 	const proto = b.capability?.protocol ?? ib?.protocol;
 	const label = proto ? `${b.inboundId} (${proto})` : b.inboundId;
 	return ib?.enabled === false ? `${label} — ${disabledLabel}` : label;
+}
+
+/** Enabled bindings whose runtime cannot enforce deviceLimit/ipLimit at
+ * session admission — same precedence as unsupportedQuotaBindings, keyed on
+ * the advertised `deviceLimits` capability. */
+function unsupportedLimitBindings(
+	c: ClientDetail,
+	inboundList: InboundOption[],
+	protocolLimits: ReadonlyMap<string, boolean>,
+): BindingView[] {
+	return (c.bindings ?? []).filter((b) => {
+		if (!b.enabled) return false;
+		const ib = inboundList.find((item) => item.name === b.inboundId);
+		const proto = b.capability?.protocol ?? ib?.protocol;
+		const supported = deviceLimitsVerdict(
+			b.capability,
+			proto != null ? (protocolLimits.get(proto) ?? null) : null,
+		);
+		return supported === false || ib?.enabled === false;
+	});
 }
 
 interface AuditEntry {
@@ -201,7 +238,11 @@ export function ClientDetailPage() {
 	// the same source the server validator uses, so the UI never hardcodes
 	// protocol names.
 	const protocolCatalog = useQuery<
-		Array<{ protocol?: string; quotaEnforcement?: boolean }>
+		Array<{
+			protocol?: string;
+			quotaEnforcement?: boolean;
+			deviceLimits?: boolean;
+		}>
 	>({
 		queryKey: ["protocols"],
 		queryFn: () => apiFetch("/api/protocols"),
@@ -210,6 +251,11 @@ export function ClientDetailPage() {
 		(protocolCatalog.data ?? [])
 			.filter((p) => p.protocol != null)
 			.map((p) => [p.protocol as string, p.quotaEnforcement === true]),
+	);
+	const protocolDeviceLimits = new Map<string, boolean>(
+		(protocolCatalog.data ?? [])
+			.filter((p) => p.protocol != null)
+			.map((p) => [p.protocol as string, p.deviceLimits === true]),
 	);
 
 	const audit = useQuery<{ items?: AuditEntry[] } | AuditEntry[]>({
@@ -252,14 +298,18 @@ export function ClientDetailPage() {
 			email: "",
 			enabled: true,
 			quotaBytes: "",
+			deviceLimit: "",
+			ipLimit: "",
 			expiresAt: "",
 			notes: "",
 		},
 	});
 	const isDirty = form.formState.isDirty;
-	// Live quota draft — the unsupported-binding hint reacts while the user is
-	// still typing, not only on submit.
+	// Live quota/limit drafts — the unsupported-binding hints react while the
+	// user is still typing, not only on submit.
 	const quotaDraft = form.watch("quotaBytes");
+	const deviceLimitDraft = form.watch("deviceLimit");
+	const ipLimitDraft = form.watch("ipLimit");
 	const loadedClientId = useRef<string | null>(null);
 	const acceptServerValues = useRef(true);
 	const draftVersion = useRef<number | null>(null);
@@ -297,6 +347,10 @@ export function ClientDetailPage() {
 			// this conversion is exact.
 			const quota =
 				v.quotaBytes === "" ? undefined : parseQuotaDecimal(v.quotaBytes);
+			const deviceLimit =
+				v.deviceLimit === "" ? undefined : Number.parseInt(v.deviceLimit, 10);
+			const ipLimit =
+				v.ipLimit === "" ? undefined : Number.parseInt(v.ipLimit, 10);
 			// Submit-time backstop: the inline hint usually catches this, but the
 			// check runs again here in case bindings changed mid-edit. The
 			// backend re-validates independently.
@@ -306,6 +360,25 @@ export function ClientDetailPage() {
 					throw new ApiError(
 						400,
 						t("clientDetail.quotaUnsupported", {
+							inbounds: blocked
+								.map((b) =>
+									quotaBlockedLabel(b, inboundList, t("common.disabled")),
+								)
+								.join(", "),
+						}),
+					);
+				}
+			}
+			if (deviceLimit != null || ipLimit != null) {
+				const blocked = unsupportedLimitBindings(
+					c,
+					inboundList,
+					protocolDeviceLimits,
+				);
+				if (blocked.length > 0) {
+					throw new ApiError(
+						400,
+						t("clientDetail.limitsUnsupported", {
 							inbounds: blocked
 								.map((b) =>
 									quotaBlockedLabel(b, inboundList, t("common.disabled")),
@@ -329,6 +402,12 @@ export function ClientDetailPage() {
 					: {}),
 				...(form.getFieldState("quotaBytes").isDirty
 					? { quotaBytes: quota ?? null }
+					: {}),
+				...(form.getFieldState("deviceLimit").isDirty
+					? { deviceLimit: deviceLimit ?? null }
+					: {}),
+				...(form.getFieldState("ipLimit").isDirty
+					? { ipLimit: ipLimit ?? null }
 					: {}),
 				...(form.getFieldState("expiresAt").isDirty
 					? { expiresAt: expiresUnix }
@@ -481,6 +560,13 @@ export function ClientDetailPage() {
 	// Surfaced inline under the quota field while the draft quota is filled —
 	// honest about enforcement instead of failing only on submit.
 	const quotaBlocked = unsupportedQuotaBindings(c, inboundList, protocolQuota);
+	// Enabled bindings that can't enforce connection limits — same inline-hint
+	// treatment as quotaBlocked.
+	const limitsBlocked = unsupportedLimitBindings(
+		c,
+		inboundList,
+		protocolDeviceLimits,
+	);
 	const disabledLabel = t("common.disabled");
 	const tabs: { id: Tab; label: string }[] = [
 		{ id: "overview", label: t("clientDetail.tab.overview") },
@@ -692,6 +778,16 @@ export function ClientDetailPage() {
 							? new Date(c.expiresAt * 1000).toLocaleString()
 							: t("clientDetail.never")}
 					</p>
+					<p>
+						<strong>{t("clientDetail.deviceLimit")}:</strong>{" "}
+						{c.deviceLimit != null
+							? c.deviceLimit
+							: t("clientDetail.unlimited")}
+					</p>
+					<p>
+						<strong>{t("clientDetail.ipLimit")}:</strong>{" "}
+						{c.ipLimit != null ? c.ipLimit : t("clientDetail.unlimited")}
+					</p>
 
 					{isAdmin ? (
 						<form
@@ -741,6 +837,51 @@ export function ClientDetailPage() {
 									type="date"
 									{...form.register("expiresAt")}
 								/>
+							</FormItem>
+							<FormItem>
+								<Label htmlFor="cd-devlim">
+									{t("clientDetail.deviceLimitLabel")}
+								</Label>
+								<Input
+									id="cd-devlim"
+									inputMode="numeric"
+									{...form.register("deviceLimit")}
+								/>
+								<FormDescription>
+									{t("clientDetail.deviceLimitHint")}
+								</FormDescription>
+								<FormMessage>
+									{form.formState.errors.deviceLimit?.message}
+								</FormMessage>
+							</FormItem>
+							<FormItem>
+								<Label htmlFor="cd-iplim">
+									{t("clientDetail.ipLimitLabel")}
+								</Label>
+								<Input
+									id="cd-iplim"
+									inputMode="numeric"
+									{...form.register("ipLimit")}
+								/>
+								<FormDescription>
+									{t("clientDetail.ipLimitHint")}
+								</FormDescription>
+								<FormMessage>
+									{form.formState.errors.ipLimit?.message}
+								</FormMessage>
+								{((deviceLimitDraft ?? "") !== "" ||
+									(ipLimitDraft ?? "") !== "") &&
+								limitsBlocked.length > 0 ? (
+									<FormMessage>
+										{t("clientDetail.limitsUnsupported", {
+											inbounds: limitsBlocked
+												.map((b) =>
+													quotaBlockedLabel(b, inboundList, disabledLabel),
+												)
+												.join(", "),
+										})}
+									</FormMessage>
+								) : null}
 							</FormItem>
 							<FormItem>
 								<Label htmlFor="cd-notes">{t("clientDetail.notes")}</Label>
@@ -815,6 +956,9 @@ export function ClientDetailPage() {
 												cannot enforce quota says so next to its name. */}
 											{b.capability.quotaEnforcement === false
 												? ` · ${t("clientDetail.quotaNotEnforced")}`
+												: ""}
+											{b.capability.deviceLimits === false
+												? ` · ${t("clientDetail.limitsNotEnforced")}`
 												: ""}
 										</FormDescription>
 									) : null}
@@ -906,6 +1050,14 @@ export function ClientDetailPage() {
 												: null,
 										) === false
 											? ` — ${t("clientDetail.quotaNotEnforced")}`
+											: ""}
+										{deviceLimitsVerdict(
+											null,
+											ib.protocol != null
+												? (protocolDeviceLimits.get(ib.protocol) ?? null)
+												: null,
+										) === false
+											? ` — ${t("clientDetail.limitsNotEnforced")}`
 											: ""}
 									</option>
 								))}

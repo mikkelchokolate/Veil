@@ -72,6 +72,16 @@ func renderHysteria2(settings model.Settings, inbound model.Inbound, warp model.
 		TrafficStatsListen: runtimeports.Hysteria2TrafficStatsAddress(inbound.Port),
 		TrafficStatsSecret: TrafficStatsSecret(settings, inbound),
 	}
+	// A client carrying deviceLimit/ipLimit cannot be enforced by the static
+	// userpass/password modes — those authenticate the secret and nothing
+	// else. The moment any admitted runtime credential is limited the config
+	// switches to the internal HTTP auth callback, which performs the same
+	// credential check plus the per-client admission limits (#1173). The
+	// callback shares one panel-side listener across inbounds; per-inbound
+	// scoping and the daemon-facing secret ride in the URL path.
+	if runtimeCredentialsLimited(inbound.RuntimeCredentials) {
+		hystConfig.HTTPAuthURL = HTTPAuthURL(settings, inbound)
+	}
 	// Use Caddy-managed certificates whenever the inbound has its own domain
 	// (Caddy is already required for it) or when the panel itself uses Caddy.
 	if domain != "" && (settings.PanelAccess == "caddy" || model.InboundDomain(inbound) != "") {
@@ -142,4 +152,16 @@ func routingDatPath(paths generatedconfig.Paths, name string) string {
 func regularFileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Mode().IsRegular()
+}
+
+// runtimeCredentialsLimited reports whether any normalized runtime
+// credential carries a connection limit. Legacy embedded profiles cannot
+// express limits, so only RuntimeCredentials are consulted.
+func runtimeCredentialsLimited(creds []model.RuntimeCredential) bool {
+	for _, cred := range creds {
+		if cred.DeviceLimit != nil || cred.IPLimit != nil {
+			return true
+		}
+	}
+	return false
 }

@@ -194,7 +194,8 @@ func clientSnapshotRows(
 			ID: c.ID, Name: c.Name, Email: c.Email, Enabled: c.Enabled,
 			GroupID: c.GroupID, QuotaBytes: c.QuotaBytes, QuotaResetPolicy: c.QuotaResetPolicy,
 			QuotaResetAt: c.QuotaResetAt, ExpiresAt: c.ExpiresAt, DeviceLimit: c.DeviceLimit,
-			Notes: c.Notes, Depleted: c.Depleted, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt, Version: c.Version,
+			IPLimit: c.IPLimit,
+			Notes:   c.Notes, Depleted: c.Depleted, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt, Version: c.Version,
 		})
 	}
 	bs := make([]model.BindingSnapshot, 0, len(bindings))

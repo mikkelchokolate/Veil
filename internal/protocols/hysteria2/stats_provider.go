@@ -117,6 +117,16 @@ func (p *StatsProvider) WithInstanceSource(source func(context.Context) string) 
 
 func (p *StatsProvider) Key() string { return p.key }
 
+// Online reads the stats server's /online table alone (identity -> live
+// session count) folded onto binding IDs, exactly as the presence read
+// inside ReadContext does. A successful result is a non-nil map: empty is an
+// authoritative "no live sessions", distinct from a failed read. The
+// internal auth callback uses this to count live sessions for
+// deviceLimit (#1173).
+func (p *StatsProvider) Online(ctx context.Context) (map[string]int64, []string, error) {
+	return p.readOnline(ctx)
+}
+
 type trafficStats struct {
 	Tx uint64 `json:"tx"`
 	Rx uint64 `json:"rx"`

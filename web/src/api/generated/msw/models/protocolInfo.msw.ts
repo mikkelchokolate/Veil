@@ -53,6 +53,8 @@ export interface ProtocolInfo {
   trafficAccounting?: boolean;
   /** The protocol's runtime can disconnect a client that exceeds its quota, so the panel's quota field is actually enforced. */
   quotaEnforcement?: boolean;
+  /** The protocol's runtime admits sessions through an authentication hook that enforces the client's deviceLimit and ipLimit. */
+  deviceLimits?: boolean;
   inboundFieldSchema?: FieldSchema[];
   settingsFieldSchema?: FieldSchema[];
 }
