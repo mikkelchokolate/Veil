@@ -95,6 +95,11 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodGet, "/api/auth/sessions", capabilityAdminMetadata},
 	{http.MethodGet, "/api/users", capabilityAdminMetadata},
 	{http.MethodGet, "/api/backups", capabilityAdminMetadata},
+	// The destination view carries host/user/key-path details but never
+	// secret values; the remote archive list is metadata about off-host
+	// copies of the same archives.
+	{http.MethodGet, "/api/backups/sftp", capabilityAdminMetadata},
+	{http.MethodGet, "/api/backups/sftp/remote", capabilityAdminMetadata},
 	{http.MethodGet, "/api/backup-restore-jobs/{id}", capabilitySelfService},
 	// The token list embeds every recoverable /s/ subscription URL, so it is
 	// admin-secret material like the token-by-id reveal, not metadata (#619).
@@ -136,6 +141,11 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodDelete, "/api/users/{username}", capabilityAdminMutation},
 	{http.MethodPost, "/api/backups", capabilityAdminMutation},
 	{http.MethodPost, "/api/backups/prune", capabilityAdminMutation},
+	{http.MethodPut, "/api/backups/sftp", capabilityAdminMutation},
+	{http.MethodDelete, "/api/backups/sftp", capabilityAdminMutation},
+	// Fetch writes a remote archive into the managed backup dir, so it is a
+	// mutation like restore, not a read.
+	{http.MethodPost, "/api/backups/sftp/fetch", capabilityAdminMutation},
 	{http.MethodPost, "/api/backups/{name}/restore", capabilityAdminMutation},
 	{http.MethodPost, "/api/backups/{name}/verify", capabilityAdminMutation},
 	{http.MethodDelete, "/api/backups/{name}", capabilityAdminMutation},

@@ -1006,6 +1006,231 @@ paths:
           $ref: '#/components/responses/Locked'
       x-roles:
       - admin
+  /api/backups/sftp:
+    get:
+      x-veil-role: admin-metadata
+      tags:
+      - backups
+      summary: Read the SFTP remote-backup destination
+      description: 'Returns the secret-free destination view (`configured` and
+
+        `*Set` flags) plus the recorded remote-operation status. Secret values
+
+        are never echoed — they are write-only.
+
+        '
+      responses:
+        '200':
+          description: Destination view and remote-operation status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupSftpDestination'
+              examples:
+                configured:
+                  value:
+                    configured: true
+                    enabled: true
+                    host: backups.example.com
+                    port: 22
+                    user: veil
+                    remoteDir: /srv/veil-backups
+                    authType: key
+                    keyPath: /etc/veil/backup-sftp.key
+                    keyPassphraseSet: false
+                    hostKeySet: true
+                    status:
+                      lastUploadAt: '2026-06-05T02:00:11Z'
+                      lastUploadArchive: veil_backup_20260605_020000.tar.gz.enc
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+    put:
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-veil-role: admin-mutation
+      tags:
+      - backups
+      summary: Configure the SFTP remote-backup destination
+      description: 'Persists the root-only destination file under the etc dir via
+
+        the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
+
+        write-only: omitting one keeps the stored value, an empty string clears
+
+        it. Requires admin and CSRF for a cookie session.
+
+        '
+      security:
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BackupSftpPutRequest'
+            examples:
+              key-auth:
+                value:
+                  enabled: true
+                  host: backups.example.com
+                  port: 22
+                  user: veil
+                  remoteDir: /srv/veil-backups
+                  authType: key
+                  keyPath: /etc/veil/backup-sftp.key
+      responses:
+        '200':
+          description: Stored destination view (secrets never echoed).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupSftpDestination'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
+    delete:
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-veil-role: admin-mutation
+      tags:
+      - backups
+      summary: Remove the SFTP remote-backup destination
+      description: Deletes the root-only destination config. Requires admin and
+        CSRF for a cookie session.
+      security:
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
+      responses:
+        '200':
+          description: Destination removed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - configured
+                properties:
+                  configured:
+                    type: boolean
+                    enum:
+                    - false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
+  /api/backups/sftp/remote:
+    get:
+      x-veil-role: admin-metadata
+      tags:
+      - backups
+      summary: List archives on the SFTP remote destination
+      description: Requires an admin token or admin session.
+      responses:
+        '200':
+          description: Remote archives in newest-first order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BackupArchive'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+  /api/backups/sftp/fetch:
+    post:
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-veil-role: admin-mutation
+      tags:
+      - backups
+      summary: Download a remote archive into the local backup dir
+      description: 'Materializes the named remote archive under the managed
+
+        backup dir (atomic temp-then-publish), after which the normal restore
+
+        endpoint applies. Requires admin and CSRF for a cookie session.
+
+        '
+      security:
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BackupSftpFetchRequest'
+      responses:
+        '200':
+          description: Archive materialized locally.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupArchive'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '423':
+          $ref: '#/components/responses/Locked'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/backup-restore-jobs/{id}:
     parameters:
     - $ref: '#/components/parameters/RestoreJobID'
@@ -4819,6 +5044,8 @@ components:
             type: string
         dryRun:
           type: boolean
+        remote:
+          $ref: '#/components/schemas/BackupRemoteResult'
     BackupCreateResponse:
       type: object
       required:
@@ -4831,9 +5058,159 @@ components:
           $ref: '#/components/schemas/BackupVerificationReport'
         prune:
           $ref: '#/components/schemas/BackupPruneResult'
+        remote:
+          $ref: '#/components/schemas/BackupRemoteResult'
         warning:
           type: string
-          description: Non-fatal warning (for example a retention prune failure after a successful archive).
+          description: Non-fatal warning (for example a retention prune or remote upload failure after a successful archive).
+    BackupRemoteResult:
+      type: object
+      description: 'Remote SFTP destination outcome for a create or prune. A
+
+        remote failure is reported in `error` without failing the local
+
+        operation it accompanied.
+
+        '
+      properties:
+        upload:
+          type: object
+          required:
+          - archive
+          - size
+          - sha256
+          properties:
+            archive:
+              type: string
+            size:
+              type: integer
+              format: int64
+              minimum: 0
+            sha256:
+              type: string
+              pattern: ^[0-9a-f]{64}$
+        pruned:
+          type: array
+          items:
+            type: string
+        kept:
+          type: array
+          items:
+            type: string
+        error:
+          type: string
+    BackupSftpStatus:
+      type: object
+      properties:
+        lastUploadAt:
+          type: string
+          format: date-time
+        lastUploadArchive:
+          type: string
+        lastFetchAt:
+          type: string
+          format: date-time
+        lastFetchArchive:
+          type: string
+        lastPruneAt:
+          type: string
+          format: date-time
+        lastError:
+          type: string
+        lastErrorAt:
+          type: string
+          format: date-time
+    BackupSftpDestination:
+      type: object
+      required:
+      - configured
+      - enabled
+      - status
+      properties:
+        configured:
+          type: boolean
+        enabled:
+          type: boolean
+        host:
+          type: string
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+          default: 22
+        user:
+          type: string
+        remoteDir:
+          type: string
+        authType:
+          type: string
+          enum:
+          - key
+          - password
+        keyPath:
+          type: string
+        passwordSet:
+          type: boolean
+        keyPassphraseSet:
+          type: boolean
+        hostKeySet:
+          type: boolean
+        status:
+          $ref: '#/components/schemas/BackupSftpStatus'
+    BackupSftpPutRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - enabled
+      - host
+      - user
+      - remoteDir
+      - authType
+      properties:
+        enabled:
+          type: boolean
+        host:
+          type: string
+        port:
+          type: integer
+          minimum: 0
+          maximum: 65535
+          default: 22
+          description: Zero or omitted means the SSH default 22.
+        user:
+          type: string
+        remoteDir:
+          type: string
+        authType:
+          type: string
+          enum:
+          - key
+          - password
+        keyPath:
+          type: string
+          description: Absolute path of the private key readable by root.
+        keyPassphrase:
+          type: string
+          writeOnly: true
+          description: Write-only; omit to keep the stored value.
+        password:
+          type: string
+          writeOnly: true
+          description: Write-only; omit to keep the stored value.
+        hostKey:
+          type: string
+          writeOnly: true
+          description: 'Pinned server host key in authorized_keys format.
+            Write-only; omit to keep, empty string clears back to TOFU.'
+    BackupSftpFetchRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          description: Remote archive basename (must match the managed archive pattern).
     BackupRestoreRequest:
       type: object
       required:

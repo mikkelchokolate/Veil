@@ -896,4 +896,143 @@ describe("BackupsPage", () => {
 			await screen.findByText(/revokes every other panel session/i),
 		).toBeInTheDocument();
 	});
+
+	// #1174: SFTP destination — saving must never send secret fields that
+	// were left blank, and the request body carries the full non-secret form.
+	it("PUTs the SFTP destination with write-only secrets omitted when blank", async () => {
+		const putBodies: unknown[] = [];
+		fetcherMocks.apiFetch.mockImplementation(
+			(path: string, init?: RequestInit) => {
+				if (path === "/api/backups") {
+					return Promise.resolve({ items: [] });
+				}
+				if (path === "/api/backups/sftp" && init?.method === "PUT") {
+					putBodies.push(
+						typeof init.body === "string" ? JSON.parse(init.body) : init.body,
+					);
+					return Promise.resolve({ configured: true, enabled: true });
+				}
+				if (path === "/api/backups/sftp") {
+					return Promise.resolve({
+						configured: false,
+						enabled: false,
+						status: {},
+					});
+				}
+				return Promise.resolve({});
+			},
+		);
+		const queryClient = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={queryClient}>
+				<I18nProvider>
+					<BackupsPage />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Configure" }),
+		);
+		fireEvent.change(await screen.findByLabelText("Host"), {
+			target: { value: "backup.example.com" },
+		});
+		fireEvent.change(screen.getByLabelText("User"), {
+			target: { value: "veil" },
+		});
+		fireEvent.change(screen.getByLabelText("Remote directory"), {
+			target: { value: "/srv/veil" },
+		});
+		fireEvent.change(screen.getByLabelText("Authentication"), {
+			target: { value: "password" },
+		});
+		fireEvent.change(screen.getByLabelText("Password"), {
+			target: { value: "s3cret" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+		await waitFor(() => expect(putBodies).toHaveLength(1));
+		expect(putBodies[0]).toEqual({
+			enabled: false,
+			host: "backup.example.com",
+			user: "veil",
+			remoteDir: "/srv/veil",
+			authType: "password",
+			password: "s3cret",
+		});
+	});
+
+	// #1174: fetching a remote archive copies it into the local list, which is
+	// where the existing restore flow picks it up.
+	it("fetches a remote archive into local backups", async () => {
+		const fetched: unknown[] = [];
+		fetcherMocks.apiFetch.mockImplementation(
+			(path: string, init?: RequestInit) => {
+				if (path === "/api/backups") {
+					return Promise.resolve({ items: [] });
+				}
+				if (path === "/api/backups/sftp/remote") {
+					return Promise.resolve([
+						{
+							name: "veil-remote.enc",
+							size: 77,
+							createdAt: "2026-08-17T03:39:09Z",
+							encrypted: true,
+						},
+					]);
+				}
+				if (
+					path === "/api/backups/sftp/fetch" &&
+					init?.method === "POST"
+				) {
+					fetched.push(
+						typeof init.body === "string" ? JSON.parse(init.body) : init.body,
+					);
+					return Promise.resolve({
+						name: "veil-remote.enc",
+						size: 77,
+						createdAt: "2026-08-17T03:39:09Z",
+						encrypted: true,
+					});
+				}
+				if (path === "/api/backups/sftp") {
+					return Promise.resolve({
+						configured: true,
+						enabled: true,
+						host: "backup.example.com",
+						port: 22,
+						user: "veil",
+						remoteDir: "/srv/veil",
+						authType: "key",
+						keyPath: "/etc/veil/backup-sftp-key",
+						hostKeySet: true,
+						status: {},
+					});
+				}
+				return Promise.resolve({});
+			},
+		);
+		const queryClient = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={queryClient}>
+				<I18nProvider>
+					<BackupsPage />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+
+		expect(
+			await screen.findByText(/backup\.example\.com/),
+		).toBeInTheDocument();
+		fireEvent.click(await screen.findByRole("button", { name: "Fetch" }));
+		await waitFor(() => expect(fetched).toHaveLength(1));
+		expect(fetched[0]).toEqual({ name: "veil-remote.enc" });
+		expect(
+			await screen.findByText(/Fetched veil-remote\.enc/i),
+		).toBeInTheDocument();
+	});
 });

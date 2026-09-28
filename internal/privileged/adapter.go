@@ -177,4 +177,27 @@ func (a *LocalAdapter) CaddyLoad(ctx context.Context, request CaddyLoadRequest) 
 	return wrapOperationError(a.executor.CaddyLoad(ctx, request))
 }
 
+// BackupSftp runs one SFTP-destination operation. Config writes and fetches
+// mutate managed files (the secret-bearing destination config under the etc
+// dir, or a downloaded archive under the backup root), so they hold the
+// fencing lease like the other backup mutations; get/list are read-only.
+func (a *LocalAdapter) BackupSftp(ctx context.Context, request BackupSftpRequest) (BackupSftpResult, error) {
+	resolved, err := a.policy.ResolveBackupSftp(request)
+	if err != nil {
+		return BackupSftpResult{}, err
+	}
+	switch request.Action {
+	case BackupSftpActionSet, BackupSftpActionDelete, BackupSftpActionFetch:
+		if err := a.fence.Accept(request.Fence); err != nil {
+			return BackupSftpResult{}, err
+		}
+	}
+	if a.executor.BackupSftp == nil {
+		return BackupSftpResult{}, newError(ErrorOperationFailed, "backup sftp executor is unavailable")
+	}
+	result, err := a.executor.BackupSftp(ctx, resolved)
+	return result, wrapOperationError(err)
+}
+
 var _ Client = (*LocalAdapter)(nil)
+var _ BackupSftpOperator = (*LocalAdapter)(nil)

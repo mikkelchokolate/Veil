@@ -98,6 +98,12 @@ func (c *SocketClient) CaddyLoad(ctx context.Context, request CaddyLoadRequest) 
 	return c.call(ctx, RequestEnvelope{Operation: OperationCaddyLoad, CaddyLoad: &request}, nil)
 }
 
+func (c *SocketClient) BackupSftp(ctx context.Context, request BackupSftpRequest) (BackupSftpResult, error) {
+	var result BackupSftpResult
+	err := c.call(ctx, RequestEnvelope{Operation: OperationBackupSftp, BackupSftp: &request}, &result)
+	return result, err
+}
+
 // undeliveredError tags a failure that happened before the request could
 // reach the helper: the unix dial failed, so no privileged mutation could
 // have started and callers may safely finalize the attempt as a plain
@@ -198,7 +204,8 @@ const (
 func operationBudget(operation Operation, fallback, mutation, backup time.Duration) time.Duration {
 	switch operation {
 	case OperationBackupCreate, OperationBackupList, OperationBackupVerify,
-		OperationBackupRead, OperationBackupPrune, OperationBackupRestore, OperationBackupDelete:
+		OperationBackupRead, OperationBackupPrune, OperationBackupRestore, OperationBackupDelete,
+		OperationBackupSftp:
 		return backup
 	case OperationPromote, OperationStageUpdate, OperationRotateKey, OperationRecoverKeyRotation:
 		return mutation

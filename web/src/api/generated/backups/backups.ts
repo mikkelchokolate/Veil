@@ -67,10 +67,14 @@ import type {
   BackupPruneResult,
   BackupRestoreJob,
   BackupRestoreRequest,
+  BackupSftpDestination,
+  BackupSftpFetchRequest,
+  BackupSftpPutRequest,
   BackupVerificationReport,
   BadRequestResponse,
   ConflictResponse,
   DeleteApiBackupsName200,
+  DeleteApiBackupsSftp200,
   EmptyObject,
   ForbiddenResponse,
   LockedResponse,
@@ -817,6 +821,492 @@ export function usePostApiBackupsNameRestore<TData = Awaited<ReturnType<typeof p
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getPostApiBackupsNameRestoreQueryOptions(name,backupRestoreRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetApiBackupsSftpUrl = () => {
+
+
+
+
+  return `/api/backups/sftp`
+}
+
+/**
+ * Returns the secret-free destination view (`configured` and
+ * `*Set` flags) plus the recorded remote-operation status. Secret values
+ * are never echoed — they are write-only.
+ * @summary Read the SFTP remote-backup destination
+ */
+export const getApiBackupsSftp = async ( options?: Parameters<typeof apiFetch>[1]): Promise<BackupSftpDestination> => {
+
+  return apiFetch<BackupSftpDestination>(getGetApiBackupsSftpUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiBackupsSftpMutationKey = () => ['getApiBackupsSftp'] as const;
+
+export const getGetApiBackupsSftpMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiBackupsSftp>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiBackupsSftp>>, TError,void, TContext> => {
+
+const mutationKey = getGetApiBackupsSftpMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiBackupsSftp>>, void> = () => {
+
+
+          return  getApiBackupsSftp(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiBackupsSftpMutationResult = NonNullable<Awaited<ReturnType<typeof getApiBackupsSftp>>>
+
+    export type GetApiBackupsSftpMutationError = UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse
+
+
+    /**
+ * @summary Read the SFTP remote-backup destination
+ */
+export const useGetApiBackupsSftp = <TError = UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiBackupsSftp>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiBackupsSftp>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiBackupsSftpMutationOptions(options), queryClient);
+    }
+    export const getPutApiBackupsSftpUrl = () => {
+
+
+
+
+  return `/api/backups/sftp`
+}
+
+/**
+ * Persists the root-only destination file under the etc dir via
+ * the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
+ * write-only: omitting one keeps the stored value, an empty string clears
+ * it. Requires admin and CSRF for a cookie session.
+ * @summary Configure the SFTP remote-backup destination
+ */
+export const putApiBackupsSftp = async (backupSftpPutRequest: BackupSftpPutRequest, options?: Parameters<typeof apiFetch>[1]): Promise<BackupSftpDestination> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<BackupSftpDestination>(getPutApiBackupsSftpUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(backupSftpPutRequest)
+  }
+);}
+
+
+
+
+
+export const getPutApiBackupsSftpQueryKey = (backupSftpPutRequest?: BackupSftpPutRequest,) => {
+    return [
+    'PUT', `/api/backups/sftp`, backupSftpPutRequest
+    ] as const;
+    }
+
+
+export const getPutApiBackupsSftpQueryOptions = <TData = Awaited<ReturnType<typeof putApiBackupsSftp>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(backupSftpPutRequest: BackupSftpPutRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiBackupsSftp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPutApiBackupsSftpQueryKey(backupSftpPutRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof putApiBackupsSftp>>> = ({ signal }) => putApiBackupsSftp(backupSftpPutRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof putApiBackupsSftp>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PutApiBackupsSftpQueryResult = NonNullable<Awaited<ReturnType<typeof putApiBackupsSftp>>>
+export type PutApiBackupsSftpQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse
+
+
+export function usePutApiBackupsSftp<TData = Awaited<ReturnType<typeof putApiBackupsSftp>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(
+ backupSftpPutRequest: BackupSftpPutRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiBackupsSftp>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putApiBackupsSftp>>,
+          TError,
+          Awaited<ReturnType<typeof putApiBackupsSftp>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePutApiBackupsSftp<TData = Awaited<ReturnType<typeof putApiBackupsSftp>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(
+ backupSftpPutRequest: BackupSftpPutRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiBackupsSftp>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putApiBackupsSftp>>,
+          TError,
+          Awaited<ReturnType<typeof putApiBackupsSftp>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePutApiBackupsSftp<TData = Awaited<ReturnType<typeof putApiBackupsSftp>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(
+ backupSftpPutRequest: BackupSftpPutRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiBackupsSftp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Configure the SFTP remote-backup destination
+ */
+
+export function usePutApiBackupsSftp<TData = Awaited<ReturnType<typeof putApiBackupsSftp>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(
+ backupSftpPutRequest: BackupSftpPutRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putApiBackupsSftp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPutApiBackupsSftpQueryOptions(backupSftpPutRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getDeleteApiBackupsSftpUrl = () => {
+
+
+
+
+  return `/api/backups/sftp`
+}
+
+/**
+ * Deletes the root-only destination config. Requires admin and CSRF for a cookie session.
+ * @summary Remove the SFTP remote-backup destination
+ */
+export const deleteApiBackupsSftp = async ( options?: Parameters<typeof apiFetch>[1]): Promise<DeleteApiBackupsSftp200> => {
+
+  return apiFetch<DeleteApiBackupsSftp200>(getDeleteApiBackupsSftpUrl(),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiBackupsSftpQueryKey = () => {
+    return [
+    'DELETE', `/api/backups/sftp`
+    ] as const;
+    }
+
+
+export const getDeleteApiBackupsSftpQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiBackupsSftp>>, TError = UnauthorizedResponse | ForbiddenResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiBackupsSftp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeleteApiBackupsSftpQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteApiBackupsSftp>>> = ({ signal }) => deleteApiBackupsSftp({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof deleteApiBackupsSftp>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeleteApiBackupsSftpQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiBackupsSftp>>>
+export type DeleteApiBackupsSftpQueryError = UnauthorizedResponse | ForbiddenResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse
+
+
+export function useDeleteApiBackupsSftp<TData = Awaited<ReturnType<typeof deleteApiBackupsSftp>>, TError = UnauthorizedResponse | ForbiddenResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiBackupsSftp>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiBackupsSftp>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiBackupsSftp>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiBackupsSftp<TData = Awaited<ReturnType<typeof deleteApiBackupsSftp>>, TError = UnauthorizedResponse | ForbiddenResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiBackupsSftp>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiBackupsSftp>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiBackupsSftp>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiBackupsSftp<TData = Awaited<ReturnType<typeof deleteApiBackupsSftp>>, TError = UnauthorizedResponse | ForbiddenResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiBackupsSftp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Remove the SFTP remote-backup destination
+ */
+
+export function useDeleteApiBackupsSftp<TData = Awaited<ReturnType<typeof deleteApiBackupsSftp>>, TError = UnauthorizedResponse | ForbiddenResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiBackupsSftp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDeleteApiBackupsSftpQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetApiBackupsSftpRemoteUrl = () => {
+
+
+
+
+  return `/api/backups/sftp/remote`
+}
+
+/**
+ * Requires an admin token or admin session.
+ * @summary List archives on the SFTP remote destination
+ */
+export const getApiBackupsSftpRemote = async ( options?: Parameters<typeof apiFetch>[1]): Promise<BackupArchive[]> => {
+
+  return apiFetch<BackupArchive[]>(getGetApiBackupsSftpRemoteUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiBackupsSftpRemoteMutationKey = () => ['getApiBackupsSftpRemote'] as const;
+
+export const getGetApiBackupsSftpRemoteMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiBackupsSftpRemote>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiBackupsSftpRemote>>, TError,void, TContext> => {
+
+const mutationKey = getGetApiBackupsSftpRemoteMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiBackupsSftpRemote>>, void> = () => {
+
+
+          return  getApiBackupsSftpRemote(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiBackupsSftpRemoteMutationResult = NonNullable<Awaited<ReturnType<typeof getApiBackupsSftpRemote>>>
+
+    export type GetApiBackupsSftpRemoteMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse
+
+
+    /**
+ * @summary List archives on the SFTP remote destination
+ */
+export const useGetApiBackupsSftpRemote = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiBackupsSftpRemote>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiBackupsSftpRemote>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiBackupsSftpRemoteMutationOptions(options), queryClient);
+    }
+    export const getPostApiBackupsSftpFetchUrl = () => {
+
+
+
+
+  return `/api/backups/sftp/fetch`
+}
+
+/**
+ * Materializes the named remote archive under the managed
+ * backup dir (atomic temp-then-publish), after which the normal restore
+ * endpoint applies. Requires admin and CSRF for a cookie session.
+ * @summary Download a remote archive into the local backup dir
+ */
+export const postApiBackupsSftpFetch = async (backupSftpFetchRequest: BackupSftpFetchRequest, options?: Parameters<typeof apiFetch>[1]): Promise<BackupArchive> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<BackupArchive>(getPostApiBackupsSftpFetchUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(backupSftpFetchRequest)
+  }
+);}
+
+
+
+
+
+export const getPostApiBackupsSftpFetchQueryKey = (backupSftpFetchRequest?: BackupSftpFetchRequest,) => {
+    return [
+    'POST', `/api/backups/sftp/fetch`, backupSftpFetchRequest
+    ] as const;
+    }
+
+
+export const getPostApiBackupsSftpFetchQueryOptions = <TData = Awaited<ReturnType<typeof postApiBackupsSftpFetch>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(backupSftpFetchRequest: BackupSftpFetchRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsSftpFetch>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiBackupsSftpFetchQueryKey(backupSftpFetchRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiBackupsSftpFetch>>> = ({ signal }) => postApiBackupsSftpFetch(backupSftpFetchRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsSftpFetch>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiBackupsSftpFetchQueryResult = NonNullable<Awaited<ReturnType<typeof postApiBackupsSftpFetch>>>
+export type PostApiBackupsSftpFetchQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse
+
+
+export function usePostApiBackupsSftpFetch<TData = Awaited<ReturnType<typeof postApiBackupsSftpFetch>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(
+ backupSftpFetchRequest: BackupSftpFetchRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsSftpFetch>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiBackupsSftpFetch>>,
+          TError,
+          Awaited<ReturnType<typeof postApiBackupsSftpFetch>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiBackupsSftpFetch<TData = Awaited<ReturnType<typeof postApiBackupsSftpFetch>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(
+ backupSftpFetchRequest: BackupSftpFetchRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsSftpFetch>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiBackupsSftpFetch>>,
+          TError,
+          Awaited<ReturnType<typeof postApiBackupsSftpFetch>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiBackupsSftpFetch<TData = Awaited<ReturnType<typeof postApiBackupsSftpFetch>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(
+ backupSftpFetchRequest: BackupSftpFetchRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsSftpFetch>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Download a remote archive into the local backup dir
+ */
+
+export function usePostApiBackupsSftpFetch<TData = Awaited<ReturnType<typeof postApiBackupsSftpFetch>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | LockedResponse | ServiceUnavailableResponse>(
+ backupSftpFetchRequest: BackupSftpFetchRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiBackupsSftpFetch>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiBackupsSftpFetchQueryOptions(backupSftpFetchRequest,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

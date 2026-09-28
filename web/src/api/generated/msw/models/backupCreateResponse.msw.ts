@@ -42,12 +42,14 @@
  */
 import type { BackupArchive } from './backupArchive.msw.ts';
 import type { BackupPruneResult } from './backupPruneResult.msw.ts';
+import type { BackupRemoteResult } from './backupRemoteResult.msw.ts';
 import type { BackupVerificationReport } from './backupVerificationReport.msw.ts';
 
 export interface BackupCreateResponse {
   archive: BackupArchive;
   verification: BackupVerificationReport;
   prune?: BackupPruneResult;
-  /** Non-fatal warning (for example a retention prune failure after a successful archive). */
+  remote?: BackupRemoteResult;
+  /** Non-fatal warning (for example a retention prune or remote upload failure after a successful archive). */
   warning?: string;
 }
