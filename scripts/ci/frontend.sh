@@ -33,6 +33,14 @@ frontend_dist_artifact_dir="${CI_ARTIFACT_DIR}/frontend-dist"
 rm -rf "${frontend_dist_artifact_dir}"
 mkdir -p "${frontend_dist_artifact_dir}"
 cp -a dist "${frontend_dist_artifact_dir}/"
+# The artifact contract is regular files + directories ONLY: dist.sha256
+# below covers -type f entries, so a symlink/FIFO/socket/device would travel
+# through cp -a but be invisible to the manifest — and a consumer's cp -a
+# would then restore an object nothing ever verified (#1147). Refuse to
+# publish such an artifact rather than weaken the manifest.
+nonregular="$(find "${frontend_dist_artifact_dir}/dist" -mindepth 1 ! -type f ! -type d -print -quit)"
+[ -z "${nonregular}" ] \
+  || ci_die "frontend dist contains non-regular entry ${nonregular} — refusing to publish"
 # Producer-side integrity: never publish an artifact that is not a real Vite
 # build — non-empty index.html plus at least one JavaScript bundle (#442).
 [ -s "${frontend_dist_artifact_dir}/dist/index.html" ] \

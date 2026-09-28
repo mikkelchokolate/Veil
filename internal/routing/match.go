@@ -91,6 +91,26 @@ func splitMatchAtoms(raw string) []string {
 	return atoms
 }
 
+// MatchResplitsAtoms reports whether raw contains a comma that the current
+// atom splitter folds into a preceding regexp atom but a plain comma split —
+// and the pre-#1071 parser — treated as an atom separator. A stored rule
+// written under the old comma semantics (e.g. "regexp:\.ru$,example.org",
+// previously regex OR domain-suffix) silently changes meaning instead of
+// failing ParseMatch: it is now one regexp that can never match (#1082).
+// Validators surface this as a warning — the rule parses, but may not mean
+// what its author intended.
+func MatchResplitsAtoms(raw string) bool {
+	naive := 0
+	for _, segment := range strings.Split(raw, ",") {
+		if strings.TrimSpace(segment) != "" {
+			naive++
+		}
+	}
+	// splitMatchAtoms can only drop empty segments or fold them into a
+	// regexp atom, so fewer atoms than naive segments means folding happened.
+	return len(splitMatchAtoms(raw)) < naive
+}
+
 // isRegexpMatchAtom reports whether the atom accumulated so far opened with
 // a regexp:/regex: prefix.
 func isRegexpMatchAtom(atom string) bool {

@@ -11,6 +11,14 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 manifest="${CI_ARTIFACT_DIR}/environment-${JOB}.txt"
 
+# Keyword redaction for `env`/`go env` output. Substring matching is
+# intentionally broad (#435): secret-bearing names do not always contain
+# TOKEN/SECRET — MYSQL_PWD, *_PASSPHRASE, *_WEBHOOK, BEARER_CRED-style vars
+# would otherwise dump verbatim into a shareable artifact, so the list also
+# covers PASS/PWD/WEBHOOK/SIGN/CERT/BEARER/CRED (#1149). Over-redaction of a
+# non-secret name is acceptable; under-redaction is the failure mode here.
+env_secret_sed='s/^([^=]*(TOKEN|SECRET|PASS|PWD|AUTH|COOKIE|KEY|CRED|PRIVATE|SESSION|WEBHOOK|SIGN|CERT|BEARER)[^=]*)=.*/\1=<redacted>/I'
+
 {
   echo "# CI environment manifest — job: ${JOB}"
   echo "date: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -22,7 +30,7 @@ manifest="${CI_ARTIFACT_DIR}/environment-${JOB}.txt"
   echo; echo "## go";         go version 2>/dev/null || echo "go: not installed"
   # go env can carry credentials (GOAUTH, GOPRIVATE proxies, -ldflags secrets):
   # route it through the same redaction as `env` below (#435).
-  go env 2>/dev/null | sed -E 's/^([^=]*(TOKEN|SECRET|PASSWORD|AUTH|COOKIE|KEY|CREDENTIAL|PRIVATE|SESSION)[^=]*)=.*/\1=<redacted>/I' || true
+  go env 2>/dev/null | sed -E "${env_secret_sed}" || true
   echo; echo "## node";       node --version 2>/dev/null || echo "node: not installed"
   echo; echo "## pnpm";       pnpm --version 2>/dev/null || echo "pnpm: not installed"
   echo; echo "## git";        git --version || true
@@ -38,7 +46,7 @@ manifest="${CI_ARTIFACT_DIR}/environment-${JOB}.txt"
     echo; echo "## buildctl";      buildctl --version 2>&1 || echo "buildctl: not available"
   fi
   echo; echo "## environment (redacted)"
-  env | sort | sed -E 's/^([^=]*(TOKEN|SECRET|PASSWORD|AUTH|COOKIE|KEY|CREDENTIAL|PRIVATE|SESSION)[^=]*)=.*/\1=<redacted>/I'
+  env | sort | sed -E "${env_secret_sed}"
 } > "${manifest}" 2>&1
 
 ci_log "environment manifest: ${manifest}"

@@ -48,6 +48,10 @@ CI_NFPM_VERSION="v2.47.0"         # github.com/goreleaser/nfpm/v2/cmd/nfpm
 CI_REDOCLY_VERSION="2.52.1"       # @redocly/cli (OpenAPI lint)
 CI_OAPI_CODEGEN_VERSION="v2.8.0"  # github.com/oapi-codegen/oapi-codegen/v2 (sdk/go generate)
 CI_SHELLCHECK_VERSION="0.9.0"     # apt package on ubuntu-24.04 / CI image (never write "# shellcheck" — that parses as a directive, SC1126)
+# SHA256 of shellcheck-v0.9.0.linux.x86_64.tar.xz from koalaman/shellcheck —
+# the release workflow downloads this tarball and must verify the pin before
+# extracting/executing anything (#1146).
+CI_SHELLCHECK_TARBALL_SHA256="700324c6dd0ebea0117591c6cc9d7350d9c7c5c287acbad7630fa17b1d4d9e2f"
 CI_SYFT_VERSION="v1.52.0"         # anchore/syft — make sbom + release sbom-action
 
 # Docker CLI and Buildx used by the system image to talk to the mounted host daemon.
