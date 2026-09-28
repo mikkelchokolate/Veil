@@ -12,7 +12,13 @@ services:
       - veil-state:/var/lib/veil
       - veil-etc:/etc/veil
     environment:
-      - VEIL_API_TOKEN=${VEIL_API_TOKEN:-}
+      # REQUIRED: an explicit API token. Docker's host networking exposes the
+      # panel to the host's loopback, where dev-anonymous would otherwise be
+      # a valid auth path on a never-configured instance; requiring a token
+      # keeps that escape hatch armed only where no token exists (#1100).
+      # Compose aborts `up` when the variable is unset rather than starting
+      # an anonymously-administerable panel.
+      - VEIL_API_TOKEN=${VEIL_API_TOKEN:?set VEIL_API_TOKEN in the environment or a .env file}
       - VEIL_WEB_BASE_PATH=${VEIL_WEB_BASE_PATH:-}
       - VEIL_AUTO_TLS=${VEIL_AUTO_TLS:-}
       - VEIL_AUTO_TLS_DIR=${VEIL_AUTO_TLS_DIR:-}

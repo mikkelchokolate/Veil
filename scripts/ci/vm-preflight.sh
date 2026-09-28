@@ -31,7 +31,10 @@ docs/development/ci.md#virtualization-setup"
     command -v docker >/dev/null 2>&1 || ci_die "Docker is required on the host to build/export content-keyed VM images"
     docker info >/dev/null 2>&1 || ci_die "Docker daemon is required on the host to build/export content-keyed VM images"
     if [ ! -e /dev/kvm ] && [ "$(uname -s)" = "Linux" ]; then
-      smolvm_out="$(smolvm machine run --image alpine -- true 2>&1 || true)"
+      # Diagnostic-only probe to capture smolvm's error string — still use the
+      # digest-pinned image; a floating `alpine` tag is fetched+executed in the
+      # host context (#1149).
+      smolvm_out="$(smolvm machine run --image "${CI_SMOKE_ALPINE_IMAGE}" -- true 2>&1 || true)"
       ci_die "\
 Local CI requires smolvm and hardware virtualization.
 

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -95,7 +96,12 @@ func (s *managementState) registerProtocolRoomRoutes(mux *http.ServeMux) {
 func (s *managementState) withMutation(fn func(managementstate.Mutation) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return fn(s.mutationLocked())
+	err := fn(s.mutationLocked())
+	// Latch provisioning whenever a mutation leaves users non-empty (user
+	// create, admin reset reload, snapshot restore) so anonymous first-run
+	// access can never be re-armed on a configured instance (#1100).
+	s.noteUsersProvisionedLocked()
+	return err
 }
 
 func (s *managementState) mutationLocked() managementstate.Mutation {
@@ -110,6 +116,15 @@ func (s *managementState) mutationLocked() managementstate.Mutation {
 
 func (s *managementState) applyHistoryPathLocked() string {
 	return filepath.Join(s.applyRoot, "generated", "veil", "apply-history.json")
+}
+
+// databaseHandle snapshots the SQLite handle under s.mu; background workers
+// that run without the mutex must use it instead of reading s.db directly,
+// because restore reload replaces the handle concurrently.
+func (s *managementState) databaseHandle() *sql.DB {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.db
 }
 
 func (s *managementState) applyHistoryLocked() applyhistory.ApplyHistory {
@@ -359,8 +374,12 @@ func (s *managementState) Close() error {
 	stopClientBackgroundWorkers(workers)
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return closeClientDatabase(s)
+	// Detach under s.mu; the blocking runner/token/db Close calls run after
+	// the mutex is released so a recovery monitor inside the apply executor
+	// cannot deadlock shutdown or a restore reusing this path (#1087).
+	detached, _ := detachClientDatabase(s)
+	s.mu.Unlock()
+	return detached.close()
 }
 
 func (s *managementState) lifecycleContext() context.Context {

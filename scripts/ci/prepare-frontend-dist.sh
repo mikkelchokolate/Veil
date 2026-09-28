@@ -17,6 +17,10 @@ if [ -z "${artifact_dir}" ]; then
     || ci_die "local frontend build produced no web/dist/index.html"
   find "${CI_ROOT}/web/dist" -type f -name '*.js' | grep -q . \
     || ci_die "local frontend build produced no JavaScript bundle (stub SPA)"
+  # Same object model as the artifact path below (#1147): the embed contract
+  # is regular files only — a stray symlink/FIFO must not ship either.
+  find "${CI_ROOT}/web/dist" -mindepth 1 ! -type f ! -type d -print -quit | grep -q . \
+    && ci_die "local frontend build produced non-regular entries in web/dist"
   exit 0
 fi
 
@@ -33,6 +37,16 @@ artifact_sha="$(tr -d '[:space:]' < "${manifest}")"
 if [ "${artifact_sha}" != "${source_sha}" ]; then
   ci_die "frontend artifact SHA ${artifact_sha} does not match source HEAD ${source_sha}"
 fi
+# Same object model on the consumer side (#1147): dist.sha256 covers regular
+# files only — a symlink/FIFO/device injected into the artifact tree passes
+# the manifest check untouched and the old `cp -a` then restored the
+# unverified object into web/dist. Reject anything that is not a regular
+# file or directory BEFORE trusting the manifest.
+[ -d "${artifact_dir}/dist" ] \
+  || ci_die "frontend artifact is missing dist/: ${artifact_dir}"
+nonregular="$(cd "${artifact_dir}/dist" && find . -mindepth 1 ! -type f ! -type d -print -quit)"
+[ -z "${nonregular}" ] \
+  || ci_die "frontend artifact contains non-regular entry: ${nonregular} (manifest covers regular files only)"
 # dist.sha256 binds CONTENT, not just the commit (#413, #414): recompute the
 # exact file set + hashes — a stub SPA, truncated upload, or a dist rebuilt
 # from different inputs cannot reuse this artifact's identity.
@@ -52,6 +66,8 @@ fi
 find "${artifact_dir}/dist" -type f -name '*.js' | grep -q . \
   || ci_die "frontend artifact contains no JavaScript bundle (stub SPA): ${artifact_dir}/dist"
 
+# Verified regular-files-only above, so cp -a can no longer smuggle an
+# unverified symlink or special file into web/dist (#1147).
 rm -rf "${CI_ROOT}/web/dist"
 mkdir -p "${CI_ROOT}/web/dist"
 cp -a "${artifact_dir}/dist/." "${CI_ROOT}/web/dist/"

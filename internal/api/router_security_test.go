@@ -313,7 +313,7 @@ func TestAuthLoginLogoutStatusEndpoints(t *testing.T) {
 	loginBody := `{"username":"alice","password":"secret-pass"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(loginBody))
 	w := httptest.NewRecorder()
-	state.handleLogin(w, req)
+	state.handleLoginWithRevalidation(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("login expected 200, got %d: %s", w.Code, w.Body.String())
 	}
@@ -370,7 +370,7 @@ func TestAuthLoginLogoutStatusEndpoints(t *testing.T) {
 	badLoginBody := `{"username":"alice","password":"wrong-pass"}`
 	req = httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(badLoginBody))
 	w = httptest.NewRecorder()
-	state.handleLogin(w, req)
+	state.handleLoginWithRevalidation(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("invalid login expected 401, got %d", w.Code)
 	}

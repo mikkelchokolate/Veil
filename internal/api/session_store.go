@@ -81,6 +81,10 @@ type Session struct {
 	ExpiresAt     time.Time
 	UserAgent     string
 	RemoteAddr    string
+	// Bootstrap marks a session created by the NaivePassword admin fallback:
+	// no User row exists for it, so it is exempt from user-match revocation
+	// ONLY while the fallback precondition still holds (#1112).
+	Bootstrap bool
 }
 
 type SessionInfo struct {
@@ -101,6 +105,10 @@ type SessionCreateInput struct {
 	Role       string
 	UserAgent  string
 	RemoteAddr string
+	// Bootstrap marks a session minted by the NaivePassword admin fallback
+	// login (no backing user row). It is set only on the fallback path in
+	// createSessionForLoginSnapshot (#1112).
+	Bootstrap bool
 }
 
 type storedSession struct {
@@ -115,6 +123,7 @@ type storedSession struct {
 	ExpiresAt     time.Time `json:"expiresAt"`
 	UserAgent     string    `json:"userAgent,omitempty"`
 	RemoteAddr    string    `json:"remoteAddr,omitempty"`
+	Bootstrap     bool      `json:"bootstrap,omitempty"`
 }
 
 type sessionStoreFile struct {
@@ -143,6 +152,12 @@ type sessionJournalRecord struct {
 }
 
 const maxActiveSessions = 1024
+
+// maxSessionsPerUser bounds the concurrent sessions one account may hold.
+// Without a per-user quota a single low-privilege account can log in
+// repeatedly until the global cap evicts every other user's — including every
+// admin's — sessions (#1105).
+const maxSessionsPerUser = 32
 
 type SessionRegistry struct {
 	mu              sync.Mutex
@@ -203,7 +218,7 @@ func NewSessionRegistry(path string) (*SessionRegistry, error) {
 	if err := registry.load(); err != nil {
 		return nil, err
 	}
-	if evicted := registry.enforceSessionBoundLocked(); len(evicted) > 0 {
+	if evicted := registry.enforceSessionBoundLocked("", ""); len(evicted) > 0 {
 		if err := registry.saveLocked(); err != nil {
 			return nil, err
 		}
@@ -225,20 +240,123 @@ type evictedSession struct {
 	csrf   string
 }
 
-func (r *SessionRegistry) enforceSessionBoundLocked() []evictedSession {
+// enforceSessionBoundLocked trims the registry to both bounds. protectedHash
+// is the session the caller just inserted (or is about to rely on): it is
+// never evicted by this pass. newUsername scopes the per-user check to one
+// account on the Create path; "" audits every account (registry load).
+func (r *SessionRegistry) enforceSessionBoundLocked(protectedHash, newUsername string) []evictedSession {
 	var evicted []evictedSession
-	for len(r.sessions) > maxActiveSessions {
-		oldestHash := ""
-		var oldest storedSession
-		for tokenHash, session := range r.sessions {
-			if oldestHash == "" || session.CreatedAt.Before(oldest.CreatedAt) ||
-				(session.CreatedAt.Equal(oldest.CreatedAt) && tokenHash < oldestHash) {
-				oldestHash, oldest = tokenHash, session
+	evictOne := func(hash string, record storedSession) {
+		evicted = append(evicted, evictedSession{hash: hash, record: record, csrf: r.rawCSRF[hash]})
+		delete(r.sessions, hash)
+		delete(r.rawCSRF, hash)
+	}
+	oldestFirst := func(hashes []string) {
+		sort.Slice(hashes, func(i, j int) bool {
+			a, b := r.sessions[hashes[i]], r.sessions[hashes[j]]
+			if !a.CreatedAt.Equal(b.CreatedAt) {
+				return a.CreatedAt.Before(b.CreatedAt)
+			}
+			return hashes[i] < hashes[j]
+		})
+	}
+	// pickOldest prefers non-admin sessions over admin ones at equal
+	// priority so the global bound cannot shed administrators merely for
+	// having older sessions; ties then fall to CreatedAt, then the hash for
+	// deterministic behavior (#1105).
+	pickOldest := func(candidates []string) (string, storedSession, bool) {
+		best := ""
+		var bestRecord storedSession
+		for _, hash := range candidates {
+			if hash == protectedHash {
+				continue
+			}
+			record, ok := r.sessions[hash]
+			if !ok {
+				continue
+			}
+			if best == "" ||
+				(bestRecord.Role == "admin" && record.Role != "admin") ||
+				(bestRecord.Role == "admin") == (record.Role == "admin") &&
+					(record.CreatedAt.Before(bestRecord.CreatedAt) ||
+						(record.CreatedAt.Equal(bestRecord.CreatedAt) && hash < best)) {
+				best, bestRecord = hash, record
 			}
 		}
-		evicted = append(evicted, evictedSession{hash: oldestHash, record: oldest, csrf: r.rawCSRF[oldestHash]})
-		delete(r.sessions, oldestHash)
-		delete(r.rawCSRF, oldestHash)
+		return best, bestRecord, best != ""
+	}
+
+	// Per-user bound: overflow always comes out of the offending account's
+	// own oldest sessions, so one user's logins can never evict another
+	// user's session (#1105).
+	usernames := map[string]bool{}
+	if newUsername != "" {
+		usernames[newUsername] = true
+	} else {
+		for _, session := range r.sessions {
+			usernames[session.Username] = true
+		}
+	}
+	for username := range usernames {
+		var owned []string
+		for hash, session := range r.sessions {
+			if session.Username == username {
+				owned = append(owned, hash)
+			}
+		}
+		overflow := len(owned) - maxSessionsPerUser
+		if overflow <= 0 {
+			continue
+		}
+		oldestFirst(owned)
+		for _, hash := range owned {
+			if overflow <= 0 {
+				break
+			}
+			if hash == protectedHash {
+				continue
+			}
+			evictOne(hash, r.sessions[hash])
+			overflow--
+		}
+	}
+
+	// Global bound: a last-resort memory bound only. When it bites, evict the
+	// oldest session belonging to the account holding the MOST sessions —
+	// the user generating the pressure absorbs the eviction rather than
+	// whichever session happens to be globally oldest (#1105). pickOldest's
+	// admin preference is the second line of defence: an attacker flooding
+	// distinct usernames sheds non-admin sessions first.
+	for len(r.sessions) > maxActiveSessions {
+		counts := make(map[string]int, 64)
+		for _, session := range r.sessions {
+			counts[session.Username]++
+		}
+		maxCount := 0
+		for _, count := range counts {
+			if count > maxCount {
+				maxCount = count
+			}
+		}
+		var bucket []string
+		for hash, session := range r.sessions {
+			if counts[session.Username] == maxCount {
+				bucket = append(bucket, hash)
+			}
+		}
+		if hash, record, ok := pickOldest(bucket); ok {
+			evictOne(hash, record)
+			continue
+		}
+		var all []string
+		for hash := range r.sessions {
+			all = append(all, hash)
+		}
+		if hash, record, ok := pickOldest(all); ok {
+			evictOne(hash, record)
+			continue
+		}
+		break
 	}
 	return evicted
 }
@@ -269,13 +387,14 @@ func (r *SessionRegistry) Create(input SessionCreateInput) (Session, error) {
 		ExpiresAt:     expiresAt,
 		UserAgent:     input.UserAgent,
 		RemoteAddr:    input.RemoteAddr,
+		Bootstrap:     input.Bootstrap,
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.sessions[record.TokenHash] = record
 	r.rawCSRF[record.TokenHash] = csrf
-	evicted := r.enforceSessionBoundLocked()
+	evicted := r.enforceSessionBoundLocked(record.TokenHash, input.Username)
 	var persistErr error
 	if len(evicted) > 0 {
 		persistErr = r.saveLocked()
@@ -925,6 +1044,7 @@ func publicSession(record storedSession, token, csrf string) Session {
 		ExpiresAt:     record.ExpiresAt,
 		UserAgent:     record.UserAgent,
 		RemoteAddr:    record.RemoteAddr,
+		Bootstrap:     record.Bootstrap,
 	}
 }
 

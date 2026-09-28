@@ -15,6 +15,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/clientaccess"
+	"github.com/mikkelchokolate/Veil/internal/clientaddr"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
@@ -41,7 +42,9 @@ func (l *subscriptionRateLimiter) allow(token, remote string, now time.Time) boo
 	if err != nil {
 		host = strings.TrimSpace(remote)
 	}
-	sourceKey := "source:" + host
+	// Aggregate IPv6 sources at /64 so rotating through one delegated prefix
+	// shares a bucket instead of bypassing the source limit (#1101).
+	sourceKey := "source:" + clientaddr.RateLimitKey(host)
 	limits := map[string]int{tokenKey: 60, sourceKey: 300}
 	updates := make(map[string]subscriptionRateBucket, len(limits))
 	for key, limit := range limits {

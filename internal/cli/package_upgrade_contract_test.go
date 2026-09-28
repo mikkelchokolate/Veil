@@ -10,20 +10,33 @@ import (
 
 // Regression for #354: /etc/veil/panel TLS is shared with the protocol units
 // (User=veil-proxy), so the package migration path must group it veil-proxy —
-// the same contract as /etc/veil/generated and /etc/veil/tls.
+// the same contract as /etc/veil/generated and /etc/veil/tls. Since #1143 the
+// normalization runs inside `veil helper migrate` (hostaccess.Migrate), which
+// implements the root:veil-proxy grouping on pinned descriptors; the script
+// must delegate to it rather than hand-rolling chown/chmod walks.
 func TestPostinstallGroupsPanelTLSForProxyReaders(t *testing.T) {
 	body, err := os.ReadFile("../../packaging/scripts/postinstall.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
 	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
-	// /etc/veil/panel is normalized inside the runtime-shared dir loop with the
-	// same root:veil-proxy contract as generated/ and tls/.
-	if !strings.Contains(script, "/etc/veil/panel; do") && !strings.Contains(script, "/etc/veil/panel ") {
-		t.Fatalf("postinstall.sh must include /etc/veil/panel in the runtime-shared ownership pass:\n%s", script)
+	if !strings.Contains(script, "/usr/local/bin/veil helper migrate") {
+		t.Fatalf("postinstall.sh must delegate ownership normalization to `veil helper migrate`:\n%s", script)
 	}
-	if !strings.Contains(script, `chown -R root:veil-proxy "$dir"`) {
-		t.Fatalf("postinstall.sh must chown runtime-shared dirs to root:veil-proxy:\n%s", script)
+	// /etc/veil/panel must stay inside the documented runtime-shared contract
+	// (the delegate implements root:veil-proxy grouping for it; the grouping
+	// itself is asserted by the hostaccess tests). The script documents the
+	// coverage in the delegation comment, which stripHashComments removes —
+	// so check the raw body.
+	if !strings.Contains(string(body), "/etc/veil/panel") {
+		t.Fatalf("postinstall.sh must keep /etc/veil/panel in the runtime-shared contract:\n%s", script)
+	}
+	// #1143: service-owned trees must never be walked by path-following shell
+	// chmod/chown again — a mid-walk symlink swap lands on arbitrary targets.
+	for _, banned := range []string{"-exec chmod", "chown -R"} {
+		if strings.Contains(script, banned) {
+			t.Fatalf("postinstall.sh must not reintroduce path-following %q walks over service-owned trees:\n%s", banned, script)
+		}
 	}
 	if strings.Contains(script, "chown -R root:veil /etc/veil/panel") {
 		t.Fatal("postinstall.sh must not regroup /etc/veil/panel back to the panel-only veil group")

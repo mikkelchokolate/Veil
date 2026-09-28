@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -53,15 +54,36 @@ func stopClientBackgroundWorkers(workers clientBackgroundWorkers) {
 	}
 }
 
-func closeClientDatabase(s *managementState) error {
+// detachedClientDatabase carries the SQLite-backed subsystem pointers detached
+// under s.mu so their blocking Close calls can run after s.mu is released.
+// Runner.Close waits on the recovery monitor, and the monitor re-enters s.mu
+// through the apply executor — closing while the caller still holds the mutex
+// is a circular wait that wedged backup restore (#1087).
+type detachedClientDatabase struct {
+	db         *sql.DB
+	runner     *apply.Runner
+	tokenStore *client.TokenStore
+}
+
+// applyRunnerClose exists so tests can observe that the runner's blocking
+// Close runs only after s.mu has been released (#1087).
+var applyRunnerClose = func(runner *apply.Runner) { runner.Close() }
+
+// detachClientDatabase nils the SQLite-backed subsystem fields and returns the
+// captured pointers. The caller must hold s.mu; the returned value's close
+// must run only after s.mu has been released. The second return is false when
+// no database was attached (nothing detached, nothing to close).
+func detachClientDatabase(s *managementState) (detachedClientDatabase, bool) {
 	s.clientLifecycleMu.Lock()
 	defer s.clientLifecycleMu.Unlock()
 	if s.db == nil {
-		return nil
+		return detachedClientDatabase{}, false
 	}
-	db := s.db
-	runner := s.applyRunner
-	tokenStore := s.tokenStore
+	detached := detachedClientDatabase{
+		db:         s.db,
+		runner:     s.applyRunner,
+		tokenStore: s.tokenStore,
+	}
 	s.db = nil
 	s.applyRevisions = nil
 	s.applyJobs = nil
@@ -74,13 +96,35 @@ func closeClientDatabase(s *managementState) error {
 	s.tokenStore = nil
 	s.subRenderer = nil
 	s.trafficStore = nil
-	if runner != nil {
-		runner.Close()
+	return detached, true
+}
+
+// close joins the runner monitor and closes the detached stores. It must run
+// without s.mu held: the runner's recovery monitor can be inside the apply
+// executor acquiring s.mu, and waiting on monitorDone while holding it
+// deadlocked restore (#1087). Safe on a zero value.
+func (d detachedClientDatabase) close() error {
+	if d.runner != nil {
+		applyRunnerClose(d.runner)
 	}
-	if tokenStore != nil {
-		tokenStore.Close()
+	if d.tokenStore != nil {
+		d.tokenStore.Close()
 	}
-	return db.Close()
+	if d.db != nil {
+		return d.db.Close()
+	}
+	return nil
+}
+
+// closeClientDatabase detaches and closes in one call for callers that do not
+// hold s.mu (or that hold it only around a runner whose monitor never runs,
+// such as test-built subsystems).
+func closeClientDatabase(s *managementState) error {
+	detached, ok := detachClientDatabase(s)
+	if !ok {
+		return nil
+	}
+	return detached.close()
 }
 
 // closeClientSubsystem is retained for package tests and routes every teardown

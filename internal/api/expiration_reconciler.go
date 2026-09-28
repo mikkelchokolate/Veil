@@ -78,11 +78,15 @@ func (r *expirationReconciler) Signal() {
 }
 
 func (r *expirationReconciler) nextBoundary(ctx context.Context) (int64, bool, error) {
-	if r == nil || r.state == nil || r.state.db == nil {
+	if r == nil || r.state == nil {
+		return 0, false, nil
+	}
+	db := r.state.databaseHandle()
+	if db == nil {
 		return 0, false, nil
 	}
 	var boundary sql.NullInt64
-	err := r.state.db.QueryRowContext(ctx, `
+	err := db.QueryRowContext(ctx, `
 SELECT MIN(boundary) FROM (
   SELECT MIN(c.expires_at) AS boundary
   FROM clients c
@@ -118,14 +122,18 @@ type expiredClientCandidate struct {
 // ReconcileOnce uses the unique (created_at,id) keyset. It also considers
 // every missed boundary on startup because the predicate is expires_at<=now.
 func (r *expirationReconciler) ReconcileOnce(ctx context.Context) error {
-	if r == nil || r.state == nil || r.state.db == nil {
+	if r == nil || r.state == nil {
+		return nil
+	}
+	db := r.state.databaseHandle()
+	if db == nil {
 		return nil
 	}
 	var afterCreated int64 = -1
 	afterID := ""
 	for {
 		now := time.Now().UTC().Unix()
-		rows, err := r.state.db.QueryContext(ctx, `
+		rows, err := db.QueryContext(ctx, `
 SELECT c.id,c.expires_at,c.created_at,c.version
 FROM clients c
 LEFT JOIN expiration_enforcement e ON e.client_id=c.id AND e.state<>'superseded'
@@ -177,6 +185,7 @@ func (s *managementState) enforceExpiration(ctx context.Context, candidate expir
 		s.mu.Unlock()
 		return errors.New("expiration enforcement paused while runtime verification is unknown")
 	}
+	runner := s.applyRunner
 	revision, done, err := s.reserveExpirationRevisionLocked(candidate, effectiveAt)
 	s.mu.Unlock()
 	if err != nil || done || revision == 0 {
@@ -185,7 +194,7 @@ func (s *managementState) enforceExpiration(ctx context.Context, candidate expir
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	job, applyErr := s.applyRunner.RunOperationContext(ctx, revision, "expiration", "system",
+	job, applyErr := runner.RunOperationContext(ctx, revision, "expiration", "system",
 		apply.ContextExecutorFunc(func(operationContext context.Context, pinnedRevision uint64) (apply.Result, error) {
 			result, runErr := s.executeApplyRevisionContext(operationContext, pinnedRevision)
 			result.Confirmations = append(result.Confirmations, apply.EnforcementConfirmation{
@@ -325,13 +334,17 @@ ON CONFLICT(client_id,target_generation) DO UPDATE SET
 }
 
 func (s *managementState) recordExpirationFailure(candidate expiredClientCandidate, revision uint64, message string) error {
+	db := s.databaseHandle()
+	if db == nil {
+		return errors.New("expiration enforcement requires durable storage")
+	}
 	var attempts int
-	if err := s.db.QueryRow(`SELECT attempts FROM expiration_enforcement WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND desired_revision=?`, candidate.ID, candidate.TargetGeneration, candidate.TargetPayloadHash, revision).Scan(&attempts); err != nil {
+	if err := db.QueryRow(`SELECT attempts FROM expiration_enforcement WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND desired_revision=?`, candidate.ID, candidate.TargetGeneration, candidate.TargetPayloadHash, revision).Scan(&attempts); err != nil {
 		return err
 	}
 	delay := expirationRetryDelay(candidate.ID, attempts)
 	now := time.Now().UTC()
-	_, err := s.db.Exec(`UPDATE expiration_enforcement
+	_, err := db.Exec(`UPDATE expiration_enforcement
 SET state='failed',next_retry_at=?,last_error=?,updated_at=?
 WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND desired_revision=? AND state<>'superseded'`,
 		now.Add(delay).Unix(), message, now.Unix(), candidate.ID, candidate.TargetGeneration, candidate.TargetPayloadHash, revision)

@@ -28,6 +28,7 @@ import (
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/releaseverify"
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 	"github.com/mikkelchokolate/Veil/internal/service"
 	"github.com/mikkelchokolate/Veil/internal/statecommit"
 )
@@ -51,7 +52,7 @@ var (
 	lookupGroup            = user.LookupGroup
 	chownPath              = chownNoFollow
 	chmodPath              = chmodNoFollow
-	openNoFollow           = openRegularNoFollow
+	openNoFollow           = safefs.OpenNoFollow
 	caddyRetryInterval     = 2 * time.Second
 	defaultCaddyCertOutDir = "/etc/veil/certs"
 	backupSystemdDir       = "/etc/systemd/system"
@@ -59,24 +60,41 @@ var (
 
 // chownNoFollow opens path with O_NOFOLLOW and applies fchown on the file
 // descriptor, so a symlink swapped in after policy resolution is rejected
-// rather than followed to an unintended target.
+// rather than followed to an unintended target. The open is non-blocking so
+// a swapped FIFO cannot park the helper, and special files are rejected
+// before the ownership change (#1083).
 func chownNoFollow(path string, uid, gid int) error {
 	f, err := openNoFollow(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() && !info.IsDir() {
+		return fmt.Errorf("refuse to chown non-regular managed path %s", path)
+	}
 	return f.Chown(uid, gid)
 }
 
 // chmodNoFollow opens path with O_NOFOLLOW and applies fchmod on the file
-// descriptor, avoiding symlink-following chmod on a swapped path.
+// descriptor, avoiding symlink-following chmod on a swapped path; special
+// files are rejected after the non-blocking open instead of hanging (#1083).
 func chmodNoFollow(path string, mode os.FileMode) error {
 	f, err := openNoFollow(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() && !info.IsDir() {
+		return fmt.Errorf("refuse to chmod non-regular managed path %s", path)
+	}
 	return f.Chmod(mode)
 }
 
@@ -1159,18 +1177,28 @@ func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config 
 		return SyncCaddyCertResult{}, fmt.Errorf("locate Caddy certificate for %q: %w", request.Domain, err)
 	}
 	// Caddy's certificate tree lives under the veil-proxy-owned
-	// StateDirectory, so the leaf files are attacker-replaceable: a .crt or
-	// .key swapped for a symlink would be read as root and copied into the
-	// veil-proxy-readable output directory — arbitrary root file exfiltration.
-	// Open with O_NOFOLLOW and verify a regular file on the descriptor so the
-	// bytes written below are exactly the bytes that were validated (#1006).
-	certData, err := readBoundedRegularFile(pair.CertPath, maxCaddyCertMaterialBytes)
-	if err != nil {
-		return SyncCaddyCertResult{}, fmt.Errorf("read Caddy certificate: %w", err)
+	// StateDirectory, so the whole lookup path — certsRoot, the issuer dir,
+	// the <domain> dir, and the leaf files — is attacker-replaceable.
+	// FindPair resolves every component on held directory descriptors and
+	// returns the exact bytes it validated, so nothing below re-resolves a
+	// path the attacker can still swap between validate and copy (#1086).
+	// The readBoundedRegularFile fallback keeps pre-#1086 stubs working; it
+	// pins the leaf with O_NOFOLLOW|O_NONBLOCK even when it does re-open.
+	certData := pair.CertPEM
+	if len(certData) == 0 {
+		var err error
+		certData, err = readBoundedRegularFile(pair.CertPath, maxCaddyCertMaterialBytes)
+		if err != nil {
+			return SyncCaddyCertResult{}, fmt.Errorf("read Caddy certificate: %w", err)
+		}
 	}
-	keyData, err := readBoundedRegularFile(pair.KeyPath, maxCaddyCertMaterialBytes)
-	if err != nil {
-		return SyncCaddyCertResult{}, fmt.Errorf("read Caddy key: %w", err)
+	keyData := pair.KeyPEM
+	if len(keyData) == 0 {
+		var err error
+		keyData, err = readBoundedRegularFile(pair.KeyPath, maxCaddyCertMaterialBytes)
+		if err != nil {
+			return SyncCaddyCertResult{}, fmt.Errorf("read Caddy key: %w", err)
+		}
 	}
 	if err := os.MkdirAll(request.OutDir, 0o700); err != nil {
 		return SyncCaddyCertResult{}, fmt.Errorf("create cert output directory: %w", err)
