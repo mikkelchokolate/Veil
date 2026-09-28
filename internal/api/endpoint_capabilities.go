@@ -88,6 +88,7 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodGet, "/api/v1/traffic/{clientId}", capabilityViewer},
 	{http.MethodGet, "/api/v1/traffic/{clientId}/history", capabilityViewer},
 	{http.MethodGet, "/api/v1/traffic/stream", capabilityViewer},
+	{http.MethodGet, "/api/v1/presence", capabilityViewer},
 	{http.MethodGet, "/api/v1/events", capabilityViewer},
 
 	{http.MethodGet, "/api/audit", capabilityAdminMetadata},
