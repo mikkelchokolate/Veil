@@ -3,6 +3,7 @@ package installer
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/systemdunits"
@@ -34,7 +35,8 @@ func TestBuildRepairPlanDetectsMissingFiles(t *testing.T) {
 		t.Fatalf("expected repair plan to have changes for missing files, got none")
 	}
 
-	wantActions := 2 + len(systemdunits.Names())
+	// Two .veil-managed dir markers (etc+state) join the panel caddy, fallback, and unit set (#1145).
+	wantActions := 4 + len(systemdunits.Names())
 	if len(plan.Actions) != wantActions {
 		t.Fatalf("expected %d repair actions (panel caddy, fallback, managed systemd units), got %d: %+v", wantActions, len(plan.Actions), plan.Actions)
 	}
@@ -135,33 +137,33 @@ func TestBuildRepairPlanNoChangesWhenFilesMatch(t *testing.T) {
 		VarDir: varDir,
 	}
 
-	// Pre-create Caddy JSON with matching content
-	caddyPath := filepath.Join(etcDir, "generated", "caddy", "config.json")
-	if err := os.MkdirAll(filepath.Dir(caddyPath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	if err := os.WriteFile(caddyPath, []byte("{}"), 0o640); err != nil {
-		t.Fatalf("write caddy: %v", err)
-	}
-
-	// Pre-create fallback index with matching content (post-#601: the fallback
-	// root lives under /etc/veil/www, root:veil-proxy 0640)
-	indexPath := filepath.Join(etcDir, "www", "index.html")
-	indexContent := ""
+	// Pre-create every managed file with matching content, mode, and
+	// ownership — including the .veil-managed markers introduced for
+	// uninstall safety (#1145) — so the plan reports no changes.
 	desiredFiles, err := desiredManagedFiles(profile, paths)
 	if err != nil {
 		t.Fatalf("desired files: %v", err)
 	}
 	for _, file := range desiredFiles {
-		if file.Path == indexPath {
-			indexContent = file.Content
+		if !strings.HasPrefix(file.Path, etcDir+string(os.PathSeparator)) &&
+			!strings.HasPrefix(file.Path, varDir+string(os.PathSeparator)) {
+			t.Fatalf("desired file outside test roots: %s", file.Path)
 		}
-	}
-	if err := os.MkdirAll(filepath.Dir(indexPath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	if err := os.WriteFile(indexPath, []byte(indexContent), 0o640); err != nil {
-		t.Fatalf("write index: %v", err)
+		if err := os.MkdirAll(filepath.Dir(file.Path), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", file.Path, err)
+		}
+		mode := file.Mode
+		if mode == 0 {
+			mode = 0o640
+		}
+		if err := os.WriteFile(file.Path, []byte(file.Content), mode); err != nil {
+			t.Fatalf("write %s: %v", file.Path, err)
+		}
+		if file.Owner != nil {
+			if err := os.Chown(file.Path, file.Owner.UID, file.Owner.GID); err != nil {
+				t.Fatalf("chown %s: %v", file.Path, err)
+			}
+		}
 	}
 
 	plan, err := BuildRepairPlan(profile, paths)

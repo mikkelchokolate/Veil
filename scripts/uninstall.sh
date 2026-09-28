@@ -143,8 +143,17 @@ print_leftover_plan() {
 # is_safe_state_dir gates operator-supplied dirs before rm -rf: a leftover
 # cleanup must never escalate an env/flag-supplied directory (VEIL_ETC_DIR,
 # --var-dir, ...) into wiping a system tree (issue #1025). A directory is
-# removable when it is absent/not a dir, carries a Veil marker, has a
-# Veil-managed basename, or is empty — anything else fails closed.
+# removable when it is absent/not a dir, carries a distinctive Veil marker,
+# has a Veil-managed basename, or is empty — anything else fails closed.
+#
+# The marker list is intentionally narrow (issue #1093): only names Veil
+# itself writes — the .veil-managed sentinel emitted by install/repair, the
+# veil.env env file, the state.key secret, the backup.passphrase file, and
+# the veil.db store. Generic names (.config, .local, www, certs, backups,
+# staging, tls, panel, generated, acme, autocert, state.json, certificates)
+# appear in countless non-Veil directories — a single one would bless a
+# misdirected dir (e.g. VEIL_ETC_DIR=/home/operator with ~/.config present)
+# for rm -rf, which is exactly the misconfiguration this guard exists for.
 is_safe_state_dir() {
   local dir="$1" base marker
   [ -e "$dir" ] || [ -L "$dir" ] || return 0
@@ -155,8 +164,7 @@ is_safe_state_dir() {
   case "$base" in
     veil | caddy | mita | veil-* | veil.*) return 0 ;;
   esac
-  for marker in veil.env state.json state.key generated www panel tls certs \
-    backup.passphrase backups staging autocert .local .config certificates acme; do
+  for marker in .veil-managed veil.env state.key backup.passphrase veil.db; do
     [ -e "$dir/$marker" ] && return 0
   done
   # An empty directory holds nothing to lose — but a directory that cannot be

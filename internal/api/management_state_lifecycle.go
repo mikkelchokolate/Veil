@@ -136,7 +136,7 @@ func newManagementStateProduction(info ServerInfo) *managementState {
 		if info.StatePath != "" {
 			updateRoot = filepath.Join(filepath.Dir(info.StatePath), "updates")
 		}
-		stager := newPanelUpdateStager(updateRoot)
+		stager := newPanelUpdateStager(updateRoot, info.Version)
 		state.updateStager = stager.Stage
 	}
 	sessionPath := ""

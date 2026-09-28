@@ -2008,6 +2008,12 @@ type NetworkStats struct {
 	Interfaces []NetworkInterface `json:"interfaces"`
 }
 
+// PanelUpdateRequest Optional body for POST /api/version/update. An empty body (or {}) requests a normal update, which is refused when the running version is already at or newer than the latest release, or when the running version is not a release build.
+type PanelUpdateRequest struct {
+	// Force Install the latest release even when the running build is not strictly older (e.g. a main-<sha> install-main build or a newer version than the latest tag). Without force such requests are refused with 409 to prevent a silent downgrade.
+	Force *bool `json:"force,omitempty"`
+}
+
 // PingRequest defines model for PingRequest.
 type PingRequest struct {
 	Count *int `json:"count,omitempty"`
@@ -3281,7 +3287,7 @@ type PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody PostApiV1ClientsIdToke
 type PostApiValidationJSONRequestBody = ValidationRequest
 
 // PostApiVersionUpdateJSONRequestBody defines body for PostApiVersionUpdate for application/json ContentType.
-type PostApiVersionUpdateJSONRequestBody = EmptyObject
+type PostApiVersionUpdateJSONRequestBody = PanelUpdateRequest
 
 // PutApiWarpJSONRequestBody defines body for PutApiWarp for application/json ContentType.
 type PutApiWarpJSONRequestBody = WarpConfig

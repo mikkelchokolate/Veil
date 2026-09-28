@@ -81,7 +81,7 @@ func TestBuildPlanFromOptionsSwallowsLEIPCertError(t *testing.T) {
 		t.Fatalf("write invalid cert: %v", err)
 	}
 
-	_, err := BuildPlanFromOptions(Options{Profile: "ru-recommended", EtcDir: etcDir, VarDir: varDir, SystemdDir: t.TempDir(), LEIPCert: true, PublicIP: "127.0.0.1"}, PlanDependencies{Secret: func(label string) string { return "x-" + label }})
+	_, err := BuildPlanFromOptions(Options{Profile: "ru-recommended", Yes: true, EtcDir: etcDir, VarDir: varDir, SystemdDir: t.TempDir(), LEIPCert: true, PublicIP: "127.0.0.1"}, PlanDependencies{Secret: func(label string) string { return "x-" + label }})
 	if err != nil {
 		t.Fatalf("expected LE error to be swallowed, got %v", err)
 	}

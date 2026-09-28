@@ -65,9 +65,11 @@ export const PostApiVersionUpdateHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(postApiVersionUpdateHeaderIdempotencyKeyMax).regex(postApiVersionUpdateHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
-export const PostApiVersionUpdateBody = zod.object({
+export const postApiVersionUpdateBodyForceDefault = false;
 
-})
+export const PostApiVersionUpdateBody = zod.object({
+  "force": zod.boolean().default(postApiVersionUpdateBodyForceDefault).describe('Install the latest release even when the running build is not strictly older (e.g. a main-<sha> install-main build or a newer version than the latest tag). Without force such requests are refused with 409 to prevent a silent downgrade.')
+}).describe('Optional body for POST /api/version/update. An empty body (or {}) requests a normal update, which is refused when the running version is already at or newer than the latest release, or when the running version is not a release build.')
 
 export const PostApiVersionUpdateResponse = zod.object({
   "jobId": zod.string().describe('Durable panel update job identifier.'),

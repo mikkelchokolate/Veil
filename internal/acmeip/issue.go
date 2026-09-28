@@ -233,6 +233,12 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 	if opts.PublicIPv4 != "" && opts.PublicIPv4 != primaryName {
 		issueArgs = append(issueArgs, "-d", opts.PublicIPv4)
 	}
+	if email := strings.TrimSpace(opts.Email); email != "" {
+		// IssueOptions.Email was silently dropped: -m exports ACCOUNT_EMAIL,
+		// which acme.sh embeds as the ACME account contact during the
+		// implicit registration inside --issue (issue #1114).
+		issueArgs = append(issueArgs, "-m", email)
+	}
 
 	home, err := sys.HomeDir()
 	if err != nil {
@@ -327,6 +333,33 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
+// acme.sh is pinned to a fixed release instead of `curl get.acme.sh | sh`:
+// the pipe executed whatever GitHub's redirect endpoint returned as root.
+// Now a fixed tag tarball is downloaded, its SHA-256 is verified against the
+// pinned digest, and only the verified tree is installed (issue #1115).
+const acmeShVersion = "3.1.6"
+
+// SHA-256 of https://github.com/acmesh-official/acme.sh/archive/refs/tags/3.1.6.tar.gz
+const acmeShTarballSHA256 = "0d3f9000ac44a6331314742a88c475f79134e24fc991997883652adc59efc486"
+
+const acmeShTarballURL = "https://github.com/acmesh-official/acme.sh/archive/refs/tags/" + acmeShVersion + ".tar.gz"
+
+// acmeShInstallScript downloads the pinned release archive into a private
+// tempdir, verifies its digest, and runs the upstream installer from the
+// extracted tree — acme.sh's --install resolves sibling files relative to
+// its own path, so it must run from inside the release directory, not via a
+// pipe. The tmpdir is removed on exit.
+func acmeShInstallScript() string {
+	return `set -e
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+curl -fsSL "` + acmeShTarballURL + `" -o "$tmpdir/acme.sh.tar.gz"
+echo "` + acmeShTarballSHA256 + `  $tmpdir/acme.sh.tar.gz" | sha256sum -c -
+tar -xzf "$tmpdir/acme.sh.tar.gz" -C "$tmpdir"
+cd "$tmpdir/acme.sh-` + acmeShVersion + `"
+sh ./acme.sh --install`
+}
+
 func ensureAcmeSh(ctx context.Context, sys System) (string, error) {
 	home, err := sys.HomeDir()
 	if err != nil {
@@ -337,13 +370,14 @@ func ensureAcmeSh(ctx context.Context, sys System) (string, error) {
 		return acmeSh, nil
 	}
 
-	if _, err := sys.LookPath("curl"); err != nil {
-		return "", fmt.Errorf("curl is required to install acme.sh")
+	for _, tool := range []string{"curl", "sha256sum", "tar", "mktemp"} {
+		if _, err := sys.LookPath(tool); err != nil {
+			return "", fmt.Errorf("%s is required to install acme.sh", tool)
+		}
 	}
 
-	args := []string{"-c", "curl -fsSL https://get.acme.sh | sh"}
-	if out, err := runWithContext(ctx, sys, "sh", args...); err != nil {
-		return "", fmt.Errorf("install acme.sh: %w (output: %s)", err, string(out))
+	if out, err := runWithContext(ctx, sys, "sh", "-c", acmeShInstallScript()); err != nil {
+		return "", fmt.Errorf("install acme.sh %s: %w (output: %s)", acmeShVersion, err, string(out))
 	}
 
 	if _, err := sys.Stat(acmeSh); err != nil {

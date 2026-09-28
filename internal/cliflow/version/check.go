@@ -44,6 +44,12 @@ func (v Check) Run() error {
 	}
 	cmp := Compare(v.current, latest)
 	switch {
+	case !IsReleaseVersion(v.current):
+		// A non-release build (main-<sha>, dev, empty) must not be claimed
+		// "older than" the latest tag: Compare sorts unparseable versions
+		// first, which would read as a downgrade advice to install the
+		// release (issue #1104).
+		fmt.Fprintf(v.out, "Running a non-release build (%s); latest release is %s.\n", v.current, latest)
 	case cmp < 0:
 		fmt.Fprintf(v.out, "Newer release available: %s → %s\n", v.current, latest)
 		fmt.Fprintf(v.out, "Download: https://github.com/mikkelchokolate/Veil/releases/tag/%s\n", latest)
@@ -94,6 +100,16 @@ type preIdent struct {
 	num   int
 	str   string
 	isNum bool
+}
+
+// IsReleaseVersion reports whether v parses as a semantic release version.
+// Builds stamped by scripts/install-main.sh ("main-<sha>"), dev builds, and
+// empty strings are not release versions — callers must not treat them as
+// simply "older than" any tag, or they will silently downgrade a newer
+// source build to the latest published release (issue #1104).
+func IsReleaseVersion(v string) bool {
+	_, ok := parseSemver(v)
+	return ok
 }
 
 func Compare(a, b string) int {

@@ -81,7 +81,7 @@ func newFakeSystem() *fakeSystem {
 		files:          map[string]*fakeFileInfo{},
 		fileData:       map[string][]byte{},
 		commands:       map[string]commandResult{},
-		lookPaths:      map[string]string{"curl": "/usr/bin/curl", "sh": "/bin/sh", "rm": "/bin/rm", "getent": "/usr/bin/getent", "openssl": "/usr/bin/openssl", "crontab": "/usr/bin/crontab"},
+		lookPaths:      map[string]string{"curl": "/usr/bin/curl", "sh": "/bin/sh", "rm": "/bin/rm", "getent": "/usr/bin/getent", "openssl": "/usr/bin/openssl", "crontab": "/usr/bin/crontab", "sha256sum": "/usr/bin/sha256sum", "tar": "/usr/bin/tar", "mktemp": "/usr/bin/mktemp"},
 		portFree:       map[int]bool{80: true},
 		installAcmeSh:  true,
 		installSocat:   true,
@@ -135,7 +135,7 @@ func (f *fakeSystem) CombinedOutput(cmd string, args ...string) ([]byte, error) 
 	if res.err == nil || res.writeFiles {
 		if cmd == "sh" && len(args) >= 2 {
 			script := args[1]
-			if strings.Contains(script, "get.acme.sh") && f.installAcmeSh {
+			if strings.Contains(script, acmeShTarballURL) && f.installAcmeSh {
 				acme := filepath.Join(f.home, ".acme.sh", "acme.sh")
 				f.files[acme] = &fakeFileInfo{name: "acme.sh", mode: 0o755}
 			}
@@ -389,7 +389,7 @@ func TestIssueIPCertInstallsAcmeShWhenMissing(t *testing.T) {
 	sys.lookPaths["socat"] = "/usr/bin/socat"
 
 	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
-	sys.commands[sys.key("sh", "-c", "curl -fsSL https://get.acme.sh | sh")] = commandResult{out: "installed"}
+	sys.commands[sys.key("sh", "-c", acmeShInstallScript())] = commandResult{out: "installed"}
 	// After install, acme.sh is present.
 	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", "letsencrypt")] = commandResult{out: "OK"}
 	sys.commands[sys.key(acmeSh, "--issue", "-d", "1.2.3.4", "--standalone", "--server", "letsencrypt", "--certificate-profile", "shortlived", "--days", "3", "--httpport", "80", "--force")] = commandResult{out: "Cert issued"}
@@ -643,7 +643,7 @@ func TestEnsureAcmeShMissingCurl(t *testing.T) {
 
 func TestEnsureAcmeShInstallFails(t *testing.T) {
 	sys := newFakeSystem()
-	sys.commands[sys.key("sh", "-c", "curl -fsSL https://get.acme.sh | sh")] = commandResult{err: errors.New("network down")}
+	sys.commands[sys.key("sh", "-c", acmeShInstallScript())] = commandResult{err: errors.New("network down")}
 
 	_, err := ensureAcmeSh(context.Background(), sys)
 	if err == nil {
@@ -654,7 +654,7 @@ func TestEnsureAcmeShInstallFails(t *testing.T) {
 func TestEnsureAcmeShInstallSucceedsButBinaryMissing(t *testing.T) {
 	sys := newFakeSystem()
 	sys.installAcmeSh = false
-	sys.commands[sys.key("sh", "-c", "curl -fsSL https://get.acme.sh | sh")] = commandResult{out: "installed"}
+	sys.commands[sys.key("sh", "-c", acmeShInstallScript())] = commandResult{out: "installed"}
 
 	_, err := ensureAcmeSh(context.Background(), sys)
 	if err == nil {
@@ -1190,5 +1190,88 @@ func TestFixCertOwnershipFailsWhenNoRuntimeGroup(t *testing.T) {
 	sys.files["/etc/veil/panel/tls.key"] = &fakeFileInfo{name: "tls.key", mode: 0o640}
 	if err := fixCertOwnership(sys, "/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key"); err == nil {
 		t.Fatal("expected error when neither veil-proxy nor veil group resolves")
+	}
+}
+
+// Issue #1114: IssueOptions.Email must reach acme.sh — -m exports
+// ACCOUNT_EMAIL, which the implicit registration inside --issue embeds as the
+// ACME account contact. The exact argv is asserted.
+func TestIssueIPCertPassesEmailToAcmeSh(t *testing.T) {
+	sys := newFakeSystem()
+	sys.setAcmeInstalled()
+	sys.lookPaths["socat"] = "/usr/bin/socat"
+
+	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
+	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", "letsencrypt")] = commandResult{out: "OK"}
+	sys.commands[sys.key(acmeSh, "--issue", "-d", "1.2.3.4", "--standalone", "--server", "letsencrypt",
+		"--certificate-profile", "shortlived", "--days", "3", "--httpport", "80", "--force",
+		"-m", "admin@example.com")] = commandResult{out: "Cert issued"}
+	sys.commands[sys.key(acmeSh, "--installcert", "-d", "1.2.3.4", "--key-file", "/etc/veil/panel/tls.key",
+		"--fullchain-file", "/etc/veil/panel/tls.crt",
+		"--reloadcmd", renewReloadCmd("/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key"))] = commandResult{out: "Installed"}
+
+	if _, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: "1.2.3.4", Email: "admin@example.com", System: sys}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// No email → no empty -m flag on the --issue argv.
+func TestIssueIPCertOmitsEmailFlagWhenUnset(t *testing.T) {
+	sys := newFakeSystem()
+	sys.setAcmeInstalled()
+	sys.lookPaths["socat"] = "/usr/bin/socat"
+
+	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
+	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", "letsencrypt")] = commandResult{out: "OK"}
+	sys.commands[sys.key(acmeSh, "--issue", "-d", "1.2.3.4", "--standalone", "--server", "letsencrypt",
+		"--certificate-profile", "shortlived", "--days", "3", "--httpport", "80", "--force")] = commandResult{out: "Cert issued"}
+	sys.commands[sys.key(acmeSh, "--installcert", "-d", "1.2.3.4", "--key-file", "/etc/veil/panel/tls.key",
+		"--fullchain-file", "/etc/veil/panel/tls.crt",
+		"--reloadcmd", renewReloadCmd("/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key"))] = commandResult{out: "Installed"}
+
+	if _, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: "1.2.3.4", System: sys}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, call := range sys.execCalls {
+		if strings.Contains(call, " -m ") || strings.HasSuffix(call, " -m") {
+			t.Fatalf("empty -m flag leaked into argv: %q", call)
+		}
+	}
+}
+
+// Issue #1115: acme.sh installs from a pinned release tarball whose SHA-256 is
+// verified before extraction — never `curl get.acme.sh | sh`, which executed
+// whatever the redirect endpoint returned as root.
+func TestAcmeShInstallScriptIsPinnedAndVerified(t *testing.T) {
+	script := acmeShInstallScript()
+	if strings.Contains(script, "get.acme.sh") {
+		t.Fatal("install script must not pipe get.acme.sh into sh")
+	}
+	for _, want := range []string{acmeShTarballURL, acmeShTarballSHA256, "sha256sum -c", "acme.sh-" + acmeShVersion, "--install"} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("install script missing %q:\n%s", want, script)
+		}
+	}
+}
+
+// A failed digest verification aborts before --install runs — ensureAcmeSh
+// propagates the script failure instead of silently installing.
+func TestEnsureAcmeShAbortsOnChecksumMismatch(t *testing.T) {
+	sys := newFakeSystem()
+	sys.commands[sys.key("sh", "-c", acmeShInstallScript())] = commandResult{err: errors.New("sha256sum: WARNING: 1 computed checksum did NOT match")}
+
+	if _, err := ensureAcmeSh(context.Background(), sys); err == nil {
+		t.Fatal("expected checksum-verification failure to propagate")
+	}
+}
+
+// Missing verification toolchain members are named, matching the curl check.
+func TestEnsureAcmeShMissingChecksumTool(t *testing.T) {
+	sys := newFakeSystem()
+	delete(sys.lookPaths, "sha256sum")
+
+	_, err := ensureAcmeSh(context.Background(), sys)
+	if err == nil || !strings.Contains(err.Error(), "sha256sum") {
+		t.Fatalf("expected sha256sum prerequisite error, got: %v", err)
 	}
 }

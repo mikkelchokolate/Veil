@@ -62,10 +62,10 @@ import type {
 import type {
   BadRequestResponse,
   ConflictResponse,
-  EmptyObject,
   ErrorEnvelope,
   LockedResponse,
   NotFoundResponse,
+  PanelUpdateRequest,
   PrivilegedFailureResponse,
   ServiceUnavailableResponse,
   UnauthorizedResponse,
@@ -208,7 +208,7 @@ export const getPostApiVersionUpdateUrl = () => {
 /**
  * @summary Trigger a staged self-update to the latest release
  */
-export const postApiVersionUpdate = async (emptyObject?: EmptyObject, options?: Parameters<typeof apiFetch>[1]): Promise<UpdateResponse> => {
+export const postApiVersionUpdate = async (panelUpdateRequest?: PanelUpdateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<UpdateResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -229,7 +229,7 @@ return apiFetch<UpdateResponse>(getPostApiVersionUpdateUrl(),
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(emptyObject)
+    body: JSON.stringify(panelUpdateRequest)
   }
 );}
 
@@ -267,9 +267,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type PostApiVersionUpdateMutationResult = NonNullable<Awaited<ReturnType<typeof postApiVersionUpdate>>>
-    export type PostApiVersionUpdateMutationBody = EmptyObject | undefined
+    export type PostApiVersionUpdateMutationBody = PanelUpdateRequest | undefined
     export type PostApiVersionUpdateMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | PrivilegedFailureResponse | ErrorEnvelope | ServiceUnavailableResponse
-    export type PostApiVersionUpdateMutationVariables = {data?: EmptyObject}
+    export type PostApiVersionUpdateMutationVariables = {data?: PanelUpdateRequest}
 
     /**
  * @summary Trigger a staged self-update to the latest release

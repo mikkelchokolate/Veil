@@ -47,7 +47,7 @@ type ServerInfo struct {
 	ConfigurationValidator  ConfigurationValidator
 	Privileged              privileged.Client
 	RequirePrivilegedHelper bool
-	UpdateStager            func(context.Context) (string, error)
+	UpdateStager            func(context.Context, bool) (string, error)
 	TrustedProxyCIDRs       []string
 	PasswordHasher          PasswordHasher
 	DatabaseOpener          func(string) (*sql.DB, error)

@@ -87,6 +87,9 @@ func TestUninstallScriptRemovesMarkedStateDir(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(etcDir, "veil.env"), []byte("VEIL_API_TOKEN=x\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(varDir, "veil.db"), []byte("sqlite"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(varDir, "state.json"), []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -116,5 +119,66 @@ func TestUninstallScriptRemovesMarkedStateDir(t *testing.T) {
 		if _, statErr := os.Lstat(dir); !os.IsNotExist(statErr) {
 			t.Fatalf("marked state dir %s should be removed:\n%s", dir, out)
 		}
+	}
+}
+
+// TestUninstallScriptRefusesGenericallyMarkedDir is the #1093 regression: the
+// pre-fix marker list blessed a directory for rm -rf on a single generic child
+// (.config, www, backups, ...), so VEIL_ETC_DIR=/home/operator — a dir that
+// almost always holds .config — passed the guard. Only distinctive
+// Veil-written names may authorize removal.
+func TestUninstallScriptRefusesGenericallyMarkedDir(t *testing.T) {
+	checkBash(t)
+	root := t.TempDir()
+	installDir := filepath.Join(root, "bin")
+	etcDir := filepath.Join(root, "etc", "veil")
+	// A "home-like" state dir: generic .config content but nothing Veil wrote.
+	varDir := filepath.Join(root, "home-operator")
+	systemdDir := filepath.Join(root, "systemd")
+
+	for _, dir := range []string{installDir, etcDir, varDir, systemdDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(etcDir, "veil.env"), []byte("VEIL_API_TOKEN=x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, generic := range []string{".config", ".local", "www", "backups", "staging", "tls", "panel", "generated", "certs", "certificates", "acme", "autocert"} {
+		if err := os.MkdirAll(filepath.Join(varDir, generic), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// state.json is generic too — plenty of projects ship one.
+	if err := os.WriteFile(filepath.Join(varDir, "state.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(systemdDir, "veil.service"), []byte("[Service]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command("bash", "../../scripts/uninstall.sh",
+		"--install-dir", installDir,
+		"--etc-dir", etcDir,
+		"--var-dir", varDir,
+		"--systemd-dir", systemdDir,
+		"--yes",
+	)
+	cmd.Env = append(os.Environ(),
+		"VEIL_UNINSTALL_ALLOW_NONROOT=1",
+		"VEIL_VENDOR_SYSTEMD_DIRS="+filepath.Join(root, "vendor"),
+		"VEIL_SYSCTL_CONF="+filepath.Join(root, "sysctl.conf"),
+		"VEIL_CADDY_STATE_DIR="+filepath.Join(root, "caddy-state"),
+		"VEIL_MITA_STATE_DIR="+filepath.Join(root, "mita-state"),
+	)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("uninstall must refuse a dir marked only with generic names:\n%s", out)
+	}
+	if !strings.Contains(string(out), "Refusing to remove") {
+		t.Fatalf("expected a refusal explaining the guard, got:\n%s", out)
+	}
+	if _, statErr := os.Stat(filepath.Join(varDir, ".config")); statErr != nil {
+		t.Fatalf("generic-marked dir content must survive: %v\n%s", statErr, out)
 	}
 }
