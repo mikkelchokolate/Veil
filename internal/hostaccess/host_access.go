@@ -463,7 +463,7 @@ func createSafetyCopies(paths Paths, now time.Time) (*safefs.Dir, error) {
 	}
 	defer baseDir.Close()
 	stamp := now.UTC().Format("20060102T150405Z")
-	rootName := stamp
+	var rootName string
 	for suffix := 0; ; suffix++ {
 		candidate := stamp
 		if suffix > 0 {

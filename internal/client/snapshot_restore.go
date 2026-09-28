@@ -55,7 +55,6 @@ func ReplaceSnapshotTx(tx *Tx, clients []Client, bindings []Binding, credentials
 		item.Enabled = item.Enabled && live.Enabled
 		item.Depleted = item.Depleted || live.Depleted
 		item.ExpiresAt = earlierExpiry(item.ExpiresAt, live.ExpiresAt)
-		item.CreatedAt = live.CreatedAt
 		item.UpdatedAt = now
 		version, err := nextRetainedVersion(tx, "clients", item.ID, item.Version)
 		if err != nil {
