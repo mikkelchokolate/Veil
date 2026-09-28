@@ -129,7 +129,7 @@ export const PostApiValidationBody = zod.object({
   "localAddress": zod.string().optional(),
   "peerPublicKey": zod.string().optional(),
   "reserved": zod.array(zod.int()).optional(),
-  "socksListen": zod.string().optional(),
+  "socksListen": zod.string().optional().describe('IPv4 loopback address for the local SOCKS5 listener. Must be inside 127.41.0.0/16 — the only loopback range the protocol-unit egress filters pierce; other loopback values are migrated to the band default.'),
   "socksPort": zod.int().optional(),
   "mtu": zod.int().optional()
 })
