@@ -25,7 +25,7 @@ const snapshot = {
 	licenseKey: "[REDACTED]",
 	localAddress: "172.16.0.2/32",
 	peerPublicKey: "peer-key",
-	socksListen: "127.0.0.1",
+	socksListen: "127.41.0.1",
 	socksPort: 40001,
 	mtu: 1280,
 };

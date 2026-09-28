@@ -259,7 +259,7 @@ func panelWarpCardHTML() string {
               </div>
               <div class="field-group">
                 <label for="warp-socks-listen">SOCKS listen</label>
-                <input id="warp-socks-listen" autocomplete="off" placeholder="127.0.0.1">
+                <input id="warp-socks-listen" autocomplete="off" placeholder="127.41.0.1">
               </div>
               <div class="field-group">
                 <label for="warp-socks-port">SOCKS port</label>

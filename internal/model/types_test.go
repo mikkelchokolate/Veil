@@ -130,14 +130,22 @@ func TestManagementStateModelTypesKeepJSONShape(t *testing.T) {
 	}
 }
 
-func TestWarpConfigSocksDialAddrMigratesLegacyDefault(t *testing.T) {
-	if got := (WarpConfig{SocksListen: "127.0.0.1"}).SocksDialAddr(); got != "127.41.0.1" {
-		t.Fatalf("legacy SocksListen must dial the reserved band, got %q", got)
-	}
+// #1160: the dial address protocol upstreams use must always land inside
+// the egress-pierced 127.41.0.0/16 band — any other loopback (including the
+// pre-#1097 persisted default 127.0.0.1) is unreachable for the
+// veil-hysteria2@/veil-olcrtc@ units and must normalize to the band default.
+func TestWarpConfigSocksDialAddr(t *testing.T) {
 	if got := (WarpConfig{}).SocksDialAddr(); got != "127.41.0.1" {
 		t.Fatalf("unset SocksListen must dial the reserved band, got %q", got)
 	}
-	if got := (WarpConfig{SocksListen: "127.0.0.5"}).SocksDialAddr(); got != "127.0.0.5" {
-		t.Fatalf("explicit SocksListen rewritten, got %q", got)
+	for _, listen := range []string{"127.0.0.1", "127.0.0.5", "127.0.0.53", "::1"} {
+		if got := (WarpConfig{SocksListen: listen}).SocksDialAddr(); got != "127.41.0.1" {
+			t.Fatalf("out-of-band SocksListen %q must dial the reserved band, got %q", listen, got)
+		}
+	}
+	for _, listen := range []string{"127.41.0.1", "127.41.0.5", "127.41.255.254"} {
+		if got := (WarpConfig{SocksListen: listen}).SocksDialAddr(); got != listen {
+			t.Fatalf("in-band SocksListen %q rewritten, got %q", listen, got)
+		}
 	}
 }

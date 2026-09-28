@@ -33,12 +33,21 @@ func TestValidateRejectsInvalidNumericValues(t *testing.T) {
 }
 
 // #358: sing-box emits an unauthenticated SOCKS listener on SocksListen — a
-// non-loopback bind is an open proxy on the network.
-func TestValidateRejectsNonLoopbackSocksListen(t *testing.T) {
+// non-loopback bind is an open proxy on the network. #1160 narrows the
+// contract further: only the 127.41.0.0/16 loopback band is pierced by the
+// protocol-unit egress filters, so any loopback outside it — including the
+// pre-#1097 default 127.0.0.1 — is a bind the upstreams cannot dial.
+func TestValidateRejectsSocksListenOutsideBand(t *testing.T) {
 	base := Config{SocksPort: 40000, MTU: 1280, Reserved: []int{1, 2, 3}}
 	for _, listen := range []string{
 		"0.0.0.0", "::", "192.168.1.10", "203.0.113.5", "10.0.0.2",
-		"169.254.1.1", "fe80::1", "localhost", "example.com", "not-an-ip", "127.0.0.1:40000",
+		"169.254.1.1", "fe80::1",
+		// Loopback, but outside the egress-pierced band (#1160).
+		"127.0.0.1", "127.0.0.5", "127.0.0.53", "127.40.0.1", "127.42.0.1", "::1",
+		// IPv4-mapped IPv6 and host:port forms are not plain IPv4 literals.
+		"::ffff:127.41.0.1", "127.41.0.1:40000",
+		// Hostnames and garbage: the bind must be a deterministic literal.
+		"localhost", "example.com", "not-an-ip",
 	} {
 		cfg := base
 		cfg.SocksListen = listen
@@ -48,9 +57,16 @@ func TestValidateRejectsNonLoopbackSocksListen(t *testing.T) {
 	}
 }
 
-func TestValidateAcceptsLoopbackSocksListen(t *testing.T) {
+func TestValidateAcceptsSocksListenInBand(t *testing.T) {
 	base := Config{SocksPort: 40000, MTU: 1280, Reserved: []int{1, 2, 3}}
-	for _, listen := range []string{"", "127.0.0.1", "127.0.0.53", "::1"} {
+	for _, listen := range []string{
+		"",
+		"127.41.0.1",
+		"127.41.0.0",     // band lower boundary
+		"127.41.255.255", // band upper boundary
+		"127.41.0.5",
+		"127.41.255.254",
+	} {
 		cfg := base
 		cfg.SocksListen = listen
 		if err := Validate(cfg); err != nil {

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/routing"
 )
 
@@ -41,15 +42,14 @@ func RenderWarpSingBox(cfg WarpSingBoxConfig) (string, error) {
 	if cfg.Endpoint == "" {
 		cfg.Endpoint = "engage.cloudflareclient.com:2408"
 	}
-	if cfg.SocksListen == "" || cfg.SocksListen == "127.0.0.1" {
-		// The default lives on the reserved 127.41.0.0/16 loopback band so the
-		// per-unit egress filter can let protocol daemons reach this SOCKS
-		// listener without also opening the rest of 127/8 (Caddy admin, panel
-		// backend) to them (issue #1097). 127.0.0.1 is the pre-#1097 persisted
-		// default — migrate it here too so renders that bypass SetDefaults
-		// never emit a bind the protocol units cannot reach.
-		cfg.SocksListen = "127.41.0.1"
-	}
+	// The default lives on the reserved 127.41.0.0/16 loopback band so the
+	// per-unit egress filter can let protocol daemons reach this SOCKS
+	// listener without also opening the rest of 127/8 (Caddy admin, panel
+	// backend) to them (issue #1097). Any persisted loopback outside the
+	// band — 127.0.0.1, 127.0.0.5, ::1 — is migrated here too so renders that
+	// bypass SetDefaults never emit a bind the protocol units cannot reach
+	// (#1160).
+	cfg.SocksListen = model.NormalizeWarpSocksListen(cfg.SocksListen)
 	if cfg.SocksPort == 0 {
 		cfg.SocksPort = 40000
 	}

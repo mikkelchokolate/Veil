@@ -101,21 +101,34 @@ func TestRedactedMarkerValue(t *testing.T) {
 	}
 }
 
-// Upgrade migration (#1097 follow-up): states persisted before the reserved
-// loopback band still carry the old default. Only the exact historical
-// default is rewritten — explicit operator alternatives stay untouched.
-func TestSetDefaultsMigratesLegacySocksListenDefault(t *testing.T) {
-	cfg := Config{SocksListen: "127.0.0.1"}
-	SetDefaults(&cfg)
-	if cfg.SocksListen != "127.41.0.1" {
-		t.Fatalf("legacy default not migrated, got %q", cfg.SocksListen)
+// Upgrade migration (#1097, #1160): persisted states and stale form submits
+// can carry loopback socksListen values outside the egress-pierced band —
+// including the pre-#1097 default 127.0.0.1. Every one of them is rewritten
+// to the band default because it can never be dialed under the protocol-unit
+// egress filters.
+func TestSetDefaultsMigratesOutOfBandLoopbackSocksListen(t *testing.T) {
+	for _, listen := range []string{
+		"127.0.0.1", "127.0.0.5", "127.0.0.53", "127.40.0.1", "127.42.0.1",
+		"::1", "::ffff:127.0.0.5",
+	} {
+		cfg := Config{SocksListen: listen}
+		SetDefaults(&cfg)
+		if cfg.SocksListen != "127.41.0.1" {
+			t.Errorf("SetDefaults(SocksListen=%q) = %q, want migrated 127.41.0.1", listen, cfg.SocksListen)
+		}
 	}
 }
 
-func TestSetDefaultsPreservesExplicitLoopbackAlternative(t *testing.T) {
-	cfg := Config{SocksListen: "127.0.0.5"}
-	SetDefaults(&cfg)
-	if cfg.SocksListen != "127.0.0.5" {
-		t.Fatalf("explicit SocksListen rewritten, got %q", cfg.SocksListen)
+// In-band values are deliberate operator choices and pass through untouched,
+// while non-canonical encodings of the band and non-IP/non-loopback garbage
+// are left for Validate to reject loudly — never silently rewritten into a
+// stored value.
+func TestSetDefaultsPreservesInBandAndNonLoopbackSocksListen(t *testing.T) {
+	for _, listen := range []string{"127.41.0.1", "127.41.0.5", "127.41.255.254", "::ffff:127.41.0.1", "0.0.0.0", "not-an-ip"} {
+		cfg := Config{SocksListen: listen}
+		SetDefaults(&cfg)
+		if cfg.SocksListen != listen {
+			t.Errorf("SetDefaults(SocksListen=%q) rewritten to %q", listen, cfg.SocksListen)
+		}
 	}
 }
