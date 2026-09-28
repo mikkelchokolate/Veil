@@ -330,7 +330,11 @@ function PresenceCard() {
 		refetchInterval: 5000,
 	});
 
-	const items = presence.data?.items ?? [];
+	// API already sorts by clientId; sort anyway so a backend reorder can
+	// never reshuffle the table between 5s polls.
+	const items = [...(presence.data?.items ?? [])].sort((a, b) =>
+		a.clientId.localeCompare(b.clientId),
+	);
 
 	return (
 		<div className="card">
