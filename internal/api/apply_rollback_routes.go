@@ -419,9 +419,11 @@ func applyManagementSnapshotExact(state *managementState, snapshot managementSna
 	state.routingPreset = cloned.RoutingPreset
 	state.routingSource = cloned.RoutingSource
 	state.warp = cloned.Warp
-	state.users = cloned.Users
-	// Rolling back TO a user-bearing snapshot provisions the instance too;
-	// rolling back to a zero-user snapshot can never clear the latch (#1100).
+	// state.users deliberately keeps the live accounts: the committed
+	// snapshot was already grafted with them, so assigning snapshot users
+	// here would resurrect revoked panel credentials (#1094). The
+	// provisioned latch re-arms from the surviving set — a rollback can
+	// never un-provision the instance either (#1100).
 	state.noteUsersProvisionedLocked()
 }
 
