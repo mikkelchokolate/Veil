@@ -2703,8 +2703,12 @@ type WarpConfig struct {
 	PeerPublicKey *string `json:"peerPublicKey,omitempty"`
 	PrivateKey    *string `json:"privateKey,omitempty"`
 	Reserved      *[]int  `json:"reserved,omitempty"`
-	SocksListen   *string `json:"socksListen,omitempty"`
-	SocksPort     *int    `json:"socksPort,omitempty"`
+
+	// SocksListen IPv4 loopback address for the local SOCKS5 listener. Must be inside 127.41.0.0/16 — the only loopback range the protocol-unit egress filters pierce; other loopback values are migrated to the band default.
+	//
+	// Examples: 127.41.0.1
+	SocksListen *string `json:"socksListen,omitempty"`
+	SocksPort   *int    `json:"socksPort,omitempty"`
 }
 
 // BackupName defines model for BackupName.
@@ -20080,9 +20084,13 @@ type PutApiWarpResponse struct {
 		PrivateKey    *string      `json:"privateKey,omitempty"`
 		Reserved      *[]int       `json:"reserved,omitempty"`
 		Revision      RevisionView `json:"revision"`
-		SocksListen   *string      `json:"socksListen,omitempty"`
-		SocksPort     *int         `json:"socksPort,omitempty"`
-		Success       bool         `json:"success"`
+
+		// SocksListen IPv4 loopback address for the local SOCKS5 listener. Must be inside 127.41.0.0/16 — the only loopback range the protocol-unit egress filters pierce; other loopback values are migrated to the band default.
+		//
+		// Examples: 127.41.0.1
+		SocksListen *string `json:"socksListen,omitempty"`
+		SocksPort   *int    `json:"socksPort,omitempty"`
+		Success     bool    `json:"success"`
 	}
 	// JSON400 the response for an HTTP 400 `application/json` response
 	JSON400 *BadRequest
@@ -20110,9 +20118,13 @@ func (r PutApiWarpResponse) GetJSON200() *struct {
 	PrivateKey    *string      `json:"privateKey,omitempty"`
 	Reserved      *[]int       `json:"reserved,omitempty"`
 	Revision      RevisionView `json:"revision"`
-	SocksListen   *string      `json:"socksListen,omitempty"`
-	SocksPort     *int         `json:"socksPort,omitempty"`
-	Success       bool         `json:"success"`
+
+	// SocksListen IPv4 loopback address for the local SOCKS5 listener. Must be inside 127.41.0.0/16 — the only loopback range the protocol-unit egress filters pierce; other loopback values are migrated to the band default.
+	//
+	// Examples: 127.41.0.1
+	SocksListen *string `json:"socksListen,omitempty"`
+	SocksPort   *int    `json:"socksPort,omitempty"`
+	Success     bool    `json:"success"`
 } {
 	return r.JSON200
 }
@@ -27963,9 +27975,13 @@ func ParsePutApiWarpResponse(rsp *http.Response) (*PutApiWarpResponse, error) {
 			PrivateKey    *string      `json:"privateKey,omitempty"`
 			Reserved      *[]int       `json:"reserved,omitempty"`
 			Revision      RevisionView `json:"revision"`
-			SocksListen   *string      `json:"socksListen,omitempty"`
-			SocksPort     *int         `json:"socksPort,omitempty"`
-			Success       bool         `json:"success"`
+
+			// SocksListen IPv4 loopback address for the local SOCKS5 listener. Must be inside 127.41.0.0/16 — the only loopback range the protocol-unit egress filters pierce; other loopback values are migrated to the band default.
+			//
+			// Examples: 127.41.0.1
+			SocksListen *string `json:"socksListen,omitempty"`
+			SocksPort   *int    `json:"socksPort,omitempty"`
+			Success     bool    `json:"success"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
