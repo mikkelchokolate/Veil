@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/netip"
 	"strconv"
 	"strings"
 
@@ -33,22 +32,23 @@ func SetDefaults(warp *Config) {
 	if warp.Endpoint == "" {
 		warp.Endpoint = "engage.cloudflareclient.com:2408"
 	}
-	if warp.SocksListen == "" {
-		// Reserved 127.41.0.0/16 band: the per-unit egress filter allow-lists
-		// it so proxy daemons can dial this SOCKS listener without gaining
-		// reachability to the rest of 127/8 (issue #1097).
-		warp.SocksListen = "127.41.0.1"
-	} else if warp.SocksListen == "127.0.0.1" {
-		// Upgrade migration: 127.0.0.1 was the SocksListen default before the
-		// reserved-band change (#1097). Persisted states carry it, but the
-		// protocol-unit egress filters now only pierce 127.41.0.0/16, so the
-		// old value silently breaks WARP upstream reachability. Rewriting is
-		// strictly corrective: 127.0.0.1 can no longer function as a dial
-		// target, so an explicit post-upgrade choice of it is unambiguously
-		// the stale default rather than a deliberate operator override.
-		// Other loopback literals (e.g. 127.0.0.5) are left untouched.
-		warp.SocksListen = "127.41.0.1"
-	}
+	// The protocol-unit egress filters only pierce the reserved 127.41.0.0/16
+	// loopback band (#1097), so a persisted or submitted loopback socksListen
+	// outside it — 127.0.0.1 (the pre-#1097 default), 127.0.0.5, ::1, ... —
+	// can never be dialed by the veil-hysteria2@/veil-olcrtc@ upstreams and
+	// silently dead-ends WARP (#1160). The rewrite is strictly corrective:
+	// such a value cannot function as a dial target, so remapping it to the
+	// band default is unambiguous. Non-loopback and non-IP values are left
+	// untouched for Validate to reject loudly — the migration never turns
+	// garbage into a stored value.
+	//
+	// Ordering: callers run SetDefaults before Validate (e.g. the warp PUT
+	// route), which is required for backward compatibility — the GET echo of
+	// a pre-upgrade persisted state still carries the historical default and
+	// would otherwise hard-fail the re-submit. Anything SetDefaults leaves
+	// either satisfies validateSocksListen (in-band values) or is non-loopback
+	// garbage Validate rejects — never a valid-but-unreachable loopback.
+	warp.SocksListen = model.NormalizeWarpSocksListen(warp.SocksListen)
 	if warp.SocksPort == 0 {
 		warp.SocksPort = 40000
 	}
@@ -84,21 +84,20 @@ func Validate(warp Config) error {
 	return nil
 }
 
-// validateSocksListen requires a loopback IP literal. sing-box emits an
-// unauthenticated SOCKS listener on this address, so any non-loopback value
-// would expose an open proxy to the network (#358). Hostnames are rejected:
-// the bind must be deterministic, not resolver-dependent.
+// validateSocksListen requires an IPv4 literal inside 127.41.0.0/16. sing-box
+// emits an unauthenticated SOCKS listener on this address, so any
+// non-loopback value would expose an open proxy to the network (#358); and
+// only the reserved band is pierced by the protocol-unit egress filters, so
+// a loopback outside it (127.0.0.1, ::1, ...) validates as a bind yet is
+// unreachable for the daemons that must dial it (#1156, #1160). Hostnames
+// are rejected: the bind must be deterministic, not resolver-dependent.
 func validateSocksListen(listen string) error {
 	listen = strings.TrimSpace(listen)
 	if listen == "" {
 		return nil // normalized to 127.41.0.1 by SetDefaults and the renderer
 	}
-	addr, err := netip.ParseAddr(listen)
-	if err != nil {
-		return errors.New("WARP SOCKS listen must be a loopback IP literal")
-	}
-	if !addr.IsLoopback() {
-		return errors.New("WARP SOCKS listen must be a loopback address")
+	if !model.WarpSocksListenInBand(listen) {
+		return errors.New("WARP SOCKS listen must be an IPv4 address inside " + model.WarpSocksEgressBand)
 	}
 	return nil
 }

@@ -1,5 +1,10 @@
 package model
 
+import (
+	"net/netip"
+	"strings"
+)
+
 type Settings struct {
 	PanelListen              string `json:"panelListen"`
 	PanelAccess              string `json:"panelAccess,omitempty"`
@@ -168,20 +173,79 @@ type WarpConfig struct {
 	MTU           int    `json:"mtu,omitempty"`
 }
 
+const (
+	// WarpSocksListenDefault is the canonical bind/dial address of the local
+	// WARP SOCKS listener: an address inside WarpSocksEgressBand.
+	WarpSocksListenDefault = "127.41.0.1"
+	// WarpSocksEgressBand is the reserved loopback band the protocol-unit
+	// systemd egress filters pierce for the WARP SOCKS listener. It is the
+	// ONLY loopback range veil-hysteria2@ and veil-olcrtc@ can reach
+	// (#1097), so socksListen is contractually restricted to it: any other
+	// loopback validates fine as a bind but is unreachable for the daemons
+	// that must dial it (#1160). Kept in sync with the renderer's
+	// egressAllowWarpSocksBand — the validation contract and the ACL pierce
+	// must never drift apart.
+	WarpSocksEgressBand = "127.41.0.0/16"
+)
+
+var warpSocksEgressPrefix = netip.MustParsePrefix(WarpSocksEgressBand)
+
+// WarpSocksListenInBand reports whether listen is an IPv4 literal inside
+// WarpSocksEgressBand — the only socksListen values the protocol units can
+// reach under their IPAddressAllow egress filters (#1160).
+func WarpSocksListenInBand(listen string) bool {
+	addr, err := netip.ParseAddr(strings.TrimSpace(listen))
+	if err != nil || !addr.Is4() || !warpSocksEgressPrefix.Contains(addr) {
+		return false
+	}
+	// Exclude the band's network/broadcast-looking endpoints: unusable as a
+	// bind target in practice and confusing to advertise as valid.
+	return !warpSocksBandEndpoint(addr)
+}
+
+// warpSocksBandEndpoint reports whether addr is one of the band's .0/.255
+// endpoints. Callers pass an already-IPv4 address.
+func warpSocksBandEndpoint(addr netip.Addr) bool {
+	o := addr.As4()
+	return (o[2] == 0 && o[3] == 0) || (o[2] == 255 && o[3] == 255)
+}
+
+// NormalizeWarpSocksListen rewrites values that cannot function as the WARP
+// SOCKS bind/dial address to WarpSocksListenDefault: unset, plus ANY
+// loopback literal whose effective address sits outside the egress-pierced
+// band (the pre-#1097 default 127.0.0.1, 127.0.0.5, ::1, ::ffff:127.0.0.5, ...)
+// — preserved, they silently dead-end WARP upstream reachability (#1097,
+// #1160). Everything else is returned untouched: non-canonical in-band
+// encodings (e.g. ::ffff:127.41.0.1) and non-loopback/non-IP garbage are left
+// for warp.Validate to reject loudly, never silently rewritten into a stored
+// value. Whitespace is trimmed before parsing so the dial/bind view can never
+// disagree with warp.Validate, which TrimSpace's the same input.
+func NormalizeWarpSocksListen(listen string) string {
+	listen = strings.TrimSpace(listen)
+	if listen == "" {
+		return WarpSocksListenDefault
+	}
+	addr, err := netip.ParseAddr(listen)
+	if err != nil {
+		return listen
+	}
+	if unmapped := addr.Unmap(); unmapped.IsLoopback() &&
+		(!warpSocksEgressPrefix.Contains(unmapped) || (addr.Is4() && warpSocksBandEndpoint(unmapped))) {
+		return WarpSocksListenDefault
+	}
+	return listen
+}
+
 // SocksDialAddr is the address protocol upstreams dial to reach the local
 // WARP SOCKS listener. It defaults to 127.41.0.1 — the reserved loopback band
 // the per-unit egress filter allow-lists for protocol daemons — so renderers
-// never diverge from the configured sing-box bind (#576, #1097). Validate
-// restricts SocksListen to loopback literals, so this is always a safe local
-// dial target.
+// never diverge from the configured sing-box bind (#576, #1097). Out-of-band
+// loopback values normalize to the band default so dial-side readers that
+// bypass SetDefaults never emit a loopback the egress filter denies (#1160);
+// warp.Validate restricts SocksListen to the band, so this is always a safe
+// reachable dial target.
 func (c WarpConfig) SocksDialAddr() string {
-	if c.SocksListen == "" || c.SocksListen == "127.0.0.1" {
-		// "" means unset; "127.0.0.1" is the pre-#1097 persisted default —
-		// SetDefaults migrates it, but dial-side readers that bypass
-		// SetDefaults must not return a loopback the egress filter denies.
-		return "127.41.0.1"
-	}
-	return c.SocksListen
+	return NormalizeWarpSocksListen(c.SocksListen)
 }
 
 type ClientLinksResponse struct {

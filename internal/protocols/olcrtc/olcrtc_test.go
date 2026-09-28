@@ -151,18 +151,19 @@ func TestRenderConfigWithWarpSOCKS(t *testing.T) {
 		t.Fatalf("default SOCKS port missing:\n%s", defaults[0].Body)
 	}
 
-	// #576: a custom loopback socksListen must be the dial address — not a
-	// hardcoded 127.0.0.1 that no longer matches the sing-box bind.
+	// #576: a custom socksListen must be the dial address — not a hardcoded
+	// loopback that no longer matches the sing-box bind. Custom values live
+	// inside the egress-pierced 127.41.0.0/16 band (#1160).
 	custom, _, err := p.RenderConfig(generatedconfig.ProtocolRenderInput{
 		Settings: model.Settings{},
 		Paths:    generatedconfig.NewPaths("/etc/veil"),
 		Inbounds: []model.Inbound{inbound},
-		Warp:     model.WarpConfig{Enabled: true, SocksListen: "127.0.0.2", SocksPort: 40001},
+		Warp:     model.WarpConfig{Enabled: true, SocksListen: "127.41.0.2", SocksPort: 40001},
 	})
 	if err != nil {
 		t.Fatalf("RenderConfig custom listen: %v", err)
 	}
-	if !strings.Contains(custom[0].Body, "proxy_addr: 127.0.0.2") {
+	if !strings.Contains(custom[0].Body, "proxy_addr: 127.41.0.2") {
 		t.Fatalf("custom socksListen not used as dial address:\n%s", custom[0].Body)
 	}
 }
