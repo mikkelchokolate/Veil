@@ -208,15 +208,27 @@ func (s *TrafficStore) recordSampleTx(tx *sql.Tx, sm Sample) error {
 	}
 	// Absolute counter. last_observed_at is the sample time, never the HTTP
 	// read clock, so per-client reports can distinguish fresh vs stale usage.
-	if _, err := tx.Exec(`INSERT INTO traffic_counters (client_id, binding_id, upload_bytes, download_bytes, last_observed_at, telemetry_state, updated_at)
-	  VALUES(?,?,?,?,?,'observed',?)
+	// last_online_at is the presence "activity" signal: the last sample whose
+	// delta actually GREW the counters. A zero-delta re-observation refreshes
+	// only last_observed_at, so a quiet-but-watched binding does not look
+	// active and a never-increasing one keeps NULL (never observed activity).
+	var lastOnline sql.NullInt64
+	if upDelta > 0 || downDelta > 0 {
+		lastOnline = sql.NullInt64{Int64: sm.AtUnix, Valid: true}
+	}
+	if _, err := tx.Exec(`INSERT INTO traffic_counters (client_id, binding_id, upload_bytes, download_bytes, last_online_at, last_observed_at, telemetry_state, updated_at)
+	  VALUES(?,?,?,?,?,?,'observed',?)
 	  ON CONFLICT(client_id, binding_id) DO UPDATE SET
 	    upload_bytes=upload_bytes+excluded.upload_bytes,
 	    download_bytes=download_bytes+excluded.download_bytes,
+	    last_online_at=CASE
+	      WHEN excluded.upload_bytes+excluded.download_bytes>0 THEN excluded.last_online_at
+	      ELSE traffic_counters.last_online_at
+	    END,
 	    last_observed_at=excluded.last_observed_at,
 	    telemetry_state=excluded.telemetry_state,
 	    updated_at=excluded.updated_at`,
-		clientID, sm.BindingID, upDelta, downDelta, sm.AtUnix, sm.AtUnix); err != nil {
+		clientID, sm.BindingID, upDelta, downDelta, lastOnline, sm.AtUnix, sm.AtUnix); err != nil {
 		return fmt.Errorf("client: traffic counter: %w", err)
 	}
 	// Bucketed sample (bucket = truncated to minute).
@@ -349,14 +361,52 @@ func ResetQuotaPeriodTx(q DBTX, clientID string, periodStart int64) error {
 	if periodStart <= 0 {
 		return nil
 	}
-	if _, err := q.Exec(`INSERT INTO traffic_counters (client_id, binding_id, upload_bytes, download_bytes, last_observed_at, telemetry_state, updated_at)
-	  SELECT client_id, binding_id, SUM(upload_delta), SUM(download_delta), MAX(bucket_start), 'observed', MAX(bucket_start)
+	if _, err := q.Exec(`INSERT INTO traffic_counters (client_id, binding_id, upload_bytes, download_bytes, last_online_at, last_observed_at, telemetry_state, updated_at)
+	  SELECT client_id, binding_id, SUM(upload_delta), SUM(download_delta),
+	    MAX(CASE WHEN upload_delta+download_delta>0 THEN bucket_start END),
+	    MAX(bucket_start), 'observed', MAX(bucket_start)
 	  FROM traffic_samples
 	  WHERE client_id=? AND bucket_start>=?
 	  GROUP BY client_id, binding_id`, clientID, periodStart); err != nil {
 		return fmt.Errorf("client: traffic rebuild current period: %w", err)
 	}
 	return nil
+}
+
+// LastActivityByBinding returns each binding's most recent counter-increase
+// timestamp (traffic_counters.last_online_at) — the presence "activity"
+// signal for runtimes that expose no live-session table. Bindings that never
+// produced an increase are absent; callers must combine this with provider
+// health to distinguish "watching, idle" from "never sampled".
+func (s *TrafficStore) LastActivityByBinding(clientIDs []string) (map[string]int64, error) {
+	out := make(map[string]int64, len(clientIDs))
+	if len(clientIDs) == 0 {
+		return out, nil
+	}
+	placeholders := make([]string, len(clientIDs))
+	args := make([]any, len(clientIDs))
+	for i, id := range clientIDs {
+		placeholders[i], args[i] = "?", id
+	}
+	query := "SELECT binding_id, MAX(last_online_at) FROM traffic_counters " +
+		"WHERE client_id IN (" + strings.Join(placeholders, ",") + ") AND binding_id<>'' AND last_online_at IS NOT NULL GROUP BY binding_id"
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("client: traffic last-activity batch: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var bindingID string
+		var lastActive int64
+		if err := rows.Scan(&bindingID, &lastActive); err != nil {
+			return nil, fmt.Errorf("client: traffic last-activity scan: %w", err)
+		}
+		out[bindingID] = lastActive
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("client: traffic last-activity rows: %w", err)
+	}
+	return out, nil
 }
 
 // MonotonicTotals returns the latest absolute reading per provider (last

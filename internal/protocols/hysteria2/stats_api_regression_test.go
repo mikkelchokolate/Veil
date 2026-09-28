@@ -28,8 +28,8 @@ func TestStatsProviderUsesAuthenticatedOfficialTrafficAPI(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Errorf("method = %s, want GET", r.Method)
 		}
-		if r.URL.Path != "/traffic" {
-			t.Errorf("path = %q, want /traffic", r.URL.Path)
+		if r.URL.Path != "/traffic" && r.URL.Path != "/online" {
+			t.Errorf("path = %q, want /traffic or /online", r.URL.Path)
 		}
 		if r.URL.RawQuery != "" {
 			t.Errorf("query = %q; collector must not clear runtime counters", r.URL.RawQuery)
@@ -40,6 +40,10 @@ func TestStatsProviderUsesAuthenticatedOfficialTrafficAPI(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/online" {
+			_, _ = w.Write([]byte(`{"custom_identity":1}`))
+			return
+		}
 		_, _ = w.Write([]byte(`{"custom_identity":{"tx":514,"rx":4017}}`))
 	}))
 	defer server.Close()
@@ -50,8 +54,9 @@ func TestStatsProviderUsesAuthenticatedOfficialTrafficAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read official traffic API: %v", err)
 	}
-	if requests.Load() != 1 {
-		t.Fatalf("API requests = %d, want 1", requests.Load())
+	// Each read polls /traffic for counters and /online for live sessions.
+	if requests.Load() != 2 {
+		t.Fatalf("API requests = %d, want 2", requests.Load())
 	}
 	if len(readings.Readings) != 1 {
 		t.Fatalf("readings = %d, want only the scoped known identity", len(readings.Readings))
