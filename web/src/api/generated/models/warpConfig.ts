@@ -49,6 +49,7 @@ export interface WarpConfig {
   localAddress?: string;
   peerPublicKey?: string;
   reserved?: number[];
+  /** IPv4 loopback address for the local SOCKS5 listener. Must be inside 127.41.0.0/16 — the only loopback range the protocol-unit egress filters pierce; other loopback values are migrated to the band default. */
   socksListen?: string;
   socksPort?: number;
   mtu?: number;

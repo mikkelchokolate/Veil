@@ -2135,14 +2135,20 @@ type ProcessesStats struct {
 
 // ProtocolInfo defines model for ProtocolInfo.
 type ProtocolInfo struct {
-	DisplayName         string         `json:"displayName"`
-	FirewallService     *string        `json:"firewallService,omitempty"`
-	InboundFieldSchema  *[]FieldSchema `json:"inboundFieldSchema,omitempty"`
-	MaxEnabled          *int           `json:"maxEnabled,omitempty"`
-	Protocol            string         `json:"protocol"`
+	DisplayName        string         `json:"displayName"`
+	FirewallService    *string        `json:"firewallService,omitempty"`
+	InboundFieldSchema *[]FieldSchema `json:"inboundFieldSchema,omitempty"`
+	MaxEnabled         *int           `json:"maxEnabled,omitempty"`
+	Protocol           string         `json:"protocol"`
+
+	// QuotaEnforcement The protocol's runtime can disconnect a client that exceeds its quota, so the panel's quota field is actually enforced.
+	QuotaEnforcement    *bool          `json:"quotaEnforcement,omitempty"`
 	RequiresCaddy       *bool          `json:"requiresCaddy,omitempty"`
 	SettingsFieldSchema *[]FieldSchema `json:"settingsFieldSchema,omitempty"`
-	Transports          []string       `json:"transports"`
+
+	// TrafficAccounting The protocol's runtime exposes per-identity byte counters, so Veil can attribute and chart traffic.
+	TrafficAccounting *bool    `json:"trafficAccounting,omitempty"`
+	Transports        []string `json:"transports"`
 }
 
 // RURecommendedPreviewRequest defines model for RURecommendedPreviewRequest.
@@ -2755,8 +2761,12 @@ type WarpConfig struct {
 	PeerPublicKey *string `json:"peerPublicKey,omitempty"`
 	PrivateKey    *string `json:"privateKey,omitempty"`
 	Reserved      *[]int  `json:"reserved,omitempty"`
-	SocksListen   *string `json:"socksListen,omitempty"`
-	SocksPort     *int    `json:"socksPort,omitempty"`
+
+	// SocksListen IPv4 loopback address for the local SOCKS5 listener. Must be inside 127.41.0.0/16 — the only loopback range the protocol-unit egress filters pierce; other loopback values are migrated to the band default.
+	//
+	// Examples: 127.41.0.1
+	SocksListen *string `json:"socksListen,omitempty"`
+	SocksPort   *int    `json:"socksPort,omitempty"`
 }
 
 // BackupName defines model for BackupName.
@@ -20397,9 +20407,13 @@ type PutApiWarpResponse struct {
 		PrivateKey    *string      `json:"privateKey,omitempty"`
 		Reserved      *[]int       `json:"reserved,omitempty"`
 		Revision      RevisionView `json:"revision"`
-		SocksListen   *string      `json:"socksListen,omitempty"`
-		SocksPort     *int         `json:"socksPort,omitempty"`
-		Success       bool         `json:"success"`
+
+		// SocksListen IPv4 loopback address for the local SOCKS5 listener. Must be inside 127.41.0.0/16 — the only loopback range the protocol-unit egress filters pierce; other loopback values are migrated to the band default.
+		//
+		// Examples: 127.41.0.1
+		SocksListen *string `json:"socksListen,omitempty"`
+		SocksPort   *int    `json:"socksPort,omitempty"`
+		Success     bool    `json:"success"`
 	}
 	// JSON400 the response for an HTTP 400 `application/json` response
 	JSON400 *BadRequest
@@ -20427,9 +20441,13 @@ func (r PutApiWarpResponse) GetJSON200() *struct {
 	PrivateKey    *string      `json:"privateKey,omitempty"`
 	Reserved      *[]int       `json:"reserved,omitempty"`
 	Revision      RevisionView `json:"revision"`
-	SocksListen   *string      `json:"socksListen,omitempty"`
-	SocksPort     *int         `json:"socksPort,omitempty"`
-	Success       bool         `json:"success"`
+
+	// SocksListen IPv4 loopback address for the local SOCKS5 listener. Must be inside 127.41.0.0/16 — the only loopback range the protocol-unit egress filters pierce; other loopback values are migrated to the band default.
+	//
+	// Examples: 127.41.0.1
+	SocksListen *string `json:"socksListen,omitempty"`
+	SocksPort   *int    `json:"socksPort,omitempty"`
+	Success     bool    `json:"success"`
 } {
 	return r.JSON200
 }
@@ -28365,9 +28383,13 @@ func ParsePutApiWarpResponse(rsp *http.Response) (*PutApiWarpResponse, error) {
 			PrivateKey    *string      `json:"privateKey,omitempty"`
 			Reserved      *[]int       `json:"reserved,omitempty"`
 			Revision      RevisionView `json:"revision"`
-			SocksListen   *string      `json:"socksListen,omitempty"`
-			SocksPort     *int         `json:"socksPort,omitempty"`
-			Success       bool         `json:"success"`
+
+			// SocksListen IPv4 loopback address for the local SOCKS5 listener. Must be inside 127.41.0.0/16 — the only loopback range the protocol-unit egress filters pierce; other loopback values are migrated to the band default.
+			//
+			// Examples: 127.41.0.1
+			SocksListen *string `json:"socksListen,omitempty"`
+			SocksPort   *int    `json:"socksPort,omitempty"`
+			Success     bool    `json:"success"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/client"
+	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
 
 func TestQuotaConfigurationRequiresRealProtocolTrafficProvider(t *testing.T) {
@@ -102,6 +103,52 @@ func TestQuotaConfigurationRequiresRealProtocolTrafficProvider(t *testing.T) {
 				t.Errorf("unsupported quota patch persisted quotaBytes=%d", *persisted.QuotaBytes)
 			}
 		})
+	}
+}
+
+// The advertised binding capability and the quota write validator must never
+// disagree: both derive from protocolQuotaEnforcement. Iterate every
+// registered protocol so a future capability expansion cannot drift from the
+// validator's answer without this test failing.
+func TestQuotaEnforcementCapabilityMatchesValidator(t *testing.T) {
+	state := &managementState{}
+	for _, protocol := range protocols.NewRegistry().Protocols() {
+		name := "cap-" + protocol
+		state.mu.Lock()
+		state.inbounds = append(state.inbounds, Inbound{
+			Name: name, Protocol: protocol, Enabled: true,
+		})
+		state.mu.Unlock()
+
+		capability := state.bindingCapabilityForInbound(name)
+		if capability == nil {
+			t.Fatalf("protocol %s: binding capability is nil", protocol)
+		}
+		state.mu.Lock()
+		validator := state.quotaSupportedForInboundLocked(name)
+		state.mu.Unlock()
+		if capability.QuotaEnforcement != validator {
+			t.Errorf("protocol %s: capability quotaEnforcement=%v but validator=%v — drift between the advertised capability and write validation", protocol, capability.QuotaEnforcement, validator)
+		}
+	}
+	// A disabled inbound must fail validation even when its protocol
+	// advertises quota enforcement — the capability describes the protocol,
+	// not the inbound's enabled state.
+	state.mu.Lock()
+	state.inbounds = append(state.inbounds, Inbound{
+		Name: "cap-disabled-hy2", Protocol: "hysteria2", Enabled: false,
+	})
+	validatorDisabled := state.quotaSupportedForInboundLocked("cap-disabled-hy2")
+	missing := state.quotaSupportedForInboundLocked("cap-unknown")
+	state.mu.Unlock()
+	if validatorDisabled {
+		t.Error("validator must reject quota on a disabled hysteria2 inbound")
+	}
+	if missing {
+		t.Error("validator must reject quota on an unknown inbound")
+	}
+	if capability := state.bindingCapabilityForInbound("cap-disabled-hy2"); capability == nil || !capability.QuotaEnforcement {
+		t.Error("capability must keep advertising hysteria2 quota enforcement regardless of inbound enabled state")
 	}
 }
 

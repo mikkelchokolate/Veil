@@ -1,6 +1,10 @@
 package renderer
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/mikkelchokolate/Veil/internal/model"
+)
 
 // egressDenyCIDRs is the canonical destination deny set applied by every
 // egress guard Veil renders (Hysteria2 ACL, sing-box route rules, Caddy
@@ -85,9 +89,11 @@ func egressDenySystemd() string {
 //     SOCKS bridge on its own band lets the filter let protocol daemons reach
 //     it without also permitting 127.0.0.1 (Caddy admin, panel backend).
 const (
-	egressAllowResolvedStub  = "127.0.0.53/32 127.0.0.54/32"
-	egressAllowStatsBand     = "127.40.0.0/16"
-	egressAllowWarpSocksBand = "127.41.0.0/16"
+	egressAllowResolvedStub = "127.0.0.53/32 127.0.0.54/32"
+	egressAllowStatsBand    = "127.40.0.0/16"
+	// Single-sourced from the model so the ACL pierce and the socksListen
+	// validation contract can never drift apart (#1160).
+	egressAllowWarpSocksBand = model.WarpSocksEgressBand
 	egressAllowHysteria2Unit = egressAllowResolvedStub + " " + egressAllowStatsBand + " " + egressAllowWarpSocksBand
 	egressAllowOlcrtcUnit    = egressAllowResolvedStub + " " + egressAllowWarpSocksBand
 	egressAllowMieruUnit     = egressAllowResolvedStub

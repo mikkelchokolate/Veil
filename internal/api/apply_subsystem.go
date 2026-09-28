@@ -192,6 +192,16 @@ func initApplySubsystemMode(s *managementState, deferStartupRecovery bool) {
 	}
 }
 
+// protocolQuotaEnforcement reports whether a protocol's runtime rejects
+// traffic once a bound client's quota is depleted. The binding capability
+// surface (bindingCapabilityForInbound → BindingCapability.QuotaEnforcement),
+// quota write validation (quotaSupportedForInboundLocked), and the
+// /api/protocols catalog all derive from protocols.TelemetrySupportOf so the
+// API never advertises a capability the validator would reject.
+func protocolQuotaEnforcement(protocol string) bool {
+	return protocols.TelemetrySupportOf(protocol).QuotaEnforcement
+}
+
 // bindingCapabilityForInbound resolves the protocol capabilities of the named
 // inbound for the enriched client binding read model. Returns nil when the
 // inbound or its protocol is unknown. Per-client credential and expiry
@@ -221,16 +231,16 @@ func (s *managementState) bindingCapabilityForInbound(inboundID string) *client.
 	// inbound-wide key, so per-client rotation/expiry must not be advertised
 	// (audit #309).
 	perClient := protocols.EnforcesPerClientCredentials(p)
+	telemetry := protocols.TelemetrySupportOf(meta.Protocol)
 	return &client.BindingCapability{
 		Protocol:             meta.Protocol,
 		Transports:           meta.Transports,
 		PerClientCredentials: perClient,
 		RequiresCaddy:        meta.RequiresCaddy,
-		// Hysteria2 and mieru expose per-user counters the collector can read;
-		// quota enforcement stays hysteria2-only until mieru limits are wired
-		// into its rendered user table.
-		TrafficAccounting:     meta.Protocol == "hysteria2" || meta.Protocol == "mieru",
-		QuotaEnforcement:      meta.Protocol == "hysteria2",
+		// TelemetrySupportOf is shared with the quota write validator and the
+		// /api/protocols catalog — never widen a protocol here alone.
+		TrafficAccounting:     telemetry.TrafficAccounting,
+		QuotaEnforcement:      telemetry.QuotaEnforcement,
 		CredentialKinds:       []string{"password"},
 		ExpirationEnforcement: perClient,
 	}

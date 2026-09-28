@@ -290,20 +290,44 @@ func TestRenderWarpSingBoxConfigKeepsProxyOffWarp(t *testing.T) {
 	}
 }
 
-func TestRenderWarpSingBoxPreservesExplicitLoopbackAlternative(t *testing.T) {
+// #1160: loopback SocksListen values outside the egress-pierced 127.41/16
+// band are unreachable for the protocol units — renders that bypass
+// SetDefaults must still migrate them to the band default so the emitted
+// bind matches what the upstreams dial.
+func TestRenderWarpSingBoxMigratesOutOfBandLoopbackSocksListen(t *testing.T) {
+	for _, listen := range []string{"127.0.0.1", "127.0.0.5", "::1"} {
+		body, err := RenderWarpSingBox(WarpSingBoxConfig{
+			Endpoint:      "engage.cloudflareclient.com:2408",
+			PrivateKey:    "warp-private-key",
+			LocalAddress:  "172.16.0.2/32",
+			PeerPublicKey: "bmXOC+F1L2oi7pR9...",
+			SocksListen:   listen,
+			SocksPort:     40000,
+			MTU:           1280,
+		})
+		if err != nil {
+			t.Fatalf("render warp sing-box (SocksListen=%q): %v", listen, err)
+		}
+		if !strings.Contains(body, `"listen": "127.41.0.1"`) {
+			t.Fatalf("out-of-band SocksListen %q must migrate to the band default:\n%s", listen, body)
+		}
+	}
+}
+
+func TestRenderWarpSingBoxPreservesInBandSocksListen(t *testing.T) {
 	body, err := RenderWarpSingBox(WarpSingBoxConfig{
 		Endpoint:      "engage.cloudflareclient.com:2408",
 		PrivateKey:    "warp-private-key",
 		LocalAddress:  "172.16.0.2/32",
 		PeerPublicKey: "bmXOC+F1L2oi7pR9...",
-		SocksListen:   "127.0.0.5",
+		SocksListen:   "127.41.0.5",
 		SocksPort:     40000,
 		MTU:           1280,
 	})
 	if err != nil {
 		t.Fatalf("render warp sing-box: %v", err)
 	}
-	if !strings.Contains(body, `"listen": "127.0.0.5"`) {
-		t.Fatalf("explicit SocksListen must be preserved:\n%s", body)
+	if !strings.Contains(body, `"listen": "127.41.0.5"`) {
+		t.Fatalf("in-band SocksListen must be preserved:\n%s", body)
 	}
 }
