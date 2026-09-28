@@ -49,7 +49,9 @@ export interface ProtocolInfo {
   requiresCaddy?: boolean;
   firewallService?: string;
   maxEnabled?: number;
+  /** The protocol's runtime exposes per-identity byte counters, so Veil can attribute and chart traffic. */
   trafficAccounting?: boolean;
+  /** The protocol's runtime can disconnect a client that exceeds its quota, so the panel's quota field is actually enforced. */
   quotaEnforcement?: boolean;
   inboundFieldSchema?: FieldSchema[];
   settingsFieldSchema?: FieldSchema[];

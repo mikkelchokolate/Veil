@@ -5073,8 +5073,14 @@ components:
           type: integer
         trafficAccounting:
           type: boolean
+          description: >-
+            The protocol's runtime exposes per-identity byte counters, so
+            Veil can attribute and chart traffic.
         quotaEnforcement:
           type: boolean
+          description: >-
+            The protocol's runtime can disconnect a client that exceeds its
+            quota, so the panel's quota field is actually enforced.
         inboundFieldSchema:
           type: array
           items:

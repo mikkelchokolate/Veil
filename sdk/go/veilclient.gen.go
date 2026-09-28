@@ -2086,16 +2086,20 @@ type ProcessesStats struct {
 
 // ProtocolInfo defines model for ProtocolInfo.
 type ProtocolInfo struct {
-	DisplayName         string         `json:"displayName"`
-	FirewallService     *string        `json:"firewallService,omitempty"`
-	InboundFieldSchema  *[]FieldSchema `json:"inboundFieldSchema,omitempty"`
-	MaxEnabled          *int           `json:"maxEnabled,omitempty"`
-	Protocol            string         `json:"protocol"`
+	DisplayName        string         `json:"displayName"`
+	FirewallService    *string        `json:"firewallService,omitempty"`
+	InboundFieldSchema *[]FieldSchema `json:"inboundFieldSchema,omitempty"`
+	MaxEnabled         *int           `json:"maxEnabled,omitempty"`
+	Protocol           string         `json:"protocol"`
+
+	// QuotaEnforcement The protocol's runtime can disconnect a client that exceeds its quota, so the panel's quota field is actually enforced.
 	QuotaEnforcement    *bool          `json:"quotaEnforcement,omitempty"`
 	RequiresCaddy       *bool          `json:"requiresCaddy,omitempty"`
 	SettingsFieldSchema *[]FieldSchema `json:"settingsFieldSchema,omitempty"`
-	TrafficAccounting   *bool          `json:"trafficAccounting,omitempty"`
-	Transports          []string       `json:"transports"`
+
+	// TrafficAccounting The protocol's runtime exposes per-identity byte counters, so Veil can attribute and chart traffic.
+	TrafficAccounting *bool    `json:"trafficAccounting,omitempty"`
+	Transports        []string `json:"transports"`
 }
 
 // RURecommendedPreviewRequest defines model for RURecommendedPreviewRequest.

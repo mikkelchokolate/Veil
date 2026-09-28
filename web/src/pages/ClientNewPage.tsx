@@ -116,11 +116,20 @@ export function ClientNewPage() {
 	// state — supported === null here, still treated as blocked.
 	const quotaBlockedBindings = bindings.filter((b) => {
 		const ib = inboundList.find((item) => item.name === b.inboundId);
+		if (ib?.enabled === false) {
+			return true;
+		}
+		// While the catalog is still loading there is no verdict yet — do not
+		// flash every quota draft as unsupported. Once resolved, a missing
+		// inbound means stale state and stays blocked.
+		if (!protocolCatalog.isSuccess) {
+			return false;
+		}
 		const supported = quotaEnforcementVerdict(
 			null,
 			ib?.protocol != null ? (protocolQuota.get(ib.protocol) ?? null) : null,
 		);
-		return supported !== true || ib?.enabled === false;
+		return supported !== true;
 	});
 	const quotaBlockedLabel = (b: BindingDraft): string => {
 		const ib = inboundList.find((item) => item.name === b.inboundId);

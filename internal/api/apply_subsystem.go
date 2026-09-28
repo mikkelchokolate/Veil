@@ -231,6 +231,7 @@ func (s *managementState) bindingCapabilityForInbound(inboundID string) *client.
 	// inbound-wide key, so per-client rotation/expiry must not be advertised
 	// (audit #309).
 	perClient := protocols.EnforcesPerClientCredentials(p)
+	telemetry := protocols.TelemetrySupportOf(meta.Protocol)
 	return &client.BindingCapability{
 		Protocol:             meta.Protocol,
 		Transports:           meta.Transports,
@@ -238,8 +239,8 @@ func (s *managementState) bindingCapabilityForInbound(inboundID string) *client.
 		RequiresCaddy:        meta.RequiresCaddy,
 		// TelemetrySupportOf is shared with the quota write validator and the
 		// /api/protocols catalog — never widen a protocol here alone.
-		TrafficAccounting:     protocols.TelemetrySupportOf(meta.Protocol).TrafficAccounting,
-		QuotaEnforcement:      protocols.TelemetrySupportOf(meta.Protocol).QuotaEnforcement,
+		TrafficAccounting:     telemetry.TrafficAccounting,
+		QuotaEnforcement:      telemetry.QuotaEnforcement,
 		CredentialKinds:       []string{"password"},
 		ExpirationEnforcement: perClient,
 	}
