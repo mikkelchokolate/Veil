@@ -31,6 +31,14 @@ type ProviderBatch struct {
 	// the provider cannot determine it — accounting then falls back to the
 	// negative-delta reset heuristic (#1102).
 	RuntimeInstanceID string
+	// Online is the runtime's authoritative live-session table when it
+	// exposes one (hysteria2 serves GET /online on the trafficStats
+	// listener): bindingID -> live connection count, merged across aliased
+	// identities exactly like Readings. nil means the provider has no
+	// presence surface or the read failed — presence consumers fall back to
+	// the counter-activity heuristic rather than assuming everyone is
+	// offline. A non-nil empty map is an authoritative "nobody is online".
+	Online map[string]int64
 }
 
 type ProviderReading struct {
@@ -52,6 +60,23 @@ type providerHealthState struct {
 	lastLogAt int64
 }
 
+// providerPresence caches the latest live-session table one provider
+// reported. A nil online map means the provider observed successfully but
+// has no presence surface (mieru) or the authoritative read failed —
+// consumers must fall back to activity, not report offline.
+type providerPresence struct {
+	observedAt int64
+	online     map[string]int64
+}
+
+// ProviderPresence is one provider's last successfully collected
+// live-session snapshot. Online is keyed by bindingID; nil means no
+// presence data was reported that round.
+type ProviderPresence struct {
+	ObservedAt int64
+	Online     map[string]int64
+}
+
 type Collector struct {
 	store     *TrafficStore
 	providers []TrafficProvider
@@ -62,6 +87,7 @@ type Collector struct {
 	collectMu  sync.Mutex
 	generation uint64
 	health     map[string]providerHealthState
+	presence   map[string]providerPresence
 	running    bool
 	stop       chan struct{}
 	done       chan struct{}
@@ -72,7 +98,7 @@ func NewCollector(store *TrafficStore, interval time.Duration, onExhaust func(cl
 	if interval <= 0 {
 		interval = 30 * time.Second
 	}
-	return &Collector{store: store, interval: interval, onExhaust: onExhaust, health: make(map[string]providerHealthState)}
+	return &Collector{store: store, interval: interval, onExhaust: onExhaust, health: make(map[string]providerHealthState), presence: make(map[string]providerPresence)}
 }
 
 func (c *Collector) Register(provider TrafficProvider) error {
@@ -123,6 +149,11 @@ func (c *Collector) ResetProviders(providers []TrafficProvider) error {
 			delete(c.health, key)
 		}
 	}
+	for key := range c.presence {
+		if _, ok := current[key]; !ok {
+			delete(c.presence, key)
+		}
+	}
 	return nil
 }
 
@@ -158,6 +189,11 @@ func validateProviderBatch(batch ProviderBatch) error {
 			return errors.New("traffic provider batch has duplicate unknown identity")
 		}
 		seenUnknown[identity] = struct{}{}
+	}
+	for bindingID, count := range batch.Online {
+		if bindingID == "" || count < 0 {
+			return errors.New("traffic provider batch has invalid online reading")
+		}
 	}
 	return nil
 }
@@ -217,6 +253,7 @@ func (c *Collector) CollectOnceContext(ctx context.Context) error {
 			continue
 		}
 		c.recordSuccess(provider.Key(), now, generation)
+		c.recordPresence(provider.Key(), batch, generation)
 	}
 	return errors.Join(collectionErrors...)
 }
@@ -271,6 +308,43 @@ func (c *Collector) ProviderHealth() []ProviderHealth {
 		out = append(out, state.ProviderHealth)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out
+}
+
+// recordPresence stores the batch's live-session table as the provider's
+// latest presence snapshot. A nil Online map still records the observation:
+// it means "no authoritative presence data this round" and ages out through
+// the consumer's staleness bound rather than lingering as a fake answer.
+func (c *Collector) recordPresence(key string, batch ProviderBatch, generation uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if generation != c.generation {
+		return
+	}
+	if c.presence == nil {
+		c.presence = make(map[string]providerPresence)
+	}
+	c.presence[key] = providerPresence{observedAt: batch.ObservedAt.Unix(), online: batch.Online}
+}
+
+// PresenceSnapshot returns each provider's most recent live-session table,
+// keyed by provider key (e.g. "hysteria2:<inbound>"). Entries are replaced
+// wholesale on every successful collect and pruned by ResetProviders, so the
+// snapshot can never merge data from an already-replaced registration.
+func (c *Collector) PresenceSnapshot() map[string]ProviderPresence {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make(map[string]ProviderPresence, len(c.presence))
+	for key, p := range c.presence {
+		var online map[string]int64
+		if p.online != nil {
+			online = make(map[string]int64, len(p.online))
+			for bindingID, count := range p.online {
+				online[bindingID] = count
+			}
+		}
+		out[key] = ProviderPresence{ObservedAt: p.observedAt, Online: online}
+	}
 	return out
 }
 

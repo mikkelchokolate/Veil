@@ -44,6 +44,22 @@ import * as zod from 'zod';
 
 
 /**
+ * One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
+ * @summary Live per-client presence (who is online right now)
+ */
+export const GetApiV1PresenceResponse = zod.object({
+  "items": zod.array(zod.object({
+  "clientId": zod.string(),
+  "name": zod.string(),
+  "online": zod.boolean().nullable().describe('Tri-state verdict: true = online now, false = offline, null = no telemetry source can currently prove either. Never fabricated.'),
+  "source": zod.enum(['stats', 'activity', 'unsupported']).describe('The most authoritative mechanism behind the verdict: stats = runtime session table (hysteria2 /online), activity = counter-increase heuristic (mieru, or hysteria2 fallback when the stats listener is dark), unsupported = no telemetry source.'),
+  "connections": zod.int().optional().describe('Live sessions reported by stats-capable bindings, summed across the client\'s bindings. Absent when no stats source contributed.'),
+  "lastActiveAt": zod.int().optional().describe('Unix timestamp of the last observed activity (session table sighting or counter increase). Absent when never observed.')
+})),
+  "count": zod.int().describe('Number of presence items (one per client).')
+})
+
+/**
  * @summary Aggregate traffic totals + honest telemetry provider state
  */
 export const GetApiV1TrafficSummaryResponse = zod.object({

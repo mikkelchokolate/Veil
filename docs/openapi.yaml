@@ -3807,6 +3807,35 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
       x-roles:
       - admin
+  /api/v1/presence:
+    get:
+      x-veil-role: viewer
+      tags:
+      - traffic
+      summary: Live per-client presence (who is online right now)
+      description: >-
+        One item per client, sorted by clientId, merging every binding.
+        Hysteria2 bindings trust the runtime's authoritative /online session
+        table (source=stats); bindings on protocols with traffic accounting
+        but no session table (mieru) use a counter-increase heuristic
+        (source=activity); bindings with no telemetry source report
+        source=unsupported. online is tri-state: true/false only when a
+        source could prove it, null when nothing can answer — never a faked
+        offline.
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      responses:
+        '200':
+          description: Per-client presence items sorted by clientId.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresenceResponse'
+      x-roles:
+      - admin
+      - viewer
   /api/v1/traffic/summary:
     get:
       x-veil-role: viewer
@@ -7278,6 +7307,63 @@ components:
         usedBytes:
           type: integer
           format: int64
+    PresenceItem:
+      type: object
+      required:
+      - clientId
+      - name
+      - online
+      - source
+      additionalProperties: false
+      properties:
+        clientId:
+          type: string
+        name:
+          type: string
+        online:
+          type:
+          - boolean
+          - 'null'
+          description: >-
+            Tri-state verdict: true = online now, false = offline, null = no
+            telemetry source can currently prove either. Never fabricated.
+        source:
+          type: string
+          enum:
+          - stats
+          - activity
+          - unsupported
+          description: >-
+            The most authoritative mechanism behind the verdict: stats =
+            runtime session table (hysteria2 /online), activity =
+            counter-increase heuristic (mieru, or hysteria2 fallback when
+            the stats listener is dark), unsupported = no telemetry source.
+        connections:
+          type: integer
+          format: int64
+          description: >-
+            Live sessions reported by stats-capable bindings, summed across
+            the client's bindings. Absent when no stats source contributed.
+        lastActiveAt:
+          type: integer
+          format: int64
+          description: >-
+            Unix timestamp of the last observed activity (session table
+            sighting or counter increase). Absent when never observed.
+    PresenceResponse:
+      type: object
+      required:
+      - items
+      - count
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PresenceItem'
+        count:
+          type: integer
+          description: Number of presence items (one per client).
   headers:
     Location:
       description: URI of the created resource.

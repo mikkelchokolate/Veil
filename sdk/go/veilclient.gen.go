@@ -535,6 +535,27 @@ func (e Locale) Valid() bool {
 	}
 }
 
+// Defines values for PresenceItemSource.
+const (
+	PresenceItemSourceActivity    PresenceItemSource = "activity"
+	PresenceItemSourceStats       PresenceItemSource = "stats"
+	PresenceItemSourceUnsupported PresenceItemSource = "unsupported"
+)
+
+// Valid indicates whether the value is a known member of the PresenceItemSource enum.
+func (e PresenceItemSource) Valid() bool {
+	switch e {
+	case PresenceItemSourceActivity:
+		return true
+	case PresenceItemSourceStats:
+		return true
+	case PresenceItemSourceUnsupported:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RURecommendedPreviewRequestPanelAccess.
 const (
 	RURecommendedPreviewRequestPanelAccessCaddy  RURecommendedPreviewRequestPanelAccess = "caddy"
@@ -2063,6 +2084,34 @@ type PingResult struct {
 	Received    int      `json:"received"`
 	StddevMs    *float32 `json:"stddevMs,omitempty"`
 	Transmitted int      `json:"transmitted"`
+}
+
+// PresenceItem defines model for PresenceItem.
+type PresenceItem struct {
+	ClientId string `json:"clientId"`
+
+	// Connections Live sessions reported by stats-capable bindings, summed across the client's bindings. Absent when no stats source contributed.
+	Connections *int64 `json:"connections,omitempty"`
+
+	// LastActiveAt Unix timestamp of the last observed activity (session table sighting or counter increase). Absent when never observed.
+	LastActiveAt *int64 `json:"lastActiveAt,omitempty"`
+	Name         string `json:"name"`
+
+	// Online Tri-state verdict: true = online now, false = offline, null = no telemetry source can currently prove either. Never fabricated.
+	Online nullable.Nullable[bool] `json:"online"`
+
+	// Source The most authoritative mechanism behind the verdict: stats = runtime session table (hysteria2 /online), activity = counter-increase heuristic (mieru, or hysteria2 fallback when the stats listener is dark), unsupported = no telemetry source.
+	Source PresenceItemSource `json:"source"`
+}
+
+// PresenceItemSource The most authoritative mechanism behind the verdict: stats = runtime session table (hysteria2 /online), activity = counter-increase heuristic (mieru, or hysteria2 fallback when the stats listener is dark), unsupported = no telemetry source.
+type PresenceItemSource string
+
+// PresenceResponse defines model for PresenceResponse.
+type PresenceResponse struct {
+	// Count Number of presence items (one per client).
+	Count int            `json:"count"`
+	Items []PresenceItem `json:"items"`
 }
 
 // PrivilegedErrorEnvelope defines model for PrivilegedErrorEnvelope.
@@ -4565,6 +4614,13 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/events (the `GetApiV1Events` operationId).
 	GetApiV1Events(ctx context.Context, params *GetApiV1EventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetApiV1Presence Live per-client presence (who is online right now)
+	//
+	// One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
+	//
+	// Corresponds with GET /api/v1/presence (the `GetApiV1Presence` operationId).
+	GetApiV1Presence(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiV1TrafficHistory Aggregate bucketed traffic samples over a window
 	//
 	// Per-bucket sums across every client and binding. Rows carry empty clientId/bindingId; the bucket is the only identity once attribution is summed away.
@@ -6798,6 +6854,23 @@ func (c *Client) PostApiV1ClientsIdTokensTokenIdRotate(ctx context.Context, id C
 // Corresponds with GET /api/v1/events (the `GetApiV1Events` operationId).
 func (c *Client) GetApiV1Events(ctx context.Context, params *GetApiV1EventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1EventsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetApiV1Presence Live per-client presence (who is online right now)
+//
+// One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
+//
+// Corresponds with GET /api/v1/presence (the `GetApiV1Presence` operationId).
+func (c *Client) GetApiV1Presence(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1PresenceRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -11257,6 +11330,33 @@ func NewGetApiV1EventsRequest(server string, params *GetApiV1EventsParams) (*htt
 	return req, nil
 }
 
+// NewGetApiV1PresenceRequest constructs an http.Request for the GetApiV1Presence method
+func NewGetApiV1PresenceRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/presence")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetApiV1TrafficHistoryRequest constructs an http.Request for the GetApiV1TrafficHistory method
 func NewGetApiV1TrafficHistoryRequest(server string, params *GetApiV1TrafficHistoryParams) (*http.Request, error) {
 	var err error
@@ -13036,6 +13136,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /api/v1/events (the `GetApiV1Events` operationId).
 	GetApiV1EventsWithResponse(ctx context.Context, params *GetApiV1EventsParams, reqEditors ...RequestEditorFn) (*GetApiV1EventsResponse, error)
+
+	// GetApiV1PresenceWithResponse Live per-client presence (who is online right now)
+	//
+	// One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/presence (the `GetApiV1Presence` operationId).
+	GetApiV1PresenceWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1PresenceResponse, error)
 
 	// GetApiV1TrafficHistoryWithResponse Aggregate bucketed traffic samples over a window
 	//
@@ -19657,6 +19766,47 @@ func (r GetApiV1EventsResponse) ContentType() string {
 	return ""
 }
 
+type GetApiV1PresenceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PresenceResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiV1PresenceResponse) GetJSON200() *PresenceResponse {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiV1PresenceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1PresenceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1PresenceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiV1PresenceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetApiV1TrafficHistoryResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -22351,6 +22501,21 @@ func (c *ClientWithResponses) GetApiV1EventsWithResponse(ctx context.Context, pa
 		return nil, err
 	}
 	return ParseGetApiV1EventsResponse(rsp)
+}
+
+// GetApiV1PresenceWithResponse Live per-client presence (who is online right now)
+//
+// One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/presence (the `GetApiV1Presence` operationId).
+func (c *ClientWithResponses) GetApiV1PresenceWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1PresenceResponse, error) {
+	rsp, err := c.GetApiV1Presence(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1PresenceResponse(rsp)
 }
 
 // GetApiV1TrafficHistoryWithResponse Aggregate bucketed traffic samples over a window
@@ -27726,6 +27891,32 @@ func ParseGetApiV1EventsResponse(rsp *http.Response) (*GetApiV1EventsResponse, e
 			headers.RetryAfter = &value
 		}
 		response.Headers429 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1PresenceResponse parses an HTTP response from a GetApiV1PresenceWithResponse call
+func ParseGetApiV1PresenceResponse(rsp *http.Response) (*GetApiV1PresenceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1PresenceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PresenceResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	}
 
 	return response, nil

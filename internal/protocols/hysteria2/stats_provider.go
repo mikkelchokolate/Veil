@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net"
 	"net/http"
@@ -205,13 +206,119 @@ func (p *StatsProvider) ReadContext(ctx context.Context) (client.ProviderBatch, 
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].BindingID < out[j].BindingID })
+	// The same secret-authenticated listener serves GET /online (identity ->
+	// live session count). Presence is best-effort: a failed or malformed
+	// read must not fail accounting, so the batch simply carries no Online
+	// table and the presence endpoint falls back to the counter-activity
+	// heuristic instead of reporting every identity offline.
+	online, onlineUnknown, onlineErr := p.readOnline(ctx)
+	if onlineErr != nil {
+		log.Printf("event=traffic_presence_read_failure provider=%q error=%q", p.key, onlineErr.Error())
+	} else {
+		unknown = append(unknown, onlineUnknown...)
+	}
 	sort.Strings(unknown)
+	unknown = dedupeStrings(unknown)
 	instanceID := ""
 	if p.instanceSource != nil {
 		instanceID = p.instanceSource(ctx)
 	}
 	return client.ProviderBatch{
 		Readings: out, UnknownIdentities: unknown, ObservedAt: time.Now().UTC(),
-		RuntimeInstance: p.key, RuntimeInstanceID: instanceID,
+		RuntimeInstance: p.key, RuntimeInstanceID: instanceID, Online: online,
 	}, nil
+}
+
+func dedupeStrings(in []string) []string {
+	if len(in) < 2 {
+		return in
+	}
+	out := in[:0]
+	for i, v := range in {
+		if i > 0 && v == in[i-1] {
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+// onlineStatsEndpoint derives the /online sibling of the configured /traffic
+// endpoint on the same stats listener (same scheme, host and secret).
+func onlineStatsEndpoint(endpoint string) string {
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed == nil {
+		return ""
+	}
+	trimmed := strings.TrimSuffix(parsed.Path, "/")
+	if i := strings.LastIndex(trimmed, "/"); i >= 0 {
+		parsed.Path = trimmed[:i] + "/online"
+	} else {
+		parsed.Path = "/online"
+	}
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
+}
+
+// readOnline fetches the stats server's /online table and folds identities
+// onto bindings with the same lowercase folding the traffic read uses. The
+// returned map is non-nil (possibly empty) on success: empty is an
+// authoritative "no live sessions", distinct from a failed read.
+func (p *StatsProvider) readOnline(ctx context.Context) (map[string]int64, []string, error) {
+	endpoint := onlineStatsEndpoint(p.endpoint)
+	if endpoint == "" {
+		return nil, nil, errors.New("hysteria2 online endpoint is not configured")
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	request.Header.Set("Authorization", p.secret)
+	httpClient := p.httpClient
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 5 * time.Second}
+	}
+	clientCopy := *httpClient
+	clientCopy.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	response, err := clientCopy.Do(request)
+	if err != nil {
+		return nil, nil, fmt.Errorf("hysteria2 online request: %w", err)
+	}
+	defer response.Body.Close()
+	if response.Request == nil || response.Request.URL == nil || response.Request.URL.String() != endpoint {
+		return nil, nil, errors.New("hysteria2 online response origin changed")
+	}
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxTrafficStatsResponseBytes+1))
+	if err != nil {
+		return nil, nil, fmt.Errorf("read hysteria2 online response: %w", err)
+	}
+	if int64(len(body)) > maxTrafficStatsResponseBytes {
+		return nil, nil, fmt.Errorf("hysteria2 online response is too large")
+	}
+	if response.StatusCode != http.StatusOK {
+		return nil, nil, fmt.Errorf("hysteria2 online status %d", response.StatusCode)
+	}
+	var payload map[string]int64
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, nil, fmt.Errorf("decode hysteria2 online response: %w", err)
+	}
+	merged := make(map[string]int64, len(payload))
+	var unknown []string
+	for runtimeIdentity, count := range payload {
+		if count < 0 {
+			return nil, nil, fmt.Errorf("hysteria2 online count for identity %q is negative", runtimeIdentity)
+		}
+		bindingID, ok := p.bindings[strings.ToLower(runtimeIdentity)]
+		if !ok || bindingID == "" {
+			unknown = append(unknown, runtimeIdentity)
+			continue
+		}
+		if count > math.MaxInt64-merged[bindingID] {
+			return nil, nil, fmt.Errorf("hysteria2 online count for identity %q overflows when merged", runtimeIdentity)
+		}
+		merged[bindingID] += count
+	}
+	return merged, unknown, nil
 }
