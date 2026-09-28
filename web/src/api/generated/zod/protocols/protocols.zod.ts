@@ -53,6 +53,8 @@ export const GetApiProtocolsResponseItem = zod.object({
   "requiresCaddy": zod.boolean().optional(),
   "firewallService": zod.string().optional(),
   "maxEnabled": zod.int().optional(),
+  "trafficAccounting": zod.boolean().optional().describe('The protocol\'s runtime exposes per-identity byte counters, so Veil can attribute and chart traffic.'),
+  "quotaEnforcement": zod.boolean().optional().describe('The protocol\'s runtime can disconnect a client that exceeds its quota, so the panel\'s quota field is actually enforced.'),
   "inboundFieldSchema": zod.array(zod.object({
   "key": zod.string(),
   "label": zod.string(),

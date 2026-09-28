@@ -34,6 +34,10 @@ export const defaultHandlers = [
 	http.get("/api/inbounds/:name/clients", () =>
 		HttpResponse.json({ items: [], total: 0, page: 1, pageSize: 500 }),
 	),
+	// The client pages read the protocol catalog for quota-enforcement
+	// verdicts; an empty catalog keeps the verdict undecidable (never
+	// "unsupported") so tests that don't care stay neutral.
+	http.get("/api/protocols", () => HttpResponse.json([])),
 	http.get("/api/processes", () => HttpResponse.json({ processes: [] })),
 ];
 
