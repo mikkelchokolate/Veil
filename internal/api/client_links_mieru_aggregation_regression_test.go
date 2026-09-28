@@ -61,10 +61,8 @@ func TestV1ClientLinksAggregatesMieruTransportBindings(t *testing.T) {
 			t.Fatalf("links: %d %s", linksResp.Code, linksResp.Body.String())
 		}
 		if time.Now().After(deadline) {
-			if rev, _ := state.applyRevisions.Get(); rev.Applied == 0 || rev.Applied < rev.Desired {
-				t.Skipf("apply pipeline cannot converge in this environment (rev=%+v)", rev)
-			}
-			t.Fatalf("links never contained mieru items despite applied revision: last=%d %s", linksResp.Code, linksResp.Body.String())
+			rev, _ := state.applyRevisions.Get()
+			t.Fatalf("links never contained mieru items: last=%d %s (rev=%+v)", linksResp.Code, linksResp.Body.String(), rev)
 		}
 		time.Sleep(1500 * time.Millisecond)
 	}

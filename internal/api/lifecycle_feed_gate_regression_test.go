@@ -245,14 +245,8 @@ func waitForFeedOK(t *testing.T, router http.Handler, state *managementState, to
 			return resp
 		}
 		if time.Now().After(deadline) {
-			// The public feed needs a committed applied revision; environments
-			// without a converging apply executor (no promotable runtime, no
-			// real services) never produce one - the pre-existing applied-
-			// subscription tests fail the same way there.
-			if rev, _ := state.applyRevisions.Get(); rev.Applied == 0 {
-				t.Skipf("apply pipeline cannot converge in this environment (rev=%+v)", rev)
-			}
-			t.Fatalf("feed never converged despite applied revision: last=%d %q", resp.Code, resp.Body.String())
+			rev, _ := state.applyRevisions.Get()
+			t.Fatalf("feed never converged: last=%d %q (rev=%+v)", resp.Code, resp.Body.String(), rev)
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
