@@ -135,6 +135,7 @@ export * from './getApiV1ClientsIdAuditParams.msw.ts';
 export * from './getApiV1ClientsIdBindings200.msw.ts';
 export * from './getApiV1ClientsIdLinks200.msw.ts';
 export * from './getApiV1EventsParams.msw.ts';
+export * from './getApiV1TrafficHistoryParams.msw.ts';
 export * from './getApiV1TrafficIdHistoryParams.msw.ts';
 export * from './getRuntimeProvenance200.msw.ts';
 export * from './getSTokenFormat.msw.ts';

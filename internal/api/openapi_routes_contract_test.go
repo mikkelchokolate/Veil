@@ -127,6 +127,7 @@ func TestOpenAPIRoutesAndMethodsMatchRegisteredAPI(t *testing.T) {
 		"/api/v1/clients/{id}/tokens/{tokenId}/rotate":        {"post"},
 		"/api/v1/traffic/summary":                             {"get"},
 		"/api/v1/traffic/top":                                 {"get"},
+		"/api/v1/traffic/history":                             {"get"},
 		"/api/v1/traffic/{id}":                                {"get"},
 		"/api/v1/traffic/{id}/history":                        {"get"},
 		"/api/v1/traffic/stream":                              {"get"},

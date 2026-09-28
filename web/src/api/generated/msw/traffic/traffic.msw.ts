@@ -57,6 +57,7 @@ import type {
 
 import type {
   GetApiV1EventsParams,
+  GetApiV1TrafficHistoryParams,
   GetApiV1TrafficIdHistoryParams,
   PresenceResponse,
   TrafficHistoryResponse,
@@ -377,6 +378,114 @@ export function useGetApiV1TrafficTop<TData = Awaited<ReturnType<typeof getApiV1
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetApiV1TrafficTopQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetApiV1TrafficHistoryUrl = (params?: GetApiV1TrafficHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/traffic/history?${stringifiedParams}` : `/api/v1/traffic/history`
+}
+
+/**
+ * Per-bucket sums across every client and binding. Rows carry empty clientId/bindingId; the bucket is the only identity once attribution is summed away.
+ * @summary Aggregate bucketed traffic samples over a window
+ */
+export const getApiV1TrafficHistory = async (params?: GetApiV1TrafficHistoryParams, options?: Parameters<typeof apiFetch>[1]): Promise<TrafficHistoryResponse> => {
+
+  return apiFetch<TrafficHistoryResponse>(getGetApiV1TrafficHistoryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1TrafficHistoryQueryKey = (params?: GetApiV1TrafficHistoryParams,) => {
+    return [
+    `/api/v1/traffic/history`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiV1TrafficHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getApiV1TrafficHistory>>, TError = void>(params?: GetApiV1TrafficHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1TrafficHistory>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiV1TrafficHistoryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiV1TrafficHistory>>> = ({ signal }) => getApiV1TrafficHistory(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiV1TrafficHistory>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiV1TrafficHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getApiV1TrafficHistory>>>
+export type GetApiV1TrafficHistoryQueryError = void
+
+
+export function useGetApiV1TrafficHistory<TData = Awaited<ReturnType<typeof getApiV1TrafficHistory>>, TError = void>(
+ params: undefined |  GetApiV1TrafficHistoryParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1TrafficHistory>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1TrafficHistory>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1TrafficHistory>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1TrafficHistory<TData = Awaited<ReturnType<typeof getApiV1TrafficHistory>>, TError = void>(
+ params?: GetApiV1TrafficHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1TrafficHistory>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1TrafficHistory>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1TrafficHistory>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1TrafficHistory<TData = Awaited<ReturnType<typeof getApiV1TrafficHistory>>, TError = void>(
+ params?: GetApiV1TrafficHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1TrafficHistory>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Aggregate bucketed traffic samples over a window
+ */
+
+export function useGetApiV1TrafficHistory<TData = Awaited<ReturnType<typeof getApiV1TrafficHistory>>, TError = void>(
+ params?: GetApiV1TrafficHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1TrafficHistory>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiV1TrafficHistoryQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
