@@ -36,7 +36,7 @@ func TestLoginRecordsSuccessAndFailureAuditEvents(t *testing.T) {
 		request.Header.Set("Content-Type", "application/json")
 		request.RemoteAddr = "192.0.2.10:1234"
 		response := httptest.NewRecorder()
-		state.handleLogin(response, request)
+		state.handleLoginWithRevalidation(response, request)
 		if index == 0 {
 			now = now.Add(2 * time.Second)
 		}

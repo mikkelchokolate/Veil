@@ -107,6 +107,14 @@ func (s *idempotencyStore) serveDurable(w http.ResponseWriter, r *http.Request, 
 				}
 				return
 			}
+			// Re-verify the fingerprint AFTER waiting: waitDurable also
+			// returns when a different request replaced the reservation (the
+			// row's payload_hash changed), and replaying that record would
+			// serve another request's response under this key (#1090).
+			if record.Fingerprint != fingerprint {
+				writeError(w, "Idempotency-Key was already used with a different request", http.StatusConflict)
+				return
+			}
 		}
 		s.replayDurableIdempotencyResponse(w, r, record)
 		return
