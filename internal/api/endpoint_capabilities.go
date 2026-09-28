@@ -81,6 +81,10 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodGet, "/api/v1/clients/{id}/bindings/{bindingId}", capabilityViewer},
 	{http.MethodGet, "/api/v1/traffic/top", capabilityViewer},
 	{http.MethodGet, "/api/v1/traffic/summary", capabilityViewer},
+	// Static segments precede the {clientId} wildcard so the aggregate
+	// history endpoint keeps its own explicit access decision instead of
+	// inheriting one through wildcard matching.
+	{http.MethodGet, "/api/v1/traffic/history", capabilityViewer},
 	{http.MethodGet, "/api/v1/traffic/{clientId}", capabilityViewer},
 	{http.MethodGet, "/api/v1/traffic/{clientId}/history", capabilityViewer},
 	{http.MethodGet, "/api/v1/traffic/stream", capabilityViewer},

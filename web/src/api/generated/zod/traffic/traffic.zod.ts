@@ -75,6 +75,27 @@ export const GetApiV1TrafficTopResponse = zod.object({
 })
 
 /**
+ * Per-bucket sums across every client and binding. Rows carry empty clientId/bindingId; the bucket is the only identity once attribution is summed away.
+ * @summary Aggregate bucketed traffic samples over a window
+ */
+export const GetApiV1TrafficHistoryQueryParams = zod.object({
+  "from": zod.int().optional().describe('Unix start of the window (default 0 — all retained history).'),
+  "to": zod.int().optional().describe('Unix end of the window (default now).'),
+  "limit": zod.int().optional().describe('Max buckets returned (default 500, capped at 5000); newest buckets win when the window truncates.')
+})
+
+export const GetApiV1TrafficHistoryResponse = zod.object({
+  "items": zod.array(zod.object({
+  "bucketStart": zod.int().describe('Unix start of the bucket.'),
+  "clientId": zod.string().describe('Owning client id; empty on aggregate /api/v1/traffic/history rows.'),
+  "bindingId": zod.string().describe('Owning binding id; empty on per-client and aggregate history rows.'),
+  "uploadDelta": zod.int().describe('Bytes uploaded inside this bucket.'),
+  "downloadDelta": zod.int().describe('Bytes downloaded inside this bucket.')
+})).nullable(),
+  "count": zod.int().describe('Number of buckets in items.')
+}).describe('Time-ordered bucketed deltas; items carry per-bucket deltas, not cumulative totals (#1066).')
+
+/**
  * @summary Per-client cumulative traffic totals
  */
 
@@ -121,8 +142,8 @@ export const GetApiV1TrafficIdHistoryQueryParams = zod.object({
 export const GetApiV1TrafficIdHistoryResponse = zod.object({
   "items": zod.array(zod.object({
   "bucketStart": zod.int().describe('Unix start of the bucket.'),
-  "clientId": zod.string(),
-  "bindingId": zod.string(),
+  "clientId": zod.string().describe('Owning client id; empty on aggregate /api/v1/traffic/history rows.'),
+  "bindingId": zod.string().describe('Owning binding id; empty on per-client and aggregate history rows.'),
   "uploadDelta": zod.int().describe('Bytes uploaded inside this bucket.'),
   "downloadDelta": zod.int().describe('Bytes downloaded inside this bucket.')
 })).nullable(),
