@@ -155,6 +155,31 @@ func (m RoutingSourceMaterial) publishRoutingFiles(bodies map[string][]byte) ([]
 	if err := syncRoutingDirectory(rulesRoot); err != nil {
 		return rollback(err)
 	}
+	// Prune staged routing files that are no longer part of the desired set:
+	// they are rendered into proxy configs while present, so a stale
+	// rules/*.dat would silently resurrect removed routing material (#1135).
+	desired := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		desired[name] = struct{}{}
+	}
+	entries, err := os.ReadDir(rulesRoot)
+	if err != nil {
+		return rollback(err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".dat") {
+			continue
+		}
+		if _, keep := desired[entry.Name()]; keep {
+			continue
+		}
+		if err := os.Remove(filepath.Join(rulesRoot, entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return rollback(err)
+		}
+	}
+	if err := syncRoutingDirectory(rulesRoot); err != nil {
+		return rollback(err)
+	}
 	return written, nil
 }
 

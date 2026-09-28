@@ -117,6 +117,7 @@ type ServiceStatus struct {
 	LoadState              string `json:"loadState,omitempty"`
 	ActiveState            string `json:"activeState,omitempty"`
 	SubState               string `json:"subState,omitempty"`
+	UnitFileState          string `json:"unitFileState,omitempty"`
 	MainPID                int    `json:"mainPid,omitempty"`
 	ExecMainStartMonotonic uint64 `json:"execMainStartMonotonic,omitempty"`
 	ExecutableDigest       string `json:"executableDigest,omitempty"`

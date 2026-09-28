@@ -87,7 +87,8 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 			status := serviceStatusReader(unit)
 			result.Services = append(result.Services, privileged.ServiceStatus{
 				Unit: status.Unit, LoadState: status.LoadState, ActiveState: status.ActiveState, SubState: status.SubState,
-				Error: status.Error,
+				UnitFileState: status.UnitFileState,
+				Error:         status.Error,
 			})
 		}
 		return result, nil

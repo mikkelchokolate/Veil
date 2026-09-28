@@ -1,6 +1,7 @@
 package caddycapabilities
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 func TestIsMissingBinary(t *testing.T) {
@@ -99,5 +101,50 @@ func TestProbeRunsLiveBinary(t *testing.T) {
 	}
 	if !caps.ForwardProxy || !caps.HTTP3 {
 		t.Fatalf("Probe capabilities = %+v, want ForwardProxy+HTTP3", caps)
+	}
+}
+
+// A wedged `caddy list-modules` must not deadlock the apply path: the probe
+// honors the caller's deadline (and its own internal timeout) instead of
+// blocking forever (#1141).
+func TestProbeReturnsWhenBinaryHangs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake caddy is a POSIX shell script")
+	}
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "caddy")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexec sleep 120\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := ProbeContext(ctx, binary)
+	if err == nil {
+		t.Fatal("hanging caddy must report a probe error")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("ProbeContext blocked %s; the caller deadline was ignored", elapsed)
+	}
+}
+
+// A binary that streams unbounded output must not exhaust panel memory: the
+// probe caps stdout and fails instead of buffering forever (#1141).
+func TestProbeCapsModuleListOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake caddy is a POSIX shell script")
+	}
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "caddy")
+	script := "#!/bin/sh\nhead -c 6000000 /dev/zero | tr '\\000' 'x'\n"
+	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Probe(binary)
+	if err == nil {
+		t.Fatal("oversized list-modules output must be rejected")
+	}
+	if IsMissingBinary(err) {
+		t.Fatalf("oversized output must not masquerade as a missing binary: %v", err)
 	}
 }

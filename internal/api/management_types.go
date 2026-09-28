@@ -97,8 +97,13 @@ type managementState struct {
 	usersEverExisted              bool
 	usersProvisionedMarkerWritten bool
 	orphanedUnits                 []string
-	sessions                      *SessionRegistry
-	loginUsernameLimiter          *observability.RateLimiterEngine
+	// previousServiceStates captures each touched unit's "active|unitFileState"
+	// before an apply mutates it, so a promotion rollback restores the exact
+	// lifecycle state instead of unconditionally enable+starting units that
+	// may have been stopped or disabled (#1135).
+	previousServiceStates map[string]string
+	sessions              *SessionRegistry
+	loginUsernameLimiter  *observability.RateLimiterEngine
 	// loginGlobalLimiter is the process-wide per-username login budget that
 	// backs delayGlobalUsernameAttempt; per-(client,username) buckets alone
 	// cannot stop a spray distributed across many IPv6 prefixes (#1101).

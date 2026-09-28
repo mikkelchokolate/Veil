@@ -5469,8 +5469,13 @@ components:
           description: Operation kinds emitted by the apply planner.
           enum:
           - promote_file
+          - remove_file
           - reload_service
           - restart_service
+          - stop_service
+          - disable_service
+          - enable_service
+          - reconcile_firewall
         source:
           type: string
         destination:
@@ -5484,6 +5489,9 @@ components:
           - reload
           - connection-drop
           - lockout-risk
+          - teardown
+          - boot-persistence
+          - firewall-change
         rollbackAvailable:
           type: boolean
         validationSource:

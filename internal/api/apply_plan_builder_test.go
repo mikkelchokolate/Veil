@@ -34,6 +34,22 @@ func TestBuildApplyPlanUsesApplyRootForStructuredOperations(t *testing.T) {
 			RollbackAvailable: true,
 			ValidationSource:  "managed-unit-catalog",
 		},
+		// Desired units are re-enabled for boot persistence during the reload
+		// phase and the firewall reconcile always runs — the plan must list
+		// both honestly (#1134).
+		{
+			Type:              "enable_service",
+			Unit:              "veil-mieru.service",
+			InterruptionRisk:  "none",
+			RollbackAvailable: true,
+			ValidationSource:  "managed-unit-catalog",
+		},
+		{
+			Type:              "reconcile_firewall",
+			InterruptionRisk:  "firewall-change",
+			RollbackAvailable: true,
+			ValidationSource:  "firewall-reconcile",
+		},
 	}
 	if !reflect.DeepEqual(plan.Operations, want) {
 		t.Fatalf("operations:\n got: %#v\nwant: %#v", plan.Operations, want)

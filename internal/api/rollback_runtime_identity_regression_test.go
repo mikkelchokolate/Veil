@@ -111,11 +111,15 @@ func TestRollbackPreservesRuntimeIdentityAndProtocolConfigBytes(t *testing.T) {
 			if err != nil || len(restoredBindings) != 1 {
 				t.Fatalf("restored bindings: count=%d err=%v", len(restoredBindings), err)
 			}
-			if got := restoredBindings[0].RuntimeIdentity; got != selectedIdentity {
-				t.Errorf("rollback RuntimeIdentity = %q, want byte-identical %q", got, selectedIdentity)
+			// #1099 keeps the live (rotated) runtime identity monotonic across
+			// rollback: restoring the snapshot's older identity would silently
+			// un-rotate a deliberately rotated credential. The original
+			// byte-identical guarantee now applies to the live-identity render.
+			if got := restoredBindings[0].RuntimeIdentity; got != "newer_runtime_identity" {
+				t.Errorf("rollback RuntimeIdentity = %q, want live-preserved %q", got, "newer_runtime_identity")
 			}
 			restoredLive := captureSnapshotTestTree(t, state.liveRoot)
-			if !reflect.DeepEqual(restoredLive, selectedLive) {
+			if !reflect.DeepEqual(restoredLive, newerLive) {
 				t.Errorf("%s live protocol configuration was not reproduced byte-identically", protocol.name)
 			}
 		})

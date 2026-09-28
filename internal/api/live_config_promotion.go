@@ -250,6 +250,12 @@ func liveConfigOrphanDirs() []liveConfigOrphanDir {
 	legacyCaddy := liveConfigOrphanDir{subpath: "caddy", ext: ".Caddyfile"}
 	dirs = append(dirs, legacyCaddy)
 	seen[legacyCaddy] = true
+	// Route databases are promoted into live/rules by name; anything left
+	// over that the desired set no longer stages is stale material and must
+	// not survive into the next render or a reboot (#1135).
+	rulesDir := liveConfigOrphanDir{subpath: "rules", ext: ".dat"}
+	dirs = append(dirs, rulesDir)
+	seen[rulesDir] = true
 	registry := protocols.NewRegistry()
 	for _, plugin := range registry.All() {
 		cr, ok := protocols.AsConfigRenderer(plugin)

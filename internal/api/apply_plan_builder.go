@@ -1,9 +1,12 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -22,7 +25,12 @@ type ApplyPlanInput struct {
 	ApplyRoot string
 	// LiveRoot is the production live generated root the apply job promotes
 	// into; empty falls back to <applyRoot>/live to match managementState.
-	LiveRoot                string
+	LiveRoot string
+	// Context bounds subprocess probes (caddy list-modules) issued while the
+	// plan is built; nil falls back to an internally bounded background
+	// context (#1141).
+	Context                 context.Context
+	SystemdWantsDir         string
 	Settings                Settings
 	Inbounds                []Inbound
 	Rules                   []RoutingRule
@@ -42,8 +50,12 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 	if liveRoot == "" {
 		liveRoot = filepath.Join(applyRoot, "live")
 	}
+	planContext := input.Context
+	if planContext == nil {
+		planContext = context.Background()
+	}
 	runtimeCatalog := NewManagedRuntimeCatalogFor(input.Settings, input.Inbounds, input.Warp)
-	caddyMaterial := buildCaddyMaterial(input.Settings, input.Inbounds, runtimeCatalog, liveRoot)
+	caddyMaterial := buildCaddyMaterial(planContext, input.Settings, input.Inbounds, runtimeCatalog, liveRoot)
 	capabilities := []applyplan.ProtocolCapability{}
 	catalog := NewApplyProtocolCapabilityCatalogForLiveRoot(liveRoot)
 	for _, protocolCapability := range catalog.All() {
@@ -86,15 +98,143 @@ func BuildApplyPlan(input ApplyPlanInput) ApplyPlanResponse {
 		GeneratedRoot:         filepath.Join(applyRoot, "generated"),
 		LiveRoot:              liveRoot,
 	})
+	augmentApplyPlanLiveTeardown(&plan, input, liveRoot)
 	appendProtocolInboundValidation(&plan, catalog, input.Settings, input.Inbounds)
 	return plan
 }
 
-// probeCaddyCapabilities is a seam so tests can simulate a host without a
-// Caddy binary — the production value is caddycapabilities.Probe.
-var probeCaddyCapabilities = caddycapabilities.Probe
+// augmentApplyPlanLiveTeardown adds the runtime-mutation operations that the
+// desired-state diff alone cannot express: live artifacts that will be
+// removed, units that will be stopped/disabled or enabled, and the firewall
+// reconcile. A pure teardown must never render as just "validate management
+// state" (#1134).
+func augmentApplyPlanLiveTeardown(plan *ApplyPlanResponse, input ApplyPlanInput, liveRoot string) {
+	removeIDs := map[string]struct{}{}
+	// Live artifacts whose desired counterpart is absent are pruned during
+	// promotion — surface each of them as a remove operation.
+	orphans, err := scanLiveConfigOrphans(liveRoot, plan.Configs)
+	if err != nil {
+		plan.Errors = appendUniqueApplyPlanError(plan.Errors, "scan live generated tree for stale artifacts: "+err.Error())
+		plan.Valid = false
+	} else {
+		for _, orphan := range orphans {
+			rel, relErr := filepath.Rel(liveRoot, orphan)
+			if relErr != nil {
+				continue
+			}
+			removeIDs[filepath.ToSlash(rel)] = struct{}{}
+		}
+	}
+	// Desired-state singleton teardown mirrors promoteStagedConfigs: a WARP or
+	// Caddy artifact (or an enabled unit) that is no longer required is
+	// retired even though nothing new is staged for it.
+	if !input.Warp.Enabled && teardownEvidenceExists(liveRoot, input.SystemdWantsDir, generatedconfig.WarpConfigSubpath, renderer.UnitWarp) {
+		removeIDs[generatedconfig.WarpConfigSubpath] = struct{}{}
+	}
+	if !caddyRequired(input.Settings, input.Inbounds) && teardownEvidenceExists(liveRoot, input.SystemdWantsDir, generatedconfig.CaddyJSONConfigSubpath, unitCaddy) {
+		removeIDs[generatedconfig.CaddyJSONConfigSubpath] = struct{}{}
+	}
+	sortedRemovals := make([]string, 0, len(removeIDs))
+	for id := range removeIDs {
+		sortedRemovals = append(sortedRemovals, id)
+	}
+	sort.Strings(sortedRemovals)
+	teardownUnits := map[string]struct{}{}
+	for _, id := range sortedRemovals {
+		livePath := filepath.ToSlash(filepath.Join(liveRoot, filepath.FromSlash(id)))
+		plan.Actions = appendUniqueApplyPlanAction(plan.Actions, "remove "+livePath)
+		plan.Operations = append(plan.Operations, model.ApplyOperation{
+			Type:              "remove_file",
+			Destination:       livePath,
+			InterruptionRisk:  "teardown",
+			RollbackAvailable: true,
+			ValidationSource:  "live-orphan-scan",
+		})
+		if unit, ok := UnitForArtifactID(id); ok {
+			teardownUnits[unit] = struct{}{}
+		}
+	}
+	// Enabled units left behind by earlier applies are stopped and disabled
+	// even when their artifact is already gone.
+	desiredUnits := map[string]struct{}{}
+	for _, unit := range plan.Runtimes {
+		desiredUnits[unit] = struct{}{}
+	}
+	for _, unit := range scanEnabledOrphanTemplateUnits(input.SystemdWantsDir, desiredUnits) {
+		teardownUnits[unit] = struct{}{}
+	}
+	sortedTeardown := make([]string, 0, len(teardownUnits))
+	for unit := range teardownUnits {
+		sortedTeardown = append(sortedTeardown, unit)
+	}
+	sort.Strings(sortedTeardown)
+	for _, unit := range sortedTeardown {
+		plan.Actions = appendUniqueApplyPlanAction(plan.Actions, "stop "+unit)
+		plan.Actions = appendUniqueApplyPlanAction(plan.Actions, "disable "+unit)
+		plan.Operations = append(plan.Operations,
+			model.ApplyOperation{Type: "stop_service", Unit: unit, InterruptionRisk: "connection-drop", RollbackAvailable: true, ValidationSource: "managed-unit-catalog"},
+			model.ApplyOperation{Type: "disable_service", Unit: unit, InterruptionRisk: "boot-persistence", RollbackAvailable: true, ValidationSource: "managed-unit-catalog"},
+		)
+	}
+	// Desired services are (re-)enabled for boot persistence during the
+	// reload phase — veil.service itself is deliberately excluded, matching
+	// reloadPromotedServices.
+	for _, unit := range plan.Runtimes {
+		if unit == renderer.UnitVeil {
+			continue
+		}
+		plan.Actions = appendUniqueApplyPlanAction(plan.Actions, "enable "+unit)
+		plan.Operations = append(plan.Operations, model.ApplyOperation{
+			Type:              "enable_service",
+			Unit:              unit,
+			InterruptionRisk:  "none",
+			RollbackAvailable: true,
+			ValidationSource:  "managed-unit-catalog",
+		})
+	}
+	// Firewall reconcile runs whenever firewall management is not explicitly
+	// disabled — even with an empty desired set it prunes stale rules.
+	if input.Settings.FirewallManagement == nil || *input.Settings.FirewallManagement {
+		plan.Actions = appendUniqueApplyPlanAction(plan.Actions, "reconcile firewall rules")
+		plan.Operations = append(plan.Operations, model.ApplyOperation{
+			Type:              "reconcile_firewall",
+			InterruptionRisk:  "firewall-change",
+			RollbackAvailable: true,
+			ValidationSource:  "firewall-reconcile",
+		})
+	}
+}
 
-func buildCaddyMaterial(settings Settings, inbounds []Inbound, runtimeCatalog ManagedRuntimeCatalog, liveRoot string) applyplan.Material {
+// teardownEvidenceExists reports whether a no-longer-desired singleton leaves
+// observable evidence in the live tree or the systemd wants directory — the
+// same filesystem proof the promotion path uses, minus the runtime status
+// query the plan cannot perform (#1134).
+func teardownEvidenceExists(liveRoot, wantsDir, artifactID, unit string) bool {
+	if _, err := os.Lstat(filepath.Join(liveRoot, filepath.FromSlash(artifactID))); err == nil || os.IsPermission(err) {
+		return true
+	}
+	if wantsDir != "" {
+		if _, err := os.Lstat(filepath.Join(wantsDir, unit)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func appendUniqueApplyPlanAction(actions []string, action string) []string {
+	for _, existing := range actions {
+		if existing == action {
+			return actions
+		}
+	}
+	return append(actions, action)
+}
+
+// probeCaddyCapabilities is a seam so tests can simulate a host without a
+// Caddy binary — the production value is caddycapabilities.ProbeContext.
+var probeCaddyCapabilities = caddycapabilities.ProbeContext
+
+func buildCaddyMaterial(ctx context.Context, settings Settings, inbounds []Inbound, runtimeCatalog ManagedRuntimeCatalog, liveRoot string) applyplan.Material {
 	material := applyplan.Material{}
 	if !caddyRequired(settings, inbounds) {
 		return material
@@ -159,12 +299,12 @@ func buildCaddyMaterial(settings Settings, inbounds []Inbound, runtimeCatalog Ma
 		material.Errors = append(material.Errors, conflict.Message)
 	}
 
-	caps, err := probeCaddyCapabilities("")
+	caps, err := probeCaddyCapabilities(ctx, "")
 	if err != nil && caddycapabilities.IsMissingBinary(err) {
 		// Plan building can run before the packaged binary is on PATH (or
 		// before `veil runtime install` has placed it); the packaged install
 		// location is the other place a real Caddy can live (issue #637).
-		caps, err = probeCaddyCapabilities("/usr/local/bin/caddy")
+		caps, err = probeCaddyCapabilities(ctx, "/usr/local/bin/caddy")
 	}
 	if err != nil {
 		if !caddycapabilities.IsMissingBinary(err) {

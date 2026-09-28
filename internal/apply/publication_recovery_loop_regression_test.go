@@ -2,6 +2,7 @@ package apply
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"sync/atomic"
@@ -68,23 +69,33 @@ func TestPublicationRecoveryDoesNotSpamFailedJobsForOneRevision(t *testing.T) {
 	}
 	assertRetainedFirewallPrepareError(t, listed[0])
 
-	runner.mu.Lock()
-	runner.lastRecoveryAttempt = time.Time{}
-	runner.mu.Unlock()
-	if err := runner.resumeRecoveryPending(context.Background()); err == nil {
-		t.Fatal("expected in-place recovery to surface the firewall prepare failure")
+	// #1136: the rollback was proven complete at artifacts_committed — a
+	// post-promotion phase — so the receipt is consumed and the job finalizes
+	// failed instead of parking at recovery_pending and re-running forever.
+	if listed[0].Status != StatusFailed {
+		t.Fatalf("proven rollback must finalize the job as failed, got status=%q", listed[0].Status)
 	}
-	if attempts.Load() < 2 {
-		t.Fatal("recovery never retried the same job after backoff")
-	}
-	listed, err = jobs.List(50)
-	if err != nil {
+	var receiptCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM runtime_publications WHERE job_id=?`, listed[0].ID).Scan(&receiptCount); err != nil {
 		t.Fatal(err)
 	}
-	if len(listed) != 1 {
-		t.Fatalf("in-place recovery created extra jobs: %+v", listed)
+	if receiptCount != 0 {
+		t.Fatalf("proven rollback left %d publication receipts behind", receiptCount)
 	}
-	assertRetainedFirewallPrepareError(t, listed[0])
+	var leaseOwner string
+	err = db.QueryRow(`SELECT owner_process FROM apply_lease WHERE id=1`).Scan(&leaseOwner)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		t.Fatal(err)
+	}
+	if err == nil && leaseOwner != "" {
+		t.Fatalf("proven rollback retained the durable lease owner %q", leaseOwner)
+	}
+	if err := runner.resumeRecoveryPending(context.Background()); err != nil {
+		t.Fatalf("no recovery may be pending after a proven rollback: %v", err)
+	}
+	if got := attempts.Load(); got != 1 {
+		t.Fatalf("proven rollback must not be retried, executor ran %d times", got)
+	}
 }
 
 func TestRecoveryPendingDueUsesExistingTimestamps(t *testing.T) {

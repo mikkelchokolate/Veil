@@ -2,11 +2,14 @@ package api
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/firewall"
+	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
 func TestSyncCaddyCertForHysteria2(t *testing.T) {
@@ -64,18 +67,52 @@ func TestRunPrivilegedServiceActionUnavailable(t *testing.T) {
 	}
 }
 
-func TestWarpUnitActiveLocked(t *testing.T) {
-	client := &recordingPrivilegedClient{statusActiveState: "active"}
-	state := newManagementState(ServerInfo{Mode: "dev", Privileged: client})
-	ctx := NewManagementApplyContext(state)
-	if !ctx.warpUnitActiveLocked() {
-		t.Fatal("expected WARP unit active")
+// TestUnitTeardownPending locks #1133: teardown decisions must consider unit
+// presence — running, enabled-but-inactive, merely loaded, or status-errored
+// — and observable artifacts, not just ActiveState == "active".
+func TestUnitTeardownPending(t *testing.T) {
+	root := t.TempDir()
+	newState := func(client *recordingPrivilegedClient) *managementState {
+		return newManagementState(ServerInfo{Mode: "dev", ApplyRoot: root, Privileged: client})
+	}
+	warpPending := func(state *managementState) bool {
+		return NewManagementApplyContext(state).unitTeardownPending(
+			renderer.UnitWarp, generatedconfig.WarpConfigSubpath)
 	}
 
-	stateNoPrivileged := newManagementState(ServerInfo{Mode: "dev"})
-	ctx = NewManagementApplyContext(stateNoPrivileged)
-	if ctx.warpUnitActiveLocked() {
-		t.Fatal("expected WARP unit inactive without privileged helper")
+	if !warpPending(newState(&recordingPrivilegedClient{statusActiveState: "active"})) {
+		t.Fatal("active WARP unit must be torn down")
+	}
+	// Enabled but not running — the stale config still needs to go and the
+	// enablement must be removed or WARP returns after a reboot.
+	if !warpPending(newState(&recordingPrivilegedClient{
+		statusActiveState: "inactive", statusUnitFileState: "enabled",
+	})) {
+		t.Fatal("enabled-but-inactive WARP unit must be torn down")
+	}
+	// A status query that cannot answer must not leave stale configuration:
+	// errored presence is treated as present (fail toward retiring).
+	if !warpPending(newState(&recordingPrivilegedClient{statusError: "unit may be dead"})) {
+		t.Fatal("status-errored WARP unit must be torn down")
+	}
+	// Loaded but disabled and inactive with no artifact left —
+	// nothing pending.
+	state := newState(&recordingPrivilegedClient{
+		statusActiveState: "inactive", statusUnitFileState: "disabled",
+	})
+	if warpPending(state) {
+		t.Fatal("inert WARP unit with no artifact must not be torn down")
+	}
+	// A live artifact on disk is evidence even when the unit is gone.
+	artifact := filepath.Join(root, "live", filepath.FromSlash(generatedconfig.WarpConfigSubpath))
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(artifact, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !warpPending(state) {
+		t.Fatal("stale live warp.json must trigger teardown")
 	}
 }
 

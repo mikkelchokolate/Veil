@@ -382,11 +382,11 @@ func TestProductionExecutorUsesOnlyFixedCommandMappings(t *testing.T) {
 
 	wantNonFirewall := [][]string{
 		{"systemctl", "restart", "veil.service"},
-		{"systemctl", "show", "veil.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--property=MainPID", "--property=ExecMainStartTimestampMonotonic", "--no-page"},
+		{"systemctl", "show", "veil.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--property=UnitFileState", "--property=MainPID", "--property=ExecMainStartTimestampMonotonic", "--no-page"},
 		{"journalctl", "-u", "veil.service", "--no-pager", "-n", "25", "-o", "short-iso"},
-		{"systemctl", "show", "veil.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--property=MainPID", "--property=ExecMainStartTimestampMonotonic", "--no-page"},
+		{"systemctl", "show", "veil.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--property=UnitFileState", "--property=MainPID", "--property=ExecMainStartTimestampMonotonic", "--no-page"},
 		{"systemctl", "restart", "veil.service"},
-		{"systemctl", "show", "veil.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--property=MainPID", "--property=ExecMainStartTimestampMonotonic", "--no-page"},
+		{"systemctl", "show", "veil.service", "--property=LoadState", "--property=ActiveState", "--property=SubState", "--property=UnitFileState", "--property=MainPID", "--property=ExecMainStartTimestampMonotonic", "--no-page"},
 	}
 	var nonFirewall [][]string
 	for _, command := range commands {

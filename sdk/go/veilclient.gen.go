@@ -69,22 +69,31 @@ func (e ApplyJobStatus) Valid() bool {
 
 // Defines values for ApplyOperationInterruptionRisk.
 const (
-	ConnectionDrop ApplyOperationInterruptionRisk = "connection-drop"
-	LockoutRisk    ApplyOperationInterruptionRisk = "lockout-risk"
-	None           ApplyOperationInterruptionRisk = "none"
-	Reload         ApplyOperationInterruptionRisk = "reload"
+	BootPersistence ApplyOperationInterruptionRisk = "boot-persistence"
+	ConnectionDrop  ApplyOperationInterruptionRisk = "connection-drop"
+	FirewallChange  ApplyOperationInterruptionRisk = "firewall-change"
+	LockoutRisk     ApplyOperationInterruptionRisk = "lockout-risk"
+	None            ApplyOperationInterruptionRisk = "none"
+	Reload          ApplyOperationInterruptionRisk = "reload"
+	Teardown        ApplyOperationInterruptionRisk = "teardown"
 )
 
 // Valid indicates whether the value is a known member of the ApplyOperationInterruptionRisk enum.
 func (e ApplyOperationInterruptionRisk) Valid() bool {
 	switch e {
+	case BootPersistence:
+		return true
 	case ConnectionDrop:
+		return true
+	case FirewallChange:
 		return true
 	case LockoutRisk:
 		return true
 	case None:
 		return true
 	case Reload:
+		return true
+	case Teardown:
 		return true
 	default:
 		return false
@@ -93,19 +102,34 @@ func (e ApplyOperationInterruptionRisk) Valid() bool {
 
 // Defines values for ApplyOperationType.
 const (
-	PromoteFile    ApplyOperationType = "promote_file"
-	ReloadService  ApplyOperationType = "reload_service"
-	RestartService ApplyOperationType = "restart_service"
+	DisableService    ApplyOperationType = "disable_service"
+	EnableService     ApplyOperationType = "enable_service"
+	PromoteFile       ApplyOperationType = "promote_file"
+	ReconcileFirewall ApplyOperationType = "reconcile_firewall"
+	ReloadService     ApplyOperationType = "reload_service"
+	RemoveFile        ApplyOperationType = "remove_file"
+	RestartService    ApplyOperationType = "restart_service"
+	StopService       ApplyOperationType = "stop_service"
 )
 
 // Valid indicates whether the value is a known member of the ApplyOperationType enum.
 func (e ApplyOperationType) Valid() bool {
 	switch e {
+	case DisableService:
+		return true
+	case EnableService:
+		return true
 	case PromoteFile:
+		return true
+	case ReconcileFirewall:
 		return true
 	case ReloadService:
 		return true
+	case RemoveFile:
+		return true
 	case RestartService:
+		return true
+	case StopService:
 		return true
 	default:
 		return false

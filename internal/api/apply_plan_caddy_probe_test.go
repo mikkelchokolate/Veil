@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io/fs"
 	"reflect"
@@ -14,7 +15,7 @@ import (
 )
 
 // stubCaddyProbe swaps the capability-probe seam for the duration of a test.
-func stubCaddyProbe(t *testing.T, fn func(string) (caddycapabilities.CaddyCapabilities, error)) {
+func stubCaddyProbe(t *testing.T, fn func(context.Context, string) (caddycapabilities.CaddyCapabilities, error)) {
 	t.Helper()
 	old := probeCaddyCapabilities
 	probeCaddyCapabilities = fn
@@ -26,7 +27,7 @@ func stubCaddyProbe(t *testing.T, fn func(string) (caddycapabilities.CaddyCapabi
 // it afterwards, and the staging renderer already tolerates the missing
 // binary for non-naive plans (audit #156).
 func TestBuildApplyPlanToleratesMissingCaddyForHysteria2Domain(t *testing.T) {
-	stubCaddyProbe(t, func(string) (caddycapabilities.CaddyCapabilities, error) {
+	stubCaddyProbe(t, func(context.Context, string) (caddycapabilities.CaddyCapabilities, error) {
 		return caddycapabilities.CaddyCapabilities{}, fs.ErrNotExist
 	})
 
@@ -178,7 +179,7 @@ func TestEmptyAcmeChallengeModePlannerNoOpButRendererDefaultsTLSALPN(t *testing.
 // forward_proxy module cannot be probed, so a rendered config could silently
 // lack the handler naive depends on.
 func TestBuildApplyPlanStillRequiresCaddyBinaryForNaiveProxy(t *testing.T) {
-	stubCaddyProbe(t, func(string) (caddycapabilities.CaddyCapabilities, error) {
+	stubCaddyProbe(t, func(context.Context, string) (caddycapabilities.CaddyCapabilities, error) {
 		return caddycapabilities.CaddyCapabilities{}, fs.ErrNotExist
 	})
 
@@ -198,7 +199,7 @@ func TestBuildApplyPlanStillRequiresCaddyBinaryForNaiveProxy(t *testing.T) {
 // so a deployed-but-not-on-PATH binary still yields real capabilities.
 func TestBuildApplyPlanProbesPackagedCaddyPathWhenPathMisses(t *testing.T) {
 	var probed []string
-	stubCaddyProbe(t, func(path string) (caddycapabilities.CaddyCapabilities, error) {
+	stubCaddyProbe(t, func(_ context.Context, path string) (caddycapabilities.CaddyCapabilities, error) {
 		probed = append(probed, path)
 		if path == "" {
 			return caddycapabilities.CaddyCapabilities{}, fs.ErrNotExist

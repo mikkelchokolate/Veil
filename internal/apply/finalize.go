@@ -272,9 +272,18 @@ ON CONFLICT(job_id,phase) DO UPDATE SET generation=excluded.generation,evidence_
 	return tx.Commit()
 }
 
+// rollbackConsumablePhases is every publication phase that may be outstanding
+// when a proven-complete, unambiguous rollback is recorded. Rollback evidence
+// is terminal regardless of how far the publication got: restricting the
+// transition to the early phases left the receipt at its last committed phase,
+// so the failure finalize could not consume it and the job stayed
+// recovery_pending — holding the durable lease against every later apply
+// (#1136).
+const rollbackConsumablePhases = `'intent','publishing','artifacts_prepared','artifacts_committed','services_planned','services_converged','health_verified','firewall_committed','side_effect_planned','side_effect_committed','side_effect_verified'`
+
 func markRuntimePublicationRolledBack(db *sql.DB, jobID string, generation uint64, now int64) error {
-	result, err := db.Exec(`UPDATE runtime_publications SET phase='rolled_back',updated_at=?
-WHERE job_id=? AND generation=? AND phase IN ('intent','publishing','artifacts_prepared')`, now, jobID, generation)
+	result, err := db.Exec(fmt.Sprintf(`UPDATE runtime_publications SET phase='rolled_back',updated_at=?
+WHERE job_id=? AND generation=? AND phase IN (%s)`, rollbackConsumablePhases), now, jobID, generation)
 	if err != nil {
 		return err
 	}

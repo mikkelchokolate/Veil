@@ -15,6 +15,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 type applyRollbackRequest struct {
@@ -113,12 +114,31 @@ func (s *managementState) commitIntentionalRollbackLocked(selectedRevision uint6
 			return err
 		}
 		store := managementstate.NewStore(s.statePath, s.cipher)
+		// Authentication and normalized-client security state are monotonic:
+		// a rollback restores configuration only. Graft the live panel
+		// users/setup (#1094) and merge the live client, binding, and
+		// credential security posture (#1099) onto the selected snapshot so
+		// the committed state file, the stored revision payload, and every
+		// render of the new revision carry the current revocations forward.
+		selected.Setup = s.setup
+		selected.Users = append([]User(nil), s.users...)
+
+		tx, err := s.clientRepo.BeginTx()
+		if err != nil {
+			return err
+		}
+		if err := graftRollbackClientSecurityTx(tx, &selected); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
 		encodedState, err := store.Marshal(selected)
 		if err != nil {
+			_ = tx.Rollback()
 			return fmt.Errorf("encode selected state: %w", err)
 		}
 		stateCommit, err := store.PrepareStateCommit(encodedState, current.Desired, current.Desired+1)
 		if err != nil {
+			_ = tx.Rollback()
 			return err
 		}
 		rollbackState := func(cause error) error {
@@ -128,9 +148,24 @@ func (s *managementState) commitIntentionalRollbackLocked(selectedRevision uint6
 			return cause
 		}
 
-		tx, err := s.clientRepo.BeginTx()
+		// The immutable payload recorded for the new revision must carry the
+		// grafted security state — persisting the historical bytes verbatim
+		// would let a later render of this revision resurrect revoked
+		// credentials or deleted accounts.
+		stored := managementstate.BuildSnapshot(managementstate.SnapshotInput{
+			EffectiveAt: selected.EffectiveAt, Setup: selected.Setup, Settings: selected.Settings,
+			Inbounds: selected.Inbounds, Rules: selected.Rules, RoutingPreset: selected.RoutingPreset,
+			RoutingSource: selected.RoutingSource, Warp: selected.Warp, Users: selected.Users,
+			Clients: selected.Clients, Bindings: selected.Bindings, Credentials: selected.Credentials,
+		})
+		if err := s.encryptSnapshot(&stored); err != nil {
+			_ = tx.Rollback()
+			return rollbackState(fmt.Errorf("encrypt selected snapshot: %w", err))
+		}
+		snapshotPayload, err := json.Marshal(stored)
 		if err != nil {
-			return rollbackState(err)
+			_ = tx.Rollback()
+			return rollbackState(fmt.Errorf("encode selected snapshot: %w", err))
 		}
 		clients, bindings, credentials := clientRowsFromImmutableSnapshot(selected)
 		if err := client.ReplaceSnapshotTx(tx, clients, bindings, credentials); err != nil {
@@ -146,7 +181,7 @@ func (s *managementState) commitIntentionalRollbackLocked(selectedRevision uint6
 			_ = tx.Rollback()
 			return rollbackState(fmt.Errorf("desired revision advanced to %d, want %d", newRevision, current.Desired+1))
 		}
-		if err := apply.SaveSnapshotTxBound(tx, newRevision, payload, stateCommit.Journal().IntendedStateSHA256); err != nil {
+		if err := apply.SaveSnapshotTxBound(tx, newRevision, snapshotPayload, stateCommit.Journal().IntendedStateSHA256); err != nil {
 			_ = tx.Rollback()
 			return rollbackState(err)
 		}
@@ -228,6 +263,114 @@ func validateRollbackNormalizedSnapshot(snapshot managementSnapshot) error {
 	return nil
 }
 
+// graftRollbackClientSecurityTx merges the live normalized-client security
+// posture into the selected snapshot inside the rollback transaction (#1099).
+// Entities that were deleted after the snapshot are not resurrected; retained
+// entities keep their configuration rollback but inherit the monotonic
+// security bits — a disable, depletion, or expiry that happened after the
+// snapshot is never undone, and a rotated runtime identity stays rotated.
+// Credentials are replaced wholesale with the currently-active values for
+// retained bindings so revoked or superseded material cannot return.
+func graftRollbackClientSecurityTx(tx *client.Tx, selected *managementSnapshot) error {
+	liveClients, err := tx.AllClients()
+	if err != nil {
+		return fmt.Errorf("read live clients for rollback graft: %w", err)
+	}
+	liveBindings, err := tx.AllBindings()
+	if err != nil {
+		return fmt.Errorf("read live bindings for rollback graft: %w", err)
+	}
+	liveCredentials, err := tx.AllActiveCredentials()
+	if err != nil {
+		return fmt.Errorf("read live credentials for rollback graft: %w", err)
+	}
+
+	liveClientByID := make(map[string]client.Client, len(liveClients))
+	for _, live := range liveClients {
+		liveClientByID[live.ID] = live
+	}
+	retainedClients := make(map[string]struct{}, len(selected.Clients))
+	clients := make([]model.ClientSnapshot, 0, len(selected.Clients))
+	for _, snapshotClient := range selected.Clients {
+		live, ok := liveClientByID[snapshotClient.ID]
+		if !ok {
+			// Deleted after the snapshot — the deletion is a security event
+			// and is never undone.
+			continue
+		}
+		retainedClients[snapshotClient.ID] = struct{}{}
+		snapshotClient.Enabled = snapshotClient.Enabled && live.Enabled
+		snapshotClient.Depleted = snapshotClient.Depleted || live.Depleted
+		snapshotClient.ExpiresAt = earlierExpiry(snapshotClient.ExpiresAt, live.ExpiresAt)
+		clients = append(clients, snapshotClient)
+	}
+	selected.Clients = clients
+
+	liveBindingByID := make(map[string]client.Binding, len(liveBindings))
+	for _, live := range liveBindings {
+		liveBindingByID[live.ID] = live
+	}
+	retainedBindings := make(map[string]struct{}, len(selected.Bindings))
+	bindings := make([]model.BindingSnapshot, 0, len(selected.Bindings))
+	for _, snapshotBinding := range selected.Bindings {
+		live, ok := liveBindingByID[snapshotBinding.ID]
+		if !ok {
+			continue
+		}
+		if _, ok := retainedClients[live.ClientID]; !ok {
+			// The binding's live parent client is not retained — the binding
+			// would dangle after that client's deletion.
+			continue
+		}
+		if _, ok := retainedClients[snapshotBinding.ClientID]; !ok {
+			// The snapshot parent is gone; keep the binding on its live
+			// parent rather than resurrecting the deleted client.
+			snapshotBinding.ClientID = live.ClientID
+		}
+		snapshotBinding.Enabled = snapshotBinding.Enabled && live.Enabled
+		if live.RuntimeIdentity != "" {
+			snapshotBinding.RuntimeIdentity = live.RuntimeIdentity
+		}
+		bindings = append(bindings, snapshotBinding)
+		retainedBindings[snapshotBinding.ID] = struct{}{}
+	}
+	selected.Bindings = bindings
+
+	credentials := make([]model.CredentialSnapshot, 0, len(liveCredentials))
+	for _, live := range liveCredentials {
+		if _, ok := retainedBindings[live.BindingID]; !ok {
+			continue
+		}
+		credentials = append(credentials, model.CredentialSnapshot{
+			ID: live.ID, BindingID: live.BindingID, Kind: live.Kind,
+			EncryptedValue:    append([]byte(nil), live.EncryptedValue...),
+			KeyVersion:        live.KeyVersion,
+			CredentialVersion: live.CredentialVersion,
+			CreatedAt:         live.CreatedAt,
+			RotatedAt:         live.RotatedAt,
+		})
+	}
+	selected.Credentials = credentials
+	return nil
+}
+
+// earlierExpiry returns the earlier non-nil expiry of a snapshot value and a
+// live value. A rollback may shorten or restore an expiry, but it must never
+// extend past — or remove — an expiry set after the snapshot was taken
+// (#1099).
+func earlierExpiry(snapshot, live *int64) *int64 {
+	if snapshot == nil {
+		return live
+	}
+	if live == nil {
+		return snapshot
+	}
+	if *live < *snapshot {
+		return live
+	}
+	return snapshot
+}
+
 func clientRowsFromImmutableSnapshot(snapshot managementSnapshot) ([]client.Client, []client.Binding, []client.Credential) {
 	clients := make([]client.Client, 0, len(snapshot.Clients))
 	for _, item := range snapshot.Clients {
@@ -262,20 +405,25 @@ func clientRowsFromImmutableSnapshot(snapshot managementSnapshot) ([]client.Clie
 
 func applyManagementSnapshotExact(state *managementState, snapshot managementSnapshot) {
 	cloned := managementstate.BuildSnapshot(managementstate.SnapshotInput{
-		Setup: snapshot.Setup, Settings: snapshot.Settings, Inbounds: snapshot.Inbounds,
+		Settings: snapshot.Settings, Inbounds: snapshot.Inbounds,
 		Rules: snapshot.Rules, RoutingPreset: snapshot.RoutingPreset,
-		RoutingSource: snapshot.RoutingSource, Warp: snapshot.Warp, Users: snapshot.Users,
+		RoutingSource: snapshot.RoutingSource, Warp: snapshot.Warp,
 	})
-	state.setup = cloned.Setup
+	// Panel authentication state is not configuration: the current users and
+	// setup flags survive the rollback so a historical snapshot can never
+	// resurrect a deleted account, roll a password hash backwards, demote an
+	// administrator, or un-complete setup (#1094).
 	state.settings = cloned.Settings
 	state.inbounds = cloned.Inbounds
 	state.rules = cloned.Rules
 	state.routingPreset = cloned.RoutingPreset
 	state.routingSource = cloned.RoutingSource
 	state.warp = cloned.Warp
-	state.users = cloned.Users
-	// Rolling back TO a user-bearing snapshot provisions the instance too;
-	// rolling back to a zero-user snapshot can never clear the latch (#1100).
+	// state.users deliberately keeps the live accounts: the committed
+	// snapshot was already grafted with them, so assigning snapshot users
+	// here would resurrect revoked panel credentials (#1094). The
+	// provisioned latch re-arms from the surviving set — a rollback can
+	// never un-provision the instance either (#1100).
 	state.noteUsersProvisionedLocked()
 }
 

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
@@ -11,7 +12,7 @@ func TestBuildApplyPlanAcceptsNaiveProxyWithProfileCredentials(t *testing.T) {
 	// Same accepted-plan contract as the caddy-settings sisters (#846): stub
 	// the probe so validity does not depend on a host binary, then pin the
 	// consolidated caddy config leg, reload action, and runtime.
-	stubCaddyProbe(t, func(string) (caddycapabilities.CaddyCapabilities, error) {
+	stubCaddyProbe(t, func(context.Context, string) (caddycapabilities.CaddyCapabilities, error) {
 		return caddycapabilities.CaddyCapabilities{ForwardProxy: true, HTTP3: true}, nil
 	})
 	plan := BuildApplyPlan(ApplyPlanInput{

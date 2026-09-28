@@ -1,11 +1,16 @@
 package api
 
+import "context"
+
 type ManagementApplyIntentInput struct {
 	ApplyRoot string
 	// LiveRoot is the production live generated root; threaded into both the
 	// render check and the plan preview so custom installs display and target
 	// the same destination (issue #636).
-	LiveRoot        string
+	LiveRoot string
+	// Context bounds subprocess probes the plan performs (nil tolerated).
+	Context         context.Context
+	SystemdWantsDir string
 	Settings        Settings
 	Inbounds        []Inbound
 	Rules           []RoutingRule
@@ -35,6 +40,8 @@ func (i ManagementApplyIntent) BuildPlan() ApplyPlanResponse {
 	planInput := ApplyPlanInput{
 		ApplyRoot:               input.ApplyRoot,
 		LiveRoot:                input.LiveRoot,
+		Context:                 input.Context,
+		SystemdWantsDir:         input.SystemdWantsDir,
 		Settings:                input.Settings,
 		Inbounds:                input.Inbounds,
 		Rules:                   input.Rules,
