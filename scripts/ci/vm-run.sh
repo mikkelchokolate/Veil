@@ -76,6 +76,10 @@ cleanup() {
   # Merge guest artifacts into the run's artifact dir (success and failure).
   if [ -d "${EXCHANGE}/artifacts" ]; then
     cp -Rf "${EXCHANGE}/artifacts/." "${CI_ARTIFACT_DIR}/" 2>/dev/null || true
+    # The guest job controls this tree — symlinks/fifos must not cross onto
+    # the host artifact dir where later consumers could dereference them.
+    # Keep only regular files and directories (#1149).
+    find "${CI_ARTIFACT_DIR}" -mindepth 1 ! -type f ! -type d -delete 2>/dev/null || true
   fi
   rm -rf "${EXCHANGE}"
   if [ "${CACHE_EPHEMERAL:-0}" = "1" ] && [ -n "${CACHE_ROOT:-}" ]; then
@@ -95,6 +99,10 @@ if [ "${CI_CLEAN:-0}" = "1" ]; then
 else
   CACHE_ROOT="${HOME}/.cache/veil-ci"
 fi
+# A symlinked cache root would be dereferenced by the chown -R below (and by
+# the bind mounts), re-owning an attacker-chosen target when this runs as
+# root via sudo (#1149). Refuse it instead of following it.
+[ ! -L "${CACHE_ROOT}" ] || ci_die "cache root ${CACHE_ROOT} is a symlink — refusing to chown/mount it"
 mkdir -p "${CACHE_ROOT}/gomod" "${CACHE_ROOT}/gobuild" "${CACHE_ROOT}/pnpm" "${CACHE_ROOT}/playwright"
 if [ "$(id -u)" -eq 0 ]; then
   chown -R 1000:1000 "${CACHE_ROOT}" 2>/dev/null || true

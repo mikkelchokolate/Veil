@@ -4,8 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"golang.org/x/sys/unix"
 )
 
 func TestReleaseSnapshotBarrierReportsCloseFailure(t *testing.T) {
@@ -13,7 +11,7 @@ func TestReleaseSnapshotBarrierReportsCloseFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := unix.Flock(int(file.Fd()), unix.LOCK_EX); err != nil {
+	if err := snapshotBarrierLock(file); err != nil {
 		_ = file.Close()
 		t.Fatal(err)
 	}

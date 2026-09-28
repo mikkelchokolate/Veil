@@ -17,11 +17,29 @@ ci_run version-consistency python3 scripts/ci/verify_versions.py
 # package contents here or a new gated root silently bypasses CI (issue #1014).
 ci_run named-roots python3 scripts/ci/verify-named-roots.py
 
+# Frontend artifact contract (#1147): dist.sha256 hashes regular files only,
+# so a symlink/FIFO injected into the artifact tree must be rejected before
+# `cp -a` can restore it — drive prepare-frontend-dist.sh against fabricated
+# artifacts to prove it.
+ci_run frontend-dist-integrity python3 scripts/ci/verify-frontend-dist-integrity.py
+
 ci_step "stub web/dist for analysis (go:embed must resolve)"
 if [ ! -f web/dist/index.html ]; then
   mkdir -p web/dist
   echo '<!doctype html><title>analysis stub</title>' > web/dist/index.html
 fi
+
+# GOOS=windows compile gate: every package that does not transitively require
+# the Unix-only internal/backup (syscall.Statfs et al — genuinely
+# platform-bound) must stay Windows-compilable — unix/syscall symbols in
+# portable packages like managementstate have regressed twice already and no
+# gate caught it (issues #1011, #1085). Excluding by dependency keeps the gate
+# honest: a new Unix-only package must be added to the exclusion pattern
+# deliberately instead of silently widening the gap.
+windows_portable="$(go list -f '{{.ImportPath}} {{join .Deps ","}}' ./... \
+  | grep -v 'internal/backup[,/ ]' | cut -d' ' -f1)"
+# shellcheck disable=SC2086  # package list is generated, newline-separated
+ci_run windows-cross-compile env GOOS=windows go build ${windows_portable}
 
 GOBIN_PATH="$(go env GOPATH)/bin"
 export PATH="${GOBIN_PATH}:${PATH}"
