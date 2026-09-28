@@ -6368,8 +6368,6 @@ components:
           type: number
         uploadMbps:
           type: number
-        raw:
-          type: string
     ClientCreateRequest:
       type: object
       required:

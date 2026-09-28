@@ -55,6 +55,23 @@ type authMiddlewareOptions struct {
 func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOptions, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
+		if r.Method == http.MethodOptions {
+			// Never dispatch OPTIONS to an application handler: classifying it
+			// as public handed every /api handler's method switch to anonymous
+			// callers, leaking the protocol catalog and a 404-vs-405 existence
+			// oracle (#1106). Answer with the methods registered for the path;
+			// an API or subscription path with no registered method fails
+			// closed like every other unregistered route.
+			if methods := registeredEndpointMethods(path); methods != nil {
+				w.Header().Set("Allow", strings.Join(append(methods, http.MethodOptions), ", "))
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			if path == "/api" || path == "/s" || strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/s/") {
+				writeError(w, "endpoint authorization policy is not defined", http.StatusNotFound)
+				return
+			}
+		}
 		state.mu.Lock()
 		startupStateLoadFailed := state.startupStateLoadFailed
 		startupStateLoadErr := state.startupStateLoadErr
@@ -106,6 +123,7 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		var role string
 		var isCookieSession bool
 		var sessionToken string
+		var sessionBootstrap bool
 
 		hasStaticToken := false
 		if opts.Token != "" && validAuthToken(r, opts.Token) {
@@ -126,6 +144,7 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 					username = sess.Username
 					role = sess.Role
 					isCookieSession = true
+					sessionBootstrap = sess.Bootstrap
 				}
 			}
 		}
@@ -140,8 +159,17 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 					break
 				}
 			}
+			// A fallback-minted bootstrap session has no user row by design;
+			// it skips user-match revocation ONLY while the NaivePassword
+			// fallback precondition still holds — zero users, fallback
+			// configured, and the instance never provisioned (#1112). The
+			// moment a real account exists or the instance was ever
+			// provisioned, it is revoked like any orphaned session.
+			bootstrapValid := sessionBootstrap && username == "admin" &&
+				len(state.users) == 0 && state.settings.NaivePassword != "" &&
+				!state.usersProvisionedLocked()
 			state.mu.Unlock()
-			if !matched {
+			if !matched && !bootstrapValid {
 				state.sessionRegistry().Delete(sessionToken)
 				username, role, isCookieSession = "", "", false
 			}
@@ -150,16 +178,29 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		if username == "" {
 			state.mu.Lock()
 			noUsers := len(state.users) == 0
+			provisioned := state.usersProvisionedLocked()
 			state.mu.Unlock()
-			if opts.AllowDevAnonymous && noUsers && opts.Token == "" {
+			// Dev-anonymous admin exists only for a never-configured
+			// instance. Once users have EVER existed, a zero-user state —
+			// e.g. a rollback to a pre-setup revision — fails closed and the
+			// operator recovers through `veil admin reset`/`veil admin set`
+			// (#1100).
+			if opts.AllowDevAnonymous && noUsers && !provisioned && opts.Token == "" {
 				username = "dev-anonymous"
 				role = "admin"
 			}
 		}
 
 		if username == "" {
+			state.mu.Lock()
+			lockdown := state.isProvisionedAuthLockdownLocked()
+			state.mu.Unlock()
 			w.Header().Set("WWW-Authenticate", `Bearer realm="Veil API"`)
-			writeError(w, "missing or invalid API token or session", http.StatusUnauthorized)
+			if lockdown {
+				writeError(w, "missing or invalid API token or session; "+provisionedRecoveryHint, http.StatusUnauthorized)
+			} else {
+				writeError(w, "missing or invalid API token or session", http.StatusUnauthorized)
+			}
 			return
 		}
 

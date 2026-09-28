@@ -2367,7 +2367,6 @@ type SetupStatusResponsePanelAccess string
 type SpeedtestResult struct {
 	DownloadMbps float32 `json:"downloadMbps"`
 	PingMs       float32 `json:"pingMs"`
-	Raw          *string `json:"raw,omitempty"`
 	Server       *string `json:"server,omitempty"`
 	UploadMbps   float32 `json:"uploadMbps"`
 }

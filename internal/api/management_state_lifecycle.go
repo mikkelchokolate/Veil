@@ -648,6 +648,9 @@ func ApplyManagementSnapshot(state *managementState, snapshot managementSnapshot
 		Warp:          &state.warp,
 		Users:         &state.users,
 	}, snapshot)
+	// Any user-bearing load/reload/restore latches the instance as
+	// provisioned; a later zero-user state must fail closed (#1100).
+	state.noteUsersProvisionedLocked()
 }
 
 func defaultApplyRoot(root string) string {

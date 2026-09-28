@@ -26,6 +26,9 @@ func TestRateLimitPolicyIncludesExpensivePanelOperations(t *testing.T) {
 		"/api/client-links":      {RatePerMinute: 10, Burst: 3},
 		"/api/backups/":          {RatePerMinute: 10, Burst: 3},
 		"/api/apply/plan":        {RatePerMinute: 6, Burst: 2},
+		// #1144: the preview renders a full profile (keygen / caddy probe)
+		// per call — the apply-plan cost tier, not the default bucket.
+		"/api/profiles/ru-recommended/preview": {RatePerMinute: 6, Burst: 2},
 	}
 	limits := policy.EndpointLimits()
 	if len(limits) != len(wantLimits) {
@@ -43,10 +46,13 @@ func TestRateLimitPolicyIncludesExpensivePanelOperations(t *testing.T) {
 
 	// GET/HEAD-only budgets for credential reads and expensive diagnostics.
 	wantRead := map[string]EndpointLimit{
-		"/api/v1/clients":          {RatePerMinute: 60, Burst: 12},
-		"/api/warp":                {RatePerMinute: 10, Burst: 3},
-		"/api/disk":                {RatePerMinute: 6, Burst: 2},
-		"/api/connections":         {RatePerMinute: 6, Burst: 2},
+		"/api/v1/clients":  {RatePerMinute: 60, Burst: 12},
+		"/api/warp":        {RatePerMinute: 10, Burst: 3},
+		"/api/disk":        {RatePerMinute: 6, Burst: 2},
+		"/api/connections": {RatePerMinute: 6, Burst: 2},
+		// #1144: /api/processes walks the whole host process table — same
+		// tier as the other O(#PIDs) diagnostics scans.
+		"/api/processes":           {RatePerMinute: 6, Burst: 2},
 		"/api/runtime/observation": {RatePerMinute: 3, Burst: 1},
 	}
 	readLimits := policy.ReadEndpointLimits()

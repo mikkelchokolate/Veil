@@ -181,7 +181,11 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 			if !authenticated {
 				routes.State.mu.Lock()
 				noUsers := len(routes.State.users) == 0
-				setupRequired := routes.State.setupAllowed && !routes.State.setup.Completed && noUsers
+				// A provisioned-then-emptied instance must not render the
+				// first-run setup page again — setup stays closed and the
+				// operator recovers via `veil admin reset` (#1100).
+				setupRequired := routes.State.setupAllowed && !routes.State.setup.Completed && noUsers &&
+					!routes.State.usersProvisionedLocked()
 				routes.State.mu.Unlock()
 				if setupRequired {
 					writeLegacyHTML(panel.ReliableSetupHTML(routes.BasePath, locale))
