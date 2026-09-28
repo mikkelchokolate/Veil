@@ -2493,11 +2493,14 @@ type TLSCertInfo struct {
 
 // TrafficBucket defines model for TrafficBucket.
 type TrafficBucket struct {
+	// BindingId Owning binding id; empty on per-client and aggregate history rows.
 	BindingId string `json:"bindingId"`
 
 	// BucketStart Unix start of the bucket.
-	BucketStart int64  `json:"bucketStart"`
-	ClientId    string `json:"clientId"`
+	BucketStart int64 `json:"bucketStart"`
+
+	// ClientId Owning client id; empty on aggregate /api/v1/traffic/history rows.
+	ClientId string `json:"clientId"`
 
 	// DownloadDelta Bytes downloaded inside this bucket.
 	DownloadDelta int64 `json:"downloadDelta"`
@@ -3160,6 +3163,18 @@ type PostApiV1ClientsIdTokensTokenIdRotateParams struct {
 // GetApiV1EventsParams defines parameters for GetApiV1Events.
 type GetApiV1EventsParams struct {
 	Types *string `form:"types,omitempty" json:"types,omitempty"`
+}
+
+// GetApiV1TrafficHistoryParams defines parameters for GetApiV1TrafficHistory.
+type GetApiV1TrafficHistoryParams struct {
+	// From Unix start of the window (default 0 — all retained history).
+	From *int64 `form:"from,omitempty" json:"from,omitempty"`
+
+	// To Unix end of the window (default now).
+	To *int64 `form:"to,omitempty" json:"to,omitempty"`
+
+	// Limit Max buckets returned (default 500, capped at 5000); newest buckets win when the window truncates.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // GetApiV1TrafficIdHistoryParams defines parameters for GetApiV1TrafficIdHistory.
@@ -4545,6 +4560,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /api/v1/events (the `GetApiV1Events` operationId).
 	GetApiV1Events(ctx context.Context, params *GetApiV1EventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1TrafficHistory Aggregate bucketed traffic samples over a window
+	//
+	// Per-bucket sums across every client and binding. Rows carry empty clientId/bindingId; the bucket is the only identity once attribution is summed away.
+	//
+	// Corresponds with GET /api/v1/traffic/history (the `GetApiV1TrafficHistory` operationId).
+	GetApiV1TrafficHistory(ctx context.Context, params *GetApiV1TrafficHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1TrafficStream Server-sent stream of live traffic snapshots
 	//
@@ -6772,6 +6794,23 @@ func (c *Client) PostApiV1ClientsIdTokensTokenIdRotate(ctx context.Context, id C
 // Corresponds with GET /api/v1/events (the `GetApiV1Events` operationId).
 func (c *Client) GetApiV1Events(ctx context.Context, params *GetApiV1EventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1EventsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetApiV1TrafficHistory Aggregate bucketed traffic samples over a window
+//
+// Per-bucket sums across every client and binding. Rows carry empty clientId/bindingId; the bucket is the only identity once attribution is summed away.
+//
+// Corresponds with GET /api/v1/traffic/history (the `GetApiV1TrafficHistory` operationId).
+func (c *Client) GetApiV1TrafficHistory(ctx context.Context, params *GetApiV1TrafficHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1TrafficHistoryRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -11214,6 +11253,84 @@ func NewGetApiV1EventsRequest(server string, params *GetApiV1EventsParams) (*htt
 	return req, nil
 }
 
+// NewGetApiV1TrafficHistoryRequest constructs an http.Request for the GetApiV1TrafficHistory method
+func NewGetApiV1TrafficHistoryRequest(server string, params *GetApiV1TrafficHistoryParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/traffic/history")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.From != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "from", *params.From, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.To != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "to", *params.To, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetApiV1TrafficStreamRequest constructs an http.Request for the GetApiV1TrafficStream method
 func NewGetApiV1TrafficStreamRequest(server string) (*http.Request, error) {
 	var err error
@@ -12915,6 +13032,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /api/v1/events (the `GetApiV1Events` operationId).
 	GetApiV1EventsWithResponse(ctx context.Context, params *GetApiV1EventsParams, reqEditors ...RequestEditorFn) (*GetApiV1EventsResponse, error)
+
+	// GetApiV1TrafficHistoryWithResponse Aggregate bucketed traffic samples over a window
+	//
+	// Per-bucket sums across every client and binding. Rows carry empty clientId/bindingId; the bucket is the only identity once attribution is summed away.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/traffic/history (the `GetApiV1TrafficHistory` operationId).
+	GetApiV1TrafficHistoryWithResponse(ctx context.Context, params *GetApiV1TrafficHistoryParams, reqEditors ...RequestEditorFn) (*GetApiV1TrafficHistoryResponse, error)
 
 	// GetApiV1TrafficStreamWithResponse Server-sent stream of live traffic snapshots
 	//
@@ -19527,6 +19653,47 @@ func (r GetApiV1EventsResponse) ContentType() string {
 	return ""
 }
 
+type GetApiV1TrafficHistoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TrafficHistoryResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiV1TrafficHistoryResponse) GetJSON200() *TrafficHistoryResponse {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiV1TrafficHistoryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1TrafficHistoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1TrafficHistoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiV1TrafficHistoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetApiV1TrafficStreamResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -22172,6 +22339,21 @@ func (c *ClientWithResponses) GetApiV1EventsWithResponse(ctx context.Context, pa
 		return nil, err
 	}
 	return ParseGetApiV1EventsResponse(rsp)
+}
+
+// GetApiV1TrafficHistoryWithResponse Aggregate bucketed traffic samples over a window
+//
+// Per-bucket sums across every client and binding. Rows carry empty clientId/bindingId; the bucket is the only identity once attribution is summed away.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/traffic/history (the `GetApiV1TrafficHistory` operationId).
+func (c *ClientWithResponses) GetApiV1TrafficHistoryWithResponse(ctx context.Context, params *GetApiV1TrafficHistoryParams, reqEditors ...RequestEditorFn) (*GetApiV1TrafficHistoryResponse, error) {
+	rsp, err := c.GetApiV1TrafficHistory(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1TrafficHistoryResponse(rsp)
 }
 
 // GetApiV1TrafficStreamWithResponse Server-sent stream of live traffic snapshots
@@ -27532,6 +27714,35 @@ func ParseGetApiV1EventsResponse(rsp *http.Response) (*GetApiV1EventsResponse, e
 			headers.RetryAfter = &value
 		}
 		response.Headers429 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1TrafficHistoryResponse parses an HTTP response from a GetApiV1TrafficHistoryWithResponse call
+func ParseGetApiV1TrafficHistoryResponse(rsp *http.Response) (*GetApiV1TrafficHistoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1TrafficHistoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TrafficHistoryResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case rsp.StatusCode == 503:
+		break // No content-type
+
 	}
 
 	return response, nil
