@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ApiError, apiFetch, mutationErrorMessage } from "../api/fetcher";
+import { apiFetch, mutationErrorMessage } from "../api/fetcher";
 import type { ProcessesStats, SystemStats } from "../api/generated/models";
 import { FormMessage } from "../components/ui/form";
 import {
@@ -119,53 +119,46 @@ export function SystemPage() {
 		refetchInterval: 5000,
 	});
 
-	if (sys.isLoading) {
-		return (
-			<div className="card">
-				<p className="muted">{t("common.loading")}</p>
-			</div>
-		);
-	}
-	if (sys.isError || !sys.data) {
-		return (
-			<div className="card">
-				<FormMessage>
-					{sys.error instanceof ApiError
-						? sys.error.message
-						: t("system.unavailable")}
-				</FormMessage>
-			</div>
-		);
-	}
-
 	const s = sys.data;
 	return (
 		<>
-			<div className="card">
-				<h2>{t("system.title")}</h2>
-				<Meter
-					label={t("system.cpu")}
-					value={Math.round(s.cpuPercent)}
-					detail={`${s.cpuPercent.toFixed(1)}%`}
-				/>
-				<Meter
-					label={t("system.memory")}
-					value={pct(s.memoryUsedMB, s.memoryTotalMB)}
-					detail={`${s.memoryUsedMB} / ${s.memoryTotalMB} MiB`}
-				/>
-				<Meter
-					label={t("system.disk")}
-					value={pct(s.diskUsedGB, s.diskTotalGB)}
-					detail={`${s.diskUsedGB.toFixed(1)} / ${s.diskTotalGB.toFixed(1)} GiB`}
-				/>
-				<p>
-					<strong>{t("system.loadAverage")}:</strong> {s.loadAvg1.toFixed(2)} ·{" "}
-					{s.loadAvg5.toFixed(2)} · {s.loadAvg15.toFixed(2)}
-				</p>
-				<p>
-					<strong>{t("system.uptime")}:</strong> {fmtUptime(s.uptimeSeconds)}
-				</p>
-			</div>
+			{sys.isLoading ? (
+				<div className="card">
+					<p className="muted">{t("common.loading")}</p>
+				</div>
+			) : sys.isError || !s ? (
+				<div className="card">
+					<FormMessage>
+						{mutationErrorMessage(sys.error, t("system.unavailable"), t)}
+					</FormMessage>
+				</div>
+			) : (
+				<div className="card">
+					<h2>{t("system.title")}</h2>
+					<Meter
+						label={t("system.cpu")}
+						value={Math.round(s.cpuPercent)}
+						detail={`${s.cpuPercent.toFixed(1)}%`}
+					/>
+					<Meter
+						label={t("system.memory")}
+						value={pct(s.memoryUsedMB, s.memoryTotalMB)}
+						detail={`${s.memoryUsedMB} / ${s.memoryTotalMB} MiB`}
+					/>
+					<Meter
+						label={t("system.disk")}
+						value={pct(s.diskUsedGB, s.diskTotalGB)}
+						detail={`${s.diskUsedGB.toFixed(1)} / ${s.diskTotalGB.toFixed(1)} GiB`}
+					/>
+					<p>
+						<strong>{t("system.loadAverage")}:</strong> {s.loadAvg1.toFixed(2)}{" "}
+						· {s.loadAvg5.toFixed(2)} · {s.loadAvg15.toFixed(2)}
+					</p>
+					<p>
+						<strong>{t("system.uptime")}:</strong> {fmtUptime(s.uptimeSeconds)}
+					</p>
+				</div>
+			)}
 			<ProcessesCard />
 		</>
 	);

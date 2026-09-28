@@ -99,4 +99,31 @@ describe("System page processes section", () => {
 			(await screen.findAllByRole("progressbar")).length,
 		).toBeGreaterThanOrEqual(3);
 	});
+
+	it("keeps the processes section when host metrics fail", async () => {
+		server.use(
+			http.get("/api/system", () =>
+				HttpResponse.json({ error: { message: "host down" } }, { status: 500 }),
+			),
+			http.get("/api/processes", () =>
+				HttpResponse.json({
+					processes: [
+						{
+							pid: 123,
+							name: "veil-agent",
+							cpuPercent: 0.49,
+							memoryMB: 32,
+							uptimeSeconds: 65,
+						},
+					],
+				}),
+			),
+		);
+		renderSystem();
+		// Host card reports its own failure…
+		expect(await screen.findByRole("alert")).toHaveTextContent("host down");
+		// …while the processes table still renders.
+		const table = await screen.findByRole("table");
+		expect(within(table).getByText("veil-agent")).toBeInTheDocument();
+	});
 });
