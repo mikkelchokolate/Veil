@@ -52,7 +52,9 @@ func TestTrackedAutoApplyUsesSnapshotIsolationOutsideGlobalMutex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	source := string(body)
+	// Windows checkouts keep CRLF endings; normalize before matching
+	// line-oriented patterns so the scan is checkout-agnostic.
+	source := strings.ReplaceAll(string(body), "\r\n", "\n")
 	if !strings.Contains(source, "s.mu.Unlock()\n		defer s.mu.Lock()") {
 		t.Fatal("tracked apply does not release/reacquire global mutex around runner")
 	}
@@ -63,7 +65,7 @@ func TestTrackedAutoApplyUsesSnapshotIsolationOutsideGlobalMutex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), "newApplyExecutionStateLocked(snapshot)") {
+	if !strings.Contains(strings.ReplaceAll(string(body), "\r\n", "\n"), "newApplyExecutionStateLocked(snapshot)") {
 		t.Fatal("apply runner does not execute against an isolated revision snapshot")
 	}
 }

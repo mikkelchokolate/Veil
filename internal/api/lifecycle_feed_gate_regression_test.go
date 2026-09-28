@@ -42,7 +42,8 @@ func TestPublicSubscriptionGatesOnLiveLifecycle(t *testing.T) {
 
 	// Disable the client without applying: the feed must stop serving links
 	// immediately even though the applied snapshot still contains them.
-	disable := v1Request(t, router, http.MethodPatch, "/api/v1/clients/"+clientID, `{"enabled":false}`)
+	disable := v1Request(t, router, http.MethodPatch, "/api/v1/clients/"+clientID,
+		fmt.Sprintf(`{"version":%d,"enabled":false}`, liveClientVersion(t, router, clientID)))
 	if disable.Code != http.StatusOK {
 		t.Fatalf("disable client: %d %s", disable.Code, disable.Body.String())
 	}
@@ -75,7 +76,8 @@ func TestPublicSubscriptionGatesOnLiveExpiry(t *testing.T) {
 	if before := waitForFeedOK(t, router, state, issued.Plaintext); !strings.Contains(before.Body.String(), "feed-expiry-cred") {
 		t.Fatalf("baseline feed missing credential: %d %q", before.Code, before.Body.String())
 	}
-	patch := v1Request(t, router, http.MethodPatch, "/api/v1/clients/"+clientID, `{"expiresAt":100}`)
+	patch := v1Request(t, router, http.MethodPatch, "/api/v1/clients/"+clientID,
+		fmt.Sprintf(`{"version":%d,"expiresAt":100}`, liveClientVersion(t, router, clientID)))
 	if patch.Code != http.StatusOK {
 		t.Fatalf("expire client: %d %s", patch.Code, patch.Body.String())
 	}
@@ -210,6 +212,24 @@ func TestMigratedLegacyProfilesSuppressedAtRender(t *testing.T) {
 			}
 		}
 	}
+}
+
+// liveClientVersion returns the client's current optimistic-lock version.
+// The version drifts while the apply pipeline converges, so it must be
+// re-read right before a mutation rather than reused from creation time.
+func liveClientVersion(t *testing.T, router http.Handler, clientID string) int {
+	t.Helper()
+	resp := v1Request(t, router, http.MethodGet, "/api/v1/clients/"+clientID, "")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("read client for version: %d %s", resp.Code, resp.Body.String())
+	}
+	var view struct {
+		Version int `json:"version"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &view); err != nil {
+		t.Fatalf("decode client: %v", err)
+	}
+	return view.Version
 }
 
 // waitForFeedOK polls the public feed until the first verified apply lands

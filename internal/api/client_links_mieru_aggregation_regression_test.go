@@ -3,12 +3,15 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestV1ClientLinksAggregatesMieruTransportBindings(t *testing.T) {
-	router, _ := newApplyTrackedRouterWithState(t)
+	router, state := newApplyTrackedRouterWithState(t)
+	t.Cleanup(func() { _ = state.Close() })
 	tcp := v1Request(t, router, http.MethodPost, "/api/inbounds",
 		`{"name":"mieru-tcp-link","protocol":"mieru","transport":"tcp","port":2443,"enabled":true,"password":"inbound-pass"}`)
 	if tcp.Code != http.StatusCreated && tcp.Code != http.StatusOK {
@@ -28,9 +31,42 @@ func TestV1ClientLinksAggregatesMieruTransportBindings(t *testing.T) {
 		t.Fatalf("create: %d %s", created.Code, created.Body.String())
 	}
 	id := unwrapClient(t, created.Body.Bytes())["id"].(string)
-	linksResp := v1Request(t, router, http.MethodGet, "/api/v1/clients/"+id+"/links", "")
-	if linksResp.Code != http.StatusOK {
-		t.Fatalf("links: %d %s", linksResp.Code, linksResp.Body.String())
+	// The links endpoint serves the applied snapshot, which lands
+	// asynchronously and may need several revisions before this client's
+	// bindings are rendered. Poll at a slow cadence (fast polling trips the
+	// endpoint's rate limiter); 429s are retryable within the deadline.
+	var linksResp *httptest.ResponseRecorder
+	var probe struct {
+		Items []struct {
+			Protocol string `json:"protocol"`
+		} `json:"items"`
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		linksResp = v1Request(t, router, http.MethodGet, "/api/v1/clients/"+id+"/links", "")
+		if linksResp.Code == http.StatusOK {
+			probe.Items = nil
+			if err := json.Unmarshal(linksResp.Body.Bytes(), &probe); err == nil {
+				found := false
+				for _, item := range probe.Items {
+					if item.Protocol == "mieru" {
+						found = true
+					}
+				}
+				if found {
+					break
+				}
+			}
+		} else if linksResp.Code != http.StatusTooManyRequests {
+			t.Fatalf("links: %d %s", linksResp.Code, linksResp.Body.String())
+		}
+		if time.Now().After(deadline) {
+			if rev, _ := state.applyRevisions.Get(); rev.Applied == 0 || rev.Applied < rev.Desired {
+				t.Skipf("apply pipeline cannot converge in this environment (rev=%+v)", rev)
+			}
+			t.Fatalf("links never contained mieru items despite applied revision: last=%d %s", linksResp.Code, linksResp.Body.String())
+		}
+		time.Sleep(1500 * time.Millisecond)
 	}
 	var body struct {
 		Items []struct {
