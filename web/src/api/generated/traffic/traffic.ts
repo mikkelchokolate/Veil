@@ -52,6 +52,7 @@ import type {
 
 import type {
   GetApiV1EventsParams,
+  GetApiV1TrafficHistoryParams,
   GetApiV1TrafficIdHistoryParams,
   TrafficHistoryResponse,
   TrafficSummaryResponse,
@@ -211,6 +212,87 @@ export const useGetApiV1TrafficTop = <TError = unknown,
         TContext
       > => {
       return useMutation(getGetApiV1TrafficTopMutationOptions(options), queryClient);
+    }
+    export const getGetApiV1TrafficHistoryUrl = (params?: GetApiV1TrafficHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/traffic/history?${stringifiedParams}` : `/api/v1/traffic/history`
+}
+
+/**
+ * Per-bucket sums across every client and binding. Rows carry empty clientId/bindingId; the bucket is the only identity once attribution is summed away.
+ * @summary Aggregate bucketed traffic samples over a window
+ */
+export const getApiV1TrafficHistory = async (params?: GetApiV1TrafficHistoryParams, options?: Parameters<typeof apiFetch>[1]): Promise<TrafficHistoryResponse> => {
+
+  return apiFetch<TrafficHistoryResponse>(getGetApiV1TrafficHistoryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1TrafficHistoryMutationKey = () => ['getApiV1TrafficHistory'] as const;
+
+export const getGetApiV1TrafficHistoryMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficHistory>>, TError,GetApiV1TrafficHistoryMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficHistory>>, TError,GetApiV1TrafficHistoryMutationVariables, TContext> => {
+
+const mutationKey = getGetApiV1TrafficHistoryMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1TrafficHistory>>, GetApiV1TrafficHistoryMutationVariables> = (props) => {
+          const {params} = props ?? {};
+
+          return  getApiV1TrafficHistory(params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1TrafficHistoryMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1TrafficHistory>>>
+
+    export type GetApiV1TrafficHistoryMutationError = void
+    export type GetApiV1TrafficHistoryMutationVariables = {params?: GetApiV1TrafficHistoryParams}
+
+    /**
+ * @summary Aggregate bucketed traffic samples over a window
+ */
+export const useGetApiV1TrafficHistory = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1TrafficHistory>>, TError,GetApiV1TrafficHistoryMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1TrafficHistory>>,
+        TError,
+        GetApiV1TrafficHistoryMutationVariables,
+        TContext
+      > => {
+      return useMutation(getGetApiV1TrafficHistoryMutationOptions(options), queryClient);
     }
     export const getGetApiV1TrafficIdUrl = (id: string,) => {
 

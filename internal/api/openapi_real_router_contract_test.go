@@ -234,7 +234,8 @@ func TestOpenAPIDocumentsEveryRegisteredStageRoute(t *testing.T) {
 		"/api/apply/history", "/api/apply/plan",
 		"/api/v1/clients", "/api/v1/clients/{id}", "/api/v1/clients/bulk",
 		"/api/v1/clients/{id}/tokens", "/api/v1/traffic/top",
-		"/api/v1/traffic/{id}", "/api/v1/traffic/{id}/history",
+		"/api/v1/traffic/history", "/api/v1/traffic/{id}",
+		"/api/v1/traffic/{id}/history",
 		"/api/v1/traffic/stream", "/api/v1/events", "/s/{token}",
 	} {
 		if _, ok := documented[must]; !ok {
