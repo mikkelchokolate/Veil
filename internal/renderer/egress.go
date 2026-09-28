@@ -37,7 +37,20 @@ var egressDenyCIDRs = []string{
 	"::1/128",
 	// IPv4-mapped IPv6 — proxies that resolve/connect through this form must
 	// not smuggle IPv4 loopback/private destinations past the IPv4 rules.
-	"::ffff:0:0/96",
+	// These are the mapped forms of the IPv4 denies above, NOT the blanket
+	// mapped prefix: hysteria's ACL engine normalizes a plain IPv4 destination
+	// into ::ffff: space before matching IPv6 prefixes, so reject(::ffff:0:0/96)
+	// would deny every IPv4 egress — verified empirically against the pinned
+	// hysteria release (#1097 follow-up).
+	"::ffff:0.0.0.0/104",     // mapped 0.0.0.0/8
+	"::ffff:10.0.0.0/104",    // mapped 10.0.0.0/8
+	"::ffff:172.16.0.0/108",  // mapped 172.16.0.0/12
+	"::ffff:192.168.0.0/112", // mapped 192.168.0.0/16
+	"::ffff:100.64.0.0/106",  // mapped 100.64.0.0/10
+	"::ffff:127.0.0.0/104",   // mapped 127.0.0.0/8
+	"::ffff:169.254.0.0/112", // mapped 169.254.0.0/16
+	"::ffff:224.0.0.0/100",   // mapped 224.0.0.0/4
+	"::ffff:240.0.0.0/100",   // mapped 240.0.0.0/4
 	// RFC 6052 NAT64 well-known prefix — embeds arbitrary IPv4 destinations.
 	"64:ff9b::/96",
 	// RFC 4193 IPv6 unique-local.

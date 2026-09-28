@@ -2,6 +2,7 @@ package renderer
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -336,6 +337,51 @@ func TestSystemdProxyUnitsCarryEgressIPFilter(t *testing.T) {
 	if caddy, ok := units[UnitCaddy]; ok {
 		if strings.Contains(caddy, "IPAddressDeny=") {
 			t.Fatalf("veil-caddy must not carry the broad deny — it needs panel loopback:\n%s", caddy)
+		}
+	}
+}
+
+// #1097 follow-up: the deny list must never contain the blanket IPv4-mapped
+// prefix ::ffff:0:0/96. Hysteria's ACL engine normalizes a plain IPv4
+// destination into ::ffff: space before matching IPv6 prefixes, so that one
+// entry rejects EVERY IPv4 egress (verified against pinned hysteria
+// app/v2.12.2: any proxied IPv4 destination returned rep 0x04 "host
+// unreachable"). The mapped forms of the denied IPv4 classes are listed
+// instead, which still blocks ::ffff:<denied> smuggling.
+func TestEgressDenyCIDRsUsesMappedFormsNotBlanketMappedPrefix(t *testing.T) {
+	for _, cidr := range egressDenyCIDRs {
+		if cidr == "::ffff:0:0/96" {
+			t.Fatalf("blanket mapped prefix denies all IPv4 egress under hysteria-style normalization: %v", egressDenyCIDRs)
+		}
+	}
+	// Every IPv4 deny entry must have its mapped-form counterpart so
+	// ::ffff:<v4> literals cannot smuggle denied destinations.
+	var v4 []string
+	for _, cidr := range egressDenyCIDRs {
+		if strings.Contains(cidr, ":") {
+			continue
+		}
+		v4 = append(v4, cidr)
+	}
+	if len(v4) == 0 {
+		t.Fatal("expected IPv4 entries in egressDenyCIDRs")
+	}
+	for _, cidr := range v4 {
+		base, bits, _ := strings.Cut(cidr, "/")
+		n, err := strconv.Atoi(bits)
+		if err != nil {
+			t.Fatalf("parse %s: %v", cidr, err)
+		}
+		want := "::ffff:" + base + "/" + strconv.Itoa(n+96)
+		found := false
+		for _, other := range egressDenyCIDRs {
+			if other == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("missing mapped counterpart %s for %s in %v", want, cidr, egressDenyCIDRs)
 		}
 	}
 }
