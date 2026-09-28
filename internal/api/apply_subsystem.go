@@ -192,6 +192,18 @@ func initApplySubsystemMode(s *managementState, deferStartupRecovery bool) {
 	}
 }
 
+// protocolQuotaEnforcement is the single source of truth for whether a
+// protocol's runtime rejects traffic once a bound client's quota is
+// depleted. The binding capability surface (bindingCapabilityForInbound →
+// BindingCapability.QuotaEnforcement) and quota write validation
+// (quotaSupportedForInboundLocked) both derive from it so the API never
+// advertises a capability the validator would reject. Only hysteria2
+// qualifies: mieru already counts per-user traffic but its rendered user
+// table does not carry quota limits yet.
+func protocolQuotaEnforcement(protocol string) bool {
+	return protocol == "hysteria2"
+}
+
 // bindingCapabilityForInbound resolves the protocol capabilities of the named
 // inbound for the enriched client binding read model. Returns nil when the
 // inbound or its protocol is unknown. Per-client credential and expiry
@@ -228,9 +240,10 @@ func (s *managementState) bindingCapabilityForInbound(inboundID string) *client.
 		RequiresCaddy:        meta.RequiresCaddy,
 		// Hysteria2 and mieru expose per-user counters the collector can read;
 		// quota enforcement stays hysteria2-only until mieru limits are wired
-		// into its rendered user table.
+		// into its rendered user table. protocolQuotaEnforcement is shared
+		// with the quota write validator — never widen it here alone.
 		TrafficAccounting:     meta.Protocol == "hysteria2" || meta.Protocol == "mieru",
-		QuotaEnforcement:      meta.Protocol == "hysteria2",
+		QuotaEnforcement:      protocolQuotaEnforcement(meta.Protocol),
 		CredentialKinds:       []string{"password"},
 		ExpirationEnforcement: perClient,
 	}

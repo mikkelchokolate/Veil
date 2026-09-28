@@ -667,6 +667,9 @@ export const ru: Record<string, string> = {
 	"clientDetail.quotaHint": "Квота действует только на Hysteria2 inbound’ы.",
 	"clientDetail.quotaHy2Only":
 		"Квоту можно задать, только если все включённые привязки — Hysteria2.",
+	"clientDetail.quotaUnsupported":
+		"Квота не будет применяться к {inbounds} — очистите квоту или отвяжите/отключите эти привязки.",
+	"clientDetail.quotaNotEnforced": "квота не применяется",
 	"clientDetail.expiryDate": "Дата истечения",
 	"clientDetail.notes": "Заметки",
 	"clientDetail.saving": "Сохранение…",
@@ -796,6 +799,9 @@ export const ru: Record<string, string> = {
 	"clientNew.quotaHint": "Квота действует только на Hysteria2 inbound’ы.",
 	"clientNew.quotaHy2Only":
 		"Квоту можно задать, только если все выбранные inbound’ы — Hysteria2.",
+	"clientNew.quotaUnsupported":
+		"Квота не будет применяться к {inbounds} — очистите квоту или снимите выбор с этих инбаундов.",
+	"clientNew.quotaNotEnforced": "квота не применяется",
 	"clientNew.quotaInvalid": "квота должна быть целым числом байт",
 	"clientNew.quotaTooLarge":
 		"квота слишком велика (максимум 9007199254740991 байт)",

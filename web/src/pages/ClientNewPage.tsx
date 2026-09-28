@@ -25,6 +25,7 @@ import { Label } from "../components/ui/label";
 import { useI18n } from "../i18n/I18nContext";
 import { decimalWithinSafeInteger, parseQuotaDecimal } from "../lib/bytes";
 import { dateInputToUnix } from "../lib/localDate";
+import { quotaEnforcementVerdict } from "../lib/quotaSupport";
 
 interface InboundOption {
 	name: string;
@@ -93,6 +94,23 @@ export function ClientNewPage() {
 		? inbounds.data
 		: (inbounds.data?.items ?? []);
 
+	// Selected binding drafts whose inbound cannot enforce a quota. Drafts are
+	// not persisted, so no BindingCapability exists yet — the catalog's
+	// protocol+enabled flags are the only client-side signal (the documented
+	// fallback inside quotaEnforcementVerdict); the server re-validates on
+	// create. A draft whose inbound vanished from a freshly refetched catalog
+	// is stale state — supported === null here, still treated as blocked.
+	const quotaBlockedBindings = bindings.filter((b) => {
+		const ib = inboundList.find((item) => item.name === b.inboundId);
+		const supported = quotaEnforcementVerdict(null, ib?.protocol);
+		return supported !== true || ib?.enabled === false;
+	});
+	const quotaBlockedLabel = (b: BindingDraft): string => {
+		const ib = inboundList.find((item) => item.name === b.inboundId);
+		const label = ib ? `${b.inboundId} (${ib.protocol})` : b.inboundId;
+		return ib?.enabled === false ? `${label} — ${t("common.disabled")}` : label;
+	};
+
 	// Issue 3: quotaBytes crosses the wire as a JSON number — reject anything
 	// above Number.MAX_SAFE_INTEGER (compared as an exact decimal string) and
 	// any non-whole-byte input before it can reach the API.
@@ -122,13 +140,10 @@ export function ClientNewPage() {
 			if (email) body.email = email;
 			if (notes) body.notes = notes;
 			if (quotaBytes) body.quotaBytes = parseQuotaDecimal(quotaBytes);
-			if (
-				quotaBytes &&
-				bindings.some((b) => {
-					const ib = inboundList.find((item) => item.name === b.inboundId);
-					return ib?.protocol !== "hysteria2" || ib.enabled === false;
-				})
-			) {
+			// Submit-time backstop: the inline hint usually catches this, but the
+			// check runs again here in case the catalog/binding picks changed
+			// between renders. The backend re-validates independently.
+			if (quotaBytes && quotaBlockedBindings.length > 0) {
 				throw new ApiError(400, t("clientNew.quotaHy2Only"));
 			}
 			if (expiresAt) {
@@ -338,6 +353,14 @@ export function ClientNewPage() {
 													{ib.enabled === false
 														? ` · ${t("common.disabled")}`
 														: ""}
+													{/* Quota support mirrors the verdict a
+													 * persisted binding's capability would
+													 * advertise — catalog items carry no
+													 * capability, so the protocol fallback
+													 * applies (see quotaEnforcementVerdict). */}
+													{quotaEnforcementVerdict(null, ib.protocol) === false
+														? ` · ${t("clientNew.quotaNotEnforced")}`
+														: ""}
 												</span>
 											</Label>
 											{bound ? (
@@ -467,6 +490,19 @@ export function ClientNewPage() {
 								</>
 							)}
 						</div>
+					) : null}
+
+					{/* Quota picked earlier can't be enforced on a selected
+					 * inbound — say so while the user is still choosing instead
+					 * of failing only on submit. */}
+					{quotaBytes !== "" && quotaBlockedBindings.length > 0 ? (
+						<FormMessage style={{ marginTop: 8 }}>
+							{t("clientNew.quotaUnsupported", {
+								inbounds: quotaBlockedBindings
+									.map(quotaBlockedLabel)
+									.join(", "),
+							})}
+						</FormMessage>
 					) : null}
 
 					{error ? (

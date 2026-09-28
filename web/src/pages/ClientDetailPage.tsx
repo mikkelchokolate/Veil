@@ -53,6 +53,7 @@ import {
 	parseQuotaDecimal,
 } from "../lib/bytes";
 import { dateInputToUnix, unixToDateInput } from "../lib/localDate";
+import { quotaEnforcementVerdict } from "../lib/quotaSupport";
 import { ClientConnectionLinks } from "../subscription/ClientConnectionLinks";
 import { ClientTrafficPanel } from "../subscription/ClientTrafficPanel";
 import { SubscriptionTokensPanel } from "../subscription/SubscriptionTokensPanel";
@@ -111,6 +112,27 @@ interface InboundOption {
 	name: string;
 	protocol: string;
 	enabled?: boolean;
+}
+
+/** Enabled bindings that make a quota unenforceable server-side. Mirrors the
+ * backend validator (quotaSupportedForInboundLocked): the verdict prefers the
+ * binding's advertised capability.quotaEnforcement and falls back to the
+ * protocol name only when the binding carries no capability; a disabled
+ * inbound blocks quota regardless. A null verdict (unknown inbound, no
+ * capability) is NOT a blocker here — server validation decides on submit. */
+function unsupportedQuotaBindings(
+	c: ClientDetail,
+	inboundList: InboundOption[],
+): BindingView[] {
+	return (c.bindings ?? []).filter((b) => {
+		if (!b.enabled) return false;
+		const ib = inboundList.find((item) => item.name === b.inboundId);
+		const supported = quotaEnforcementVerdict(
+			b.capability,
+			b.capability?.protocol ?? ib?.protocol,
+		);
+		return supported === false || ib?.enabled === false;
+	});
 }
 
 interface AuditEntry {
@@ -206,6 +228,9 @@ export function ClientDetailPage() {
 		},
 	});
 	const isDirty = form.formState.isDirty;
+	// Live quota draft — the unsupported-binding hint reacts while the user is
+	// still typing, not only on submit.
+	const quotaDraft = form.watch("quotaBytes");
 	const loadedClientId = useRef<string | null>(null);
 	const acceptServerValues = useRef(true);
 	const draftVersion = useRef<number | null>(null);
@@ -243,17 +268,14 @@ export function ClientDetailPage() {
 			// this conversion is exact.
 			const quota =
 				v.quotaBytes === "" ? undefined : parseQuotaDecimal(v.quotaBytes);
-			if (quota != null) {
-				const enabledBindings = (c.bindings ?? []).filter((b) => b.enabled);
-				const quotaUnsupported = enabledBindings.some((b) => {
-					const ib = inboundList.find((item) => item.name === b.inboundId);
-					const proto = b.capability?.protocol ?? ib?.protocol;
-					if (proto == null) return false;
-					return proto !== "hysteria2" || ib?.enabled === false;
-				});
-				if (quotaUnsupported) {
-					throw new ApiError(400, t("clientDetail.quotaHy2Only"));
-				}
+			// Submit-time backstop: the inline hint usually catches this, but the
+			// check runs again here in case bindings changed mid-edit. The
+			// backend re-validates independently.
+			if (
+				quota != null &&
+				unsupportedQuotaBindings(c, inboundList).length > 0
+			) {
+				throw new ApiError(400, t("clientDetail.quotaHy2Only"));
 			}
 			const expires = v.expiresAt ? dateInputToUnix(v.expiresAt) : undefined;
 			const expiresUnix =
@@ -417,6 +439,16 @@ export function ClientDetailPage() {
 	const c = client.data;
 	const boundInboundIds = new Set((c.bindings ?? []).map((b) => b.inboundId));
 	const attachable = inboundList.filter((ib) => !boundInboundIds.has(ib.name));
+	// Enabled bindings whose protocol/inbound state cannot enforce a quota.
+	// Surfaced inline under the quota field while the draft quota is filled —
+	// honest about enforcement instead of failing only on submit.
+	const quotaBlocked = unsupportedQuotaBindings(c, inboundList);
+	const quotaBlockedLabel = (b: BindingView): string => {
+		const ib = inboundList.find((item) => item.name === b.inboundId);
+		const proto = b.capability?.protocol ?? ib?.protocol;
+		const label = proto ? `${b.inboundId} (${proto})` : b.inboundId;
+		return ib?.enabled === false ? `${label} — ${t("common.disabled")}` : label;
+	};
 	const tabs: { id: Tab; label: string }[] = [
 		{ id: "overview", label: t("clientDetail.tab.overview") },
 		{ id: "access", label: t("clientDetail.tab.access") },
@@ -657,6 +689,13 @@ export function ClientDetailPage() {
 								<FormMessage>
 									{form.formState.errors.quotaBytes?.message}
 								</FormMessage>
+								{(quotaDraft ?? "") !== "" && quotaBlocked.length > 0 ? (
+									<FormMessage>
+										{t("clientDetail.quotaUnsupported", {
+											inbounds: quotaBlocked.map(quotaBlockedLabel).join(", "),
+										})}
+									</FormMessage>
+								) : null}
 							</FormItem>
 							<FormItem>
 								<Label htmlFor="cd-exp">{t("clientDetail.expiryDate")}</Label>
@@ -735,6 +774,11 @@ export function ClientDetailPage() {
 									{b.capability?.protocol ? (
 										<FormDescription style={{ fontSize: 12 }}>
 											{b.capability.protocol}
+											{/* Honest capability surface: a binding whose protocol
+												cannot enforce quota says so next to its name. */}
+											{b.capability.quotaEnforcement === false
+												? ` · ${t("clientDetail.quotaNotEnforced")}`
+												: ""}
 										</FormDescription>
 									) : null}
 									<div style={{ flex: 1 }} />
@@ -811,9 +855,15 @@ export function ClientDetailPage() {
 								{attachable.map((ib) => (
 									<option key={ib.name} value={ib.name}>
 										{/* #729: attaching to a disabled inbound produces
-										 * no usable links — label the state. */}
+										 * no usable links — label the state. The quota
+										 * marker mirrors the capability surface: catalog
+										 * items carry no capability object, so the protocol
+										 * fallback is the only client-side signal here. */}
 										{ib.name} ({ib.protocol})
 										{ib.enabled === false ? ` — ${t("common.disabled")}` : ""}
+										{quotaEnforcementVerdict(null, ib.protocol) === false
+											? ` — ${t("clientDetail.quotaNotEnforced")}`
+											: ""}
 									</option>
 								))}
 							</Select>

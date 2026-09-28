@@ -658,6 +658,9 @@ export const en: Record<string, string> = {
 	"clientDetail.quotaHint": "Quota is enforced only on Hysteria2 inbounds.",
 	"clientDetail.quotaHy2Only":
 		"Quota can be set only when every enabled binding is Hysteria2.",
+	"clientDetail.quotaUnsupported":
+		"Quota can't be enforced on {inbounds} — clear the quota or detach/disable those bindings.",
+	"clientDetail.quotaNotEnforced": "quota not enforced",
 	"clientDetail.expiryDate": "Expiry date",
 	"clientDetail.notes": "Notes",
 	"clientDetail.saving": "Saving…",
@@ -785,6 +788,9 @@ export const en: Record<string, string> = {
 	"clientNew.quotaHint": "Quota is enforced only on Hysteria2 inbounds.",
 	"clientNew.quotaHy2Only":
 		"Quota can be set only when every selected inbound is Hysteria2.",
+	"clientNew.quotaUnsupported":
+		"Quota can't be enforced on {inbounds} — clear the quota or uncheck those inbounds.",
+	"clientNew.quotaNotEnforced": "quota not enforced",
 	"clientNew.quotaInvalid": "quota must be a whole number of bytes",
 	"clientNew.quotaTooLarge": "quota is too large (max 9007199254740991 bytes)",
 	"clientNew.expiryLabel": "Expiry date (optional)",
