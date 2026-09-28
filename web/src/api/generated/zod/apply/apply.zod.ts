@@ -314,11 +314,11 @@ export const PostApiApplyResponse = zod.object({
   "source": zod.enum(['candidate', 'live-host', 'render', 'managed-unit-catalog'])
 })),
   "operations": zod.array(zod.object({
-  "type": zod.enum(['promote_file', 'reload_service', 'restart_service']).describe('Operation kinds emitted by the apply planner.'),
+  "type": zod.enum(['promote_file', 'remove_file', 'reload_service', 'restart_service', 'stop_service', 'disable_service', 'enable_service', 'reconcile_firewall']).describe('Operation kinds emitted by the apply planner.'),
   "source": zod.string().optional(),
   "destination": zod.string().optional(),
   "unit": zod.string().optional(),
-  "interruptionRisk": zod.enum(['none', 'reload', 'connection-drop', 'lockout-risk']),
+  "interruptionRisk": zod.enum(['none', 'reload', 'connection-drop', 'lockout-risk', 'teardown', 'boot-persistence', 'firewall-change']),
   "rollbackAvailable": zod.boolean(),
   "validationSource": zod.string()
 }))
@@ -398,11 +398,11 @@ export const PostApiApplyPlanResponse = zod.object({
   "source": zod.enum(['candidate', 'live-host', 'render', 'managed-unit-catalog'])
 })),
   "operations": zod.array(zod.object({
-  "type": zod.enum(['promote_file', 'reload_service', 'restart_service']).describe('Operation kinds emitted by the apply planner.'),
+  "type": zod.enum(['promote_file', 'remove_file', 'reload_service', 'restart_service', 'stop_service', 'disable_service', 'enable_service', 'reconcile_firewall']).describe('Operation kinds emitted by the apply planner.'),
   "source": zod.string().optional(),
   "destination": zod.string().optional(),
   "unit": zod.string().optional(),
-  "interruptionRisk": zod.enum(['none', 'reload', 'connection-drop', 'lockout-risk']),
+  "interruptionRisk": zod.enum(['none', 'reload', 'connection-drop', 'lockout-risk', 'teardown', 'boot-persistence', 'firewall-change']),
   "rollbackAvailable": zod.boolean(),
   "validationSource": zod.string()
 }))
@@ -432,11 +432,11 @@ export const GetApiApplyHistoryResponseItem = zod.object({
   "source": zod.enum(['candidate', 'live-host', 'render', 'managed-unit-catalog'])
 })),
   "operations": zod.array(zod.object({
-  "type": zod.enum(['promote_file', 'reload_service', 'restart_service']).describe('Operation kinds emitted by the apply planner.'),
+  "type": zod.enum(['promote_file', 'remove_file', 'reload_service', 'restart_service', 'stop_service', 'disable_service', 'enable_service', 'reconcile_firewall']).describe('Operation kinds emitted by the apply planner.'),
   "source": zod.string().optional(),
   "destination": zod.string().optional(),
   "unit": zod.string().optional(),
-  "interruptionRisk": zod.enum(['none', 'reload', 'connection-drop', 'lockout-risk']),
+  "interruptionRisk": zod.enum(['none', 'reload', 'connection-drop', 'lockout-risk', 'teardown', 'boot-persistence', 'firewall-change']),
   "rollbackAvailable": zod.boolean(),
   "validationSource": zod.string()
 }))
