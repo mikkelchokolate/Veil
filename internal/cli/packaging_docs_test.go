@@ -21,7 +21,7 @@ type releaseWorkflowStep struct {
 	With map[string]any `yaml:"with"`
 }
 
-func releaseWorkflowSteps(t *testing.T) (map[string]string, []releaseWorkflowStep) {
+func releaseWorkflowSteps(t *testing.T) (topLevel map[string]string, effective map[string]string, steps []releaseWorkflowStep) {
 	t.Helper()
 	body, err := os.ReadFile("../../.github/workflows/release.yml")
 	if err != nil {
@@ -30,20 +30,29 @@ func releaseWorkflowSteps(t *testing.T) (map[string]string, []releaseWorkflowSte
 	var workflow struct {
 		Permissions map[string]string `yaml:"permissions"`
 		Jobs        map[string]struct {
-			Steps []releaseWorkflowStep `yaml:"steps"`
+			Permissions map[string]string     `yaml:"permissions"`
+			Steps       []releaseWorkflowStep `yaml:"steps"`
 		} `yaml:"jobs"`
 	}
 	if err := yaml.Unmarshal(body, &workflow); err != nil {
 		t.Fatalf("release.yml must parse as workflow YAML: %v", err)
 	}
-	var steps []releaseWorkflowStep
+	effective = map[string]string{}
+	for k, v := range workflow.Permissions {
+		effective[k] = v
+	}
 	for _, job := range workflow.Jobs {
 		steps = append(steps, job.Steps...)
+		// Publishing jobs escalate per-job (#1146): the effective permission
+		// set is the top-level floor plus any per-job grants.
+		for k, v := range job.Permissions {
+			effective[k] = v
+		}
 	}
 	if len(steps) == 0 {
 		t.Fatal("release.yml has no job steps")
 	}
-	return workflow.Permissions, steps
+	return workflow.Permissions, effective, steps
 }
 
 func stepHasUse(steps []releaseWorkflowStep, prefix string) bool {
@@ -70,11 +79,16 @@ func stepRunContains(steps []releaseWorkflowStep, want string) bool {
 // provenance attestation — each proven by an actual `uses:`/`run:`/`with:`
 // field, never by a comment or step name alone.
 func TestReleaseWorkflowBuildsSignedPackagesAndSBOM(t *testing.T) {
-	permissions, steps := releaseWorkflowSteps(t)
+	topLevel, permissions, steps := releaseWorkflowSteps(t)
 
 	for _, perm := range []string{"id-token", "attestations"} {
 		if got := permissions[perm]; got != "write" {
 			t.Fatalf("release workflow permissions[%q] = %q, want \"write\" (keyless signing/attestation)", perm, got)
+		}
+		// The grants must live on the publishing job, not the workflow floor:
+		// a top-level write token defeats the least-privilege gate (#1146).
+		if got := topLevel[perm]; got == "write" {
+			t.Fatalf("release workflow top-level permissions[%q] = \"write\" — publishing grants must be per-job", perm)
 		}
 	}
 

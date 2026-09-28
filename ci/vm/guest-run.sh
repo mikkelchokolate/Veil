@@ -36,6 +36,10 @@ finish() {
   # Artifacts out on every exit path.
   if [ -d "${ARTIFACTS_GUEST}" ] && [ -d "${EXCHANGE}/artifacts" ]; then
     cp -rf "${ARTIFACTS_GUEST}/." "${EXCHANGE}/artifacts/" 2>/dev/null || true
+    # Job-produced trees may carry symlinks/fifos; keep the exchange volume
+    # to regular files/dirs so the host-side merge in vm-run.sh cannot
+    # propagate them (#1149).
+    find "${EXCHANGE}/artifacts" -mindepth 1 ! -type f ! -type d -delete 2>/dev/null || true
   fi
   exit "${rc}"
 }

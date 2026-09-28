@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
@@ -111,20 +110,6 @@ type fileInfo struct {
 	uid  int
 	gid  int
 	mode os.FileMode
-}
-
-func fileOwnerUID(fi os.FileInfo) int {
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
-		return int(st.Uid)
-	}
-	return -1
-}
-
-func fileOwnerGID(fi os.FileInfo) int {
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
-		return int(st.Gid)
-	}
-	return -1
 }
 
 func (s Store) Marshal(snapshot model.ManagementSnapshot) ([]byte, error) {

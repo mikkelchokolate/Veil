@@ -59,6 +59,7 @@ required = {
     "CI_SINGBOX_SHA256",
     "CI_OAPI_CODEGEN_VERSION",
     "CI_SHELLCHECK_VERSION",
+    "CI_SHELLCHECK_TARBALL_SHA256",
     "CI_SYFT_VERSION",
     "CI_NODE_IMAGE_DIGEST",
     "CI_GO_IMAGE_DIGEST",
@@ -349,6 +350,17 @@ expect(
     match(r"^shellcheck\s+(\S+)$", packages_lock, "packages.lock shellcheck"),
     f"{versions['CI_SHELLCHECK_VERSION']}-1",
 )
+
+# The release quality job downloads the upstream shellcheck tarball — it must
+# carry and CHECK the pinned sha256 before extracting, never pipe an
+# unverified stream into sudo tar (#1146).
+release_yml = (ROOT / ".github/workflows/release.yml").read_text()
+if "CI_SHELLCHECK_TARBALL_SHA256" not in release_yml:
+    fail("release.yml does not consume the pinned CI_SHELLCHECK_TARBALL_SHA256")
+if "sha256sum --check" not in release_yml:
+    fail("release.yml does not sha256-verify the shellcheck tarball before extraction")
+if re.search(r"shellcheck[^\n]*\|\s*sudo\s+tar|curl[^\n]*\|[^\n]*tar", release_yml):
+    fail("release.yml still pipes a download into tar without checksum verification")
 
 # Every workflow `uses:` ref must be a full-length commit SHA so dependabot
 # retargets and tag rewrites cannot silently change gate behaviour (#417).

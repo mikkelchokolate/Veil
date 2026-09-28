@@ -61,12 +61,3 @@ func writeStoreFileAtomicWithSync(path string, body []byte, previous *fileInfo, 
 	committed = true
 	return syncStoreDirectory(dir)
 }
-
-func syncStoreDirectory(path string) error {
-	dir, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer dir.Close()
-	return dir.Sync()
-}
