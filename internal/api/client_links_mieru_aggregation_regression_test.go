@@ -41,7 +41,9 @@ func TestV1ClientLinksAggregatesMieruTransportBindings(t *testing.T) {
 			Protocol string `json:"protocol"`
 		} `json:"items"`
 	}
-	deadline := time.Now().Add(30 * time.Second)
+	// Each mutation queues a full apply revision (stage + promote + health);
+	// on a loaded CI worker three revisions can take over a minute to settle.
+	deadline := time.Now().Add(2 * time.Minute)
 	for {
 		linksResp = v1Request(t, router, http.MethodGet, "/api/v1/clients/"+id+"/links", "")
 		if linksResp.Code == http.StatusOK {

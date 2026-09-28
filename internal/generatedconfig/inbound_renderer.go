@@ -41,7 +41,7 @@ func (r InboundRenderer) RenderNaive(inbound Inbound, includePanel bool) (string
 	username := naiveUsername(r.settings, inbound)
 	root := fallbackRoot(r.settings, inbound)
 	users := access.NaiveUsers()
-	if len(users) == 0 && (len(inbound.Profiles) > 0 || inbound.HasClientBindings) {
+	if len(users) == 0 && (inbound.HadClientProfiles()) {
 		// Credential-managed inbound with every client revoked: an empty user
 		// list would revive the fallback password inside RenderNaiveCaddyfile
 		// (issue #1098); the sentinel account can never authenticate.
@@ -123,7 +123,7 @@ func (r InboundRenderer) RenderHysteria2(inbound Inbound) (string, error) {
 	url := masqueradeURL(r.settings, inbound)
 	domain := model.ResolveInboundDomain(inbound, r.settings)
 	hyUsers := access.Hysteria2Users()
-	if len(hyUsers) == 0 && (len(inbound.Profiles) > 0 || inbound.HasClientBindings) {
+	if len(hyUsers) == 0 && (inbound.HadClientProfiles()) {
 		// Credential-managed inbound with every client revoked must not fall
 		// back to the shared inbound password (issue #1098). The sentinel
 		// account renders a syntactically valid config that authenticates no

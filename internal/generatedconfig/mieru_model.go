@@ -35,7 +35,7 @@ func (m MieruGeneratedConfigModel) Build(inbounds []Inbound) (renderer.MieruConf
 		if err != nil {
 			return renderer.MieruConfig{}, false, err
 		}
-		if len(credentials) == 0 && (hasProfiles(inbound) || inbound.HasClientBindings) {
+		if len(credentials) == 0 && inbound.HadClientProfiles() {
 			// Fall back to the inbound credential only when the inbound has no
 			// client profiles at all AND no normalized bindings. Profiles that
 			// exist but are all disabled, or bindings whose credentials are all
@@ -85,10 +85,6 @@ func (m MieruGeneratedConfigModel) Build(inbounds []Inbound) (renderer.MieruConf
 // model.EffectiveInboundPassword and never trims the winning value (audit #311).
 func mieruEffectivePassword(inbound Inbound) string {
 	return model.EffectiveInboundPassword(inbound)
-}
-
-func hasProfiles(inbound Inbound) bool {
-	return len(inbound.Profiles) > 0
 }
 
 func (m MieruGeneratedConfigModel) includes(inbound Inbound) bool {
