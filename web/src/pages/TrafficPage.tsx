@@ -7,8 +7,15 @@ import {
 } from "echarts/components";
 import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
-import { useEffect, useRef } from "react";
-import { apiFetch } from "../api/fetcher";
+import { useEffect, useMemo, useRef } from "react";
+import { apiFetch, mutationErrorMessage } from "../api/fetcher";
+import type {
+	ConnectionsStats,
+	PresenceItem,
+	PresenceResponse,
+	TrafficBucket,
+	TrafficHistoryResponse,
+} from "../api/generated/models";
 import { Badge } from "../components/ui/badge";
 import { FormMessage } from "../components/ui/form";
 import {
@@ -68,7 +75,64 @@ echarts.use([
 	CanvasRenderer,
 ]);
 
-function chartOption(
+/** Shared echarts host: owns init/resize/dispose so each card only supplies an
+ * option object. The mount-time apply reads optionRef so the first paint uses
+ * the freshest option even when an earlier resize tick re-runs apply(). */
+function EChartView({ option }: { option: echarts.EChartsCoreOption }) {
+	const elRef = useRef<HTMLDivElement>(null);
+	const chartRef = useRef<echarts.ECharts | null>(null);
+	const optionRef = useRef(option);
+	optionRef.current = option;
+
+	useEffect(() => {
+		const el = elRef.current;
+		if (!el) return;
+		let disposed = false;
+
+		const apply = () => {
+			if (disposed) return;
+			let chart = chartRef.current;
+			if (!chart) {
+				if (el.clientWidth === 0 || el.clientHeight === 0) return;
+				chart = echarts.init(el);
+				chartRef.current = chart;
+			}
+			chart.setOption(optionRef.current, true);
+		};
+
+		apply();
+		const onResize = () => {
+			apply();
+			chartRef.current?.resize();
+		};
+		window.addEventListener("resize", onResize);
+		const ro =
+			typeof ResizeObserver === "undefined"
+				? null
+				: new ResizeObserver(onResize);
+		ro?.observe(el);
+
+		return () => {
+			disposed = true;
+			window.removeEventListener("resize", onResize);
+			ro?.disconnect();
+			try {
+				chartRef.current?.dispose();
+			} catch {
+				/* painter may already be torn down */
+			}
+			chartRef.current = null;
+		};
+	}, []);
+
+	useEffect(() => {
+		chartRef.current?.setOption(option, true);
+	}, [option]);
+
+	return <div ref={elRef} className="traffic-chart" />;
+}
+
+function topChartOption(
 	items: TopEntry[],
 	t: (key: string) => string,
 ): echarts.EChartsCoreOption {
@@ -127,62 +191,266 @@ function chartOption(
 
 function TrafficUsageChart({ items }: { items: TopEntry[] }) {
 	const { t } = useI18n();
-	const elRef = useRef<HTMLDivElement>(null);
-	const chartRef = useRef<echarts.ECharts | null>(null);
-	const itemsRef = useRef(items);
-	const tRef = useRef(t);
-	itemsRef.current = items;
-	tRef.current = t;
-
-	useEffect(() => {
-		const el = elRef.current;
-		if (!el) return;
-		let disposed = false;
-
-		const apply = () => {
-			if (disposed) return;
-			let chart = chartRef.current;
-			if (!chart) {
-				if (el.clientWidth === 0 || el.clientHeight === 0) return;
-				chart = echarts.init(el);
-				chartRef.current = chart;
-			}
-			chart.setOption(chartOption(itemsRef.current, tRef.current), true);
-		};
-
-		apply();
-		const onResize = () => {
-			apply();
-			chartRef.current?.resize();
-		};
-		window.addEventListener("resize", onResize);
-		const ro =
-			typeof ResizeObserver === "undefined"
-				? null
-				: new ResizeObserver(onResize);
-		ro?.observe(el);
-
-		return () => {
-			disposed = true;
-			window.removeEventListener("resize", onResize);
-			ro?.disconnect();
-			try {
-				chartRef.current?.dispose();
-			} catch {
-				/* painter may already be torn down */
-			}
-			chartRef.current = null;
-		};
-	}, []);
-
-	useEffect(() => {
-		chartRef.current?.setOption(chartOption(items, t), true);
-	}, [items, t]);
-
-	return <div ref={elRef} className="traffic-chart" />;
+	const option = useMemo(() => topChartOption(items, t), [items, t]);
+	return <EChartView option={option} />;
 }
 
-/** B9: traffic dashboard with Apache ECharts breakdown. When no runtime feeds
+function fmtBucketTime(bucketStart: number): string {
+	return new Date(bucketStart * 1000).toLocaleTimeString(undefined, {
+		hour: "2-digit",
+		minute: "2-digit",
+	});
+}
+
+function historyChartOption(
+	buckets: TrafficBucket[],
+	t: (key: string) => string,
+): echarts.EChartsCoreOption {
+	const uploadLabel = t("traffic.upload");
+	const downloadLabel = t("traffic.download");
+	return {
+		tooltip: {
+			trigger: "axis",
+			axisPointer: { type: "shadow" },
+			formatter: (params: unknown) => {
+				const p = params as Array<{
+					name: string;
+					value: number;
+					seriesName: string;
+				}>;
+				if (!p.length) return "";
+				// Axis labels come from Date formatting, but the tooltip emits raw
+				// HTML — escape anyway so a hostile locale string cannot inject.
+				const name = escapeHtml(p[0].name);
+				const up = p.find((x) => x.seriesName === uploadLabel)?.value ?? 0;
+				const down = p.find((x) => x.seriesName === downloadLabel)?.value ?? 0;
+				return `${name}<br/>${uploadLabel}: ${fmtBytes(up)}<br/>${downloadLabel}: ${fmtBytes(down)}`;
+			},
+		},
+		legend: { data: [uploadLabel, downloadLabel] },
+		grid: { left: "3%", right: "4%", bottom: "3%", containLabel: true },
+		xAxis: {
+			type: "category",
+			data: buckets.map((b) => fmtBucketTime(b.bucketStart)),
+		},
+		yAxis: {
+			type: "value",
+			axisLabel: { formatter: (v: number) => fmtBytes(v) },
+		},
+		series: [
+			{
+				name: uploadLabel,
+				type: "bar",
+				stack: "total",
+				data: buckets.map((b) => b.uploadDelta),
+				itemStyle: { color: "#3b82f6" },
+			},
+			{
+				name: downloadLabel,
+				type: "bar",
+				stack: "total",
+				data: buckets.map((b) => b.downloadDelta),
+				itemStyle: { color: "#10b981" },
+			},
+		],
+	};
+}
+
+const HISTORY_LIMIT = 60;
+
+/** Aggregate bucketed traffic history (GET /api/v1/traffic/history). Buckets
+ * carry per-bucket deltas, not cumulative totals — the chart stacks them. */
+function HistoryCard() {
+	const { t } = useI18n();
+	const history = useQuery<TrafficHistoryResponse>({
+		queryKey: ["traffic", "history"],
+		queryFn: () => apiFetch(`/api/v1/traffic/history?limit=${HISTORY_LIMIT}`),
+		refetchInterval: 30000,
+	});
+
+	// items is nullable and not guaranteed to arrive sorted — order by bucket
+	// start so the chart is always time-ascending.
+	const buckets = useMemo(
+		() =>
+			[...(history.data?.items ?? [])].sort(
+				(a, b) => a.bucketStart - b.bucketStart,
+			),
+		[history.data],
+	);
+	const option = useMemo(() => historyChartOption(buckets, t), [buckets, t]);
+
+	return (
+		<div className="card">
+			<h2>{t("traffic.history.title")}</h2>
+			{history.isLoading ? (
+				<p className="muted">{t("common.loading")}</p>
+			) : history.isError ? (
+				<FormMessage>
+					{mutationErrorMessage(
+						history.error,
+						t("traffic.history.unavailable"),
+						t,
+					)}
+				</FormMessage>
+			) : buckets.length === 0 ? (
+				<p className="muted">{t("traffic.history.empty")}</p>
+			) : (
+				<EChartView option={option} />
+			)}
+		</div>
+	);
+}
+
+function PresenceStatusCell({ item }: { item: PresenceItem }) {
+	const { t } = useI18n();
+	// online is tri-state: true = online, false = offline, null = no telemetry
+	// source can prove either. null must never render as a fake "offline".
+	if (item.online === true) {
+		return <Badge variant="success">{t("traffic.presence.online")}</Badge>;
+	}
+	if (item.online === false) {
+		return <Badge variant="outline">{t("traffic.presence.offline")}</Badge>;
+	}
+	return <span className="muted">{t("traffic.presence.noTelemetry")}</span>;
+}
+
+function PresenceSourceCell({ item }: { item: PresenceItem }) {
+	const { t } = useI18n();
+	const key = `traffic.presence.source.${item.source}`;
+	const label = t(key);
+	return <span className="muted">{label === key ? item.source : label}</span>;
+}
+
+/** Per-client online presence fed by GET /api/v1/presence (5s poll). */
+function PresenceCard() {
+	const { t } = useI18n();
+	const presence = useQuery<PresenceResponse>({
+		queryKey: ["traffic", "presence"],
+		queryFn: () => apiFetch("/api/v1/presence"),
+		refetchInterval: 5000,
+	});
+
+	const items = presence.data?.items ?? [];
+
+	return (
+		<div className="card">
+			<h2>{t("traffic.presence.title")}</h2>
+			{presence.isLoading ? (
+				<p className="muted">{t("common.loading")}</p>
+			) : presence.isError ? (
+				<FormMessage>
+					{mutationErrorMessage(
+						presence.error,
+						t("traffic.presence.unavailable"),
+						t,
+					)}
+				</FormMessage>
+			) : items.length === 0 ? (
+				<p className="muted">{t("traffic.presence.empty")}</p>
+			) : (
+				<Table>
+					<TableHeader>
+						<TableRow>
+							<TableHead>{t("traffic.client")}</TableHead>
+							<TableHead>{t("traffic.presence.status")}</TableHead>
+							<TableHead>{t("traffic.presence.source")}</TableHead>
+							<TableHead>{t("traffic.presence.connections")}</TableHead>
+							<TableHead>{t("traffic.presence.lastActive")}</TableHead>
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{items.map((item) => (
+							<TableRow key={item.clientId}>
+								<TableCell>{item.name}</TableCell>
+								<TableCell>
+									<PresenceStatusCell item={item} />
+								</TableCell>
+								<TableCell>
+									<PresenceSourceCell item={item} />
+								</TableCell>
+								<TableCell className="mono">
+									{item.connections ?? "—"}
+								</TableCell>
+								<TableCell className="muted">
+									{item.lastActiveAt != null
+										? new Date(item.lastActiveAt * 1000).toLocaleString()
+										: "—"}
+								</TableCell>
+							</TableRow>
+						))}
+					</TableBody>
+				</Table>
+			)}
+		</div>
+	);
+}
+
+/** Listening sockets snapshot fed by GET /api/connections (10s poll). */
+function ListenersCard() {
+	const { t } = useI18n();
+	const conn = useQuery<ConnectionsStats>({
+		queryKey: ["traffic", "connections"],
+		queryFn: () => apiFetch("/api/connections"),
+		refetchInterval: 10000,
+	});
+
+	// Deterministic order: port ascending, then proto/address tiebreakers —
+	// the backend returns raw procfs order which can shuffle between polls.
+	const listeners = useMemo(
+		() =>
+			[...(conn.data?.listeners ?? [])].sort(
+				(a, b) =>
+					a.port - b.port ||
+					a.proto.localeCompare(b.proto) ||
+					a.address.localeCompare(b.address),
+			),
+		[conn.data],
+	);
+
+	return (
+		<div className="card">
+			<h2>{t("traffic.listeners.title")}</h2>
+			{conn.isLoading ? (
+				<p className="muted">{t("common.loading")}</p>
+			) : conn.isError ? (
+				<FormMessage>
+					{mutationErrorMessage(
+						conn.error,
+						t("traffic.listeners.unavailable"),
+						t,
+					)}
+				</FormMessage>
+			) : listeners.length === 0 ? (
+				<p className="muted">{t("traffic.listeners.empty")}</p>
+			) : (
+				<Table>
+					<TableHeader>
+						<TableRow>
+							<TableHead>{t("traffic.listeners.proto")}</TableHead>
+							<TableHead>{t("traffic.listeners.address")}</TableHead>
+							<TableHead>{t("traffic.listeners.port")}</TableHead>
+							<TableHead>{t("traffic.listeners.process")}</TableHead>
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{listeners.map((l) => (
+							<TableRow key={`${l.proto}|${l.address}|${l.port}`}>
+								<TableCell className="mono">{l.proto}</TableCell>
+								<TableCell className="mono">{l.address}</TableCell>
+								<TableCell className="mono">{l.port}</TableCell>
+								<TableCell className="muted">{l.process ?? "—"}</TableCell>
+							</TableRow>
+						))}
+					</TableBody>
+				</Table>
+			)}
+		</div>
+	);
+}
+
+/** Traffic observability: aggregate telemetry summary, live per-client
+ * presence, listening sockets, bucketed history, and the per-client usage
+ * breakdown. Each card polls and fails independently. When no runtime feeds
  * counters the panel says so explicitly instead of rendering a fake graph. */
 export function TrafficPage() {
 	const { t } = useI18n();
@@ -251,6 +519,12 @@ export function TrafficPage() {
 					</>
 				) : null}
 			</div>
+
+			<PresenceCard />
+
+			<ListenersCard />
+
+			<HistoryCard />
 
 			{hasTelemetry ? (
 				<div className="card">

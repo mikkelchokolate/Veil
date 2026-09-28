@@ -35,6 +35,15 @@ export const defaultHandlers = [
 		HttpResponse.json({ items: [], total: 0, page: 1, pageSize: 500 }),
 	),
 	http.get("/api/processes", () => HttpResponse.json({ processes: [] })),
+	// Traffic page live feeds — empty defaults keep tests that render the page
+	// (or the whole router) quiet; scenarios override with server.use(...).
+	http.get("/api/v1/presence", () =>
+		HttpResponse.json({ items: [], count: 0 }),
+	),
+	http.get("/api/connections", () => HttpResponse.json({ listeners: [] })),
+	http.get("/api/v1/traffic/history", () =>
+		HttpResponse.json({ items: null, count: 0 }),
+	),
 ];
 
 export { HttpResponse, http };
