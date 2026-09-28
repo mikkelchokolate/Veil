@@ -207,7 +207,7 @@ func WarpSocksListenInBand(listen string) bool {
 // endpoints. Callers pass an already-IPv4 address.
 func warpSocksBandEndpoint(addr netip.Addr) bool {
 	o := addr.As4()
-	return o[2] == 0 && o[3] == 0 || o[2] == 255 && o[3] == 255
+	return (o[2] == 0 && o[3] == 0) || (o[2] == 255 && o[3] == 255)
 }
 
 // NormalizeWarpSocksListen rewrites values that cannot function as the WARP
