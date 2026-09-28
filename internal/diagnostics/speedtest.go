@@ -14,12 +14,16 @@ var ErrSpeedtestUnavailable = errors.New("speedtest unavailable")
 
 var errSpeedtestUnavailable = ErrSpeedtestUnavailable
 
+// SpeedtestResult is the viewer-facing payload. It deliberately contains no
+// Raw CLI output: both parsers expose the entire upstream JSON (provider,
+// server host/location, external IP metadata) to any viewer, which leaks
+// infrastructure details the panel never displays (#1088). Only the fields
+// the UI renders are populated.
 type SpeedtestResult struct {
 	Server       string  `json:"server,omitempty"`
 	PingMS       float64 `json:"pingMs"`
 	DownloadMbps float64 `json:"downloadMbps"`
 	UploadMbps   float64 `json:"uploadMbps"`
-	Raw          string  `json:"raw,omitempty"`
 }
 
 var speedtestRunner = RunSpeedtest
@@ -72,7 +76,6 @@ func parseSpeedtestCLIJSON(raw []byte) (SpeedtestResult, error) {
 		PingMS:       payload.Ping,
 		DownloadMbps: payload.Download / 1_000_000,
 		UploadMbps:   payload.Upload / 1_000_000,
-		Raw:          string(raw),
 	}, nil
 }
 
@@ -101,6 +104,5 @@ func parseOoklaSpeedtestJSON(raw []byte) (SpeedtestResult, error) {
 		PingMS:       payload.Ping.Latency,
 		DownloadMbps: payload.Download.Bandwidth * 8 / 1_000_000,
 		UploadMbps:   payload.Upload.Bandwidth * 8 / 1_000_000,
-		Raw:          string(raw),
 	}, nil
 }

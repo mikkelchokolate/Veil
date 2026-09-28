@@ -92,6 +92,24 @@ func (r Resolver) isTrusted(address netip.Addr) bool {
 	return false
 }
 
+// RateLimitKey collapses a resolved client address into the identity used
+// for throttling. An IPv6 address maps to its /64 prefix so a client that
+// rotates through the huge address space one prefix typically provides
+// cannot mint a fresh rate-limit bucket per request (#1101). IPv4 and
+// unparseable input pass through unchanged, and the full address is still
+// what audit and logs record — only bucket keys aggregate.
+func RateLimitKey(address string) string {
+	addr, err := netip.ParseAddr(strings.Trim(strings.TrimSpace(address), "[]"))
+	if err != nil {
+		return address
+	}
+	addr = addr.Unmap()
+	if addr.Is4() {
+		return address
+	}
+	return netip.PrefixFrom(addr, 64).Masked().String()
+}
+
 func parseRemoteAddr(raw string) (netip.Addr, error) {
 	host := raw
 	if parsedHost, _, err := net.SplitHostPort(raw); err == nil {

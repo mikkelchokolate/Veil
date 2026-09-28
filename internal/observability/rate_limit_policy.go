@@ -28,6 +28,11 @@ func DefaultRateLimitPolicy() RateLimitPolicy {
 			"/api/client-links":      {RatePerMinute: 10, Burst: 3},
 			"/api/backups/":          {RatePerMinute: 10, Burst: 3},
 			"/api/apply/plan":        {RatePerMinute: 6, Burst: 2},
+			// RU-recommended profile preview spawns a full render pipeline —
+			// key generation plus a Caddy config render — per call, so it
+			// belongs in the expensive-mutation tier next to apply plans,
+			// not on the 100/min shared default (#1144).
+			"/api/profiles/ru-recommended/preview": {RatePerMinute: 6, Burst: 2},
 		},
 		readLimits: map[string]EndpointLimit{
 			// Credential reads gated by isRateLimitedReadPath (#583/#594).
@@ -45,6 +50,9 @@ func DefaultRateLimitPolicy() RateLimitPolicy {
 			// /api/diagnostics.
 			"/api/disk":        {RatePerMinute: 6, Burst: 2},
 			"/api/connections": {RatePerMinute: 6, Burst: 2},
+			// /api/processes walks the host process table every request —
+			// same tier as the other expensive diagnostics (#1144).
+			"/api/processes": {RatePerMinute: 6, Burst: 2},
 			// /api/runtime/observation (#648) pays the disk walk, the /proc fd
 			// attribution, and a process scan in one request, so it gets a
 			// stricter budget than the single-purpose diagnostics above.

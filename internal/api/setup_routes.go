@@ -31,7 +31,11 @@ func (s *managementState) handleSetupStatus(w http.ResponseWriter, r *http.Reque
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	required := !s.setup.Completed && len(s.users) == 0
+	// required asks "can a client perform first-run setup now?". Once the
+	// instance has ever been provisioned the answer stays no even if a
+	// rollback or restore emptied the user list — re-running setup would be
+	// the anonymous-admin regrant of #1100. Recovery is `veil admin reset`.
+	required := !s.setup.Completed && len(s.users) == 0 && !s.usersProvisionedLocked()
 	// Settings may not have been normalized yet (e.g. before first save); an
 	// unset panelAccess behaves identically to "local" everywhere else, so
 	// report the effective mode instead of leaking the empty sentinel.
@@ -83,15 +87,39 @@ func (s *managementState) handleSetupComplete(w http.ResponseWriter, r *http.Req
 	} else {
 		req.Locale = panel.ResolveLocale("", r)
 	}
-	hashed, err := s.hashPassword([]byte(req.Password))
-	if err != nil {
+	// Cheap pre-check before spending a bcrypt hash: an already-provisioned
+	// instance (the overwhelmingly common case) gets its conflict answer
+	// without queueing CPU-bound hash work at all (#1101). The authoritative
+	// check is repeated under the lock below.
+	s.mu.Lock()
+	alreadyDone := s.setup.Completed || len(s.users) != 0 || s.usersProvisionedLocked()
+	s.mu.Unlock()
+	if alreadyDone {
+		writeError(w, "first-run setup is already complete", http.StatusConflict)
+		return
+	}
+
+	// Setup hashing shares the login bcrypt ceiling so a setup/login spray
+	// cannot stack unbounded CPU-bound work (#1101).
+	releaseBcrypt := acquireBcryptWork()
+	if releaseBcrypt == nil {
+		w.Header().Set("Retry-After", "1")
+		writeError(w, "too many requests", http.StatusTooManyRequests)
+		return
+	}
+	hashed, hashErr := s.hashPassword([]byte(req.Password))
+	releaseBcrypt()
+	if hashErr != nil {
 		writeError(w, "failed to hash password", http.StatusInternalServerError)
 		return
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.setup.Completed || len(s.users) != 0 {
+	// The provisioning latch must agree setup is still possible: a
+	// provisioned-then-emptied instance reports "already complete" so the
+	// anonymous first-run path can never re-arm (#1100).
+	if s.setup.Completed || len(s.users) != 0 || s.usersProvisionedLocked() {
 		writeError(w, "first-run setup is already complete", http.StatusConflict)
 		return
 	}
@@ -108,6 +136,10 @@ func (s *managementState) handleSetupComplete(w http.ResponseWriter, r *http.Req
 		Role:         "admin",
 		Locale:       req.Locale,
 	}}
+	// The first user permanently latches the instance as provisioned —
+	// outside the state file itself, so no rollback/restore can clear it —
+	// and revokes any bootstrap sessions minted before this point (#1100).
+	s.noteUsersProvisionedLocked()
 	if err := s.saveLocked(); err != nil {
 		s.setup = previousSetup
 		s.users = previousUsers

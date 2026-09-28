@@ -435,7 +435,7 @@ func TestHandleLoginValidation(t *testing.T) {
 
 	get := httptest.NewRequest(http.MethodGet, "/api/auth/login", nil)
 	rec := httptest.NewRecorder()
-	state.handleLogin(rec, get)
+	state.handleLoginWithRevalidation(rec, get)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET status=%d", rec.Code)
 	}
@@ -443,7 +443,7 @@ func TestHandleLoginValidation(t *testing.T) {
 	badJSON := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{`))
 	badJSON.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
-	state.handleLogin(rec, badJSON)
+	state.handleLoginWithRevalidation(rec, badJSON)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("bad JSON status=%d", rec.Code)
 	}
@@ -451,7 +451,7 @@ func TestHandleLoginValidation(t *testing.T) {
 	badCreds := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"alice","password":"wrong"}`))
 	badCreds.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
-	state.handleLogin(rec, badCreds)
+	state.handleLoginWithRevalidation(rec, badCreds)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("bad creds status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -463,7 +463,7 @@ func TestHandleLoginValidation(t *testing.T) {
 	valid := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"alice","password":"secret-password"}`))
 	valid.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
-	state.handleLogin(rec, valid)
+	state.handleLoginWithRevalidation(rec, valid)
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("session failure status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -480,7 +480,7 @@ func TestHandleLoginFallbackAdmin(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"admin","password":"naive-password"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	state.handleLogin(rec, req)
+	state.handleLoginWithRevalidation(rec, req)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"role":"admin"`) {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}

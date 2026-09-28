@@ -32,7 +32,9 @@ func (s *managementState) handleEffectiveAuthStatus(w http.ResponseWriter, r *ht
 		}
 	}
 	s.mu.Lock()
-	devAnonymous := s.allowDevAnonymous && s.authToken == "" && len(s.users) == 0
+	// Same gate as the middleware: dev-anonymous is a never-configured-only
+	// path and stays closed once the instance was ever provisioned (#1100).
+	devAnonymous := s.allowDevAnonymous && s.authToken == "" && len(s.users) == 0 && !s.usersProvisionedLocked()
 	s.mu.Unlock()
 	if devAnonymous {
 		writeJSON(w, map[string]any{

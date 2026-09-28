@@ -146,9 +146,11 @@ var endpointPolicies = []endpointPolicy{
 }
 
 func capabilityForEndpoint(method, path string) (endpointCapability, bool) {
-	if method == http.MethodOptions {
-		return capabilityPublic, true
-	}
+	// OPTIONS is deliberately NOT blanket-public: the auth middleware answers
+	// it in authMiddlewareWithOptions before any capability check, so a
+	// classification here must never hand an anonymous caller through to a
+	// handler's method switch (#1106). An OPTIONS that somehow reaches this
+	// point falls through the generic rules below like any other method.
 	if method == http.MethodHead {
 		method = http.MethodGet
 	}
@@ -201,6 +203,21 @@ func splitEndpointPath(path string) []string {
 		return nil
 	}
 	return strings.Split(trimmed, "/")
+}
+
+// registeredEndpointMethods returns the HTTP methods endpointPolicies
+// registers for path, in registration order. Nil when no policy pattern
+// matches — for /api/ and /s/ paths that means the endpoint is unknown.
+func registeredEndpointMethods(path string) []string {
+	var methods []string
+	seen := map[string]bool{}
+	for _, policy := range endpointPolicies {
+		if matchEndpointPattern(policy.pattern, path) && !seen[policy.method] {
+			seen[policy.method] = true
+			methods = append(methods, policy.method)
+		}
+	}
+	return methods
 }
 
 func capabilityAllowsRole(capability endpointCapability, role string) bool {

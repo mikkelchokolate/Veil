@@ -174,7 +174,10 @@ func TestSubscriptionRateLimitIPv6Peer(t *testing.T) {
 	if limiter.allow("token-over", "[2001:db8::1]:8888", now) {
 		t.Fatal("IPv6 source bucket did not trip at the limit")
 	}
-	if !limiter.allow("token-over", "[2001:db8::2]:8888", now) {
-		t.Fatal("distinct IPv6 peer shared the saturated bucket")
+	if limiter.allow("token-over", "[2001:db8::2]:8888", now) {
+		t.Fatal("distinct IPv6 peer in the same /64 bypassed the saturated bucket")
+	}
+	if !limiter.allow("token-over", "[2001:db8:1::1]:8888", now) {
+		t.Fatal("IPv6 peer in a different /64 shared the saturated bucket")
 	}
 }

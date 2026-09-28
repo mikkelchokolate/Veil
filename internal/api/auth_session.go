@@ -15,7 +15,6 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/observability"
 	"github.com/mikkelchokolate/Veil/internal/panel"
 	"github.com/mikkelchokolate/Veil/internal/webbasepath"
-	"golang.org/x/crypto/bcrypt"
 )
 
 var errUserNotFound = errors.New("user not found")
@@ -80,113 +79,21 @@ func (s *managementState) sessionRegistry() *SessionRegistry {
 	return globalSessions
 }
 
-func (s *managementState) handleLogin(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, http.MethodPost)
-		return
-	}
-
-	var req struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-	if !decodeJSONRequest(w, r, &req) {
-		return
-	}
-	if s.rejectThrottledLogin(w, r, req.Username) {
-		return
-	}
-
-	s.mu.Lock()
-	var matchedUser User
-	foundUser := false
-	for _, u := range s.users {
-		if u.Username == req.Username {
-			matchedUser = u
-			foundUser = true
-			break
-		}
-	}
-	userCount := len(s.users)
-	fallbackPassword := s.settings.NaivePassword
-	s.mu.Unlock()
-
-	valid := false
-	role := "viewer"
-	locale := panel.LocaleEnglish
-	if foundUser {
-		if err := bcrypt.CompareHashAndPassword([]byte(matchedUser.PasswordHash), []byte(req.Password)); err == nil {
-			valid = true
-			role = matchedUser.Role
-			locale = panel.NormalizeLocale(matchedUser.Locale)
-		}
-	} else {
-		// Unknown usernames still pay the bcrypt cost so the response time
-		// cannot reveal whether the account exists (#1064).
-		_ = bcrypt.CompareHashAndPassword(dummyLoginPasswordHash, []byte(req.Password))
-		if userCount == 0 && fallbackPassword != "" && req.Username == "admin" {
-			if constantTimePasswordEqual(req.Password, fallbackPassword) {
-				valid = true
-				role = "admin"
-			}
-		}
-	}
-
-	if !valid {
-		s.recordInvalidLogin(w, r, req.Username)
-		return
-	}
-
-	s.clearLoginFailures(loginThrottleKey(r, req.Username))
-	session, err := s.sessionRegistry().Create(SessionCreateInput{
-		Username:   req.Username,
-		Role:       role,
-		UserAgent:  r.UserAgent(),
-		RemoteAddr: clientIP(r),
-	})
-	if err != nil {
-		s.recordRequestAudit(r, audit.Record{
-			Actor:   req.Username,
-			Role:    role,
-			Action:  "auth.login",
-			Target:  "panel",
-			Success: false,
-			Error:   "session persistence failed",
-		})
-		writeError(w, "failed to persist session", http.StatusInternalServerError)
-		return
-	}
-	s.recordRequestAudit(r, audit.Record{
-		Actor:   req.Username,
-		Role:    role,
-		Action:  "auth.login",
-		Target:  "panel",
-		Success: true,
-	})
-
-	s.setSessionCookie(w, r, session.Token, 86400)
-
-	writeJSON(w, map[string]any{
-		"success":   true,
-		"username":  req.Username,
-		"role":      role,
-		"locale":    locale,
-		"csrfToken": session.CSRFToken,
-	})
-}
-
 func loginUsernameKey(username string) string {
 	return strings.ToLower(strings.TrimSpace(username))
 }
 
 // loginThrottleKey scopes the per-username login limiter and backoff to the
-// calling client address. A process-global username key let anyone who knew
-// a login name (the default is "admin") burn the whole budget from
+// calling client address, aggregated to /64 for IPv6 (#1101): rotating
+// through one delegated prefix shares the throttle instead of minting a
+// fresh budget per address. A process-global username key let anyone who
+// knew a login name (the default is "admin") burn the whole budget from
 // distributed IPs and lock the real operator out without a valid password
 // (issue #667). The per-IP /api/auth/login HTTP limit still bounds password
-// spraying from a single address.
+// spraying from a single address, and the process-wide per-username budget
+// in delayGlobalUsernameAttempt covers multi-prefix sprays.
 func loginThrottleKey(r *http.Request, username string) string {
-	return clientIP(r) + "|" + loginUsernameKey(username)
+	return clientaddr.RateLimitKey(clientIP(r)) + "|" + loginUsernameKey(username)
 }
 
 func (s *managementState) rejectThrottledLogin(w http.ResponseWriter, r *http.Request, username string) bool {

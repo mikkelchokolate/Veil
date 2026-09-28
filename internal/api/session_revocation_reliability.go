@@ -72,6 +72,24 @@ func (r *SessionRegistry) DeleteUsernamePersisted(username string) (int, error) 
 	return changed, err
 }
 
+// DeleteBootstrapPersisted revokes every fallback-minted bootstrap session.
+// Called when the first real user row appears (first-run setup, user create,
+// CLI reset reload, snapshot restore): a session minted without knowing a
+// real credential must never survive the creation of the account it mimics
+// (#1112).
+func (r *SessionRegistry) DeleteBootstrapPersisted() (int, error) {
+	return r.mutateAndPersistSessions(func() []string {
+		var hashes []string
+		for tokenHash, session := range r.sessions {
+			if !session.Bootstrap {
+				continue
+			}
+			hashes = append(hashes, tokenHash)
+		}
+		return hashes
+	})
+}
+
 func (r *SessionRegistry) DeleteAllExceptPersisted(currentToken string) (int, error) {
 	currentHash := hashSessionSecret(currentToken)
 	changed, err := r.mutateAndPersistSessions(func() []string {

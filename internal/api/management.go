@@ -96,7 +96,12 @@ func (s *managementState) registerProtocolRoomRoutes(mux *http.ServeMux) {
 func (s *managementState) withMutation(fn func(managementstate.Mutation) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return fn(s.mutationLocked())
+	err := fn(s.mutationLocked())
+	// Latch provisioning whenever a mutation leaves users non-empty (user
+	// create, admin reset reload, snapshot restore) so anonymous first-run
+	// access can never be re-armed on a configured instance (#1100).
+	s.noteUsersProvisionedLocked()
+	return err
 }
 
 func (s *managementState) mutationLocked() managementstate.Mutation {
