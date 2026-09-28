@@ -164,6 +164,20 @@ func (a *LocalAdapter) SyncCaddyCert(ctx context.Context, request SyncCaddyCertR
 	return result, wrapOperationError(err)
 }
 
+func (a *LocalAdapter) IssueIPCert(ctx context.Context, request IssueIPCertRequest) (IssueIPCertResult, error) {
+	// Issuance installs tooling, binds the standalone HTTP-01 listener and
+	// rewrites the panel certificate — a full host mutation, so it takes the
+	// fencing token like every other mutating operation.
+	if err := a.fence.Accept(request.Fence); err != nil {
+		return IssueIPCertResult{}, err
+	}
+	if a.executor.IssueIPCert == nil {
+		return IssueIPCertResult{}, newError(ErrorOperationFailed, "IP certificate issuer executor is unavailable")
+	}
+	result, err := a.executor.IssueIPCert(ctx, request)
+	return result, wrapOperationError(err)
+}
+
 func (a *LocalAdapter) CaddyLoad(ctx context.Context, request CaddyLoadRequest) error {
 	if len(request.Config) == 0 || len(request.Config) > 4<<20 {
 		return newError(ErrorInvalidRequest, "Caddy config must be 1-4194304 bytes")

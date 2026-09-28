@@ -60,6 +60,18 @@ func (a applyWorkflowStateAdapter) RollbackPromotedConfigsLocked(records []apply
 	return a.state.rollbackPromotedConfigs(records, liveFiles)
 }
 
+// PostServiceActionsLocked forwards the optional best-effort action hook —
+// the panel IP certificate issuance (#1169) — when the wrapped state
+// implements it.
+func (a applyWorkflowStateAdapter) PostServiceActionsLocked(liveFiles []string) []ServiceActionResult {
+	if state, ok := a.state.(interface {
+		PostServiceActionsLocked([]string) []ServiceActionResult
+	}); ok {
+		return state.PostServiceActionsLocked(liveFiles)
+	}
+	return nil
+}
+
 func (a applyWorkflowStateAdapter) PrepareFirewallLocked() (string, error) {
 	if state, ok := a.state.(interface{ PrepareFirewallLocked() (string, error) }); ok {
 		return state.PrepareFirewallLocked()
