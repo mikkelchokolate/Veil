@@ -7,6 +7,20 @@ import (
 	"testing"
 )
 
+// openHistoryDB opens a scratch database with the production DSN (WAL +
+// busy_timeout + foreign_keys) so replayed history matches how real
+// databases were written.
+func openHistoryDB(t *testing.T, name string) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", sqliteFileDSN(filepath.Join(t.TempDir(), name), false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() { db.Close() })
+	return db
+}
+
 // applyHistory runs migrations[0:upto) raw and records them in
 // schema_migrations, simulating a database at an older release.
 func applyHistory(t *testing.T, db *sql.DB, upto int) {
@@ -28,11 +42,7 @@ func applyHistory(t *testing.T, db *sql.DB, upto int) {
 // table migration 20 copies from, so `label=created_by` wrote NULL into a
 // NOT NULL column and aborted on any row that carried NULL.
 func TestMigration20NullableCreatedBy(t *testing.T) {
-	db, err := sql.Open("sqlite", "file:"+filepath.Join(t.TempDir(), "nullable-created-by.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openHistoryDB(t, "nullable-created-by.db")
 	applyHistory(t, db, 20-1) // versions 1..19 applied; v20 pending
 
 	if _, err := db.Exec(`INSERT INTO clients(id,name,enabled,created_at,updated_at,version,quota_reset_policy)
@@ -59,11 +69,7 @@ func TestMigration20NullableCreatedBy(t *testing.T) {
 // the superseded bodies of migrations 16/20/25 recorded their digests; the
 // verifier must accept those checksums while still rejecting unknown edits.
 func TestLegacyMigrationChecksumsAccepted(t *testing.T) {
-	db, err := sql.Open("sqlite", "file:"+filepath.Join(t.TempDir(), "legacy-checksum.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openHistoryDB(t, "legacy-checksum.db")
 	if _, err := db.Exec(`CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,name TEXT NOT NULL,checksum TEXT NOT NULL DEFAULT '',applied_at INTEGER NOT NULL DEFAULT 0)`); err != nil {
 		t.Fatal(err)
 	}
@@ -83,11 +89,7 @@ func TestLegacyMigrationChecksumsAccepted(t *testing.T) {
 		t.Fatalf("migrate over legacy-checksummed history: %v", err)
 	}
 	// And a checksum that matches neither body still fails closed.
-	db2, err := sql.Open("sqlite", "file:"+filepath.Join(t.TempDir(), "tampered.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db2.Close()
+	db2 := openHistoryDB(t, "tampered.db")
 	applyHistory(t, db2, 1)
 	if _, err := db2.Exec(`ALTER TABLE schema_migrations ADD COLUMN checksum TEXT NOT NULL DEFAULT 'deadbeef'`); err != nil {
 		t.Fatal(err)
@@ -103,15 +105,11 @@ func TestLegacyMigrationChecksumsAccepted(t *testing.T) {
 // collisions, and the binding-cleanup trigger no longer uses LIKE so a
 // restored binding id containing wildcards cannot over-delete state.
 func TestMigration29RuntimeIdentityNormalization(t *testing.T) {
-	db, err := sql.Open("sqlite", "file:"+filepath.Join(t.TempDir(), "ri.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openHistoryDB(t, "ri.db")
 	applyHistory(t, db, 29-1)
 
 	if _, err := db.Exec(`INSERT INTO clients(id,name,enabled,created_at,updated_at,version,quota_reset_policy)
-	  VALUES('c1','owner',1,0,0,1,'never')`); err != nil {
+	  VALUES('c1','owner',1,0,0,1,'never'),('c2','second',1,0,0,1,'never')`); err != nil {
 		t.Fatal(err)
 	}
 	// Mixed-case identity (pre-validation row) + over-length v_ identity
