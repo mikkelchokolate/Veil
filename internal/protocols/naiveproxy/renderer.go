@@ -131,13 +131,14 @@ func liveNaiveUsers(settings model.Settings, inbound model.Inbound) []caddyassem
 			delete(runtimeUsers, strings.TrimSpace(credential.Username))
 		}
 	}
-	if len(users) > 0 || inbound.HadClientProfiles() {
+	if len(users) > 0 {
 		return users
 	}
-	if len(inbound.Profiles) > 0 || inbound.HasClientBindings {
-		// Profiles exist but are all disabled, or the normalized client store
-		// still has bindings whose credentials are all revoked/expired/
-		// depleted — the legacy fallback must not be revived (issue #1098).
+	if inbound.HadClientProfiles() {
+		// Profiles exist but are all disabled or were suppressed
+		// post-migration, or the normalized client store still has bindings
+		// whose credentials are all revoked/expired/depleted — the legacy
+		// fallback must not be revived (issues #1098, #1117).
 		// An EMPTY auth_credentials list means "no authentication" to the
 		// forward_proxy module (an open relay), so render a sentinel account
 		// that can never authenticate instead.
