@@ -34,7 +34,20 @@ func SetDefaults(warp *Config) {
 		warp.Endpoint = "engage.cloudflareclient.com:2408"
 	}
 	if warp.SocksListen == "" {
-		warp.SocksListen = "127.0.0.1"
+		// Reserved 127.41.0.0/16 band: the per-unit egress filter allow-lists
+		// it so proxy daemons can dial this SOCKS listener without gaining
+		// reachability to the rest of 127/8 (issue #1097).
+		warp.SocksListen = "127.41.0.1"
+	} else if warp.SocksListen == "127.0.0.1" {
+		// Upgrade migration: 127.0.0.1 was the SocksListen default before the
+		// reserved-band change (#1097). Persisted states carry it, but the
+		// protocol-unit egress filters now only pierce 127.41.0.0/16, so the
+		// old value silently breaks WARP upstream reachability. Rewriting is
+		// strictly corrective: 127.0.0.1 can no longer function as a dial
+		// target, so an explicit post-upgrade choice of it is unambiguously
+		// the stale default rather than a deliberate operator override.
+		// Other loopback literals (e.g. 127.0.0.5) are left untouched.
+		warp.SocksListen = "127.41.0.1"
 	}
 	if warp.SocksPort == 0 {
 		warp.SocksPort = 40000
@@ -78,7 +91,7 @@ func Validate(warp Config) error {
 func validateSocksListen(listen string) error {
 	listen = strings.TrimSpace(listen)
 	if listen == "" {
-		return nil // normalized to 127.0.0.1 by SetDefaults and the renderer
+		return nil // normalized to 127.41.0.1 by SetDefaults and the renderer
 	}
 	addr, err := netip.ParseAddr(listen)
 	if err != nil {

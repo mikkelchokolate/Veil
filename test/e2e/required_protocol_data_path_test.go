@@ -548,9 +548,33 @@ func caddyRouteMatcher(server map[string]any, handlerName string) map[string]any
 	return nil
 }
 
+// registerNonDeniedLoopbackAlias binds a documentation-range IP to the
+// loopback interface for the duration of the test. Hysteria2's egress ACL
+// evaluates the RESOLVED destination IP, so a backend that must be reachable
+// through the ACL has to listen on an address outside egressDenyCIDRs —
+// TEST-NET-1 (192.0.2.0/24) is not denied, and even where geoip classifies
+// it, direct(geoip:private) routes it direct anyway. Uses `addr replace`
+// (add-or-change) so a stale alias from a killed run cannot wedge CI;
+// failures are fatal so regressions surface instead of silently degrading.
+func registerNonDeniedLoopbackAlias(t *testing.T, ip string) {
+	t.Helper()
+	if net.ParseIP(ip) == nil {
+		t.Fatalf("invalid E2E loopback alias IP %q", ip)
+	}
+	cidr := ip + "/32"
+	if output, err := exec.Command("sudo", "ip", "addr", "replace", cidr, "dev", "lo").CombinedOutput(); err != nil {
+		t.Fatalf("register E2E loopback alias %s: %v: %s", cidr, err, output)
+	}
+	t.Cleanup(func() {
+		if output, err := exec.Command("sudo", "ip", "addr", "del", cidr, "dev", "lo").CombinedOutput(); err != nil {
+			t.Errorf("remove E2E loopback alias %s: %v: %s", cidr, err, output)
+		}
+	})
+}
+
 func registerLoopbackHostname(t *testing.T, hostname string) {
 	t.Helper()
-	if hostname == "" || strings.ContainsAny(hostname, " 	\r\n") {
+	if hostname == "" || strings.ContainsAny(hostname, " \t\r\n") {
 		t.Fatalf("invalid E2E hostname %q", hostname)
 	}
 	// Unique marker so cleanup removes only the exact line this invocation

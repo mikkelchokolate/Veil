@@ -207,6 +207,20 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 			"hide_ip":          true,
 			"hide_via":         true,
 			"probe_resistance": map[string]any{},
+			// The pinned forwardproxy evaluates ACL subjects against the
+			// RESOLVED destination when no upstream is configured, so these
+			// denies cover DNS names that resolve into the deny set as well as
+			// literal IPs. They precede the module's built-in private-range
+			// denies (which only cover 10/8, 172.16/12, 192.168/16, ::1 and
+			// fe80/10) and extend them to unspecified, CGNAT, link-local,
+			// multicast, mapped/NAT64 and ULA destinations (issues #1096,
+			// #1097). When a socks5 upstream is configured the module skips
+			// its ACL dial check entirely — that bypass is closed by the
+			// sing-box leading block rule and the unit IP filter, which sit on
+			// the packet path the upstream hop still has to take.
+			"acl": []map[string]any{
+				{"subjects": EgressDenyCIDRs(), "allow": false},
+			},
 		}
 		if owner.Upstream != "" {
 			forwardProxy["upstream"] = owner.Upstream

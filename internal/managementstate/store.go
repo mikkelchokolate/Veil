@@ -156,7 +156,14 @@ func (s Store) decryptSnapshot(snapshot *model.ManagementSnapshot) error {
 		}
 		return s.cipher.Decrypt(v)
 	}
-	return NewSecretPolicy().Transform(snapshot, decrypt)
+	if err := NewSecretPolicy().Transform(snapshot, decrypt); err != nil {
+		return err
+	}
+	// Inject the per-install credential-derivation secret so revoked-client
+	// sentinels render unguessable even when all credential fields are empty
+	// (issue #1098). Runtime-only: never serialized back to disk.
+	snapshot.Settings.CredentialDerivationSecret = secrets.DeriveToken(s.cipher, model.CredentialDerivationLabel)
+	return nil
 }
 
 func EncryptSnapshot(snapshot *model.ManagementSnapshot, cipher *secrets.Cipher) error {

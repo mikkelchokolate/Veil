@@ -24,6 +24,23 @@ type mieruServerConfigJSON struct {
 	PortBindings []mieruPortBindingJSON `json:"portBindings"`
 	Users        []mieruUserJSON        `json:"users"`
 	LoggingLevel string                 `json:"loggingLevel"`
+	// Egress maps to mita's ServerConfig.egress. The reject rules are an
+	// app-layer complement to the veil-mieru.service IPAddressDeny filter:
+	// the daemon's built-in egress controller only refuses private/loopback
+	// literal IPs and a handful of well-known local names, so literal
+	// link-local/CGNAT/ULA/multicast/unspecified targets need these rules;
+	// names that RESOLVE into the deny set are caught by the unit filter at
+	// connect() time (issue #1097).
+	Egress *mieruEgressJSON `json:"egress,omitempty"`
+}
+
+type mieruEgressJSON struct {
+	Rules []mieruEgressRuleJSON `json:"rules"`
+}
+
+type mieruEgressRuleJSON struct {
+	IPRanges []string `json:"ipRanges,omitempty"`
+	Action   string   `json:"action"`
 }
 
 type mieruPortBindingJSON struct {
@@ -44,6 +61,12 @@ func RenderMieru(cfg MieruConfig) (string, error) {
 		return "", errors.New("at least one mieru user is required")
 	}
 	out := mieruServerConfigJSON{LoggingLevel: "INFO"}
+	out.Egress = &mieruEgressJSON{
+		Rules: []mieruEgressRuleJSON{{
+			IPRanges: EgressDenyCIDRs(),
+			Action:   "REJECT",
+		}},
+	}
 	seenBindings := make(map[mieruPortBindingJSON]struct{}, len(cfg.PortBindings))
 	for _, binding := range cfg.PortBindings {
 		// Keep this aligned with pinned mita v3.36.1 FlatPortBindings, which

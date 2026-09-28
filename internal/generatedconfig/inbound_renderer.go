@@ -40,13 +40,21 @@ func (r InboundRenderer) RenderNaive(inbound Inbound, includePanel bool) (string
 	}
 	username := naiveUsername(r.settings, inbound)
 	root := fallbackRoot(r.settings, inbound)
+	users := access.NaiveUsers()
+	if len(users) == 0 && (len(inbound.Profiles) > 0 || inbound.HasClientBindings) {
+		// Credential-managed inbound with every client revoked: an empty user
+		// list would revive the fallback password inside RenderNaiveCaddyfile
+		// (issue #1098); the sentinel account can never authenticate.
+		user, pass := model.RevokedClientCredential(r.settings, inbound)
+		users = []renderer.NaiveUser{{Username: user, Password: pass}}
+	}
 	naiveConfig := renderer.NaiveConfig{
 		Domain:       model.ResolveInboundDomain(inbound, r.settings),
 		Email:        model.ResolveInboundEmail(inbound, r.settings),
 		ListenPort:   inbound.Port,
 		Username:     username,
 		Password:     password,
-		Users:        access.NaiveUsers(),
+		Users:        users,
 		FallbackRoot: root,
 		// The render paths' etc root (derived from the configured live root)
 		// is authoritative for the fallback tree: a custom --etc-dir install
@@ -114,11 +122,20 @@ func (r InboundRenderer) RenderHysteria2(inbound Inbound) (string, error) {
 	}
 	url := masqueradeURL(r.settings, inbound)
 	domain := model.ResolveInboundDomain(inbound, r.settings)
+	hyUsers := access.Hysteria2Users()
+	if len(hyUsers) == 0 && (len(inbound.Profiles) > 0 || inbound.HasClientBindings) {
+		// Credential-managed inbound with every client revoked must not fall
+		// back to the shared inbound password (issue #1098). The sentinel
+		// account renders a syntactically valid config that authenticates no
+		// one.
+		user, pass := model.RevokedClientCredential(r.settings, inbound)
+		hyUsers = []renderer.Hysteria2User{{Username: user, Password: pass}}
+	}
 	hystConfig := renderer.Hysteria2Config{
 		ListenPort:    inbound.Port,
 		Domain:        domain,
 		Password:      password,
-		Users:         access.Hysteria2Users(),
+		Users:         hyUsers,
 		MasqueradeURL: url,
 	}
 	if domain != "" && (r.settings.PanelAccess == "caddy" || model.InboundDomain(inbound) != "") {
