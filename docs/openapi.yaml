@@ -3845,6 +3845,45 @@ paths:
       x-roles:
       - admin
       - viewer
+  /api/v1/traffic/history:
+    get:
+      x-veil-role: viewer
+      tags:
+      - traffic
+      summary: Aggregate bucketed traffic samples over a window
+      description: Per-bucket sums across every client and binding. Rows carry empty clientId/bindingId; the bucket is the only identity once attribution is summed away.
+      security:
+      - sessionCookie: []
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: integer
+          format: int64
+        description: Unix start of the window (default 0 — all retained history).
+      - name: to
+        in: query
+        schema:
+          type: integer
+          format: int64
+        description: Unix end of the window (default now).
+      - name: limit
+        in: query
+        schema:
+          type: integer
+        description: Max buckets returned (default 500, capped at 5000); newest buckets win when the window truncates.
+      responses:
+        '200':
+          description: Time-ordered aggregate traffic buckets.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrafficHistoryResponse'
+        '503':
+          description: Traffic store unavailable.
+      x-roles:
+      - admin
+      - viewer
   /api/v1/traffic/{id}:
     get:
       x-veil-role: viewer
@@ -7115,8 +7154,10 @@ components:
           description: Unix start of the bucket.
         clientId:
           type: string
+          description: Owning client id; empty on aggregate /api/v1/traffic/history rows.
         bindingId:
           type: string
+          description: Owning binding id; empty on per-client and aggregate history rows.
         uploadDelta:
           type: integer
           format: int64

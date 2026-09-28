@@ -15,6 +15,10 @@ func (s *managementState) registerTrafficRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/traffic/top", s.handleV1TrafficTop)
 	mux.HandleFunc("/api/v1/traffic/stream", s.handleV1TrafficStream)
 	mux.HandleFunc("/api/v1/traffic/summary", s.handleV1TrafficSummary)
+	// Aggregate history is a static segment under the {clientId} subtree.
+	// The exact pattern wins over the trailing-slash wildcard, so
+	// /api/v1/traffic/history can never be read as a client id.
+	mux.HandleFunc("/api/v1/traffic/history", s.handleV1TrafficAllHistory)
 	mux.HandleFunc("/api/v1/traffic/", s.handleV1TrafficClient)
 }
 
@@ -32,6 +36,14 @@ func (s *managementState) handleV1TrafficClient(w http.ResponseWriter, r *http.R
 	parts := splitNonEmpty(rest, "/")
 	if len(parts) == 0 {
 		writeNotFound(w)
+		return
+	}
+	// "history" is reserved for the aggregate endpoint. The exact mux
+	// pattern already claims /api/v1/traffic/history; this dispatches the
+	// stragglers that still reach the subtree handler (trailing slash,
+	// doubled separators) before parts[0] can be treated as a client id.
+	if len(parts) == 1 && parts[0] == "history" {
+		s.handleV1TrafficAllHistory(w, r)
 		return
 	}
 	clientID := parts[0]
@@ -119,6 +131,31 @@ func (s *managementState) handleV1TrafficHistory(w http.ResponseWriter, r *http.
 	to := parseInt64Default(r.URL.Query().Get("to"), time.Now().Unix())
 	limit := parseLimitParam(r.URL.Query().Get("limit"), 500, 5000)
 	rows, err := s.trafficStore.HistoryForClient(clientID, from, to, limit)
+	if err != nil {
+		writeError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"items": rows, "count": len(rows)})
+}
+
+// handleV1TrafficAllHistory serves the deployment-wide bucketed traffic
+// history — per-bucket sums across every client and binding, behind
+// GET /api/v1/traffic/history. Same query params and response shape as the
+// per-client history; returned rows carry empty clientId/bindingId because
+// the aggregate has no single attribution.
+func (s *managementState) handleV1TrafficAllHistory(w http.ResponseWriter, r *http.Request) {
+	if s.trafficStore == nil {
+		writeError(w, "traffic store unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	from := parseInt64Default(r.URL.Query().Get("from"), 0)
+	to := parseInt64Default(r.URL.Query().Get("to"), time.Now().Unix())
+	limit := parseLimitParam(r.URL.Query().Get("limit"), 500, 5000)
+	rows, err := s.trafficStore.HistoryForAll(from, to, limit)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusInternalServerError)
 		return

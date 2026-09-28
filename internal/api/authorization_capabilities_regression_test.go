@@ -126,6 +126,7 @@ func productionAuthorizationMatrix() []routeAuthorizationExpectation {
 		{http.MethodPost, "/api/v1/clients/client-1/tokens/token-1/rotate", false, false, "admin secret read/write"},
 		{http.MethodGet, "/api/v1/traffic/summary", false, true, "viewer metadata"},
 		{http.MethodGet, "/api/v1/traffic/top", false, true, "viewer metadata"},
+		{http.MethodGet, "/api/v1/traffic/history", false, true, "aggregate viewer metadata"},
 		{http.MethodGet, "/api/v1/traffic/client-1", false, true, "viewer metadata"},
 		{http.MethodGet, "/api/v1/traffic/client-1/history", false, true, "viewer metadata"},
 		{http.MethodGet, "/api/v1/traffic/stream", false, true, "viewer stream"},

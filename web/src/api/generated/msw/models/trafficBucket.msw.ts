@@ -44,7 +44,9 @@
 export interface TrafficBucket {
   /** Unix start of the bucket. */
   bucketStart: number;
+  /** Owning client id; empty on aggregate /api/v1/traffic/history rows. */
   clientId: string;
+  /** Owning binding id; empty on per-client and aggregate history rows. */
   bindingId: string;
   /** Bytes uploaded inside this bucket. */
   uploadDelta: number;

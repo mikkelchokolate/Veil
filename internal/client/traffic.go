@@ -464,6 +464,38 @@ func (s *TrafficStore) HistoryForClient(clientID string, from, to int64, limit i
 	return out, nil
 }
 
+// HistoryForAll aggregates bucketed deltas across every client and binding
+// into one row per bucket — the store-wide history behind the Traffic page
+// chart. ClientID/BindingID are empty on aggregate rows: once per-attribution
+// detail is summed away the bucket is the only meaningful identity. Limit
+// keeps the newest buckets (DESC scan + reverse to ascending), matching
+// HistoryForClient/HistoryForBinding.
+func (s *TrafficStore) HistoryForAll(from, to int64, limit int) ([]SampleRow, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	rows, err := s.db.Query(`SELECT bucket_start, '', '', SUM(upload_delta), SUM(download_delta)
+	  FROM traffic_samples WHERE bucket_start>=? AND bucket_start<=?
+	  GROUP BY bucket_start ORDER BY bucket_start DESC LIMIT ?`, from, to, limit)
+	if err != nil {
+		return nil, fmt.Errorf("client: traffic history: %w", err)
+	}
+	defer rows.Close()
+	var out []SampleRow
+	for rows.Next() {
+		var r SampleRow
+		if err := rows.Scan(&r.BucketStart, &r.ClientID, &r.BindingID, &r.UploadDelta, &r.DownloadDelta); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	reverseSampleRows(out)
+	return out, nil
+}
+
 func reverseSampleRows(rows []SampleRow) {
 	for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
 		rows[i], rows[j] = rows[j], rows[i]
