@@ -15,6 +15,13 @@ var firewallStatusReader = func() (bool, error) {
 	return firewall.NewStatusReader(nil).Active()
 }
 
+// runApplyWorkflowLocked runs the untracked (no durable revision) apply
+// workflow while the caller holds s.mu. It is a seam so tests can inject a
+// panic and prove handleApply still releases the state mutex (#1137).
+var runApplyWorkflowLocked = func(s *managementState, req ApplyRequest) (ApplyResponse, int, error) {
+	return NewApplyWorkflow(NewManagementApplyContextWithContext(s, s.mutationApplyContext())).RunLocked(req)
+}
+
 func (s *managementState) handleClientLinks(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, http.MethodGet)
@@ -197,9 +204,14 @@ func (s *managementState) handleApply(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, response)
 		return
 	}
+	// The unlock must be deferred: a panic inside the workflow would otherwise
+	// leak s.mu and permanently deadlock every subsequent management handler
+	// (#1137).
 	s.mu.Lock()
-	response, status, err := NewApplyWorkflow(NewManagementApplyContextWithContext(s, s.mutationApplyContext())).RunLocked(req)
-	s.mu.Unlock()
+	response, status, err := func() (ApplyResponse, int, error) {
+		defer s.mu.Unlock()
+		return runApplyWorkflowLocked(s, req)
+	}()
 	if status == http.StatusBadRequest && len(response.Plan.Issues) > 0 {
 		status = http.StatusUnprocessableEntity
 	}

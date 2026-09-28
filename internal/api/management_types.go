@@ -90,6 +90,11 @@ type managementState struct {
 	warp                 WarpConfig
 	users                []User
 	orphanedUnits        []string
+	// previousServiceStates captures each touched unit's "active|unitFileState"
+	// before an apply mutates it, so a promotion rollback restores the exact
+	// lifecycle state instead of unconditionally enable+starting units that
+	// may have been stopped or disabled (#1135).
+	previousServiceStates map[string]string
 	sessions             *SessionRegistry
 	loginUsernameLimiter *observability.RateLimiterEngine
 	httpRateLimiter      *observability.RateLimiter

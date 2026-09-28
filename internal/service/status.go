@@ -11,6 +11,10 @@ type RuntimeStatus struct {
 	LoadState              string
 	ActiveState            string
 	SubState               string
+	// UnitFileState is the systemd enablement state ("enabled", "disabled",
+	// "static", ...) — apply needs it to drive desired-state teardown and to
+	// restore a unit's previous lifecycle state during rollback (#1133/#1135).
+	UnitFileState          string
 	MainPID                int
 	ExecMainStartMonotonic uint64
 	ExecutableDigest       string

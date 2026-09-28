@@ -29,6 +29,10 @@ func (SystemdServiceStatusParser) Parse(unit string, output string) ServiceRunti
 			if value != "" {
 				status.SubState = value
 			}
+		case "UnitFileState":
+			if value != "" {
+				status.UnitFileState = value
+			}
 		case "MainPID":
 			status.MainPID, _ = strconv.Atoi(value)
 		case "ExecMainStartTimestampMonotonic":
