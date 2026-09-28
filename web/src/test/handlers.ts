@@ -38,6 +38,7 @@ export const defaultHandlers = [
 	// verdicts; an empty catalog keeps the verdict undecidable (never
 	// "unsupported") so tests that don't care stay neutral.
 	http.get("/api/protocols", () => HttpResponse.json([])),
+	http.get("/api/processes", () => HttpResponse.json({ processes: [] })),
 ];
 
 export { HttpResponse, http };
