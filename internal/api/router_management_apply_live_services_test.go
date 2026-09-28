@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
+	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 )
 
 func TestManagementApplyLiveRequiresExplicitFlagAndKeepsStagedOnlyByDefault(t *testing.T) {
@@ -689,6 +691,17 @@ func TestManagementApplyServicesCleansOrphanedInstances(t *testing.T) {
 
 	caddyAdminLoader = func(_ []byte) error { return nil }
 
+	// Same hermetic-caddy setup as the rollback variant below: the naive-only
+	// desired state must not depend on a caddy binary existing on the host.
+	stubCaddyProbe(t, func(context.Context, string) (caddycapabilities.CaddyCapabilities, error) {
+		return caddycapabilities.CaddyCapabilities{ForwardProxy: true, HTTP3: true}, nil
+	})
+	fakeBin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fakeBin, "caddy"), []byte("#!/bin/sh\nprintf '%s' '[{\"module_name\":\"http\"},{\"module_name\":\"http.handlers.forward_proxy\"}]'\n"), 0o755); err != nil {
+		t.Fatalf("write fake caddy: %v", err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
 	r, _ := newTestRouter(ServerInfo{Version: "test", Mode: "dev", StatePath: statePath, ApplyRoot: applyRoot})
 	w := httptest.NewRecorder()
 
@@ -779,6 +792,21 @@ func TestManagementApplyServicesRestoresOrphanedInstancesOnRollback(t *testing.T
 
 	caddyAdminLoader = func(_ []byte) error { return nil }
 
+	// The naive-only desired state fails plan building when no caddy binary
+	// exists on the host (forward_proxy must be probed, audit #156). The
+	// planner probe has an api-level seam, but the naive renderer probes
+	// `caddy list-modules` directly too — put a fake binary on PATH so the
+	// test is hermetic on hosts with and without caddy.
+	stubCaddyProbe(t, func(context.Context, string) (caddycapabilities.CaddyCapabilities, error) {
+		return caddycapabilities.CaddyCapabilities{ForwardProxy: true, HTTP3: true}, nil
+	})
+	fakeBin := t.TempDir()
+	fakeCaddy := filepath.Join(fakeBin, "caddy")
+	if err := os.WriteFile(fakeCaddy, []byte("#!/bin/sh\nprintf '%s' '[{\"module_name\":\"http\"},{\"module_name\":\"http.handlers.forward_proxy\"}]'\n"), 0o755); err != nil {
+		t.Fatalf("write fake caddy: %v", err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
 	// The orphaned unit was enabled and running before the apply removed its
 	// config, so rollback's captured-state lifecycle restore (#1135) must emit
 	// enable+start. An enabled-but-stopped unit would get enable only, and an
@@ -795,7 +823,6 @@ func TestManagementApplyServicesRestoresOrphanedInstancesOnRollback(t *testing.T
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
-
 	// Verify that orphans were restored
 	assertFileBody(t, orphanCaddy, "caddy config")
 	assertFileBody(t, orphanHysteria2, "hysteria2 config")
