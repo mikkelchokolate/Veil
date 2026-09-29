@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,13 +14,13 @@ import (
 // IPCertIssuer, recording the issuance request for assertions.
 type ipCertPrivilegedClient struct {
 	recordingPrivilegedClient
-	issueCalls int
+	issueCalls atomic.Int32
 	issueErr   error
 	gotRequest privileged.IssueIPCertRequest
 }
 
 func (c *ipCertPrivilegedClient) IssueIPCert(_ context.Context, request privileged.IssueIPCertRequest) (privileged.IssueIPCertResult, error) {
-	c.issueCalls++
+	c.issueCalls.Add(1)
 	c.gotRequest = request
 	return privileged.IssueIPCertResult{CertPath: request.CertPath, KeyPath: request.KeyPath}, c.issueErr
 }
@@ -54,7 +55,7 @@ func TestPostServiceActionsSkipsNonDirectAccess(t *testing.T) {
 		if got := NewManagementApplyContext(state).PostServiceActionsLocked(nil); got != nil {
 			t.Fatalf("panelAccess=%q produced actions: %+v", access, got)
 		}
-		if backend.issueCalls != 0 {
+		if backend.issueCalls.Load() != 0 {
 			t.Fatalf("panelAccess=%q invoked issuance", access)
 		}
 	}
@@ -67,7 +68,7 @@ func TestPostServiceActionsSkipsWhenCertHealthy(t *testing.T) {
 	if got := NewManagementApplyContext(state).PostServiceActionsLocked(nil); got != nil {
 		t.Fatalf("healthy certificate produced actions: %+v", got)
 	}
-	if backend.issueCalls != 0 {
+	if backend.issueCalls.Load() != 0 {
 		t.Fatal("issuance ran for a certificate outside the renewal window")
 	}
 }
@@ -80,8 +81,8 @@ func TestPostServiceActionsIssuesForDirectAccess(t *testing.T) {
 	if len(actions) != 1 || !actions[0].Success {
 		t.Fatalf("actions = %+v, want one successful issuance action", actions)
 	}
-	if backend.issueCalls != 1 {
-		t.Fatalf("issuer invoked %d times", backend.issueCalls)
+	if backend.issueCalls.Load() != 1 {
+		t.Fatalf("issuer invoked %d times", backend.issueCalls.Load())
 	}
 	request := backend.gotRequest
 	if !request.DeferPanelRestart {
@@ -130,7 +131,7 @@ func TestPostServiceActionsSkipsResolverFailureAsFailedAction(t *testing.T) {
 	if len(actions) != 1 || actions[0].Success {
 		t.Fatalf("resolution failure must produce a failed action, got %+v", actions)
 	}
-	if backend.issueCalls != 0 {
+	if backend.issueCalls.Load() != 0 {
 		t.Fatal("issuer must not run when public IP resolution failed")
 	}
 }
@@ -147,7 +148,7 @@ func TestIPCertWorkerSyncOnceGates(t *testing.T) {
 	if err := worker.SyncOnce(context.Background()); err != nil {
 		t.Fatalf("non-direct SyncOnce: %v", err)
 	}
-	if backend.issueCalls != 0 {
+	if backend.issueCalls.Load() != 0 {
 		t.Fatal("worker issued a certificate for non-direct panel access")
 	}
 }
@@ -159,8 +160,8 @@ func TestIPCertWorkerIssuesWhenRenewalDue(t *testing.T) {
 	if err := worker.SyncOnce(context.Background()); err != nil {
 		t.Fatalf("SyncOnce: %v", err)
 	}
-	if backend.issueCalls != 1 {
-		t.Fatalf("issuer invoked %d times", backend.issueCalls)
+	if backend.issueCalls.Load() != 1 {
+		t.Fatalf("issuer invoked %d times", backend.issueCalls.Load())
 	}
 	if !backend.gotRequest.DeferPanelRestart {
 		t.Fatal("worker issuance must defer the panel restart — the panel is the caller")
@@ -188,13 +189,13 @@ func TestIPCertWorkerSignalTriggersPass(t *testing.T) {
 	}()
 	// Wait for the goroutine to park, then signal a pass.
 	deadline := time.Now().Add(2 * time.Second)
-	for backend.issueCalls == 0 && time.Now().Before(deadline) {
+	for backend.issueCalls.Load() == 0 && time.Now().Before(deadline) {
 		worker.Signal()
 		time.Sleep(5 * time.Millisecond)
 	}
 	worker.Stop()
 	<-done
-	if backend.issueCalls == 0 {
+	if backend.issueCalls.Load() == 0 {
 		t.Fatal("signalled pass never ran the issuer")
 	}
 }

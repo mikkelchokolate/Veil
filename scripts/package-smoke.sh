@@ -294,9 +294,9 @@ assert_unit_hardening() {
   # (issue #816).
   grep -qxF 'User=root' "$unitdir/veil-helper.service" || fail "veil-helper.service User"
   grep -qxF 'Group=root' "$unitdir/veil-helper.service" || fail "veil-helper.service Group"
-  grep -qxF 'CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_NET_ADMIN CAP_NET_RAW' \
+  grep -qxF 'CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE' \
     "$unitdir/veil-helper.service" || fail "veil-helper.service CapabilityBoundingSet"
-  grep -qxF 'AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW' "$unitdir/veil-helper.service" \
+  grep -qxF 'AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE' "$unitdir/veil-helper.service" \
     || fail "veil-helper.service AmbientCapabilities"
   # The backup unit is root but tightly bounded — its caps cover backup
   # member reads, nothing else (issue #816).
