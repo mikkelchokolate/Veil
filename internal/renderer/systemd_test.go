@@ -499,7 +499,7 @@ func TestRuntimeUnitsLockExactAddressFamiliesAndCapabilities(t *testing.T) {
 		UnitOlcrtc:        {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK", bounds: "CapabilityBoundingSet=CAP_NET_BIND_SERVICE\n", ambient: "AmbientCapabilities=CAP_NET_BIND_SERVICE\n"},
 		UnitWarp:          {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK", bounds: "CapabilityBoundingSet=CAP_NET_BIND_SERVICE\n", ambient: "AmbientCapabilities=CAP_NET_BIND_SERVICE\n"},
 		UnitMieru:         {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6", bounds: "CapabilityBoundingSet=CAP_NET_BIND_SERVICE\n", ambient: "AmbientCapabilities=CAP_NET_BIND_SERVICE\n"},
-		UnitBackupService: {raf: "RestrictAddressFamilies=AF_UNIX", bounds: "CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH\n"},
+		UnitBackupService: {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6", bounds: "CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH\n"},
 	}
 	for name, expected := range want {
 		body := units[name]
