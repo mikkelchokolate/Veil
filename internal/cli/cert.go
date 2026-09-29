@@ -323,7 +323,7 @@ func runCertRenew(cmd *cobra.Command, publicIP, email string, port int, etcDirFl
 	}
 
 	// The persisted --le-ip-cert-port wins over the flag default so renewal
-	// binds the same standalone port the install-time issuance used (#1185).
+	// binds the same standalone port the install-time issuance used (#1189/#1186).
 	if !certFlagChanged(cmd, "port") {
 		if persisted := hostenv.EnvOrFile(envValues, "VEIL_PANEL_HTTP01_PORT"); persisted != "" {
 			if parsed, err := strconv.Atoi(persisted); err == nil && parsed >= 0 && parsed <= 65535 {

@@ -22,6 +22,9 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/acmeip"
 	"github.com/mikkelchokolate/Veil/internal/api"
 	"github.com/mikkelchokolate/Veil/internal/installer"
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
 func TestBuildPlanFromOptionsReturnsErrorWhenBuildRepairPlanFails(t *testing.T) {
@@ -531,5 +534,57 @@ func TestMaybeIssueLEIPCertReturnsErrorOnKeyRead(t *testing.T) {
 	err := maybeIssueLEIPCert(context.Background(), &profile, Options{EtcDir: etcDir, PublicIP: "127.0.0.1"})
 	if err == nil || !strings.Contains(err.Error(), "read issued key") {
 		t.Fatalf("expected key read error, got %v", err)
+	}
+}
+
+// A repair runs while veil-caddy may already own :80 — when the persisted
+// plan keeps a Caddy-fronted challenge route, issuance must park on the
+// internal port via HTTP01ViaCaddy instead of colliding on the public port
+// (#1181 symmetry with `cert renew`).
+func TestMaybeIssueLEIPCertSetsHTTP01ViaCaddy(t *testing.T) {
+	etcDir := t.TempDir()
+	varDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(etcDir, "panel"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	key, err := secrets.LoadOrCreateKey(filepath.Join(etcDir, "state.key"))
+	if err != nil {
+		t.Fatalf("create state key: %v", err)
+	}
+	cipher, err := secrets.NewCipher(*key)
+	if err != nil {
+		t.Fatalf("create cipher: %v", err)
+	}
+	snapshot := managementstate.BuildSnapshot(managementstate.SnapshotInput{
+		Settings: model.Settings{PanelAccess: "direct", AcmeChallengeMode: "tls-alpn-01", DefaultAcmeEmail: "ops@example.net"},
+		Inbounds: []model.Inbound{
+			{Name: "hy1", Protocol: "hysteria2", Enabled: true, Port: 443,
+				ProtocolFields: map[string]any{"domain": "hy.example.net"}},
+		},
+	})
+	if err := managementstate.NewStore(filepath.Join(varDir, "state.json"), cipher).Save(snapshot); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+
+	var got acmeip.IssueOptions
+	oldIssue := leIPCertIssueFunc
+	leIPCertIssueFunc = func(ctx context.Context, opts acmeip.IssueOptions) (acmeip.IssuedCert, error) {
+		got = opts
+		if err := os.WriteFile(opts.CertPath, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(opts.KeyPath, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return acmeip.IssuedCert{CertPath: opts.CertPath, KeyPath: opts.KeyPath}, nil
+	}
+	t.Cleanup(func() { leIPCertIssueFunc = oldIssue })
+
+	profile := installer.RURecommendedProfile{Email: "admin@example.com"}
+	if err := maybeIssueLEIPCert(context.Background(), &profile, Options{EtcDir: etcDir, VarDir: varDir, PublicIP: "127.0.0.1"}); err != nil {
+		t.Fatalf("maybeIssueLEIPCert: %v", err)
+	}
+	if !got.HTTP01ViaCaddy {
+		t.Fatal("HTTP01ViaCaddy = false — veil-caddy owns :80, issuance must park on the internal port")
 	}
 }
