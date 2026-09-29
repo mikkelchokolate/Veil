@@ -34,9 +34,21 @@ func (s *managementState) handleTOTPVerify(w http.ResponseWriter, r *http.Reques
 	token := pendingSecondFactorToken(r)
 	// Claim takes the in-flight lease atomically with the resolve: two
 	// parallel POSTs on the same pending cookie can no longer both validate
-	// one code into two sessions (#1172).
-	pending, ok := s.pendingSecondFactors().Claim(token)
-	if !ok {
+	// one code into two sessions (#1172). A busy challenge keeps its cookie:
+	// the in-flight request may still Release it after a wrong code, and the
+	// losing submit must not strip the retry path (#1172 review).
+	pending, claim := s.pendingSecondFactors().Claim(token)
+	switch claim {
+	case pendingClaimBusy:
+		s.recordRequestAudit(r, audit.Record{
+			Action:  "auth.totp.verify",
+			Target:  "panel",
+			Success: false,
+			Error:   "concurrent verification on the same challenge",
+		})
+		writeError(w, "verification already in progress", http.StatusTooManyRequests)
+		return
+	case pendingClaimMissing:
 		s.setPendingSecondFactorCookie(w, r, "", -1)
 		s.recordRequestAudit(r, audit.Record{
 			Action:  "auth.totp.verify",
@@ -62,11 +74,13 @@ func (s *managementState) handleTOTPVerify(w http.ResponseWriter, r *http.Reques
 			Error:   "rate limited",
 		})
 		writeError(w, "too many attempts", http.StatusTooManyRequests)
+		s.pendingSecondFactors().Release(token)
 		return
 	}
 	if retryAfter := s.loginBackoffRemaining(throttleKey); retryAfter > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
 		writeError(w, "too many attempts", http.StatusTooManyRequests)
+		s.pendingSecondFactors().Release(token)
 		return
 	}
 
@@ -155,6 +169,9 @@ func (s *managementState) handleTOTPVerify(w http.ResponseWriter, r *http.Reques
 				Error:   "recovery code consumption failed to persist",
 			})
 			writeError(w, "failed to consume recovery code", http.StatusInternalServerError)
+			// Transient persist failure — release the claim so a retry on
+			// the same challenge is not wedged until the TTL.
+			s.pendingSecondFactors().Release(token)
 			return
 		}
 		s.catchUpAfterPanelMutation()

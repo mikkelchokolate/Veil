@@ -132,30 +132,46 @@ func (s *pendingSecondFactorStore) Resolve(token string) (pendingSecondFactor, b
 	return pending, true
 }
 
+// pendingClaimResult distinguishes the three Claim outcomes: a live
+// challenge leased to this request, a challenge that exists but is already
+// being verified by another in-flight request, and no usable challenge at
+// all. The busy case matters to the handler: the pending cookie is still
+// valid, so the response must not clear it (#1172 review).
+type pendingClaimResult int
+
+const (
+	pendingClaimMissing pendingClaimResult = iota
+	pendingClaimBusy
+	pendingClaimOK
+)
+
 // Claim resolves the challenge AND atomically takes an in-flight lease on it:
 // only one request can verify a given pending cookie at a time, so two
 // parallel POSTs cannot race one factor code into two sessions. A claimed
 // challenge must be completed by Consume (success/exhaustion) or Release
 // (retryable failure); a claim abandoned mid-request stays closed until the
 // TTL — the fail-closed side.
-func (s *pendingSecondFactorStore) Claim(token string) (pendingSecondFactor, bool) {
+func (s *pendingSecondFactorStore) Claim(token string) (pendingSecondFactor, pendingClaimResult) {
 	if token == "" {
-		return pendingSecondFactor{}, false
+		return pendingSecondFactor{}, pendingClaimMissing
 	}
 	id := hashSessionSecret(token)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	pending, ok := s.byID[id]
-	if !ok || pending.InFlight {
-		return pendingSecondFactor{}, false
+	if !ok {
+		return pendingSecondFactor{}, pendingClaimMissing
 	}
 	if !pending.ExpiresAt.After(s.now().UTC()) {
 		delete(s.byID, id)
-		return pendingSecondFactor{}, false
+		return pendingSecondFactor{}, pendingClaimMissing
+	}
+	if pending.InFlight {
+		return pendingSecondFactor{}, pendingClaimBusy
 	}
 	pending.InFlight = true
 	s.byID[id] = pending
-	return pending, true
+	return pending, pendingClaimOK
 }
 
 // Release frees a claimed challenge after a retryable factor failure so the

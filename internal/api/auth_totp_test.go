@@ -326,8 +326,10 @@ func TestTOTPEnrollmentLifecycle(t *testing.T) {
 		t.Fatalf("enrolling session was not upgraded: %+v", marked)
 	}
 
-	// Disable with the account password clears every second-factor field.
-	rec = authedTOTPRequest(t, state, session, http.MethodDelete, "/api/v1/users/me/totp", `{"password":"correct-password-123"}`)
+	// Disable with a live authenticator code clears every second-factor
+	// field (factor-grade contract — password alone is rejected).
+	disableCode := totpCode(t, state.users[0].TOTPSecret, *now)
+	rec = authedTOTPRequest(t, state, session, http.MethodDelete, "/api/v1/users/me/totp", `{"code":"`+disableCode+`"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("disable status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -357,19 +359,28 @@ func TestTOTPConfirmRevokesPreEnrollmentSessions(t *testing.T) {
 	}
 }
 
-func TestTOTPDisableRequiresFreshCredential(t *testing.T) {
+func TestTOTPDisableRejectsWrongCode(t *testing.T) {
 	user := totpTestUser(t, "correct-password-123")
 	user.TOTPEnabled = true
 	user.TOTPSecret = "JBSWY3DPEHPK3PXP"
 	state, _ := totpTestState(t, user)
 	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
 
-	rec := authedTOTPRequest(t, state, session, http.MethodDelete, "/api/v1/users/me/totp", `{"password":"wrong-password"}`)
+	rec := authedTOTPRequest(t, state, session, http.MethodDelete, "/api/v1/users/me/totp", `{"code":"000000"}`)
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("disable with bad password status=%d, want 400", rec.Code)
+		t.Fatalf("disable with wrong code status=%d, want 400", rec.Code)
 	}
 	if !state.users[0].TOTPEnabled {
-		t.Fatal("disable succeeded with a bad password")
+		t.Fatal("disable succeeded with a wrong code")
+	}
+
+	// An empty body is rejected the same way — the code is mandatory.
+	rec = authedTOTPRequest(t, state, session, http.MethodDelete, "/api/v1/users/me/totp", `{}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("disable with no code status=%d, want 400", rec.Code)
+	}
+	if !state.users[0].TOTPEnabled {
+		t.Fatal("disable succeeded without a code")
 	}
 }
 
@@ -445,19 +456,19 @@ func TestPendingSecondFactorClaimIsExclusive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
-	if _, ok := store.Claim(token); !ok {
+	if _, res := store.Claim(token); res != pendingClaimOK {
 		t.Fatal("first claim rejected")
 	}
-	if _, ok := store.Claim(token); ok {
-		t.Fatal("second concurrent claim accepted")
+	if _, res := store.Claim(token); res != pendingClaimBusy {
+		t.Fatalf("second concurrent claim: got %v, want busy", res)
 	}
 	store.Release(token)
-	if _, ok := store.Claim(token); !ok {
+	if _, res := store.Claim(token); res != pendingClaimOK {
 		t.Fatal("claim after release rejected")
 	}
 	store.Consume(token)
-	if _, ok := store.Claim(token); ok {
-		t.Fatal("claim on consumed challenge accepted")
+	if _, res := store.Claim(token); res != pendingClaimMissing {
+		t.Fatalf("claim on consumed challenge: got %v, want missing", res)
 	}
 }
 
