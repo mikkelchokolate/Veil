@@ -7,6 +7,11 @@ import (
 )
 
 // ProcessInfo holds information about a running process.
+//
+// CPUPercent is a live rate — Δ(utime+stime)/Δwall since the previous sample
+// taken by the shared ProcessCPUSampler — not a since-start average (#1190).
+// A pid with no previous sample yet reports the lifetime average so the value
+// stays a finite non-negative number for JSON consumers.
 type ProcessInfo struct {
 	PID           int     `json:"pid"`
 	Name          string  `json:"name"`
@@ -20,12 +25,20 @@ type ProcessesStats struct {
 	Processes []ProcessInfo `json:"processes"`
 }
 
+// defaultProcessCPUSampler is shared across requests: /api/processes and the
+// processes block of /api/runtime/observation each build a fresh discovery
+// reader, so the previous-sample cache must live at package scope for
+// cpuPercent to be a live Δticks/Δwall rate between polls (#1190).
+var defaultProcessCPUSampler = NewProcessCPUSampler(100, nil)
+
 // readProcessesStats finds managed service processes via /proc.
 func readProcessesStats(policy ManagedProcessPolicy) (ProcessesStats, error) {
-	return NewProcessDiscovery(procProcessSource{}, policy).Read()
+	return NewProcessDiscovery(procProcessSource{cpu: defaultProcessCPUSampler}, policy).Read()
 }
 
-type procProcessSource struct{}
+type procProcessSource struct {
+	cpu *ProcessCPUSampler
+}
 
 func (procProcessSource) PIDs() ([]int, error) {
 	procs, err := os.ReadDir("/proc")
@@ -52,8 +65,12 @@ func (procProcessSource) Name(pid int) string { return readProcessName(pid) }
 
 func (procProcessSource) MemoryMB(pid int) int64 { return readProcessMemory(pid) }
 
-func (procProcessSource) CPUPercent(pid int, uptimeSec int64) float64 {
-	return readProcessCPU(pid, uptimeSec)
+func (s procProcessSource) CPUPercent(pid int, uptimeSec int64) float64 {
+	stat, ok := readProcessStat(pid)
+	if !ok {
+		return 0
+	}
+	return s.cpu.Percent(pid, stat, uptimeSec)
 }
 
 func (procProcessSource) UptimeSeconds(pid int, systemUptime int64) int64 {
@@ -74,14 +91,6 @@ func readProcessMemory(pid int) int64 {
 		return 0
 	}
 	return NewProcessMemoryParser().Parse(string(data))
-}
-
-func readProcessCPU(pid int, uptimeSec int64) float64 {
-	stat, ok := readProcessStat(pid)
-	if !ok {
-		return 0
-	}
-	return NewProcessCPUUsage(100).Percent(stat, uptimeSec)
 }
 
 func readProcessUptime(pid int, systemUptime int64) int64 {
