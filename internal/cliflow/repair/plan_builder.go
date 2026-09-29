@@ -539,7 +539,7 @@ func maybeIssueLEIPCert(ctx context.Context, profile *installer.RURecommendedPro
 	// The effective standalone port follows the persisted contract: an
 	// explicit --le-ip-cert-port wins, otherwise the recorded
 	// VEIL_PANEL_HTTP01_PORT — issuance must bind the port the regenerated
-	// veil.env keeps advertising to renewals (#1185).
+	// veil.env keeps advertising to renewals (#1189/#1186).
 	httpPort := opts.LEIPCertPort
 	if !opts.LEIPCertPortSet {
 		if persisted := strings.TrimSpace(profile.PanelHTTP01PortEnv); persisted != "" {
@@ -548,15 +548,24 @@ func maybeIssueLEIPCert(ctx context.Context, profile *installer.RURecommendedPro
 			}
 		}
 	}
+	// A repair runs while veil-caddy may already own :80 — park the
+	// standalone listener on the internal port when the persisted plan keeps
+	// a Caddy-fronted challenge route, mirroring `cert renew` (#1181).
+	viaCaddy := false
+	store := managementstate.NewStore(filepath.Join(opts.VarDir, "state.json"), repairStateCipher(filepath.Join(opts.EtcDir, "state.key")))
+	if snapshot, ok, err := store.Load(); err == nil && ok {
+		viaCaddy = caddyassembly.PanelIPCertCaddyFronted(snapshot.Settings, snapshot.Inbounds)
+	}
 	cert, err := leIPCertIssueFunc(ctx, acmeip.IssueOptions{
-		PublicIPv4: publicIPv4,
-		PublicIPv6: publicIPv6,
-		HTTPPort:   httpPort,
-		Email:      profile.Email,
-		CertPath:   certPath,
-		KeyPath:    keyPath,
-		CAServer:   acmeCAURL,
-		CARoot:     acmeCARoot,
+		PublicIPv4:     publicIPv4,
+		PublicIPv6:     publicIPv6,
+		HTTPPort:       httpPort,
+		Email:          profile.Email,
+		CertPath:       certPath,
+		KeyPath:        keyPath,
+		CAServer:       acmeCAURL,
+		CARoot:         acmeCARoot,
+		HTTP01ViaCaddy: viaCaddy,
 		// profile.ACMEInsecure already folds the persisted
 		// VEIL_ACME_INSECURE in — a repair shell that does not export it
 		// must still verify the controlled-CA endpoint the same way the

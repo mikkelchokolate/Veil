@@ -544,6 +544,14 @@ func issueLEIPCertForProfile(ctx context.Context, profile *installer.RURecommend
 	if err := os.MkdirAll(filepath.Dir(certPath), 0o750); err != nil {
 		return fmt.Errorf("create panel cert directory: %w", err)
 	}
+	// On a reinstall, veil-caddy may already own :80 — park the standalone
+	// listener on the internal port when the running plan keeps a
+	// Caddy-fronted challenge route, the same contract `cert renew` uses
+	// (#1181). Fresh installs have no snapshot and stay on the public port.
+	viaCaddy := false
+	if snapshot, hasSnapshot := loadCertSnapshot(opts.EtcDir, opts.VarDir); hasSnapshot {
+		viaCaddy = caddyassembly.PanelIPCertCaddyFronted(snapshot.Settings, snapshot.Inbounds)
+	}
 	cert, err := leIPCertIssueFunc(ctx, acmeip.IssueOptions{
 		PublicIPv4: publicIPv4,
 		PublicIPv6: publicIPv6,
@@ -555,9 +563,10 @@ func issueLEIPCertForProfile(ctx context.Context, profile *installer.RURecommend
 		// been preserved from the previous veil.env when the environment no
 		// longer exports them, and issuance must run against the same CA
 		// configuration that gets persisted (#1189).
-		CAServer: profile.ACMECAURL,
-		Insecure: profile.ACMEInsecure,
-		CARoot:   profile.ACMECARoot,
+		CAServer:       profile.ACMECAURL,
+		Insecure:       profile.ACMEInsecure,
+		CARoot:         profile.ACMECARoot,
+		HTTP01ViaCaddy: viaCaddy,
 	})
 	if err != nil {
 		return err
