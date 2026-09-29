@@ -574,6 +574,7 @@ func (e Locale) Valid() bool {
 // Defines values for PresenceItemSource.
 const (
 	PresenceItemSourceActivity    PresenceItemSource = "activity"
+	PresenceItemSourceIneligible  PresenceItemSource = "ineligible"
 	PresenceItemSourceStats       PresenceItemSource = "stats"
 	PresenceItemSourceUnsupported PresenceItemSource = "unsupported"
 )
@@ -582,6 +583,8 @@ const (
 func (e PresenceItemSource) Valid() bool {
 	switch e {
 	case PresenceItemSourceActivity:
+		return true
+	case PresenceItemSourceIneligible:
 		return true
 	case PresenceItemSourceStats:
 		return true
@@ -2369,11 +2372,11 @@ type PresenceItem struct {
 	// Online Tri-state verdict: true = online now, false = offline, null = no telemetry source can currently prove either. Never fabricated.
 	Online nullable.Nullable[bool] `json:"online"`
 
-	// Source The most authoritative mechanism behind the verdict: stats = runtime session table (hysteria2 /online), activity = counter-increase heuristic (mieru, or hysteria2 fallback when the stats listener is dark), unsupported = no telemetry source.
+	// Source The most authoritative mechanism behind the verdict: stats = runtime session table (hysteria2 /online), activity = counter-increase heuristic (mieru, or hysteria2 fallback when the stats listener is dark), unsupported = no telemetry source, ineligible = the render path excludes the client (disabled, depleted, or expired) so no verdict is possible.
 	Source PresenceItemSource `json:"source"`
 }
 
-// PresenceItemSource The most authoritative mechanism behind the verdict: stats = runtime session table (hysteria2 /online), activity = counter-increase heuristic (mieru, or hysteria2 fallback when the stats listener is dark), unsupported = no telemetry source.
+// PresenceItemSource The most authoritative mechanism behind the verdict: stats = runtime session table (hysteria2 /online), activity = counter-increase heuristic (mieru, or hysteria2 fallback when the stats listener is dark), unsupported = no telemetry source, ineligible = the render path excludes the client (disabled, depleted, or expired) so no verdict is possible.
 type PresenceItemSource string
 
 // PresenceResponse defines model for PresenceResponse.
@@ -5233,7 +5236,7 @@ type ClientInterface interface {
 
 	// GetApiV1Presence Live per-client presence (who is online right now)
 	//
-	// One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
+	// One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. Clients the render path excludes — disabled, quota-depleted, or expired — report source=ineligible with online=null because any telemetry they still carry is residual and cannot prove presence. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
 	//
 	// Corresponds with GET /api/v1/presence (the `GetApiV1Presence` operationId).
 	GetApiV1Presence(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -7908,7 +7911,7 @@ func (c *Client) GetApiV1Events(ctx context.Context, params *GetApiV1EventsParam
 
 // GetApiV1Presence Live per-client presence (who is online right now)
 //
-// One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
+// One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. Clients the render path excludes — disabled, quota-depleted, or expired — report source=ineligible with online=null because any telemetry they still carry is residual and cannot prove presence. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
 //
 // Corresponds with GET /api/v1/presence (the `GetApiV1Presence` operationId).
 func (c *Client) GetApiV1Presence(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -15497,7 +15500,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetApiV1PresenceWithResponse Live per-client presence (who is online right now)
 	//
-	// One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
+	// One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. Clients the render path excludes — disabled, quota-depleted, or expired — report source=ineligible with online=null because any telemetry they still carry is residual and cannot prove presence. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -26791,7 +26794,7 @@ func (c *ClientWithResponses) GetApiV1EventsWithResponse(ctx context.Context, pa
 
 // GetApiV1PresenceWithResponse Live per-client presence (who is online right now)
 //
-// One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
+// One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. Clients the render path excludes — disabled, quota-depleted, or expired — report source=ineligible with online=null because any telemetry they still carry is residual and cannot prove presence. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
 //
 // Returns a wrapper object for the known response body format(s).
 //

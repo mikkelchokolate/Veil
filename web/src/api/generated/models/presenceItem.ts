@@ -50,7 +50,7 @@ export interface PresenceItem {
      * @nullable
      */
   online: boolean | null;
-  /** The most authoritative mechanism behind the verdict: stats = runtime session table (hysteria2 /online), activity = counter-increase heuristic (mieru, or hysteria2 fallback when the stats listener is dark), unsupported = no telemetry source. */
+  /** The most authoritative mechanism behind the verdict: stats = runtime session table (hysteria2 /online), activity = counter-increase heuristic (mieru, or hysteria2 fallback when the stats listener is dark), unsupported = no telemetry source, ineligible = the render path excludes the client (disabled, depleted, or expired) so no verdict is possible. */
   source: PresenceItemSource;
   /** Live sessions reported by stats-capable bindings, summed across the client's bindings. Absent when no stats source contributed. */
   connections?: number;

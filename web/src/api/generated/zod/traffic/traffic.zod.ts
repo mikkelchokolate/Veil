@@ -44,7 +44,7 @@ import * as zod from 'zod';
 
 
 /**
- * One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
+ * One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. Clients the render path excludes — disabled, quota-depleted, or expired — report source=ineligible with online=null because any telemetry they still carry is residual and cannot prove presence. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
  * @summary Live per-client presence (who is online right now)
  */
 export const GetApiV1PresenceResponse = zod.object({
@@ -52,7 +52,7 @@ export const GetApiV1PresenceResponse = zod.object({
   "clientId": zod.string(),
   "name": zod.string(),
   "online": zod.boolean().nullable().describe('Tri-state verdict: true = online now, false = offline, null = no telemetry source can currently prove either. Never fabricated.'),
-  "source": zod.enum(['stats', 'activity', 'unsupported']).describe('The most authoritative mechanism behind the verdict: stats = runtime session table (hysteria2 /online), activity = counter-increase heuristic (mieru, or hysteria2 fallback when the stats listener is dark), unsupported = no telemetry source.'),
+  "source": zod.enum(['stats', 'activity', 'unsupported', 'ineligible']).describe('The most authoritative mechanism behind the verdict: stats = runtime session table (hysteria2 /online), activity = counter-increase heuristic (mieru, or hysteria2 fallback when the stats listener is dark), unsupported = no telemetry source, ineligible = the render path excludes the client (disabled, depleted, or expired) so no verdict is possible.'),
   "connections": zod.int().optional().describe('Live sessions reported by stats-capable bindings, summed across the client\'s bindings. Absent when no stats source contributed.'),
   "lastActiveAt": zod.int().optional().describe('Unix timestamp of the last observed activity (session table sighting or counter increase). Absent when never observed.')
 })),

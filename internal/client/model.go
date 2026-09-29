@@ -115,6 +115,23 @@ func ComputeStatus(c Client, now time.Time, applyFailed, pendingApply, orphaned 
 	}
 }
 
+// RuntimeEligible reports whether a client may still be admitted to a
+// protocol runtime: enabled, not quota-depleted, and unexpired
+// (expires_at > now). It is the single gate behind render admission —
+// ListRuntimeBindingsForInbound applies the same rule in SQL and the
+// pinned snapshot render checks it per client — and every consumer that
+// reads runtime telemetry (presence, traffic identity attribution) must
+// agree with it: a client the renderer excluded can leave only residual
+// telemetry, which must never prove "online" or attribute traffic.
+func RuntimeEligible(enabled, depleted bool, expiresAt *int64, now int64) bool {
+	return enabled && !depleted && (expiresAt == nil || *expiresAt > now)
+}
+
+// RuntimeEligible is the Client receiver form of the package-level gate.
+func (c Client) RuntimeEligible(now int64) bool {
+	return RuntimeEligible(c.Enabled, c.Depleted, c.ExpiresAt, now)
+}
+
 // nowUnix is a seam for tests.
 var nowUnix = func() int64 { return time.Now().Unix() }
 

@@ -274,7 +274,7 @@ func (s *managementState) inboundsWithPinnedCredentialsLocked() ([]Inbound, erro
 		rc := make([]RuntimeCredential, 0, len(bindings))
 		for _, b := range bindings {
 			c, ok := clientByID[b.ClientID]
-			if !ok || !c.Enabled || c.Depleted || (c.ExpiresAt != nil && *c.ExpiresAt <= s.renderEffectiveAt) {
+			if !ok || !client.RuntimeEligible(c.Enabled, c.Depleted, c.ExpiresAt, s.renderEffectiveAt) {
 				continue
 			}
 			cred, ok := credByBinding[credentialKey{bindingID: b.ID, kind: "password"}]
