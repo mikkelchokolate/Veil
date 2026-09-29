@@ -43,6 +43,7 @@ func (s *managementState) resolveWebAuthnPending(w http.ResponseWriter, r *http.
 			Success: false,
 			Error:   "concurrent verification on the same challenge",
 		})
+		w.Header().Set("Retry-After", "1")
 		writeError(w, "verification already in progress", http.StatusTooManyRequests)
 		return pendingSecondFactor{}, model.User{}, "", false
 	case pendingClaimMissing:
@@ -187,6 +188,7 @@ func (s *managementState) handleWebAuthnLoginFinish(w http.ResponseWriter, r *ht
 			Success: false,
 			Error:   "concurrent verification on the same challenge",
 		})
+		w.Header().Set("Retry-After", "1")
 		writeError(w, "verification already in progress", http.StatusTooManyRequests)
 		return
 	case pendingClaimMissing:
