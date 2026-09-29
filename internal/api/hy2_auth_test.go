@@ -590,9 +590,12 @@ func TestHy2AuthIPLimitFreesSlotAfterDisconnect(t *testing.T) {
 // A dead pending admission must expire before promotion: with ipLimit >= 2,
 // an expired record promoted ahead of a live pending peer would become
 // registered — and registered records are never swept — pinning its IP
-// forever. Admit A and B while /online counts nothing, let only B reach the
-// table, advance past A's TTL, then admit C: B promotes, C takes the free
-// IP slot, and a fourth distinct IP is still denied.
+// forever. Admit A, then admit B half a TTL later while /online counts
+// nothing; let only B reach the table and advance so A is expired but B is
+// still live. Under the old promote-then-expire order A would win the single
+// promotion slot (oldest admittedAt) and pin 1.1.1.1; the fixed order sweeps
+// A, promotes B, and C takes the free IP slot — while A's stale IP can never
+// come back.
 func TestHy2AuthIPLimitDeadPendingCannotPinRegisteredSlot(t *testing.T) {
 	s, svc := newHy2AuthTestState(t)
 	now := time.Now()
@@ -615,14 +618,21 @@ func TestHy2AuthIPLimitDeadPendingCannotPinRegisteredSlot(t *testing.T) {
 	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "1.1.1.1:1000", Auth: auth}); !resp.OK {
 		t.Fatal("session A denied")
 	}
+	now = now.Add(30 * time.Second)
 	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "2.2.2.2:2000", Auth: auth}); !resp.OK {
 		t.Fatal("session B denied")
 	}
-	// Only B reaches the daemon table; A's pending TTL lapses.
+	// Only B reaches the daemon table; jump so A (admitted at +0s) is past
+	// its TTL while B (admitted at +30s) is still inside it.
 	s.hy2AuthOnline = stubOnline(1)
-	now = now.Add(2 * time.Minute)
+	now = now.Add(45 * time.Second)
 	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "3.3.3.3:3000", Auth: auth}); !resp.OK {
 		t.Fatal("third IP denied — a dead pending record pinned a registered slot")
+	}
+	// A's IP was swept, not promoted: a new tuple from it is a brand-new
+	// address against a full ipLimit and must be denied.
+	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "1.1.1.1:5000", Auth: auth}); resp.OK {
+		t.Fatal("stale pending IP admitted as if its dead record had registered")
 	}
 	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "4.4.4.4:4000", Auth: auth}); resp.OK {
 		t.Fatal("fourth IP admitted past ipLimit=2")
