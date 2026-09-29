@@ -2,6 +2,7 @@ package privileged
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"time"
 
@@ -34,6 +35,7 @@ func backupSftpEngine(config ProductionConfig, paths BackupSftpPaths) backupsftp
 			ConfigPath:     paths.ConfigPath,
 			StatusPath:     paths.StatusPath,
 			KnownHostsPath: paths.KnownHostsPath,
+			InstallIDPath:  paths.InstallIDPath,
 		},
 		Dial: dial,
 		Now:  config.Now,
@@ -52,6 +54,12 @@ func applyRemoteUpload(ctx context.Context, config ProductionConfig, request Res
 	synced, configured, err := engine.SyncArchive(ctx, filepath.Join(request.BackupRoot, name), name, nil)
 	if err != nil {
 		result.RemoteError = err.Error()
+		if errors.Is(err, backupsftp.ErrUnencryptedArchive) {
+			// A policy refusal is not a transport failure: the remote side
+			// deliberately skipped a plaintext archive (#1188).
+			result.Warning = appendBackupResultWarning(result.Warning, "sftp upload skipped: "+err.Error())
+			return
+		}
 		result.Warning = appendBackupResultWarning(result.Warning, "sftp upload failed: "+err.Error())
 		return
 	}

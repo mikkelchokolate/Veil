@@ -51,11 +51,15 @@ func DefaultPolicy() Policy {
 		BackupSftpConfigPath:     pathFromEnv("VEIL_BACKUP_SFTP_CONFIG", filepath.Join(etcDir, "backup-sftp.json")),
 		BackupSftpStatusPath:     pathFromEnv("VEIL_BACKUP_SFTP_STATUS", filepath.Join(varDir, "backup-sftp-status.json")),
 		BackupSftpKnownHostsPath: pathFromEnv("VEIL_BACKUP_SFTP_KNOWN_HOSTS", filepath.Join(varDir, "backup-sftp.known_hosts")),
-		UpdateRoot:               filepath.Join(varDir, "updates"),
-		FencePath:                filepath.Join(varDir, "transactions", "runtime-fence.json"),
-		RequireFence:             true,
-		ManagedUnits:             defaultManagedUnits(),
-		ManagedUnitPrefixes:      defaultManagedUnitPrefixes(),
+		// The install id namespaces this node's remote archives under
+		// <remoteDir>/veil-node-<id>/ (#1184); it lives under the state dir
+		// like the status file so the scheduled unit can mint it.
+		BackupSftpInstallIDPath: pathFromEnv("VEIL_BACKUP_SFTP_INSTALL_ID", filepath.Join(varDir, "backup-sftp.install-id")),
+		UpdateRoot:              filepath.Join(varDir, "updates"),
+		FencePath:               filepath.Join(varDir, "transactions", "runtime-fence.json"),
+		RequireFence:            true,
+		ManagedUnits:            defaultManagedUnits(),
+		ManagedUnitPrefixes:     defaultManagedUnitPrefixes(),
 		Artifacts: map[string]ArtifactPath{
 			"caddy-panel": {
 				Staged:    filepath.FromSlash("caddy/config.json"),

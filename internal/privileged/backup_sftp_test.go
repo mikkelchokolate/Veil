@@ -30,7 +30,14 @@ type sftpBackupFixture struct {
 	config     ProductionConfig
 	sftpPaths  BackupSftpPaths
 	remote     *sftpfake.MemFS
+	// remoteDir is this fixture's remote namespace under the configured
+	// remoteDir — the only place the fake remote may see writes.
+	remoteDir string
 }
+
+// sftpTestInstallID is the fixture's persisted identity, so the remote
+// namespace is deterministic for pre-seeded archives (#1184).
+const sftpTestInstallID = "0123456789abcdef0123456789abcdef"
 
 func newSftpBackupFixture(t *testing.T, remote *sftpfake.MemFS, dialErr error) sftpBackupFixture {
 	t.Helper()
@@ -39,6 +46,10 @@ func newSftpBackupFixture(t *testing.T, remote *sftpfake.MemFS, dialErr error) s
 	keyPath := filepath.Join(root, "state.key")
 	passPath := filepath.Join(root, "backup.passphrase")
 	backupRoot := filepath.Join(root, "backups")
+	installIDPath := filepath.Join(root, backupsftp.InstallIDFileName)
+	if err := os.WriteFile(installIDPath, []byte(sftpTestInstallID+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	var key [32]byte
 	if _, err := rand.Read(key[:]); err != nil {
 		t.Fatal(err)
@@ -64,10 +75,12 @@ func newSftpBackupFixture(t *testing.T, remote *sftpfake.MemFS, dialErr error) s
 		passPath:   passPath,
 		backupRoot: backupRoot,
 		remote:     remote,
+		remoteDir:  "/srv/veil-backups/veil-node-" + sftpTestInstallID,
 		sftpPaths: BackupSftpPaths{
 			ConfigPath:     filepath.Join(root, "backup-sftp.json"),
 			StatusPath:     filepath.Join(root, "backup-sftp-status.json"),
 			KnownHostsPath: filepath.Join(root, "backup-sftp.known_hosts"),
+			InstallIDPath:  installIDPath,
 		},
 	}
 	fixture.config = ProductionConfig{
@@ -122,8 +135,8 @@ func TestBackupCreateUploadsToConfiguredSftp(t *testing.T) {
 	if result.RemoteError != "" || result.Warning != "" {
 		t.Fatalf("unexpected remote error/warning: %+v", result)
 	}
-	if !remote.Has("/srv/veil-backups/"+result.ArchiveName) ||
-		!remote.Has("/srv/veil-backups/"+result.ArchiveName+".sha256") {
+	if !remote.Has(fixture.remoteDir+"/"+result.ArchiveName) ||
+		!remote.Has(fixture.remoteDir+"/"+result.ArchiveName+".sha256") {
 		t.Fatalf("remote files=%v", remote.Paths())
 	}
 	status := backupsftp.LoadStatus(fixture.sftpPaths.StatusPath)
@@ -174,7 +187,7 @@ func TestBackupPruneMirrorsRemoteRetention(t *testing.T) {
 	remote := sftpfake.New()
 	fixture := newSftpBackupFixture(t, remote, nil)
 	fixture.saveConfig(t, true)
-	dir := "/srv/veil-backups"
+	dir := fixture.remoteDir
 	for _, name := range []string{
 		"veil_backup_20260201_020000.tar.gz.enc",
 		"veil_backup_20260202_020000.tar.gz.enc",
@@ -183,6 +196,13 @@ func TestBackupPruneMirrorsRemoteRetention(t *testing.T) {
 		remote.SetFile(path.Join(dir, name), []byte("a"))
 		remote.SetFile(path.Join(dir, name+".sha256"), []byte("x"))
 	}
+	// Foreign archives — another node's namespace plus a pre-namespacing
+	// orphan at the remoteDir root — must never be prune candidates (#1184).
+	foreignDir := "/srv/veil-backups/veil-node-ffffffffffffffffffffffffffffffff"
+	foreignName := "veil_backup_20260202_020000.tar.gz.enc"
+	remote.SetFile(path.Join(foreignDir, foreignName), []byte("other-node"))
+	orphan := "veil_backup_20260101_020000.tar.gz.enc"
+	remote.SetFile(path.Join("/srv/veil-backups", orphan), []byte("legacy-orphan"))
 
 	result, err := runProductionBackup(context.Background(), fixture.config, ResolvedBackup{
 		Action: BackupActionPrune, BackupRoot: fixture.backupRoot,
@@ -196,6 +216,12 @@ func TestBackupPruneMirrorsRemoteRetention(t *testing.T) {
 	}
 	if remote.Has(path.Join(dir, "veil_backup_20260202_020000.tar.gz.enc")) {
 		t.Fatal("remote archive survived prune")
+	}
+	if !remote.Has(path.Join(foreignDir, foreignName)) {
+		t.Fatal("foreign node archive was pruned")
+	}
+	if !remote.Has(path.Join("/srv/veil-backups", orphan)) {
+		t.Fatal("root orphan archive was pruned")
 	}
 	if status := backupsftp.LoadStatus(fixture.sftpPaths.StatusPath); status.LastPruneAt == "" {
 		t.Fatalf("prune status=%+v", status)
@@ -283,9 +309,11 @@ func TestBackupSftpListAndFetch(t *testing.T) {
 	remote := sftpfake.New()
 	fixture := newSftpBackupFixture(t, remote, nil)
 	fixture.saveConfig(t, true)
-	dir := "/srv/veil-backups"
+	dir := fixture.remoteDir
 	remote.SetFile(path.Join(dir, "veil_backup_20260101_020000.tar.gz.enc"), []byte("remote-archive"))
 	remote.SetFile(path.Join(dir, "notes.txt"), []byte("not-managed"))
+	// An archive in another node's namespace is invisible to list/fetch (#1184).
+	remote.SetFile("/srv/veil-backups/veil-node-ffffffffffffffffffffffffffffffff/veil_backup_20260102_020000.tar.gz.enc", []byte("other-node"))
 	ctx := context.Background()
 
 	listed, err := runProductionBackupSftp(ctx, fixture.config, ResolvedBackupSftp{
