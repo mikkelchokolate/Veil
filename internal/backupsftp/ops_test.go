@@ -297,7 +297,7 @@ func TestFetchRejectsCorruptSidecar(t *testing.T) {
 
 func TestFetchRejectsBadNamesAndMissingRemote(t *testing.T) {
 	fs := sftpfake.New()
-	for _, name := range []string{"", "../state.json", "a/b.enc", "notes.txt", "veil_backup_bad.tar.gz.enc"} {
+	for _, name := range []string{"", "../state.json", "a/b.enc", "notes.txt", "veil_backup_bad.tar.gz.enc", "veil_backup_20260101_020000.tar.gz"} {
 		if _, err := Fetch(context.Background(), fs, sftpTestConfig(), t.TempDir(), name); err == nil {
 			t.Fatalf("fetch accepted %q", name)
 		}

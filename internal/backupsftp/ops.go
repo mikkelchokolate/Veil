@@ -199,6 +199,12 @@ func Fetch(_ context.Context, fs RemoteFS, config Config, localDir, name string)
 	if _, ok := backup.ArchiveTimestamp(name); !ok {
 		return backup.ArchiveEntry{}, fmt.Errorf("unrecognized remote archive name %q", name)
 	}
+	// Match the privileged fetch policy: only encrypted archives leave the
+	// remote, so a plaintext blob parked on the SFTP side can never be pulled
+	// into the managed restore set through this path.
+	if !strings.HasSuffix(strings.ToLower(name), ".enc") {
+		return backup.ArchiveEntry{}, fmt.Errorf("remote archive %q is not an encrypted archive", name)
+	}
 	final := filepath.Join(localDir, name)
 	if _, err := os.Stat(final); err == nil {
 		return backup.ArchiveEntry{}, fmt.Errorf("archive %s already exists locally", name)

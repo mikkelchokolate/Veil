@@ -104,7 +104,7 @@ func TestConfigSaveLoadRoundtripKeepsSecretsLocal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, secret := range []string{"key-secret", "never-here", "AAAAC3fake"} {
+	for _, secret := range []string{"key-secret", "never-here", "AAAAC3NzaC1lZDI1NTE5"} {
 		if strings.Contains(string(body), secret) {
 			t.Fatalf("public view leaked a secret: %s", body)
 		}
