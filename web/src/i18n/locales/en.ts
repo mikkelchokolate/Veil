@@ -690,6 +690,19 @@ export const en: Record<string, string> = {
 	"clientDetail.quotaUnsupported":
 		"Quota can't be enforced on {inbounds} — clear the quota or detach/disable those bindings.",
 	"clientDetail.quotaNotEnforced": "quota not enforced",
+	"clientDetail.limitsNotEnforced": "no session limits",
+	"clientDetail.deviceLimit": "Device limit",
+	"clientDetail.ipLimit": "IP limit",
+	"clientDetail.deviceLimitLabel":
+		"Device limit (concurrent sessions, blank = unlimited)",
+	"clientDetail.ipLimitLabel":
+		"IP limit (distinct source IPs, blank = unlimited)",
+	"clientDetail.deviceLimitHint":
+		"Session limits are enforced only on Hysteria2 inbounds.",
+	"clientDetail.ipLimitHint":
+		"Enforced only on Hysteria2 inbounds. Source IPs behind NAT/CGNAT or cellular churn share or change addresses — prefer deviceLimit for per-device caps.",
+	"clientDetail.limitsUnsupported":
+		"Connection limits can't be enforced on {inbounds} — clear the limits or detach/disable those bindings.",
 	"clientDetail.expiryDate": "Expiry date",
 	"clientDetail.notes": "Notes",
 	"clientDetail.saving": "Saving…",
@@ -727,6 +740,7 @@ export const en: Record<string, string> = {
 	"clientDetail.validation.nameRequired": "name is required",
 	"clientDetail.validation.invalidEmail": "invalid email",
 	"clientDetail.validation.wholeBytes": "must be a whole number of bytes",
+	"clientDetail.validation.positiveInt": "must be a whole number ≥ 1",
 	"clientDetail.validation.quotaTooLarge":
 		"quota is too large (max 9007199254740991 bytes)",
 
@@ -820,6 +834,16 @@ export const en: Record<string, string> = {
 	"clientNew.quotaNotEnforced": "quota not enforced",
 	"clientNew.quotaInvalid": "quota must be a whole number of bytes",
 	"clientNew.quotaTooLarge": "quota is too large (max 9007199254740991 bytes)",
+	"clientNew.deviceLimitLabel": "Device limit (concurrent sessions, optional)",
+	"clientNew.deviceLimitHint":
+		"Session limits are enforced only on Hysteria2 inbounds.",
+	"clientNew.ipLimitLabel": "IP limit (distinct source IPs, optional)",
+	"clientNew.ipLimitHint":
+		"Enforced only on Hysteria2 inbounds. Devices behind NAT/CGNAT share an IP; cellular clients churn addresses — prefer deviceLimit for per-device caps.",
+	"clientNew.limitInvalid": "limit must be a whole number ≥ 1",
+	"clientNew.limitsUnsupported":
+		"Connection limits can't be enforced on {inbounds} — clear the limits or uncheck those inbounds.",
+	"clientNew.limitsNotEnforced": "no session limits",
 	"clientNew.expiryLabel": "Expiry date (optional)",
 	"clientNew.bindingsLegend": "Bind to inbounds",
 	"clientNew.noInbounds": "No inbounds available.",
@@ -838,6 +862,8 @@ export const en: Record<string, string> = {
 	"clientNew.reviewQuota": "Quota",
 	"clientNew.reviewQuotaValue": "{quotaBytes} bytes",
 	"clientNew.reviewExpires": "Expires",
+	"clientNew.reviewDeviceLimit": "Device limit",
+	"clientNew.reviewIpLimit": "IP limit",
 	"clientNew.reviewBindings": "Bindings",
 	"clientNew.reviewButton": "Review",
 	"clientNew.createClient": "Create client",

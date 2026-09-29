@@ -51,6 +51,8 @@ export const getApiV1ClientsResponseItemsItemQuotaBytesMax = 9007199254740991;
 
 
 
+
+
 export const GetApiV1ClientsResponse = zod.object({
   "items": zod.array(zod.object({
   "id": zod.string(),
@@ -62,7 +64,8 @@ export const GetApiV1ClientsResponse = zod.object({
   "quotaResetPolicy": zod.string(),
   "quotaResetAt": zod.int().optional(),
   "expiresAt": zod.int().optional(),
-  "deviceLimit": zod.int().optional(),
+  "deviceLimit": zod.int().min(1).optional().describe('Concurrent-session cap; absent when unlimited.'),
+  "ipLimit": zod.int().min(1).optional().describe('Distinct-source-IP cap; absent when unlimited.'),
   "notes": zod.string().optional(),
   "depleted": zod.boolean(),
   "status": zod.enum(['active', 'disabled', 'expired', 'depleted', 'pending_apply', 'apply_failed', 'orphaned']).describe('Effective status.'),
@@ -92,6 +95,7 @@ export const GetApiV1ClientsResponse = zod.object({
   "requiresCaddy": zod.boolean(),
   "trafficAccounting": zod.boolean().describe('Whether traffic on this binding counts toward the client\'s recorded usage.'),
   "quotaEnforcement": zod.boolean().describe('Whether the runtime rejects traffic once the client\'s quota is depleted.'),
+  "deviceLimits": zod.boolean().describe('Whether the runtime enforces the client\'s deviceLimit/ipLimit at session admission.'),
   "credentialKinds": zod.array(zod.string()).optional().describe('Credential kinds the protocol can issue for this binding. Omitted when empty.'),
   "expirationEnforcement": zod.boolean().describe('Whether expiry enforcement is applied for credentials on this binding.')
 }).optional(),
@@ -123,7 +127,7 @@ export const postApiV1ClientsBodyQuotaBytesMin = 0;
 export const postApiV1ClientsBodyQuotaBytesMax = 9007199254740991;
 
 
-export const postApiV1ClientsBodyDeviceLimitMin = 0;
+
 
 export const postApiV1ClientsBodyBindingsItemRuntimeIdentityRegExp = new RegExp('^[a-z0-9_-]{1,48}$');
 
@@ -137,7 +141,8 @@ export const PostApiV1ClientsBody = zod.object({
   "quotaResetPolicy": zod.enum(['never', 'daily', 'weekly', 'monthly']).optional(),
   "quotaResetAt": zod.int().nullish(),
   "expiresAt": zod.int().min(1).nullish().describe('Unix expiry timestamp; null means never. Non-positive values are rejected — every enforcement path already treats them as expired while status would report active.'),
-  "deviceLimit": zod.int().min(postApiV1ClientsBodyDeviceLimitMin).nullish(),
+  "deviceLimit": zod.int().min(1).nullish().describe('Maximum concurrent sessions for this client, aggregated across its enabled bindings. Enforced by protocols that admit sessions through an authentication hook (Hysteria2). null means unlimited; a positive value is rejected when any enabled binding targets a protocol without connection-limit support.'),
+  "ipLimit": zod.int().min(1).nullish().describe('Maximum distinct source IPs this client\'s live sessions may come from. Same capability and nullability rules as deviceLimit.'),
   "notes": zod.string().optional(),
   "bindings": zod.array(zod.object({
   "inboundId": zod.string(),
@@ -152,6 +157,8 @@ export const postApiV1ClientsResponseClientQuotaBytesMax = 9007199254740991;
 
 
 
+
+
 export const PostApiV1ClientsResponse = zod.object({
   "client": zod.object({
   "id": zod.string(),
@@ -163,7 +170,8 @@ export const PostApiV1ClientsResponse = zod.object({
   "quotaResetPolicy": zod.string(),
   "quotaResetAt": zod.int().optional(),
   "expiresAt": zod.int().optional(),
-  "deviceLimit": zod.int().optional(),
+  "deviceLimit": zod.int().min(1).optional().describe('Concurrent-session cap; absent when unlimited.'),
+  "ipLimit": zod.int().min(1).optional().describe('Distinct-source-IP cap; absent when unlimited.'),
   "notes": zod.string().optional(),
   "depleted": zod.boolean(),
   "status": zod.enum(['active', 'disabled', 'expired', 'depleted', 'pending_apply', 'apply_failed', 'orphaned']).describe('Effective status.'),
@@ -193,6 +201,7 @@ export const PostApiV1ClientsResponse = zod.object({
   "requiresCaddy": zod.boolean(),
   "trafficAccounting": zod.boolean().describe('Whether traffic on this binding counts toward the client\'s recorded usage.'),
   "quotaEnforcement": zod.boolean().describe('Whether the runtime rejects traffic once the client\'s quota is depleted.'),
+  "deviceLimits": zod.boolean().describe('Whether the runtime enforces the client\'s deviceLimit/ipLimit at session admission.'),
   "credentialKinds": zod.array(zod.string()).optional().describe('Credential kinds the protocol can issue for this binding. Omitted when empty.'),
   "expirationEnforcement": zod.boolean().describe('Whether expiry enforcement is applied for credentials on this binding.')
 }).optional(),
@@ -338,6 +347,7 @@ export const GetApiV1ClientsIdBindingsResponse = zod.object({
   "requiresCaddy": zod.boolean(),
   "trafficAccounting": zod.boolean().describe('Whether traffic on this binding counts toward the client\'s recorded usage.'),
   "quotaEnforcement": zod.boolean().describe('Whether the runtime rejects traffic once the client\'s quota is depleted.'),
+  "deviceLimits": zod.boolean().describe('Whether the runtime enforces the client\'s deviceLimit/ipLimit at session admission.'),
   "credentialKinds": zod.array(zod.string()).optional().describe('Credential kinds the protocol can issue for this binding. Omitted when empty.'),
   "expirationEnforcement": zod.boolean().describe('Whether expiry enforcement is applied for credentials on this binding.')
 }).optional(),
@@ -774,6 +784,8 @@ export const getApiV1ClientsIdResponseQuotaBytesMax = 9007199254740991;
 
 
 
+
+
 export const GetApiV1ClientsIdResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
@@ -784,7 +796,8 @@ export const GetApiV1ClientsIdResponse = zod.object({
   "quotaResetPolicy": zod.string(),
   "quotaResetAt": zod.int().optional(),
   "expiresAt": zod.int().optional(),
-  "deviceLimit": zod.int().optional(),
+  "deviceLimit": zod.int().min(1).optional().describe('Concurrent-session cap; absent when unlimited.'),
+  "ipLimit": zod.int().min(1).optional().describe('Distinct-source-IP cap; absent when unlimited.'),
   "notes": zod.string().optional(),
   "depleted": zod.boolean(),
   "status": zod.enum(['active', 'disabled', 'expired', 'depleted', 'pending_apply', 'apply_failed', 'orphaned']).describe('Effective status.'),
@@ -814,6 +827,7 @@ export const GetApiV1ClientsIdResponse = zod.object({
   "requiresCaddy": zod.boolean(),
   "trafficAccounting": zod.boolean().describe('Whether traffic on this binding counts toward the client\'s recorded usage.'),
   "quotaEnforcement": zod.boolean().describe('Whether the runtime rejects traffic once the client\'s quota is depleted.'),
+  "deviceLimits": zod.boolean().describe('Whether the runtime enforces the client\'s deviceLimit/ipLimit at session admission.'),
   "credentialKinds": zod.array(zod.string()).optional().describe('Credential kinds the protocol can issue for this binding. Omitted when empty.'),
   "expirationEnforcement": zod.boolean().describe('Whether expiry enforcement is applied for credentials on this binding.')
 }).optional(),
@@ -851,7 +865,7 @@ export const patchApiV1ClientsIdBodyQuotaBytesMin = 0;
 export const patchApiV1ClientsIdBodyQuotaBytesMax = 9007199254740991;
 
 
-export const patchApiV1ClientsIdBodyDeviceLimitMin = 0;
+
 
 
 
@@ -865,12 +879,15 @@ export const PatchApiV1ClientsIdBody = zod.object({
   "quotaResetPolicy": zod.union([zod.literal('never'),zod.literal('daily'),zod.literal('weekly'),zod.literal('monthly'),zod.literal(null)]).nullish(),
   "quotaResetAt": zod.int().nullish(),
   "expiresAt": zod.int().min(1).nullish().describe('Unix expiry timestamp; null clears the expiry. Non-positive values are rejected.'),
-  "deviceLimit": zod.int().min(patchApiV1ClientsIdBodyDeviceLimitMin).nullish(),
+  "deviceLimit": zod.int().min(1).nullish().describe('Maximum concurrent sessions for the client; null clears the limit. Enforced by protocols with deviceLimits capability (Hysteria2).'),
+  "ipLimit": zod.int().min(1).nullish().describe('Maximum distinct source IPs for the client\'s live sessions; null clears the limit.'),
   "notes": zod.string().nullish()
 }).describe('Presence-aware patch. Omitted fields are preserved, explicit null clears nullable/defaultable fields, and supplied values replace them.')
 
 export const patchApiV1ClientsIdResponseOneQuotaBytesMin = 0;
 export const patchApiV1ClientsIdResponseOneQuotaBytesMax = 9007199254740991;
+
+
 
 
 
@@ -884,7 +901,8 @@ export const PatchApiV1ClientsIdResponse = zod.object({
   "quotaResetPolicy": zod.string(),
   "quotaResetAt": zod.int().optional(),
   "expiresAt": zod.int().optional(),
-  "deviceLimit": zod.int().optional(),
+  "deviceLimit": zod.int().min(1).optional().describe('Concurrent-session cap; absent when unlimited.'),
+  "ipLimit": zod.int().min(1).optional().describe('Distinct-source-IP cap; absent when unlimited.'),
   "notes": zod.string().optional(),
   "depleted": zod.boolean(),
   "status": zod.enum(['active', 'disabled', 'expired', 'depleted', 'pending_apply', 'apply_failed', 'orphaned']).describe('Effective status.'),
@@ -914,6 +932,7 @@ export const PatchApiV1ClientsIdResponse = zod.object({
   "requiresCaddy": zod.boolean(),
   "trafficAccounting": zod.boolean().describe('Whether traffic on this binding counts toward the client\'s recorded usage.'),
   "quotaEnforcement": zod.boolean().describe('Whether the runtime rejects traffic once the client\'s quota is depleted.'),
+  "deviceLimits": zod.boolean().describe('Whether the runtime enforces the client\'s deviceLimit/ipLimit at session admission.'),
   "credentialKinds": zod.array(zod.string()).optional().describe('Credential kinds the protocol can issue for this binding. Omitted when empty.'),
   "expirationEnforcement": zod.boolean().describe('Whether expiry enforcement is applied for credentials on this binding.')
 }).optional(),

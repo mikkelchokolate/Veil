@@ -34,12 +34,12 @@ func TestV1ClientPatchExplicitNullClearsNullableFields(t *testing.T) {
 	version := int(created["version"].(float64))
 
 	response := v1Request(t, r, http.MethodPatch, "/api/v1/clients/"+id,
-		`{"version":`+strconv.Itoa(version)+`,"email":null,"groupId":null,"quotaBytes":null,"quotaResetPolicy":null,"quotaResetAt":null,"expiresAt":null,"deviceLimit":null,"notes":null}`)
+		`{"version":`+strconv.Itoa(version)+`,"email":null,"groupId":null,"quotaBytes":null,"quotaResetPolicy":null,"quotaResetAt":null,"expiresAt":null,"deviceLimit":null,"ipLimit":null,"notes":null}`)
 	if response.Code != http.StatusOK {
 		t.Fatalf("PATCH status=%d body=%s", response.Code, response.Body.String())
 	}
 	updated := decodeJSONMap(t, response.Body.Bytes())
-	for _, field := range []string{"email", "groupId", "quotaBytes", "quotaResetAt", "expiresAt", "deviceLimit"} {
+	for _, field := range []string{"email", "groupId", "quotaBytes", "quotaResetAt", "expiresAt", "deviceLimit", "ipLimit"} {
 		if value, exists := updated[field]; exists && value != nil {
 			t.Errorf("%s=%v; explicit null must clear it", field, value)
 		}
@@ -52,7 +52,7 @@ func TestV1ClientPatchExplicitNullClearsNullableFields(t *testing.T) {
 	}
 	assertDurableClientFieldsEqual(t, created, updated, map[string]bool{
 		"email": true, "groupId": true, "quotaBytes": true, "quotaResetPolicy": true, "quotaResetAt": true,
-		"expiresAt": true, "deviceLimit": true, "notes": true, "version": true, "updatedAt": true,
+		"expiresAt": true, "deviceLimit": true, "ipLimit": true, "notes": true, "version": true, "updatedAt": true,
 	})
 }
 
@@ -79,7 +79,7 @@ func TestV1ClientEnablePatchDoesNotRewriteUnrelatedFields(t *testing.T) {
 // input, not a durable value, but must be present in both schema and SDK.
 var durableClientFields = []string{
 	"version", "name", "email", "enabled", "groupId", "quotaBytes",
-	"quotaResetPolicy", "quotaResetAt", "expiresAt", "deviceLimit", "notes",
+	"quotaResetPolicy", "quotaResetAt", "expiresAt", "deviceLimit", "ipLimit", "notes",
 }
 
 func TestClientPatchOpenAPIAndGeneratedContractIncludesEveryDurableField(t *testing.T) {
@@ -151,6 +151,8 @@ func createFullyPopulatedClient(t *testing.T, r http.Handler, name string) map[s
 		"quotaResetPolicy":"weekly",
 		"quotaResetAt":1893456000,
 		"expiresAt":1924992000,
+		"deviceLimit":7,
+		"ipLimit":3,
 		"notes":"durable notes"
 	}`)
 	if response.Code != http.StatusCreated {
@@ -172,7 +174,7 @@ func assertDurableClientFieldsEqual(t *testing.T, before, after map[string]any, 
 	t.Helper()
 	for _, field := range []string{
 		"id", "name", "email", "enabled", "groupId", "quotaBytes", "quotaResetPolicy",
-		"quotaResetAt", "expiresAt", "deviceLimit", "notes", "depleted", "createdAt",
+		"quotaResetAt", "expiresAt", "deviceLimit", "ipLimit", "notes", "depleted", "createdAt",
 		"updatedAt", "version", "status",
 	} {
 		if allowedChanges[field] {

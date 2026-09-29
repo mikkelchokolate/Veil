@@ -34,3 +34,22 @@ func Hysteria2TrafficStatsAddress(publicPort int) string {
 func Hysteria2TrafficStatsEndpoint(publicPort int) string {
 	return "http://" + Hysteria2TrafficStatsAddress(publicPort) + "/traffic"
 }
+
+// Hysteria2HTTPAuthPort is reserved for the panel-side internal Hysteria2
+// HTTP authentication callback (#1173). Unlike the stats API it is a single
+// listener shared by every Hysteria2 inbound: the per-inbound identity is
+// carried in the request path, so it binds one fixed address inside the
+// 127.40.0.0/16 band the unit egress filter already pierces. The distinct
+// port means it can never collide with a per-inbound stats listener even
+// when the mapped stats host equals Hysteria2HTTPAuthHost.
+const Hysteria2HTTPAuthPort = 61001
+
+// Hysteria2HTTPAuthHost is the fixed loopback address the internal auth
+// listener binds. It must live inside 127.40.0.0/16 — the only non-resolver
+// loopback band veil-hysteria2@.service units are allowed to dial — while
+// staying outside the reserved WARP band (127.41.0.0/16).
+const Hysteria2HTTPAuthHost = "127.40.0.1"
+
+func Hysteria2HTTPAuthAddress() string {
+	return net.JoinHostPort(Hysteria2HTTPAuthHost, strconv.Itoa(Hysteria2HTTPAuthPort))
+}

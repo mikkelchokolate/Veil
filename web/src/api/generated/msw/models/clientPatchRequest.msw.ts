@@ -75,10 +75,17 @@ export interface ClientPatchRequest {
      */
   expiresAt?: number | null;
   /**
-     * @minimum 0
+     * Maximum concurrent sessions for the client; null clears the limit. Enforced by protocols with deviceLimits capability (Hysteria2).
+     * @minimum 1
      * @nullable
      */
   deviceLimit?: number | null;
+  /**
+     * Maximum distinct source IPs for the client's live sessions; null clears the limit.
+     * @minimum 1
+     * @nullable
+     */
+  ipLimit?: number | null;
   /** @nullable */
   notes?: string | null;
 }

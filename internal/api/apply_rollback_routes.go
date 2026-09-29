@@ -378,7 +378,7 @@ func clientRowsFromImmutableSnapshot(snapshot managementSnapshot) ([]client.Clie
 			ID: item.ID, Name: item.Name, Email: item.Email, Enabled: item.Enabled,
 			GroupID: item.GroupID, QuotaBytes: item.QuotaBytes, QuotaResetPolicy: item.QuotaResetPolicy,
 			QuotaResetAt: item.QuotaResetAt, ExpiresAt: item.ExpiresAt, DeviceLimit: item.DeviceLimit,
-			Notes: item.Notes, Depleted: item.Depleted, CreatedAt: item.CreatedAt,
+			IPLimit: item.IPLimit, Notes: item.Notes, Depleted: item.Depleted, CreatedAt: item.CreatedAt,
 			UpdatedAt: item.UpdatedAt, Version: item.Version,
 		})
 	}

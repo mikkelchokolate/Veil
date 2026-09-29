@@ -63,10 +63,10 @@ func ReplaceSnapshotTx(tx *Tx, clients []Client, bindings []Binding, credentials
 		item.Version = version
 		if _, err := tx.Exec(`UPDATE clients SET name=?, email=?, enabled=?, group_id=?,
     quota_bytes=?, quota_reset_policy=?, quota_reset_at=?, expires_at=?, device_limit=?,
-    notes=?, depleted=?, updated_at=?, version=? WHERE id=?`,
+    ip_limit=?, notes=?, depleted=?, updated_at=?, version=? WHERE id=?`,
 			item.Name, item.Email, boolToInt(item.Enabled), item.GroupID,
 			item.QuotaBytes, item.QuotaResetPolicy, item.QuotaResetAt, item.ExpiresAt,
-			item.DeviceLimit, item.Notes, boolToInt(item.Depleted),
+			item.DeviceLimit, item.IPLimit, item.Notes, boolToInt(item.Depleted),
 			item.UpdatedAt, item.Version, item.ID); err != nil {
 			return fmt.Errorf("client: restore snapshot client %s: %w", item.ID, err)
 		}

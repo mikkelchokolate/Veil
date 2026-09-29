@@ -250,7 +250,7 @@ func (s *managementState) appliedSubscription(clientID string) (client.View, []m
 	}
 	current := client.Client{ID: row.ID, Name: row.Name, Email: row.Email, Enabled: row.Enabled, GroupID: row.GroupID,
 		QuotaBytes: row.QuotaBytes, QuotaResetPolicy: row.QuotaResetPolicy, QuotaResetAt: row.QuotaResetAt,
-		ExpiresAt: row.ExpiresAt, DeviceLimit: row.DeviceLimit, Notes: row.Notes, Depleted: row.Depleted,
+		ExpiresAt: row.ExpiresAt, DeviceLimit: row.DeviceLimit, IPLimit: row.IPLimit, Notes: row.Notes, Depleted: row.Depleted,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, Version: row.Version}
 	bindings := make([]client.Binding, 0)
 	bindingIDs := make(map[string]struct{})

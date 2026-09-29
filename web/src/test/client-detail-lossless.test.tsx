@@ -24,6 +24,7 @@ const durableFields = [
 	"quotaResetAt",
 	"expiresAt",
 	"deviceLimit",
+	"ipLimit",
 	"notes",
 	"depleted",
 	"createdAt",
@@ -41,6 +42,7 @@ function fullyPopulatedClient(): JSONRecord {
 		quotaResetAt: 1893456000,
 		expiresAt: 1924992000,
 		deviceLimit: 7,
+		ipLimit: 3,
 		notes: "durable notes",
 		depleted: false,
 		createdAt: 1700000000,
@@ -133,6 +135,7 @@ function installStatefulClientAPI() {
 					quotaResetAt: body.quotaResetAt ?? null,
 					expiresAt: body.expiresAt ?? null,
 					deviceLimit: body.deviceLimit ?? null,
+					ipLimit: body.ipLimit ?? null,
 					notes: body.notes ?? "",
 				};
 			}
@@ -256,7 +259,13 @@ describe("ClientDetailPage lossless UI mutations", () => {
 		const api = installStatefulClientAPI();
 		const user = userEvent.setup();
 		renderClientDetail();
-		for (const label of [/email/i, /quota/i, /expiry date/i]) {
+		for (const label of [
+			/email/i,
+			/quota/i,
+			/device limit/i,
+			/ip limit/i,
+			/expiry date/i,
+		]) {
 			const input = await screen.findByLabelText(label, {}, uiLoadTimeout);
 			await user.clear(input);
 		}
@@ -270,6 +279,8 @@ describe("ClientDetailPage lossless UI mutations", () => {
 			version: 1,
 			email: null,
 			quotaBytes: null,
+			deviceLimit: null,
+			ipLimit: null,
 			expiresAt: null,
 			notes: null,
 		});

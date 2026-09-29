@@ -699,6 +699,19 @@ export const ru: Record<string, string> = {
 	"clientDetail.quotaUnsupported":
 		"Квота не будет применяться к {inbounds} — очистите квоту или отвяжите/отключите эти привязки.",
 	"clientDetail.quotaNotEnforced": "квота не применяется",
+	"clientDetail.limitsNotEnforced": "без лимита сессий",
+	"clientDetail.deviceLimit": "Лимит устройств",
+	"clientDetail.ipLimit": "Лимит IP",
+	"clientDetail.deviceLimitLabel":
+		"Лимит устройств (одновременные сессии, пусто = без ограничений)",
+	"clientDetail.ipLimitLabel":
+		"Лимит IP (различные исходные IP, пусто = без ограничений)",
+	"clientDetail.deviceLimitHint":
+		"Лимиты сессий действуют только на Hysteria2 inbound’ы.",
+	"clientDetail.ipLimitHint":
+		"Действует только на Hysteria2 inbound’ы. За NAT/CGNAT устройства делят один IP, а у сотовых клиентов адрес меняется — для лимита устройств используйте deviceLimit.",
+	"clientDetail.limitsUnsupported":
+		"Лимиты подключений не будут применяться к {inbounds} — очистите лимиты или отвяжите/отключите эти привязки.",
 	"clientDetail.expiryDate": "Дата истечения",
 	"clientDetail.notes": "Заметки",
 	"clientDetail.saving": "Сохранение…",
@@ -738,6 +751,7 @@ export const ru: Record<string, string> = {
 	"clientDetail.validation.nameRequired": "имя обязательно",
 	"clientDetail.validation.invalidEmail": "некорректный email",
 	"clientDetail.validation.wholeBytes": "должно быть целым числом байт",
+	"clientDetail.validation.positiveInt": "должно быть целым числом ≥ 1",
 	"clientDetail.validation.quotaTooLarge":
 		"квота слишком велика (максимум 9007199254740991 байт)",
 
@@ -832,6 +846,17 @@ export const ru: Record<string, string> = {
 	"clientNew.quotaInvalid": "квота должна быть целым числом байт",
 	"clientNew.quotaTooLarge":
 		"квота слишком велика (максимум 9007199254740991 байт)",
+	"clientNew.deviceLimitLabel":
+		"Лимит устройств (одновременные сессии, необязательно)",
+	"clientNew.deviceLimitHint":
+		"Лимиты сессий действуют только на Hysteria2 inbound’ы.",
+	"clientNew.ipLimitLabel": "Лимит IP (различные исходные IP, необязательно)",
+	"clientNew.ipLimitHint":
+		"Действует только на Hysteria2 inbound’ы. За NAT/CGNAT устройства делят один IP, у сотовых клиентов адрес меняется — для лимита устройств используйте deviceLimit.",
+	"clientNew.limitInvalid": "лимит должен быть целым числом ≥ 1",
+	"clientNew.limitsUnsupported":
+		"Лимиты подключений не будут применяться к {inbounds} — очистите лимиты или снимите выбор с этих инбаундов.",
+	"clientNew.limitsNotEnforced": "без лимита сессий",
 	"clientNew.expiryLabel": "Дата окончания (необязательно)",
 	"clientNew.bindingsLegend": "Привязать к инбаундам",
 	"clientNew.noInbounds": "Нет доступных инбаундов.",
@@ -850,6 +875,8 @@ export const ru: Record<string, string> = {
 	"clientNew.reviewQuota": "Квота",
 	"clientNew.reviewQuotaValue": "{quotaBytes} bytes",
 	"clientNew.reviewExpires": "Истекает",
+	"clientNew.reviewDeviceLimit": "Лимит устройств",
+	"clientNew.reviewIpLimit": "Лимит IP",
 	"clientNew.reviewBindings": "Привязки",
 	"clientNew.reviewButton": "Проверить",
 	"clientNew.createClient": "Создать клиента",

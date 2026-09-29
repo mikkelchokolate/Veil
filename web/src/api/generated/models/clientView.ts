@@ -58,7 +58,16 @@ export interface ClientView {
   quotaResetPolicy: string;
   quotaResetAt?: number;
   expiresAt?: number;
+  /**
+     * Concurrent-session cap; absent when unlimited.
+     * @minimum 1
+     */
   deviceLimit?: number;
+  /**
+     * Distinct-source-IP cap; absent when unlimited.
+     * @minimum 1
+     */
+  ipLimit?: number;
   notes?: string;
   depleted: boolean;
   /** Effective status. */

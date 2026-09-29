@@ -68,6 +68,12 @@ type RuntimeCredential struct {
 	Name     string `json:"-"`
 	Username string `json:"-"`
 	Password string `json:"-"`
+	// DeviceLimit/IPLimit mirror the owning client's connection limits so a
+	// renderer can tell whether ANY admitted runtime identity needs
+	// protocol-level enforcement (Hysteria2 switches auth to the HTTP
+	// callback only when at least one credential is limited). Runtime-only.
+	DeviceLimit *int `json:"-"`
+	IPLimit     *int `json:"-"`
 }
 
 type Inbound struct {
@@ -442,6 +448,7 @@ type ClientSnapshot struct {
 	QuotaResetAt     *int64  `json:"quotaResetAt,omitempty"`
 	ExpiresAt        *int64  `json:"expiresAt,omitempty"`
 	DeviceLimit      *int    `json:"deviceLimit,omitempty"`
+	IPLimit          *int    `json:"ipLimit,omitempty"`
 	Notes            string  `json:"notes,omitempty"`
 	Depleted         bool    `json:"depleted"`
 	CreatedAt        int64   `json:"createdAt,omitempty"`
