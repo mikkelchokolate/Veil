@@ -128,7 +128,7 @@ func TestUploadSidecarFailureRemovesPublishedArchive(t *testing.T) {
 	if _, err := Upload(context.Background(), fs, sftpTestConfig(), localPath, name); err == nil {
 		t.Fatal("expected sidecar write failure")
 	}
-	if fs.Has("/srv/veil-backups/" + name) || fs.Has("/srv/veil-backups/"+name+partialSuffix) {
+	if fs.Has("/srv/veil-backups/"+name) || fs.Has("/srv/veil-backups/"+name+partialSuffix) {
 		t.Fatalf("sidecar failure left published state: %v", fs.Paths())
 	}
 }
