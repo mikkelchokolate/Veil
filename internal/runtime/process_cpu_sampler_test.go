@@ -105,8 +105,9 @@ func TestProcessCPUSamplerSubDeltaFloorFallsBack(t *testing.T) {
 	stat := ProcessStatFields{UserTicks: 900, SystemTicks: 100, StartTimeTicks: 500}
 	sampler.Percent(42, stat, 100)
 	clock.advance(10 * time.Millisecond)
-	want := NewProcessCPUUsage(100).Percent(stat, 100)
-	if got := sampler.Percent(42, ProcessStatFields{UserTicks: 910, SystemTicks: 100, StartTimeTicks: 500}, 100); got != want {
+	second := ProcessStatFields{UserTicks: 910, SystemTicks: 100, StartTimeTicks: 500}
+	want := NewProcessCPUUsage(100).Percent(second, 100)
+	if got := sampler.Percent(42, second, 100); got != want {
 		t.Fatalf("sub-delta percent = %v, want fallback %v", got, want)
 	}
 }
