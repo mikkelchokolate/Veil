@@ -32,8 +32,20 @@ import (
 // consume. Every non-terminal exit in the begin handler must Release it.
 func (s *managementState) resolveWebAuthnPending(w http.ResponseWriter, r *http.Request) (pendingSecondFactor, model.User, string, bool) {
 	token := pendingSecondFactorToken(r)
-	pending, ok := s.pendingSecondFactors().Claim(token)
-	if !ok {
+	pending, claim := s.pendingSecondFactors().Claim(token)
+	switch claim {
+	case pendingClaimBusy:
+		// The cookie stays valid — a concurrent request holds the lease and
+		// may Release it; the losing submit must not strip the retry path.
+		s.recordRequestAudit(r, audit.Record{
+			Action:  "auth.webauthn.login",
+			Target:  "panel",
+			Success: false,
+			Error:   "concurrent verification on the same challenge",
+		})
+		writeError(w, "verification already in progress", http.StatusTooManyRequests)
+		return pendingSecondFactor{}, model.User{}, "", false
+	case pendingClaimMissing:
 		s.setPendingSecondFactorCookie(w, r, "", -1)
 		s.recordRequestAudit(r, audit.Record{
 			Action:  "auth.webauthn.login",
@@ -166,8 +178,18 @@ func (s *managementState) handleWebAuthnLoginFinish(w http.ResponseWriter, r *ht
 	// Claim takes the in-flight lease atomically: two parallel finishes on
 	// the same pending cookie can no longer both mint sessions — the same
 	// guarantee handleTOTPVerify makes for codes (#1172).
-	pending, ok := s.pendingSecondFactors().Claim(token)
-	if !ok {
+	pending, claim := s.pendingSecondFactors().Claim(token)
+	switch claim {
+	case pendingClaimBusy:
+		s.recordRequestAudit(r, audit.Record{
+			Action:  "auth.webauthn.finish",
+			Target:  "panel",
+			Success: false,
+			Error:   "concurrent verification on the same challenge",
+		})
+		writeError(w, "verification already in progress", http.StatusTooManyRequests)
+		return
+	case pendingClaimMissing:
 		s.setPendingSecondFactorCookie(w, r, "", -1)
 		s.recordRequestAudit(r, audit.Record{
 			Action:  "auth.webauthn.finish",
@@ -192,11 +214,13 @@ func (s *managementState) handleWebAuthnLoginFinish(w http.ResponseWriter, r *ht
 			Error:   "rate limited",
 		})
 		writeError(w, "too many attempts", http.StatusTooManyRequests)
+		s.pendingSecondFactors().Release(token)
 		return
 	}
 	if retryAfter := s.loginBackoffRemaining(throttleKey); retryAfter > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
 		writeError(w, "too many attempts", http.StatusTooManyRequests)
+		s.pendingSecondFactors().Release(token)
 		return
 	}
 
@@ -264,6 +288,7 @@ func (s *managementState) handleWebAuthnLoginFinish(w http.ResponseWriter, r *ht
 			Success: false, Error: err.Error(),
 		})
 		writeError(w, "passkey login is unavailable", http.StatusInternalServerError)
+		s.pendingSecondFactors().Release(token)
 		return
 	}
 	credential, err := wa.ValidateLogin(
