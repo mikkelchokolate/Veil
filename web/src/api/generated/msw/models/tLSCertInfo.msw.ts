@@ -44,7 +44,7 @@ import type { TLSCertInfoSource } from './tLSCertInfoSource.msw.ts';
 
 export interface TLSCertInfo {
   path: string;
-  /** Where the certificate came from. Panel-edge reads use "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage). Per-inbound reads classify the served certificate's origin: "acme" (CA-issued), "internal" (Caddy local CA — an untrusted fallback), "self-signed" (Veil/operator fallback material), or "missing" (no usable certificate at the configured path). An internal/self-signed certificate is never reported as a trusted issuance. */
+  /** Where the certificate came from. Panel-edge reads use "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage). Per-inbound reads classify the served certificate's origin: "acme" (CA-issued), "internal" (Caddy local CA — an untrusted fallback), "self-signed" (Veil/operator fallback material), or "missing" (no usable certificate at the configured path). An internal/self-signed certificate is never reported as a trusted issuance. Note that "acme" is an origin classification, not a public-trust check: a leaf from a private CA (VEIL_ACME_CA_URL installs, enterprise CA) also reports "acme". */
   source?: TLSCertInfoSource;
   subject: string;
   issuer: string;
