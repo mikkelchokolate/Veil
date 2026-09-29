@@ -136,7 +136,7 @@ export const GetApiProcessesResponse = zod.object({
   "processes": zod.array(zod.object({
   "pid": zod.int(),
   "name": zod.string(),
-  "cpuPercent": zod.number(),
+  "cpuPercent": zod.number().describe('Live CPU usage rate — Δ(utime+stime)/Δwall since the previous sample, top-style (100 = one saturated core; multithreaded processes may exceed 100). The first sample after process start, a respawned pid, or a sub-100ms interval reports the since-start lifetime average instead.'),
   "memoryMB": zod.int(),
   "uptimeSeconds": zod.int()
 }))
@@ -204,7 +204,7 @@ export const GetApiRuntimeObservationResponse = zod.object({
   "processes": zod.array(zod.object({
   "pid": zod.int(),
   "name": zod.string(),
-  "cpuPercent": zod.number(),
+  "cpuPercent": zod.number().describe('Live CPU usage rate — Δ(utime+stime)/Δwall since the previous sample, top-style (100 = one saturated core; multithreaded processes may exceed 100). The first sample after process start, a respawned pid, or a sub-100ms interval reports the since-start lifetime average instead.'),
   "memoryMB": zod.int(),
   "uptimeSeconds": zod.int()
 }))

@@ -44,6 +44,7 @@
 export interface ProcessInfo {
   pid: number;
   name: string;
+  /** Live CPU usage rate — Δ(utime+stime)/Δwall since the previous sample, top-style (100 = one saturated core; multithreaded processes may exceed 100). The first sample after process start, a respawned pid, or a sub-100ms interval reports the since-start lifetime average instead. */
   cpuPercent: number;
   memoryMB: number;
   uptimeSeconds: number;
