@@ -132,7 +132,14 @@ func newBackupCommand(version string) *cobra.Command {
 			// fails the local backup that already committed.
 			engine := backupSftpEngineCLI(sftpConfigPath, filepath.Dir(resolvedState))
 			if synced, attempted, syncErr := engine.SyncArchive(cmd.Context(), targetOutput, filepath.Base(targetOutput), nil); syncErr != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: SFTP remote upload failed: %v\n", syncErr)
+				if errors.Is(syncErr, backupsftp.ErrUnencryptedArchive) {
+					// The local backup committed; only the remote copy is
+					// skipped because remote storage is encrypted-only
+					// (#1188).
+					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: plaintext archive not sent to the SFTP destination (remote backups are encrypted-only): %v\n", syncErr)
+				} else {
+					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: SFTP remote upload failed: %v\n", syncErr)
+				}
 			} else if attempted && synced.Uploaded != nil {
 				fmt.Fprintf(cmd.OutOrStdout(), "Uploaded to SFTP destination: %s (sha256 %s)\n", synced.Uploaded.Archive, synced.Uploaded.SHA256)
 			}
@@ -443,14 +450,16 @@ func defaultBackupSftpConfigPath() string {
 }
 
 // backupSftpEngineCLI builds the remote-destination engine for the CLI path:
-// the config (secrets) lives under the etc dir while status and the TOFU
-// known_hosts file land in stateDir — the tree the scheduled unit mounts
-// writable alongside the backup archives.
+// the config (secrets) lives under the etc dir while status, the TOFU
+// known_hosts file, and the per-installation remote namespace identity land
+// in stateDir — the tree the scheduled unit mounts writable alongside the
+// backup archives.
 func backupSftpEngineCLI(configPath, stateDir string) backupsftp.Engine {
 	return backupsftp.Engine{Paths: backupsftp.Paths{
 		ConfigPath:     configPath,
 		StatusPath:     filepath.Join(stateDir, backupsftp.StatusFileName),
 		KnownHostsPath: filepath.Join(stateDir, backupsftp.KnownHostsFileName),
+		InstallIDPath:  filepath.Join(stateDir, backupsftp.InstallIDFileName),
 	}}
 }
 
