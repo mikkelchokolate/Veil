@@ -193,6 +193,16 @@ func backupSftpSet(engine backupsftp.Engine, request *BackupSftpConfig) (BackupS
 	if request.HostKey != nil {
 		merged.HostKey = *request.HostKey
 	}
+	// An auth-type switch retires the unused credential: keeping a stale
+	// password after moving to key auth (or a passphrase after password auth)
+	// leaves secret material on disk that can never be exercised again.
+	switch merged.AuthType {
+	case backupsftp.AuthTypeKey:
+		merged.Password = ""
+	case backupsftp.AuthTypePassword:
+		merged.KeyPath = ""
+		merged.KeyPassphrase = ""
+	}
 	if err := engine.SaveConfig(merged); err != nil {
 		return BackupSftpResult{}, newError(ErrorInvalidRequest, err.Error())
 	}

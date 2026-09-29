@@ -178,12 +178,19 @@ func appendKnownHost(path, hostname string, key ssh.PublicKey) error {
 	if err != nil {
 		return fmt.Errorf("record sftp host key: %w", err)
 	}
-	defer file.Close()
 	line := knownhosts.Line([]string{knownhosts.Normalize(hostname)}, key)
 	if _, err := file.WriteString(line + "\n"); err != nil {
+		_ = file.Close()
 		return fmt.Errorf("record sftp host key: %w", err)
 	}
-	return file.Sync()
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("record sftp host key: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("record sftp host key: %w", err)
+	}
+	return nil
 }
 
 // sftpFS adapts *sftp.Client to RemoteFS. Remote paths always use slash

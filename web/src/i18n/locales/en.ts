@@ -597,6 +597,7 @@ export const en: Record<string, string> = {
 	"backups.sftp.remoteTitle": "Remote archives",
 	"backups.sftp.remoteEmpty": "No remote archives.",
 	"backups.sftp.fetch": "Fetch",
+	"backups.sftp.notEncrypted": "not encrypted",
 	"backups.sftp.fetchHint":
 		"Fetching copies a remote archive into the local backup list, where it can be verified and restored.",
 	"backups.sftp.notice.saved": "SFTP destination saved.",

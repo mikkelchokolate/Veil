@@ -544,16 +544,22 @@ export function BackupSftpPanel() {
 												{new Date(b.createdAt).toLocaleString()}
 											</TableCell>
 											<TableCell>
-												<Button
-													size="sm"
-													disabled={fetchRemote.isPending}
-													onClick={() => {
-														setError(null);
-														fetchRemote.mutate(b.name);
-													}}
-												>
-													{t("backups.sftp.fetch")}
-												</Button>
+												{b.encrypted ? (
+													<Button
+														size="sm"
+														disabled={fetchRemote.isPending}
+														onClick={() => {
+															setError(null);
+															fetchRemote.mutate(b.name);
+														}}
+													>
+														{t("backups.sftp.fetch")}
+													</Button>
+												) : (
+													<span className="muted" style={{ fontSize: 12 }}>
+														{t("backups.sftp.notEncrypted")}
+													</span>
+												)}
 											</TableCell>
 										</TableRow>
 									))

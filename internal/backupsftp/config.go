@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/crypto/ssh"
+
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 )
 
@@ -149,6 +151,11 @@ func (c Config) Validate() error {
 	}
 	if strings.ContainsAny(c.HostKey, "\x00\r") {
 		return errors.New("host key contains invalid characters")
+	}
+	if pinned := strings.TrimSpace(c.HostKey); pinned != "" {
+		if _, _, _, _, err := ssh.ParseAuthorizedKey([]byte(pinned)); err != nil {
+			return fmt.Errorf("host key is not a valid authorized_keys entry: %w", err)
+		}
 	}
 	return nil
 }

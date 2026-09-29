@@ -540,6 +540,7 @@ export const ru: Record<string, string> = {
 	"backups.sftp.remoteTitle": "Удалённые архивы",
 	"backups.sftp.remoteEmpty": "Удалённых архивов нет.",
 	"backups.sftp.fetch": "Получить",
+	"backups.sftp.notEncrypted": "не зашифрован",
 	"backups.sftp.fetchHint":
 		"Получение копирует удалённый архив в локальный список бэкапов, где его можно проверить и восстановить.",
 	"backups.sftp.notice.saved": "SFTP-назначение сохранено.",

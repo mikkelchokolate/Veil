@@ -1020,7 +1020,7 @@ describe("BackupsPage", () => {
 			</QueryClientProvider>,
 		);
 
-		expect(await screen.findByText(/backup\.example\.com/)).toBeInTheDocument();
+		expect(await screen.findByText("backup.example.com")).toBeInTheDocument();
 		fireEvent.click(await screen.findByRole("button", { name: "Fetch" }));
 		await waitFor(() => expect(fetched).toHaveLength(1));
 		expect(fetched[0]).toEqual({ name: "veil-remote.enc" });

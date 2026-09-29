@@ -82,11 +82,21 @@ func Upload(_ context.Context, fs RemoteFS, config Config, localPath, name strin
 		_ = fs.Remove(part)
 		return UploadReceipt{}, fmt.Errorf("publish remote archive: %w", err)
 	}
+	// Post-publish cleanup: a failure from here on must not leave a
+	// verify-failed archive (or a half-written sidecar) on the remote —
+	// the operator would otherwise see a "successful" archive listing whose
+	// content was never verified.
+	cleanup := func() {
+		_ = fs.Remove(final)
+		_ = fs.Remove(remotePath(config.RemoteDir, name+sidecarSuffix))
+	}
 	stat, err := fs.Stat(final)
 	if err != nil {
+		cleanup()
 		return UploadReceipt{}, fmt.Errorf("verify remote archive: %w", err)
 	}
 	if stat.Size() != info.Size() {
+		cleanup()
 		return UploadReceipt{}, fmt.Errorf("verify remote archive: size %d != local %d", stat.Size(), info.Size())
 	}
 	digest := hex.EncodeToString(hash.Sum(nil))
@@ -94,13 +104,16 @@ func Upload(_ context.Context, fs RemoteFS, config Config, localPath, name strin
 	sidecarName := remotePath(config.RemoteDir, name+sidecarSuffix)
 	writer, err := fs.Create(sidecarName)
 	if err != nil {
+		cleanup()
 		return UploadReceipt{}, fmt.Errorf("write remote checksum sidecar: %w", err)
 	}
 	if _, err := writer.Write([]byte(sidecar)); err != nil {
 		_ = writer.Close()
+		cleanup()
 		return UploadReceipt{}, fmt.Errorf("write remote checksum sidecar: %w", err)
 	}
 	if err := writer.Close(); err != nil {
+		cleanup()
 		return UploadReceipt{}, fmt.Errorf("write remote checksum sidecar: %w", err)
 	}
 	return UploadReceipt{Archive: name, Size: info.Size(), SHA256: digest}, nil

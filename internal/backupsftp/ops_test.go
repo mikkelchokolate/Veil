@@ -107,9 +107,29 @@ func (f truncatingFS) Rename(oldname, newname string) error {
 
 func TestUploadDetectsSizeMismatch(t *testing.T) {
 	localPath := writeLocalArchive(t, []byte("payload-payload"))
-	if _, err := Upload(context.Background(), truncatingFS{sftpfake.New()}, sftpTestConfig(), localPath, filepath.Base(localPath)); err == nil ||
+	name := filepath.Base(localPath)
+	fs := truncatingFS{sftpfake.New()}
+	if _, err := Upload(context.Background(), fs, sftpTestConfig(), localPath, name); err == nil ||
 		!strings.Contains(err.Error(), "size") {
 		t.Fatalf("expected size verification failure, got %v", err)
+	}
+	// A verify-failed archive must not stay published (post-publish cleanup).
+	if fs.Has("/srv/veil-backups/" + name) {
+		t.Fatal("verify-failed archive left published on the remote")
+	}
+}
+
+func TestUploadSidecarFailureRemovesPublishedArchive(t *testing.T) {
+	localPath := writeLocalArchive(t, []byte("payload"))
+	name := filepath.Base(localPath)
+	fs := sftpfake.New()
+	// Fail only the sidecar create — the archive itself publishes fine.
+	fs.Errors = map[string]error{"create|" + path.Join("/srv/veil-backups", name+sidecarSuffix): errors.New("sidecar write failed")}
+	if _, err := Upload(context.Background(), fs, sftpTestConfig(), localPath, name); err == nil {
+		t.Fatal("expected sidecar write failure")
+	}
+	if fs.Has("/srv/veil-backups/" + name) || fs.Has("/srv/veil-backups/"+name+partialSuffix) {
+		t.Fatalf("sidecar failure left published state: %v", fs.Paths())
 	}
 }
 
