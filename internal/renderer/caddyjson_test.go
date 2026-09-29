@@ -1000,11 +1000,22 @@ func TestRenderCaddyJSONHttp01ChallengeServer(t *testing.T) {
 	if len(listen) != 1 || listen[0] != ":80" {
 		t.Fatalf("expected challenge server to listen on :80, got %v", listen)
 	}
+	// Caddy handles ACME HTTP-01 challenges at the server level (before route
+	// matching); the single route is the #1181 passthrough that proxies
+	// unmatched challenge tokens to acme.sh's internal standalone port so the
+	// direct-mode panel IP certificate can renew while Caddy owns :80.
 	routes := challengeServerMap["routes"].([]any)
-	if len(routes) != 0 {
-		// Caddy handles ACME HTTP-01 challenges at the server level (before route matching),
-		// so the challenge server intentionally has no routes.
-		t.Fatalf("expected HTTP-01 challenge server to have empty routes (Caddy handles challenges at server level), got %v", routes)
+	if len(routes) != 1 {
+		t.Fatalf("expected exactly the acme.sh passthrough route on the challenge server, got %v", routes)
+	}
+	route := routes[0].(map[string]any)
+	if route["terminal"] != true {
+		t.Fatalf("passthrough route must be terminal, got %v", route)
+	}
+	handlers := route["handle"].([]any)
+	upstreams := handlers[0].(map[string]any)["upstreams"].([]any)
+	if len(upstreams) != 1 || upstreams[0].(map[string]any)["dial"] != "localhost:44080" {
+		t.Fatalf("passthrough must proxy to acme.sh's internal port 44080, got %v", upstreams)
 	}
 
 	tlsApp := apps["tls"].(map[string]any)
@@ -1068,8 +1079,15 @@ func TestRenderCaddyJSONHttp01ChallengeHandlerEndToEnd(t *testing.T) {
 	servers := apps["http"].(map[string]any)["servers"].(map[string]any)
 	challengeServer := servers["tcp-0.0.0.0-80-acme"].(map[string]any)
 	routes := challengeServer["routes"].([]any)
-	if len(routes) != 0 {
-		t.Fatalf("expected HTTP-01 challenge server to have empty routes (Caddy handles challenges at server level), got %v", routes)
+	// Exactly one route: the acme.sh challenge passthrough to the internal
+	// standalone port (#1181) — certmagic still answers its own tokens first.
+	if len(routes) != 1 {
+		t.Fatalf("expected exactly the acme.sh passthrough route on the challenge server, got %v", routes)
+	}
+	raw, _ := json.Marshal(routes[0])
+	if !strings.Contains(string(raw), `/.well-known/acme-challenge/*`) ||
+		!strings.Contains(string(raw), `localhost:44080`) {
+		t.Fatalf("passthrough route missing the challenge path or internal port: %s", raw)
 	}
 }
 
@@ -1183,5 +1201,63 @@ func TestRenderCaddyJSONHttp01ValidatesWithCaddy(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "Valid configuration") {
 		t.Errorf("caddy validate did not report valid configuration:\n%s", out)
+	}
+}
+
+// Issue #1181: the -acme challenge server on :80 must proxy unmatched
+// /.well-known/acme-challenge/ tokens to acme.sh's loopback port — that is
+// how the direct-mode panel IP certificate renews while veil-caddy owns the
+// public port. certmagic still answers tokens for challenges Caddy itself
+// is solving before these routes run.
+func TestRenderCaddyJSONACMEChallengeOn80ProxiesToInternalAcme(t *testing.T) {
+	plan := caddyassembly.CaddyRenderPlan{
+		ACMEChallenges: map[bindregistry.BindKey]caddyassembly.AcmeChallengeOwner{
+			{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}: {
+				ChallengeMode: "http-01",
+				Domains:       []string{"hy.example.com"},
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"hy.example.com": {Domain: "hy.example.com", Email: "a@example.com"},
+		},
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(data)
+	for _, want := range []string{
+		`"/.well-known/acme-challenge/*"`,
+		`"reverse_proxy"`,
+		`"localhost:44080"`,
+		`"terminal": true`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("-acme :80 server missing %s:\n%s", want, s)
+		}
+	}
+}
+
+// A plan with no Veil-owned :80 listener must not reference the internal
+// acme.sh port anywhere — standalone renewal binds the public port itself.
+func TestRenderCaddyJSONNoPassthroughWithoutPort80(t *testing.T) {
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}: {
+				Kind:        caddyassembly.CaddyOwnerPanel,
+				Domain:      "panel.example.com",
+				BackendPort: 2096,
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"panel.example.com": {Domain: "panel.example.com", Email: "admin@example.com"},
+		},
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "44080") {
+		t.Fatalf("internal acme.sh port leaked into a plan without :80:\n%s", data)
 	}
 }

@@ -56,6 +56,64 @@ func writeCLICertPEM(t *testing.T, path, issuerOrg string, notAfter time.Time, i
 	}
 }
 
+// writeCLICASignedCertPEM writes a leaf issued by a fresh test CA under
+// issuerOrg so the certificate classifies as ACME-issued — the shape a real
+// Let's Encrypt or controlled-CA issuance produces (#1185).
+func writeCLICASignedCertPEM(t *testing.T, path, issuerOrg string, notAfter time.Time, ips ...net.IP) {
+	t.Helper()
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newSerial := func() *big.Int {
+		n, err := rand.Int(rand.Reader, big.NewInt(1<<62))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	caTemplate := x509.Certificate{
+		SerialNumber:          newSerial(),
+		Subject:               pkix.Name{CommonName: issuerOrg + " Test Root", Organization: []string{issuerOrg}},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(30 * 24 * time.Hour),
+		IsCA:                  true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, &caTemplate, &caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caCert, err := x509.ParseCertificate(caDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leafTemplate := x509.Certificate{
+		SerialNumber: newSerial(),
+		Subject:      pkix.Name{CommonName: "veil-cert-test"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     notAfter,
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IPAddresses:  ips,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &leafTemplate, caCert, &leafKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func certTestCommand(out *bytes.Buffer) *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.SetOut(out)
@@ -70,7 +128,7 @@ func TestCertStatusMissingCertificate(t *testing.T) {
 	t.Setenv("VEIL_TLS_KEY", "")
 
 	out := &bytes.Buffer{}
-	if err := runCertStatus(certTestCommand(out), false); err != nil {
+	if err := runCertStatus(certTestCommand(out), false, ""); err != nil {
 		t.Fatalf("status must report, not fail, on a missing certificate: %v", err)
 	}
 	text := out.String()
@@ -88,7 +146,7 @@ func TestCertStatusSelfSignedNeedsRenewal(t *testing.T) {
 	writeCLICertPEM(t, certPath, "Veil Self-Signed", time.Now().Add(30*24*time.Hour), net.ParseIP("203.0.113.9"))
 
 	out := &bytes.Buffer{}
-	if err := runCertStatus(certTestCommand(out), false); err != nil {
+	if err := runCertStatus(certTestCommand(out), false, ""); err != nil {
 		t.Fatal(err)
 	}
 	text := out.String()
@@ -104,10 +162,10 @@ func TestCertStatusLetsEncryptOutsideWindow(t *testing.T) {
 	etc := t.TempDir()
 	t.Setenv("VEIL_ETC_DIR", etc)
 	certPath := filepath.Join(etc, "panel", "tls.crt")
-	writeCLICertPEM(t, certPath, "Let's Encrypt", time.Now().Add(5*24*time.Hour))
+	writeCLICASignedCertPEM(t, certPath, "Let's Encrypt", time.Now().Add(5*24*time.Hour))
 
 	out := &bytes.Buffer{}
-	if err := runCertStatus(certTestCommand(out), false); err != nil {
+	if err := runCertStatus(certTestCommand(out), false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "Renewal:     not required") {
@@ -119,10 +177,10 @@ func TestCertStatusJSON(t *testing.T) {
 	etc := t.TempDir()
 	t.Setenv("VEIL_ETC_DIR", etc)
 	certPath := filepath.Join(etc, "panel", "tls.crt")
-	writeCLICertPEM(t, certPath, "Let's Encrypt", time.Now().Add(48*time.Hour), net.ParseIP("2001:db8::7"))
+	writeCLICASignedCertPEM(t, certPath, "Let's Encrypt", time.Now().Add(48*time.Hour), net.ParseIP("2001:db8::7"))
 
 	out := &bytes.Buffer{}
-	if err := runCertStatus(certTestCommand(out), true); err != nil {
+	if err := runCertStatus(certTestCommand(out), true, ""); err != nil {
 		t.Fatal(err)
 	}
 	var view certStatusView
@@ -147,7 +205,7 @@ func stubCertRenew(t *testing.T, issuerErr error) (*privileged.IssueIPCertReques
 	oldFence, oldIssuer := certRenewFence, certRenewIssuer
 	calls := new(int)
 	captured := new(privileged.IssueIPCertRequest)
-	certRenewFence = func() (privileged.FenceToken, func(), error) {
+	certRenewFence = func(string) (privileged.FenceToken, func(), error) {
 		return privileged.FenceToken{Owner: "test", Generation: 7, OperationID: "cert-renew"}, func() {}, nil
 	}
 	certRenewIssuer = func(string) privileged.IPCertIssuer {
@@ -168,7 +226,7 @@ func (f certRenewIssuerFunc) IssueIPCert(ctx context.Context, request privileged
 }
 
 func TestCertRenewRejectsInvalidPublicIP(t *testing.T) {
-	if err := runCertRenew(certTestCommand(&bytes.Buffer{}), "not-an-ip", "", 80); err == nil {
+	if err := runCertRenew(certTestCommand(&bytes.Buffer{}), "not-an-ip", "", 80, "", ""); err == nil {
 		t.Fatal("invalid --public-ip must fail before touching the helper")
 	}
 }
@@ -179,7 +237,7 @@ func TestCertRenewIssuesViaPrivilegedHelper(t *testing.T) {
 	captured, calls := stubCertRenew(t, nil)
 
 	out := &bytes.Buffer{}
-	if err := runCertRenew(certTestCommand(out), "203.0.113.9", "ops@example.com", 80); err != nil {
+	if err := runCertRenew(certTestCommand(out), "203.0.113.9", "ops@example.com", 80, "", ""); err != nil {
 		t.Fatalf("renew failed: %v", err)
 	}
 	if *calls != 1 {
@@ -208,7 +266,7 @@ func TestCertRenewIssuesViaPrivilegedHelper(t *testing.T) {
 func TestCertRenewIPv6LiteralStaysIPv6(t *testing.T) {
 	t.Setenv("VEIL_ETC_DIR", t.TempDir())
 	captured, _ := stubCertRenew(t, nil)
-	if err := runCertRenew(certTestCommand(&bytes.Buffer{}), "2001:db8::7", "", 80); err != nil {
+	if err := runCertRenew(certTestCommand(&bytes.Buffer{}), "2001:db8::7", "", 80, "", ""); err != nil {
 		t.Fatalf("renew failed: %v", err)
 	}
 	if captured.PublicIPv6 != "2001:db8::7" || captured.PublicIPv4 != "" {
@@ -219,7 +277,7 @@ func TestCertRenewIPv6LiteralStaysIPv6(t *testing.T) {
 func TestCertRenewPropagatesIssuerError(t *testing.T) {
 	t.Setenv("VEIL_ETC_DIR", t.TempDir())
 	stubCertRenew(t, errors.New("helper refused"))
-	if err := runCertRenew(certTestCommand(&bytes.Buffer{}), "203.0.113.9", "", 80); err == nil ||
+	if err := runCertRenew(certTestCommand(&bytes.Buffer{}), "203.0.113.9", "", 80, "", ""); err == nil ||
 		!strings.Contains(err.Error(), "helper refused") {
 		t.Fatalf("issuer error must propagate, got %v", err)
 	}
@@ -228,7 +286,7 @@ func TestCertRenewPropagatesIssuerError(t *testing.T) {
 func TestCertRenewPropagatesFenceError(t *testing.T) {
 	t.Setenv("VEIL_ETC_DIR", t.TempDir())
 	oldFence, oldIssuer := certRenewFence, certRenewIssuer
-	certRenewFence = func() (privileged.FenceToken, func(), error) {
+	certRenewFence = func(string) (privileged.FenceToken, func(), error) {
 		return privileged.FenceToken{}, nil, errors.New("another operation holds the runtime fencing lease; retry after it finishes")
 	}
 	issuerCalled := false
@@ -240,11 +298,186 @@ func TestCertRenewPropagatesFenceError(t *testing.T) {
 	}
 	t.Cleanup(func() { certRenewFence, certRenewIssuer = oldFence, oldIssuer })
 
-	err := runCertRenew(certTestCommand(&bytes.Buffer{}), "203.0.113.9", "", 80)
+	err := runCertRenew(certTestCommand(&bytes.Buffer{}), "203.0.113.9", "", 80, "", "")
 	if err == nil || !strings.Contains(err.Error(), "fencing lease") {
 		t.Fatalf("fence conflict must propagate, got %v", err)
 	}
 	if issuerCalled {
 		t.Fatal("issuer ran despite a fencing failure")
+	}
+}
+
+// certFlagCommand returns a command with the cert renew flag set so tests
+// can exercise the explicit-vs-persisted precedence (Changed tracking).
+func certFlagCommand(out *bytes.Buffer) *cobra.Command {
+	cmd := certTestCommand(out)
+	cmd.Flags().String("public-ip", "auto", "")
+	cmd.Flags().Int("port", 80, "")
+	cmd.Flags().String("email", "", "")
+	return cmd
+}
+
+func writeVeilEnv(t *testing.T, etcDir, body string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(etcDir, "veil.env"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Issue #1186: without an explicit --public-ip, renewal reuses the
+// install-time persisted identity instead of probing detection endpoints.
+func TestCertRenewUsesPersistedPublicIP(t *testing.T) {
+	etc := t.TempDir()
+	t.Setenv("VEIL_ETC_DIR", etc)
+	writeVeilEnv(t, etc, "VEIL_PANEL_PUBLIC_IP=203.0.113.9,2001:db8::7\n")
+	captured, calls := stubCertRenew(t, nil)
+
+	cmd := certFlagCommand(&bytes.Buffer{})
+	if err := runCertRenew(cmd, "auto", "", 80, "", ""); err != nil {
+		t.Fatalf("renew failed: %v", err)
+	}
+	if *calls != 1 {
+		t.Fatalf("issuer invoked %d times", *calls)
+	}
+	if captured.PublicIPv4 != "203.0.113.9" || captured.PublicIPv6 != "2001:db8::7" {
+		t.Fatalf("persisted dual-stack identity not reused: %+v", captured)
+	}
+}
+
+// An explicit --public-ip always wins over the persisted value.
+func TestCertRenewExplicitPublicIPBeatsPersisted(t *testing.T) {
+	etc := t.TempDir()
+	t.Setenv("VEIL_ETC_DIR", etc)
+	writeVeilEnv(t, etc, "VEIL_PANEL_PUBLIC_IP=203.0.113.9\n")
+	captured, _ := stubCertRenew(t, nil)
+
+	cmd := certFlagCommand(&bytes.Buffer{})
+	if err := cmd.Flags().Set("public-ip", "192.0.2.55"); err != nil {
+		t.Fatal(err)
+	}
+	if err := runCertRenew(cmd, "192.0.2.55", "", 80, "", ""); err != nil {
+		t.Fatalf("renew failed: %v", err)
+	}
+	if captured.PublicIPv4 != "192.0.2.55" {
+		t.Fatalf("explicit --public-ip lost to the persisted value: %+v", captured)
+	}
+}
+
+// The persisted --le-ip-cert-port wins over the flag default but an
+// explicit --port still overrides it.
+func TestCertRenewUsesPersistedHTTP01Port(t *testing.T) {
+	etc := t.TempDir()
+	t.Setenv("VEIL_ETC_DIR", etc)
+	writeVeilEnv(t, etc, "VEIL_PANEL_PUBLIC_IP=203.0.113.9\nVEIL_PANEL_HTTP01_PORT=8080\n")
+	captured, _ := stubCertRenew(t, nil)
+
+	if err := runCertRenew(certFlagCommand(&bytes.Buffer{}), "auto", "", 80, "", ""); err != nil {
+		t.Fatalf("renew failed: %v", err)
+	}
+	if captured.HTTPPort != 8080 {
+		t.Fatalf("persisted HTTP-01 port not used: %+v", captured)
+	}
+
+	captured2, _ := stubCertRenew(t, nil)
+	cmd := certFlagCommand(&bytes.Buffer{})
+	if err := cmd.Flags().Set("port", "8443"); err != nil {
+		t.Fatal(err)
+	}
+	if err := runCertRenew(cmd, "auto", "", 8443, "", ""); err != nil {
+		t.Fatalf("renew failed: %v", err)
+	}
+	if captured2.HTTPPort != 8443 {
+		t.Fatalf("explicit --port lost to the persisted value: %+v", captured2)
+	}
+}
+
+// Issue #1189: the controlled-CA knobs persisted in veil.env reach the
+// privileged issuance request even though the CLI runs outside
+// veil.service's EnvironmentFile.
+func TestCertRenewPropagatesPersistedCAConfig(t *testing.T) {
+	etc := t.TempDir()
+	t.Setenv("VEIL_ETC_DIR", etc)
+	writeVeilEnv(t, etc,
+		"VEIL_PANEL_PUBLIC_IP=203.0.113.9\n"+
+			"VEIL_ACME_CA_URL=https://127.0.0.1:14000/dir\n"+
+			"VEIL_ACME_INSECURE=1\n"+
+			"VEIL_ACME_CA_ROOT=/etc/veil/acme-root.pem\n")
+	captured, _ := stubCertRenew(t, nil)
+
+	if err := runCertRenew(certFlagCommand(&bytes.Buffer{}), "auto", "", 80, "", ""); err != nil {
+		t.Fatalf("renew failed: %v", err)
+	}
+	if captured.CAServer != "https://127.0.0.1:14000/dir" {
+		t.Fatalf("persisted CA URL not propagated: %q", captured.CAServer)
+	}
+	if !captured.Insecure {
+		t.Fatal("persisted VEIL_ACME_INSECURE did not reach the request")
+	}
+	if captured.CARoot != "/etc/veil/acme-root.pem" {
+		t.Fatalf("persisted CA root not propagated: %q", captured.CARoot)
+	}
+}
+
+// A process-environment override still beats the persisted file value.
+func TestCertRenewEnvOverridesPersistedCA(t *testing.T) {
+	etc := t.TempDir()
+	t.Setenv("VEIL_ETC_DIR", etc)
+	t.Setenv("VEIL_ACME_CA_URL", "https://shell.example/dir")
+	writeVeilEnv(t, etc,
+		"VEIL_PANEL_PUBLIC_IP=203.0.113.9\nVEIL_ACME_CA_URL=https://127.0.0.1:14000/dir\n")
+	captured, _ := stubCertRenew(t, nil)
+
+	if err := runCertRenew(certFlagCommand(&bytes.Buffer{}), "auto", "", 80, "", ""); err != nil {
+		t.Fatalf("renew failed: %v", err)
+	}
+	if captured.CAServer != "https://shell.example/dir" {
+		t.Fatalf("process env must override veil.env, got %q", captured.CAServer)
+	}
+}
+
+// --etc-dir retargets both the veil.env lookup and the default cert paths.
+func TestCertRenewHonorsEtcDirFlag(t *testing.T) {
+	etc := t.TempDir()
+	writeVeilEnv(t, etc, "VEIL_PANEL_PUBLIC_IP=203.0.113.9\n")
+	captured, _ := stubCertRenew(t, nil)
+
+	if err := runCertRenew(certFlagCommand(&bytes.Buffer{}), "auto", "", 80, etc, ""); err != nil {
+		t.Fatalf("renew failed: %v", err)
+	}
+	want := filepath.Join(etc, "panel", "tls.crt")
+	if captured.CertPath != want {
+		t.Fatalf("cert path = %q, want %q", captured.CertPath, want)
+	}
+}
+
+// Issue #1187: a persisted --le-ip-cert=false must stop `veil cert renew`
+// too — issuing once while the daemon keeps skipping renewals would just
+// leave the panel on an expiring certificate. An explicit env override
+// (VEIL_PANEL_LE_IP_CERT=1) still forces a renewal.
+func TestCertRenewHonorsPersistedOptOut(t *testing.T) {
+	etc := t.TempDir()
+	t.Setenv("VEIL_ETC_DIR", etc)
+	writeVeilEnv(t, etc, "VEIL_PANEL_PUBLIC_IP=203.0.113.9\nVEIL_PANEL_LE_IP_CERT=0\n")
+	_, calls := stubCertRenew(t, nil)
+
+	out := &bytes.Buffer{}
+	if err := runCertRenew(certFlagCommand(out), "auto", "", 80, "", ""); err != nil {
+		t.Fatalf("opted-out renew should be a clean no-op, got %v", err)
+	}
+	if *calls != 0 {
+		t.Fatal("issuer ran despite the persisted opt-out")
+	}
+	if !strings.Contains(out.String(), "disabled") {
+		t.Fatalf("opt-out notice missing from output:\n%s", out.String())
+	}
+
+	// Escape hatch: an explicit process-env override beats the file.
+	t.Setenv("VEIL_PANEL_LE_IP_CERT", "1")
+	captured, calls2 := stubCertRenew(t, nil)
+	if err := runCertRenew(certFlagCommand(&bytes.Buffer{}), "auto", "", 80, "", ""); err != nil {
+		t.Fatalf("env-forced renew failed: %v", err)
+	}
+	if *calls2 != 1 || captured.PublicIPv4 != "203.0.113.9" {
+		t.Fatalf("explicit VEIL_PANEL_LE_IP_CERT=1 must re-enable renewal: %+v", captured)
 	}
 }

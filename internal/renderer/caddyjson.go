@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/acmeip"
 	"github.com/mikkelchokolate/Veil/internal/bindregistry"
 	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
 	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
@@ -169,6 +170,10 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 		"automatic_https":         map[string]any{"disable_redirects": true},
 		"tls_connection_policies": []map[string]any{{}},
 	}
+	// A Veil-owned :80 listener must also front acme.sh's http-01 challenges:
+	// the panel IP certificate renews via --standalone on the internal port
+	// this passthrough route proxies to while Caddy holds public :80 (#1181).
+	caddyOwnsPublicHTTP := key.Port == 80 && key.Network == bindregistry.ListenTCP
 	// Keep Panel HTTPS on TCP only. Caddy's default protocol set includes h3,
 	// which binds UDP on the same port and makes Hysteria2 (QUIC/UDP 443)
 	// fail live validation and fail to start next to Panel Caddy.
@@ -184,7 +189,11 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 	}
 	switch owner.Kind {
 	case caddyassembly.CaddyOwnerPanel:
-		server["routes"] = panelRoutes(owner.Domain, owner.BackendPort, owner.WebBasePath, true)
+		routes := panelRoutes(owner.Domain, owner.BackendPort, owner.WebBasePath, true)
+		if caddyOwnsPublicHTTP {
+			routes = append([]map[string]any{acmeHTTP01PassthroughRoute()}, routes...)
+		}
+		server["routes"] = routes
 		server["errors"] = panelErrorRoutes()
 	case caddyassembly.CaddyOwnerNaive:
 		authCreds := make([]string, 0, len(owner.NaiveUsers))
@@ -259,6 +268,9 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 			})
 		}
 		routes = append(routes, proxyRoute)
+		if caddyOwnsPublicHTTP {
+			routes = append([]map[string]any{acmeHTTP01PassthroughRoute()}, routes...)
+		}
 		server["routes"] = routes
 	}
 	return server, nil
@@ -311,7 +323,34 @@ func renderAcmeChallengeServer(key bindregistry.BindKey, owner caddyassembly.Acm
 	if key.Port == 443 && key.Network == bindregistry.ListenTCP {
 		server["protocols"] = []string{"h1", "h2"}
 	}
+	if key.Port == 80 && key.Network == bindregistry.ListenTCP {
+		// certmagic answers tokens for challenges Caddy itself is solving
+		// before routes run; every other token falls through to this
+		// passthrough, which is how the panel IP certificate renews through
+		// acme.sh --standalone while Caddy owns :80 (#1181).
+		server["routes"] = []map[string]any{acmeHTTP01PassthroughRoute()}
+	}
 	return server
+}
+
+// acmeHTTP01PassthroughRoute proxies the ACME http-01 challenge path to the
+// internal loopback port acme.sh --standalone binds when the managed Caddy
+// edge owns public :80 (IssueOptions.HTTP01ViaCaddy, #1181). It is prepended
+// to every Veil-owned :80 server's routes so a panel or naive listener can
+// front panel-IP issuance the same way the dedicated -acme challenge server
+// does. The handler is deliberately a plain reverse_proxy: no auth, no
+// path rewriting — acme.sh serves exactly this prefix itself.
+func acmeHTTP01PassthroughRoute() map[string]any {
+	return map[string]any{
+		"match": []map[string]any{{"path": []string{"/.well-known/acme-challenge/*"}}},
+		"handle": []map[string]any{{
+			"handler": "reverse_proxy",
+			"upstreams": []map[string]any{
+				{"dial": "localhost:" + portString(acmeip.CaddyFrontedHTTP01Port)},
+			},
+		}},
+		"terminal": true,
+	}
 }
 
 func panelErrorRoutes() map[string]any {

@@ -7,18 +7,22 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/mikkelchokolate/Veil/internal/acmeip"
 	"github.com/mikkelchokolate/Veil/internal/apply"
+	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 	"github.com/mikkelchokolate/Veil/internal/runtime"
+	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/storage"
 	"github.com/spf13/cobra"
 )
@@ -31,13 +35,20 @@ func newCertCommand() *cobra.Command {
 		Use:   "cert",
 		Short: "Inspect and renew the panel Let's Encrypt IP certificate",
 	}
+	// CLI invocations run outside veil.service's EnvironmentFile, so the
+	// persisted lifecycle knobs in veil.env are resolved from <etc-dir>
+	// explicitly (#1189); the flags only override where that file lives.
+	var certEtcDir string
+	var certVarDir string
+	cmd.PersistentFlags().StringVar(&certEtcDir, "etc-dir", "", "Veil configuration directory (defaults to VEIL_ETC_DIR or /etc/veil)")
+	cmd.PersistentFlags().StringVar(&certVarDir, "var-dir", "", "Veil state directory (defaults to VEIL_VAR_DIR or /var/lib/veil)")
 
 	var statusJSON bool
 	statusCmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show the panel IP certificate state",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCertStatus(cmd, statusJSON)
+			return runCertStatus(cmd, statusJSON, certEtcDir)
 		},
 	}
 	statusCmd.Flags().BoolVar(&statusJSON, "json", false, "print the certificate status as JSON")
@@ -50,33 +61,62 @@ func newCertCommand() *cobra.Command {
 		Use:   "renew",
 		Short: "Force renewal of the panel IP certificate via the privileged helper",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCertRenew(cmd, renewPublicIP, renewEmail, renewPort)
+			return runCertRenew(cmd, renewPublicIP, renewEmail, renewPort, certEtcDir, certVarDir)
 		},
 	}
-	renewCmd.Flags().StringVar(&renewPublicIP, "public-ip", "auto", "public IPv4/IPv6 the certificate covers; auto detects both families")
+	renewCmd.Flags().StringVar(&renewPublicIP, "public-ip", "auto", "public IPv4/IPv6 the certificate covers; auto detects both families; unset uses the install-time persisted value")
 	renewCmd.Flags().StringVar(&renewEmail, "email", "", "ACME account contact email (defaults to the panel settings email)")
-	renewCmd.Flags().IntVar(&renewPort, "port", 80, "port used for Let's Encrypt HTTP-01 validation")
+	renewCmd.Flags().IntVar(&renewPort, "port", 80, "port used for Let's Encrypt HTTP-01 validation (defaults to the install-time persisted port)")
 	cmd.AddCommand(renewCmd)
 	return cmd
 }
 
-// certTLSCertPath resolves the panel TLS certificate path the same way the
-// status flow does: VEIL_TLS_CERT first, then <etc>/panel/tls.crt.
-func certTLSCertPath() string {
-	if v := strings.TrimSpace(os.Getenv("VEIL_TLS_CERT")); v != "" {
-		return v
+// certResolveDirs applies the --etc-dir/--var-dir flag defaults over the
+// hostenv resolution chain.
+func certResolveDirs(etcDir, varDir string) (string, string) {
+	if strings.TrimSpace(etcDir) != "" {
+		etcDir = filepath.Clean(etcDir)
+	} else {
+		etcDir = hostenv.EtcDir()
 	}
-	return filepath.Join(hostenv.EtcDir(), "panel", "tls.crt")
+	if strings.TrimSpace(varDir) != "" {
+		varDir = filepath.Clean(varDir)
+	} else {
+		varDir = hostenv.VarDir()
+	}
+	return etcDir, varDir
 }
 
-func certTLSKeyPath(certPath string) string {
-	if v := strings.TrimSpace(os.Getenv("VEIL_TLS_KEY")); v != "" {
+// certEnvFile loads the persisted veil.env map for the resolved etc dir so
+// the CLI honors the same lifecycle knobs the daemon sees through
+// EnvironmentFile (#1189).
+var certEnvFile = hostenv.ReadEnvFile
+
+// certTLSCertPath resolves the panel TLS certificate path the same way the
+// status flow does: VEIL_TLS_CERT first (process env, then the persisted
+// veil.env value), then <etc>/panel/tls.crt (#1189).
+func certTLSCertPath(envValues map[string]string, etcDir string) string {
+	if v := hostenv.EnvOrFile(envValues, "VEIL_TLS_CERT"); v != "" {
 		return v
 	}
-	if strings.TrimSpace(os.Getenv("VEIL_TLS_CERT")) != "" {
+	return filepath.Join(etcDir, "panel", "tls.crt")
+}
+
+func certTLSKeyPath(envValues map[string]string, certPath, etcDir string) string {
+	if v := hostenv.EnvOrFile(envValues, "VEIL_TLS_KEY"); v != "" {
+		return v
+	}
+	if hostenv.EnvOrFile(envValues, "VEIL_TLS_CERT") != "" {
 		return strings.TrimSuffix(certPath, filepath.Ext(certPath)) + ".key"
 	}
-	return filepath.Join(hostenv.EtcDir(), "panel", "tls.key")
+	return filepath.Join(etcDir, "panel", "tls.key")
+}
+
+// certFlagChanged reports whether a flag was explicitly set, nil-safe for
+// direct test invocations on bare commands.
+func certFlagChanged(cmd *cobra.Command, name string) bool {
+	f := cmd.Flags().Lookup(name)
+	return f != nil && f.Changed
 }
 
 type certStatusView struct {
@@ -109,12 +149,14 @@ func certIPSANs(certPath string) []string {
 	return out
 }
 
-func runCertStatus(cmd *cobra.Command, jsonOutput bool) error {
-	certPath := certTLSCertPath()
+func runCertStatus(cmd *cobra.Command, jsonOutput bool, etcDirFlag string) error {
+	etcDir, _ := certResolveDirs(etcDirFlag, "")
+	envValues := certEnvFile(filepath.Join(etcDir, "veil.env"))
+	certPath := certTLSCertPath(envValues, etcDir)
 	info := runtime.ReadTLSCert(certPath)
 	view := certStatusView{
 		TLSCertInfo:    info,
-		KeyPath:        certTLSKeyPath(certPath),
+		KeyPath:        certTLSKeyPath(envValues, certPath, etcDir),
 		IPAddresses:    certIPSANs(certPath),
 		NeedsRenewal:   acmeip.NeedsRenewal(certPath, time.Now()),
 		RenewalWindowH: int(acmeip.RenewalWindow / time.Hour),
@@ -165,8 +207,8 @@ var certRenewIssuer = func(socketPath string) privileged.IPCertIssuer {
 // to the state file, shared with the running panel: while an apply holds it
 // the CLI renewal reports the conflict instead of racing the apply's
 // generation, and vice versa.
-func mintCertRenewFence() (privileged.FenceToken, func(), error) {
-	databasePath := filepath.Join(hostenv.VarDir(), "veil.db")
+func mintCertRenewFence(varDir string) (privileged.FenceToken, func(), error) {
+	databasePath := filepath.Join(varDir, "veil.db")
 	db, err := storage.Open(databasePath)
 	if err != nil {
 		return privileged.FenceToken{}, nil, fmt.Errorf("open fencing lease store %s: %w", databasePath, err)
@@ -198,27 +240,116 @@ func mintCertRenewFence() (privileged.FenceToken, func(), error) {
 // certRenewFence is a test seam around mintCertRenewFence.
 var certRenewFence = mintCertRenewFence
 
-func runCertRenew(cmd *cobra.Command, publicIP, email string, port int) error {
+// loadCertSnapshot loads the persisted panel state so `cert renew` can reuse
+// install-time facts the bare shell environment does not carry: whether the
+// rendered plan keeps a Caddy listener on :80 (which decides the
+// Caddy-fronted acme.sh standalone port, #1181) and the panel email the
+// --email help promises as the default (#1189). Best-effort — a missing or
+// unreadable snapshot just leaves the flag defaults.
+func loadCertSnapshot(etcDir, varDir string) (model.ManagementSnapshot, bool) {
+	statePath := filepath.Join(varDir, "state.json")
+	if v := strings.TrimSpace(os.Getenv("VEIL_STATE_PATH")); v != "" {
+		statePath = v
+	}
+	keyPath := filepath.Join(etcDir, "state.key")
+	if v := strings.TrimSpace(os.Getenv("VEIL_KEY_PATH")); v != "" {
+		keyPath = v
+	}
+	if _, err := os.Stat(statePath); err != nil {
+		return model.ManagementSnapshot{}, false
+	}
+	if _, err := os.Stat(keyPath); err != nil {
+		return model.ManagementSnapshot{}, false
+	}
+	key, err := secrets.LoadOrCreateKey(keyPath)
+	if err != nil {
+		return model.ManagementSnapshot{}, false
+	}
+	cipher, err := secrets.NewCipher(*key)
+	if err != nil {
+		return model.ManagementSnapshot{}, false
+	}
+	snapshot, ok, err := managementstate.NewStore(statePath, cipher).Load()
+	if err != nil || !ok {
+		return model.ManagementSnapshot{}, false
+	}
+	return snapshot, true
+}
+
+func runCertRenew(cmd *cobra.Command, publicIP, email string, port int, etcDirFlag, varDirFlag string) error {
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if ip := net.ParseIP(strings.TrimSpace(publicIP)); ip == nil && !strings.EqualFold(strings.TrimSpace(publicIP), "auto") && strings.TrimSpace(publicIP) != "" {
-		return fmt.Errorf("--public-ip %q is not a valid IP address or \"auto\"", publicIP)
+	etcDir, varDir := certResolveDirs(etcDirFlag, varDirFlag)
+	envValues := certEnvFile(filepath.Join(etcDir, "veil.env"))
+
+	// The persisted --le-ip-cert=false opt-out applies here too: a manual
+	// renewal would issue a certificate the daemon then refuses to renew,
+	// silently lapsing the panel onto an expired cert. Renewing anyway is
+	// still possible via an explicit VEIL_PANEL_LE_IP_CERT=1 env override
+	// (#1187).
+	if v := hostenv.EnvOrFile(envValues, "VEIL_PANEL_LE_IP_CERT"); v != "" {
+		if enabled, err := strconv.ParseBool(v); err == nil && !enabled {
+			fmt.Fprintln(cmd.OutOrStdout(), "Panel IP certificate is disabled (VEIL_PANEL_LE_IP_CERT=0); nothing to renew.")
+			return nil
+		}
 	}
-	publicIPv4, publicIPv6, err := acmeip.ResolvePublicIPs(ctx, publicIP)
-	if err != nil {
-		return fmt.Errorf("detect public IP: %w", err)
+
+	// Public-IP precedence: an explicit --public-ip wins; otherwise the
+	// install-time persisted identity (process env or veil.env) is reused
+	// so renewal certifies the same SANs instead of re-probing external
+	// detection endpoints (#1186); only a bare "auto" reaches detection.
+	ipSpec := strings.TrimSpace(publicIP)
+	if !certFlagChanged(cmd, "public-ip") {
+		if persisted := hostenv.EnvOrFile(envValues, "VEIL_PANEL_PUBLIC_IP"); persisted != "" {
+			ipSpec = persisted
+		}
 	}
-	fence, release, err := certRenewFence()
+	var publicIPv4, publicIPv6 string
+	switch {
+	case ipSpec == "" || strings.EqualFold(ipSpec, "auto"):
+		var err error
+		publicIPv4, publicIPv6, err = acmeip.ResolvePublicIPs(ctx, "auto")
+		if err != nil {
+			return fmt.Errorf("detect public IP: %w", err)
+		}
+	default:
+		var err error
+		publicIPv4, publicIPv6, err = acmeip.ParsePublicIPSpec(ipSpec)
+		if err != nil {
+			return fmt.Errorf("public IP %q is not a valid IPv4/IPv6 spec or \"auto\"", ipSpec)
+		}
+	}
+
+	// The persisted --le-ip-cert-port wins over the flag default so renewal
+	// binds the same standalone port the install-time issuance used (#1189/#1186).
+	if !certFlagChanged(cmd, "port") {
+		if persisted := hostenv.EnvOrFile(envValues, "VEIL_PANEL_HTTP01_PORT"); persisted != "" {
+			if parsed, err := strconv.Atoi(persisted); err == nil && parsed >= 0 && parsed <= 65535 {
+				port = parsed
+			}
+		}
+	}
+
+	snapshot, hasSnapshot := loadCertSnapshot(etcDir, varDir)
+	if strings.TrimSpace(email) == "" && hasSnapshot {
+		email = snapshot.Settings.PanelEmail
+		if email == "" {
+			email = snapshot.Settings.Email
+		}
+	}
+	viaCaddy := hasSnapshot && caddyassembly.PanelIPCertCaddyFronted(snapshot.Settings, snapshot.Inbounds)
+
+	fence, release, err := certRenewFence(varDir)
 	if err != nil {
 		return err
 	}
 	if release != nil {
 		defer release()
 	}
-	certPath := certTLSCertPath()
-	keyPath := certTLSKeyPath(certPath)
+	certPath := certTLSCertPath(envValues, etcDir)
+	keyPath := certTLSKeyPath(envValues, certPath, etcDir)
 	issuer := certRenewIssuer(privileged.DefaultSocketPath)
 	result, err := issuer.IssueIPCert(ctx, privileged.IssueIPCertRequest{
 		PublicIPv4: publicIPv4,
@@ -227,9 +358,13 @@ func runCertRenew(cmd *cobra.Command, publicIP, email string, port int) error {
 		Email:      strings.TrimSpace(email),
 		CertPath:   certPath,
 		KeyPath:    keyPath,
-		// Honor the controlled-CA knobs install persists into veil.env.
-		CAServer: strings.TrimSpace(os.Getenv("VEIL_ACME_CA_URL")),
-		Insecure: strings.TrimSpace(os.Getenv("VEIL_ACME_INSECURE")) != "",
+		// Honor the controlled-CA knobs install persists into veil.env —
+		// the process environment still wins for an explicit override
+		// (#1189).
+		CAServer:       hostenv.EnvOrFile(envValues, "VEIL_ACME_CA_URL"),
+		Insecure:       hostenv.EnvOrFile(envValues, "VEIL_ACME_INSECURE") != "",
+		CARoot:         hostenv.EnvOrFile(envValues, "VEIL_ACME_CA_ROOT"),
+		HTTP01ViaCaddy: viaCaddy,
 		// The panel itself consumes this certificate; its restart rides a
 		// transient systemd timer so a running panel finishes in-flight
 		// responses before reloadcmd restarts it (#1170).

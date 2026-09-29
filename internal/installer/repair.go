@@ -61,6 +61,10 @@ func desiredManagedFiles(profile RURecommendedProfile, paths ApplyPaths) ([]mana
 		CaddyJSON:         profile.CaddyJSON,
 		ACMECAURL:         profile.ACMECAURL,
 		ACMECARoot:        profile.ACMECARoot,
+		ACMEInsecure:      profile.ACMEInsecure,
+		PanelPublicIP:     profile.PanelPublicIP,
+		PanelLEIPCert:     profile.PanelLEIPCertEnv,
+		PanelHTTP01Port:   profile.PanelHTTP01PortEnv,
 	}).Files()
 	if err != nil {
 		return nil, err

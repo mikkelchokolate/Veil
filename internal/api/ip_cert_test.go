@@ -26,18 +26,32 @@ func (c *ipCertPrivilegedClient) IssueIPCert(_ context.Context, request privileg
 }
 
 // swapIPCertSeams points the renewal gate / resolver / clock at test stubs
-// and returns a restore function.
+// and returns a restore function. The env seam defaults to empty so tests
+// stay hermetic regardless of the developer shell's VEIL_* variables.
 func swapIPCertSeams(t *testing.T, needs bool, err error) func() {
 	t.Helper()
 	oldNeeds, oldResolve, oldNow := ipCertNeedsRenewal, ipCertResolvePublicIPs, ipCertNow
+	oldEnv, oldSANs, oldFronted := ipCertGetenv, ipCertManagedIPSANs, ipCertCaddyFronted
 	ipCertNeedsRenewal = func(string, time.Time) bool { return needs }
 	ipCertResolvePublicIPs = func(context.Context, string) (string, string, error) {
 		return "203.0.113.9", "2001:db8::7", err
 	}
 	ipCertNow = func() time.Time { return time.Unix(1_700_000_000, 0) }
+	ipCertGetenv = func(string) string { return "" }
+	ipCertManagedIPSANs = func(string) []string { return nil }
+	ipCertCaddyFronted = func(Settings, []Inbound) bool { return false }
 	return func() {
 		ipCertNeedsRenewal, ipCertResolvePublicIPs, ipCertNow = oldNeeds, oldResolve, oldNow
+		ipCertGetenv, ipCertManagedIPSANs, ipCertCaddyFronted = oldEnv, oldSANs, oldFronted
 	}
+}
+
+// stubIPCertEnv serves a fixed map through the getenv seam.
+func stubIPCertEnv(t *testing.T, env map[string]string) {
+	t.Helper()
+	old := ipCertGetenv
+	ipCertGetenv = func(key string) string { return env[key] }
+	t.Cleanup(func() { ipCertGetenv = old })
 }
 
 func directIPCertState(backend privileged.Client) *managementState {
@@ -217,7 +231,7 @@ func TestIPCertRequestUsesDualStackResolution(t *testing.T) {
 		}
 		return "192.0.2.1", "", nil
 	}
-	request, err := panelIPCertIssueRequest(context.Background(), Settings{Email: "ops@example.com"}, "/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key", privileged.FenceToken{Owner: "o", Generation: 1})
+	request, err := panelIPCertIssueRequest(context.Background(), Settings{Email: "ops@example.com"}, nil, "/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key", privileged.FenceToken{Owner: "o", Generation: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,6 +243,157 @@ func TestIPCertRequestUsesDualStackResolution(t *testing.T) {
 	}
 	if request.Fence.Generation != 1 {
 		t.Fatal("fence token not propagated into the request")
+	}
+}
+
+// Issue #1187: --le-ip-cert=false persists VEIL_PANEL_LE_IP_CERT=0, and
+// every renewal entry point must then skip the gate entirely — no resolver
+// call, no issuance attempt.
+func TestPostServiceActionsSkipsOptedOutPanel(t *testing.T) {
+	defer swapIPCertSeams(t, true, nil)()
+	stubIPCertEnv(t, map[string]string{"VEIL_PANEL_LE_IP_CERT": "0"})
+	backend := &ipCertPrivilegedClient{}
+	state := directIPCertState(backend)
+	if got := NewManagementApplyContext(state).PostServiceActionsLocked(nil); got != nil {
+		t.Fatalf("opted-out panel produced actions: %+v", got)
+	}
+	if backend.issueCalls.Load() != 0 {
+		t.Fatal("opted-out panel must never invoke issuance")
+	}
+}
+
+func TestIPCertWorkerSkipsOptedOutPanel(t *testing.T) {
+	defer swapIPCertSeams(t, true, nil)()
+	stubIPCertEnv(t, map[string]string{"VEIL_PANEL_LE_IP_CERT": "false"})
+	backend := &ipCertPrivilegedClient{}
+	worker := newIPCertRenewalWorker(directIPCertState(backend))
+	if err := worker.SyncOnce(context.Background()); err != nil {
+		t.Fatalf("opted-out SyncOnce must be a silent no-op, got %v", err)
+	}
+	if backend.issueCalls.Load() != 0 {
+		t.Fatal("worker issued a certificate for an opted-out panel")
+	}
+}
+
+// Issue #1186: the install-pinned public IP wins and the detection
+// endpoints are never probed during renewal.
+func TestIPCertRequestUsesPersistedPublicIP(t *testing.T) {
+	defer swapIPCertSeams(t, true, nil)()
+	stubIPCertEnv(t, map[string]string{"VEIL_PANEL_PUBLIC_IP": "203.0.113.9,2001:db8::7"})
+	probed := false
+	old := ipCertResolvePublicIPs
+	defer func() { ipCertResolvePublicIPs = old }()
+	ipCertResolvePublicIPs = func(context.Context, string) (string, string, error) {
+		probed = true
+		return "", "", errors.New("detection endpoints must not be probed")
+	}
+	request, err := panelIPCertIssueRequest(context.Background(), Settings{}, nil, "/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key", privileged.FenceToken{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if probed {
+		t.Fatal("renewal probed the detection endpoints despite the persisted IP")
+	}
+	if request.PublicIPv4 != "203.0.113.9" || request.PublicIPv6 != "2001:db8::7" {
+		t.Fatalf("persisted dual-stack addresses not propagated: %+v", request)
+	}
+}
+
+// Issue #1186 (upgrade path): installs that predate VEIL_PANEL_PUBLIC_IP
+// still avoid the probe by reusing the IP SANs of the certificate they
+// already issued — the renewal renews the same identity.
+func TestIPCertRequestReusesIssuedCertSANs(t *testing.T) {
+	defer swapIPCertSeams(t, true, nil)()
+	probed := false
+	oldResolve, oldSANs := ipCertResolvePublicIPs, ipCertManagedIPSANs
+	defer func() { ipCertResolvePublicIPs, ipCertManagedIPSANs = oldResolve, oldSANs }()
+	ipCertResolvePublicIPs = func(context.Context, string) (string, string, error) {
+		probed = true
+		return "", "", errors.New("detection endpoints must not be probed")
+	}
+	ipCertManagedIPSANs = func(path string) []string {
+		if path != "/etc/veil/panel/tls.crt" {
+			t.Fatalf("SAN helper read %q, want the panel cert path", path)
+		}
+		return []string{"203.0.113.10", "2001:db8::9"}
+	}
+	request, err := panelIPCertIssueRequest(context.Background(), Settings{}, nil, "/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key", privileged.FenceToken{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if probed {
+		t.Fatal("renewal probed despite reusable IP SANs on the issued cert")
+	}
+	if request.PublicIPv4 != "203.0.113.10" || request.PublicIPv6 != "2001:db8::9" {
+		t.Fatalf("issued cert SANs not reused: %+v", request)
+	}
+}
+
+// The self-signed fallback's SANs (loopback/interface addresses) must never
+// steer issuance — ManagedCertIPIdentities already filters them, and the
+// seam returns nil so the resolver path is exercised.
+func TestIPCertRequestFallsBackToResolver(t *testing.T) {
+	defer swapIPCertSeams(t, true, nil)()
+	request, err := panelIPCertIssueRequest(context.Background(), Settings{}, nil, "/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key", privileged.FenceToken{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.PublicIPv4 != "203.0.113.9" || request.PublicIPv6 != "2001:db8::7" {
+		t.Fatalf("resolver result not propagated: %+v", request)
+	}
+}
+
+// Issue #1189: the controlled-CA knobs persisted in veil.env reach the
+// privileged issuance request — CA URL, insecure flag, and the root bundle
+// that becomes acme.sh's --ca-bundle.
+func TestIPCertRequestPropagatesControlledCAConfig(t *testing.T) {
+	defer swapIPCertSeams(t, true, nil)()
+	stubIPCertEnv(t, map[string]string{
+		"VEIL_ACME_CA_URL":   "https://127.0.0.1:14000/dir",
+		"VEIL_ACME_INSECURE": "1",
+		"VEIL_ACME_CA_ROOT":  "/etc/veil/acme-root.pem",
+	})
+	request, err := panelIPCertIssueRequest(context.Background(), Settings{}, nil, "/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key", privileged.FenceToken{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.CAServer != "https://127.0.0.1:14000/dir" {
+		t.Fatalf("controlled CA URL dropped: %q", request.CAServer)
+	}
+	if !request.Insecure {
+		t.Fatal("VEIL_ACME_INSECURE did not reach the request")
+	}
+	if request.CARoot != "/etc/veil/acme-root.pem" {
+		t.Fatalf("VEIL_ACME_CA_ROOT dropped: %q", request.CARoot)
+	}
+}
+
+// Issue #1181: when the rendered plan keeps a Veil-owned Caddy listener on
+// :80, the request asks the helper to park acme.sh on the internal port
+// that the challenge proxy route forwards to.
+func TestIPCertRequestMarksCaddyFrontedIssuance(t *testing.T) {
+	defer swapIPCertSeams(t, true, nil)()
+	old := ipCertCaddyFronted
+	ipCertCaddyFronted = func(Settings, []Inbound) bool { return true }
+	defer func() { ipCertCaddyFronted = old }()
+	request, err := panelIPCertIssueRequest(context.Background(), Settings{}, nil, "/etc/veil/panel/tls.crt", "/etc/veil/panel/tls.key", privileged.FenceToken{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !request.HTTP01ViaCaddy {
+		t.Fatal("Caddy-owned :80 was not marked on the issuance request")
+	}
+}
+
+func TestIPCertHTTP01PortValidation(t *testing.T) {
+	stubIPCertEnv(t, map[string]string{"VEIL_PANEL_HTTP01_PORT": "not-a-port"})
+	if _, err := ipCertHTTP01Port(); err == nil {
+		t.Fatal("malformed persisted port must fail loudly")
+	}
+	stubIPCertEnv(t, map[string]string{"VEIL_PANEL_HTTP01_PORT": "8080"})
+	port, err := ipCertHTTP01Port()
+	if err != nil || port != 8080 {
+		t.Fatalf("persisted port = %d, %v; want 8080", port, err)
 	}
 }
 
