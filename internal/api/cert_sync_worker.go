@@ -227,6 +227,14 @@ func (w *certSyncWorker) reconcilePending(outcomes map[string]certSyncOutcome, t
 	if len(w.pending) == 0 {
 		return
 	}
+	if targets == nil {
+		// syncOnce failed before the live target set was known (fence
+		// acquire, glob error, missing backend). Treating that as "no
+		// targets" would drop every pending retry on a transient error and
+		// end the post-apply window early — keep the marks until their
+		// deadline or maxAttempts instead (#1168 review).
+		return
+	}
 	targetDomains := make(map[string]bool, len(targets))
 	for _, target := range targets {
 		targetDomains[target.Domain] = true
@@ -321,7 +329,11 @@ func (w *certSyncWorker) syncOnce(ctx context.Context) (map[string]certSyncOutco
 	}
 	targets := hysteria2CertSyncTargets(configFiles)
 	if len(targets) == 0 {
-		return nil, nil, nil
+		// Non-nil empty: the scan DID run and found no live hy2 config —
+		// reconcilePending may legitimately drop pending domains. The nil
+		// returns below (no backend, glob/fence failure) mean "target set
+		// unknown" and must NOT drop pending entries (#1168 review).
+		return nil, []hysteria2CertSyncTarget{}, nil
 	}
 	fence, release, err := s.acquireRuntimeFence("cert-sync")
 	if err != nil {

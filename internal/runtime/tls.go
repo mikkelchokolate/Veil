@@ -99,6 +99,13 @@ func ReadManagedTLSCertForDomain(path, domain string) TLSCertInfo {
 // classification never upgrades a fallback to "acme" — an unrecognized
 // issuer is still reported acme only when the certificate is NOT
 // self-signed/internal (#1168).
+//
+// Caveat: "acme" means "issued by a CA, not self-signed or Caddy-local" — it
+// is NOT a public-trust check. A leaf from an operator-supplied private CA
+// (VEIL_ACME_CA_URL/staging installs, custom enterprise CA) also classifies
+// as "acme" even though arbitrary clients will not trust it. Chaining to the
+// system root pool is deliberately avoided here: the status read must stay
+// filesystem-cheap and must not depend on the host's CA bundle.
 func ClassifyManagedCertSource(cert *x509.Certificate) string {
 	if cert == nil {
 		return TLSCertSourceMissing

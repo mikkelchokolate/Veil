@@ -33,7 +33,7 @@ var hostPortAvailable = func(ctx context.Context, transport string, port int) (b
 //
 // When the live Caddy config already owns :80 the planned challenge bind
 // simply merges with it, so no probe is needed at all.
-func demoteForeignHeldHTTP01Binds(ctx context.Context, plan caddyassembly.CaddyRenderPlan, owners map[bindregistry.BindKey]bindregistry.BindOwner, liveRoot string) []model.ValidationIssue {
+func demoteForeignHeldHTTP01Binds(ctx context.Context, plan *caddyassembly.CaddyRenderPlan, owners map[bindregistry.BindKey]bindregistry.BindOwner, liveRoot string) []model.ValidationIssue {
 	var busy []bindregistry.BindKey
 	for key, owner := range plan.ACMEChallenges {
 		if owner.ChallengeMode == "http-01" && key.Port == 80 && key.Network == bindregistry.ListenTCP {
@@ -77,9 +77,19 @@ func demoteForeignHeldHTTP01Binds(ctx context.Context, plan caddyassembly.CaddyR
 		}
 		// Drop the challenge bind entirely: leaving it in the rendered config
 		// would make Caddy fail to load and turn the whole apply into a
-		// rollback for a problem that only blocks ACME issuance.
+		// rollback for a problem that only blocks ACME issuance. The domain
+		// still keeps http-01 as its issuer mode through
+		// plan.HTTP01DeferredDomains — certmagic can then solve the moment
+		// the foreign holder frees :80, which is what makes the bounded
+		// post-apply sync retry able to converge without a re-apply.
 		delete(plan.ACMEChallenges, key)
 		delete(owners, key)
+		if plan.HTTP01DeferredDomains == nil {
+			plan.HTTP01DeferredDomains = make(map[string]bool)
+		}
+		for _, domain := range domains {
+			plan.HTTP01DeferredDomains[domain] = true
+		}
 		sort.Strings(hysteriaNames)
 		issues = append(issues, model.ValidationIssue{
 			Code:      "acme_http01_port_in_use",
@@ -89,7 +99,8 @@ func demoteForeignHeldHTTP01Binds(ctx context.Context, plan caddyassembly.CaddyR
 			Message: "TCP :80 is held by a non-Caddy service, so ACME issuance is deferred for hysteria2 domain(s) " +
 				strings.Join(domains, ", ") + "; the inbound keeps serving its self-signed fallback certificate",
 			Source:      "caddyassembly",
-			Remediation: "Free TCP port 80, then re-apply — Veil also retries the certificate sync in the background for a few minutes after apply.",
+			Remediation: "Free TCP port 80 and re-apply to restore the http-01 challenge server; " +
+				"the domain keeps http-01 issuance armed meanwhile, so Veil's background cert-sync picks up the certificate as soon as Caddy can issue it.",
 		})
 	}
 	return issues

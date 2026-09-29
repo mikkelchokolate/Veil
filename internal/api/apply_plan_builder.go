@@ -288,7 +288,7 @@ func buildCaddyMaterial(ctx context.Context, settings Settings, inbounds []Inbou
 	// the live port and demote hysteria2-only http-01 binds to a warning so
 	// the apply proceeds and the post-apply cert-sync retry converges once
 	// the port is freed (#1168).
-	challengeIssues = append(challengeIssues, demoteForeignHeldHTTP01Binds(ctx, plan, owners, liveRoot)...)
+	challengeIssues = append(challengeIssues, demoteForeignHeldHTTP01Binds(ctx, &plan, owners, liveRoot)...)
 	for _, issue := range challengeIssues {
 		if issue.Severity == "error" {
 			material.Errors = append(material.Errors, issue.Message)

@@ -6655,7 +6655,9 @@ components:
             fallback), "self-signed" (Veil/operator fallback material), or
             "missing" (no usable certificate at the configured path). An
             internal/self-signed certificate is never reported as a trusted
-            issuance.
+            issuance. Note that "acme" is an origin classification, not a
+            public-trust check: a leaf from a private CA (VEIL_ACME_CA_URL
+            installs, enterprise CA) also reports "acme".
           enum:
           - env
           - caddy
