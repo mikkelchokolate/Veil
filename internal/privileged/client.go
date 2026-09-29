@@ -26,6 +26,14 @@ type CaddyLoader interface {
 	CaddyLoad(context.Context, CaddyLoadRequest) error
 }
 
+// BackupSftpOperator is the optional Client extension for SFTP remote-backup
+// destination operations. The server discovers it by type assertion (the
+// same pattern as CaddyLoader) so test doubles that only need the core
+// Client surface stay compilable.
+type BackupSftpOperator interface {
+	BackupSftp(context.Context, BackupSftpRequest) (BackupSftpResult, error)
+}
+
 // IPCertIssuer is implemented by privileged backends that can run ACME
 // issuance for the panel's short-lived IP certificate (#1169/#1170). It is
 // kept out of Client so the many test doubles implementing Client do not

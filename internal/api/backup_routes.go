@@ -25,7 +25,21 @@ type BackupCreateResponse struct {
 	Archive      backup.ArchiveEntry       `json:"archive"`
 	Verification backup.VerificationReport `json:"verification"`
 	Prune        *backup.PruneResult       `json:"prune,omitempty"`
-	Warning      string                    `json:"warning,omitempty"`
+	// Remote reports the SFTP-destination outcome when one is configured:
+	// a verified upload receipt or the loud error that did not fail the
+	// local create.
+	Remote  *BackupRemote `json:"remote,omitempty"`
+	Warning string        `json:"warning,omitempty"`
+}
+
+// BackupRemote carries the remote-destination outcome of a create or prune:
+// upload receipt, mirrored retention results, and/or the failure that was
+// kept non-fatal for the local operation.
+type BackupRemote struct {
+	Upload *privileged.BackupRemoteUpload `json:"upload,omitempty"`
+	Pruned []string                       `json:"pruned,omitempty"`
+	Kept   []string                       `json:"kept,omitempty"`
+	Error  string                         `json:"error,omitempty"`
 }
 
 type BackupRestoreJob struct {
@@ -100,6 +114,14 @@ func (s *managementState) handleBackups(w http.ResponseWriter, r *http.Request) 
 		name := result.ArchiveName
 		response := backupCreateResponseFromPrivileged(s.backupDir, result)
 		details := map[string]any{"prune": request.Prune}
+		if result.RemoteUpload != nil {
+			details["remoteUpload"] = result.RemoteUpload.Archive
+		}
+		if result.RemoteError != "" {
+			// A remote upload failure rides in the warning and the audit
+			// record — loud, but never a failed local backup.
+			details["remoteError"] = result.RemoteError
+		}
 		if request.Prune {
 			// The same fencing lease covers the retention prune that belongs to
 			// this create request.
@@ -196,9 +218,22 @@ func (s *managementState) handleBackupPrune(w http.ResponseWriter, r *http.Reque
 		Action:  "backup.prune",
 		Target:  "managed-backups",
 		Success: true,
-		Details: map[string]any{"deleted": len(result.Pruned), "kept": len(result.Kept)},
+		Details: map[string]any{"deleted": len(result.Pruned), "kept": len(result.Kept),
+			"remoteDeleted": len(result.RemotePruned), "remoteError": result.RemoteError},
 	})
-	writeJSON(w, backup.PruneResult{Deleted: result.Pruned, Kept: result.Kept})
+	// The remote destination mirrors the same retention decision; a remote
+	// failure is reported inside the response without failing the local prune.
+	response := backupPruneResponse{PruneResult: backup.PruneResult{Deleted: result.Pruned, Kept: result.Kept}}
+	if remote := backupRemoteFromResult(result); remote != nil {
+		response.Remote = remote
+	}
+	writeJSON(w, response)
+}
+
+// backupPruneResponse is the prune contract plus the mirrored remote result.
+type backupPruneResponse struct {
+	backup.PruneResult
+	Remote *BackupRemote `json:"remote,omitempty"`
 }
 
 func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Request) {

@@ -31,6 +31,22 @@ func backupCreateResponseFromPrivileged(backupDir string, result privileged.Back
 		Archive:      archive,
 		Verification: backupVerificationFromPrivileged(result),
 		Warning:      result.Warning,
+		Remote:       backupRemoteFromResult(result),
+	}
+}
+
+// backupRemoteFromResult translates the helper's remote-destination fields
+// into the API response; nil when the run touched no remote state.
+func backupRemoteFromResult(result privileged.BackupResult) *BackupRemote {
+	if result.RemoteUpload == nil && result.RemoteError == "" &&
+		result.RemotePruned == nil && result.RemoteKept == nil {
+		return nil
+	}
+	return &BackupRemote{
+		Upload: result.RemoteUpload,
+		Pruned: result.RemotePruned,
+		Kept:   result.RemoteKept,
+		Error:  result.RemoteError,
 	}
 }
 

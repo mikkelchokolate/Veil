@@ -13,7 +13,9 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/api"
 	"github.com/mikkelchokolate/Veil/internal/backup"
+	"github.com/mikkelchokolate/Veil/internal/backupsftp"
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -58,6 +60,7 @@ func newBackupCommand(version string) *cobra.Command {
 	var dryRun bool
 	var schedulePassphrasePath string
 	var removeSchedulePassphrase bool
+	var sftpConfigPath string
 	defaultRetention := backup.DefaultRetentionPolicy()
 	var daily = defaultRetention.Daily
 	var weekly = defaultRetention.Weekly
@@ -121,18 +124,30 @@ func newBackupCommand(version string) *cobra.Command {
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Backup successfully created: %s\n", targetOutput)
+
+			// Honor a configured SFTP destination: the scheduled
+			// veil-backup.service invokes this command unattended, so the
+			// upload happens here as root — no helper round-trip. A remote
+			// failure is loud on stderr and in the status file but never
+			// fails the local backup that already committed.
+			engine := backupSftpEngineCLI(sftpConfigPath, filepath.Dir(resolvedState))
+			if synced, attempted, syncErr := engine.SyncArchive(cmd.Context(), targetOutput, filepath.Base(targetOutput), nil); syncErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: SFTP remote upload failed: %v\n", syncErr)
+			} else if attempted && synced.Uploaded != nil {
+				fmt.Fprintf(cmd.OutOrStdout(), "Uploaded to SFTP destination: %s (sha256 %s)\n", synced.Uploaded.Archive, synced.Uploaded.SHA256)
+			}
 			if pruneAfterCreate {
 				dir := outputDir
 				if dir == "" {
 					dir = filepath.Dir(targetOutput)
 				}
-				result, err := backup.PruneArchives(dir, backup.RetentionPolicy{
-					Daily: daily, Weekly: weekly, Monthly: monthly,
-				}, false)
+				policy := backup.RetentionPolicy{Daily: daily, Weekly: weekly, Monthly: monthly}
+				result, err := backup.PruneArchives(dir, policy, false)
 				if err != nil {
 					return fmt.Errorf("prune backups after create: %w", err)
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "Retention: kept %d, deleted %d\n", len(result.Kept), len(result.Deleted))
+				printRemotePruneResult(cmd, engine, policy)
 			}
 			return nil
 		},
@@ -268,9 +283,8 @@ func newBackupCommand(version string) *cobra.Command {
 		Use:   "prune",
 		Short: "Apply daily, weekly, and monthly backup retention",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			result, err := backup.PruneArchives(backupDir, backup.RetentionPolicy{
-				Daily: daily, Weekly: weekly, Monthly: monthly,
-			}, dryRun)
+			policy := backup.RetentionPolicy{Daily: daily, Weekly: weekly, Monthly: monthly}
+			result, err := backup.PruneArchives(backupDir, policy, dryRun)
 			if err != nil {
 				return err
 			}
@@ -282,6 +296,13 @@ func newBackupCommand(version string) *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", action, name)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Retention: kept %d, deleted %d, dry-run=%t\n", len(result.Kept), len(result.Deleted), dryRun)
+			if !dryRun {
+				// Mirror the policy onto the configured remote destination;
+				// state-dir paths derive from the backup dir's parent so the
+				// scheduled unit's writable mount covers them.
+				engine := backupSftpEngineCLI(sftpConfigPath, filepath.Dir(backupDir))
+				printRemotePruneResult(cmd, engine, policy)
+			}
 			return nil
 		},
 	}
@@ -399,6 +420,7 @@ func newBackupCommand(version string) *cobra.Command {
 	createCmd.Flags().BoolVar(&allowUnencrypted, "allow-unencrypted", false, "explicitly allow a plaintext archive containing state and key material")
 	createCmd.Flags().BoolVar(&pruneAfterCreate, "prune", false, "apply retention after a successful verified backup")
 	addRetentionFlags(createCmd, &daily, &weekly, &monthly)
+	createCmd.Flags().StringVar(&sftpConfigPath, "sftp-config", defaultBackupSftpConfigPath(), "SFTP destination config path; set to an empty value to skip remote upload")
 	restoreCmd.Flags().BoolVarP(&yes, "yes", "y", false, "confirm restore operation without prompting")
 	restoreCmd.Flags().BoolVar(&checkOnly, "check-only", false, "verify compatibility without writing state or key files")
 	for _, subCmd := range []*cobra.Command{listCmd, pruneCmd} {
@@ -407,8 +429,43 @@ func newBackupCommand(version string) *cobra.Command {
 	}
 	addRetentionFlags(pruneCmd, &daily, &weekly, &monthly)
 	pruneCmd.Flags().BoolVar(&dryRun, "dry-run", false, "show deletions without removing archives")
+	pruneCmd.Flags().StringVar(&sftpConfigPath, "sftp-config", defaultBackupSftpConfigPath(), "SFTP destination config path; set to an empty value to skip remote prune")
 
 	return cmd
+}
+
+// defaultBackupSftpConfigPath is where the scheduled backup unit and the
+// manual CLI look for the root-only SFTP destination config written through
+// the privileged helper (or by hand) — the same etc dir that carries
+// backup.passphrase.
+func defaultBackupSftpConfigPath() string {
+	return filepath.Join(hostenv.EtcDir(), backupsftp.ConfigFileName)
+}
+
+// backupSftpEngineCLI builds the remote-destination engine for the CLI path:
+// the config (secrets) lives under the etc dir while status and the TOFU
+// known_hosts file land in stateDir — the tree the scheduled unit mounts
+// writable alongside the backup archives.
+func backupSftpEngineCLI(configPath, stateDir string) backupsftp.Engine {
+	return backupsftp.Engine{Paths: backupsftp.Paths{
+		ConfigPath:     configPath,
+		StatusPath:     filepath.Join(stateDir, backupsftp.StatusFileName),
+		KnownHostsPath: filepath.Join(stateDir, backupsftp.KnownHostsFileName),
+	}}
+}
+
+// printRemotePruneResult mirrors a finished local prune onto the configured
+// remote destination. Failures warn without failing the command — the local
+// prune already committed.
+func printRemotePruneResult(cmd *cobra.Command, engine backupsftp.Engine, policy backup.RetentionPolicy) {
+	remote, attempted, err := engine.RemotePruneIfConfigured(cmd.Context(), policy)
+	if err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: SFTP remote prune failed: %v\n", err)
+		return
+	}
+	if attempted {
+		fmt.Fprintf(cmd.OutOrStdout(), "Remote retention: kept %d, deleted %d\n", len(remote.Kept), len(remote.Deleted))
+	}
 }
 
 func addRetentionFlags(cmd *cobra.Command, daily, weekly, monthly *int) {

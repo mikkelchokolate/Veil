@@ -25,6 +25,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/acmeip"
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/backup"
+	"github.com/mikkelchokolate/Veil/internal/backupsftp"
 	"github.com/mikkelchokolate/Veil/internal/caddyadmin"
 	"github.com/mikkelchokolate/Veil/internal/caddycert"
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
@@ -106,6 +107,7 @@ type Executor struct {
 	ServiceStatus      func(context.Context, ServiceStatusRequest) (ServiceStatusResult, error)
 	Journal            func(context.Context, ResolvedJournal) (JournalResult, error)
 	Backup             func(context.Context, ResolvedBackup) (BackupResult, error)
+	BackupSftp         func(context.Context, ResolvedBackupSftp) (BackupSftpResult, error)
 	RotateKey          func(context.Context, RotateKeyRequest) error
 	RecoverKeyRotation func(context.Context) error
 	Firewall           func(context.Context, ResolvedFirewall) (FirewallResult, error)
@@ -119,17 +121,21 @@ type Executor struct {
 type CommandRunner func(context.Context, []string, time.Duration) (string, error)
 
 type ProductionConfig struct {
-	PromotionBackupRoot        string
-	StatePath                  string
-	KeyPath                    string
-	BackupPassphrasePath       string
-	BackupRoot                 string
-	BackupMaxBytes             int64
-	VeilVersion                string
-	BinaryPath                 string
-	FirewallCommands           map[string][]string
-	RunCommand                 CommandRunner
-	BackupWorkflow             func(context.Context, ResolvedBackup) (BackupResult, error)
+	PromotionBackupRoot  string
+	StatePath            string
+	KeyPath              string
+	BackupPassphrasePath string
+	BackupRoot           string
+	BackupMaxBytes       int64
+	VeilVersion          string
+	BinaryPath           string
+	FirewallCommands     map[string][]string
+	RunCommand           CommandRunner
+	BackupWorkflow       func(context.Context, ResolvedBackup) (BackupResult, error)
+	BackupSftpWorkflow   func(context.Context, ResolvedBackupSftp) (BackupSftpResult, error)
+	// SftpDial is the SSH/SFTP connect seam; nil uses the real dialer in
+	// internal/backupsftp. Tests substitute an in-memory fake.
+	SftpDial                   backupsftp.Dialer
 	UpdateWorkflow             func(context.Context, ResolvedUpdate) (UpdateResult, error)
 	RotateKeyWorkflow          func(context.Context) error
 	RecoverKeyRotationWorkflow func(context.Context) error
@@ -181,6 +187,11 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 	if config.BackupWorkflow == nil {
 		config.BackupWorkflow = func(ctx context.Context, request ResolvedBackup) (BackupResult, error) {
 			return runProductionBackup(ctx, config, request)
+		}
+	}
+	if config.BackupSftpWorkflow == nil {
+		config.BackupSftpWorkflow = func(ctx context.Context, request ResolvedBackupSftp) (BackupSftpResult, error) {
+			return runProductionBackupSftp(ctx, config, request)
 		}
 	}
 	if config.UpdateWorkflow == nil {
@@ -299,7 +310,8 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 			lines := boundedJournalLines(output, 256*1024, 16*1024)
 			return JournalResult{Unit: request.Unit, Lines: lines}, nil
 		},
-		Backup: config.BackupWorkflow,
+		Backup:     config.BackupWorkflow,
+		BackupSftp: config.BackupSftpWorkflow,
 		RotateKey: func(ctx context.Context, _ RotateKeyRequest) error {
 			return config.RotateKeyWorkflow(ctx)
 		},
@@ -963,7 +975,7 @@ func readBackupArchiveFromStableDescriptor(config ProductionConfig, request Reso
 	return result, nil
 }
 
-func runProductionBackup(_ context.Context, config ProductionConfig, request ResolvedBackup) (BackupResult, error) {
+func runProductionBackup(ctx context.Context, config ProductionConfig, request ResolvedBackup) (BackupResult, error) {
 	switch request.Action {
 	case BackupActionList:
 		entries, err := backup.ListArchives(request.BackupRoot)
@@ -990,7 +1002,12 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 			// classified as kept must reach the operator alongside the error.
 			return BackupResult{Pruned: pruned.Deleted, Kept: pruned.Kept}, err
 		}
-		return BackupResult{Pruned: pruned.Deleted, Kept: pruned.Kept}, nil
+		result := BackupResult{Pruned: pruned.Deleted, Kept: pruned.Kept}
+		// Mirror the same retention decision onto the configured SFTP
+		// destination. A remote prune failure is loud (RemoteError/Warning)
+		// but must not fail the local prune that already completed.
+		applyRemotePrune(ctx, config, request, policy, &result)
+		return result, nil
 	case BackupActionDelete:
 		if err := backup.DeleteArchive(request.BackupRoot, request.ArchiveName); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
@@ -1059,7 +1076,13 @@ func runProductionBackup(_ context.Context, config ProductionConfig, request Res
 		if err := syncBackupDirectory(request.BackupRoot); err != nil {
 			return BackupResult{}, err
 		}
-		return BackupResult{ArchiveName: name, Verified: true, Verification: privilegedBackupVerification(report)}, nil
+		result := BackupResult{ArchiveName: name, Verified: true, Verification: privilegedBackupVerification(report)}
+		// Push the verified archive to the configured SFTP destination. The
+		// upload is a follower of the local create: a remote failure is
+		// reported via RemoteError/Warning but never fails the local backup
+		// that already committed.
+		applyRemoteUpload(ctx, config, request, name, &result)
+		return result, nil
 	case BackupActionVerify:
 		if err := backup.PreflightVerifySpace(request.ArchivePath, maxBytes); err != nil {
 			return BackupResult{}, err

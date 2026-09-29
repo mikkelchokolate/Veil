@@ -30,6 +30,7 @@ const (
 	OperationRestartPanel       Operation = "restart_panel"
 	OperationSyncCaddyCert      Operation = "sync_caddy_cert"
 	OperationCaddyLoad          Operation = "caddy_load"
+	OperationBackupSftp         Operation = "backup_sftp"
 	OperationIssueIPCert        Operation = "issue_ip_cert"
 )
 
@@ -53,6 +54,7 @@ func (o Operation) Valid() bool {
 		OperationRestartPanel,
 		OperationSyncCaddyCert,
 		OperationCaddyLoad,
+		OperationBackupSftp,
 		OperationIssueIPCert:
 		return true
 	default:
@@ -181,6 +183,93 @@ type BackupResult struct {
 	InodeGeneration    string                    `json:"inodeGeneration,omitempty"`
 	BoundSize          int64                     `json:"boundSize,omitempty"`
 	Warning            string                    `json:"warning,omitempty"`
+	// RemoteUpload carries the verified SFTP receipt when a create also
+	// pushed the archive to a configured remote destination.
+	RemoteUpload *BackupRemoteUpload `json:"remoteUpload,omitempty"`
+	// RemotePruned/RemoteKept report the mirrored remote retention run after
+	// a prune when an SFTP destination is configured.
+	RemotePruned []string `json:"remotePruned,omitempty"`
+	RemoteKept   []string `json:"remoteKept,omitempty"`
+	// RemoteError makes a remote-destination failure loud without failing
+	// the local backup operation it accompanied.
+	RemoteError string `json:"remoteError,omitempty"`
+}
+
+// BackupRemoteUpload is the receipt for one verified remote upload.
+type BackupRemoteUpload struct {
+	Archive string `json:"archive"`
+	Size    int64  `json:"size"`
+	SHA256  string `json:"sha256"`
+}
+
+// BackupSftpAction selects one SFTP-destination operation.
+type BackupSftpAction string
+
+const (
+	BackupSftpActionGet    BackupSftpAction = "get"
+	BackupSftpActionSet    BackupSftpAction = "set"
+	BackupSftpActionDelete BackupSftpAction = "delete"
+	BackupSftpActionList   BackupSftpAction = "list"
+	BackupSftpActionFetch  BackupSftpAction = "fetch"
+)
+
+// BackupSftpConfig is the destination payload for a set operation. The
+// secret fields are pointer-typed write-only knobs: nil keeps the stored
+// value, a non-nil value replaces it (empty clears). They are never echoed
+// back — reads return the *Set flags on BackupSftpDestination instead.
+type BackupSftpConfig struct {
+	Enabled       bool    `json:"enabled"`
+	Host          string  `json:"host"`
+	Port          int     `json:"port,omitempty"`
+	User          string  `json:"user"`
+	RemoteDir     string  `json:"remoteDir"`
+	AuthType      string  `json:"authType"`
+	KeyPath       string  `json:"keyPath,omitempty"`
+	KeyPassphrase *string `json:"keyPassphrase,omitempty"`
+	Password      *string `json:"password,omitempty"`
+	HostKey       *string `json:"hostKey,omitempty"`
+}
+
+type BackupSftpRequest struct {
+	Action      BackupSftpAction  `json:"action"`
+	ArchiveName string            `json:"archiveName,omitempty"`
+	Config      *BackupSftpConfig `json:"config,omitempty"`
+	Fence       FenceToken        `json:"fence"`
+}
+
+// BackupSftpDestination is the secret-free API view of the stored config.
+type BackupSftpDestination struct {
+	Configured       bool   `json:"configured"`
+	Enabled          bool   `json:"enabled"`
+	Host             string `json:"host,omitempty"`
+	Port             int    `json:"port,omitempty"`
+	User             string `json:"user,omitempty"`
+	RemoteDir        string `json:"remoteDir,omitempty"`
+	AuthType         string `json:"authType,omitempty"`
+	KeyPath          string `json:"keyPath,omitempty"`
+	PasswordSet      bool   `json:"passwordSet,omitempty"`
+	KeyPassphraseSet bool   `json:"keyPassphraseSet,omitempty"`
+	HostKeySet       bool   `json:"hostKeySet,omitempty"`
+}
+
+// BackupSftpStatus reports the most recent remote-operation outcomes.
+type BackupSftpStatus struct {
+	LastUploadAt      string `json:"lastUploadAt,omitempty"`
+	LastUploadArchive string `json:"lastUploadArchive,omitempty"`
+	LastFetchAt       string `json:"lastFetchAt,omitempty"`
+	LastFetchArchive  string `json:"lastFetchArchive,omitempty"`
+	LastPruneAt       string `json:"lastPruneAt,omitempty"`
+	LastError         string `json:"lastError,omitempty"`
+	LastErrorAt       string `json:"lastErrorAt,omitempty"`
+}
+
+type BackupSftpResult struct {
+	Destination *BackupSftpDestination `json:"destination,omitempty"`
+	Status      *BackupSftpStatus      `json:"status,omitempty"`
+	// Archives lists remote archives for the list action.
+	Archives []BackupArchive `json:"archives,omitempty"`
+	// Archive is the locally materialized entry after a fetch action.
+	Archive *BackupArchive `json:"archive,omitempty"`
 }
 
 type RotateKeyRequest struct {
@@ -311,6 +400,7 @@ type RequestEnvelope struct {
 	RestartPanel       *RestartPanelRequest       `json:"restartPanel,omitempty"`
 	SyncCaddyCert      *SyncCaddyCertRequest      `json:"syncCaddyCert,omitempty"`
 	CaddyLoad          *CaddyLoadRequest          `json:"caddyLoad,omitempty"`
+	BackupSftp         *BackupSftpRequest         `json:"backupSftp,omitempty"`
 	IssueIPCert        *IssueIPCertRequest        `json:"issueIpCert,omitempty"`
 }
 
@@ -345,6 +435,7 @@ func (r RequestEnvelope) Validate() error {
 		r.RestartPanel != nil,
 		r.SyncCaddyCert != nil,
 		r.CaddyLoad != nil,
+		r.BackupSftp != nil,
 		r.IssueIPCert != nil,
 	}
 	count := 0
@@ -388,6 +479,8 @@ func (r RequestEnvelope) payloadMatchesOperation() bool {
 		return r.SyncCaddyCert != nil
 	case OperationCaddyLoad:
 		return r.CaddyLoad != nil
+	case OperationBackupSftp:
+		return r.BackupSftp != nil
 	case OperationIssueIPCert:
 		return r.IssueIPCert != nil
 	default:

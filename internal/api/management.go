@@ -73,6 +73,12 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/audit", s.handleAudit)
 	mux.HandleFunc("/api/backups", s.handleBackups)
 	mux.HandleFunc("/api/backups/prune", s.handleBackupPrune)
+	// The sftp destination routes are registered before the /api/backups/
+	// subtree; ServeMux longest-prefix matching still gives them precedence,
+	// and the static "sftp" segment can never be a real archive name (managed
+	// archives end in .tar.gz[.enc]).
+	mux.HandleFunc("/api/backups/sftp", s.handleBackupSftp)
+	mux.HandleFunc("/api/backups/sftp/", s.handleBackupSftpRemote)
 	mux.HandleFunc("/api/backup-restore-jobs/", s.handleBackupRestoreJob)
 	mux.HandleFunc("/api/backups/", s.handleBackupByName)
 	mux.HandleFunc("/api/setup/status", s.handleSetupStatus)

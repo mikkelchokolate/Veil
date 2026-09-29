@@ -44,11 +44,18 @@ func DefaultPolicy() Policy {
 		PanelCertDir:         filepath.Join(etcDir, "panel"),
 		BackupPassphrasePath: pathFromEnv("VEIL_BACKUP_PASSPHRASE", filepath.Join(etcDir, "backup.passphrase")),
 		BackupRoot:           pathFromEnv("VEIL_BACKUP_ROOT", filepath.Join(varDir, "backups")),
-		UpdateRoot:           filepath.Join(varDir, "updates"),
-		FencePath:            filepath.Join(varDir, "transactions", "runtime-fence.json"),
-		RequireFence:         true,
-		ManagedUnits:         defaultManagedUnits(),
-		ManagedUnitPrefixes:  defaultManagedUnitPrefixes(),
+		// The destination config carries secrets and stays under the etc dir
+		// (root-only, like backup.passphrase); status and the TOFU known_hosts
+		// file live under the state dir so the scheduled backup unit — which
+		// mounts only /var/lib/veil writable — can update them.
+		BackupSftpConfigPath:     pathFromEnv("VEIL_BACKUP_SFTP_CONFIG", filepath.Join(etcDir, "backup-sftp.json")),
+		BackupSftpStatusPath:     pathFromEnv("VEIL_BACKUP_SFTP_STATUS", filepath.Join(varDir, "backup-sftp-status.json")),
+		BackupSftpKnownHostsPath: pathFromEnv("VEIL_BACKUP_SFTP_KNOWN_HOSTS", filepath.Join(varDir, "backup-sftp.known_hosts")),
+		UpdateRoot:               filepath.Join(varDir, "updates"),
+		FencePath:                filepath.Join(varDir, "transactions", "runtime-fence.json"),
+		RequireFence:             true,
+		ManagedUnits:             defaultManagedUnits(),
+		ManagedUnitPrefixes:      defaultManagedUnitPrefixes(),
 		Artifacts: map[string]ArtifactPath{
 			"caddy-panel": {
 				Staged:    filepath.FromSlash("caddy/config.json"),

@@ -50,7 +50,14 @@ type Policy struct {
 	KeyPath              string
 	BackupPassphrasePath string
 	BackupRoot           string
-	UpdateRoot           string
+	// BackupSftp paths locate the SFTP destination's on-disk state: the
+	// secret-bearing config under the etc dir, and the status/known_hosts
+	// files under the state dir (which the scheduled backup unit mounts
+	// writable while /etc stays read-only).
+	BackupSftpConfigPath     string
+	BackupSftpStatusPath     string
+	BackupSftpKnownHostsPath string
+	UpdateRoot               string
 	// CertDirs are the directories the helper may sync Caddy-issued ACME
 	// certificate pairs into — the <etc>/certs tree of the configured install
 	// (custom --etc-dir installs resolve their own; issue #628).
@@ -113,6 +120,28 @@ type ResolvedBackup struct {
 	Limit                int64
 	TransactionID        string
 	FenceGeneration      uint64
+	// SftpPaths locate the remote-destination config/status/known_hosts
+	// files so create and prune can mirror their outcome to a configured
+	// SFTP destination.
+	SftpPaths BackupSftpPaths
+}
+
+// BackupSftpPaths carries the resolved on-disk locations the SFTP engine
+// needs — see backupsftp.Paths for the layout rationale.
+type BackupSftpPaths struct {
+	ConfigPath     string
+	StatusPath     string
+	KnownHostsPath string
+}
+
+// ResolvedBackupSftp is one validated SFTP-destination operation with the
+// policy-pinned paths the executor may touch.
+type ResolvedBackupSftp struct {
+	Action      BackupSftpAction
+	ArchiveName string
+	BackupRoot  string
+	Paths       BackupSftpPaths
+	Config      *BackupSftpConfig
 }
 
 type ResolvedFirewall struct {
@@ -398,6 +427,7 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 		Offset:               request.Offset,
 		Limit:                request.Limit,
 		TransactionID:        request.TransactionID,
+		SftpPaths:            p.backupSftpPaths(),
 	}
 	if resolved.StatePath == "" {
 		resolved.StatePath = filepath.Join(p.StateRoot, "state.json")
@@ -427,6 +457,57 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 	}
 	resolved.ArchiveName = request.ArchiveName
 	resolved.ArchivePath = archivePath
+	return resolved, nil
+}
+
+// backupSftpPaths resolves the destination file locations. Status and
+// known_hosts fall back to StateRoot so a policy constructed without
+// explicit paths still lands them beside the state file — the directory the
+// scheduled backup unit mounts writable.
+func (p Policy) backupSftpPaths() BackupSftpPaths {
+	paths := BackupSftpPaths{
+		ConfigPath:     p.BackupSftpConfigPath,
+		StatusPath:     p.BackupSftpStatusPath,
+		KnownHostsPath: p.BackupSftpKnownHostsPath,
+	}
+	if paths.StatusPath == "" && p.StateRoot != "" {
+		paths.StatusPath = filepath.Join(p.StateRoot, "backup-sftp-status.json")
+	}
+	if paths.KnownHostsPath == "" && p.StateRoot != "" {
+		paths.KnownHostsPath = filepath.Join(p.StateRoot, "backup-sftp.known_hosts")
+	}
+	return paths
+}
+
+// ResolveBackupSftp validates one SFTP-destination operation and pins the
+// paths it may touch. Config-path-less policies still resolve so "get" can
+// honestly report an unconfigured destination.
+func (p Policy) ResolveBackupSftp(request BackupSftpRequest) (ResolvedBackupSftp, error) {
+	resolved := ResolvedBackupSftp{
+		Action:     request.Action,
+		BackupRoot: p.BackupRoot,
+		Paths:      p.backupSftpPaths(),
+	}
+	switch request.Action {
+	case BackupSftpActionGet, BackupSftpActionDelete, BackupSftpActionList:
+	case BackupSftpActionSet:
+		if request.Config == nil {
+			return ResolvedBackupSftp{}, newError(ErrorInvalidRequest, "sftp destination config is required")
+		}
+		if resolved.Paths.ConfigPath == "" {
+			return ResolvedBackupSftp{}, newError(ErrorOperationFailed, "sftp destination config path is not configured")
+		}
+		resolved.Config = request.Config
+	case BackupSftpActionFetch:
+		if strings.ContainsAny(request.ArchiveName, `/\`) ||
+			filepath.Base(request.ArchiveName) != request.ArchiveName ||
+			!strings.HasSuffix(strings.ToLower(request.ArchiveName), ".enc") {
+			return ResolvedBackupSftp{}, newError(ErrorInvalidRequest, "archiveName must be an .enc basename")
+		}
+		resolved.ArchiveName = request.ArchiveName
+	default:
+		return ResolvedBackupSftp{}, newError(ErrorInvalidRequest, "unsupported sftp backup action")
+	}
 	return resolved, nil
 }
 
