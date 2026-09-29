@@ -146,24 +146,24 @@ type managementState struct {
 	// Architecture rework (durable apply + normalized store). db is nil when no
 	// StatePath is configured; the apply subsystem and revision/job tracking are
 	// then disabled and handlers fall back to legacy behavior.
-	db                      *sql.DB
-	applyRevisions          *apply.RevisionStore
-	applyJobs               *apply.JobStore
-	applySnapshots          *apply.SnapshotStore
-	applyRunner             *apply.Runner
-	clientService           *client.Service
-	clientRepo              *client.Repository
-	clientCreds             *client.CredentialStore
-	clientMigrator          *client.Migrator
-	tokenStore              *client.TokenStore
-	subRenderer             *client.SubscriptionRenderer
-	trafficStore            *client.TrafficStore
-	trafficCollector        *client.Collector
-	trafficReconciler       *client.Reconciler
-	expirationReconciler    *expirationReconciler
-	certSyncWorker          *certSyncWorker
-	ipCertRenewalWorker     *ipCertRenewalWorker
-	sse                     *sseBroadcaster
+	db                   *sql.DB
+	applyRevisions       *apply.RevisionStore
+	applyJobs            *apply.JobStore
+	applySnapshots       *apply.SnapshotStore
+	applyRunner          *apply.Runner
+	clientService        *client.Service
+	clientRepo           *client.Repository
+	clientCreds          *client.CredentialStore
+	clientMigrator       *client.Migrator
+	tokenStore           *client.TokenStore
+	subRenderer          *client.SubscriptionRenderer
+	trafficStore         *client.TrafficStore
+	trafficCollector     *client.Collector
+	trafficReconciler    *client.Reconciler
+	expirationReconciler *expirationReconciler
+	certSyncWorker       *certSyncWorker
+	ipCertRenewalWorker  *ipCertRenewalWorker
+	sse                  *sseBroadcaster
 	// Internal Hysteria2 auth callback (#1173): the listener is started by
 	// initClientSubsystem, survives restores (it only reads live state per
 	// request), and is closed by Close. hy2AuthListenAddr overrides the
