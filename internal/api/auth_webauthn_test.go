@@ -597,7 +597,7 @@ func TestUpdateUserPreservesPasskeys(t *testing.T) {
 		var mErr error
 		updated, mErr = mutation.UpdateUser("alice", model.User{
 			Username:     "alice",
-			Role:         "viewer",
+			Role:         "admin",
 			Locale:       "ru",
 			PasswordHash: state.users[0].PasswordHash,
 			Passkeys:     []model.Passkey{forged.storedPasskey()},
