@@ -20,28 +20,29 @@ const (
 )
 
 type ruRecommendedInstallOptions struct {
-	Profile        string
-	Domain         string
-	Email          string
-	DryRun         bool
-	CheckOnly      bool
-	Yes            bool
-	EtcDir         string
-	VarDir         string
-	SystemdDir     string
-	PanelPort      int
-	PanelPortSet   bool
-	PanelAccess    string
-	PanelAccessSet bool
-	PublicIP       string
-	Interactive    bool
-	AuditLog       string
-	BackupDir      string
-	BackupDirSet   bool
-	CaddyBinary    string
-	LEIPCert       bool
-	LEIPCertSet    bool
-	LEIPCertPort   int
+	Profile         string
+	Domain          string
+	Email           string
+	DryRun          bool
+	CheckOnly       bool
+	Yes             bool
+	EtcDir          string
+	VarDir          string
+	SystemdDir      string
+	PanelPort       int
+	PanelPortSet    bool
+	PanelAccess     string
+	PanelAccessSet  bool
+	PublicIP        string
+	Interactive     bool
+	AuditLog        string
+	BackupDir       string
+	BackupDirSet    bool
+	CaddyBinary     string
+	LEIPCert        bool
+	LEIPCertSet     bool
+	LEIPCertPort    int
+	LEIPCertPortSet bool
 }
 
 type RURecommendedInstallWorkflow struct {

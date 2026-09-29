@@ -116,8 +116,8 @@ func TestLookPathDefaultReturnsLookPath(t *testing.T) {
 
 func TestPreserveExistingPanelRepairMaterialNoops(t *testing.T) {
 	profile := installer.RURecommendedProfile{PanelAuthToken: "keep"}
-	preserveExistingPanelRepairMaterial(nil, t.TempDir())
-	preserveExistingPanelRepairMaterial(&profile, "")
+	preserveExistingPanelRepairMaterial(nil, Options{EtcDir: t.TempDir()})
+	preserveExistingPanelRepairMaterial(&profile, Options{})
 	if profile.PanelAuthToken != "keep" {
 		t.Fatal("profile should be unchanged")
 	}

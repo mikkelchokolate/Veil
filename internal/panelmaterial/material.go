@@ -34,6 +34,22 @@ type Input struct {
 	CaddyJSON         string
 	ACMECAURL         string
 	ACMECARoot        string
+	// ACMEInsecure persists VEIL_ACME_INSECURE — the controlled-CA
+	// "directory endpoint is not publicly trusted" choice made at install
+	// must reach the daemon and `veil cert` processes too (#1189).
+	ACMEInsecure bool
+	// PanelPublicIP persists the public address(es) the panel IP certificate
+	// was issued for — "ipv4" or "ipv4,ipv6". Renewal reuses the pinned
+	// identity instead of re-probing external detection endpoints (#1186).
+	PanelPublicIP string
+	// PanelLEIPCert persists the install-time --le-ip-cert choice ("1" or
+	// "0"); empty means "not explicitly chosen" and renders no line, which
+	// preserves the enabled-by-default behaviour (#1187).
+	PanelLEIPCert string
+	// PanelHTTP01Port persists a non-default --le-ip-cert-port so renewals
+	// bind the same standalone port (#1185/audit). Empty or "80" renders
+	// nothing — 80 is already the implicit default.
+	PanelHTTP01Port string
 }
 
 type File struct {
@@ -94,6 +110,23 @@ func (m ManagedMaterial) EnvContent() (string, error) {
 	}
 	if input.ACMECARoot != "" {
 		entries = append(entries, envKV{"VEIL_ACME_CA_ROOT", input.ACMECARoot})
+	}
+	if input.ACMEInsecure {
+		entries = append(entries, envKV{"VEIL_ACME_INSECURE", "1"})
+	}
+	// Persist the panel IP-certificate lifecycle choices so the daemon
+	// renewal worker, the apply post-hook and `veil cert renew` all reuse the
+	// install-time contract instead of re-deriving it (#1186/#1187).
+	if input.PanelAccess == "direct" {
+		if input.PanelPublicIP != "" {
+			entries = append(entries, envKV{"VEIL_PANEL_PUBLIC_IP", input.PanelPublicIP})
+		}
+		if input.PanelLEIPCert != "" {
+			entries = append(entries, envKV{"VEIL_PANEL_LE_IP_CERT", input.PanelLEIPCert})
+		}
+		if port := strings.TrimSpace(input.PanelHTTP01Port); port != "" && port != "80" {
+			entries = append(entries, envKV{"VEIL_PANEL_HTTP01_PORT", port})
+		}
 	}
 	if paths := input.Paths; paths.EtcDir != "" {
 		entries = append(entries,

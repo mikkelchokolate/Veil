@@ -1310,3 +1310,99 @@ func TestEnsureAcmeShMissingChecksumTool(t *testing.T) {
 		t.Fatalf("expected sha256sum prerequisite error, got: %v", err)
 	}
 }
+
+// Issue #1181: when the managed Caddy edge owns public :80 (a rendered -acme
+// challenge server, or a panel/naive :80 listener), acme.sh --standalone can
+// never bind it. The rendered /.well-known/acme-challenge/ reverse-proxy
+// route forwards those requests to the internal loopback port, so the
+// issuer parks acme.sh there instead of failing on the busy public port.
+func TestIssueIPCertCaddyFrontedParksInternalPort(t *testing.T) {
+	sys := newFakeSystem()
+	sys.setAcmeInstalled()
+	sys.lookPaths["socat"] = "/usr/bin/socat"
+	sys.portFree[80] = false // Caddy owns public :80
+	sys.portFree[CaddyFrontedHTTP01Port] = true
+
+	certPath, keyPath := "/tmp/ipcert/tls.crt", "/tmp/ipcert/tls.key"
+	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
+	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", "letsencrypt")] = commandResult{out: "OK"}
+	sys.commands[sys.key(acmeSh, "--issue", "-d", "1.2.3.4", "--standalone", "--server", "letsencrypt", "--certificate-profile", "shortlived", "--days", "3", "--httpport", "44080", "--force")] = commandResult{out: "Cert issued"}
+	sys.commands[sys.key(acmeSh, "--installcert", "-d", "1.2.3.4", "--key-file", keyPath, "--fullchain-file", certPath, "--reloadcmd", renewReloadCmd(certPath, keyPath))] = commandResult{out: "Installed"}
+
+	cert, err := IssueIPCert(context.Background(), IssueOptions{
+		PublicIPv4: "1.2.3.4", HTTP01ViaCaddy: true,
+		CertPath: certPath, KeyPath: keyPath, System: sys,
+	})
+	if err != nil {
+		t.Fatalf("via-Caddy issuance must not require a free :80: %v", err)
+	}
+	if cert.CertPath != certPath {
+		t.Fatalf("cert path = %q", cert.CertPath)
+	}
+}
+
+// When Caddy nominally owns :80 but is momentarily stopped (restart window),
+// the public port is free and standalone can bind it directly.
+func TestIssueIPCertCaddyFrontedUsesFreePort(t *testing.T) {
+	sys := newFakeSystem()
+	sys.setAcmeInstalled()
+	sys.lookPaths["socat"] = "/usr/bin/socat"
+	// portFree[80] is already true in newFakeSystem — Caddy down, port free.
+
+	certPath, keyPath := "/tmp/ipcert/tls.crt", "/tmp/ipcert/tls.key"
+	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
+	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", "letsencrypt")] = commandResult{out: "OK"}
+	sys.commands[sys.key(acmeSh, "--issue", "-d", "1.2.3.4", "--standalone", "--server", "letsencrypt", "--certificate-profile", "shortlived", "--days", "3", "--httpport", "80", "--force")] = commandResult{out: "Cert issued"}
+	sys.commands[sys.key(acmeSh, "--installcert", "-d", "1.2.3.4", "--key-file", keyPath, "--fullchain-file", certPath, "--reloadcmd", renewReloadCmd(certPath, keyPath))] = commandResult{out: "Installed"}
+
+	if _, err := IssueIPCert(context.Background(), IssueOptions{
+		PublicIPv4: "1.2.3.4", HTTP01ViaCaddy: true,
+		CertPath: certPath, KeyPath: keyPath, System: sys,
+	}); err != nil {
+		t.Fatalf("free :80 must keep standalone issuance on the public port: %v", err)
+	}
+}
+
+// Without the via-Caddy signal a busy :80 stays a hard failure — the foreign
+// listener will not proxy challenges to an internal acme.sh listener.
+func TestIssueIPCertBusyPortStillFailsWithoutViaCaddy(t *testing.T) {
+	sys := newFakeSystem()
+	sys.setAcmeInstalled()
+	sys.lookPaths["socat"] = "/usr/bin/socat"
+	sys.portFree[80] = false
+
+	_, err := IssueIPCert(context.Background(), IssueOptions{
+		PublicIPv4: "1.2.3.4",
+		CertPath:   "/tmp/ipcert/tls.crt", KeyPath: "/tmp/ipcert/tls.key",
+		System: sys,
+	})
+	if err == nil || !strings.Contains(err.Error(), "port 80 is already in use") {
+		t.Fatalf("busy :80 without via-Caddy must fail, got %v", err)
+	}
+}
+
+// Issue #1189: the persisted VEIL_ACME_CA_ROOT must reach acme.sh as
+// --ca-bundle so a controlled CA whose directory endpoint is not publicly
+// trusted still verifies.
+func TestIssueIPCertPassesCARootAsCABundle(t *testing.T) {
+	sys := newFakeSystem()
+	sys.setAcmeInstalled()
+	sys.lookPaths["socat"] = "/usr/bin/socat"
+	sys.portFree[5002] = true
+
+	caURL := "https://127.0.0.1:14000/dir"
+	caRoot := "/etc/veil/acme-root.pem"
+	certPath, keyPath := "/tmp/ipcert/tls.crt", "/tmp/ipcert/tls.key"
+	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
+	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", caURL)] = commandResult{out: "OK"}
+	sys.commands[sys.key(acmeSh, "--issue", "-d", "1.2.3.4", "--standalone", "--server", caURL, "--httpport", "5002", "--force", "--insecure", "--ca-bundle", caRoot)] = commandResult{out: "Cert issued"}
+	sys.commands[sys.key(acmeSh, "--installcert", "-d", "1.2.3.4", "--key-file", keyPath, "--fullchain-file", certPath, "--reloadcmd", renewReloadCmd(certPath, keyPath))] = commandResult{out: "Installed"}
+
+	if _, err := IssueIPCert(context.Background(), IssueOptions{
+		PublicIPv4: "1.2.3.4", HTTPPort: 5002,
+		CAServer: caURL, Insecure: true, CARoot: caRoot,
+		CertPath: certPath, KeyPath: keyPath, System: sys,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

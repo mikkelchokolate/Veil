@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/acmeip"
+	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
@@ -27,12 +30,16 @@ import (
 // before the certificate actually lapses (#1170).
 const ipCertRenewalInterval = 6 * time.Hour
 
-// Test seams: the renewal gate, public-IP resolution and the clock are
-// overridable so apply/worker tests never touch the network or a real ACME
-// directory.
+// Test seams: the renewal gate, public-IP resolution, environment access,
+// managed-cert SAN extraction, the render-plan check and the clock are
+// overridable so apply/worker tests never touch the network, the filesystem
+// or a real ACME directory.
 var (
 	ipCertNeedsRenewal     = acmeip.NeedsRenewal
 	ipCertResolvePublicIPs = acmeip.ResolvePublicIPs
+	ipCertGetenv           = os.Getenv
+	ipCertManagedIPSANs    = acmeip.ManagedCertIPIdentities
+	ipCertCaddyFronted     = caddyassembly.PanelIPCertCaddyFronted
 	ipCertNow              = time.Now
 )
 
@@ -75,35 +82,117 @@ func ipCertEmail(settings Settings) string {
 	return strings.TrimSpace(settings.Email)
 }
 
+// panelIPCertOptedOut reports whether the install explicitly disabled the
+// LE IP certificate (--le-ip-cert=false persists VEIL_PANEL_LE_IP_CERT=0
+// into veil.env, which veil.service loads via EnvironmentFile). An opted-out
+// direct panel must be skipped silently by every renewal entry point — no
+// warning, no ACME command (#1187). Unset or unparsable values keep the
+// enabled-by-default contract.
+func panelIPCertOptedOut() bool {
+	v := strings.TrimSpace(ipCertGetenv("VEIL_PANEL_LE_IP_CERT"))
+	if v == "" {
+		return false
+	}
+	if parsed, err := strconv.ParseBool(v); err == nil {
+		return !parsed
+	}
+	return false
+}
+
 // ipCertACMEConfig reads the controlled-CA knobs from the process
 // environment. veil.service loads veil.env via EnvironmentFile, so values
 // persisted at install time are visible here exactly as they are to the
-// renderers (material_acme_ca_test.go pins that contract).
-func ipCertACMEConfig() (caServer string, insecure bool) {
-	return strings.TrimSpace(os.Getenv("VEIL_ACME_CA_URL")),
-		strings.TrimSpace(os.Getenv("VEIL_ACME_INSECURE")) != ""
+// renderers (material_acme_ca_test.go pins that contract); VEIL_ACME_CA_ROOT
+// additionally becomes acme.sh's --ca-bundle (#1189).
+func ipCertACMEConfig() (caServer string, insecure bool, caRoot string) {
+	return strings.TrimSpace(ipCertGetenv("VEIL_ACME_CA_URL")),
+		strings.TrimSpace(ipCertGetenv("VEIL_ACME_INSECURE")) != "",
+		strings.TrimSpace(ipCertGetenv("VEIL_ACME_CA_ROOT"))
+}
+
+// ipCertHTTP01Port returns the persisted --le-ip-cert-port
+// (VEIL_PANEL_HTTP01_PORT); 0 lets the helper default to 80. A malformed
+// persisted value fails the request loudly instead of silently rebinding
+// :80.
+func ipCertHTTP01Port() (int, error) {
+	v := strings.TrimSpace(ipCertGetenv("VEIL_PANEL_HTTP01_PORT"))
+	if v == "" {
+		return 0, nil
+	}
+	port, err := strconv.Atoi(v)
+	if err != nil || port < 0 || port > 65535 {
+		return 0, fmt.Errorf("VEIL_PANEL_HTTP01_PORT %q is not a valid port", v)
+	}
+	return port, nil
+}
+
+// ipCertRequestPublicIPs resolves the public addresses the renewal must
+// certify. The install-pinned VEIL_PANEL_PUBLIC_IP wins — an operator who
+// passed --public-ip never wants renewal re-probing the detection endpoints
+// and certifying a different egress identity (#1186). Older installs that
+// predate persistence fall back to the IP SANs of the certificate they
+// already issued (only when it classifies as ACME-managed — the self-signed
+// fallback's interface IPs must never steer issuance), and only when neither
+// source has an answer does renewal auto-detect.
+func ipCertRequestPublicIPs(ctx context.Context, certPath string) (publicIPv4, publicIPv6 string, err error) {
+	if spec := strings.TrimSpace(ipCertGetenv("VEIL_PANEL_PUBLIC_IP")); spec != "" {
+		publicIPv4, publicIPv6, err = acmeip.ParsePublicIPSpec(spec)
+		if err != nil {
+			return "", "", fmt.Errorf("VEIL_PANEL_PUBLIC_IP: %w", err)
+		}
+		return publicIPv4, publicIPv6, nil
+	}
+	if sans := ipCertManagedIPSANs(certPath); len(sans) > 0 {
+		for _, san := range sans {
+			if ip := net.ParseIP(san); ip != nil {
+				if ip.To4() != nil {
+					publicIPv4 = san
+				} else {
+					publicIPv6 = san
+				}
+			}
+		}
+		if publicIPv4 != "" || publicIPv6 != "" {
+			return publicIPv4, publicIPv6, nil
+		}
+	}
+	return ipCertResolvePublicIPs(ctx, "auto")
 }
 
 // panelIPCertIssueRequest builds the privileged issue_ip_cert request. It
-// resolves the public addresses so the certificate covers both families on
-// dual-stack hosts (#665), defaulting cert/key to the helper's allowlisted
-// panel directory. DeferPanelRestart is always set: the panel itself is the
-// caller, so the acme.sh reloadcmd must restart veil.service on a transient
-// timer instead of killing the process before the helper can answer.
-func panelIPCertIssueRequest(ctx context.Context, settings Settings, certPath, keyPath string, fence privileged.FenceToken) (privileged.IssueIPCertRequest, error) {
-	publicIPv4, publicIPv6, err := ipCertResolvePublicIPs(ctx, "auto")
+// resolves the public addresses from the persisted install-time identity
+// (or the issued cert's SANs, or auto-detection as a last resort, #1186)
+// so the certificate covers both families on dual-stack hosts (#665),
+// defaulting cert/key to the helper's allowlisted panel directory.
+// HTTP01ViaCaddy marks the request when the rendered plan keeps a Veil-owned
+// Caddy listener on :80 — the -acme challenge server a hysteria2 domain
+// forces — so the helper parks acme.sh on the internal port the rendered
+// /.well-known/acme-challenge/ proxy route forwards to instead of failing
+// on the busy public port (#1181). DeferPanelRestart is always set: the
+// panel itself is the caller, so the acme.sh reloadcmd must restart
+// veil.service on a transient timer instead of killing the process before
+// the helper can answer.
+func panelIPCertIssueRequest(ctx context.Context, settings Settings, inbounds []Inbound, certPath, keyPath string, fence privileged.FenceToken) (privileged.IssueIPCertRequest, error) {
+	publicIPv4, publicIPv6, err := ipCertRequestPublicIPs(ctx, certPath)
 	if err != nil {
 		return privileged.IssueIPCertRequest{}, fmt.Errorf("detect public IP: %w", err)
 	}
-	caServer, insecure := ipCertACMEConfig()
+	httpPort, err := ipCertHTTP01Port()
+	if err != nil {
+		return privileged.IssueIPCertRequest{}, err
+	}
+	caServer, insecure, caRoot := ipCertACMEConfig()
 	return privileged.IssueIPCertRequest{
 		PublicIPv4:        publicIPv4,
 		PublicIPv6:        publicIPv6,
+		HTTPPort:          httpPort,
 		Email:             ipCertEmail(settings),
 		CertPath:          certPath,
 		KeyPath:           keyPath,
 		CAServer:          caServer,
 		Insecure:          insecure,
+		CARoot:            caRoot,
+		HTTP01ViaCaddy:    ipCertCaddyFronted(settings, inbounds),
 		DeferPanelRestart: true,
 		Fence:             fence,
 	}, nil
@@ -117,13 +206,14 @@ func panelIPCertIssueRequest(ctx context.Context, settings Settings, certPath, k
 // never stall the API.
 //
 // The pass is a no-op (nil error) unless the effective panel access is
-// "direct" and the on-disk certificate is inside the shared renewal gate.
-// When the supplied fence token is empty (worker/CLI entry points that are
-// not inside a durable apply operation) a one-shot runtime fencing lease is
-// minted and released around the helper call, matching every other
-// privileged mutation.
-func (s *managementState) issuePanelIPCert(ctx context.Context, settings Settings, backend privileged.Client, fence privileged.FenceToken) error {
-	if settings.PanelAccess != "direct" {
+// "direct", the install did not opt out of the IP certificate
+// (VEIL_PANEL_LE_IP_CERT=0, #1187), and the on-disk certificate is inside
+// the shared renewal gate. When the supplied fence token is empty
+// (worker/CLI entry points that are not inside a durable apply operation) a
+// one-shot runtime fencing lease is minted and released around the helper
+// call, matching every other privileged mutation.
+func (s *managementState) issuePanelIPCert(ctx context.Context, settings Settings, inbounds []Inbound, backend privileged.Client, fence privileged.FenceToken) error {
+	if settings.PanelAccess != "direct" || panelIPCertOptedOut() {
 		return nil
 	}
 	certPath, keyPath, ok := panelIPCertPaths()
@@ -150,7 +240,7 @@ func (s *managementState) issuePanelIPCert(ctx context.Context, settings Setting
 	if release != nil {
 		defer release()
 	}
-	request, err := panelIPCertIssueRequest(ctx, settings, certPath, keyPath, fence)
+	request, err := panelIPCertIssueRequest(ctx, settings, inbounds, certPath, keyPath, fence)
 	if err != nil {
 		return err
 	}
@@ -167,7 +257,7 @@ func (s *managementState) issuePanelIPCert(ctx context.Context, settings Setting
 // Locked contract), so fields are read directly, never re-locked.
 func (ctx ManagementApplyContext) PostServiceActionsLocked([]string) []ServiceActionResult {
 	s := ctx.state
-	if s == nil || s.settings.PanelAccess != "direct" {
+	if s == nil || s.settings.PanelAccess != "direct" || panelIPCertOptedOut() {
 		return nil
 	}
 	certPath, _, ok := panelIPCertPaths()
@@ -178,7 +268,7 @@ func (ctx ManagementApplyContext) PostServiceActionsLocked([]string) []ServiceAc
 		Name:    "issue-ip-cert",
 		Command: []string{"acme.sh", "--issue", "--standalone"},
 	}
-	if err := s.issuePanelIPCert(ctx.operationContext(), s.settings, s.privileged, ctx.fenceToken()); err != nil {
+	if err := s.issuePanelIPCert(ctx.operationContext(), s.settings, s.inbounds, s.privileged, ctx.fenceToken()); err != nil {
 		action.Error = err.Error()
 		return []ServiceActionResult{action}
 	}
@@ -273,7 +363,8 @@ func (w *ipCertRenewalWorker) SyncOnce(ctx context.Context) error {
 	}
 	s.mu.Lock()
 	settings := s.settings
+	inbounds := s.inbounds
 	backend := s.privileged
 	s.mu.Unlock()
-	return s.issuePanelIPCert(ctx, settings, backend, privileged.FenceToken{})
+	return s.issuePanelIPCert(ctx, settings, inbounds, backend, privileged.FenceToken{})
 }
