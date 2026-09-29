@@ -283,6 +283,37 @@ func TestSyncArchiveRefusesUnencryptedArchiveBeforeDial(t *testing.T) {
 	}
 }
 
+// #1188: the .enc suffix alone is not enough — a .enc-named file whose
+// content was never encrypted must also be refused before the dial.
+func TestSyncArchiveRefusesEncNamedPlaintextBeforeDial(t *testing.T) {
+	fs := sftpfake.New()
+	engine := testEngine(t, fs, nil)
+	saveEngineConfig(t, engine, nil)
+	dialed := false
+	engine.Dial = func(context.Context, Config, string) (RemoteFS, error) {
+		dialed = true
+		return fs, nil
+	}
+	localPath := filepath.Join(t.TempDir(), "veil_backup_20260101_020000.tar.gz.enc")
+	if err := os.WriteFile(localPath, []byte("\x1f\x8bplain"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, configured, err := engine.SyncArchive(context.Background(), localPath, filepath.Base(localPath), nil)
+	if !errors.Is(err, ErrUnencryptedArchive) || !configured {
+		t.Fatalf(".enc-named plaintext sync = %v, %v", configured, err)
+	}
+	if dialed {
+		t.Fatal("refused sync dialed the remote")
+	}
+	if len(fs.Paths()) != 0 {
+		t.Fatalf("refused sync touched the remote: %v", fs.Paths())
+	}
+	if status := engine.Status(); status.LastError == "" {
+		t.Fatal("refusal not recorded in status")
+	}
+}
+
 // #1184: two installations sharing one remoteDir must never see, fetch, or
 // prune each other's archives, and a pre-namespacing orphan at the remoteDir
 // root must stay untouchable.

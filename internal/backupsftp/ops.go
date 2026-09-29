@@ -54,6 +54,23 @@ func remotePath(dir, name string) string {
 // Remote storage is encrypted-only: a name without the .enc suffix or a file
 // missing the Veil encrypted-archive magic is refused with
 // ErrUnencryptedArchive before a single byte leaves the host (#1188).
+// probeLocalEncryptedArchive verifies the encrypted-archive magic on the
+// local file so callers can refuse plaintext before the remote is ever
+// dialed. Upload re-checks on its own no-follow handle (#1188).
+func probeLocalEncryptedArchive(localPath string) error {
+	local, err := safefs.OpenNoFollow(localPath)
+	if err != nil {
+		return fmt.Errorf("open local archive: %w", err)
+	}
+	defer local.Close()
+	prefix := make([]byte, magicProbeBytes)
+	n, _ := io.ReadFull(local, prefix)
+	if !backup.IsEncryptedArchivePrefix(prefix[:n]) {
+		return ErrUnencryptedArchive
+	}
+	return nil
+}
+
 func Upload(_ context.Context, fs RemoteFS, config Config, localPath, name string) (UploadReceipt, error) {
 	if name == "" || path.Base(name) != name || strings.ContainsAny(name, `/\`) {
 		return UploadReceipt{}, fmt.Errorf("remote archive name %q must be a basename", name)

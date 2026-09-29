@@ -143,10 +143,10 @@ type SyncResult struct {
 // no destination is on file or it is disabled, so callers distinguish
 // "nothing to do" from a real skip.
 //
-// A plaintext archive (a name without the .enc suffix) is refused with
-// ErrUnencryptedArchive before the remote is even dialed — remote storage is
-// an encrypted-only tier, so --allow-unencrypted stays a purely local opt-in
-// (#1188). Upload additionally verifies the encrypted-archive magic.
+// A plaintext archive — a name without the .enc suffix or content missing
+// the encrypted-archive magic — is refused with ErrUnencryptedArchive
+// before the remote is even dialed: remote storage is an encrypted-only
+// tier, so --allow-unencrypted stays a purely local opt-in (#1188).
 //
 // Failures return the error — callers decide how loud to make it — while the
 // status file records the same outcome for the status endpoint.
@@ -161,6 +161,15 @@ func (e Engine) SyncArchive(ctx context.Context, localPath, name string, policy 
 	}
 	if !strings.HasSuffix(strings.ToLower(name), ".enc") {
 		err := fmt.Errorf("%w: %q", ErrUnencryptedArchive, name)
+		e.recordError(err)
+		return SyncResult{}, true, err
+	}
+	if err := probeLocalEncryptedArchive(localPath); err != nil {
+		if !errors.Is(err, ErrUnencryptedArchive) {
+			err = fmt.Errorf("probe local archive: %w", err)
+		} else {
+			err = fmt.Errorf("%w: %q does not start with the Veil encrypted-archive header", err, name)
+		}
 		e.recordError(err)
 		return SyncResult{}, true, err
 	}
