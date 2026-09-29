@@ -458,7 +458,7 @@ func TestIsEncryptedArchivePrefix(t *testing.T) {
 	for _, bad := range [][]byte{
 		nil,
 		[]byte("VEILBAC"),
-		[]byte("gzip-plaintext"),
+		[]byte("\x1f\x8bgzip-plaintext"),
 		[]byte("VEILBACX"),
 		[]byte("veilback-wrong-case"),
 	} {
