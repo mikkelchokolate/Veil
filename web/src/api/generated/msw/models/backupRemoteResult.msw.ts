@@ -45,7 +45,9 @@ import type { BackupRemoteResultUpload } from './backupRemoteResultUpload.msw.ts
 /**
  * Remote SFTP destination outcome for a create or prune. A
  * remote failure is reported in `error` without failing the local
- * operation it accompanied.
+ * operation it accompanied. Remote storage is encrypted-only: an
+ * unencrypted local archive is skipped rather than uploaded, with the
+ * refusal reported in `error`/`warning`.
  */
 export interface BackupRemoteResult {
   upload?: BackupRemoteResultUpload;

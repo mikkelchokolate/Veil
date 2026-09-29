@@ -4,6 +4,16 @@
 // remote retention prune that shares the policy decision with the local
 // archive prune in internal/backup.
 //
+// Two safety invariants shape the remote side:
+//   - Remote storage is encrypted-only: Upload refuses archives without the
+//     .enc suffix or the Veil encrypted-archive magic (#1188), mirroring the
+//     fetch side's .enc-only policy.
+//   - Remote work happens under <remoteDir>/veil-node-<install-id>/, a
+//     per-installation namespace minted once and persisted in the state dir,
+//     so nodes sharing one remoteDir never list, fetch, or prune each
+//     other's archives (#1184). Archives written by older versions at the
+//     remoteDir root are orphans the engine deliberately never touches.
+//
 // Secret fields (password, key passphrase, pinned host key) live only in the
 // on-disk config file. Anything returned over the API goes through View,
 // which reports "configured" flags instead of the values.
@@ -32,6 +42,9 @@ const (
 	StatusFileName = "backup-sftp-status.json"
 	// KnownHostsFileName holds the trust-on-first-use remote host keys.
 	KnownHostsFileName = "backup-sftp.known_hosts"
+	// InstallIDFileName persists the random per-installation identity that
+	// namespaces this node's remote archives (#1184).
+	InstallIDFileName = "backup-sftp.install-id"
 
 	AuthTypeKey      = "key"
 	AuthTypePassword = "password"

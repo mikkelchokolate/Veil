@@ -441,3 +441,29 @@ func TestEncryptBackupTarballCipherErrors(t *testing.T) {
 		}
 	})
 }
+
+// IsEncryptedArchivePrefix is the remote-publish gate: it must accept the
+// magic of every encryption format version and reject plaintext (gzip or
+// otherwise) so the SFTP layer never ships a plaintext archive (#1188).
+func TestIsEncryptedArchivePrefix(t *testing.T) {
+	encrypted, err := encryptBackupTarballWithOptions([]byte("tarball"), "passphrase", CryptoOptions{
+		DeriveKey: func(string, []byte, byte) []byte { return bytes.Repeat([]byte{0xab}, 32) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !IsEncryptedArchivePrefix(encrypted[:len(encrypted)-1]) {
+		t.Fatal("real encrypted blob rejected")
+	}
+	for _, bad := range [][]byte{
+		nil,
+		[]byte("VEILBAC"),
+		[]byte("gzip-plaintext"),
+		[]byte("VEILBACX"),
+		[]byte("veilback-wrong-case"),
+	} {
+		if IsEncryptedArchivePrefix(bad) {
+			t.Fatalf("accepted %q", bad)
+		}
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/backupsftp"
 	"github.com/mikkelchokolate/Veil/internal/protocols"
 )
 
@@ -57,7 +58,11 @@ type Policy struct {
 	BackupSftpConfigPath     string
 	BackupSftpStatusPath     string
 	BackupSftpKnownHostsPath string
-	UpdateRoot               string
+	// BackupSftpInstallIDPath persists the random per-installation identity
+	// that namespaces this node's remote archives (#1184); empty falls back
+	// to <StateRoot>/backup-sftp.install-id.
+	BackupSftpInstallIDPath string
+	UpdateRoot              string
 	// CertDirs are the directories the helper may sync Caddy-issued ACME
 	// certificate pairs into — the <etc>/certs tree of the configured install
 	// (custom --etc-dir installs resolve their own; issue #628).
@@ -121,17 +126,20 @@ type ResolvedBackup struct {
 	TransactionID        string
 	FenceGeneration      uint64
 	// SftpPaths locate the remote-destination config/status/known_hosts
-	// files so create and prune can mirror their outcome to a configured
-	// SFTP destination.
+	// files and the install-id so create and prune can mirror their outcome
+	// to a configured SFTP destination.
 	SftpPaths BackupSftpPaths
 }
 
 // BackupSftpPaths carries the resolved on-disk locations the SFTP engine
-// needs — see backupsftp.Paths for the layout rationale.
+// needs — see backupsftp.Paths for the layout rationale. InstallIDPath
+// persists the random per-installation identity that namespaces this node's
+// remote archives (#1184).
 type BackupSftpPaths struct {
 	ConfigPath     string
 	StatusPath     string
 	KnownHostsPath string
+	InstallIDPath  string
 }
 
 // ResolvedBackupSftp is one validated SFTP-destination operation with the
@@ -469,12 +477,16 @@ func (p Policy) backupSftpPaths() BackupSftpPaths {
 		ConfigPath:     p.BackupSftpConfigPath,
 		StatusPath:     p.BackupSftpStatusPath,
 		KnownHostsPath: p.BackupSftpKnownHostsPath,
+		InstallIDPath:  p.BackupSftpInstallIDPath,
 	}
 	if paths.StatusPath == "" && p.StateRoot != "" {
 		paths.StatusPath = filepath.Join(p.StateRoot, "backup-sftp-status.json")
 	}
 	if paths.KnownHostsPath == "" && p.StateRoot != "" {
 		paths.KnownHostsPath = filepath.Join(p.StateRoot, "backup-sftp.known_hosts")
+	}
+	if paths.InstallIDPath == "" && p.StateRoot != "" {
+		paths.InstallIDPath = filepath.Join(p.StateRoot, backupsftp.InstallIDFileName)
 	}
 	return paths
 }
