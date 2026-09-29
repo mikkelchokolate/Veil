@@ -10,10 +10,14 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
-	"golang.org/x/crypto/bcrypt"
 )
 
 var errTOTPVerifyFailed = errors.New("invalid verification code")
+
+// errEnrollingSessionGone means the session that ran the TOTP confirm is no
+// longer in the registry — the factor must not be armed behind it, so the
+// confirm rolls back and the operator re-enrolls from a fresh session.
+var errEnrollingSessionGone = errors.New("enrolling session expired")
 
 // sessionUserForTOTP resolves the cookie-session identity these endpoints are
 // scoped to. Self-service TOTP management requires a live browser session
@@ -225,11 +229,18 @@ func (s *managementState) handleMyTOTPConfirm(w http.ResponseWriter, r *http.Req
 			_ = s.sessionRegistry().CancelUsernameRevocation(intent)
 			return mErr
 		}
-		if _, markErr := s.sessionRegistry().MarkSecondFactorPersisted(currentSessionToken(r)); markErr != nil {
+		marked, markErr := s.sessionRegistry().MarkSecondFactorPersisted(currentSessionToken(r))
+		if markErr == nil && !marked {
+			markErr = errEnrollingSessionGone
+		}
+		if markErr != nil {
 			if _, restoreErr := mutation.SetUserTOTP(user.Username, current); restoreErr != nil {
 				return fmt.Errorf("%w: %v (restore user: %v)", errSessionRevocationPersistence, markErr, restoreErr)
 			}
 			_ = s.sessionRegistry().CancelUsernameRevocation(intent)
+			if errors.Is(markErr, errEnrollingSessionGone) {
+				return markErr
+			}
 			return fmt.Errorf("%w: %v", errSessionRevocationPersistence, markErr)
 		}
 		if _, revokeErr := s.sessionRegistry().DeleteUsernameExceptPersisted(user.Username, currentSessionToken(r)); revokeErr != nil {
@@ -259,6 +270,8 @@ func (s *managementState) handleMyTOTPConfirm(w http.ResponseWriter, r *http.Req
 			writeNotFound(w)
 		case errors.Is(err, errTOTPVerifyFailed):
 			writeError(w, "pending TOTP enrollment changed; enroll again", http.StatusConflict)
+		case errors.Is(err, errEnrollingSessionGone):
+			writeError(w, errEnrollingSessionGone.Error()+"; sign in again", http.StatusUnauthorized)
 		case errors.Is(err, errSessionRevocationPersistence):
 			writeError(w, errSessionRevocationPersistence.Error(), http.StatusInternalServerError)
 		default:
@@ -293,41 +306,30 @@ func (s *managementState) handleMyTOTPDisable(w http.ResponseWriter, r *http.Req
 		writeError(w, "TOTP is not enabled", http.StatusBadRequest)
 		return
 	}
-	if strings.TrimSpace(req.Password) == "" && strings.TrimSpace(req.Code) == "" {
-		writeError(w, "password or authenticator code is required", http.StatusBadRequest)
+	if strings.TrimSpace(req.Code) == "" {
+		writeError(w, "authenticator code is required", http.StatusBadRequest)
 		return
 	}
-	// Disabling a second factor is credential-grade: prove a fresh password
-	// or a live TOTP code, throttled through the login backoff family so the
-	// disable form cannot be turned into a code oracle.
+	// Disabling a second factor is factor-grade, not credential-grade: a
+	// stolen-but-verified session plus the account password must not be
+	// enough to strip the factor. Require a live TOTP code — the operator
+	// who lost the authenticator entirely goes through admin reset
+	// (#1172). Throttled through the login backoff family so the disable
+	// form cannot be turned into a code oracle.
 	throttleKey := "totp-disable:" + loginThrottleKey(r, user.Username)
 	if retryAfter := s.loginBackoffRemaining(throttleKey); retryAfter > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
 		writeError(w, "too many attempts", http.StatusTooManyRequests)
 		return
 	}
-	authorized := false
-	if req.Code != "" {
-		authorized = validateTOTPCode(s.loginBackoffTime(), user.TOTPSecret, req.Code)
-	}
-	if !authorized && req.Password != "" {
-		releaseBcrypt := acquireBcryptWork()
-		if releaseBcrypt == nil {
-			w.Header().Set("Retry-After", "1")
-			writeError(w, "too many attempts", http.StatusTooManyRequests)
-			return
-		}
-		authorized = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) == nil
-		releaseBcrypt()
-	}
-	if !authorized {
+	if !validateTOTPCode(s.loginBackoffTime(), user.TOTPSecret, req.Code) {
 		delay := s.recordLoginFailure(throttleKey)
 		w.Header().Set("Retry-After", strconv.Itoa(int(delay.Seconds())+1))
 		s.recordRequestAudit(r, audit.Record{
 			Actor: user.Username, Action: "user.totp.disable", Target: user.Username,
-			Success: false, Error: "invalid password or code",
+			Success: false, Error: "invalid authenticator code",
 		})
-		writeError(w, "invalid password or code", http.StatusBadRequest)
+		writeError(w, "invalid authenticator code", http.StatusBadRequest)
 		return
 	}
 	err := s.withMutation(func(mutation managementstate.Mutation) error {

@@ -42,7 +42,6 @@
  */
 
 export interface TOTPDisableRequest {
-  password?: string;
-  /** Live authenticator code; either password or code is required. */
-  code?: string;
+  /** Live authenticator code. Self-disable is factor-grade — a stolen 2FA-complete session plus the account password is not sufficient; losing the authenticator goes through admin reset. */
+  code: string;
 }

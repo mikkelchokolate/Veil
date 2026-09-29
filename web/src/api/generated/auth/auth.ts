@@ -1320,7 +1320,9 @@ export const useGetApiV1UsersMeTotp = <TError = UnauthorizedResponse | Forbidden
 
 /**
  * Requires the `veil_session` cookie and `X-CSRF-Token` plus a
- * fresh credential: the account password or a live authenticator code.
+ * live authenticator code. Self-disable is factor-grade: the account
+ * password alone is not accepted, so a stolen completed session cannot
+ * strip the factor; a lost authenticator goes through the admin reset.
  * Attempts are throttled through the login backoff family. On success all
  * other sessions of the user are revoked.
  * @summary Disable the current user's TOTP second factor

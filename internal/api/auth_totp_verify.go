@@ -32,7 +32,10 @@ func (s *managementState) handleTOTPVerify(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	token := pendingSecondFactorToken(r)
-	pending, ok := s.pendingSecondFactors().Resolve(token)
+	// Claim takes the in-flight lease atomically with the resolve: two
+	// parallel POSTs on the same pending cookie can no longer both validate
+	// one code into two sessions (#1172).
+	pending, ok := s.pendingSecondFactors().Claim(token)
 	if !ok {
 		s.setPendingSecondFactorCookie(w, r, "", -1)
 		s.recordRequestAudit(r, audit.Record{
@@ -72,6 +75,11 @@ func (s *managementState) handleTOTPVerify(w http.ResponseWriter, r *http.Reques
 		// against the pending challenge's own attempt cap. Exhaustion destroys
 		// the challenge so the caller must restart at the password stage.
 		exhausted := s.pendingSecondFactors().RecordFailure(token)
+		if !exhausted {
+			// Retryable failure: free the in-flight lease so the next code
+			// submission on this challenge is not denied by our own claim.
+			s.pendingSecondFactors().Release(token)
+		}
 		delay := s.recordLoginFailure(throttleKey)
 		w.Header().Set("Retry-After", strconv.Itoa(int(delay.Seconds())+1))
 		s.recordRequestAudit(r, audit.Record{
@@ -183,12 +191,19 @@ func (s *managementState) handleTOTPVerify(w http.ResponseWriter, r *http.Reques
 			Error:   "session persistence failed",
 		})
 		writeError(w, "failed to persist session", http.StatusInternalServerError)
+		// Transient server failure — release the claim so a retry on the
+		// same challenge is not wedged until the TTL.
+		s.pendingSecondFactors().Release(token)
 		return
 	}
 
 	s.pendingSecondFactors().Consume(token)
 	s.setPendingSecondFactorCookie(w, r, "", -1)
+	// Failures were recorded against BOTH the password-stage key and the
+	// 2fa-prefixed verify key — a successful factor clears each, otherwise a
+	// residue of verify-stage failures would keep throttling future logins.
 	s.clearLoginFailures(loginThrottleKey(r, pending.Username))
+	s.clearLoginFailures(throttleKey)
 	s.recordRequestAudit(r, audit.Record{
 		Actor:   pending.Username,
 		Role:    role,

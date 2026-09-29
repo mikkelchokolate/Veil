@@ -122,6 +122,9 @@ export const ru: Record<string, string> = {
 	"auth.totp.verifying": "Проверка…",
 	"auth.totp.useRecovery": "Использовать код восстановления",
 	"auth.totp.useAuthenticator": "Использовать код из приложения",
+	"auth.totp.backToPassword": "Назад ко входу",
+	"auth.totp.challengeExpires":
+		"Этот запрос действует до {time}. Если время истечёт, вернитесь и войдите заново.",
 	"auth.totp.invalid":
 		"Неверный или истёкший код. Повторите попытку или войдите снова.",
 	"auth.totp.failed": "Не удалось проверить код. Повторите попытку.",
@@ -424,6 +427,7 @@ export const ru: Record<string, string> = {
 	"settings.totp.description":
 		"Требовать код из приложения-аутентификатора в дополнение к паролю при входе.",
 	"settings.totp.enable": "Включить аутентификатор",
+	"settings.totp.restartEnrollment": "Начать регистрацию заново",
 	"settings.totp.enrollScan":
 		"Отсканируйте QR-код приложением-аутентификатором или введите секрет вручную.",
 	"settings.totp.secret": "Секрет",
@@ -440,7 +444,7 @@ export const ru: Record<string, string> = {
 	"settings.totp.copied": "Скопировано",
 	"settings.totp.disableTitle": "Отключить двухфакторную аутентификацию?",
 	"settings.totp.disableDescription":
-		"Подтвердите действие паролем или текущим кодом аутентификатора. Все остальные ваши сессии будут завершены.",
+		"Введите текущий код аутентификатора для подтверждения. Все остальные ваши сессии будут завершены. Если аутентификатор утерян, попросите администратора сбросить двухфакторную аутентификацию.",
 	"settings.totp.disabling": "Отключение…",
 	"settings.totp.error.status": "Не удалось загрузить статус 2FA",
 	"settings.totp.error.enroll": "Не удалось начать регистрацию",

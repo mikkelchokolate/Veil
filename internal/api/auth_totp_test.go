@@ -373,6 +373,94 @@ func TestTOTPDisableRequiresFreshCredential(t *testing.T) {
 	}
 }
 
+// Disabling the factor must be factor-grade (#1172 review): a stolen
+// 2FA-complete session plus the account password must not be enough. The
+// live TOTP code is the only self-service path; losing the authenticator
+// entirely goes through admin reset.
+func TestTOTPDisableRejectsPasswordAlone(t *testing.T) {
+	user := totpTestUser(t, "correct-password-123")
+	user.TOTPEnabled = true
+	user.TOTPSecret = "JBSWY3DPEHPK3PXP"
+	state, now := totpTestState(t, user)
+	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+
+	rec := authedTOTPRequest(t, state, session, http.MethodDelete, "/api/v1/users/me/totp", `{"password":"correct-password-123"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("disable with password alone status=%d, want 400", rec.Code)
+	}
+	if !state.users[0].TOTPEnabled {
+		t.Fatal("password alone disabled the factor")
+	}
+
+	code := totpCode(t, user.TOTPSecret, *now)
+	rec = authedTOTPRequest(t, state, session, http.MethodDelete, "/api/v1/users/me/totp", `{"code":"`+code+`"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("disable with live code status=%d, want 200 (body %q)", rec.Code, rec.Body.String())
+	}
+	if state.users[0].TOTPEnabled {
+		t.Fatal("live TOTP code did not disable the factor")
+	}
+}
+
+// A confirmed factor whose enrolling session is already gone (expired or
+// revoked between enroll and confirm) must roll back the enrollment instead
+// of leaving TOTP enabled on an unmarked session (#1172 review).
+func TestTOTPConfirmRollsBackWhenEnrollingSessionGone(t *testing.T) {
+	user := totpTestUser(t, "correct-password-123")
+	state, now := totpTestState(t, user)
+	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+
+	rec := authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("enroll status=%d", rec.Code)
+	}
+	pendingSecret := state.users[0].TOTPPendingSecret
+	if pendingSecret == "" {
+		t.Fatal("enroll produced no pending secret")
+	}
+
+	if _, err := state.sessionRegistry().DeleteTokenPersisted(session.Token); err != nil {
+		t.Fatalf("delete enrolling session: %v", err)
+	}
+
+	code := totpCode(t, pendingSecret, *now)
+	rec = authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/confirm", `{"code":"`+code+`"}`)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("confirm with gone session status=%d, want 401 (body %q)", rec.Code, rec.Body.String())
+	}
+	if state.users[0].TOTPEnabled {
+		t.Fatal("factor enabled while its enrolling session was unmarkable")
+	}
+	if state.users[0].TOTPPendingSecret == "" {
+		t.Fatal("rollback dropped the pending enrollment")
+	}
+}
+
+// The in-flight lease on a pending challenge must be exclusive (#1172
+// review): two concurrent verifies on one pending cookie cannot both
+// validate one code into two sessions.
+func TestPendingSecondFactorClaimIsExclusive(t *testing.T) {
+	store := newPendingSecondFactorStore(time.Now)
+	token, _, err := store.Issue("alice", "hash")
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	if _, ok := store.Claim(token); !ok {
+		t.Fatal("first claim rejected")
+	}
+	if _, ok := store.Claim(token); ok {
+		t.Fatal("second concurrent claim accepted")
+	}
+	store.Release(token)
+	if _, ok := store.Claim(token); !ok {
+		t.Fatal("claim after release rejected")
+	}
+	store.Consume(token)
+	if _, ok := store.Claim(token); ok {
+		t.Fatal("claim on consumed challenge accepted")
+	}
+}
+
 func TestTOTPAdminResetClearsFactorAndSessions(t *testing.T) {
 	user := totpTestUser(t, "correct-password-123")
 	user.TOTPEnabled = true

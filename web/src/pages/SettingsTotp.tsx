@@ -34,7 +34,6 @@ export function TotpCard() {
 	const [confirmCode, setConfirmCode] = useState("");
 	const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
 	const [disabling, setDisabling] = useState(false);
-	const [disablePassword, setDisablePassword] = useState("");
 	const [disableCode, setDisableCode] = useState("");
 	const [copied, setCopied] = useState(false);
 
@@ -82,14 +81,10 @@ export function TotpCard() {
 		mutationFn: () =>
 			apiFetch("/api/v1/users/me/totp", {
 				method: "DELETE",
-				body: JSON.stringify({
-					...(disablePassword ? { password: disablePassword } : {}),
-					...(disableCode ? { code: disableCode } : {}),
-				}),
+				body: JSON.stringify({ code: disableCode }),
 			}),
 		onSuccess: () => {
 			setDisabling(false);
-			setDisablePassword("");
 			setDisableCode("");
 			setError(null);
 			invalidate();
@@ -161,7 +156,9 @@ export function TotpCard() {
 								enroll.mutate();
 							}}
 						>
-							{t("settings.totp.enable")}
+							{status.data?.pendingEnrollment
+								? t("settings.totp.restartEnrollment")
+								: t("settings.totp.enable")}
 						</Button>
 					)}
 				</div>
@@ -209,6 +206,7 @@ export function TotpCard() {
 					</FormItem>
 					<div style={{ display: "flex", gap: 8 }}>
 						<Button
+							type="submit"
 							variant="primary"
 							disabled={confirm.isPending || confirmCode.trim() === ""}
 						>
@@ -275,18 +273,6 @@ export function TotpCard() {
 					{error ? <FormMessage>{error}</FormMessage> : null}
 					<form className="form-stack" onSubmit={onDisableSubmit}>
 						<FormItem>
-							<Label htmlFor="totp-disable-password">
-								{t("auth.password")}
-							</Label>
-							<Input
-								id="totp-disable-password"
-								type="password"
-								autoComplete="current-password"
-								value={disablePassword}
-								onChange={(e) => setDisablePassword(e.target.value)}
-							/>
-						</FormItem>
-						<FormItem>
 							<Label htmlFor="totp-disable-code">{t("auth.totp.code")}</Label>
 							<Input
 								id="totp-disable-code"
@@ -294,15 +280,14 @@ export function TotpCard() {
 								autoComplete="one-time-code"
 								value={disableCode}
 								onChange={(e) => setDisableCode(e.target.value)}
+								required
 							/>
 						</FormItem>
 						<div style={{ display: "flex", gap: 8 }}>
 							<Button
+								type="submit"
 								variant="danger"
-								disabled={
-									disable.isPending ||
-									(disablePassword.trim() === "" && disableCode.trim() === "")
-								}
+								disabled={disable.isPending || disableCode.trim() === ""}
 							>
 								{disable.isPending
 									? t("settings.totp.disabling")

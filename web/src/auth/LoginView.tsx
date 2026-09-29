@@ -52,6 +52,7 @@ export function LoginView() {
 	// account holds a TOTP factor — the pending_2fa cookie was already minted.
 	const [factorStep, setFactorStep] = useState(false);
 	const [factorCode, setFactorCode] = useState("");
+	const [pendingExpiresAt, setPendingExpiresAt] = useState<string | null>(null);
 	const [recoveryMode, setRecoveryMode] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
@@ -65,6 +66,7 @@ export function LoginView() {
 		try {
 			const result = await login(user, pass);
 			if (result.secondFactorRequired) {
+				setPendingExpiresAt(result.pendingExpiresAt ?? null);
 				setFactorStep(true);
 			}
 		} catch (err) {
@@ -102,7 +104,10 @@ export function LoginView() {
 		setError(null);
 		void login(pending.username, pending.password)
 			.then((result) => {
-				if (result.secondFactorRequired) setFactorStep(true);
+				if (result.secondFactorRequired) {
+					setPendingExpiresAt(result.pendingExpiresAt ?? null);
+					setFactorStep(true);
+				}
 			})
 			.catch((err) => {
 				setError(loginFailureMessage(err, tRef.current));
@@ -152,6 +157,29 @@ export function LoginView() {
 						{recoveryMode
 							? t("auth.totp.useAuthenticator")
 							: t("auth.totp.useRecovery")}
+					</button>
+					{pendingExpiresAt ? (
+						<p className="muted">
+							{t("auth.totp.challengeExpires", {
+								time: new Date(pendingExpiresAt).toLocaleTimeString(),
+							})}
+						</p>
+					) : null}
+					<button
+						className="btn"
+						type="button"
+						onClick={() => {
+							// The pending_2fa challenge is single-shot server-side:
+							// expired/exhausted cookies are dead. Going back lets a
+							// fresh password submit mint a new challenge.
+							setFactorStep(false);
+							setFactorCode("");
+							setRecoveryMode(false);
+							setPendingExpiresAt(null);
+							setError(null);
+						}}
+					>
+						{t("auth.totp.backToPassword")}
 					</button>
 				</form>
 			</main>

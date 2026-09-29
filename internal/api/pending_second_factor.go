@@ -45,6 +45,10 @@ type pendingSecondFactor struct {
 	CreatedAt    time.Time
 	ExpiresAt    time.Time
 	Attempts     int
+	// InFlight marks a challenge currently being verified: a second
+	// concurrent POST with the same pending cookie must never let two
+	// requests both validate one code and mint two sessions (#1172).
+	InFlight bool
 }
 
 type pendingSecondFactorStore struct {
@@ -126,6 +130,49 @@ func (s *pendingSecondFactorStore) Resolve(token string) (pendingSecondFactor, b
 		return pendingSecondFactor{}, false
 	}
 	return pending, true
+}
+
+// Claim resolves the challenge AND atomically takes an in-flight lease on it:
+// only one request can verify a given pending cookie at a time, so two
+// parallel POSTs cannot race one factor code into two sessions. A claimed
+// challenge must be completed by Consume (success/exhaustion) or Release
+// (retryable failure); a claim abandoned mid-request stays closed until the
+// TTL — the fail-closed side.
+func (s *pendingSecondFactorStore) Claim(token string) (pendingSecondFactor, bool) {
+	if token == "" {
+		return pendingSecondFactor{}, false
+	}
+	id := hashSessionSecret(token)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	pending, ok := s.byID[id]
+	if !ok || pending.InFlight {
+		return pendingSecondFactor{}, false
+	}
+	if !pending.ExpiresAt.After(s.now().UTC()) {
+		delete(s.byID, id)
+		return pendingSecondFactor{}, false
+	}
+	pending.InFlight = true
+	s.byID[id] = pending
+	return pending, true
+}
+
+// Release frees a claimed challenge after a retryable factor failure so the
+// caller can submit another code. Unknown/consumed tokens are a no-op.
+func (s *pendingSecondFactorStore) Release(token string) {
+	if token == "" {
+		return
+	}
+	id := hashSessionSecret(token)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	pending, ok := s.byID[id]
+	if !ok {
+		return
+	}
+	pending.InFlight = false
+	s.byID[id] = pending
 }
 
 // RecordFailure counts a failed factor attempt against the challenge and

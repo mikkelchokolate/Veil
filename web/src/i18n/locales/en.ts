@@ -224,6 +224,9 @@ export const en: Record<string, string> = {
 	"auth.totp.verifying": "Verifying…",
 	"auth.totp.useRecovery": "Use a recovery code instead",
 	"auth.totp.useAuthenticator": "Use an authenticator code instead",
+	"auth.totp.backToPassword": "Back to sign in",
+	"auth.totp.challengeExpires":
+		"This challenge expires at {time}. If it lapses, go back and sign in again.",
 	"auth.totp.invalid":
 		"Invalid or expired verification code. Try again or sign in again.",
 	"auth.totp.failed": "Could not verify the code. Try again.",
@@ -521,6 +524,7 @@ export const en: Record<string, string> = {
 	"settings.totp.description":
 		"Require a code from an authenticator app in addition to the password when signing in.",
 	"settings.totp.enable": "Enable authenticator app",
+	"settings.totp.restartEnrollment": "Restart enrollment",
 	"settings.totp.enrollScan":
 		"Scan this QR code with your authenticator app, or enter the secret manually.",
 	"settings.totp.secret": "Secret",
@@ -537,7 +541,7 @@ export const en: Record<string, string> = {
 	"settings.totp.copied": "Copied",
 	"settings.totp.disableTitle": "Disable two-factor authentication?",
 	"settings.totp.disableDescription":
-		"Confirm with your password or a current authenticator code. All your other sessions will be revoked.",
+		"Enter a current authenticator code to confirm. All your other sessions will be revoked. If you lost your authenticator, ask an admin to reset two-factor authentication.",
 	"settings.totp.disabling": "Disabling…",
 	"settings.totp.error.status": "Failed to load two-factor status",
 	"settings.totp.error.enroll": "Failed to start enrollment",

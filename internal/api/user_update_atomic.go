@@ -140,9 +140,10 @@ func (s *managementState) handleAtomicUserUpdate(w http.ResponseWriter, r *http.
 	s.catchUpAfterPanelMutation()
 
 	writeJSON(w, map[string]any{
-		"username": updated.Username,
-		"role":     updated.Role,
-		"locale":   panel.NormalizeLocale(updated.Locale),
+		"username":    updated.Username,
+		"role":        updated.Role,
+		"locale":      panel.NormalizeLocale(updated.Locale),
+		"totpEnabled": updated.TOTPEnabled,
 	})
 	s.recordRequestAudit(r, audit.Record{
 		Action:  "user.update",
