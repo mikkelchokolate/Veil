@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,14 +14,35 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/testutil/sftpfake"
 )
 
+// testInstallID is the fixed per-test namespace identity so tests can seed
+// the namespaced remote directory before an engine operation runs.
+const testInstallID = "0123456789abcdef0123456789abcdef"
+
+// testRemoteDir is this node's remote namespace under the shared remoteDir.
+const testRemoteDir = "/srv/veil-backups/" + remoteNamespacePrefix + testInstallID
+
+// testEngine builds an engine whose install id is already persisted, so the
+// remote namespace is deterministic for pre-seeded fixtures.
 func testEngine(t *testing.T, fs *sftpfake.MemFS, dialErr error) Engine {
 	t.Helper()
+	return testEngineWithID(t, fs, dialErr, testInstallID)
+}
+
+// testEngineWithID is testEngine with a caller-chosen install id — a second
+// node sharing the remote filesystem in the multi-node tests.
+func testEngineWithID(t *testing.T, fs *sftpfake.MemFS, dialErr error, installID string) Engine {
+	t.Helper()
 	dir := t.TempDir()
+	installIDPath := filepath.Join(dir, InstallIDFileName)
+	if err := os.WriteFile(installIDPath, []byte(installID+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	engine := Engine{
 		Paths: Paths{
 			ConfigPath:     filepath.Join(dir, ConfigFileName),
 			StatusPath:     filepath.Join(dir, StatusFileName),
 			KnownHostsPath: filepath.Join(dir, KnownHostsFileName),
+			InstallIDPath:  installIDPath,
 		},
 		Dial: func(context.Context, Config, string) (RemoteFS, error) {
 			if dialErr != nil {
@@ -85,7 +107,7 @@ func TestSyncArchiveUploadsAndRecordsStatus(t *testing.T) {
 	if err != nil || !configured || result.Uploaded == nil {
 		t.Fatalf("sync = %+v, %v, %v", result, configured, err)
 	}
-	if !fs.Has("/srv/veil-backups/" + name) {
+	if !fs.Has(testRemoteDir + "/" + name) {
 		t.Fatalf("remote missing archive: %v", fs.Paths())
 	}
 	status := engine.Status()
@@ -112,11 +134,10 @@ func TestSyncArchiveRecordsFailureWithoutLosingLocalResult(t *testing.T) {
 }
 
 func TestSyncArchiveMirrorsRetention(t *testing.T) {
-	dir := "/srv/veil-backups"
 	fs := sftpfake.New()
 	engine := testEngine(t, fs, nil)
 	saveEngineConfig(t, engine, nil)
-	seedRemote(t, fs, dir, []string{
+	seedRemote(t, fs, testRemoteDir, []string{
 		"veil_backup_20260201_020000.tar.gz.enc",
 		"veil_backup_20260202_020000.tar.gz.enc",
 		"veil_backup_20260203_020000.tar.gz.enc",
@@ -152,7 +173,7 @@ func TestRemotePruneIfConfigured(t *testing.T) {
 	}
 
 	saveEngineConfig(t, engine, nil)
-	seedRemote(t, fs, "/srv/veil-backups", []string{
+	seedRemote(t, fs, testRemoteDir, []string{
 		"veil_backup_20260201_020000.tar.gz.enc",
 		"veil_backup_20260202_020000.tar.gz.enc",
 	})
@@ -170,7 +191,7 @@ func TestRemoteListAndFetchRecordStatus(t *testing.T) {
 	engine := testEngine(t, fs, nil)
 	saveEngineConfig(t, engine, nil)
 	name := "veil_backup_20260101_020000.tar.gz.enc"
-	fs.SetFile(path.Join("/srv/veil-backups", name), []byte("archive"))
+	fs.SetFile(path.Join(testRemoteDir, name), []byte("archive"))
 
 	entries, err := engine.RemoteList(context.Background(), sftpTestConfig())
 	if err != nil || len(entries) != 1 || entries[0].Name != name {
@@ -216,5 +237,224 @@ func TestLoadConfigEmptyPathIsNil(t *testing.T) {
 	engine.recordStatus(func(s *Status) { s.LastError = "x" })
 	if _, err := os.Stat(""); !os.IsNotExist(err) {
 		t.Fatalf("stat empty path: %v", err)
+	}
+}
+
+// writeNamedLocalArchive is writeLocalArchive with a caller-chosen basename,
+// for fixtures where several archives must exist at once.
+func writeNamedLocalArchive(t *testing.T, name, body string) string {
+	t.Helper()
+	localPath := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(localPath, append([]byte("VEILBACK\x03"), []byte(body)...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return localPath
+}
+
+// #1188: a plaintext archive name is refused before the remote is even
+// dialed — the operator's --allow-unencrypted consent covers only the local
+// file.
+func TestSyncArchiveRefusesUnencryptedArchiveBeforeDial(t *testing.T) {
+	fs := sftpfake.New()
+	engine := testEngine(t, fs, nil)
+	saveEngineConfig(t, engine, nil)
+	dialed := false
+	engine.Dial = func(context.Context, Config, string) (RemoteFS, error) {
+		dialed = true
+		return fs, nil
+	}
+	localPath := filepath.Join(t.TempDir(), "veil_backup_20260101_020000.tar.gz")
+	if err := os.WriteFile(localPath, []byte("\x1f\x8bplain"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, configured, err := engine.SyncArchive(context.Background(), localPath, filepath.Base(localPath), nil)
+	if !errors.Is(err, ErrUnencryptedArchive) || !configured {
+		t.Fatalf("plaintext sync = %v, %v", configured, err)
+	}
+	if dialed {
+		t.Fatal("refused sync dialed the remote")
+	}
+	if len(fs.Paths()) != 0 {
+		t.Fatalf("refused sync touched the remote: %v", fs.Paths())
+	}
+	if status := engine.Status(); status.LastError == "" {
+		t.Fatal("refusal not recorded in status")
+	}
+}
+
+// #1188: the .enc suffix alone is not enough — a .enc-named file whose
+// content was never encrypted must also be refused before the dial.
+func TestSyncArchiveRefusesEncNamedPlaintextBeforeDial(t *testing.T) {
+	fs := sftpfake.New()
+	engine := testEngine(t, fs, nil)
+	saveEngineConfig(t, engine, nil)
+	dialed := false
+	engine.Dial = func(context.Context, Config, string) (RemoteFS, error) {
+		dialed = true
+		return fs, nil
+	}
+	localPath := filepath.Join(t.TempDir(), "veil_backup_20260101_020000.tar.gz.enc")
+	if err := os.WriteFile(localPath, []byte("\x1f\x8bplain"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, configured, err := engine.SyncArchive(context.Background(), localPath, filepath.Base(localPath), nil)
+	if !errors.Is(err, ErrUnencryptedArchive) || !configured {
+		t.Fatalf(".enc-named plaintext sync = %v, %v", configured, err)
+	}
+	if dialed {
+		t.Fatal("refused sync dialed the remote")
+	}
+	if len(fs.Paths()) != 0 {
+		t.Fatalf("refused sync touched the remote: %v", fs.Paths())
+	}
+	if status := engine.Status(); status.LastError == "" {
+		t.Fatal("refusal not recorded in status")
+	}
+}
+
+// #1184: two installations sharing one remoteDir must never see, fetch, or
+// prune each other's archives, and a pre-namespacing orphan at the remoteDir
+// root must stay untouchable.
+func TestRemoteNamespaceIsolatesSharedDirectory(t *testing.T) {
+	ctx := context.Background()
+	fs := sftpfake.New()
+	otherID := "ffffffffffffffffffffffffffffffff"
+	otherDir := "/srv/veil-backups/" + remoteNamespacePrefix + otherID
+
+	engineA := testEngine(t, fs, nil)
+	saveEngineConfig(t, engineA, nil)
+	engineB := testEngineWithID(t, fs, nil, otherID)
+	saveEngineConfig(t, engineB, nil)
+
+	// An archive uploaded before namespacing existed sits unscoped at the
+	// remoteDir root — the exact orphan the fix must never touch.
+	orphan := "veil_backup_20250101_020000.tar.gz.enc"
+	fs.SetFile(path.Join("/srv/veil-backups", orphan), []byte("legacy-orphan"))
+	fs.SetFile(path.Join("/srv/veil-backups", orphan+sidecarSuffix), []byte("x"))
+
+	// Each node uploads one archive per day, an hour apart — the exact repro
+	// from the issue, where B's runs would eat A's history.
+	days := []string{"20260201", "20260202", "20260203"}
+	for _, day := range days {
+		nameA := "veil_backup_" + day + "_020000.tar.gz.enc"
+		if _, _, err := engineA.SyncArchive(ctx, writeNamedLocalArchive(t, nameA, "a-"+day), nameA, nil); err != nil {
+			t.Fatalf("node A upload %s: %v", nameA, err)
+		}
+		nameB := "veil_backup_" + day + "_030000.tar.gz.enc"
+		if _, _, err := engineB.SyncArchive(ctx, writeNamedLocalArchive(t, nameB, "b-"+day), nameB, nil); err != nil {
+			t.Fatalf("node B upload %s: %v", nameB, err)
+		}
+	}
+
+	// A's listing only contains A's namespace: neither B's archives nor the
+	// root-level orphan are visible — fetch cannot pick them by accident.
+	entries, err := engineA.RemoteList(ctx, sftpTestConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("node A remote list = %+v", entries)
+	}
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name, "_020000.tar.gz.enc") {
+			t.Fatalf("foreign archive listed for node A: %+v", entries)
+		}
+	}
+	if _, err := engineA.FetchArchive(ctx, sftpTestConfig(), t.TempDir(), "veil_backup_20260203_030000.tar.gz.enc"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("fetch of B's archive err=%v, want ErrNotExist", err)
+	}
+	if _, err := engineA.FetchArchive(ctx, sftpTestConfig(), t.TempDir(), orphan); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("fetch of the root orphan err=%v, want ErrNotExist", err)
+	}
+
+	// A prunes with daily=1: only A's newest survives. B's namespace and the
+	// root orphan must be byte-for-byte intact.
+	pruned, err := engineA.RemotePrune(ctx, sftpTestConfig(), backup.RetentionPolicy{Daily: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pruned.Deleted) != 2 || len(pruned.Kept) != 1 {
+		t.Fatalf("node A prune = %+v", pruned)
+	}
+	for _, day := range days {
+		foreign := path.Join(otherDir, "veil_backup_"+day+"_030000.tar.gz.enc")
+		if got := fs.File(foreign); string(got) != "VEILBACK\x03b-"+day {
+			t.Fatalf("node B archive was touched: %s=%q", foreign, got)
+		}
+	}
+	if got := fs.File(path.Join("/srv/veil-backups", orphan)); string(got) != "legacy-orphan" {
+		t.Fatalf("root orphan was touched: %q", got)
+	}
+	if !fs.Has(path.Join("/srv/veil-backups", orphan+sidecarSuffix)) {
+		t.Fatal("root orphan sidecar was removed")
+	}
+	if !fs.Has(path.Join(testRemoteDir, "veil_backup_20260203_020000.tar.gz.enc")) ||
+		fs.Has(path.Join(testRemoteDir, "veil_backup_20260201_020000.tar.gz.enc")) {
+		t.Fatalf("own namespace prune wrong: %v", fs.Paths())
+	}
+}
+
+// The install id file is minted on first remote use and reused afterwards —
+// every operation of the node lands in the same namespace.
+func TestEngineMintsAndReusesInstallID(t *testing.T) {
+	ctx := context.Background()
+	fs := sftpfake.New()
+	dir := t.TempDir()
+	engine := Engine{
+		Paths: Paths{
+			ConfigPath:     filepath.Join(dir, ConfigFileName),
+			StatusPath:     filepath.Join(dir, StatusFileName),
+			KnownHostsPath: filepath.Join(dir, KnownHostsFileName),
+		},
+		Dial: func(context.Context, Config, string) (RemoteFS, error) { return fs, nil },
+	}
+	if err := engine.SaveConfig(sftpTestConfig()); err != nil {
+		t.Fatal(err)
+	}
+	name := "veil_backup_20260101_020000.tar.gz.enc"
+	if _, _, err := engine.SyncArchive(ctx, writeNamedLocalArchive(t, name, "x"), name, nil); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, InstallIDFileName))
+	if err != nil {
+		t.Fatalf("install id not persisted: %v", err)
+	}
+	id := strings.TrimSpace(string(body))
+	if !installIDPattern.MatchString(id) {
+		t.Fatalf("persisted install id %q is malformed", id)
+	}
+	namespace := path.Join("/srv/veil-backups", namespaceDir(id))
+	if !fs.Has(path.Join(namespace, name)) {
+		t.Fatalf("archive not in node namespace: %v", fs.Paths())
+	}
+	name2 := "veil_backup_20260102_020000.tar.gz.enc"
+	if _, _, err := engine.SyncArchive(ctx, writeNamedLocalArchive(t, name2, "y"), name2, nil); err != nil {
+		t.Fatalf("second sync: %v", err)
+	}
+	if !fs.Has(path.Join(namespace, name2)) {
+		t.Fatalf("second archive landed elsewhere: %v", fs.Paths())
+	}
+	if again, _ := os.ReadFile(filepath.Join(dir, InstallIDFileName)); strings.TrimSpace(string(again)) != id {
+		t.Fatal("install id changed between runs")
+	}
+}
+
+// A corrupt install id must fail closed: silently minting a second identity
+// would strand the archives already uploaded under the first.
+func TestRemoteOpFailsClosedOnMalformedInstallID(t *testing.T) {
+	fs := sftpfake.New()
+	engine := testEngine(t, fs, nil)
+	saveEngineConfig(t, engine, nil)
+	if err := os.WriteFile(engine.Paths.InstallIDPath, []byte("not-an-id"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.RemoteList(context.Background(), sftpTestConfig()); err == nil ||
+		!strings.Contains(err.Error(), "malformed") {
+		t.Fatalf("malformed install id err=%v", err)
+	}
+	if len(fs.Paths()) != 0 {
+		t.Fatalf("remote touched despite malformed id: %v", fs.Paths())
 	}
 }

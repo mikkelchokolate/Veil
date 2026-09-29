@@ -155,7 +155,7 @@ export const PostApiBackupsResponse = zod.object({
   "pruned": zod.array(zod.string()).optional(),
   "kept": zod.array(zod.string()).optional(),
   "error": zod.string().optional()
-}).optional().describe('Remote SFTP destination outcome for a create or prune. A\nremote failure is reported in `error` without failing the local\noperation it accompanied.\n')
+}).optional().describe('Remote SFTP destination outcome for a create or prune. A\nremote failure is reported in `error` without failing the local\noperation it accompanied. Remote storage is encrypted-only: an\nunencrypted local archive is skipped rather than uploaded, with the\nrefusal reported in `error`/`warning`.\n')
 }).optional(),
   "remote": zod.object({
   "upload": zod.object({
@@ -166,7 +166,7 @@ export const PostApiBackupsResponse = zod.object({
   "pruned": zod.array(zod.string()).optional(),
   "kept": zod.array(zod.string()).optional(),
   "error": zod.string().optional()
-}).optional().describe('Remote SFTP destination outcome for a create or prune. A\nremote failure is reported in `error` without failing the local\noperation it accompanied.\n'),
+}).optional().describe('Remote SFTP destination outcome for a create or prune. A\nremote failure is reported in `error` without failing the local\noperation it accompanied. Remote storage is encrypted-only: an\nunencrypted local archive is skipped rather than uploaded, with the\nrefusal reported in `error`/`warning`.\n'),
   "warning": zod.string().optional().describe('Non-fatal warning (for example a retention prune or remote upload failure after a successful archive).')
 })
 
@@ -222,7 +222,7 @@ export const PostApiBackupsPruneResponse = zod.object({
   "pruned": zod.array(zod.string()).optional(),
   "kept": zod.array(zod.string()).optional(),
   "error": zod.string().optional()
-}).optional().describe('Remote SFTP destination outcome for a create or prune. A\nremote failure is reported in `error` without failing the local\noperation it accompanied.\n')
+}).optional().describe('Remote SFTP destination outcome for a create or prune. A\nremote failure is reported in `error` without failing the local\noperation it accompanied. Remote storage is encrypted-only: an\nunencrypted local archive is skipped rather than uploaded, with the\nrefusal reported in `error`/`warning`.\n')
 })
 
 /**
@@ -380,7 +380,7 @@ export const GetApiBackupsSftpResponse = zod.object({
   "host": zod.string().optional(),
   "port": zod.int().min(1).max(getApiBackupsSftpResponsePortMax).default(getApiBackupsSftpResponsePortDefault),
   "user": zod.string().optional(),
-  "remoteDir": zod.string().optional(),
+  "remoteDir": zod.string().optional().describe('Shared-safe destination directory. This installation uploads, lists, fetches, and prunes only inside its own `veil-node-<install-id>` subdirectory; archives other nodes or older versions left directly under `remoteDir` are never touched.'),
   "authType": zod.enum(['key', 'password']).optional(),
   "keyPath": zod.string().optional(),
   "passwordSet": zod.boolean().optional(),
@@ -402,6 +402,10 @@ export const GetApiBackupsSftpResponse = zod.object({
  * the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
  * write-only: omitting one keeps the stored value, an empty string clears
  * it. Requires admin and CSRF for a cookie session.
+ * `remoteDir` may be shared between Veil installations: this node works
+ * inside its own `veil-node-<install-id>` subdirectory, so nodes never
+ * list, fetch, or prune each other's archives. Only encrypted `.enc`
+ * archives are ever uploaded; plaintext backups stay local-only.
  * @summary Configure the SFTP remote-backup destination
  */
 export const putApiBackupsSftpHeaderIdempotencyKeyMax = 128;
@@ -425,7 +429,7 @@ export const PutApiBackupsSftpBody = zod.object({
   "host": zod.string(),
   "port": zod.int().min(putApiBackupsSftpBodyPortMin).max(putApiBackupsSftpBodyPortMax).default(putApiBackupsSftpBodyPortDefault).describe('Zero or omitted means the SSH default 22.'),
   "user": zod.string(),
-  "remoteDir": zod.string(),
+  "remoteDir": zod.string().describe('Shared-safe destination directory. This installation uploads, lists, fetches, and prunes only inside its own `veil-node-<install-id>` subdirectory; archives other nodes or older versions left directly under `remoteDir` are never touched.'),
   "authType": zod.enum(['key', 'password']),
   "keyPath": zod.string().optional().describe('Absolute path of the private key readable by root.'),
   "keyPassphrase": zod.string().optional().describe('Write-only; omit to keep the stored value.'),
@@ -444,7 +448,7 @@ export const PutApiBackupsSftpResponse = zod.object({
   "host": zod.string().optional(),
   "port": zod.int().min(1).max(putApiBackupsSftpResponsePortMax).default(putApiBackupsSftpResponsePortDefault),
   "user": zod.string().optional(),
-  "remoteDir": zod.string().optional(),
+  "remoteDir": zod.string().optional().describe('Shared-safe destination directory. This installation uploads, lists, fetches, and prunes only inside its own `veil-node-<install-id>` subdirectory; archives other nodes or older versions left directly under `remoteDir` are never touched.'),
   "authType": zod.enum(['key', 'password']).optional(),
   "keyPath": zod.string().optional(),
   "passwordSet": zod.boolean().optional(),
@@ -480,7 +484,10 @@ export const DeleteApiBackupsSftpResponse = zod.object({
 })
 
 /**
- * Requires an admin token or admin session.
+ * Lists this installation's remote namespace under `remoteDir`
+ * only — archives uploaded by other Veil nodes sharing the directory, and
+ * archives left by older versions at the `remoteDir` root, are never
+ * returned. Requires an admin token or admin session.
  * @summary List archives on the SFTP remote destination
  */
 export const getApiBackupsSftpRemoteResponseSizeMin = 0;
@@ -499,7 +506,9 @@ export const GetApiBackupsSftpRemoteResponse = zod.array(GetApiBackupsSftpRemote
 /**
  * Materializes the named remote archive under the managed
  * backup dir (atomic temp-then-publish), after which the normal restore
- * endpoint applies. Requires admin and CSRF for a cookie session.
+ * endpoint applies. Only names visible in this installation's remote
+ * namespace resolve — another node's archive name returns 404.
+ * Requires admin and CSRF for a cookie session.
  * @summary Download a remote archive into the local backup dir
  */
 export const postApiBackupsSftpFetchHeaderIdempotencyKeyMax = 128;

@@ -53,6 +53,7 @@ export interface BackupSftpDestination {
      */
   port?: number;
   user?: string;
+  /** Shared-safe destination directory. This installation uploads, lists, fetches, and prunes only inside its own `veil-node-<install-id>` subdirectory; archives other nodes or older versions left directly under `remoteDir` are never touched. */
   remoteDir?: string;
   authType?: BackupSftpDestinationAuthType;
   keyPath?: string;

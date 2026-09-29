@@ -2,6 +2,11 @@ package backupsftp
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"path"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/backup"
@@ -12,11 +17,14 @@ import (
 // KnownHostsPath live under the state dir so the scheduled backup unit —
 // which mounts /var/lib/veil writable but keeps /etc read-only — can record
 // outcomes and complete trust-on-first-use without relaxing its filesystem
-// confinement.
+// confinement. InstallIDPath persists the random per-installation identity
+// that namespaces this node's remote archives (#1184); when empty it falls
+// back to a backup-sftp.install-id file beside the status file.
 type Paths struct {
 	ConfigPath     string
 	StatusPath     string
 	KnownHostsPath string
+	InstallIDPath  string
 }
 
 // Engine binds the destination paths to the dial and clock seams so the
@@ -94,6 +102,31 @@ func (e Engine) connect(ctx context.Context, config Config) (RemoteFS, error) {
 	return e.dialer()(ctx, config, e.Paths.KnownHostsPath)
 }
 
+// namespacedConfig returns config with RemoteDir scoped to this
+// installation's subdirectory. Remote archives live under
+// <remoteDir>/veil-node-<install-id>/ so nodes sharing one destination never
+// list, fetch, or prune each other's archives — and same-second archive names
+// can never collide cross-node (#1184). The install id is persisted locally
+// on first use. Archives written before namespacing existed sit unscoped at
+// the remoteDir root: they are orphans the engine deliberately never lists,
+// fetches, or removes.
+func (e Engine) namespacedConfig(config Config) (Config, error) {
+	idPath := e.Paths.InstallIDPath
+	if idPath == "" && e.Paths.StatusPath != "" {
+		idPath = filepath.Join(filepath.Dir(e.Paths.StatusPath), InstallIDFileName)
+	}
+	if idPath == "" {
+		return Config{}, errors.New("sftp install id path is not configured; the remote namespace cannot be resolved")
+	}
+	id, err := loadOrCreateInstallID(idPath)
+	if err != nil {
+		return Config{}, err
+	}
+	scoped := config
+	scoped.RemoteDir = path.Join(config.RemoteDir, namespaceDir(id))
+	return scoped, nil
+}
+
 // SyncResult reports what one remote synchronization achieved.
 type SyncResult struct {
 	Uploaded *UploadReceipt `json:"uploaded,omitempty"`
@@ -104,10 +137,16 @@ type SyncResult struct {
 
 // SyncArchive is the post-create hook shared by the privileged helper's
 // backup_create handling and the scheduled veil-backup.service CLI path: it
-// uploads the freshly written archive to the remote directory and, when a
-// retention policy is supplied, mirrors the daily/weekly/monthly prune on
-// the remote listing. configured is false when no destination is on file or
-// it is disabled, so callers distinguish "nothing to do" from a real skip.
+// uploads the freshly written archive to this installation's remote
+// namespace and, when a retention policy is supplied, mirrors the
+// daily/weekly/monthly prune on the remote listing. configured is false when
+// no destination is on file or it is disabled, so callers distinguish
+// "nothing to do" from a real skip.
+//
+// A plaintext archive — a name without the .enc suffix or content missing
+// the encrypted-archive magic — is refused with ErrUnencryptedArchive
+// before the remote is even dialed: remote storage is an encrypted-only
+// tier, so --allow-unencrypted stays a purely local opt-in (#1188).
 //
 // Failures return the error — callers decide how loud to make it — while the
 // status file records the same outcome for the status endpoint.
@@ -120,13 +159,32 @@ func (e Engine) SyncArchive(ctx context.Context, localPath, name string, policy 
 	if config == nil || !config.Enabled {
 		return SyncResult{}, false, nil
 	}
-	remote, err := e.connect(ctx, *config)
+	if !strings.HasSuffix(strings.ToLower(name), ".enc") {
+		err := fmt.Errorf("%w: %q", ErrUnencryptedArchive, name)
+		e.recordError(err)
+		return SyncResult{}, true, err
+	}
+	if err := probeLocalEncryptedArchive(localPath); err != nil {
+		if !errors.Is(err, ErrUnencryptedArchive) {
+			err = fmt.Errorf("probe local archive: %w", err)
+		} else {
+			err = fmt.Errorf("%w: %q does not start with the Veil encrypted-archive header", err, name)
+		}
+		e.recordError(err)
+		return SyncResult{}, true, err
+	}
+	scoped, err := e.namespacedConfig(*config)
+	if err != nil {
+		e.recordError(err)
+		return SyncResult{}, true, err
+	}
+	remote, err := e.connect(ctx, scoped)
 	if err != nil {
 		e.recordError(err)
 		return SyncResult{}, true, err
 	}
 	defer remote.Close()
-	receipt, err := Upload(ctx, remote, *config, localPath, name)
+	receipt, err := Upload(ctx, remote, scoped, localPath, name)
 	if err != nil {
 		e.recordError(err)
 		return SyncResult{}, true, err
@@ -139,7 +197,7 @@ func (e Engine) SyncArchive(ctx context.Context, localPath, name string, policy 
 		status.LastError, status.LastErrorAt = "", ""
 	})
 	if policy != nil {
-		pruned, pruneErr := Prune(ctx, remote, *config, *policy)
+		pruned, pruneErr := Prune(ctx, remote, scoped, *policy)
 		if pruneErr != nil {
 			e.recordError(pruneErr)
 			result.Pruned = pruned.Deleted
@@ -172,16 +230,22 @@ func (e Engine) RemotePruneIfConfigured(ctx context.Context, policy backup.Reten
 	return result, true, err
 }
 
-// RemoteList returns the managed archives in the remote directory and
-// records dial/list failures in the status file.
+// RemoteList returns the managed archives in this installation's remote
+// namespace and records dial/list failures in the status file. Archives other
+// nodes or older unscoped uploads left in remoteDir are not shown.
 func (e Engine) RemoteList(ctx context.Context, config Config) ([]backup.ArchiveEntry, error) {
-	remote, err := e.connect(ctx, config)
+	scoped, err := e.namespacedConfig(config)
+	if err != nil {
+		e.recordError(err)
+		return nil, err
+	}
+	remote, err := e.connect(ctx, scoped)
 	if err != nil {
 		e.recordError(err)
 		return nil, err
 	}
 	defer remote.Close()
-	entries, err := List(ctx, remote, config)
+	entries, err := List(ctx, remote, scoped)
 	if err != nil {
 		e.recordError(err)
 		return nil, err
@@ -189,16 +253,23 @@ func (e Engine) RemoteList(ctx context.Context, config Config) ([]backup.Archive
 	return entries, nil
 }
 
-// RemotePrune applies the shared retention decision to the remote listing
-// and records the outcome.
+// RemotePrune applies the shared retention decision to this installation's
+// remote namespace and records the outcome. Foreign archives — other nodes'
+// namespaces and pre-namespacing orphans at the remoteDir root — are never
+// candidates for removal (#1184).
 func (e Engine) RemotePrune(ctx context.Context, config Config, policy backup.RetentionPolicy) (backup.PruneResult, error) {
-	remote, err := e.connect(ctx, config)
+	scoped, err := e.namespacedConfig(config)
+	if err != nil {
+		e.recordError(err)
+		return backup.PruneResult{}, err
+	}
+	remote, err := e.connect(ctx, scoped)
 	if err != nil {
 		e.recordError(err)
 		return backup.PruneResult{}, err
 	}
 	defer remote.Close()
-	result, err := Prune(ctx, remote, config, policy)
+	result, err := Prune(ctx, remote, scoped, policy)
 	if err != nil {
 		e.recordError(err)
 		return result, err
@@ -210,16 +281,21 @@ func (e Engine) RemotePrune(ctx context.Context, config Config, policy backup.Re
 	return result, nil
 }
 
-// FetchArchive downloads one remote archive into localDir and records the
-// outcome in the status file.
+// FetchArchive downloads one archive from this installation's remote
+// namespace into localDir and records the outcome in the status file.
 func (e Engine) FetchArchive(ctx context.Context, config Config, localDir, name string) (backup.ArchiveEntry, error) {
-	remote, err := e.connect(ctx, config)
+	scoped, err := e.namespacedConfig(config)
+	if err != nil {
+		e.recordError(err)
+		return backup.ArchiveEntry{}, err
+	}
+	remote, err := e.connect(ctx, scoped)
 	if err != nil {
 		e.recordError(err)
 		return backup.ArchiveEntry{}, err
 	}
 	defer remote.Close()
-	entry, err := Fetch(ctx, remote, config, localDir, name)
+	entry, err := Fetch(ctx, remote, scoped, localDir, name)
 	if err != nil {
 		e.recordError(err)
 		return backup.ArchiveEntry{}, err
