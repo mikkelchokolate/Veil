@@ -18,6 +18,15 @@ import (
 // Magic header for encrypted backups
 var magicHeader = []byte("VEILBACK")
 
+// IsEncryptedArchivePrefix reports whether prefix begins with the Veil
+// encrypted-archive magic shared by every encryption format version (v1/v2
+// blob and v3 chunked). The SFTP remote-destination boundary uses it to prove
+// an archive really is encrypted before publishing it off-host — a .enc
+// suffix is a naming convention, not a guarantee (#1188).
+func IsEncryptedArchivePrefix(prefix []byte) bool {
+	return len(prefix) >= len(magicHeader) && bytes.Equal(prefix[:len(magicHeader)], magicHeader)
+}
+
 // backupRandRead is overridable in tests to inject failures during encryption.
 var backupRandRead = rand.Read
 

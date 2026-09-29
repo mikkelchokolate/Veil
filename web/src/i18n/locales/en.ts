@@ -669,7 +669,7 @@ export const en: Record<string, string> = {
 
 	"backups.sftp.title": "Remote SFTP backups",
 	"backups.sftp.hint":
-		"Each new backup is also uploaded to the configured SFTP server, and pruning applies the same retention remotely.",
+		"Each new encrypted backup is also uploaded to the configured SFTP server, and pruning applies the same retention remotely. Uploads land in a per-installation subdirectory, so several Veil servers can share one remote directory without touching each other's archives. Unencrypted backups always stay local-only.",
 	"backups.sftp.configure": "Configure",
 	"backups.sftp.remove": "Remove destination",
 	"backups.sftp.removing": "Removing…",
@@ -679,6 +679,8 @@ export const en: Record<string, string> = {
 	"backups.sftp.port": "Port",
 	"backups.sftp.user": "User",
 	"backups.sftp.remoteDir": "Remote directory",
+	"backups.sftp.remoteDirHint":
+		"Archives are stored under a per-installation veil-node-… subdirectory inside this directory, so it can be shared with other Veil servers.",
 	"backups.sftp.authType": "Authentication",
 	"backups.sftp.authKey": "Private key",
 	"backups.sftp.authPassword": "Password",

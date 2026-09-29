@@ -178,12 +178,13 @@ func TestSftpRealRoundtripUploadListFetchPrune(t *testing.T) {
 	}
 
 	localPath := writeLocalArchive(t, []byte("real-encrypted-archive"))
+	want := localArchiveContent(t, localPath)
 	name := filepath.Base(localPath)
 	receipt, err := Upload(context.Background(), remote, config, localPath, name)
 	if err != nil {
 		t.Fatalf("upload: %v", err)
 	}
-	if receipt.Size != int64(len("real-encrypted-archive")) {
+	if receipt.Size != int64(len(want)) {
 		t.Fatalf("receipt=%+v", receipt)
 	}
 
@@ -200,7 +201,7 @@ func TestSftpRealRoundtripUploadListFetchPrune(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(body) != "real-encrypted-archive" {
+	if string(body) != string(want) {
 		t.Fatalf("fetched=%q", body)
 	}
 

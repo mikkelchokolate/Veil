@@ -1542,7 +1542,9 @@ type BackupCreateResponse struct {
 
 	// Remote Remote SFTP destination outcome for a create or prune. A
 	// remote failure is reported in `error` without failing the local
-	// operation it accompanied.
+	// operation it accompanied. Remote storage is encrypted-only: an
+	// unencrypted local archive is skipped rather than uploaded, with the
+	// refusal reported in `error`/`warning`.
 	Remote       *BackupRemoteResult      `json:"remote,omitempty"`
 	Verification BackupVerificationReport `json:"verification"`
 
@@ -1565,13 +1567,17 @@ type BackupPruneResult struct {
 
 	// Remote Remote SFTP destination outcome for a create or prune. A
 	// remote failure is reported in `error` without failing the local
-	// operation it accompanied.
+	// operation it accompanied. Remote storage is encrypted-only: an
+	// unencrypted local archive is skipped rather than uploaded, with the
+	// refusal reported in `error`/`warning`.
 	Remote *BackupRemoteResult `json:"remote,omitempty"`
 }
 
 // BackupRemoteResult Remote SFTP destination outcome for a create or prune. A
 // remote failure is reported in `error` without failing the local
-// operation it accompanied.
+// operation it accompanied. Remote storage is encrypted-only: an
+// unencrypted local archive is skipped rather than uploaded, with the
+// refusal reported in `error`/`warning`.
 type BackupRemoteResult struct {
 	Error  *string   `json:"error,omitempty"`
 	Kept   *[]string `json:"kept,omitempty"`
@@ -1631,9 +1637,11 @@ type BackupSftpDestination struct {
 	KeyPath          *string                        `json:"keyPath,omitempty"`
 	PasswordSet      *bool                          `json:"passwordSet,omitempty"`
 	Port             *int                           `json:"port,omitempty"`
-	RemoteDir        *string                        `json:"remoteDir,omitempty"`
-	Status           BackupSftpStatus               `json:"status"`
-	User             *string                        `json:"user,omitempty"`
+
+	// RemoteDir Shared-safe destination directory. This installation uploads, lists, fetches, and prunes only inside its own `veil-node-<install-id>` subdirectory; archives other nodes or older versions left directly under `remoteDir` are never touched.
+	RemoteDir *string          `json:"remoteDir,omitempty"`
+	Status    BackupSftpStatus `json:"status"`
+	User      *string          `json:"user,omitempty"`
 }
 
 // BackupSftpDestinationAuthType defines model for BackupSftpDestination.AuthType.
@@ -1664,7 +1672,9 @@ type BackupSftpPutRequest struct {
 	Password *string `json:"password,omitempty"`
 
 	// Port Zero or omitted means the SSH default 22.
-	Port      *int   `json:"port,omitempty"`
+	Port *int `json:"port,omitempty"`
+
+	// RemoteDir Shared-safe destination directory. This installation uploads, lists, fetches, and prunes only inside its own `veil-node-<install-id>` subdirectory; archives other nodes or older versions left directly under `remoteDir` are never touched.
 	RemoteDir string `json:"remoteDir"`
 	User      string `json:"user"`
 }
@@ -4480,6 +4490,10 @@ type ClientInterface interface {
 	// the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
 	// write-only: omitting one keeps the stored value, an empty string clears
 	// it. Requires admin and CSRF for a cookie session.
+	// `remoteDir` may be shared between Veil installations: this node works
+	// inside its own `veil-node-<install-id>` subdirectory, so nodes never
+	// list, fetch, or prune each other's archives. Only encrypted `.enc`
+	// archives are ever uploaded; plaintext backups stay local-only.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -4492,6 +4506,10 @@ type ClientInterface interface {
 	// the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
 	// write-only: omitting one keeps the stored value, an empty string clears
 	// it. Requires admin and CSRF for a cookie session.
+	// `remoteDir` may be shared between Veil installations: this node works
+	// inside its own `veil-node-<install-id>` subdirectory, so nodes never
+	// list, fetch, or prune each other's archives. Only encrypted `.enc`
+	// archives are ever uploaded; plaintext backups stay local-only.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -4502,7 +4520,9 @@ type ClientInterface interface {
 	//
 	// Materializes the named remote archive under the managed
 	// backup dir (atomic temp-then-publish), after which the normal restore
-	// endpoint applies. Requires admin and CSRF for a cookie session.
+	// endpoint applies. Only names visible in this installation's remote
+	// namespace resolve — another node's archive name returns 404.
+	// Requires admin and CSRF for a cookie session.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -4513,7 +4533,9 @@ type ClientInterface interface {
 	//
 	// Materializes the named remote archive under the managed
 	// backup dir (atomic temp-then-publish), after which the normal restore
-	// endpoint applies. Requires admin and CSRF for a cookie session.
+	// endpoint applies. Only names visible in this installation's remote
+	// namespace resolve — another node's archive name returns 404.
+	// Requires admin and CSRF for a cookie session.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -4522,7 +4544,10 @@ type ClientInterface interface {
 
 	// GetApiBackupsSftpRemote List archives on the SFTP remote destination
 	//
-	// Requires an admin token or admin session.
+	// Lists this installation's remote namespace under `remoteDir`
+	// only — archives uploaded by other Veil nodes sharing the directory, and
+	// archives left by older versions at the `remoteDir` root, are never
+	// returned. Requires an admin token or admin session.
 	//
 	// Corresponds with GET /api/backups/sftp/remote (the `GetApiBackupsSftpRemote` operationId).
 	GetApiBackupsSftpRemote(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -6079,6 +6104,10 @@ func (c *Client) GetApiBackupsSftp(ctx context.Context, reqEditors ...RequestEdi
 // the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
 // write-only: omitting one keeps the stored value, an empty string clears
 // it. Requires admin and CSRF for a cookie session.
+// `remoteDir` may be shared between Veil installations: this node works
+// inside its own `veil-node-<install-id>` subdirectory, so nodes never
+// list, fetch, or prune each other's archives. Only encrypted `.enc`
+// archives are ever uploaded; plaintext backups stay local-only.
 //
 // Takes any type of body and a specified content type.
 //
@@ -6101,6 +6130,10 @@ func (c *Client) PutApiBackupsSftpWithBody(ctx context.Context, params *PutApiBa
 // the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
 // write-only: omitting one keeps the stored value, an empty string clears
 // it. Requires admin and CSRF for a cookie session.
+// `remoteDir` may be shared between Veil installations: this node works
+// inside its own `veil-node-<install-id>` subdirectory, so nodes never
+// list, fetch, or prune each other's archives. Only encrypted `.enc`
+// archives are ever uploaded; plaintext backups stay local-only.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -6121,7 +6154,9 @@ func (c *Client) PutApiBackupsSftp(ctx context.Context, params *PutApiBackupsSft
 //
 // Materializes the named remote archive under the managed
 // backup dir (atomic temp-then-publish), after which the normal restore
-// endpoint applies. Requires admin and CSRF for a cookie session.
+// endpoint applies. Only names visible in this installation's remote
+// namespace resolve — another node's archive name returns 404.
+// Requires admin and CSRF for a cookie session.
 //
 // Takes any type of body and a specified content type.
 //
@@ -6142,7 +6177,9 @@ func (c *Client) PostApiBackupsSftpFetchWithBody(ctx context.Context, params *Po
 //
 // Materializes the named remote archive under the managed
 // backup dir (atomic temp-then-publish), after which the normal restore
-// endpoint applies. Requires admin and CSRF for a cookie session.
+// endpoint applies. Only names visible in this installation's remote
+// namespace resolve — another node's archive name returns 404.
+// Requires admin and CSRF for a cookie session.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -6161,7 +6198,10 @@ func (c *Client) PostApiBackupsSftpFetch(ctx context.Context, params *PostApiBac
 
 // GetApiBackupsSftpRemote List archives on the SFTP remote destination
 //
-// Requires an admin token or admin session.
+// Lists this installation's remote namespace under `remoteDir`
+// only — archives uploaded by other Veil nodes sharing the directory, and
+// archives left by older versions at the `remoteDir` root, are never
+// returned. Requires an admin token or admin session.
 //
 // Corresponds with GET /api/backups/sftp/remote (the `GetApiBackupsSftpRemote` operationId).
 func (c *Client) GetApiBackupsSftpRemote(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -14622,6 +14662,10 @@ type ClientWithResponsesInterface interface {
 	// the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
 	// write-only: omitting one keeps the stored value, an empty string clears
 	// it. Requires admin and CSRF for a cookie session.
+	// `remoteDir` may be shared between Veil installations: this node works
+	// inside its own `veil-node-<install-id>` subdirectory, so nodes never
+	// list, fetch, or prune each other's archives. Only encrypted `.enc`
+	// archives are ever uploaded; plaintext backups stay local-only.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -14634,6 +14678,10 @@ type ClientWithResponsesInterface interface {
 	// the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
 	// write-only: omitting one keeps the stored value, an empty string clears
 	// it. Requires admin and CSRF for a cookie session.
+	// `remoteDir` may be shared between Veil installations: this node works
+	// inside its own `veil-node-<install-id>` subdirectory, so nodes never
+	// list, fetch, or prune each other's archives. Only encrypted `.enc`
+	// archives are ever uploaded; plaintext backups stay local-only.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -14644,7 +14692,9 @@ type ClientWithResponsesInterface interface {
 	//
 	// Materializes the named remote archive under the managed
 	// backup dir (atomic temp-then-publish), after which the normal restore
-	// endpoint applies. Requires admin and CSRF for a cookie session.
+	// endpoint applies. Only names visible in this installation's remote
+	// namespace resolve — another node's archive name returns 404.
+	// Requires admin and CSRF for a cookie session.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -14655,7 +14705,9 @@ type ClientWithResponsesInterface interface {
 	//
 	// Materializes the named remote archive under the managed
 	// backup dir (atomic temp-then-publish), after which the normal restore
-	// endpoint applies. Requires admin and CSRF for a cookie session.
+	// endpoint applies. Only names visible in this installation's remote
+	// namespace resolve — another node's archive name returns 404.
+	// Requires admin and CSRF for a cookie session.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -14664,7 +14716,10 @@ type ClientWithResponsesInterface interface {
 
 	// GetApiBackupsSftpRemoteWithResponse List archives on the SFTP remote destination
 	//
-	// Requires an admin token or admin session.
+	// Lists this installation's remote namespace under `remoteDir`
+	// only — archives uploaded by other Veil nodes sharing the directory, and
+	// archives left by older versions at the `remoteDir` root, are never
+	// returned. Requires an admin token or admin session.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -25264,6 +25319,10 @@ func (c *ClientWithResponses) GetApiBackupsSftpWithResponse(ctx context.Context,
 // the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
 // write-only: omitting one keeps the stored value, an empty string clears
 // it. Requires admin and CSRF for a cookie session.
+// `remoteDir` may be shared between Veil installations: this node works
+// inside its own `veil-node-<install-id>` subdirectory, so nodes never
+// list, fetch, or prune each other's archives. Only encrypted `.enc`
+// archives are ever uploaded; plaintext backups stay local-only.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -25282,6 +25341,10 @@ func (c *ClientWithResponses) PutApiBackupsSftpWithBodyWithResponse(ctx context.
 // the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
 // write-only: omitting one keeps the stored value, an empty string clears
 // it. Requires admin and CSRF for a cookie session.
+// `remoteDir` may be shared between Veil installations: this node works
+// inside its own `veil-node-<install-id>` subdirectory, so nodes never
+// list, fetch, or prune each other's archives. Only encrypted `.enc`
+// archives are ever uploaded; plaintext backups stay local-only.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -25298,7 +25361,9 @@ func (c *ClientWithResponses) PutApiBackupsSftpWithResponse(ctx context.Context,
 //
 // Materializes the named remote archive under the managed
 // backup dir (atomic temp-then-publish), after which the normal restore
-// endpoint applies. Requires admin and CSRF for a cookie session.
+// endpoint applies. Only names visible in this installation's remote
+// namespace resolve — another node's archive name returns 404.
+// Requires admin and CSRF for a cookie session.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -25315,7 +25380,9 @@ func (c *ClientWithResponses) PostApiBackupsSftpFetchWithBodyWithResponse(ctx co
 //
 // Materializes the named remote archive under the managed
 // backup dir (atomic temp-then-publish), after which the normal restore
-// endpoint applies. Requires admin and CSRF for a cookie session.
+// endpoint applies. Only names visible in this installation's remote
+// namespace resolve — another node's archive name returns 404.
+// Requires admin and CSRF for a cookie session.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -25330,7 +25397,10 @@ func (c *ClientWithResponses) PostApiBackupsSftpFetchWithResponse(ctx context.Co
 
 // GetApiBackupsSftpRemoteWithResponse List archives on the SFTP remote destination
 //
-// Requires an admin token or admin session.
+// Lists this installation's remote namespace under `remoteDir`
+// only — archives uploaded by other Veil nodes sharing the directory, and
+// archives left by older versions at the `remoteDir` root, are never
+// returned. Requires an admin token or admin session.
 //
 // Returns a wrapper object for the known response body format(s).
 //

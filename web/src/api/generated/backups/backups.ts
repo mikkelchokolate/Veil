@@ -921,6 +921,10 @@ export const useGetApiBackupsSftp = <TError = UnauthorizedResponse | ForbiddenRe
  * the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
  * write-only: omitting one keeps the stored value, an empty string clears
  * it. Requires admin and CSRF for a cookie session.
+ * `remoteDir` may be shared between Veil installations: this node works
+ * inside its own `veil-node-<install-id>` subdirectory, so nodes never
+ * list, fetch, or prune each other's archives. Only encrypted `.enc`
+ * archives are ever uploaded; plaintext backups stay local-only.
  * @summary Configure the SFTP remote-backup destination
  */
 export const putApiBackupsSftp = async (backupSftpPutRequest: BackupSftpPutRequest, options?: Parameters<typeof apiFetch>[1]): Promise<BackupSftpDestination> => {
@@ -1136,7 +1140,10 @@ export const getGetApiBackupsSftpRemoteUrl = () => {
 }
 
 /**
- * Requires an admin token or admin session.
+ * Lists this installation's remote namespace under `remoteDir`
+ * only — archives uploaded by other Veil nodes sharing the directory, and
+ * archives left by older versions at the `remoteDir` root, are never
+ * returned. Requires an admin token or admin session.
  * @summary List archives on the SFTP remote destination
  */
 export const getApiBackupsSftpRemote = async ( options?: Parameters<typeof apiFetch>[1]): Promise<BackupArchive[]> => {
@@ -1212,7 +1219,9 @@ export const useGetApiBackupsSftpRemote = <TError = BadRequestResponse | Unautho
 /**
  * Materializes the named remote archive under the managed
  * backup dir (atomic temp-then-publish), after which the normal restore
- * endpoint applies. Requires admin and CSRF for a cookie session.
+ * endpoint applies. Only names visible in this installation's remote
+ * namespace resolve — another node's archive name returns 404.
+ * Requires admin and CSRF for a cookie session.
  * @summary Download a remote archive into the local backup dir
  */
 export const postApiBackupsSftpFetch = async (backupSftpFetchRequest: BackupSftpFetchRequest, options?: Parameters<typeof apiFetch>[1]): Promise<BackupArchive> => {

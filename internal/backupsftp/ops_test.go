@@ -23,18 +23,33 @@ func sftpTestConfig() Config {
 	}
 }
 
+// writeLocalArchive writes a local file whose content passes the encrypted
+// archive gate: the given body sits behind the Veil encryption magic so the
+// fixture looks like a real .enc payload (#1188).
 func writeLocalArchive(t *testing.T, body []byte) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "veil_backup_20260101_020000.tar.gz.enc")
-	if err := os.WriteFile(path, body, 0o600); err != nil {
+	payload := append([]byte("VEILBACK\x03"), body...)
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return path
 }
 
+// localArchiveContent returns the bytes actually written by
+// writeLocalArchive (encryption magic + body).
+func localArchiveContent(t *testing.T, localPath string) []byte {
+	t.Helper()
+	body, err := os.ReadFile(localPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
 func TestUploadPublishesAtomicallyWithSidecar(t *testing.T) {
-	body := []byte("encrypted-backup-bytes")
-	localPath := writeLocalArchive(t, body)
+	localPath := writeLocalArchive(t, []byte("encrypted-backup-bytes"))
+	want := localArchiveContent(t, localPath)
 	name := filepath.Base(localPath)
 	fs := sftpfake.New()
 
@@ -42,20 +57,20 @@ func TestUploadPublishesAtomicallyWithSidecar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	digest := sha256.Sum256(body)
-	if receipt.Archive != name || receipt.Size != int64(len(body)) || receipt.SHA256 != hex.EncodeToString(digest[:]) {
+	digest := sha256.Sum256(want)
+	if receipt.Archive != name || receipt.Size != int64(len(want)) || receipt.SHA256 != hex.EncodeToString(digest[:]) {
 		t.Fatalf("receipt=%+v", receipt)
 	}
-	if got := fs.File("/srv/veil-backups/" + name); string(got) != string(body) {
+	if got := fs.File("/srv/veil-backups/" + name); string(got) != string(want) {
 		t.Fatalf("remote archive=%q", got)
 	}
 	if fs.Has("/srv/veil-backups/" + name + partialSuffix) {
 		t.Fatal("stale .part left behind")
 	}
 	sidecar := string(fs.File("/srv/veil-backups/" + name + sidecarSuffix))
-	want := fmt.Sprintf("%s  %s", hex.EncodeToString(digest[:]), name)
-	if !strings.Contains(sidecar, want) {
-		t.Fatalf("sidecar=%q, want substring %q", sidecar, want)
+	wantSidecar := fmt.Sprintf("%s  %s", hex.EncodeToString(digest[:]), name)
+	if !strings.Contains(sidecar, wantSidecar) {
+		t.Fatalf("sidecar=%q, want substring %q", sidecar, wantSidecar)
 	}
 }
 
@@ -65,6 +80,42 @@ func TestUploadRejectsNonBasename(t *testing.T) {
 		if _, err := Upload(context.Background(), fs, sftpTestConfig(), writeLocalArchive(t, []byte("x")), name); err == nil {
 			t.Fatalf("upload accepted name %q", name)
 		}
+	}
+}
+
+// #1188: the remote tier is encrypted-only — a plaintext-named archive is
+// refused before anything touches the remote.
+func TestUploadRejectsUnencryptedArchiveName(t *testing.T) {
+	fs := sftpfake.New()
+	for _, name := range []string{
+		"veil_backup_20260101_020000.tar.gz",
+		"notes.txt",
+	} {
+		if _, err := Upload(context.Background(), fs, sftpTestConfig(), writeLocalArchive(t, []byte("x")), name); !errors.Is(err, ErrUnencryptedArchive) {
+			t.Fatalf("upload name %q err=%v, want ErrUnencryptedArchive", name, err)
+		}
+	}
+	if len(fs.Paths()) != 0 || len(fs.Written) != 0 {
+		t.Fatalf("refused upload touched the remote: %v", fs.Paths())
+	}
+}
+
+// #1188: a .enc-named file whose content was never encrypted (reachable via
+// --output with an empty passphrase) is refused on the archive magic, again
+// without writing anything remotely.
+func TestUploadRejectsPlaintextContent(t *testing.T) {
+	fs := sftpfake.New()
+	dir := t.TempDir()
+	localPath := filepath.Join(dir, "veil_backup_20260101_020000.tar.gz.enc")
+	// A plaintext backup is a gzip stream — no VEILBACK magic.
+	if err := os.WriteFile(localPath, []byte("\x1f\x8bplaintext-state"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Upload(context.Background(), fs, sftpTestConfig(), localPath, filepath.Base(localPath)); !errors.Is(err, ErrUnencryptedArchive) {
+		t.Fatalf("plaintext upload err=%v, want ErrUnencryptedArchive", err)
+	}
+	if len(fs.Paths()) != 0 || len(fs.Written) != 0 {
+		t.Fatalf("refused upload touched the remote: %v", fs.Paths())
 	}
 }
 

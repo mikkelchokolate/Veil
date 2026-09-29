@@ -31,6 +31,22 @@ func stubSftpDial(t *testing.T, remote *sftpfake.MemFS, dialErr error) {
 	t.Cleanup(func() { backupsftp.Dial = original })
 }
 
+// sftpTestInstallID pins the per-installation remote namespace identity the
+// engine resolves under the panel state dir (#1184), so tests can seed
+// deterministic remote paths.
+const sftpTestInstallID = "0123456789abcdef0123456789abcdef"
+
+// sftpTestRemoteDir is this node's remote namespace under remoteDir.
+const sftpTestRemoteDir = "/srv/veil-backups/veil-node-" + sftpTestInstallID
+
+func seedSftpInstallID(t *testing.T, state *managementState) {
+	t.Helper()
+	path := filepath.Join(filepath.Dir(state.statePath), backupsftp.InstallIDFileName)
+	if err := os.WriteFile(path, []byte(sftpTestInstallID+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestBackupSftpRouteRequiresAdmin(t *testing.T) {
 	state := newPanelBackupState(t)
 	viewer := httptest.NewRequest(http.MethodGet, "/api/backups/sftp", nil)
@@ -204,8 +220,12 @@ func TestBackupSftpRemoteListAndFetch(t *testing.T) {
 	if putResponse.Code != http.StatusOK {
 		t.Fatalf("put status=%d body=%s", putResponse.Code, putResponse.Body.String())
 	}
+	seedSftpInstallID(t, state)
 	name := "veil_backup_20260101_020000.tar.gz.enc"
-	remote.SetFile("/srv/veil-backups/"+name, []byte("remote-archive"))
+	remote.SetFile(sftpTestRemoteDir+"/"+name, []byte("remote-archive"))
+	// A foreign archive outside this node's namespace must never be listed
+	// or fetchable (#1184).
+	remote.SetFile("/srv/veil-backups/veil_backup_20260102_020000.tar.gz.enc", []byte("foreign"))
 
 	list := adminJSONRequest(http.MethodGet, "/api/backups/sftp/remote", "")
 	listResponse := httptest.NewRecorder()
@@ -276,6 +296,7 @@ func TestBackupCreateSurfacesRemoteUploadOutcome(t *testing.T) {
 	remote := sftpfake.New()
 	stubSftpDial(t, remote, nil)
 	state := newPanelBackupState(t)
+	seedSftpInstallID(t, state)
 
 	put := adminJSONRequest(http.MethodPut, "/api/backups/sftp", `{
 		"enabled": true, "host": "backups.example.com",
@@ -302,7 +323,7 @@ func TestBackupCreateSurfacesRemoteUploadOutcome(t *testing.T) {
 		created.Remote.Upload.Archive != created.Archive.Name || created.Remote.Error != "" {
 		t.Fatalf("remote result=%+v", created.Remote)
 	}
-	if !remote.Has("/srv/veil-backups/" + created.Archive.Name) {
+	if !remote.Has(sftpTestRemoteDir + "/" + created.Archive.Name) {
 		t.Fatalf("remote missing upload: %v", remote.Paths())
 	}
 }

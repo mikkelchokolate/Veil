@@ -298,6 +298,9 @@ export function BackupSftpPanel() {
 							value={form.remoteDir}
 							onChange={(e) => setForm({ ...form, remoteDir: e.target.value })}
 						/>
+						<p className="muted" style={{ fontSize: 12 }}>
+							{t("backups.sftp.remoteDirHint")}
+						</p>
 					</FormItem>
 					<FormItem>
 						<Label htmlFor="sftp-auth">{t("backups.sftp.authType")}</Label>
