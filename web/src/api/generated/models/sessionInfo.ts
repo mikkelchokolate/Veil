@@ -59,6 +59,6 @@ export interface SessionInfo {
   remoteAddr?: string;
   /** True when this entry matches the caller's `veil_session` cookie. */
   current: boolean;
-  /** True when the session was minted after the account's second factor was satisfied (TOTP verify or enrollment confirmation). */
+  /** True when the session was minted after the account's second factor was satisfied (TOTP verify, passkey assertion, or factor registration confirmation). */
   secondFactor?: boolean;
 }

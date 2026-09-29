@@ -240,10 +240,11 @@ func (s *managementState) handleTOTPVerify(w http.ResponseWriter, r *http.Reques
 	})
 	s.setSessionCookie(w, r, session.Token, 86400)
 	writeJSON(w, map[string]any{
-		"success":   true,
-		"username":  pending.Username,
-		"role":      role,
-		"locale":    locale,
-		"csrfToken": session.CSRFToken,
+		"success":      true,
+		"username":     pending.Username,
+		"role":         role,
+		"locale":       locale,
+		"csrfToken":    session.CSRFToken,
+		"secondFactor": true,
 	})
 }

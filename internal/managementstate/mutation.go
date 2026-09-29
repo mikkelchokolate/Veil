@@ -370,8 +370,10 @@ func (m Mutation) UpdateUser(username string, update model.User) (model.User, er
 	}
 	// TOTP second-factor state is owned exclusively by the TOTP endpoints
 	// (SetUserTOTP below): a role/password/locale PUT must neither wipe nor
-	// smuggle a factor change (issue #1172).
+	// smuggle a factor change (issue #1172). Passkeys are likewise owned by
+	// SetUserPasskeys (#1171).
 	update.PreserveTOTP((*m.target.Users)[idx])
+	update.PreservePasskeys((*m.target.Users)[idx])
 	previous := cloneUsers(*m.target.Users)
 	(*m.target.Users)[idx] = update
 	if err := m.save(); err != nil {
@@ -402,6 +404,33 @@ func (m Mutation) SetUserTOTP(username string, totp model.User) (model.User, err
 	updated.TOTPSecret = totp.TOTPSecret
 	updated.TOTPPendingSecret = totp.TOTPPendingSecret
 	updated.TOTPRecoveryHashes = append([]string(nil), totp.TOTPRecoveryHashes...)
+	(*m.target.Users)[idx] = updated
+	if err := m.save(); err != nil {
+		*m.target.Users = previous
+		return model.User{}, err
+	}
+	return updated, nil
+}
+
+// SetUserPasskeys is the ONLY mutation path that writes a user's WebAuthn
+// credential list; UpdateUser preserves it (#1171). Clearing is expressed by
+// passing a User whose Passkeys is nil (see model.User.ClearPasskeys), so
+// admin reset, self-delete, and clone-invalidation share the same durable
+// write.
+func (m Mutation) SetUserPasskeys(username string, update model.User) (model.User, error) {
+	idx := -1
+	for i, existing := range *m.target.Users {
+		if existing.Username == username {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return model.User{}, errors.New("user not found")
+	}
+	previous := cloneUsers(*m.target.Users)
+	updated := (*m.target.Users)[idx]
+	updated.Passkeys = append([]model.Passkey(nil), update.Passkeys...)
 	(*m.target.Users)[idx] = updated
 	if err := m.save(); err != nil {
 		*m.target.Users = previous

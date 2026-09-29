@@ -49,6 +49,15 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodDelete, "/api/v1/users/me/totp", capabilitySelfService},
 	{http.MethodPost, "/api/v1/users/me/totp/enroll", capabilitySelfService},
 	{http.MethodPost, "/api/v1/users/me/totp/confirm", capabilitySelfService},
+	// WebAuthn/passkey second factor (#1171). The login begin/finish pair is
+	// public for the same reason as totp/verify — gated by the pending_2fa
+	// cookie, not a session. me/passkeys routes are self-service.
+	{http.MethodPost, "/api/v1/auth/webauthn/begin", capabilityPublic},
+	{http.MethodPost, "/api/v1/auth/webauthn/finish", capabilityPublic},
+	{http.MethodGet, "/api/v1/users/me/passkeys", capabilitySelfService},
+	{http.MethodPost, "/api/v1/users/me/passkeys/register/begin", capabilitySelfService},
+	{http.MethodPost, "/api/v1/users/me/passkeys/register/finish", capabilitySelfService},
+	{http.MethodDelete, "/api/v1/users/me/passkeys/{id}", capabilitySelfService},
 
 	{http.MethodGet, "/api/status", capabilityViewer},
 	{http.MethodGet, "/api/version", capabilityViewer},
@@ -130,6 +139,7 @@ var endpointPolicies = []endpointPolicy{
 	// Admin reset of another user's second factor; the "me" entries above win
 	// for the literal me path.
 	{http.MethodDelete, "/api/v1/users/{username}/totp", capabilityAdminMutation},
+	{http.MethodDelete, "/api/v1/users/{username}/passkeys", capabilityAdminMutation},
 
 	{http.MethodPut, "/api/settings", capabilityAdminMutation},
 	{http.MethodPost, "/api/inbounds", capabilityAdminMutation},

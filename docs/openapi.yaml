@@ -3590,6 +3590,374 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
       x-roles:
       - admin
+  /api/v1/auth/webauthn/begin:
+    post:
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-veil-role: public
+      tags:
+      - auth
+      summary: Begin the passkey second-factor login ceremony
+      description: 'Issues a WebAuthn assertion challenge for the pending_2fa
+        record minted by `/api/auth/login` when the account advertises
+        `webauthn` in `secondFactorMethods`. The `veil_pending_2fa` cookie
+        authorizes this endpoint and `/api/v1/auth/webauthn/finish` only; the
+        challenge is stored server-side bound to that pending token. The
+        response is the `PublicKeyCredentialRequestOptions` object the browser
+        passes to `navigator.credentials.get`. Attempts honor the shared login
+        backoff.
+
+        '
+      security: []
+      responses:
+        '200':
+          description: Assertion options for the authenticator ceremony.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebAuthnAssertionOptions'
+              examples:
+                begin:
+                  value:
+                    publicKey:
+                      challenge: MzJhZDRh... # base64url
+                      timeout: 60000
+                      rpId: panel.example.com
+                      userVerification: preferred
+                      allowCredentials:
+                      - id: Y3JlZA... # base64url
+                        type: public-key
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          description: Too many attempts; the Retry-After header carries the backoff.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      x-roles:
+      - public
+  /api/v1/auth/webauthn/finish:
+    post:
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-veil-role: public
+      tags:
+      - auth
+      summary: Complete the passkey second-factor login
+      description: 'Completes the pending_2fa stage with a WebAuthn assertion.
+        The `veil_pending_2fa` cookie authorizes ONLY this ceremony and
+        `/api/v1/auth/webauthn/begin`; a valid assertion mints the real
+        `veil_session` cookie with the second-factor mark. Attempts share the
+        per-(client, username) login throttle and are hard-capped per
+        challenge; a signature-counter regression invalidates the credential
+        (clone detection); the challenge fails closed if the account changed
+        since the password was verified.
+
+        '
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebAuthnAssertionResponse'
+      responses:
+        '200':
+          description: Second factor verified; a `veil_session` cookie was set and the pending cookie was cleared.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: HTTP-only `veil_session` cookie (and a cleared `veil_pending_2fa` cookie).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              examples:
+                verified:
+                  value:
+                    success: true
+                    username: admin
+                    role: admin
+                    locale: en
+                    csrfToken: 0123456789abcdef0123456789abcdef
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          description: Too many factor attempts; the Retry-After header carries the backoff.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      x-roles:
+      - public
+  /api/v1/users/me/passkeys:
+    get:
+      x-veil-role: self-service
+      tags:
+      - auth
+      summary: List the current user's passkeys
+      description: 'Requires a `veil_session` cookie bound to a real user row;
+        static API tokens and the dev-anonymous identity cannot call it.
+        Returns public metadata only — credential IDs, names, transports, and
+        timestamps; public key material never leaves the server.
+
+        '
+      security:
+      - sessionCookie: []
+      responses:
+        '200':
+          description: Passkeys registered on the session account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyListResponse'
+              examples:
+                list:
+                  value:
+                    passkeys:
+                    - id: Y3JlZA
+                      name: Laptop key
+                      createdAt: '2026-09-29T12:00:00Z'
+                      transports:
+                      - internal
+                      backedUp: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      x-roles:
+      - admin
+      - viewer
+  /api/v1/users/me/passkeys/register/begin:
+    post:
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-veil-role: self-service
+      tags:
+      - auth
+      summary: Begin passkey registration for the current user
+      description: 'Requires the `veil_session` cookie and `X-CSRF-Token`, plus
+        a credential-grade gate: a session that already carries the
+        second-factor mark, or the account password re-presented here. Mints a
+        WebAuthn registration challenge stored server-side for ~5 minutes,
+        keyed by the session token. The response is the
+        `PublicKeyCredentialCreationOptions` object for
+        `navigator.credentials.create`.
+
+        '
+      security:
+      - sessionCookie: []
+        csrfToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyRegisterBeginRequest'
+            examples:
+              password:
+                value:
+                  password: correct horse battery staple
+                  name: Laptop key
+      responses:
+        '200':
+          description: Creation options for the authenticator ceremony.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebAuthnCreationOptions'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          description: Too many attempts; the Retry-After header carries the backoff.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      x-roles:
+      - admin
+      - viewer
+  /api/v1/users/me/passkeys/register/finish:
+    post:
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-veil-role: self-service
+      tags:
+      - auth
+      summary: Finish passkey registration for the current user
+      description: 'Requires the `veil_session` cookie and `X-CSRF-Token`.
+        Verifies the authenticator attestation against the challenge minted by
+        `register/begin` (single-use), stores the credential, upgrades the
+        calling session to second-factor-complete, and revokes every other
+        session of the user — a credential addition is a privilege-floor
+        change.
+
+        '
+      security:
+      - sessionCookie: []
+        csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyRegisterFinishRequest'
+            examples:
+              finish:
+                value:
+                  name: Laptop key
+                  credential:
+                    id: Y3JlZA
+                    rawId: Y3JlZA
+                    type: public-key
+                    response:
+                      clientDataJSON: eyJ0eXBl
+                      attestationObject: o2NmbXRkbm9u
+      responses:
+        '201':
+          description: Passkey registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyInfo'
+              examples:
+                created:
+                  value:
+                    id: Y3JlZA
+                    name: Laptop key
+                    createdAt: '2026-09-29T12:00:00Z'
+                    transports:
+                    - internal
+                    backedUp: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
+      - viewer
+  /api/v1/users/me/passkeys/{passkeyId}:
+    parameters:
+    - name: passkeyId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Base64url credential ID.
+    delete:
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-veil-role: self-service
+      tags:
+      - auth
+      summary: Delete one of the current user's passkeys
+      description: 'Requires the `veil_session` cookie and `X-CSRF-Token` plus
+        the same credential-grade gate as registration (second-factor session
+        or account password). Removing a credential never revokes sessions —
+        once the last factor is gone the session-mark requirement simply stops
+        applying.
+
+        '
+      security:
+      - sessionCookie: []
+        csrfToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyDeleteRequest'
+            examples:
+              password:
+                value:
+                  password: correct horse battery staple
+      responses:
+        '204':
+          description: Passkey deleted.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          description: Too many attempts; the Retry-After header carries the backoff.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      x-roles:
+      - admin
+      - viewer
+  /api/v1/users/{username}/passkeys:
+    parameters:
+    - $ref: '#/components/parameters/Username'
+    delete:
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-veil-role: admin-mutation
+      tags:
+      - auth
+      summary: Reset a user's passkeys
+      description: 'Admin reset for a locked-out user: clears every registered
+        WebAuthn credential. Cookie sessions must include `X-CSRF-Token`.
+        Unlike the TOTP reset this does NOT revoke the target''s sessions —
+        removing a possession factor cannot let an existing session bypass a
+        still-armed factor.
+
+        '
+      security:
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
+      responses:
+        '204':
+          description: Passkeys cleared.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/v1/clients:
     get:
       x-veil-role: viewer
@@ -5112,12 +5480,15 @@ components:
           type: string
         secondFactorRequired:
           type: boolean
-          description: When true no session was minted; the `veil_pending_2fa` cookie authorizes POST /api/v1/auth/totp/verify.
+          description: When true no session was minted; the `veil_pending_2fa` cookie authorizes POST /api/v1/auth/totp/verify and /api/v1/auth/webauthn/*.
+        secondFactor:
+          type: boolean
+          description: Present and true on the factor-completion responses (TOTP verify, WebAuthn finish); the minted session carries the second-factor mark.
         secondFactorMethods:
           type: array
           items:
             type: string
-          description: Factor mechanisms accepted by the pending challenge (currently `totp`).
+          description: 'Factor mechanisms accepted by the pending challenge: `webauthn` and/or `totp`, in the server''s preference order.'
         pendingExpiresAt:
           type: string
           format: date-time
@@ -5137,6 +5508,9 @@ components:
           $ref: '#/components/schemas/Locale'
         csrfToken:
           type: string
+        secondFactor:
+          type: boolean
+          description: True when the cookie session carries the second-factor mark (TOTP verify, passkey assertion, or factor registration confirmation). Absent for static-token/dev-anonymous responses.
         authMethod:
           type: string
           description: How the request was authenticated; absent for cookie-session responses.
@@ -5215,6 +5589,89 @@ components:
         recoveryCode:
           type: string
           description: Single-use recovery code alternative to `code`.
+    PasskeyInfo:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
+          description: Base64url credential ID; also the path parameter of DELETE /api/v1/users/me/passkeys/{id}.
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        transports:
+          type: array
+          items:
+            type: string
+          description: Authenticator transport hints reported at registration.
+        backedUp:
+          type: boolean
+          description: True when the authenticator reports the credential is backed up / synced.
+    PasskeyListResponse:
+      type: object
+      required:
+      - passkeys
+      properties:
+        passkeys:
+          type: array
+          items:
+            $ref: '#/components/schemas/PasskeyInfo'
+    PasskeyRegisterBeginRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        password:
+          type: string
+          format: password
+          description: Required when the session does not carry the second-factor mark.
+        name:
+          type: string
+          description: Display label for the new credential.
+    PasskeyRegisterFinishRequest:
+      type: object
+      required:
+      - credential
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        credential:
+          type: object
+          description: The RegistrationResponseJSON object produced by the browser ceremony.
+    PasskeyDeleteRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        password:
+          type: string
+          format: password
+          description: Required when the session does not carry the second-factor mark.
+    WebAuthnAssertionOptions:
+      type: object
+      required:
+      - publicKey
+      properties:
+        publicKey:
+          type: object
+          description: PublicKeyCredentialRequestOptions for navigator.credentials.get.
+        mediation:
+          type: string
+    WebAuthnAssertionResponse:
+      type: object
+      description: The AuthenticationResponseJSON object produced by the browser ceremony.
+    WebAuthnCreationOptions:
+      type: object
+      required:
+      - publicKey
+      properties:
+        publicKey:
+          type: object
+          description: PublicKeyCredentialCreationOptions for navigator.credentials.create.
+        mediation:
+          type: string
     Locale:
       type: string
       enum:
@@ -5279,7 +5736,7 @@ components:
           description: True when this entry matches the caller's `veil_session` cookie.
         secondFactor:
           type: boolean
-          description: True when the session was minted after the account's second factor was satisfied (TOTP verify or enrollment confirmation).
+          description: True when the session was minted after the account's second factor was satisfied (TOTP verify, passkey assertion, or factor registration confirmation).
     SessionDeleteRequest:
       type: object
       required:
@@ -5730,6 +6187,7 @@ components:
       - role
       - locale
       - totpEnabled
+      - passkeyCount
       properties:
         username:
           type: string
@@ -5740,6 +6198,9 @@ components:
         totpEnabled:
           type: boolean
           description: Whether the account requires a TOTP second factor at login.
+        passkeyCount:
+          type: integer
+          description: Number of WebAuthn credentials registered on the account.
     UserCreateRequest:
       type: object
       required:

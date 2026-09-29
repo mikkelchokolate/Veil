@@ -29,6 +29,7 @@ import { Label } from "../components/ui/label";
 import { Select } from "../components/ui/select";
 import { Table, TableBody, TableCell, TableRow } from "../components/ui/table";
 import { useI18n } from "../i18n/I18nContext";
+import { PasskeysCard } from "./SettingsPasskeys";
 import { TotpCard } from "./SettingsTotp";
 
 /** S4: full settings edit (every editable field) + security key rotation.
@@ -608,6 +609,7 @@ export function SettingsPage() {
 			</div>
 
 			<TotpCard />
+			<PasskeysCard />
 
 			{isAdmin ? (
 				<div className="card">

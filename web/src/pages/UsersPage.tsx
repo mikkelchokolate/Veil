@@ -58,6 +58,10 @@ export function UsersPage() {
 	const [confirmRevoke, setConfirmRevoke] = useState<SessionInfo | null>(null);
 	// #1172: admin reset of a locked-out user's second factor.
 	const [confirmResetTotp, setConfirmResetTotp] = useState<string | null>(null);
+	// #1171: same lockout-recovery surface for registered passkeys.
+	const [confirmResetPasskeys, setConfirmResetPasskeys] = useState<
+		string | null
+	>(null);
 
 	const users = useQuery<PanelUser[]>({
 		queryKey: ["users"],
@@ -151,6 +155,21 @@ export function UsersPage() {
 			setError(mutationErrorMessage(err, t("users.totp.error.reset"), t)),
 	});
 
+	const resetPasskeys = useMutation({
+		mutationFn: (name: string) =>
+			apiFetch(`/api/v1/users/${encodeURIComponent(name)}/passkeys`, {
+				method: "DELETE",
+			}),
+		onSuccess: (_d, name) => {
+			setConfirmResetPasskeys(null);
+			setError(null);
+			setNotice(t("users.passkeys.resetNotice", { name }));
+			invalidate();
+		},
+		onError: (err) =>
+			setError(mutationErrorMessage(err, t("users.passkeys.error.reset"), t)),
+	});
+
 	const revoke = useMutation({
 		mutationFn: (id: string) =>
 			apiFetch("/api/auth/sessions", {
@@ -213,6 +232,7 @@ export function UsersPage() {
 								<TableHead>{t("users.role")}</TableHead>
 								<TableHead>{t("users.locale")}</TableHead>
 								<TableHead>{t("users.totp")}</TableHead>
+								<TableHead>{t("users.passkeys")}</TableHead>
 								<TableHead>{t("common.actions")}</TableHead>
 							</TableRow>
 						</TableHeader>
@@ -234,6 +254,17 @@ export function UsersPage() {
 									<TableCell>
 										{u.totpEnabled ? (
 											<Badge variant="success">{t("users.totp.enabled")}</Badge>
+										) : (
+											<span className="muted">—</span>
+										)}
+									</TableCell>
+									<TableCell>
+										{(u.passkeyCount ?? 0) > 0 ? (
+											<Badge variant="success">
+												{t("users.passkeys.count", {
+													n: u.passkeyCount ?? 0,
+												})}
+											</Badge>
 										) : (
 											<span className="muted">—</span>
 										)}
@@ -273,6 +304,17 @@ export function UsersPage() {
 													}}
 												>
 													{t("users.totp.reset")}
+												</Button>
+											) : null}
+											{(u.passkeyCount ?? 0) > 0 ? (
+												<Button
+													size="sm"
+													onClick={() => {
+														setError(null);
+														setConfirmResetPasskeys(u.username);
+													}}
+												>
+													{t("users.passkeys.reset")}
 												</Button>
 											) : null}
 										</div>
@@ -550,6 +592,42 @@ export function UsersPage() {
 							{resetTotp.isPending
 								? t("users.totp.resetting")
 								: t("users.totp.reset")}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
+			<AlertDialog
+				open={confirmResetPasskeys !== null}
+				onOpenChange={(open) => {
+					if (!open) setConfirmResetPasskeys(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							{t("users.passkeys.resetTitle")}
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							{t("users.passkeys.resetDescription", {
+								name: confirmResetPasskeys ?? "",
+							})}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					{error ? <FormMessage>{error}</FormMessage> : null}
+					<AlertDialogFooter>
+						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={resetPasskeys.isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								if (confirmResetPasskeys)
+									resetPasskeys.mutate(confirmResetPasskeys);
+							}}
+						>
+							{resetPasskeys.isPending
+								? t("users.passkeys.resetting")
+								: t("users.passkeys.reset")}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

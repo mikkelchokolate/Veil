@@ -57,8 +57,9 @@ export const PostApiAuthLoginResponse = zod.object({
   "role": zod.enum(['admin', 'viewer']),
   "locale": zod.enum(['en', 'ru']).describe('Persisted Panel display language.'),
   "csrfToken": zod.string(),
-  "secondFactorRequired": zod.boolean().optional().describe('When true no session was minted; the `veil_pending_2fa` cookie authorizes POST /api/v1/auth/totp/verify.'),
-  "secondFactorMethods": zod.array(zod.string()).optional().describe('Factor mechanisms accepted by the pending challenge (currently `totp`).'),
+  "secondFactorRequired": zod.boolean().optional().describe('When true no session was minted; the `veil_pending_2fa` cookie authorizes POST /api/v1/auth/totp/verify and /api/v1/auth/webauthn/*.'),
+  "secondFactor": zod.boolean().optional().describe('Present and true on the factor-completion responses (TOTP verify, WebAuthn finish); the minted session carries the second-factor mark.'),
+  "secondFactorMethods": zod.array(zod.string()).optional().describe('Factor mechanisms accepted by the pending challenge: `webauthn` and/or `totp`, in the server\'s preference order.'),
   "pendingExpiresAt": zod.iso.datetime({"offset":true}).optional().describe('Deadline for completing the pending_2fa challenge.')
 })
 
@@ -78,6 +79,7 @@ export const GetApiAuthStatusResponse = zod.object({
   "role": zod.enum(['admin', 'viewer']).optional(),
   "locale": zod.enum(['en', 'ru']).optional().describe('Persisted Panel display language.'),
   "csrfToken": zod.string().optional(),
+  "secondFactor": zod.boolean().optional().describe('True when the cookie session carries the second-factor mark (TOTP verify, passkey assertion, or factor registration confirmation). Absent for static-token/dev-anonymous responses.'),
   "authMethod": zod.enum(['static-token', 'dev-anonymous']).optional().describe('How the request was authenticated; absent for cookie-session responses.')
 })
 
@@ -127,7 +129,7 @@ export const GetApiAuthSessionsResponseItem = zod.object({
   "userAgent": zod.string().optional(),
   "remoteAddr": zod.string().optional(),
   "current": zod.boolean().describe('True when this entry matches the caller\'s `veil_session` cookie.'),
-  "secondFactor": zod.boolean().optional().describe('True when the session was minted after the account\'s second factor was satisfied (TOTP verify or enrollment confirmation).')
+  "secondFactor": zod.boolean().optional().describe('True when the session was minted after the account\'s second factor was satisfied (TOTP verify, passkey assertion, or factor registration confirmation).')
 })
 export const GetApiAuthSessionsResponse = zod.array(GetApiAuthSessionsResponseItem)
 
@@ -165,7 +167,8 @@ export const GetApiUsersResponseItem = zod.object({
   "username": zod.string(),
   "role": zod.enum(['admin', 'viewer']),
   "locale": zod.enum(['en', 'ru']).describe('Persisted Panel display language.'),
-  "totpEnabled": zod.boolean().describe('Whether the account requires a TOTP second factor at login.')
+  "totpEnabled": zod.boolean().describe('Whether the account requires a TOTP second factor at login.'),
+  "passkeyCount": zod.int().describe('Number of WebAuthn credentials registered on the account.')
 })
 export const GetApiUsersResponse = zod.array(GetApiUsersResponseItem)
 
@@ -194,7 +197,8 @@ export const PostApiUsersResponse = zod.object({
   "username": zod.string(),
   "role": zod.enum(['admin', 'viewer']),
   "locale": zod.enum(['en', 'ru']).describe('Persisted Panel display language.'),
-  "totpEnabled": zod.boolean().describe('Whether the account requires a TOTP second factor at login.')
+  "totpEnabled": zod.boolean().describe('Whether the account requires a TOTP second factor at login.'),
+  "passkeyCount": zod.int().describe('Number of WebAuthn credentials registered on the account.')
 })
 
 /**
@@ -227,7 +231,8 @@ export const PutApiUsersUsernameResponse = zod.object({
   "username": zod.string(),
   "role": zod.enum(['admin', 'viewer']),
   "locale": zod.enum(['en', 'ru']).describe('Persisted Panel display language.'),
-  "totpEnabled": zod.boolean().describe('Whether the account requires a TOTP second factor at login.')
+  "totpEnabled": zod.boolean().describe('Whether the account requires a TOTP second factor at login.'),
+  "passkeyCount": zod.int().describe('Number of WebAuthn credentials registered on the account.')
 })
 
 /**
@@ -283,8 +288,9 @@ export const PostApiV1AuthTotpVerifyResponse = zod.object({
   "role": zod.enum(['admin', 'viewer']),
   "locale": zod.enum(['en', 'ru']).describe('Persisted Panel display language.'),
   "csrfToken": zod.string(),
-  "secondFactorRequired": zod.boolean().optional().describe('When true no session was minted; the `veil_pending_2fa` cookie authorizes POST /api/v1/auth/totp/verify.'),
-  "secondFactorMethods": zod.array(zod.string()).optional().describe('Factor mechanisms accepted by the pending challenge (currently `totp`).'),
+  "secondFactorRequired": zod.boolean().optional().describe('When true no session was minted; the `veil_pending_2fa` cookie authorizes POST /api/v1/auth/totp/verify and /api/v1/auth/webauthn/*.'),
+  "secondFactor": zod.boolean().optional().describe('Present and true on the factor-completion responses (TOTP verify, WebAuthn finish); the minted session carries the second-factor mark.'),
+  "secondFactorMethods": zod.array(zod.string()).optional().describe('Factor mechanisms accepted by the pending challenge: `webauthn` and/or `totp`, in the server\'s preference order.'),
   "pendingExpiresAt": zod.iso.datetime({"offset":true}).optional().describe('Deadline for completing the pending_2fa challenge.')
 })
 
@@ -400,4 +406,171 @@ export const DeleteApiV1UsersUsernameTotpHeader = zod.object({
 })
 
 export const DeleteApiV1UsersUsernameTotpResponse = zod.void()
+
+/**
+ * Issues a WebAuthn assertion challenge for the pending_2fa record minted by `/api/auth/login` when the account advertises `webauthn` in `secondFactorMethods`. The `veil_pending_2fa` cookie authorizes this endpoint and `/api/v1/auth/webauthn/finish` only; the challenge is stored server-side bound to that pending token. The response is the `PublicKeyCredentialRequestOptions` object the browser passes to `navigator.credentials.get`. Attempts honor the shared login backoff.
+ * @summary Begin the passkey second-factor login ceremony
+ */
+export const postApiV1AuthWebauthnBeginHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiV1AuthWebauthnBeginHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiV1AuthWebauthnBeginHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiV1AuthWebauthnBeginHeaderIdempotencyKeyMax).regex(postApiV1AuthWebauthnBeginHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
+export const PostApiV1AuthWebauthnBeginResponse = zod.object({
+  "publicKey": zod.looseObject({
+
+}).describe('PublicKeyCredentialRequestOptions for navigator.credentials.get.'),
+  "mediation": zod.string().optional()
+})
+
+/**
+ * Completes the pending_2fa stage with a WebAuthn assertion. The `veil_pending_2fa` cookie authorizes ONLY this ceremony and `/api/v1/auth/webauthn/begin`; a valid assertion mints the real `veil_session` cookie with the second-factor mark. Attempts share the per-(client, username) login throttle and are hard-capped per challenge; a signature-counter regression invalidates the credential (clone detection); the challenge fails closed if the account changed since the password was verified.
+ * @summary Complete the passkey second-factor login
+ */
+export const postApiV1AuthWebauthnFinishHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiV1AuthWebauthnFinishHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiV1AuthWebauthnFinishHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiV1AuthWebauthnFinishHeaderIdempotencyKeyMax).regex(postApiV1AuthWebauthnFinishHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
+export const PostApiV1AuthWebauthnFinishBody = zod.looseObject({
+
+}).describe('The AuthenticationResponseJSON object produced by the browser ceremony.')
+
+export const PostApiV1AuthWebauthnFinishResponse = zod.object({
+  "success": zod.boolean(),
+  "username": zod.string(),
+  "role": zod.enum(['admin', 'viewer']),
+  "locale": zod.enum(['en', 'ru']).describe('Persisted Panel display language.'),
+  "csrfToken": zod.string(),
+  "secondFactorRequired": zod.boolean().optional().describe('When true no session was minted; the `veil_pending_2fa` cookie authorizes POST /api/v1/auth/totp/verify and /api/v1/auth/webauthn/*.'),
+  "secondFactor": zod.boolean().optional().describe('Present and true on the factor-completion responses (TOTP verify, WebAuthn finish); the minted session carries the second-factor mark.'),
+  "secondFactorMethods": zod.array(zod.string()).optional().describe('Factor mechanisms accepted by the pending challenge: `webauthn` and/or `totp`, in the server\'s preference order.'),
+  "pendingExpiresAt": zod.iso.datetime({"offset":true}).optional().describe('Deadline for completing the pending_2fa challenge.')
+})
+
+/**
+ * Requires a `veil_session` cookie bound to a real user row; static API tokens and the dev-anonymous identity cannot call it. Returns public metadata only — credential IDs, names, transports, and timestamps; public key material never leaves the server.
+ * @summary List the current user's passkeys
+ */
+export const GetApiV1UsersMePasskeysResponse = zod.object({
+  "passkeys": zod.array(zod.object({
+  "id": zod.string().describe('Base64url credential ID; also the path parameter of DELETE /api/v1/users/me/passkeys/{id}.'),
+  "name": zod.string().optional(),
+  "createdAt": zod.iso.datetime({"offset":true}).optional(),
+  "transports": zod.array(zod.string()).optional().describe('Authenticator transport hints reported at registration.'),
+  "backedUp": zod.boolean().optional().describe('True when the authenticator reports the credential is backed up / synced.')
+}))
+})
+
+/**
+ * Requires the `veil_session` cookie and `X-CSRF-Token`, plus a credential-grade gate: a session that already carries the second-factor mark, or the account password re-presented here. Mints a WebAuthn registration challenge stored server-side for ~5 minutes, keyed by the session token. The response is the `PublicKeyCredentialCreationOptions` object for `navigator.credentials.create`.
+ * @summary Begin passkey registration for the current user
+ */
+export const postApiV1UsersMePasskeysRegisterBeginHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiV1UsersMePasskeysRegisterBeginHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiV1UsersMePasskeysRegisterBeginHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiV1UsersMePasskeysRegisterBeginHeaderIdempotencyKeyMax).regex(postApiV1UsersMePasskeysRegisterBeginHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
+export const PostApiV1UsersMePasskeysRegisterBeginBody = zod.object({
+  "password": zod.string().optional().describe('Required when the session does not carry the second-factor mark.'),
+  "name": zod.string().optional().describe('Display label for the new credential.')
+})
+
+export const PostApiV1UsersMePasskeysRegisterBeginResponse = zod.object({
+  "publicKey": zod.looseObject({
+
+}).describe('PublicKeyCredentialCreationOptions for navigator.credentials.create.'),
+  "mediation": zod.string().optional()
+})
+
+/**
+ * Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies the authenticator attestation against the challenge minted by `register/begin` (single-use), stores the credential, upgrades the calling session to second-factor-complete, and revokes every other session of the user — a credential addition is a privilege-floor change.
+ * @summary Finish passkey registration for the current user
+ */
+export const postApiV1UsersMePasskeysRegisterFinishHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiV1UsersMePasskeysRegisterFinishHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiV1UsersMePasskeysRegisterFinishHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiV1UsersMePasskeysRegisterFinishHeaderIdempotencyKeyMax).regex(postApiV1UsersMePasskeysRegisterFinishHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
+export const PostApiV1UsersMePasskeysRegisterFinishBody = zod.object({
+  "name": zod.string().optional(),
+  "credential": zod.looseObject({
+
+}).describe('The RegistrationResponseJSON object produced by the browser ceremony.')
+})
+
+export const PostApiV1UsersMePasskeysRegisterFinishResponse = zod.object({
+  "id": zod.string().describe('Base64url credential ID; also the path parameter of DELETE /api/v1/users/me/passkeys/{id}.'),
+  "name": zod.string().optional(),
+  "createdAt": zod.iso.datetime({"offset":true}).optional(),
+  "transports": zod.array(zod.string()).optional().describe('Authenticator transport hints reported at registration.'),
+  "backedUp": zod.boolean().optional().describe('True when the authenticator reports the credential is backed up / synced.')
+})
+
+/**
+ * Requires the `veil_session` cookie and `X-CSRF-Token` plus the same credential-grade gate as registration (second-factor session or account password). Removing a credential never revokes sessions — once the last factor is gone the session-mark requirement simply stops applying.
+ * @summary Delete one of the current user's passkeys
+ */
+export const DeleteApiV1UsersMePasskeysPasskeyIdParams = zod.object({
+  "passkeyId": zod.string().describe('Base64url credential ID.')
+})
+
+export const deleteApiV1UsersMePasskeysPasskeyIdHeaderIdempotencyKeyMax = 128;
+
+
+export const deleteApiV1UsersMePasskeysPasskeyIdHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const DeleteApiV1UsersMePasskeysPasskeyIdHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(deleteApiV1UsersMePasskeysPasskeyIdHeaderIdempotencyKeyMax).regex(deleteApiV1UsersMePasskeysPasskeyIdHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
+export const DeleteApiV1UsersMePasskeysPasskeyIdBody = zod.object({
+  "password": zod.string().optional().describe('Required when the session does not carry the second-factor mark.')
+})
+
+export const DeleteApiV1UsersMePasskeysPasskeyIdResponse = zod.void()
+
+/**
+ * Admin reset for a locked-out user: clears every registered WebAuthn credential. Cookie sessions must include `X-CSRF-Token`. Unlike the TOTP reset this does NOT revoke the target's sessions — removing a possession factor cannot let an existing session bypass a still-armed factor.
+ * @summary Reset a user's passkeys
+ */
+
+
+
+export const DeleteApiV1UsersUsernamePasskeysParams = zod.object({
+  "username": zod.string().min(1)
+})
+
+export const deleteApiV1UsersUsernamePasskeysHeaderIdempotencyKeyMax = 128;
+
+
+export const deleteApiV1UsersUsernamePasskeysHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const DeleteApiV1UsersUsernamePasskeysHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(deleteApiV1UsersUsernamePasskeysHeaderIdempotencyKeyMax).regex(deleteApiV1UsersUsernamePasskeysHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
+export const DeleteApiV1UsersUsernamePasskeysResponse = zod.void()
 

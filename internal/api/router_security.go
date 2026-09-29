@@ -154,12 +154,15 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		if isCookieSession {
 			state.mu.Lock()
 			matched := false
-			ownerTOTPEnabled := false
+			ownerFactorEnabled := false
 			for _, user := range state.users {
 				if user.Username == username {
 					role = user.Role
 					matched = true
-					ownerTOTPEnabled = user.TOTPEnabled
+					// ANY armed second factor (TOTP or a registered passkey)
+					// requires the session mark, not TOTP alone — a
+					// passkey-only account must be equally protected (#1171).
+					ownerFactorEnabled = user.HasSecondFactor()
 					break
 				}
 			}
@@ -173,12 +176,12 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 				len(state.users) == 0 && state.settings.NaivePassword != "" &&
 				!state.usersProvisionedLocked()
 			state.mu.Unlock()
-			// Second factor, fail closed: once the owner has TOTP enabled, a
-			// session without the second-factor mark — e.g. one minted before
-			// enrollment — is revoked rather than trusted. The pending_2fa
-			// cookie is never consulted here; only a verified session counts
-			// (#1172).
-			if (matched && ownerTOTPEnabled && !sessionSecondFactor) || (!matched && !bootstrapValid) {
+			// Second factor, fail closed: once the owner has any factor armed
+			// (TOTP enabled or a passkey registered), a session without the
+			// second-factor mark — e.g. one minted before enrollment — is
+			// revoked rather than trusted. The pending_2fa cookie is never
+			// consulted here; only a verified session counts (#1172, #1171).
+			if (matched && ownerFactorEnabled && !sessionSecondFactor) || (!matched && !bootstrapValid) {
 				state.sessionRegistry().Delete(sessionToken)
 				username, role, isCookieSession = "", "", false
 			}
@@ -244,11 +247,12 @@ func isHealthProbePath(path string) bool {
 
 func csrfExemptPublicMutation(path string) bool {
 	switch path {
-	// The pending_2fa verify endpoint sits in the same position as login: the
+	// The pending_2fa verify endpoints sit in the same position as login: the
 	// SPA completing a second factor may hold a stale veil_session whose CSRF
 	// token it never had, and the pending cookie — SameSite=Lax, password-gated
-	// — is itself the proof the flow is on-site (#1172).
-	case "/api/auth/login", "/api/setup/complete", "/api/v1/auth/totp/verify":
+	// — is itself the proof the flow is on-site (#1172, #1171).
+	case "/api/auth/login", "/api/setup/complete", "/api/v1/auth/totp/verify",
+		"/api/v1/auth/webauthn/begin", "/api/v1/auth/webauthn/finish":
 		return true
 	default:
 		return false

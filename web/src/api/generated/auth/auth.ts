@@ -71,6 +71,11 @@ import type {
   LoginRequest,
   LoginResponse,
   NotFoundResponse,
+  PasskeyDeleteRequest,
+  PasskeyInfo,
+  PasskeyListResponse,
+  PasskeyRegisterBeginRequest,
+  PasskeyRegisterFinishRequest,
   ServiceUnavailableResponse,
   SessionDeleteRequest,
   SessionInfo,
@@ -85,7 +90,10 @@ import type {
   UserCreateRequest,
   UserResponse,
   UserUpdateRequest,
-  ValidationFailedResponse
+  ValidationFailedResponse,
+  WebAuthnAssertionOptions,
+  WebAuthnAssertionResponse,
+  WebAuthnCreationOptions
 } from '../models';
 
 import { apiFetch } from '../../fetcher.ts';
@@ -1745,6 +1753,749 @@ export function useDeleteApiV1UsersUsernameTotp<TData = Awaited<ReturnType<typeo
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getDeleteApiV1UsersUsernameTotpQueryOptions(username,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getPostApiV1AuthWebauthnBeginUrl = () => {
+
+
+
+
+  return `/api/v1/auth/webauthn/begin`
+}
+
+/**
+ * Issues a WebAuthn assertion challenge for the pending_2fa record minted by `/api/auth/login` when the account advertises `webauthn` in `secondFactorMethods`. The `veil_pending_2fa` cookie authorizes this endpoint and `/api/v1/auth/webauthn/finish` only; the challenge is stored server-side bound to that pending token. The response is the `PublicKeyCredentialRequestOptions` object the browser passes to `navigator.credentials.get`. Attempts honor the shared login backoff.
+ * @summary Begin the passkey second-factor login ceremony
+ */
+export const postApiV1AuthWebauthnBegin = async ( options?: Parameters<typeof apiFetch>[1]): Promise<WebAuthnAssertionOptions> => {
+
+  return apiFetch<WebAuthnAssertionOptions>(getPostApiV1AuthWebauthnBeginUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiV1AuthWebauthnBeginQueryKey = () => {
+    return [
+    'POST', `/api/v1/auth/webauthn/begin`
+    ] as const;
+    }
+
+
+export const getPostApiV1AuthWebauthnBeginQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>, TError = UnauthorizedResponse | ErrorEnvelope>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1AuthWebauthnBeginQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>> = ({ signal }) => postApiV1AuthWebauthnBegin({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiV1AuthWebauthnBeginQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>>
+export type PostApiV1AuthWebauthnBeginQueryError = UnauthorizedResponse | ErrorEnvelope
+
+
+export function usePostApiV1AuthWebauthnBegin<TData = Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>, TError = UnauthorizedResponse | ErrorEnvelope>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1AuthWebauthnBegin<TData = Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>, TError = UnauthorizedResponse | ErrorEnvelope>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1AuthWebauthnBegin<TData = Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>, TError = UnauthorizedResponse | ErrorEnvelope>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Begin the passkey second-factor login ceremony
+ */
+
+export function usePostApiV1AuthWebauthnBegin<TData = Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>, TError = UnauthorizedResponse | ErrorEnvelope>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiV1AuthWebauthnBeginQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getPostApiV1AuthWebauthnFinishUrl = () => {
+
+
+
+
+  return `/api/v1/auth/webauthn/finish`
+}
+
+/**
+ * Completes the pending_2fa stage with a WebAuthn assertion. The `veil_pending_2fa` cookie authorizes ONLY this ceremony and `/api/v1/auth/webauthn/begin`; a valid assertion mints the real `veil_session` cookie with the second-factor mark. Attempts share the per-(client, username) login throttle and are hard-capped per challenge; a signature-counter regression invalidates the credential (clone detection); the challenge fails closed if the account changed since the password was verified.
+ * @summary Complete the passkey second-factor login
+ */
+export const postApiV1AuthWebauthnFinish = async (webAuthnAssertionResponse: WebAuthnAssertionResponse, options?: Parameters<typeof apiFetch>[1]): Promise<LoginResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<LoginResponse>(getPostApiV1AuthWebauthnFinishUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(webAuthnAssertionResponse)
+  }
+);}
+
+
+
+
+
+export const getPostApiV1AuthWebauthnFinishQueryKey = (webAuthnAssertionResponse?: WebAuthnAssertionResponse,) => {
+    return [
+    'POST', `/api/v1/auth/webauthn/finish`, webAuthnAssertionResponse
+    ] as const;
+    }
+
+
+export const getPostApiV1AuthWebauthnFinishQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope>(webAuthnAssertionResponse: WebAuthnAssertionResponse, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1AuthWebauthnFinishQueryKey(webAuthnAssertionResponse);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>> = ({ signal }) => postApiV1AuthWebauthnFinish(webAuthnAssertionResponse, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiV1AuthWebauthnFinishQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>>
+export type PostApiV1AuthWebauthnFinishQueryError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope
+
+
+export function usePostApiV1AuthWebauthnFinish<TData = Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope>(
+ webAuthnAssertionResponse: WebAuthnAssertionResponse, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1AuthWebauthnFinish<TData = Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope>(
+ webAuthnAssertionResponse: WebAuthnAssertionResponse, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1AuthWebauthnFinish<TData = Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope>(
+ webAuthnAssertionResponse: WebAuthnAssertionResponse, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Complete the passkey second-factor login
+ */
+
+export function usePostApiV1AuthWebauthnFinish<TData = Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope>(
+ webAuthnAssertionResponse: WebAuthnAssertionResponse, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiV1AuthWebauthnFinishQueryOptions(webAuthnAssertionResponse,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetApiV1UsersMePasskeysUrl = () => {
+
+
+
+
+  return `/api/v1/users/me/passkeys`
+}
+
+/**
+ * Requires a `veil_session` cookie bound to a real user row; static API tokens and the dev-anonymous identity cannot call it. Returns public metadata only — credential IDs, names, transports, and timestamps; public key material never leaves the server.
+ * @summary List the current user's passkeys
+ */
+export const getApiV1UsersMePasskeys = async ( options?: Parameters<typeof apiFetch>[1]): Promise<PasskeyListResponse> => {
+
+  return apiFetch<PasskeyListResponse>(getGetApiV1UsersMePasskeysUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1UsersMePasskeysMutationKey = () => ['getApiV1UsersMePasskeys'] as const;
+
+export const getGetApiV1UsersMePasskeysMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>, TError,void, TContext> => {
+
+const mutationKey = getGetApiV1UsersMePasskeysMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>, void> = () => {
+
+
+          return  getApiV1UsersMePasskeys(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1UsersMePasskeysMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>>
+
+    export type GetApiV1UsersMePasskeysMutationError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+
+
+    /**
+ * @summary List the current user's passkeys
+ */
+export const useGetApiV1UsersMePasskeys = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiV1UsersMePasskeysMutationOptions(options), queryClient);
+    }
+    export const getPostApiV1UsersMePasskeysRegisterBeginUrl = () => {
+
+
+
+
+  return `/api/v1/users/me/passkeys/register/begin`
+}
+
+/**
+ * Requires the `veil_session` cookie and `X-CSRF-Token`, plus a credential-grade gate: a session that already carries the second-factor mark, or the account password re-presented here. Mints a WebAuthn registration challenge stored server-side for ~5 minutes, keyed by the session token. The response is the `PublicKeyCredentialCreationOptions` object for `navigator.credentials.create`.
+ * @summary Begin passkey registration for the current user
+ */
+export const postApiV1UsersMePasskeysRegisterBegin = async (passkeyRegisterBeginRequest?: PasskeyRegisterBeginRequest, options?: Parameters<typeof apiFetch>[1]): Promise<WebAuthnCreationOptions> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<WebAuthnCreationOptions>(getPostApiV1UsersMePasskeysRegisterBeginUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(passkeyRegisterBeginRequest)
+  }
+);}
+
+
+
+
+
+export const getPostApiV1UsersMePasskeysRegisterBeginQueryKey = (passkeyRegisterBeginRequest?: PasskeyRegisterBeginRequest,) => {
+    return [
+    'POST', `/api/v1/users/me/passkeys/register/begin`, passkeyRegisterBeginRequest
+    ] as const;
+    }
+
+
+export const getPostApiV1UsersMePasskeysRegisterBeginQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope>(passkeyRegisterBeginRequest?: PasskeyRegisterBeginRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1UsersMePasskeysRegisterBeginQueryKey(passkeyRegisterBeginRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>> = ({ signal }) => postApiV1UsersMePasskeysRegisterBegin(passkeyRegisterBeginRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiV1UsersMePasskeysRegisterBeginQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>>
+export type PostApiV1UsersMePasskeysRegisterBeginQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope
+
+
+export function usePostApiV1UsersMePasskeysRegisterBegin<TData = Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope>(
+ passkeyRegisterBeginRequest: undefined |  PasskeyRegisterBeginRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1UsersMePasskeysRegisterBegin<TData = Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope>(
+ passkeyRegisterBeginRequest?: PasskeyRegisterBeginRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1UsersMePasskeysRegisterBegin<TData = Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope>(
+ passkeyRegisterBeginRequest?: PasskeyRegisterBeginRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Begin passkey registration for the current user
+ */
+
+export function usePostApiV1UsersMePasskeysRegisterBegin<TData = Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope>(
+ passkeyRegisterBeginRequest?: PasskeyRegisterBeginRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiV1UsersMePasskeysRegisterBeginQueryOptions(passkeyRegisterBeginRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getPostApiV1UsersMePasskeysRegisterFinishUrl = () => {
+
+
+
+
+  return `/api/v1/users/me/passkeys/register/finish`
+}
+
+/**
+ * Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies the authenticator attestation against the challenge minted by `register/begin` (single-use), stores the credential, upgrades the calling session to second-factor-complete, and revokes every other session of the user — a credential addition is a privilege-floor change.
+ * @summary Finish passkey registration for the current user
+ */
+export const postApiV1UsersMePasskeysRegisterFinish = async (passkeyRegisterFinishRequest: PasskeyRegisterFinishRequest, options?: Parameters<typeof apiFetch>[1]): Promise<PasskeyInfo> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<PasskeyInfo>(getPostApiV1UsersMePasskeysRegisterFinishUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(passkeyRegisterFinishRequest)
+  }
+);}
+
+
+
+
+
+export const getPostApiV1UsersMePasskeysRegisterFinishQueryKey = (passkeyRegisterFinishRequest?: PasskeyRegisterFinishRequest,) => {
+    return [
+    'POST', `/api/v1/users/me/passkeys/register/finish`, passkeyRegisterFinishRequest
+    ] as const;
+    }
+
+
+export const getPostApiV1UsersMePasskeysRegisterFinishQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ServiceUnavailableResponse>(passkeyRegisterFinishRequest: PasskeyRegisterFinishRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1UsersMePasskeysRegisterFinishQueryKey(passkeyRegisterFinishRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>> = ({ signal }) => postApiV1UsersMePasskeysRegisterFinish(passkeyRegisterFinishRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiV1UsersMePasskeysRegisterFinishQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>>
+export type PostApiV1UsersMePasskeysRegisterFinishQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ServiceUnavailableResponse
+
+
+export function usePostApiV1UsersMePasskeysRegisterFinish<TData = Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ServiceUnavailableResponse>(
+ passkeyRegisterFinishRequest: PasskeyRegisterFinishRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1UsersMePasskeysRegisterFinish<TData = Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ServiceUnavailableResponse>(
+ passkeyRegisterFinishRequest: PasskeyRegisterFinishRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1UsersMePasskeysRegisterFinish<TData = Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ServiceUnavailableResponse>(
+ passkeyRegisterFinishRequest: PasskeyRegisterFinishRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Finish passkey registration for the current user
+ */
+
+export function usePostApiV1UsersMePasskeysRegisterFinish<TData = Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ServiceUnavailableResponse>(
+ passkeyRegisterFinishRequest: PasskeyRegisterFinishRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiV1UsersMePasskeysRegisterFinishQueryOptions(passkeyRegisterFinishRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getDeleteApiV1UsersMePasskeysPasskeyIdUrl = (passkeyId: string,) => {
+
+
+
+
+  return `/api/v1/users/me/passkeys/${passkeyId}`
+}
+
+/**
+ * Requires the `veil_session` cookie and `X-CSRF-Token` plus the same credential-grade gate as registration (second-factor session or account password). Removing a credential never revokes sessions — once the last factor is gone the session-mark requirement simply stops applying.
+ * @summary Delete one of the current user's passkeys
+ */
+export const deleteApiV1UsersMePasskeysPasskeyId = async (passkeyId: string,
+    passkeyDeleteRequest?: PasskeyDeleteRequest, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<void>(getDeleteApiV1UsersMePasskeysPasskeyIdUrl(passkeyId),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(passkeyDeleteRequest)
+  }
+);}
+
+
+
+
+
+export const getDeleteApiV1UsersMePasskeysPasskeyIdQueryKey = (passkeyId: string,
+    passkeyDeleteRequest?: PasskeyDeleteRequest,) => {
+    return [
+    'DELETE', `/api/v1/users/me/passkeys/${passkeyId}`, passkeyDeleteRequest
+    ] as const;
+    }
+
+
+export const getDeleteApiV1UsersMePasskeysPasskeyIdQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope>(passkeyId: string,
+    passkeyDeleteRequest?: PasskeyDeleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeleteApiV1UsersMePasskeysPasskeyIdQueryKey(passkeyId,passkeyDeleteRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>> = ({ signal }) => deleteApiV1UsersMePasskeysPasskeyId(passkeyId,passkeyDeleteRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: passkeyId !== null && passkeyId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeleteApiV1UsersMePasskeysPasskeyIdQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>>
+export type DeleteApiV1UsersMePasskeysPasskeyIdQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope
+
+
+export function useDeleteApiV1UsersMePasskeysPasskeyId<TData = Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope>(
+ passkeyId: string,
+    passkeyDeleteRequest: undefined |  PasskeyDeleteRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiV1UsersMePasskeysPasskeyId<TData = Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope>(
+ passkeyId: string,
+    passkeyDeleteRequest?: PasskeyDeleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiV1UsersMePasskeysPasskeyId<TData = Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope>(
+ passkeyId: string,
+    passkeyDeleteRequest?: PasskeyDeleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Delete one of the current user's passkeys
+ */
+
+export function useDeleteApiV1UsersMePasskeysPasskeyId<TData = Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope>(
+ passkeyId: string,
+    passkeyDeleteRequest?: PasskeyDeleteRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDeleteApiV1UsersMePasskeysPasskeyIdQueryOptions(passkeyId,passkeyDeleteRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getDeleteApiV1UsersUsernamePasskeysUrl = (username: string,) => {
+
+
+
+
+  return `/api/v1/users/${username}/passkeys`
+}
+
+/**
+ * Admin reset for a locked-out user: clears every registered WebAuthn credential. Cookie sessions must include `X-CSRF-Token`. Unlike the TOTP reset this does NOT revoke the target's sessions — removing a possession factor cannot let an existing session bypass a still-armed factor.
+ * @summary Reset a user's passkeys
+ */
+export const deleteApiV1UsersUsernamePasskeys = async (username: string, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
+
+  return apiFetch<void>(getDeleteApiV1UsersUsernamePasskeysUrl(username),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiV1UsersUsernamePasskeysQueryKey = (username: string,) => {
+    return [
+    'DELETE', `/api/v1/users/${username}/passkeys`
+    ] as const;
+    }
+
+
+export const getDeleteApiV1UsersUsernamePasskeysQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(username: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeleteApiV1UsersUsernamePasskeysQueryKey(username);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>> = ({ signal }) => deleteApiV1UsersUsernamePasskeys(username, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: username !== null && username !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeleteApiV1UsersUsernamePasskeysQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>>
+export type DeleteApiV1UsersUsernamePasskeysQueryError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse
+
+
+export function useDeleteApiV1UsersUsernamePasskeys<TData = Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(
+ username: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiV1UsersUsernamePasskeys<TData = Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(
+ username: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiV1UsersUsernamePasskeys<TData = Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(
+ username: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Reset a user's passkeys
+ */
+
+export function useDeleteApiV1UsersUsernamePasskeys<TData = Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(
+ username: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDeleteApiV1UsersUsernamePasskeysQueryOptions(username,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

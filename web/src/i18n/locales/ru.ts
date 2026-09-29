@@ -129,6 +129,16 @@ export const ru: Record<string, string> = {
 		"Неверный или истёкший код. Повторите попытку или войдите снова.",
 	"auth.totp.failed": "Не удалось проверить код. Повторите попытку.",
 
+	"auth.secondFactor.subtitle": "Двухфакторная аутентификация",
+	"auth.secondFactor.or": "или",
+	"auth.passkey.use": "Использовать ключ доступа",
+	"auth.passkey.verifying": "Ожидание ключа доступа…",
+	"auth.passkey.cancelled": "Запрос ключа доступа отменён.",
+	"auth.passkey.invalid":
+		"Ключ доступа не принят. Повторите попытку или используйте другой фактор.",
+	"auth.passkey.failed":
+		"Не удалось проверить ключ доступа. Повторите попытку.",
+
 	"users.title": "Пользователи",
 	"users.adminRequired":
 		"Управление пользователями требует роли администратора.",
@@ -163,6 +173,15 @@ export const ru: Record<string, string> = {
 		"Удаляет TOTP-фактор пользователя {name} и завершает все его сессии.",
 	"users.totp.resetNotice": "Двухфакторная аутентификация сброшена для {name}.",
 	"users.totp.error.reset": "Не удалось сбросить 2FA",
+	"users.passkeys": "Ключи доступа",
+	"users.passkeys.count": "ключей доступа: {n}",
+	"users.passkeys.reset": "Сбросить ключи доступа",
+	"users.passkeys.resetting": "Сброс…",
+	"users.passkeys.resetTitle": "Сбросить ключи доступа?",
+	"users.passkeys.resetDescription":
+		"Удаляет все ключи доступа пользователя {name}. Для входа потребуется пароль и оставшийся второй фактор — либо повторный сброс.",
+	"users.passkeys.resetNotice": "Ключи доступа сброшены для {name}.",
+	"users.passkeys.error.reset": "Не удалось сбросить ключи доступа",
 	"users.createUser": "Создать пользователя",
 	"users.creating": "Создание…",
 	"users.activeSessions": "Активные сессии",
@@ -461,6 +480,31 @@ export const ru: Record<string, string> = {
 	"settings.totp.error.confirm": "Неверный код подтверждения",
 	"settings.totp.error.disable":
 		"Не удалось отключить двухфакторную аутентификацию",
+
+	"settings.passkeys.title": "Ключи доступа",
+	"settings.passkeys.description":
+		"Входите с аппаратным ключом, отпечатком пальца или PIN-кодом устройства вместо одноразового кода.",
+	"settings.passkeys.empty": "Ключи доступа ещё не зарегистрированы.",
+	"settings.passkeys.unsupported":
+		"Этот браузер не поддерживает ключи доступа (WebAuthn).",
+	"settings.passkeys.add": "Добавить ключ доступа",
+	"settings.passkeys.addTitle": "Регистрация ключа доступа",
+	"settings.passkeys.addDescription":
+		"Задайте имя ключа, затем подтвердите действие блокировкой экрана устройства или ключом безопасности.",
+	"settings.passkeys.name": "Имя",
+	"settings.passkeys.namePlaceholder": "Например, отпечаток ноутбука",
+	"settings.passkeys.registering": "Ожидание аутентификатора…",
+	"settings.passkeys.cancelled": "Запрос ключа доступа отменён.",
+	"settings.passkeys.backedUp": "синхронизирован",
+	"settings.passkeys.synced": "Синхронизирован",
+	"settings.passkeys.deleteTitle": "Удалить ключ доступа?",
+	"settings.passkeys.deleteDescription":
+		"Удаляет «{name}» — этот ключ больше не сможет разблокировать вашу учётную запись.",
+	"settings.passkeys.deleting": "Удаление…",
+	"settings.passkeys.error.status": "Не удалось загрузить ключи доступа",
+	"settings.passkeys.error.register":
+		"Не удалось зарегистрировать ключ доступа",
+	"settings.passkeys.error.delete": "Не удалось удалить ключ доступа",
 
 	"apply.title": "Состояние применения",
 	"apply.stateLabel": "Состояние",

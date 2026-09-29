@@ -92,7 +92,16 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/users/me/totp", s.handleMyTOTP)
 	mux.HandleFunc("/api/v1/users/me/totp/enroll", s.handleMyTOTPEnroll)
 	mux.HandleFunc("/api/v1/users/me/totp/confirm", s.handleMyTOTPConfirm)
-	mux.HandleFunc("/api/v1/users/", s.handleV1UserTOTPReset)
+	// WebAuthn/passkey second factor (#1171). The login begin/finish pair is
+	// pending_2fa-gated exactly like totp/verify; the me/passkeys routes are
+	// self-service and {username}/passkeys is the admin reset.
+	mux.HandleFunc("/api/v1/auth/webauthn/begin", s.handleWebAuthnLoginBegin)
+	mux.HandleFunc("/api/v1/auth/webauthn/finish", s.handleWebAuthnLoginFinish)
+	mux.HandleFunc("/api/v1/users/me/passkeys", s.handleMyPasskeys)
+	mux.HandleFunc("/api/v1/users/me/passkeys/register/begin", s.handleMyPasskeyRegisterBegin)
+	mux.HandleFunc("/api/v1/users/me/passkeys/register/finish", s.handleMyPasskeyRegisterFinish)
+	mux.HandleFunc("/api/v1/users/me/passkeys/", s.handleMyPasskeyByID)
+	mux.HandleFunc("/api/v1/users/", s.handleV1UserFactorReset)
 }
 
 // registerProtocolRoomRoutes registers per-protocol room generation routes for

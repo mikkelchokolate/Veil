@@ -136,6 +136,10 @@ func (p SecretPolicy) Transform(snapshot *model.ManagementSnapshot, transform fu
 		if snapshot.Users[i].TOTPPendingSecret, err = transform(snapshot.Users[i].TOTPPendingSecret); err != nil {
 			return err
 		}
+		// Passkey material is deliberately NOT transformed: WebAuthn public
+		// keys, credential IDs, sign counters, and flags are public-key
+		// records, not secrets (#1171). Encrypting them would only widen the
+		// ciphertext surface without protecting anything.
 	}
 	return nil
 }

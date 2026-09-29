@@ -417,6 +417,37 @@ type User struct {
 	TOTPSecret         string   `json:"totpSecret,omitempty"`
 	TOTPPendingSecret  string   `json:"totpPendingSecret,omitempty"`
 	TOTPRecoveryHashes []string `json:"totpRecoveryHashes,omitempty"`
+	// Passkeys holds the user's registered WebAuthn credentials (#1171).
+	// Every entry is a second factor for panel login; the public key is not
+	// secret material so the SecretPolicy leaves these fields in plaintext.
+	// Generic user mutations must not touch the list — writes go through
+	// Mutation.SetUserPasskeys only.
+	Passkeys []Passkey `json:"passkeys,omitempty"`
+}
+
+// Passkey is one WebAuthn credential bound to a panel user (#1171). ID is the
+// base64url (unpadded) credential ID — it doubles as the path parameter of the
+// self-service delete route. PublicKey and AAGUID are base64-encoded raw
+// bytes. SignCount is the last accepted authenticator counter: a WebAuthn
+// assertion that presents a non-increasing counter means the credential was
+// cloned, so the login path both fails AND invalidates the credential.
+type Passkey struct {
+	ID                string `json:"id"`
+	Name              string `json:"name,omitempty"`
+	PublicKey         string `json:"publicKey"`
+	AttestationType   string `json:"attestationType,omitempty"`
+	AttestationFormat string `json:"attestationFormat,omitempty"`
+	SignCount         uint32 `json:"signCount"`
+	// CloneWarning is persisted so a credential flagged once stays flagged
+	// even if a later assertion is skipped by the caller before write-back.
+	CloneWarning   bool     `json:"cloneWarning,omitempty"`
+	Transports     []string `json:"transports,omitempty"`
+	UserVerified   bool     `json:"userVerified,omitempty"`
+	BackupEligible bool     `json:"backupEligible,omitempty"`
+	BackupState    bool     `json:"backupState,omitempty"`
+	AAGUID         string   `json:"aaguid,omitempty"`
+	Attachment     string   `json:"attachment,omitempty"`
+	CreatedAt      string   `json:"createdAt,omitempty"`
 }
 
 // HasUsableTOTPSecret reports whether the user carries second-factor material
@@ -443,6 +474,33 @@ func (u *User) ClearTOTP() {
 	u.TOTPSecret = ""
 	u.TOTPPendingSecret = ""
 	u.TOTPRecoveryHashes = nil
+}
+
+// HasPasskeys reports whether the user holds at least one WebAuthn second
+// factor for panel login.
+func (u User) HasPasskeys() bool {
+	return len(u.Passkeys) > 0
+}
+
+// HasSecondFactor reports whether ANY second factor is armed — the
+// session-mark requirement in the auth middleware keys off this, not TOTP
+// alone, so a passkey-only account is equally protected (#1171).
+func (u User) HasSecondFactor() bool {
+	return u.TOTPEnabled || u.HasPasskeys()
+}
+
+// PreservePasskeys copies the WebAuthn credential list from prior so generic
+// user mutations (role/password/locale through UpdateUser) never silently
+// wipe or smuggle a passkey. The dedicated passkey endpoints write the field
+// through SetUserPasskeys instead.
+func (u *User) PreservePasskeys(prior User) {
+	u.Passkeys = append([]Passkey(nil), prior.Passkeys...)
+}
+
+// ClearPasskeys drops every registered passkey (admin reset / self-delete of
+// the last credential).
+func (u *User) ClearPasskeys() {
+	u.Passkeys = nil
 }
 
 type SetupState struct {
