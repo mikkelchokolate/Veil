@@ -97,6 +97,20 @@ func TestProcessCPUSamplerNonPositiveElapsedFallsBack(t *testing.T) {
 	}
 }
 
+// A sub-100ms second read (e.g. /api/processes and /api/runtime/observation
+// sharing the sampler) must not turn a small tick delta into a huge rate.
+func TestProcessCPUSamplerSubDeltaFloorFallsBack(t *testing.T) {
+	clock := &samplerClock{t: time.Unix(1_700_000_000, 0)}
+	sampler := NewProcessCPUSampler(100, clock.now)
+	stat := ProcessStatFields{UserTicks: 900, SystemTicks: 100, StartTimeTicks: 500}
+	sampler.Percent(42, stat, 100)
+	clock.advance(10 * time.Millisecond)
+	want := NewProcessCPUUsage(100).Percent(stat, 100)
+	if got := sampler.Percent(42, ProcessStatFields{UserTicks: 910, SystemTicks: 100, StartTimeTicks: 500}, 100); got != want {
+		t.Fatalf("sub-delta percent = %v, want fallback %v", got, want)
+	}
+}
+
 // Each sample replaces the previous one, so rates always span the most recent
 // pair of polls.
 func TestProcessCPUSamplerRatesChainAcrossSamples(t *testing.T) {

@@ -2380,6 +2380,7 @@ type PrivilegedErrorEnvelope struct {
 
 // ProcessInfo defines model for ProcessInfo.
 type ProcessInfo struct {
+	// CpuPercent Live CPU usage rate — Δ(utime+stime)/Δwall since the previous sample, top-style (100 = one saturated core; multithreaded processes may exceed 100). The first sample after process start, a respawned pid, or a sub-100ms interval reports the since-start lifetime average instead.
 	CpuPercent    float32 `json:"cpuPercent"`
 	MemoryMB      int     `json:"memoryMB"`
 	Name          string  `json:"name"`

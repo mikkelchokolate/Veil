@@ -25,8 +25,16 @@ type processCPUSample struct {
 	at             time.Time
 }
 
+// minSampleDelta is the shortest wall-clock gap trusted for a delta rate:
+// two consumers sharing the sampler can land reads milliseconds apart, and
+// dividing a small tick delta by a tiny interval would spike cpuPercent.
+// Below the floor the previous-sample answer (lifetime average) stands.
+const minSampleDelta = 100 * time.Millisecond
+
 // NewProcessCPUSampler creates a sampler. now is injectable for tests; nil
-// uses time.Now. clockTicksPerSecond defaults to the common USER_HZ of 100.
+// uses time.Now. clockTicksPerSecond defaults to the common USER_HZ of 100,
+// which every supported Linux arch uses — a non-100 host would need
+// sysconf(_SC_CLK_TCK), which is not reachable without cgo.
 func NewProcessCPUSampler(clockTicksPerSecond int64, now func() time.Time) *ProcessCPUSampler {
 	if clockTicksPerSecond <= 0 {
 		clockTicksPerSecond = 100
@@ -66,7 +74,7 @@ func (s *ProcessCPUSampler) Percent(pid int, stat ProcessStatFields, systemUptim
 	}
 	elapsed := now.Sub(prev.at)
 	deltaTicks := totalTicks - prev.ticks
-	if elapsed <= 0 || deltaTicks < 0 {
+	if elapsed < minSampleDelta || deltaTicks < 0 {
 		return fallback
 	}
 	return float64(deltaTicks) / float64(s.clockTicksPerSecond) / elapsed.Seconds() * 100
