@@ -301,6 +301,7 @@ export const ru: Record<string, string> = {
 	"traffic.presence.source.stats": "таблица сессий",
 	"traffic.presence.source.activity": "активность",
 	"traffic.presence.source.unsupported": "нет",
+	"traffic.presence.source.ineligible": "не допущен",
 	"traffic.presence.connections": "Подключения",
 	"traffic.presence.lastActive": "Последняя активность",
 	"traffic.listeners.title": "Прослушиваемые порты",

@@ -45,14 +45,20 @@ func (p *presenceFakeProvider) Read() (client.ProviderBatch, error) {
 
 func mustCreatePresenceClient(t *testing.T, state *managementState, name string, bindings ...client.Binding) client.Client {
 	t.Helper()
-	row, err := state.clientRepo.Create(client.Client{Name: name, Enabled: true, QuotaResetPolicy: client.ResetNever})
+	return mustCreatePresenceClientRow(t, state,
+		client.Client{Name: name, Enabled: true, QuotaResetPolicy: client.ResetNever}, bindings...)
+}
+
+func mustCreatePresenceClientRow(t *testing.T, state *managementState, c client.Client, bindings ...client.Binding) client.Client {
+	t.Helper()
+	row, err := state.clientRepo.Create(c)
 	if err != nil {
-		t.Fatalf("create client %q: %v", name, err)
+		t.Fatalf("create client %q: %v", c.Name, err)
 	}
 	for _, binding := range bindings {
 		binding.ClientID = row.ID
 		if _, err := state.clientRepo.CreateBinding(binding); err != nil {
-			t.Fatalf("create binding for %q: %v", name, err)
+			t.Fatalf("create binding for %q: %v", c.Name, err)
 		}
 	}
 	return row
@@ -697,6 +703,125 @@ func TestPresenceMergeAllUnknownYieldsNull(t *testing.T) {
 	}
 	if merged.Source != presenceSourceActivity {
 		t.Fatalf("merged source=%q, want activity (best mechanism that could have answered)", merged.Source)
+	}
+}
+
+// TestV1PresenceIneligibleClientActivitySource (#1177): disabled, depleted,
+// and expired clients are already excluded by the render path, so a fresh
+// counter increase — residual telemetry — must not report them online via
+// the activity heuristic. An enabled live client must still report online.
+func TestV1PresenceIneligibleClientActivitySource(t *testing.T) {
+	state := newClientLifecycleTestState(t)
+	state.mu.Lock()
+	state.inbounds = []Inbound{{Name: "mi-main", Protocol: "mieru", Enabled: true}}
+	state.mu.Unlock()
+
+	past := time.Now().Unix() - 3600
+	ineligible := []client.Client{
+		mustCreatePresenceClientRow(t, state,
+			client.Client{Name: "disabled", Enabled: false, QuotaResetPolicy: client.ResetNever},
+			client.Binding{InboundID: "mi-main", Enabled: true}),
+		mustCreatePresenceClientRow(t, state,
+			client.Client{Name: "depleted", Enabled: true, Depleted: true, QuotaResetPolicy: client.ResetNever},
+			client.Binding{InboundID: "mi-main", Enabled: true}),
+		mustCreatePresenceClientRow(t, state,
+			client.Client{Name: "expired", Enabled: true, ExpiresAt: &past, QuotaResetPolicy: client.ResetNever},
+			client.Binding{InboundID: "mi-main", Enabled: true}),
+	}
+	live := mustCreatePresenceClient(t, state, "live",
+		client.Binding{InboundID: "mi-main", Enabled: true})
+
+	// Fresh counter increases on every binding: residual telemetry for the
+	// ineligible clients, a real sighting for the eligible one.
+	bindings, err := state.clientRepo.AllBindings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Unix()
+	for _, b := range bindings {
+		if err := state.trafficStore.RecordSample(client.Sample{
+			BindingID: b.ID, UploadBytes: 128, AtUnix: now,
+		}); err != nil {
+			t.Fatalf("record activity for binding %s: %v", b.ID, err)
+		}
+	}
+
+	items := presenceItemsByClientID(t, presenceRequest(t, state))
+	for _, c := range ineligible {
+		item := presenceItemByClientID(t, items, c.ID)
+		if item.Online != nil {
+			t.Fatalf("client %q online=%v, want null — residual activity must not prove presence", c.Name, *item.Online)
+		}
+		if item.Source != presenceSourceIneligible {
+			t.Fatalf("client %q source=%q, want ineligible", c.Name, item.Source)
+		}
+		if item.Connections != nil || item.LastActiveAt != nil {
+			t.Fatalf("client %q carries residual telemetry fields: %+v", c.Name, item)
+		}
+	}
+
+	liveItem := presenceItemByClientID(t, items, live.ID)
+	if liveItem.Online == nil || !*liveItem.Online {
+		t.Fatalf("live client online=%v, want true — the eligibility gate must not over-filter", liveItem.Online)
+	}
+	if liveItem.Source != presenceSourceActivity {
+		t.Fatalf("live client source=%q, want activity", liveItem.Source)
+	}
+}
+
+// TestV1PresenceIneligibleClientStatsSource (#1177): a residual hysteria2
+// /online row still claiming live sessions must not report a disabled
+// client online — the stats path obeys the same eligibility gate.
+func TestV1PresenceIneligibleClientStatsSource(t *testing.T) {
+	state := newClientLifecycleTestState(t)
+	state.mu.Lock()
+	state.inbounds = []Inbound{{Name: "hy-main", Protocol: "hysteria2", Enabled: true}}
+	state.mu.Unlock()
+
+	disabled := mustCreatePresenceClientRow(t, state,
+		client.Client{Name: "disabled", Enabled: false, QuotaResetPolicy: client.ResetNever},
+		client.Binding{InboundID: "hy-main", Enabled: true})
+	live := mustCreatePresenceClient(t, state, "live",
+		client.Binding{InboundID: "hy-main", Enabled: true})
+
+	bindings, err := state.clientRepo.AllBindings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	online := map[string]int64{}
+	for _, b := range bindings {
+		online[b.ID] = 2 // residual session rows for both bindings
+	}
+	provider := &presenceFakeProvider{key: "hysteria2:hy-main", online: online}
+	if err := state.trafficCollector.ResetProviders([]client.TrafficProvider{provider}); err != nil {
+		t.Fatal(err)
+	}
+	if err := state.trafficCollector.CollectOnce(); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+
+	items := presenceItemsByClientID(t, presenceRequest(t, state))
+
+	disabledItem := presenceItemByClientID(t, items, disabled.ID)
+	if disabledItem.Online != nil {
+		t.Fatalf("disabled client online=%v, want null — a residual stats row must not prove presence", *disabledItem.Online)
+	}
+	if disabledItem.Source != presenceSourceIneligible {
+		t.Fatalf("disabled client source=%q, want ineligible", disabledItem.Source)
+	}
+	if disabledItem.Connections != nil || disabledItem.LastActiveAt != nil {
+		t.Fatalf("disabled client carries residual telemetry fields: %+v", disabledItem)
+	}
+
+	liveItem := presenceItemByClientID(t, items, live.ID)
+	if liveItem.Online == nil || !*liveItem.Online {
+		t.Fatalf("live client online=%v, want true from stats", liveItem.Online)
+	}
+	if liveItem.Source != presenceSourceStats {
+		t.Fatalf("live client source=%q, want stats", liveItem.Source)
+	}
+	if liveItem.Connections == nil || *liveItem.Connections != 2 {
+		t.Fatalf("live client connections=%v, want 2", liveItem.Connections)
 	}
 }
 

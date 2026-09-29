@@ -400,6 +400,7 @@ export const en: Record<string, string> = {
 	"traffic.presence.source.stats": "session table",
 	"traffic.presence.source.activity": "activity",
 	"traffic.presence.source.unsupported": "none",
+	"traffic.presence.source.ineligible": "not admitted",
 	"traffic.presence.connections": "Connections",
 	"traffic.presence.lastActive": "Last active",
 	"traffic.listeners.title": "Listeners",

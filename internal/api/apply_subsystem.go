@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/client"
@@ -383,11 +384,12 @@ func (s *managementState) buildTrafficProvidersLocked() ([]client.TrafficProvide
 	}
 	inbounds, settings := s.liveTrafficObservationConfigLocked()
 	providers := []client.TrafficProvider{}
+	now := time.Now().Unix()
 	for _, inbound := range inbounds {
 		if inbound.Protocol != "hysteria2" || !inbound.Enabled {
 			continue
 		}
-		bindings := trafficIdentityMap(inbound.Name, inbound.Profiles, allBindings, allClients)
+		bindings := trafficIdentityMap(inbound.Name, inbound.Profiles, allBindings, allClients, now)
 		endpoint := fmt.Sprintf("http://127.0.0.1:%d/traffic", inbound.Port)
 		secret := hysteria2.TrafficStatsSecret(settings, inbound)
 		// The unit authenticates with the trafficStats block of its published
@@ -419,7 +421,7 @@ func (s *managementState) buildTrafficProvidersLocked() ([]client.TrafficProvide
 			continue
 		}
 		mieruEnabled = true
-		for identity, bindingID := range trafficIdentityMap(inbound.Name, inbound.Profiles, allBindings, allClients) {
+		for identity, bindingID := range trafficIdentityMap(inbound.Name, inbound.Profiles, allBindings, allClients, now) {
 			if prev, exists := mieruIdentities[identity]; exists && prev != bindingID {
 				log.Printf("traffic: mieru runtime identity %q claimed by bindings %s and %s — keeping first", identity, prev, bindingID)
 				continue

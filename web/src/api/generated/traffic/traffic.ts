@@ -77,7 +77,7 @@ export const getGetApiV1PresenceUrl = () => {
 }
 
 /**
- * One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
+ * One item per client, sorted by clientId, merging every binding. Hysteria2 bindings trust the runtime's authoritative /online session table (source=stats); bindings on protocols with traffic accounting but no session table (mieru) use a counter-increase heuristic (source=activity); bindings with no telemetry source report source=unsupported. Clients the render path excludes — disabled, quota-depleted, or expired — report source=ineligible with online=null because any telemetry they still carry is residual and cannot prove presence. online is tri-state: true/false only when a source could prove it, null when nothing can answer — never a faked offline.
  * @summary Live per-client presence (who is online right now)
  */
 export const getApiV1Presence = async ( options?: Parameters<typeof apiFetch>[1]): Promise<PresenceResponse> => {
