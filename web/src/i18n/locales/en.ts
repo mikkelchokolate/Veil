@@ -217,6 +217,20 @@ export const en: Record<string, string> = {
 	"auth.setup.creating": "Creating…",
 	"auth.setup.create": "Create administrator",
 
+	"auth.totp.subtitle": "Two-factor authentication",
+	"auth.totp.code": "Authenticator code",
+	"auth.totp.recoveryCode": "Recovery code",
+	"auth.totp.verify": "Verify",
+	"auth.totp.verifying": "Verifying…",
+	"auth.totp.useRecovery": "Use a recovery code instead",
+	"auth.totp.useAuthenticator": "Use an authenticator code instead",
+	"auth.totp.backToPassword": "Back to sign in",
+	"auth.totp.challengeExpires":
+		"This challenge expires at {time}. If it lapses, go back and sign in again.",
+	"auth.totp.invalid":
+		"Invalid or expired verification code. Try again or sign in again.",
+	"auth.totp.failed": "Could not verify the code. Try again.",
+
 	"users.title": "Users",
 	"users.adminRequired": "User management requires the admin role.",
 	"users.panelUsers": "Panel users",
@@ -240,6 +254,15 @@ export const en: Record<string, string> = {
 	"users.error.load": "Failed to load users",
 	"users.error.loadSessions": "Failed to load sessions",
 	"users.error.revoke": "Revoke failed",
+	"users.totp": "2FA",
+	"users.totp.enabled": "2FA",
+	"users.totp.reset": "Reset 2FA",
+	"users.totp.resetting": "Resetting…",
+	"users.totp.resetTitle": "Reset two-factor authentication?",
+	"users.totp.resetDescription":
+		"Clears the TOTP factor for {name} and signs out all of their sessions.",
+	"users.totp.resetNotice": "Two-factor authentication reset for {name}.",
+	"users.totp.error.reset": "2FA reset failed",
 	"users.createUser": "Create user",
 	"users.creating": "Creating…",
 	"users.activeSessions": "Active sessions",
@@ -507,6 +530,33 @@ export const en: Record<string, string> = {
 	"settings.rotatedApplyFailedNoOthers":
 		"State key rotated, but applying the new revision failed. No other sessions were active. Check Apply.",
 	"settings.rotateFailed": "Key rotation failed",
+	"settings.totp.title": "Two-factor authentication (TOTP)",
+	"settings.totp.description":
+		"Require a code from an authenticator app in addition to the password when signing in.",
+	"settings.totp.enable": "Enable authenticator app",
+	"settings.totp.restartEnrollment": "Restart enrollment",
+	"settings.totp.enrollScan":
+		"Scan this QR code with your authenticator app, or enter the secret manually.",
+	"settings.totp.secret": "Secret",
+	"settings.totp.uri": "Provisioning URI",
+	"settings.totp.confirmCode": "Enter the 6-digit code shown in the app",
+	"settings.totp.confirming": "Confirming…",
+	"settings.totp.pendingEnrollment":
+		"Enrollment is pending confirmation — start again to re-issue the secret.",
+	"settings.totp.recoveryRemaining": "{n} recovery code(s) remaining",
+	"settings.totp.recoveryTitle": "Recovery codes",
+	"settings.totp.recoveryHint":
+		"Save these codes now: each works exactly once and they are shown only this once.",
+	"settings.totp.copy": "Copy codes",
+	"settings.totp.copied": "Copied",
+	"settings.totp.disableTitle": "Disable two-factor authentication?",
+	"settings.totp.disableDescription":
+		"Enter a current authenticator code to confirm. All your other sessions will be revoked. If you lost your authenticator, ask an admin to reset two-factor authentication.",
+	"settings.totp.disabling": "Disabling…",
+	"settings.totp.error.status": "Failed to load two-factor status",
+	"settings.totp.error.enroll": "Failed to start enrollment",
+	"settings.totp.error.confirm": "Invalid verification code",
+	"settings.totp.error.disable": "Failed to disable two-factor authentication",
 
 	"backups.title": "Backups",
 	"backups.create": "Create backup",

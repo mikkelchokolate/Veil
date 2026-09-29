@@ -103,7 +103,11 @@ type managementState struct {
 	// may have been stopped or disabled (#1135).
 	previousServiceStates map[string]string
 	sessions              *SessionRegistry
-	loginUsernameLimiter  *observability.RateLimiterEngine
+	// pending2FA holds the short-lived post-password/pre-factor challenges
+	// shared by every second-factor mechanism (TOTP now, WebAuthn later).
+	// In-memory only: a restart simply forces a fresh login (#1172).
+	pending2FA           *pendingSecondFactorStore
+	loginUsernameLimiter *observability.RateLimiterEngine
 	// loginGlobalLimiter is the process-wide per-username login budget that
 	// backs delayGlobalUsernameAttempt; per-(client,username) buckets alone
 	// cannot stop a spray distributed across many IPv6 prefixes (#1101).

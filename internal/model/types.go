@@ -407,6 +407,42 @@ type User struct {
 	PasswordHash string `json:"passwordHash"`
 	Role         string `json:"role"` // "admin" or "viewer"
 	Locale       string `json:"locale,omitempty"`
+	// TOTP second factor (issue #1172). TOTPSecret is the active shared
+	// secret, TOTPPendingSecret is the enroll-time secret that has not been
+	// confirmed by a first valid code yet — both are AES-256-GCM encrypted at
+	// rest by the managementstate SecretPolicy. TOTPRecoveryHashes holds
+	// SHA-256 hashes of the single-use recovery codes (never the codes
+	// themselves).
+	TOTPEnabled        bool     `json:"totpEnabled,omitempty"`
+	TOTPSecret         string   `json:"totpSecret,omitempty"`
+	TOTPPendingSecret  string   `json:"totpPendingSecret,omitempty"`
+	TOTPRecoveryHashes []string `json:"totpRecoveryHashes,omitempty"`
+}
+
+// HasUsableTOTPSecret reports whether the user carries second-factor material
+// that still needs to survive a role/password update: an enabled factor, an
+// in-flight enrollment, or unused recovery codes.
+func (u User) HasUsableTOTPSecret() bool {
+	return u.TOTPEnabled || u.TOTPSecret != "" || u.TOTPPendingSecret != "" || len(u.TOTPRecoveryHashes) > 0
+}
+
+// PreserveTOTP copies the second-factor fields from prior so generic user
+// mutations (role/password/locale through UpdateUser) never silently wipe an
+// enrolled factor. The dedicated TOTP endpoints write these fields through
+// SetUserTOTP instead.
+func (u *User) PreserveTOTP(prior User) {
+	u.TOTPEnabled = prior.TOTPEnabled
+	u.TOTPSecret = prior.TOTPSecret
+	u.TOTPPendingSecret = prior.TOTPPendingSecret
+	u.TOTPRecoveryHashes = append([]string(nil), prior.TOTPRecoveryHashes...)
+}
+
+// ClearTOTP drops every second-factor field (admin reset / self-disable).
+func (u *User) ClearTOTP() {
+	u.TOTPEnabled = false
+	u.TOTPSecret = ""
+	u.TOTPPendingSecret = ""
+	u.TOTPRecoveryHashes = nil
 }
 
 type SetupState struct {

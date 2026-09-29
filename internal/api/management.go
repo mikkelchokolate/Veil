@@ -85,6 +85,14 @@ func (s *managementState) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/setup/complete", s.handleSetupComplete)
 	mux.HandleFunc("/api/users", s.handleUsersRouteWithAdminInvariant)
 	mux.HandleFunc("/api/users/", s.handleReliableUserItemRoute)
+	// TOTP second factor (#1172). The pending_2fa challenge only authorizes
+	// the verify route; the me/* routes are self-service on the cookie session
+	// and /api/v1/users/{username}/totp is the admin reset.
+	mux.HandleFunc("/api/v1/auth/totp/verify", s.handleTOTPVerify)
+	mux.HandleFunc("/api/v1/users/me/totp", s.handleMyTOTP)
+	mux.HandleFunc("/api/v1/users/me/totp/enroll", s.handleMyTOTPEnroll)
+	mux.HandleFunc("/api/v1/users/me/totp/confirm", s.handleMyTOTPConfirm)
+	mux.HandleFunc("/api/v1/users/", s.handleV1UserTOTPReset)
 }
 
 // registerProtocolRoomRoutes registers per-protocol room generation routes for

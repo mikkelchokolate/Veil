@@ -41,6 +41,14 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodGet, "/api/setup/status", capabilityPublic},
 	{http.MethodPost, "/api/setup/complete", capabilityPublic},
 	{http.MethodPost, "/api/auth/locale", capabilitySelfService},
+	// TOTP second factor (#1172). The verify endpoint is public like login —
+	// it is gated by the pending_2fa cookie, not a session. Self-service
+	// entries precede the {username} wildcard so "me" keeps its own decision.
+	{http.MethodPost, "/api/v1/auth/totp/verify", capabilityPublic},
+	{http.MethodGet, "/api/v1/users/me/totp", capabilitySelfService},
+	{http.MethodDelete, "/api/v1/users/me/totp", capabilitySelfService},
+	{http.MethodPost, "/api/v1/users/me/totp/enroll", capabilitySelfService},
+	{http.MethodPost, "/api/v1/users/me/totp/confirm", capabilitySelfService},
 
 	{http.MethodGet, "/api/status", capabilityViewer},
 	{http.MethodGet, "/api/version", capabilityViewer},
@@ -119,6 +127,9 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodPost, "/api/v1/clients/{id}/tokens", capabilityAdminSecret},
 	{http.MethodPost, "/api/v1/clients/{id}/tokens/{tokenId}/rotate", capabilityAdminSecret},
 	{http.MethodPost, "/api/protocols/{protocol}/room", capabilityAdminSecret},
+	// Admin reset of another user's second factor; the "me" entries above win
+	// for the literal me path.
+	{http.MethodDelete, "/api/v1/users/{username}/totp", capabilityAdminMutation},
 
 	{http.MethodPut, "/api/settings", capabilityAdminMutation},
 	{http.MethodPost, "/api/inbounds", capabilityAdminMutation},

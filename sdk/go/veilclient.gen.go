@@ -2235,10 +2235,19 @@ type LoginResponse struct {
 	CsrfToken string `json:"csrfToken"`
 
 	// Locale Persisted Panel display language.
-	Locale   Locale   `json:"locale"`
-	Role     UserRole `json:"role"`
-	Success  bool     `json:"success"`
-	Username string   `json:"username"`
+	Locale Locale `json:"locale"`
+
+	// PendingExpiresAt Deadline for completing the pending_2fa challenge.
+	PendingExpiresAt *time.Time `json:"pendingExpiresAt,omitempty"`
+	Role             UserRole   `json:"role"`
+
+	// SecondFactorMethods Factor mechanisms accepted by the pending challenge (currently `totp`).
+	SecondFactorMethods *[]string `json:"secondFactorMethods,omitempty"`
+
+	// SecondFactorRequired When true no session was minted; the `veil_pending_2fa` cookie authorizes POST /api/v1/auth/totp/verify.
+	SecondFactorRequired *bool  `json:"secondFactorRequired,omitempty"`
+	Success              bool   `json:"success"`
+	Username             string `json:"username"`
 }
 
 // MutationOutcome Apply outcome merged into admin mutation responses. success=false means the change committed (desired revision advanced) but the apply job for that revision did not finish cleanly; inspect applyJob for evidence.
@@ -2551,8 +2560,11 @@ type SessionInfo struct {
 	LastSeenAt    time.Time `json:"lastSeenAt"`
 	RemoteAddr    *string   `json:"remoteAddr,omitempty"`
 	Role          UserRole  `json:"role"`
-	UserAgent     *string   `json:"userAgent,omitempty"`
-	Username      string    `json:"username"`
+
+	// SecondFactor True when the session was minted after the account's second factor was satisfied (TOTP verify or enrollment confirmation).
+	SecondFactor *bool   `json:"secondFactor,omitempty"`
+	UserAgent    *string `json:"userAgent,omitempty"`
+	Username     string  `json:"username"`
 }
 
 // Settings defines model for Settings.
@@ -2754,6 +2766,55 @@ type TLSCertInfo struct {
 // TLSCertInfoSource Where the certificate came from. Panel-edge reads use "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage). Per-inbound reads classify the served certificate's origin: "acme" (CA-issued), "internal" (Caddy local CA — an untrusted fallback), "self-signed" (Veil/operator fallback material), or "missing" (no usable certificate at the configured path). An internal/self-signed certificate is never reported as a trusted issuance. Note that "acme" is an origin classification, not a public-trust check: a leaf from a private CA (VEIL_ACME_CA_URL installs, enterprise CA) also reports "acme".
 type TLSCertInfoSource string
 
+// TOTPConfirmRequest defines model for TOTPConfirmRequest.
+type TOTPConfirmRequest struct {
+	// Code Six-digit code generated from the pending enrollment secret.
+	Code string `json:"code"`
+}
+
+// TOTPConfirmResponse defines model for TOTPConfirmResponse.
+type TOTPConfirmResponse struct {
+	Enabled bool `json:"enabled"`
+
+	// RecoveryCodes Single-use recovery codes; shown exactly once.
+	RecoveryCodes []string `json:"recoveryCodes"`
+}
+
+// TOTPDisableRequest defines model for TOTPDisableRequest.
+type TOTPDisableRequest struct {
+	// Code Live authenticator code. Self-disable is factor-grade — a stolen 2FA-complete session plus the account password is not sufficient; losing the authenticator goes through admin reset.
+	Code string `json:"code"`
+}
+
+// TOTPEnrollResponse defines model for TOTPEnrollResponse.
+type TOTPEnrollResponse struct {
+	Issuer string `json:"issuer"`
+
+	// OtpauthUri otpauth:// provisioning URI suitable for QR rendering.
+	OtpauthUri string `json:"otpauthUri"`
+
+	// Secret Base32 shared secret for manual authenticator entry.
+	Secret string `json:"secret"`
+}
+
+// TOTPStatusResponse defines model for TOTPStatusResponse.
+type TOTPStatusResponse struct {
+	Enabled bool `json:"enabled"`
+
+	// PendingEnrollment True while an enrollment secret awaits its first verified code.
+	PendingEnrollment      bool `json:"pendingEnrollment"`
+	RecoveryCodesRemaining int  `json:"recoveryCodesRemaining"`
+}
+
+// TOTPVerifyRequest defines model for TOTPVerifyRequest.
+type TOTPVerifyRequest struct {
+	// Code Six-digit authenticator code.
+	Code *string `json:"code,omitempty"`
+
+	// RecoveryCode Single-use recovery code alternative to `code`.
+	RecoveryCode *string `json:"recoveryCode,omitempty"`
+}
+
 // TrafficBucket defines model for TrafficBucket.
 type TrafficBucket struct {
 	// BindingId Owning binding id; empty on per-client and aggregate history rows.
@@ -2892,9 +2953,12 @@ type UserCreateRequest struct {
 // UserResponse defines model for UserResponse.
 type UserResponse struct {
 	// Locale Persisted Panel display language.
-	Locale   Locale   `json:"locale"`
-	Role     UserRole `json:"role"`
-	Username string   `json:"username"`
+	Locale Locale   `json:"locale"`
+	Role   UserRole `json:"role"`
+
+	// TotpEnabled Whether the account requires a TOTP second factor at login.
+	TotpEnabled bool   `json:"totpEnabled"`
+	Username    string `json:"username"`
 }
 
 // UserRole defines model for UserRole.
@@ -3308,6 +3372,12 @@ type PutApiUsersUsernameParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// PostApiV1AuthTotpVerifyParams defines parameters for PostApiV1AuthTotpVerify.
+type PostApiV1AuthTotpVerifyParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // PostApiV1ClientsParams defines parameters for PostApiV1Clients.
 type PostApiV1ClientsParams struct {
 	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
@@ -3480,6 +3550,30 @@ type GetApiV1TrafficIdHistoryParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// DeleteApiV1UsersMeTotpParams defines parameters for DeleteApiV1UsersMeTotp.
+type DeleteApiV1UsersMeTotpParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiV1UsersMeTotpConfirmParams defines parameters for PostApiV1UsersMeTotpConfirm.
+type PostApiV1UsersMeTotpConfirmParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiV1UsersMeTotpEnrollParams defines parameters for PostApiV1UsersMeTotpEnroll.
+type PostApiV1UsersMeTotpEnrollParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteApiV1UsersUsernameTotpParams defines parameters for DeleteApiV1UsersUsernameTotp.
+type DeleteApiV1UsersUsernameTotpParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // PostApiValidationParams defines parameters for PostApiValidation.
 type PostApiValidationParams struct {
 	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
@@ -3595,6 +3689,9 @@ type PostApiUsersJSONRequestBody = UserCreateRequest
 // PutApiUsersUsernameJSONRequestBody defines body for PutApiUsersUsername for application/json ContentType.
 type PutApiUsersUsernameJSONRequestBody = UserUpdateRequest
 
+// PostApiV1AuthTotpVerifyJSONRequestBody defines body for PostApiV1AuthTotpVerify for application/json ContentType.
+type PostApiV1AuthTotpVerifyJSONRequestBody = TOTPVerifyRequest
+
 // PostApiV1ClientsJSONRequestBody defines body for PostApiV1Clients for application/json ContentType.
 type PostApiV1ClientsJSONRequestBody = ClientCreateRequest
 
@@ -3621,6 +3718,12 @@ type PostApiV1ClientsIdTokensJSONRequestBody PostApiV1ClientsIdTokensJSONBody
 
 // PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody defines body for PostApiV1ClientsIdTokensTokenIdRotate for application/json ContentType.
 type PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody PostApiV1ClientsIdTokensTokenIdRotateJSONBody
+
+// DeleteApiV1UsersMeTotpJSONRequestBody defines body for DeleteApiV1UsersMeTotp for application/json ContentType.
+type DeleteApiV1UsersMeTotpJSONRequestBody = TOTPDisableRequest
+
+// PostApiV1UsersMeTotpConfirmJSONRequestBody defines body for PostApiV1UsersMeTotpConfirm for application/json ContentType.
+type PostApiV1UsersMeTotpConfirmJSONRequestBody = TOTPConfirmRequest
 
 // PostApiValidationJSONRequestBody defines body for PostApiValidation for application/json ContentType.
 type PostApiValidationJSONRequestBody = ValidationRequest
@@ -4731,6 +4834,36 @@ type ClientInterface interface {
 	// Corresponds with PUT /api/users/{username} (the `PutApiUsersUsername` operationId).
 	PutApiUsersUsername(ctx context.Context, username Username, params *PutApiUsersUsernameParams, body PutApiUsersUsernameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostApiV1AuthTotpVerifyWithBody Complete the second-factor login challenge
+	//
+	// Completes the pending_2fa stage minted by `/api/auth/login` when the
+	// account has TOTP enabled. The `veil_pending_2fa` cookie (5-minute TTL,
+	// single challenge) authorizes ONLY this endpoint; a valid TOTP code or a
+	// single-use recovery code mints the real `veil_session` cookie. Attempts
+	// share the per-(client, username) login throttle and are hard-capped per
+	// challenge; the challenge fails closed if the account changed since the
+	// password was verified.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/auth/totp/verify (the `PostApiV1AuthTotpVerify` operationId).
+	PostApiV1AuthTotpVerifyWithBody(ctx context.Context, params *PostApiV1AuthTotpVerifyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1AuthTotpVerify Complete the second-factor login challenge
+	//
+	// Completes the pending_2fa stage minted by `/api/auth/login` when the
+	// account has TOTP enabled. The `veil_pending_2fa` cookie (5-minute TTL,
+	// single challenge) authorizes ONLY this endpoint; a valid TOTP code or a
+	// single-use recovery code mints the real `veil_session` cookie. Attempts
+	// share the per-(client, username) login throttle and are hard-capped per
+	// challenge; the challenge fails closed if the account changed since the
+	// password was verified.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/auth/totp/verify (the `PostApiV1AuthTotpVerify` operationId).
+	PostApiV1AuthTotpVerify(ctx context.Context, params *PostApiV1AuthTotpVerifyParams, body PostApiV1AuthTotpVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiV1Clients List clients with effective status
 	//
 	// Corresponds with GET /api/v1/clients (the `GetApiV1Clients` operationId).
@@ -4971,6 +5104,87 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /api/v1/traffic/{id}/history (the `GetApiV1TrafficIdHistory` operationId).
 	GetApiV1TrafficIdHistory(ctx context.Context, id ClientId, params *GetApiV1TrafficIdHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiV1UsersMeTotpWithBody Disable the current user's TOTP second factor
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token` plus a
+	// live authenticator code. Self-disable is factor-grade: the account
+	// password alone is not accepted, so a stolen completed session cannot
+	// strip the factor; a lost authenticator goes through the admin reset.
+	// Attempts are throttled through the login backoff family. On success all
+	// other sessions of the user are revoked.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with DELETE /api/v1/users/me/totp (the `DeleteApiV1UsersMeTotp` operationId).
+	DeleteApiV1UsersMeTotpWithBody(ctx context.Context, params *DeleteApiV1UsersMeTotpParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiV1UsersMeTotp Disable the current user's TOTP second factor
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token` plus a
+	// live authenticator code. Self-disable is factor-grade: the account
+	// password alone is not accepted, so a stolen completed session cannot
+	// strip the factor; a lost authenticator goes through the admin reset.
+	// Attempts are throttled through the login backoff family. On success all
+	// other sessions of the user are revoked.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /api/v1/users/me/totp (the `DeleteApiV1UsersMeTotp` operationId).
+	DeleteApiV1UsersMeTotp(ctx context.Context, params *DeleteApiV1UsersMeTotpParams, body DeleteApiV1UsersMeTotpJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1UsersMeTotp Read the current user's TOTP second-factor status
+	//
+	// Requires a `veil_session` cookie bound to a real user row;
+	// static API tokens and the dev-anonymous identity cannot call it.
+	//
+	// Corresponds with GET /api/v1/users/me/totp (the `GetApiV1UsersMeTotp` operationId).
+	GetApiV1UsersMeTotp(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1UsersMeTotpConfirmWithBody Confirm TOTP enrollment and receive recovery codes
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies a
+	// code from the pending enrollment secret, activates the factor, returns
+	// the single-use recovery codes exactly once, upgrades the calling
+	// session to second-factor-complete, and revokes every other session of
+	// the user. Attempts share the login backoff family.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/users/me/totp/confirm (the `PostApiV1UsersMeTotpConfirm` operationId).
+	PostApiV1UsersMeTotpConfirmWithBody(ctx context.Context, params *PostApiV1UsersMeTotpConfirmParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1UsersMeTotpConfirm Confirm TOTP enrollment and receive recovery codes
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies a
+	// code from the pending enrollment secret, activates the factor, returns
+	// the single-use recovery codes exactly once, upgrades the calling
+	// session to second-factor-complete, and revokes every other session of
+	// the user. Attempts share the login backoff family.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/users/me/totp/confirm (the `PostApiV1UsersMeTotpConfirm` operationId).
+	PostApiV1UsersMeTotpConfirm(ctx context.Context, params *PostApiV1UsersMeTotpConfirmParams, body PostApiV1UsersMeTotpConfirmJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1UsersMeTotpEnroll Start TOTP second-factor enrollment
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token`. Mints a
+	// pending enrollment secret (not yet active) and returns it with an
+	// `otpauth://` provisioning URI. The factor activates only when
+	// `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+	//
+	// Corresponds with POST /api/v1/users/me/totp/enroll (the `PostApiV1UsersMeTotpEnroll` operationId).
+	PostApiV1UsersMeTotpEnroll(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiV1UsersUsernameTotp Reset a user's TOTP second factor
+	//
+	// Admin reset for a locked-out user: clears the factor, any
+	// pending enrollment, and all recovery codes, and revokes every session
+	// the user holds. Cookie sessions must include `X-CSRF-Token`.
+	//
+	// Corresponds with DELETE /api/v1/users/{username}/totp (the `DeleteApiV1UsersUsernameTotp` operationId).
+	DeleteApiV1UsersUsernameTotp(ctx context.Context, username Username, params *DeleteApiV1UsersUsernameTotpParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiValidationWithBody Validate a candidate configuration against live host state
 	//
@@ -6826,6 +7040,56 @@ func (c *Client) PutApiUsersUsername(ctx context.Context, username Username, par
 	return c.Client.Do(req)
 }
 
+// PostApiV1AuthTotpVerifyWithBody Complete the second-factor login challenge
+//
+// Completes the pending_2fa stage minted by `/api/auth/login` when the
+// account has TOTP enabled. The `veil_pending_2fa` cookie (5-minute TTL,
+// single challenge) authorizes ONLY this endpoint; a valid TOTP code or a
+// single-use recovery code mints the real `veil_session` cookie. Attempts
+// share the per-(client, username) login throttle and are hard-capped per
+// challenge; the challenge fails closed if the account changed since the
+// password was verified.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/auth/totp/verify (the `PostApiV1AuthTotpVerify` operationId).
+func (c *Client) PostApiV1AuthTotpVerifyWithBody(ctx context.Context, params *PostApiV1AuthTotpVerifyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1AuthTotpVerifyRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiV1AuthTotpVerify Complete the second-factor login challenge
+//
+// Completes the pending_2fa stage minted by `/api/auth/login` when the
+// account has TOTP enabled. The `veil_pending_2fa` cookie (5-minute TTL,
+// single challenge) authorizes ONLY this endpoint; a valid TOTP code or a
+// single-use recovery code mints the real `veil_session` cookie. Attempts
+// share the per-(client, username) login throttle and are hard-capped per
+// challenge; the challenge fails closed if the account changed since the
+// password was verified.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/auth/totp/verify (the `PostApiV1AuthTotpVerify` operationId).
+func (c *Client) PostApiV1AuthTotpVerify(ctx context.Context, params *PostApiV1AuthTotpVerifyParams, body PostApiV1AuthTotpVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1AuthTotpVerifyRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetApiV1Clients List clients with effective status
 //
 // Corresponds with GET /api/v1/clients (the `GetApiV1Clients` operationId).
@@ -7438,6 +7702,157 @@ func (c *Client) GetApiV1TrafficId(ctx context.Context, id ClientId, reqEditors 
 // Corresponds with GET /api/v1/traffic/{id}/history (the `GetApiV1TrafficIdHistory` operationId).
 func (c *Client) GetApiV1TrafficIdHistory(ctx context.Context, id ClientId, params *GetApiV1TrafficIdHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1TrafficIdHistoryRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteApiV1UsersMeTotpWithBody Disable the current user's TOTP second factor
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token` plus a
+// live authenticator code. Self-disable is factor-grade: the account
+// password alone is not accepted, so a stolen completed session cannot
+// strip the factor; a lost authenticator goes through the admin reset.
+// Attempts are throttled through the login backoff family. On success all
+// other sessions of the user are revoked.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with DELETE /api/v1/users/me/totp (the `DeleteApiV1UsersMeTotp` operationId).
+func (c *Client) DeleteApiV1UsersMeTotpWithBody(ctx context.Context, params *DeleteApiV1UsersMeTotpParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1UsersMeTotpRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteApiV1UsersMeTotp Disable the current user's TOTP second factor
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token` plus a
+// live authenticator code. Self-disable is factor-grade: the account
+// password alone is not accepted, so a stolen completed session cannot
+// strip the factor; a lost authenticator goes through the admin reset.
+// Attempts are throttled through the login backoff family. On success all
+// other sessions of the user are revoked.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /api/v1/users/me/totp (the `DeleteApiV1UsersMeTotp` operationId).
+func (c *Client) DeleteApiV1UsersMeTotp(ctx context.Context, params *DeleteApiV1UsersMeTotpParams, body DeleteApiV1UsersMeTotpJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1UsersMeTotpRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetApiV1UsersMeTotp Read the current user's TOTP second-factor status
+//
+// Requires a `veil_session` cookie bound to a real user row;
+// static API tokens and the dev-anonymous identity cannot call it.
+//
+// Corresponds with GET /api/v1/users/me/totp (the `GetApiV1UsersMeTotp` operationId).
+func (c *Client) GetApiV1UsersMeTotp(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1UsersMeTotpRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiV1UsersMeTotpConfirmWithBody Confirm TOTP enrollment and receive recovery codes
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies a
+// code from the pending enrollment secret, activates the factor, returns
+// the single-use recovery codes exactly once, upgrades the calling
+// session to second-factor-complete, and revokes every other session of
+// the user. Attempts share the login backoff family.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/users/me/totp/confirm (the `PostApiV1UsersMeTotpConfirm` operationId).
+func (c *Client) PostApiV1UsersMeTotpConfirmWithBody(ctx context.Context, params *PostApiV1UsersMeTotpConfirmParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1UsersMeTotpConfirmRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiV1UsersMeTotpConfirm Confirm TOTP enrollment and receive recovery codes
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies a
+// code from the pending enrollment secret, activates the factor, returns
+// the single-use recovery codes exactly once, upgrades the calling
+// session to second-factor-complete, and revokes every other session of
+// the user. Attempts share the login backoff family.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/users/me/totp/confirm (the `PostApiV1UsersMeTotpConfirm` operationId).
+func (c *Client) PostApiV1UsersMeTotpConfirm(ctx context.Context, params *PostApiV1UsersMeTotpConfirmParams, body PostApiV1UsersMeTotpConfirmJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1UsersMeTotpConfirmRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiV1UsersMeTotpEnroll Start TOTP second-factor enrollment
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token`. Mints a
+// pending enrollment secret (not yet active) and returns it with an
+// `otpauth://` provisioning URI. The factor activates only when
+// `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+//
+// Corresponds with POST /api/v1/users/me/totp/enroll (the `PostApiV1UsersMeTotpEnroll` operationId).
+func (c *Client) PostApiV1UsersMeTotpEnroll(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1UsersMeTotpEnrollRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteApiV1UsersUsernameTotp Reset a user's TOTP second factor
+//
+// Admin reset for a locked-out user: clears the factor, any
+// pending enrollment, and all recovery codes, and revokes every session
+// the user holds. Cookie sessions must include `X-CSRF-Token`.
+//
+// Corresponds with DELETE /api/v1/users/{username}/totp (the `DeleteApiV1UsersUsernameTotp` operationId).
+func (c *Client) DeleteApiV1UsersUsernameTotp(ctx context.Context, username Username, params *DeleteApiV1UsersUsernameTotpParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1UsersUsernameTotpRequest(c.Server, username, params)
 	if err != nil {
 		return nil, err
 	}
@@ -10889,6 +11304,61 @@ func NewPutApiUsersUsernameRequestWithBody(server string, username Username, par
 	return req, nil
 }
 
+// NewPostApiV1AuthTotpVerifyRequest calls the generic PostApiV1AuthTotpVerify builder with application/json body
+func NewPostApiV1AuthTotpVerifyRequest(server string, params *PostApiV1AuthTotpVerifyParams, body PostApiV1AuthTotpVerifyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1AuthTotpVerifyRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostApiV1AuthTotpVerifyRequestWithBody constructs an http.Request for the PostApiV1AuthTotpVerify method, with any body, and a specified content type
+func NewPostApiV1AuthTotpVerifyRequestWithBody(server string, params *PostApiV1AuthTotpVerifyParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/auth/totp/verify")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
 // NewGetApiV1ClientsRequest constructs an http.Request for the GetApiV1Clients method
 func NewGetApiV1ClientsRequest(server string) (*http.Request, error) {
 	var err error
@@ -12353,6 +12823,234 @@ func NewGetApiV1TrafficIdHistoryRequest(server string, id ClientId, params *GetA
 	return req, nil
 }
 
+// NewDeleteApiV1UsersMeTotpRequest calls the generic DeleteApiV1UsersMeTotp builder with application/json body
+func NewDeleteApiV1UsersMeTotpRequest(server string, params *DeleteApiV1UsersMeTotpParams, body DeleteApiV1UsersMeTotpJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDeleteApiV1UsersMeTotpRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewDeleteApiV1UsersMeTotpRequestWithBody constructs an http.Request for the DeleteApiV1UsersMeTotp method, with any body, and a specified content type
+func NewDeleteApiV1UsersMeTotpRequestWithBody(server string, params *DeleteApiV1UsersMeTotpParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/users/me/totp")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1UsersMeTotpRequest constructs an http.Request for the GetApiV1UsersMeTotp method
+func NewGetApiV1UsersMeTotpRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/users/me/totp")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1UsersMeTotpConfirmRequest calls the generic PostApiV1UsersMeTotpConfirm builder with application/json body
+func NewPostApiV1UsersMeTotpConfirmRequest(server string, params *PostApiV1UsersMeTotpConfirmParams, body PostApiV1UsersMeTotpConfirmJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1UsersMeTotpConfirmRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostApiV1UsersMeTotpConfirmRequestWithBody constructs an http.Request for the PostApiV1UsersMeTotpConfirm method, with any body, and a specified content type
+func NewPostApiV1UsersMeTotpConfirmRequestWithBody(server string, params *PostApiV1UsersMeTotpConfirmParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/users/me/totp/confirm")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1UsersMeTotpEnrollRequest constructs an http.Request for the PostApiV1UsersMeTotpEnroll method
+func NewPostApiV1UsersMeTotpEnrollRequest(server string, params *PostApiV1UsersMeTotpEnrollParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/users/me/totp/enroll")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewDeleteApiV1UsersUsernameTotpRequest constructs an http.Request for the DeleteApiV1UsersUsernameTotp method
+func NewDeleteApiV1UsersUsernameTotpRequest(server string, username Username, params *DeleteApiV1UsersUsernameTotpParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "username", username, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/users/%s/totp", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
 // NewPostApiValidationRequest calls the generic PostApiValidation builder with application/json body
 func NewPostApiValidationRequest(server string, params *PostApiValidationParams, body PostApiValidationJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -13701,6 +14399,36 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /api/users/{username} (the `PutApiUsersUsername` operationId).
 	PutApiUsersUsernameWithResponse(ctx context.Context, username Username, params *PutApiUsersUsernameParams, body PutApiUsersUsernameJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiUsersUsernameResponse, error)
 
+	// PostApiV1AuthTotpVerifyWithBodyWithResponse Complete the second-factor login challenge
+	//
+	// Completes the pending_2fa stage minted by `/api/auth/login` when the
+	// account has TOTP enabled. The `veil_pending_2fa` cookie (5-minute TTL,
+	// single challenge) authorizes ONLY this endpoint; a valid TOTP code or a
+	// single-use recovery code mints the real `veil_session` cookie. Attempts
+	// share the per-(client, username) login throttle and are hard-capped per
+	// challenge; the challenge fails closed if the account changed since the
+	// password was verified.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/auth/totp/verify (the `PostApiV1AuthTotpVerify` operationId).
+	PostApiV1AuthTotpVerifyWithBodyWithResponse(ctx context.Context, params *PostApiV1AuthTotpVerifyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1AuthTotpVerifyResponse, error)
+
+	// PostApiV1AuthTotpVerifyWithResponse Complete the second-factor login challenge
+	//
+	// Completes the pending_2fa stage minted by `/api/auth/login` when the
+	// account has TOTP enabled. The `veil_pending_2fa` cookie (5-minute TTL,
+	// single challenge) authorizes ONLY this endpoint; a valid TOTP code or a
+	// single-use recovery code mints the real `veil_session` cookie. Attempts
+	// share the per-(client, username) login throttle and are hard-capped per
+	// challenge; the challenge fails closed if the account changed since the
+	// password was verified.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/auth/totp/verify (the `PostApiV1AuthTotpVerify` operationId).
+	PostApiV1AuthTotpVerifyWithResponse(ctx context.Context, params *PostApiV1AuthTotpVerifyParams, body PostApiV1AuthTotpVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1AuthTotpVerifyResponse, error)
+
 	// GetApiV1ClientsWithResponse List clients with effective status
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -13981,6 +14709,93 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /api/v1/traffic/{id}/history (the `GetApiV1TrafficIdHistory` operationId).
 	GetApiV1TrafficIdHistoryWithResponse(ctx context.Context, id ClientId, params *GetApiV1TrafficIdHistoryParams, reqEditors ...RequestEditorFn) (*GetApiV1TrafficIdHistoryResponse, error)
+
+	// DeleteApiV1UsersMeTotpWithBodyWithResponse Disable the current user's TOTP second factor
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token` plus a
+	// live authenticator code. Self-disable is factor-grade: the account
+	// password alone is not accepted, so a stolen completed session cannot
+	// strip the factor; a lost authenticator goes through the admin reset.
+	// Attempts are throttled through the login backoff family. On success all
+	// other sessions of the user are revoked.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/users/me/totp (the `DeleteApiV1UsersMeTotp` operationId).
+	DeleteApiV1UsersMeTotpWithBodyWithResponse(ctx context.Context, params *DeleteApiV1UsersMeTotpParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteApiV1UsersMeTotpResponse, error)
+
+	// DeleteApiV1UsersMeTotpWithResponse Disable the current user's TOTP second factor
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token` plus a
+	// live authenticator code. Self-disable is factor-grade: the account
+	// password alone is not accepted, so a stolen completed session cannot
+	// strip the factor; a lost authenticator goes through the admin reset.
+	// Attempts are throttled through the login backoff family. On success all
+	// other sessions of the user are revoked.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/users/me/totp (the `DeleteApiV1UsersMeTotp` operationId).
+	DeleteApiV1UsersMeTotpWithResponse(ctx context.Context, params *DeleteApiV1UsersMeTotpParams, body DeleteApiV1UsersMeTotpJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteApiV1UsersMeTotpResponse, error)
+
+	// GetApiV1UsersMeTotpWithResponse Read the current user's TOTP second-factor status
+	//
+	// Requires a `veil_session` cookie bound to a real user row;
+	// static API tokens and the dev-anonymous identity cannot call it.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/users/me/totp (the `GetApiV1UsersMeTotp` operationId).
+	GetApiV1UsersMeTotpWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1UsersMeTotpResponse, error)
+
+	// PostApiV1UsersMeTotpConfirmWithBodyWithResponse Confirm TOTP enrollment and receive recovery codes
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies a
+	// code from the pending enrollment secret, activates the factor, returns
+	// the single-use recovery codes exactly once, upgrades the calling
+	// session to second-factor-complete, and revokes every other session of
+	// the user. Attempts share the login backoff family.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/users/me/totp/confirm (the `PostApiV1UsersMeTotpConfirm` operationId).
+	PostApiV1UsersMeTotpConfirmWithBodyWithResponse(ctx context.Context, params *PostApiV1UsersMeTotpConfirmParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1UsersMeTotpConfirmResponse, error)
+
+	// PostApiV1UsersMeTotpConfirmWithResponse Confirm TOTP enrollment and receive recovery codes
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies a
+	// code from the pending enrollment secret, activates the factor, returns
+	// the single-use recovery codes exactly once, upgrades the calling
+	// session to second-factor-complete, and revokes every other session of
+	// the user. Attempts share the login backoff family.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/users/me/totp/confirm (the `PostApiV1UsersMeTotpConfirm` operationId).
+	PostApiV1UsersMeTotpConfirmWithResponse(ctx context.Context, params *PostApiV1UsersMeTotpConfirmParams, body PostApiV1UsersMeTotpConfirmJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1UsersMeTotpConfirmResponse, error)
+
+	// PostApiV1UsersMeTotpEnrollWithResponse Start TOTP second-factor enrollment
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token`. Mints a
+	// pending enrollment secret (not yet active) and returns it with an
+	// `otpauth://` provisioning URI. The factor activates only when
+	// `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/users/me/totp/enroll (the `PostApiV1UsersMeTotpEnroll` operationId).
+	PostApiV1UsersMeTotpEnrollWithResponse(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, reqEditors ...RequestEditorFn) (*PostApiV1UsersMeTotpEnrollResponse, error)
+
+	// DeleteApiV1UsersUsernameTotpWithResponse Reset a user's TOTP second factor
+	//
+	// Admin reset for a locked-out user: clears the factor, any
+	// pending enrollment, and all recovery codes, and revokes every session
+	// the user holds. Cookie sessions must include `X-CSRF-Token`.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/users/{username}/totp (the `DeleteApiV1UsersUsernameTotp` operationId).
+	DeleteApiV1UsersUsernameTotpWithResponse(ctx context.Context, username Username, params *DeleteApiV1UsersUsernameTotpParams, reqEditors ...RequestEditorFn) (*DeleteApiV1UsersUsernameTotpResponse, error)
 
 	// PostApiValidationWithBodyWithResponse Validate a candidate configuration against live host state
 	//
@@ -19448,6 +20263,89 @@ func (r PutApiUsersUsernameResponse) ContentType() string {
 	return ""
 }
 
+// PostApiV1AuthTotpVerifyResponse200Headers the declared response headers of an HTTP 200 response for PostApiV1AuthTotpVerify
+type PostApiV1AuthTotpVerifyResponse200Headers struct {
+	SetCookie *string
+}
+
+// PostApiV1AuthTotpVerifyResponse401Headers the declared response headers of an HTTP 401 response for PostApiV1AuthTotpVerify
+type PostApiV1AuthTotpVerifyResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+// PostApiV1AuthTotpVerifyResponse429Headers the declared response headers of an HTTP 429 response for PostApiV1AuthTotpVerify
+type PostApiV1AuthTotpVerifyResponse429Headers struct {
+	RetryAfter *int
+}
+
+type PostApiV1AuthTotpVerifyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *LoginResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *ErrorEnvelope
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *PostApiV1AuthTotpVerifyResponse200Headers
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *PostApiV1AuthTotpVerifyResponse401Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *PostApiV1AuthTotpVerifyResponse429Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostApiV1AuthTotpVerifyResponse) GetJSON200() *LoginResponse {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiV1AuthTotpVerifyResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiV1AuthTotpVerifyResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r PostApiV1AuthTotpVerifyResponse) GetJSON429() *ErrorEnvelope {
+	return r.JSON429
+}
+
+// GetBody returns the raw response body bytes
+func (r PostApiV1AuthTotpVerifyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1AuthTotpVerifyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1AuthTotpVerifyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostApiV1AuthTotpVerifyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetApiV1ClientsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -21314,6 +22212,421 @@ func (r GetApiV1TrafficIdHistoryResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetApiV1TrafficIdHistoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// DeleteApiV1UsersMeTotpResponse401Headers the declared response headers of an HTTP 401 response for DeleteApiV1UsersMeTotp
+type DeleteApiV1UsersMeTotpResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+// DeleteApiV1UsersMeTotpResponse429Headers the declared response headers of an HTTP 429 response for DeleteApiV1UsersMeTotp
+type DeleteApiV1UsersMeTotpResponse429Headers struct {
+	RetryAfter *int
+}
+
+type DeleteApiV1UsersMeTotpResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SuccessResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *ErrorEnvelope
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *DeleteApiV1UsersMeTotpResponse401Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *DeleteApiV1UsersMeTotpResponse429Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DeleteApiV1UsersMeTotpResponse) GetJSON200() *SuccessResponse {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r DeleteApiV1UsersMeTotpResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r DeleteApiV1UsersMeTotpResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r DeleteApiV1UsersMeTotpResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r DeleteApiV1UsersMeTotpResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r DeleteApiV1UsersMeTotpResponse) GetJSON429() *ErrorEnvelope {
+	return r.JSON429
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r DeleteApiV1UsersMeTotpResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteApiV1UsersMeTotpResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiV1UsersMeTotpResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiV1UsersMeTotpResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteApiV1UsersMeTotpResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetApiV1UsersMeTotpResponse401Headers the declared response headers of an HTTP 401 response for GetApiV1UsersMeTotp
+type GetApiV1UsersMeTotpResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type GetApiV1UsersMeTotpResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TOTPStatusResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetApiV1UsersMeTotpResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiV1UsersMeTotpResponse) GetJSON200() *TOTPStatusResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiV1UsersMeTotpResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetApiV1UsersMeTotpResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetApiV1UsersMeTotpResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiV1UsersMeTotpResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1UsersMeTotpResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1UsersMeTotpResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiV1UsersMeTotpResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PostApiV1UsersMeTotpConfirmResponse401Headers the declared response headers of an HTTP 401 response for PostApiV1UsersMeTotpConfirm
+type PostApiV1UsersMeTotpConfirmResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+// PostApiV1UsersMeTotpConfirmResponse429Headers the declared response headers of an HTTP 429 response for PostApiV1UsersMeTotpConfirm
+type PostApiV1UsersMeTotpConfirmResponse429Headers struct {
+	RetryAfter *int
+}
+
+type PostApiV1UsersMeTotpConfirmResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TOTPConfirmResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Conflict
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *ErrorEnvelope
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *PostApiV1UsersMeTotpConfirmResponse401Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *PostApiV1UsersMeTotpConfirmResponse429Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostApiV1UsersMeTotpConfirmResponse) GetJSON200() *TOTPConfirmResponse {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiV1UsersMeTotpConfirmResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiV1UsersMeTotpConfirmResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostApiV1UsersMeTotpConfirmResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r PostApiV1UsersMeTotpConfirmResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r PostApiV1UsersMeTotpConfirmResponse) GetJSON409() *Conflict {
+	return r.JSON409
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r PostApiV1UsersMeTotpConfirmResponse) GetJSON429() *ErrorEnvelope {
+	return r.JSON429
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PostApiV1UsersMeTotpConfirmResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r PostApiV1UsersMeTotpConfirmResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1UsersMeTotpConfirmResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1UsersMeTotpConfirmResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostApiV1UsersMeTotpConfirmResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PostApiV1UsersMeTotpEnrollResponse401Headers the declared response headers of an HTTP 401 response for PostApiV1UsersMeTotpEnroll
+type PostApiV1UsersMeTotpEnrollResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type PostApiV1UsersMeTotpEnrollResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TOTPEnrollResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *PostApiV1UsersMeTotpEnrollResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostApiV1UsersMeTotpEnrollResponse) GetJSON200() *TOTPEnrollResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiV1UsersMeTotpEnrollResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostApiV1UsersMeTotpEnrollResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r PostApiV1UsersMeTotpEnrollResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PostApiV1UsersMeTotpEnrollResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r PostApiV1UsersMeTotpEnrollResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1UsersMeTotpEnrollResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1UsersMeTotpEnrollResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostApiV1UsersMeTotpEnrollResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// DeleteApiV1UsersUsernameTotpResponse401Headers the declared response headers of an HTTP 401 response for DeleteApiV1UsersUsernameTotp
+type DeleteApiV1UsersUsernameTotpResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type DeleteApiV1UsersUsernameTotpResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *DeleteApiV1UsersUsernameTotpResponse401Headers
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r DeleteApiV1UsersUsernameTotpResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r DeleteApiV1UsersUsernameTotpResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r DeleteApiV1UsersUsernameTotpResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r DeleteApiV1UsersUsernameTotpResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteApiV1UsersUsernameTotpResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiV1UsersUsernameTotpResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiV1UsersUsernameTotpResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteApiV1UsersUsernameTotpResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -23496,6 +24809,48 @@ func (c *ClientWithResponses) PutApiUsersUsernameWithResponse(ctx context.Contex
 	return ParsePutApiUsersUsernameResponse(rsp)
 }
 
+// PostApiV1AuthTotpVerifyWithBodyWithResponse Complete the second-factor login challenge
+//
+// Completes the pending_2fa stage minted by `/api/auth/login` when the
+// account has TOTP enabled. The `veil_pending_2fa` cookie (5-minute TTL,
+// single challenge) authorizes ONLY this endpoint; a valid TOTP code or a
+// single-use recovery code mints the real `veil_session` cookie. Attempts
+// share the per-(client, username) login throttle and are hard-capped per
+// challenge; the challenge fails closed if the account changed since the
+// password was verified.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/auth/totp/verify (the `PostApiV1AuthTotpVerify` operationId).
+func (c *ClientWithResponses) PostApiV1AuthTotpVerifyWithBodyWithResponse(ctx context.Context, params *PostApiV1AuthTotpVerifyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1AuthTotpVerifyResponse, error) {
+	rsp, err := c.PostApiV1AuthTotpVerifyWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1AuthTotpVerifyResponse(rsp)
+}
+
+// PostApiV1AuthTotpVerifyWithResponse Complete the second-factor login challenge
+//
+// Completes the pending_2fa stage minted by `/api/auth/login` when the
+// account has TOTP enabled. The `veil_pending_2fa` cookie (5-minute TTL,
+// single challenge) authorizes ONLY this endpoint; a valid TOTP code or a
+// single-use recovery code mints the real `veil_session` cookie. Attempts
+// share the per-(client, username) login throttle and are hard-capped per
+// challenge; the challenge fails closed if the account changed since the
+// password was verified.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/auth/totp/verify (the `PostApiV1AuthTotpVerify` operationId).
+func (c *ClientWithResponses) PostApiV1AuthTotpVerifyWithResponse(ctx context.Context, params *PostApiV1AuthTotpVerifyParams, body PostApiV1AuthTotpVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1AuthTotpVerifyResponse, error) {
+	rsp, err := c.PostApiV1AuthTotpVerify(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1AuthTotpVerifyResponse(rsp)
+}
+
 // GetApiV1ClientsWithResponse List clients with effective status
 //
 // Returns a wrapper object for the known response body format(s).
@@ -24004,6 +25359,135 @@ func (c *ClientWithResponses) GetApiV1TrafficIdHistoryWithResponse(ctx context.C
 		return nil, err
 	}
 	return ParseGetApiV1TrafficIdHistoryResponse(rsp)
+}
+
+// DeleteApiV1UsersMeTotpWithBodyWithResponse Disable the current user's TOTP second factor
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token` plus a
+// live authenticator code. Self-disable is factor-grade: the account
+// password alone is not accepted, so a stolen completed session cannot
+// strip the factor; a lost authenticator goes through the admin reset.
+// Attempts are throttled through the login backoff family. On success all
+// other sessions of the user are revoked.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/users/me/totp (the `DeleteApiV1UsersMeTotp` operationId).
+func (c *ClientWithResponses) DeleteApiV1UsersMeTotpWithBodyWithResponse(ctx context.Context, params *DeleteApiV1UsersMeTotpParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteApiV1UsersMeTotpResponse, error) {
+	rsp, err := c.DeleteApiV1UsersMeTotpWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiV1UsersMeTotpResponse(rsp)
+}
+
+// DeleteApiV1UsersMeTotpWithResponse Disable the current user's TOTP second factor
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token` plus a
+// live authenticator code. Self-disable is factor-grade: the account
+// password alone is not accepted, so a stolen completed session cannot
+// strip the factor; a lost authenticator goes through the admin reset.
+// Attempts are throttled through the login backoff family. On success all
+// other sessions of the user are revoked.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/users/me/totp (the `DeleteApiV1UsersMeTotp` operationId).
+func (c *ClientWithResponses) DeleteApiV1UsersMeTotpWithResponse(ctx context.Context, params *DeleteApiV1UsersMeTotpParams, body DeleteApiV1UsersMeTotpJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteApiV1UsersMeTotpResponse, error) {
+	rsp, err := c.DeleteApiV1UsersMeTotp(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiV1UsersMeTotpResponse(rsp)
+}
+
+// GetApiV1UsersMeTotpWithResponse Read the current user's TOTP second-factor status
+//
+// Requires a `veil_session` cookie bound to a real user row;
+// static API tokens and the dev-anonymous identity cannot call it.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/users/me/totp (the `GetApiV1UsersMeTotp` operationId).
+func (c *ClientWithResponses) GetApiV1UsersMeTotpWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1UsersMeTotpResponse, error) {
+	rsp, err := c.GetApiV1UsersMeTotp(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1UsersMeTotpResponse(rsp)
+}
+
+// PostApiV1UsersMeTotpConfirmWithBodyWithResponse Confirm TOTP enrollment and receive recovery codes
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies a
+// code from the pending enrollment secret, activates the factor, returns
+// the single-use recovery codes exactly once, upgrades the calling
+// session to second-factor-complete, and revokes every other session of
+// the user. Attempts share the login backoff family.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/users/me/totp/confirm (the `PostApiV1UsersMeTotpConfirm` operationId).
+func (c *ClientWithResponses) PostApiV1UsersMeTotpConfirmWithBodyWithResponse(ctx context.Context, params *PostApiV1UsersMeTotpConfirmParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1UsersMeTotpConfirmResponse, error) {
+	rsp, err := c.PostApiV1UsersMeTotpConfirmWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1UsersMeTotpConfirmResponse(rsp)
+}
+
+// PostApiV1UsersMeTotpConfirmWithResponse Confirm TOTP enrollment and receive recovery codes
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies a
+// code from the pending enrollment secret, activates the factor, returns
+// the single-use recovery codes exactly once, upgrades the calling
+// session to second-factor-complete, and revokes every other session of
+// the user. Attempts share the login backoff family.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/users/me/totp/confirm (the `PostApiV1UsersMeTotpConfirm` operationId).
+func (c *ClientWithResponses) PostApiV1UsersMeTotpConfirmWithResponse(ctx context.Context, params *PostApiV1UsersMeTotpConfirmParams, body PostApiV1UsersMeTotpConfirmJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1UsersMeTotpConfirmResponse, error) {
+	rsp, err := c.PostApiV1UsersMeTotpConfirm(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1UsersMeTotpConfirmResponse(rsp)
+}
+
+// PostApiV1UsersMeTotpEnrollWithResponse Start TOTP second-factor enrollment
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token`. Mints a
+// pending enrollment secret (not yet active) and returns it with an
+// `otpauth://` provisioning URI. The factor activates only when
+// `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/users/me/totp/enroll (the `PostApiV1UsersMeTotpEnroll` operationId).
+func (c *ClientWithResponses) PostApiV1UsersMeTotpEnrollWithResponse(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, reqEditors ...RequestEditorFn) (*PostApiV1UsersMeTotpEnrollResponse, error) {
+	rsp, err := c.PostApiV1UsersMeTotpEnroll(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1UsersMeTotpEnrollResponse(rsp)
+}
+
+// DeleteApiV1UsersUsernameTotpWithResponse Reset a user's TOTP second factor
+//
+// Admin reset for a locked-out user: clears the factor, any
+// pending enrollment, and all recovery codes, and revokes every session
+// the user holds. Cookie sessions must include `X-CSRF-Token`.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/users/{username}/totp (the `DeleteApiV1UsersUsernameTotp` operationId).
+func (c *ClientWithResponses) DeleteApiV1UsersUsernameTotpWithResponse(ctx context.Context, username Username, params *DeleteApiV1UsersUsernameTotpParams, reqEditors ...RequestEditorFn) (*DeleteApiV1UsersUsernameTotpResponse, error) {
+	rsp, err := c.DeleteApiV1UsersUsernameTotp(ctx, username, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiV1UsersUsernameTotpResponse(rsp)
 }
 
 // PostApiValidationWithBodyWithResponse Validate a candidate configuration against live host state
@@ -28492,6 +29976,86 @@ func ParsePutApiUsersUsernameResponse(rsp *http.Response) (*PutApiUsersUsernameR
 	return response, nil
 }
 
+// ParsePostApiV1AuthTotpVerifyResponse parses an HTTP response from a PostApiV1AuthTotpVerifyWithResponse call
+func ParsePostApiV1AuthTotpVerifyResponse(rsp *http.Response) (*PostApiV1AuthTotpVerifyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1AuthTotpVerifyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LoginResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers PostApiV1AuthTotpVerifyResponse200Headers
+		if values := rsp.Header.Values("Set-Cookie"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Set-Cookie", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.SetCookie = &value
+		}
+		response.Headers200 = &headers
+	case rsp.StatusCode == 401:
+		var headers PostApiV1AuthTotpVerifyResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	case rsp.StatusCode == 429:
+		var headers PostApiV1AuthTotpVerifyResponse429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers429 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseGetApiV1ClientsResponse parses an HTTP response from a GetApiV1ClientsWithResponse call
 func ParseGetApiV1ClientsResponse(rsp *http.Response) (*GetApiV1ClientsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -29898,6 +31462,385 @@ func ParseGetApiV1TrafficIdHistoryResponse(rsp *http.Response) (*GetApiV1Traffic
 		}
 		response.JSON200 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiV1UsersMeTotpResponse parses an HTTP response from a DeleteApiV1UsersMeTotpWithResponse call
+func ParseDeleteApiV1UsersMeTotpResponse(rsp *http.Response) (*DeleteApiV1UsersMeTotpResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiV1UsersMeTotpResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SuccessResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers DeleteApiV1UsersMeTotpResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	case rsp.StatusCode == 429:
+		var headers DeleteApiV1UsersMeTotpResponse429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers429 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1UsersMeTotpResponse parses an HTTP response from a GetApiV1UsersMeTotpWithResponse call
+func ParseGetApiV1UsersMeTotpResponse(rsp *http.Response) (*GetApiV1UsersMeTotpResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1UsersMeTotpResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TOTPStatusResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetApiV1UsersMeTotpResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1UsersMeTotpConfirmResponse parses an HTTP response from a PostApiV1UsersMeTotpConfirmWithResponse call
+func ParsePostApiV1UsersMeTotpConfirmResponse(rsp *http.Response) (*PostApiV1UsersMeTotpConfirmResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1UsersMeTotpConfirmResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TOTPConfirmResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers PostApiV1UsersMeTotpConfirmResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	case rsp.StatusCode == 429:
+		var headers PostApiV1UsersMeTotpConfirmResponse429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers429 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1UsersMeTotpEnrollResponse parses an HTTP response from a PostApiV1UsersMeTotpEnrollWithResponse call
+func ParsePostApiV1UsersMeTotpEnrollResponse(rsp *http.Response) (*PostApiV1UsersMeTotpEnrollResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1UsersMeTotpEnrollResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TOTPEnrollResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers PostApiV1UsersMeTotpEnrollResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiV1UsersUsernameTotpResponse parses an HTTP response from a DeleteApiV1UsersUsernameTotpWithResponse call
+func ParseDeleteApiV1UsersUsernameTotpResponse(rsp *http.Response) (*DeleteApiV1UsersUsernameTotpResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiV1UsersUsernameTotpResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers DeleteApiV1UsersUsernameTotpResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
 	}
 
 	return response, nil

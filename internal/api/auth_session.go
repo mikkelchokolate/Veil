@@ -363,16 +363,18 @@ func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Reques
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		type UserResponse struct {
-			Username string `json:"username"`
-			Role     string `json:"role"`
-			Locale   string `json:"locale"`
+			Username    string `json:"username"`
+			Role        string `json:"role"`
+			Locale      string `json:"locale"`
+			TOTPEnabled bool   `json:"totpEnabled"`
 		}
 		var list []UserResponse
 		for _, u := range s.users {
 			list = append(list, UserResponse{
-				Username: u.Username,
-				Role:     u.Role,
-				Locale:   panel.NormalizeLocale(u.Locale),
+				Username:    u.Username,
+				Role:        u.Role,
+				Locale:      panel.NormalizeLocale(u.Locale),
+				TOTPEnabled: u.TOTPEnabled,
 			})
 		}
 		writeJSON(w, list)
@@ -434,9 +436,10 @@ func (s *managementState) handleUsersRoute(w http.ResponseWriter, r *http.Reques
 				Details: map[string]any{"role": created.Role},
 			})
 			writeJSONStatus(w, http.StatusCreated, map[string]any{
-				"username": created.Username,
-				"role":     created.Role,
-				"locale":   created.Locale,
+				"username":    created.Username,
+				"role":        created.Role,
+				"locale":      created.Locale,
+				"totpEnabled": created.TOTPEnabled,
 			})
 			return nil
 		})
@@ -535,9 +538,10 @@ func (s *managementState) handleUserByNameRoute(w http.ResponseWriter, r *http.R
 				return nil
 			}
 			writeJSON(w, map[string]any{
-				"username": updated.Username,
-				"role":     updated.Role,
-				"locale":   panel.NormalizeLocale(updated.Locale),
+				"username":    updated.Username,
+				"role":        updated.Role,
+				"locale":      panel.NormalizeLocale(updated.Locale),
+				"totpEnabled": updated.TOTPEnabled,
 			})
 			s.recordRequestAudit(r, audit.Record{
 				Action:  "user.update",

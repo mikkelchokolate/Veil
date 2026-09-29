@@ -115,6 +115,19 @@ export const ru: Record<string, string> = {
 		"Не удалось загрузить статус первоначальной настройки.",
 	"auth.setup.creating": "Создание…",
 	"auth.setup.create": "Создать администратора",
+	"auth.totp.subtitle": "Двухфакторная аутентификация",
+	"auth.totp.code": "Код аутентификатора",
+	"auth.totp.recoveryCode": "Код восстановления",
+	"auth.totp.verify": "Подтвердить",
+	"auth.totp.verifying": "Проверка…",
+	"auth.totp.useRecovery": "Использовать код восстановления",
+	"auth.totp.useAuthenticator": "Использовать код из приложения",
+	"auth.totp.backToPassword": "Назад ко входу",
+	"auth.totp.challengeExpires":
+		"Этот запрос действует до {time}. Если время истечёт, вернитесь и войдите заново.",
+	"auth.totp.invalid":
+		"Неверный или истёкший код. Повторите попытку или войдите снова.",
+	"auth.totp.failed": "Не удалось проверить код. Повторите попытку.",
 
 	"users.title": "Пользователи",
 	"users.adminRequired":
@@ -141,6 +154,15 @@ export const ru: Record<string, string> = {
 	"users.error.load": "Не удалось загрузить пользователей",
 	"users.error.loadSessions": "Не удалось загрузить сессии",
 	"users.error.revoke": "Не удалось отозвать",
+	"users.totp": "2FA",
+	"users.totp.enabled": "2FA",
+	"users.totp.reset": "Сбросить 2FA",
+	"users.totp.resetting": "Сброс…",
+	"users.totp.resetTitle": "Сбросить двухфакторную аутентификацию?",
+	"users.totp.resetDescription":
+		"Удаляет TOTP-фактор пользователя {name} и завершает все его сессии.",
+	"users.totp.resetNotice": "Двухфакторная аутентификация сброшена для {name}.",
+	"users.totp.error.reset": "Не удалось сбросить 2FA",
 	"users.createUser": "Создать пользователя",
 	"users.creating": "Создание…",
 	"users.activeSessions": "Активные сессии",
@@ -411,6 +433,34 @@ export const ru: Record<string, string> = {
 	"settings.rotatedApplyFailedNoOthers":
 		"Ключ состояния изменён, но применение новой ревизии не удалось. Других активных сессий не было. Проверьте Apply.",
 	"settings.rotateFailed": "Не удалось сменить ключ",
+	"settings.totp.title": "Двухфакторная аутентификация (TOTP)",
+	"settings.totp.description":
+		"Требовать код из приложения-аутентификатора в дополнение к паролю при входе.",
+	"settings.totp.enable": "Включить аутентификатор",
+	"settings.totp.restartEnrollment": "Начать регистрацию заново",
+	"settings.totp.enrollScan":
+		"Отсканируйте QR-код приложением-аутентификатором или введите секрет вручную.",
+	"settings.totp.secret": "Секрет",
+	"settings.totp.uri": "URI для подключения",
+	"settings.totp.confirmCode": "Введите 6-значный код из приложения",
+	"settings.totp.confirming": "Подтверждение…",
+	"settings.totp.pendingEnrollment":
+		"Регистрация ожидает подтверждения — начните заново, чтобы перевыпустить секрет.",
+	"settings.totp.recoveryRemaining": "Осталось кодов восстановления: {n}",
+	"settings.totp.recoveryTitle": "Коды восстановления",
+	"settings.totp.recoveryHint":
+		"Сохраните эти коды сейчас: каждый работает один раз и показывается только сейчас.",
+	"settings.totp.copy": "Копировать коды",
+	"settings.totp.copied": "Скопировано",
+	"settings.totp.disableTitle": "Отключить двухфакторную аутентификацию?",
+	"settings.totp.disableDescription":
+		"Введите текущий код аутентификатора для подтверждения. Все остальные ваши сессии будут завершены. Если аутентификатор утерян, попросите администратора сбросить двухфакторную аутентификацию.",
+	"settings.totp.disabling": "Отключение…",
+	"settings.totp.error.status": "Не удалось загрузить статус 2FA",
+	"settings.totp.error.enroll": "Не удалось начать регистрацию",
+	"settings.totp.error.confirm": "Неверный код подтверждения",
+	"settings.totp.error.disable":
+		"Не удалось отключить двухфакторную аутентификацию",
 
 	"apply.title": "Состояние применения",
 	"apply.stateLabel": "Состояние",

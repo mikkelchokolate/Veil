@@ -29,6 +29,7 @@ import { Label } from "../components/ui/label";
 import { Select } from "../components/ui/select";
 import { Table, TableBody, TableCell, TableRow } from "../components/ui/table";
 import { useI18n } from "../i18n/I18nContext";
+import { TotpCard } from "./SettingsTotp";
 
 /** S4: full settings edit (every editable field) + security key rotation.
  * Fields are grouped: identity/access, protocol credentials, ACME, firewall.
@@ -605,6 +606,8 @@ export function SettingsPage() {
 					{t("settings.readOnlyHint")}
 				</p>
 			</div>
+
+			<TotpCard />
 
 			{isAdmin ? (
 				<div className="card">

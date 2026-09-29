@@ -85,6 +85,13 @@ type Session struct {
 	// no User row exists for it, so it is exempt from user-match revocation
 	// ONLY while the fallback precondition still holds (#1112).
 	Bootstrap bool
+	// SecondFactor marks a session minted after the account's second factor
+	// was satisfied (TOTP verify, or a session upgraded at TOTP enroll
+	// confirmation — that confirmation IS a factor presentation). Sessions
+	// lacking the flag are revoked on sight once the owner has TOTP enabled,
+	// so a pre-enrollment cookie can never outlive the factor requirement
+	// (#1172).
+	SecondFactor bool
 }
 
 type SessionInfo struct {
@@ -98,6 +105,7 @@ type SessionInfo struct {
 	UserAgent     string `json:"userAgent,omitempty"`
 	RemoteAddr    string `json:"remoteAddr,omitempty"`
 	Current       bool   `json:"current"`
+	SecondFactor  bool   `json:"secondFactor,omitempty"`
 }
 
 type SessionCreateInput struct {
@@ -109,6 +117,9 @@ type SessionCreateInput struct {
 	// login (no backing user row). It is set only on the fallback path in
 	// createSessionForLoginSnapshot (#1112).
 	Bootstrap bool
+	// SecondFactor marks a session minted after the account's second factor
+	// was satisfied; see Session.SecondFactor (#1172).
+	SecondFactor bool
 }
 
 type storedSession struct {
@@ -124,6 +135,7 @@ type storedSession struct {
 	UserAgent     string    `json:"userAgent,omitempty"`
 	RemoteAddr    string    `json:"remoteAddr,omitempty"`
 	Bootstrap     bool      `json:"bootstrap,omitempty"`
+	SecondFactor  bool      `json:"secondFactor,omitempty"`
 }
 
 type sessionStoreFile struct {
@@ -388,6 +400,7 @@ func (r *SessionRegistry) Create(input SessionCreateInput) (Session, error) {
 		UserAgent:     input.UserAgent,
 		RemoteAddr:    input.RemoteAddr,
 		Bootstrap:     input.Bootstrap,
+		SecondFactor:  input.SecondFactor,
 	}
 
 	r.mu.Lock()
@@ -516,6 +529,7 @@ func (r *SessionRegistry) List(currentToken string) []SessionInfo {
 			UserAgent:     session.UserAgent,
 			RemoteAddr:    session.RemoteAddr,
 			Current:       tokenHash == currentHash,
+			SecondFactor:  session.SecondFactor,
 		})
 	}
 
@@ -1045,6 +1059,7 @@ func publicSession(record storedSession, token, csrf string) Session {
 		UserAgent:     record.UserAgent,
 		RemoteAddr:    record.RemoteAddr,
 		Bootstrap:     record.Bootstrap,
+		SecondFactor:  record.SecondFactor,
 	}
 }
 
