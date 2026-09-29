@@ -153,6 +153,7 @@ var operationPayloadField = map[Operation]string{
 	OperationSyncCaddyCert:      "SyncCaddyCert",
 	OperationCaddyLoad:          "CaddyLoad",
 	OperationBackupSftp:         "BackupSftp",
+	OperationIssueIPCert:        "IssueIPCert",
 }
 
 // payloadFieldNames enumerates the RequestEnvelope payload slots by

@@ -104,6 +104,12 @@ func (c *SocketClient) BackupSftp(ctx context.Context, request BackupSftpRequest
 	return result, err
 }
 
+func (c *SocketClient) IssueIPCert(ctx context.Context, request IssueIPCertRequest) (IssueIPCertResult, error) {
+	var result IssueIPCertResult
+	err := c.call(ctx, RequestEnvelope{Operation: OperationIssueIPCert, IssueIPCert: &request}, &result)
+	return result, err
+}
+
 // undeliveredError tags a failure that happened before the request could
 // reach the helper: the unix dial failed, so no privileged mutation could
 // have started and callers may safely finalize the attempt as a plain
@@ -207,7 +213,7 @@ func operationBudget(operation Operation, fallback, mutation, backup time.Durati
 		OperationBackupRead, OperationBackupPrune, OperationBackupRestore, OperationBackupDelete,
 		OperationBackupSftp:
 		return backup
-	case OperationPromote, OperationStageUpdate, OperationRotateKey, OperationRecoverKeyRotation:
+	case OperationPromote, OperationStageUpdate, OperationRotateKey, OperationRecoverKeyRotation, OperationIssueIPCert:
 		return mutation
 	default:
 		return fallback

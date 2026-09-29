@@ -162,6 +162,7 @@ type managementState struct {
 	trafficReconciler       *client.Reconciler
 	expirationReconciler    *expirationReconciler
 	certSyncWorker          *certSyncWorker
+	ipCertRenewalWorker     *ipCertRenewalWorker
 	sse                     *sseBroadcaster
 	clientSubsystemStopping bool
 	applyReadinessMu        sync.Mutex

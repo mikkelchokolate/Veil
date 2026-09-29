@@ -94,6 +94,23 @@ func (f *fakeSystem) key(cmd string, args ...string) string {
 	return fmt.Sprintf("%s %v", cmd, args)
 }
 
+// unwrapEnv peels `env HOME=<dir> <cmd> <args>` prefixes produced by the
+// homeDirSystem wrapper so command matching and install-side effects see the
+// real argv (#1170).
+func unwrapEnv(cmd string, args []string) (string, []string) {
+	if cmd != "env" || len(args) < 2 {
+		return cmd, args
+	}
+	i := 0
+	for i < len(args) && strings.Contains(args[i], "=") && !strings.HasPrefix(args[i], "-") {
+		i++
+	}
+	if i >= len(args) {
+		return cmd, args
+	}
+	return args[i], args[i+1:]
+}
+
 func (f *fakeSystem) Run(cmd string, args ...string) error {
 	f.events = append(f.events, "cleanup")
 	f.runCalls = append(f.runCalls, append([]string{cmd}, args...))
@@ -128,15 +145,33 @@ func (f *fakeSystem) CombinedOutputContext(ctx context.Context, cmd string, args
 
 func (f *fakeSystem) CombinedOutput(cmd string, args ...string) ([]byte, error) {
 	f.execCalls = append(f.execCalls, cmd+" "+strings.Join(args, " "))
+	realCmd, realArgs := unwrapEnv(cmd, args)
+	// The acme.sh home is wherever the env prefix put it — homeDirSystem
+	// spawns `env HOME=<dir> ...` so acme.sh state lands under the override.
+	effectiveHome := f.home
+	if cmd == "env" {
+		for _, a := range args {
+			if strings.HasPrefix(a, "HOME=") {
+				effectiveHome = strings.TrimPrefix(a, "HOME=")
+				break
+			}
+			if !strings.Contains(a, "=") {
+				break
+			}
+		}
+	}
 	res, ok := f.commands[f.key(cmd, args...)]
+	if !ok {
+		res, ok = f.commands[f.key(realCmd, realArgs...)]
+	}
 	if !ok {
 		return nil, fmt.Errorf("unexpected command: %s %v", cmd, args)
 	}
 	if res.err == nil || res.writeFiles {
-		if cmd == "sh" && len(args) >= 2 {
-			script := args[1]
+		if realCmd == "sh" && len(realArgs) >= 2 {
+			script := realArgs[1]
 			if strings.Contains(script, acmeShTarballURL) && f.installAcmeSh {
-				acme := filepath.Join(f.home, ".acme.sh", "acme.sh")
+				acme := filepath.Join(effectiveHome, ".acme.sh", "acme.sh")
 				f.files[acme] = &fakeFileInfo{name: "acme.sh", mode: 0o755}
 			}
 			if strings.Contains(script, "socat") && f.installSocat {
@@ -149,8 +184,8 @@ func (f *fakeSystem) CombinedOutput(cmd string, args ...string) ([]byte, error) 
 				f.lookPaths["crontab"] = "/usr/bin/crontab"
 			}
 		}
-		if cmd == filepath.Join(f.home, ".acme.sh", "acme.sh") && len(args) >= 1 && args[0] == "--installcert" {
-			certPath, keyPath, ip := parseInstallcertArgs(args)
+		if realCmd == filepath.Join(effectiveHome, ".acme.sh", "acme.sh") && len(realArgs) >= 1 && realArgs[0] == "--installcert" {
+			certPath, keyPath, ip := parseInstallcertArgs(realArgs)
 			ips := f.installIPs
 			if len(ips) == 0 {
 				ips = []string{ip}

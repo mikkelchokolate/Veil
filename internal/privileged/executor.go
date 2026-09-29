@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -21,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/acmeip"
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/backup"
 	"github.com/mikkelchokolate/Veil/internal/backupsftp"
@@ -113,6 +115,7 @@ type Executor struct {
 	RestartPanel       func(context.Context) error
 	SyncCaddyCert      func(context.Context, SyncCaddyCertRequest) (SyncCaddyCertResult, error)
 	CaddyLoad          func(context.Context, CaddyLoadRequest) error
+	IssueIPCert        func(context.Context, IssueIPCertRequest) (IssueIPCertResult, error)
 }
 
 type CommandRunner func(context.Context, []string, time.Duration) (string, error)
@@ -140,7 +143,18 @@ type ProductionConfig struct {
 	// CertDirs are the directories SyncCaddyCert may write into; derived from
 	// Policy.CertDirs so a custom --etc-dir install syncs to its own
 	// <etc>/certs tree (issue #628).
-	CertDirs      []string
+	CertDirs []string
+	// IPCertDir is the only directory IssueIPCert may write the panel's
+	// certificate/key into; derived from Policy.PanelCertDir so a custom
+	// --etc-dir install issues into its own <etc>/panel tree (#1169/#1170).
+	IPCertDir string
+	// IPCertHomeDir is the acme.sh install/account home the helper uses. The
+	// helper unit runs ProtectHome=yes so /root/.acme.sh is unreachable; the
+	// working dir lives under the writable state root instead.
+	IPCertHomeDir string
+	// IssueIPCert is the issuance seam — production runs
+	// acmeip.IssueIPCert; tests substitute a stub.
+	IssueIPCert   func(context.Context, acmeip.IssueOptions) (acmeip.IssuedCert, error)
 	CaddyAdminURL string
 	HTTPClient    *http.Client
 	Now           func() time.Time
@@ -154,6 +168,8 @@ func DefaultProductionConfig(policy Policy, version string) ProductionConfig {
 		BackupPassphrasePath: policy.BackupPassphrasePath,
 		BackupRoot:           policy.BackupRoot,
 		CertDirs:             append([]string(nil), policy.CertDirs...),
+		IPCertDir:            policy.PanelCertDir,
+		IPCertHomeDir:        filepath.Join(policy.StateRoot, "acme"),
 		VeilVersion:          version,
 	}
 }
@@ -212,6 +228,15 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 	}
 	if config.HTTPClient == nil {
 		config.HTTPClient = &http.Client{Timeout: 10 * time.Second}
+	}
+	if config.IssueIPCert == nil {
+		config.IssueIPCert = acmeip.IssueIPCert
+	}
+	if config.IPCertDir == "" {
+		config.IPCertDir = filepath.Join(hostenv.EtcDir(), "panel")
+	}
+	if config.IPCertHomeDir == "" {
+		config.IPCertHomeDir = filepath.Join(hostenv.VarDir(), "acme")
 	}
 	return Executor{
 		Promote: func(_ context.Context, request ResolvedPromotion) (PromoteResult, error) {
@@ -377,6 +402,9 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 			client := caddyadmin.NewClient(endpoint)
 			client.HTTPClient = config.HTTPClient
 			return client.LoadConfigContext(ctx, request.Config)
+		},
+		IssueIPCert: func(ctx context.Context, request IssueIPCertRequest) (IssueIPCertResult, error) {
+			return runIssueIPCert(ctx, request, config)
 		},
 	}
 }
@@ -1281,6 +1309,101 @@ func caddyCertOutDirAllowed(dir string, roots []string) bool {
 		}
 	}
 	return false
+}
+
+// resolveIPCertPath constrains a requested panel certificate path to the
+// configured panel certificate directory. The helper runs as root, so a
+// caller-controlled path must resolve to an absolute path directly inside the
+// allowlisted directory — rejecting relative paths, ".." traversal, symlink
+// juggling via UNC-ish tricks and every other root (#1169). An empty path
+// defaults to the directory's tls.crt/tls.key.
+func resolveIPCertPath(path, allowedDir, name string) (string, error) {
+	allowedDir = filepath.Clean(allowedDir)
+	if allowedDir == "." || allowedDir == string(filepath.Separator) {
+		return "", newError(ErrorForbiddenOperation, "IP certificate directory is not configured")
+	}
+	if path == "" {
+		return filepath.Join(allowedDir, name), nil
+	}
+	if !filepath.IsAbs(path) || strings.Contains(path, "..") {
+		return "", newError(ErrorForbiddenOperation, "IP certificate path is not allowed")
+	}
+	if filepath.Dir(filepath.Clean(path)) != allowedDir {
+		return "", newError(ErrorForbiddenOperation, "IP certificate path is not inside the allowed directory")
+	}
+	return filepath.Clean(path), nil
+}
+
+// runIssueIPCert issues/renews the panel's short-lived Let's Encrypt IP
+// certificate through acmeip.IssueIPCert (#1169/#1170). The helper runs as
+// root but sandboxed (ProtectSystem=strict, ProtectHome=yes): acme.sh state
+// lives under the state root instead of /root, no crontab is installed —
+// Veil's own renewal worker owns the schedule — and package installation is
+// still attempted best-effort by IssueIPCert, failing loudly when the
+// sandbox denies it.
+func runIssueIPCert(ctx context.Context, request IssueIPCertRequest, config ProductionConfig) (IssueIPCertResult, error) {
+	if request.PublicIPv4 == "" && request.PublicIPv6 == "" {
+		return IssueIPCertResult{}, newError(ErrorInvalidRequest, "a public IPv4 or IPv6 address is required")
+	}
+	if request.PublicIPv4 != "" {
+		if ip := net.ParseIP(request.PublicIPv4); ip == nil || ip.To4() == nil {
+			return IssueIPCertResult{}, newError(ErrorInvalidRequest, "publicIpv4 must be a valid IPv4 address")
+		}
+	}
+	if request.PublicIPv6 != "" {
+		if ip := net.ParseIP(request.PublicIPv6); ip == nil || ip.To4() != nil {
+			return IssueIPCertResult{}, newError(ErrorInvalidRequest, "publicIpv6 must be a valid IPv6 address")
+		}
+	}
+	if request.HTTPPort < 0 || request.HTTPPort > 65535 {
+		return IssueIPCertResult{}, newError(ErrorInvalidRequest, "httpPort must be between 0 and 65535")
+	}
+	if strings.TrimSpace(request.CAServer) != "" {
+		ca := strings.TrimSpace(request.CAServer)
+		if strings.ContainsAny(ca, " \t\r\n'\"") || len(ca) > 512 {
+			return IssueIPCertResult{}, newError(ErrorInvalidRequest, "caServer must be an acme.sh CA name or a URL")
+		}
+		if !strings.Contains(ca, "://") && !dnsLabelPattern.MatchString(ca) {
+			return IssueIPCertResult{}, newError(ErrorInvalidRequest, "caServer must be an acme.sh CA name or a URL")
+		}
+	}
+	allowedDir := config.IPCertDir
+	if allowedDir == "" {
+		allowedDir = filepath.Join(hostenv.EtcDir(), "panel")
+	}
+	certPath, err := resolveIPCertPath(request.CertPath, allowedDir, "tls.crt")
+	if err != nil {
+		return IssueIPCertResult{}, err
+	}
+	keyPath, err := resolveIPCertPath(request.KeyPath, allowedDir, "tls.key")
+	if err != nil {
+		return IssueIPCertResult{}, err
+	}
+	issue := config.IssueIPCert
+	if issue == nil {
+		issue = acmeip.IssueIPCert
+	}
+	issued, err := issue(ctx, acmeip.IssueOptions{
+		PublicIPv4:        request.PublicIPv4,
+		PublicIPv6:        request.PublicIPv6,
+		HTTPPort:          request.HTTPPort,
+		Email:             request.Email,
+		CertPath:          certPath,
+		KeyPath:           keyPath,
+		CAServer:          request.CAServer,
+		Insecure:          request.Insecure,
+		DeferPanelRestart: request.DeferPanelRestart,
+		// Veil's in-daemon worker owns renewal (#1170) and the helper's
+		// sandbox cannot write a crontab anyway — install acme.sh without one.
+		// HomeDir keeps acme.sh state under the writable state root instead of
+		// the ProtectHome-masked /root.
+		NoCron:  true,
+		HomeDir: config.IPCertHomeDir,
+	})
+	if err != nil {
+		return IssueIPCertResult{}, err
+	}
+	return IssueIPCertResult{CertPath: issued.CertPath, KeyPath: issued.KeyPath}, nil
 }
 
 func findCaddyCertWithRetry(ctx context.Context, domain string) (caddycert.Pair, error) {

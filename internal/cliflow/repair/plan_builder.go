@@ -21,7 +21,6 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/panelmaterial"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
-	"github.com/mikkelchokolate/Veil/internal/runtime"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/service"
 	"github.com/mikkelchokolate/Veil/internal/statecommit"
@@ -506,17 +505,9 @@ func maybeIssueLEIPCert(ctx context.Context, profile *installer.RURecommendedPro
 	return nil
 }
 
+// shouldRenewLEIPCert delegates to acmeip.NeedsRenewal — the shared renewal
+// gate the apply hook and the in-daemon worker use (#1169/#1170) — so repair,
+// apply and the worker can never drift apart on what "needs renewal" means.
 func shouldRenewLEIPCert(certPath string) bool {
-	info := runtime.ReadTLSCert(certPath)
-	if !info.Valid || info.Error != "" {
-		return true
-	}
-	if !strings.Contains(info.Issuer, "Let's Encrypt") {
-		return true
-	}
-	notAfter, err := time.Parse(time.RFC3339, info.NotAfter)
-	if err != nil {
-		return true
-	}
-	return !notAfter.After(time.Now().Add(72 * time.Hour))
+	return acmeip.NeedsRenewal(certPath, time.Now())
 }

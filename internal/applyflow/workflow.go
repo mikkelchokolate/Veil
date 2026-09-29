@@ -61,6 +61,18 @@ type PublicationPhaseState interface {
 	AdvancePublicationPhaseLocked(string) error
 }
 
+// PostServiceActionsState is an optional State extension contributing extra
+// best-effort actions that run only AFTER the service-action success policy,
+// the health checks, and the firewall commit have all passed — the panel's
+// direct-mode IP certificate issuance is the consumer (#1169). Results are
+// appended to response.ServiceActions for reporting, but the policy and
+// health probes have already evaluated the real actions: a failure here is
+// surfaced to the caller yet can never roll back an otherwise-converged
+// apply.
+type PostServiceActionsState interface {
+	PostServiceActionsLocked(liveFiles []string) []model.ServiceActionResult
+}
+
 type HealthChecker func([]model.ServiceActionResult) []model.ServiceHealthResult
 
 type Workflow struct {
@@ -260,6 +272,14 @@ func (w Workflow) RunLocked(req model.ApplyRequest) (model.ApplyResponse, int, e
 				if err := advancePhase("firewall_committed"); err != nil {
 					rollbackErr := rollbackRuntime()
 					return response, http.StatusInternalServerError, errors.Join(fmt.Errorf("persist firewall-committed publication phase: %w", err), rollbackErr)
+				}
+			}
+			// Best-effort post-policy actions (panel IP certificate issuance,
+			// #1169): appended for reporting only — evaluated after every
+			// success gate so a failure cannot roll the apply back.
+			if postState, ok := s.(PostServiceActionsState); ok {
+				if postActions := postState.PostServiceActionsLocked(liveFiles); len(postActions) > 0 {
+					response.ServiceActions = append(response.ServiceActions, postActions...)
 				}
 			}
 			response.ServicesApplied = len(serviceActions) > 0

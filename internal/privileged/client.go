@@ -33,3 +33,12 @@ type CaddyLoader interface {
 type BackupSftpOperator interface {
 	BackupSftp(context.Context, BackupSftpRequest) (BackupSftpResult, error)
 }
+
+// IPCertIssuer is implemented by privileged backends that can run ACME
+// issuance for the panel's short-lived IP certificate (#1169/#1170). It is
+// kept out of Client so the many test doubles implementing Client do not
+// have to grow a heavyweight mutation they never exercise — the same split
+// CaddyLoader already models.
+type IPCertIssuer interface {
+	IssueIPCert(context.Context, IssueIPCertRequest) (IssueIPCertResult, error)
+}

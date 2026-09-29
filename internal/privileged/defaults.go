@@ -41,6 +41,7 @@ func DefaultPolicy() Policy {
 		StatePath:            statePath,
 		KeyPath:              keyPath,
 		CertDirs:             []string{filepath.Join(etcDir, "certs")},
+		PanelCertDir:         filepath.Join(etcDir, "panel"),
 		BackupPassphrasePath: pathFromEnv("VEIL_BACKUP_PASSPHRASE", filepath.Join(etcDir, "backup.passphrase")),
 		BackupRoot:           pathFromEnv("VEIL_BACKUP_ROOT", filepath.Join(varDir, "backups")),
 		// The destination config carries secrets and stays under the etc dir

@@ -196,6 +196,12 @@ func (s *Server) dispatch(ctx context.Context, request RequestEnvelope) (any, er
 			return nil, newError(ErrorOperationFailed, "backup sftp operator is unavailable")
 		}
 		return operator.BackupSftp(ctx, *request.BackupSftp)
+	case OperationIssueIPCert:
+		issuer, ok := s.client.(IPCertIssuer)
+		if !ok {
+			return nil, newError(ErrorOperationFailed, "IP certificate issuer is unavailable")
+		}
+		return issuer.IssueIPCert(ctx, *request.IssueIPCert)
 	default:
 		return nil, newError(ErrorInvalidRequest, "unsupported operation")
 	}
