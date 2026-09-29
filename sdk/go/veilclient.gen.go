@@ -1492,9 +1492,12 @@ type AuthStatusResponse struct {
 	CsrfToken     *string                       `json:"csrfToken,omitempty"`
 
 	// Locale Persisted Panel display language.
-	Locale   *Locale   `json:"locale,omitempty"`
-	Role     *UserRole `json:"role,omitempty"`
-	Username *string   `json:"username,omitempty"`
+	Locale *Locale   `json:"locale,omitempty"`
+	Role   *UserRole `json:"role,omitempty"`
+
+	// SecondFactor True when the cookie session carries the second-factor mark (TOTP verify, passkey assertion, or factor registration confirmation). Absent for static-token/dev-anonymous responses.
+	SecondFactor *bool   `json:"secondFactor,omitempty"`
+	Username     *string `json:"username,omitempty"`
 }
 
 // AuthStatusResponseAuthMethod How the request was authenticated; absent for cookie-session responses.
@@ -2241,10 +2244,13 @@ type LoginResponse struct {
 	PendingExpiresAt *time.Time `json:"pendingExpiresAt,omitempty"`
 	Role             UserRole   `json:"role"`
 
-	// SecondFactorMethods Factor mechanisms accepted by the pending challenge (currently `totp`).
+	// SecondFactor Present and true on the factor-completion responses (TOTP verify, WebAuthn finish); the minted session carries the second-factor mark.
+	SecondFactor *bool `json:"secondFactor,omitempty"`
+
+	// SecondFactorMethods Factor mechanisms accepted by the pending challenge: `webauthn` and/or `totp`, in the server's preference order.
 	SecondFactorMethods *[]string `json:"secondFactorMethods,omitempty"`
 
-	// SecondFactorRequired When true no session was minted; the `veil_pending_2fa` cookie authorizes POST /api/v1/auth/totp/verify.
+	// SecondFactorRequired When true no session was minted; the `veil_pending_2fa` cookie authorizes POST /api/v1/auth/totp/verify and /api/v1/auth/webauthn/*.
 	SecondFactorRequired *bool  `json:"secondFactorRequired,omitempty"`
 	Success              bool   `json:"success"`
 	Username             string `json:"username"`
@@ -2275,6 +2281,47 @@ type NetworkStats struct {
 type PanelUpdateRequest struct {
 	// Force Install the latest release even when the running build is not strictly older (e.g. a main-<sha> install-main build or a newer version than the latest tag). Without force such requests are refused with 409 to prevent a silent downgrade.
 	Force *bool `json:"force,omitempty"`
+}
+
+// PasskeyDeleteRequest defines model for PasskeyDeleteRequest.
+type PasskeyDeleteRequest struct {
+	// Password Required when the session does not carry the second-factor mark.
+	Password *string `json:"password,omitempty"`
+}
+
+// PasskeyInfo defines model for PasskeyInfo.
+type PasskeyInfo struct {
+	// BackedUp True when the authenticator reports the credential is backed up / synced.
+	BackedUp  *bool      `json:"backedUp,omitempty"`
+	CreatedAt *time.Time `json:"createdAt,omitempty"`
+
+	// Id Base64url credential ID; also the path parameter of DELETE /api/v1/users/me/passkeys/{id}.
+	Id   string  `json:"id"`
+	Name *string `json:"name,omitempty"`
+
+	// Transports Authenticator transport hints reported at registration.
+	Transports *[]string `json:"transports,omitempty"`
+}
+
+// PasskeyListResponse defines model for PasskeyListResponse.
+type PasskeyListResponse struct {
+	Passkeys []PasskeyInfo `json:"passkeys"`
+}
+
+// PasskeyRegisterBeginRequest defines model for PasskeyRegisterBeginRequest.
+type PasskeyRegisterBeginRequest struct {
+	// Name Display label for the new credential.
+	Name *string `json:"name,omitempty"`
+
+	// Password Required when the session does not carry the second-factor mark.
+	Password *string `json:"password,omitempty"`
+}
+
+// PasskeyRegisterFinishRequest defines model for PasskeyRegisterFinishRequest.
+type PasskeyRegisterFinishRequest struct {
+	// Credential The RegistrationResponseJSON object produced by the browser ceremony.
+	Credential map[string]interface{} `json:"credential"`
+	Name       *string                `json:"name,omitempty"`
 }
 
 // PingRequest defines model for PingRequest.
@@ -2561,7 +2608,7 @@ type SessionInfo struct {
 	RemoteAddr    *string   `json:"remoteAddr,omitempty"`
 	Role          UserRole  `json:"role"`
 
-	// SecondFactor True when the session was minted after the account's second factor was satisfied (TOTP verify or enrollment confirmation).
+	// SecondFactor True when the session was minted after the account's second factor was satisfied (TOTP verify, passkey assertion, or factor registration confirmation).
 	SecondFactor *bool   `json:"secondFactor,omitempty"`
 	UserAgent    *string `json:"userAgent,omitempty"`
 	Username     string  `json:"username"`
@@ -2953,8 +3000,11 @@ type UserCreateRequest struct {
 // UserResponse defines model for UserResponse.
 type UserResponse struct {
 	// Locale Persisted Panel display language.
-	Locale Locale   `json:"locale"`
-	Role   UserRole `json:"role"`
+	Locale Locale `json:"locale"`
+
+	// PasskeyCount Number of WebAuthn credentials registered on the account.
+	PasskeyCount int      `json:"passkeyCount"`
+	Role         UserRole `json:"role"`
 
 	// TotpEnabled Whether the account requires a TOTP second factor at login.
 	TotpEnabled bool   `json:"totpEnabled"`
@@ -3039,6 +3089,25 @@ type WarpConfig struct {
 	// Examples: 127.41.0.1
 	SocksListen *string `json:"socksListen,omitempty"`
 	SocksPort   *int    `json:"socksPort,omitempty"`
+}
+
+// WebAuthnAssertionOptions defines model for WebAuthnAssertionOptions.
+type WebAuthnAssertionOptions struct {
+	Mediation *string `json:"mediation,omitempty"`
+
+	// PublicKey PublicKeyCredentialRequestOptions for navigator.credentials.get.
+	PublicKey map[string]interface{} `json:"publicKey"`
+}
+
+// WebAuthnAssertionResponse The AuthenticationResponseJSON object produced by the browser ceremony.
+type WebAuthnAssertionResponse = map[string]interface{}
+
+// WebAuthnCreationOptions defines model for WebAuthnCreationOptions.
+type WebAuthnCreationOptions struct {
+	Mediation *string `json:"mediation,omitempty"`
+
+	// PublicKey PublicKeyCredentialCreationOptions for navigator.credentials.create.
+	PublicKey map[string]interface{} `json:"publicKey"`
 }
 
 // BackupName defines model for BackupName.
@@ -3378,6 +3447,18 @@ type PostApiV1AuthTotpVerifyParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// PostApiV1AuthWebauthnBeginParams defines parameters for PostApiV1AuthWebauthnBegin.
+type PostApiV1AuthWebauthnBeginParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiV1AuthWebauthnFinishParams defines parameters for PostApiV1AuthWebauthnFinish.
+type PostApiV1AuthWebauthnFinishParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // PostApiV1ClientsParams defines parameters for PostApiV1Clients.
 type PostApiV1ClientsParams struct {
 	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
@@ -3550,6 +3631,24 @@ type GetApiV1TrafficIdHistoryParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// PostApiV1UsersMePasskeysRegisterBeginParams defines parameters for PostApiV1UsersMePasskeysRegisterBegin.
+type PostApiV1UsersMePasskeysRegisterBeginParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiV1UsersMePasskeysRegisterFinishParams defines parameters for PostApiV1UsersMePasskeysRegisterFinish.
+type PostApiV1UsersMePasskeysRegisterFinishParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteApiV1UsersMePasskeysPasskeyIdParams defines parameters for DeleteApiV1UsersMePasskeysPasskeyId.
+type DeleteApiV1UsersMePasskeysPasskeyIdParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // DeleteApiV1UsersMeTotpParams defines parameters for DeleteApiV1UsersMeTotp.
 type DeleteApiV1UsersMeTotpParams struct {
 	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
@@ -3564,6 +3663,12 @@ type PostApiV1UsersMeTotpConfirmParams struct {
 
 // PostApiV1UsersMeTotpEnrollParams defines parameters for PostApiV1UsersMeTotpEnroll.
 type PostApiV1UsersMeTotpEnrollParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteApiV1UsersUsernamePasskeysParams defines parameters for DeleteApiV1UsersUsernamePasskeys.
+type DeleteApiV1UsersUsernamePasskeysParams struct {
 	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
@@ -3692,6 +3797,9 @@ type PutApiUsersUsernameJSONRequestBody = UserUpdateRequest
 // PostApiV1AuthTotpVerifyJSONRequestBody defines body for PostApiV1AuthTotpVerify for application/json ContentType.
 type PostApiV1AuthTotpVerifyJSONRequestBody = TOTPVerifyRequest
 
+// PostApiV1AuthWebauthnFinishJSONRequestBody defines body for PostApiV1AuthWebauthnFinish for application/json ContentType.
+type PostApiV1AuthWebauthnFinishJSONRequestBody = WebAuthnAssertionResponse
+
 // PostApiV1ClientsJSONRequestBody defines body for PostApiV1Clients for application/json ContentType.
 type PostApiV1ClientsJSONRequestBody = ClientCreateRequest
 
@@ -3718,6 +3826,15 @@ type PostApiV1ClientsIdTokensJSONRequestBody PostApiV1ClientsIdTokensJSONBody
 
 // PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody defines body for PostApiV1ClientsIdTokensTokenIdRotate for application/json ContentType.
 type PostApiV1ClientsIdTokensTokenIdRotateJSONRequestBody PostApiV1ClientsIdTokensTokenIdRotateJSONBody
+
+// PostApiV1UsersMePasskeysRegisterBeginJSONRequestBody defines body for PostApiV1UsersMePasskeysRegisterBegin for application/json ContentType.
+type PostApiV1UsersMePasskeysRegisterBeginJSONRequestBody = PasskeyRegisterBeginRequest
+
+// PostApiV1UsersMePasskeysRegisterFinishJSONRequestBody defines body for PostApiV1UsersMePasskeysRegisterFinish for application/json ContentType.
+type PostApiV1UsersMePasskeysRegisterFinishJSONRequestBody = PasskeyRegisterFinishRequest
+
+// DeleteApiV1UsersMePasskeysPasskeyIdJSONRequestBody defines body for DeleteApiV1UsersMePasskeysPasskeyId for application/json ContentType.
+type DeleteApiV1UsersMePasskeysPasskeyIdJSONRequestBody = PasskeyDeleteRequest
 
 // DeleteApiV1UsersMeTotpJSONRequestBody defines body for DeleteApiV1UsersMeTotp for application/json ContentType.
 type DeleteApiV1UsersMeTotpJSONRequestBody = TOTPDisableRequest
@@ -4864,6 +4981,31 @@ type ClientInterface interface {
 	// Corresponds with POST /api/v1/auth/totp/verify (the `PostApiV1AuthTotpVerify` operationId).
 	PostApiV1AuthTotpVerify(ctx context.Context, params *PostApiV1AuthTotpVerifyParams, body PostApiV1AuthTotpVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostApiV1AuthWebauthnBegin Begin the passkey second-factor login ceremony
+	//
+	// Issues a WebAuthn assertion challenge for the pending_2fa record minted by `/api/auth/login` when the account advertises `webauthn` in `secondFactorMethods`. The `veil_pending_2fa` cookie authorizes this endpoint and `/api/v1/auth/webauthn/finish` only; the challenge is stored server-side bound to that pending token. The response is the `PublicKeyCredentialRequestOptions` object the browser passes to `navigator.credentials.get`. Attempts honor the shared login backoff.
+	//
+	// Corresponds with POST /api/v1/auth/webauthn/begin (the `PostApiV1AuthWebauthnBegin` operationId).
+	PostApiV1AuthWebauthnBegin(ctx context.Context, params *PostApiV1AuthWebauthnBeginParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1AuthWebauthnFinishWithBody Complete the passkey second-factor login
+	//
+	// Completes the pending_2fa stage with a WebAuthn assertion. The `veil_pending_2fa` cookie authorizes ONLY this ceremony and `/api/v1/auth/webauthn/begin`; a valid assertion mints the real `veil_session` cookie with the second-factor mark. Attempts share the per-(client, username) login throttle and are hard-capped per challenge; a signature-counter regression invalidates the credential (clone detection); the challenge fails closed if the account changed since the password was verified.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/auth/webauthn/finish (the `PostApiV1AuthWebauthnFinish` operationId).
+	PostApiV1AuthWebauthnFinishWithBody(ctx context.Context, params *PostApiV1AuthWebauthnFinishParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1AuthWebauthnFinish Complete the passkey second-factor login
+	//
+	// Completes the pending_2fa stage with a WebAuthn assertion. The `veil_pending_2fa` cookie authorizes ONLY this ceremony and `/api/v1/auth/webauthn/begin`; a valid assertion mints the real `veil_session` cookie with the second-factor mark. Attempts share the per-(client, username) login throttle and are hard-capped per challenge; a signature-counter regression invalidates the credential (clone detection); the challenge fails closed if the account changed since the password was verified.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/auth/webauthn/finish (the `PostApiV1AuthWebauthnFinish` operationId).
+	PostApiV1AuthWebauthnFinish(ctx context.Context, params *PostApiV1AuthWebauthnFinishParams, body PostApiV1AuthWebauthnFinishJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiV1Clients List clients with effective status
 	//
 	// Corresponds with GET /api/v1/clients (the `GetApiV1Clients` operationId).
@@ -5105,6 +5247,67 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/traffic/{id}/history (the `GetApiV1TrafficIdHistory` operationId).
 	GetApiV1TrafficIdHistory(ctx context.Context, id ClientId, params *GetApiV1TrafficIdHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetApiV1UsersMePasskeys List the current user's passkeys
+	//
+	// Requires a `veil_session` cookie bound to a real user row; static API tokens and the dev-anonymous identity cannot call it. Returns public metadata only — credential IDs, names, transports, and timestamps; public key material never leaves the server.
+	//
+	// Corresponds with GET /api/v1/users/me/passkeys (the `GetApiV1UsersMePasskeys` operationId).
+	GetApiV1UsersMePasskeys(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1UsersMePasskeysRegisterBeginWithBody Begin passkey registration for the current user
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token`, plus a credential-grade gate: a session that already carries the second-factor mark, or the account password re-presented here. Mints a WebAuthn registration challenge stored server-side for ~5 minutes, keyed by the session token. The response is the `PublicKeyCredentialCreationOptions` object for `navigator.credentials.create`.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/users/me/passkeys/register/begin (the `PostApiV1UsersMePasskeysRegisterBegin` operationId).
+	PostApiV1UsersMePasskeysRegisterBeginWithBody(ctx context.Context, params *PostApiV1UsersMePasskeysRegisterBeginParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1UsersMePasskeysRegisterBegin Begin passkey registration for the current user
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token`, plus a credential-grade gate: a session that already carries the second-factor mark, or the account password re-presented here. Mints a WebAuthn registration challenge stored server-side for ~5 minutes, keyed by the session token. The response is the `PublicKeyCredentialCreationOptions` object for `navigator.credentials.create`.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/users/me/passkeys/register/begin (the `PostApiV1UsersMePasskeysRegisterBegin` operationId).
+	PostApiV1UsersMePasskeysRegisterBegin(ctx context.Context, params *PostApiV1UsersMePasskeysRegisterBeginParams, body PostApiV1UsersMePasskeysRegisterBeginJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1UsersMePasskeysRegisterFinishWithBody Finish passkey registration for the current user
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies the authenticator attestation against the challenge minted by `register/begin` (single-use), stores the credential, upgrades the calling session to second-factor-complete, and revokes every other session of the user — a credential addition is a privilege-floor change.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/users/me/passkeys/register/finish (the `PostApiV1UsersMePasskeysRegisterFinish` operationId).
+	PostApiV1UsersMePasskeysRegisterFinishWithBody(ctx context.Context, params *PostApiV1UsersMePasskeysRegisterFinishParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1UsersMePasskeysRegisterFinish Finish passkey registration for the current user
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies the authenticator attestation against the challenge minted by `register/begin` (single-use), stores the credential, upgrades the calling session to second-factor-complete, and revokes every other session of the user — a credential addition is a privilege-floor change.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/users/me/passkeys/register/finish (the `PostApiV1UsersMePasskeysRegisterFinish` operationId).
+	PostApiV1UsersMePasskeysRegisterFinish(ctx context.Context, params *PostApiV1UsersMePasskeysRegisterFinishParams, body PostApiV1UsersMePasskeysRegisterFinishJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiV1UsersMePasskeysPasskeyIdWithBody Delete one of the current user's passkeys
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token` plus the same credential-grade gate as registration (second-factor session or account password). Removing a credential never revokes sessions — once the last factor is gone the session-mark requirement simply stops applying.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with DELETE /api/v1/users/me/passkeys/{passkeyId} (the `DeleteApiV1UsersMePasskeysPasskeyId` operationId).
+	DeleteApiV1UsersMePasskeysPasskeyIdWithBody(ctx context.Context, passkeyId string, params *DeleteApiV1UsersMePasskeysPasskeyIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiV1UsersMePasskeysPasskeyId Delete one of the current user's passkeys
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token` plus the same credential-grade gate as registration (second-factor session or account password). Removing a credential never revokes sessions — once the last factor is gone the session-mark requirement simply stops applying.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /api/v1/users/me/passkeys/{passkeyId} (the `DeleteApiV1UsersMePasskeysPasskeyId` operationId).
+	DeleteApiV1UsersMePasskeysPasskeyId(ctx context.Context, passkeyId string, params *DeleteApiV1UsersMePasskeysPasskeyIdParams, body DeleteApiV1UsersMePasskeysPasskeyIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// DeleteApiV1UsersMeTotpWithBody Disable the current user's TOTP second factor
 	//
 	// Requires the `veil_session` cookie and `X-CSRF-Token` plus a
@@ -5176,6 +5379,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /api/v1/users/me/totp/enroll (the `PostApiV1UsersMeTotpEnroll` operationId).
 	PostApiV1UsersMeTotpEnroll(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiV1UsersUsernamePasskeys Reset a user's passkeys
+	//
+	// Admin reset for a locked-out user: clears every registered WebAuthn credential. Cookie sessions must include `X-CSRF-Token`. Unlike the TOTP reset this does NOT revoke the target's sessions — removing a possession factor cannot let an existing session bypass a still-armed factor.
+	//
+	// Corresponds with DELETE /api/v1/users/{username}/passkeys (the `DeleteApiV1UsersUsernamePasskeys` operationId).
+	DeleteApiV1UsersUsernamePasskeys(ctx context.Context, username Username, params *DeleteApiV1UsersUsernamePasskeysParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteApiV1UsersUsernameTotp Reset a user's TOTP second factor
 	//
@@ -7090,6 +7300,61 @@ func (c *Client) PostApiV1AuthTotpVerify(ctx context.Context, params *PostApiV1A
 	return c.Client.Do(req)
 }
 
+// PostApiV1AuthWebauthnBegin Begin the passkey second-factor login ceremony
+//
+// Issues a WebAuthn assertion challenge for the pending_2fa record minted by `/api/auth/login` when the account advertises `webauthn` in `secondFactorMethods`. The `veil_pending_2fa` cookie authorizes this endpoint and `/api/v1/auth/webauthn/finish` only; the challenge is stored server-side bound to that pending token. The response is the `PublicKeyCredentialRequestOptions` object the browser passes to `navigator.credentials.get`. Attempts honor the shared login backoff.
+//
+// Corresponds with POST /api/v1/auth/webauthn/begin (the `PostApiV1AuthWebauthnBegin` operationId).
+func (c *Client) PostApiV1AuthWebauthnBegin(ctx context.Context, params *PostApiV1AuthWebauthnBeginParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1AuthWebauthnBeginRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiV1AuthWebauthnFinishWithBody Complete the passkey second-factor login
+//
+// Completes the pending_2fa stage with a WebAuthn assertion. The `veil_pending_2fa` cookie authorizes ONLY this ceremony and `/api/v1/auth/webauthn/begin`; a valid assertion mints the real `veil_session` cookie with the second-factor mark. Attempts share the per-(client, username) login throttle and are hard-capped per challenge; a signature-counter regression invalidates the credential (clone detection); the challenge fails closed if the account changed since the password was verified.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/auth/webauthn/finish (the `PostApiV1AuthWebauthnFinish` operationId).
+func (c *Client) PostApiV1AuthWebauthnFinishWithBody(ctx context.Context, params *PostApiV1AuthWebauthnFinishParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1AuthWebauthnFinishRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiV1AuthWebauthnFinish Complete the passkey second-factor login
+//
+// Completes the pending_2fa stage with a WebAuthn assertion. The `veil_pending_2fa` cookie authorizes ONLY this ceremony and `/api/v1/auth/webauthn/begin`; a valid assertion mints the real `veil_session` cookie with the second-factor mark. Attempts share the per-(client, username) login throttle and are hard-capped per challenge; a signature-counter regression invalidates the credential (clone detection); the challenge fails closed if the account changed since the password was verified.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/auth/webauthn/finish (the `PostApiV1AuthWebauthnFinish` operationId).
+func (c *Client) PostApiV1AuthWebauthnFinish(ctx context.Context, params *PostApiV1AuthWebauthnFinishParams, body PostApiV1AuthWebauthnFinishJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1AuthWebauthnFinishRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetApiV1Clients List clients with effective status
 //
 // Corresponds with GET /api/v1/clients (the `GetApiV1Clients` operationId).
@@ -7712,6 +7977,137 @@ func (c *Client) GetApiV1TrafficIdHistory(ctx context.Context, id ClientId, para
 	return c.Client.Do(req)
 }
 
+// GetApiV1UsersMePasskeys List the current user's passkeys
+//
+// Requires a `veil_session` cookie bound to a real user row; static API tokens and the dev-anonymous identity cannot call it. Returns public metadata only — credential IDs, names, transports, and timestamps; public key material never leaves the server.
+//
+// Corresponds with GET /api/v1/users/me/passkeys (the `GetApiV1UsersMePasskeys` operationId).
+func (c *Client) GetApiV1UsersMePasskeys(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1UsersMePasskeysRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiV1UsersMePasskeysRegisterBeginWithBody Begin passkey registration for the current user
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token`, plus a credential-grade gate: a session that already carries the second-factor mark, or the account password re-presented here. Mints a WebAuthn registration challenge stored server-side for ~5 minutes, keyed by the session token. The response is the `PublicKeyCredentialCreationOptions` object for `navigator.credentials.create`.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/users/me/passkeys/register/begin (the `PostApiV1UsersMePasskeysRegisterBegin` operationId).
+func (c *Client) PostApiV1UsersMePasskeysRegisterBeginWithBody(ctx context.Context, params *PostApiV1UsersMePasskeysRegisterBeginParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1UsersMePasskeysRegisterBeginRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiV1UsersMePasskeysRegisterBegin Begin passkey registration for the current user
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token`, plus a credential-grade gate: a session that already carries the second-factor mark, or the account password re-presented here. Mints a WebAuthn registration challenge stored server-side for ~5 minutes, keyed by the session token. The response is the `PublicKeyCredentialCreationOptions` object for `navigator.credentials.create`.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/users/me/passkeys/register/begin (the `PostApiV1UsersMePasskeysRegisterBegin` operationId).
+func (c *Client) PostApiV1UsersMePasskeysRegisterBegin(ctx context.Context, params *PostApiV1UsersMePasskeysRegisterBeginParams, body PostApiV1UsersMePasskeysRegisterBeginJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1UsersMePasskeysRegisterBeginRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiV1UsersMePasskeysRegisterFinishWithBody Finish passkey registration for the current user
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies the authenticator attestation against the challenge minted by `register/begin` (single-use), stores the credential, upgrades the calling session to second-factor-complete, and revokes every other session of the user — a credential addition is a privilege-floor change.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/users/me/passkeys/register/finish (the `PostApiV1UsersMePasskeysRegisterFinish` operationId).
+func (c *Client) PostApiV1UsersMePasskeysRegisterFinishWithBody(ctx context.Context, params *PostApiV1UsersMePasskeysRegisterFinishParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1UsersMePasskeysRegisterFinishRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiV1UsersMePasskeysRegisterFinish Finish passkey registration for the current user
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies the authenticator attestation against the challenge minted by `register/begin` (single-use), stores the credential, upgrades the calling session to second-factor-complete, and revokes every other session of the user — a credential addition is a privilege-floor change.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/users/me/passkeys/register/finish (the `PostApiV1UsersMePasskeysRegisterFinish` operationId).
+func (c *Client) PostApiV1UsersMePasskeysRegisterFinish(ctx context.Context, params *PostApiV1UsersMePasskeysRegisterFinishParams, body PostApiV1UsersMePasskeysRegisterFinishJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1UsersMePasskeysRegisterFinishRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteApiV1UsersMePasskeysPasskeyIdWithBody Delete one of the current user's passkeys
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token` plus the same credential-grade gate as registration (second-factor session or account password). Removing a credential never revokes sessions — once the last factor is gone the session-mark requirement simply stops applying.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with DELETE /api/v1/users/me/passkeys/{passkeyId} (the `DeleteApiV1UsersMePasskeysPasskeyId` operationId).
+func (c *Client) DeleteApiV1UsersMePasskeysPasskeyIdWithBody(ctx context.Context, passkeyId string, params *DeleteApiV1UsersMePasskeysPasskeyIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1UsersMePasskeysPasskeyIdRequestWithBody(c.Server, passkeyId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteApiV1UsersMePasskeysPasskeyId Delete one of the current user's passkeys
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token` plus the same credential-grade gate as registration (second-factor session or account password). Removing a credential never revokes sessions — once the last factor is gone the session-mark requirement simply stops applying.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /api/v1/users/me/passkeys/{passkeyId} (the `DeleteApiV1UsersMePasskeysPasskeyId` operationId).
+func (c *Client) DeleteApiV1UsersMePasskeysPasskeyId(ctx context.Context, passkeyId string, params *DeleteApiV1UsersMePasskeysPasskeyIdParams, body DeleteApiV1UsersMePasskeysPasskeyIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1UsersMePasskeysPasskeyIdRequest(c.Server, passkeyId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // DeleteApiV1UsersMeTotpWithBody Disable the current user's TOTP second factor
 //
 // Requires the `veil_session` cookie and `X-CSRF-Token` plus a
@@ -7834,6 +8230,23 @@ func (c *Client) PostApiV1UsersMeTotpConfirm(ctx context.Context, params *PostAp
 // Corresponds with POST /api/v1/users/me/totp/enroll (the `PostApiV1UsersMeTotpEnroll` operationId).
 func (c *Client) PostApiV1UsersMeTotpEnroll(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostApiV1UsersMeTotpEnrollRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteApiV1UsersUsernamePasskeys Reset a user's passkeys
+//
+// Admin reset for a locked-out user: clears every registered WebAuthn credential. Cookie sessions must include `X-CSRF-Token`. Unlike the TOTP reset this does NOT revoke the target's sessions — removing a possession factor cannot let an existing session bypass a still-armed factor.
+//
+// Corresponds with DELETE /api/v1/users/{username}/passkeys (the `DeleteApiV1UsersUsernamePasskeys` operationId).
+func (c *Client) DeleteApiV1UsersUsernamePasskeys(ctx context.Context, username Username, params *DeleteApiV1UsersUsernamePasskeysParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1UsersUsernamePasskeysRequest(c.Server, username, params)
 	if err != nil {
 		return nil, err
 	}
@@ -11359,6 +11772,103 @@ func NewPostApiV1AuthTotpVerifyRequestWithBody(server string, params *PostApiV1A
 	return req, nil
 }
 
+// NewPostApiV1AuthWebauthnBeginRequest constructs an http.Request for the PostApiV1AuthWebauthnBegin method
+func NewPostApiV1AuthWebauthnBeginRequest(server string, params *PostApiV1AuthWebauthnBeginParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/auth/webauthn/begin")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1AuthWebauthnFinishRequest calls the generic PostApiV1AuthWebauthnFinish builder with application/json body
+func NewPostApiV1AuthWebauthnFinishRequest(server string, params *PostApiV1AuthWebauthnFinishParams, body PostApiV1AuthWebauthnFinishJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1AuthWebauthnFinishRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostApiV1AuthWebauthnFinishRequestWithBody constructs an http.Request for the PostApiV1AuthWebauthnFinish method, with any body, and a specified content type
+func NewPostApiV1AuthWebauthnFinishRequestWithBody(server string, params *PostApiV1AuthWebauthnFinishParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/auth/webauthn/finish")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
 // NewGetApiV1ClientsRequest constructs an http.Request for the GetApiV1Clients method
 func NewGetApiV1ClientsRequest(server string) (*http.Request, error) {
 	var err error
@@ -12823,6 +13333,205 @@ func NewGetApiV1TrafficIdHistoryRequest(server string, id ClientId, params *GetA
 	return req, nil
 }
 
+// NewGetApiV1UsersMePasskeysRequest constructs an http.Request for the GetApiV1UsersMePasskeys method
+func NewGetApiV1UsersMePasskeysRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/users/me/passkeys")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1UsersMePasskeysRegisterBeginRequest calls the generic PostApiV1UsersMePasskeysRegisterBegin builder with application/json body
+func NewPostApiV1UsersMePasskeysRegisterBeginRequest(server string, params *PostApiV1UsersMePasskeysRegisterBeginParams, body PostApiV1UsersMePasskeysRegisterBeginJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1UsersMePasskeysRegisterBeginRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostApiV1UsersMePasskeysRegisterBeginRequestWithBody constructs an http.Request for the PostApiV1UsersMePasskeysRegisterBegin method, with any body, and a specified content type
+func NewPostApiV1UsersMePasskeysRegisterBeginRequestWithBody(server string, params *PostApiV1UsersMePasskeysRegisterBeginParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/users/me/passkeys/register/begin")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1UsersMePasskeysRegisterFinishRequest calls the generic PostApiV1UsersMePasskeysRegisterFinish builder with application/json body
+func NewPostApiV1UsersMePasskeysRegisterFinishRequest(server string, params *PostApiV1UsersMePasskeysRegisterFinishParams, body PostApiV1UsersMePasskeysRegisterFinishJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1UsersMePasskeysRegisterFinishRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostApiV1UsersMePasskeysRegisterFinishRequestWithBody constructs an http.Request for the PostApiV1UsersMePasskeysRegisterFinish method, with any body, and a specified content type
+func NewPostApiV1UsersMePasskeysRegisterFinishRequestWithBody(server string, params *PostApiV1UsersMePasskeysRegisterFinishParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/users/me/passkeys/register/finish")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewDeleteApiV1UsersMePasskeysPasskeyIdRequest calls the generic DeleteApiV1UsersMePasskeysPasskeyId builder with application/json body
+func NewDeleteApiV1UsersMePasskeysPasskeyIdRequest(server string, passkeyId string, params *DeleteApiV1UsersMePasskeysPasskeyIdParams, body DeleteApiV1UsersMePasskeysPasskeyIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDeleteApiV1UsersMePasskeysPasskeyIdRequestWithBody(server, passkeyId, params, "application/json", bodyReader)
+}
+
+// NewDeleteApiV1UsersMePasskeysPasskeyIdRequestWithBody constructs an http.Request for the DeleteApiV1UsersMePasskeysPasskeyId method, with any body, and a specified content type
+func NewDeleteApiV1UsersMePasskeysPasskeyIdRequestWithBody(server string, passkeyId string, params *DeleteApiV1UsersMePasskeysPasskeyIdParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "passkeyId", passkeyId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/users/me/passkeys/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
 // NewDeleteApiV1UsersMeTotpRequest calls the generic DeleteApiV1UsersMeTotp builder with application/json body
 func NewDeleteApiV1UsersMeTotpRequest(server string, params *DeleteApiV1UsersMeTotpParams, body DeleteApiV1UsersMeTotpJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -12980,6 +13689,55 @@ func NewPostApiV1UsersMeTotpEnrollRequest(server string, params *PostApiV1UsersM
 	}
 
 	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewDeleteApiV1UsersUsernamePasskeysRequest constructs an http.Request for the DeleteApiV1UsersUsernamePasskeys method
+func NewDeleteApiV1UsersUsernamePasskeysRequest(server string, username Username, params *DeleteApiV1UsersUsernamePasskeysParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "username", username, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/users/%s/passkeys", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -14429,6 +15187,33 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/v1/auth/totp/verify (the `PostApiV1AuthTotpVerify` operationId).
 	PostApiV1AuthTotpVerifyWithResponse(ctx context.Context, params *PostApiV1AuthTotpVerifyParams, body PostApiV1AuthTotpVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1AuthTotpVerifyResponse, error)
 
+	// PostApiV1AuthWebauthnBeginWithResponse Begin the passkey second-factor login ceremony
+	//
+	// Issues a WebAuthn assertion challenge for the pending_2fa record minted by `/api/auth/login` when the account advertises `webauthn` in `secondFactorMethods`. The `veil_pending_2fa` cookie authorizes this endpoint and `/api/v1/auth/webauthn/finish` only; the challenge is stored server-side bound to that pending token. The response is the `PublicKeyCredentialRequestOptions` object the browser passes to `navigator.credentials.get`. Attempts honor the shared login backoff.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/auth/webauthn/begin (the `PostApiV1AuthWebauthnBegin` operationId).
+	PostApiV1AuthWebauthnBeginWithResponse(ctx context.Context, params *PostApiV1AuthWebauthnBeginParams, reqEditors ...RequestEditorFn) (*PostApiV1AuthWebauthnBeginResponse, error)
+
+	// PostApiV1AuthWebauthnFinishWithBodyWithResponse Complete the passkey second-factor login
+	//
+	// Completes the pending_2fa stage with a WebAuthn assertion. The `veil_pending_2fa` cookie authorizes ONLY this ceremony and `/api/v1/auth/webauthn/begin`; a valid assertion mints the real `veil_session` cookie with the second-factor mark. Attempts share the per-(client, username) login throttle and are hard-capped per challenge; a signature-counter regression invalidates the credential (clone detection); the challenge fails closed if the account changed since the password was verified.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/auth/webauthn/finish (the `PostApiV1AuthWebauthnFinish` operationId).
+	PostApiV1AuthWebauthnFinishWithBodyWithResponse(ctx context.Context, params *PostApiV1AuthWebauthnFinishParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1AuthWebauthnFinishResponse, error)
+
+	// PostApiV1AuthWebauthnFinishWithResponse Complete the passkey second-factor login
+	//
+	// Completes the pending_2fa stage with a WebAuthn assertion. The `veil_pending_2fa` cookie authorizes ONLY this ceremony and `/api/v1/auth/webauthn/begin`; a valid assertion mints the real `veil_session` cookie with the second-factor mark. Attempts share the per-(client, username) login throttle and are hard-capped per challenge; a signature-counter regression invalidates the credential (clone detection); the challenge fails closed if the account changed since the password was verified.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/auth/webauthn/finish (the `PostApiV1AuthWebauthnFinish` operationId).
+	PostApiV1AuthWebauthnFinishWithResponse(ctx context.Context, params *PostApiV1AuthWebauthnFinishParams, body PostApiV1AuthWebauthnFinishJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1AuthWebauthnFinishResponse, error)
+
 	// GetApiV1ClientsWithResponse List clients with effective status
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -14710,6 +15495,69 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/traffic/{id}/history (the `GetApiV1TrafficIdHistory` operationId).
 	GetApiV1TrafficIdHistoryWithResponse(ctx context.Context, id ClientId, params *GetApiV1TrafficIdHistoryParams, reqEditors ...RequestEditorFn) (*GetApiV1TrafficIdHistoryResponse, error)
 
+	// GetApiV1UsersMePasskeysWithResponse List the current user's passkeys
+	//
+	// Requires a `veil_session` cookie bound to a real user row; static API tokens and the dev-anonymous identity cannot call it. Returns public metadata only — credential IDs, names, transports, and timestamps; public key material never leaves the server.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/users/me/passkeys (the `GetApiV1UsersMePasskeys` operationId).
+	GetApiV1UsersMePasskeysWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1UsersMePasskeysResponse, error)
+
+	// PostApiV1UsersMePasskeysRegisterBeginWithBodyWithResponse Begin passkey registration for the current user
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token`, plus a credential-grade gate: a session that already carries the second-factor mark, or the account password re-presented here. Mints a WebAuthn registration challenge stored server-side for ~5 minutes, keyed by the session token. The response is the `PublicKeyCredentialCreationOptions` object for `navigator.credentials.create`.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/users/me/passkeys/register/begin (the `PostApiV1UsersMePasskeysRegisterBegin` operationId).
+	PostApiV1UsersMePasskeysRegisterBeginWithBodyWithResponse(ctx context.Context, params *PostApiV1UsersMePasskeysRegisterBeginParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1UsersMePasskeysRegisterBeginResponse, error)
+
+	// PostApiV1UsersMePasskeysRegisterBeginWithResponse Begin passkey registration for the current user
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token`, plus a credential-grade gate: a session that already carries the second-factor mark, or the account password re-presented here. Mints a WebAuthn registration challenge stored server-side for ~5 minutes, keyed by the session token. The response is the `PublicKeyCredentialCreationOptions` object for `navigator.credentials.create`.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/users/me/passkeys/register/begin (the `PostApiV1UsersMePasskeysRegisterBegin` operationId).
+	PostApiV1UsersMePasskeysRegisterBeginWithResponse(ctx context.Context, params *PostApiV1UsersMePasskeysRegisterBeginParams, body PostApiV1UsersMePasskeysRegisterBeginJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1UsersMePasskeysRegisterBeginResponse, error)
+
+	// PostApiV1UsersMePasskeysRegisterFinishWithBodyWithResponse Finish passkey registration for the current user
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies the authenticator attestation against the challenge minted by `register/begin` (single-use), stores the credential, upgrades the calling session to second-factor-complete, and revokes every other session of the user — a credential addition is a privilege-floor change.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/users/me/passkeys/register/finish (the `PostApiV1UsersMePasskeysRegisterFinish` operationId).
+	PostApiV1UsersMePasskeysRegisterFinishWithBodyWithResponse(ctx context.Context, params *PostApiV1UsersMePasskeysRegisterFinishParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1UsersMePasskeysRegisterFinishResponse, error)
+
+	// PostApiV1UsersMePasskeysRegisterFinishWithResponse Finish passkey registration for the current user
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies the authenticator attestation against the challenge minted by `register/begin` (single-use), stores the credential, upgrades the calling session to second-factor-complete, and revokes every other session of the user — a credential addition is a privilege-floor change.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/users/me/passkeys/register/finish (the `PostApiV1UsersMePasskeysRegisterFinish` operationId).
+	PostApiV1UsersMePasskeysRegisterFinishWithResponse(ctx context.Context, params *PostApiV1UsersMePasskeysRegisterFinishParams, body PostApiV1UsersMePasskeysRegisterFinishJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1UsersMePasskeysRegisterFinishResponse, error)
+
+	// DeleteApiV1UsersMePasskeysPasskeyIdWithBodyWithResponse Delete one of the current user's passkeys
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token` plus the same credential-grade gate as registration (second-factor session or account password). Removing a credential never revokes sessions — once the last factor is gone the session-mark requirement simply stops applying.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/users/me/passkeys/{passkeyId} (the `DeleteApiV1UsersMePasskeysPasskeyId` operationId).
+	DeleteApiV1UsersMePasskeysPasskeyIdWithBodyWithResponse(ctx context.Context, passkeyId string, params *DeleteApiV1UsersMePasskeysPasskeyIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteApiV1UsersMePasskeysPasskeyIdResponse, error)
+
+	// DeleteApiV1UsersMePasskeysPasskeyIdWithResponse Delete one of the current user's passkeys
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token` plus the same credential-grade gate as registration (second-factor session or account password). Removing a credential never revokes sessions — once the last factor is gone the session-mark requirement simply stops applying.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/users/me/passkeys/{passkeyId} (the `DeleteApiV1UsersMePasskeysPasskeyId` operationId).
+	DeleteApiV1UsersMePasskeysPasskeyIdWithResponse(ctx context.Context, passkeyId string, params *DeleteApiV1UsersMePasskeysPasskeyIdParams, body DeleteApiV1UsersMePasskeysPasskeyIdJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteApiV1UsersMePasskeysPasskeyIdResponse, error)
+
 	// DeleteApiV1UsersMeTotpWithBodyWithResponse Disable the current user's TOTP second factor
 	//
 	// Requires the `veil_session` cookie and `X-CSRF-Token` plus a
@@ -14785,6 +15633,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /api/v1/users/me/totp/enroll (the `PostApiV1UsersMeTotpEnroll` operationId).
 	PostApiV1UsersMeTotpEnrollWithResponse(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, reqEditors ...RequestEditorFn) (*PostApiV1UsersMeTotpEnrollResponse, error)
+
+	// DeleteApiV1UsersUsernamePasskeysWithResponse Reset a user's passkeys
+	//
+	// Admin reset for a locked-out user: clears every registered WebAuthn credential. Cookie sessions must include `X-CSRF-Token`. Unlike the TOTP reset this does NOT revoke the target's sessions — removing a possession factor cannot let an existing session bypass a still-armed factor.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/users/{username}/passkeys (the `DeleteApiV1UsersUsernamePasskeys` operationId).
+	DeleteApiV1UsersUsernamePasskeysWithResponse(ctx context.Context, username Username, params *DeleteApiV1UsersUsernamePasskeysParams, reqEditors ...RequestEditorFn) (*DeleteApiV1UsersUsernamePasskeysResponse, error)
 
 	// DeleteApiV1UsersUsernameTotpWithResponse Reset a user's TOTP second factor
 	//
@@ -20346,6 +21203,158 @@ func (r PostApiV1AuthTotpVerifyResponse) ContentType() string {
 	return ""
 }
 
+// PostApiV1AuthWebauthnBeginResponse401Headers the declared response headers of an HTTP 401 response for PostApiV1AuthWebauthnBegin
+type PostApiV1AuthWebauthnBeginResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+// PostApiV1AuthWebauthnBeginResponse429Headers the declared response headers of an HTTP 429 response for PostApiV1AuthWebauthnBegin
+type PostApiV1AuthWebauthnBeginResponse429Headers struct {
+	RetryAfter *int
+}
+
+type PostApiV1AuthWebauthnBeginResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *WebAuthnAssertionOptions
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *ErrorEnvelope
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *PostApiV1AuthWebauthnBeginResponse401Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *PostApiV1AuthWebauthnBeginResponse429Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostApiV1AuthWebauthnBeginResponse) GetJSON200() *WebAuthnAssertionOptions {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiV1AuthWebauthnBeginResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r PostApiV1AuthWebauthnBeginResponse) GetJSON429() *ErrorEnvelope {
+	return r.JSON429
+}
+
+// GetBody returns the raw response body bytes
+func (r PostApiV1AuthWebauthnBeginResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1AuthWebauthnBeginResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1AuthWebauthnBeginResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostApiV1AuthWebauthnBeginResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PostApiV1AuthWebauthnFinishResponse200Headers the declared response headers of an HTTP 200 response for PostApiV1AuthWebauthnFinish
+type PostApiV1AuthWebauthnFinishResponse200Headers struct {
+	SetCookie *string
+}
+
+// PostApiV1AuthWebauthnFinishResponse401Headers the declared response headers of an HTTP 401 response for PostApiV1AuthWebauthnFinish
+type PostApiV1AuthWebauthnFinishResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+// PostApiV1AuthWebauthnFinishResponse429Headers the declared response headers of an HTTP 429 response for PostApiV1AuthWebauthnFinish
+type PostApiV1AuthWebauthnFinishResponse429Headers struct {
+	RetryAfter *int
+}
+
+type PostApiV1AuthWebauthnFinishResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *LoginResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *ErrorEnvelope
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *PostApiV1AuthWebauthnFinishResponse200Headers
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *PostApiV1AuthWebauthnFinishResponse401Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *PostApiV1AuthWebauthnFinishResponse429Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostApiV1AuthWebauthnFinishResponse) GetJSON200() *LoginResponse {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiV1AuthWebauthnFinishResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiV1AuthWebauthnFinishResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r PostApiV1AuthWebauthnFinishResponse) GetJSON429() *ErrorEnvelope {
+	return r.JSON429
+}
+
+// GetBody returns the raw response body bytes
+func (r PostApiV1AuthWebauthnFinishResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1AuthWebauthnFinishResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1AuthWebauthnFinishResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostApiV1AuthWebauthnFinishResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetApiV1ClientsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -22218,6 +23227,338 @@ func (r GetApiV1TrafficIdHistoryResponse) ContentType() string {
 	return ""
 }
 
+// GetApiV1UsersMePasskeysResponse401Headers the declared response headers of an HTTP 401 response for GetApiV1UsersMePasskeys
+type GetApiV1UsersMePasskeysResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type GetApiV1UsersMePasskeysResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PasskeyListResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetApiV1UsersMePasskeysResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiV1UsersMePasskeysResponse) GetJSON200() *PasskeyListResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiV1UsersMePasskeysResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetApiV1UsersMePasskeysResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetApiV1UsersMePasskeysResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiV1UsersMePasskeysResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1UsersMePasskeysResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1UsersMePasskeysResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiV1UsersMePasskeysResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PostApiV1UsersMePasskeysRegisterBeginResponse401Headers the declared response headers of an HTTP 401 response for PostApiV1UsersMePasskeysRegisterBegin
+type PostApiV1UsersMePasskeysRegisterBeginResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+// PostApiV1UsersMePasskeysRegisterBeginResponse429Headers the declared response headers of an HTTP 429 response for PostApiV1UsersMePasskeysRegisterBegin
+type PostApiV1UsersMePasskeysRegisterBeginResponse429Headers struct {
+	RetryAfter *int
+}
+
+type PostApiV1UsersMePasskeysRegisterBeginResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *WebAuthnCreationOptions
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *ErrorEnvelope
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *PostApiV1UsersMePasskeysRegisterBeginResponse401Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *PostApiV1UsersMePasskeysRegisterBeginResponse429Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostApiV1UsersMePasskeysRegisterBeginResponse) GetJSON200() *WebAuthnCreationOptions {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiV1UsersMePasskeysRegisterBeginResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiV1UsersMePasskeysRegisterBeginResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostApiV1UsersMePasskeysRegisterBeginResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r PostApiV1UsersMePasskeysRegisterBeginResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r PostApiV1UsersMePasskeysRegisterBeginResponse) GetJSON429() *ErrorEnvelope {
+	return r.JSON429
+}
+
+// GetBody returns the raw response body bytes
+func (r PostApiV1UsersMePasskeysRegisterBeginResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1UsersMePasskeysRegisterBeginResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1UsersMePasskeysRegisterBeginResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostApiV1UsersMePasskeysRegisterBeginResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PostApiV1UsersMePasskeysRegisterFinishResponse401Headers the declared response headers of an HTTP 401 response for PostApiV1UsersMePasskeysRegisterFinish
+type PostApiV1UsersMePasskeysRegisterFinishResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type PostApiV1UsersMePasskeysRegisterFinishResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *PasskeyInfo
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Conflict
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *PostApiV1UsersMePasskeysRegisterFinishResponse401Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r PostApiV1UsersMePasskeysRegisterFinishResponse) GetJSON201() *PasskeyInfo {
+	return r.JSON201
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiV1UsersMePasskeysRegisterFinishResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiV1UsersMePasskeysRegisterFinishResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostApiV1UsersMePasskeysRegisterFinishResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r PostApiV1UsersMePasskeysRegisterFinishResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r PostApiV1UsersMePasskeysRegisterFinishResponse) GetJSON409() *Conflict {
+	return r.JSON409
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PostApiV1UsersMePasskeysRegisterFinishResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r PostApiV1UsersMePasskeysRegisterFinishResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1UsersMePasskeysRegisterFinishResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1UsersMePasskeysRegisterFinishResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostApiV1UsersMePasskeysRegisterFinishResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// DeleteApiV1UsersMePasskeysPasskeyIdResponse401Headers the declared response headers of an HTTP 401 response for DeleteApiV1UsersMePasskeysPasskeyId
+type DeleteApiV1UsersMePasskeysPasskeyIdResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+// DeleteApiV1UsersMePasskeysPasskeyIdResponse429Headers the declared response headers of an HTTP 429 response for DeleteApiV1UsersMePasskeysPasskeyId
+type DeleteApiV1UsersMePasskeysPasskeyIdResponse429Headers struct {
+	RetryAfter *int
+}
+
+type DeleteApiV1UsersMePasskeysPasskeyIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *ErrorEnvelope
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *DeleteApiV1UsersMePasskeysPasskeyIdResponse401Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *DeleteApiV1UsersMePasskeysPasskeyIdResponse429Headers
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r DeleteApiV1UsersMePasskeysPasskeyIdResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r DeleteApiV1UsersMePasskeysPasskeyIdResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r DeleteApiV1UsersMePasskeysPasskeyIdResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r DeleteApiV1UsersMePasskeysPasskeyIdResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r DeleteApiV1UsersMePasskeysPasskeyIdResponse) GetJSON429() *ErrorEnvelope {
+	return r.JSON429
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteApiV1UsersMePasskeysPasskeyIdResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiV1UsersMePasskeysPasskeyIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiV1UsersMePasskeysPasskeyIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteApiV1UsersMePasskeysPasskeyIdResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // DeleteApiV1UsersMeTotpResponse401Headers the declared response headers of an HTTP 401 response for DeleteApiV1UsersMeTotp
 type DeleteApiV1UsersMeTotpResponse401Headers struct {
 	WWWAuthenticate *string
@@ -22558,6 +23899,75 @@ func (r PostApiV1UsersMeTotpEnrollResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PostApiV1UsersMeTotpEnrollResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// DeleteApiV1UsersUsernamePasskeysResponse401Headers the declared response headers of an HTTP 401 response for DeleteApiV1UsersUsernamePasskeys
+type DeleteApiV1UsersUsernamePasskeysResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type DeleteApiV1UsersUsernamePasskeysResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *DeleteApiV1UsersUsernamePasskeysResponse401Headers
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r DeleteApiV1UsersUsernamePasskeysResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r DeleteApiV1UsersUsernamePasskeysResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r DeleteApiV1UsersUsernamePasskeysResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r DeleteApiV1UsersUsernamePasskeysResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteApiV1UsersUsernamePasskeysResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiV1UsersUsernamePasskeysResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiV1UsersUsernamePasskeysResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteApiV1UsersUsernamePasskeysResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -24851,6 +26261,51 @@ func (c *ClientWithResponses) PostApiV1AuthTotpVerifyWithResponse(ctx context.Co
 	return ParsePostApiV1AuthTotpVerifyResponse(rsp)
 }
 
+// PostApiV1AuthWebauthnBeginWithResponse Begin the passkey second-factor login ceremony
+//
+// Issues a WebAuthn assertion challenge for the pending_2fa record minted by `/api/auth/login` when the account advertises `webauthn` in `secondFactorMethods`. The `veil_pending_2fa` cookie authorizes this endpoint and `/api/v1/auth/webauthn/finish` only; the challenge is stored server-side bound to that pending token. The response is the `PublicKeyCredentialRequestOptions` object the browser passes to `navigator.credentials.get`. Attempts honor the shared login backoff.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/auth/webauthn/begin (the `PostApiV1AuthWebauthnBegin` operationId).
+func (c *ClientWithResponses) PostApiV1AuthWebauthnBeginWithResponse(ctx context.Context, params *PostApiV1AuthWebauthnBeginParams, reqEditors ...RequestEditorFn) (*PostApiV1AuthWebauthnBeginResponse, error) {
+	rsp, err := c.PostApiV1AuthWebauthnBegin(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1AuthWebauthnBeginResponse(rsp)
+}
+
+// PostApiV1AuthWebauthnFinishWithBodyWithResponse Complete the passkey second-factor login
+//
+// Completes the pending_2fa stage with a WebAuthn assertion. The `veil_pending_2fa` cookie authorizes ONLY this ceremony and `/api/v1/auth/webauthn/begin`; a valid assertion mints the real `veil_session` cookie with the second-factor mark. Attempts share the per-(client, username) login throttle and are hard-capped per challenge; a signature-counter regression invalidates the credential (clone detection); the challenge fails closed if the account changed since the password was verified.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/auth/webauthn/finish (the `PostApiV1AuthWebauthnFinish` operationId).
+func (c *ClientWithResponses) PostApiV1AuthWebauthnFinishWithBodyWithResponse(ctx context.Context, params *PostApiV1AuthWebauthnFinishParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1AuthWebauthnFinishResponse, error) {
+	rsp, err := c.PostApiV1AuthWebauthnFinishWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1AuthWebauthnFinishResponse(rsp)
+}
+
+// PostApiV1AuthWebauthnFinishWithResponse Complete the passkey second-factor login
+//
+// Completes the pending_2fa stage with a WebAuthn assertion. The `veil_pending_2fa` cookie authorizes ONLY this ceremony and `/api/v1/auth/webauthn/begin`; a valid assertion mints the real `veil_session` cookie with the second-factor mark. Attempts share the per-(client, username) login throttle and are hard-capped per challenge; a signature-counter regression invalidates the credential (clone detection); the challenge fails closed if the account changed since the password was verified.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/auth/webauthn/finish (the `PostApiV1AuthWebauthnFinish` operationId).
+func (c *ClientWithResponses) PostApiV1AuthWebauthnFinishWithResponse(ctx context.Context, params *PostApiV1AuthWebauthnFinishParams, body PostApiV1AuthWebauthnFinishJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1AuthWebauthnFinishResponse, error) {
+	rsp, err := c.PostApiV1AuthWebauthnFinish(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1AuthWebauthnFinishResponse(rsp)
+}
+
 // GetApiV1ClientsWithResponse List clients with effective status
 //
 // Returns a wrapper object for the known response body format(s).
@@ -25361,6 +26816,111 @@ func (c *ClientWithResponses) GetApiV1TrafficIdHistoryWithResponse(ctx context.C
 	return ParseGetApiV1TrafficIdHistoryResponse(rsp)
 }
 
+// GetApiV1UsersMePasskeysWithResponse List the current user's passkeys
+//
+// Requires a `veil_session` cookie bound to a real user row; static API tokens and the dev-anonymous identity cannot call it. Returns public metadata only — credential IDs, names, transports, and timestamps; public key material never leaves the server.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/users/me/passkeys (the `GetApiV1UsersMePasskeys` operationId).
+func (c *ClientWithResponses) GetApiV1UsersMePasskeysWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1UsersMePasskeysResponse, error) {
+	rsp, err := c.GetApiV1UsersMePasskeys(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1UsersMePasskeysResponse(rsp)
+}
+
+// PostApiV1UsersMePasskeysRegisterBeginWithBodyWithResponse Begin passkey registration for the current user
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token`, plus a credential-grade gate: a session that already carries the second-factor mark, or the account password re-presented here. Mints a WebAuthn registration challenge stored server-side for ~5 minutes, keyed by the session token. The response is the `PublicKeyCredentialCreationOptions` object for `navigator.credentials.create`.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/users/me/passkeys/register/begin (the `PostApiV1UsersMePasskeysRegisterBegin` operationId).
+func (c *ClientWithResponses) PostApiV1UsersMePasskeysRegisterBeginWithBodyWithResponse(ctx context.Context, params *PostApiV1UsersMePasskeysRegisterBeginParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1UsersMePasskeysRegisterBeginResponse, error) {
+	rsp, err := c.PostApiV1UsersMePasskeysRegisterBeginWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1UsersMePasskeysRegisterBeginResponse(rsp)
+}
+
+// PostApiV1UsersMePasskeysRegisterBeginWithResponse Begin passkey registration for the current user
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token`, plus a credential-grade gate: a session that already carries the second-factor mark, or the account password re-presented here. Mints a WebAuthn registration challenge stored server-side for ~5 minutes, keyed by the session token. The response is the `PublicKeyCredentialCreationOptions` object for `navigator.credentials.create`.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/users/me/passkeys/register/begin (the `PostApiV1UsersMePasskeysRegisterBegin` operationId).
+func (c *ClientWithResponses) PostApiV1UsersMePasskeysRegisterBeginWithResponse(ctx context.Context, params *PostApiV1UsersMePasskeysRegisterBeginParams, body PostApiV1UsersMePasskeysRegisterBeginJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1UsersMePasskeysRegisterBeginResponse, error) {
+	rsp, err := c.PostApiV1UsersMePasskeysRegisterBegin(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1UsersMePasskeysRegisterBeginResponse(rsp)
+}
+
+// PostApiV1UsersMePasskeysRegisterFinishWithBodyWithResponse Finish passkey registration for the current user
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies the authenticator attestation against the challenge minted by `register/begin` (single-use), stores the credential, upgrades the calling session to second-factor-complete, and revokes every other session of the user — a credential addition is a privilege-floor change.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/users/me/passkeys/register/finish (the `PostApiV1UsersMePasskeysRegisterFinish` operationId).
+func (c *ClientWithResponses) PostApiV1UsersMePasskeysRegisterFinishWithBodyWithResponse(ctx context.Context, params *PostApiV1UsersMePasskeysRegisterFinishParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1UsersMePasskeysRegisterFinishResponse, error) {
+	rsp, err := c.PostApiV1UsersMePasskeysRegisterFinishWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1UsersMePasskeysRegisterFinishResponse(rsp)
+}
+
+// PostApiV1UsersMePasskeysRegisterFinishWithResponse Finish passkey registration for the current user
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies the authenticator attestation against the challenge minted by `register/begin` (single-use), stores the credential, upgrades the calling session to second-factor-complete, and revokes every other session of the user — a credential addition is a privilege-floor change.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/users/me/passkeys/register/finish (the `PostApiV1UsersMePasskeysRegisterFinish` operationId).
+func (c *ClientWithResponses) PostApiV1UsersMePasskeysRegisterFinishWithResponse(ctx context.Context, params *PostApiV1UsersMePasskeysRegisterFinishParams, body PostApiV1UsersMePasskeysRegisterFinishJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1UsersMePasskeysRegisterFinishResponse, error) {
+	rsp, err := c.PostApiV1UsersMePasskeysRegisterFinish(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1UsersMePasskeysRegisterFinishResponse(rsp)
+}
+
+// DeleteApiV1UsersMePasskeysPasskeyIdWithBodyWithResponse Delete one of the current user's passkeys
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token` plus the same credential-grade gate as registration (second-factor session or account password). Removing a credential never revokes sessions — once the last factor is gone the session-mark requirement simply stops applying.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/users/me/passkeys/{passkeyId} (the `DeleteApiV1UsersMePasskeysPasskeyId` operationId).
+func (c *ClientWithResponses) DeleteApiV1UsersMePasskeysPasskeyIdWithBodyWithResponse(ctx context.Context, passkeyId string, params *DeleteApiV1UsersMePasskeysPasskeyIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteApiV1UsersMePasskeysPasskeyIdResponse, error) {
+	rsp, err := c.DeleteApiV1UsersMePasskeysPasskeyIdWithBody(ctx, passkeyId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiV1UsersMePasskeysPasskeyIdResponse(rsp)
+}
+
+// DeleteApiV1UsersMePasskeysPasskeyIdWithResponse Delete one of the current user's passkeys
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token` plus the same credential-grade gate as registration (second-factor session or account password). Removing a credential never revokes sessions — once the last factor is gone the session-mark requirement simply stops applying.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/users/me/passkeys/{passkeyId} (the `DeleteApiV1UsersMePasskeysPasskeyId` operationId).
+func (c *ClientWithResponses) DeleteApiV1UsersMePasskeysPasskeyIdWithResponse(ctx context.Context, passkeyId string, params *DeleteApiV1UsersMePasskeysPasskeyIdParams, body DeleteApiV1UsersMePasskeysPasskeyIdJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteApiV1UsersMePasskeysPasskeyIdResponse, error) {
+	rsp, err := c.DeleteApiV1UsersMePasskeysPasskeyId(ctx, passkeyId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiV1UsersMePasskeysPasskeyIdResponse(rsp)
+}
+
 // DeleteApiV1UsersMeTotpWithBodyWithResponse Disable the current user's TOTP second factor
 //
 // Requires the `veil_session` cookie and `X-CSRF-Token` plus a
@@ -25471,6 +27031,21 @@ func (c *ClientWithResponses) PostApiV1UsersMeTotpEnrollWithResponse(ctx context
 		return nil, err
 	}
 	return ParsePostApiV1UsersMeTotpEnrollResponse(rsp)
+}
+
+// DeleteApiV1UsersUsernamePasskeysWithResponse Reset a user's passkeys
+//
+// Admin reset for a locked-out user: clears every registered WebAuthn credential. Cookie sessions must include `X-CSRF-Token`. Unlike the TOTP reset this does NOT revoke the target's sessions — removing a possession factor cannot let an existing session bypass a still-armed factor.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/users/{username}/passkeys (the `DeleteApiV1UsersUsernamePasskeys` operationId).
+func (c *ClientWithResponses) DeleteApiV1UsersUsernamePasskeysWithResponse(ctx context.Context, username Username, params *DeleteApiV1UsersUsernamePasskeysParams, reqEditors ...RequestEditorFn) (*DeleteApiV1UsersUsernamePasskeysResponse, error) {
+	rsp, err := c.DeleteApiV1UsersUsernamePasskeys(ctx, username, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiV1UsersUsernamePasskeysResponse(rsp)
 }
 
 // DeleteApiV1UsersUsernameTotpWithResponse Reset a user's TOTP second factor
@@ -30056,6 +31631,149 @@ func ParsePostApiV1AuthTotpVerifyResponse(rsp *http.Response) (*PostApiV1AuthTot
 	return response, nil
 }
 
+// ParsePostApiV1AuthWebauthnBeginResponse parses an HTTP response from a PostApiV1AuthWebauthnBeginWithResponse call
+func ParsePostApiV1AuthWebauthnBeginResponse(rsp *http.Response) (*PostApiV1AuthWebauthnBeginResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1AuthWebauthnBeginResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WebAuthnAssertionOptions
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers PostApiV1AuthWebauthnBeginResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	case rsp.StatusCode == 429:
+		var headers PostApiV1AuthWebauthnBeginResponse429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers429 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1AuthWebauthnFinishResponse parses an HTTP response from a PostApiV1AuthWebauthnFinishWithResponse call
+func ParsePostApiV1AuthWebauthnFinishResponse(rsp *http.Response) (*PostApiV1AuthWebauthnFinishResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1AuthWebauthnFinishResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LoginResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers PostApiV1AuthWebauthnFinishResponse200Headers
+		if values := rsp.Header.Values("Set-Cookie"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Set-Cookie", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.SetCookie = &value
+		}
+		response.Headers200 = &headers
+	case rsp.StatusCode == 401:
+		var headers PostApiV1AuthWebauthnFinishResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	case rsp.StatusCode == 429:
+		var headers PostApiV1AuthWebauthnFinishResponse429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers429 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseGetApiV1ClientsResponse parses an HTTP response from a GetApiV1ClientsWithResponse call
 func ParseGetApiV1ClientsResponse(rsp *http.Response) (*GetApiV1ClientsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -31467,6 +33185,311 @@ func ParseGetApiV1TrafficIdHistoryResponse(rsp *http.Response) (*GetApiV1Traffic
 	return response, nil
 }
 
+// ParseGetApiV1UsersMePasskeysResponse parses an HTTP response from a GetApiV1UsersMePasskeysWithResponse call
+func ParseGetApiV1UsersMePasskeysResponse(rsp *http.Response) (*GetApiV1UsersMePasskeysResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1UsersMePasskeysResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PasskeyListResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetApiV1UsersMePasskeysResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1UsersMePasskeysRegisterBeginResponse parses an HTTP response from a PostApiV1UsersMePasskeysRegisterBeginWithResponse call
+func ParsePostApiV1UsersMePasskeysRegisterBeginResponse(rsp *http.Response) (*PostApiV1UsersMePasskeysRegisterBeginResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1UsersMePasskeysRegisterBeginResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WebAuthnCreationOptions
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers PostApiV1UsersMePasskeysRegisterBeginResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	case rsp.StatusCode == 429:
+		var headers PostApiV1UsersMePasskeysRegisterBeginResponse429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers429 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1UsersMePasskeysRegisterFinishResponse parses an HTTP response from a PostApiV1UsersMePasskeysRegisterFinishWithResponse call
+func ParsePostApiV1UsersMePasskeysRegisterFinishResponse(rsp *http.Response) (*PostApiV1UsersMePasskeysRegisterFinishResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1UsersMePasskeysRegisterFinishResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest PasskeyInfo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers PostApiV1UsersMePasskeysRegisterFinishResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiV1UsersMePasskeysPasskeyIdResponse parses an HTTP response from a DeleteApiV1UsersMePasskeysPasskeyIdWithResponse call
+func ParseDeleteApiV1UsersMePasskeysPasskeyIdResponse(rsp *http.Response) (*DeleteApiV1UsersMePasskeysPasskeyIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiV1UsersMePasskeysPasskeyIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers DeleteApiV1UsersMePasskeysPasskeyIdResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	case rsp.StatusCode == 429:
+		var headers DeleteApiV1UsersMePasskeysPasskeyIdResponse429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers429 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseDeleteApiV1UsersMeTotpResponse parses an HTTP response from a DeleteApiV1UsersMeTotpWithResponse call
 func ParseDeleteApiV1UsersMeTotpResponse(rsp *http.Response) (*DeleteApiV1UsersMeTotpResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -31770,6 +33793,69 @@ func ParsePostApiV1UsersMeTotpEnrollResponse(rsp *http.Response) (*PostApiV1User
 	switch {
 	case rsp.StatusCode == 401:
 		var headers PostApiV1UsersMeTotpEnrollResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiV1UsersUsernamePasskeysResponse parses an HTTP response from a DeleteApiV1UsersUsernamePasskeysWithResponse call
+func ParseDeleteApiV1UsersUsernamePasskeysResponse(rsp *http.Response) (*DeleteApiV1UsersUsernamePasskeysResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiV1UsersUsernamePasskeysResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers DeleteApiV1UsersUsernamePasskeysResponse401Headers
 		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {

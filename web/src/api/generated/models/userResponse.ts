@@ -49,4 +49,6 @@ export interface UserResponse {
   locale: Locale;
   /** Whether the account requires a TOTP second factor at login. */
   totpEnabled: boolean;
+  /** Number of WebAuthn credentials registered on the account. */
+  passkeyCount: number;
 }

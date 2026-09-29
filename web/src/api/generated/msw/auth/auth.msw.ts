@@ -71,6 +71,11 @@ import type {
   LoginRequest,
   LoginResponse,
   NotFoundResponse,
+  PasskeyDeleteRequest,
+  PasskeyInfo,
+  PasskeyListResponse,
+  PasskeyRegisterBeginRequest,
+  PasskeyRegisterFinishRequest,
   ServiceUnavailableResponse,
   SessionDeleteRequest,
   SessionInfo,
@@ -85,7 +90,10 @@ import type {
   UserCreateRequest,
   UserResponse,
   UserUpdateRequest,
-  ValidationFailedResponse
+  ValidationFailedResponse,
+  WebAuthnAssertionOptions,
+  WebAuthnAssertionResponse,
+  WebAuthnCreationOptions
 } from '../models';
 
 import { apiFetch } from '../../../fetcher.ts';
@@ -1533,4 +1541,606 @@ export const useDeleteApiV1UsersUsernameTotp = <TError = UnauthorizedResponse | 
         TContext
       > => {
       return useMutation(getDeleteApiV1UsersUsernameTotpMutationOptions(options), queryClient);
+    }
+    export const getPostApiV1AuthWebauthnBeginUrl = () => {
+
+
+
+
+  return `/api/v1/auth/webauthn/begin`
+}
+
+/**
+ * Issues a WebAuthn assertion challenge for the pending_2fa record minted by `/api/auth/login` when the account advertises `webauthn` in `secondFactorMethods`. The `veil_pending_2fa` cookie authorizes this endpoint and `/api/v1/auth/webauthn/finish` only; the challenge is stored server-side bound to that pending token. The response is the `PublicKeyCredentialRequestOptions` object the browser passes to `navigator.credentials.get`. Attempts honor the shared login backoff.
+ * @summary Begin the passkey second-factor login ceremony
+ */
+export const postApiV1AuthWebauthnBegin = async ( options?: Parameters<typeof apiFetch>[1]): Promise<WebAuthnAssertionOptions> => {
+
+  return apiFetch<WebAuthnAssertionOptions>(getPostApiV1AuthWebauthnBeginUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiV1AuthWebauthnBeginMutationKey = () => ['postApiV1AuthWebauthnBegin'] as const;
+
+export const getPostApiV1AuthWebauthnBeginMutationOptions = <TError = UnauthorizedResponse | ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>, TError,void, TContext> => {
+
+const mutationKey = getPostApiV1AuthWebauthnBeginMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>, void> = () => {
+
+
+          return  postApiV1AuthWebauthnBegin(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiV1AuthWebauthnBeginMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>>
+
+    export type PostApiV1AuthWebauthnBeginMutationError = UnauthorizedResponse | ErrorEnvelope
+
+
+    /**
+ * @summary Begin the passkey second-factor login ceremony
+ */
+export const usePostApiV1AuthWebauthnBegin = <TError = UnauthorizedResponse | ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiV1AuthWebauthnBegin>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getPostApiV1AuthWebauthnBeginMutationOptions(options), queryClient);
+    }
+    export const getPostApiV1AuthWebauthnFinishUrl = () => {
+
+
+
+
+  return `/api/v1/auth/webauthn/finish`
+}
+
+/**
+ * Completes the pending_2fa stage with a WebAuthn assertion. The `veil_pending_2fa` cookie authorizes ONLY this ceremony and `/api/v1/auth/webauthn/begin`; a valid assertion mints the real `veil_session` cookie with the second-factor mark. Attempts share the per-(client, username) login throttle and are hard-capped per challenge; a signature-counter regression invalidates the credential (clone detection); the challenge fails closed if the account changed since the password was verified.
+ * @summary Complete the passkey second-factor login
+ */
+export const postApiV1AuthWebauthnFinish = async (webAuthnAssertionResponse: WebAuthnAssertionResponse, options?: Parameters<typeof apiFetch>[1]): Promise<LoginResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<LoginResponse>(getPostApiV1AuthWebauthnFinishUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(webAuthnAssertionResponse)
+  }
+);}
+
+
+
+
+
+export const getPostApiV1AuthWebauthnFinishMutationKey = () => ['postApiV1AuthWebauthnFinish'] as const;
+
+export const getPostApiV1AuthWebauthnFinishMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>, TError,PostApiV1AuthWebauthnFinishMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>, TError,PostApiV1AuthWebauthnFinishMutationVariables, TContext> => {
+
+const mutationKey = getPostApiV1AuthWebauthnFinishMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>, PostApiV1AuthWebauthnFinishMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiV1AuthWebauthnFinish(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiV1AuthWebauthnFinishMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>>
+    export type PostApiV1AuthWebauthnFinishMutationBody = WebAuthnAssertionResponse
+    export type PostApiV1AuthWebauthnFinishMutationError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope
+    export type PostApiV1AuthWebauthnFinishMutationVariables = {data: WebAuthnAssertionResponse}
+
+    /**
+ * @summary Complete the passkey second-factor login
+ */
+export const usePostApiV1AuthWebauthnFinish = <TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>, TError,PostApiV1AuthWebauthnFinishMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiV1AuthWebauthnFinish>>,
+        TError,
+        PostApiV1AuthWebauthnFinishMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiV1AuthWebauthnFinishMutationOptions(options), queryClient);
+    }
+    export const getGetApiV1UsersMePasskeysUrl = () => {
+
+
+
+
+  return `/api/v1/users/me/passkeys`
+}
+
+/**
+ * Requires a `veil_session` cookie bound to a real user row; static API tokens and the dev-anonymous identity cannot call it. Returns public metadata only — credential IDs, names, transports, and timestamps; public key material never leaves the server.
+ * @summary List the current user's passkeys
+ */
+export const getApiV1UsersMePasskeys = async ( options?: Parameters<typeof apiFetch>[1]): Promise<PasskeyListResponse> => {
+
+  return apiFetch<PasskeyListResponse>(getGetApiV1UsersMePasskeysUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1UsersMePasskeysQueryKey = () => {
+    return [
+    `/api/v1/users/me/passkeys`
+    ] as const;
+    }
+
+
+export const getGetApiV1UsersMePasskeysQueryOptions = <TData = Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiV1UsersMePasskeysQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>> = ({ signal }) => getApiV1UsersMePasskeys({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiV1UsersMePasskeysQueryResult = NonNullable<Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>>
+export type GetApiV1UsersMePasskeysQueryError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+
+
+export function useGetApiV1UsersMePasskeys<TData = Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1UsersMePasskeys<TData = Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1UsersMePasskeys<TData = Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List the current user's passkeys
+ */
+
+export function useGetApiV1UsersMePasskeys<TData = Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1UsersMePasskeys>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiV1UsersMePasskeysQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getPostApiV1UsersMePasskeysRegisterBeginUrl = () => {
+
+
+
+
+  return `/api/v1/users/me/passkeys/register/begin`
+}
+
+/**
+ * Requires the `veil_session` cookie and `X-CSRF-Token`, plus a credential-grade gate: a session that already carries the second-factor mark, or the account password re-presented here. Mints a WebAuthn registration challenge stored server-side for ~5 minutes, keyed by the session token. The response is the `PublicKeyCredentialCreationOptions` object for `navigator.credentials.create`.
+ * @summary Begin passkey registration for the current user
+ */
+export const postApiV1UsersMePasskeysRegisterBegin = async (passkeyRegisterBeginRequest?: PasskeyRegisterBeginRequest, options?: Parameters<typeof apiFetch>[1]): Promise<WebAuthnCreationOptions> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<WebAuthnCreationOptions>(getPostApiV1UsersMePasskeysRegisterBeginUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(passkeyRegisterBeginRequest)
+  }
+);}
+
+
+
+
+
+export const getPostApiV1UsersMePasskeysRegisterBeginMutationKey = () => ['postApiV1UsersMePasskeysRegisterBegin'] as const;
+
+export const getPostApiV1UsersMePasskeysRegisterBeginMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>, TError,PostApiV1UsersMePasskeysRegisterBeginMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>, TError,PostApiV1UsersMePasskeysRegisterBeginMutationVariables, TContext> => {
+
+const mutationKey = getPostApiV1UsersMePasskeysRegisterBeginMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>, PostApiV1UsersMePasskeysRegisterBeginMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiV1UsersMePasskeysRegisterBegin(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiV1UsersMePasskeysRegisterBeginMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>>
+    export type PostApiV1UsersMePasskeysRegisterBeginMutationBody = PasskeyRegisterBeginRequest | undefined
+    export type PostApiV1UsersMePasskeysRegisterBeginMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope
+    export type PostApiV1UsersMePasskeysRegisterBeginMutationVariables = {data?: PasskeyRegisterBeginRequest}
+
+    /**
+ * @summary Begin passkey registration for the current user
+ */
+export const usePostApiV1UsersMePasskeysRegisterBegin = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>, TError,PostApiV1UsersMePasskeysRegisterBeginMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterBegin>>,
+        TError,
+        PostApiV1UsersMePasskeysRegisterBeginMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiV1UsersMePasskeysRegisterBeginMutationOptions(options), queryClient);
+    }
+    export const getPostApiV1UsersMePasskeysRegisterFinishUrl = () => {
+
+
+
+
+  return `/api/v1/users/me/passkeys/register/finish`
+}
+
+/**
+ * Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies the authenticator attestation against the challenge minted by `register/begin` (single-use), stores the credential, upgrades the calling session to second-factor-complete, and revokes every other session of the user — a credential addition is a privilege-floor change.
+ * @summary Finish passkey registration for the current user
+ */
+export const postApiV1UsersMePasskeysRegisterFinish = async (passkeyRegisterFinishRequest: PasskeyRegisterFinishRequest, options?: Parameters<typeof apiFetch>[1]): Promise<PasskeyInfo> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<PasskeyInfo>(getPostApiV1UsersMePasskeysRegisterFinishUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(passkeyRegisterFinishRequest)
+  }
+);}
+
+
+
+
+
+export const getPostApiV1UsersMePasskeysRegisterFinishMutationKey = () => ['postApiV1UsersMePasskeysRegisterFinish'] as const;
+
+export const getPostApiV1UsersMePasskeysRegisterFinishMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>, TError,PostApiV1UsersMePasskeysRegisterFinishMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>, TError,PostApiV1UsersMePasskeysRegisterFinishMutationVariables, TContext> => {
+
+const mutationKey = getPostApiV1UsersMePasskeysRegisterFinishMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>, PostApiV1UsersMePasskeysRegisterFinishMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiV1UsersMePasskeysRegisterFinish(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiV1UsersMePasskeysRegisterFinishMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>>
+    export type PostApiV1UsersMePasskeysRegisterFinishMutationBody = PasskeyRegisterFinishRequest
+    export type PostApiV1UsersMePasskeysRegisterFinishMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ServiceUnavailableResponse
+    export type PostApiV1UsersMePasskeysRegisterFinishMutationVariables = {data: PasskeyRegisterFinishRequest}
+
+    /**
+ * @summary Finish passkey registration for the current user
+ */
+export const usePostApiV1UsersMePasskeysRegisterFinish = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>, TError,PostApiV1UsersMePasskeysRegisterFinishMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiV1UsersMePasskeysRegisterFinish>>,
+        TError,
+        PostApiV1UsersMePasskeysRegisterFinishMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiV1UsersMePasskeysRegisterFinishMutationOptions(options), queryClient);
+    }
+    export const getDeleteApiV1UsersMePasskeysPasskeyIdUrl = (passkeyId: string,) => {
+
+
+
+
+  return `/api/v1/users/me/passkeys/${passkeyId}`
+}
+
+/**
+ * Requires the `veil_session` cookie and `X-CSRF-Token` plus the same credential-grade gate as registration (second-factor session or account password). Removing a credential never revokes sessions — once the last factor is gone the session-mark requirement simply stops applying.
+ * @summary Delete one of the current user's passkeys
+ */
+export const deleteApiV1UsersMePasskeysPasskeyId = async (passkeyId: string,
+    passkeyDeleteRequest?: PasskeyDeleteRequest, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<void>(getDeleteApiV1UsersMePasskeysPasskeyIdUrl(passkeyId),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(passkeyDeleteRequest)
+  }
+);}
+
+
+
+
+
+export const getDeleteApiV1UsersMePasskeysPasskeyIdMutationKey = () => ['deleteApiV1UsersMePasskeysPasskeyId'] as const;
+
+export const getDeleteApiV1UsersMePasskeysPasskeyIdMutationOptions = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>, TError,DeleteApiV1UsersMePasskeysPasskeyIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>, TError,DeleteApiV1UsersMePasskeysPasskeyIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiV1UsersMePasskeysPasskeyIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>, DeleteApiV1UsersMePasskeysPasskeyIdMutationVariables> = (props) => {
+          const {passkeyId,data} = props ?? {};
+
+          return  deleteApiV1UsersMePasskeysPasskeyId(passkeyId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiV1UsersMePasskeysPasskeyIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>>
+    export type DeleteApiV1UsersMePasskeysPasskeyIdMutationBody = PasskeyDeleteRequest | undefined
+    export type DeleteApiV1UsersMePasskeysPasskeyIdMutationError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope
+    export type DeleteApiV1UsersMePasskeysPasskeyIdMutationVariables = {passkeyId: string;data?: PasskeyDeleteRequest}
+
+    /**
+ * @summary Delete one of the current user's passkeys
+ */
+export const useDeleteApiV1UsersMePasskeysPasskeyId = <TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>, TError,DeleteApiV1UsersMePasskeysPasskeyIdMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiV1UsersMePasskeysPasskeyId>>,
+        TError,
+        DeleteApiV1UsersMePasskeysPasskeyIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiV1UsersMePasskeysPasskeyIdMutationOptions(options), queryClient);
+    }
+    export const getDeleteApiV1UsersUsernamePasskeysUrl = (username: string,) => {
+
+
+
+
+  return `/api/v1/users/${username}/passkeys`
+}
+
+/**
+ * Admin reset for a locked-out user: clears every registered WebAuthn credential. Cookie sessions must include `X-CSRF-Token`. Unlike the TOTP reset this does NOT revoke the target's sessions — removing a possession factor cannot let an existing session bypass a still-armed factor.
+ * @summary Reset a user's passkeys
+ */
+export const deleteApiV1UsersUsernamePasskeys = async (username: string, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
+
+  return apiFetch<void>(getDeleteApiV1UsersUsernamePasskeysUrl(username),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiV1UsersUsernamePasskeysMutationKey = () => ['deleteApiV1UsersUsernamePasskeys'] as const;
+
+export const getDeleteApiV1UsersUsernamePasskeysMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>, TError,DeleteApiV1UsersUsernamePasskeysMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>, TError,DeleteApiV1UsersUsernamePasskeysMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiV1UsersUsernamePasskeysMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>, DeleteApiV1UsersUsernamePasskeysMutationVariables> = (props) => {
+          const {username} = props ?? {};
+
+          return  deleteApiV1UsersUsernamePasskeys(username,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiV1UsersUsernamePasskeysMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>>
+
+    export type DeleteApiV1UsersUsernamePasskeysMutationError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse
+    export type DeleteApiV1UsersUsernamePasskeysMutationVariables = {username: string}
+
+    /**
+ * @summary Reset a user's passkeys
+ */
+export const useDeleteApiV1UsersUsernamePasskeys = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>, TError,DeleteApiV1UsersUsernamePasskeysMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiV1UsersUsernamePasskeys>>,
+        TError,
+        DeleteApiV1UsersUsernamePasskeysMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiV1UsersUsernamePasskeysMutationOptions(options), queryClient);
     }

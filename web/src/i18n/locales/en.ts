@@ -231,6 +231,15 @@ export const en: Record<string, string> = {
 		"Invalid or expired verification code. Try again or sign in again.",
 	"auth.totp.failed": "Could not verify the code. Try again.",
 
+	"auth.secondFactor.subtitle": "Two-factor authentication",
+	"auth.secondFactor.or": "or",
+	"auth.passkey.use": "Use a passkey",
+	"auth.passkey.verifying": "Waiting for passkey…",
+	"auth.passkey.cancelled": "Passkey prompt was cancelled.",
+	"auth.passkey.invalid":
+		"That passkey was not accepted. Try again or use another factor.",
+	"auth.passkey.failed": "Could not verify the passkey. Try again.",
+
 	"users.title": "Users",
 	"users.adminRequired": "User management requires the admin role.",
 	"users.panelUsers": "Panel users",
@@ -263,6 +272,15 @@ export const en: Record<string, string> = {
 		"Clears the TOTP factor for {name} and signs out all of their sessions.",
 	"users.totp.resetNotice": "Two-factor authentication reset for {name}.",
 	"users.totp.error.reset": "2FA reset failed",
+	"users.passkeys": "Passkeys",
+	"users.passkeys.count": "{n} passkey(s)",
+	"users.passkeys.reset": "Reset passkeys",
+	"users.passkeys.resetting": "Resetting…",
+	"users.passkeys.resetTitle": "Reset passkeys?",
+	"users.passkeys.resetDescription":
+		"Removes every passkey registered for {name}. They will need their password and a remaining second factor — or this action again — to sign in.",
+	"users.passkeys.resetNotice": "Passkeys reset for {name}.",
+	"users.passkeys.error.reset": "Passkey reset failed",
 	"users.createUser": "Create user",
 	"users.creating": "Creating…",
 	"users.activeSessions": "Active sessions",
@@ -557,6 +575,30 @@ export const en: Record<string, string> = {
 	"settings.totp.error.enroll": "Failed to start enrollment",
 	"settings.totp.error.confirm": "Invalid verification code",
 	"settings.totp.error.disable": "Failed to disable two-factor authentication",
+
+	"settings.passkeys.title": "Passkeys",
+	"settings.passkeys.description":
+		"Sign in with a hardware security key, fingerprint, or device PIN instead of a one-time code.",
+	"settings.passkeys.empty": "No passkeys registered yet.",
+	"settings.passkeys.unsupported":
+		"This browser does not support passkeys (WebAuthn).",
+	"settings.passkeys.add": "Add passkey",
+	"settings.passkeys.addTitle": "Register a passkey",
+	"settings.passkeys.addDescription":
+		"Give the key a name, then confirm with your device's screen lock or a security key.",
+	"settings.passkeys.name": "Name",
+	"settings.passkeys.namePlaceholder": "e.g. Laptop fingerprint",
+	"settings.passkeys.registering": "Waiting for the authenticator…",
+	"settings.passkeys.cancelled": "Passkey prompt was cancelled.",
+	"settings.passkeys.backedUp": "synced",
+	"settings.passkeys.synced": "Synced",
+	"settings.passkeys.deleteTitle": "Delete passkey?",
+	"settings.passkeys.deleteDescription":
+		"Removes “{name}” — this credential will no longer unlock your account.",
+	"settings.passkeys.deleting": "Deleting…",
+	"settings.passkeys.error.status": "Failed to load passkeys",
+	"settings.passkeys.error.register": "Failed to register the passkey",
+	"settings.passkeys.error.delete": "Failed to delete the passkey",
 
 	"backups.title": "Backups",
 	"backups.create": "Create backup",

@@ -1,5 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import {
+	startAuthentication,
+	type PublicKeyCredentialRequestOptionsJSON,
+} from "@simplewebauthn/browser";
+import {
 	createContext,
 	type ReactNode,
 	useCallback,
@@ -15,7 +19,10 @@ import {
 	setCsrfToken,
 	setUnauthorizedHandler,
 } from "../api/fetcher";
-import type { UserRole } from "../api/generated/models";
+import type {
+	UserRole,
+	WebAuthnAssertionOptions,
+} from "../api/generated/models";
 
 export interface Session {
 	authenticated: boolean;
@@ -23,6 +30,9 @@ export interface Session {
 	role?: UserRole;
 	locale?: string;
 	csrfToken?: string;
+	/** True when this cookie session already satisfied the account's second
+	 * factor — factor-management flows can skip the password re-check (#1171). */
+	secondFactor?: boolean;
 }
 
 /** Result of the password stage. When `secondFactorRequired` is set the
@@ -41,6 +51,7 @@ interface LoginResponseData {
 	locale?: string;
 	secondFactorRequired?: boolean;
 	secondFactorMethods?: string[];
+	secondFactor?: boolean;
 	pendingExpiresAt?: string;
 }
 
@@ -52,6 +63,10 @@ interface AuthContextValue {
 		code?: string;
 		recoveryCode?: string;
 	}) => Promise<LoginResult>;
+	/** Passkey completion of the pending_2fa stage (#1171): the server mints an
+	 * assertion challenge, the browser runs navigator.credentials.get, and the
+	 * result is posted back to finish. Throws the ApiError/WebAuthnError. */
+	verifySecondFactorPasskey: () => Promise<LoginResult>;
 	logout: () => Promise<void>;
 	refresh: () => Promise<void>;
 }
@@ -189,6 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 				if (data.role) session.role = data.role;
 				if (data.locale) session.locale = data.locale;
 				if (data.csrfToken) session.csrfToken = data.csrfToken;
+				if (data.secondFactor) session.secondFactor = true;
 				return session;
 			};
 			try {
@@ -261,6 +277,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		[finishLogin],
 	);
 
+	// Passkey factor (#1171): begin returns the assertion challenge the
+	// pending_2fa cookie scopes; finish mints the real session. The browser
+	// ceremony errors (WebAuthnError — e.g. the user cancelled) are surfaced
+	// to the caller untranslated so the view can phrase them.
+	const verifySecondFactorPasskey = useCallback(async (): Promise<LoginResult> => {
+		const options = await apiFetch<WebAuthnAssertionOptions>(
+			"/api/v1/auth/webauthn/begin",
+			{ method: "POST" },
+		);
+		const assertion = await startAuthentication({
+			optionsJSON:
+				options.publicKey as unknown as PublicKeyCredentialRequestOptionsJSON,
+		});
+		const data = await apiFetch<LoginResponseData>(
+			"/api/v1/auth/webauthn/finish",
+			{ method: "POST", body: JSON.stringify(assertion) },
+		);
+		await finishLogin(data, data?.username ?? "");
+		return { secondFactorRequired: false };
+	}, [finishLogin]);
+
 	const logout = useCallback(async () => {
 		const epoch = ++epochRef.current;
 		logoutInFlightRef.current = true;
@@ -285,8 +322,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	}, [abortRefresh, broadcastRefresh, qc]);
 
 	const value = useMemo(
-		() => ({ session, loading, login, verifySecondFactor, logout, refresh }),
-		[session, loading, login, verifySecondFactor, logout, refresh],
+		() => ({
+			session,
+			loading,
+			login,
+			verifySecondFactor,
+			verifySecondFactorPasskey,
+			logout,
+			refresh,
+		}),
+		[
+			session,
+			loading,
+			login,
+			verifySecondFactor,
+			verifySecondFactorPasskey,
+			logout,
+			refresh,
+		],
 	);
 
 	return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

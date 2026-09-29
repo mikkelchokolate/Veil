@@ -49,9 +49,11 @@ export interface LoginResponse {
   role: UserRole;
   locale: Locale;
   csrfToken: string;
-  /** When true no session was minted; the `veil_pending_2fa` cookie authorizes POST /api/v1/auth/totp/verify. */
+  /** When true no session was minted; the `veil_pending_2fa` cookie authorizes POST /api/v1/auth/totp/verify and /api/v1/auth/webauthn/*. */
   secondFactorRequired?: boolean;
-  /** Factor mechanisms accepted by the pending challenge (currently `totp`). */
+  /** Present and true on the factor-completion responses (TOTP verify, WebAuthn finish); the minted session carries the second-factor mark. */
+  secondFactor?: boolean;
+  /** Factor mechanisms accepted by the pending challenge: `webauthn` and/or `totp`, in the server's preference order. */
   secondFactorMethods?: string[];
   /** Deadline for completing the pending_2fa challenge. */
   pendingExpiresAt?: string;

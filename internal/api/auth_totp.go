@@ -19,12 +19,12 @@ var errTOTPVerifyFailed = errors.New("invalid verification code")
 // confirm rolls back and the operator re-enrolls from a fresh session.
 var errEnrollingSessionGone = errors.New("enrolling session expired")
 
-// sessionUserForTOTP resolves the cookie-session identity these endpoints are
-// scoped to. Self-service TOTP management requires a live browser session
-// bound to a real user row: static API tokens and the dev-anonymous identity
-// have no account to enroll (mirrors handleAuthLocale's session-mismatch
-// guard).
-func (s *managementState) sessionUserForTOTP(w http.ResponseWriter, r *http.Request) (Session, model.User, bool) {
+// sessionUserForFactor resolves the cookie-session identity the self-service
+// factor endpoints (TOTP, passkeys) are scoped to. Managing a second factor
+// requires a live browser session bound to a real user row: static API
+// tokens and the dev-anonymous identity have no account to enroll (mirrors
+// handleAuthLocale's session-mismatch guard).
+func (s *managementState) sessionUserForFactor(w http.ResponseWriter, r *http.Request) (Session, model.User, bool) {
 	cookie, err := r.Cookie("veil_session")
 	if err != nil {
 		writeError(w, "an authenticated user session is required", http.StatusUnauthorized)
@@ -62,10 +62,11 @@ func (s *managementState) findUserLocked(username string) (model.User, bool) {
 }
 
 // sessionMeetsFactorRequirement reports whether an existing session may still
-// be used: once its owner has TOTP enabled the session must carry the
-// second-factor mark — minted by the verify step or upgraded at enrollment
-// confirmation. Sessions minted before enrollment are retired on sight, which
-// is also what makes "privilege changes revoke sessions" hold for 2FA (#1172).
+// be used: once its owner has ANY second factor armed (TOTP enabled or at
+// least one passkey) the session must carry the second-factor mark — minted
+// by a factor verify step or upgraded at enrollment/registration time.
+// Sessions minted before enrollment are retired on sight, which is also what
+// makes "privilege changes revoke sessions" hold for 2FA (#1172, #1171).
 func (s *managementState) sessionMeetsFactorRequirement(sess Session) bool {
 	if sess.SecondFactor {
 		return true
@@ -74,7 +75,7 @@ func (s *managementState) sessionMeetsFactorRequirement(sess Session) bool {
 	defer s.mu.Unlock()
 	for _, user := range s.users {
 		if user.Username == sess.Username {
-			return !user.TOTPEnabled
+			return !user.HasSecondFactor()
 		}
 	}
 	return true
@@ -94,7 +95,7 @@ func (s *managementState) handleMyTOTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *managementState) handleMyTOTPStatus(w http.ResponseWriter, r *http.Request) {
-	_, user, ok := s.sessionUserForTOTP(w, r)
+	_, user, ok := s.sessionUserForFactor(w, r)
 	if !ok {
 		return
 	}
@@ -110,7 +111,7 @@ func (s *managementState) handleMyTOTPEnroll(w http.ResponseWriter, r *http.Requ
 		methodNotAllowed(w, http.MethodPost)
 		return
 	}
-	_, user, ok := s.sessionUserForTOTP(w, r)
+	_, user, ok := s.sessionUserForFactor(w, r)
 	if !ok {
 		return
 	}
@@ -162,7 +163,7 @@ func (s *managementState) handleMyTOTPConfirm(w http.ResponseWriter, r *http.Req
 		methodNotAllowed(w, http.MethodPost)
 		return
 	}
-	_, user, ok := s.sessionUserForTOTP(w, r)
+	_, user, ok := s.sessionUserForFactor(w, r)
 	if !ok {
 		return
 	}
@@ -291,7 +292,7 @@ func (s *managementState) handleMyTOTPConfirm(w http.ResponseWriter, r *http.Req
 }
 
 func (s *managementState) handleMyTOTPDisable(w http.ResponseWriter, r *http.Request) {
-	_, user, ok := s.sessionUserForTOTP(w, r)
+	_, user, ok := s.sessionUserForFactor(w, r)
 	if !ok {
 		return
 	}

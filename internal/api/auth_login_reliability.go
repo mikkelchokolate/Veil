@@ -22,6 +22,9 @@ type loginCredentialSnapshot struct {
 	// only a pending_2fa challenge that must be completed at
 	// POST /api/v1/auth/totp/verify (#1172).
 	TOTPEnabled bool
+	// HasPasskeys marks a user holding WebAuthn credentials (#1171): the
+	// pending challenge then also accepts the /api/v1/auth/webauthn/* finish.
+	HasPasskeys bool
 }
 
 func (s *managementState) snapshotLoginCredentials(username string) loginCredentialSnapshot {
@@ -34,6 +37,7 @@ func (s *managementState) snapshotLoginCredentials(username string) loginCredent
 			snapshot.FoundUser = true
 			snapshot.PasswordHash = user.PasswordHash
 			snapshot.TOTPEnabled = user.TOTPEnabled
+			snapshot.HasPasskeys = user.HasPasskeys()
 			return snapshot
 		}
 	}
@@ -125,17 +129,27 @@ func (s *managementState) issuePendingSecondFactor(w http.ResponseWriter, r *htt
 		return
 	}
 	s.setPendingSecondFactorCookie(w, r, token, int(pendingSecondFactorTTL.Seconds()))
+	// The pending challenge accepts every factor the account holds; the
+	// client picks. WebAuthn is advertised first — a passkey presentation is
+	// phishing-resistant and one gesture — with TOTP as the fallback (#1171).
+	methods := make([]string, 0, 2)
+	if snapshot.HasPasskeys {
+		methods = append(methods, "webauthn")
+	}
+	if snapshot.TOTPEnabled {
+		methods = append(methods, "totp")
+	}
 	s.recordRequestAudit(r, audit.Record{
 		Actor:   snapshot.Username,
 		Action:  "auth.login.pending_2fa",
 		Target:  "panel",
 		Success: true,
-		Details: map[string]any{"methods": []string{"totp"}},
+		Details: map[string]any{"methods": methods},
 	})
 	writeJSON(w, map[string]any{
 		"success":              true,
 		"secondFactorRequired": true,
-		"secondFactorMethods":  []string{"totp"},
+		"secondFactorMethods":  methods,
 		"pendingExpiresAt":     expiresAt.Format(time.RFC3339),
 	})
 }
@@ -184,9 +198,9 @@ func (s *managementState) handleLoginWithRevalidation(w http.ResponseWriter, r *
 	}
 
 	// A verified password is only HALF the credential when the account has
-	// TOTP enabled: mint the short-lived pending_2fa challenge instead of a
-	// session (#1172).
-	if snapshot.FoundUser && snapshot.TOTPEnabled {
+	// any second factor armed (TOTP or passkeys): mint the short-lived
+	// pending_2fa challenge instead of a session (#1172, #1171).
+	if snapshot.FoundUser && (snapshot.TOTPEnabled || snapshot.HasPasskeys) {
 		s.issuePendingSecondFactor(w, r, snapshot)
 		return
 	}

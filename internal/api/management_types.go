@@ -106,7 +106,11 @@ type managementState struct {
 	// pending2FA holds the short-lived post-password/pre-factor challenges
 	// shared by every second-factor mechanism (TOTP now, WebAuthn later).
 	// In-memory only: a restart simply forces a fresh login (#1172).
-	pending2FA           *pendingSecondFactorStore
+	pending2FA *pendingSecondFactorStore
+	// webAuthnCeremonies holds in-flight WebAuthn SessionData between begin
+	// and finish — registration ceremonies keyed by session token, login
+	// ceremonies by the pending_2fa token. In-memory only (#1171).
+	webAuthnCeremonies   *webAuthnChallengeStore
 	loginUsernameLimiter *observability.RateLimiterEngine
 	// loginGlobalLimiter is the process-wide per-username login budget that
 	// backs delayGlobalUsernameAttempt; per-(client,username) buckets alone

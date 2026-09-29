@@ -69,6 +69,11 @@ func (s *managementState) handlePersistentAuthStatus(w http.ResponseWriter, r *h
 				"role":          sess.Role,
 				"locale":        s.userLocale(sess.Username),
 				"csrfToken":     csrf,
+				// Lets factor-management UIs skip the redundant password
+				// prompt when this session already satisfied a second
+				// factor (#1171). Informational only — it never widens
+				// authorization by itself.
+				"secondFactor": sess.SecondFactor,
 			})
 			return
 		}

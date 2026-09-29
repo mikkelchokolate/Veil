@@ -50,6 +50,8 @@ export interface AuthStatusResponse {
   role?: UserRole;
   locale?: Locale;
   csrfToken?: string;
+  /** True when the cookie session carries the second-factor mark (TOTP verify, passkey assertion, or factor registration confirmation). Absent for static-token/dev-anonymous responses. */
+  secondFactor?: boolean;
   /** How the request was authenticated; absent for cookie-session responses. */
   authMethod?: AuthStatusResponseAuthMethod;
 }

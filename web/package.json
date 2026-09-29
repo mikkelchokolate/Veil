@@ -29,6 +29,7 @@
 		"@radix-ui/react-slot": "^1.3.3",
 		"@radix-ui/react-tabs": "^1.1.21",
 		"@radix-ui/react-toast": "^1.2.23",
+		"@simplewebauthn/browser": "^14.0.0",
 		"@tanstack/react-query": "^5.103.1",
 		"@tanstack/react-router": "^1.170.38",
 		"@tanstack/react-table": "^9.2.4",
