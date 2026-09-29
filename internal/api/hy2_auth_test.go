@@ -421,6 +421,12 @@ func TestHy2AuthIPLimitDeniesSecondIPWhileSessionLive(t *testing.T) {
 	}
 	// Device A's session registers and stays connected indefinitely.
 	s.hy2AuthOnline = stubOnline(1)
+	// While A's pending record is still inside its TTL, the next reconcile —
+	// here a denied attempt from a second IP — promotes it into a registered
+	// slot because the count moved past A's admission watermark.
+	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "203.0.113.19:1999", Auth: auth}); resp.OK {
+		t.Fatal("second IP admitted while A's session is live")
+	}
 	// Well past the old 4-minute admission window: device B must still be
 	// denied because A's session is live in /online.
 	now = now.Add(30 * time.Minute)
@@ -576,6 +582,48 @@ func TestHy2AuthIPLimitFreesSlotAfterDisconnect(t *testing.T) {
 		t.Fatal("third IP still denied after a session disconnected")
 	}
 	s.hy2AuthOnline = stubOnline(2)
+	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "4.4.4.4:4000", Auth: auth}); resp.OK {
+		t.Fatal("fourth IP admitted past ipLimit=2")
+	}
+}
+
+// A dead pending admission must expire before promotion: with ipLimit >= 2,
+// an expired record promoted ahead of a live pending peer would become
+// registered — and registered records are never swept — pinning its IP
+// forever. Admit A and B while /online counts nothing, let only B reach the
+// table, advance past A's TTL, then admit C: B promotes, C takes the free
+// IP slot, and a fourth distinct IP is still denied.
+func TestHy2AuthIPLimitDeadPendingCannotPinRegisteredSlot(t *testing.T) {
+	s, svc := newHy2AuthTestState(t)
+	now := time.Now()
+	s.hy2Limiter = newHy2AdmissionTracker(time.Minute, func() time.Time { return now })
+	s.hy2AuthOnline = stubOnline(0)
+	view, err := svc.Create(client.Client{Name: "partial", Enabled: true, IPLimit: intPtr(2)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := svc.AddBinding(view.ID, "hy2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetCredential(b.ID, "password", "pw"); err != nil {
+		t.Fatal(err)
+	}
+	path := hy2AuthPath(s, "hy2")
+	auth := b.RuntimeIdentity + ":pw"
+
+	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "1.1.1.1:1000", Auth: auth}); !resp.OK {
+		t.Fatal("session A denied")
+	}
+	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "2.2.2.2:2000", Auth: auth}); !resp.OK {
+		t.Fatal("session B denied")
+	}
+	// Only B reaches the daemon table; A's pending TTL lapses.
+	s.hy2AuthOnline = stubOnline(1)
+	now = now.Add(2 * time.Minute)
+	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "3.3.3.3:3000", Auth: auth}); !resp.OK {
+		t.Fatal("third IP denied — a dead pending record pinned a registered slot")
+	}
 	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "4.4.4.4:4000", Auth: auth}); resp.OK {
 		t.Fatal("fourth IP admitted past ipLimit=2")
 	}

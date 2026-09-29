@@ -142,8 +142,9 @@ func newHy2AdmissionTracker(ttl time.Duration, now func() time.Time) *hy2Admissi
 // key is the session's unique tuple (inbound + addr), ip its parsed source
 // address (required only when ipLimit > 0), and online the client's folded
 // /online session count read just before this call. On true the admission is
-// committed; on false NOTHING was recorded — (false, reason) names the limit
-// that denied.
+// committed; on false the denied admission itself recorded nothing — (false,
+// reason) names the limit that denied — though the ipLimit gate's reconcile
+// pass may still promote or retire OTHER pre-existing records.
 func (t *hy2AdmissionTracker) admit(clientID, key string, ip netip.Addr, online int64, deviceLimit, ipLimit int) (bool, string) {
 	if deviceLimit < 1 && ipLimit < 1 {
 		return true, ""
@@ -269,6 +270,15 @@ func (t *hy2AdmissionTracker) admit(clientID, key string, ip netip.Addr, online 
 // and expires pending records that evidently never registered. Call under
 // the tracker mutex.
 func (t *hy2AdmissionTracker) reconcileSessionsLocked(sessions map[string]*hy2LiveSession, online int64, now time.Time) {
+	// Pending records whose TTL already lapsed are dead admissions — expire
+	// them BEFORE promotion so a stale record cannot consume a registration
+	// slot ahead of a still-live pending peer: promoted records are never
+	// swept, so a promoted corpse would pin its IP forever.
+	for key, s := range sessions {
+		if !s.registered && !s.expires.After(now) {
+			delete(sessions, key)
+		}
+	}
 	var registered int64
 	for _, s := range sessions {
 		if s.registered {
@@ -290,14 +300,6 @@ func (t *hy2AdmissionTracker) reconcileSessionsLocked(sessions map[string]*hy2Li
 		for i := int64(0); i < slots && i < int64(len(promotable)); i++ {
 			promotable[i].registered = true
 			registered++
-		}
-	}
-	// Pending entries that still cannot be accounted for die at their TTL:
-	// a session that never reached the table frees its IP — bounded by the
-	// same short window deviceLimit uses for dead admissions.
-	for key, s := range sessions {
-		if !s.registered && !s.expires.After(now) {
-			delete(sessions, key)
 		}
 	}
 	// The count shrank below the registered set: exactly (registered -
@@ -332,6 +334,7 @@ func (t *hy2AdmissionTracker) reconcileSessionsLocked(sessions map[string]*hy2Li
 		})
 		retire := registered - online
 		for i := int64(0); i < retire && i < int64(len(registeredEntries)); i++ {
+			freq[registeredEntries[i].session.ip]--
 			delete(sessions, registeredEntries[i].key)
 		}
 	}
