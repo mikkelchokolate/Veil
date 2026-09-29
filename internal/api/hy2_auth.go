@@ -180,9 +180,11 @@ func (t *hy2SessionTracker) admit(clientID, token string, online int64, limit in
 	// Everything else is still invisible to the daemon table and must count
 	// as pending: a fast registration cannot double-count (its entry falls
 	// inside the absorbed allowance) and a slow one cannot reopen the slot
-	// (its entry stays pending regardless of age). Residual: an entry whose
-	// session dies before ever registering squats on its slot until the
-	// TTL — under-admitting by at most that window, the fail-closed side.
+	// (its entry stays pending regardless of age). Residuals: absorption is
+	// identity-agnostic — any /online increase credits low-watermark entries
+	// without matching which session registered — and an entry whose session
+	// dies before ever registering squats on its slot until the TTL; both
+	// land on the fail-closed side within the TTL window.
 	var below, live int64
 	for _, entry := range entries {
 		live++
@@ -211,6 +213,23 @@ type hy2AuthSecretEntry struct {
 type hy2AuthServer struct {
 	server   *http.Server
 	listener net.Listener
+}
+
+// pruneHy2AuthSecretsLocked drops cached path secrets for inbound names that
+// no longer exist — the cache is keyed by name, so deleting an inbound would
+// otherwise leave its derived secret resident until restart. Call under s.mu
+// wherever the inbound set is replaced.
+func (s *managementState) pruneHy2AuthSecretsLocked() {
+	live := make(map[string]struct{}, len(s.inbounds))
+	for _, in := range s.inbounds {
+		live[in.Name] = struct{}{}
+	}
+	s.hy2AuthSecrets.Range(func(key, _ any) bool {
+		if _, ok := live[key.(string)]; !ok {
+			s.hy2AuthSecrets.Delete(key)
+		}
+		return true
+	})
 }
 
 // ensureHy2AuthLocked binds the internal auth listener once for the lifetime
