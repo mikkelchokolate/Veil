@@ -527,7 +527,9 @@ ProtectHome=yes
 PrivateTmp=true
 PrivateDevices=true
 CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH
-RestrictAddressFamilies=AF_UNIX
+# AF_INET/AF_INET6 let a configured SFTP destination receive the archive;
+# without a destination config the unit never opens a network socket.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 SystemCallArchitectures=native
 ProtectKernelTunables=true
 ProtectKernelModules=true

@@ -78,7 +78,7 @@ func TestConfigSaveLoadRoundtripKeepsSecretsLocal(t *testing.T) {
 		Enabled: true, Host: "backups.example.com", Port: 2222, User: "veil",
 		RemoteDir: "/srv/veil-backups", AuthType: AuthTypeKey,
 		KeyPath: "/etc/veil/backup-sftp.key", KeyPassphrase: "key-secret",
-		Password: "never-here", HostKey: "ssh-ed25519 AAAAC3fake",
+		Password: "never-here", HostKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDb8mQJYHLqAoBzBfOkJM0iOOcXLbbQ1sDHs/RTmkrqX",
 	}
 	if err := SaveConfig(path, config); err != nil {
 		t.Fatal(err)
