@@ -2731,9 +2731,8 @@ type TOTPConfirmResponse struct {
 
 // TOTPDisableRequest defines model for TOTPDisableRequest.
 type TOTPDisableRequest struct {
-	// Code Live authenticator code; either password or code is required.
-	Code     *string `json:"code,omitempty"`
-	Password *string `json:"password,omitempty"`
+	// Code Live authenticator code. Self-disable is factor-grade — a stolen 2FA-complete session plus the account password is not sufficient; losing the authenticator goes through admin reset.
+	Code string `json:"code"`
 }
 
 // TOTPEnrollResponse defines model for TOTPEnrollResponse.
@@ -5051,7 +5050,9 @@ type ClientInterface interface {
 	// DeleteApiV1UsersMeTotpWithBody Disable the current user's TOTP second factor
 	//
 	// Requires the `veil_session` cookie and `X-CSRF-Token` plus a
-	// fresh credential: the account password or a live authenticator code.
+	// live authenticator code. Self-disable is factor-grade: the account
+	// password alone is not accepted, so a stolen completed session cannot
+	// strip the factor; a lost authenticator goes through the admin reset.
 	// Attempts are throttled through the login backoff family. On success all
 	// other sessions of the user are revoked.
 	//
@@ -5063,7 +5064,9 @@ type ClientInterface interface {
 	// DeleteApiV1UsersMeTotp Disable the current user's TOTP second factor
 	//
 	// Requires the `veil_session` cookie and `X-CSRF-Token` plus a
-	// fresh credential: the account password or a live authenticator code.
+	// live authenticator code. Self-disable is factor-grade: the account
+	// password alone is not accepted, so a stolen completed session cannot
+	// strip the factor; a lost authenticator goes through the admin reset.
 	// Attempts are throttled through the login backoff family. On success all
 	// other sessions of the user are revoked.
 	//
@@ -7637,7 +7640,9 @@ func (c *Client) GetApiV1TrafficIdHistory(ctx context.Context, id ClientId, para
 // DeleteApiV1UsersMeTotpWithBody Disable the current user's TOTP second factor
 //
 // Requires the `veil_session` cookie and `X-CSRF-Token` plus a
-// fresh credential: the account password or a live authenticator code.
+// live authenticator code. Self-disable is factor-grade: the account
+// password alone is not accepted, so a stolen completed session cannot
+// strip the factor; a lost authenticator goes through the admin reset.
 // Attempts are throttled through the login backoff family. On success all
 // other sessions of the user are revoked.
 //
@@ -7659,7 +7664,9 @@ func (c *Client) DeleteApiV1UsersMeTotpWithBody(ctx context.Context, params *Del
 // DeleteApiV1UsersMeTotp Disable the current user's TOTP second factor
 //
 // Requires the `veil_session` cookie and `X-CSRF-Token` plus a
-// fresh credential: the account password or a live authenticator code.
+// live authenticator code. Self-disable is factor-grade: the account
+// password alone is not accepted, so a stolen completed session cannot
+// strip the factor; a lost authenticator goes through the admin reset.
 // Attempts are throttled through the login backoff family. On success all
 // other sessions of the user are revoked.
 //
@@ -14595,7 +14602,9 @@ type ClientWithResponsesInterface interface {
 	// DeleteApiV1UsersMeTotpWithBodyWithResponse Disable the current user's TOTP second factor
 	//
 	// Requires the `veil_session` cookie and `X-CSRF-Token` plus a
-	// fresh credential: the account password or a live authenticator code.
+	// live authenticator code. Self-disable is factor-grade: the account
+	// password alone is not accepted, so a stolen completed session cannot
+	// strip the factor; a lost authenticator goes through the admin reset.
 	// Attempts are throttled through the login backoff family. On success all
 	// other sessions of the user are revoked.
 	//
@@ -14607,7 +14616,9 @@ type ClientWithResponsesInterface interface {
 	// DeleteApiV1UsersMeTotpWithResponse Disable the current user's TOTP second factor
 	//
 	// Requires the `veil_session` cookie and `X-CSRF-Token` plus a
-	// fresh credential: the account password or a live authenticator code.
+	// live authenticator code. Self-disable is factor-grade: the account
+	// password alone is not accepted, so a stolen completed session cannot
+	// strip the factor; a lost authenticator goes through the admin reset.
 	// Attempts are throttled through the login backoff family. On success all
 	// other sessions of the user are revoked.
 	//
@@ -25172,7 +25183,9 @@ func (c *ClientWithResponses) GetApiV1TrafficIdHistoryWithResponse(ctx context.C
 // DeleteApiV1UsersMeTotpWithBodyWithResponse Disable the current user's TOTP second factor
 //
 // Requires the `veil_session` cookie and `X-CSRF-Token` plus a
-// fresh credential: the account password or a live authenticator code.
+// live authenticator code. Self-disable is factor-grade: the account
+// password alone is not accepted, so a stolen completed session cannot
+// strip the factor; a lost authenticator goes through the admin reset.
 // Attempts are throttled through the login backoff family. On success all
 // other sessions of the user are revoked.
 //
@@ -25190,7 +25203,9 @@ func (c *ClientWithResponses) DeleteApiV1UsersMeTotpWithBodyWithResponse(ctx con
 // DeleteApiV1UsersMeTotpWithResponse Disable the current user's TOTP second factor
 //
 // Requires the `veil_session` cookie and `X-CSRF-Token` plus a
-// fresh credential: the account password or a live authenticator code.
+// live authenticator code. Self-disable is factor-grade: the account
+// password alone is not accepted, so a stolen completed session cannot
+// strip the factor; a lost authenticator goes through the admin reset.
 // Attempts are throttled through the login backoff family. On success all
 // other sessions of the user are revoked.
 //
