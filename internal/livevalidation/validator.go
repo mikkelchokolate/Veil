@@ -487,9 +487,11 @@ func inboundListenPort(settings model.Settings, inbound model.Inbound) int {
 // the wildcard listener claims the loopback address first (the service then
 // fails to bind), or the already-bound service blocks the inbound. These are
 // reserved unconditionally — the stats/admin listeners may appear later
-// (e.g. the first Hysteria2 inbound added after the TCP rule).
+// (e.g. the first Hysteria2 inbound added after the TCP rule), and the
+// Hysteria2 auth callback listener is bound on every panel start (#1191).
 var reservedInternalTCPPorts = map[int]string{
 	runtimeports.Hysteria2TrafficStatsPort: "the Hysteria2 traffic stats API",
+	runtimeports.Hysteria2HTTPAuthPort:     "the Hysteria2 auth callback",
 	runtimeports.CaddyAdminPort:            "the managed Caddy admin API",
 }
 
