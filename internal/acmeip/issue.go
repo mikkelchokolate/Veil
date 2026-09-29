@@ -39,6 +39,23 @@ type IssueOptions struct {
 	// verification of the ACME endpoint — for controlled test CAs only.
 	CAServer string
 	Insecure bool
+	// DeferPanelRestart schedules the panel restart the issued certificate's
+	// reloadcmd performs instead of running it inline: when the panel itself
+	// requested issuance through the privileged helper, a synchronous
+	// `systemctl try-restart veil.service` would kill the panel before the
+	// helper could answer — or mid-apply (#1170). Callers that are not the
+	// panel process (CLI install/repair/renew) leave this false so the
+	// restart result stays part of the operation's success contract.
+	DeferPanelRestart bool
+	// NoCron installs acme.sh with --no-cron: the caller owns the renewal
+	// lifecycle (the in-daemon worker, #1170) and the requesting sandbox may
+	// not even be able to write a crontab (the helper runs ProtectSystem=
+	// strict, so acme.sh's installcronjob would fail the whole --install).
+	NoCron bool
+	// HomeDir overrides the acme.sh account/install home. The privileged
+	// helper runs with ProtectHome=yes, so the default /root/.acme.sh is
+	// unreachable; the helper passes a state-rooted home instead.
+	HomeDir string
 }
 
 // System abstracts command execution and file operations so IssueIPCert can be
@@ -143,6 +160,36 @@ func defaultSystemOr(s System) System {
 	return defaultSystem{}
 }
 
+// homeDirSystem overrides the acme.sh home directory. HomeDir() alone is not
+// enough: acme.sh derives its install/account home from the $HOME environment
+// variable of the spawned process, so every command the wrapper executes goes
+// through `env HOME=<home>` — the privileged helper runs with ProtectHome=yes
+// and /root is unreachable, so its acme.sh state must live under the writable
+// state root instead (issue #1170). `env` is coreutils and always present on
+// hosts that satisfy the issuance prerequisites.
+type homeDirSystem struct {
+	System
+	home string
+}
+
+func (s homeDirSystem) HomeDir() (string, error) { return s.home, nil }
+
+func (s homeDirSystem) envArgs(cmd string, args []string) []string {
+	return append([]string{"HOME=" + s.home, cmd}, args...)
+}
+
+func (s homeDirSystem) Run(cmd string, args ...string) error {
+	return s.System.Run("env", s.envArgs(cmd, args)...)
+}
+
+func (s homeDirSystem) CombinedOutput(cmd string, args ...string) ([]byte, error) {
+	return s.System.CombinedOutput("env", s.envArgs(cmd, args)...)
+}
+
+func (s homeDirSystem) CombinedOutputContext(ctx context.Context, cmd string, args ...string) ([]byte, error) {
+	return s.System.CombinedOutputContext(ctx, "env", s.envArgs(cmd, args)...)
+}
+
 // IssueIPCert obtains a Let's Encrypt shortlived certificate for the given IP
 // address(es) using acme.sh standalone mode. It installs acme.sh and socat if
 // they are missing, writes the certificate material to CertPath/KeyPath, and
@@ -151,6 +198,9 @@ func defaultSystemOr(s System) System {
 // Port 80 (or HTTPPort) must be free and reachable from the internet.
 func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 	sys := defaultSystemOr(opts.System)
+	if home := strings.TrimSpace(opts.HomeDir); home != "" {
+		sys = homeDirSystem{System: sys, home: home}
+	}
 
 	if opts.PublicIPv4 == "" && opts.PublicIPv6 == "" {
 		return IssuedCert{}, fmt.Errorf("a public IPv4 or IPv6 address is required")
@@ -188,10 +238,10 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		httpPort = 80
 	}
 
-	if err := ensureAcmePrereqs(ctx, sys); err != nil {
+	if err := ensureAcmePrereqsMode(ctx, sys, opts.NoCron); err != nil {
 		return IssuedCert{}, fmt.Errorf("acme prerequisites: %w", err)
 	}
-	acmeSh, err := ensureAcmeSh(ctx, sys)
+	acmeSh, err := ensureAcmeShMode(ctx, sys, opts.NoCron)
 	if err != nil {
 		return IssuedCert{}, fmt.Errorf("acme.sh setup: %w", err)
 	}
@@ -253,12 +303,16 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		return IssuedCert{}, fmt.Errorf("issue certificate for %s: %w (output: %s)", primaryName, err, string(out))
 	}
 
+	reloadCmd := renewReloadCmd(certPath, keyPath)
+	if opts.DeferPanelRestart {
+		reloadCmd = renewReloadCmdDeferredPanelRestart(certPath, keyPath)
+	}
 	installArgs := []string{
 		"--installcert",
 		"-d", primaryName,
 		"--key-file", keyPath,
 		"--fullchain-file", certPath,
-		"--reloadcmd", renewReloadCmd(certPath, keyPath),
+		"--reloadcmd", reloadCmd,
 	}
 	prevCert, _ := sys.ReadFile(certPath)
 	prevKey, _ := sys.ReadFile(keyPath)
@@ -320,11 +374,28 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 // it only when it is already active — while still failing closed when the
 // restart of an active panel genuinely fails (issue #999).
 func renewReloadCmd(certPath, keyPath string) string {
+	return buildRenewReloadCmd(certPath, keyPath, "systemctl try-restart veil.service")
+}
+
+// renewReloadCmdDeferredPanelRestart is the variant used when the panel
+// itself requested issuance through the privileged helper (#1170). The panel
+// restart rides a transient systemd timer so the helper can finish answering
+// the in-flight request first; a synchronous try-restart would kill the
+// caller mid-response — or mid-apply. Scheduling failure still fails the
+// reload command closed, so a renewed cert can never sit unloaded without
+// the caller hearing about it.
+func renewReloadCmdDeferredPanelRestart(certPath, keyPath string) string {
+	return buildRenewReloadCmd(certPath, keyPath,
+		"systemd-run --quiet --collect --on-active=2 --unit veil-ip-cert-panel-restart -- systemctl try-restart veil.service")
+}
+
+func buildRenewReloadCmd(certPath, keyPath, panelRestart string) string {
 	dir := filepath.Dir(certPath)
-	return fmt.Sprintf("chmod 0644 %s && chmod 0640 %s && chgrp veil-proxy %s %s && chgrp veil-proxy %s && chmod 0750 %s && systemctl try-restart veil.service && for u in $(systemctl list-units --plain --no-legend --state=active 'veil-hysteria2@*.service' | awk '{print $1}'); do systemctl try-restart \"$u\" || exit 1; done",
+	return fmt.Sprintf("chmod 0644 %s && chmod 0640 %s && chgrp veil-proxy %s %s && chgrp veil-proxy %s && chmod 0750 %s && %s && for u in $(systemctl list-units --plain --no-legend --state=active 'veil-hysteria2@*.service' | awk '{print $1}'); do systemctl try-restart \"$u\" || exit 1; done",
 		shellQuote(certPath), shellQuote(keyPath),
 		shellQuote(certPath), shellQuote(keyPath),
-		shellQuote(dir), shellQuote(dir))
+		shellQuote(dir), shellQuote(dir),
+		panelRestart)
 }
 
 // shellQuote wraps a path in single quotes for embedding in the acme.sh
@@ -350,6 +421,18 @@ const acmeShTarballURL = "https://github.com/acmesh-official/acme.sh/archive/ref
 // its own path, so it must run from inside the release directory, not via a
 // pipe. The tmpdir is removed on exit.
 func acmeShInstallScript() string {
+	return acmeShInstallScriptMode(false)
+}
+
+// acmeShInstallScriptMode renders the pinned-release install script. noCron
+// maps to acme.sh --no-cron (plus --no-profile so no shell rcfiles are
+// touched): renewal is driven by Veil's own scheduler in that mode, and the
+// helper sandbox cannot write a crontab anyway (ProtectSystem=strict).
+func acmeShInstallScriptMode(noCron bool) string {
+	installArgs := "--install"
+	if noCron {
+		installArgs += " --no-cron --no-profile"
+	}
 	return `set -e
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
@@ -357,10 +440,14 @@ curl -fsSL "` + acmeShTarballURL + `" -o "$tmpdir/acme.sh.tar.gz"
 echo "` + acmeShTarballSHA256 + `  $tmpdir/acme.sh.tar.gz" | sha256sum -c -
 tar -xzf "$tmpdir/acme.sh.tar.gz" -C "$tmpdir"
 cd "$tmpdir/acme.sh-` + acmeShVersion + `"
-sh ./acme.sh --install`
+sh ./acme.sh ` + installArgs
 }
 
 func ensureAcmeSh(ctx context.Context, sys System) (string, error) {
+	return ensureAcmeShMode(ctx, sys, false)
+}
+
+func ensureAcmeShMode(ctx context.Context, sys System, noCron bool) (string, error) {
 	home, err := sys.HomeDir()
 	if err != nil {
 		return "", fmt.Errorf("home directory: %w", err)
@@ -376,7 +463,7 @@ func ensureAcmeSh(ctx context.Context, sys System) (string, error) {
 		}
 	}
 
-	if out, err := runWithContext(ctx, sys, "sh", "-c", acmeShInstallScript()); err != nil {
+	if out, err := runWithContext(ctx, sys, "sh", "-c", acmeShInstallScriptMode(noCron)); err != nil {
 		return "", fmt.Errorf("install acme.sh %s: %w (output: %s)", acmeShVersion, err, string(out))
 	}
 
@@ -392,6 +479,10 @@ func ensureAcmeSh(ctx context.Context, sys System) (string, error) {
 // upstream install refuses to complete, and without OpenSSL key creation
 // fails — in both cases the caller silently fell back to self-signed TLS.
 func ensureAcmePrereqs(ctx context.Context, sys System) error {
+	return ensureAcmePrereqsMode(ctx, sys, false)
+}
+
+func ensureAcmePrereqsMode(ctx context.Context, sys System, noCron bool) error {
 	if _, err := sys.LookPath("curl"); err != nil {
 		return fmt.Errorf("curl is required to install acme.sh")
 	}
@@ -401,6 +492,12 @@ func ensureAcmePrereqs(ctx context.Context, sys System) error {
 	// socat serves the standalone HTTP-01 challenge.
 	if err := ensureSocat(ctx, sys); err != nil {
 		return fmt.Errorf("socat setup: %w", err)
+	}
+	if noCron {
+		// Renewal is owned by the caller's own scheduler (the in-daemon
+		// worker, #1170), so no crontab is needed — and the helper's
+		// ProtectSystem=strict sandbox could not install one anyway.
+		return nil
 	}
 	if err := ensureToolInstalled(ctx, sys, "crontab", func(manager string) string {
 		switch manager {

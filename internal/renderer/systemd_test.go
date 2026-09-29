@@ -380,8 +380,8 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 		"User=root",
 		"ExecStart=/usr/local/bin/veil helper serve --systemd-socket-activation",
 		"RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK",
-		"CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_NET_ADMIN CAP_NET_RAW\n",
-		"AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW",
+		"CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE\n",
+		"AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE",
 		"Environment=\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"",
 		"ReadWritePaths=/etc/veil /var/lib/veil /usr/local/bin /etc/ufw\n",
 	} {
@@ -493,7 +493,7 @@ func TestRuntimeUnitsLockExactAddressFamiliesAndCapabilities(t *testing.T) {
 	}
 	want := map[string]sandboxWant{
 		UnitVeil:          {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6", bounds: "CapabilityBoundingSet=\n", ambient: "AmbientCapabilities=\n"},
-		UnitHelperService: {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK", bounds: "CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_NET_ADMIN CAP_NET_RAW\n", ambient: "AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW\n"},
+		UnitHelperService: {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK", bounds: "CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE\n", ambient: "AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE\n"},
 		UnitCaddy:         {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6", bounds: "CapabilityBoundingSet=CAP_NET_BIND_SERVICE\n", ambient: "AmbientCapabilities=CAP_NET_BIND_SERVICE\n"},
 		UnitHysteria2:     {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6", bounds: "CapabilityBoundingSet=CAP_NET_BIND_SERVICE\n", ambient: "AmbientCapabilities=CAP_NET_BIND_SERVICE\n"},
 		UnitOlcrtc:        {raf: "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK", bounds: "CapabilityBoundingSet=CAP_NET_BIND_SERVICE\n", ambient: "AmbientCapabilities=CAP_NET_BIND_SERVICE\n"},

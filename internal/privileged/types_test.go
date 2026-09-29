@@ -152,6 +152,7 @@ var operationPayloadField = map[Operation]string{
 	OperationRestartPanel:       "RestartPanel",
 	OperationSyncCaddyCert:      "SyncCaddyCert",
 	OperationCaddyLoad:          "CaddyLoad",
+	OperationIssueIPCert:        "IssueIPCert",
 }
 
 // payloadFieldNames enumerates the RequestEnvelope payload slots by

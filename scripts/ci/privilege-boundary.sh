@@ -213,8 +213,8 @@ assert_unit veil-helper.socket 'RemoveOnStop=true'
 # no more (issue #816).
 assert_unit veil-helper.service 'User=root'
 assert_unit veil-helper.service 'Group=root'
-assert_unit veil-helper.service 'CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_NET_ADMIN CAP_NET_RAW'
-assert_unit veil-helper.service 'AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW'
+assert_unit veil-helper.service 'CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE'
+assert_unit veil-helper.service 'AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE'
 # The backup unit is root but tightly bounded: its caps cover backup member
 # reads, its only writable root is the state dir (issue #816).
 assert_unit veil-backup.service 'User=root'

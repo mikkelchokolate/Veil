@@ -54,7 +54,11 @@ type Policy struct {
 	// CertDirs are the directories the helper may sync Caddy-issued ACME
 	// certificate pairs into — the <etc>/certs tree of the configured install
 	// (custom --etc-dir installs resolve their own; issue #628).
-	CertDirs            []string
+	CertDirs []string
+	// PanelCertDir is the only directory IssueIPCert may write certificate
+	// material into — the <etc>/panel tree of the configured install
+	// (#1169/#1170). An empty value resolves to hostenv.EtcDir()/panel.
+	PanelCertDir        string
 	ManagedUnits        map[string]struct{}
 	ManagedUnitPrefixes []string
 	Artifacts           map[string]ArtifactPath

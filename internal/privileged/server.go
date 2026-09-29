@@ -190,6 +190,12 @@ func (s *Server) dispatch(ctx context.Context, request RequestEnvelope) (any, er
 			return nil, err
 		}
 		return struct{}{}, nil
+	case OperationIssueIPCert:
+		issuer, ok := s.client.(IPCertIssuer)
+		if !ok {
+			return nil, newError(ErrorOperationFailed, "IP certificate issuer is unavailable")
+		}
+		return issuer.IssueIPCert(ctx, *request.IssueIPCert)
 	default:
 		return nil, newError(ErrorInvalidRequest, "unsupported operation")
 	}
