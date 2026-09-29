@@ -374,3 +374,18 @@ func TestHy2AuthConcurrentAdmissionsCannotRacePastLimit(t *testing.T) {
 		t.Fatalf("admitted %d sessions under deviceLimit=1", count)
 	}
 }
+
+// A renamed or deleted inbound must not leave its derived path secret
+// resident: the prune drops cache entries whose name left the inbound set.
+func TestHy2AuthSecretCachePrunesRemovedInbounds(t *testing.T) {
+	s, _ := newHy2AuthTestState(t)
+	s.hy2AuthSecrets.Store("hy2", hy2AuthSecretEntry{password: "p", secret: "s"})
+	s.hy2AuthSecrets.Store("gone", hy2AuthSecretEntry{password: "p", secret: "s"})
+	s.pruneHy2AuthSecretsLocked()
+	if _, ok := s.hy2AuthSecrets.Load("gone"); ok {
+		t.Fatal("secret cache kept an entry for a removed inbound")
+	}
+	if _, ok := s.hy2AuthSecrets.Load("hy2"); !ok {
+		t.Fatal("secret cache dropped a live inbound's entry")
+	}
+}

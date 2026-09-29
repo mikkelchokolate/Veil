@@ -415,6 +415,7 @@ func applyManagementSnapshotExact(state *managementState, snapshot managementSna
 	// administrator, or un-complete setup (#1094).
 	state.settings = cloned.Settings
 	state.inbounds = cloned.Inbounds
+	state.pruneHy2AuthSecretsLocked()
 	state.rules = cloned.Rules
 	state.routingPreset = cloned.RoutingPreset
 	state.routingSource = cloned.RoutingSource

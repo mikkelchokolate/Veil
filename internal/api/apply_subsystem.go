@@ -852,6 +852,7 @@ func applyRenderSnapshot(s *managementState, snap managementSnapshot) {
 	s.setup = snap.Setup
 	s.settings = snap.Settings
 	s.inbounds = snap.Inbounds
+	s.pruneHy2AuthSecretsLocked()
 	s.rules = snap.Rules
 	s.routingPreset = snap.RoutingPreset
 	s.routingSource = snap.RoutingSource
