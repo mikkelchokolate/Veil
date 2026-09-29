@@ -12,7 +12,11 @@ import {
 	apiFetch,
 	mutationErrorMessage,
 } from "../api/fetcher";
-import type { ClientView, Inbound } from "../api/generated/models";
+import type {
+	ClientView,
+	Inbound,
+	InboundTLSStatus,
+} from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
 import {
 	AlertDialog,
@@ -229,6 +233,59 @@ function seededRecordFields(
 	return fields;
 }
 
+// InboundCertBadge renders the certificate status an inbound actually serves
+// (#1168): ACME in green, a Caddy internal CA or self-signed fallback in
+// warning, missing/invalid in danger. A pending ACME retry is marked so the
+// provisional fallback is never mistaken for the final state. The title
+// attribute carries issuer/expiry/detail for the honest-state drill-down.
+function InboundCertBadge({ status }: { status: InboundTLSStatus }) {
+	const { t } = useI18n();
+	const cert = status.cert;
+	const source = cert?.source ?? "missing";
+	let label: string;
+	let variant: "default" | "success" | "warning" | "danger";
+	switch (source) {
+		case "acme":
+			label = t("inbounds.tls.acme");
+			variant = cert?.valid ? "success" : "danger";
+			break;
+		case "internal":
+			label = t("inbounds.tls.internal");
+			variant = "warning";
+			break;
+		case "self-signed":
+			label = status.pending
+				? t("inbounds.tls.selfSignedPending")
+				: t("inbounds.tls.selfSigned");
+			variant = status.pending ? "default" : "warning";
+			break;
+		default:
+			label = status.pending
+				? t("inbounds.tls.missingPending")
+				: t("inbounds.tls.missing");
+			variant = status.pending ? "default" : "danger";
+	}
+	const detail: string[] = [];
+	if (cert?.issuer)
+		detail.push(t("inbounds.tls.issuer", { issuer: cert.issuer }));
+	if (cert?.notAfter) {
+		detail.push(t("inbounds.tls.notAfter", { date: cert.notAfter }));
+	}
+	if (cert?.error) detail.push(cert.error);
+	return (
+		<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+			<Badge variant={variant} title={detail.join("\n") || undefined}>
+				{label}
+			</Badge>
+			{cert?.valid && cert.daysRemaining >= 0 ? (
+				<span className="muted" style={{ fontSize: 12 }}>
+					{cert.daysRemaining}d
+				</span>
+			) : null}
+		</span>
+	);
+}
+
 export function InboundsPage() {
 	const isAdmin = useIsAdmin();
 	const { t } = useI18n();
@@ -342,6 +399,17 @@ export function InboundsPage() {
 		queryKey: ["inbounds", "all"],
 		queryFn: () => apiFetch("/api/inbounds"),
 	});
+	// Per-inbound TLS status (#1168): polled so a pending ACME issuance
+	// visibly converges from self-signed to acme once the worker's bounded
+	// retry succeeds.
+	const tlsStatuses = useQuery<InboundTLSStatus[]>({
+		queryKey: ["tls", "inbounds"],
+		queryFn: () => apiFetch("/api/tls/inbounds"),
+		refetchInterval: 30000,
+	});
+	const tlsByName = new Map(
+		(tlsStatuses.data ?? []).map((status) => [status.name, status]),
+	);
 	const settings = useQuery<{ defaultInboundPublicPort?: number }>({
 		queryKey: ["settings"],
 		queryFn: () => apiFetch("/api/settings"),
@@ -1100,6 +1168,7 @@ export function InboundsPage() {
 								<TableHead>{t("inbounds.transport")}</TableHead>
 								<TableHead>{t("inbounds.port")}</TableHead>
 								<TableHead>{t("common.status")}</TableHead>
+								<TableHead>{t("inbounds.tls")}</TableHead>
 								<TableHead>{t("inbounds.attachedClients")}</TableHead>
 								{isAdmin ? <TableHead>{t("common.actions")}</TableHead> : null}
 							</TableRow>
@@ -1107,6 +1176,7 @@ export function InboundsPage() {
 						<TableBody>
 							{(inbounds.data ?? []).map((ib, inboundIndex) => {
 								const attachedQuery = attachedQueries[inboundIndex];
+								const tlsStatus = tlsByName.get(ib.name);
 								const attached = attachedQuery?.data?.items ?? [];
 								const attachedTotal =
 									attachedQuery?.data?.total ?? attached.length;
@@ -1130,6 +1200,25 @@ export function InboundsPage() {
 													? t("common.enabled")
 													: t("common.disabled")}
 											</Badge>
+										</TableCell>
+										{/* #1168: the certificate the live inbound
+										 * actually serves — never "trusted" while
+										 * it is fallback material. Absent from the
+										 * status response means the inbound has no
+										 * TLS edge (e.g. mieru). */}
+										<TableCell>
+											{tlsStatuses.isError ? (
+												<span
+													className="muted"
+													title={t("inbounds.tls.unavailable")}
+												>
+													—
+												</span>
+											) : tlsStatus ? (
+												<InboundCertBadge status={tlsStatus} />
+											) : (
+												<span className="muted">—</span>
+											)}
 										</TableCell>
 										<TableCell>
 											{attachedQuery?.isError ? (

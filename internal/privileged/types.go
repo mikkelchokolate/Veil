@@ -351,6 +351,12 @@ type SyncCaddyCertResult struct {
 	// The periodic cert-sync worker restarts the serving runtime only on a
 	// real change (#1103).
 	Changed bool `json:"changed,omitempty"`
+	// Fallback reports that the destination was seeded with a Veil-issued
+	// self-signed certificate because Caddy storage had no ACME material yet
+	// (e.g. a hysteria2-only domain whose http-01 port was busy at apply
+	// time). The certificate is honest fallback material, never a trusted
+	// issuance (#1168).
+	Fallback bool `json:"fallback,omitempty"`
 }
 
 // IssueIPCertRequest asks the helper to issue/renew the short-lived Let's

@@ -62,6 +62,7 @@ import type {
   ForbiddenResponse,
   GetApiLogsParams,
   GetRuntimeProvenance200,
+  InboundTLSStatus,
   LogResult,
   NetworkStats,
   ProcessesStats,
@@ -283,6 +284,107 @@ export function useGetApiTls<TData = Awaited<ReturnType<typeof getApiTls>>, TErr
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetApiTlsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetApiTlsInboundsUrl = () => {
+
+
+
+
+  return `/api/tls/inbounds`
+}
+
+/**
+ * Reports the TLS certificate each domain-bearing inbound actually serves: for hysteria2 inbounds the certificate path is read from the live hysteria2 YAML and classified honestly — acme for a CA-issued certificate, internal for a Caddy local-CA certificate, self-signed for Veil/operator fallback material, and missing when no usable certificate is configured. A pending ACME issuance still in retry is flagged via pending so a provisional self-signed certificate is never mistaken for the final state.
+ * @summary Per-inbound TLS certificate status
+ */
+export const getApiTlsInbounds = async ( options?: Parameters<typeof apiFetch>[1]): Promise<InboundTLSStatus[]> => {
+
+  return apiFetch<InboundTLSStatus[]>(getGetApiTlsInboundsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiTlsInboundsQueryKey = () => {
+    return [
+    `/api/tls/inbounds`
+    ] as const;
+    }
+
+
+export const getGetApiTlsInboundsQueryOptions = <TData = Awaited<ReturnType<typeof getApiTlsInbounds>>, TError = UnauthorizedResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTlsInbounds>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiTlsInboundsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTlsInbounds>>> = ({ signal }) => getApiTlsInbounds({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTlsInbounds>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiTlsInboundsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTlsInbounds>>>
+export type GetApiTlsInboundsQueryError = UnauthorizedResponse
+
+
+export function useGetApiTlsInbounds<TData = Awaited<ReturnType<typeof getApiTlsInbounds>>, TError = UnauthorizedResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTlsInbounds>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiTlsInbounds>>,
+          TError,
+          Awaited<ReturnType<typeof getApiTlsInbounds>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiTlsInbounds<TData = Awaited<ReturnType<typeof getApiTlsInbounds>>, TError = UnauthorizedResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTlsInbounds>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiTlsInbounds>>,
+          TError,
+          Awaited<ReturnType<typeof getApiTlsInbounds>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiTlsInbounds<TData = Awaited<ReturnType<typeof getApiTlsInbounds>>, TError = UnauthorizedResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTlsInbounds>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Per-inbound TLS certificate status
+ */
+
+export function useGetApiTlsInbounds<TData = Awaited<ReturnType<typeof getApiTlsInbounds>>, TError = UnauthorizedResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTlsInbounds>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiTlsInboundsQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

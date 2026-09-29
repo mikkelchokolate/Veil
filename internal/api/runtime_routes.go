@@ -32,6 +32,10 @@ type RuntimeRoutes struct {
 func (r RuntimeRoutes) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/system", handleSystemRuntime)
 	mux.HandleFunc("/api/tls", r.handleTLSRuntime)
+	// Per-inbound certificate status: the cert each domain-bearing inbound
+	// actually serves, classified honestly (acme/internal/self-signed/missing)
+	// (#1168).
+	mux.HandleFunc("/api/tls/inbounds", r.handleInboundTLS)
 	mux.HandleFunc("/api/network", handleNetworkRuntime)
 	mux.HandleFunc("/api/connections", handleConnectionsRuntime)
 	mux.HandleFunc("/api/processes", handleProcessesRuntime)

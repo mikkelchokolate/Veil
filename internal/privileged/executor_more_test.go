@@ -194,24 +194,37 @@ func TestRunSyncCaddyCertDefaultsOutDir(t *testing.T) {
 }
 
 func TestRunSyncCaddyCertReturnsNotFound(t *testing.T) {
+	stubRuntimeArtifactOwnership(t)
 	original := findCaddyCertPair
 	originalRoot := caddyCertRoot
+	originalInterval := caddyRetryInterval
 	defer func() {
 		findCaddyCertPair = original
 		caddyCertRoot = originalRoot
+		caddyRetryInterval = originalInterval
 	}()
 
 	caddyCertRoot = t.TempDir()
+	caddyRetryInterval = time.Millisecond
 	findCaddyCertPair = func(_, _ string) (caddycert.Pair, error) {
 		return caddycert.Pair{}, caddycert.ErrCertificateNotFound
 	}
 
-	result, err := runSyncCaddyCert(context.Background(), SyncCaddyCertRequest{Domain: "missing.example.com", OutDir: caddyCertRoot}, ProductionConfig{})
+	// A short context deadline keeps the "still issuing" poll from running
+	// the full 30s budget while still exercising the not-found path.
+	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Millisecond)
+	defer cancel()
+	result, err := runSyncCaddyCert(ctx, SyncCaddyCertRequest{Domain: "missing.example.com", OutDir: caddyCertRoot}, ProductionConfig{})
 	if err != nil {
 		t.Fatalf("expected no error for missing cert, got %v", err)
 	}
 	if result.Found {
 		t.Fatal("expected Found=false")
+	}
+	// The not-found path seeds a Veil-issued fallback so the inbound serves
+	// honest material instead of nothing (#1168).
+	if !result.Fallback || !result.Changed {
+		t.Fatalf("expected seeded fallback with Changed, got %+v", result)
 	}
 }
 

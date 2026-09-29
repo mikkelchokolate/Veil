@@ -69,6 +69,7 @@ var endpointPolicies = []endpointPolicy{
 	{http.MethodPost, "/api/profiles/ru-recommended/preview", capabilityViewer},
 	{http.MethodGet, "/api/system", capabilityViewer},
 	{http.MethodGet, "/api/tls", capabilityViewer},
+	{http.MethodGet, "/api/tls/inbounds", capabilityViewer},
 	{http.MethodGet, "/api/network", capabilityViewer},
 	{http.MethodGet, "/api/connections", capabilityViewer},
 	{http.MethodGet, "/api/processes", capabilityViewer},

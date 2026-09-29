@@ -40,24 +40,17 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { TLSCertInfoSource } from './tLSCertInfoSource.ts';
+import type { TLSCertInfo } from './tLSCertInfo.msw.ts';
 
-export interface TLSCertInfo {
-  path: string;
-  /** Where the certificate came from. Panel-edge reads use "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage). Per-inbound reads classify the served certificate's origin: "acme" (CA-issued), "internal" (Caddy local CA — an untrusted fallback), "self-signed" (Veil/operator fallback material), or "missing" (no usable certificate at the configured path). An internal/self-signed certificate is never reported as a trusted issuance. */
-  source?: TLSCertInfoSource;
-  subject: string;
-  issuer: string;
-  notBefore: string;
-  notAfter: string;
-  daysRemaining: number;
-  dnsNames?: string[];
-  valid: boolean;
-  error?: string;
-  /** Component that issued/stores the certificate when it is not the process's own VEIL_TLS_CERT file (e.g. "caddy" for the managed panel edge). */
-  managedBy?: string;
-  /** Upstream issuer identity (Caddy issuer storage name, e.g. "local" or "acme-v02.api.letsencrypt.org-directory"). */
-  issuerSource?: string;
-  /** Issuer classification — "acme", "internal" (Caddy local CA, an untrusted fallback), or "other". */
-  issuerKind?: string;
+export interface InboundTLSStatus {
+  /** Inbound name. */
+  name: string;
+  /** Inbound protocol (hysteria2, naiveproxy, ...). */
+  protocol: string;
+  /** Effective certificate domain for the inbound (per-inbound domain falling back to the primary settings domain). */
+  domain: string;
+  /** True while an ACME issuance for the domain is still being retried after apply — a reported self-signed certificate is provisional. */
+  pending?: boolean;
+  /** The certificate the inbound actually serves, classified honestly (acme/internal/self-signed/missing). */
+  cert: TLSCertInfo;
 }

@@ -63,7 +63,7 @@ export const GetApiSystemResponse = zod.object({
  */
 export const GetApiTlsResponse = zod.object({
   "path": zod.string(),
-  "source": zod.string().optional().describe('Where the certificate was loaded from — "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage).'),
+  "source": zod.enum(['env', 'caddy', 'acme', 'internal', 'self-signed', 'missing']).optional().describe('Where the certificate came from. Panel-edge reads use "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage). Per-inbound reads classify the served certificate\'s origin: "acme" (CA-issued), "internal" (Caddy local CA — an untrusted fallback), "self-signed" (Veil/operator fallback material), or "missing" (no usable certificate at the configured path). An internal/self-signed certificate is never reported as a trusted issuance.'),
   "subject": zod.string(),
   "issuer": zod.string(),
   "notBefore": zod.string(),
@@ -76,6 +76,33 @@ export const GetApiTlsResponse = zod.object({
   "issuerSource": zod.string().optional().describe('Upstream issuer identity (Caddy issuer storage name, e.g. "local" or "acme-v02.api.letsencrypt.org-directory").'),
   "issuerKind": zod.string().optional().describe('Issuer classification — "acme", "internal" (Caddy local CA, an untrusted fallback), or "other".')
 })
+
+/**
+ * Reports the TLS certificate each domain-bearing inbound actually serves: for hysteria2 inbounds the certificate path is read from the live hysteria2 YAML and classified honestly — acme for a CA-issued certificate, internal for a Caddy local-CA certificate, self-signed for Veil/operator fallback material, and missing when no usable certificate is configured. A pending ACME issuance still in retry is flagged via pending so a provisional self-signed certificate is never mistaken for the final state.
+ * @summary Per-inbound TLS certificate status
+ */
+export const GetApiTlsInboundsResponseItem = zod.object({
+  "name": zod.string().describe('Inbound name.'),
+  "protocol": zod.string().describe('Inbound protocol (hysteria2, naiveproxy, ...).'),
+  "domain": zod.string().describe('Effective certificate domain for the inbound (per-inbound domain falling back to the primary settings domain).'),
+  "pending": zod.boolean().optional().describe('True while an ACME issuance for the domain is still being retried after apply — a reported self-signed certificate is provisional.'),
+  "cert": zod.object({
+  "path": zod.string(),
+  "source": zod.enum(['env', 'caddy', 'acme', 'internal', 'self-signed', 'missing']).optional().describe('Where the certificate came from. Panel-edge reads use "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage). Per-inbound reads classify the served certificate\'s origin: "acme" (CA-issued), "internal" (Caddy local CA — an untrusted fallback), "self-signed" (Veil/operator fallback material), or "missing" (no usable certificate at the configured path). An internal/self-signed certificate is never reported as a trusted issuance.'),
+  "subject": zod.string(),
+  "issuer": zod.string(),
+  "notBefore": zod.string(),
+  "notAfter": zod.string(),
+  "daysRemaining": zod.int(),
+  "dnsNames": zod.array(zod.string()).optional(),
+  "valid": zod.boolean(),
+  "error": zod.string().optional(),
+  "managedBy": zod.string().optional().describe('Component that issued/stores the certificate when it is not the process\'s own VEIL_TLS_CERT file (e.g. "caddy" for the managed panel edge).'),
+  "issuerSource": zod.string().optional().describe('Upstream issuer identity (Caddy issuer storage name, e.g. "local" or "acme-v02.api.letsencrypt.org-directory").'),
+  "issuerKind": zod.string().optional().describe('Issuer classification — "acme", "internal" (Caddy local CA, an untrusted fallback), or "other".')
+}).describe('The certificate the inbound actually serves, classified honestly (acme/internal/self-signed/missing).')
+})
+export const GetApiTlsInboundsResponse = zod.array(GetApiTlsInboundsResponseItem)
 
 /**
  * @summary Network counters observation
@@ -143,7 +170,7 @@ export const GetApiRuntimeObservationResponse = zod.object({
 }),
   "tls": zod.object({
   "path": zod.string(),
-  "source": zod.string().optional().describe('Where the certificate was loaded from — "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage).'),
+  "source": zod.enum(['env', 'caddy', 'acme', 'internal', 'self-signed', 'missing']).optional().describe('Where the certificate came from. Panel-edge reads use "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage). Per-inbound reads classify the served certificate\'s origin: "acme" (CA-issued), "internal" (Caddy local CA — an untrusted fallback), "self-signed" (Veil/operator fallback material), or "missing" (no usable certificate at the configured path). An internal/self-signed certificate is never reported as a trusted issuance.'),
   "subject": zod.string(),
   "issuer": zod.string(),
   "notBefore": zod.string(),

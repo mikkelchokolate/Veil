@@ -40,24 +40,18 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { TLSCertInfoSource } from './tLSCertInfoSource.ts';
 
-export interface TLSCertInfo {
-  path: string;
-  /** Where the certificate came from. Panel-edge reads use "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage). Per-inbound reads classify the served certificate's origin: "acme" (CA-issued), "internal" (Caddy local CA — an untrusted fallback), "self-signed" (Veil/operator fallback material), or "missing" (no usable certificate at the configured path). An internal/self-signed certificate is never reported as a trusted issuance. */
-  source?: TLSCertInfoSource;
-  subject: string;
-  issuer: string;
-  notBefore: string;
-  notAfter: string;
-  daysRemaining: number;
-  dnsNames?: string[];
-  valid: boolean;
-  error?: string;
-  /** Component that issued/stores the certificate when it is not the process's own VEIL_TLS_CERT file (e.g. "caddy" for the managed panel edge). */
-  managedBy?: string;
-  /** Upstream issuer identity (Caddy issuer storage name, e.g. "local" or "acme-v02.api.letsencrypt.org-directory"). */
-  issuerSource?: string;
-  /** Issuer classification — "acme", "internal" (Caddy local CA, an untrusted fallback), or "other". */
-  issuerKind?: string;
-}
+/**
+ * Where the certificate came from. Panel-edge reads use "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage). Per-inbound reads classify the served certificate's origin: "acme" (CA-issued), "internal" (Caddy local CA — an untrusted fallback), "self-signed" (Veil/operator fallback material), or "missing" (no usable certificate at the configured path). An internal/self-signed certificate is never reported as a trusted issuance.
+ */
+export type TLSCertInfoSource = typeof TLSCertInfoSource[keyof typeof TLSCertInfoSource];
+
+
+export const TLSCertInfoSource = {
+  env: 'env',
+  caddy: 'caddy',
+  acme: 'acme',
+  internal: 'internal',
+  'self-signed': 'self-signed',
+  missing: 'missing',
+} as const;
