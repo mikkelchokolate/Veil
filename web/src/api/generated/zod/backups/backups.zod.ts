@@ -111,6 +111,12 @@ export const postApiBackupsResponseVerificationFilesItemSha256RegExp = new RegEx
 export const postApiBackupsResponseVerificationFilesMin = 2;
 export const postApiBackupsResponseVerificationFilesMax = 3;
 
+export const postApiBackupsResponsePruneRemoteUploadSizeMin = 0;
+
+export const postApiBackupsResponsePruneRemoteUploadSha256RegExp = new RegExp('^[0-9a-f]{64}$');
+export const postApiBackupsResponseRemoteUploadSizeMin = 0;
+
+export const postApiBackupsResponseRemoteUploadSha256RegExp = new RegExp('^[0-9a-f]{64}$');
 
 
 export const PostApiBackupsResponse = zod.object({
@@ -139,9 +145,29 @@ export const PostApiBackupsResponse = zod.object({
   "prune": zod.object({
   "kept": zod.array(zod.string()),
   "deleted": zod.array(zod.string()),
-  "dryRun": zod.boolean()
+  "dryRun": zod.boolean(),
+  "remote": zod.object({
+  "upload": zod.object({
+  "archive": zod.string(),
+  "size": zod.int().min(postApiBackupsResponsePruneRemoteUploadSizeMin),
+  "sha256": zod.string().regex(postApiBackupsResponsePruneRemoteUploadSha256RegExp)
 }).optional(),
-  "warning": zod.string().optional().describe('Non-fatal warning (for example a retention prune failure after a successful archive).')
+  "pruned": zod.array(zod.string()).optional(),
+  "kept": zod.array(zod.string()).optional(),
+  "error": zod.string().optional()
+}).optional().describe('Remote SFTP destination outcome for a create or prune. A\nremote failure is reported in `error` without failing the local\noperation it accompanied.\n')
+}).optional(),
+  "remote": zod.object({
+  "upload": zod.object({
+  "archive": zod.string(),
+  "size": zod.int().min(postApiBackupsResponseRemoteUploadSizeMin),
+  "sha256": zod.string().regex(postApiBackupsResponseRemoteUploadSha256RegExp)
+}).optional(),
+  "pruned": zod.array(zod.string()).optional(),
+  "kept": zod.array(zod.string()).optional(),
+  "error": zod.string().optional()
+}).optional().describe('Remote SFTP destination outcome for a create or prune. A\nremote failure is reported in `error` without failing the local\noperation it accompanied.\n'),
+  "warning": zod.string().optional().describe('Non-fatal warning (for example a retention prune or remote upload failure after a successful archive).')
 })
 
 /**
@@ -178,10 +204,25 @@ export const PostApiBackupsPruneBody = zod.object({
   "monthly": zod.int().min(postApiBackupsPruneBodyMonthlyMin).max(postApiBackupsPruneBodyMonthlyMax).default(postApiBackupsPruneBodyMonthlyDefault)
 })
 
+export const postApiBackupsPruneResponseRemoteUploadSizeMin = 0;
+
+export const postApiBackupsPruneResponseRemoteUploadSha256RegExp = new RegExp('^[0-9a-f]{64}$');
+
+
 export const PostApiBackupsPruneResponse = zod.object({
   "kept": zod.array(zod.string()),
   "deleted": zod.array(zod.string()),
-  "dryRun": zod.boolean()
+  "dryRun": zod.boolean(),
+  "remote": zod.object({
+  "upload": zod.object({
+  "archive": zod.string(),
+  "size": zod.int().min(postApiBackupsPruneResponseRemoteUploadSizeMin),
+  "sha256": zod.string().regex(postApiBackupsPruneResponseRemoteUploadSha256RegExp)
+}).optional(),
+  "pruned": zod.array(zod.string()).optional(),
+  "kept": zod.array(zod.string()).optional(),
+  "error": zod.string().optional()
+}).optional().describe('Remote SFTP destination outcome for a create or prune. A\nremote failure is reported in `error` without failing the local\noperation it accompanied.\n')
 })
 
 /**
@@ -320,6 +361,171 @@ export const PostApiBackupsNameRestoreResponse = zod.object({
   "safetyStatePath": zod.string().optional(),
   "safetyKeyPath": zod.string().optional(),
   "safetyDatabasePath": zod.string().optional()
+})
+
+/**
+ * Returns the secret-free destination view (`configured` and
+ * `*Set` flags) plus the recorded remote-operation status. Secret values
+ * are never echoed — they are write-only.
+ * @summary Read the SFTP remote-backup destination
+ */
+export const getApiBackupsSftpResponsePortDefault = 22;
+export const getApiBackupsSftpResponsePortMax = 65535;
+
+
+
+export const GetApiBackupsSftpResponse = zod.object({
+  "configured": zod.boolean(),
+  "enabled": zod.boolean(),
+  "host": zod.string().optional(),
+  "port": zod.int().min(1).max(getApiBackupsSftpResponsePortMax).default(getApiBackupsSftpResponsePortDefault),
+  "user": zod.string().optional(),
+  "remoteDir": zod.string().optional(),
+  "authType": zod.enum(['key', 'password']).optional(),
+  "keyPath": zod.string().optional(),
+  "passwordSet": zod.boolean().optional(),
+  "keyPassphraseSet": zod.boolean().optional(),
+  "hostKeySet": zod.boolean().optional(),
+  "status": zod.object({
+  "lastUploadAt": zod.iso.datetime({"offset":true}).optional(),
+  "lastUploadArchive": zod.string().optional(),
+  "lastFetchAt": zod.iso.datetime({"offset":true}).optional(),
+  "lastFetchArchive": zod.string().optional(),
+  "lastPruneAt": zod.iso.datetime({"offset":true}).optional(),
+  "lastError": zod.string().optional(),
+  "lastErrorAt": zod.iso.datetime({"offset":true}).optional()
+})
+})
+
+/**
+ * Persists the root-only destination file under the etc dir via
+ * the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
+ * write-only: omitting one keeps the stored value, an empty string clears
+ * it. Requires admin and CSRF for a cookie session.
+ * @summary Configure the SFTP remote-backup destination
+ */
+export const putApiBackupsSftpHeaderIdempotencyKeyMax = 128;
+
+
+export const putApiBackupsSftpHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PutApiBackupsSftpHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(putApiBackupsSftpHeaderIdempotencyKeyMax).regex(putApiBackupsSftpHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
+export const putApiBackupsSftpBodyPortDefault = 22;
+export const putApiBackupsSftpBodyPortMin = 0;
+export const putApiBackupsSftpBodyPortMax = 65535;
+
+
+
+export const PutApiBackupsSftpBody = zod.object({
+  "enabled": zod.boolean(),
+  "host": zod.string(),
+  "port": zod.int().min(putApiBackupsSftpBodyPortMin).max(putApiBackupsSftpBodyPortMax).default(putApiBackupsSftpBodyPortDefault).describe('Zero or omitted means the SSH default 22.'),
+  "user": zod.string(),
+  "remoteDir": zod.string(),
+  "authType": zod.enum(['key', 'password']),
+  "keyPath": zod.string().optional().describe('Absolute path of the private key readable by root.'),
+  "keyPassphrase": zod.string().optional().describe('Write-only; omit to keep the stored value.'),
+  "password": zod.string().optional().describe('Write-only; omit to keep the stored value.'),
+  "hostKey": zod.string().optional().describe('Pinned server host key in authorized_keys format. Write-only; omit to keep, empty string clears back to TOFU.')
+})
+
+export const putApiBackupsSftpResponsePortDefault = 22;
+export const putApiBackupsSftpResponsePortMax = 65535;
+
+
+
+export const PutApiBackupsSftpResponse = zod.object({
+  "configured": zod.boolean(),
+  "enabled": zod.boolean(),
+  "host": zod.string().optional(),
+  "port": zod.int().min(1).max(putApiBackupsSftpResponsePortMax).default(putApiBackupsSftpResponsePortDefault),
+  "user": zod.string().optional(),
+  "remoteDir": zod.string().optional(),
+  "authType": zod.enum(['key', 'password']).optional(),
+  "keyPath": zod.string().optional(),
+  "passwordSet": zod.boolean().optional(),
+  "keyPassphraseSet": zod.boolean().optional(),
+  "hostKeySet": zod.boolean().optional(),
+  "status": zod.object({
+  "lastUploadAt": zod.iso.datetime({"offset":true}).optional(),
+  "lastUploadArchive": zod.string().optional(),
+  "lastFetchAt": zod.iso.datetime({"offset":true}).optional(),
+  "lastFetchArchive": zod.string().optional(),
+  "lastPruneAt": zod.iso.datetime({"offset":true}).optional(),
+  "lastError": zod.string().optional(),
+  "lastErrorAt": zod.iso.datetime({"offset":true}).optional()
+})
+})
+
+/**
+ * Deletes the root-only destination config. Requires admin and CSRF for a cookie session.
+ * @summary Remove the SFTP remote-backup destination
+ */
+export const deleteApiBackupsSftpHeaderIdempotencyKeyMax = 128;
+
+
+export const deleteApiBackupsSftpHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const DeleteApiBackupsSftpHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(deleteApiBackupsSftpHeaderIdempotencyKeyMax).regex(deleteApiBackupsSftpHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
+export const DeleteApiBackupsSftpResponse = zod.object({
+  "configured": zod.literal(false)
+})
+
+/**
+ * Requires an admin token or admin session.
+ * @summary List archives on the SFTP remote destination
+ */
+export const getApiBackupsSftpRemoteResponseSizeMin = 0;
+
+
+
+export const GetApiBackupsSftpRemoteResponseItem = zod.object({
+  "name": zod.string(),
+  "path": zod.string().describe('Absolute server-side archive path.'),
+  "size": zod.int().min(getApiBackupsSftpRemoteResponseSizeMin),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "encrypted": zod.boolean()
+})
+export const GetApiBackupsSftpRemoteResponse = zod.array(GetApiBackupsSftpRemoteResponseItem)
+
+/**
+ * Materializes the named remote archive under the managed
+ * backup dir (atomic temp-then-publish), after which the normal restore
+ * endpoint applies. Requires admin and CSRF for a cookie session.
+ * @summary Download a remote archive into the local backup dir
+ */
+export const postApiBackupsSftpFetchHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiBackupsSftpFetchHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiBackupsSftpFetchHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiBackupsSftpFetchHeaderIdempotencyKeyMax).regex(postApiBackupsSftpFetchHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
+export const PostApiBackupsSftpFetchBody = zod.object({
+  "name": zod.string().describe('Remote archive basename (must match the managed archive pattern).')
+})
+
+export const postApiBackupsSftpFetchResponseSizeMin = 0;
+
+
+
+export const PostApiBackupsSftpFetchResponse = zod.object({
+  "name": zod.string(),
+  "path": zod.string().describe('Absolute server-side archive path.'),
+  "size": zod.int().min(postApiBackupsSftpFetchResponseSizeMin),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "encrypted": zod.boolean()
 })
 
 /**

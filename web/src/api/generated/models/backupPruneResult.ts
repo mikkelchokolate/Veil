@@ -40,9 +40,11 @@
  *
  * OpenAPI spec version: 0.6.3
  */
+import type { BackupRemoteResult } from './backupRemoteResult.ts';
 
 export interface BackupPruneResult {
   kept: string[];
   deleted: string[];
   dryRun: boolean;
+  remote?: BackupRemoteResult;
 }

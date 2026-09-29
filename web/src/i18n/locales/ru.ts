@@ -505,6 +505,58 @@ export const ru: Record<string, string> = {
 	"backups.error.restoreJob":
 		"Не удалось загрузить статус задания восстановления.",
 
+	"backups.sftp.title": "Удалённые бэкапы по SFTP",
+	"backups.sftp.hint":
+		"Каждый новый бэкап также загружается на настроенный SFTP-сервер, а очистка применяет ту же политику хранения удалённо.",
+	"backups.sftp.configure": "Настроить",
+	"backups.sftp.remove": "Удалить назначение",
+	"backups.sftp.removing": "Удаление…",
+	"backups.sftp.saving": "Сохранение…",
+	"backups.sftp.notConfigured": "SFTP-назначение не настроено.",
+	"backups.sftp.host": "Хост",
+	"backups.sftp.port": "Порт",
+	"backups.sftp.user": "Пользователь",
+	"backups.sftp.remoteDir": "Удалённый каталог",
+	"backups.sftp.authType": "Аутентификация",
+	"backups.sftp.authKey": "Закрытый ключ",
+	"backups.sftp.authPassword": "Пароль",
+	"backups.sftp.keyPath": "Путь к ключу на сервере",
+	"backups.sftp.keyPathPlaceholder": "/etc/veil/backup-sftp-key",
+	"backups.sftp.keyPassphrase": "Парольная фраза ключа",
+	"backups.sftp.password": "Пароль",
+	"backups.sftp.hostKey": "Закреплённый ключ хоста (необязательно)",
+	"backups.sftp.hostKeyPlaceholder": "ssh-ed25519 AAAA…",
+	"backups.sftp.hostKeyHint":
+		"Вставьте ключ хоста сервера в формате authorized_keys, чтобы закрепить его. Если пусто, при первом подключении ключ принимается на доверии (TOFU).",
+	"backups.sftp.keepSecret":
+		"оставьте пустым, чтобы сохранить текущее значение",
+	"backups.sftp.secretSet": "сохранено",
+	"backups.sftp.secretUnset": "не сохранено",
+	"backups.sftp.clearSecret": "Очистить сохранённое значение",
+	"backups.sftp.summary": "Аутентификация: {auth}.",
+	"backups.sftp.status.lastUpload": "Последняя загрузка: {name} в {at}.",
+	"backups.sftp.status.lastFetch": "Последнее получение: {name} в {at}.",
+	"backups.sftp.status.lastError": "Последняя ошибка в {at}: {error}",
+	"backups.sftp.remoteTitle": "Удалённые архивы",
+	"backups.sftp.remoteEmpty": "Удалённых архивов нет.",
+	"backups.sftp.fetch": "Получить",
+	"backups.sftp.notEncrypted": "не зашифрован",
+	"backups.sftp.fetchHint":
+		"Получение копирует удалённый архив в локальный список бэкапов, где его можно проверить и восстановить.",
+	"backups.sftp.notice.saved": "SFTP-назначение сохранено.",
+	"backups.sftp.notice.removed": "SFTP-назначение удалено.",
+	"backups.sftp.notice.fetched":
+		"Архив {name} получен в локальные бэкапы — его можно проверить или восстановить.",
+	"backups.sftp.error.load": "Не удалось загрузить SFTP-назначение",
+	"backups.sftp.error.save": "Не удалось сохранить SFTP-назначение",
+	"backups.sftp.error.remove": "Не удалось удалить SFTP-назначение",
+	"backups.sftp.error.remoteList":
+		"Не удалось получить список удалённых архивов",
+	"backups.sftp.error.fetch": "Не удалось получить удалённый архив",
+	"backups.sftp.removeConfirmTitle": "Удалить SFTP-назначение?",
+	"backups.sftp.removeConfirmDescription":
+		"Сохранённые учётные данные и ключ хоста будут удалены. Удалённые архивы останутся нетронутыми.",
+
 	"clientTraffic.title": "Использование трафика",
 	"clientTraffic.upload": "Исходящий",
 	"clientTraffic.download": "Входящий",

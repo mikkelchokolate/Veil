@@ -40,13 +40,20 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 		KeyPath:              state.keyPath,
 		BackupPassphrasePath: state.backupPassphrasePath,
 		BackupRoot:           state.backupDir,
-		UpdateRoot:           filepath.Join(stateRoot, "updates"),
-		ManagedUnits:         units,
-		ManagedUnitPrefixes:  catalog.LifecycleUnitPrefixes(),
-		UpdateArtifacts:      map[string]string{"veil-update": "veil-update.tar.gz"},
-		Artifacts:            map[string]privileged.ArtifactPath{},
-		FirewallRules:        map[string]struct{}{},
-		AllowedArtifactNames: allowedArtifactNames,
+		// The destination config carries SFTP secrets and stays root-only
+		// under the etc tree (the parent of the live generated root, same
+		// derivation as CertDirs); status/known_hosts land under the state
+		// root so the scheduled backup unit can update them.
+		BackupSftpConfigPath:     filepath.Join(etcRoot, "backup-sftp.json"),
+		BackupSftpStatusPath:     filepath.Join(stateRoot, "backup-sftp-status.json"),
+		BackupSftpKnownHostsPath: filepath.Join(stateRoot, "backup-sftp.known_hosts"),
+		UpdateRoot:               filepath.Join(stateRoot, "updates"),
+		ManagedUnits:             units,
+		ManagedUnitPrefixes:      catalog.LifecycleUnitPrefixes(),
+		UpdateArtifacts:          map[string]string{"veil-update": "veil-update.tar.gz"},
+		Artifacts:                map[string]privileged.ArtifactPath{},
+		FirewallRules:            map[string]struct{}{},
+		AllowedArtifactNames:     allowedArtifactNames,
 	}
 	production := privileged.NewProductionExecutor(privileged.ProductionConfig{
 		PromotionBackupRoot:  filepath.Join(state.applyRoot, "backups"),

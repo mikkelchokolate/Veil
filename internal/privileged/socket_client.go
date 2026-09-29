@@ -98,6 +98,12 @@ func (c *SocketClient) CaddyLoad(ctx context.Context, request CaddyLoadRequest) 
 	return c.call(ctx, RequestEnvelope{Operation: OperationCaddyLoad, CaddyLoad: &request}, nil)
 }
 
+func (c *SocketClient) BackupSftp(ctx context.Context, request BackupSftpRequest) (BackupSftpResult, error) {
+	var result BackupSftpResult
+	err := c.call(ctx, RequestEnvelope{Operation: OperationBackupSftp, BackupSftp: &request}, &result)
+	return result, err
+}
+
 func (c *SocketClient) IssueIPCert(ctx context.Context, request IssueIPCertRequest) (IssueIPCertResult, error) {
 	var result IssueIPCertResult
 	err := c.call(ctx, RequestEnvelope{Operation: OperationIssueIPCert, IssueIPCert: &request}, &result)
@@ -204,7 +210,8 @@ const (
 func operationBudget(operation Operation, fallback, mutation, backup time.Duration) time.Duration {
 	switch operation {
 	case OperationBackupCreate, OperationBackupList, OperationBackupVerify,
-		OperationBackupRead, OperationBackupPrune, OperationBackupRestore, OperationBackupDelete:
+		OperationBackupRead, OperationBackupPrune, OperationBackupRestore, OperationBackupDelete,
+		OperationBackupSftp:
 		return backup
 	case OperationPromote, OperationStageUpdate, OperationRotateKey, OperationRecoverKeyRotation, OperationIssueIPCert:
 		return mutation

@@ -110,17 +110,7 @@ func PruneArchives(dir string, policy RetentionPolicy, dryRun bool) (PruneResult
 	if err != nil {
 		return PruneResult{}, err
 	}
-	keep := make(map[string]bool)
-	selectRetentionBuckets(archives, policy.Daily, func(entry ArchiveEntry) string {
-		return entry.CreatedAt.Format("2006-01-02")
-	}, keep)
-	selectRetentionBuckets(archives, policy.Weekly, func(entry ArchiveEntry) string {
-		year, week := entry.CreatedAt.ISOWeek()
-		return fmt.Sprintf("%04d-W%02d", year, week)
-	}, keep)
-	selectRetentionBuckets(archives, policy.Monthly, func(entry ArchiveEntry) string {
-		return entry.CreatedAt.Format("2006-01")
-	}, keep)
+	keep := RetentionKeepSet(archives, policy)
 
 	result := PruneResult{DryRun: dryRun}
 	for _, entry := range archives {
@@ -139,6 +129,25 @@ func PruneArchives(dir string, policy RetentionPolicy, dryRun bool) (PruneResult
 		result.Deleted = append(result.Deleted, entry.Name)
 	}
 	return result, nil
+}
+
+// RetentionKeepSet applies the daily/weekly/Monthly bucket policy to a
+// listing of archives — wherever they live — and returns the names that
+// survive. The local prune (PruneArchives) and the SFTP remote prune share
+// this decision so both sides keep exactly the same generations.
+func RetentionKeepSet(archives []ArchiveEntry, policy RetentionPolicy) map[string]bool {
+	keep := make(map[string]bool)
+	selectRetentionBuckets(archives, policy.Daily, func(entry ArchiveEntry) string {
+		return entry.CreatedAt.Format("2006-01-02")
+	}, keep)
+	selectRetentionBuckets(archives, policy.Weekly, func(entry ArchiveEntry) string {
+		year, week := entry.CreatedAt.ISOWeek()
+		return fmt.Sprintf("%04d-W%02d", year, week)
+	}, keep)
+	selectRetentionBuckets(archives, policy.Monthly, func(entry ArchiveEntry) string {
+		return entry.CreatedAt.Format("2006-01")
+	}, keep)
+	return keep
 }
 
 func selectRetentionBuckets(
@@ -162,6 +171,13 @@ func selectRetentionBuckets(
 		selected[key] = true
 		keep[entry.Name] = true
 	}
+}
+
+// ArchiveTimestamp parses the timestamp encoded in a managed archive name,
+// so remote listings can apply the same managed-name filter ListArchives
+// applies locally.
+func ArchiveTimestamp(name string) (time.Time, bool) {
+	return parseArchiveTimestamp(name)
 }
 
 func parseArchiveTimestamp(name string) (time.Time, bool) {

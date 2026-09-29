@@ -13,6 +13,7 @@ import type {
 	BackupPruneResult,
 } from "../api/generated/models";
 import { useIsAdmin } from "../auth/AuthContext";
+import { BackupSftpPanel } from "../components/BackupSftpPanel";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -514,6 +515,11 @@ export function BackupsPage() {
 					</Table>
 				)}
 			</div>
+
+			{/* #1174: SFTP remote destination — configuration, status, and
+			    fetching remote archives back for restore. Admin-only, like the
+			    rest of this page. */}
+			<BackupSftpPanel />
 
 			<AlertDialog
 				open={confirmPrune}

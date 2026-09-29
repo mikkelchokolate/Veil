@@ -274,6 +274,42 @@ func (e BackupRestoreRequestConfirm) Valid() bool {
 	}
 }
 
+// Defines values for BackupSftpDestinationAuthType.
+const (
+	BackupSftpDestinationAuthTypeKey      BackupSftpDestinationAuthType = "key"
+	BackupSftpDestinationAuthTypePassword BackupSftpDestinationAuthType = "password"
+)
+
+// Valid indicates whether the value is a known member of the BackupSftpDestinationAuthType enum.
+func (e BackupSftpDestinationAuthType) Valid() bool {
+	switch e {
+	case BackupSftpDestinationAuthTypeKey:
+		return true
+	case BackupSftpDestinationAuthTypePassword:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BackupSftpPutRequestAuthType.
+const (
+	BackupSftpPutRequestAuthTypeKey      BackupSftpPutRequestAuthType = "key"
+	BackupSftpPutRequestAuthTypePassword BackupSftpPutRequestAuthType = "password"
+)
+
+// Valid indicates whether the value is a known member of the BackupSftpPutRequestAuthType enum.
+func (e BackupSftpPutRequestAuthType) Valid() bool {
+	switch e {
+	case BackupSftpPutRequestAuthTypeKey:
+		return true
+	case BackupSftpPutRequestAuthTypePassword:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BackupVerificationReportEncryptionVersion.
 const (
 	N0 BackupVerificationReportEncryptionVersion = 0
@@ -399,25 +435,25 @@ func (e FieldSchemaScope) Valid() bool {
 
 // Defines values for FieldSchemaType.
 const (
-	Checkbox FieldSchemaType = "checkbox"
-	Number   FieldSchemaType = "number"
-	Password FieldSchemaType = "password"
-	Select   FieldSchemaType = "select"
-	Text     FieldSchemaType = "text"
+	FieldSchemaTypeCheckbox FieldSchemaType = "checkbox"
+	FieldSchemaTypeNumber   FieldSchemaType = "number"
+	FieldSchemaTypePassword FieldSchemaType = "password"
+	FieldSchemaTypeSelect   FieldSchemaType = "select"
+	FieldSchemaTypeText     FieldSchemaType = "text"
 )
 
 // Valid indicates whether the value is a known member of the FieldSchemaType enum.
 func (e FieldSchemaType) Valid() bool {
 	switch e {
-	case Checkbox:
+	case FieldSchemaTypeCheckbox:
 		return true
-	case Number:
+	case FieldSchemaTypeNumber:
 		return true
-	case Password:
+	case FieldSchemaTypePassword:
 		return true
-	case Select:
+	case FieldSchemaTypeSelect:
 		return true
-	case Text:
+	case FieldSchemaTypeText:
 		return true
 	default:
 		return false
@@ -928,6 +964,21 @@ const (
 func (e PostApiApplyRollbackJSONBodyConfirm) Valid() bool {
 	switch e {
 	case PostApiApplyRollbackJSONBodyConfirmTrue:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DeleteApiBackupsSftp200JSONResponseBodyConfigured.
+const (
+	False DeleteApiBackupsSftp200JSONResponseBodyConfigured = false
+)
+
+// Valid indicates whether the value is a known member of the DeleteApiBackupsSftp200JSONResponseBodyConfigured enum.
+func (e DeleteApiBackupsSftp200JSONResponseBodyConfigured) Valid() bool {
+	switch e {
+	case False:
 		return true
 	default:
 		return false
@@ -1450,11 +1501,16 @@ type BackupCreateRequest struct {
 
 // BackupCreateResponse defines model for BackupCreateResponse.
 type BackupCreateResponse struct {
-	Archive      BackupArchive            `json:"archive"`
-	Prune        *BackupPruneResult       `json:"prune,omitempty"`
+	Archive BackupArchive      `json:"archive"`
+	Prune   *BackupPruneResult `json:"prune,omitempty"`
+
+	// Remote Remote SFTP destination outcome for a create or prune. A
+	// remote failure is reported in `error` without failing the local
+	// operation it accompanied.
+	Remote       *BackupRemoteResult      `json:"remote,omitempty"`
 	Verification BackupVerificationReport `json:"verification"`
 
-	// Warning Non-fatal warning (for example a retention prune failure after a successful archive).
+	// Warning Non-fatal warning (for example a retention prune or remote upload failure after a successful archive).
 	Warning *string `json:"warning,omitempty"`
 }
 
@@ -1470,6 +1526,25 @@ type BackupPruneResult struct {
 	Deleted []string `json:"deleted"`
 	DryRun  bool     `json:"dryRun"`
 	Kept    []string `json:"kept"`
+
+	// Remote Remote SFTP destination outcome for a create or prune. A
+	// remote failure is reported in `error` without failing the local
+	// operation it accompanied.
+	Remote *BackupRemoteResult `json:"remote,omitempty"`
+}
+
+// BackupRemoteResult Remote SFTP destination outcome for a create or prune. A
+// remote failure is reported in `error` without failing the local
+// operation it accompanied.
+type BackupRemoteResult struct {
+	Error  *string   `json:"error,omitempty"`
+	Kept   *[]string `json:"kept,omitempty"`
+	Pruned *[]string `json:"pruned,omitempty"`
+	Upload *struct {
+		Archive string `json:"archive"`
+		Sha256  string `json:"sha256"`
+		Size    int64  `json:"size"`
+	} `json:"upload,omitempty"`
 }
 
 // BackupRestoreJob defines model for BackupRestoreJob.
@@ -1508,6 +1583,69 @@ type BackupRestoreRequest struct {
 
 // BackupRestoreRequestConfirm defines model for BackupRestoreRequest.Confirm.
 type BackupRestoreRequestConfirm bool
+
+// BackupSftpDestination defines model for BackupSftpDestination.
+type BackupSftpDestination struct {
+	AuthType         *BackupSftpDestinationAuthType `json:"authType,omitempty"`
+	Configured       bool                           `json:"configured"`
+	Enabled          bool                           `json:"enabled"`
+	Host             *string                        `json:"host,omitempty"`
+	HostKeySet       *bool                          `json:"hostKeySet,omitempty"`
+	KeyPassphraseSet *bool                          `json:"keyPassphraseSet,omitempty"`
+	KeyPath          *string                        `json:"keyPath,omitempty"`
+	PasswordSet      *bool                          `json:"passwordSet,omitempty"`
+	Port             *int                           `json:"port,omitempty"`
+	RemoteDir        *string                        `json:"remoteDir,omitempty"`
+	Status           BackupSftpStatus               `json:"status"`
+	User             *string                        `json:"user,omitempty"`
+}
+
+// BackupSftpDestinationAuthType defines model for BackupSftpDestination.AuthType.
+type BackupSftpDestinationAuthType string
+
+// BackupSftpFetchRequest defines model for BackupSftpFetchRequest.
+type BackupSftpFetchRequest struct {
+	// Name Remote archive basename (must match the managed archive pattern).
+	Name string `json:"name"`
+}
+
+// BackupSftpPutRequest defines model for BackupSftpPutRequest.
+type BackupSftpPutRequest struct {
+	AuthType BackupSftpPutRequestAuthType `json:"authType"`
+	Enabled  bool                         `json:"enabled"`
+	Host     string                       `json:"host"`
+
+	// HostKey Pinned server host key in authorized_keys format. Write-only; omit to keep, empty string clears back to TOFU.
+	HostKey *string `json:"hostKey,omitempty"`
+
+	// KeyPassphrase Write-only; omit to keep the stored value.
+	KeyPassphrase *string `json:"keyPassphrase,omitempty"`
+
+	// KeyPath Absolute path of the private key readable by root.
+	KeyPath *string `json:"keyPath,omitempty"`
+
+	// Password Write-only; omit to keep the stored value.
+	Password *string `json:"password,omitempty"`
+
+	// Port Zero or omitted means the SSH default 22.
+	Port      *int   `json:"port,omitempty"`
+	RemoteDir string `json:"remoteDir"`
+	User      string `json:"user"`
+}
+
+// BackupSftpPutRequestAuthType defines model for BackupSftpPutRequest.AuthType.
+type BackupSftpPutRequestAuthType string
+
+// BackupSftpStatus defines model for BackupSftpStatus.
+type BackupSftpStatus struct {
+	LastError         *string    `json:"lastError,omitempty"`
+	LastErrorAt       *time.Time `json:"lastErrorAt,omitempty"`
+	LastFetchArchive  *string    `json:"lastFetchArchive,omitempty"`
+	LastFetchAt       *time.Time `json:"lastFetchAt,omitempty"`
+	LastPruneAt       *time.Time `json:"lastPruneAt,omitempty"`
+	LastUploadArchive *string    `json:"lastUploadArchive,omitempty"`
+	LastUploadAt      *time.Time `json:"lastUploadAt,omitempty"`
+}
 
 // BackupVerificationReport defines model for BackupVerificationReport.
 type BackupVerificationReport struct {
@@ -2920,6 +3058,27 @@ type PostApiBackupsPruneParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// DeleteApiBackupsSftpParams defines parameters for DeleteApiBackupsSftp.
+type DeleteApiBackupsSftpParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteApiBackupsSftp200JSONResponseBodyConfigured defines parameters for DeleteApiBackupsSftp.
+type DeleteApiBackupsSftp200JSONResponseBodyConfigured bool
+
+// PutApiBackupsSftpParams defines parameters for PutApiBackupsSftp.
+type PutApiBackupsSftpParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiBackupsSftpFetchParams defines parameters for PostApiBackupsSftpFetch.
+type PostApiBackupsSftpFetchParams struct {
+	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // DeleteApiBackupsNameParams defines parameters for DeleteApiBackupsName.
 type DeleteApiBackupsNameParams struct {
 	// IdempotencyKey Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.
@@ -3327,6 +3486,12 @@ type PostApiBackupsJSONRequestBody = BackupCreateRequest
 
 // PostApiBackupsPruneJSONRequestBody defines body for PostApiBackupsPrune for application/json ContentType.
 type PostApiBackupsPruneJSONRequestBody = BackupPruneRequest
+
+// PutApiBackupsSftpJSONRequestBody defines body for PutApiBackupsSftp for application/json ContentType.
+type PutApiBackupsSftpJSONRequestBody = BackupSftpPutRequest
+
+// PostApiBackupsSftpFetchJSONRequestBody defines body for PostApiBackupsSftpFetch for application/json ContentType.
+type PostApiBackupsSftpFetchJSONRequestBody = BackupSftpFetchRequest
 
 // PostApiBackupsNameRestoreJSONRequestBody defines body for PostApiBackupsNameRestore for application/json ContentType.
 type PostApiBackupsNameRestoreJSONRequestBody = BackupRestoreRequest
@@ -4018,6 +4183,75 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /api/backups/prune (the `PostApiBackupsPrune` operationId).
 	PostApiBackupsPrune(ctx context.Context, params *PostApiBackupsPruneParams, body PostApiBackupsPruneJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiBackupsSftp Remove the SFTP remote-backup destination
+	//
+	// Deletes the root-only destination config. Requires admin and CSRF for a cookie session.
+	//
+	// Corresponds with DELETE /api/backups/sftp (the `DeleteApiBackupsSftp` operationId).
+	DeleteApiBackupsSftp(ctx context.Context, params *DeleteApiBackupsSftpParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiBackupsSftp Read the SFTP remote-backup destination
+	//
+	// Returns the secret-free destination view (`configured` and
+	// `*Set` flags) plus the recorded remote-operation status. Secret values
+	// are never echoed — they are write-only.
+	//
+	// Corresponds with GET /api/backups/sftp (the `GetApiBackupsSftp` operationId).
+	GetApiBackupsSftp(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutApiBackupsSftpWithBody Configure the SFTP remote-backup destination
+	//
+	// Persists the root-only destination file under the etc dir via
+	// the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
+	// write-only: omitting one keeps the stored value, an empty string clears
+	// it. Requires admin and CSRF for a cookie session.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /api/backups/sftp (the `PutApiBackupsSftp` operationId).
+	PutApiBackupsSftpWithBody(ctx context.Context, params *PutApiBackupsSftpParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutApiBackupsSftp Configure the SFTP remote-backup destination
+	//
+	// Persists the root-only destination file under the etc dir via
+	// the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
+	// write-only: omitting one keeps the stored value, an empty string clears
+	// it. Requires admin and CSRF for a cookie session.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /api/backups/sftp (the `PutApiBackupsSftp` operationId).
+	PutApiBackupsSftp(ctx context.Context, params *PutApiBackupsSftpParams, body PutApiBackupsSftpJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiBackupsSftpFetchWithBody Download a remote archive into the local backup dir
+	//
+	// Materializes the named remote archive under the managed
+	// backup dir (atomic temp-then-publish), after which the normal restore
+	// endpoint applies. Requires admin and CSRF for a cookie session.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/backups/sftp/fetch (the `PostApiBackupsSftpFetch` operationId).
+	PostApiBackupsSftpFetchWithBody(ctx context.Context, params *PostApiBackupsSftpFetchParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiBackupsSftpFetch Download a remote archive into the local backup dir
+	//
+	// Materializes the named remote archive under the managed
+	// backup dir (atomic temp-then-publish), after which the normal restore
+	// endpoint applies. Requires admin and CSRF for a cookie session.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/backups/sftp/fetch (the `PostApiBackupsSftpFetch` operationId).
+	PostApiBackupsSftpFetch(ctx context.Context, params *PostApiBackupsSftpFetchParams, body PostApiBackupsSftpFetchJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiBackupsSftpRemote List archives on the SFTP remote destination
+	//
+	// Requires an admin token or admin session.
+	//
+	// Corresponds with GET /api/backups/sftp/remote (the `GetApiBackupsSftpRemote` operationId).
+	GetApiBackupsSftpRemote(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteApiBackupsName Delete one managed encrypted archive
 	//
@@ -5308,6 +5542,145 @@ func (c *Client) PostApiBackupsPruneWithBody(ctx context.Context, params *PostAp
 // Corresponds with POST /api/backups/prune (the `PostApiBackupsPrune` operationId).
 func (c *Client) PostApiBackupsPrune(ctx context.Context, params *PostApiBackupsPruneParams, body PostApiBackupsPruneJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostApiBackupsPruneRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteApiBackupsSftp Remove the SFTP remote-backup destination
+//
+// Deletes the root-only destination config. Requires admin and CSRF for a cookie session.
+//
+// Corresponds with DELETE /api/backups/sftp (the `DeleteApiBackupsSftp` operationId).
+func (c *Client) DeleteApiBackupsSftp(ctx context.Context, params *DeleteApiBackupsSftpParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiBackupsSftpRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetApiBackupsSftp Read the SFTP remote-backup destination
+//
+// Returns the secret-free destination view (`configured` and
+// `*Set` flags) plus the recorded remote-operation status. Secret values
+// are never echoed — they are write-only.
+//
+// Corresponds with GET /api/backups/sftp (the `GetApiBackupsSftp` operationId).
+func (c *Client) GetApiBackupsSftp(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiBackupsSftpRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutApiBackupsSftpWithBody Configure the SFTP remote-backup destination
+//
+// Persists the root-only destination file under the etc dir via
+// the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
+// write-only: omitting one keeps the stored value, an empty string clears
+// it. Requires admin and CSRF for a cookie session.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /api/backups/sftp (the `PutApiBackupsSftp` operationId).
+func (c *Client) PutApiBackupsSftpWithBody(ctx context.Context, params *PutApiBackupsSftpParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutApiBackupsSftpRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutApiBackupsSftp Configure the SFTP remote-backup destination
+//
+// Persists the root-only destination file under the etc dir via
+// the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
+// write-only: omitting one keeps the stored value, an empty string clears
+// it. Requires admin and CSRF for a cookie session.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /api/backups/sftp (the `PutApiBackupsSftp` operationId).
+func (c *Client) PutApiBackupsSftp(ctx context.Context, params *PutApiBackupsSftpParams, body PutApiBackupsSftpJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutApiBackupsSftpRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiBackupsSftpFetchWithBody Download a remote archive into the local backup dir
+//
+// Materializes the named remote archive under the managed
+// backup dir (atomic temp-then-publish), after which the normal restore
+// endpoint applies. Requires admin and CSRF for a cookie session.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/backups/sftp/fetch (the `PostApiBackupsSftpFetch` operationId).
+func (c *Client) PostApiBackupsSftpFetchWithBody(ctx context.Context, params *PostApiBackupsSftpFetchParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiBackupsSftpFetchRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostApiBackupsSftpFetch Download a remote archive into the local backup dir
+//
+// Materializes the named remote archive under the managed
+// backup dir (atomic temp-then-publish), after which the normal restore
+// endpoint applies. Requires admin and CSRF for a cookie session.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/backups/sftp/fetch (the `PostApiBackupsSftpFetch` operationId).
+func (c *Client) PostApiBackupsSftpFetch(ctx context.Context, params *PostApiBackupsSftpFetchParams, body PostApiBackupsSftpFetchJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiBackupsSftpFetchRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetApiBackupsSftpRemote List archives on the SFTP remote destination
+//
+// Requires an admin token or admin session.
+//
+// Corresponds with GET /api/backups/sftp/remote (the `GetApiBackupsSftpRemote` operationId).
+func (c *Client) GetApiBackupsSftpRemote(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiBackupsSftpRemoteRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -8142,6 +8515,212 @@ func NewPostApiBackupsPruneRequestWithBody(server string, params *PostApiBackups
 			req.Header.Set("Idempotency-Key", headerParam0)
 		}
 
+	}
+
+	return req, nil
+}
+
+// NewDeleteApiBackupsSftpRequest constructs an http.Request for the DeleteApiBackupsSftp method
+func NewDeleteApiBackupsSftpRequest(server string, params *DeleteApiBackupsSftpParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/backups/sftp")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetApiBackupsSftpRequest constructs an http.Request for the GetApiBackupsSftp method
+func NewGetApiBackupsSftpRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/backups/sftp")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutApiBackupsSftpRequest calls the generic PutApiBackupsSftp builder with application/json body
+func NewPutApiBackupsSftpRequest(server string, params *PutApiBackupsSftpParams, body PutApiBackupsSftpJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutApiBackupsSftpRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPutApiBackupsSftpRequestWithBody constructs an http.Request for the PutApiBackupsSftp method, with any body, and a specified content type
+func NewPutApiBackupsSftpRequestWithBody(server string, params *PutApiBackupsSftpParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/backups/sftp")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewPostApiBackupsSftpFetchRequest calls the generic PostApiBackupsSftpFetch builder with application/json body
+func NewPostApiBackupsSftpFetchRequest(server string, params *PostApiBackupsSftpFetchParams, body PostApiBackupsSftpFetchJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiBackupsSftpFetchRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostApiBackupsSftpFetchRequestWithBody constructs an http.Request for the PostApiBackupsSftpFetch method, with any body, and a specified content type
+func NewPostApiBackupsSftpFetchRequestWithBody(server string, params *PostApiBackupsSftpFetchParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/backups/sftp/fetch")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetApiBackupsSftpRemoteRequest constructs an http.Request for the GetApiBackupsSftpRemote method
+func NewGetApiBackupsSftpRemoteRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/backups/sftp/remote")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -12456,6 +13035,81 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/backups/prune (the `PostApiBackupsPrune` operationId).
 	PostApiBackupsPruneWithResponse(ctx context.Context, params *PostApiBackupsPruneParams, body PostApiBackupsPruneJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsPruneResponse, error)
 
+	// DeleteApiBackupsSftpWithResponse Remove the SFTP remote-backup destination
+	//
+	// Deletes the root-only destination config. Requires admin and CSRF for a cookie session.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/backups/sftp (the `DeleteApiBackupsSftp` operationId).
+	DeleteApiBackupsSftpWithResponse(ctx context.Context, params *DeleteApiBackupsSftpParams, reqEditors ...RequestEditorFn) (*DeleteApiBackupsSftpResponse, error)
+
+	// GetApiBackupsSftpWithResponse Read the SFTP remote-backup destination
+	//
+	// Returns the secret-free destination view (`configured` and
+	// `*Set` flags) plus the recorded remote-operation status. Secret values
+	// are never echoed — they are write-only.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/backups/sftp (the `GetApiBackupsSftp` operationId).
+	GetApiBackupsSftpWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiBackupsSftpResponse, error)
+
+	// PutApiBackupsSftpWithBodyWithResponse Configure the SFTP remote-backup destination
+	//
+	// Persists the root-only destination file under the etc dir via
+	// the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
+	// write-only: omitting one keeps the stored value, an empty string clears
+	// it. Requires admin and CSRF for a cookie session.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api/backups/sftp (the `PutApiBackupsSftp` operationId).
+	PutApiBackupsSftpWithBodyWithResponse(ctx context.Context, params *PutApiBackupsSftpParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiBackupsSftpResponse, error)
+
+	// PutApiBackupsSftpWithResponse Configure the SFTP remote-backup destination
+	//
+	// Persists the root-only destination file under the etc dir via
+	// the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
+	// write-only: omitting one keeps the stored value, an empty string clears
+	// it. Requires admin and CSRF for a cookie session.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api/backups/sftp (the `PutApiBackupsSftp` operationId).
+	PutApiBackupsSftpWithResponse(ctx context.Context, params *PutApiBackupsSftpParams, body PutApiBackupsSftpJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiBackupsSftpResponse, error)
+
+	// PostApiBackupsSftpFetchWithBodyWithResponse Download a remote archive into the local backup dir
+	//
+	// Materializes the named remote archive under the managed
+	// backup dir (atomic temp-then-publish), after which the normal restore
+	// endpoint applies. Requires admin and CSRF for a cookie session.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/backups/sftp/fetch (the `PostApiBackupsSftpFetch` operationId).
+	PostApiBackupsSftpFetchWithBodyWithResponse(ctx context.Context, params *PostApiBackupsSftpFetchParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsSftpFetchResponse, error)
+
+	// PostApiBackupsSftpFetchWithResponse Download a remote archive into the local backup dir
+	//
+	// Materializes the named remote archive under the managed
+	// backup dir (atomic temp-then-publish), after which the normal restore
+	// endpoint applies. Requires admin and CSRF for a cookie session.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/backups/sftp/fetch (the `PostApiBackupsSftpFetch` operationId).
+	PostApiBackupsSftpFetchWithResponse(ctx context.Context, params *PostApiBackupsSftpFetchParams, body PostApiBackupsSftpFetchJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsSftpFetchResponse, error)
+
+	// GetApiBackupsSftpRemoteWithResponse List archives on the SFTP remote destination
+	//
+	// Requires an admin token or admin session.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/backups/sftp/remote (the `GetApiBackupsSftpRemote` operationId).
+	GetApiBackupsSftpRemoteWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiBackupsSftpRemoteResponse, error)
+
 	// DeleteApiBackupsNameWithResponse Delete one managed encrypted archive
 	//
 	// Requires admin and CSRF for a cookie session.
@@ -14876,6 +15530,425 @@ func (r PostApiBackupsPruneResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PostApiBackupsPruneResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// DeleteApiBackupsSftpResponse401Headers the declared response headers of an HTTP 401 response for DeleteApiBackupsSftp
+type DeleteApiBackupsSftpResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type DeleteApiBackupsSftpResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Configured DeleteApiBackupsSftp200JSONResponseBodyConfigured `json:"configured"`
+	}
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Conflict
+	// JSON423 the response for an HTTP 423 `application/json` response
+	JSON423 *Locked
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *DeleteApiBackupsSftpResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DeleteApiBackupsSftpResponse) GetJSON200() *struct {
+	Configured DeleteApiBackupsSftp200JSONResponseBodyConfigured `json:"configured"`
+} {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r DeleteApiBackupsSftpResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r DeleteApiBackupsSftpResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r DeleteApiBackupsSftpResponse) GetJSON409() *Conflict {
+	return r.JSON409
+}
+
+// GetJSON423 returns the response for an HTTP 423 `application/json` response
+func (r DeleteApiBackupsSftpResponse) GetJSON423() *Locked {
+	return r.JSON423
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r DeleteApiBackupsSftpResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteApiBackupsSftpResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiBackupsSftpResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiBackupsSftpResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteApiBackupsSftpResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetApiBackupsSftpResponse401Headers the declared response headers of an HTTP 401 response for GetApiBackupsSftp
+type GetApiBackupsSftpResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type GetApiBackupsSftpResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *BackupSftpDestination
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetApiBackupsSftpResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiBackupsSftpResponse) GetJSON200() *BackupSftpDestination {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiBackupsSftpResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetApiBackupsSftpResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r GetApiBackupsSftpResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiBackupsSftpResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiBackupsSftpResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiBackupsSftpResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiBackupsSftpResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PutApiBackupsSftpResponse401Headers the declared response headers of an HTTP 401 response for PutApiBackupsSftp
+type PutApiBackupsSftpResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type PutApiBackupsSftpResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *BackupSftpDestination
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Conflict
+	// JSON423 the response for an HTTP 423 `application/json` response
+	JSON423 *Locked
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *PutApiBackupsSftpResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PutApiBackupsSftpResponse) GetJSON200() *BackupSftpDestination {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PutApiBackupsSftpResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PutApiBackupsSftpResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PutApiBackupsSftpResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r PutApiBackupsSftpResponse) GetJSON409() *Conflict {
+	return r.JSON409
+}
+
+// GetJSON423 returns the response for an HTTP 423 `application/json` response
+func (r PutApiBackupsSftpResponse) GetJSON423() *Locked {
+	return r.JSON423
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PutApiBackupsSftpResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r PutApiBackupsSftpResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PutApiBackupsSftpResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutApiBackupsSftpResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PutApiBackupsSftpResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PostApiBackupsSftpFetchResponse401Headers the declared response headers of an HTTP 401 response for PostApiBackupsSftpFetch
+type PostApiBackupsSftpFetchResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type PostApiBackupsSftpFetchResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *BackupArchive
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Conflict
+	// JSON423 the response for an HTTP 423 `application/json` response
+	JSON423 *Locked
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *PostApiBackupsSftpFetchResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostApiBackupsSftpFetchResponse) GetJSON200() *BackupArchive {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiBackupsSftpFetchResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostApiBackupsSftpFetchResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostApiBackupsSftpFetchResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r PostApiBackupsSftpFetchResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r PostApiBackupsSftpFetchResponse) GetJSON409() *Conflict {
+	return r.JSON409
+}
+
+// GetJSON423 returns the response for an HTTP 423 `application/json` response
+func (r PostApiBackupsSftpFetchResponse) GetJSON423() *Locked {
+	return r.JSON423
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PostApiBackupsSftpFetchResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r PostApiBackupsSftpFetchResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiBackupsSftpFetchResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiBackupsSftpFetchResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostApiBackupsSftpFetchResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetApiBackupsSftpRemoteResponse401Headers the declared response headers of an HTTP 401 response for GetApiBackupsSftpRemote
+type GetApiBackupsSftpRemoteResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type GetApiBackupsSftpRemoteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]BackupArchive
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetApiBackupsSftpRemoteResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiBackupsSftpRemoteResponse) GetJSON200() *[]BackupArchive {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r GetApiBackupsSftpRemoteResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiBackupsSftpRemoteResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetApiBackupsSftpRemoteResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r GetApiBackupsSftpRemoteResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiBackupsSftpRemoteResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiBackupsSftpRemoteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiBackupsSftpRemoteResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiBackupsSftpRemoteResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -21261,6 +22334,123 @@ func (c *ClientWithResponses) PostApiBackupsPruneWithResponse(ctx context.Contex
 	return ParsePostApiBackupsPruneResponse(rsp)
 }
 
+// DeleteApiBackupsSftpWithResponse Remove the SFTP remote-backup destination
+//
+// Deletes the root-only destination config. Requires admin and CSRF for a cookie session.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/backups/sftp (the `DeleteApiBackupsSftp` operationId).
+func (c *ClientWithResponses) DeleteApiBackupsSftpWithResponse(ctx context.Context, params *DeleteApiBackupsSftpParams, reqEditors ...RequestEditorFn) (*DeleteApiBackupsSftpResponse, error) {
+	rsp, err := c.DeleteApiBackupsSftp(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiBackupsSftpResponse(rsp)
+}
+
+// GetApiBackupsSftpWithResponse Read the SFTP remote-backup destination
+//
+// Returns the secret-free destination view (`configured` and
+// `*Set` flags) plus the recorded remote-operation status. Secret values
+// are never echoed — they are write-only.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/backups/sftp (the `GetApiBackupsSftp` operationId).
+func (c *ClientWithResponses) GetApiBackupsSftpWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiBackupsSftpResponse, error) {
+	rsp, err := c.GetApiBackupsSftp(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiBackupsSftpResponse(rsp)
+}
+
+// PutApiBackupsSftpWithBodyWithResponse Configure the SFTP remote-backup destination
+//
+// Persists the root-only destination file under the etc dir via
+// the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
+// write-only: omitting one keeps the stored value, an empty string clears
+// it. Requires admin and CSRF for a cookie session.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api/backups/sftp (the `PutApiBackupsSftp` operationId).
+func (c *ClientWithResponses) PutApiBackupsSftpWithBodyWithResponse(ctx context.Context, params *PutApiBackupsSftpParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiBackupsSftpResponse, error) {
+	rsp, err := c.PutApiBackupsSftpWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutApiBackupsSftpResponse(rsp)
+}
+
+// PutApiBackupsSftpWithResponse Configure the SFTP remote-backup destination
+//
+// Persists the root-only destination file under the etc dir via
+// the privileged helper. `password`, `keyPassphrase`, and `hostKey` are
+// write-only: omitting one keeps the stored value, an empty string clears
+// it. Requires admin and CSRF for a cookie session.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api/backups/sftp (the `PutApiBackupsSftp` operationId).
+func (c *ClientWithResponses) PutApiBackupsSftpWithResponse(ctx context.Context, params *PutApiBackupsSftpParams, body PutApiBackupsSftpJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiBackupsSftpResponse, error) {
+	rsp, err := c.PutApiBackupsSftp(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutApiBackupsSftpResponse(rsp)
+}
+
+// PostApiBackupsSftpFetchWithBodyWithResponse Download a remote archive into the local backup dir
+//
+// Materializes the named remote archive under the managed
+// backup dir (atomic temp-then-publish), after which the normal restore
+// endpoint applies. Requires admin and CSRF for a cookie session.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/backups/sftp/fetch (the `PostApiBackupsSftpFetch` operationId).
+func (c *ClientWithResponses) PostApiBackupsSftpFetchWithBodyWithResponse(ctx context.Context, params *PostApiBackupsSftpFetchParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiBackupsSftpFetchResponse, error) {
+	rsp, err := c.PostApiBackupsSftpFetchWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiBackupsSftpFetchResponse(rsp)
+}
+
+// PostApiBackupsSftpFetchWithResponse Download a remote archive into the local backup dir
+//
+// Materializes the named remote archive under the managed
+// backup dir (atomic temp-then-publish), after which the normal restore
+// endpoint applies. Requires admin and CSRF for a cookie session.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/backups/sftp/fetch (the `PostApiBackupsSftpFetch` operationId).
+func (c *ClientWithResponses) PostApiBackupsSftpFetchWithResponse(ctx context.Context, params *PostApiBackupsSftpFetchParams, body PostApiBackupsSftpFetchJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiBackupsSftpFetchResponse, error) {
+	rsp, err := c.PostApiBackupsSftpFetch(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiBackupsSftpFetchResponse(rsp)
+}
+
+// GetApiBackupsSftpRemoteWithResponse List archives on the SFTP remote destination
+//
+// Requires an admin token or admin session.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/backups/sftp/remote (the `GetApiBackupsSftpRemote` operationId).
+func (c *ClientWithResponses) GetApiBackupsSftpRemoteWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiBackupsSftpRemoteResponse, error) {
+	rsp, err := c.GetApiBackupsSftpRemote(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiBackupsSftpRemoteResponse(rsp)
+}
+
 // DeleteApiBackupsNameWithResponse Delete one managed encrypted archive
 //
 // Requires admin and CSRF for a cookie session.
@@ -24128,6 +25318,378 @@ func ParsePostApiBackupsPruneResponse(rsp *http.Response) (*PostApiBackupsPruneR
 	switch {
 	case rsp.StatusCode == 401:
 		var headers PostApiBackupsPruneResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiBackupsSftpResponse parses an HTTP response from a DeleteApiBackupsSftpWithResponse call
+func ParseDeleteApiBackupsSftpResponse(rsp *http.Response) (*DeleteApiBackupsSftpResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiBackupsSftpResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Configured DeleteApiBackupsSftp200JSONResponseBodyConfigured `json:"configured"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 423:
+		var dest Locked
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON423 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers DeleteApiBackupsSftpResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetApiBackupsSftpResponse parses an HTTP response from a GetApiBackupsSftpWithResponse call
+func ParseGetApiBackupsSftpResponse(rsp *http.Response) (*GetApiBackupsSftpResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiBackupsSftpResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BackupSftpDestination
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetApiBackupsSftpResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePutApiBackupsSftpResponse parses an HTTP response from a PutApiBackupsSftpWithResponse call
+func ParsePutApiBackupsSftpResponse(rsp *http.Response) (*PutApiBackupsSftpResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutApiBackupsSftpResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BackupSftpDestination
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 423:
+		var dest Locked
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON423 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers PutApiBackupsSftpResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePostApiBackupsSftpFetchResponse parses an HTTP response from a PostApiBackupsSftpFetchWithResponse call
+func ParsePostApiBackupsSftpFetchResponse(rsp *http.Response) (*PostApiBackupsSftpFetchResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiBackupsSftpFetchResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BackupArchive
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 423:
+		var dest Locked
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON423 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers PostApiBackupsSftpFetchResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetApiBackupsSftpRemoteResponse parses an HTTP response from a GetApiBackupsSftpRemoteWithResponse call
+func ParseGetApiBackupsSftpRemoteResponse(rsp *http.Response) (*GetApiBackupsSftpRemoteResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiBackupsSftpRemoteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []BackupArchive
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetApiBackupsSftpRemoteResponse401Headers
 		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
