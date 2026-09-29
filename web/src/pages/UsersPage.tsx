@@ -605,7 +605,9 @@ export function UsersPage() {
 			>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>{t("users.passkeys.resetTitle")}</AlertDialogTitle>
+						<AlertDialogTitle>
+							{t("users.passkeys.resetTitle")}
+						</AlertDialogTitle>
 						<AlertDialogDescription>
 							{t("users.passkeys.resetDescription", {
 								name: confirmResetPasskeys ?? "",

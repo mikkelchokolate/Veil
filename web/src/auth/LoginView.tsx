@@ -1,5 +1,5 @@
-import { type FormEvent, useEffect, useRef, useState } from "react";
 import { WebAuthnError } from "@simplewebauthn/browser";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { ApiError } from "../api/fetcher";
 import { useAuth } from "../auth/AuthContext";
 import { type I18nVars, useI18n } from "../i18n/I18nContext";

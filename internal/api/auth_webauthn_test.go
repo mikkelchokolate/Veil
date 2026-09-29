@@ -54,14 +54,18 @@ func newSoftPasskey(t *testing.T) *softPasskey {
 	if _, err := rand.Read(credentialID); err != nil {
 		t.Fatal(err)
 	}
+	pubRaw, err := key.PublicKey.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
 	coseKey, err := webauthncbor.Marshal(webauthncose.EC2PublicKeyData{
 		PublicKeyData: webauthncose.PublicKeyData{
 			KeyType:   int64(webauthncose.EllipticKey),
 			Algorithm: int64(webauthncose.AlgES256),
 		},
 		Curve:  int64(webauthncose.P256),
-		XCoord: key.PublicKey.X.FillBytes(make([]byte, 32)),
-		YCoord: key.PublicKey.Y.FillBytes(make([]byte, 32)),
+		XCoord: pubRaw[1:33],
+		YCoord: pubRaw[33:65],
 	})
 	if err != nil {
 		t.Fatal(err)

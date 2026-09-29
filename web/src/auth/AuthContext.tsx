@@ -1,8 +1,8 @@
-import { useQueryClient } from "@tanstack/react-query";
 import {
-	startAuthentication,
 	type PublicKeyCredentialRequestOptionsJSON,
+	startAuthentication,
 } from "@simplewebauthn/browser";
+import { useQueryClient } from "@tanstack/react-query";
 import {
 	createContext,
 	type ReactNode,
@@ -281,22 +281,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	// pending_2fa cookie scopes; finish mints the real session. The browser
 	// ceremony errors (WebAuthnError — e.g. the user cancelled) are surfaced
 	// to the caller untranslated so the view can phrase them.
-	const verifySecondFactorPasskey = useCallback(async (): Promise<LoginResult> => {
-		const options = await apiFetch<WebAuthnAssertionOptions>(
-			"/api/v1/auth/webauthn/begin",
-			{ method: "POST" },
-		);
-		const assertion = await startAuthentication({
-			optionsJSON:
-				options.publicKey as unknown as PublicKeyCredentialRequestOptionsJSON,
-		});
-		const data = await apiFetch<LoginResponseData>(
-			"/api/v1/auth/webauthn/finish",
-			{ method: "POST", body: JSON.stringify(assertion) },
-		);
-		await finishLogin(data, data?.username ?? "");
-		return { secondFactorRequired: false };
-	}, [finishLogin]);
+	const verifySecondFactorPasskey =
+		useCallback(async (): Promise<LoginResult> => {
+			const options = await apiFetch<WebAuthnAssertionOptions>(
+				"/api/v1/auth/webauthn/begin",
+				{ method: "POST" },
+			);
+			const assertion = await startAuthentication({
+				optionsJSON:
+					options.publicKey as unknown as PublicKeyCredentialRequestOptionsJSON,
+			});
+			const data = await apiFetch<LoginResponseData>(
+				"/api/v1/auth/webauthn/finish",
+				{ method: "POST", body: JSON.stringify(assertion) },
+			);
+			await finishLogin(data, data?.username ?? "");
+			return { secondFactorRequired: false };
+		}, [finishLogin]);
 
 	const logout = useCallback(async () => {
 		const epoch = ++epochRef.current;

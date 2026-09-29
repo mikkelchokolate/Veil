@@ -136,7 +136,8 @@ export const ru: Record<string, string> = {
 	"auth.passkey.cancelled": "Запрос ключа доступа отменён.",
 	"auth.passkey.invalid":
 		"Ключ доступа не принят. Повторите попытку или используйте другой фактор.",
-	"auth.passkey.failed": "Не удалось проверить ключ доступа. Повторите попытку.",
+	"auth.passkey.failed":
+		"Не удалось проверить ключ доступа. Повторите попытку.",
 
 	"users.title": "Пользователи",
 	"users.adminRequired":
@@ -501,7 +502,8 @@ export const ru: Record<string, string> = {
 		"Удаляет «{name}» — этот ключ больше не сможет разблокировать вашу учётную запись.",
 	"settings.passkeys.deleting": "Удаление…",
 	"settings.passkeys.error.status": "Не удалось загрузить ключи доступа",
-	"settings.passkeys.error.register": "Не удалось зарегистрировать ключ доступа",
+	"settings.passkeys.error.register":
+		"Не удалось зарегистрировать ключ доступа",
 	"settings.passkeys.error.delete": "Не удалось удалить ключ доступа",
 
 	"apply.title": "Состояние применения",
