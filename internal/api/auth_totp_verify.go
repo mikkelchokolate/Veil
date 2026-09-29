@@ -46,6 +46,7 @@ func (s *managementState) handleTOTPVerify(w http.ResponseWriter, r *http.Reques
 			Success: false,
 			Error:   "concurrent verification on the same challenge",
 		})
+		w.Header().Set("Retry-After", "1")
 		writeError(w, "verification already in progress", http.StatusTooManyRequests)
 		return
 	case pendingClaimMissing:
