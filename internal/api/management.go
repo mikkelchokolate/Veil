@@ -102,6 +102,12 @@ func (s *managementState) withMutation(fn func(managementstate.Mutation) error) 
 	// create, admin reset reload, snapshot restore) so anonymous first-run
 	// access can never be re-armed on a configured instance (#1100).
 	s.noteUsersProvisionedLocked()
+	if err == nil {
+		// Any mutation that rewrites the inbound set (create/update/delete)
+		// can orphan per-inbound hy2 auth secrets — drop stale entries so a
+		// removed name never leaves its derived secret resident.
+		s.pruneHy2AuthSecretsLocked()
+	}
 	return err
 }
 
