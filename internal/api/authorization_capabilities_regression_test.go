@@ -104,6 +104,7 @@ func productionAuthorizationMatrix() []routeAuthorizationExpectation {
 		{http.MethodPost, "/api/services/veil-caddy/restart", false, false, "admin mutation"},
 		{http.MethodGet, "/api/system", false, true, "viewer metadata"},
 		{http.MethodGet, "/api/tls", false, true, "viewer metadata"},
+		{http.MethodGet, "/api/tls/inbounds", false, true, "per-inbound certificate status"},
 		{http.MethodGet, "/api/network", false, true, "viewer metadata"},
 		{http.MethodGet, "/api/connections", false, true, "viewer metadata"},
 		{http.MethodGet, "/api/processes", false, true, "viewer metadata"},

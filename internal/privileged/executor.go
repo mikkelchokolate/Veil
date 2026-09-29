@@ -1226,7 +1226,13 @@ func runSyncCaddyCert(ctx context.Context, request SyncCaddyCertRequest, config 
 		// cancellation, and other lookup failures must propagate so the
 		// caller does not misreport them as an ACME miss (#537).
 		if errors.Is(err, caddycert.ErrCertificateNotFound) {
-			return SyncCaddyCertResult{Found: false}, nil
+			// ACME has not issued the certificate yet — for a
+			// hysteria2-only domain whose http-01 port was occupied at apply
+			// time this is the expected steady state (#1168). Seed a
+			// Veil-issued self-signed fallback so the inbound serves honest
+			// material the status endpoint can classify, but never overwrite
+			// a destination certificate that is still usable.
+			return writeFallbackCaddyCert(request)
 		}
 		return SyncCaddyCertResult{}, fmt.Errorf("locate Caddy certificate for %q: %w", request.Domain, err)
 	}

@@ -408,6 +408,13 @@ func challengeForDomain(plan caddyassembly.CaddyRenderPlan, domain string) strin
 			}
 		}
 	}
+	// A demoted hy2-only domain keeps http-01 issuance armed even though its
+	// challenge server bind was removed — otherwise the default mode would
+	// flip it to tls-alpn-01, which a UDP-only domain can never answer, and
+	// the deferred-issuance retry window could never converge (#1168).
+	if plan.HTTP01DeferredDomains[domain] {
+		return "http-01"
+	}
 	if plan.DefaultChallengeMode != "" {
 		return plan.DefaultChallengeMode
 	}

@@ -16,6 +16,10 @@ type Material struct {
 	Actions  []string
 	Runtimes []string
 	Errors   []string
+	// Issues carries non-fatal validation issues (warnings) the material
+	// builder discovered while planning — e.g. an http-01 challenge bind
+	// demoted because a foreign service holds :80 (#1168).
+	Issues []model.ValidationIssue
 }
 
 type ProtocolCapability struct {
@@ -405,6 +409,7 @@ func appendMaterial(plan *model.ApplyPlanResponse, material Material) {
 		plan.Runtimes = appendUnique(plan.Runtimes, runtime)
 	}
 	plan.Errors = append(plan.Errors, material.Errors...)
+	plan.Issues = append(plan.Issues, material.Issues...)
 }
 
 func protocolCapabilities(capabilities []ProtocolCapability) map[string]ProtocolCapability {

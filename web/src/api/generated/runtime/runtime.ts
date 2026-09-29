@@ -57,6 +57,7 @@ import type {
   ForbiddenResponse,
   GetApiLogsParams,
   GetRuntimeProvenance200,
+  InboundTLSStatus,
   LogResult,
   NetworkStats,
   ProcessesStats,
@@ -219,6 +220,80 @@ export const useGetApiTls = <TError = unknown,
         TContext
       > => {
       return useMutation(getGetApiTlsMutationOptions(options), queryClient);
+    }
+    export const getGetApiTlsInboundsUrl = () => {
+
+
+
+
+  return `/api/tls/inbounds`
+}
+
+/**
+ * Reports the TLS certificate each domain-bearing inbound actually serves: for hysteria2 inbounds the certificate path is read from the live hysteria2 YAML and classified honestly — acme for a CA-issued certificate, internal for a Caddy local-CA certificate, self-signed for Veil/operator fallback material, and missing when no usable certificate is configured. A pending ACME issuance still in retry is flagged via pending so a provisional self-signed certificate is never mistaken for the final state.
+ * @summary Per-inbound TLS certificate status
+ */
+export const getApiTlsInbounds = async ( options?: Parameters<typeof apiFetch>[1]): Promise<InboundTLSStatus[]> => {
+
+  return apiFetch<InboundTLSStatus[]>(getGetApiTlsInboundsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiTlsInboundsMutationKey = () => ['getApiTlsInbounds'] as const;
+
+export const getGetApiTlsInboundsMutationOptions = <TError = UnauthorizedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiTlsInbounds>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiTlsInbounds>>, TError,void, TContext> => {
+
+const mutationKey = getGetApiTlsInboundsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiTlsInbounds>>, void> = () => {
+
+
+          return  getApiTlsInbounds(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiTlsInboundsMutationResult = NonNullable<Awaited<ReturnType<typeof getApiTlsInbounds>>>
+
+    export type GetApiTlsInboundsMutationError = UnauthorizedResponse
+
+
+    /**
+ * @summary Per-inbound TLS certificate status
+ */
+export const useGetApiTlsInbounds = <TError = UnauthorizedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiTlsInbounds>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiTlsInbounds>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiTlsInboundsMutationOptions(options), queryClient);
     }
     export const getGetApiNetworkUrl = () => {
 

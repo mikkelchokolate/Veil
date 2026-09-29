@@ -781,6 +781,36 @@ func (e SetupStatusResponsePanelAccess) Valid() bool {
 	}
 }
 
+// Defines values for TLSCertInfoSource.
+const (
+	TLSCertInfoSourceAcme       TLSCertInfoSource = "acme"
+	TLSCertInfoSourceCaddy      TLSCertInfoSource = "caddy"
+	TLSCertInfoSourceEnv        TLSCertInfoSource = "env"
+	TLSCertInfoSourceInternal   TLSCertInfoSource = "internal"
+	TLSCertInfoSourceMissing    TLSCertInfoSource = "missing"
+	TLSCertInfoSourceSelfSigned TLSCertInfoSource = "self-signed"
+)
+
+// Valid indicates whether the value is a known member of the TLSCertInfoSource enum.
+func (e TLSCertInfoSource) Valid() bool {
+	switch e {
+	case TLSCertInfoSourceAcme:
+		return true
+	case TLSCertInfoSourceCaddy:
+		return true
+	case TLSCertInfoSourceEnv:
+		return true
+	case TLSCertInfoSourceInternal:
+		return true
+	case TLSCertInfoSourceMissing:
+		return true
+	case TLSCertInfoSourceSelfSigned:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TrafficProviderHealthState.
 const (
 	TrafficProviderHealthStateDegraded TrafficProviderHealthState = "degraded"
@@ -2129,6 +2159,24 @@ type InboundProtocol string
 // InboundTransport defines model for Inbound.Transport.
 type InboundTransport string
 
+// InboundTLSStatus defines model for InboundTLSStatus.
+type InboundTLSStatus struct {
+	// Cert The certificate the inbound actually serves, classified honestly (acme/internal/self-signed/missing).
+	Cert TLSCertInfo `json:"cert"`
+
+	// Domain Effective certificate domain for the inbound (per-inbound domain falling back to the primary settings domain).
+	Domain string `json:"domain"`
+
+	// Name Inbound name.
+	Name string `json:"name"`
+
+	// Pending True while an ACME issuance for the domain is still being retried after apply — a reported self-signed certificate is provisional.
+	Pending *bool `json:"pending,omitempty"`
+
+	// Protocol Inbound protocol (hysteria2, naiveproxy, ...).
+	Protocol string `json:"protocol"`
+}
+
 // IssuedCredential Server-generated credential returned exactly once at creation time. Only the encrypted form is persisted; the plaintext is never stored.
 type IssuedCredential struct {
 	BindingId string `json:"bindingId"`
@@ -2709,11 +2757,14 @@ type TLSCertInfo struct {
 	NotBefore string  `json:"notBefore"`
 	Path      string  `json:"path"`
 
-	// Source Where the certificate was loaded from — "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage).
-	Source  *string `json:"source,omitempty"`
-	Subject string  `json:"subject"`
-	Valid   bool    `json:"valid"`
+	// Source Where the certificate came from. Panel-edge reads use "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage). Per-inbound reads classify the served certificate's origin: "acme" (CA-issued), "internal" (Caddy local CA — an untrusted fallback), "self-signed" (Veil/operator fallback material), or "missing" (no usable certificate at the configured path). An internal/self-signed certificate is never reported as a trusted issuance. Note that "acme" is an origin classification, not a public-trust check: a leaf from a private CA (VEIL_ACME_CA_URL installs, enterprise CA) also reports "acme".
+	Source  *TLSCertInfoSource `json:"source,omitempty"`
+	Subject string             `json:"subject"`
+	Valid   bool               `json:"valid"`
 }
+
+// TLSCertInfoSource Where the certificate came from. Panel-edge reads use "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage). Per-inbound reads classify the served certificate's origin: "acme" (CA-issued), "internal" (Caddy local CA — an untrusted fallback), "self-signed" (Veil/operator fallback material), or "missing" (no usable certificate at the configured path). An internal/self-signed certificate is never reported as a trusted issuance. Note that "acme" is an origin classification, not a public-trust check: a leaf from a private CA (VEIL_ACME_CA_URL installs, enterprise CA) also reports "acme".
+type TLSCertInfoSource string
 
 // TOTPConfirmRequest defines model for TOTPConfirmRequest.
 type TOTPConfirmRequest struct {
@@ -4691,6 +4742,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /api/tls (the `GetApiTls` operationId).
 	GetApiTls(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiTlsInbounds Per-inbound TLS certificate status
+	//
+	// Reports the TLS certificate each domain-bearing inbound actually serves: for hysteria2 inbounds the certificate path is read from the live hysteria2 YAML and classified honestly — acme for a CA-issued certificate, internal for a Caddy local-CA certificate, self-signed for Veil/operator fallback material, and missing when no usable certificate is configured. A pending ACME issuance still in retry is flagged via pending so a provisional self-signed certificate is never mistaken for the final state.
+	//
+	// Corresponds with GET /api/tls/inbounds (the `GetApiTlsInbounds` operationId).
+	GetApiTlsInbounds(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiToolsDnsLookupWithBody DNS lookup diagnostic
 	//
@@ -6751,6 +6809,23 @@ func (c *Client) GetApiSystem(ctx context.Context, reqEditors ...RequestEditorFn
 // Corresponds with GET /api/tls (the `GetApiTls` operationId).
 func (c *Client) GetApiTls(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiTlsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetApiTlsInbounds Per-inbound TLS certificate status
+//
+// Reports the TLS certificate each domain-bearing inbound actually serves: for hysteria2 inbounds the certificate path is read from the live hysteria2 YAML and classified honestly — acme for a CA-issued certificate, internal for a Caddy local-CA certificate, self-signed for Veil/operator fallback material, and missing when no usable certificate is configured. A pending ACME issuance still in retry is flagged via pending so a provisional self-signed certificate is never mistaken for the final state.
+//
+// Corresponds with GET /api/tls/inbounds (the `GetApiTlsInbounds` operationId).
+func (c *Client) GetApiTlsInbounds(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiTlsInboundsRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -10844,6 +10919,33 @@ func NewGetApiTlsRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewGetApiTlsInboundsRequest constructs an http.Request for the GetApiTlsInbounds method
+func NewGetApiTlsInboundsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/tls/inbounds")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewPostApiToolsDnsLookupRequest calls the generic PostApiToolsDnsLookup builder with application/json body
 func NewPostApiToolsDnsLookupRequest(server string, params *PostApiToolsDnsLookupParams, body PostApiToolsDnsLookupJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -14199,6 +14301,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /api/tls (the `GetApiTls` operationId).
 	GetApiTlsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiTlsResponse, error)
+
+	// GetApiTlsInboundsWithResponse Per-inbound TLS certificate status
+	//
+	// Reports the TLS certificate each domain-bearing inbound actually serves: for hysteria2 inbounds the certificate path is read from the live hysteria2 YAML and classified honestly — acme for a CA-issued certificate, internal for a Caddy local-CA certificate, self-signed for Veil/operator fallback material, and missing when no usable certificate is configured. A pending ACME issuance still in retry is flagged via pending so a provisional self-signed certificate is never mistaken for the final state.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/tls/inbounds (the `GetApiTlsInbounds` operationId).
+	GetApiTlsInboundsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiTlsInboundsResponse, error)
 
 	// PostApiToolsDnsLookupWithBodyWithResponse DNS lookup diagnostic
 	//
@@ -19558,6 +19669,61 @@ func (r GetApiTlsResponse) ContentType() string {
 	return ""
 }
 
+// GetApiTlsInboundsResponse401Headers the declared response headers of an HTTP 401 response for GetApiTlsInbounds
+type GetApiTlsInboundsResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type GetApiTlsInboundsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]InboundTLSStatus
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetApiTlsInboundsResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiTlsInboundsResponse) GetJSON200() *[]InboundTLSStatus {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetApiTlsInboundsResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiTlsInboundsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiTlsInboundsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiTlsInboundsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiTlsInboundsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type PostApiToolsDnsLookupResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -24468,6 +24634,21 @@ func (c *ClientWithResponses) GetApiTlsWithResponse(ctx context.Context, reqEdit
 	return ParseGetApiTlsResponse(rsp)
 }
 
+// GetApiTlsInboundsWithResponse Per-inbound TLS certificate status
+//
+// Reports the TLS certificate each domain-bearing inbound actually serves: for hysteria2 inbounds the certificate path is read from the live hysteria2 YAML and classified honestly — acme for a CA-issued certificate, internal for a Caddy local-CA certificate, self-signed for Veil/operator fallback material, and missing when no usable certificate is configured. A pending ACME issuance still in retry is flagged via pending so a provisional self-signed certificate is never mistaken for the final state.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/tls/inbounds (the `GetApiTlsInbounds` operationId).
+func (c *ClientWithResponses) GetApiTlsInboundsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiTlsInboundsResponse, error) {
+	rsp, err := c.GetApiTlsInbounds(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiTlsInboundsResponse(rsp)
+}
+
 // PostApiToolsDnsLookupWithBodyWithResponse DNS lookup diagnostic
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -29301,6 +29482,52 @@ func ParseGetApiTlsResponse(rsp *http.Response) (*GetApiTlsResponse, error) {
 		}
 		response.JSON200 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseGetApiTlsInboundsResponse parses an HTTP response from a GetApiTlsInboundsWithResponse call
+func ParseGetApiTlsInboundsResponse(rsp *http.Response) (*GetApiTlsInboundsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiTlsInboundsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []InboundTLSStatus
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetApiTlsInboundsResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
 	}
 
 	return response, nil
