@@ -172,18 +172,15 @@ func (t *hy2SessionTracker) admit(clientID, token string, online int64, limit in
 	// entries registered in /online (it is only a count), so drop the oldest
 	// min(online, len(pending)) — those are the ones most likely registered —
 	// keeping the check fail-closed for genuinely disjoint pending+online.
-	for drop := min(int(online), len(entries)); drop > 0; {
-		oldest, oldestAt := "", now.Add(t.ttl)
+	for drop := min(int(online), len(entries)); drop > 0 && len(entries) > 0; drop-- {
+		var oldest string
+		var oldestAt time.Time
 		for tok, expires := range entries {
-			if expires.Before(oldestAt) {
+			if oldest == "" || expires.Before(oldestAt) {
 				oldest, oldestAt = tok, expires
 			}
 		}
-		if oldest == "" {
-			break
-		}
 		delete(entries, oldest)
-		drop--
 	}
 	if online+int64(len(entries)) >= int64(limit) {
 		return false
