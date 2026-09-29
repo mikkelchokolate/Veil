@@ -28,7 +28,7 @@ import { useI18n } from "../i18n/I18nContext";
  * therefore only prompts for the password when the session lacks the mark. */
 export function PasskeysCard() {
 	const { t } = useI18n();
-	const { session } = useAuth();
+	const { session, refresh } = useAuth();
 	const qc = useQueryClient();
 	const [error, setError] = useState<string | null>(null);
 	const [adding, setAdding] = useState(false);
@@ -81,6 +81,10 @@ export function PasskeysCard() {
 			setPassword("");
 			setError(null);
 			invalidate();
+			// The server marks this session second-factor-persisted on
+			// register/finish — refresh so needsPassword drops immediately
+			// instead of waiting for a reload (#1171 review).
+			void refresh();
 		},
 		onError: (err) => {
 			// A dismissed authenticator prompt is not a failure worth an alarm.

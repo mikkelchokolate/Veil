@@ -38,6 +38,12 @@ const maxPasskeyNameLen = 64
 
 var errPasskeyVerifyFailed = errors.New("passkey verification failed")
 
+// errPasskeyLimit marks a per-account passkey cap hit discovered inside the
+// register-finish mutation. Begin checks the cap pre-ceremony, but the
+// re-check under the user lock is the authoritative one: two concurrent
+// registrations on the same account must not exceed it (#1171 review).
+var errPasskeyLimit = errors.New("passkey limit reached")
+
 // passkeyListEntry is the only passkey shape the API ever emits: public
 // metadata. The credential's public key, sign counter, and attestation
 // details are server-side records and never leave the process.
@@ -286,6 +292,11 @@ func (s *managementState) handleMyPasskeyRegisterFinish(w http.ResponseWriter, r
 		if !found {
 			return errUserNotFound
 		}
+		// Authoritative cap re-check under the lock — the begin-time check
+		// raced with nothing, a concurrent register could fill the slot.
+		if len(current.Passkeys) >= maxPasskeysPerUser {
+			return errPasskeyLimit
+		}
 		for _, existing := range current.Passkeys {
 			if existing.ID == passkey.ID {
 				return errPasskeyVerifyFailed
@@ -335,6 +346,8 @@ func (s *managementState) handleMyPasskeyRegisterFinish(w http.ResponseWriter, r
 			writeNotFound(w)
 		case errors.Is(err, errPasskeyVerifyFailed):
 			writeError(w, "passkey already registered", http.StatusConflict)
+		case errors.Is(err, errPasskeyLimit):
+			writeError(w, errPasskeyLimit.Error(), http.StatusBadRequest)
 		case errors.Is(err, errSessionRevocationPersistence):
 			writeError(w, errSessionRevocationPersistence.Error(), http.StatusInternalServerError)
 		default:

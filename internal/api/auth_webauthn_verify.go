@@ -307,7 +307,7 @@ func (s *managementState) handleWebAuthnLoginFinish(w http.ResponseWriter, r *ht
 		// the credential is invalidated — deleted from the account — not
 		// merely denied once, so a cloned authenticator cannot be retried
 		// under a fresh challenge (#1171).
-		_ = s.withMutation(func(mutation managementstate.Mutation) error {
+		invalidateErr := s.withMutation(func(mutation managementstate.Mutation) error {
 			fresh, ok := s.findUserLocked(pending.Username)
 			if !ok {
 				return errUserNotFound
@@ -324,6 +324,13 @@ func (s *managementState) handleWebAuthnLoginFinish(w http.ResponseWriter, r *ht
 			return mErr
 		})
 		s.catchUpAfterPanelMutation()
+		if invalidateErr != nil {
+			// The assertion is still denied, but the cloned credential could
+			// not be removed durably — surface that in the audit trail so a
+			// silent persist failure does not masquerade as a clean delete.
+			fail("cloned credential detected; invalidation failed to persist")
+			return
+		}
 		fail("cloned credential invalidated")
 		return
 	}
