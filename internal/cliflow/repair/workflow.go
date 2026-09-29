@@ -18,8 +18,13 @@ type Options struct {
 	BackupDirSet bool
 	AuditLog     string
 	LEIPCert     bool
-	LEIPCertPort int
-	PublicIP     string
+	// LEIPCertSet reports whether --le-ip-cert was passed explicitly; only an
+	// explicit choice is persisted over an existing VEIL_PANEL_LE_IP_CERT —
+	// the true flag default must never overwrite a recorded opt-out (#1187).
+	LEIPCertSet     bool
+	LEIPCertPort    int
+	LEIPCertPortSet bool
+	PublicIP        string
 }
 
 // mutates reports whether this run is authorized to change the host. Plan

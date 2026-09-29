@@ -378,6 +378,15 @@ type IssueIPCertRequest struct {
 	// CAs only.
 	CAServer string `json:"caServer,omitempty"`
 	Insecure bool   `json:"insecure,omitempty"`
+	// CARoot is an optional PEM bundle acme.sh verifies the ACME directory
+	// endpoint against (--ca-bundle) — the VEIL_ACME_CA_ROOT persisted for
+	// controlled-CA installs (#1189).
+	CARoot string `json:"caRoot,omitempty"`
+	// HTTP01ViaCaddy reports that the managed Caddy edge owns the public
+	// HTTP-01 port in the rendered plan. When the requested standalone port
+	// is busy the helper parks acme.sh on the internal port that the
+	// /.well-known/acme-challenge/ reverse-proxy route forwards to (#1181).
+	HTTP01ViaCaddy bool `json:"http01ViaCaddy,omitempty"`
 	// DeferPanelRestart moves the reloadcmd's `try-restart veil.service` onto
 	// a transient systemd timer: the panel itself is the caller, so an inline
 	// restart would kill it before this operation could answer.

@@ -20,8 +20,7 @@ import (
 )
 
 // writeTestCertPEM writes a self-signed certificate whose issuer carries the
-// supplied organization so NeedsRenewal's "Let's Encrypt" issuer check can be
-// exercised for both directions (#1169/#1170).
+// supplied organization — the installer fallback shape (#1169/#1170).
 func writeTestCertPEM(t *testing.T, path, issuerOrg string, notAfter time.Time) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -41,6 +40,61 @@ func writeTestCertPEM(t *testing.T, path, issuerOrg string, notAfter time.Time) 
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// writeTestCACertPEM writes a leaf signed by a freshly generated CA whose
+// subject carries issuerOrg — the shape NeedsRenewal accepts as ACME-managed
+// (#1185). IP SANs are attached so ManagedCertIPIdentities can be exercised.
+func writeTestCACertPEM(t *testing.T, path, issuerOrg string, notAfter time.Time, ips ...net.IP) {
+	t.Helper()
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	serial := func() *big.Int {
+		s, err := rand.Int(rand.Reader, big.NewInt(1<<62))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	caTemplate := x509.Certificate{
+		SerialNumber:          serial(),
+		Subject:               pkix.Name{CommonName: issuerOrg + " Test Root", Organization: []string{issuerOrg}},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		IsCA:                  true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, &caTemplate, &caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caCert, err := x509.ParseCertificate(caDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leafTemplate := x509.Certificate{
+		SerialNumber: serial(),
+		Subject:      pkix.Name{CommonName: "veil-test"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     notAfter,
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IPAddresses:  ips,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &leafTemplate, caCert, &leafKey.PublicKey, caKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,9 +132,41 @@ func TestNeedsRenewalNonLetsEncryptIssuer(t *testing.T) {
 func TestNeedsRenewalHealthyCertOutsideWindow(t *testing.T) {
 	dir := t.TempDir()
 	certPath := filepath.Join(dir, "tls.crt")
-	writeTestCertPEM(t, certPath, "Let's Encrypt", time.Now().Add(6*24*time.Hour))
+	writeTestCACertPEM(t, certPath, "Let's Encrypt", time.Now().Add(6*24*time.Hour))
 	if NeedsRenewal(certPath, time.Now()) {
 		t.Fatal("fresh Let's Encrypt certificate must not need renewal")
+	}
+}
+
+// Issue #1185: a valid leaf issued by a controlled/private ACME CA (Pebble,
+// Smallstep, ZeroSSL — any issuer that is not Let's Encrypt) is just as
+// managed as a Let's Encrypt certificate. Gating on the issuer brand made a
+// healthy private-CA certificate renew in a loop.
+func TestNeedsRenewalPrivateCAOutsideWindow(t *testing.T) {
+	dir := t.TempDir()
+	for _, issuer := range []string{"Pebble", "Smallstep", "ZeroSSL", "Example Internal CA"} {
+		certPath := filepath.Join(dir, issuer+".crt")
+		writeTestCACertPEM(t, certPath, issuer, time.Now().Add(6*24*time.Hour))
+		if NeedsRenewal(certPath, time.Now()) {
+			t.Fatalf("fresh %q-issued certificate must not need renewal", issuer)
+		}
+	}
+	// ... but a private-CA leaf inside the renewal window still renews.
+	certPath := filepath.Join(dir, "expiring.crt")
+	writeTestCACertPEM(t, certPath, "Pebble", time.Now().Add(24*time.Hour))
+	if !NeedsRenewal(certPath, time.Now()) {
+		t.Fatal("private-CA certificate inside the window must still renew")
+	}
+}
+
+// Caddy's internal local CA classifies as "internal", not ACME-managed:
+// a local-CA leaf must still be replaced by real issuance.
+func TestNeedsRenewalCaddyInternalCA(t *testing.T) {
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "tls.crt")
+	writeTestCACertPEM(t, certPath, "Caddy Local Authority", time.Now().Add(90*24*time.Hour))
+	if !NeedsRenewal(certPath, time.Now()) {
+		t.Fatal("Caddy-local-CA certificate must need renewal")
 	}
 }
 
@@ -89,13 +175,13 @@ func TestNeedsRenewalInsideWindowAndExpired(t *testing.T) {
 	now := time.Now()
 
 	inside := filepath.Join(dir, "inside.crt")
-	writeTestCertPEM(t, inside, "Let's Encrypt", now.Add(48*time.Hour))
+	writeTestCACertPEM(t, inside, "Let's Encrypt", now.Add(48*time.Hour))
 	if !NeedsRenewal(inside, now) {
 		t.Fatal("certificate expiring within the renewal window must need renewal")
 	}
 
 	expired := filepath.Join(dir, "expired.crt")
-	writeTestCertPEM(t, expired, "Let's Encrypt", now.Add(-time.Hour))
+	writeTestCACertPEM(t, expired, "Let's Encrypt", now.Add(-time.Hour))
 	if !NeedsRenewal(expired, now) {
 		t.Fatal("expired certificate must need renewal")
 	}
@@ -106,12 +192,54 @@ func TestNeedsRenewalHonorsInjectedClock(t *testing.T) {
 	certPath := filepath.Join(dir, "tls.crt")
 	// 5 days out: healthy now, inside the window once the injected clock
 	// advances past the 72h boundary.
-	writeTestCertPEM(t, certPath, "Let's Encrypt", time.Now().Add(5*24*time.Hour))
+	writeTestCACertPEM(t, certPath, "Let's Encrypt", time.Now().Add(5*24*time.Hour))
 	if NeedsRenewal(certPath, time.Now()) {
 		t.Fatal("certificate 5 days out must not need renewal")
 	}
 	if !NeedsRenewal(certPath, time.Now().Add(49*time.Hour)) {
 		t.Fatal("injected clock inside the renewal window must trigger renewal")
+	}
+}
+
+func TestParsePublicIPSpec(t *testing.T) {
+	v4, v6, err := ParsePublicIPSpec("203.0.113.9,2001:db8::7")
+	if err != nil || v4 != "203.0.113.9" || v6 != "2001:db8::7" {
+		t.Fatalf("dual spec = %q/%q err=%v", v4, v6, err)
+	}
+	v4, v6, err = ParsePublicIPSpec("2001:db8::7")
+	if err != nil || v4 != "" || v6 != "2001:db8::7" {
+		t.Fatalf("v6-only spec = %q/%q err=%v", v4, v6, err)
+	}
+	v4, v6, err = ParsePublicIPSpec(" 203.0.113.9 ")
+	if err != nil || v4 != "203.0.113.9" || v6 != "" {
+		t.Fatalf("v4-only spec = %q/%q err=%v", v4, v6, err)
+	}
+	for _, bad := range []string{"not-an-ip", "auto", "1.2.3.4,5.6.7.8", "2001:db8::1,2001:db8::2"} {
+		if _, _, err := ParsePublicIPSpec(bad); err == nil {
+			t.Fatalf("spec %q must be rejected", bad)
+		}
+	}
+}
+
+func TestManagedCertIPIdentities(t *testing.T) {
+	dir := t.TempDir()
+	managed := filepath.Join(dir, "managed.crt")
+	writeTestCACertPEM(t, managed, "Example Internal CA", time.Now().Add(24*time.Hour),
+		net.ParseIP("203.0.113.9"), net.ParseIP("2001:db8::7"))
+	sans := ManagedCertIPIdentities(managed)
+	if len(sans) != 2 || sans[0] != "203.0.113.9" || sans[1] != "2001:db8::7" {
+		t.Fatalf("managed cert SANs = %v", sans)
+	}
+
+	// Self-signed fallback material carries interface/loopback IPs that must
+	// never steer issuance (#1186).
+	selfSigned := filepath.Join(dir, "self.crt")
+	writeTestCertPEM(t, selfSigned, "Veil Self-Signed", time.Now().Add(24*time.Hour))
+	if ips := ManagedCertIPIdentities(selfSigned); len(ips) != 0 {
+		t.Fatalf("self-signed cert must not yield renewal identities: %v", ips)
+	}
+	if ips := ManagedCertIPIdentities(filepath.Join(dir, "missing.crt")); ips != nil {
+		t.Fatalf("missing cert must yield no identities: %v", ips)
 	}
 }
 

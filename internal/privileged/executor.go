@@ -1373,6 +1373,13 @@ func runIssueIPCert(ctx context.Context, request IssueIPCertRequest, config Prod
 			return IssueIPCertResult{}, newError(ErrorInvalidRequest, "caServer must be an acme.sh CA name or a URL")
 		}
 	}
+	if caRoot := strings.TrimSpace(request.CARoot); caRoot != "" {
+		// --ca-bundle argv-safety: an absolute path without control
+		// characters; it is passed to acme.sh uninterpreted (#1189).
+		if !filepath.IsAbs(caRoot) || len(caRoot) > 512 || strings.ContainsAny(caRoot, "\x00\r\n'\"") {
+			return IssueIPCertResult{}, newError(ErrorInvalidRequest, "caRoot must be an absolute PEM bundle path")
+		}
+	}
 	allowedDir := config.IPCertDir
 	if allowedDir == "" {
 		allowedDir = filepath.Join(hostenv.EtcDir(), "panel")
@@ -1398,6 +1405,8 @@ func runIssueIPCert(ctx context.Context, request IssueIPCertRequest, config Prod
 		KeyPath:           keyPath,
 		CAServer:          request.CAServer,
 		Insecure:          request.Insecure,
+		CARoot:            request.CARoot,
+		HTTP01ViaCaddy:    request.HTTP01ViaCaddy,
 		DeferPanelRestart: request.DeferPanelRestart,
 		// Veil's in-daemon worker owns renewal (#1170) and the helper's
 		// sandbox cannot write a crontab anyway — install acme.sh without one.

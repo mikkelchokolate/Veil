@@ -60,6 +60,8 @@ func TestIssueIPCertRequestJSONRoundTrip(t *testing.T) {
 			KeyPath:           "/etc/veil/panel/tls.key",
 			CAServer:          "https://ca.example.test/dir",
 			Insecure:          true,
+			CARoot:            "/etc/veil/acme-root.pem",
+			HTTP01ViaCaddy:    true,
 			DeferPanelRestart: true,
 			Fence:             FenceToken{Owner: "pid:1:x", Generation: 3, LeaseExpiresAt: 9999999999, OperationID: "op"},
 		},
@@ -73,7 +75,8 @@ func TestIssueIPCertRequestJSONRoundTrip(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	if decoded.IssueIPCert == nil || decoded.IssueIPCert.PublicIPv6 != "2001:db8::7" ||
-		!decoded.IssueIPCert.DeferPanelRestart || decoded.IssueIPCert.Fence.Generation != 3 {
+		!decoded.IssueIPCert.DeferPanelRestart || decoded.IssueIPCert.Fence.Generation != 3 ||
+		decoded.IssueIPCert.CARoot != "/etc/veil/acme-root.pem" || !decoded.IssueIPCert.HTTP01ViaCaddy {
 		t.Fatalf("issue_ip_cert payload lost in round-trip: %+v", decoded.IssueIPCert)
 	}
 }
@@ -123,6 +126,8 @@ func TestRunIssueIPCertDefaultsAndOptionMapping(t *testing.T) {
 		Email:             "ops@example.com",
 		CAServer:          "https://ca.example.test/dir",
 		Insecure:          true,
+		CARoot:            filepath.Join(config.IPCertDir, "acme-root.pem"),
+		HTTP01ViaCaddy:    true,
 		DeferPanelRestart: true,
 	}, config)
 	if err != nil {
@@ -149,6 +154,12 @@ func TestRunIssueIPCertDefaultsAndOptionMapping(t *testing.T) {
 	if got.CAServer != "https://ca.example.test/dir" || !got.Insecure {
 		t.Fatalf("controlled-CA settings not propagated: %+v", got)
 	}
+	if got.CARoot != filepath.Join(config.IPCertDir, "acme-root.pem") {
+		t.Fatalf("caRoot not propagated: %q", got.CARoot)
+	}
+	if !got.HTTP01ViaCaddy {
+		t.Fatal("http01ViaCaddy not propagated — Caddy-fronted issuance would bind the busy public port")
+	}
 	if got.System != nil {
 		t.Fatal("helper issuance must run on the root system implementation")
 	}
@@ -169,6 +180,9 @@ func TestRunIssueIPCertRejectsInvalidAddressesAndPorts(t *testing.T) {
 		{"port too high", IssueIPCertRequest{PublicIPv4: "1.2.3.4", HTTPPort: 70000}},
 		{"ca with whitespace", IssueIPCertRequest{PublicIPv4: "1.2.3.4", CAServer: "bad ca"}},
 		{"ca not a name or url", IssueIPCertRequest{PublicIPv4: "1.2.3.4", CAServer: "BAD_CA!"}},
+		{"caRoot relative", IssueIPCertRequest{PublicIPv4: "1.2.3.4", CARoot: "roots/ca.pem"}},
+		{"caRoot with quote", IssueIPCertRequest{PublicIPv4: "1.2.3.4", CARoot: "/etc/veil/evil'root.pem"}},
+		{"caRoot with newline", IssueIPCertRequest{PublicIPv4: "1.2.3.4", CARoot: "/etc/veil/root.pem\n--force"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

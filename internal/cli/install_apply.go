@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +38,17 @@ import (
 
 var installSystemdRunFunc = func(actions []service.SystemdAction) error {
 	return service.RunSystemdActions(service.ExecRunner{}, actions)
+}
+
+// installEnvFirstNonEmpty returns the first non-empty trimmed value —
+// install-time env overrides win over the previously persisted veil.env.
+func installEnvFirstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 var leIPCertIssueFunc = func(ctx context.Context, opts acmeip.IssueOptions) (acmeip.IssuedCert, error) {
@@ -191,9 +203,12 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 
 	// Persist the controlled-CA configuration into veil.env so the running
 	// panel keeps rendering Caddy issuers against the same ACME directory
-	// (audit #304 controlled-CA leg).
-	profile.ACMECAURL = strings.TrimSpace(os.Getenv("VEIL_ACME_CA_URL"))
-	profile.ACMECARoot = strings.TrimSpace(os.Getenv("VEIL_ACME_CA_ROOT"))
+	// (audit #304 controlled-CA leg). A reinstall keeps values already
+	// recorded in veil.env when the environment no longer exports them, so
+	// re-running `veil install` cannot silently drop the CA configuration or
+	// the IP-certificate lifecycle choices (#1186/#1187/#1189).
+	existingEnv := hostenv.ReadEnvFile(filepath.Join(opts.EtcDir, "veil.env"))
+	applyInstallEnvToProfile(&profile, opts, existingEnv)
 
 	// 2. Initialize state.key and encrypted state.json with generated credentials
 	resolvedKeyPath := filepath.Join(opts.EtcDir, "state.key")
@@ -322,10 +337,25 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 			return fmt.Errorf("prepare panel service account and permissions: %w", err)
 		}
 	}
-	if opts.PanelAccess == "direct" && opts.LEIPCert {
+	// The flag default is "issue", but a reinstall must not re-enroll a
+	// certificate the operator opted out of: profile.PanelLEIPCertEnv
+	// already folded the explicit-flag-over-persisted precedence, so "0"
+	// (either source) skips issuance entirely (#1187).
+	if opts.PanelAccess == "direct" && opts.LEIPCert && profile.PanelLEIPCertEnv != "0" {
 		if err := issueLEIPCertForProfile(cmd.Context(), &profile, opts, resolvedIP); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: could not obtain Let's Encrypt IP certificate: %v\n", err)
 			fmt.Fprintln(cmd.ErrOrStderr(), "Falling back to the generated self-signed certificate.")
+		}
+	}
+	if profile.PanelAccess == "direct" && profile.PanelPublicIP == "" {
+		// Issuance already recorded the pair it actually resolved. When it
+		// did not run (opted out or unreachable), keep the previously
+		// persisted identity — an explicit --public-ip from an earlier
+		// install outranks a fresh auto-detection — and only then fall back
+		// to this run's resolved literal (#1186).
+		profile.PanelPublicIP = existingEnv["VEIL_PANEL_PUBLIC_IP"]
+		if profile.PanelPublicIP == "" && resolvedIP != nil {
+			profile.PanelPublicIP = resolvedIP.String()
 		}
 	}
 
@@ -427,6 +457,30 @@ func buildInstallPlan(profile installer.RURecommendedProfile, opts ruRecommended
 // endpoint connection used (issue #665).
 var installPublicIPFamilyDetectFunc = hostenv.DetectPublicIPForFamily
 
+// applyInstallEnvToProfile folds the ACME and IP-certificate lifecycle knobs
+// from the process environment and any previously persisted veil.env into
+// the profile so issuance, persistence and rendering all resolve one
+// configuration (#1186/#1187/#1189).
+func applyInstallEnvToProfile(profile *installer.RURecommendedProfile, opts ruRecommendedInstallOptions, existingEnv map[string]string) {
+	profile.ACMECAURL = installEnvFirstNonEmpty(strings.TrimSpace(os.Getenv("VEIL_ACME_CA_URL")), existingEnv["VEIL_ACME_CA_URL"])
+	profile.ACMECARoot = installEnvFirstNonEmpty(strings.TrimSpace(os.Getenv("VEIL_ACME_CA_ROOT")), existingEnv["VEIL_ACME_CA_ROOT"])
+	profile.ACMEInsecure = strings.TrimSpace(os.Getenv("VEIL_ACME_INSECURE")) != "" ||
+		strings.TrimSpace(existingEnv["VEIL_ACME_INSECURE"]) != ""
+	if opts.LEIPCertSet {
+		profile.PanelLEIPCertEnv = "1"
+		if !opts.LEIPCert {
+			profile.PanelLEIPCertEnv = "0"
+		}
+	} else {
+		profile.PanelLEIPCertEnv = existingEnv["VEIL_PANEL_LE_IP_CERT"]
+	}
+	if opts.LEIPCertPortSet {
+		profile.PanelHTTP01PortEnv = strconv.Itoa(opts.LEIPCertPort)
+	} else {
+		profile.PanelHTTP01PortEnv = existingEnv["VEIL_PANEL_HTTP01_PORT"]
+	}
+}
+
 func issueLEIPCertForProfile(ctx context.Context, profile *installer.RURecommendedProfile, opts ruRecommendedInstallOptions, resolvedIP net.IP) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -473,10 +527,30 @@ func issueLEIPCertForProfile(ctx context.Context, profile *installer.RURecommend
 		}
 	}
 
+	// Persist the identities this issuance covers into veil.env so the daemon
+	// renewal worker and `veil cert renew` renew the same SANs instead of
+	// re-probing external detection endpoints (#1186). Set before the issue
+	// call so a failed attempt still records the resolution.
+	profile.PanelPublicIP = publicIPv4
+	if publicIPv6 != "" {
+		if profile.PanelPublicIP != "" {
+			profile.PanelPublicIP += ","
+		}
+		profile.PanelPublicIP += publicIPv6
+	}
+
 	certPath := filepath.Join(opts.EtcDir, "panel", "tls.crt")
 	keyPath := filepath.Join(opts.EtcDir, "panel", "tls.key")
 	if err := os.MkdirAll(filepath.Dir(certPath), 0o750); err != nil {
 		return fmt.Errorf("create panel cert directory: %w", err)
+	}
+	// On a reinstall, veil-caddy may already own :80 — park the standalone
+	// listener on the internal port when the running plan keeps a
+	// Caddy-fronted challenge route, the same contract `cert renew` uses
+	// (#1181). Fresh installs have no snapshot and stay on the public port.
+	viaCaddy := false
+	if snapshot, hasSnapshot := loadCertSnapshot(opts.EtcDir, opts.VarDir); hasSnapshot {
+		viaCaddy = caddyassembly.PanelIPCertCaddyFronted(snapshot.Settings, snapshot.Inbounds)
 	}
 	cert, err := leIPCertIssueFunc(ctx, acmeip.IssueOptions{
 		PublicIPv4: publicIPv4,
@@ -485,11 +559,14 @@ func issueLEIPCertForProfile(ctx context.Context, profile *installer.RURecommend
 		Email:      opts.Email,
 		CertPath:   certPath,
 		KeyPath:    keyPath,
-		// VEIL_ACME_CA_URL points issuance at a controlled ACME CA (e.g. a test
-		// CA in CI) instead of Let's Encrypt; VEIL_ACME_INSECURE skips ACME
-		// endpoint TLS verification for self-signed test endpoints.
-		CAServer: strings.TrimSpace(os.Getenv("VEIL_ACME_CA_URL")),
-		Insecure: strings.TrimSpace(os.Getenv("VEIL_ACME_INSECURE")) != "",
+		// Use the resolved profile values — on a reinstall they may have
+		// been preserved from the previous veil.env when the environment no
+		// longer exports them, and issuance must run against the same CA
+		// configuration that gets persisted (#1189).
+		CAServer:       profile.ACMECAURL,
+		Insecure:       profile.ACMEInsecure,
+		CARoot:         profile.ACMECARoot,
+		HTTP01ViaCaddy: viaCaddy,
 	})
 	if err != nil {
 		return err

@@ -24,6 +24,14 @@ type IssuedCert struct {
 	KeyPath  string
 }
 
+// CaddyFrontedHTTP01Port is the loopback-only port acme.sh's --standalone
+// listener parks on when the managed Caddy edge owns the public HTTP-01 port:
+// the rendered -acme server (and any other Caddy :80 listener) proxies
+// /.well-known/acme-challenge/* to it, so the panel IP certificate renews
+// without competing for :80 (#1181). The renderer MUST emit the matching
+// reverse-proxy upstream for the same port.
+const CaddyFrontedHTTP01Port = 44080
+
 // IssueOptions configures a Let's Encrypt IP-certificate request.
 type IssueOptions struct {
 	PublicIPv4 string
@@ -39,6 +47,17 @@ type IssueOptions struct {
 	// verification of the ACME endpoint — for controlled test CAs only.
 	CAServer string
 	Insecure bool
+	// CARoot is an optional PEM bundle acme.sh verifies the ACME directory
+	// endpoint against (--ca-bundle) — the VEIL_ACME_CA_ROOT persisted for
+	// controlled-CA installs (#1189).
+	CARoot string
+	// HTTP01ViaCaddy reports that the managed Caddy edge owns the public
+	// HTTP-01 port in the rendered plan (the -acme challenge server or a
+	// panel/naive server on :80): when the requested standalone port is busy
+	// that is not fatal — acme.sh parks on CaddyFrontedHTTP01Port, which the
+	// rendered /.well-known/acme-challenge/ reverse-proxy route forwards to
+	// (#1181).
+	HTTP01ViaCaddy bool
 	// DeferPanelRestart schedules the panel restart the issued certificate's
 	// reloadcmd performs instead of running it inline: when the panel itself
 	// requested issuance through the privileged helper, a synchronous
@@ -195,7 +214,9 @@ func (s homeDirSystem) CombinedOutputContext(ctx context.Context, cmd string, ar
 // they are missing, writes the certificate material to CertPath/KeyPath, and
 // registers an acme.sh reloadcmd that restarts veil on renewal.
 //
-// Port 80 (or HTTPPort) must be free and reachable from the internet.
+// Port 80 (or HTTPPort) must be reachable from the internet — either free for
+// the standalone listener or, with HTTP01ViaCaddy, held by the managed Caddy
+// edge which proxies the challenge path to the internal port (#1181).
 func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 	sys := defaultSystemOr(opts.System)
 	if home := strings.TrimSpace(opts.HomeDir); home != "" {
@@ -245,6 +266,17 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 	if err != nil {
 		return IssuedCert{}, fmt.Errorf("acme.sh setup: %w", err)
 	}
+	if opts.HTTP01ViaCaddy && !sys.IsPortFree(httpPort) {
+		// The managed Caddy edge owns the public HTTP-01 port — typically the
+		// permanent -acme challenge server a hysteria2-domain plan renders on
+		// :80 — so acme.sh --standalone can never bind it (#1181). The
+		// rendered /.well-known/acme-challenge/ reverse-proxy route forwards
+		// every non-certmagic token to this internal loopback port, so the
+		// standalone listener parks there and the public :80 path keeps
+		// working end to end. When the public port is still free (Caddy
+		// stopped mid-restart) standalone simply binds it directly.
+		httpPort = CaddyFrontedHTTP01Port
+	}
 	if !sys.IsPortFree(httpPort) {
 		return IssuedCert{}, fmt.Errorf("port %d is already in use; Let's Encrypt HTTP-01 validation needs a free port %d (forward external port 80 if you use a non-standard port)", httpPort, httpPort)
 	}
@@ -276,6 +308,12 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 	issueArgs = append(issueArgs, "--httpport", strconv.Itoa(httpPort), "--force")
 	if opts.Insecure {
 		issueArgs = append(issueArgs, "--insecure")
+	}
+	if caRoot := strings.TrimSpace(opts.CARoot); caRoot != "" {
+		// Controlled CA whose directory endpoint is not publicly trusted:
+		// the install persisted VEIL_ACME_CA_ROOT so acme.sh can verify it
+		// (#1189).
+		issueArgs = append(issueArgs, "--ca-bundle", caRoot)
 	}
 	if opts.PublicIPv6 != "" && opts.PublicIPv6 != primaryName {
 		issueArgs = append(issueArgs, "-d", opts.PublicIPv6)

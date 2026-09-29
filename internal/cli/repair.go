@@ -7,18 +7,20 @@ import (
 )
 
 type repairWorkflowOptions struct {
-	Profile      string
-	DryRun       bool
-	Yes          bool
-	EtcDir       string
-	VarDir       string
-	SystemdDir   string
-	BackupDir    string
-	BackupDirSet bool
-	AuditLog     string
-	LEIPCert     bool
-	LEIPCertPort int
-	PublicIP     string
+	Profile         string
+	DryRun          bool
+	Yes             bool
+	EtcDir          string
+	VarDir          string
+	SystemdDir      string
+	BackupDir       string
+	BackupDirSet    bool
+	AuditLog        string
+	LEIPCert        bool
+	LEIPCertSet     bool
+	LEIPCertPort    int
+	LEIPCertPortSet bool
+	PublicIP        string
 }
 
 func newRepairCommand() *cobra.Command {
@@ -39,18 +41,20 @@ func newRepairCommand() *cobra.Command {
 		Short: "Repair Veil managed generated files without arbitrary side effects",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRepairWorkflow(cmd, repairWorkflowOptions{
-				Profile:      profile,
-				DryRun:       dryRun,
-				Yes:          yes,
-				EtcDir:       etcDir,
-				VarDir:       varDir,
-				SystemdDir:   systemdDir,
-				BackupDir:    backupDir,
-				BackupDirSet: cmd.Flags().Changed("backup-dir"),
-				AuditLog:     auditLog,
-				LEIPCert:     leIPCert,
-				LEIPCertPort: leIPCertPort,
-				PublicIP:     publicIP,
+				Profile:         profile,
+				DryRun:          dryRun,
+				Yes:             yes,
+				EtcDir:          etcDir,
+				VarDir:          varDir,
+				SystemdDir:      systemdDir,
+				BackupDir:       backupDir,
+				BackupDirSet:    cmd.Flags().Changed("backup-dir"),
+				AuditLog:        auditLog,
+				LEIPCert:        leIPCert,
+				LEIPCertSet:     cmd.Flags().Changed("le-ip-cert"),
+				LEIPCertPort:    leIPCertPort,
+				LEIPCertPortSet: cmd.Flags().Changed("le-ip-cert-port"),
+				PublicIP:        publicIP,
 			})
 		},
 	}
@@ -69,7 +73,7 @@ func newRepairCommand() *cobra.Command {
 }
 
 func runRepairWorkflow(cmd *cobra.Command, opts repairWorkflowOptions) error {
-	flowOpts := repairflow.Options{Profile: opts.Profile, DryRun: opts.DryRun, Yes: opts.Yes, EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, BackupDir: opts.BackupDir, BackupDirSet: opts.BackupDirSet, AuditLog: opts.AuditLog, LEIPCert: opts.LEIPCert, LEIPCertPort: opts.LEIPCertPort, PublicIP: opts.PublicIP}
+	flowOpts := repairflow.Options{Profile: opts.Profile, DryRun: opts.DryRun, Yes: opts.Yes, EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, BackupDir: opts.BackupDir, BackupDirSet: opts.BackupDirSet, AuditLog: opts.AuditLog, LEIPCert: opts.LEIPCert, LEIPCertSet: opts.LEIPCertSet, LEIPCertPort: opts.LEIPCertPort, LEIPCertPortSet: opts.LEIPCertPortSet, PublicIP: opts.PublicIP}
 	return repairflow.Run(flowOpts, cmd.OutOrStdout(), repairflow.Dependencies{
 		BuildPlan: func(flowOpts repairflow.Options) (installer.RepairPlan, error) {
 			return repairflow.BuildPlanFromOptions(flowOpts, repairflow.PlanDependencies{Secret: randomSecret, Executable: installExecutableFunc, LookPath: commandLookPath})

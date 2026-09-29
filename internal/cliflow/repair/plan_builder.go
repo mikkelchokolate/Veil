@@ -57,7 +57,7 @@ func BuildPlanFromOptions(opts Options, deps PlanDependencies) (installer.Repair
 	if err != nil {
 		return installer.RepairPlan{}, err
 	}
-	preserveExistingPanelRepairMaterial(&built, opts.EtcDir)
+	preserveExistingPanelRepairMaterial(&built, opts)
 
 	// Direct mode uses the public IP as the panel endpoint. Resolve it once so
 	// both veil.env and the encrypted panel state get a usable Domain.
@@ -75,13 +75,25 @@ func BuildPlanFromOptions(opts Options, deps PlanDependencies) (installer.Repair
 	// HTTP-01 port, and writes cert material — all real changes that belong
 	// to the apply phase. Without --yes a bare `veil repair` is refused by
 	// ApplyPlan, so it must not mutate here either (issues #1021, #1128).
-	if opts.LEIPCert && built.PanelAccess == "direct" && opts.mutates() {
+	// A persisted VEIL_PANEL_LE_IP_CERT=0 (set by an earlier
+	// --le-ip-cert=false) must keep issuance off unless the operator passes
+	// --le-ip-cert=true explicitly — preserveExistingPanelRepairMaterial
+	// already resolved that precedence into built.PanelLEIPCertEnv (#1187).
+	if opts.LEIPCert && built.PanelAccess == "direct" && built.PanelLEIPCertEnv != "0" && opts.mutates() {
 		if err := maybeIssueLEIPCert(context.Background(), &built, opts); err != nil {
 			// Repair should not fail because a certificate could not be renewed;
 			// the existing self-signed cert from the profile is still usable.
 			// The error is intentionally swallowed here; callers may log it later.
 			_ = err
 		}
+	}
+	if built.PanelAccess == "direct" && built.PanelPublicIP == "" && resolvedIP != "" {
+		// The explicit --public-ip flag or the persisted VEIL_PANEL_PUBLIC_IP
+		// already seeded this inside preserveExistingPanelRepairMaterial;
+		// maybeIssueLEIPCert overwrites it with the pair it actually issued
+		// for. Only the freshly resolved literal is left as the fallback so
+		// the repaired veil.env keeps pinning the renewal identity (#1186).
+		built.PanelPublicIP = resolvedIP
 	}
 	veilBinary, executableErr := deps.executable()()
 	if executableErr != nil {
@@ -166,8 +178,16 @@ func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts Options, s
 	}
 	// The rewritten veil.env must keep the controlled-CA configuration that
 	// install persisted; dropping it would silently move the running panel's
-	// Caddy issuers back to Let's Encrypt (audit #340).
+	// Caddy issuers back to Let's Encrypt (audit #340). Same for the
+	// IP-certificate lifecycle knobs: the plan's own veil.env action already
+	// encodes the resolved/preserved values (including the pair a repair
+	// issuance actually certified), so reuse it before the env/flag fallbacks
+	// (#1186/#1187/#1189).
 	acmeCAURL, acmeCARoot := repairACMEEnv(opts.EtcDir)
+	publicIP, leIPCert, http01Port, insecure := repairLifecycleEnv(opts)
+	if v := repairPlanEnvValue(*plan, "VEIL_PANEL_PUBLIC_IP"); v != "" {
+		publicIP = v
+	}
 	token, err := repairPanelAuthToken(*plan, opts.EtcDir, secret)
 	if err != nil {
 		return err
@@ -183,6 +203,10 @@ func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts Options, s
 		PanelTLSEnabled: settings.PanelAccess != "caddy",
 		ACMECAURL:       acmeCAURL,
 		ACMECARoot:      acmeCARoot,
+		ACMEInsecure:    insecure,
+		PanelPublicIP:   publicIP,
+		PanelLEIPCert:   leIPCert,
+		PanelHTTP01Port: http01Port,
 	})
 	if settings.PanelAccess == "caddy" {
 		removeRepairActions(plan, material.PanelTLSCertPath(), material.PanelTLSKeyPath())
@@ -210,10 +234,45 @@ func repairPanelAuthToken(plan installer.RepairPlan, etcDir string, secret insta
 	return token, nil
 }
 
-func preserveExistingPanelRepairMaterial(profile *installer.RURecommendedProfile, etcDir string) {
-	if profile == nil || etcDir == "" {
+// repairLifecycleEnv resolves the persisted IP-certificate lifecycle knobs
+// for the regenerated veil.env. Explicit repair flags win over the values a
+// previous install recorded; otherwise the persisted choices survive so
+// repair cannot silently re-enable an opted-out certificate or drop the
+// pinned public IP (#1186/#1187/#1189).
+func repairLifecycleEnv(opts Options) (publicIP, leIPCert, http01Port string, insecure bool) {
+	values := readRepairEnv(filepath.Join(opts.EtcDir, "veil.env"))
+	insecure = strings.TrimSpace(os.Getenv("VEIL_ACME_INSECURE")) != "" ||
+		strings.TrimSpace(values["VEIL_ACME_INSECURE"]) != ""
+	if opts.LEIPCertSet {
+		leIPCert = "1"
+		if !opts.LEIPCert {
+			leIPCert = "0"
+		}
+	} else {
+		leIPCert = values["VEIL_PANEL_LE_IP_CERT"]
+	}
+	if opts.LEIPCertPortSet {
+		http01Port = strconv.Itoa(opts.LEIPCertPort)
+	} else {
+		http01Port = values["VEIL_PANEL_HTTP01_PORT"]
+	}
+	// "auto" is a resolution directive, not an identity — it must never be
+	// persisted as VEIL_PANEL_PUBLIC_IP (renewal would parse it as a literal
+	// and fail). An explicit literal pins; otherwise the recorded pair
+	// stands until issuance replaces it with what it actually certified.
+	if ip := strings.TrimSpace(opts.PublicIP); ip != "" && !strings.EqualFold(ip, "auto") {
+		publicIP = ip
+	} else {
+		publicIP = values["VEIL_PANEL_PUBLIC_IP"]
+	}
+	return
+}
+
+func preserveExistingPanelRepairMaterial(profile *installer.RURecommendedProfile, opts Options) {
+	if profile == nil || opts.EtcDir == "" {
 		return
 	}
+	etcDir := opts.EtcDir
 	values := readRepairEnv(filepath.Join(etcDir, "veil.env"))
 	if token := values["VEIL_API_TOKEN"]; token != "" {
 		profile.PanelAuthToken = token
@@ -237,6 +296,9 @@ func preserveExistingPanelRepairMaterial(profile *installer.RURecommendedProfile
 	// regenerated veil.env keeps pointing the running panel's Caddy issuers at
 	// the same ACME directory (audit #340).
 	profile.ACMECAURL, profile.ACMECARoot = repairACMEEnv(etcDir)
+	// Same contract for the IP-certificate lifecycle knobs (#1186/#1187/#1189).
+	profile.PanelPublicIP, profile.PanelLEIPCertEnv, profile.PanelHTTP01PortEnv, profile.ACMEInsecure =
+		repairLifecycleEnv(opts)
 	if profile.PanelAccess == "caddy" {
 		profile.PanelTLSEnabled = false
 		profile.PanelTLSCertPEM = ""
@@ -315,25 +377,8 @@ func repairACMEEnv(etcDir string) (caURL, caRoot string) {
 	return caURL, caRoot
 }
 
-func readRepairEnv(path string) map[string]string {
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return map[string]string{}
-	}
-	values := map[string]string{}
-	for _, line := range strings.Split(string(body), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		values[strings.TrimSpace(key)] = strings.TrimSpace(value)
-	}
-	return values
-}
+// readRepairEnv is a test-seamable alias for the shared veil.env parser.
+var readRepairEnv = hostenv.ReadEnvFile
 
 func (d PlanDependencies) resolvedBinaryPath(name string) string {
 	path, err := d.lookPath()(name)
@@ -472,21 +517,60 @@ func maybeIssueLEIPCert(ctx context.Context, profile *installer.RURecommendedPro
 		}
 	}
 
+	// Persist the identities this repair issuance covers so later renewals
+	// reuse them instead of re-probing the detection endpoints (#1186). The
+	// pair — including the probed second family — is authoritative over the
+	// preserved/flag value.
+	profile.PanelPublicIP = publicIPv4
+	if publicIPv6 != "" {
+		if profile.PanelPublicIP != "" {
+			profile.PanelPublicIP += ","
+		}
+		profile.PanelPublicIP += publicIPv6
+	}
+
 	keyPath := filepath.Join(opts.EtcDir, "panel", "tls.key")
 	// Honour the same controlled-CA knobs install used: the persisted
-	// VEIL_ACME_CA_URL points issuance at the operator's ACME directory and
+	// VEIL_ACME_CA_URL points issuance at the operator's ACME directory,
+	// VEIL_ACME_CA_ROOT verifies its TLS endpoint via --ca-bundle, and
 	// VEIL_ACME_INSECURE skips endpoint TLS verification for controlled CAs
-	// (audit #338).
-	acmeCAURL, _ := repairACMEEnv(opts.EtcDir)
+	// (audit #338, #1189).
+	acmeCAURL, acmeCARoot := repairACMEEnv(opts.EtcDir)
+	// The effective standalone port follows the persisted contract: an
+	// explicit --le-ip-cert-port wins, otherwise the recorded
+	// VEIL_PANEL_HTTP01_PORT — issuance must bind the port the regenerated
+	// veil.env keeps advertising to renewals (#1189/#1186).
+	httpPort := opts.LEIPCertPort
+	if !opts.LEIPCertPortSet {
+		if persisted := strings.TrimSpace(profile.PanelHTTP01PortEnv); persisted != "" {
+			if parsed, err := strconv.Atoi(persisted); err == nil {
+				httpPort = parsed
+			}
+		}
+	}
+	// A repair runs while veil-caddy may already own :80 — park the
+	// standalone listener on the internal port when the persisted plan keeps
+	// a Caddy-fronted challenge route, mirroring `cert renew` (#1181).
+	viaCaddy := false
+	store := managementstate.NewStore(filepath.Join(opts.VarDir, "state.json"), repairStateCipher(filepath.Join(opts.EtcDir, "state.key")))
+	if snapshot, ok, err := store.Load(); err == nil && ok {
+		viaCaddy = caddyassembly.PanelIPCertCaddyFronted(snapshot.Settings, snapshot.Inbounds)
+	}
 	cert, err := leIPCertIssueFunc(ctx, acmeip.IssueOptions{
-		PublicIPv4: publicIPv4,
-		PublicIPv6: publicIPv6,
-		HTTPPort:   opts.LEIPCertPort,
-		Email:      profile.Email,
-		CertPath:   certPath,
-		KeyPath:    keyPath,
-		CAServer:   acmeCAURL,
-		Insecure:   strings.TrimSpace(os.Getenv("VEIL_ACME_INSECURE")) != "",
+		PublicIPv4:     publicIPv4,
+		PublicIPv6:     publicIPv6,
+		HTTPPort:       httpPort,
+		Email:          profile.Email,
+		CertPath:       certPath,
+		KeyPath:        keyPath,
+		CAServer:       acmeCAURL,
+		CARoot:         acmeCARoot,
+		HTTP01ViaCaddy: viaCaddy,
+		// profile.ACMEInsecure already folds the persisted
+		// VEIL_ACME_INSECURE in — a repair shell that does not export it
+		// must still verify the controlled-CA endpoint the same way the
+		// install did (#1189).
+		Insecure: profile.ACMEInsecure,
 	})
 	if err != nil {
 		return err

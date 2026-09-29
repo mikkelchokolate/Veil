@@ -37,8 +37,23 @@ type RURecommendedProfile struct {
 	CaddyJSON         string
 	ACMECAURL         string
 	ACMECARoot        string
-	MasqueradeURL     string
-	FallbackRoot      string
+	// ACMEInsecure persists VEIL_ACME_INSECURE into veil.env so daemon-side
+	// renewal and `veil cert` keep trusting the controlled-CA endpoint the
+	// install was run against (#1189).
+	ACMEInsecure bool
+	// PanelPublicIP is the persisted "ipv4[,ipv6]" public identity the panel
+	// IP certificate was issued for; renewals reuse it instead of re-probing
+	// the external detection endpoints (#1186).
+	PanelPublicIP string
+	// PanelLEIPCertEnv persists an explicit --le-ip-cert choice ("1"/"0") so
+	// an opted-out direct panel is never re-enrolled by the daemon (#1187).
+	// Empty renders no VEIL_PANEL_LE_IP_CERT line (enabled by default).
+	PanelLEIPCertEnv string
+	// PanelHTTP01PortEnv persists an explicit --le-ip-cert-port so renewals
+	// reuse the operator-chosen standalone port (#1185).
+	PanelHTTP01PortEnv string
+	MasqueradeURL      string
+	FallbackRoot       string
 }
 
 // RURecommendedInstallInput contains the decisions and adapters needed to build
