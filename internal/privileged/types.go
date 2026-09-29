@@ -30,6 +30,7 @@ const (
 	OperationRestartPanel       Operation = "restart_panel"
 	OperationSyncCaddyCert      Operation = "sync_caddy_cert"
 	OperationCaddyLoad          Operation = "caddy_load"
+	OperationIssueIPCert        Operation = "issue_ip_cert"
 )
 
 func (o Operation) Valid() bool {
@@ -51,7 +52,8 @@ func (o Operation) Valid() bool {
 		OperationStageUpdate,
 		OperationRestartPanel,
 		OperationSyncCaddyCert,
-		OperationCaddyLoad:
+		OperationCaddyLoad,
+		OperationIssueIPCert:
 		return true
 	default:
 		return false
@@ -262,6 +264,37 @@ type SyncCaddyCertResult struct {
 	Changed bool `json:"changed,omitempty"`
 }
 
+// IssueIPCertRequest asks the helper to issue/renew the short-lived Let's
+// Encrypt IP certificate that the panel (and the runtimes sharing it) serve
+// in direct access mode (#1169/#1170). CertPath/KeyPath must sit inside the
+// helper's allowed panel certificate directory; empty paths default to that
+// directory's tls.crt/tls.key.
+type IssueIPCertRequest struct {
+	PublicIPv4 string `json:"publicIpv4,omitempty"`
+	PublicIPv6 string `json:"publicIpv6,omitempty"`
+	// HTTPPort is the HTTP-01 standalone listen port; 0 defaults to 80.
+	HTTPPort int    `json:"httpPort,omitempty"`
+	Email    string `json:"email,omitempty"`
+	CertPath string `json:"certPath,omitempty"`
+	KeyPath  string `json:"keyPath,omitempty"`
+	// CAServer overrides the ACME directory (an acme.sh CA name like
+	// "letsencrypt" or a controlled-CA URL); empty means Let's Encrypt.
+	// Insecure skips TLS verification of the ACME endpoint — controlled test
+	// CAs only.
+	CAServer string `json:"caServer,omitempty"`
+	Insecure bool   `json:"insecure,omitempty"`
+	// DeferPanelRestart moves the reloadcmd's `try-restart veil.service` onto
+	// a transient systemd timer: the panel itself is the caller, so an inline
+	// restart would kill it before this operation could answer.
+	DeferPanelRestart bool       `json:"deferPanelRestart,omitempty"`
+	Fence             FenceToken `json:"fence"`
+}
+
+type IssueIPCertResult struct {
+	CertPath string `json:"certPath"`
+	KeyPath  string `json:"keyPath"`
+}
+
 type RequestEnvelope struct {
 	Version            int                        `json:"version"`
 	RequestID          string                     `json:"requestId"`
@@ -278,6 +311,7 @@ type RequestEnvelope struct {
 	RestartPanel       *RestartPanelRequest       `json:"restartPanel,omitempty"`
 	SyncCaddyCert      *SyncCaddyCertRequest      `json:"syncCaddyCert,omitempty"`
 	CaddyLoad          *CaddyLoadRequest          `json:"caddyLoad,omitempty"`
+	IssueIPCert        *IssueIPCertRequest        `json:"issueIpCert,omitempty"`
 }
 
 type ResponseEnvelope struct {
@@ -311,6 +345,7 @@ func (r RequestEnvelope) Validate() error {
 		r.RestartPanel != nil,
 		r.SyncCaddyCert != nil,
 		r.CaddyLoad != nil,
+		r.IssueIPCert != nil,
 	}
 	count := 0
 	for _, present := range payloads {
@@ -353,6 +388,8 @@ func (r RequestEnvelope) payloadMatchesOperation() bool {
 		return r.SyncCaddyCert != nil
 	case OperationCaddyLoad:
 		return r.CaddyLoad != nil
+	case OperationIssueIPCert:
+		return r.IssueIPCert != nil
 	default:
 		return false
 	}
