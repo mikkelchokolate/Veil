@@ -700,7 +700,7 @@ export const en: Record<string, string> = {
 	"clientDetail.deviceLimitHint":
 		"Session limits are enforced only on Hysteria2 inbounds.",
 	"clientDetail.ipLimitHint":
-		"Session limits are enforced only on Hysteria2 inbounds.",
+		"Enforced only on Hysteria2 inbounds. Source IPs behind NAT/CGNAT or cellular churn share or change addresses — prefer deviceLimit for per-device caps.",
 	"clientDetail.limitsUnsupported":
 		"Connection limits can't be enforced on {inbounds} — clear the limits or detach/disable those bindings.",
 	"clientDetail.expiryDate": "Expiry date",
@@ -839,7 +839,7 @@ export const en: Record<string, string> = {
 		"Session limits are enforced only on Hysteria2 inbounds.",
 	"clientNew.ipLimitLabel": "IP limit (distinct source IPs, optional)",
 	"clientNew.ipLimitHint":
-		"Session limits are enforced only on Hysteria2 inbounds.",
+		"Enforced only on Hysteria2 inbounds. Devices behind NAT/CGNAT share an IP; cellular clients churn addresses — prefer deviceLimit for per-device caps.",
 	"clientNew.limitInvalid": "limit must be a whole number ≥ 1",
 	"clientNew.limitsUnsupported":
 		"Connection limits can't be enforced on {inbounds} — clear the limits or uncheck those inbounds.",

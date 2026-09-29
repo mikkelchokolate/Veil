@@ -172,6 +172,11 @@ type managementState struct {
 	hy2AuthListenAddr string
 	hy2AuthOnline     func(ctx context.Context, settings model.Settings, inbound model.Inbound, identities map[string]string) (map[string]int64, []string, error)
 	hy2IPTracker      *hy2IPTracker
+	// hy2AuthSecretCache memoizes the Argon2-derived per-inbound path secret
+	// (keyed by name+"\x00"+password) so reconnect storms do not re-run the KDF
+	// on every admission. Bounded by the number of distinct inbound/password
+	// pairs ever seen.
+	hy2AuthSecrets sync.Map
 	// hy2SessionTracker bridges the auth-ok → /online-registration gap so
 	// concurrent admissions cannot race past deviceLimit (#1173).
 	hy2SessionTracker       *hy2SessionTracker

@@ -709,7 +709,7 @@ export const ru: Record<string, string> = {
 	"clientDetail.deviceLimitHint":
 		"Лимиты сессий действуют только на Hysteria2 inbound’ы.",
 	"clientDetail.ipLimitHint":
-		"Лимиты сессий действуют только на Hysteria2 inbound’ы.",
+		"Действует только на Hysteria2 inbound’ы. За NAT/CGNAT устройства делят один IP, а у сотовых клиентов адрес меняется — для лимита устройств используйте deviceLimit.",
 	"clientDetail.limitsUnsupported":
 		"Лимиты подключений не будут применяться к {inbounds} — очистите лимиты или отвяжите/отключите эти привязки.",
 	"clientDetail.expiryDate": "Дата истечения",
@@ -852,7 +852,7 @@ export const ru: Record<string, string> = {
 		"Лимиты сессий действуют только на Hysteria2 inbound’ы.",
 	"clientNew.ipLimitLabel": "Лимит IP (различные исходные IP, необязательно)",
 	"clientNew.ipLimitHint":
-		"Лимиты сессий действуют только на Hysteria2 inbound’ы.",
+		"Действует только на Hysteria2 inbound’ы. За NAT/CGNAT устройства делят один IP, у сотовых клиентов адрес меняется — для лимита устройств используйте deviceLimit.",
 	"clientNew.limitInvalid": "лимит должен быть целым числом ≥ 1",
 	"clientNew.limitsUnsupported":
 		"Лимиты подключений не будут применяться к {inbounds} — очистите лимиты или снимите выбор с этих инбаундов.",

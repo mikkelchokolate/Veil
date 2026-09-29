@@ -166,6 +166,25 @@ func (t *hy2SessionTracker) admit(clientID, token string, online int64, limit in
 		entries[token] = now.Add(t.ttl)
 		return true
 	}
+	// /online counts sessions already admitted here, but their pending entries
+	// live on for the TTL — without trimming, online+pending double-counts the
+	// overlap and under-admits when limit >= 2. We cannot tell WHICH pending
+	// entries registered in /online (it is only a count), so drop the oldest
+	// min(online, len(pending)) — those are the ones most likely registered —
+	// keeping the check fail-closed for genuinely disjoint pending+online.
+	for drop := min(int(online), len(entries)); drop > 0; {
+		oldest, oldestAt := "", now.Add(t.ttl)
+		for tok, expires := range entries {
+			if expires.Before(oldestAt) {
+				oldest, oldestAt = tok, expires
+			}
+		}
+		if oldest == "" {
+			break
+		}
+		delete(entries, oldest)
+		drop--
+	}
 	if online+int64(len(entries)) >= int64(limit) {
 		return false
 	}
@@ -279,7 +298,13 @@ func (s *managementState) handleHy2Auth(w http.ResponseWriter, r *http.Request) 
 		deny()
 		return
 	}
-	expectedSecret := hysteria2.HTTPAuthSecret(settings, inbound)
+	cacheKey := inbound.Name + "\x00" + hysteria2.SharedPassword(settings, inbound)
+	cached, ok := s.hy2AuthSecrets.Load(cacheKey)
+	if !ok {
+		cached = hysteria2.HTTPAuthSecret(settings, inbound)
+		s.hy2AuthSecrets.Store(cacheKey, cached)
+	}
+	expectedSecret, _ := cached.(string)
 	if subtle.ConstantTimeCompare([]byte(providedSecret), []byte(expectedSecret)) != 1 {
 		deny()
 		return
