@@ -39,10 +39,28 @@ func writeCLISftpConfig(t *testing.T, enabled bool) string {
 	return path
 }
 
+// cliSftpInstallID is the fixed per-test remote namespace identity; the CLI
+// engine persists it in the state dir it derives from --state/--dir (#1184).
+const cliSftpInstallID = "0123456789abcdef0123456789abcdef"
+
+// cliSftpNamespace is this node's remote subdirectory under the shared
+// remoteDir.
+const cliSftpNamespace = "/srv/veil-backups/veil-node-" + cliSftpInstallID
+
+// writeCLISftpInstallID persists the identity file in the dir the engine
+// resolves as its state dir, so remote paths are deterministic.
+func writeCLISftpInstallID(t *testing.T, stateDir string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(stateDir, backupsftp.InstallIDFileName), []byte(cliSftpInstallID+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestBackupCreateUploadsToConfiguredSftpCLI(t *testing.T) {
 	remote := sftpfake.New()
 	stubCLISftpDial(t, remote, nil)
 	statePath, keyPath := writeCLIBackupSource(t)
+	writeCLISftpInstallID(t, filepath.Dir(statePath))
 	outputDir := t.TempDir()
 	passphraseFile := filepath.Join(t.TempDir(), "passphrase")
 	if err := os.WriteFile(passphraseFile, []byte("scheduled-secret\n"), 0o600); err != nil {
@@ -70,7 +88,7 @@ func TestBackupCreateUploadsToConfiguredSftpCLI(t *testing.T) {
 	}
 	uploaded := false
 	for _, p := range remote.Paths() {
-		if strings.HasPrefix(p, "/srv/veil-backups/veil_backup_") && strings.HasSuffix(p, ".tar.gz.enc") {
+		if strings.HasPrefix(p, cliSftpNamespace+"/veil_backup_") && strings.HasSuffix(p, ".tar.gz.enc") {
 			uploaded = true
 		}
 	}
@@ -152,7 +170,13 @@ func TestBackupCreateSftpDisabledSkipsUploadCLI(t *testing.T) {
 func TestBackupPruneMirrorsRemoteRetentionCLI(t *testing.T) {
 	remote := sftpfake.New()
 	stubCLISftpDial(t, remote, nil)
-	backupDir := t.TempDir()
+	// stateDir is what the CLI engine resolves from --dir's parent.
+	stateDir := t.TempDir()
+	backupDir := filepath.Join(stateDir, "backups")
+	if err := os.MkdirAll(backupDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeCLISftpInstallID(t, stateDir)
 	configPath := writeCLISftpConfig(t, true)
 	for _, name := range []string{
 		"veil_backup_20260201_020000.tar.gz.enc",
@@ -162,8 +186,11 @@ func TestBackupPruneMirrorsRemoteRetentionCLI(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(backupDir, name), []byte("local"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		remote.SetFile(path.Join("/srv/veil-backups", name), []byte("remote"))
+		remote.SetFile(path.Join(cliSftpNamespace, name), []byte("remote"))
 	}
+	// A foreign archive at the shared remoteDir root is not a prune
+	// candidate (#1184).
+	remote.SetFile("/srv/veil-backups/veil_backup_20260204_020000.tar.gz.enc", []byte("foreign"))
 
 	command := NewRootCommand("0.6.0")
 	var output bytes.Buffer
@@ -183,12 +210,52 @@ func TestBackupPruneMirrorsRemoteRetentionCLI(t *testing.T) {
 	}
 	kept := 0
 	for _, p := range remote.Paths() {
-		if strings.HasSuffix(p, ".tar.gz.enc") {
+		if strings.HasPrefix(p, cliSftpNamespace+"/") && strings.HasSuffix(p, ".tar.gz.enc") {
 			kept++
 		}
 	}
 	if kept != 1 {
 		t.Fatalf("remote paths=%v", remote.Paths())
+	}
+	if !remote.Has("/srv/veil-backups/veil_backup_20260204_020000.tar.gz.enc") {
+		t.Fatal("foreign archive outside the node namespace was pruned")
+	}
+}
+
+// #1188: --allow-unencrypted consents to a local plaintext archive only —
+// the configured SFTP destination must never receive it.
+func TestBackupCreateAllowUnencryptedSkipsSftpUploadCLI(t *testing.T) {
+	remote := sftpfake.New()
+	stubCLISftpDial(t, remote, nil)
+	statePath, keyPath := writeCLIBackupSource(t)
+	writeCLISftpInstallID(t, filepath.Dir(statePath))
+	outputDir := t.TempDir()
+	configPath := writeCLISftpConfig(t, true)
+
+	command := NewRootCommand("0.6.0")
+	var stdout, stderr bytes.Buffer
+	command.SetOut(&stdout)
+	command.SetErr(&stderr)
+	command.SetArgs([]string{
+		"backup", "create",
+		"--state", statePath,
+		"--key-path", keyPath,
+		"--allow-unencrypted",
+		"--output-dir", outputDir,
+		"--sftp-config", configPath,
+	})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("create: %v stderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "plaintext archive not sent to the SFTP destination") {
+		t.Fatalf("stderr=%s", stderr.String())
+	}
+	locals, err := filepath.Glob(filepath.Join(outputDir, "veil_backup_*.tar.gz"))
+	if err != nil || len(locals) != 1 {
+		t.Fatalf("local plaintext archive missing: %v err=%v", locals, err)
+	}
+	if len(remote.Paths()) != 0 || len(remote.Written) != 0 {
+		t.Fatalf("plaintext archive reached the remote: %v", remote.Paths())
 	}
 }
 

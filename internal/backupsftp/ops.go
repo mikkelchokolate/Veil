@@ -1,6 +1,7 @@
 package backupsftp
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -22,7 +23,16 @@ const (
 	sidecarSuffix = ".sha256"
 	// maxSidecarBytes bounds the sha256 sidecar read.
 	maxSidecarBytes = 256
+	// magicProbeBytes is how many leading bytes of a local archive Upload
+	// reads to verify the Veil encrypted-archive header.
+	magicProbeBytes = 64
 )
+
+// ErrUnencryptedArchive rejects plaintext at the remote-publish boundary:
+// the SFTP destination is an encrypted-only tier, the mirror image of the
+// fetch side's .enc-only policy (#1188). Callers unwrap it with errors.Is to
+// distinguish a policy refusal from a transport failure.
+var ErrUnencryptedArchive = errors.New("unencrypted archives are not uploaded to the SFTP destination")
 
 // UploadReceipt describes one verified remote upload.
 type UploadReceipt struct {
@@ -40,9 +50,33 @@ func remotePath(dir, name string) string {
 // the bytes stream through a sha256 into a .part sibling that is renamed to
 // the final name only after a remote size check, and a <name>.sha256
 // sidecar is written so later downloads can verify content, not just size.
+//
+// Remote storage is encrypted-only: a name without the .enc suffix or a file
+// missing the Veil encrypted-archive magic is refused with
+// ErrUnencryptedArchive before a single byte leaves the host (#1188).
+// probeLocalEncryptedArchive verifies the encrypted-archive magic on the
+// local file so callers can refuse plaintext before the remote is ever
+// dialed. Upload re-checks on its own no-follow handle (#1188).
+func probeLocalEncryptedArchive(localPath string) error {
+	local, err := safefs.OpenNoFollow(localPath)
+	if err != nil {
+		return fmt.Errorf("open local archive: %w", err)
+	}
+	defer local.Close()
+	prefix := make([]byte, magicProbeBytes)
+	n, _ := io.ReadFull(local, prefix)
+	if !backup.IsEncryptedArchivePrefix(prefix[:n]) {
+		return ErrUnencryptedArchive
+	}
+	return nil
+}
+
 func Upload(_ context.Context, fs RemoteFS, config Config, localPath, name string) (UploadReceipt, error) {
 	if name == "" || path.Base(name) != name || strings.ContainsAny(name, `/\`) {
 		return UploadReceipt{}, fmt.Errorf("remote archive name %q must be a basename", name)
+	}
+	if !strings.HasSuffix(strings.ToLower(name), ".enc") {
+		return UploadReceipt{}, fmt.Errorf("%w: %q is not an encrypted (.enc) archive", ErrUnencryptedArchive, name)
 	}
 	local, err := safefs.OpenNoFollow(localPath)
 	if err != nil {
@@ -56,6 +90,14 @@ func Upload(_ context.Context, fs RemoteFS, config Config, localPath, name strin
 	if !info.Mode().IsRegular() {
 		return UploadReceipt{}, fmt.Errorf("local archive %s is not a regular file", name)
 	}
+	// The name check alone is not enough: --output can hand over a
+	// .enc-named file whose content was never encrypted, so the archive
+	// magic itself is verified before any remote mutation (#1188).
+	prefix := make([]byte, magicProbeBytes)
+	n, _ := io.ReadFull(local, prefix)
+	if !backup.IsEncryptedArchivePrefix(prefix[:n]) {
+		return UploadReceipt{}, fmt.Errorf("%w: %q does not start with the Veil encrypted-archive header", ErrUnencryptedArchive, name)
+	}
 	if err := fs.MkdirAll(config.RemoteDir); err != nil {
 		return UploadReceipt{}, fmt.Errorf("create remote directory: %w", err)
 	}
@@ -67,7 +109,9 @@ func Upload(_ context.Context, fs RemoteFS, config Config, localPath, name strin
 		return UploadReceipt{}, fmt.Errorf("create remote archive: %w", err)
 	}
 	hash := sha256.New()
-	_, copyErr := io.Copy(dst, io.TeeReader(local, hash))
+	// The probe bytes consumed by the header check re-join the stream so the
+	// uploaded content and the digest cover the whole file.
+	_, copyErr := io.Copy(dst, io.TeeReader(io.MultiReader(bytes.NewReader(prefix[:n]), local), hash))
 	closeErr := dst.Close()
 	if copyErr != nil {
 		_ = fs.Remove(part)

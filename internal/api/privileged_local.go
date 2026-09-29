@@ -47,13 +47,16 @@ func newLocalPrivilegedClient(state *managementState) privileged.Client {
 		BackupSftpConfigPath:     filepath.Join(etcRoot, "backup-sftp.json"),
 		BackupSftpStatusPath:     filepath.Join(stateRoot, "backup-sftp-status.json"),
 		BackupSftpKnownHostsPath: filepath.Join(stateRoot, "backup-sftp.known_hosts"),
-		UpdateRoot:               filepath.Join(stateRoot, "updates"),
-		ManagedUnits:             units,
-		ManagedUnitPrefixes:      catalog.LifecycleUnitPrefixes(),
-		UpdateArtifacts:          map[string]string{"veil-update": "veil-update.tar.gz"},
-		Artifacts:                map[string]privileged.ArtifactPath{},
-		FirewallRules:            map[string]struct{}{},
-		AllowedArtifactNames:     allowedArtifactNames,
+		// The install id namespaces this node's remote archives under
+		// <remoteDir>/veil-node-<id>/ (#1184).
+		BackupSftpInstallIDPath: filepath.Join(stateRoot, "backup-sftp.install-id"),
+		UpdateRoot:              filepath.Join(stateRoot, "updates"),
+		ManagedUnits:            units,
+		ManagedUnitPrefixes:     catalog.LifecycleUnitPrefixes(),
+		UpdateArtifacts:         map[string]string{"veil-update": "veil-update.tar.gz"},
+		Artifacts:               map[string]privileged.ArtifactPath{},
+		FirewallRules:           map[string]struct{}{},
+		AllowedArtifactNames:    allowedArtifactNames,
 	}
 	production := privileged.NewProductionExecutor(privileged.ProductionConfig{
 		PromotionBackupRoot:  filepath.Join(state.applyRoot, "backups"),
