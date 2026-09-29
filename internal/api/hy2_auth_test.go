@@ -156,12 +156,12 @@ func TestHy2AuthDeviceLimitEnforcedAcrossOnlineAndPending(t *testing.T) {
 	path := hy2AuthPath(s, "hy2")
 	auth := b.RuntimeIdentity + ":pw"
 	// First admission registers a pending session; the second concurrent
-	// request inside the grace window sees it even though /online has not.
+	// request sees it even though /online has not caught up yet.
 	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "1.2.3.4:1000", Auth: auth}); !resp.OK {
 		t.Fatal("first session denied")
 	}
 	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "5.6.7.8:2000", Auth: auth}); resp.OK {
-		t.Fatal("second session inside grace window admitted past deviceLimit=1")
+		t.Fatal("second session raced past deviceLimit=1 while /online lagged")
 	}
 	// Same tuple re-admits without consuming a second slot.
 	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "1.2.3.4:1000", Auth: auth}); !resp.OK {
@@ -282,8 +282,9 @@ func TestHy2AuthTrackerTTLExpiry(t *testing.T) {
 // Regression for the review finding on #1173: once an admitted session shows
 // up in /online, its pending tracker entry keeps living for the TTL, so
 // online+pending double-counted the overlap and under-admitted for
-// deviceLimit >= 2. Pending entries only count while they are younger than
-// the registration grace — older ones are presumed already in /online.
+// deviceLimit >= 2. Entries carry the /online watermark seen at admission
+// and stay pending until the count credibly absorbs them (or the TTL
+// retires a dead admission).
 func TestHy2AuthOnlinePendingOverlapDoesNotUnderAdmit(t *testing.T) {
 	s, svc := newHy2AuthTestState(t)
 	s.hy2AuthOnline = stubOnline(0)
@@ -305,17 +306,30 @@ func TestHy2AuthOnlinePendingOverlapDoesNotUnderAdmit(t *testing.T) {
 	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "1.2.3.4:1000", Auth: auth}); !resp.OK {
 		t.Fatal("first admission denied")
 	}
-	// Session A registers in /online (grace elapsed); its pending entry stays
-	// tracked but must not double-count — the second slot is genuinely free.
-	now = now.Add(hy2AuthRegistrationGrace + time.Second)
+	// Session A registers in /online (count moves above its watermark); its
+	// pending entry stops counting — the second slot is genuinely free.
 	s.hy2AuthOnline = stubOnline(1)
 	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "5.6.7.8:2000", Auth: auth}); !resp.OK {
 		t.Fatal("second admission denied by online∩pending double-count under deviceLimit=2")
 	}
-	// Third must still be denied: online=1 (A) + pending B (inside grace) = 2.
-	now = now.Add(time.Second)
+	// Third must still be denied: online=1 (A) + pending B = 2 — and it stays
+	// denied no matter how long B's registration lags, because B's watermark
+	// keeps it pending until /online absorbs it.
+	now = now.Add(10 * time.Second)
 	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "9.9.9.9:3000", Auth: auth}); resp.OK {
 		t.Fatal("third admission raced past deviceLimit=2")
+	}
+	// B registers too: /online alone is at the limit.
+	s.hy2AuthOnline = stubOnline(2)
+	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "9.9.9.9:3001", Auth: auth}); resp.OK {
+		t.Fatal("admission past deviceLimit=2 with two live sessions")
+	}
+	// If a pending session dies before ever registering, its entry frees the
+	// slot when the TTL retires it rather than squatting forever.
+	now = now.Add(2 * time.Minute)
+	s.hy2AuthOnline = stubOnline(1)
+	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "9.9.9.9:3002", Auth: auth}); !resp.OK {
+		t.Fatal("admission denied by an expired dead-admission entry")
 	}
 }
 

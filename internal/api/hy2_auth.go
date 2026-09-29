@@ -49,17 +49,11 @@ const (
 	// evictions lag real session death without letting a stale IP squat on
 	// the client's limit forever.
 	defaultHy2AuthIPTTL = 4 * time.Minute
-	// defaultHy2AuthSessionTTL bounds pending-admission bookkeeping memory.
-	// Entries older than this are garbage-collected regardless of state.
+	// defaultHy2AuthSessionTTL bounds pending-admission bookkeeping: an
+	// admission that never reaches the /online table (dead connection, lost
+	// daemon update) holds its slot for at most this long before the entry
+	// expires and frees the slot.
 	defaultHy2AuthSessionTTL = 30 * time.Second
-	// hy2AuthRegistrationGrace is the window during which a just-admitted
-	// session is presumed NOT yet in /online: the auth endpoint re-reads
-	// /online synchronously on every request, so the registration lag is only
-	// the daemon's own table update — seconds, not the whole TTL. Entries
-	// older than the grace are assumed already counted by /online (or dead
-	// admissions that never connected) and stop counting — that resolves the
-	// online∩pending double-count that under-admitted for deviceLimit >= 2.
-	hy2AuthRegistrationGrace = 5 * time.Second
 )
 
 type hy2AuthRequest struct {
@@ -124,8 +118,16 @@ func (t *hy2IPTracker) admit(clientID string, ip netip.Addr, limit int) bool {
 	return true
 }
 
+// hy2PendingAdmission pins the client's /online watermark observed when the
+// session was admitted: the admission is assumed absorbed into the daemon's
+// table only once the observed count moves above that watermark.
+type hy2PendingAdmission struct {
+	expires       time.Time
+	onlineAtAdmit int64
+}
+
 // hy2SessionTracker records recent session admissions per client inside a
-// short grace window. /online is authoritative for LIVE sessions, but the
+// short TTL window. /online is authoritative for LIVE sessions, but the
 // daemon only registers a session after auth returns ok — without this
 // bridge, two auth requests landing inside that interval both see the same
 // /online count and both pass, admitting more sessions than deviceLimit
@@ -135,16 +137,15 @@ func (t *hy2IPTracker) admit(clientID string, ip netip.Addr, limit int) bool {
 type hy2SessionTracker struct {
 	mu       sync.Mutex
 	ttl      time.Duration
-	grace    time.Duration
 	now      func() time.Time
-	sessions map[string]map[string]time.Time
+	sessions map[string]map[string]hy2PendingAdmission
 }
 
 func newHy2SessionTracker(ttl time.Duration, now func() time.Time) *hy2SessionTracker {
 	if now == nil {
 		now = time.Now
 	}
-	return &hy2SessionTracker{ttl: ttl, grace: hy2AuthRegistrationGrace, now: now, sessions: make(map[string]map[string]time.Time)}
+	return &hy2SessionTracker{ttl: ttl, now: now, sessions: make(map[string]map[string]hy2PendingAdmission)}
 }
 
 // admit reports whether clientID may admit a session whose /online count is
@@ -160,35 +161,50 @@ func (t *hy2SessionTracker) admit(clientID, token string, online int64, limit in
 	defer t.mu.Unlock()
 	entries, ok := t.sessions[clientID]
 	if !ok {
-		entries = make(map[string]time.Time)
+		entries = make(map[string]hy2PendingAdmission)
 		t.sessions[clientID] = entries
 	}
-	for seen, expires := range entries {
-		if !expires.After(now) {
+	for seen, entry := range entries {
+		if !entry.expires.After(now) {
 			delete(entries, seen)
 		}
 	}
-	if expires, tracked := entries[token]; tracked && expires.After(now) {
-		entries[token] = now.Add(t.ttl)
+	if entry, tracked := entries[token]; tracked && entry.expires.After(now) {
+		entry.expires = now.Add(t.ttl)
+		entries[token] = entry
 		return true
 	}
-	// Only pending entries younger than the registration grace count toward
-	// the limit: they were admitted too recently to appear in the /online
-	// snapshot just read. Older entries are already represented by `online`
-	// (or are dead admissions that never connected) — counting them again
-	// would double-count the overlap. Entries store expiry = admittedAt+ttl,
-	// so "younger than grace" is expiry further out than ttl-grace.
-	var pending int64
-	for _, expires := range entries {
-		if expires.After(now.Add(t.ttl - t.grace)) {
-			pending++
+	// Entries admitted at a watermark below the current /online count may
+	// already be absorbed into that count — but online credits at most one
+	// session per entry, so the absorbed allowance is min(#below, online).
+	// Everything else is still invisible to the daemon table and must count
+	// as pending: a fast registration cannot double-count (its entry falls
+	// inside the absorbed allowance) and a slow one cannot reopen the slot
+	// (its entry stays pending regardless of age). Residual: an entry whose
+	// session dies before ever registering squats on its slot until the
+	// TTL — under-admitting by at most that window, the fail-closed side.
+	var below, live int64
+	for _, entry := range entries {
+		live++
+		if entry.onlineAtAdmit < online {
+			below++
 		}
 	}
+	pending := live - min(below, online)
 	if online+pending >= int64(limit) {
 		return false
 	}
-	entries[token] = now.Add(t.ttl)
+	entries[token] = hy2PendingAdmission{expires: now.Add(t.ttl), onlineAtAdmit: online}
 	return true
+}
+
+// hy2AuthSecretEntry is the memoized Argon2 path secret for one inbound,
+// validated by the shared password it was derived from. Keyed in
+// s.hy2AuthSecrets by inbound name — password rotation overwrites the entry,
+// so the map stays bounded by the inbound count.
+type hy2AuthSecretEntry struct {
+	password string
+	secret   string
 }
 
 // hy2AuthServer bundles the listener and server so Close can shut both down.
@@ -297,13 +313,21 @@ func (s *managementState) handleHy2Auth(w http.ResponseWriter, r *http.Request) 
 		deny()
 		return
 	}
-	cacheKey := inbound.Name + "\x00" + hysteria2.SharedPassword(settings, inbound)
-	cached, ok := s.hy2AuthSecrets.Load(cacheKey)
-	if !ok {
-		cached = hysteria2.HTTPAuthSecret(settings, inbound)
-		s.hy2AuthSecrets.Store(cacheKey, cached)
+	// The Argon2 derivation is keyed solely by (inbound.Name, shared
+	// password), so a {password -> secret} entry per inbound is exact: a
+	// password rotation replaces the stored entry instead of accumulating
+	// stale ones, bounding the map by the inbound count.
+	password := hysteria2.SharedPassword(settings, inbound)
+	var expectedSecret string
+	if cached, ok := s.hy2AuthSecrets.Load(inbound.Name); ok {
+		if entry, ok := cached.(hy2AuthSecretEntry); ok && subtle.ConstantTimeCompare([]byte(entry.password), []byte(password)) == 1 {
+			expectedSecret = entry.secret
+		}
 	}
-	expectedSecret, _ := cached.(string)
+	if expectedSecret == "" {
+		expectedSecret = hysteria2.HTTPAuthSecret(settings, inbound)
+		s.hy2AuthSecrets.Store(inbound.Name, hy2AuthSecretEntry{password: password, secret: expectedSecret})
+	}
 	if subtle.ConstantTimeCompare([]byte(providedSecret), []byte(expectedSecret)) != 1 {
 		deny()
 		return
