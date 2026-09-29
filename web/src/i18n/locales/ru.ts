@@ -297,6 +297,7 @@ export const ru: Record<string, string> = {
 	"traffic.presence.online": "в сети",
 	"traffic.presence.offline": "не в сети",
 	"traffic.presence.noTelemetry": "нет телеметрии",
+	"traffic.presence.ineligible": "не допущен",
 	"traffic.presence.source": "Источник",
 	"traffic.presence.source.stats": "таблица сессий",
 	"traffic.presence.source.activity": "активность",

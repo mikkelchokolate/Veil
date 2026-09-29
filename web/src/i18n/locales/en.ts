@@ -396,6 +396,7 @@ export const en: Record<string, string> = {
 	"traffic.presence.online": "online",
 	"traffic.presence.offline": "offline",
 	"traffic.presence.noTelemetry": "no telemetry",
+	"traffic.presence.ineligible": "not admitted",
 	"traffic.presence.source": "Source",
 	"traffic.presence.source.stats": "session table",
 	"traffic.presence.source.activity": "activity",

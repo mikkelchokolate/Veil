@@ -770,17 +770,27 @@ func TestV1PresenceIneligibleClientActivitySource(t *testing.T) {
 }
 
 // TestV1PresenceIneligibleClientStatsSource (#1177): a residual hysteria2
-// /online row still claiming live sessions must not report a disabled
-// client online — the stats path obeys the same eligibility gate.
+// /online row still claiming live sessions must not report a disabled,
+// depleted, or expired client online — the stats path obeys the same
+// eligibility gate.
 func TestV1PresenceIneligibleClientStatsSource(t *testing.T) {
 	state := newClientLifecycleTestState(t)
 	state.mu.Lock()
 	state.inbounds = []Inbound{{Name: "hy-main", Protocol: "hysteria2", Enabled: true}}
 	state.mu.Unlock()
 
-	disabled := mustCreatePresenceClientRow(t, state,
-		client.Client{Name: "disabled", Enabled: false, QuotaResetPolicy: client.ResetNever},
-		client.Binding{InboundID: "hy-main", Enabled: true})
+	past := time.Now().Unix() - 3600
+	ineligible := []client.Client{
+		mustCreatePresenceClientRow(t, state,
+			client.Client{Name: "disabled", Enabled: false, QuotaResetPolicy: client.ResetNever},
+			client.Binding{InboundID: "hy-main", Enabled: true}),
+		mustCreatePresenceClientRow(t, state,
+			client.Client{Name: "depleted", Enabled: true, Depleted: true, QuotaResetPolicy: client.ResetNever},
+			client.Binding{InboundID: "hy-main", Enabled: true}),
+		mustCreatePresenceClientRow(t, state,
+			client.Client{Name: "expired", Enabled: true, ExpiresAt: &past, QuotaResetPolicy: client.ResetNever},
+			client.Binding{InboundID: "hy-main", Enabled: true}),
+	}
 	live := mustCreatePresenceClient(t, state, "live",
 		client.Binding{InboundID: "hy-main", Enabled: true})
 
@@ -790,7 +800,7 @@ func TestV1PresenceIneligibleClientStatsSource(t *testing.T) {
 	}
 	online := map[string]int64{}
 	for _, b := range bindings {
-		online[b.ID] = 2 // residual session rows for both bindings
+		online[b.ID] = 2 // residual session rows for all bindings
 	}
 	provider := &presenceFakeProvider{key: "hysteria2:hy-main", online: online}
 	if err := state.trafficCollector.ResetProviders([]client.TrafficProvider{provider}); err != nil {
@@ -802,15 +812,17 @@ func TestV1PresenceIneligibleClientStatsSource(t *testing.T) {
 
 	items := presenceItemsByClientID(t, presenceRequest(t, state))
 
-	disabledItem := presenceItemByClientID(t, items, disabled.ID)
-	if disabledItem.Online != nil {
-		t.Fatalf("disabled client online=%v, want null — a residual stats row must not prove presence", *disabledItem.Online)
-	}
-	if disabledItem.Source != presenceSourceIneligible {
-		t.Fatalf("disabled client source=%q, want ineligible", disabledItem.Source)
-	}
-	if disabledItem.Connections != nil || disabledItem.LastActiveAt != nil {
-		t.Fatalf("disabled client carries residual telemetry fields: %+v", disabledItem)
+	for _, c := range ineligible {
+		item := presenceItemByClientID(t, items, c.ID)
+		if item.Online != nil {
+			t.Fatalf("client %q online=%v, want null — a residual stats row must not prove presence", c.Name, *item.Online)
+		}
+		if item.Source != presenceSourceIneligible {
+			t.Fatalf("client %q source=%q, want ineligible", c.Name, item.Source)
+		}
+		if item.Connections != nil || item.LastActiveAt != nil {
+			t.Fatalf("client %q carries residual telemetry fields: %+v", c.Name, item)
+		}
 	}
 
 	liveItem := presenceItemByClientID(t, items, live.ID)
