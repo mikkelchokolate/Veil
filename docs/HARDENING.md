@@ -242,8 +242,10 @@ runbook.
   ports keep only `CAP_NET_BIND_SERVICE`. The Panel unit ships with empty
   `CapabilityBoundingSet` and `AmbientCapabilities`. The helper unit keeps
   `CAP_NET_ADMIN` and `CAP_NET_RAW` so it can synchronize the host firewall,
-  and relies on root UID plus explicit systemd filesystem and syscall
-  restrictions for the rest of its privileges.
+  plus `CAP_NET_BIND_SERVICE` so its acme.sh children can bind :80 for the
+  IP-certificate standalone HTTP-01 challenge, and relies on root UID plus
+  explicit systemd filesystem and syscall restrictions for the rest of its
+  privileges.
 
 Check the boundary after installation:
 
