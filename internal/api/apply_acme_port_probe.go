@@ -98,7 +98,7 @@ func demoteForeignHeldHTTP01Binds(ctx context.Context, plan *caddyassembly.Caddy
 			InboundID: strings.Join(hysteriaNames, ","),
 			Message: "TCP :80 is held by a non-Caddy service, so ACME issuance is deferred for hysteria2 domain(s) " +
 				strings.Join(domains, ", ") + "; the inbound keeps serving its self-signed fallback certificate",
-			Source:      "caddyassembly",
+			Source: "caddyassembly",
 			Remediation: "Free TCP port 80 and re-apply to restore the http-01 challenge server; " +
 				"the domain keeps http-01 issuance armed meanwhile, so Veil's background cert-sync picks up the certificate as soon as Caddy can issue it.",
 		})

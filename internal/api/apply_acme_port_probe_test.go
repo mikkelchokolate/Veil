@@ -24,11 +24,11 @@ func stubHostPortAvailable(t *testing.T, available bool, err error) {
 func hy2OnlyDomainPlan(t *testing.T) (caddyassembly.CaddyRenderPlan, map[bindregistry.BindKey]bindregistry.BindOwner) {
 	t.Helper()
 	settings := Settings{
-		PanelListen:        "127.0.0.1:2096",
-		Mode:               "server",
-		AcmeChallengeMode:  "tls-alpn-01",
-		DefaultAcmeEmail:   "admin@example.com",
-		PanelAccess:        "direct",
+		PanelListen:       "127.0.0.1:2096",
+		Mode:              "server",
+		AcmeChallengeMode: "tls-alpn-01",
+		DefaultAcmeEmail:  "admin@example.com",
+		PanelAccess:       "direct",
 	}
 	inbounds := []Inbound{{
 		Name:           "hy2",
