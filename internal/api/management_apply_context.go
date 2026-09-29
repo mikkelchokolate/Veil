@@ -379,10 +379,15 @@ func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []S
 	// Domains are read from the config files being made live so a rollback
 	// restores certificates for the previous state instead of polling for a
 	// domain that only existed in the failed candidate.
+	var pendingCertSync []string
 	for _, domain := range hysteria2CertDomainsFromConfigs(liveFiles) {
-		results = append(results, ctx.syncCaddyCertForHysteria2(domain))
-		if !results[len(results)-1].Success {
+		action, pending := ctx.syncCaddyCertForHysteria2(domain)
+		results = append(results, action)
+		if !action.Success {
 			return results
+		}
+		if pending {
+			pendingCertSync = append(pendingCertSync, domain)
 		}
 	}
 
@@ -457,6 +462,14 @@ func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []S
 		}
 	}
 	ctx.state.orphanedUnits = nil
+
+	// Every promoted service action succeeded — the live configs are final.
+	// Hand still-pending ACME domains to the cert-sync worker for bounded
+	// retries so a freed :80 converges to the real certificate without
+	// waiting for the hourly pass (#1168).
+	if len(pendingCertSync) > 0 {
+		ctx.state.signalPendingCertSync(pendingCertSync)
+	}
 
 	return results
 }
@@ -610,14 +623,19 @@ func hysteria2CertDomainsFromConfigs(configFiles []string) []string {
 	return domains
 }
 
-func (ctx ManagementApplyContext) syncCaddyCertForHysteria2(domain string) ServiceActionResult {
+// syncCaddyCertForHysteria2 syncs one hysteria2 domain certificate through
+// the privileged helper. The second return value reports that ACME issuance
+// is still pending: the helper seeded (or kept) fallback material, the action
+// is recorded as a non-fatal success so the apply can proceed, and the caller
+// hands the domain to the cert-sync worker for bounded retries (#1168).
+func (ctx ManagementApplyContext) syncCaddyCertForHysteria2(domain string) (ServiceActionResult, bool) {
 	result := ServiceActionResult{
 		Name:    "sync-caddy-cert",
 		Command: []string{"helper", "sync_caddy_cert", domain},
 	}
 	if ctx.state.privileged == nil {
 		result.Error = "privileged helper is unavailable"
-		return result
+		return result, false
 	}
 	// The certificate tree lives under the install's etc root — the parent of
 	// the configured live root — so a custom --etc-dir install syncs into its
@@ -631,14 +649,23 @@ func (ctx ManagementApplyContext) syncCaddyCertForHysteria2(domain string) Servi
 	})
 	if err != nil {
 		result.Error = err.Error()
-		return result
+		return result, false
 	}
 	if !syncResult.Found {
-		result.Error = "Caddy has not yet issued a certificate for " + domain + "; ensure the domain resolves to this server and Cloudflare proxy is disabled so ACME can complete"
-		return result
+		// Not-yet-issued is recoverable: once the ACME challenge path clears
+		// (e.g. :80 is freed) the cert-sync worker picks the domain up again.
+		// Keep the action successful — with a warning in Output — so apply
+		// neither fails nor silently drops the pending issuance (#1168).
+		result.Success = true
+		if syncResult.Fallback {
+			result.Output = "no ACME certificate for " + domain + " yet; serving a self-signed fallback and retrying in the background"
+		} else {
+			result.Output = "no ACME certificate for " + domain + " yet; keeping the existing certificate and retrying in the background"
+		}
+		return result, true
 	}
 	result.Success = true
-	return result
+	return result, false
 }
 
 // localFirewallSyncTransactionID marks a firewall sync that was applied

@@ -2982,6 +2982,39 @@ paths:
       x-roles:
       - admin
       - viewer
+  /api/tls/inbounds:
+    get:
+      x-veil-role: viewer
+      tags:
+      - runtime
+      summary: Per-inbound TLS certificate status
+      description: >-
+        Reports the TLS certificate each domain-bearing inbound actually
+        serves: for hysteria2 inbounds the certificate path is read from the
+        live hysteria2 YAML and classified honestly — acme for a CA-issued
+        certificate, internal for a Caddy local-CA certificate, self-signed
+        for Veil/operator fallback material, and missing when no usable
+        certificate is configured. A pending ACME issuance still in retry is
+        flagged via pending so a provisional self-signed certificate is never
+        mistaken for the final state.
+      responses:
+        '200':
+          description: Per-inbound TLS certificate status list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InboundTLSStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+      security:
+      - sessionCookie: []
+      - bearerAuth: []
+      - veilToken: []
+      x-roles:
+      - admin
+      - viewer
   /api/network:
     get:
       x-veil-role: viewer
@@ -5495,6 +5528,35 @@ components:
           type: object
           description: Protocol-specific inbound fields keyed by field identifier.
           additionalProperties: true
+    InboundTLSStatus:
+      type: object
+      required:
+      - name
+      - protocol
+      - domain
+      - cert
+      properties:
+        name:
+          type: string
+          description: Inbound name.
+        protocol:
+          type: string
+          description: Inbound protocol (hysteria2, naiveproxy, ...).
+        domain:
+          type: string
+          description: >-
+            Effective certificate domain for the inbound (per-inbound domain
+            falling back to the primary settings domain).
+        pending:
+          type: boolean
+          description: >-
+            True while an ACME issuance for the domain is still being retried
+            after apply — a reported self-signed certificate is provisional.
+        cert:
+          $ref: '#/components/schemas/TLSCertInfo'
+          description: >-
+            The certificate the inbound actually serves, classified honestly
+            (acme/internal/self-signed/missing).
     ProtocolInfo:
       type: object
       required:
@@ -6585,7 +6647,24 @@ components:
           type: string
         source:
           type: string
-          description: Where the certificate was loaded from — "env" (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage).
+          description: >-
+            Where the certificate came from. Panel-edge reads use "env"
+            (VEIL_TLS_CERT) or "caddy" (Caddy-managed ACME storage).
+            Per-inbound reads classify the served certificate's origin:
+            "acme" (CA-issued), "internal" (Caddy local CA — an untrusted
+            fallback), "self-signed" (Veil/operator fallback material), or
+            "missing" (no usable certificate at the configured path). An
+            internal/self-signed certificate is never reported as a trusted
+            issuance. Note that "acme" is an origin classification, not a
+            public-trust check: a leaf from a private CA (VEIL_ACME_CA_URL
+            installs, enterprise CA) also reports "acme".
+          enum:
+          - env
+          - caddy
+          - acme
+          - internal
+          - self-signed
+          - missing
         subject:
           type: string
         issuer:

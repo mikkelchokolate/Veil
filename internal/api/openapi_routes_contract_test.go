@@ -105,6 +105,7 @@ func TestOpenAPIRoutesAndMethodsMatchRegisteredAPI(t *testing.T) {
 		"/api/services/{name}/restart":                 {"post"},
 		"/api/system":                                  {"get"},
 		"/api/tls":                                     {"get"},
+		"/api/tls/inbounds":                            {"get"},
 		"/api/network":                                 {"get"},
 		"/api/connections":                             {"get"},
 		"/api/processes":                               {"get"},

@@ -133,3 +133,68 @@ func TestCertSyncTargetsSkipsNonCertConfigs(t *testing.T) {
 		t.Fatalf("unexpected targets: %+v", targets)
 	}
 }
+
+// reconcilePending must not treat an unknown target set as "no targets": when
+// syncOnce failed before the live target list existed (fence acquire, glob
+// error, missing backend), pending marks must survive until their deadline
+// instead of being wiped by a transient error (#1168 review).
+func TestCertSyncReconcilePendingKeepsMarksOnFailedSync(t *testing.T) {
+	state := newFencedPanelState(t, &recordingPrivilegedClient{})
+	worker := newCertSyncWorker(state)
+	worker.SignalPending([]string{"edge.example.com"})
+	if !worker.PendingDomain("edge.example.com") {
+		t.Fatal("pending mark was not recorded")
+	}
+
+	// targets == nil == "sync never reached the point where the live target
+	// set was known" — pending must not be touched.
+	worker.reconcilePending(map[string]certSyncOutcome{}, nil)
+	if !worker.PendingDomain("edge.example.com") {
+		t.Fatal("nil targets wiped the pending mark on a failed sync")
+	}
+
+	// An empty-but-known target set means the domain really left the live
+	// config — dropping is correct there.
+	worker.reconcilePending(map[string]certSyncOutcome{}, []hysteria2CertSyncTarget{})
+	if worker.PendingDomain("edge.example.com") {
+		t.Fatal("pending mark survived a known-empty live target set")
+	}
+}
+
+// A still-served domain whose ACME material is absent burns an attempt each
+// pass until the budget or the hard deadline is spent — retries never run
+// unbounded (#1168).
+func TestCertSyncReconcilePendingCountsAttempts(t *testing.T) {
+	state := newFencedPanelState(t, &recordingPrivilegedClient{})
+	worker := newCertSyncWorker(state)
+	worker.maxAttempts = 2
+	worker.SignalPending([]string{"edge.example.com"})
+
+	targets := []hysteria2CertSyncTarget{{Domain: "edge.example.com", Unit: "veil-hysteria2@edge.service"}}
+	outcomes := map[string]certSyncOutcome{"edge.example.com": certSyncMissing}
+
+	worker.reconcilePending(outcomes, targets)
+	if !worker.PendingDomain("edge.example.com") {
+		t.Fatal("pending dropped after a single missing outcome")
+	}
+	worker.reconcilePending(outcomes, targets)
+	// attempts (2) reached maxAttempts on this pass → dropped.
+	worker.reconcilePending(outcomes, targets)
+	if worker.PendingDomain("edge.example.com") {
+		t.Fatal("pending survived past the attempt budget")
+	}
+}
+
+// A found outcome converges the pending mark immediately.
+func TestCertSyncReconcilePendingClearsOnFound(t *testing.T) {
+	state := newFencedPanelState(t, &recordingPrivilegedClient{})
+	worker := newCertSyncWorker(state)
+	worker.SignalPending([]string{"edge.example.com"})
+	worker.reconcilePending(
+		map[string]certSyncOutcome{"edge.example.com": certSyncFound},
+		[]hysteria2CertSyncTarget{{Domain: "edge.example.com", Unit: "veil-hysteria2@edge.service"}},
+	)
+	if worker.PendingDomain("edge.example.com") {
+		t.Fatal("pending mark survived issued material")
+	}
+}

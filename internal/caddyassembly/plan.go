@@ -44,6 +44,16 @@ type CaddyRenderPlan struct {
 	ACMEChallenges       map[bindregistry.BindKey]AcmeChallengeOwner
 	Domains              map[string]CaddyDomainCertSpec
 	DefaultChallengeMode string
+	// HTTP01DeferredDomains names hysteria2-only domains whose :80 http-01
+	// challenge server bind was demoted because a foreign service holds the
+	// port (#1168). No -acme server is rendered for them (the bind would
+	// collide), but the TLS automation policy keeps their issuer in http-01
+	// mode: certmagic can then solve opportunistically the moment the port
+	// frees, and the cert-sync worker copies the issued leaf into hy2
+	// storage. Without this, the demote would silently drop the domain to
+	// DefaultChallengeMode (usually tls-alpn-01) — an unreachable challenge
+	// for a UDP-only domain, so the background retry could never converge.
+	HTTP01DeferredDomains map[string]bool
 	// FallbackBase is the managed naive fallback web-root base (the <etc>/www
 	// tree) every naive server in this plan was resolved against. The renderer
 	// validates owner.FallbackRoot against it so custom --etc-dir installs
@@ -131,11 +141,12 @@ func BuildRenderPlanForEtcDir(
 	}
 
 	return CaddyRenderPlan{
-		Servers:              servers,
-		ACMEChallenges:       challengeBinds,
-		Domains:              domains,
-		DefaultChallengeMode: settings.AcmeChallengeMode,
-		FallbackBase:         fallbackBase,
+		Servers:               servers,
+		ACMEChallenges:        challengeBinds,
+		Domains:               domains,
+		DefaultChallengeMode:  settings.AcmeChallengeMode,
+		HTTP01DeferredDomains: make(map[string]bool),
+		FallbackBase:          fallbackBase,
 	}, owners, nil
 }
 
