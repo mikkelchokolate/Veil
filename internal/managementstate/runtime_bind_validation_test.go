@@ -160,6 +160,102 @@ func TestValidationRejectsTCPInboundOnWarpSocksPort(t *testing.T) {
 	}
 }
 
+// #1191: the panel's internal Hysteria2 auth callback binds
+// 127.40.0.1:61001 on every start, so any TCP listener on that port
+// collides regardless of whether a Hysteria2 inbound exists — unlike the
+// per-inbound stats port, this reservation is unconditional.
+func TestValidationRejectsHy2AuthPortForTCPInboundWithoutHysteria(t *testing.T) {
+	settings := runtimeBindSettings()
+	snapshot := model.ManagementSnapshot{
+		Settings: settings,
+		Inbounds: []model.Inbound{
+			{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: runtimeports.Hysteria2HTTPAuthPort, Enabled: true},
+		},
+	}
+	errs := NewValidation().ValidateSnapshot(snapshot, runtimeBindValidationFields())
+	if !validationContains(errs, "hysteria2 auth callback") {
+		t.Fatalf("TCP inbound on the Hysteria2 auth port was accepted: %v", errs)
+	}
+}
+
+func TestValidationRejectsHy2AuthPortForPanelListen(t *testing.T) {
+	settings := runtimeBindSettings()
+	settings.PanelListen = "0.0.0.0:" + itoa(runtimeports.Hysteria2HTTPAuthPort)
+	snapshot := model.ManagementSnapshot{
+		Settings: settings,
+		Inbounds: []model.Inbound{{Name: "hy", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}},
+	}
+	errs := NewValidation().ValidateSnapshot(snapshot, runtimeBindValidationFields())
+	if !validationContains(errs, "panellisten") || !validationContains(errs, "hysteria2 auth callback") {
+		t.Fatalf("panelListen on the Hysteria2 auth port was accepted: %v", errs)
+	}
+}
+
+func TestValidationRejectsHy2AuthPortForPanelCaddyPublicPort(t *testing.T) {
+	settings := runtimeBindSettings()
+	settings.PanelAccess = "caddy"
+	settings.PanelDomain = "panel.example.test"
+	settings.PanelPublicPort = runtimeports.Hysteria2HTTPAuthPort
+	snapshot := model.ManagementSnapshot{
+		Settings: settings,
+		Inbounds: []model.Inbound{{Name: "hy", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}},
+	}
+	errs := NewValidation().ValidateSnapshot(snapshot, runtimeBindValidationFields())
+	if !validationContains(errs, "panelpublicport") || !validationContains(errs, "hysteria2 auth callback") {
+		t.Fatalf("Panel Caddy public port on the Hysteria2 auth port was accepted: %v", errs)
+	}
+}
+
+func TestValidationRejectsHy2AuthPortForNaiveEffectivePublicPort(t *testing.T) {
+	settings := runtimeBindSettings()
+	snapshot := model.ManagementSnapshot{
+		Settings: settings,
+		Inbounds: []model.Inbound{
+			{Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 8443, Enabled: true, ProtocolFields: map[string]any{"publicPort": float64(runtimeports.Hysteria2HTTPAuthPort)}},
+		},
+	}
+	errs := NewValidation().ValidateSnapshot(snapshot, runtimeBindValidationFields())
+	if !validationContains(errs, "hysteria2 auth callback") {
+		t.Fatalf("Naive public-port/Hysteria2 auth collision was accepted: %v", errs)
+	}
+}
+
+func TestValidationRejectsHy2AuthPortForWarpSocksPort(t *testing.T) {
+	settings := runtimeBindSettings()
+	snapshot := model.ManagementSnapshot{
+		Settings: settings,
+		Warp:     model.WarpConfig{Enabled: true, SocksPort: runtimeports.Hysteria2HTTPAuthPort},
+		Inbounds: []model.Inbound{{Name: "hy", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}},
+	}
+	fields := map[string]json.RawMessage{
+		"settings": json.RawMessage(`{}`),
+		"inbounds": json.RawMessage(`[]`),
+		"warp":     json.RawMessage(`{}`),
+	}
+	errs := NewValidation().ValidateSnapshot(snapshot, fields)
+	if !validationContains(errs, "socksport") || !validationContains(errs, "hysteria2 auth callback") {
+		t.Fatalf("WARP socksPort on the Hysteria2 auth port was accepted: %v", errs)
+	}
+}
+
+// The auth callback is TCP-only: a UDP inbound on the same numeric port
+// does not collide with it.
+func TestValidationAllowsUDPInboundOnHy2AuthPort(t *testing.T) {
+	settings := runtimeBindSettings()
+	snapshot := model.ManagementSnapshot{
+		Settings: settings,
+		Inbounds: []model.Inbound{
+			{Name: "hy", Protocol: "hysteria2", Transport: "udp", Port: runtimeports.Hysteria2HTTPAuthPort, Enabled: true},
+		},
+	}
+	errs := NewValidation().ValidateSnapshot(snapshot, runtimeBindValidationFields())
+	for _, err := range errs {
+		if strings.Contains(err, "61001") {
+			t.Fatalf("UDP inbound on the Hysteria2 auth port was rejected: %v", errs)
+		}
+	}
+}
+
 func TestValidationAllowsNaiveToSharePanelCaddyPublicPort(t *testing.T) {
 	settings := runtimeBindSettings()
 	settings.PanelAccess = "caddy"

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/netip"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -43,16 +44,12 @@ const (
 	// maxHy2AuthBodyBytes bounds the auth request body — it is a three-field
 	// JSON object, so anything larger is malformed.
 	maxHy2AuthBodyBytes int64 = 8 << 10
-	// defaultHy2AuthIPTTL retires stale IP admissions. The rendered QUIC
-	// maxIdleTimeout is 2m; once a connection idles past that the session is
-	// gone, and keeping the IP recorded for roughly twice that window makes
-	// evictions lag real session death without letting a stale IP squat on
-	// the client's limit forever.
-	defaultHy2AuthIPTTL = 4 * time.Minute
 	// defaultHy2AuthSessionTTL bounds pending-admission bookkeeping: an
 	// admission that never reaches the /online table (dead connection, lost
 	// daemon update) holds its slot for at most this long before the entry
-	// expires and frees the slot.
+	// expires and frees the slot. Sessions that DO reach the table are then
+	// tracked for as long as /online still contains them — no wall-clock TTL
+	// applies to a live session (#1180).
 	defaultHy2AuthSessionTTL = 30 * time.Second
 )
 
@@ -67,57 +64,6 @@ type hy2AuthResponse struct {
 	ID string `json:"id,omitempty"`
 }
 
-// hy2IPTracker records the distinct source IPs admitted per client inside a
-// sliding TTL window. Entries expire lazily; re-admitting an already-tracked
-// IP refreshes its expiry so reconnects from the same address never consume a
-// second slot, while an idle IP ages out ~2x the QUIC idle timeout after its
-// session actually dies.
-type hy2IPTracker struct {
-	mu      sync.Mutex
-	ttl     time.Duration
-	now     func() time.Time
-	clients map[string]map[netip.Addr]time.Time
-}
-
-func newHy2IPTracker(ttl time.Duration, now func() time.Time) *hy2IPTracker {
-	if now == nil {
-		now = time.Now
-	}
-	return &hy2IPTracker{ttl: ttl, now: now, clients: make(map[string]map[netip.Addr]time.Time)}
-}
-
-// admit reports whether clientID may admit a session from ip under limit.
-// true means the IP is now tracked (or its TTL refreshed); false means the
-// admission would exceed the limit.
-func (t *hy2IPTracker) admit(clientID string, ip netip.Addr, limit int) bool {
-	if limit < 1 {
-		return true
-	}
-	now := t.now()
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	entries, ok := t.clients[clientID]
-	if !ok {
-		entries = make(map[netip.Addr]time.Time)
-		t.clients[clientID] = entries
-	}
-	// Lazy expiry keeps the map bounded without a background reaper.
-	for seen, expires := range entries {
-		if !expires.After(now) {
-			delete(entries, seen)
-		}
-	}
-	if expires, tracked := entries[ip]; tracked && expires.After(now) {
-		entries[ip] = now.Add(t.ttl)
-		return true
-	}
-	if len(entries) >= limit {
-		return false
-	}
-	entries[ip] = now.Add(t.ttl)
-	return true
-}
-
 // hy2PendingAdmission pins the client's /online watermark observed when the
 // session was admitted: the admission is assumed absorbed into the daemon's
 // table only once the observed count moves above that watermark.
@@ -126,54 +72,135 @@ type hy2PendingAdmission struct {
 	onlineAtAdmit int64
 }
 
-// hy2SessionTracker records recent session admissions per client inside a
-// short TTL window. /online is authoritative for LIVE sessions, but the
-// daemon only registers a session after auth returns ok — without this
-// bridge, two auth requests landing inside that interval both see the same
-// /online count and both pass, admitting more sessions than deviceLimit
-// allows. Pending entries are keyed by the client addr (ip:port), which is
-// unique per QUIC connection, so a re-auth for the same tuple refreshes
-// rather than double-counts.
-type hy2SessionTracker struct {
+// hy2LiveSession records one admitted session for ipLimit accounting, keyed
+// by the session tuple (inbound + the client addr the daemon reports). An
+// entry is "pending" until the /online count can credibly contain it
+// (watermark promotion), then "registered"; a pending entry that never
+// promotes dies at `expires` — the admission evidently failed to register.
+// Registered entries carry no wall-clock TTL: they survive for exactly as
+// long as the /online count still has room for them, which is what makes
+// ipLimit a LIVE-session bound instead of an admission-history window — the
+// defect behind #1180. `admittedAt` is the last auth sighting of the tuple
+// and orders retirement candidates when the count shrinks.
+type hy2LiveSession struct {
+	ip            netip.Addr
+	admittedAt    time.Time
+	expires       time.Time
+	onlineAtAdmit int64
+	registered    bool
+}
+
+// hy2AdmissionTracker enforces deviceLimit and ipLimit at session admission
+// against the daemon's live /online session table. Both limits share one
+// mutex and one commit point: every check evaluates first, and bookkeeping
+// is written only after ALL set limits pass, so an admission denied by one
+// limit can never squat on the other limit's slots (#1180 secondary defect).
+//
+// /online is authoritative for the client's live session COUNT but anonymous
+// about which sessions it counts, so the trackers reconcile per-session
+// records (keyed by the unique 4-tuple the daemon reports) against it:
+//
+//   - pending entries (deviceLimit) bridge the auth-ok → /online gap for a
+//     short TTL, credited against watermark absorption exactly as before.
+//   - live entries (ipLimit) carry the source IP. A pending entry whose
+//     admission watermark is below the current count is promoted to
+//     registered — the count plausibly contains it — limited to the count
+//     slots registered entries do not already fill. A pending entry that is
+//     never promoted dies at its TTL (dead admission, slot freed).
+//   - when the count drops below the number of registered entries, the
+//     excess are dead sessions. The table cannot name which, so the tracker
+//     retires records that lose the least information first — an entry whose
+//     IP a sibling entry still covers cannot shrink the tracked IP set, then
+//     the longest-silent entry is the best guess for a dead session. A wrong
+//     retirement can only un-track a live session's IP (a bounded residual
+//     vs the exact per-IP session table the stats API does not expose);
+//     keeping a dead entry only squats on its own already-seen IP.
+//   - count sessions with no matching record (panel restart while clients
+//     stayed connected) are unaccounted live sessions: they occupy
+//     unknown-IP slots and deny new IPs fail-closed until they disconnect.
+type hy2AdmissionTracker struct {
 	mu       sync.Mutex
 	ttl      time.Duration
 	now      func() time.Time
-	sessions map[string]map[string]hy2PendingAdmission
+	pending  map[string]map[string]hy2PendingAdmission
+	sessions map[string]map[string]*hy2LiveSession
 }
 
-func newHy2SessionTracker(ttl time.Duration, now func() time.Time) *hy2SessionTracker {
+func newHy2AdmissionTracker(ttl time.Duration, now func() time.Time) *hy2AdmissionTracker {
 	if now == nil {
 		now = time.Now
 	}
-	return &hy2SessionTracker{ttl: ttl, now: now, sessions: make(map[string]map[string]hy2PendingAdmission)}
+	return &hy2AdmissionTracker{
+		ttl:      ttl,
+		now:      now,
+		pending:  make(map[string]map[string]hy2PendingAdmission),
+		sessions: make(map[string]map[string]*hy2LiveSession),
+	}
 }
 
-// admit reports whether clientID may admit a session whose /online count is
-// `online` under `limit`, counting this admission's pending entry too. The
-// check + record is atomic under the tracker mutex, so concurrent auth
-// requests cannot race past the limit together.
-func (t *hy2SessionTracker) admit(clientID, token string, online int64, limit int) bool {
-	if limit < 1 {
-		return true
+// admit reports whether clientID may admit a session under the given limits.
+// key is the session's unique tuple (inbound + addr), ip its parsed source
+// address (required only when ipLimit > 0), and online the client's folded
+// /online session count read just before this call. On true the admission is
+// committed; on false the denied admission itself recorded nothing — (false,
+// reason) names the limit that denied — though the ipLimit gate's reconcile
+// pass may still promote or retire OTHER pre-existing records.
+func (t *hy2AdmissionTracker) admit(clientID, key string, ip netip.Addr, online int64, deviceLimit, ipLimit int) (bool, string) {
+	if deviceLimit < 1 && ipLimit < 1 {
+		return true, ""
 	}
 	now := t.now()
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	entries, ok := t.sessions[clientID]
+
+	pending, ok := t.pending[clientID]
 	if !ok {
-		entries = make(map[string]hy2PendingAdmission)
-		t.sessions[clientID] = entries
+		pending = make(map[string]hy2PendingAdmission)
+		t.pending[clientID] = pending
 	}
-	for seen, entry := range entries {
+	sessions, ok := t.sessions[clientID]
+	if !ok {
+		sessions = make(map[string]*hy2LiveSession)
+		t.sessions[clientID] = sessions
+	}
+	// Lazy expiry keeps the pending map bounded without a background reaper.
+	for seen, entry := range pending {
 		if !entry.expires.After(now) {
-			delete(entries, seen)
+			delete(pending, seen)
 		}
 	}
-	if entry, tracked := entries[token]; tracked && entry.expires.After(now) {
-		entry.expires = now.Add(t.ttl)
-		entries[token] = entry
-		return true
+
+	// A re-auth for a tuple the tracker still believes pending or live is the
+	// same QUIC connection, never a new slot: refresh and admit without
+	// re-running the limits.
+	pendingTracked := false
+	if entry, tracked := pending[key]; tracked && entry.expires.After(now) {
+		pendingTracked = true
 	}
+	sessionTracked := false
+	if s := sessions[key]; s != nil && (s.registered || s.expires.After(now)) {
+		sessionTracked = true
+	}
+	if pendingTracked || sessionTracked {
+		if deviceLimit > 0 {
+			entry, tracked := pending[key]
+			if !tracked {
+				entry.onlineAtAdmit = online
+				if s := sessions[key]; s != nil {
+					entry.onlineAtAdmit = s.onlineAtAdmit
+				}
+			}
+			entry.expires = now.Add(t.ttl)
+			pending[key] = entry
+		}
+		if s := sessions[key]; s != nil {
+			s.admittedAt = now
+			s.expires = now.Add(t.ttl)
+		}
+		return true, ""
+	}
+
+	// --- deviceLimit evaluation (no commit yet) ---
 	// Entries admitted at a watermark below the current /online count may
 	// already be absorbed into that count — but online credits at most one
 	// session per entry, so the absorbed allowance is min(#below, online).
@@ -185,19 +212,132 @@ func (t *hy2SessionTracker) admit(clientID, token string, online int64, limit in
 	// without matching which session registered — and an entry whose session
 	// dies before ever registering squats on its slot until the TTL; both
 	// land on the fail-closed side within the TTL window.
-	var below, live int64
-	for _, entry := range entries {
-		live++
-		if entry.onlineAtAdmit < online {
-			below++
+	if deviceLimit > 0 {
+		var below, live int64
+		for _, entry := range pending {
+			live++
+			if entry.onlineAtAdmit < online {
+				below++
+			}
+		}
+		pendingEffective := live - min(below, online)
+		if online+pendingEffective >= int64(deviceLimit) {
+			return false, "device_limit"
 		}
 	}
-	pending := live - min(below, online)
-	if online+pending >= int64(limit) {
-		return false
+
+	// --- ipLimit evaluation (no commit yet) ---
+	if ipLimit > 0 {
+		t.reconcileSessionsLocked(sessions, online, now)
+		liveIPs := make(map[netip.Addr]struct{}, len(sessions))
+		var registered int64
+		for _, s := range sessions {
+			liveIPs[s.ip] = struct{}{}
+			if s.registered {
+				registered++
+			}
+		}
+		// Sessions the daemon counts but the tracker never recorded (panel
+		// restart, tracker reset) occupy unknown-IP slots — denying a new IP
+		// fail-closed is strictly correct because any of them could be a
+		// distinct address already at the limit.
+		unaccounted := online - registered
+		if unaccounted < 0 {
+			unaccounted = 0
+		}
+		if _, covered := liveIPs[ip]; !covered && int64(len(liveIPs))+unaccounted >= int64(ipLimit) {
+			return false, "ip_limit"
+		}
 	}
-	entries[token] = hy2PendingAdmission{expires: now.Add(t.ttl), onlineAtAdmit: online}
-	return true
+
+	// Every set limit passed — only now commit.
+	if deviceLimit > 0 {
+		pending[key] = hy2PendingAdmission{expires: now.Add(t.ttl), onlineAtAdmit: online}
+	}
+	if ipLimit > 0 {
+		sessions[key] = &hy2LiveSession{
+			ip:            ip,
+			admittedAt:    now,
+			expires:       now.Add(t.ttl),
+			onlineAtAdmit: online,
+		}
+	}
+	return true, ""
+}
+
+// reconcileSessionsLocked retires session records the /online count can no
+// longer account for, promotes pending records the count plausibly contains,
+// and expires pending records that evidently never registered. Call under
+// the tracker mutex.
+func (t *hy2AdmissionTracker) reconcileSessionsLocked(sessions map[string]*hy2LiveSession, online int64, now time.Time) {
+	// Pending records whose TTL already lapsed are dead admissions — expire
+	// them BEFORE promotion so a stale record cannot consume a registration
+	// slot ahead of a still-live pending peer: promoted records are never
+	// swept, so a promoted corpse would pin its IP forever.
+	for key, s := range sessions {
+		if !s.registered && !s.expires.After(now) {
+			delete(sessions, key)
+		}
+	}
+	var registered int64
+	for _, s := range sessions {
+		if s.registered {
+			registered++
+		}
+	}
+	// Registration credit: pending entries admitted below the current count
+	// may already be inside it. Promote the oldest candidates first, but only
+	// into count slots the registered set does not already fill — anything
+	// promoted past the count would be a guessed, not evidenced, liveness.
+	if slots := online - registered; slots > 0 {
+		var promotable []*hy2LiveSession
+		for _, s := range sessions {
+			if !s.registered && s.onlineAtAdmit < online {
+				promotable = append(promotable, s)
+			}
+		}
+		sort.Slice(promotable, func(i, j int) bool { return promotable[i].admittedAt.Before(promotable[j].admittedAt) })
+		for i := int64(0); i < slots && i < int64(len(promotable)); i++ {
+			promotable[i].registered = true
+			registered++
+		}
+	}
+	// The count shrank below the registered set: exactly (registered -
+	// online) recorded sessions are dead, but the table cannot say which.
+	// Retire records that cost the least information first — an entry whose
+	// IP a sibling still covers cannot shrink the tracked IP set — and after
+	// that the longest-silent records, the best available proxy for a dead
+	// session. Wrong retirements are the documented residual: they can only
+	// free an IP this client already used, never admit a never-seen one.
+	if registered > online {
+		freq := make(map[netip.Addr]int, len(sessions))
+		for _, s := range sessions {
+			freq[s.ip]++
+		}
+		type candidate struct {
+			key     string
+			session *hy2LiveSession
+		}
+		registeredEntries := make([]candidate, 0, len(sessions))
+		for key, s := range sessions {
+			if s.registered {
+				registeredEntries = append(registeredEntries, candidate{key: key, session: s})
+			}
+		}
+		sort.Slice(registeredEntries, func(i, j int) bool {
+			di := freq[registeredEntries[i].session.ip] > 1
+			dj := freq[registeredEntries[j].session.ip] > 1
+			if di != dj {
+				return di
+			}
+			return registeredEntries[i].session.admittedAt.Before(registeredEntries[j].session.admittedAt)
+		})
+		retire := registered - online
+		for i := int64(0); i < retire && i < int64(len(registeredEntries)); i++ {
+			freq[registeredEntries[i].session.ip]--
+			delete(sessions, registeredEntries[i].key)
+		}
+	}
 }
 
 // hy2AuthSecretEntry is the memoized Argon2 path secret for one inbound,
@@ -242,11 +382,8 @@ func (s *managementState) ensureHy2AuthLocked() {
 	if s.hy2Auth != nil {
 		return
 	}
-	if s.hy2IPTracker == nil {
-		s.hy2IPTracker = newHy2IPTracker(defaultHy2AuthIPTTL, nil)
-	}
-	if s.hy2SessionTracker == nil {
-		s.hy2SessionTracker = newHy2SessionTracker(defaultHy2AuthSessionTTL, nil)
+	if s.hy2Limiter == nil {
+		s.hy2Limiter = newHy2AdmissionTracker(defaultHy2AuthSessionTTL, nil)
 	}
 	addr := s.hy2AuthListenAddr
 	if addr == "" {
@@ -319,12 +456,11 @@ func (s *managementState) handleHy2Auth(w http.ResponseWriter, r *http.Request) 
 	svc := s.clientService
 	repo := s.clientRepo
 	stopping := s.clientSubsystemStopping
-	tracker := s.hy2IPTracker
-	sessions := s.hy2SessionTracker
+	limiter := s.hy2Limiter
 	online := s.hy2AuthOnline
 	s.mu.Unlock()
 
-	if !found || stopping || svc == nil || repo == nil || tracker == nil || sessions == nil {
+	if !found || stopping || svc == nil || repo == nil || limiter == nil {
 		deny()
 		return
 	}
@@ -420,34 +556,43 @@ func (s *managementState) handleHy2Auth(w http.ResponseWriter, r *http.Request) 
 
 	// Limits only attach to normalized bindings — legacy embedded profiles
 	// cannot carry them, and an unknown user table entry already failed the
-	// credential check above.
+	// credential check above. Both limits are enforced against the daemon's
+	// LIVE /online session table: the /online read is required whenever any
+	// limit is set, so a stats outage fails closed for deviceLimit and
+	// ipLimit alike (an unreadable table can never prove the limit holds).
 	norm, isNormalized := normalizedByUser[user]
 	if isNormalized && norm.ClientID != "" {
-		if norm.DeviceLimit != nil && *norm.DeviceLimit > 0 {
+		deviceLimit := 0
+		if norm.DeviceLimit != nil {
+			deviceLimit = *norm.DeviceLimit
+		}
+		ipLimit := 0
+		if norm.IPLimit != nil {
+			ipLimit = *norm.IPLimit
+		}
+		if deviceLimit > 0 || ipLimit > 0 {
 			live, err := s.hy2ClientOnlineSessions(r.Context(), settings, norm.ClientID, online)
 			if err != nil {
 				log.Printf("event=hy2_auth_online_error inbound=%q client=%q err=%q (failing closed)", inbound.Name, norm.ClientID, err)
 				deny()
 				return
 			}
-			// live + pending-admissions vs the limit in one atomic check —
-			// a burst of concurrent auths cannot all win on the same stale
-			// /online read.
-			if !sessions.admit(norm.ClientID, req.Addr, live, *norm.DeviceLimit) {
-				log.Printf("event=hy2_auth_deny reason=device_limit inbound=%q client=%q sessions=%d limit=%d", inbound.Name, norm.ClientID, live, *norm.DeviceLimit)
-				deny()
-				return
+			var ip netip.Addr
+			if ipLimit > 0 {
+				var ok bool
+				ip, ok = parseHy2AuthAddr(req.Addr)
+				if !ok {
+					log.Printf("event=hy2_auth_deny reason=unparseable_addr inbound=%q client=%q addr=%q", inbound.Name, norm.ClientID, req.Addr)
+					deny()
+					return
+				}
 			}
-		}
-		if norm.IPLimit != nil && *norm.IPLimit > 0 {
-			ip, ok := parseHy2AuthAddr(req.Addr)
-			if !ok {
-				log.Printf("event=hy2_auth_deny reason=unparseable_addr inbound=%q client=%q addr=%q", inbound.Name, norm.ClientID, req.Addr)
-				deny()
-				return
-			}
-			if !tracker.admit(norm.ClientID, ip, *norm.IPLimit) {
-				log.Printf("event=hy2_auth_deny reason=ip_limit inbound=%q client=%q ip=%s limit=%d", inbound.Name, norm.ClientID, ip, *norm.IPLimit)
+			// live + pending-admissions vs every set limit in one atomic
+			// check — a burst of concurrent auths cannot all win on the same
+			// stale /online read, and a deny by either limit commits nothing.
+			admitted, reason := limiter.admit(norm.ClientID, inbound.Name+"\x00"+req.Addr, ip, live, deviceLimit, ipLimit)
+			if !admitted {
+				log.Printf("event=hy2_auth_deny reason=%s inbound=%q client=%q addr=%q online=%d", reason, inbound.Name, norm.ClientID, req.Addr, live)
 				deny()
 				return
 			}

@@ -45,13 +45,14 @@ func TestValidatorStillRejectsForeignPortOwner(t *testing.T) {
 	assertErrorIssue(t, response, "port_in_use")
 }
 
-// TestValidatorRejectsInternalReservedTCPPorts covers #1061: the loopback
-// TCP ports Veil services bind (Hysteria2 traffic stats on 61000, managed
-// Caddy admin on 2019) must be rejected for public TCP inbounds regardless
-// of whether the service currently exists — a wildcard listener on either
-// port claims the loopback address and wedges the service on first use.
+// TestValidatorRejectsInternalReservedTCPPorts covers #1061 and #1191: the
+// loopback TCP ports Veil services bind (Hysteria2 traffic stats on 61000,
+// the Hysteria2 auth callback on 61001, managed Caddy admin on 2019) must be
+// rejected for public TCP inbounds regardless of whether the service
+// currently exists — a wildcard listener on any of them claims the loopback
+// address and wedges the service on first use.
 func TestValidatorRejectsInternalReservedTCPPorts(t *testing.T) {
-	for _, port := range []int{runtimeports.Hysteria2TrafficStatsPort, runtimeports.CaddyAdminPort} {
+	for _, port := range []int{runtimeports.Hysteria2TrafficStatsPort, runtimeports.Hysteria2HTTPAuthPort, runtimeports.CaddyAdminPort} {
 		response := testValidator().Validate(context.Background(), Request{
 			Inbounds: []model.Inbound{{
 				Name: "edge", Protocol: "mieru", Transport: "tcp", Port: port, Enabled: true, Password: "secret",
@@ -65,7 +66,7 @@ func TestValidatorRejectsInternalReservedTCPPorts(t *testing.T) {
 // the reserved loopback listeners are TCP-only, so a UDP inbound on the same
 // numeric port does not collide with them.
 func TestValidatorAllowsUDPOnReservedTCPPorts(t *testing.T) {
-	for _, port := range []int{runtimeports.Hysteria2TrafficStatsPort, runtimeports.CaddyAdminPort} {
+	for _, port := range []int{runtimeports.Hysteria2TrafficStatsPort, runtimeports.Hysteria2HTTPAuthPort, runtimeports.CaddyAdminPort} {
 		response := testValidator().Validate(context.Background(), Request{
 			Inbounds: []model.Inbound{{
 				Name: "edge", Protocol: "mieru", Transport: "udp", Port: port, Enabled: true, Password: "secret",

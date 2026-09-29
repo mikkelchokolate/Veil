@@ -66,6 +66,9 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 		if hysteriaStatsActive && panelCaddyPort == runtimeports.Hysteria2TrafficStatsPort {
 			errs = append(errs, fmt.Sprintf("settings.panelPublicPort: TCP port %d is reserved for Hysteria2 traffic statistics", panelCaddyPort))
 		}
+		if panelCaddyPort == runtimeports.Hysteria2HTTPAuthPort {
+			errs = append(errs, fmt.Sprintf("settings.panelPublicPort: TCP port %d is reserved for the Hysteria2 auth callback", panelCaddyPort))
+		}
 		if panelCaddyPort == runtimeports.CaddyAdminPort {
 			errs = append(errs, fmt.Sprintf("settings.panelPublicPort: TCP port %d conflicts with the Caddy admin listener", panelCaddyPort))
 		}
@@ -78,6 +81,12 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 			if port, err := strconv.Atoi(portStr); err == nil {
 				if hysteriaStatsActive && port == runtimeports.Hysteria2TrafficStatsPort {
 					errs = append(errs, fmt.Sprintf("settings.panelListen: TCP port %d is reserved for Hysteria2 traffic statistics", port))
+				}
+				// The panel binds the internal Hysteria2 auth callback on
+				// every start regardless of the inbound set, so this
+				// reservation is unconditional (#1191).
+				if port == runtimeports.Hysteria2HTTPAuthPort {
+					errs = append(errs, fmt.Sprintf("settings.panelListen: TCP port %d is reserved for the Hysteria2 auth callback", port))
 				}
 				if caddyActive && port == runtimeports.CaddyAdminPort {
 					errs = append(errs, fmt.Sprintf("settings.panelListen: TCP port %d conflicts with the Caddy admin listener", port))
@@ -102,6 +111,9 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 		}
 		if hysteriaStatsActive && port == runtimeports.Hysteria2TrafficStatsPort {
 			errs = append(errs, fmt.Sprintf("warp.socksPort: TCP port %d is reserved for Hysteria2 traffic statistics", port))
+		}
+		if port == runtimeports.Hysteria2HTTPAuthPort {
+			errs = append(errs, fmt.Sprintf("warp.socksPort: TCP port %d is reserved for the Hysteria2 auth callback", port))
 		}
 		if caddyActive && port == runtimeports.CaddyAdminPort {
 			errs = append(errs, fmt.Sprintf("warp.socksPort: TCP port %d conflicts with the Caddy admin listener", port))
@@ -154,6 +166,9 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 			if bindTransport == "tcp" {
 				if hysteriaStatsActive && bindPort == runtimeports.Hysteria2TrafficStatsPort {
 					errs = append(errs, fmt.Sprintf("inbounds[%d]: effective TCP port %d is reserved for Hysteria2 traffic statistics", i, bindPort))
+				}
+				if bindPort == runtimeports.Hysteria2HTTPAuthPort {
+					errs = append(errs, fmt.Sprintf("inbounds[%d]: effective TCP port %d is reserved for the Hysteria2 auth callback", i, bindPort))
 				}
 				if caddyActive && bindPort == runtimeports.CaddyAdminPort {
 					errs = append(errs, fmt.Sprintf("inbounds[%d]: effective TCP port %d conflicts with the Caddy admin listener", i, bindPort))

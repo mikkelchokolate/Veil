@@ -41,7 +41,9 @@ func Hysteria2TrafficStatsEndpoint(publicPort int) string {
 // carried in the request path, so it binds one fixed address inside the
 // 127.40.0.0/16 band the unit egress filter already pierces. The distinct
 // port means it can never collide with a per-inbound stats listener even
-// when the mapped stats host equals Hysteria2HTTPAuthHost.
+// when the mapped stats host equals Hysteria2HTTPAuthHost. The panel binds
+// it unconditionally at startup, so desired-state validation reserves it
+// for every TCP listen (#1191).
 const Hysteria2HTTPAuthPort = 61001
 
 // Hysteria2HTTPAuthHost is the fixed loopback address the internal auth
