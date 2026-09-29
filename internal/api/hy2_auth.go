@@ -119,22 +119,6 @@ func (t *hy2IPTracker) admit(clientID string, ip netip.Addr, limit int) bool {
 	return true
 }
 
-// tracked returns the number of live (non-expired) IPs for a client —
-// test/debug support only.
-func (t *hy2IPTracker) tracked(clientID string) int {
-	now := t.now()
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	entries := t.clients[clientID]
-	live := 0
-	for _, expires := range entries {
-		if expires.After(now) {
-			live++
-		}
-	}
-	return live
-}
-
 // hy2SessionTracker records recent session admissions per client inside a
 // short grace window. /online is authoritative for LIVE sessions, but the
 // daemon only registers a session after auth returns ok — without this
@@ -187,21 +171,6 @@ func (t *hy2SessionTracker) admit(clientID, token string, online int64, limit in
 	}
 	entries[token] = now.Add(t.ttl)
 	return true
-}
-
-// pending returns the number of unexpired admissions for a client —
-// test/debug support only.
-func (t *hy2SessionTracker) pending(clientID string) int {
-	now := t.now()
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	live := 0
-	for _, expires := range t.sessions[clientID] {
-		if expires.After(now) {
-			live++
-		}
-	}
-	return live
 }
 
 // hy2AuthServer bundles the listener and server so Close can shut both down.
