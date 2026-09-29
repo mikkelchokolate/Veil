@@ -207,6 +207,14 @@ func protocolQuotaEnforcement(protocol string) bool {
 	return protocols.TelemetrySupportOf(protocol).QuotaEnforcement
 }
 
+// protocolConnectionLimits reports whether a protocol's runtime enforces
+// deviceLimit/ipLimit when admitting sessions. It shares
+// protocols.TelemetrySupportOf with the capability surface and the catalog
+// for the same single-source guarantee as protocolQuotaEnforcement (#1173).
+func protocolConnectionLimits(protocol string) bool {
+	return protocols.TelemetrySupportOf(protocol).DeviceLimits
+}
+
 // bindingCapabilityForInbound resolves the protocol capabilities of the named
 // inbound for the enriched client binding read model. Returns nil when the
 // inbound or its protocol is unknown. Per-client credential and expiry
@@ -246,6 +254,7 @@ func (s *managementState) bindingCapabilityForInbound(inboundID string) *client.
 		// /api/protocols catalog — never widen a protocol here alone.
 		TrafficAccounting:     telemetry.TrafficAccounting,
 		QuotaEnforcement:      telemetry.QuotaEnforcement,
+		DeviceLimits:          telemetry.DeviceLimits,
 		CredentialKinds:       []string{"password"},
 		ExpirationEnforcement: perClient,
 	}
@@ -323,6 +332,13 @@ func initClientSubsystem(s *managementState) {
 		s.certSyncWorker = newCertSyncWorker(s)
 		s.certSyncWorker.Start()
 	}
+	// Internal Hysteria2 HTTP auth callback (#1173): one loopback listener
+	// serves every inbound (per-inbound scoping rides in the URL path) and
+	// reads live client state per request, so it binds once and survives
+	// restores. Rendered configs only reference it when a limited client is
+	// present, but binding it unconditionally keeps the listener free of
+	// render-order dependencies.
+	s.ensureHy2AuthLocked()
 	// Periodic panel IP-certificate renewal (#1170): the shortlived profile
 	// yields ~6-day certificates and acme.sh runs with --no-cron for helper
 	// issuance, so this worker is the renewal driver. It self-gates on

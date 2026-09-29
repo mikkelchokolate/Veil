@@ -845,6 +845,30 @@ CREATE TRIGGER traffic_binding_cleanup AFTER DELETE ON client_bindings BEGIN
 END;
 `,
 	},
+	{
+		version: 30,
+		name:    "client_connection_limits",
+		sql: `
+-- ipLimit mirrors deviceLimit: a positive cap on the number of distinct
+-- source IPs a client's sessions may come from; NULL means unlimited
+-- (#1173).
+ALTER TABLE clients ADD COLUMN ip_limit INTEGER;
+-- Tighten the domain guards for both connection-limit columns. The service
+-- contract is "positive integer or null": 0 used to pass the old <0 rule
+-- yet meant nothing (it would read as "block everything" while null means
+-- unlimited), so the storage layer now enforces the same contract.
+DROP TRIGGER IF EXISTS validate_clients_insert;
+CREATE TRIGGER validate_clients_insert BEFORE INSERT ON clients
+WHEN NEW.enabled NOT IN (0,1) OR NEW.depleted NOT IN (0,1) OR NEW.quota_bytes < 0
+  OR NEW.device_limit <= 0 OR NEW.ip_limit <= 0
+BEGIN SELECT RAISE(ABORT, 'invalid client domain values'); END;
+DROP TRIGGER IF EXISTS validate_clients_update;
+CREATE TRIGGER validate_clients_update BEFORE UPDATE ON clients
+WHEN NEW.enabled NOT IN (0,1) OR NEW.depleted NOT IN (0,1) OR NEW.quota_bytes < 0
+  OR NEW.device_limit <= 0 OR NEW.ip_limit <= 0
+BEGIN SELECT RAISE(ABORT, 'invalid client domain values'); END;
+`,
+	},
 }
 
 func migrationChecksumText(name, sql string) string {
@@ -1022,7 +1046,7 @@ func validateDomainIntegrity(db *sql.DB) error {
 		{"snapshot JSON", `SELECT EXISTS(SELECT 1 FROM revision_snapshots WHERE revision > 0 AND (json_valid(payload)=0 OR trim(payload)=''))`},
 		{"publication receipts", `SELECT EXISTS(SELECT 1 FROM runtime_publications WHERE phase NOT IN ('intent','publishing','artifacts_prepared','artifacts_committed','services_planned','services_converged','health_verified','firewall_committed','side_effect_planned','side_effect_committed','side_effect_verified','published','finalization_pending','rolled_back','recovery_transferred') OR json_valid(artifacts_json)=0 OR json_valid(operations_json)=0 OR json_valid(confirmations_json)=0 OR json_valid(service_plan_json)=0 OR json_valid(previous_service_states_json)=0 OR json_valid(health_evidence_json)=0 OR (revision > 0 AND length(snapshot_sha256)<>64))`},
 		{"apply lease", `SELECT EXISTS(SELECT 1 FROM apply_lease WHERE id<>1 OR generation<0 OR lease_expires_at<0 OR ((owner_process='' OR current_operation='') AND NOT (owner_process='' AND current_operation='')))`},
-		{"clients", `SELECT EXISTS(SELECT 1 FROM clients WHERE enabled NOT IN (0,1) OR depleted NOT IN (0,1) OR quota_bytes < 0 OR device_limit < 0 OR quota_reset_policy NOT IN ('never','daily','weekly','monthly') OR version < 1)`},
+		{"clients", `SELECT EXISTS(SELECT 1 FROM clients WHERE enabled NOT IN (0,1) OR depleted NOT IN (0,1) OR quota_bytes < 0 OR device_limit <= 0 OR ip_limit <= 0 OR quota_reset_policy NOT IN ('never','daily','weekly','monthly') OR version < 1)`},
 		{"credentials", `SELECT EXISTS(SELECT 1 FROM client_credentials WHERE length(encrypted_value)<=12 OR key_version<1 OR credential_version<1) OR EXISTS(SELECT 1 FROM client_credentials WHERE revoked_at IS NULL GROUP BY binding_id,kind HAVING COUNT(*)>1)`},
 		{"bindings", `SELECT EXISTS(SELECT 1 FROM client_bindings WHERE enabled NOT IN (0,1) OR version < 1)`},
 		{"tokens", `SELECT EXISTS(SELECT 1 FROM subscription_tokens WHERE enabled NOT IN (0,1) OR length(token_hash)<>32)`},

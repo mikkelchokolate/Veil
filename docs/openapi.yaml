@@ -5526,6 +5526,11 @@ components:
           description: >-
             The protocol's runtime can disconnect a client that exceeds its
             quota, so the panel's quota field is actually enforced.
+        deviceLimits:
+          type: boolean
+          description: >-
+            The protocol's runtime admits sessions through an authentication
+            hook that enforces the client's deviceLimit and ipLimit.
         inboundFieldSchema:
           type: array
           items:
@@ -6885,7 +6890,17 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
+          minimum: 1
+          description: Maximum concurrent sessions for this client, aggregated across its enabled bindings. Enforced by
+            protocols that admit sessions through an authentication hook (Hysteria2). null means unlimited; a positive
+            value is rejected when any enabled binding targets a protocol without connection-limit support.
+        ipLimit:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          description: Maximum distinct source IPs this client's live sessions may come from. Same capability and
+            nullability rules as deviceLimit.
         notes:
           type: string
         bindings:
@@ -6952,7 +6967,15 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
+          minimum: 1
+          description: Maximum concurrent sessions for the client; null clears the limit. Enforced by protocols with
+            deviceLimits capability (Hysteria2).
+        ipLimit:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          description: Maximum distinct source IPs for the client's live sessions; null clears the limit.
         notes:
           type:
           - string
@@ -7094,6 +7117,12 @@ components:
           format: int64
         deviceLimit:
           type: integer
+          minimum: 1
+          description: Concurrent-session cap; absent when unlimited.
+        ipLimit:
+          type: integer
+          minimum: 1
+          description: Distinct-source-IP cap; absent when unlimited.
         notes:
           type: string
         depleted:
@@ -7162,6 +7191,7 @@ components:
       - requiresCaddy
       - trafficAccounting
       - quotaEnforcement
+      - deviceLimits
       - expirationEnforcement
       properties:
         protocol:
@@ -7180,6 +7210,9 @@ components:
         quotaEnforcement:
           type: boolean
           description: Whether the runtime rejects traffic once the client's quota is depleted.
+        deviceLimits:
+          type: boolean
+          description: Whether the runtime enforces the client's deviceLimit/ipLimit at session admission.
         credentialKinds:
           type: array
           description: Credential kinds the protocol can issue for this binding. Omitted when empty.

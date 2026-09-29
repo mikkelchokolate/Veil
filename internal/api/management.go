@@ -193,7 +193,10 @@ func (s *managementState) inboundsWithRuntimeCredentialsLocked() ([]Inbound, err
 		}
 		rc := make([]RuntimeCredential, 0, len(creds))
 		for _, current := range creds {
-			rc = append(rc, RuntimeCredential{Name: current.Name, Username: current.Username, Password: current.Password})
+			rc = append(rc, RuntimeCredential{
+				Name: current.Name, Username: current.Username, Password: current.Password,
+				DeviceLimit: current.DeviceLimit, IPLimit: current.IPLimit,
+			})
 		}
 		out[i].RuntimeCredentials = rc
 	}
@@ -268,7 +271,10 @@ func (s *managementState) inboundsWithPinnedCredentialsLocked() ([]Inbound, erro
 			if runtimeIdentity == "" {
 				runtimeIdentity = client.GenerateRuntimeIdentity(b.ID)
 			}
-			rc = append(rc, RuntimeCredential{Name: c.Name, Username: runtimeIdentity, Password: plaintext})
+			rc = append(rc, RuntimeCredential{
+				Name: c.Name, Username: runtimeIdentity, Password: plaintext,
+				DeviceLimit: c.DeviceLimit, IPLimit: c.IPLimit,
+			})
 		}
 		if len(rc) > 0 {
 			out[i].RuntimeCredentials = rc
@@ -390,6 +396,7 @@ func (s *managementState) Close() error {
 
 	s.mu.Lock()
 	workers := detachClientBackgroundWorkers(s)
+	hy2Auth := s.detachHy2AuthLocked()
 	limiter := s.httpRateLimiter
 	s.httpRateLimiter = nil
 	idempotency := s.idempotency
@@ -410,6 +417,11 @@ func (s *managementState) Close() error {
 		_ = idempotency.Close()
 	}
 	stopClientBackgroundWorkers(workers)
+	if hy2Auth != nil {
+		// http.Server.Close closes the listener synchronously, so a Close
+		// immediately followed by a fresh init can rebind the same port.
+		_ = hy2Auth.server.Close()
+	}
 
 	s.mu.Lock()
 	// Detach under s.mu; the blocking runner/token/db Close calls run after

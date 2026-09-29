@@ -50,6 +50,8 @@ export interface BindingCapability {
   trafficAccounting: boolean;
   /** Whether the runtime rejects traffic once the client's quota is depleted. */
   quotaEnforcement: boolean;
+  /** Whether the runtime enforces the client's deviceLimit/ipLimit at session admission. */
+  deviceLimits: boolean;
   /** Credential kinds the protocol can issue for this binding. Omitted when empty. */
   credentialKinds?: string[];
   /** Whether expiry enforcement is applied for credentials on this binding. */

@@ -33,6 +33,13 @@ type Hysteria2Config struct {
 	KeyPath            string
 	TrafficStatsListen string
 	TrafficStatsSecret string
+	// HTTPAuthURL, when non-empty, switches the daemon's auth mode to the
+	// panel-internal HTTP callback (auth.type=http). The callback validates
+	// credentials against the normalized client store and enforces
+	// deviceLimit/ipLimit at session admission — the only place those limits
+	// can actually be enforced (#1173). Rendered only when at least one
+	// admitted runtime credential carries a connection limit.
+	HTTPAuthURL string
 	// RoutingRules split Hysteria2 traffic when Upstream (WARP) is set.
 	// direct leaves locally (bypass proxy and WARP). warp uses Upstream.
 	// proxy uses the protocol's own exit, not WARP.
@@ -53,9 +60,10 @@ type hysteria2YAML struct {
 		Key  string `yaml:"key"`
 	} `yaml:"tls"`
 	Auth struct {
-		Type     string            `yaml:"type"`
-		Password string            `yaml:"password,omitempty"`
-		UserPass map[string]string `yaml:"userpass,omitempty"`
+		Type     string                 `yaml:"type"`
+		Password string                 `yaml:"password,omitempty"`
+		UserPass map[string]string      `yaml:"userpass,omitempty"`
+		HTTP     *hysteria2HTTPAuthYAML `yaml:"http,omitempty"`
 	} `yaml:"auth"`
 	Masquerade struct {
 		Type  string `yaml:"type"`
@@ -78,6 +86,14 @@ type hysteria2YAML struct {
 	// bandwidth and the QUIC path then stalls ("pauses") under load.
 	IgnoreClientBandwidth bool               `yaml:"ignoreClientBandwidth"`
 	QUIC                  *hysteria2QUICYAML `yaml:"quic,omitempty"`
+}
+
+// hysteria2HTTPAuthYAML mirrors apernet/hysteria serverConfigAuthHTTP:
+// auth.http.url is the endpoint the daemon POSTs {addr, auth, tx} to on every
+// session admission; insecure only applies to https URLs and stays false.
+type hysteria2HTTPAuthYAML struct {
+	URL      string `yaml:"url"`
+	Insecure bool   `yaml:"insecure"`
 }
 
 type hysteria2QUICYAML struct {
@@ -128,13 +144,20 @@ func RenderHysteria2(cfg Hysteria2Config) (string, error) {
 	doc.Listen = ":" + itoa(cfg.ListenPort)
 	doc.TLS.Cert = cfg.CertPath
 	doc.TLS.Key = cfg.KeyPath
-	if len(cfg.Users) > 0 {
+	switch {
+	case cfg.HTTPAuthURL != "":
+		// HTTP auth replaces both password and userpass: the callback does
+		// the same credential check plus the connection-limit admission the
+		// static modes cannot express (#1173).
+		doc.Auth.Type = "http"
+		doc.Auth.HTTP = &hysteria2HTTPAuthYAML{URL: cfg.HTTPAuthURL}
+	case len(cfg.Users) > 0:
 		doc.Auth.Type = "userpass"
 		doc.Auth.UserPass = make(map[string]string, len(cfg.Users))
 		for _, u := range cfg.Users {
 			doc.Auth.UserPass[u.Username] = u.Password
 		}
-	} else {
+	default:
 		doc.Auth.Type = "password"
 		doc.Auth.Password = cfg.Password
 	}

@@ -1674,6 +1674,9 @@ type BindingCapability struct {
 	// CredentialKinds Credential kinds the protocol can issue for this binding. Omitted when empty.
 	CredentialKinds *[]string `json:"credentialKinds,omitempty"`
 
+	// DeviceLimits Whether the runtime enforces the client's deviceLimit/ipLimit at session admission.
+	DeviceLimits bool `json:"deviceLimits"`
+
 	// ExpirationEnforcement Whether expiry enforcement is applied for credentials on this binding.
 	ExpirationEnforcement bool   `json:"expirationEnforcement"`
 	PerClientCredentials  bool   `json:"perClientCredentials"`
@@ -1784,14 +1787,19 @@ type ClientBulkResult struct {
 // ClientCreateRequest defines model for ClientCreateRequest.
 type ClientCreateRequest struct {
 	// Bindings Bind the client to inbounds atomically with creation. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials.
-	Bindings    *[]ClientBindingInput     `json:"bindings,omitempty"`
+	Bindings *[]ClientBindingInput `json:"bindings,omitempty"`
+
+	// DeviceLimit Maximum concurrent sessions for this client, aggregated across its enabled bindings. Enforced by protocols that admit sessions through an authentication hook (Hysteria2). null means unlimited; a positive value is rejected when any enabled binding targets a protocol without connection-limit support.
 	DeviceLimit nullable.Nullable[int]    `json:"deviceLimit,omitempty"`
 	Email       nullable.Nullable[string] `json:"email,omitempty"`
 	Enabled     *bool                     `json:"enabled,omitempty"`
 
 	// ExpiresAt Unix expiry timestamp; null means never. Non-positive values are rejected — every enforcement path already treats them as expired while status would report active.
-	ExpiresAt        nullable.Nullable[int64]             `json:"expiresAt,omitempty"`
-	GroupId          nullable.Nullable[string]            `json:"groupId,omitempty"`
+	ExpiresAt nullable.Nullable[int64]  `json:"expiresAt,omitempty"`
+	GroupId   nullable.Nullable[string] `json:"groupId,omitempty"`
+
+	// IpLimit Maximum distinct source IPs this client's live sessions may come from. Same capability and nullability rules as deviceLimit.
+	IpLimit          nullable.Nullable[int]               `json:"ipLimit,omitempty"`
 	Name             string                               `json:"name"`
 	Notes            *string                              `json:"notes,omitempty"`
 	QuotaBytes       nullable.Nullable[int64]             `json:"quotaBytes,omitempty"`
@@ -1879,13 +1887,17 @@ type ClientMigrateResponse struct {
 
 // ClientPatchRequest Presence-aware patch. Omitted fields are preserved, explicit null clears nullable/defaultable fields, and supplied values replace them.
 type ClientPatchRequest struct {
+	// DeviceLimit Maximum concurrent sessions for the client; null clears the limit. Enforced by protocols with deviceLimits capability (Hysteria2).
 	DeviceLimit nullable.Nullable[int]    `json:"deviceLimit,omitempty"`
 	Email       nullable.Nullable[string] `json:"email,omitempty"`
 	Enabled     nullable.Nullable[bool]   `json:"enabled,omitempty"`
 
 	// ExpiresAt Unix expiry timestamp; null clears the expiry. Non-positive values are rejected.
-	ExpiresAt        nullable.Nullable[int64]                              `json:"expiresAt,omitempty"`
-	GroupId          nullable.Nullable[string]                             `json:"groupId,omitempty"`
+	ExpiresAt nullable.Nullable[int64]  `json:"expiresAt,omitempty"`
+	GroupId   nullable.Nullable[string] `json:"groupId,omitempty"`
+
+	// IpLimit Maximum distinct source IPs for the client's live sessions; null clears the limit.
+	IpLimit          nullable.Nullable[int]                                `json:"ipLimit,omitempty"`
 	Name             *string                                               `json:"name,omitempty"`
 	Notes            nullable.Nullable[string]                             `json:"notes,omitempty"`
 	QuotaBytes       nullable.Nullable[int64]                              `json:"quotaBytes,omitempty"`
@@ -1909,9 +1921,11 @@ type ClientProfile struct {
 
 // ClientView defines model for ClientView.
 type ClientView struct {
-	Bindings              *[]BindingView         `json:"bindings,omitempty"`
-	CreatedAt             int64                  `json:"createdAt"`
-	Depleted              bool                   `json:"depleted"`
+	Bindings  *[]BindingView `json:"bindings,omitempty"`
+	CreatedAt int64          `json:"createdAt"`
+	Depleted  bool           `json:"depleted"`
+
+	// DeviceLimit Concurrent-session cap; absent when unlimited.
 	DeviceLimit           *int                   `json:"deviceLimit,omitempty"`
 	Email                 *string                `json:"email,omitempty"`
 	Enabled               bool                   `json:"enabled"`
@@ -1920,14 +1934,17 @@ type ClientView struct {
 	GroupId               *string                `json:"groupId,omitempty"`
 
 	// HasCredentials Whether any binding holds an issued credential.
-	HasCredentials   bool      `json:"hasCredentials"`
-	Id               string    `json:"id"`
-	InboundIds       *[]string `json:"inboundIds,omitempty"`
-	Name             string    `json:"name"`
-	Notes            *string   `json:"notes,omitempty"`
-	QuotaBytes       *int64    `json:"quotaBytes,omitempty"`
-	QuotaResetAt     *int64    `json:"quotaResetAt,omitempty"`
-	QuotaResetPolicy string    `json:"quotaResetPolicy"`
+	HasCredentials bool      `json:"hasCredentials"`
+	Id             string    `json:"id"`
+	InboundIds     *[]string `json:"inboundIds,omitempty"`
+
+	// IpLimit Distinct-source-IP cap; absent when unlimited.
+	IpLimit          *int    `json:"ipLimit,omitempty"`
+	Name             string  `json:"name"`
+	Notes            *string `json:"notes,omitempty"`
+	QuotaBytes       *int64  `json:"quotaBytes,omitempty"`
+	QuotaResetAt     *int64  `json:"quotaResetAt,omitempty"`
+	QuotaResetPolicy string  `json:"quotaResetPolicy"`
 
 	// Status Effective status.
 	Status    ClientViewStatus `json:"status"`
@@ -2273,6 +2290,8 @@ type ProcessesStats struct {
 
 // ProtocolInfo defines model for ProtocolInfo.
 type ProtocolInfo struct {
+	// DeviceLimits The protocol's runtime admits sessions through an authentication hook that enforces the client's deviceLimit and ipLimit.
+	DeviceLimits       *bool          `json:"deviceLimits,omitempty"`
 	DisplayName        string         `json:"displayName"`
 	FirewallService    *string        `json:"firewallService,omitempty"`
 	InboundFieldSchema *[]FieldSchema `json:"inboundFieldSchema,omitempty"`
@@ -19657,10 +19676,12 @@ type PatchApiV1ClientsIdResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *struct {
-		ApplyJob              *ApplyJob              `json:"applyJob,omitempty"`
-		Bindings              *[]BindingView         `json:"bindings,omitempty"`
-		CreatedAt             int64                  `json:"createdAt"`
-		Depleted              bool                   `json:"depleted"`
+		ApplyJob  *ApplyJob      `json:"applyJob,omitempty"`
+		Bindings  *[]BindingView `json:"bindings,omitempty"`
+		CreatedAt int64          `json:"createdAt"`
+		Depleted  bool           `json:"depleted"`
+
+		// DeviceLimit Concurrent-session cap; absent when unlimited.
 		DeviceLimit           *int                   `json:"deviceLimit,omitempty"`
 		Email                 *string                `json:"email,omitempty"`
 		Enabled               bool                   `json:"enabled"`
@@ -19669,9 +19690,12 @@ type PatchApiV1ClientsIdResponse struct {
 		GroupId               *string                `json:"groupId,omitempty"`
 
 		// HasCredentials Whether any binding holds an issued credential.
-		HasCredentials   bool         `json:"hasCredentials"`
-		Id               string       `json:"id"`
-		InboundIds       *[]string    `json:"inboundIds,omitempty"`
+		HasCredentials bool      `json:"hasCredentials"`
+		Id             string    `json:"id"`
+		InboundIds     *[]string `json:"inboundIds,omitempty"`
+
+		// IpLimit Distinct-source-IP cap; absent when unlimited.
+		IpLimit          *int         `json:"ipLimit,omitempty"`
 		Name             string       `json:"name"`
 		Notes            *string      `json:"notes,omitempty"`
 		QuotaBytes       *int64       `json:"quotaBytes,omitempty"`
@@ -19699,10 +19723,12 @@ type PatchApiV1ClientsIdResponse struct {
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PatchApiV1ClientsIdResponse) GetJSON200() *struct {
-	ApplyJob              *ApplyJob              `json:"applyJob,omitempty"`
-	Bindings              *[]BindingView         `json:"bindings,omitempty"`
-	CreatedAt             int64                  `json:"createdAt"`
-	Depleted              bool                   `json:"depleted"`
+	ApplyJob  *ApplyJob      `json:"applyJob,omitempty"`
+	Bindings  *[]BindingView `json:"bindings,omitempty"`
+	CreatedAt int64          `json:"createdAt"`
+	Depleted  bool           `json:"depleted"`
+
+	// DeviceLimit Concurrent-session cap; absent when unlimited.
 	DeviceLimit           *int                   `json:"deviceLimit,omitempty"`
 	Email                 *string                `json:"email,omitempty"`
 	Enabled               bool                   `json:"enabled"`
@@ -19711,9 +19737,12 @@ func (r PatchApiV1ClientsIdResponse) GetJSON200() *struct {
 	GroupId               *string                `json:"groupId,omitempty"`
 
 	// HasCredentials Whether any binding holds an issued credential.
-	HasCredentials   bool         `json:"hasCredentials"`
-	Id               string       `json:"id"`
-	InboundIds       *[]string    `json:"inboundIds,omitempty"`
+	HasCredentials bool      `json:"hasCredentials"`
+	Id             string    `json:"id"`
+	InboundIds     *[]string `json:"inboundIds,omitempty"`
+
+	// IpLimit Distinct-source-IP cap; absent when unlimited.
+	IpLimit          *int         `json:"ipLimit,omitempty"`
 	Name             string       `json:"name"`
 	Notes            *string      `json:"notes,omitempty"`
 	QuotaBytes       *int64       `json:"quotaBytes,omitempty"`
@@ -28558,10 +28587,12 @@ func ParsePatchApiV1ClientsIdResponse(rsp *http.Response) (*PatchApiV1ClientsIdR
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			ApplyJob              *ApplyJob              `json:"applyJob,omitempty"`
-			Bindings              *[]BindingView         `json:"bindings,omitempty"`
-			CreatedAt             int64                  `json:"createdAt"`
-			Depleted              bool                   `json:"depleted"`
+			ApplyJob  *ApplyJob      `json:"applyJob,omitempty"`
+			Bindings  *[]BindingView `json:"bindings,omitempty"`
+			CreatedAt int64          `json:"createdAt"`
+			Depleted  bool           `json:"depleted"`
+
+			// DeviceLimit Concurrent-session cap; absent when unlimited.
 			DeviceLimit           *int                   `json:"deviceLimit,omitempty"`
 			Email                 *string                `json:"email,omitempty"`
 			Enabled               bool                   `json:"enabled"`
@@ -28570,9 +28601,12 @@ func ParsePatchApiV1ClientsIdResponse(rsp *http.Response) (*PatchApiV1ClientsIdR
 			GroupId               *string                `json:"groupId,omitempty"`
 
 			// HasCredentials Whether any binding holds an issued credential.
-			HasCredentials   bool         `json:"hasCredentials"`
-			Id               string       `json:"id"`
-			InboundIds       *[]string    `json:"inboundIds,omitempty"`
+			HasCredentials bool      `json:"hasCredentials"`
+			Id             string    `json:"id"`
+			InboundIds     *[]string `json:"inboundIds,omitempty"`
+
+			// IpLimit Distinct-source-IP cap; absent when unlimited.
+			IpLimit          *int         `json:"ipLimit,omitempty"`
 			Name             string       `json:"name"`
 			Notes            *string      `json:"notes,omitempty"`
 			QuotaBytes       *int64       `json:"quotaBytes,omitempty"`

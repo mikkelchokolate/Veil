@@ -216,10 +216,10 @@ func (q queries) CreateClient(c Client) (Client, error) {
 	c.CreatedAt, c.UpdatedAt, c.Version = now, now, 1
 	_, err := q.q.Exec(`INSERT INTO clients
   (id, name, email, enabled, group_id, quota_bytes, quota_reset_policy, quota_reset_at,
-   expires_at, device_limit, notes, depleted, created_at, updated_at, version)
-  VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+   expires_at, device_limit, ip_limit, notes, depleted, created_at, updated_at, version)
+  VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		c.ID, c.Name, c.Email, boolToInt(c.Enabled), c.GroupID, c.QuotaBytes, c.QuotaResetPolicy,
-		c.QuotaResetAt, c.ExpiresAt, c.DeviceLimit, c.Notes, boolToInt(c.Depleted),
+		c.QuotaResetAt, c.ExpiresAt, c.DeviceLimit, c.IPLimit, c.Notes, boolToInt(c.Depleted),
 		c.CreatedAt, c.UpdatedAt, c.Version)
 	if err != nil {
 		return Client{}, fmt.Errorf("client: create: %w", err)
@@ -232,7 +232,7 @@ func (q queries) Create(c Client) (Client, error) { return q.CreateClient(c) }
 
 func (q queries) Get(id string) (Client, error) {
 	row := q.q.QueryRow(`SELECT id, name, email, enabled, group_id, quota_bytes, quota_reset_policy,
-  quota_reset_at, expires_at, device_limit, notes, depleted, created_at, updated_at, version
+  quota_reset_at, expires_at, device_limit, ip_limit, notes, depleted, created_at, updated_at, version
   FROM clients WHERE id=?`, id)
 	c, err := scanClient(row)
 	if err != nil {
@@ -246,11 +246,11 @@ func (q queries) Get(id string) (Client, error) {
 func (q queries) Update(c Client, wantVersion int) (Client, error) {
 	c.UpdatedAt = nowUnix()
 	res, err := q.q.Exec(`UPDATE clients SET name=?, email=?, enabled=?, group_id=?, quota_bytes=?,
-  quota_reset_policy=?, quota_reset_at=?, expires_at=?, device_limit=?, notes=?, depleted=?,
+  quota_reset_policy=?, quota_reset_at=?, expires_at=?, device_limit=?, ip_limit=?, notes=?, depleted=?,
   updated_at=?, version=version+1
   WHERE id=? AND version=?`,
 		c.Name, c.Email, boolToInt(c.Enabled), c.GroupID, c.QuotaBytes, c.QuotaResetPolicy,
-		c.QuotaResetAt, c.ExpiresAt, c.DeviceLimit, c.Notes, boolToInt(c.Depleted),
+		c.QuotaResetAt, c.ExpiresAt, c.DeviceLimit, c.IPLimit, c.Notes, boolToInt(c.Depleted),
 		c.UpdatedAt, c.ID, wantVersion)
 	if err != nil {
 		return Client{}, fmt.Errorf("client: update: %w", err)
@@ -314,7 +314,7 @@ func (q queries) List(f ListFilter) ([]Client, int, error) {
 		order = "expires_at IS NULL, expires_at ASC"
 	}
 	query := `SELECT id, name, email, enabled, group_id, quota_bytes, quota_reset_policy, quota_reset_at,
-  expires_at, device_limit, notes, depleted, created_at, updated_at, version
+  expires_at, device_limit, ip_limit, notes, depleted, created_at, updated_at, version
   FROM clients` + where + ` ORDER BY ` + order + ` LIMIT ? OFFSET ?`
 	args = append(args, size, (page-1)*size)
 	rows, err := q.q.Query(query, args...)
@@ -338,7 +338,7 @@ func (q queries) ListKeyset(afterCreated int64, afterID string, limit int) ([]Cl
 		limit = 100
 	}
 	rows, err := q.q.Query(`SELECT id,name,email,enabled,group_id,quota_bytes,quota_reset_policy,quota_reset_at,
- expires_at,device_limit,notes,depleted,created_at,updated_at,version
+ expires_at,device_limit,ip_limit,notes,depleted,created_at,updated_at,version
 FROM clients WHERE created_at>? OR (created_at=? AND id>?)
 ORDER BY created_at,id LIMIT ?`, afterCreated, afterCreated, afterID, limit)
 	if err != nil {
@@ -398,7 +398,7 @@ func buildWhere(f ListFilter) (string, []any) {
 // OrphanClients returns clients with no bindings.
 func (q queries) OrphanClients() ([]Client, error) {
 	rows, err := q.q.Query(`SELECT id, name, email, enabled, group_id, quota_bytes, quota_reset_policy,
-  quota_reset_at, expires_at, device_limit, notes, depleted, created_at, updated_at, version
+  quota_reset_at, expires_at, device_limit, ip_limit, notes, depleted, created_at, updated_at, version
   FROM clients WHERE id NOT IN (SELECT DISTINCT client_id FROM client_bindings)`)
 	if err != nil {
 		return nil, fmt.Errorf("client: orphans: %w", err)
@@ -515,7 +515,7 @@ func (q queries) DeleteBindingsForInbound(inboundID string) (int, error) {
 // AllClients returns every client (no pagination) for revision snapshots.
 func (q queries) AllClients() ([]Client, error) {
 	rows, err := q.q.Query(`SELECT id, name, email, enabled, group_id, quota_bytes, quota_reset_policy,
-  quota_reset_at, expires_at, device_limit, notes, depleted, created_at, updated_at, version
+  quota_reset_at, expires_at, device_limit, ip_limit, notes, depleted, created_at, updated_at, version
   FROM clients ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("client: list all: %w", err)
@@ -632,7 +632,7 @@ func scanClient(row scanner) (Client, error) {
 	var c Client
 	var enabled, depleted int
 	err := row.Scan(&c.ID, &c.Name, &c.Email, &enabled, &c.GroupID, &c.QuotaBytes,
-		&c.QuotaResetPolicy, &c.QuotaResetAt, &c.ExpiresAt, &c.DeviceLimit, &c.Notes,
+		&c.QuotaResetPolicy, &c.QuotaResetAt, &c.ExpiresAt, &c.DeviceLimit, &c.IPLimit, &c.Notes,
 		&depleted, &c.CreatedAt, &c.UpdatedAt, &c.Version)
 	if err != nil {
 		return Client{}, err
@@ -697,7 +697,7 @@ type inboundRuntimeBinding struct {
 func (q queries) ListRuntimeBindingsForInbound(inboundID string, now int64) ([]inboundRuntimeBinding, error) {
 	rows, err := q.q.Query(`SELECT
   c.id, c.name, c.email, c.enabled, c.group_id, c.quota_bytes, c.quota_reset_policy,
-  c.quota_reset_at, c.expires_at, c.device_limit, c.notes, c.depleted, c.created_at, c.updated_at, c.version,
+  c.quota_reset_at, c.expires_at, c.device_limit, c.ip_limit, c.notes, c.depleted, c.created_at, c.updated_at, c.version,
   b.id, b.client_id, b.inbound_id, b.runtime_identity, b.enabled, b.protocol_settings,
   b.created_at, b.updated_at, b.version
 FROM client_bindings b
@@ -726,7 +726,7 @@ func scanClientAndBinding(row scanner) (inboundRuntimeBinding, error) {
 	var cEnabled, cDepleted, bEnabled int
 	err := row.Scan(
 		&c.ID, &c.Name, &c.Email, &cEnabled, &c.GroupID, &c.QuotaBytes, &c.QuotaResetPolicy,
-		&c.QuotaResetAt, &c.ExpiresAt, &c.DeviceLimit, &c.Notes, &cDepleted, &c.CreatedAt, &c.UpdatedAt, &c.Version,
+		&c.QuotaResetAt, &c.ExpiresAt, &c.DeviceLimit, &c.IPLimit, &c.Notes, &cDepleted, &c.CreatedAt, &c.UpdatedAt, &c.Version,
 		&b.ID, &b.ClientID, &b.InboundID, &b.RuntimeIdentity, &bEnabled, &b.ProtocolSettings,
 		&b.CreatedAt, &b.UpdatedAt, &b.Version,
 	)

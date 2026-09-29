@@ -66,10 +66,17 @@ export interface ClientCreateRequest {
      */
   expiresAt?: number | null;
   /**
-     * @minimum 0
+     * Maximum concurrent sessions for this client, aggregated across its enabled bindings. Enforced by protocols that admit sessions through an authentication hook (Hysteria2). null means unlimited; a positive value is rejected when any enabled binding targets a protocol without connection-limit support.
+     * @minimum 1
      * @nullable
      */
   deviceLimit?: number | null;
+  /**
+     * Maximum distinct source IPs this client's live sessions may come from. Same capability and nullability rules as deviceLimit.
+     * @minimum 1
+     * @nullable
+     */
+  ipLimit?: number | null;
   notes?: string;
   /** Bind the client to inbounds atomically with creation. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials. */
   bindings?: ClientBindingInput[];
