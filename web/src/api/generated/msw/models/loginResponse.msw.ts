@@ -49,4 +49,10 @@ export interface LoginResponse {
   role: UserRole;
   locale: Locale;
   csrfToken: string;
+  /** When true no session was minted; the `veil_pending_2fa` cookie authorizes POST /api/v1/auth/totp/verify. */
+  secondFactorRequired?: boolean;
+  /** Factor mechanisms accepted by the pending challenge (currently `totp`). */
+  secondFactorMethods?: string[];
+  /** Deadline for completing the pending_2fa challenge. */
+  pendingExpiresAt?: string;
 }

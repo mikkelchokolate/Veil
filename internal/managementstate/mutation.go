@@ -368,6 +368,10 @@ func (m Mutation) UpdateUser(username string, update model.User) (model.User, er
 	if update.Locale == "" {
 		update.Locale = (*m.target.Users)[idx].Locale
 	}
+	// TOTP second-factor state is owned exclusively by the TOTP endpoints
+	// (SetUserTOTP below): a role/password/locale PUT must neither wipe nor
+	// smuggle a factor change (issue #1172).
+	update.PreserveTOTP((*m.target.Users)[idx])
 	previous := cloneUsers(*m.target.Users)
 	(*m.target.Users)[idx] = update
 	if err := m.save(); err != nil {
@@ -375,6 +379,35 @@ func (m Mutation) UpdateUser(username string, update model.User) (model.User, er
 		return model.User{}, err
 	}
 	return update, nil
+}
+
+// SetUserTOTP is the ONLY mutation path that writes a user's second-factor
+// fields; UpdateUser preserves them. Clearing is expressed by passing a
+// cleared User (see model.User.ClearTOTP), so admin reset and self-disable
+// share the same durable write.
+func (m Mutation) SetUserTOTP(username string, totp model.User) (model.User, error) {
+	idx := -1
+	for i, existing := range *m.target.Users {
+		if existing.Username == username {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return model.User{}, errors.New("user not found")
+	}
+	previous := cloneUsers(*m.target.Users)
+	updated := (*m.target.Users)[idx]
+	updated.TOTPEnabled = totp.TOTPEnabled
+	updated.TOTPSecret = totp.TOTPSecret
+	updated.TOTPPendingSecret = totp.TOTPPendingSecret
+	updated.TOTPRecoveryHashes = append([]string(nil), totp.TOTPRecoveryHashes...)
+	(*m.target.Users)[idx] = updated
+	if err := m.save(); err != nil {
+		*m.target.Users = previous
+		return model.User{}, err
+	}
+	return updated, nil
 }
 
 func validUserLocale(locale string) bool {

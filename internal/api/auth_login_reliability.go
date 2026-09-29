@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/panel"
@@ -17,6 +18,10 @@ type loginCredentialSnapshot struct {
 	PasswordHash     string
 	FallbackAllowed  bool
 	FallbackPassword string
+	// TOTPEnabled decides whether a verified password mints a real session or
+	// only a pending_2fa challenge that must be completed at
+	// POST /api/v1/auth/totp/verify (#1172).
+	TOTPEnabled bool
 }
 
 func (s *managementState) snapshotLoginCredentials(username string) loginCredentialSnapshot {
@@ -28,6 +33,7 @@ func (s *managementState) snapshotLoginCredentials(username string) loginCredent
 		if user.Username == username {
 			snapshot.FoundUser = true
 			snapshot.PasswordHash = user.PasswordHash
+			snapshot.TOTPEnabled = user.TOTPEnabled
 			return snapshot
 		}
 	}
@@ -51,7 +57,11 @@ func (snapshot loginCredentialSnapshot) passwordMatches(password string) bool {
 	return snapshot.FallbackAllowed && constantTimePasswordEqual(password, snapshot.FallbackPassword)
 }
 
-func (s *managementState) createSessionForLoginSnapshot(snapshot loginCredentialSnapshot, r *http.Request) (Session, string, string, string, error) {
+// createSessionForLoginSnapshot mints the session for a verified login.
+// secondFactor=true marks the session as having completed the second factor:
+// only the pending_2fa verify path passes it, and only after the factor was
+// actually validated (#1172).
+func (s *managementState) createSessionForLoginSnapshot(snapshot loginCredentialSnapshot, r *http.Request, secondFactor bool) (Session, string, string, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -86,13 +96,48 @@ func (s *managementState) createSessionForLoginSnapshot(snapshot loginCredential
 	// from user-match revocation only while the fallback precondition still
 	// holds; ordinary sessions are never marked (#1112).
 	session, err := s.sessionRegistry().Create(SessionCreateInput{
-		Username:   snapshot.Username,
-		Role:       role,
-		UserAgent:  r.UserAgent(),
-		RemoteAddr: clientIP(r),
-		Bootstrap:  !snapshot.FoundUser,
+		Username:     snapshot.Username,
+		Role:         role,
+		UserAgent:    r.UserAgent(),
+		RemoteAddr:   clientIP(r),
+		Bootstrap:    !snapshot.FoundUser,
+		SecondFactor: secondFactor,
 	})
 	return session, role, locale, s.settings.PanelAccess, err
+}
+
+// issuePendingSecondFactor converts a verified password into a pending_2fa
+// challenge instead of a session. The pending cookie authorizes exactly one
+// route — POST /api/v1/auth/totp/verify — for ~5 minutes. The login backoff
+// budget is deliberately NOT cleared here: the factor-verify failures feed the
+// same per-(client, username) throttle as password failures (#1172).
+func (s *managementState) issuePendingSecondFactor(w http.ResponseWriter, r *http.Request, snapshot loginCredentialSnapshot) {
+	token, expiresAt, err := s.pendingSecondFactors().Issue(snapshot.Username, snapshot.PasswordHash)
+	if err != nil {
+		s.recordRequestAudit(r, audit.Record{
+			Actor:   snapshot.Username,
+			Action:  "auth.login",
+			Target:  "panel",
+			Success: false,
+			Error:   "second-factor challenge issuance failed",
+		})
+		writeError(w, "failed to start second-factor challenge", http.StatusInternalServerError)
+		return
+	}
+	s.setPendingSecondFactorCookie(w, r, token, int(pendingSecondFactorTTL.Seconds()))
+	s.recordRequestAudit(r, audit.Record{
+		Actor:   snapshot.Username,
+		Action:  "auth.login.pending_2fa",
+		Target:  "panel",
+		Success: true,
+		Details: map[string]any{"methods": []string{"totp"}},
+	})
+	writeJSON(w, map[string]any{
+		"success":              true,
+		"secondFactorRequired": true,
+		"secondFactorMethods":  []string{"totp"},
+		"pendingExpiresAt":     expiresAt.Format(time.RFC3339),
+	})
 }
 
 func (s *managementState) handleLoginWithRevalidation(w http.ResponseWriter, r *http.Request) {
@@ -138,7 +183,15 @@ func (s *managementState) handleLoginWithRevalidation(w http.ResponseWriter, r *
 		return
 	}
 
-	session, role, locale, _, err := s.createSessionForLoginSnapshot(snapshot, r)
+	// A verified password is only HALF the credential when the account has
+	// TOTP enabled: mint the short-lived pending_2fa challenge instead of a
+	// session (#1172).
+	if snapshot.FoundUser && snapshot.TOTPEnabled {
+		s.issuePendingSecondFactor(w, r, snapshot)
+		return
+	}
+
+	session, role, locale, _, err := s.createSessionForLoginSnapshot(snapshot, r, false)
 	if errors.Is(err, errLoginCredentialsChanged) {
 		s.recordRequestAudit(r, audit.Record{
 			Actor:   req.Username,

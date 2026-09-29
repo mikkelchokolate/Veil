@@ -56,6 +56,8 @@ export function UsersPage() {
 	// #702: session revoke is a remote sign-out — same confirm gate as the
 	// user Delete next to it.
 	const [confirmRevoke, setConfirmRevoke] = useState<SessionInfo | null>(null);
+	// #1172: admin reset of a locked-out user's second factor.
+	const [confirmResetTotp, setConfirmResetTotp] = useState<string | null>(null);
 
 	const users = useQuery<PanelUser[]>({
 		queryKey: ["users"],
@@ -134,6 +136,21 @@ export function UsersPage() {
 			setError(mutationErrorMessage(err, t("users.error.delete"), t)),
 	});
 
+	const resetTotp = useMutation({
+		mutationFn: (name: string) =>
+			apiFetch(`/api/v1/users/${encodeURIComponent(name)}/totp`, {
+				method: "DELETE",
+			}),
+		onSuccess: (_d, name) => {
+			setConfirmResetTotp(null);
+			setError(null);
+			setNotice(t("users.totp.resetNotice", { name }));
+			invalidate();
+		},
+		onError: (err) =>
+			setError(mutationErrorMessage(err, t("users.totp.error.reset"), t)),
+	});
+
 	const revoke = useMutation({
 		mutationFn: (id: string) =>
 			apiFetch("/api/auth/sessions", {
@@ -195,6 +212,7 @@ export function UsersPage() {
 								<TableHead>{t("users.username")}</TableHead>
 								<TableHead>{t("users.role")}</TableHead>
 								<TableHead>{t("users.locale")}</TableHead>
+								<TableHead>{t("users.totp")}</TableHead>
 								<TableHead>{t("common.actions")}</TableHead>
 							</TableRow>
 						</TableHeader>
@@ -213,6 +231,13 @@ export function UsersPage() {
 										</Badge>
 									</TableCell>
 									<TableCell className="muted">{u.locale ?? "en"}</TableCell>
+									<TableCell>
+										{u.totpEnabled ? (
+											<Badge variant="success">{t("users.totp.enabled")}</Badge>
+										) : (
+											<span className="muted">—</span>
+										)}
+									</TableCell>
 									<TableCell>
 										<div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
 											<Button
@@ -237,6 +262,17 @@ export function UsersPage() {
 													}}
 												>
 													{t("common.delete")}
+												</Button>
+											) : null}
+											{u.totpEnabled ? (
+												<Button
+													size="sm"
+													onClick={() => {
+														setError(null);
+														setConfirmResetTotp(u.username);
+													}}
+												>
+													{t("users.totp.reset")}
 												</Button>
 											) : null}
 										</div>
@@ -481,6 +517,39 @@ export function UsersPage() {
 							{remove.isPending
 								? t("users.deleting")
 								: t("users.confirmDelete")}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
+			<AlertDialog
+				open={confirmResetTotp !== null}
+				onOpenChange={(open) => {
+					if (!open) setConfirmResetTotp(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>{t("users.totp.resetTitle")}</AlertDialogTitle>
+						<AlertDialogDescription>
+							{t("users.totp.resetDescription", {
+								name: confirmResetTotp ?? "",
+							})}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					{error ? <FormMessage>{error}</FormMessage> : null}
+					<AlertDialogFooter>
+						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={resetTotp.isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								if (confirmResetTotp) resetTotp.mutate(confirmResetTotp);
+							}}
+						>
+							{resetTotp.isPending
+								? t("users.totp.resetting")
+								: t("users.totp.reset")}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

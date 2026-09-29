@@ -45,6 +45,15 @@ func (s *managementState) handlePersistentAuthStatus(w http.ResponseWriter, r *h
 	cookie, err := r.Cookie("veil_session")
 	if err == nil {
 		if sess, ok := s.sessionRegistry().Get(cookie.Value); ok {
+			// The status endpoint is the SPA's source of truth for "am I
+			// logged in". Enforce the same second-factor revocation the API
+			// middleware applies or a pre-enrollment cookie would report
+			// authenticated forever while every real call 401s (#1172).
+			if !s.sessionMeetsFactorRequirement(sess) {
+				_ = s.sessionRegistry().Delete(cookie.Value)
+				writeJSON(w, map[string]any{"authenticated": false})
+				return
+			}
 			csrf, csrfOK, csrfErr := s.sessionRegistry().EnsureCSRFPersisted(cookie.Value)
 			if csrfErr != nil {
 				writeError(w, "failed to refresh session", http.StatusInternalServerError)

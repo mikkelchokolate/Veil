@@ -24,12 +24,35 @@ function loginFailureMessage(
 	return t("auth.login.failed");
 }
 
+function secondFactorFailureMessage(
+	err: unknown,
+	t: (key: string, vars?: I18nVars) => string,
+): string {
+	if (err instanceof ApiError) {
+		if (err.status === 401 || err.status === 400) {
+			return t("auth.totp.invalid");
+		}
+		if (err.status === 429) {
+			const wait = err.retryAfterSeconds;
+			return wait != null && wait > 0
+				? t("auth.login.tooManyAttemptsWait", { seconds: wait })
+				: t("auth.login.tooManyAttempts");
+		}
+	}
+	return t("auth.totp.failed");
+}
+
 export function LoginView() {
-	const { login } = useAuth();
+	const { login, verifySecondFactor } = useAuth();
 	const { t } = useI18n();
 	const [pending] = useState(takePendingLogin);
 	const [username, setUsername] = useState(pending.username);
 	const [password, setPassword] = useState(pending.password);
+	// Second stage of login (#1172): set when the password verified and the
+	// account holds a TOTP factor — the pending_2fa cookie was already minted.
+	const [factorStep, setFactorStep] = useState(false);
+	const [factorCode, setFactorCode] = useState("");
+	const [recoveryMode, setRecoveryMode] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const autoSubmitted = useRef(false);
@@ -40,7 +63,10 @@ export function LoginView() {
 		setError(null);
 		setBusy(true);
 		try {
-			await login(user, pass);
+			const result = await login(user, pass);
+			if (result.secondFactorRequired) {
+				setFactorStep(true);
+			}
 		} catch (err) {
 			setError(loginFailureMessage(err, t));
 		} finally {
@@ -53,6 +79,21 @@ export function LoginView() {
 		await submit(username, password);
 	}
 
+	async function onFactorSubmit(e: FormEvent) {
+		e.preventDefault();
+		setError(null);
+		setBusy(true);
+		try {
+			await verifySecondFactor(
+				recoveryMode ? { recoveryCode: factorCode } : { code: factorCode },
+			);
+		} catch (err) {
+			setError(secondFactorFailureMessage(err, t));
+		} finally {
+			setBusy(false);
+		}
+	}
+
 	useEffect(() => {
 		if (!pending.submit || !pending.username || !pending.password) return;
 		if (autoSubmitted.current) return;
@@ -60,6 +101,9 @@ export function LoginView() {
 		setBusy(true);
 		setError(null);
 		void login(pending.username, pending.password)
+			.then((result) => {
+				if (result.secondFactorRequired) setFactorStep(true);
+			})
 			.catch((err) => {
 				setError(loginFailureMessage(err, tRef.current));
 			})
@@ -67,6 +111,52 @@ export function LoginView() {
 				setBusy(false);
 			});
 	}, [pending, login]);
+
+	if (factorStep) {
+		return (
+			<main className="center-screen">
+				<form className="auth-card" onSubmit={onFactorSubmit}>
+					<h1>Veil</h1>
+					<div className="subtitle">{t("auth.totp.subtitle")}</div>
+					<div className="form-field">
+						<label htmlFor="login-totp">
+							{recoveryMode ? t("auth.totp.recoveryCode") : t("auth.totp.code")}
+						</label>
+						<input
+							id="login-totp"
+							className="input"
+							autoComplete={recoveryMode ? "off" : "one-time-code"}
+							inputMode={recoveryMode ? "text" : "numeric"}
+							value={factorCode}
+							onChange={(e) => setFactorCode(e.target.value)}
+							required
+						/>
+					</div>
+					{error ? (
+						<div className="form-error" role="alert">
+							{error}
+						</div>
+					) : null}
+					<button className="btn btn-primary" type="submit" disabled={busy}>
+						{busy ? t("auth.totp.verifying") : t("auth.totp.verify")}
+					</button>
+					<button
+						className="btn"
+						type="button"
+						onClick={() => {
+							setRecoveryMode((v) => !v);
+							setFactorCode("");
+							setError(null);
+						}}
+					>
+						{recoveryMode
+							? t("auth.totp.useAuthenticator")
+							: t("auth.totp.useRecovery")}
+					</button>
+				</form>
+			</main>
+		);
+	}
 
 	return (
 		<main className="center-screen">

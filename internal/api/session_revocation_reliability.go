@@ -90,6 +90,56 @@ func (r *SessionRegistry) DeleteBootstrapPersisted() (int, error) {
 	})
 }
 
+// MarkSecondFactorPersisted records on the session that its owner's second
+// factor was satisfied in this browser flow. It is journaled like any other
+// upsert: a flag that exists only in memory would drop at restart and the
+// middleware would revoke the still-valid session on the next request — a
+// fail-closed but disruptive outcome the TOTP confirm path must not inflict
+// on the operator who just proved the factor (#1172).
+func (r *SessionRegistry) MarkSecondFactorPersisted(token string) (bool, error) {
+	tokenHash := hashSessionSecret(token)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	record, ok := r.sessions[tokenHash]
+	if !ok || sessionExpired(record, r.now().UTC()) {
+		return false, nil
+	}
+	if record.SecondFactor {
+		return true, nil
+	}
+	previous := record
+	record.SecondFactor = true
+	r.sessions[tokenHash] = record
+	if err := r.persistUpsertLocked(record); err != nil {
+		r.sessions[tokenHash] = previous
+		return false, err
+	}
+	return true, nil
+}
+
+// DeleteUsernameExceptPersisted revokes every session owned by username
+// except the caller's current token. TOTP enable/disable uses it so the
+// session performing the factor change survives while every other login —
+// including ones minted before the factor existed — is revoked (#1172).
+//
+// The caller pairs this with MarkUsernameRevocationPending + an explicit
+// CancelUsernameRevocation: the kept session predates the intent's Through
+// bound, so a replayed intent would delete it — only the journaled cancel
+// keeps live and replayed state consistent (#1059 pattern).
+func (r *SessionRegistry) DeleteUsernameExceptPersisted(username, keepToken string) (int, error) {
+	keepHash := hashSessionSecret(keepToken)
+	return r.mutateAndPersistSessions(func() []string {
+		var hashes []string
+		for tokenHash, session := range r.sessions {
+			if session.Username != username || tokenHash == keepHash {
+				continue
+			}
+			hashes = append(hashes, tokenHash)
+		}
+		return hashes
+	})
+}
+
 func (r *SessionRegistry) DeleteAllExceptPersisted(currentToken string) (int, error) {
 	currentHash := hashSessionSecret(currentToken)
 	changed, err := r.mutateAndPersistSessions(func() []string {

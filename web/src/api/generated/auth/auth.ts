@@ -63,6 +63,7 @@ import type {
   AuthStatusResponse,
   BadRequestResponse,
   ConflictResponse,
+  ErrorEnvelope,
   ForbiddenResponse,
   LocaleResponse,
   LocaleUpdateRequest,
@@ -74,6 +75,12 @@ import type {
   SessionDeleteRequest,
   SessionInfo,
   SuccessResponse,
+  TOTPConfirmRequest,
+  TOTPConfirmResponse,
+  TOTPDisableRequest,
+  TOTPEnrollResponse,
+  TOTPStatusResponse,
+  TOTPVerifyRequest,
   UnauthorizedResponse,
   UserCreateRequest,
   UserResponse,
@@ -1096,6 +1103,646 @@ export function useDeleteApiUsersUsername<TData = Awaited<ReturnType<typeof dele
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getDeleteApiUsersUsernameQueryOptions(username,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getPostApiV1AuthTotpVerifyUrl = () => {
+
+
+
+
+  return `/api/v1/auth/totp/verify`
+}
+
+/**
+ * Completes the pending_2fa stage minted by `/api/auth/login` when the
+ * account has TOTP enabled. The `veil_pending_2fa` cookie (5-minute TTL,
+ * single challenge) authorizes ONLY this endpoint; a valid TOTP code or a
+ * single-use recovery code mints the real `veil_session` cookie. Attempts
+ * share the per-(client, username) login throttle and are hard-capped per
+ * challenge; the challenge fails closed if the account changed since the
+ * password was verified.
+ * @summary Complete the second-factor login challenge
+ */
+export const postApiV1AuthTotpVerify = async (tOTPVerifyRequest: TOTPVerifyRequest, options?: Parameters<typeof apiFetch>[1]): Promise<LoginResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<LoginResponse>(getPostApiV1AuthTotpVerifyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(tOTPVerifyRequest)
+  }
+);}
+
+
+
+
+
+export const getPostApiV1AuthTotpVerifyQueryKey = (tOTPVerifyRequest?: TOTPVerifyRequest,) => {
+    return [
+    'POST', `/api/v1/auth/totp/verify`, tOTPVerifyRequest
+    ] as const;
+    }
+
+
+export const getPostApiV1AuthTotpVerifyQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope>(tOTPVerifyRequest: TOTPVerifyRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1AuthTotpVerifyQueryKey(tOTPVerifyRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>> = ({ signal }) => postApiV1AuthTotpVerify(tOTPVerifyRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiV1AuthTotpVerifyQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>>
+export type PostApiV1AuthTotpVerifyQueryError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope
+
+
+export function usePostApiV1AuthTotpVerify<TData = Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope>(
+ tOTPVerifyRequest: TOTPVerifyRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1AuthTotpVerify<TData = Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope>(
+ tOTPVerifyRequest: TOTPVerifyRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1AuthTotpVerify<TData = Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope>(
+ tOTPVerifyRequest: TOTPVerifyRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Complete the second-factor login challenge
+ */
+
+export function usePostApiV1AuthTotpVerify<TData = Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>, TError = BadRequestResponse | UnauthorizedResponse | ErrorEnvelope>(
+ tOTPVerifyRequest: TOTPVerifyRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1AuthTotpVerify>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiV1AuthTotpVerifyQueryOptions(tOTPVerifyRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetApiV1UsersMeTotpUrl = () => {
+
+
+
+
+  return `/api/v1/users/me/totp`
+}
+
+/**
+ * Requires a `veil_session` cookie bound to a real user row;
+ * static API tokens and the dev-anonymous identity cannot call it.
+ * @summary Read the current user's TOTP second-factor status
+ */
+export const getApiV1UsersMeTotp = async ( options?: Parameters<typeof apiFetch>[1]): Promise<TOTPStatusResponse> => {
+
+  return apiFetch<TOTPStatusResponse>(getGetApiV1UsersMeTotpUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1UsersMeTotpMutationKey = () => ['getApiV1UsersMeTotp'] as const;
+
+export const getGetApiV1UsersMeTotpMutationOptions = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1UsersMeTotp>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getApiV1UsersMeTotp>>, TError,void, TContext> => {
+
+const mutationKey = getGetApiV1UsersMeTotpMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getApiV1UsersMeTotp>>, void> = () => {
+
+
+          return  getApiV1UsersMeTotp(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetApiV1UsersMeTotpMutationResult = NonNullable<Awaited<ReturnType<typeof getApiV1UsersMeTotp>>>
+
+    export type GetApiV1UsersMeTotpMutationError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+
+
+    /**
+ * @summary Read the current user's TOTP second-factor status
+ */
+export const useGetApiV1UsersMeTotp = <TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getApiV1UsersMeTotp>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getApiV1UsersMeTotp>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGetApiV1UsersMeTotpMutationOptions(options), queryClient);
+    }
+    export const getDeleteApiV1UsersMeTotpUrl = () => {
+
+
+
+
+  return `/api/v1/users/me/totp`
+}
+
+/**
+ * Requires the `veil_session` cookie and `X-CSRF-Token` plus a
+ * fresh credential: the account password or a live authenticator code.
+ * Attempts are throttled through the login backoff family. On success all
+ * other sessions of the user are revoked.
+ * @summary Disable the current user's TOTP second factor
+ */
+export const deleteApiV1UsersMeTotp = async (tOTPDisableRequest: TOTPDisableRequest, options?: Parameters<typeof apiFetch>[1]): Promise<SuccessResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<SuccessResponse>(getDeleteApiV1UsersMeTotpUrl(),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(tOTPDisableRequest)
+  }
+);}
+
+
+
+
+
+export const getDeleteApiV1UsersMeTotpQueryKey = (tOTPDisableRequest?: TOTPDisableRequest,) => {
+    return [
+    'DELETE', `/api/v1/users/me/totp`, tOTPDisableRequest
+    ] as const;
+    }
+
+
+export const getDeleteApiV1UsersMeTotpQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(tOTPDisableRequest: TOTPDisableRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeleteApiV1UsersMeTotpQueryKey(tOTPDisableRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>> = ({ signal }) => deleteApiV1UsersMeTotp(tOTPDisableRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeleteApiV1UsersMeTotpQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>>
+export type DeleteApiV1UsersMeTotpQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse
+
+
+export function useDeleteApiV1UsersMeTotp<TData = Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+ tOTPDisableRequest: TOTPDisableRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiV1UsersMeTotp<TData = Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+ tOTPDisableRequest: TOTPDisableRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiV1UsersMeTotp<TData = Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+ tOTPDisableRequest: TOTPDisableRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Disable the current user's TOTP second factor
+ */
+
+export function useDeleteApiV1UsersMeTotp<TData = Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+ tOTPDisableRequest: TOTPDisableRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersMeTotp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDeleteApiV1UsersMeTotpQueryOptions(tOTPDisableRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getPostApiV1UsersMeTotpEnrollUrl = () => {
+
+
+
+
+  return `/api/v1/users/me/totp/enroll`
+}
+
+/**
+ * Requires the `veil_session` cookie and `X-CSRF-Token`. Mints a
+ * pending enrollment secret (not yet active) and returns it with an
+ * `otpauth://` provisioning URI. The factor activates only when
+ * `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+ * @summary Start TOTP second-factor enrollment
+ */
+export const postApiV1UsersMeTotpEnroll = async ( options?: Parameters<typeof apiFetch>[1]): Promise<TOTPEnrollResponse> => {
+
+  return apiFetch<TOTPEnrollResponse>(getPostApiV1UsersMeTotpEnrollUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiV1UsersMeTotpEnrollQueryKey = () => {
+    return [
+    'POST', `/api/v1/users/me/totp/enroll`
+    ] as const;
+    }
+
+
+export const getPostApiV1UsersMeTotpEnrollQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1UsersMeTotpEnrollQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>> = ({ signal }) => postApiV1UsersMeTotpEnroll({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiV1UsersMeTotpEnrollQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>>
+export type PostApiV1UsersMeTotpEnrollQueryError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse
+
+
+export function usePostApiV1UsersMeTotpEnroll<TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1UsersMeTotpEnroll<TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1UsersMeTotpEnroll<TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Start TOTP second-factor enrollment
+ */
+
+export function usePostApiV1UsersMeTotpEnroll<TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiV1UsersMeTotpEnrollQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getPostApiV1UsersMeTotpConfirmUrl = () => {
+
+
+
+
+  return `/api/v1/users/me/totp/confirm`
+}
+
+/**
+ * Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies a
+ * code from the pending enrollment secret, activates the factor, returns
+ * the single-use recovery codes exactly once, upgrades the calling
+ * session to second-factor-complete, and revokes every other session of
+ * the user. Attempts share the login backoff family.
+ * @summary Confirm TOTP enrollment and receive recovery codes
+ */
+export const postApiV1UsersMeTotpConfirm = async (tOTPConfirmRequest: TOTPConfirmRequest, options?: Parameters<typeof apiFetch>[1]): Promise<TOTPConfirmResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<TOTPConfirmResponse>(getPostApiV1UsersMeTotpConfirmUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(tOTPConfirmRequest)
+  }
+);}
+
+
+
+
+
+export const getPostApiV1UsersMeTotpConfirmQueryKey = (tOTPConfirmRequest?: TOTPConfirmRequest,) => {
+    return [
+    'POST', `/api/v1/users/me/totp/confirm`, tOTPConfirmRequest
+    ] as const;
+    }
+
+
+export const getPostApiV1UsersMeTotpConfirmQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ErrorEnvelope | ServiceUnavailableResponse>(tOTPConfirmRequest: TOTPConfirmRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1UsersMeTotpConfirmQueryKey(tOTPConfirmRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>> = ({ signal }) => postApiV1UsersMeTotpConfirm(tOTPConfirmRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PostApiV1UsersMeTotpConfirmQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>>
+export type PostApiV1UsersMeTotpConfirmQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ErrorEnvelope | ServiceUnavailableResponse
+
+
+export function usePostApiV1UsersMeTotpConfirm<TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+ tOTPConfirmRequest: TOTPConfirmRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1UsersMeTotpConfirm<TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+ tOTPConfirmRequest: TOTPConfirmRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>,
+          TError,
+          Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePostApiV1UsersMeTotpConfirm<TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+ tOTPConfirmRequest: TOTPConfirmRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Confirm TOTP enrollment and receive recovery codes
+ */
+
+export function usePostApiV1UsersMeTotpConfirm<TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+ tOTPConfirmRequest: TOTPConfirmRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpConfirm>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPostApiV1UsersMeTotpConfirmQueryOptions(tOTPConfirmRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getDeleteApiV1UsersUsernameTotpUrl = (username: string,) => {
+
+
+
+
+  return `/api/v1/users/${username}/totp`
+}
+
+/**
+ * Admin reset for a locked-out user: clears the factor, any
+ * pending enrollment, and all recovery codes, and revokes every session
+ * the user holds. Cookie sessions must include `X-CSRF-Token`.
+ * @summary Reset a user's TOTP second factor
+ */
+export const deleteApiV1UsersUsernameTotp = async (username: string, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
+
+  return apiFetch<void>(getDeleteApiV1UsersUsernameTotpUrl(username),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiV1UsersUsernameTotpQueryKey = (username: string,) => {
+    return [
+    'DELETE', `/api/v1/users/${username}/totp`
+    ] as const;
+    }
+
+
+export const getDeleteApiV1UsersUsernameTotpQueryOptions = <TData = Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(username: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeleteApiV1UsersUsernameTotpQueryKey(username);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>> = ({ signal }) => deleteApiV1UsersUsernameTotp(username, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: username !== null && username !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeleteApiV1UsersUsernameTotpQueryResult = NonNullable<Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>>
+export type DeleteApiV1UsersUsernameTotpQueryError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse
+
+
+export function useDeleteApiV1UsersUsernameTotp<TData = Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(
+ username: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiV1UsersUsernameTotp<TData = Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(
+ username: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>,
+          TError,
+          Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteApiV1UsersUsernameTotp<TData = Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(
+ username: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Reset a user's TOTP second factor
+ */
+
+export function useDeleteApiV1UsersUsernameTotp<TData = Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(
+ username: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteApiV1UsersUsernameTotp>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDeleteApiV1UsersUsernameTotpQueryOptions(username,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

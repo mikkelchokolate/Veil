@@ -47,4 +47,6 @@ export interface UserResponse {
   username: string;
   role: UserRole;
   locale: Locale;
+  /** Whether the account requires a TOTP second factor at login. */
+  totpEnabled: boolean;
 }

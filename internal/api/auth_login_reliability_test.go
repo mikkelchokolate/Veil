@@ -53,7 +53,7 @@ func TestLoginSnapshotRejectsPasswordChangedAfterVerification(t *testing.T) {
 	state.mu.Unlock()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
-	_, _, _, _, err := state.createSessionForLoginSnapshot(snapshot, req)
+	_, _, _, _, err := state.createSessionForLoginSnapshot(snapshot, req, false)
 	if !errors.Is(err, errLoginCredentialsChanged) {
 		t.Fatalf("createSessionForLoginSnapshot() error = %v", err)
 	}
@@ -81,7 +81,7 @@ func TestLoginSnapshotUsesCurrentRoleAndLocale(t *testing.T) {
 	state.mu.Unlock()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
-	session, role, locale, panelAccess, err := state.createSessionForLoginSnapshot(snapshot, req)
+	session, role, locale, panelAccess, err := state.createSessionForLoginSnapshot(snapshot, req, false)
 	if err != nil {
 		t.Fatalf("createSessionForLoginSnapshot() error = %v", err)
 	}
@@ -112,7 +112,7 @@ func TestFallbackLoginSnapshotRejectsChangedSettings(t *testing.T) {
 	state.mu.Unlock()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
-	_, _, _, _, err = state.createSessionForLoginSnapshot(snapshot, req)
+	_, _, _, _, err = state.createSessionForLoginSnapshot(snapshot, req, false)
 	if !errors.Is(err, errLoginCredentialsChanged) {
 		t.Fatalf("createSessionForLoginSnapshot() error = %v", err)
 	}

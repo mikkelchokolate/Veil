@@ -3235,6 +3235,327 @@ paths:
       x-roles:
       - admin
       - viewer
+  /api/v1/auth/totp/verify:
+    post:
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-veil-role: public
+      tags:
+      - auth
+      summary: Complete the second-factor login challenge
+      description: 'Completes the pending_2fa stage minted by `/api/auth/login` when the
+
+        account has TOTP enabled. The `veil_pending_2fa` cookie (5-minute TTL,
+
+        single challenge) authorizes ONLY this endpoint; a valid TOTP code or a
+
+        single-use recovery code mints the real `veil_session` cookie. Attempts
+
+        share the per-(client, username) login throttle and are hard-capped per
+
+        challenge; the challenge fails closed if the account changed since the
+
+        password was verified.
+
+        '
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TOTPVerifyRequest'
+            examples:
+              totp:
+                value:
+                  code: '123456'
+              recovery:
+                value:
+                  recoveryCode: ABCD-EFGH
+      responses:
+        '200':
+          description: Second factor verified; a `veil_session` cookie was set and the pending cookie was cleared.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: HTTP-only `veil_session` cookie (and a cleared `veil_pending_2fa` cookie).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              examples:
+                verified:
+                  value:
+                    success: true
+                    username: admin
+                    role: admin
+                    locale: en
+                    csrfToken: 0123456789abcdef0123456789abcdef
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          description: Too many factor attempts; the Retry-After header carries the backoff.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      x-roles:
+      - public
+  /api/v1/users/me/totp:
+    get:
+      x-veil-role: self-service
+      tags:
+      - auth
+      summary: Read the current user's TOTP second-factor status
+      description: 'Requires a `veil_session` cookie bound to a real user row;
+
+        static API tokens and the dev-anonymous identity cannot call it.
+
+        '
+      security:
+      - sessionCookie: []
+      responses:
+        '200':
+          description: Second-factor status for the session user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TOTPStatusResponse'
+              examples:
+                enabled:
+                  value:
+                    enabled: true
+                    pendingEnrollment: false
+                    recoveryCodesRemaining: 10
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      x-roles:
+      - admin
+      - viewer
+    delete:
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-veil-role: self-service
+      tags:
+      - auth
+      summary: Disable the current user's TOTP second factor
+      description: 'Requires the `veil_session` cookie and `X-CSRF-Token` plus a
+
+        fresh credential: the account password or a live authenticator code.
+
+        Attempts are throttled through the login backoff family. On success all
+
+        other sessions of the user are revoked.
+
+        '
+      security:
+      - sessionCookie: []
+        csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TOTPDisableRequest'
+            examples:
+              password:
+                value:
+                  password: correct horse battery staple
+              code:
+                value:
+                  code: '123456'
+      responses:
+        '200':
+          description: TOTP disabled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                ok:
+                  value:
+                    success: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          description: Too many attempts; the Retry-After header carries the backoff.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
+      - viewer
+  /api/v1/users/me/totp/enroll:
+    post:
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-veil-role: self-service
+      tags:
+      - auth
+      summary: Start TOTP second-factor enrollment
+      description: 'Requires the `veil_session` cookie and `X-CSRF-Token`. Mints a
+
+        pending enrollment secret (not yet active) and returns it with an
+
+        `otpauth://` provisioning URI. The factor activates only when
+
+        `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+
+        '
+      security:
+      - sessionCookie: []
+        csrfToken: []
+      responses:
+        '200':
+          description: Pending enrollment created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TOTPEnrollResponse'
+              examples:
+                enroll:
+                  value:
+                    secret: JBSWY3DPEHPK3PXP
+                    otpauthUri: otpauth://totp/Veil:admin?secret=JBSWY3DPEHPK3PXP&issuer=Veil
+                    issuer: Veil
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
+      - viewer
+  /api/v1/users/me/totp/confirm:
+    post:
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-veil-role: self-service
+      tags:
+      - auth
+      summary: Confirm TOTP enrollment and receive recovery codes
+      description: 'Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies a
+
+        code from the pending enrollment secret, activates the factor, returns
+
+        the single-use recovery codes exactly once, upgrades the calling
+
+        session to second-factor-complete, and revokes every other session of
+
+        the user. Attempts share the login backoff family.
+
+        '
+      security:
+      - sessionCookie: []
+        csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TOTPConfirmRequest'
+            examples:
+              confirm:
+                value:
+                  code: '123456'
+      responses:
+        '200':
+          description: TOTP enabled; recovery codes are returned this once only.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TOTPConfirmResponse'
+              examples:
+                confirmed:
+                  value:
+                    enabled: true
+                    recoveryCodes:
+                    - ABCD-EFGH
+                    - IJKL-MNOP
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          description: Too many attempts; the Retry-After header carries the backoff.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
+      - viewer
+  /api/v1/users/{username}/totp:
+    parameters:
+    - $ref: '#/components/parameters/Username'
+    delete:
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-veil-role: admin-mutation
+      tags:
+      - auth
+      summary: Reset a user's TOTP second factor
+      description: 'Admin reset for a locked-out user: clears the factor, any
+
+        pending enrollment, and all recovery codes, and revokes every session
+
+        the user holds. Cookie sessions must include `X-CSRF-Token`.
+
+        '
+      security:
+      - veilToken: []
+      - bearerAuth: []
+      - sessionCookie: []
+        csrfToken: []
+      responses:
+        '204':
+          description: Second factor cleared.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-roles:
+      - admin
   /api/v1/clients:
     get:
       x-veil-role: viewer
@@ -4755,6 +5076,18 @@ components:
           $ref: '#/components/schemas/Locale'
         csrfToken:
           type: string
+        secondFactorRequired:
+          type: boolean
+          description: When true no session was minted; the `veil_pending_2fa` cookie authorizes POST /api/v1/auth/totp/verify.
+        secondFactorMethods:
+          type: array
+          items:
+            type: string
+          description: Factor mechanisms accepted by the pending challenge (currently `totp`).
+        pendingExpiresAt:
+          type: string
+          format: date-time
+          description: Deadline for completing the pending_2fa challenge.
     AuthStatusResponse:
       type: object
       required:
@@ -4776,6 +5109,77 @@ components:
           enum:
           - static-token
           - dev-anonymous
+    TOTPStatusResponse:
+      type: object
+      required:
+      - enabled
+      - pendingEnrollment
+      - recoveryCodesRemaining
+      properties:
+        enabled:
+          type: boolean
+        pendingEnrollment:
+          type: boolean
+          description: True while an enrollment secret awaits its first verified code.
+        recoveryCodesRemaining:
+          type: integer
+    TOTPEnrollResponse:
+      type: object
+      required:
+      - secret
+      - otpauthUri
+      - issuer
+      properties:
+        secret:
+          type: string
+          description: Base32 shared secret for manual authenticator entry.
+        otpauthUri:
+          type: string
+          description: otpauth:// provisioning URI suitable for QR rendering.
+        issuer:
+          type: string
+    TOTPConfirmRequest:
+      type: object
+      required:
+      - code
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          description: Six-digit code generated from the pending enrollment secret.
+    TOTPConfirmResponse:
+      type: object
+      required:
+      - enabled
+      - recoveryCodes
+      properties:
+        enabled:
+          type: boolean
+        recoveryCodes:
+          type: array
+          items:
+            type: string
+          description: Single-use recovery codes; shown exactly once.
+    TOTPDisableRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        password:
+          type: string
+          format: password
+        code:
+          type: string
+          description: Live authenticator code; either password or code is required.
+    TOTPVerifyRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          description: Six-digit authenticator code.
+        recoveryCode:
+          type: string
+          description: Single-use recovery code alternative to `code`.
     Locale:
       type: string
       enum:
@@ -4838,6 +5242,9 @@ components:
         current:
           type: boolean
           description: True when this entry matches the caller's `veil_session` cookie.
+        secondFactor:
+          type: boolean
+          description: True when the session was minted after the account's second factor was satisfied (TOTP verify or enrollment confirmation).
     SessionDeleteRequest:
       type: object
       required:
@@ -5287,6 +5694,7 @@ components:
       - username
       - role
       - locale
+      - totpEnabled
       properties:
         username:
           type: string
@@ -5294,6 +5702,9 @@ components:
           $ref: '#/components/schemas/UserRole'
         locale:
           $ref: '#/components/schemas/Locale'
+        totpEnabled:
+          type: boolean
+          description: Whether the account requires a TOTP second factor at login.
     UserCreateRequest:
       type: object
       required:

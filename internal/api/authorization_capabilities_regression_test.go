@@ -34,6 +34,12 @@ func productionAuthorizationMatrix() []routeAuthorizationExpectation {
 		{http.MethodPost, "/api/auth/logout", true, true, "logout"},
 		{http.MethodGet, "/api/auth/status", true, true, "auth status"},
 		{http.MethodPost, "/api/auth/locale", false, true, "self service"},
+		{http.MethodPost, "/api/v1/auth/totp/verify", true, true, "second-factor verify gated by pending_2fa cookie"},
+		{http.MethodGet, "/api/v1/users/me/totp", false, true, "self-service TOTP status"},
+		{http.MethodDelete, "/api/v1/users/me/totp", false, true, "self-service TOTP disable"},
+		{http.MethodPost, "/api/v1/users/me/totp/enroll", false, true, "self-service TOTP enroll"},
+		{http.MethodPost, "/api/v1/users/me/totp/confirm", false, true, "self-service TOTP confirm"},
+		{http.MethodDelete, "/api/v1/users/alice/totp", false, false, "admin TOTP reset"},
 		{http.MethodGet, "/api/auth/sessions", false, false, "admin metadata"},
 		{http.MethodDelete, "/api/auth/sessions", false, false, "admin mutation"},
 		{http.MethodPost, "/api/admin/rotate-key", false, false, "admin mutation"},
@@ -205,21 +211,35 @@ func TestEveryOperationHasExplicitAnonymousViewerAdminAuthorization(t *testing.T
 // admin gate without an explicit access decision here.
 func TestAuthorizationMatrixCoversEveryEndpointPolicy(t *testing.T) {
 	matrix := productionAuthorizationMatrix()
-	for _, policy := range endpointPolicies {
-		wantPublic := policy.capability == capabilityPublic
-		wantViewer := capabilityAllowsRole(policy.capability, "viewer")
-		matched := false
-		for _, row := range matrix {
+	covered := make([]bool, len(endpointPolicies))
+	for _, row := range matrix {
+		// First match wins at request time (capabilityForEndpoint): a row is
+		// validated only against its effective policy — a more specific
+		// literal (e.g. ".../me/totp") legitimately outranks a later wildcard
+		// with a stricter capability. Coverage still counts the row toward
+		// EVERY policy its path matches so an intentionally shadowed policy
+		// (e.g. /api/v1/traffic/stream under /api/v1/traffic/{id}) is still
+		// considered exercised (#1172).
+		effective := true
+		for i, policy := range endpointPolicies {
 			if row.method != policy.method || !matchEndpointPattern(policy.pattern, row.path) {
 				continue
 			}
-			matched = true
+			covered[i] = true
+			if !effective {
+				continue
+			}
+			effective = false
+			wantPublic := policy.capability == capabilityPublic
+			wantViewer := capabilityAllowsRole(policy.capability, "viewer")
 			if row.public != wantPublic || row.viewer != wantViewer {
 				t.Errorf("matrix row %s %s (public=%v viewer=%v) disagrees with policy %s (capability %s)",
 					row.method, row.path, row.public, row.viewer, policy.pattern, policy.capability)
 			}
 		}
-		if !matched {
+	}
+	for i, policy := range endpointPolicies {
+		if !covered[i] {
 			t.Errorf("authorization matrix has no entry exercising policy %s %s (%s)", policy.method, policy.pattern, policy.capability)
 		}
 	}

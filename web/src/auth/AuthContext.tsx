@@ -25,10 +25,33 @@ export interface Session {
 	csrfToken?: string;
 }
 
+/** Result of the password stage. When `secondFactorRequired` is set the
+ * server minted a short-lived pending_2fa cookie instead of a session; call
+ * verifySecondFactor to finish the login (#1172). */
+export interface LoginResult {
+	secondFactorRequired: boolean;
+	secondFactorMethods?: string[];
+	pendingExpiresAt?: string;
+}
+
+interface LoginResponseData {
+	csrfToken?: string;
+	username?: string;
+	role?: UserRole;
+	locale?: string;
+	secondFactorRequired?: boolean;
+	secondFactorMethods?: string[];
+	pendingExpiresAt?: string;
+}
+
 interface AuthContextValue {
 	session: Session | null;
 	loading: boolean;
-	login: (username: string, password: string) => Promise<void>;
+	login: (username: string, password: string) => Promise<LoginResult>;
+	verifySecondFactor: (args: {
+		code?: string;
+		recoveryCode?: string;
+	}) => Promise<LoginResult>;
 	logout: () => Promise<void>;
 	refresh: () => Promise<void>;
 }
@@ -147,17 +170,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		};
 	}, [refresh]);
 
-	const login = useCallback(
-		async (username: string, password: string) => {
-			const data = await apiFetch<{
-				csrfToken?: string;
-				username?: string;
-				role?: UserRole;
-				locale?: string;
-			}>("/api/auth/login", {
-				method: "POST",
-				body: JSON.stringify({ username, password }),
-			});
+	// finishLogin owns the post-credential bookkeeping shared by the
+	// password-only and the pending_2fa verify paths (#1172).
+	const finishLogin = useCallback(
+		async (data: LoginResponseData, fallbackUsername: string) => {
 			const epoch = ++epochRef.current;
 			logoutInFlightRef.current = false;
 			refreshSeqRef.current += 1;
@@ -168,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			const fromLogin = (): Session => {
 				const session: Session = {
 					authenticated: true,
-					username: data.username ?? username,
+					username: data.username ?? fallbackUsername,
 				};
 				if (data.role) session.role = data.role;
 				if (data.locale) session.locale = data.locale;
@@ -203,6 +219,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		[abortRefresh, broadcastRefresh],
 	);
 
+	const login = useCallback(
+		async (username: string, password: string): Promise<LoginResult> => {
+			const data = await apiFetch<LoginResponseData>("/api/auth/login", {
+				method: "POST",
+				body: JSON.stringify({ username, password }),
+			});
+			// TOTP-enabled accounts stop at a pending_2fa challenge here — no
+			// session exists yet, so finishLogin must NOT run (#1172).
+			if (data?.secondFactorRequired) {
+				const result: LoginResult = { secondFactorRequired: true };
+				if (data.secondFactorMethods) {
+					result.secondFactorMethods = data.secondFactorMethods;
+				}
+				if (data.pendingExpiresAt) {
+					result.pendingExpiresAt = data.pendingExpiresAt;
+				}
+				return result;
+			}
+			await finishLogin(data, username);
+			return { secondFactorRequired: false };
+		},
+		[finishLogin],
+	);
+
+	const verifySecondFactor = useCallback(
+		async (args: {
+			code?: string;
+			recoveryCode?: string;
+		}): Promise<LoginResult> => {
+			const data = await apiFetch<LoginResponseData>(
+				"/api/v1/auth/totp/verify",
+				{
+					method: "POST",
+					body: JSON.stringify(args),
+				},
+			);
+			await finishLogin(data, data?.username ?? "");
+			return { secondFactorRequired: false };
+		},
+		[finishLogin],
+	);
+
 	const logout = useCallback(async () => {
 		const epoch = ++epochRef.current;
 		logoutInFlightRef.current = true;
@@ -227,8 +285,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	}, [abortRefresh, broadcastRefresh, qc]);
 
 	const value = useMemo(
-		() => ({ session, loading, login, logout, refresh }),
-		[session, loading, login, logout, refresh],
+		() => ({ session, loading, login, verifySecondFactor, logout, refresh }),
+		[session, loading, login, verifySecondFactor, logout, refresh],
 	);
 
 	return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

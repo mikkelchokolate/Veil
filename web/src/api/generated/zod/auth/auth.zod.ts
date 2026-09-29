@@ -56,7 +56,10 @@ export const PostApiAuthLoginResponse = zod.object({
   "username": zod.string(),
   "role": zod.enum(['admin', 'viewer']),
   "locale": zod.enum(['en', 'ru']).describe('Persisted Panel display language.'),
-  "csrfToken": zod.string()
+  "csrfToken": zod.string(),
+  "secondFactorRequired": zod.boolean().optional().describe('When true no session was minted; the `veil_pending_2fa` cookie authorizes POST /api/v1/auth/totp/verify.'),
+  "secondFactorMethods": zod.array(zod.string()).optional().describe('Factor mechanisms accepted by the pending challenge (currently `totp`).'),
+  "pendingExpiresAt": zod.iso.datetime({"offset":true}).optional().describe('Deadline for completing the pending_2fa challenge.')
 })
 
 /**
@@ -123,7 +126,8 @@ export const GetApiAuthSessionsResponseItem = zod.object({
   "expiresAt": zod.iso.datetime({"offset":true}),
   "userAgent": zod.string().optional(),
   "remoteAddr": zod.string().optional(),
-  "current": zod.boolean().describe('True when this entry matches the caller\'s `veil_session` cookie.')
+  "current": zod.boolean().describe('True when this entry matches the caller\'s `veil_session` cookie.'),
+  "secondFactor": zod.boolean().optional().describe('True when the session was minted after the account\'s second factor was satisfied (TOTP verify or enrollment confirmation).')
 })
 export const GetApiAuthSessionsResponse = zod.array(GetApiAuthSessionsResponseItem)
 
@@ -160,7 +164,8 @@ export const DeleteApiAuthSessionsResponse = zod.object({
 export const GetApiUsersResponseItem = zod.object({
   "username": zod.string(),
   "role": zod.enum(['admin', 'viewer']),
-  "locale": zod.enum(['en', 'ru']).describe('Persisted Panel display language.')
+  "locale": zod.enum(['en', 'ru']).describe('Persisted Panel display language.'),
+  "totpEnabled": zod.boolean().describe('Whether the account requires a TOTP second factor at login.')
 })
 export const GetApiUsersResponse = zod.array(GetApiUsersResponseItem)
 
@@ -188,7 +193,8 @@ export const PostApiUsersBody = zod.object({
 export const PostApiUsersResponse = zod.object({
   "username": zod.string(),
   "role": zod.enum(['admin', 'viewer']),
-  "locale": zod.enum(['en', 'ru']).describe('Persisted Panel display language.')
+  "locale": zod.enum(['en', 'ru']).describe('Persisted Panel display language.'),
+  "totpEnabled": zod.boolean().describe('Whether the account requires a TOTP second factor at login.')
 })
 
 /**
@@ -220,7 +226,8 @@ export const PutApiUsersUsernameBody = zod.object({
 export const PutApiUsersUsernameResponse = zod.object({
   "username": zod.string(),
   "role": zod.enum(['admin', 'viewer']),
-  "locale": zod.enum(['en', 'ru']).describe('Persisted Panel display language.')
+  "locale": zod.enum(['en', 'ru']).describe('Persisted Panel display language.'),
+  "totpEnabled": zod.boolean().describe('Whether the account requires a TOTP second factor at login.')
 })
 
 /**
@@ -244,4 +251,152 @@ export const DeleteApiUsersUsernameHeader = zod.object({
 })
 
 export const DeleteApiUsersUsernameResponse = zod.void()
+
+/**
+ * Completes the pending_2fa stage minted by `/api/auth/login` when the
+ * account has TOTP enabled. The `veil_pending_2fa` cookie (5-minute TTL,
+ * single challenge) authorizes ONLY this endpoint; a valid TOTP code or a
+ * single-use recovery code mints the real `veil_session` cookie. Attempts
+ * share the per-(client, username) login throttle and are hard-capped per
+ * challenge; the challenge fails closed if the account changed since the
+ * password was verified.
+ * @summary Complete the second-factor login challenge
+ */
+export const postApiV1AuthTotpVerifyHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiV1AuthTotpVerifyHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiV1AuthTotpVerifyHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiV1AuthTotpVerifyHeaderIdempotencyKeyMax).regex(postApiV1AuthTotpVerifyHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
+export const PostApiV1AuthTotpVerifyBody = zod.object({
+  "code": zod.string().optional().describe('Six-digit authenticator code.'),
+  "recoveryCode": zod.string().optional().describe('Single-use recovery code alternative to `code`.')
+})
+
+export const PostApiV1AuthTotpVerifyResponse = zod.object({
+  "success": zod.boolean(),
+  "username": zod.string(),
+  "role": zod.enum(['admin', 'viewer']),
+  "locale": zod.enum(['en', 'ru']).describe('Persisted Panel display language.'),
+  "csrfToken": zod.string(),
+  "secondFactorRequired": zod.boolean().optional().describe('When true no session was minted; the `veil_pending_2fa` cookie authorizes POST /api/v1/auth/totp/verify.'),
+  "secondFactorMethods": zod.array(zod.string()).optional().describe('Factor mechanisms accepted by the pending challenge (currently `totp`).'),
+  "pendingExpiresAt": zod.iso.datetime({"offset":true}).optional().describe('Deadline for completing the pending_2fa challenge.')
+})
+
+/**
+ * Requires a `veil_session` cookie bound to a real user row;
+ * static API tokens and the dev-anonymous identity cannot call it.
+ * @summary Read the current user's TOTP second-factor status
+ */
+export const GetApiV1UsersMeTotpResponse = zod.object({
+  "enabled": zod.boolean(),
+  "pendingEnrollment": zod.boolean().describe('True while an enrollment secret awaits its first verified code.'),
+  "recoveryCodesRemaining": zod.int()
+})
+
+/**
+ * Requires the `veil_session` cookie and `X-CSRF-Token` plus a
+ * fresh credential: the account password or a live authenticator code.
+ * Attempts are throttled through the login backoff family. On success all
+ * other sessions of the user are revoked.
+ * @summary Disable the current user's TOTP second factor
+ */
+export const deleteApiV1UsersMeTotpHeaderIdempotencyKeyMax = 128;
+
+
+export const deleteApiV1UsersMeTotpHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const DeleteApiV1UsersMeTotpHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(deleteApiV1UsersMeTotpHeaderIdempotencyKeyMax).regex(deleteApiV1UsersMeTotpHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
+export const DeleteApiV1UsersMeTotpBody = zod.object({
+  "password": zod.string().optional(),
+  "code": zod.string().optional().describe('Live authenticator code; either password or code is required.')
+})
+
+export const DeleteApiV1UsersMeTotpResponse = zod.object({
+  "success": zod.boolean()
+})
+
+/**
+ * Requires the `veil_session` cookie and `X-CSRF-Token`. Mints a
+ * pending enrollment secret (not yet active) and returns it with an
+ * `otpauth://` provisioning URI. The factor activates only when
+ * `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+ * @summary Start TOTP second-factor enrollment
+ */
+export const postApiV1UsersMeTotpEnrollHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiV1UsersMeTotpEnrollHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiV1UsersMeTotpEnrollHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiV1UsersMeTotpEnrollHeaderIdempotencyKeyMax).regex(postApiV1UsersMeTotpEnrollHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
+export const PostApiV1UsersMeTotpEnrollResponse = zod.object({
+  "secret": zod.string().describe('Base32 shared secret for manual authenticator entry.'),
+  "otpauthUri": zod.string().describe('otpauth:// provisioning URI suitable for QR rendering.'),
+  "issuer": zod.string()
+})
+
+/**
+ * Requires the `veil_session` cookie and `X-CSRF-Token`. Verifies a
+ * code from the pending enrollment secret, activates the factor, returns
+ * the single-use recovery codes exactly once, upgrades the calling
+ * session to second-factor-complete, and revokes every other session of
+ * the user. Attempts share the login backoff family.
+ * @summary Confirm TOTP enrollment and receive recovery codes
+ */
+export const postApiV1UsersMeTotpConfirmHeaderIdempotencyKeyMax = 128;
+
+
+export const postApiV1UsersMeTotpConfirmHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const PostApiV1UsersMeTotpConfirmHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(postApiV1UsersMeTotpConfirmHeaderIdempotencyKeyMax).regex(postApiV1UsersMeTotpConfirmHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
+export const PostApiV1UsersMeTotpConfirmBody = zod.object({
+  "code": zod.string().describe('Six-digit code generated from the pending enrollment secret.')
+})
+
+export const PostApiV1UsersMeTotpConfirmResponse = zod.object({
+  "enabled": zod.boolean(),
+  "recoveryCodes": zod.array(zod.string()).describe('Single-use recovery codes; shown exactly once.')
+})
+
+/**
+ * Admin reset for a locked-out user: clears the factor, any
+ * pending enrollment, and all recovery codes, and revokes every session
+ * the user holds. Cookie sessions must include `X-CSRF-Token`.
+ * @summary Reset a user's TOTP second factor
+ */
+
+
+
+export const DeleteApiV1UsersUsernameTotpParams = zod.object({
+  "username": zod.string().min(1)
+})
+
+export const deleteApiV1UsersUsernameTotpHeaderIdempotencyKeyMax = 128;
+
+
+export const deleteApiV1UsersUsernameTotpHeaderIdempotencyKeyRegExp = new RegExp('^[!-~]+$');
+
+
+export const DeleteApiV1UsersUsernameTotpHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(deleteApiV1UsersUsernameTotpHeaderIdempotencyKeyMax).regex(deleteApiV1UsersUsernameTotpHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
+export const DeleteApiV1UsersUsernameTotpResponse = zod.void()
 

@@ -40,25 +40,9 @@
  *
  * OpenAPI spec version: 0.6.3
  */
-import type { UserRole } from './userRole.msw.ts';
 
-export interface SessionInfo {
-  /**
-     * Stable short hash used for session revocation; the raw bearer cookie is never returned.
-     * @minLength 16
-     * @maxLength 16
-     */
-  id: string;
-  username: string;
-  role: UserRole;
-  createdAt: string;
-  lastSeenAt: string;
-  idleExpiresAt: string;
-  expiresAt: string;
-  userAgent?: string;
-  remoteAddr?: string;
-  /** True when this entry matches the caller's `veil_session` cookie. */
-  current: boolean;
-  /** True when the session was minted after the account's second factor was satisfied (TOTP verify or enrollment confirmation). */
-  secondFactor?: boolean;
+export interface TOTPConfirmResponse {
+  enabled: boolean;
+  /** Single-use recovery codes; shown exactly once. */
+  recoveryCodes: string[];
 }

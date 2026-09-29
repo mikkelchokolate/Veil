@@ -124,5 +124,18 @@ func (p SecretPolicy) Transform(snapshot *model.ManagementSnapshot, transform fu
 	if snapshot.Warp.PrivateKey, err = transform(snapshot.Warp.PrivateKey); err != nil {
 		return err
 	}
+
+	// Per-user TOTP shared secrets are password-grade material: encrypted on
+	// save, decrypted on load. Recovery codes are stored as SHA-256 hashes
+	// and need no transform; the pending enrollment secret is secret-grade
+	// even before it is confirmed (issue #1172).
+	for i := range snapshot.Users {
+		if snapshot.Users[i].TOTPSecret, err = transform(snapshot.Users[i].TOTPSecret); err != nil {
+			return err
+		}
+		if snapshot.Users[i].TOTPPendingSecret, err = transform(snapshot.Users[i].TOTPPendingSecret); err != nil {
+			return err
+		}
+	}
 	return nil
 }

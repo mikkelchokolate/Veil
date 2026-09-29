@@ -31,6 +31,15 @@ export const defaultHandlers = [
 			defaultInboundPublicPort: 0,
 		}),
 	),
+	// SettingsPage always mounts the TOTP card; a disabled status keeps
+	// unrelated settings tests quiet (#1172).
+	http.get("/api/v1/users/me/totp", () =>
+		HttpResponse.json({
+			enabled: false,
+			pendingEnrollment: false,
+			recoveryCodesRemaining: 0,
+		}),
+	),
 	http.get("/api/inbounds/:name/clients", () =>
 		HttpResponse.json({ items: [], total: 0, page: 1, pageSize: 500 }),
 	),
