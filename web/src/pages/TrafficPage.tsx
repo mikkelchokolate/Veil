@@ -311,6 +311,9 @@ function PresenceStatusCell({ item }: { item: PresenceItem }) {
 	if (item.online === false) {
 		return <Badge variant="outline">{t("traffic.presence.offline")}</Badge>;
 	}
+	if (item.source === "ineligible") {
+		return <span className="muted">{t("traffic.presence.ineligible")}</span>;
+	}
 	return <span className="muted">{t("traffic.presence.noTelemetry")}</span>;
 }
 

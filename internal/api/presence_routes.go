@@ -13,6 +13,7 @@ const (
 	presenceSourceStats       = "stats"       // authoritative runtime session table (hysteria2 /online)
 	presenceSourceActivity    = "activity"    // counter-increase heuristic (mieru; hysteria2 fallback)
 	presenceSourceUnsupported = "unsupported" // no telemetry source exists (naiveproxy, olcRTC, unbound)
+	presenceSourceIneligible  = "ineligible"  // render excluded the client (disabled/depleted/expired)
 )
 
 const (
@@ -120,6 +121,15 @@ func (s *managementState) handleV1Presence(w http.ResponseWriter, r *http.Reques
 	now := time.Now().Unix()
 	items := make([]presenceItem, 0, len(clients))
 	for _, c := range clients {
+		if !c.RuntimeEligible(now) {
+			// The render path already excludes this client (disabled,
+			// depleted, or expired): any stats row or counter increase it
+			// still carries is residual and must not prove "online"
+			// (#1177). Report no verdict rather than a fake "offline" —
+			// a session torn down mid-flight is not provably gone.
+			items = append(items, presenceItem{ClientID: c.ID, Name: c.Name, Source: presenceSourceIneligible})
+			continue
+		}
 		clientBindings := bindingsByClient[c.ID]
 		evals := make([]bindingPresenceEval, 0, len(clientBindings))
 		for _, b := range clientBindings {
