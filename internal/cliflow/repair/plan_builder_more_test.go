@@ -202,19 +202,23 @@ func TestApplyPanelSettingsRepairActionsNoPanelAccess(t *testing.T) {
 
 func TestShouldRenewLEIPCert(t *testing.T) {
 	cases := []struct {
-		name     string
-		certPath string
-		issuer   string
-		notAfter time.Time
-		want     bool
+		name       string
+		certPath   string
+		issuer     string
+		notAfter   time.Time
+		selfSigned bool
+		want       bool
 	}{
-		{"missing", "", "Let's Encrypt", time.Now().Add(30 * 24 * time.Hour), true},
-		{"invalid PEM", "invalid.pem", "Let's Encrypt", time.Now().Add(30 * 24 * time.Hour), true},
-		{"LE fresh", "le-fresh.pem", "Let's Encrypt", time.Now().Add(30 * 24 * time.Hour), false},
-		{"LE shortlived fresh", "le-short.pem", "Let's Encrypt", time.Now().Add(160 * time.Hour), false},
-		{"LE renew window", "le-window.pem", "Let's Encrypt", time.Now().Add(72 * time.Hour), true},
-		{"LE expired soon", "le-soon.pem", "Let's Encrypt", time.Now().Add(1 * 24 * time.Hour), true},
-		{"not LE", "not-le.pem", "Veil", time.Now().Add(30 * 24 * time.Hour), true},
+		{"missing", "", "Let's Encrypt", time.Now().Add(30 * 24 * time.Hour), false, true},
+		{"invalid PEM", "invalid.pem", "Let's Encrypt", time.Now().Add(30 * 24 * time.Hour), false, true},
+		{"LE fresh", "le-fresh.pem", "Let's Encrypt", time.Now().Add(30 * 24 * time.Hour), false, false},
+		{"LE shortlived fresh", "le-short.pem", "Let's Encrypt", time.Now().Add(160 * time.Hour), false, false},
+		{"LE renew window", "le-window.pem", "Let's Encrypt", time.Now().Add(72 * time.Hour), false, true},
+		{"LE expired soon", "le-soon.pem", "Let's Encrypt", time.Now().Add(1 * 24 * time.Hour), false, true},
+		// #1185: a fresh leaf from an operator's private CA is just as
+		// managed as a Let's Encrypt issuance — brand must not matter.
+		{"private CA fresh", "private-ca.pem", "Veil", time.Now().Add(30 * 24 * time.Hour), false, false},
+		{"self-signed fallback", "self.pem", "Veil", time.Now().Add(30 * 24 * time.Hour), true, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -225,6 +229,8 @@ func TestShouldRenewLEIPCert(t *testing.T) {
 					if err := os.WriteFile(certPath, []byte("not a valid PEM file"), 0o644); err != nil {
 						t.Fatalf("write invalid pem: %v", err)
 					}
+				} else if tc.selfSigned {
+					writeTestSelfSignedCert(t, certPath, tc.issuer, tc.notAfter)
 				} else {
 					writeTestCert(t, certPath, tc.issuer, tc.notAfter)
 				}
@@ -236,12 +242,61 @@ func TestShouldRenewLEIPCert(t *testing.T) {
 	}
 }
 
+// writeTestCert writes a CA-signed leaf: the issuer org becomes a fresh
+// test CA so the leaf classifies as an ACME-issued certificate the way a
+// real Let's Encrypt or private-CA issuance would (#1185). Use
+// writeTestSelfSignedCert for fixtures that must classify self-signed.
 func writeTestCert(t *testing.T, path, issuer string, notAfter time.Time) {
 	t.Helper()
-	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatalf("generate key: %v", err)
+	caKey := mustGenerateECDSA(t)
+	serial := func() *big.Int {
+		n, err := rand.Int(rand.Reader, big.NewInt(1<<62))
+		if err != nil {
+			t.Fatalf("serial: %v", err)
+		}
+		return n
 	}
+	caTmpl := x509.Certificate{
+		SerialNumber:          serial(),
+		Subject:               pkix.Name{CommonName: issuer + " Test Root", Organization: []string{issuer}},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(30 * 24 * time.Hour),
+		IsCA:                  true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, &caTmpl, &caTmpl, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatalf("create CA: %v", err)
+	}
+	caCert, err := x509.ParseCertificate(caDER)
+	if err != nil {
+		t.Fatalf("parse CA: %v", err)
+	}
+	leafKey := mustGenerateECDSA(t)
+	leafTmpl := x509.Certificate{
+		SerialNumber: serial(),
+		Subject:      pkix.Name{CommonName: "example.com"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     notAfter,
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:     []string{"example.com"},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &leafTmpl, caCert, &leafKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatalf("create cert: %v", err)
+	}
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+}
+
+// writeTestSelfSignedCert writes a leaf signed by its own key — the shape
+// the installer's fallback produces and the renewal gate must reject.
+func writeTestSelfSignedCert(t *testing.T, path, issuer string, notAfter time.Time) {
+	t.Helper()
+	priv := mustGenerateECDSA(t)
 	serial, err := rand.Int(rand.Reader, big.NewInt(1<<62))
 	if err != nil {
 		t.Fatalf("serial: %v", err)
@@ -262,6 +317,15 @@ func writeTestCert(t *testing.T, path, issuer string, notAfter time.Time) {
 	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644); err != nil {
 		t.Fatalf("write cert: %v", err)
 	}
+}
+
+func mustGenerateECDSA(t *testing.T) *ecdsa.PrivateKey {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	return key
 }
 
 func TestMaybeIssueLEIPCertSkipsWhenNotNeeded(t *testing.T) {

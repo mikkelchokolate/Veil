@@ -56,6 +56,64 @@ func writeCLICertPEM(t *testing.T, path, issuerOrg string, notAfter time.Time, i
 	}
 }
 
+// writeCLICASignedCertPEM writes a leaf issued by a fresh test CA under
+// issuerOrg so the certificate classifies as ACME-issued — the shape a real
+// Let's Encrypt or controlled-CA issuance produces (#1185).
+func writeCLICASignedCertPEM(t *testing.T, path, issuerOrg string, notAfter time.Time, ips ...net.IP) {
+	t.Helper()
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newSerial := func() *big.Int {
+		n, err := rand.Int(rand.Reader, big.NewInt(1<<62))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	caTemplate := x509.Certificate{
+		SerialNumber:          newSerial(),
+		Subject:               pkix.Name{CommonName: issuerOrg + " Test Root", Organization: []string{issuerOrg}},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(30 * 24 * time.Hour),
+		IsCA:                  true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, &caTemplate, &caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caCert, err := x509.ParseCertificate(caDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leafTemplate := x509.Certificate{
+		SerialNumber: newSerial(),
+		Subject:      pkix.Name{CommonName: "veil-cert-test"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     notAfter,
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IPAddresses:  ips,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &leafTemplate, caCert, &leafKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func certTestCommand(out *bytes.Buffer) *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.SetOut(out)
@@ -104,7 +162,7 @@ func TestCertStatusLetsEncryptOutsideWindow(t *testing.T) {
 	etc := t.TempDir()
 	t.Setenv("VEIL_ETC_DIR", etc)
 	certPath := filepath.Join(etc, "panel", "tls.crt")
-	writeCLICertPEM(t, certPath, "Let's Encrypt", time.Now().Add(5*24*time.Hour))
+	writeCLICASignedCertPEM(t, certPath, "Let's Encrypt", time.Now().Add(5*24*time.Hour))
 
 	out := &bytes.Buffer{}
 	if err := runCertStatus(certTestCommand(out), false, ""); err != nil {
@@ -119,7 +177,7 @@ func TestCertStatusJSON(t *testing.T) {
 	etc := t.TempDir()
 	t.Setenv("VEIL_ETC_DIR", etc)
 	certPath := filepath.Join(etc, "panel", "tls.crt")
-	writeCLICertPEM(t, certPath, "Let's Encrypt", time.Now().Add(48*time.Hour), net.ParseIP("2001:db8::7"))
+	writeCLICASignedCertPEM(t, certPath, "Let's Encrypt", time.Now().Add(48*time.Hour), net.ParseIP("2001:db8::7"))
 
 	out := &bytes.Buffer{}
 	if err := runCertStatus(certTestCommand(out), true, ""); err != nil {

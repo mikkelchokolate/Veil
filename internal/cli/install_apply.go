@@ -208,23 +208,7 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	// re-running `veil install` cannot silently drop the CA configuration or
 	// the IP-certificate lifecycle choices (#1186/#1187/#1189).
 	existingEnv := hostenv.ReadEnvFile(filepath.Join(opts.EtcDir, "veil.env"))
-	profile.ACMECAURL = installEnvFirstNonEmpty(strings.TrimSpace(os.Getenv("VEIL_ACME_CA_URL")), existingEnv["VEIL_ACME_CA_URL"])
-	profile.ACMECARoot = installEnvFirstNonEmpty(strings.TrimSpace(os.Getenv("VEIL_ACME_CA_ROOT")), existingEnv["VEIL_ACME_CA_ROOT"])
-	profile.ACMEInsecure = strings.TrimSpace(os.Getenv("VEIL_ACME_INSECURE")) != "" ||
-		strings.TrimSpace(existingEnv["VEIL_ACME_INSECURE"]) != ""
-	if opts.LEIPCertSet {
-		profile.PanelLEIPCertEnv = "1"
-		if !opts.LEIPCert {
-			profile.PanelLEIPCertEnv = "0"
-		}
-	} else {
-		profile.PanelLEIPCertEnv = existingEnv["VEIL_PANEL_LE_IP_CERT"]
-	}
-	if opts.LEIPCertPortSet {
-		profile.PanelHTTP01PortEnv = strconv.Itoa(opts.LEIPCertPort)
-	} else {
-		profile.PanelHTTP01PortEnv = existingEnv["VEIL_PANEL_HTTP01_PORT"]
-	}
+	applyInstallEnvToProfile(&profile, opts, existingEnv)
 
 	// 2. Initialize state.key and encrypted state.json with generated credentials
 	resolvedKeyPath := filepath.Join(opts.EtcDir, "state.key")
@@ -472,6 +456,30 @@ func buildInstallPlan(profile installer.RURecommendedProfile, opts ruRecommended
 // cover both SANs — ResolvePublicIP returns only the family the winning
 // endpoint connection used (issue #665).
 var installPublicIPFamilyDetectFunc = hostenv.DetectPublicIPForFamily
+
+// applyInstallEnvToProfile folds the ACME and IP-certificate lifecycle knobs
+// from the process environment and any previously persisted veil.env into
+// the profile so issuance, persistence and rendering all resolve one
+// configuration (#1186/#1187/#1189).
+func applyInstallEnvToProfile(profile *installer.RURecommendedProfile, opts ruRecommendedInstallOptions, existingEnv map[string]string) {
+	profile.ACMECAURL = installEnvFirstNonEmpty(strings.TrimSpace(os.Getenv("VEIL_ACME_CA_URL")), existingEnv["VEIL_ACME_CA_URL"])
+	profile.ACMECARoot = installEnvFirstNonEmpty(strings.TrimSpace(os.Getenv("VEIL_ACME_CA_ROOT")), existingEnv["VEIL_ACME_CA_ROOT"])
+	profile.ACMEInsecure = strings.TrimSpace(os.Getenv("VEIL_ACME_INSECURE")) != "" ||
+		strings.TrimSpace(existingEnv["VEIL_ACME_INSECURE"]) != ""
+	if opts.LEIPCertSet {
+		profile.PanelLEIPCertEnv = "1"
+		if !opts.LEIPCert {
+			profile.PanelLEIPCertEnv = "0"
+		}
+	} else {
+		profile.PanelLEIPCertEnv = existingEnv["VEIL_PANEL_LE_IP_CERT"]
+	}
+	if opts.LEIPCertPortSet {
+		profile.PanelHTTP01PortEnv = strconv.Itoa(opts.LEIPCertPort)
+	} else {
+		profile.PanelHTTP01PortEnv = existingEnv["VEIL_PANEL_HTTP01_PORT"]
+	}
+}
 
 func issueLEIPCertForProfile(ctx context.Context, profile *installer.RURecommendedProfile, opts ruRecommendedInstallOptions, resolvedIP net.IP) error {
 	if ctx == nil {

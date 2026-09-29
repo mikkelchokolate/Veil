@@ -5,9 +5,11 @@ import (
 	"errors"
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/acmeip"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/installer"
 )
 
@@ -51,10 +53,10 @@ func TestIssueLEIPCertForProfileHonorsAcmeCAEnv(t *testing.T) {
 
 	tempEtc := t.TempDir()
 	profile := installer.RURecommendedProfile{Domain: "127.0.0.1"}
+	opts := ruRecommendedInstallOptions{EtcDir: tempEtc}
+	applyInstallEnvToProfile(&profile, opts, hostenv.ReadEnvFile(filepath.Join(tempEtc, "veil.env")))
 	resolvedIP := net.ParseIP("127.0.0.1")
-	if err := issueLEIPCertForProfile(context.Background(), &profile, ruRecommendedInstallOptions{
-		EtcDir: tempEtc,
-	}, resolvedIP); err != nil {
+	if err := issueLEIPCertForProfile(context.Background(), &profile, opts, resolvedIP); err != nil {
 		t.Fatalf("issueLEIPCertForProfile: %v", err)
 	}
 	if got.CAServer != "https://127.0.0.1:14000/dir" {
@@ -86,10 +88,10 @@ func TestIssueLEIPCertForProfileDefaultsToLetsEncrypt(t *testing.T) {
 
 	tempEtc := t.TempDir()
 	profile := installer.RURecommendedProfile{Domain: "127.0.0.1"}
+	opts := ruRecommendedInstallOptions{EtcDir: tempEtc}
+	applyInstallEnvToProfile(&profile, opts, hostenv.ReadEnvFile(filepath.Join(tempEtc, "veil.env")))
 	resolvedIP := net.ParseIP("127.0.0.1")
-	if err := issueLEIPCertForProfile(context.Background(), &profile, ruRecommendedInstallOptions{
-		EtcDir: tempEtc,
-	}, resolvedIP); err != nil {
+	if err := issueLEIPCertForProfile(context.Background(), &profile, opts, resolvedIP); err != nil {
 		t.Fatalf("issueLEIPCertForProfile: %v", err)
 	}
 	if got.CAServer != "" {
