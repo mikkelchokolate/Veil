@@ -49,12 +49,17 @@ const (
 	// evictions lag real session death without letting a stale IP squat on
 	// the client's limit forever.
 	defaultHy2AuthIPTTL = 4 * time.Minute
-	// defaultHy2AuthSessionTTL is the admission-grace window for deviceLimit:
-	// the interval between a successful auth response and the new session
-	// appearing in the daemon's /online table. It only has to cover that
-	// handoff — a session that stays live is counted by /online long before
-	// its grace entry expires, and a deny stays denied either way.
+	// defaultHy2AuthSessionTTL bounds pending-admission bookkeeping memory.
+	// Entries older than this are garbage-collected regardless of state.
 	defaultHy2AuthSessionTTL = 30 * time.Second
+	// hy2AuthRegistrationGrace is the window during which a just-admitted
+	// session is presumed NOT yet in /online: the auth endpoint re-reads
+	// /online synchronously on every request, so the registration lag is only
+	// the daemon's own table update — seconds, not the whole TTL. Entries
+	// older than the grace are assumed already counted by /online (or dead
+	// admissions that never connected) and stop counting — that resolves the
+	// online∩pending double-count that under-admitted for deviceLimit >= 2.
+	hy2AuthRegistrationGrace = 5 * time.Second
 )
 
 type hy2AuthRequest struct {
@@ -130,6 +135,7 @@ func (t *hy2IPTracker) admit(clientID string, ip netip.Addr, limit int) bool {
 type hy2SessionTracker struct {
 	mu       sync.Mutex
 	ttl      time.Duration
+	grace    time.Duration
 	now      func() time.Time
 	sessions map[string]map[string]time.Time
 }
@@ -138,7 +144,7 @@ func newHy2SessionTracker(ttl time.Duration, now func() time.Time) *hy2SessionTr
 	if now == nil {
 		now = time.Now
 	}
-	return &hy2SessionTracker{ttl: ttl, now: now, sessions: make(map[string]map[string]time.Time)}
+	return &hy2SessionTracker{ttl: ttl, grace: hy2AuthRegistrationGrace, now: now, sessions: make(map[string]map[string]time.Time)}
 }
 
 // admit reports whether clientID may admit a session whose /online count is
@@ -166,23 +172,19 @@ func (t *hy2SessionTracker) admit(clientID, token string, online int64, limit in
 		entries[token] = now.Add(t.ttl)
 		return true
 	}
-	// /online counts sessions already admitted here, but their pending entries
-	// live on for the TTL — without trimming, online+pending double-counts the
-	// overlap and under-admits when limit >= 2. We cannot tell WHICH pending
-	// entries registered in /online (it is only a count), so drop the oldest
-	// min(online, len(pending)) — those are the ones most likely registered —
-	// keeping the check fail-closed for genuinely disjoint pending+online.
-	for drop := min(int(online), len(entries)); drop > 0 && len(entries) > 0; drop-- {
-		var oldest string
-		var oldestAt time.Time
-		for tok, expires := range entries {
-			if oldest == "" || expires.Before(oldestAt) {
-				oldest, oldestAt = tok, expires
-			}
+	// Only pending entries younger than the registration grace count toward
+	// the limit: they were admitted too recently to appear in the /online
+	// snapshot just read. Older entries are already represented by `online`
+	// (or are dead admissions that never connected) — counting them again
+	// would double-count the overlap. Entries store expiry = admittedAt+ttl,
+	// so "younger than grace" is expiry further out than ttl-grace.
+	var pending int64
+	for _, expires := range entries {
+		if expires.After(now.Add(t.ttl - t.grace)) {
+			pending++
 		}
-		delete(entries, oldest)
 	}
-	if online+int64(len(entries)) >= int64(limit) {
+	if online+pending >= int64(limit) {
 		return false
 	}
 	entries[token] = now.Add(t.ttl)

@@ -282,8 +282,8 @@ func TestHy2AuthTrackerTTLExpiry(t *testing.T) {
 // Regression for the review finding on #1173: once an admitted session shows
 // up in /online, its pending tracker entry keeps living for the TTL, so
 // online+pending double-counted the overlap and under-admitted for
-// deviceLimit >= 2. The tracker must trim min(online, pending) overlap before
-// the slot check.
+// deviceLimit >= 2. Pending entries only count while they are younger than
+// the registration grace — older ones are presumed already in /online.
 func TestHy2AuthOnlinePendingOverlapDoesNotUnderAdmit(t *testing.T) {
 	s, svc := newHy2AuthTestState(t)
 	s.hy2AuthOnline = stubOnline(0)
@@ -305,12 +305,15 @@ func TestHy2AuthOnlinePendingOverlapDoesNotUnderAdmit(t *testing.T) {
 	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "1.2.3.4:1000", Auth: auth}); !resp.OK {
 		t.Fatal("first admission denied")
 	}
-	// Session A now registers in /online while its pending entry is still live.
+	// Session A registers in /online (grace elapsed); its pending entry stays
+	// tracked but must not double-count — the second slot is genuinely free.
+	now = now.Add(hy2AuthRegistrationGrace + time.Second)
 	s.hy2AuthOnline = stubOnline(1)
 	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "5.6.7.8:2000", Auth: auth}); !resp.OK {
 		t.Fatal("second admission denied by online∩pending double-count under deviceLimit=2")
 	}
-	// Third must still be denied: online=1 (A) + pending (B) = 2 = limit.
+	// Third must still be denied: online=1 (A) + pending B (inside grace) = 2.
+	now = now.Add(time.Second)
 	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "9.9.9.9:3000", Auth: auth}); resp.OK {
 		t.Fatal("third admission raced past deviceLimit=2")
 	}
