@@ -528,7 +528,8 @@ export const ru: Record<string, string> = {
 	"backups.sftp.hostKeyPlaceholder": "ssh-ed25519 AAAA…",
 	"backups.sftp.hostKeyHint":
 		"Вставьте ключ хоста сервера в формате authorized_keys, чтобы закрепить его. Если пусто, при первом подключении ключ принимается на доверии (TOFU).",
-	"backups.sftp.keepSecret": "оставьте пустым, чтобы сохранить текущее значение",
+	"backups.sftp.keepSecret":
+		"оставьте пустым, чтобы сохранить текущее значение",
 	"backups.sftp.secretSet": "сохранено",
 	"backups.sftp.secretUnset": "не сохранено",
 	"backups.sftp.clearSecret": "Очистить сохранённое значение",
@@ -548,7 +549,8 @@ export const ru: Record<string, string> = {
 	"backups.sftp.error.load": "Не удалось загрузить SFTP-назначение",
 	"backups.sftp.error.save": "Не удалось сохранить SFTP-назначение",
 	"backups.sftp.error.remove": "Не удалось удалить SFTP-назначение",
-	"backups.sftp.error.remoteList": "Не удалось получить список удалённых архивов",
+	"backups.sftp.error.remoteList":
+		"Не удалось получить список удалённых архивов",
 	"backups.sftp.error.fetch": "Не удалось получить удалённый архив",
 	"backups.sftp.removeConfirmTitle": "Удалить SFTP-назначение?",
 	"backups.sftp.removeConfirmDescription":

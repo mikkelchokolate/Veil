@@ -933,9 +933,7 @@ describe("BackupsPage", () => {
 			</QueryClientProvider>,
 		);
 
-		fireEvent.click(
-			await screen.findByRole("button", { name: "Configure" }),
-		);
+		fireEvent.click(await screen.findByRole("button", { name: "Configure" }));
 		fireEvent.change(await screen.findByLabelText("Host"), {
 			target: { value: "backup.example.com" },
 		});
@@ -983,10 +981,7 @@ describe("BackupsPage", () => {
 						},
 					]);
 				}
-				if (
-					path === "/api/backups/sftp/fetch" &&
-					init?.method === "POST"
-				) {
+				if (path === "/api/backups/sftp/fetch" && init?.method === "POST") {
 					fetched.push(
 						typeof init.body === "string" ? JSON.parse(init.body) : init.body,
 					);
@@ -1025,9 +1020,7 @@ describe("BackupsPage", () => {
 			</QueryClientProvider>,
 		);
 
-		expect(
-			await screen.findByText(/backup\.example\.com/),
-		).toBeInTheDocument();
+		expect(await screen.findByText(/backup\.example\.com/)).toBeInTheDocument();
 		fireEvent.click(await screen.findByRole("button", { name: "Fetch" }));
 		await waitFor(() => expect(fetched).toHaveLength(1));
 		expect(fetched[0]).toEqual({ name: "veil-remote.enc" });
