@@ -678,7 +678,7 @@ func (s *managementState) hy2ClientOnlineSessions(ctx context.Context, settings 
 			return 0, err
 		}
 		s.mu.Unlock()
-		identities := trafficIdentityMap(name, effective.Profiles, allBindings, allClients)
+		identities := trafficIdentityMap(name, effective.Profiles, allBindings, allClients, time.Now().Unix())
 		counts, _, err := online(ctx, settings, effective, identities)
 		if err != nil {
 			return 0, fmt.Errorf("online sessions for inbound %s: %w", name, err)
