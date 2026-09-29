@@ -4785,7 +4785,10 @@ paths:
         table (source=stats); bindings on protocols with traffic accounting
         but no session table (mieru) use a counter-increase heuristic
         (source=activity); bindings with no telemetry source report
-        source=unsupported. online is tri-state: true/false only when a
+        source=unsupported. Clients the render path excludes — disabled,
+        quota-depleted, or expired — report source=ineligible with
+        online=null because any telemetry they still carry is residual and
+        cannot prove presence. online is tri-state: true/false only when a
         source could prove it, null when nothing can answer — never a faked
         offline.
       security:
@@ -8742,11 +8745,14 @@ components:
           - stats
           - activity
           - unsupported
+          - ineligible
           description: >-
             The most authoritative mechanism behind the verdict: stats =
             runtime session table (hysteria2 /online), activity =
             counter-increase heuristic (mieru, or hysteria2 fallback when
-            the stats listener is dark), unsupported = no telemetry source.
+            the stats listener is dark), unsupported = no telemetry source,
+            ineligible = the render path excludes the client (disabled,
+            depleted, or expired) so no verdict is possible.
         connections:
           type: integer
           format: int64
