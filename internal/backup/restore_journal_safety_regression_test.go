@@ -197,45 +197,86 @@ func TestRestoreRollbackRefusesToUnlinkForeignTargets(t *testing.T) {
 }
 
 // TestRestoreRollbackRejectsPlantedSafetyLeaf covers the remaining #1219
-// rename-before-verify gap: a planted journal can claim hadPrevious:false
-// while dropping a forged ".restore-state-old" leaf next to the target.
-// The parked inode must hash to a well-formed recorded PreviousDigest
-// BEFORE it is renamed over the live leaf — an empty previousDigest with
-// a present safety leaf is refused, so state.json keeps its live content.
+// rename-before-verify gaps: a planted journal can drop a forged
+// ".restore-state-old" leaf next to the target and either claim
+// hadPrevious:false or fully forge a hadPrevious/previousDigest pair.
+// Rollback must refuse before any rename unless live evidence shows the
+// transaction actually published the member (target or intact staged
+// leaf hashing to IntendedDigest), so state.json keeps its live content.
+// Rollback walks members in reverse order, so the planted-safety record
+// is listed LAST to be exercised first.
 func TestRestoreRollbackRejectsPlantedSafetyLeaf(t *testing.T) {
-	root := t.TempDir()
-	statePath := filepath.Join(root, "state.json")
-	keyPath := filepath.Join(root, "state.key")
-	for path, body := range map[string]string{statePath: "live-state", keyPath: "live-key"} {
-		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// The attacker drops a forged "previous" inode while the journal
-	// claims there was none.
-	if err := os.WriteFile(filepath.Join(root, ".restore-state-old"), []byte("forged-state"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	disk := restoreJournalDisk{
-		Version: 2, TransactionID: "planted", Phase: "prepared", WALCleanupPhase: "pending",
-		Files: []restoreJournalDiskFile{
-			{Name: "state.json", TargetID: "state.json", StagedName: ".restore-state-new", SafetyName: ".restore-state-old", IntendedDigest: backupChecksum([]byte("planted-state")), Phase: "prepared"},
+	tests := []struct {
+		name        string
+		record      func(root string, live []byte) restoreJournalDiskFile
+		wantErrPart string
+	}{
+		{
+			name: "claimed_no_previous",
+			record: func(_ string, live []byte) restoreJournalDiskFile {
+				return restoreJournalDiskFile{
+					Name: "state.json", TargetID: "state.json",
+					StagedName: ".restore-state-new", SafetyName: ".restore-state-old",
+					IntendedDigest: backupChecksum([]byte("planted-state")), Phase: "prepared",
+				}
+			},
+			wantErrPart: "never published",
+		},
+		{
+			name: "forged_consistent_previous",
+			record: func(_ string, _ []byte) restoreJournalDiskFile {
+				return restoreJournalDiskFile{
+					Name: "state.json", TargetID: "state.json",
+					StagedName: ".restore-state-new", SafetyName: ".restore-state-old",
+					HadPrevious: true, PreviousDigest: backupChecksum([]byte("forged-state")),
+					IntendedDigest: backupChecksum([]byte("planted-state")), Phase: "prepared",
+				}
+			},
+			wantErrPart: "never published",
 		},
 	}
-	payload, err := json.Marshal(disk)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, restoreTransactionJournalName), payload, 0o600); err != nil {
-		t.Fatal(err)
-	}
 
-	if err := RecoverInterruptedRestore(statePath, keyPath, ""); err == nil {
-		t.Fatal("planted safety leaf with no previous digest was silently accepted")
-	}
-	got, err := os.ReadFile(statePath)
-	if err != nil || string(got) != "live-state" {
-		t.Fatalf("planted safety leaf clobbered live state.json: body=%q err=%v", got, err)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			statePath := filepath.Join(root, "state.json")
+			keyPath := filepath.Join(root, "state.key")
+			for path, body := range map[string]string{statePath: "live-state", keyPath: "live-key"} {
+				if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// The attacker drops a forged "previous" inode for state.json.
+			if err := os.WriteFile(filepath.Join(root, ".restore-state-old"), []byte("forged-state"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			disk := restoreJournalDisk{
+				Version: 2, TransactionID: "planted", Phase: "prepared", WALCleanupPhase: "pending",
+				Files: []restoreJournalDiskFile{
+					{Name: "state.key", TargetID: "state.key", StagedName: ".restore-key-new", SafetyName: ".restore-key-old", IntendedDigest: backupChecksum([]byte("planted-key")), Phase: "prepared"},
+					test.record(root, []byte("live-state")),
+				},
+			}
+			payload, err := json.Marshal(disk)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, restoreTransactionJournalName), payload, 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			err = RecoverInterruptedRestore(statePath, keyPath, "")
+			if err == nil {
+				t.Fatal("planted journal+safety pair was silently accepted")
+			}
+			if !strings.Contains(err.Error(), test.wantErrPart) {
+				t.Fatalf("recovery failed for the wrong reason: %v", err)
+			}
+			got, err := os.ReadFile(statePath)
+			if err != nil || string(got) != "live-state" {
+				t.Fatalf("planted safety leaf clobbered live state.json: body=%q err=%v", got, err)
+			}
+		})
 	}
 }
 

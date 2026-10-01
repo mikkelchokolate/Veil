@@ -579,12 +579,31 @@ func rollbackRestoreJournal(dirs restoreJournalDirs, root string, journal *resto
 		// proves a previous inode was parked (#1219).
 		if record.HadPrevious || statErr == nil {
 			if statErr == nil {
-				// The parked inode must prove it IS the recorded previous
-				// file BEFORE it is renamed over the live target — a
-				// planted journal can pair "no previous" with a dropped
-				// safety leaf to clobber live state (#1219). Without a
-				// well-formed PreviousDigest there is nothing to verify
-				// against, so the rename is refused.
+				// The journal is fully attacker-authored, so even a
+				// self-consistent hadPrevious/previousDigest pair proves
+				// nothing by itself. Require live evidence this
+				// transaction actually progressed on the member BEFORE
+				// any rename: either the live target already carries the
+				// intended content, or the intact staged leaf that would
+				// produce it is still parked (#1219). A cold planted
+				// journal+safety pair has no such footprint and is
+				// refused before it can clobber live state.
+				published := false
+				if digest, err := digestJournalLeaf(dir, targetLeaf); err == nil && digest == record.IntendedDigest {
+					published = true
+				}
+				if !published {
+					if digest, err := digestJournalLeaf(dir, filepath.Base(record.StagedPath)); err == nil && digest == record.IntendedDigest {
+						published = true
+					}
+				}
+				if !published {
+					return fmt.Errorf("restore safety member %s exists but the transaction never published it", record.Name)
+				}
+				// The parked inode must additionally prove it IS the
+				// recorded previous file — without a well-formed
+				// PreviousDigest there is nothing to verify against, so
+				// the rename is refused.
 				if !isSHA256HexDigest(record.PreviousDigest) {
 					return fmt.Errorf("restore safety member %s exists but journal records no previous digest", record.Name)
 				}
