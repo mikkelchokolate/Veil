@@ -68,8 +68,12 @@ func DefaultRateLimitPolicy() RateLimitPolicy {
 			// re-queries clients, bindings, and last-activity on the same
 			// single connection — moderate, not heavy.
 			"/api/v1/traffic/history": {RatePerMinute: 6, Burst: 2},
-			"/api/v1/traffic/":        {RatePerMinute: 12, Burst: 4},
-			"/api/v1/presence":        {RatePerMinute: 12, Burst: 4},
+			// Note: every gated read under the /api/v1/traffic/ subtree
+			// that isn't the exact aggregate key shares this one IP bucket —
+			// fine while the UI polls only the aggregate; a client-detail
+			// view fanning out {id}/history reads would need its own tier.
+			"/api/v1/traffic/": {RatePerMinute: 12, Burst: 4},
+			"/api/v1/presence": {RatePerMinute: 12, Burst: 4},
 		},
 	}
 }
