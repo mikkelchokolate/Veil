@@ -1,6 +1,7 @@
 package hysteria2
 
 import (
+	"encoding/hex"
 	"net/url"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols/schema"
 	"github.com/mikkelchokolate/Veil/internal/runtimeinstall"
+	"golang.org/x/crypto/argon2"
 )
 
 func TestPluginMetadata(t *testing.T) {
@@ -1226,6 +1228,53 @@ func TestHTTPAuthURLRoundTripsSecret(t *testing.T) {
 	}
 	if parts[5] != HTTPAuthSecret(settings, inbound) {
 		t.Fatal("auth URL does not embed the derived per-inbound secret")
+	}
+}
+
+// #1205: the path secret is keyed by the per-install derivation secret —
+// two installs with the same inbound and shared password must derive
+// different URL secrets.
+func TestHTTPAuthSecretKeyedByInstallSecret(t *testing.T) {
+	inbound := model.Inbound{Name: "h2", Protocol: "hysteria2", Port: 8443, Password: "shared-pass"}
+	a := HTTPAuthSecret(model.Settings{CredentialDerivationSecret: "install-a"}, inbound)
+	b := HTTPAuthSecret(model.Settings{CredentialDerivationSecret: "install-b"}, inbound)
+	if a == b {
+		t.Fatal("path secret ignores the per-install derivation secret")
+	}
+	if len(a) != trafficStatsSecretBytes*2 {
+		t.Fatalf("unexpected secret length %d", len(a))
+	}
+}
+
+// #1205: with an empty shared password the secret must still be unguessable —
+// the derivation must not reduce to publicly computable inputs (inbound name
+// is not secret). The legacy password-only derivation is reproduced inline so
+// the test pins the pre-fix construction exactly.
+func TestHTTPAuthSecretNotPubliclyComputable(t *testing.T) {
+	inbound := model.Inbound{Name: "h2", Protocol: "hysteria2", Port: 8443} // no password at all
+	legacyOnlyPassword := hex.EncodeToString(argon2.IDKey(
+		[]byte(""),
+		[]byte("veil-hysteria2-http-auth\x00"+inbound.Name),
+		trafficStatsArgonTime, trafficStatsArgonMemory, trafficStatsArgonThreads, trafficStatsSecretBytes,
+	))
+	got := HTTPAuthSecret(model.Settings{CredentialDerivationSecret: "install-secret"}, inbound)
+	if got == legacyOnlyPassword {
+		t.Fatal("empty-password path secret reduced to publicly computable inputs")
+	}
+	// A weak shared password is likewise not the sole KDF input.
+	weak := model.Inbound{Name: "h2", Protocol: "hysteria2", Port: 8443, Password: "1234"}
+	legacyWeak := hex.EncodeToString(argon2.IDKey(
+		[]byte("1234"),
+		[]byte("veil-hysteria2-http-auth\x00"+weak.Name),
+		trafficStatsArgonTime, trafficStatsArgonMemory, trafficStatsArgonThreads, trafficStatsSecretBytes,
+	))
+	if HTTPAuthSecret(model.Settings{CredentialDerivationSecret: "install-secret"}, weak) == legacyWeak {
+		t.Fatal("weak-password path secret reduced to publicly computable inputs")
+	}
+	// Contexts with no install secret keep the legacy derivation — the
+	// fallback is only reachable without managed state.
+	if got := HTTPAuthSecret(model.Settings{}, weak); got != legacyWeak {
+		t.Fatal("no-install-secret fallback derivation changed")
 	}
 }
 
