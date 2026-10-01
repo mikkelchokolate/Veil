@@ -1,10 +1,10 @@
 package backup
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 // restoreResidueMinAge gates residue sweeps: only entries strictly older than
@@ -21,12 +21,14 @@ var restoreResiduePrefixes = []string{".veil-restore-", ".tmp-", ".veil-backup-d
 // staged .veil-restore-* member temps, atomicfile .tmp-* temps, orphaned
 // .veil-backup-db-* snapshots and stale .veil-backup-inspect-* workspaces. It
 // must only run when no restore journal exists — a surviving journal may still
-// reference staged paths for rollback (#1125).
-func sweepInterruptedRestoreResidue(root string) {
-	if _, err := os.Lstat(filepath.Join(root, restoreTransactionJournalName)); err == nil {
+// reference staged paths for rollback (#1125). The caller supplies the
+// already-pinned root directory, so the journal check and every removal are
+// descriptor-relative and cannot be redirected by a swapped path (#1219).
+func sweepInterruptedRestoreResidue(rootDir *safefs.Dir) {
+	if _, err := rootDir.StatAt(restoreTransactionJournalName); err == nil {
 		return
 	}
-	sweepRestoreResidueEntries(root, restoreResiduePrefixes, func(name string) bool {
+	sweepRestoreResidueEntries(rootDir, restoreResiduePrefixes, func(name string) bool {
 		return name == restoreTransactionJournalName || name == restoreCommitReceiptName
 	})
 }
@@ -34,12 +36,22 @@ func sweepInterruptedRestoreResidue(root string) {
 // sweepBackupWorkspaceResidue removes stale .veil-backup-* temp files and
 // workspaces (inspection, creation, publish/pending temps, db snapshots) from
 // the directory that hosts backup archives (#1125).
-func sweepBackupWorkspaceResidue(dir string) {
+func sweepBackupWorkspaceResidue(dirPath string) {
+	dir, err := safefs.OpenDir(dirPath)
+	if err != nil {
+		return
+	}
+	defer dir.Close()
 	sweepRestoreResidueEntries(dir, []string{".veil-backup-"}, nil)
 }
 
-func sweepRestoreResidueEntries(dir string, prefixes []string, excluded func(string) bool) {
-	entries, err := os.ReadDir(dir)
+// sweepRestoreResidueEntries removes matched entries through the pinned
+// directory handle: readdir names feed StatAt (lstat-equivalent) and
+// RemoveAt/RemoveTreeAt, so a stale leaf swapped for a symlink is unlinked
+// as the symlink itself — never followed — and a swapped workspace directory
+// can only lose its own pinned subtree, not an attacker-chosen path (#1219).
+func sweepRestoreResidueEntries(dir *safefs.Dir, prefixes []string, excluded func(string) bool) {
+	entries, err := dir.ReadDir()
 	if err != nil {
 		return
 	}
@@ -59,15 +71,14 @@ func sweepRestoreResidueEntries(dir string, prefixes []string, excluded func(str
 		if !match {
 			continue
 		}
-		info, err := entry.Info()
+		info, err := dir.StatAt(name)
 		if err != nil || !info.ModTime().Before(cutoff) {
 			continue
 		}
-		path := filepath.Join(dir, name)
-		if entry.IsDir() {
-			_ = os.RemoveAll(path)
+		if info.IsDir() {
+			_ = dir.RemoveTreeAt(name)
 			continue
 		}
-		_ = os.Remove(path)
+		_ = dir.RemoveAt(name)
 	}
 }

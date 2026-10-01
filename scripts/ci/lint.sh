@@ -41,6 +41,12 @@ windows_portable="$(go list -f '{{.ImportPath}} {{join .Deps ","}}' ./... \
 # shellcheck disable=SC2086  # package list is generated, newline-separated
 ci_run windows-cross-compile env GOOS=windows go build ${windows_portable}
 
+# internal/backup itself must compile on Windows now: the platform-bound
+# pieces (statfs, Stat_t ownership/link-count, O_NOFOLLOW opens) live behind
+# _linux/_windows files, so the package is no longer genuinely Unix-only
+# (#1210).
+ci_run windows-backup-compile env GOOS=windows go build ./internal/backup
+
 GOBIN_PATH="$(go env GOPATH)/bin"
 export PATH="${GOBIN_PATH}:${PATH}"
 

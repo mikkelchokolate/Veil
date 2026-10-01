@@ -32,8 +32,10 @@ func stageTwoMemberJournal(t *testing.T, statePath, keyPath string, intendedStat
 	if err != nil {
 		t.Fatal(err)
 	}
+	dirs := restoreJournalDirs{}
+	defer dirs.Close()
 	for index := 0; index < publishCount; index++ {
-		if err := publishRestoreJournalFile(root, &journal, index); err != nil {
+		if err := publishRestoreJournalFile(dirs, root, &journal, index); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -252,7 +254,7 @@ func TestRestorePublishWaitsForCrossProcessSnapshotBarrier(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		_, err := RestoreBackupFileWithOptions(fixture.archive, fixture.statePath, fixture.keyPath, "",
-			RestoreOptions{DatabasePath: fixture.databasePath})
+			RestoreOptions{DatabasePath: fixture.databasePath, AllowUnencrypted: true})
 		done <- err
 	}()
 
@@ -299,7 +301,7 @@ func TestRestoreBackupWithOptionsJournalsCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := RestoreBackupWithOptions(data, fixture.statePath, fixture.keyPath, "",
-		RestoreOptions{DatabasePath: fixture.databasePath})
+		RestoreOptions{DatabasePath: fixture.databasePath, AllowUnencrypted: true})
 	if err != nil {
 		t.Fatalf("byte-slice restore: %v", err)
 	}
@@ -503,7 +505,7 @@ func TestInspectSweepsStaleBackupWorkspaces(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	verified, err := inspectBackupFile(archive, "", DefaultMaxBackupBytes)
+	verified, err := inspectBackupFileWithOptions(archive, "", DefaultMaxBackupBytes, CryptoOptions{}, true)
 	if err != nil {
 		t.Fatalf("inspect with stale workspace present: %v", err)
 	}
@@ -568,7 +570,7 @@ func TestFileRestorePrunesRetainedSafeties(t *testing.T) {
 		safetyNames = append(safetyNames, name)
 	}
 	if _, err := RestoreBackupFileWithOptions(fixture.archive, fixture.statePath, fixture.keyPath, "",
-		RestoreOptions{DatabasePath: fixture.databasePath}); err != nil {
+		RestoreOptions{DatabasePath: fixture.databasePath, AllowUnencrypted: true}); err != nil {
 		t.Fatalf("restore with retained safeties: %v", err)
 	}
 	matches, err := filepath.Glob(fixture.statePath + ".pre-restore-*")

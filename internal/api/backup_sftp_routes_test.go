@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -45,6 +47,16 @@ func seedSftpInstallID(t *testing.T, state *managementState) {
 	if err := os.WriteFile(path, []byte(sftpTestInstallID+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// sftpEncryptedArchive builds a structurally valid v3 (chunked) archive
+// header around body so fixtures satisfy the strict IsEncryptedArchivePrefix
+// proof, not just the magic prefix (#1209).
+func sftpEncryptedArchive(body []byte) []byte {
+	payload := append([]byte("VEILBACK\x03"), make([]byte, 28)...)
+	var flen [4]byte
+	binary.BigEndian.PutUint32(flen[:], uint32(len(body)))
+	return append(payload, append(flen[:], body...)...)
 }
 
 func TestBackupSftpRouteRequiresAdmin(t *testing.T) {
@@ -224,7 +236,7 @@ func TestBackupSftpRemoteListAndFetch(t *testing.T) {
 	name := "veil_backup_20260101_020000.tar.gz.enc"
 	// No sidecar: the fetch relies on the encrypted-archive magic check for
 	// pre-sidecar content (#1209).
-	remote.SetFile(sftpTestRemoteDir+"/"+name, []byte("VEILBACK\x03remote-archive"))
+	remote.SetFile(sftpTestRemoteDir+"/"+name, sftpEncryptedArchive([]byte("remote-archive")))
 	// A foreign archive outside this node's namespace must never be listed
 	// or fetchable (#1184).
 	remote.SetFile("/srv/veil-backups/veil_backup_20260102_020000.tar.gz.enc", []byte("foreign"))
@@ -253,7 +265,7 @@ func TestBackupSftpRemoteListAndFetch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != "VEILBACK\x03remote-archive" {
+	if !bytes.Equal(got, sftpEncryptedArchive([]byte("remote-archive"))) {
 		t.Fatalf("fetched=%q", got)
 	}
 

@@ -48,7 +48,8 @@ func TestCreateAndRestoreBackupUnencrypted(t *testing.T) {
 	newStatePath := filepath.Join(dir, "new_state.json")
 	newKeyPath := filepath.Join(dir, "new_state.key")
 
-	err = RestoreBackup(backupData, newStatePath, newKeyPath, "")
+	// Plaintext restores require the explicit opt-in (#1223).
+	_, err = RestoreBackupWithOptions(backupData, newStatePath, newKeyPath, "", RestoreOptions{AllowUnencrypted: true})
 	if err != nil {
 		t.Fatalf("RestoreBackup failed: %v", err)
 	}

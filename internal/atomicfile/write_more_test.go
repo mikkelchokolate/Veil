@@ -76,11 +76,11 @@ func TestWriteCleansUpTempFileOnCloseFailure(t *testing.T) {
 }
 
 func TestWriteCleansUpTempFileOnChmodFailure(t *testing.T) {
-	origChmod := chmod
-	chmod = func(name string, mode os.FileMode) error {
+	origChmod := chmodFile
+	chmodFile = func(*os.File, os.FileMode) error {
 		return errors.New("injected chmod error")
 	}
-	defer func() { chmod = origChmod }()
+	defer func() { chmodFile = origChmod }()
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file.txt")

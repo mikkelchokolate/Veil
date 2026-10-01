@@ -8,6 +8,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,13 +19,46 @@ import (
 // Magic header for encrypted backups
 var magicHeader = []byte("VEILBACK")
 
-// IsEncryptedArchivePrefix reports whether prefix begins with the Veil
-// encrypted-archive magic shared by every encryption format version (v1/v2
-// blob and v3 chunked). The SFTP remote-destination boundary uses it to prove
-// an archive really is encrypted before publishing it off-host — a .enc
-// suffix is a naming convention, not a guarantee (#1188).
+// encryptedArchiveHeaderBytes is the fixed encrypted-archive header: magic +
+// version byte + 16-byte KDF salt + 12-byte nonce.
+var encryptedArchiveHeaderBytes = len(magicHeader) + 1 + 16 + 12
+
+// maxEncryptedArchivePrefixBytes bounds the accepted probe window; a probe
+// is a small leading slice, so an oversized buffer is never a valid proof.
+const maxEncryptedArchivePrefixBytes = 4096
+
+// IsEncryptedArchivePrefix reports whether prefix contains a complete,
+// well-formed Veil encrypted-archive header for a SUPPORTED encryption
+// format version: magic, a version byte in {1,2,3}, the full salt+nonce
+// header, and — for the chunked v3 stream — the first frame length must be
+// present and within the 1 MiB frame bound. Truncated headers, unknown
+// versions, oversized inputs, plaintext gzip and malformed prefixes are all
+// rejected (#1223). The SFTP remote-destination boundary uses it to prove an
+// archive really is encrypted before publishing it off-host — a .enc suffix
+// is a naming convention, not a guarantee (#1188).
 func IsEncryptedArchivePrefix(prefix []byte) bool {
-	return len(prefix) >= len(magicHeader) && bytes.Equal(prefix[:len(magicHeader)], magicHeader)
+	if len(prefix) < encryptedArchiveHeaderBytes || len(prefix) > maxEncryptedArchivePrefixBytes {
+		return false
+	}
+	if !bytes.Equal(prefix[:len(magicHeader)], magicHeader) {
+		return false
+	}
+	switch prefix[len(magicHeader)] {
+	case 1, 2:
+		// Blob format: header followed by GCM ciphertext — require at least
+		// one byte of ciphertext (the tag alone is 16 bytes, so a header-only
+		// prefix is incomplete).
+		return len(prefix) > encryptedArchiveHeaderBytes
+	case chunkedEncryptionVersion:
+		// Chunked stream: the first frame's 4-byte big-endian length must be
+		// present and within the frame bound.
+		if len(prefix) < encryptedArchiveHeaderBytes+4 {
+			return false
+		}
+		return binary.BigEndian.Uint32(prefix[encryptedArchiveHeaderBytes:]) <= backupChunkBytes
+	default:
+		return false
+	}
 }
 
 // backupRandRead is overridable in tests to inject failures during encryption.

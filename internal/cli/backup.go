@@ -56,6 +56,8 @@ func newBackupCommand(version string) *cobra.Command {
 	var yes bool
 	var checkOnly bool
 	var allowUnencrypted bool
+	var allowUnencryptedRestore bool
+	var allowUnencryptedVerify bool
 	var pruneAfterCreate bool
 	var dryRun bool
 	var schedulePassphrasePath string
@@ -118,7 +120,14 @@ func newBackupCommand(version string) *cobra.Command {
 			}); err != nil {
 				return fmt.Errorf("create backup failed: %w", err)
 			}
-			if _, err := backup.VerifyBackupFile(targetOutput, resolvedPass, maxBytes); err != nil {
+			// The operator's --allow-unencrypted consent covers the
+			// post-create verification of the archive we just wrote too —
+			// otherwise a consented plaintext create would fail its own
+			// integrity check (#1223).
+			if _, err := backup.VerifyBackupFileWithOptions(targetOutput, resolvedPass, backup.VerifyOptions{
+				MaxBytes:         maxBytes,
+				AllowUnencrypted: allowUnencrypted,
+			}); err != nil {
 				_ = os.Remove(targetOutput)
 				return fmt.Errorf("verify generated backup failed: %w", err)
 			}
@@ -205,7 +214,7 @@ func newBackupCommand(version string) *cobra.Command {
 				resolvedState,
 				resolvedKey,
 				resolvedPass,
-				backup.RestoreOptions{CheckOnly: checkOnly, MaxBytes: maxBytes},
+				backup.RestoreOptions{CheckOnly: checkOnly, MaxBytes: maxBytes, AllowUnencrypted: allowUnencryptedRestore},
 			)
 			if err != nil {
 				return fmt.Errorf("restore backup failed: %w", err)
@@ -250,7 +259,9 @@ func newBackupCommand(version string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			report, err := backup.VerifyBackupFile(args[0], resolvedPass, maxBytes)
+			report, err := backup.VerifyBackupFileWithOptions(args[0], resolvedPass, backup.VerifyOptions{
+				MaxBytes: maxBytes, AllowUnencrypted: allowUnencryptedVerify,
+			})
 			if err != nil {
 				return fmt.Errorf("verify backup failed: %w", err)
 			}
@@ -435,6 +446,8 @@ func newBackupCommand(version string) *cobra.Command {
 	createCmd.Flags().StringVar(&sftpConfigPath, "sftp-config", defaultBackupSftpConfigPath(), "SFTP destination config path; set to an empty value to skip remote upload")
 	restoreCmd.Flags().BoolVarP(&yes, "yes", "y", false, "confirm restore operation without prompting")
 	restoreCmd.Flags().BoolVar(&checkOnly, "check-only", false, "verify compatibility without writing state or key files")
+	restoreCmd.Flags().BoolVar(&allowUnencryptedRestore, "allow-unencrypted", false, "explicitly allow restoring a plaintext archive containing state and key material")
+	verifyCmd.Flags().BoolVar(&allowUnencryptedVerify, "allow-unencrypted", false, "explicitly allow verifying a plaintext archive containing state and key material")
 	for _, subCmd := range []*cobra.Command{listCmd, pruneCmd} {
 		subCmd.Flags().StringVar(&backupDir, "dir", "/var/lib/veil/backups", "managed backup archive directory")
 		cmd.AddCommand(subCmd)
@@ -519,16 +532,19 @@ func publishReplacingFile(path string, body []byte, mode os.FileMode, dirMode os
 		_ = os.Remove(tempPath)
 		return nil, err
 	}
+	// Apply mode on the open descriptor, never by re-resolving the temp
+	// path (#1219).
+	if err := temp.Chmod(mode); err != nil {
+		_ = temp.Close()
+		_ = os.Remove(tempPath)
+		return nil, err
+	}
 	if err := temp.Sync(); err != nil {
 		_ = temp.Close()
 		_ = os.Remove(tempPath)
 		return nil, err
 	}
 	if err := temp.Close(); err != nil {
-		_ = os.Remove(tempPath)
-		return nil, err
-	}
-	if err := os.Chmod(tempPath, mode); err != nil {
 		_ = os.Remove(tempPath)
 		return nil, err
 	}

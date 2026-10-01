@@ -17,10 +17,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 	"github.com/mikkelchokolate/Veil/internal/storage"
 )
 
@@ -32,8 +32,6 @@ const (
 	backupChunkBytes               = 1024 * 1024
 	chunkedEncryptionVersion       = byte(3)
 )
-
-var backupStatfs = syscall.Statfs
 
 func preflightBackupSpace(destinationDir string, sourcePaths []string, maxBytes int64) error {
 	const safetyReserve = int64(64 * 1024 * 1024)
@@ -52,11 +50,10 @@ func preflightBackupSpace(destinationDir string, sourcePaths []string, maxBytes 
 		return fmt.Errorf("backup space estimate overflow")
 	}
 	required := sourceBytes*2 + safetyReserve
-	var stats syscall.Statfs_t
-	if err := backupStatfs(destinationDir, &stats); err != nil {
+	available, _, err := backupFilesystemUsage(destinationDir)
+	if err != nil {
 		return fmt.Errorf("backup space preflight: %w", err)
 	}
-	available := uint64(stats.Bavail) * uint64(stats.Bsize)
 	if uint64(required) > available {
 		return fmt.Errorf("insufficient free space for backup: require %d bytes, available %d", required, available)
 	}
@@ -123,14 +120,13 @@ func requireBackupSpaceByFilesystem(requirements map[string][]int64) error {
 	}
 	needs := make(map[string]filesystemNeed)
 	for directory, components := range requirements {
-		var stats syscall.Statfs_t
-		if err := backupStatfs(directory, &stats); err != nil {
+		available, key, err := backupFilesystemUsage(directory)
+		if err != nil {
 			return fmt.Errorf("backup operation space preflight: %w", err)
 		}
-		key := fmt.Sprintf("%v", stats.Fsid)
 		need := needs[key]
 		if need.available == 0 {
-			need.available = uint64(stats.Bavail) * uint64(stats.Bsize)
+			need.available = available
 		}
 		for _, component := range components {
 			if component < 0 || need.required > math.MaxInt64-component {
@@ -361,7 +357,11 @@ func createBackupFileWithOptionsUnlocked(destination, statePath, keyPath, passph
 }
 
 func VerifyBackupFile(path, passphrase string, maxBytes int64) (VerificationReport, error) {
-	verified, err := inspectBackupFile(path, passphrase, maxBytes)
+	return VerifyBackupFileWithOptions(path, passphrase, VerifyOptions{MaxBytes: maxBytes})
+}
+
+func VerifyBackupFileWithOptions(path, passphrase string, options VerifyOptions) (VerificationReport, error) {
+	verified, err := inspectBackupFileWithOptions(path, passphrase, options.MaxBytes, options.Crypto, options.AllowUnencrypted)
 	if err != nil {
 		return VerificationReport{}, err
 	}
@@ -373,10 +373,15 @@ func RestoreBackupFileWithOptions(archivePath, statePath, keyPath, passphrase st
 	if options.DatabasePath == "" && statePath != "" {
 		options.DatabasePath = filepath.Join(filepath.Dir(statePath), "veil.db")
 	}
-	if err := RecoverInterruptedRestore(statePath, keyPath, options.DatabasePath); err != nil {
+	// Recovery runs under the same cross-process snapshot barrier as the
+	// publish path below: without it a journal rollback could interleave
+	// with an in-flight commit's member renames (#1219).
+	if err := managementstate.WithSnapshotBarrier(statePath, func() error {
+		return RecoverInterruptedRestore(statePath, keyPath, options.DatabasePath)
+	}); err != nil {
 		return RestoreResult{}, fmt.Errorf("recover interrupted restore: %w", err)
 	}
-	verified, err := inspectBackupFileWithOptions(archivePath, passphrase, options.MaxBytes, options.Crypto)
+	verified, err := inspectBackupFileWithOptions(archivePath, passphrase, options.MaxBytes, options.Crypto, options.AllowUnencrypted)
 	if err != nil {
 		return RestoreResult{}, err
 	}
@@ -441,6 +446,14 @@ func RestoreBackupFileWithOptions(archivePath, statePath, keyPath, passphrase st
 				_ = databaseBackup.cleanupStaged()
 				return fmt.Errorf("mark restored runtime unverified: %w", err)
 			}
+			// The runtime marker rewrote the staged bytes; rebind the journal
+			// digest to the post-marker inode before it is published (#1219).
+			if err := refreshStagedDigest(databaseBackup); err != nil {
+				_ = stateBackup.cleanupStaged()
+				_ = keyBackup.cleanupStaged()
+				_ = databaseBackup.cleanupStaged()
+				return fmt.Errorf("bind staged database digest: %w", err)
+			}
 			staged = append(staged, databaseBackup)
 			names = append(names, "veil.db")
 		}
@@ -452,9 +465,14 @@ func RestoreBackupFileWithOptions(archivePath, statePath, keyPath, passphrase st
 			return fmt.Errorf("prepare durable restore journal: %w", err)
 		}
 		root := filepath.Dir(statePath)
+		// Member directories stay pinned for the whole publish/rollback
+		// window — one descriptor per directory, so a mid-flight directory
+		// swap cannot split the transaction across two locations (#1219).
+		dirs := restoreJournalDirs{}
+		defer dirs.Close()
 		for index := range staged {
-			if err := publishRestoreJournalFile(root, &journal, index); err != nil {
-				if rollbackErr := rollbackRestoreJournal(root, &journal); rollbackErr != nil {
+			if err := publishRestoreJournalFile(dirs, root, &journal, index); err != nil {
+				if rollbackErr := rollbackRestoreJournal(dirs, root, &journal); rollbackErr != nil {
 					return fmt.Errorf("replace backup member %d: %v; rollback: %w", index, err, rollbackErr)
 				}
 				return fmt.Errorf("replace backup member %d: %w", index, err)
@@ -472,7 +490,7 @@ func RestoreBackupFileWithOptions(archivePath, statePath, keyPath, passphrase st
 				// failed.
 				return nil
 			}
-			if rollbackErr := rollbackRestoreJournal(root, &journal); rollbackErr != nil {
+			if rollbackErr := rollbackRestoreJournal(dirs, root, &journal); rollbackErr != nil {
 				return fmt.Errorf("finalize restored backup: %v; rollback: %w", err, rollbackErr)
 			}
 			return fmt.Errorf("finalize restored backup: %w", err)
@@ -495,10 +513,13 @@ func RestoreBackupFileWithOptions(archivePath, statePath, keyPath, passphrase st
 }
 
 func inspectBackupFile(path, passphrase string, configuredMax int64) (*extractedBackup, error) {
-	return inspectBackupFileWithOptions(path, passphrase, configuredMax, CryptoOptions{})
+	return inspectBackupFileWithOptions(path, passphrase, configuredMax, CryptoOptions{}, false)
 }
 
-func inspectBackupFileWithOptions(path, passphrase string, configuredMax int64, options CryptoOptions) (*extractedBackup, error) {
+// inspectBackupFileWithOptions verifies an archive on disk. Plaintext
+// archives are refused unless allowUnencrypted is explicitly set — the
+// require-encrypted policy is opt-out per call, never ambient (#1223).
+func inspectBackupFileWithOptions(path, passphrase string, configuredMax int64, options CryptoOptions, allowUnencrypted bool) (*extractedBackup, error) {
 	maxBytes, err := normalizeBackupMaxBytes(configuredMax)
 	if err != nil {
 		return nil, err
@@ -531,6 +552,9 @@ func inspectBackupFileWithOptions(path, passphrase string, configuredMax int64, 
 	tarballPath, encrypted, encryptionVersion, err := prepareTarballFileWithOptions(path, passphrase, maxBytes, workDir, options)
 	if err != nil {
 		return nil, err
+	}
+	if !encrypted && !allowUnencrypted {
+		return nil, errors.New("backup archive is not encrypted; pass --allow-unencrypted to accept a plaintext archive")
 	}
 	if err := extractAndVerifyTarball(tarballPath, maxBytes, result); err != nil {
 		return nil, err
@@ -625,16 +649,22 @@ func extractAndVerifyTarball(tarballPath string, maxBytes int64, result *extract
 		return fmt.Errorf("validate backup state: %w", err)
 	}
 	result.report = VerificationReport{
-		Legacy:             !seen["manifest.json"],
 		StateSchemaVersion: sourceSchema,
 		Files:              []ArchiveFile{metadata["state.json"], metadata["state.key"]},
 	}
-	if !seen["manifest.json"] {
-		return nil
+	var manifestBody []byte
+	if seen["manifest.json"] {
+		manifestBody, err = os.ReadFile(paths["manifest.json"])
+		if err != nil {
+			return err
+		}
 	}
-	manifestBody, err := os.ReadFile(paths["manifest.json"])
-	if err != nil {
-		return err
+	if len(manifestBody) == 0 {
+		// A missing or empty manifest member means "legacy" — identical to
+		// the byte-slice API, which treats an empty manifest body as none;
+		// the two verification paths must not diverge on it (#1223).
+		result.report.Legacy = true
+		return nil
 	}
 	var manifest ArchiveManifest
 	if err := json.Unmarshal(manifestBody, &manifest); err != nil {
@@ -928,7 +958,8 @@ func syncDirectory(path string) error {
 }
 
 func stageRestoreFileFromPath(target, source, safety string) (*stagedRestoreFile, error) {
-	if err := restoreMkdirAll(filepath.Dir(target), 0o700); err != nil {
+	dirPath := filepath.Dir(target)
+	if err := restoreMkdirAll(dirPath, 0o700); err != nil {
 		return nil, err
 	}
 	input, err := openBackupRegularNoFollow(source)
@@ -936,54 +967,39 @@ func stageRestoreFileFromPath(target, source, safety string) (*stagedRestoreFile
 		return nil, err
 	}
 	defer input.Close()
-	temp, err := restoreCreateTemp(filepath.Dir(target), ".veil-restore-*")
+	temp, err := restoreCreateTemp(dirPath, ".veil-restore-*")
 	if err != nil {
 		return nil, err
 	}
 	tempPath := temp.Name()
-	if _, err := io.Copy(temp, input); err != nil {
+	// Digest while copying so the journal's IntendedDigest is bound to the
+	// staged bytes without a second by-name read of the temp file (#1219).
+	hash := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(temp, hash), input); err != nil {
 		_ = restoreFileClose(temp)
-		_ = restoreRemove(tempPath)
+		_ = restoreRemovePath(tempPath)
 		return nil, err
 	}
-	if err := restoreFileSync(temp); err != nil {
-		_ = restoreFileClose(temp)
-		_ = restoreRemove(tempPath)
-		return nil, err
+	return finishRestoreStaging(temp, tempPath, target, safety, hex.EncodeToString(hash.Sum(nil)))
+}
+
+// refreshStagedDigest re-reads the staged temp once — needed only where the
+// staged bytes are legitimately rewritten after staging (the runtime
+// unverified marker on the database member) — so the journal digest always
+// matches the inode that gets renamed into place. The read is descriptor-
+// relative inside the pinned target directory (#1219).
+func refreshStagedDigest(staged *stagedRestoreFile) error {
+	dir, err := safefs.OpenDir(filepath.Dir(staged.target))
+	if err != nil {
+		return err
 	}
-	if err := restoreFileClose(temp); err != nil {
-		_ = restoreRemove(tempPath)
-		return nil, err
+	defer dir.Close()
+	digest, err := digestJournalLeaf(dir, filepath.Base(staged.temp))
+	if err != nil {
+		return err
 	}
-	mode := os.FileMode(0o600)
-	var info os.FileInfo
-	existing, statErr := os.Lstat(target)
-	if statErr == nil {
-		if !existing.Mode().IsRegular() {
-			// A symlinked live target would be renamed into the safety slot,
-			// where safety retention later rejects it as non-regular and
-			// permanently poisons pruning (#1125).
-			_ = restoreRemove(tempPath)
-			return nil, fmt.Errorf("restore target %s is not a regular file", target)
-		}
-		info = existing
-		mode = existing.Mode().Perm()
-	} else if !errors.Is(statErr, os.ErrNotExist) {
-		_ = restoreRemove(tempPath)
-		return nil, statErr
-	}
-	if err := restoreChmod(tempPath, mode); err != nil {
-		_ = restoreRemove(tempPath)
-		return nil, err
-	}
-	if info != nil {
-		if err := restoreChownToMatch(tempPath, info); err != nil {
-			_ = restoreRemove(tempPath)
-			return nil, err
-		}
-	}
-	_, statErr = os.Lstat(target)
-	return &stagedRestoreFile{target: target, temp: tempPath, safety: safety, hadOriginal: statErr == nil}, nil
+	staged.intendedDigest = digest
+	return nil
 }
 
 type chunkEncryptWriter struct {

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/storage"
 )
@@ -83,6 +84,23 @@ type RestoreOptions struct {
 	FencingGeneration uint64
 	// Crypto is scoped to this restore operation; empty selects production KDF.
 	Crypto CryptoOptions
+	// AllowUnencrypted is the explicit opt-in required to restore a
+	// plaintext archive. Restores refuse plaintext by default; the
+	// SFTP/remote boundary gates encryption independently of this flag
+	// (#1223).
+	AllowUnencrypted bool
+}
+
+// VerifyOptions carries the explicit policy for standalone verification.
+type VerifyOptions struct {
+	// MaxBytes is the explicit policy limit; zero selects the production
+	// default.
+	MaxBytes int64
+	// Crypto is scoped to this verification; empty selects production KDF.
+	Crypto CryptoOptions
+	// AllowUnencrypted is the explicit opt-in required to verify a plaintext
+	// archive; verification refuses plaintext by default (#1223).
+	AllowUnencrypted bool
 }
 
 type RestoreResult struct {
@@ -242,79 +260,43 @@ func inspectBackup(data []byte, passphrase string) (verifiedBackup, error) {
 	return inspectBackupWithOptions(data, passphrase, CryptoOptions{})
 }
 
+// inspectBackupWithOptions stages caller-supplied archive bytes to a bounded
+// temp file and routes them through the same streaming verification as
+// inspectBackupFileWithOptions — one implementation keeps manifest, schema,
+// database and size-policy checks identical between the byte and file APIs
+// (the separate in-memory path was dead divergent code, #1223). The byte API
+// keeps accepting plaintext archives: the require-encryption boundary lives
+// on the file restore/verify path (VerifyOptions/RestoreOptions).
 func inspectBackupWithOptions(data []byte, passphrase string, options CryptoOptions) (verifiedBackup, error) {
-	tarball, encrypted, encryptionVersion, err := decryptBackupWithOptions(data, passphrase, options)
+	maxBytes, err := normalizeBackupMaxBytes(0)
 	if err != nil {
 		return verifiedBackup{}, err
 	}
-	contents, err := readArchiveTarball(tarball)
+	if int64(len(data)) > maxBytes {
+		return verifiedBackup{}, backupPolicyError(int64(len(data)), maxBytes)
+	}
+	workDir, err := os.MkdirTemp("", "veil-verify-archive-*")
 	if err != nil {
 		return verifiedBackup{}, err
 	}
-	if len(contents.state) == 0 {
-		return verifiedBackup{}, errors.New("invalid backup: missing state.json")
+	defer os.RemoveAll(workDir)
+	archivePath := filepath.Join(workDir, "archive.tar.gz")
+	if err := os.WriteFile(archivePath, data, 0o600); err != nil {
+		return verifiedBackup{}, err
 	}
-	if len(contents.key) == 0 {
-		return verifiedBackup{}, errors.New("invalid backup: missing state.key")
+	extracted, err := inspectBackupFileWithOptions(archivePath, passphrase, maxBytes, options, true)
+	if err != nil {
+		return verifiedBackup{}, err
 	}
-	sourceSchema := rawStateSchemaVersion(contents.state)
-	if sourceSchema > managementstate.CurrentSchemaVersion {
-		return verifiedBackup{}, fmt.Errorf(
-			"backup uses newer state schema %d; this Veil supports up to %d",
-			sourceSchema,
-			managementstate.CurrentSchemaVersion,
-		)
-	}
-	if err := validateStateAndKey(contents.state, contents.key); err != nil {
-		return verifiedBackup{}, fmt.Errorf("validate backup state: %w", err)
-	}
-
-	report := VerificationReport{
-		EncryptionVersion:  encryptionVersion,
-		Encrypted:          encrypted,
-		Legacy:             len(contents.manifest) == 0,
-		StateSchemaVersion: sourceSchema,
-		Files: []ArchiveFile{
-			{Name: "state.json", Size: int64(len(contents.state)), SHA256: backupChecksum(contents.state)},
-			{Name: "state.key", Size: int64(len(contents.key)), SHA256: backupChecksum(contents.key)},
-		},
-	}
-	if len(contents.manifest) != 0 {
-		var manifest ArchiveManifest
-		if err := json.Unmarshal(contents.manifest, &manifest); err != nil {
-			return verifiedBackup{}, fmt.Errorf("decode backup manifest: %w", err)
-		}
-		if manifest.FormatVersion != LegacyArchiveFormatVersion && manifest.FormatVersion != CurrentArchiveFormatVersion {
-			return verifiedBackup{}, fmt.Errorf("unsupported archive manifest version: %d", manifest.FormatVersion)
-		}
-		if manifest.FormatVersion == CurrentArchiveFormatVersion {
-			if len(contents.database) == 0 {
-				return verifiedBackup{}, errors.New("invalid backup: missing veil.db")
-			}
-			report.Files = append(report.Files, ArchiveFile{Name: "veil.db", Size: int64(len(contents.database)), SHA256: backupChecksum(contents.database)})
-			if err := validateSQLiteSnapshot(contents.database, manifest.DesiredRevision, backupChecksum(contents.state)); err != nil {
-				return verifiedBackup{}, fmt.Errorf("validate backup database: %w", err)
-			}
-		}
-		if manifest.StateSchemaVersion != sourceSchema {
-			return verifiedBackup{}, fmt.Errorf(
-				"backup manifest state schema mismatch: manifest=%d archive=%d",
-				manifest.StateSchemaVersion,
-				sourceSchema,
-			)
-		}
-		if err := verifyManifestFiles(manifest.Files, report.Files); err != nil {
+	defer extracted.cleanup()
+	verified := verifiedBackup{report: extracted.report, state: extracted.state, key: extracted.key}
+	if extracted.databasePath != "" {
+		verified.database, err = os.ReadFile(extracted.databasePath)
+		if err != nil {
 			return verifiedBackup{}, err
 		}
-		report.FormatVersion = manifest.FormatVersion
-		report.CreatedAt = manifest.CreatedAt.UTC()
-		report.VeilVersion = manifest.VeilVersion
-		if manifest.DesiredRevision != nil {
-			report.DesiredRevision = *manifest.DesiredRevision
-		}
-		report.Files = manifest.Files
 	}
-	return verifiedBackup{report: report, state: contents.state, key: contents.key, database: contents.database}, nil
+	return verified, nil
 }
 
 func checkpointSQLiteRestoreBoundary(path string) error {
@@ -341,36 +323,6 @@ func checkpointSQLiteRestoreBoundary(path string) error {
 		return fmt.Errorf("veil.db is still in use (WAL frames=%d checkpointed=%d); stop writers before restore", logFrames, checkpointed)
 	}
 	return nil
-}
-
-func validateSQLiteSnapshot(body []byte, expectedDesiredRevision *uint64, expectedStateDigest string) error {
-	tmp, err := os.CreateTemp("", "veil-verify-db-*.sqlite")
-	if err != nil {
-		return err
-	}
-	path := tmp.Name()
-	defer os.Remove(path)
-	if _, err := tmp.Write(body); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	db, err := storage.OpenExisting(path)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-	var result string
-	if err := db.QueryRow(`PRAGMA quick_check`).Scan(&result); err != nil {
-		return err
-	}
-	if result != "ok" {
-		return fmt.Errorf("SQLite quick_check: %s", result)
-	}
-	_, err = validateSQLiteDesiredSnapshotDB(db, expectedDesiredRevision, expectedStateDigest)
-	return err
 }
 
 func validateSQLiteDesiredSnapshotPath(path string, expectedDesiredRevision *uint64, expectedStateDigest string) (uint64, error) {
@@ -477,13 +429,27 @@ func writeArchiveTarball(contents archiveContents) ([]byte, error) {
 	var buffer bytes.Buffer
 	gzipWriter := gzip.NewWriter(&buffer)
 	tarWriter := tar.NewWriter(gzipWriter)
-	files := []struct {
+	var files []struct {
 		name string
 		body []byte
 		mode int64
-	}{
-		{name: "state.json", body: contents.state, mode: 0o600},
-		{name: "state.key", body: contents.key, mode: 0o600},
+	}
+	// Members are written only when present, so a nil body produces a
+	// genuinely absent member that verification reports as missing rather
+	// than a zero-length file that fails state validation downstream.
+	if len(contents.state) > 0 {
+		files = append(files, struct {
+			name string
+			body []byte
+			mode int64
+		}{name: "state.json", body: contents.state, mode: 0o600})
+	}
+	if len(contents.key) > 0 {
+		files = append(files, struct {
+			name string
+			body []byte
+			mode int64
+		}{name: "state.key", body: contents.key, mode: 0o600})
 	}
 	if len(contents.database) > 0 {
 		files = append(files, struct {
@@ -640,16 +606,30 @@ func backupChecksum(body []byte) string {
 }
 
 // Filesystem hooks for restore staging; overridable in tests to inject failures.
+// Metadata and mutation operations run on open descriptors or descriptor-
+// relative directory handles — never on a re-resolved path under the
+// service-writable state directory, where a leaf swapped for a symlink would
+// redirect a root-side chmod/chown/rename onto an attacker target (#1219).
 var (
 	restoreMkdirAll   = os.MkdirAll
 	restoreCreateTemp = os.CreateTemp
-	restoreChmod      = os.Chmod
-	restoreRename     = os.Rename
-	restoreRemove     = os.Remove
+	// restoreRename is descriptor-relative: (dir, oldLeaf, newLeaf).
+	restoreRename = func(dir *safefs.Dir, oldLeaf, newLeaf string) error {
+		return dir.RenameAt(oldLeaf, newLeaf)
+	}
+	// restoreRemove is descriptor-relative: (dir, leaf).
+	restoreRemove = func(dir *safefs.Dir, leaf string) error {
+		return dir.RemoveAt(leaf)
+	}
+	// restoreRemovePath removes a staging temp by full path. Only ever used on
+	// a fresh .veil-restore-* leaf this process created, where path removal is
+	// safe: a swapped leaf just unlinks whatever name is present.
+	restoreRemovePath = os.Remove
 
 	restoreFileWrite = (*os.File).Write
 	restoreFileSync  = (*os.File).Sync
 	restoreFileClose = (*os.File).Close
+	restoreFileChmod = (*os.File).Chmod
 )
 
 // Archive and crypto hooks overridable in tests.
@@ -672,30 +652,79 @@ type stagedRestoreFile struct {
 	safety      string
 	hadOriginal bool
 	committed   bool
+	// Metadata captured while staging, all observed on one pinned observation
+	// of the target: intendedDigest is the sha256 of the staged bytes and
+	// previousDigest/mode/uid/gid describe the pre-restore target. The journal
+	// records these values directly so recovery never has to trust — or
+	// re-read by name — attacker-mutable fields (#1219).
+	intendedDigest string
+	previousDigest string
+	mode           os.FileMode
+	uid            int
+	gid            int
 }
 
-func stageRestoreFile(target string, body []byte, safety string) (*stagedRestoreFile, error) {
-	if err := restoreMkdirAll(filepath.Dir(target), 0o700); err != nil {
+// restoreTargetObservation is one coherent, descriptor-pinned view of the
+// pre-restore target: the leaf is opened O_NOFOLLOW and fstat-verified, so
+// the mode/owner/digest recorded here cannot be redirected by a mid-flight
+// name swap (#1219).
+type restoreTargetObservation struct {
+	mode   os.FileMode
+	uid    int
+	gid    int
+	digest string
+}
+
+func observeRestoreTarget(target string) (*restoreTargetObservation, error) {
+	// An explicit lstat first preserves the clear "not a regular file"
+	// rejection for a statically planted symlink; the descriptor-pinned open
+	// below still guards the swap window after this check.
+	if info, err := os.Lstat(target); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("restore target %s is not a regular file", target)
+		}
+	} else if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	} else {
 		return nil, err
 	}
-	temp, err := restoreCreateTemp(filepath.Dir(target), ".veil-restore-*")
+	file, err := safefs.OpenNoFollow(target)
 	if err != nil {
 		return nil, err
 	}
-	tempPath := temp.Name()
-	if _, err := restoreFileWrite(temp, body); err != nil {
-		_ = restoreFileClose(temp)
-		_ = restoreRemove(tempPath)
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
 		return nil, err
 	}
-	if err := restoreFileSync(temp); err != nil {
-		_ = restoreFileClose(temp)
-		_ = restoreRemove(tempPath)
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("restore target %s is not a regular file", target)
+	}
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
 		return nil, err
 	}
-	if err := restoreFileClose(temp); err != nil {
-		_ = restoreRemove(tempPath)
+	observation := &restoreTargetObservation{
+		mode:   info.Mode().Perm(),
+		digest: hex.EncodeToString(hash.Sum(nil)),
+	}
+	observation.uid, observation.gid = fileOwnerIDs(info)
+	return observation, nil
+}
+
+// finishRestoreStaging applies mode/ownership to the open temp descriptor —
+// while the inode is still pinned — then syncs and closes it. The .veil-*
+// temp name is never used for a metadata operation again (#1219).
+func finishRestoreStaging(temp *os.File, tempPath, target, safety, intendedDigest string) (*stagedRestoreFile, error) {
+	dirPath := filepath.Dir(target)
+	fail := func(err error) (*stagedRestoreFile, error) {
+		_ = restoreFileClose(temp)
+		_ = restoreRemovePath(tempPath)
 		return nil, err
+	}
+	observed, err := observeRestoreTarget(target)
+	if err != nil {
+		return fail(err)
 	}
 	// Preserve the original file's mode and ownership: the restore may run as
 	// root (privileged helper) while the panel process runs unprivileged. A
@@ -704,54 +733,85 @@ func stageRestoreFile(target string, body []byte, safety string) (*stagedRestore
 	// the whole restore job is reported as failed despite state on disk being
 	// correct).
 	mode := os.FileMode(0o600)
-	var info os.FileInfo
-	existing, statErr := os.Lstat(target)
-	if statErr == nil {
-		if !existing.Mode().IsRegular() {
-			// A symlinked live target would be renamed into the safety slot,
-			// where safety retention later rejects it as non-regular and
-			// permanently poisons pruning (#1125).
-			_ = restoreRemove(tempPath)
-			return nil, fmt.Errorf("restore target %s is not a regular file", target)
-		}
-		info = existing
-		mode = existing.Mode().Perm()
-	} else if !errors.Is(statErr, os.ErrNotExist) {
-		_ = restoreRemove(tempPath)
-		return nil, statErr
+	if observed != nil {
+		mode = observed.mode
 	}
-	if err := restoreChmod(tempPath, mode); err != nil {
-		_ = restoreRemove(tempPath)
-		return nil, err
+	if err := restoreFileChmod(temp, mode); err != nil {
+		return fail(err)
 	}
-	if info != nil {
-		if err := restoreChownToMatch(tempPath, info); err != nil {
-			_ = restoreRemove(tempPath)
-			return nil, err
+	if observed != nil {
+		if err := restoreChownToMatch(temp, observed.uid, observed.gid); err != nil {
+			return fail(err)
 		}
 	}
-	if err := syncRestoreParent(tempPath); err != nil {
-		_ = restoreRemove(tempPath)
+	if err := restoreFileSync(temp); err != nil {
+		return fail(err)
+	}
+	if err := restoreFileClose(temp); err != nil {
+		_ = restoreRemovePath(tempPath)
 		return nil, err
 	}
-	_, statErr = os.Lstat(target)
-	return &stagedRestoreFile{
-		target:      target,
-		temp:        tempPath,
-		safety:      safety,
-		hadOriginal: statErr == nil,
-	}, nil
+	if err := syncDirectory(dirPath); err != nil {
+		_ = restoreRemovePath(tempPath)
+		return nil, err
+	}
+	staged := &stagedRestoreFile{
+		target:         target,
+		temp:           tempPath,
+		safety:         safety,
+		mode:           mode,
+		intendedDigest: intendedDigest,
+	}
+	if observed != nil {
+		staged.hadOriginal = true
+		staged.previousDigest = observed.digest
+		staged.uid = observed.uid
+		staged.gid = observed.gid
+	}
+	return staged, nil
 }
 
+func stageRestoreFile(target string, body []byte, safety string) (*stagedRestoreFile, error) {
+	dirPath := filepath.Dir(target)
+	if err := restoreMkdirAll(dirPath, 0o700); err != nil {
+		return nil, err
+	}
+	temp, err := restoreCreateTemp(dirPath, ".veil-restore-*")
+	if err != nil {
+		return nil, err
+	}
+	tempPath := temp.Name()
+	if _, err := restoreFileWrite(temp, body); err != nil {
+		_ = restoreFileClose(temp)
+		_ = restoreRemovePath(tempPath)
+		return nil, err
+	}
+	return finishRestoreStaging(temp, tempPath, target, safety, backupChecksum(body))
+}
+
+func (f *stagedRestoreFile) pinnedTargetDir() (*safefs.Dir, error) {
+	return safefs.OpenDir(filepath.Dir(f.target))
+}
+
+// commit performs the safety swap with descriptor-relative renames: the
+// staged and safety leaves are moved inside the pinned target directory, so
+// a leaf swapped mid-flight is renamed as its own inode — never followed —
+// and a planted symlink simply moves where a regular rename of it would
+// land instead of tricking a path-based chmod/chown later (#1219).
 func (f *stagedRestoreFile) commit() error {
+	dir, err := f.pinnedTargetDir()
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
 	if f.hadOriginal {
-		if err := restoreRename(f.target, f.safety); err != nil {
+		if err := restoreRename(dir, filepath.Base(f.target), filepath.Base(f.safety)); err != nil {
 			return err
 		}
 	}
-	if err := restoreRename(f.temp, f.target); err != nil {
+	if err := restoreRename(dir, filepath.Base(f.temp), filepath.Base(f.target)); err != nil {
 		if f.hadOriginal {
-			_ = restoreRename(f.safety, f.target)
+			_ = restoreRename(dir, filepath.Base(f.safety), filepath.Base(f.target))
 		}
 		return err
 	}
@@ -760,16 +820,21 @@ func (f *stagedRestoreFile) commit() error {
 }
 
 func (f *stagedRestoreFile) rollback() error {
-	_ = restoreRemove(f.temp)
+	dir, err := f.pinnedTargetDir()
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	_ = restoreRemove(dir, filepath.Base(f.temp))
 	if f.committed {
-		_ = restoreRemove(f.target)
+		_ = restoreRemove(dir, filepath.Base(f.target))
 	}
 	if f.hadOriginal {
-		return restoreRename(f.safety, f.target)
+		return restoreRename(dir, filepath.Base(f.safety), filepath.Base(f.target))
 	}
 	return nil
 }
 
 func (f *stagedRestoreFile) cleanupStaged() error {
-	return restoreRemove(f.temp)
+	return restoreRemovePath(f.temp)
 }

@@ -1,25 +1,97 @@
 package backup
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
-	"syscall"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 	"github.com/mikkelchokolate/Veil/internal/storage"
 )
 
 const restoreTransactionJournalName = ".veil-restore-journal.json"
 
+// restoreJournalMaxBytes bounds the journal read: the file lives in the
+// service-writable state root so an unbounded read would let a planted
+// multi-GB journal exhaust memory before it could even be validated (#1219).
+const restoreJournalMaxBytes = 4 << 20
+
 var (
-	restoreJournalRemove = os.Remove
-	errRestoreCommitted  = errors.New("restore committed; journal finalization pending")
+	// restoreJournalRemove unlinks the journal leaf relative to its pinned
+	// root directory: (dir, leaf) — never a re-resolved path (#1219).
+	restoreJournalRemove = func(dir *safefs.Dir, leaf string) error {
+		return dir.RemoveAt(leaf)
+	}
+	errRestoreCommitted = errors.New("restore committed; journal finalization pending")
 )
+
+// restoreJournalDirs caches one pinned *safefs.Dir per member directory for
+// the length of a journal operation, so every stat/open/rename/remove runs
+// descriptor-relative and a directory swapped mid-recovery cannot redirect
+// the operation (#1219).
+type restoreJournalDirs map[string]*safefs.Dir
+
+func (c restoreJournalDirs) forTarget(targetPath string) (*safefs.Dir, error) {
+	dirPath := filepath.Dir(targetPath)
+	if dir, ok := c[dirPath]; ok {
+		return dir, nil
+	}
+	dir, err := safefs.OpenDir(dirPath)
+	if err != nil {
+		return nil, err
+	}
+	c[dirPath] = dir
+	return dir, nil
+}
+
+func (c restoreJournalDirs) Close() {
+	for _, dir := range c {
+		_ = dir.Close()
+	}
+}
+
+// digestJournalLeaf hashes a leaf inside a pinned directory; the leaf is
+// opened O_NOFOLLOW relative to the directory descriptor, so a swapped
+// symlink is rejected rather than followed (#1219).
+func digestJournalLeaf(dir *safefs.Dir, leaf string) (string, error) {
+	file, err := dir.OpenFileAt(leaf)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// quarantineRestoreJournal renames a journal that failed validation or could
+// not finish its own recovery to a non-residue name. The failure is reported
+// once; the renamed journal is never replayed, so a malformed or
+// self-defeating journal cannot wedge startup into an endless recovery loop.
+// The quarantine name deliberately avoids the ".veil-restore-" residue
+// prefix so the crash sweeper does not garbage-collect the evidence (#1219).
+func quarantineRestoreJournal(rootDir *safefs.Dir) error {
+	quarantine := fmt.Sprintf("veil-restore-journal.failed-%d", time.Now().UnixNano())
+	if err := rootDir.RenameAt(restoreTransactionJournalName, quarantine); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	return rootDir.File().Sync()
+}
 
 type restoreTransactionJournal struct {
 	Version          int                  `json:"version"`
@@ -78,22 +150,47 @@ func RecoverInterruptedRestore(statePath, keyPath, databasePath string) error {
 	if statePath == "" {
 		return nil
 	}
-	root := filepath.Dir(statePath)
-	journalPath := filepath.Join(root, restoreTransactionJournalName)
-	body, err := os.ReadFile(journalPath)
+	rootPath := filepath.Dir(statePath)
+	// Pin the state root once: the journal and every staged/safety/member
+	// operation below resolve relative to this descriptor, so an attacker who
+	// owns the directory can rename entries but can never redirect an
+	// operation outside the pinned inode (#1219).
+	rootDir, err := safefs.OpenDir(rootPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	defer rootDir.Close()
+	journalFile, err := rootDir.OpenFileAt(restoreTransactionJournalName)
 	if errors.Is(err, os.ErrNotExist) {
 		// No live journal means no interrupted restore can still reference
 		// staged temps — sweep crash leftovers (.veil-restore-*, atomicfile
 		// .tmp-*, backup db snapshots) before proceeding (#1125).
-		sweepInterruptedRestoreResidue(root)
+		sweepInterruptedRestoreResidue(rootDir)
 		return nil
 	}
 	if err != nil {
 		return err
 	}
+	body, readErr := io.ReadAll(io.LimitReader(journalFile, restoreJournalMaxBytes))
+	_ = journalFile.Close()
+	if readErr != nil {
+		return readErr
+	}
+	// The journal is attacker-influenced: anything that fails validation — or
+	// fails its own recovery — is quarantined once and reported, never
+	// replayed, so a malformed journal cannot wedge recovery forever (#1219).
+	fail := func(cause error) error {
+		if quarantineErr := quarantineRestoreJournal(rootDir); quarantineErr != nil {
+			return fmt.Errorf("%w (restore journal quarantine failed: %v)", cause, quarantineErr)
+		}
+		return cause
+	}
 	var disk restoreJournalDisk
 	if err := json.Unmarshal(body, &disk); err != nil {
-		return fmt.Errorf("decode restore transaction journal: %w", err)
+		return fail(fmt.Errorf("decode restore transaction journal: %w", err))
 	}
 	// The expected member set is derived from the journal's own member names:
 	// a legacy restore journal legitimately carries only state.json+state.key
@@ -102,17 +199,19 @@ func RecoverInterruptedRestore(statePath, keyPath, databasePath string) error {
 	// wedge recovery on "missing restore journal member veil.db" (#1116).
 	journal, err := decodeRestoreJournal(body, restoreJournalExpectedTargets(disk, statePath, keyPath, databasePath))
 	if err != nil {
-		return err
+		return fail(err)
 	}
 	if journal.Version != 2 || journal.TransactionID == "" || len(journal.Files) < 2 {
-		return errors.New("invalid restore transaction journal")
+		return fail(errors.New("invalid restore transaction journal"))
 	}
-	if err := validateRestoreJournalMembers(journal.Files); err != nil {
-		return err
+	dirs := restoreJournalDirs{}
+	defer dirs.Close()
+	if err := validateRestoreJournalMembers(dirs, journal.Files); err != nil {
+		return fail(err)
 	}
-	intended, err := restoreJournalTargetsMatch(journal.Files, true)
+	intended, err := restoreJournalTargetsMatch(dirs, journal.Files, true)
 	if err != nil {
-		return err
+		return fail(err)
 	}
 	if journal.Phase == "committed" || intended {
 		// Database-side recovery is meaningful only when this journal
@@ -120,17 +219,17 @@ func RecoverInterruptedRestore(statePath, keyPath, databasePath string) error {
 		// delete sidecars or verify a revision binding on a live database
 		// the interrupted restore never touched (#1116).
 		if journalDatabase := restoreJournalMemberTarget(journal.Files, "veil.db"); journalDatabase != "" {
-			if err := cleanupRestoreDatabaseSidecars(root, journalDatabase, &journal); err != nil {
-				return err
+			if err := cleanupRestoreDatabaseSidecars(dirs, rootPath, journalDatabase, &journal); err != nil {
+				return fail(err)
 			}
 			if err := verifyRestoreRevisionBinding(journalDatabase, journal.IntendedRevision, restoreJournalDigest(journal.Files, "state.json", true), journal.FenceGeneration > 0); err != nil {
-				return err
+				return fail(err)
 			}
 			if err := ensureRestoreFencingFloor(journalDatabase, journal.FenceGeneration); err != nil {
-				return err
+				return fail(err)
 			}
-			if err := refreshRestoreDatabaseDigest(&journal, journalDatabase); err != nil {
-				return err
+			if err := refreshRestoreDatabaseDigest(dirs, &journal, journalDatabase); err != nil {
+				return fail(err)
 			}
 		}
 		journal.Phase = "committed"
@@ -138,15 +237,18 @@ func RecoverInterruptedRestore(statePath, keyPath, databasePath string) error {
 		for i := range journal.Files {
 			journal.Files[i].Phase = "committed"
 		}
-		if err := writeRestoreJournal(root, journal); err != nil {
-			return err
+		if err := writeRestoreJournal(rootPath, journal); err != nil {
+			return fail(err)
 		}
-		if err := writeRestoreCommitReceipt(root); err != nil {
-			return err
+		if err := writeRestoreCommitReceipt(rootPath); err != nil {
+			return fail(err)
 		}
-		return removeRestoreJournal(root)
+		return removeRestoreJournal(rootDir)
 	}
-	return rollbackRestoreJournal(root, &journal)
+	if err := rollbackRestoreJournal(dirs, rootPath, &journal); err != nil {
+		return fail(err)
+	}
+	return nil
 }
 
 // restoreJournalExpectedTargets maps journal member names to the live targets
@@ -215,30 +317,20 @@ func prepareRestoreJournalFenced(statePath string, staged []*stagedRestoreFile, 
 		FenceGeneration: fenceGeneration,
 	}
 	for index, item := range staged {
+		// Digests, mode and ownership are taken from the descriptor-pinned
+		// observation captured at stage time — the journal records what was
+		// actually verified, not whatever a swapped leaf resolves to now
+		// (#1219).
 		record := restoreJournalFile{
 			Name: names[index], TargetPath: item.target, StagedPath: item.temp,
 			SafetyPath: item.safety, HadPrevious: item.hadOriginal, Phase: "prepared",
-			Mode: 0o600, UID: os.Getuid(), GID: os.Getgid(),
+			Mode:           uint32(item.mode),
+			UID:            item.uid,
+			GID:            item.gid,
+			IntendedDigest: item.intendedDigest,
 		}
-		intended, err := os.ReadFile(item.temp)
-		if err != nil {
-			return restoreTransactionJournal{}, err
-		}
-		record.IntendedDigest = backupChecksum(intended)
 		if item.hadOriginal {
-			previous, err := os.ReadFile(item.target)
-			if err != nil {
-				return restoreTransactionJournal{}, err
-			}
-			record.PreviousDigest = backupChecksum(previous)
-			info, err := os.Lstat(item.target)
-			if err != nil {
-				return restoreTransactionJournal{}, err
-			}
-			record.Mode = uint32(info.Mode().Perm())
-			if stat, ok := info.Sys().(*syscall.Stat_t); ok {
-				record.UID, record.GID = int(stat.Uid), int(stat.Gid)
-			}
+			record.PreviousDigest = item.previousDigest
 		}
 		journal.Files = append(journal.Files, record)
 	}
@@ -252,13 +344,31 @@ func prepareRestoreJournalFenced(statePath string, staged []*stagedRestoreFile, 
 	return journal, nil
 }
 
-func publishRestoreJournalFile(root string, journal *restoreTransactionJournal, index int) error {
+func publishRestoreJournalFile(dirs restoreJournalDirs, root string, journal *restoreTransactionJournal, index int) error {
 	record := &journal.Files[index]
+	// All member mutations are descriptor-relative inside the pinned target
+	// directory; nothing here follows a re-resolved path (#1219).
+	dir, err := dirs.forTarget(record.TargetPath)
+	if err != nil {
+		return err
+	}
+	targetLeaf := filepath.Base(record.TargetPath)
 	if record.HadPrevious {
-		if err := restoreRename(record.TargetPath, record.SafetyPath); err != nil {
+		// Bind the safety swap to the inode that was actually validated at
+		// stage time: if the live target's digest no longer matches the
+		// journal-recorded PreviousDigest, a swap won a race mid-publish —
+		// fail before it is archived as the "previous" copy (#1219).
+		digest, err := digestJournalLeaf(dir, targetLeaf)
+		if err != nil {
+			return fmt.Errorf("verify restore target %s before safety swap: %w", record.Name, err)
+		}
+		if digest != record.PreviousDigest {
+			return fmt.Errorf("restore target %s changed since staging", record.Name)
+		}
+		if err := restoreRename(dir, targetLeaf, filepath.Base(record.SafetyPath)); err != nil {
 			return err
 		}
-		if err := syncRestoreParent(record.TargetPath); err != nil {
+		if err := dir.File().Sync(); err != nil {
 			return err
 		}
 		record.Phase = "safety-published"
@@ -267,17 +377,28 @@ func publishRestoreJournalFile(root string, journal *restoreTransactionJournal, 
 			return err
 		}
 	}
-	if err := restoreRename(record.StagedPath, record.TargetPath); err != nil {
-		return err
-	}
-	if err := syncRestoreParent(record.TargetPath); err != nil {
-		return err
-	}
-	body, err := os.ReadFile(record.TargetPath)
+	stagedLeaf := filepath.Base(record.StagedPath)
+	stagedInfo, err := dir.StatAt(stagedLeaf)
 	if err != nil {
 		return err
 	}
-	if backupChecksum(body) != record.IntendedDigest {
+	if !stagedInfo.Mode().IsRegular() {
+		return fmt.Errorf("restore staged member is not a regular file: %s", record.Name)
+	}
+	if unsafeJournalHardLink(stagedInfo) {
+		return fmt.Errorf("restore staged member has unsafe hard links: %s", record.Name)
+	}
+	if err := restoreRename(dir, stagedLeaf, targetLeaf); err != nil {
+		return err
+	}
+	if err := dir.File().Sync(); err != nil {
+		return err
+	}
+	digest, err := digestJournalLeaf(dir, targetLeaf)
+	if err != nil {
+		return err
+	}
+	if digest != record.IntendedDigest {
 		return fmt.Errorf("restore intended digest mismatch for %s", record.Name)
 	}
 	record.Phase = "intended-published"
@@ -333,11 +454,20 @@ ON CONFLICT(id) DO UPDATE SET historical_applied_revision=excluded.historical_ap
 	if err := db.Close(); err != nil {
 		return err
 	}
+	// Sidecar cleanup goes through a pinned parent directory and
+	// descriptor-relative removes so a swapped directory component cannot
+	// redirect the unlink (#1219).
+	sidecarDir, err := safefs.OpenDir(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	defer sidecarDir.Close()
+	dbLeaf := filepath.Base(path)
 	for _, suffix := range []string{"-wal", "-shm"} {
-		if err := os.Remove(path + suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := restoreRemove(sidecarDir, dbLeaf+suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
-		if err := syncRestoreParent(path + suffix); err != nil {
+		if err := sidecarDir.File().Sync(); err != nil {
 			return err
 		}
 	}
@@ -352,18 +482,22 @@ ON CONFLICT(id) DO UPDATE SET historical_applied_revision=excluded.historical_ap
 	return file.Close()
 }
 
-func cleanupRestoreDatabaseSidecars(root, databasePath string, journal *restoreTransactionJournal) error {
+func cleanupRestoreDatabaseSidecars(dirs restoreJournalDirs, root, databasePath string, journal *restoreTransactionJournal) error {
 	if databasePath == "" {
 		return nil
 	}
+	dir, err := dirs.forTarget(databasePath)
+	if err != nil {
+		return err
+	}
+	leaf := filepath.Base(databasePath)
 	for _, suffix := range []string{"-wal", "-shm"} {
-		path := databasePath + suffix
-		if err := restoreRemove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := restoreRemove(dir, leaf+suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 		// Sync even when the sidecar was already absent. This durably orders the
 		// absence check before database validation and journal finalization.
-		if err := syncRestoreParent(path); err != nil {
+		if err := dir.File().Sync(); err != nil {
 			return err
 		}
 		journal.WALCleanupPhase = suffix[1:] + "-removed"
@@ -376,18 +510,25 @@ func cleanupRestoreDatabaseSidecars(root, databasePath string, journal *restoreT
 }
 
 func completeRestoreJournal(root, databasePath string, journal *restoreTransactionJournal) error {
-	if err := cleanupRestoreDatabaseSidecars(root, databasePath, journal); err != nil {
+	dirs := restoreJournalDirs{}
+	defer dirs.Close()
+	if err := cleanupRestoreDatabaseSidecars(dirs, root, databasePath, journal); err != nil {
 		return err
 	}
 	for index := range journal.Files {
-		body, err := os.ReadFile(journal.Files[index].TargetPath)
+		record := &journal.Files[index]
+		dir, err := dirs.forTarget(record.TargetPath)
 		if err != nil {
 			return err
 		}
-		if backupChecksum(body) != journal.Files[index].IntendedDigest {
-			return fmt.Errorf("restore final digest mismatch for %s", journal.Files[index].Name)
+		digest, err := digestJournalLeaf(dir, filepath.Base(record.TargetPath))
+		if err != nil {
+			return err
 		}
-		journal.Files[index].Phase = "committed"
+		if digest != record.IntendedDigest {
+			return fmt.Errorf("restore final digest mismatch for %s", record.Name)
+		}
+		record.Phase = "committed"
 	}
 	if err := verifyRestoreRevisionBinding(databasePath, journal.IntendedRevision, restoreJournalDigest(journal.Files, "state.json", true), journal.FenceGeneration > 0); err != nil {
 		return err
@@ -395,7 +536,7 @@ func completeRestoreJournal(root, databasePath string, journal *restoreTransacti
 	if err := ensureRestoreFencingFloor(databasePath, journal.FenceGeneration); err != nil {
 		return err
 	}
-	if err := refreshRestoreDatabaseDigest(journal, databasePath); err != nil {
+	if err := refreshRestoreDatabaseDigest(dirs, journal, databasePath); err != nil {
 		return err
 	}
 	journal.Phase = "committed"
@@ -406,52 +547,128 @@ func completeRestoreJournal(root, databasePath string, journal *restoreTransacti
 	if err := writeRestoreCommitReceipt(root); err != nil {
 		return err
 	}
-	if err := removeRestoreJournal(root); err != nil {
+	rootDir, err := safefs.OpenDir(root)
+	if err != nil {
+		return err
+	}
+	defer rootDir.Close()
+	if err := removeRestoreJournal(rootDir); err != nil {
 		return fmt.Errorf("%w: %v", errRestoreCommitted, err)
 	}
 	return nil
 }
 
-func rollbackRestoreJournal(root string, journal *restoreTransactionJournal) error {
+func rollbackRestoreJournal(dirs restoreJournalDirs, root string, journal *restoreTransactionJournal) error {
 	journal.Phase = "rolling-back"
 	_ = writeRestoreJournal(root, *journal)
 	for index := len(journal.Files) - 1; index >= 0; index-- {
 		record := &journal.Files[index]
-		if record.HadPrevious {
-			if _, err := os.Stat(record.SafetyPath); err == nil {
-				if err := restoreRename(record.SafetyPath, record.TargetPath); err != nil {
+		dir, err := dirs.forTarget(record.TargetPath)
+		if err != nil {
+			return err
+		}
+		targetLeaf := filepath.Base(record.TargetPath)
+		safetyLeaf := filepath.Base(record.SafetyPath)
+		info, statErr := dir.StatAt(safetyLeaf)
+		if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+			return statErr
+		}
+		// HadPrevious in the journal is attacker-authored — re-derive it
+		// from live evidence so a planted "no previous" bit cannot make
+		// root unlink state.json/state.key/veil.db: a present safety leaf
+		// proves a previous inode was parked (#1219).
+		if record.HadPrevious || statErr == nil {
+			if statErr == nil {
+				// The journal is fully attacker-authored, so even a
+				// self-consistent hadPrevious/previousDigest pair proves
+				// nothing by itself. Require live evidence this
+				// transaction actually progressed on the member BEFORE
+				// any rename: either the live target already carries the
+				// intended content, or the intact staged leaf that would
+				// produce it is still parked (#1219). A cold planted
+				// journal+safety pair has no such footprint and is
+				// refused before it can clobber live state.
+				published := false
+				targetDigest, targetErr := digestJournalLeaf(dir, targetLeaf)
+				if targetErr == nil && targetDigest == record.IntendedDigest {
+					published = true
+				}
+				if !published && errors.Is(targetErr, os.ErrNotExist) {
+					// Mid-publish crash window: the target was parked to
+					// safety and the staged->target rename never ran, so
+					// the intact staged leaf is the publish evidence. It
+					// counts only while the target is absent — a staged
+					// leaf next to a live target is forgeable noise and
+					// must not unlock the rename (#1219).
+					if digest, err := digestJournalLeaf(dir, filepath.Base(record.StagedPath)); err == nil && digest == record.IntendedDigest {
+						published = true
+					}
+				}
+				if !published {
+					return fmt.Errorf("restore safety member %s exists but the transaction never published it", record.Name)
+				}
+				// The parked inode must additionally prove it IS the
+				// recorded previous file — without a well-formed
+				// PreviousDigest there is nothing to verify against, so
+				// the rename is refused.
+				if !isSHA256HexDigest(record.PreviousDigest) {
+					return fmt.Errorf("restore safety member %s exists but journal records no previous digest", record.Name)
+				}
+				safetyDigest, err := digestJournalLeaf(dir, safetyLeaf)
+				if err != nil {
+					return fmt.Errorf("recover safety %s: %w", record.Name, err)
+				}
+				if safetyDigest != record.PreviousDigest {
+					return fmt.Errorf("recover safety digest mismatch for %s", record.Name)
+				}
+				// A swapped symlink or multi-linked entry is rejected here
+				// instead of renamed into place (#1219).
+				if !info.Mode().IsRegular() {
+					return fmt.Errorf("restore safety member is not a regular file: %s", record.Name)
+				}
+				if unsafeJournalHardLink(info) {
+					return fmt.Errorf("restore safety member has unsafe hard links: %s", record.Name)
+				}
+				if err := restoreRename(dir, safetyLeaf, targetLeaf); err != nil {
 					return err
 				}
-				if err := syncRestoreParent(record.TargetPath); err != nil {
+				if err := dir.File().Sync(); err != nil {
 					return err
 				}
-			} else if !errors.Is(err, os.ErrNotExist) {
-				return err
 			}
-			body, err := os.ReadFile(record.TargetPath)
+			digest, err := digestJournalLeaf(dir, targetLeaf)
 			if err != nil {
 				return fmt.Errorf("recover previous %s: %w", record.Name, err)
 			}
-			if backupChecksum(body) != record.PreviousDigest {
+			if digest != record.PreviousDigest {
 				return fmt.Errorf("recover previous digest mismatch for %s", record.Name)
 			}
-			if err := os.Chmod(record.TargetPath, os.FileMode(record.Mode)); err != nil {
-				return err
-			}
-			if os.Geteuid() == 0 {
-				if err := os.Chown(record.TargetPath, record.UID, record.GID); err != nil {
+			// No chmod/chown on the restored target: the safety inode kept
+			// its original mode and ownership through the rename, so there
+			// is no metadata operation left to race against a swapped leaf.
+			// Journal Mode/UID/GID are treated as untrusted hints and never
+			// applied (#1219).
+		} else {
+			// Only unlink a target this transaction provably published —
+			// the live leaf must hash to the recorded intended digest. A
+			// foreign file is never removed on journal say-so (#1219).
+			digest, err := digestJournalLeaf(dir, targetLeaf)
+			switch {
+			case errors.Is(err, os.ErrNotExist):
+			case err != nil:
+				return fmt.Errorf("recover %s: %w", record.Name, err)
+			case digest != record.IntendedDigest:
+				return fmt.Errorf("restore rollback refuses to remove foreign file %s", record.Name)
+			default:
+				if err := restoreRemove(dir, targetLeaf); err != nil && !errors.Is(err, os.ErrNotExist) {
+					return err
+				}
+				if err := dir.File().Sync(); err != nil {
 					return err
 				}
 			}
-		} else {
-			if err := restoreRemove(record.TargetPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return err
-			}
-			if err := syncRestoreParent(record.TargetPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return err
-			}
 		}
-		if err := restoreRemove(record.StagedPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := restoreRemove(dir, filepath.Base(record.StagedPath)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 		record.Phase = "rolled-back"
@@ -462,8 +679,13 @@ func rollbackRestoreJournal(root string, journal *restoreTransactionJournal) err
 	}
 	for _, file := range journal.Files {
 		if file.Name == "veil.db" {
+			dir, err := dirs.forTarget(file.TargetPath)
+			if err != nil {
+				return err
+			}
+			leaf := filepath.Base(file.TargetPath)
 			for _, suffix := range []string{"-wal", "-shm"} {
-				if err := restoreRemove(file.TargetPath + suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+				if err := restoreRemove(dir, leaf+suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
 					return err
 				}
 			}
@@ -476,7 +698,13 @@ func rollbackRestoreJournal(root string, journal *restoreTransactionJournal) err
 	if err := ClearRestoreCommitReceipt(root); err != nil {
 		return err
 	}
-	return removeRestoreJournal(root)
+	// The journal leaf lives in the same directory as the state member —
+	// reuse the pinned handle rather than opening a second one.
+	rootDir, err := dirs.forTarget(filepath.Join(root, restoreTransactionJournalName))
+	if err != nil {
+		return err
+	}
+	return removeRestoreJournal(rootDir)
 }
 
 func writeRestoreJournal(root string, journal restoreTransactionJournal) error {
@@ -501,6 +729,54 @@ func writeRestoreJournal(root string, journal restoreTransactionJournal) error {
 		return err
 	}
 	return atomicfile.Write(filepath.Join(root, restoreTransactionJournalName), body, 0o600, 0o700)
+}
+
+// restoreJournalMemberPhases is the closed set of per-member phases a v2
+// journal may claim; anything else is rejected before any mutation (#1219).
+var restoreJournalMemberPhases = map[string]bool{
+	"prepared":           true,
+	"safety-published":   true,
+	"intended-published": true,
+	"committed":          true,
+	"rolled-back":        true,
+}
+
+// restoreJournalWALPhases is the closed set of WALCleanupPhase values.
+var restoreJournalWALPhases = map[string]bool{
+	"pending":     true,
+	"wal-removed": true,
+	"shm-removed": true,
+	"committed":   true,
+}
+
+// validRestoreJournalPhase restricts the journal-level Phase field to the
+// values recovery itself can produce: fixed phases plus member-scoped
+// progress markers derived from the journal's own member names (#1219).
+func validRestoreJournalPhase(phase string, memberNames map[string]struct{}) bool {
+	switch phase {
+	case "prepared", "rolling-back", "rolled-back", "committed",
+		"database-sidecar-wal-removed", "database-sidecar-shm-removed":
+		return true
+	}
+	for _, suffix := range []string{"-safety-published", "-intended-published", "-rolled-back"} {
+		name := strings.TrimSuffix(phase, suffix)
+		if name != phase {
+			_, ok := memberNames[name]
+			return ok
+		}
+	}
+	return false
+}
+
+// isSHA256HexDigest requires digests to be exact sha256 hex strings —
+// journals that smuggle empty, truncated or oversized digests must not reach
+// the byte-comparison path where a malformed value could alias "".
+func isSHA256HexDigest(value string) bool {
+	if len(value) != sha256.Size*2 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
 }
 
 func decodeRestoreJournal(body []byte, expected map[string]string) (restoreTransactionJournal, error) {
@@ -530,12 +806,33 @@ func decodeRestoreJournal(body []byte, expected map[string]string) (restoreTrans
 		if !safeRestoreLeaf(file.StagedName) || !safeRestoreLeaf(file.SafetyName) || file.StagedName == file.SafetyName {
 			return restoreTransactionJournal{}, fmt.Errorf("restore journal has unsafe member names for %s", file.Name)
 		}
+		if !restoreJournalMemberPhases[file.Phase] {
+			return restoreTransactionJournal{}, fmt.Errorf("restore journal member %s has unsupported phase %q", file.Name, file.Phase)
+		}
+		if !isSHA256HexDigest(file.IntendedDigest) {
+			return restoreTransactionJournal{}, fmt.Errorf("restore journal member %s has invalid intended digest", file.Name)
+		}
+		if file.HadPrevious != (file.PreviousDigest != "") {
+			return restoreTransactionJournal{}, fmt.Errorf("restore journal member %s has inconsistent previous evidence", file.Name)
+		}
+		if file.HadPrevious && !isSHA256HexDigest(file.PreviousDigest) {
+			return restoreTransactionJournal{}, fmt.Errorf("restore journal member %s has invalid previous digest", file.Name)
+		}
 		directory := filepath.Dir(target)
+		// Mode/UID/GID from the journal are deliberately NOT propagated: they
+		// are attacker-controlled hints, and rollback never re-applies
+		// metadata — the preserved safety inode already carries it (#1219).
 		journal.Files = append(journal.Files, restoreJournalFile{
 			Name: file.Name, TargetPath: target, StagedPath: filepath.Join(directory, file.StagedName), SafetyPath: filepath.Join(directory, file.SafetyName),
 			HadPrevious: file.HadPrevious, PreviousDigest: file.PreviousDigest, IntendedDigest: file.IntendedDigest,
-			Mode: file.Mode, UID: file.UID, GID: file.GID, Phase: file.Phase,
+			Phase: file.Phase,
 		})
+	}
+	if !restoreJournalWALPhases[disk.WALCleanupPhase] {
+		return restoreTransactionJournal{}, fmt.Errorf("restore journal has unsupported wal cleanup phase %q", disk.WALCleanupPhase)
+	}
+	if !validRestoreJournalPhase(disk.Phase, seen) {
+		return restoreTransactionJournal{}, fmt.Errorf("restore journal has unsupported phase %q", disk.Phase)
 	}
 	if len(seen) != len(expected) {
 		for name := range expected {
@@ -552,13 +849,17 @@ func safeRestoreLeaf(name string) bool {
 	return name != "" && name != "." && name != ".." && filepath.Base(name) == name
 }
 
-func validateRestoreJournalMembers(files []restoreJournalFile) error {
+func validateRestoreJournalMembers(dirs restoreJournalDirs, files []restoreJournalFile) error {
 	for _, file := range files {
 		if filepath.Dir(file.StagedPath) != filepath.Dir(file.TargetPath) || filepath.Dir(file.SafetyPath) != filepath.Dir(file.TargetPath) {
 			return fmt.Errorf("restore journal member %s escapes target directory", file.Name)
 		}
-		for _, path := range []string{file.TargetPath, file.StagedPath, file.SafetyPath} {
-			info, err := os.Lstat(path)
+		dir, err := dirs.forTarget(file.TargetPath)
+		if err != nil {
+			return err
+		}
+		for _, leaf := range []string{filepath.Base(file.TargetPath), filepath.Base(file.StagedPath), filepath.Base(file.SafetyPath)} {
+			info, err := dir.StatAt(leaf)
 			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
@@ -566,23 +867,27 @@ func validateRestoreJournalMembers(files []restoreJournalFile) error {
 				return err
 			}
 			if !info.Mode().IsRegular() {
-				return fmt.Errorf("restore journal member is not a regular file: %s", path)
+				return fmt.Errorf("restore journal member is not a regular file: %s", filepath.Join(dir.Path(), leaf))
 			}
-			if stat, ok := info.Sys().(*syscall.Stat_t); ok && stat.Nlink != 1 {
-				return fmt.Errorf("restore journal member has unsafe hard links: %s", path)
+			if unsafeJournalHardLink(info) {
+				return fmt.Errorf("restore journal member has unsafe hard links: %s", filepath.Join(dir.Path(), leaf))
 			}
 		}
 	}
 	return nil
 }
 
-func restoreJournalTargetsMatch(files []restoreJournalFile, intended bool) (bool, error) {
+func restoreJournalTargetsMatch(dirs restoreJournalDirs, files []restoreJournalFile, intended bool) (bool, error) {
 	for _, file := range files {
 		digest := file.PreviousDigest
 		if intended {
 			digest = file.IntendedDigest
 		}
-		body, err := os.ReadFile(file.TargetPath)
+		dir, err := dirs.forTarget(file.TargetPath)
+		if err != nil {
+			return false, err
+		}
+		got, err := digestJournalLeaf(dir, filepath.Base(file.TargetPath))
 		if errors.Is(err, os.ErrNotExist) {
 			if !intended && !file.HadPrevious {
 				continue
@@ -592,7 +897,7 @@ func restoreJournalTargetsMatch(files []restoreJournalFile, intended bool) (bool
 		if err != nil {
 			return false, err
 		}
-		if backupChecksum(body) != digest {
+		if got != digest {
 			return false, nil
 		}
 	}
@@ -689,17 +994,21 @@ func verifyRestoreRevisionBinding(databasePath string, expectedRevision uint64, 
 	return nil
 }
 
-func refreshRestoreDatabaseDigest(journal *restoreTransactionJournal, databasePath string) error {
+func refreshRestoreDatabaseDigest(dirs restoreJournalDirs, journal *restoreTransactionJournal, databasePath string) error {
 	if databasePath == "" {
 		return nil
 	}
-	body, err := os.ReadFile(databasePath)
+	dir, err := dirs.forTarget(databasePath)
+	if err != nil {
+		return err
+	}
+	digest, err := digestJournalLeaf(dir, filepath.Base(databasePath))
 	if err != nil {
 		return err
 	}
 	for index := range journal.Files {
 		if journal.Files[index].Name == "veil.db" {
-			journal.Files[index].IntendedDigest = backupChecksum(body)
+			journal.Files[index].IntendedDigest = digest
 			return nil
 		}
 	}
@@ -732,21 +1041,11 @@ WHERE id=1`, generation, generation)
 	return nil
 }
 
-func removeRestoreJournal(root string) error {
-	path := filepath.Join(root, restoreTransactionJournalName)
-	if err := restoreJournalRemove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+func removeRestoreJournal(rootDir *safefs.Dir) error {
+	if err := restoreJournalRemove(rootDir, restoreTransactionJournalName); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	return syncRestoreParent(path)
-}
-
-func syncRestoreParent(path string) error {
-	directory, err := os.Open(filepath.Dir(path))
-	if err != nil {
-		return err
-	}
-	defer directory.Close()
-	return directory.Sync()
+	return rootDir.File().Sync()
 }
 
 func readRestoreRevision(databasePath string) (uint64, error) {

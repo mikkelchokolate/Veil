@@ -60,7 +60,9 @@ func TestBackupRestoreJobsKeepHelperCommittedRestoreAcrossRestart(t *testing.T) 
 	running := BackupRestoreJob{ID: "job-committed", Archive: "veil_backup_20260728_120000.tar.gz.enc", Status: "running", CreatedAt: created, StartedAt: created}
 	persistRunningRestoreJob(t, jobsPath, running)
 
-	writeAPIRestoreJournal(t, root, "prepared", restoreJobChecksum(intendedState), restoreJobChecksum(intendedKey))
+	writeAPIRestoreJournal(t, root, "prepared",
+		restoreJobChecksum(intendedState), restoreJobChecksum(intendedKey),
+		restoreJobChecksum([]byte("old-state")), restoreJobChecksum([]byte("old-key")))
 	reloaded := loadRestoreJobsFromDisk(t, jobsPath, statePath, keyPath)
 	assertHelperCommittedRestoreJob(t, reloaded.backupJobs["job-committed"])
 
@@ -91,7 +93,9 @@ func TestBackupRestoreJobsFailUncommittedHelperJournalAcrossRestart(t *testing.T
 	}
 	created := time.Now().UTC().Add(-time.Minute)
 	persistRunningRestoreJob(t, jobsPath, BackupRestoreJob{ID: "job-open", Archive: "veil_backup_20260728_120000.tar.gz.enc", Status: "running", CreatedAt: created, StartedAt: created})
-	writeAPIRestoreJournal(t, root, "prepared", restoreJobChecksum([]byte("intended-state")), restoreJobChecksum([]byte("intended-key")))
+	writeAPIRestoreJournal(t, root, "prepared",
+		restoreJobChecksum([]byte("intended-state")), restoreJobChecksum([]byte("intended-key")),
+		restoreJobChecksum([]byte("live-state")), restoreJobChecksum([]byte("live-key")))
 
 	reloaded := loadRestoreJobsFromDisk(t, jobsPath, statePath, keyPath)
 	job := reloaded.backupJobs["job-open"]
@@ -178,13 +182,13 @@ func assertHelperCommittedRestoreJob(t *testing.T, job BackupRestoreJob) {
 	}
 }
 
-func writeAPIRestoreJournal(t *testing.T, root, phase, stateDigest, keyDigest string) {
+func writeAPIRestoreJournal(t *testing.T, root, phase, stateDigest, keyDigest, statePrev, keyPrev string) {
 	t.Helper()
 	body, err := json.Marshal(map[string]any{
-		"version": 2, "transactionId": "tx-panel", "phase": phase,
+		"version": 2, "transactionId": "tx-panel", "phase": phase, "walShmCleanupPhase": "pending",
 		"files": []map[string]any{
-			{"name": "state.json", "targetId": "state.json", "stagedName": ".restore-state-new", "safetyName": "state.json.pre-restore-test", "hadPrevious": true, "intendedDigest": stateDigest, "mode": 384, "phase": phase},
-			{"name": "state.key", "targetId": "state.key", "stagedName": ".restore-key-new", "safetyName": "state.key.pre-restore-test", "hadPrevious": true, "intendedDigest": keyDigest, "mode": 384, "phase": phase},
+			{"name": "state.json", "targetId": "state.json", "stagedName": ".restore-state-new", "safetyName": "state.json.pre-restore-test", "hadPrevious": true, "previousDigest": statePrev, "intendedDigest": stateDigest, "mode": 384, "phase": phase},
+			{"name": "state.key", "targetId": "state.key", "stagedName": ".restore-key-new", "safetyName": "state.key.pre-restore-test", "hadPrevious": true, "previousDigest": keyPrev, "intendedDigest": keyDigest, "mode": 384, "phase": phase},
 		},
 	})
 	if err != nil {

@@ -30,6 +30,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/caddycert"
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/releaseverify"
 	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 	"github.com/mikkelchokolate/Veil/internal/safefs"
@@ -216,7 +217,11 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 			if config.StatePath != "" {
 				databasePath = filepath.Join(filepath.Dir(config.StatePath), "veil.db")
 			}
-			if err := backup.RecoverInterruptedRestore(config.StatePath, config.KeyPath, databasePath); err != nil {
+			// Recover under the snapshot barrier so journal rollback cannot
+			// interleave with an in-flight commit's member renames (#1219).
+			if err := managementstate.WithSnapshotBarrier(config.StatePath, func() error {
+				return backup.RecoverInterruptedRestore(config.StatePath, config.KeyPath, databasePath)
+			}); err != nil {
 				return fmt.Errorf("recover interrupted backup restore: %w", err)
 			}
 			return statecommit.RecoverKeyRotation(statecommit.RecoverKeyRotationOptions{
@@ -1075,7 +1080,13 @@ func runProductionBackup(ctx context.Context, config ProductionConfig, request R
 		}); err != nil {
 			return BackupResult{}, err
 		}
-		report, err := backup.VerifyBackupFile(pendingPath, passphrase, maxBytes)
+		// Post-create verification mirrors the create-time encryption choice:
+		// an archive produced with an empty passphrase is plaintext and needs
+		// the explicit opt-in; encrypted archives verify under the default
+		// require-encryption policy (#1223).
+		report, err := backup.VerifyBackupFileWithOptions(pendingPath, passphrase, backup.VerifyOptions{
+			MaxBytes: maxBytes, AllowUnencrypted: passphrase == "",
+		})
 		if err != nil {
 			return BackupResult{}, err
 		}
@@ -1103,7 +1114,9 @@ func runProductionBackup(ctx context.Context, config ProductionConfig, request R
 		if err := backup.PreflightVerifySpace(request.ArchivePath, maxBytes); err != nil {
 			return BackupResult{}, err
 		}
-		report, err := backup.VerifyBackupFile(request.ArchivePath, passphrase, maxBytes)
+		report, err := backup.VerifyBackupFileWithOptions(request.ArchivePath, passphrase, backup.VerifyOptions{
+			MaxBytes: maxBytes, AllowUnencrypted: request.AllowUnencrypted,
+		})
 		if err != nil {
 			return BackupResult{}, err
 		}
@@ -1128,7 +1141,7 @@ func runProductionBackup(ctx context.Context, config ProductionConfig, request R
 			request.KeyPath,
 			passphrase,
 			backup.RestoreOptions{CheckOnly: request.CheckOnly, DatabasePath: databasePath, MaxBytes: maxBytes,
-				FencingGeneration: request.FenceGeneration},
+				FencingGeneration: request.FenceGeneration, AllowUnencrypted: request.AllowUnencrypted},
 		)
 		if err != nil {
 			return BackupResult{}, err

@@ -155,3 +155,190 @@ func TestRestoreRecoveryRejectsUntrustedSafetyObjectsBeforeMutation(t *testing.T
 		})
 	}
 }
+
+// TestRestoreRollbackRefusesToUnlinkForeignTargets covers the #1219 residual
+// found in review: `hadPrevious` is attacker-authored, so a planted journal
+// claiming "no previous file existed" must not make recovery unlink live
+// state.json/state.key. Rollback only removes a target whose live digest
+// equals the transaction-published intended digest.
+func TestRestoreRollbackRefusesToUnlinkForeignTargets(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state.json")
+	keyPath := filepath.Join(root, "state.key")
+	for path, body := range map[string]string{statePath: "live-state", keyPath: "live-key"} {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	disk := restoreJournalDisk{
+		Version: 2, TransactionID: "planted", Phase: "prepared", WALCleanupPhase: "pending",
+		Files: []restoreJournalDiskFile{
+			{Name: "state.json", TargetID: "state.json", StagedName: ".restore-state-new", SafetyName: ".restore-state-old", IntendedDigest: backupChecksum([]byte("planted-state")), Phase: "prepared"},
+			{Name: "state.key", TargetID: "state.key", StagedName: ".restore-key-new", SafetyName: ".restore-key-old", IntendedDigest: backupChecksum([]byte("planted-key")), Phase: "prepared"},
+		},
+	}
+	payload, err := json.Marshal(disk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, restoreTransactionJournalName), payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RecoverInterruptedRestore(statePath, keyPath, ""); err == nil {
+		t.Fatal("planted hadPrevious:false journal was silently accepted")
+	}
+	for path, want := range map[string]string{statePath: "live-state", keyPath: "live-key"} {
+		got, err := os.ReadFile(path)
+		if err != nil || string(got) != want {
+			t.Fatalf("recovery unlinked live member %s: body=%q err=%v", path, got, err)
+		}
+	}
+}
+
+// TestRestoreRollbackRejectsPlantedSafetyLeaf covers the remaining #1219
+// rename-before-verify gaps: a planted journal can drop a forged
+// ".restore-state-old" leaf next to the target and either claim
+// hadPrevious:false or fully forge a hadPrevious/previousDigest pair.
+// Rollback must refuse before any rename unless live evidence shows the
+// transaction actually published the member (target or intact staged
+// leaf hashing to IntendedDigest), so state.json keeps its live content.
+// Rollback walks members in reverse order, so the planted-safety record
+// is listed LAST to be exercised first.
+func TestRestoreRollbackRejectsPlantedSafetyLeaf(t *testing.T) {
+	tests := []struct {
+		name        string
+		record      func() restoreJournalDiskFile
+		plantStaged bool
+		wantErrPart string
+	}{
+		{
+			name: "claimed_no_previous",
+			record: func() restoreJournalDiskFile {
+				return restoreJournalDiskFile{
+					Name: "state.json", TargetID: "state.json",
+					StagedName: ".restore-state-new", SafetyName: ".restore-state-old",
+					IntendedDigest: backupChecksum([]byte("planted-state")), Phase: "prepared",
+				}
+			},
+			wantErrPart: "never published",
+		},
+		{
+			name: "forged_consistent_previous",
+			record: func() restoreJournalDiskFile {
+				return restoreJournalDiskFile{
+					Name: "state.json", TargetID: "state.json",
+					StagedName: ".restore-state-new", SafetyName: ".restore-state-old",
+					HadPrevious: true, PreviousDigest: backupChecksum([]byte("forged-state")),
+					IntendedDigest: backupChecksum([]byte("planted-state")), Phase: "prepared",
+				}
+			},
+			wantErrPart: "never published",
+		},
+		{
+			name: "staged_beside_live_target",
+			record: func() restoreJournalDiskFile {
+				return restoreJournalDiskFile{
+					Name: "state.json", TargetID: "state.json",
+					StagedName: ".restore-state-new", SafetyName: ".restore-state-old",
+					HadPrevious: true, PreviousDigest: backupChecksum([]byte("forged-state")),
+					IntendedDigest: backupChecksum([]byte("planted-state")), Phase: "prepared",
+				}
+			},
+			plantStaged: true,
+			wantErrPart: "never published",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			statePath := filepath.Join(root, "state.json")
+			keyPath := filepath.Join(root, "state.key")
+			for path, body := range map[string]string{statePath: "live-state", keyPath: "live-key"} {
+				if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// The attacker drops a forged "previous" inode for state.json.
+			if err := os.WriteFile(filepath.Join(root, ".restore-state-old"), []byte("forged-state"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if test.plantStaged {
+				// A staged leaf hashing to IntendedDigest counts as
+				// publish evidence only while the target is absent —
+				// beside a live target it is forgeable noise (#1219).
+				if err := os.WriteFile(filepath.Join(root, ".restore-state-new"), []byte("planted-state"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			disk := restoreJournalDisk{
+				Version: 2, TransactionID: "planted", Phase: "prepared", WALCleanupPhase: "pending",
+				Files: []restoreJournalDiskFile{
+					{Name: "state.key", TargetID: "state.key", StagedName: ".restore-key-new", SafetyName: ".restore-key-old", IntendedDigest: backupChecksum([]byte("planted-key")), Phase: "prepared"},
+					test.record(),
+				},
+			}
+			payload, err := json.Marshal(disk)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, restoreTransactionJournalName), payload, 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			err = RecoverInterruptedRestore(statePath, keyPath, "")
+			if err == nil {
+				t.Fatal("planted journal+safety pair was silently accepted")
+			}
+			if !strings.Contains(err.Error(), test.wantErrPart) {
+				t.Fatalf("recovery failed for the wrong reason: %v", err)
+			}
+			got, err := os.ReadFile(statePath)
+			if err != nil || string(got) != "live-state" {
+				t.Fatalf("planted safety leaf clobbered live state.json: body=%q err=%v", got, err)
+			}
+		})
+	}
+}
+
+// TestMalformedRestoreJournalQuarantinedOnce covers #1219: a journal that
+// fails validation is renamed to a non-replayable quarantine leaf and the
+// failure is reported once — recovery must neither replay the poisoned
+// journal nor wedge every later startup on it.
+func TestMalformedRestoreJournalQuarantinedOnce(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state.json")
+	keyPath := filepath.Join(root, "state.key")
+	for path, body := range map[string]string{statePath: "live-state", keyPath: "live-key"} {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	journalPath := filepath.Join(root, restoreTransactionJournalName)
+	if err := os.WriteFile(journalPath, []byte(`{"version":2,"phase":`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RecoverInterruptedRestore(statePath, keyPath, ""); err == nil {
+		t.Fatal("malformed restore journal was accepted")
+	}
+	if _, err := os.Lstat(journalPath); !os.IsNotExist(err) {
+		t.Fatalf("malformed journal was not quarantined: %v", err)
+	}
+	quarantined, err := filepath.Glob(filepath.Join(root, "veil-restore-journal.failed-*"))
+	if err != nil || len(quarantined) != 1 {
+		t.Fatalf("quarantined journal artifacts=%v err=%v", quarantined, err)
+	}
+	// The quarantined journal is never replayed: recovery is a clean no-op
+	// on the next entry, and the live members were never touched.
+	if err := RecoverInterruptedRestore(statePath, keyPath, ""); err != nil {
+		t.Fatalf("quarantined journal replayed on re-entry: %v", err)
+	}
+	for path, want := range map[string]string{statePath: "live-state", keyPath: "live-key"} {
+		got, err := os.ReadFile(path)
+		if err != nil || string(got) != want {
+			t.Fatalf("recovery touched live member %s: body=%q err=%v", path, got, err)
+		}
+	}
+}

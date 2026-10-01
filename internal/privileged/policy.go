@@ -121,6 +121,7 @@ type ResolvedBackup struct {
 	Monthly              int
 	CheckOnly            bool
 	AllowVersionMismatch bool
+	AllowUnencrypted     bool
 	Offset               int64
 	Limit                int64
 	TransactionID        string
@@ -431,6 +432,7 @@ func (p Policy) ResolveBackup(request BackupRequest) (ResolvedBackup, error) {
 		Monthly:              request.Monthly,
 		CheckOnly:            request.CheckOnly,
 		AllowVersionMismatch: request.AllowVersionMismatch,
+		AllowUnencrypted:     request.AllowUnencrypted,
 		FenceGeneration:      request.Fence.Generation,
 		Offset:               request.Offset,
 		Limit:                request.Limit,

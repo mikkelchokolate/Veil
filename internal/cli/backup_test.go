@@ -71,6 +71,7 @@ func TestBackupRestoreCLIUnencrypted(t *testing.T) {
 		"backup", "restore", backupPath,
 		"--state", statePath,
 		"--key-path", keyPath,
+		"--allow-unencrypted",
 		"--yes",
 	})
 

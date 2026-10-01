@@ -67,9 +67,19 @@ func (d *Dir) OpenFileAt(name string) (*os.File, error) {
 	return OpenNoFollow(filepath.Join(d.path, name))
 }
 
+// OpenFileAtRW opens child name read/write after an lstat symlink check.
+func (d *Dir) OpenFileAtRW(name string) (*os.File, error) {
+	return OpenNoFollowWrite(filepath.Join(d.path, name))
+}
+
 // CreateFileAt creates child name with O_EXCL so an existing entry fails.
 func (d *Dir) CreateFileAt(name string, mode os.FileMode) (*os.File, error) {
 	return os.OpenFile(filepath.Join(d.path, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode.Perm())
+}
+
+// CreateFileAtRW creates child name read/write with O_EXCL.
+func (d *Dir) CreateFileAtRW(name string, mode os.FileMode) (*os.File, error) {
+	return os.OpenFile(filepath.Join(d.path, name), os.O_RDWR|os.O_CREATE|os.O_EXCL, mode.Perm())
 }
 
 // AppendFileAt opens child name for appending after an lstat symlink check,
@@ -126,6 +136,19 @@ func (d *Dir) RemoveAt(name string) error {
 	return os.Remove(filepath.Join(d.path, name))
 }
 
+// RemoveDirAt removes an empty child directory after an lstat check.
+func (d *Dir) RemoveDirAt(name string) error {
+	path := filepath.Join(d.path, name)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fmt.Errorf("managed path %s must be a real directory", path)
+	}
+	return os.Remove(path)
+}
+
 // OpenNoFollow lstat-checks the leaf for a symlink and then opens it.
 func OpenNoFollow(path string) (*os.File, error) {
 	info, err := os.Lstat(path)
@@ -136,6 +159,19 @@ func OpenNoFollow(path string) (*os.File, error) {
 		return nil, errors.New("managed path must not be a symlink")
 	}
 	return os.Open(path)
+}
+
+// OpenNoFollowWrite lstat-checks the leaf for a symlink and then opens it
+// read/write.
+func OpenNoFollowWrite(path string) (*os.File, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, errors.New("managed path must not be a symlink")
+	}
+	return os.OpenFile(path, os.O_RDWR, 0)
 }
 
 // ChmodNoFollow applies mode on an lstat-checked descriptor.

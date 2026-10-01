@@ -9,8 +9,13 @@ import (
 
 // test hooks; replaced by tests to inject errors without changing logic.
 var (
-	createTemp    = os.CreateTemp
-	chmod         = os.Chmod
+	createTemp = os.CreateTemp
+	// chmodFile and preserveOwner operate on the open temp descriptor, not the
+	// .tmp-* path: the parent directory is service-writable, so the leaf name
+	// can be swapped for a symlink between a path-based stat and a path-based
+	// chmod/chown — redirecting root's metadata write onto an attacker-chosen
+	// target (#1219). The descriptor stays pinned to the inode createTemp made.
+	chmodFile     = func(f *os.File, mode os.FileMode) error { return f.Chmod(mode) }
 	syncFile      = func(f *os.File) error { return f.Sync() }
 	closeFile     = func(f *os.File) error { return f.Close() }
 	syncDirectory = func(path string) error {
@@ -45,10 +50,10 @@ func Write(path string, body []byte, mode os.FileMode, dirMode os.FileMode) erro
 	if _, err := tmp.Write(body); err != nil {
 		return err
 	}
-	if err := chmod(tmpPath, mode); err != nil {
+	if err := chmodFile(tmp, mode); err != nil {
 		return err
 	}
-	if err := preserveOwner(tmpPath, path); err != nil {
+	if err := preserveOwner(tmp, path); err != nil {
 		return err
 	}
 	if err := syncFile(tmp); err != nil {

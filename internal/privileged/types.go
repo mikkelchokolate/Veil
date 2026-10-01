@@ -150,10 +150,14 @@ type BackupRequest struct {
 	Monthly              int          `json:"monthly,omitempty"`
 	CheckOnly            bool         `json:"checkOnly,omitempty"`
 	AllowVersionMismatch bool         `json:"allowVersionMismatch,omitempty"`
-	Offset               int64        `json:"offset,omitempty"`
-	Limit                int64        `json:"limit,omitempty"`
-	TransactionID        string       `json:"transactionId,omitempty"`
-	Fence                FenceToken   `json:"fence"`
+	// AllowUnencrypted is the explicit opt-in to verify/restore a plaintext
+	// archive via the privileged helper; archive encryption is required by
+	// default (#1223).
+	AllowUnencrypted bool       `json:"allowUnencrypted,omitempty"`
+	Offset           int64      `json:"offset,omitempty"`
+	Limit            int64      `json:"limit,omitempty"`
+	TransactionID    string     `json:"transactionId,omitempty"`
+	Fence            FenceToken `json:"fence"`
 }
 
 type BackupArchive struct {

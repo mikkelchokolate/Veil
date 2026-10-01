@@ -1,7 +1,5 @@
 package backup
 
-import "os"
-
 // Dir represents a backup directory path.
 type Dir struct {
 	Path string
@@ -45,9 +43,4 @@ func CleanupBackup(backupDir string, backupID string) error {
 // ListBackups returns available backup IDs sorted by time (lexicographic sort matches chronological).
 func ListBackups(backupDir string) ([]string, error) {
 	return NewLifecycle(backupDir).List()
-}
-
-// copyFile copies a file from src to dst preserving the given mode.
-func copyFile(src, dst string, mode os.FileMode) error {
-	return NewFileCopier().Copy(src, dst, mode)
 }

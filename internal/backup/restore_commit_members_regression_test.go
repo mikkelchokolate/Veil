@@ -3,10 +3,11 @@ package backup
 import (
 	"encoding/json"
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 func TestRestoreJournalRequiresExactUniqueMemberSet(t *testing.T) {
@@ -16,12 +17,13 @@ func TestRestoreJournalRequiresExactUniqueMemberSet(t *testing.T) {
 		"state.key":  filepath.Join(root, "state.key"),
 		"veil.db":    filepath.Join(root, "veil.db"),
 	}
+	digest := strings.Repeat("ab", 32)
 	base := restoreJournalDisk{
-		Version: 2, TransactionID: "tx", Phase: "prepared",
+		Version: 2, TransactionID: "tx", Phase: "prepared", WALCleanupPhase: "pending",
 		Files: []restoreJournalDiskFile{
-			{Name: "state.json", TargetID: "state.json", StagedName: ".state.stage", SafetyName: ".state.old"},
-			{Name: "state.key", TargetID: "state.key", StagedName: ".key.stage", SafetyName: ".key.old"},
-			{Name: "veil.db", TargetID: "veil.db", StagedName: ".db.stage", SafetyName: ".db.old"},
+			{Name: "state.json", TargetID: "state.json", StagedName: ".state.stage", SafetyName: ".state.old", IntendedDigest: digest, Phase: "prepared"},
+			{Name: "state.key", TargetID: "state.key", StagedName: ".key.stage", SafetyName: ".key.old", IntendedDigest: digest, Phase: "prepared"},
+			{Name: "veil.db", TargetID: "veil.db", StagedName: ".db.stage", SafetyName: ".db.old", IntendedDigest: digest, Phase: "prepared"},
 		},
 	}
 	for _, tc := range []struct {
@@ -49,17 +51,17 @@ func TestCommittedRestoreMarkerDeletionFailureFinalizesWithoutRollback(t *testin
 	fixture := prepareRestoreTripleFixture(t)
 	originalRemove := restoreJournalRemove
 	failed := false
-	restoreJournalRemove = func(path string) error {
-		if !failed && filepath.Base(path) == restoreTransactionJournalName {
+	restoreJournalRemove = func(dir *safefs.Dir, leaf string) error {
+		if !failed && leaf == restoreTransactionJournalName {
 			failed = true
 			return errors.New("injected committed restore marker unlink failure")
 		}
-		return os.Remove(path)
+		return dir.RemoveAt(leaf)
 	}
 	defer func() { restoreJournalRemove = originalRemove }()
 
 	if _, err := RestoreBackupFileWithOptions(fixture.archive, fixture.statePath, fixture.keyPath, "",
-		RestoreOptions{DatabasePath: fixture.databasePath}); err != nil {
+		RestoreOptions{DatabasePath: fixture.databasePath, AllowUnencrypted: true}); err != nil {
 		t.Fatalf("committed restore was reported failed: %v", err)
 	}
 	got := classifyRestoreTriple(t, fixture)
@@ -72,7 +74,7 @@ func TestCommittedRestoreMarkerDeletionFailureFinalizesWithoutRollback(t *testin
 
 	restoreJournalRemove = originalRemove
 	if _, err := RestoreBackupFileWithOptions(fixture.archive, fixture.statePath, fixture.keyPath, "",
-		RestoreOptions{DatabasePath: fixture.databasePath, CheckOnly: true}); err != nil {
+		RestoreOptions{DatabasePath: fixture.databasePath, CheckOnly: true, AllowUnencrypted: true}); err != nil {
 		t.Fatalf("finalize committed restore marker: %v", err)
 	}
 	got = classifyRestoreTriple(t, fixture)

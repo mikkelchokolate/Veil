@@ -7,7 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 func PruneRestoreSafetyFiles(statePath, keyPath, databasePath string, keep int) ([]string, error) {
@@ -62,7 +63,7 @@ func secureRemoveRestoreSafetyFile(path string) error {
 	if !strings.Contains(filepath.Base(path), ".pre-restore-") {
 		return fmt.Errorf("refusing to delete non-safety file")
 	}
-	file, err := os.OpenFile(path, os.O_WRONLY|syscall.O_NOFOLLOW, 0)
+	file, err := safefs.OpenNoFollowWrite(path)
 	if err != nil {
 		return err
 	}
@@ -74,7 +75,7 @@ func secureRemoveRestoreSafetyFile(path string) error {
 		}
 		return fmt.Errorf("restore safety path is not a regular file")
 	}
-	if stat, ok := info.Sys().(*syscall.Stat_t); !ok || stat.Nlink != 1 {
+	if unsafeSafetyLinkCount(info) {
 		_ = file.Close()
 		return fmt.Errorf("restore safety path has unsafe link count")
 	}
