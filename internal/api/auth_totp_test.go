@@ -628,6 +628,9 @@ func TestTOTPConfirmAndDisableAdvanceReplayWatermark(t *testing.T) {
 	// Disable spends its own step: the watermark survives ClearTOTP while
 	// every other factor field is dropped.
 	*now = now.Add(2 * totpPeriod * time.Second)
+	// Advance one timestep: reusing the confirm step’s code is now a
+	// replay and is correctly rejected (#1220).
+	*now = now.Add(30 * time.Second)
 	disableCode := totpCode(t, state.users[0].TOTPSecret, *now)
 	rec = authedTOTPRequest(t, state, session, http.MethodDelete, "/api/v1/users/me/totp", `{"code":"`+disableCode+`"}`)
 	if rec.Code != http.StatusOK {
