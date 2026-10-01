@@ -46,8 +46,8 @@ func TestEnsureAcmeShRejectsSymlinkedScript(t *testing.T) {
 	if _, err := ensureAcmeSh(context.Background(), sys); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !rmCallsFor(sys, acmeSh) {
-		t.Fatalf("planted symlink must be removed before reinstall: %v", sys.runCalls)
+	if !rmCallsFor(sys, filepath.Dir(acmeSh)) {
+		t.Fatalf("planted payload tree must be removed before reinstall: %v", sys.runCalls)
 	}
 	if !installRan(sys) {
 		t.Fatal("untrusted acme.sh must trigger a reinstall")
