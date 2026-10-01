@@ -1145,6 +1145,29 @@ func TestRenderCaddyJSONNoPassthroughWithoutPanelIPIdentity(t *testing.T) {
 	}
 }
 
+// #1207: a poisoned VEIL_PANEL_PUBLIC_IP must not widen the host matcher —
+// non-IP values are dropped, so no route renders when nothing valid remains.
+func TestRenderCaddyJSONNoPassthroughForPoisonedPanelIP(t *testing.T) {
+	t.Setenv("VEIL_PANEL_PUBLIC_IP", "evil.example.com, ,*")
+	t.Setenv("VEIL_ETC_DIR", t.TempDir())
+	plan := caddyassembly.CaddyRenderPlan{
+		ACMEChallenges: map[bindregistry.BindKey]caddyassembly.AcmeChallengeOwner{
+			{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}: {
+				ChallengeMode: "http-01",
+				Domains:       []string{"proxy.example.com"},
+			},
+		},
+		DefaultChallengeMode: "http-01",
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "acme-challenge") || strings.Contains(string(data), "44080") {
+		t.Fatalf("no acme.sh passthrough may render for a non-IP panel identity:\n%s", data)
+	}
+}
+
 // #1207: renderers that run outside veil.service (install/repair shells, the
 // privileged helper) never inherit VEIL_PANEL_PUBLIC_IP — the host pin must
 // fall back to the persisted veil.env instead of silently dropping the route.

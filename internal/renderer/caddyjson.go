@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"sort"
@@ -360,9 +361,15 @@ var panelIPCertChallengeHosts = func() []string {
 		if item == "" {
 			continue
 		}
-		hosts = append(hosts, item)
-		if strings.Contains(item, ":") && !strings.HasPrefix(item, "[") {
-			hosts = append(hosts, "["+item+"]")
+		// Only real IPs may pin the matcher — a poisoned veil.env carrying
+		// hostnames or wildcards must not widen the passthrough (#1207).
+		addr, err := netip.ParseAddr(item)
+		if err != nil {
+			continue
+		}
+		hosts = append(hosts, addr.String())
+		if addr.Is6() {
+			hosts = append(hosts, "["+addr.String()+"]")
 		}
 	}
 	return hosts

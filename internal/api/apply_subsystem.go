@@ -360,14 +360,6 @@ func initClientSubsystem(s *managementState) {
 	// the reloaded store no longer carries must not keep admission records
 	// (#1206).
 	s.pruneHy2AdmissionToLiveClients()
-	// Periodic panel IP-certificate renewal (#1170): the shortlived profile
-	// yields ~6-day certificates and acme.sh runs with --no-cron for helper
-	// issuance, so this worker is the renewal driver. It self-gates on
-	// panelAccess=="direct" so non-direct installs pay nothing per tick.
-	if s.ipCertRenewalWorker == nil {
-		s.ipCertRenewalWorker = newIPCertRenewalWorker(s)
-		s.ipCertRenewalWorker.Start()
-	}
 }
 
 // registerTrafficProvidersLocked creates and registers TrafficProviders for
