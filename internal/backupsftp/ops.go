@@ -212,6 +212,13 @@ func List(ctx context.Context, fs RemoteFS, config Config) ([]backup.ArchiveEntr
 		return nil, err
 	}
 	defer watchRemote(ctx, fs)()
+	return listRemote(ctx, fs, config)
+}
+
+// listRemote is the un-watched List body for callers (Prune) that already
+// hold a watchRemote on the same fs — nesting a second watch would close the
+// filesystem twice on cancel, which is harmless but needlessly racy.
+func listRemote(ctx context.Context, fs RemoteFS, config Config) ([]backup.ArchiveEntry, error) {
 	infos, err := fs.ReadDir(config.RemoteDir)
 	if errors.Is(err, os.ErrNotExist) {
 		return []backup.ArchiveEntry{}, nil
@@ -228,6 +235,8 @@ func List(ctx context.Context, fs RemoteFS, config Config) ([]backup.ArchiveEntr
 		if !ok {
 			continue
 		}
+		// Encrypted is a name-derived display hint only; the publish gate
+		// decides on the .sha256 sidecar / VEILBACK magic, not the suffix.
 		entries = append(entries, backup.ArchiveEntry{
 			Name:      info.Name(),
 			Path:      remotePath(config.RemoteDir, info.Name()),
@@ -256,7 +265,7 @@ func Prune(ctx context.Context, fs RemoteFS, config Config, policy backup.Retent
 		return backup.PruneResult{}, err
 	}
 	defer watchRemote(ctx, fs)()
-	entries, err := List(ctx, fs, config)
+	entries, err := listRemote(ctx, fs, config)
 	if err != nil {
 		return backup.PruneResult{}, remoteOpErr(ctx, err)
 	}
@@ -401,6 +410,7 @@ func Fetch(ctx context.Context, fs RemoteFS, config Config, localDir, name strin
 		Path:      final,
 		Size:      info.Size(),
 		CreatedAt: createdAt,
+		// Display hint only — see List; publication gates on magic/sidecar.
 		Encrypted: strings.HasSuffix(name, ".enc"),
 	}, nil
 }

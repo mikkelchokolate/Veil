@@ -79,7 +79,9 @@ func (c *stallGuardConn) Write(p []byte) (int, error) {
 
 // SetDeadline drives the mode switch: a non-zero deadline is a one-shot
 // absolute bound (handshake), and clearing it arms the per-I/O stall guard
-// for the session that follows.
+// for the session that follows. Split SetReadDeadline/SetWriteDeadline are
+// intentionally not overridden — no caller uses them, and a partial deadline
+// would fight the guard's own arming; add tracking here before adopting one.
 func (c *stallGuardConn) SetDeadline(t time.Time) error {
 	c.mu.Lock()
 	c.live = t.IsZero()
