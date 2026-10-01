@@ -415,7 +415,10 @@ func (s *Service) IssueBindingPasswordTx(tx *Tx, binding Binding, provided strin
 	return IssuedCredential{BindingID: binding.ID, InboundID: binding.InboundID, Kind: "password", Plaintext: plaintext}, nil
 }
 
-// RemoveBindingTx is the transactional variant of RemoveBinding.
+// RemoveBindingTx deletes a binding inside the caller's transaction,
+// constrained to the owning client so a mismatched (bindingID, clientID)
+// pair can never detach someone else's binding (#1225). The client survives
+// as an orphan.
 func (s *Service) RemoveBindingTx(tx *Tx, bindingID, clientID string) error {
 	result, err := tx.q.Exec(`DELETE FROM client_bindings WHERE id=? AND client_id=?`, bindingID, clientID)
 	if err != nil {
@@ -529,11 +532,6 @@ func (s *Service) AddBinding(clientID, inboundID string) (Binding, error) {
 		return Binding{}, fmt.Errorf("%w: inboundId is required", ErrValidation)
 	}
 	return s.repo.CreateBinding(Binding{ClientID: clientID, InboundID: inboundID, Enabled: true})
-}
-
-// RemoveBinding deletes a binding. The client survives as an orphan.
-func (s *Service) RemoveBinding(bindingID, clientID string) error {
-	return s.repo.DeleteBinding(bindingID)
 }
 
 // SetCredential encrypts and stores a credential for a binding. The stored

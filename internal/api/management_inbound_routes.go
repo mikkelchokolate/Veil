@@ -335,6 +335,26 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 					return nil
 				}
 			}
+			// Same for connection limits (#1224): the candidate inbound only
+			// enforces deviceLimit/ipLimit while it stays enabled on a
+			// connection-limit-capable protocol, and client-side validation
+			// already forbids an enabled limit-bearing binding on anything
+			// else. Check the POST-UPDATE state, not just the transition:
+			// a stale binding (restore, legacy data) cannot be laundered
+			// through a disabled-inbound edit, while a switch to a capable
+			// protocol is never blocked — so a wedged state stays fixable.
+			if s.clientRepo != nil && (!updated.Enabled || !protocolConnectionLimits(updated.Protocol)) {
+				count, countErr := s.clientRepo.ConnectionLimitedBindingCount(name)
+				if countErr != nil {
+					writeError(w, "failed to check inbound connection-limited bindings", http.StatusInternalServerError)
+					return nil
+				}
+				if count > 0 {
+					s.logUserAction(r, "update_inbound", name, false, "connection-limited clients attached")
+					writeError(w, "inbound update would remove connection-limit enforcement for bound clients — detach them or keep a limit-capable protocol", http.StatusConflict)
+					return nil
+				}
+			}
 			updated, err = mutation.UpdateInbound(name, updated)
 			s.logUserAction(r, "update_inbound", name, err == nil, "")
 			if err != nil {

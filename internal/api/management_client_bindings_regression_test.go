@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -182,7 +183,19 @@ func TestClientBindingsFallbackReturnsOnlyAfterAllBindingsRemoved(t *testing.T) 
 	if _, err := svc.SetCredential(b.ID, "password", "client-pass"); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.RemoveBinding(b.ID, view.ID); err != nil {
+	// Binding removal is owner-scoped: RemoveBindingTx requires the matching
+	// clientID so a swapped pair can never detach the wrong binding (#1225).
+	if err := s.clientRepo.WithTx(func(tx *client.Tx) error {
+		return svc.RemoveBindingTx(tx, b.ID, "other-client")
+	}); !errors.Is(err, client.ErrNotFound) {
+		t.Fatalf("mismatched binding delete: %v, want ErrNotFound", err)
+	}
+	if _, err := s.clientRepo.GetBinding(b.ID); err != nil {
+		t.Fatalf("mismatched delete removed the binding anyway: %v", err)
+	}
+	if err := s.clientRepo.WithTx(func(tx *client.Tx) error {
+		return svc.RemoveBindingTx(tx, b.ID, view.ID)
+	}); err != nil {
 		t.Fatal(err)
 	}
 	inbounds, err := s.inboundsWithRuntimeCredentialsLocked()

@@ -291,9 +291,14 @@ func StableClientID(inboundID, username string) string {
 // markers written by MigrateInboundProfilesTx.
 const LegacyProfileMarkerVersion = 2
 
+// LegacyProfileMarkerPrefix is the key namespace every per-profile migration
+// marker lives under; a set of its keys resolves "was this profile migrated"
+// in one query for callers that cannot afford a per-row read (#1206).
+const LegacyProfileMarkerPrefix = "legacy_profile/"
+
 // LegacyProfileMarkerKey is the migration-marker key recording that the
 // legacy profile (inboundID, username) was handed over to the normalized
 // client domain. Render suppression and startup fingerprinting both use it.
 func LegacyProfileMarkerKey(inboundID, username string) string {
-	return "legacy_profile/" + StableClientID(inboundID, username)
+	return LegacyProfileMarkerPrefix + StableClientID(inboundID, username)
 }

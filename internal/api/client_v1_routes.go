@@ -227,6 +227,22 @@ func (s *managementState) handleV1Bulk(w http.ResponseWriter, r *http.Request) {
 		s.writeV1ClientError(w, err)
 		return
 	}
+	// Prune admission-tracker residue for committed removals — a deleted
+	// client's records, or a detached client's tuples for the dropped
+	// inbound, can never reconcile again (#1206).
+	if s.hy2Limiter != nil {
+		for _, item := range results {
+			if !item.OK {
+				continue
+			}
+			switch req.Action {
+			case "delete":
+				s.hy2Limiter.dropClient(item.ID)
+			case "detach_inbound":
+				s.hy2Limiter.dropInbound(item.ID, req.InboundID)
+			}
+		}
+	}
 	resp := map[string]any{
 		"action":    req.Action,
 		"total":     len(req.ClientIDs),
@@ -710,6 +726,9 @@ func (s *managementState) handleV1ClientByID(w http.ResponseWriter, r *http.Requ
 			s.writeV1ClientError(w, err)
 			return
 		}
+		// The deleted client's admission records can never reconcile again —
+		// drop them so the tracker stays bounded (#1206).
+		s.pruneHy2AdmissionClient(id)
 		s.logUserAction(r, "delete_client", id, true, "")
 		s.writeMutationResponse(w, http.StatusOK, map[string]string{"id": id}, outcome)
 	default:
@@ -1104,6 +1123,7 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 		return
 	}
 	if r.Method == http.MethodDelete {
+		var bindingInbound string
 		outcome, err := s.withClientMutation(r, actorFromRequest(r), func(tx *client.Tx) error {
 			binding, err := tx.GetBinding(bindingID)
 			if err != nil {
@@ -1112,12 +1132,16 @@ func (s *managementState) handleV1ClientBindings(w http.ResponseWriter, r *http.
 			if binding.ClientID != clientID {
 				return client.ErrNotFound
 			}
+			bindingInbound = binding.InboundID
 			return s.clientService.RemoveBindingTx(tx, bindingID, clientID)
 		})
 		if err != nil {
 			s.writeV1ClientError(w, err)
 			return
 		}
+		// Sessions keyed by the removed binding's inbound can no longer admit
+		// — drop just that inbound's tuples, keeping other bindings' (#1206).
+		s.pruneHy2AdmissionInbound(clientID, bindingInbound)
 		s.logUserAction(r, "remove_binding", clientID, true, bindingID)
 		s.writeMutationResponse(w, http.StatusOK, map[string]string{"id": bindingID}, outcome)
 		return
