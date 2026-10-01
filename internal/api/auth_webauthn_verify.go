@@ -118,7 +118,7 @@ func (s *managementState) handleWebAuthnLoginBegin(w http.ResponseWriter, r *htt
 		writeError(w, "account changed; sign in again", http.StatusUnauthorized)
 		return
 	}
-	wa, _, err := webAuthnForRequest(r)
+	wa, _, err := s.webAuthnForRequest(r)
 	if err != nil {
 		s.recordRequestAudit(r, audit.Record{
 			Actor: pending.Username, Action: "auth.webauthn.begin", Target: "panel",
@@ -152,6 +152,9 @@ func (s *managementState) handleWebAuthnLoginBegin(w http.ResponseWriter, r *htt
 		Target:  "panel",
 		Success: true,
 	})
+	// The assertion options carry the single-use ceremony challenge —
+	// secret-grade for the idempotency store (#1221).
+	markIdempotencySecretResponse(w, "webauthn-login:"+pending.Username, 1)
 	writeJSON(w, assertion)
 }
 
@@ -283,7 +286,7 @@ func (s *managementState) handleWebAuthnLoginFinish(w http.ResponseWriter, r *ht
 		return
 	}
 
-	wa, _, err := webAuthnForRequest(r)
+	wa, _, err := s.webAuthnForRequest(r)
 	if err != nil {
 		s.recordRequestAudit(r, audit.Record{
 			Actor: pending.Username, Action: "auth.webauthn.finish", Target: "panel",
@@ -436,6 +439,9 @@ func (s *managementState) handleWebAuthnLoginFinish(w http.ResponseWriter, r *ht
 		Success: true,
 		Details: map[string]any{"secondFactor": "webauthn"},
 	})
+	// The body carries the fresh session's CSRF token — session-minting
+	// responses are secret-grade for the idempotency store (#1221).
+	markIdempotencySecretResponse(w, "session:"+pending.Username, 1)
 	s.setSessionCookie(w, r, session.Token, 86400)
 	writeJSON(w, map[string]any{
 		"success":      true,

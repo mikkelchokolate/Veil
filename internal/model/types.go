@@ -417,6 +417,12 @@ type User struct {
 	TOTPSecret         string   `json:"totpSecret,omitempty"`
 	TOTPPendingSecret  string   `json:"totpPendingSecret,omitempty"`
 	TOTPRecoveryHashes []string `json:"totpRecoveryHashes,omitempty"`
+	// TOTPLastStep is the RFC 6238 §5.2 anti-replay watermark: the highest
+	// timestep whose code has already been accepted. Verification rejects
+	// codes at or below it. The watermark is deliberately NOT cleared by
+	// ClearTOTP — it is monotonic, so tearing the factor down can never
+	// rewind replay protection for a later re-enrollment.
+	TOTPLastStep int64 `json:"totpLastStep,omitempty"`
 	// Passkeys holds the user's registered WebAuthn credentials (#1171).
 	// Every entry is a second factor for panel login; the public key is not
 	// secret material so the SecretPolicy leaves these fields in plaintext.
@@ -466,9 +472,13 @@ func (u *User) PreserveTOTP(prior User) {
 	u.TOTPSecret = prior.TOTPSecret
 	u.TOTPPendingSecret = prior.TOTPPendingSecret
 	u.TOTPRecoveryHashes = append([]string(nil), prior.TOTPRecoveryHashes...)
+	u.TOTPLastStep = prior.TOTPLastStep
 }
 
-// ClearTOTP drops every second-factor field (admin reset / self-disable).
+// ClearTOTP drops every second-factor field (admin reset / self-disable)
+// EXCEPT the replay watermark: TOTPLastStep is a monotonic marker, and
+// rewinding it would let a code already spent under the old secret be
+// re-accepted if the same secret material were ever re-armed (#1220).
 func (u *User) ClearTOTP() {
 	u.TOTPEnabled = false
 	u.TOTPSecret = ""
