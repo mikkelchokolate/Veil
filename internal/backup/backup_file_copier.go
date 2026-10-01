@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 type FileCopier struct{}
@@ -21,32 +23,60 @@ var fileCopierSync = (*os.File).Sync
 // fileCopierCopy is overridable in tests to inject copy failures.
 var fileCopierCopy = io.Copy
 
-// Copy copies src to dst, setting mode on a sibling temp file before replace.
+// Copy copies src to dst, setting mode (and prior ownership where a regular
+// destination exists) on the open temp descriptor before a
+// descriptor-relative rename — no metadata operation ever re-resolves a path
+// under the destination directory (#1219).
 func (FileCopier) Copy(src, dst string, mode os.FileMode) error {
-	srcFile, err := os.Open(src)
+	srcFile, err := safefs.OpenNoFollow(src)
 	if err != nil {
 		return fmt.Errorf("open source: %w", err)
 	}
 	defer srcFile.Close()
+	srcInfo, err := srcFile.Stat()
+	if err != nil {
+		return fmt.Errorf("open source: %w", err)
+	}
+	if !srcInfo.Mode().IsRegular() {
+		return fmt.Errorf("backup source %s is not a regular file", src)
+	}
 
-	dir := filepath.Dir(dst)
-	tmp, err := os.CreateTemp(dir, ".veil-copy-*")
+	dirPath := filepath.Dir(dst)
+	dir, err := safefs.OpenDir(dirPath)
 	if err != nil {
 		return fmt.Errorf("create destination: %w", err)
 	}
-	tmpPath := tmp.Name()
+	defer dir.Close()
+	tmp, tmpName, err := dir.CreateTempAt(".veil-copy-", 0o600)
+	if err != nil {
+		return fmt.Errorf("create destination: %w", err)
+	}
 	committed := false
 	defer func() {
 		_ = tmp.Close()
 		if !committed {
-			_ = os.Remove(tmpPath)
+			_ = dir.RemoveAt(tmpName)
 		}
 	}()
 
 	if _, err := fileCopierCopy(tmp, srcFile); err != nil {
 		return fmt.Errorf("copy: %w", err)
 	}
-	if err := os.Chmod(tmpPath, mode); err != nil {
+	if err := tmp.Chmod(mode.Perm()); err != nil {
+		return err
+	}
+	// Ownership preservation consults the destination leaf resolved relative
+	// to the pinned parent — a swapped symlink reports as a symlink and is
+	// refused rather than chown'ed (#1219).
+	if existing, err := dir.StatAt(filepath.Base(dst)); err == nil {
+		if !existing.Mode().IsRegular() || existing.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("restore destination is not a regular file: %s", dst)
+		}
+		uid, gid := fileOwnerIDs(existing)
+		if err := restoreChownToMatch(tmp, uid, gid); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
 		return err
 	}
 	if err := fileCopierSync(tmp); err != nil {
@@ -55,16 +85,9 @@ func (FileCopier) Copy(src, dst string, mode os.FileMode) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if existing, err := os.Lstat(dst); err == nil {
-		if err := restoreChownToMatch(tmpPath, existing); err != nil {
-			return err
-		}
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	if err := os.Rename(tmpPath, dst); err != nil {
+	if err := dir.RenameAt(tmpName, filepath.Base(dst)); err != nil {
 		return fmt.Errorf("create destination: %w", err)
 	}
 	committed = true
-	return syncDirectory(dir)
+	return dir.File().Sync()
 }

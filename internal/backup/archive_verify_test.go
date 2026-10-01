@@ -155,6 +155,7 @@ func TestRestoreBackupPreservesPreviousStateAndKey(t *testing.T) {
 	}
 
 	result, err := RestoreBackupWithOptions(data, targetState, targetKey, "", RestoreOptions{
+		AllowUnencrypted: true,
 		Now: func() time.Time {
 			return time.Date(2026, 6, 5, 13, 0, 0, 0, time.UTC)
 		},
@@ -209,7 +210,7 @@ func TestArchiveV2RestoreRequiresIdleSQLiteBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	if _, err := RestoreBackupWithOptions(data, targetState, targetKey, "", RestoreOptions{DatabasePath: targetDB}); err == nil {
+	if _, err := RestoreBackupWithOptions(data, targetState, targetKey, "", RestoreOptions{DatabasePath: targetDB, AllowUnencrypted: true}); err == nil {
 		t.Fatal("restore succeeded while target database had an active writer")
 	}
 }
@@ -267,7 +268,7 @@ func TestArchiveV2RestoresNormalizedSQLiteDomain(t *testing.T) {
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	result, err := RestoreBackupWithOptions(data, statePath, keyPath, "", RestoreOptions{DatabasePath: dbPath})
+	result, err := RestoreBackupWithOptions(data, statePath, keyPath, "", RestoreOptions{DatabasePath: dbPath, AllowUnencrypted: true})
 	if err != nil {
 		t.Fatal(err)
 	}

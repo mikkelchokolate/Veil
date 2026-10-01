@@ -155,3 +155,44 @@ func TestRestoreRecoveryRejectsUntrustedSafetyObjectsBeforeMutation(t *testing.T
 		})
 	}
 }
+
+// TestMalformedRestoreJournalQuarantinedOnce covers #1219: a journal that
+// fails validation is renamed to a non-replayable quarantine leaf and the
+// failure is reported once — recovery must neither replay the poisoned
+// journal nor wedge every later startup on it.
+func TestMalformedRestoreJournalQuarantinedOnce(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state.json")
+	keyPath := filepath.Join(root, "state.key")
+	for path, body := range map[string]string{statePath: "live-state", keyPath: "live-key"} {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	journalPath := filepath.Join(root, restoreTransactionJournalName)
+	if err := os.WriteFile(journalPath, []byte(`{"version":2,"phase":`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RecoverInterruptedRestore(statePath, keyPath, ""); err == nil {
+		t.Fatal("malformed restore journal was accepted")
+	}
+	if _, err := os.Lstat(journalPath); !os.IsNotExist(err) {
+		t.Fatalf("malformed journal was not quarantined: %v", err)
+	}
+	quarantined, err := filepath.Glob(filepath.Join(root, "veil-restore-journal.failed-*"))
+	if err != nil || len(quarantined) != 1 {
+		t.Fatalf("quarantined journal artifacts=%v err=%v", quarantined, err)
+	}
+	// The quarantined journal is never replayed: recovery is a clean no-op
+	// on the next entry, and the live members were never touched.
+	if err := RecoverInterruptedRestore(statePath, keyPath, ""); err != nil {
+		t.Fatalf("quarantined journal replayed on re-entry: %v", err)
+	}
+	for path, want := range map[string]string{statePath: "live-state", keyPath: "live-key"} {
+		got, err := os.ReadFile(path)
+		if err != nil || string(got) != want {
+			t.Fatalf("recovery touched live member %s: body=%q err=%v", path, got, err)
+		}
+	}
+}

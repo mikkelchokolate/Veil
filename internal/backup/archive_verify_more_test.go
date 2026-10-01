@@ -16,6 +16,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/storage"
 )
@@ -210,7 +211,7 @@ func TestRestoreBackupWithOptionsStagingErrors(t *testing.T) {
 		restoreMkdirAll = func(path string, perm os.FileMode) error {
 			return errors.New("injected mkdir failure")
 		}
-		if _, err := RestoreBackupWithOptions(data, targetState, targetKey, "", RestoreOptions{}); err == nil {
+		if _, err := RestoreBackupWithOptions(data, targetState, targetKey, "", RestoreOptions{AllowUnencrypted: true}); err == nil {
 			t.Fatal("expected error")
 		}
 	})
@@ -235,13 +236,13 @@ func TestRestoreBackupWithOptionsStagingErrors(t *testing.T) {
 			}
 			return originalCreateTemp(dir, pattern)
 		}
-		restoreRemove = func(name string) error {
+		restoreRemove = func(dir *safefs.Dir, leaf string) error {
 			// Allow cleanup of the staged state temp to succeed.
-			_ = originalRemove(name)
+			_ = originalRemove(dir, leaf)
 			return nil
 		}
 
-		if _, err := RestoreBackupWithOptions(data, targetState, targetKey, "", RestoreOptions{}); err == nil {
+		if _, err := RestoreBackupWithOptions(data, targetState, targetKey, "", RestoreOptions{AllowUnencrypted: true}); err == nil {
 			t.Fatal("expected error")
 		}
 	})
@@ -255,15 +256,15 @@ func TestRestoreBackupWithOptionsStagingErrors(t *testing.T) {
 		defer func() { restoreRename = originalRename }()
 
 		calls := 0
-		restoreRename = func(oldpath, newpath string) error {
+		restoreRename = func(dir *safefs.Dir, oldLeaf, newLeaf string) error {
 			calls++
 			if calls == 1 {
 				return errors.New("injected rename failure")
 			}
-			return originalRename(oldpath, newpath)
+			return originalRename(dir, oldLeaf, newLeaf)
 		}
 
-		if _, err := RestoreBackupWithOptions(data, targetState, targetKey, "", RestoreOptions{}); err == nil {
+		if _, err := RestoreBackupWithOptions(data, targetState, targetKey, "", RestoreOptions{AllowUnencrypted: true}); err == nil {
 			t.Fatal("expected error")
 		}
 	})
@@ -277,15 +278,15 @@ func TestRestoreBackupWithOptionsStagingErrors(t *testing.T) {
 		defer func() { restoreRename = originalRename }()
 
 		calls := 0
-		restoreRename = func(oldpath, newpath string) error {
+		restoreRename = func(dir *safefs.Dir, oldLeaf, newLeaf string) error {
 			calls++
 			if calls == 2 {
 				return errors.New("injected key commit failure")
 			}
-			return originalRename(oldpath, newpath)
+			return originalRename(dir, oldLeaf, newLeaf)
 		}
 
-		if _, err := RestoreBackupWithOptions(data, targetState, targetKey, "", RestoreOptions{}); err == nil {
+		if _, err := RestoreBackupWithOptions(data, targetState, targetKey, "", RestoreOptions{AllowUnencrypted: true}); err == nil {
 			t.Fatal("expected error")
 		}
 	})
@@ -318,11 +319,11 @@ func TestRestoreBackupWithOptionsStagingErrors(t *testing.T) {
 		}
 		originalRename := restoreRename
 		defer func() { restoreRename = originalRename }()
-		restoreRename = func(oldpath, newpath string) error {
-			if newpath == targetDB && strings.Contains(filepath.Base(oldpath), ".veil-restore-") {
+		restoreRename = func(dir *safefs.Dir, oldLeaf, newLeaf string) error {
+			if newLeaf == filepath.Base(targetDB) && strings.HasPrefix(oldLeaf, ".veil-restore-") {
 				return errors.New("injected database commit failure")
 			}
-			return originalRename(oldpath, newpath)
+			return originalRename(dir, oldLeaf, newLeaf)
 		}
 		if _, err := RestoreBackupWithOptions(v2Data, targetState, targetKey, "", RestoreOptions{DatabasePath: targetDB}); err == nil {
 			t.Fatal("expected error")
@@ -370,9 +371,9 @@ func TestStageRestoreFileErrors(t *testing.T) {
 	})
 
 	t.Run("chmod fails cleans up temp", func(t *testing.T) {
-		original := restoreChmod
-		defer func() { restoreChmod = original }()
-		restoreChmod = func(name string, mode os.FileMode) error {
+		original := restoreFileChmod
+		defer func() { restoreFileChmod = original }()
+		restoreFileChmod = func(*os.File, os.FileMode) error {
 			return errors.New("injected chmod failure")
 		}
 		dir := t.TempDir()
@@ -397,16 +398,19 @@ func TestStagedRestoreFileRollbackAndCleanup(t *testing.T) {
 	}
 
 	// Simulate a commit that moved the original to safety and temp to target,
-	// then rollback should restore the original and clean up.
+	// then rollback should restore the original and clean up. Renames are
+	// descriptor-relative inside the pinned target directory.
 	originalRename := restoreRename
 	defer func() { restoreRename = originalRename }()
-	restoreRename = func(oldpath, newpath string) error {
-		return originalRename(oldpath, newpath)
-	}
-	if err := originalRename(target, safety); err != nil {
+	targetDir, err := safefs.OpenDir(dir)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := originalRename(f.temp, target); err != nil {
+	defer targetDir.Close()
+	if err := originalRename(targetDir, filepath.Base(target), filepath.Base(safety)); err != nil {
+		t.Fatal(err)
+	}
+	if err := originalRename(targetDir, filepath.Base(f.temp), filepath.Base(target)); err != nil {
 		t.Fatal(err)
 	}
 	f.committed = true
@@ -456,7 +460,7 @@ func TestStagedRestoreFileCommitOriginalRenameError(t *testing.T) {
 
 	origRename := restoreRename
 	defer func() { restoreRename = origRename }()
-	restoreRename = func(string, string) error {
+	restoreRename = func(*safefs.Dir, string, string) error {
 		return errors.New("injected original rename error")
 	}
 
@@ -482,12 +486,12 @@ func TestStagedRestoreFileCommitRollback(t *testing.T) {
 	origRename := restoreRename
 	defer func() { restoreRename = origRename }()
 	calls := 0
-	restoreRename = func(oldpath, newpath string) error {
+	restoreRename = func(dir *safefs.Dir, oldLeaf, newLeaf string) error {
 		calls++
 		if calls == 2 {
 			return errors.New("injected rename error")
 		}
-		return origRename(oldpath, newpath)
+		return origRename(dir, oldLeaf, newLeaf)
 	}
 
 	if err := f.commit(); err == nil {

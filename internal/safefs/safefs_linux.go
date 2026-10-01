@@ -26,6 +26,11 @@ const dirOpenFlags = unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NOFOLLOW | unix.O_D
 // Callers must fstat the result and reject non-regular/non-directory types.
 const fileOpenFlags = unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NOFOLLOW | unix.O_NONBLOCK
 
+// fileWriteFlags is the read/write counterpart of fileOpenFlags for leaves a
+// caller must mutate through a descriptor (lock files, safety overwrite) —
+// same no-follow/non-block guarantees, plus write access (#1216).
+const fileWriteFlags = unix.O_RDWR | unix.O_CLOEXEC | unix.O_NOFOLLOW | unix.O_NONBLOCK
+
 // OpenDir opens path as a pinned directory handle. A symlinked or
 // non-directory leaf is rejected (ELOOP / ENOTDIR).
 func OpenDir(path string) (*Dir, error) {
@@ -105,6 +110,42 @@ func (d *Dir) OpenFileAt(name string) (*os.File, error) {
 	if file == nil {
 		_ = unix.Close(fd)
 		return nil, fmt.Errorf("open managed path %s", path)
+	}
+	return file, nil
+}
+
+// OpenFileAtRW opens child name read/write relative to d with O_NOFOLLOW and
+// O_NONBLOCK — the descriptor-relative, descriptor-pinned way to obtain a
+// writable handle a lock or an overwrite can be applied to without any path
+// re-resolution (#1216). Callers must fstat and reject unexpected file types.
+func (d *Dir) OpenFileAtRW(name string) (*os.File, error) {
+	fd, err := unix.Openat(int(d.file.Fd()), name, fileWriteFlags, 0)
+	if err != nil {
+		return nil, err
+	}
+	path := filepath.Join(d.path, name)
+	file := os.NewFile(uintptr(fd), path)
+	if file == nil {
+		_ = unix.Close(fd)
+		return nil, fmt.Errorf("open managed path %s", path)
+	}
+	return file, nil
+}
+
+// CreateFileAtRW is the O_RDWR counterpart of CreateFileAt: O_EXCL guarantees
+// the returned descriptor is bound to a freshly created inode inside the
+// pinned directory, so it can be used (and fchmod/fchown'ed) without ever
+// re-resolving the name (#1216).
+func (d *Dir) CreateFileAtRW(name string, mode os.FileMode) (*os.File, error) {
+	fd, err := unix.Openat(int(d.file.Fd()), name, unix.O_RDWR|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, uint32(mode.Perm()))
+	if err != nil {
+		return nil, err
+	}
+	path := filepath.Join(d.path, name)
+	file := os.NewFile(uintptr(fd), path)
+	if file == nil {
+		_ = unix.Close(fd)
+		return nil, fmt.Errorf("create managed file %s", path)
 	}
 	return file, nil
 }
@@ -191,11 +232,33 @@ func (d *Dir) RemoveAt(name string) error {
 	return unix.Unlinkat(int(d.file.Fd()), name, 0)
 }
 
+// RemoveDirAt removes the empty child directory name within d
+// (unlinkat + AT_REMOVEDIR) — the descriptor-relative counterpart needed to
+// dismantle a pinned tree bottom-up (#1219).
+func (d *Dir) RemoveDirAt(name string) error {
+	return unix.Unlinkat(int(d.file.Fd()), name, unix.AT_REMOVEDIR)
+}
+
 // OpenNoFollow opens path for reading with O_NOFOLLOW|O_NONBLOCK. The
 // descriptor is pinned to the leaf inode present at open time; callers must
 // fstat and reject unexpected file types.
 func OpenNoFollow(path string) (*os.File, error) {
 	fd, err := unix.Open(path, fileOpenFlags, 0)
+	if err != nil {
+		return nil, err
+	}
+	file := os.NewFile(uintptr(fd), path)
+	if file == nil {
+		_ = unix.Close(fd)
+		return nil, fmt.Errorf("open managed path %s", path)
+	}
+	return file, nil
+}
+
+// OpenNoFollowWrite is the O_RDWR counterpart of OpenNoFollow for leaves that
+// must be mutated through the descriptor (#1216, #1219).
+func OpenNoFollowWrite(path string) (*os.File, error) {
+	fd, err := unix.Open(path, fileWriteFlags, 0)
 	if err != nil {
 		return nil, err
 	}

@@ -283,6 +283,13 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 	if err := ensureOwnedDirectory(paths.VarDir, 0o750, panel.UID, panel.GID); err != nil {
 		return err
 	}
+	// The snapshot barrier lock is shared between the veil-owned panel and
+	// root-run backup/restore flows. Pre-create it with a fixed owner and
+	// mode so runtime barrier acquisition never needs to chmod — and can
+	// therefore never chmod through — a symlink planted at the leaf (#1216).
+	if err := ensureSnapshotBarrierLock(paths.VarDir, paths.RootUID, paths.RootGID); err != nil {
+		return err
+	}
 	safetyDir, err := createSafetyCopies(paths, now())
 	if err != nil {
 		return err
@@ -743,6 +750,46 @@ func applyManagedTreeEntries(dir *safefs.Dir, dirMode, fileMode os.FileMode, uid
 		}
 		return e.chown(uid, gid)
 	})
+}
+
+// snapshotBarrierLockName mirrors the lock leaf managementstate opens inside
+// the var state dir. Pre-creation happens inside the pinned VarDir handle so
+// a planted symlink or non-regular leaf is refused instead of followed or
+// chmodded through (#1216).
+const snapshotBarrierLockName = ".veil-snapshot.lock"
+
+func ensureSnapshotBarrierLock(varDir string, uid, gid int) error {
+	dir, err := safefs.OpenDir(varDir)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	info, err := testHooks.statEntryAt(dir, snapshotBarrierLockName)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		file, err := dir.CreateFileAtRW(snapshotBarrierLockName, 0o666)
+		if err != nil {
+			return err
+		}
+		// fchmod the fresh O_EXCL descriptor: the mode on the inode we just
+		// created is pinned, never applied through the leaf name.
+		if err := file.Chmod(0o666); err != nil {
+			return errors.Join(err, file.Close())
+		}
+		if err := file.Close(); err != nil {
+			return err
+		}
+	case err != nil:
+		return err
+	default:
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return fmt.Errorf("refuse to migrate non-regular snapshot barrier %s", filepath.Join(varDir, snapshotBarrierLockName))
+		}
+	}
+	if err := dir.ChmodAt(snapshotBarrierLockName, 0o666); err != nil {
+		return err
+	}
+	return dir.ChownAt(snapshotBarrierLockName, uid, gid)
 }
 
 func setOptionalFile(path string, mode os.FileMode, uid, gid int) error {

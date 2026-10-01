@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 )
@@ -29,13 +30,13 @@ func TestWritePreservesExistingOwner(t *testing.T) {
 	}
 	want := targetInfo.Sys().(*syscall.Stat_t)
 
-	var gotPath string
+	var gotTemp *os.File
 	var gotUID, gotGID int
 	calls := 0
 	origChown, origEuid := chownFile, geteuid
-	chownFile = func(p string, uid, gid int) error {
+	chownFile = func(f *os.File, uid, gid int) error {
 		calls++
-		gotPath, gotUID, gotGID = p, uid, gid
+		gotTemp, gotUID, gotGID = f, uid, gid
 		return nil
 	}
 	geteuid = func() int { return 0 }
@@ -50,8 +51,8 @@ func TestWritePreservesExistingOwner(t *testing.T) {
 	if gotUID != int(want.Uid) || gotGID != int(want.Gid) {
 		t.Fatalf("preserved owner = %d:%d, want replaced file's %d:%d", gotUID, gotGID, want.Uid, want.Gid)
 	}
-	if filepath.Dir(gotPath) != dir || filepath.Base(gotPath) == "tls.crt" {
-		t.Fatalf("chown must target the staged temp file in the same dir, got %q", gotPath)
+	if filepath.Dir(gotTemp.Name()) != dir || !strings.HasPrefix(filepath.Base(gotTemp.Name()), ".tmp-") {
+		t.Fatalf("chown must target the staged temp file in the same dir, got %q", gotTemp.Name())
 	}
 	if body, _ := os.ReadFile(path); string(body) != "new" {
 		t.Fatalf("body = %q", body)
@@ -65,7 +66,7 @@ func TestWriteNewFileDoesNotPreserve(t *testing.T) {
 
 	calls := 0
 	origChown, origEuid := chownFile, geteuid
-	chownFile = func(string, int, int) error { calls++; return nil }
+	chownFile = func(*os.File, int, int) error { calls++; return nil }
 	geteuid = func() int { return 0 }
 	defer func() { chownFile, geteuid = origChown, origEuid }()
 
@@ -87,7 +88,7 @@ func TestWriteSkipsPreserveForNonRoot(t *testing.T) {
 	}
 	calls := 0
 	origChown, origEuid := chownFile, geteuid
-	chownFile = func(string, int, int) error { calls++; return nil }
+	chownFile = func(*os.File, int, int) error { calls++; return nil }
 	geteuid = func() int { return 1000 }
 	defer func() { chownFile, geteuid = origChown, origEuid }()
 
@@ -129,7 +130,7 @@ func TestWriteSkipsPreserveOnlyOnNotExist(t *testing.T) {
 	calls := 0
 	origStat, origChown, origEuid := statFile, chownFile, geteuid
 	statFile = func(string) (os.FileInfo, error) { return nil, fs.ErrNotExist }
-	chownFile = func(string, int, int) error { calls++; return nil }
+	chownFile = func(*os.File, int, int) error { calls++; return nil }
 	geteuid = func() int { return 0 }
 	defer func() { statFile, chownFile, geteuid = origStat, origChown, origEuid }()
 
@@ -150,7 +151,7 @@ func TestWriteFailsWhenOwnerPreservationFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	origChown, origEuid := chownFile, geteuid
-	chownFile = func(string, int, int) error { return errors.New("chown denied") }
+	chownFile = func(*os.File, int, int) error { return errors.New("chown denied") }
 	geteuid = func() int { return 0 }
 	defer func() { chownFile, geteuid = origChown, origEuid }()
 

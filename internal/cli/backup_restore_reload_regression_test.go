@@ -52,6 +52,7 @@ func TestCLIBackupRestoreSignalsRunningPanel(t *testing.T) {
 		"backup", "restore", backupPath,
 		"--state", statePath,
 		"--key-path", keyPath,
+		"--allow-unencrypted",
 		"--yes",
 	})
 	if err := restore.Execute(); err != nil {
@@ -117,6 +118,7 @@ func TestCLIBackupRestoreSkipsReloadWhenPanelInactive(t *testing.T) {
 		"backup", "restore", backupPath,
 		"--state", statePath,
 		"--key-path", keyPath,
+		"--allow-unencrypted",
 		"--yes",
 	})
 	if err := restore.Execute(); err != nil {

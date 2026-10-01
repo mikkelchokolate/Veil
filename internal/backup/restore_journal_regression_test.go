@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 	"github.com/mikkelchokolate/Veil/internal/storage"
 )
 
@@ -42,7 +43,7 @@ func TestRestoreRecoversSIGKILLAfterEveryFilePublication(t *testing.T) {
 				fixture.statePath,
 				fixture.keyPath,
 				"",
-				RestoreOptions{DatabasePath: fixture.databasePath, CheckOnly: true},
+				RestoreOptions{DatabasePath: fixture.databasePath, CheckOnly: true, AllowUnencrypted: true},
 			); err != nil {
 				t.Fatalf("recover interrupted restore: %v", err)
 			}
@@ -86,13 +87,12 @@ func TestRestoreCrashProcess(t *testing.T) {
 	originalRename := restoreRename
 	defer func() { restoreRename = originalRename }()
 	publications := 0
-	restoreRename = func(oldPath, newPath string) error {
-		if err := originalRename(oldPath, newPath); err != nil {
+	restoreRename = func(dir *safefs.Dir, oldLeaf, newLeaf string) error {
+		if err := originalRename(dir, oldLeaf, newLeaf); err != nil {
 			return err
 		}
-		base := filepath.Base(oldPath)
-		if strings.HasPrefix(base, ".veil-restore-") &&
-			(newPath == statePath || newPath == keyPath || newPath == databasePath) {
+		if strings.HasPrefix(oldLeaf, ".veil-restore-") &&
+			(newLeaf == filepath.Base(statePath) || newLeaf == filepath.Base(keyPath) || newLeaf == filepath.Base(databasePath)) {
 			publications++
 			if publications == faultFile {
 				if err := os.WriteFile(marker, []byte("published"), 0o600); err != nil {
@@ -108,7 +108,7 @@ func TestRestoreCrashProcess(t *testing.T) {
 		statePath,
 		keyPath,
 		"",
-		RestoreOptions{DatabasePath: databasePath, FencingGeneration: 41, Now: func() time.Time {
+		RestoreOptions{DatabasePath: databasePath, FencingGeneration: 41, AllowUnencrypted: true, Now: func() time.Time {
 			return time.Date(2026, time.July, 27, 13, 0, 0, 0, time.UTC)
 		}},
 	)
@@ -165,7 +165,7 @@ func prepareRestoreTripleFixture(t *testing.T) restoreTripleFixture {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	verified, err := inspectBackupFile(archive, "", DefaultMaxBackupBytes)
+	verified, err := inspectBackupFileWithOptions(archive, "", DefaultMaxBackupBytes, CryptoOptions{}, true)
 	if err != nil {
 		t.Fatal(err)
 	}

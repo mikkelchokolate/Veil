@@ -12,6 +12,11 @@ type Options struct {
 	BackupDir string
 	Yes       bool
 	AuditLog  string
+	// RestoreRoots is the managed-root allowlist for restore destinations
+	// declared by the backup manifest. When empty, destinations are
+	// unconstrained — callers that operate with elevated privilege should
+	// always set it (#1219).
+	RestoreRoots []string
 }
 
 // lifecycle abstracts backup.NewLifecycle so tests can inject mocks.
@@ -22,8 +27,10 @@ type lifecycle interface {
 }
 
 // newLifecycle is overridable in tests to avoid touching the real filesystem.
-var newLifecycle = func(dir string) lifecycle {
-	return backup.NewLifecycle(dir)
+// restoreRoots is the managed-root allowlist enforced on manifest-declared
+// restore destinations (#1219).
+var newLifecycle = func(dir string, restoreRoots []string) lifecycle {
+	return backup.Lifecycle{Dir: dir, RestoreRoots: restoreRoots}
 }
 
 // appendAuditEvent is overridable in tests to simulate audit log failures.
@@ -36,7 +43,7 @@ type Workflow struct {
 }
 
 func NewWorkflow(opts Options, out io.Writer) Workflow {
-	return Workflow{opts: opts, out: out, lc: newLifecycle(opts.BackupDir)}
+	return Workflow{opts: opts, out: out, lc: newLifecycle(opts.BackupDir, opts.RestoreRoots)}
 }
 
 func (w Workflow) List() error {

@@ -3,10 +3,12 @@ package backup
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 const restoreCommitReceiptName = ".veil-restore-committed"
@@ -44,12 +46,26 @@ func RestoreTransactionCommitted(statePath, keyPath, databasePath string) (bool,
 		return false, nil
 	}
 	root := filepath.Dir(statePath)
-	journalPath := filepath.Join(root, restoreTransactionJournalName)
-	body, err := os.ReadFile(journalPath)
+	// Read and evaluate the journal through the pinned root so a swapped
+	// journal leaf or member cannot be followed (#1219).
+	rootDir, err := safefs.OpenDir(root)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	defer rootDir.Close()
+	journalFile, err := rootDir.OpenFileAt(restoreTransactionJournalName)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return false, err
 	}
 	if err == nil {
+		body, readErr := io.ReadAll(io.LimitReader(journalFile, restoreJournalMaxBytes))
+		_ = journalFile.Close()
+		if readErr != nil {
+			return false, readErr
+		}
 		var disk restoreJournalDisk
 		if unmarshalErr := json.Unmarshal(body, &disk); unmarshalErr != nil {
 			return false, unmarshalErr
@@ -61,7 +77,9 @@ func RestoreTransactionCommitted(statePath, keyPath, databasePath string) (bool,
 		if journal.Version != 2 || journal.TransactionID == "" || len(journal.Files) < 2 {
 			return false, errors.New("invalid restore transaction journal")
 		}
-		intended, matchErr := restoreJournalTargetsMatch(journal.Files, true)
+		dirs := restoreJournalDirs{}
+		defer dirs.Close()
+		intended, matchErr := restoreJournalTargetsMatch(dirs, journal.Files, true)
 		if matchErr != nil {
 			return false, matchErr
 		}

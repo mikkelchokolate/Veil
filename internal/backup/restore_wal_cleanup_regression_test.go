@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 	"github.com/mikkelchokolate/Veil/internal/storage"
 )
 
@@ -57,14 +58,14 @@ func TestCommittedRestoreRecoveryActuallyCleansWALAndSHMBeforeJournalRemoval(t *
 	oldJournalRemove := restoreJournalRemove
 	defer func() { restoreRemove, restoreJournalRemove = oldRemove, oldJournalRemove }()
 	var removalOrder []string
-	restoreRemove = func(path string) error {
-		removalOrder = append(removalOrder, path)
-		return os.Remove(path)
+	restoreRemove = func(dir *safefs.Dir, leaf string) error {
+		removalOrder = append(removalOrder, filepath.Join(dir.Path(), leaf))
+		return dir.RemoveAt(leaf)
 	}
 	journalPath := filepath.Join(root, restoreTransactionJournalName)
-	restoreJournalRemove = func(path string) error {
-		removalOrder = append(removalOrder, path)
-		return os.Remove(path)
+	restoreJournalRemove = func(dir *safefs.Dir, leaf string) error {
+		removalOrder = append(removalOrder, filepath.Join(dir.Path(), leaf))
+		return dir.RemoveAt(leaf)
 	}
 	if err := RecoverInterruptedRestore(statePath, keyPath, databasePath); err != nil {
 		t.Fatal(err)

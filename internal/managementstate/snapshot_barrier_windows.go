@@ -21,3 +21,8 @@ func snapshotBarrierUnlock(file *os.File) error {
 	overlapped := &windows.Overlapped{}
 	return windows.UnlockFileEx(windows.Handle(file.Fd()), 0, 1, 0, overlapped)
 }
+
+// Windows has no POSIX link counts in os.FileInfo.Sys(); the regular-file
+// check in verifySnapshotBarrierFile already rejects the special types the
+// swap produces there.
+func verifySnapshotBarrierLinks(os.FileInfo) error { return nil }

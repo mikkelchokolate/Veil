@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 func TestRestoreFailureLeavesOriginalGenerationIntact(t *testing.T) {
@@ -93,12 +95,12 @@ func TestRestoreCommitFailureRestoresSafetyGeneration(t *testing.T) {
 	commits := 0
 	origRename := restoreCommitRename
 	t.Cleanup(func() { restoreCommitRename = origRename })
-	restoreCommitRename = func(oldpath, newpath string) error {
+	restoreCommitRename = func(dir *safefs.Dir, oldLeaf, newLeaf string) error {
 		commits++
 		if commits == 2 {
 			return errors.New("injected restore commit failure")
 		}
-		return os.Rename(oldpath, newpath)
+		return dir.RenameAt(oldLeaf, newLeaf)
 	}
 
 	_, err = lifecycle.Restore(id)
