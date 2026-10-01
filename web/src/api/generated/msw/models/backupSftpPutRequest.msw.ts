@@ -55,7 +55,7 @@ export interface BackupSftpPutRequest {
   /** Shared-safe destination directory. This installation uploads, lists, fetches, and prunes only inside its own `veil-node-<install-id>` subdirectory; archives other nodes or older versions left directly under `remoteDir` are never touched. */
   remoteDir: string;
   authType: BackupSftpPutRequestAuthType;
-  /** Absolute path of the private key readable by root. */
+  /** Absolute path of the private key, confined to the managed /etc/veil directory. */
   keyPath?: string;
   /** Write-only; omit to keep the stored value. */
   keyPassphrase?: string;

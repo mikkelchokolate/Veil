@@ -26,7 +26,40 @@ const (
 	// magicProbeBytes is how many leading bytes of a local archive Upload
 	// reads to verify the Veil encrypted-archive header.
 	magicProbeBytes = 64
+	// fetchSlackBytes is how far past the remote-declared size a fetch may
+	// read before the stream is cut — just enough to prove overshoot.
+	fetchSlackBytes = 4096
 )
+
+// watchRemote closes the remote filesystem when ctx ends, so an in-flight
+// SFTP request fails instead of wedging on a stalled server or surviving
+// caller cancellation (#1202). The returned func detaches the watcher; it is
+// a no-op for contexts that cannot be cancelled.
+func watchRemote(ctx context.Context, fs RemoteFS) func() {
+	done := ctx.Done()
+	if done == nil {
+		return func() {}
+	}
+	stop := make(chan struct{})
+	go func() {
+		select {
+		case <-done:
+			_ = fs.Close()
+		case <-stop:
+		}
+	}()
+	return func() { close(stop) }
+}
+
+// remoteOpErr reports ctx.Err() when cancellation is what broke the remote
+// operation, so callers see context.Canceled rather than the transport's
+// "connection closed" symptom.
+func remoteOpErr(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	return err
+}
 
 // ErrUnencryptedArchive rejects plaintext at the remote-publish boundary:
 // the SFTP destination is an encrypted-only tier, the mirror image of the
@@ -71,7 +104,11 @@ func probeLocalEncryptedArchive(localPath string) error {
 	return nil
 }
 
-func Upload(_ context.Context, fs RemoteFS, config Config, localPath, name string) (UploadReceipt, error) {
+func Upload(ctx context.Context, fs RemoteFS, config Config, localPath, name string) (UploadReceipt, error) {
+	if err := ctx.Err(); err != nil {
+		return UploadReceipt{}, err
+	}
+	defer watchRemote(ctx, fs)()
 	if name == "" || path.Base(name) != name || strings.ContainsAny(name, `/\`) {
 		return UploadReceipt{}, fmt.Errorf("remote archive name %q must be a basename", name)
 	}
@@ -115,11 +152,15 @@ func Upload(_ context.Context, fs RemoteFS, config Config, localPath, name strin
 	closeErr := dst.Close()
 	if copyErr != nil {
 		_ = fs.Remove(part)
-		return UploadReceipt{}, fmt.Errorf("write remote archive: %w", copyErr)
+		return UploadReceipt{}, remoteOpErr(ctx, fmt.Errorf("write remote archive: %w", copyErr))
 	}
 	if closeErr != nil {
 		_ = fs.Remove(part)
 		return UploadReceipt{}, fmt.Errorf("close remote archive: %w", closeErr)
+	}
+	if err := ctx.Err(); err != nil {
+		_ = fs.Remove(part)
+		return UploadReceipt{}, err
 	}
 	final := remotePath(config.RemoteDir, name)
 	if err := fs.Rename(part, final); err != nil {
@@ -166,13 +207,17 @@ func Upload(_ context.Context, fs RemoteFS, config Config, localPath, name strin
 // List returns the managed archives present in the remote directory in
 // newest-first order, using the same managed-name filter the local listing
 // applies. A missing remote directory lists as empty.
-func List(_ context.Context, fs RemoteFS, config Config) ([]backup.ArchiveEntry, error) {
+func List(ctx context.Context, fs RemoteFS, config Config) ([]backup.ArchiveEntry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	defer watchRemote(ctx, fs)()
 	infos, err := fs.ReadDir(config.RemoteDir)
 	if errors.Is(err, os.ErrNotExist) {
 		return []backup.ArchiveEntry{}, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("list remote directory: %w", err)
+		return nil, remoteOpErr(ctx, fmt.Errorf("list remote directory: %w", err))
 	}
 	entries := make([]backup.ArchiveEntry, 0, len(infos))
 	for _, info := range infos {
@@ -203,17 +248,24 @@ func List(_ context.Context, fs RemoteFS, config Config) ([]backup.ArchiveEntry,
 // Prune applies the shared daily/weekly/monthly bucket decision to the
 // remote listing and removes remote archives (plus their .sha256 sidecars)
 // the policy would not keep. This mirrors local PruneArchives semantics.
-func Prune(_ context.Context, fs RemoteFS, config Config, policy backup.RetentionPolicy) (backup.PruneResult, error) {
+func Prune(ctx context.Context, fs RemoteFS, config Config, policy backup.RetentionPolicy) (backup.PruneResult, error) {
 	if policy.Daily < 0 || policy.Weekly < 0 || policy.Monthly < 0 {
 		return backup.PruneResult{}, errors.New("retention counts cannot be negative")
 	}
-	entries, err := List(context.Background(), fs, config)
-	if err != nil {
+	if err := ctx.Err(); err != nil {
 		return backup.PruneResult{}, err
+	}
+	defer watchRemote(ctx, fs)()
+	entries, err := List(ctx, fs, config)
+	if err != nil {
+		return backup.PruneResult{}, remoteOpErr(ctx, err)
 	}
 	keep := backup.RetentionKeepSet(entries, policy)
 	result := backup.PruneResult{}
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
 		if keep[entry.Name] {
 			result.Kept = append(result.Kept, entry.Name)
 			continue
@@ -236,7 +288,11 @@ func Prune(_ context.Context, fs RemoteFS, config Config, policy backup.Retentio
 // the remote carries one, size is checked against the remote stat, and the
 // file is published by hardlink so a name that already exists locally can
 // never be replaced.
-func Fetch(_ context.Context, fs RemoteFS, config Config, localDir, name string) (backup.ArchiveEntry, error) {
+func Fetch(ctx context.Context, fs RemoteFS, config Config, localDir, name string) (backup.ArchiveEntry, error) {
+	if err := ctx.Err(); err != nil {
+		return backup.ArchiveEntry{}, err
+	}
+	defer watchRemote(ctx, fs)()
 	if name == "" || filepath.Base(name) != name || strings.ContainsAny(name, `/\`) {
 		return backup.ArchiveEntry{}, fmt.Errorf("remote archive name %q must be a basename", name)
 	}
@@ -262,6 +318,18 @@ func Fetch(_ context.Context, fs RemoteFS, config Config, localDir, name string)
 		}
 		return backup.ArchiveEntry{}, fmt.Errorf("stat remote archive: %w", err)
 	}
+	// Bound the download before any byte lands on the root-written backup
+	// dir: reject a declared size the local policy could never restore, and
+	// otherwise cut the stream at the remote-declared size plus slack, never
+	// past the configured archive ceiling — a hostile server can lie about
+	// sizes, but it cannot stream unbounded data (#1202).
+	maxBytes, err := backup.ConfiguredMaxBackupBytes()
+	if err != nil {
+		return backup.ArchiveEntry{}, err
+	}
+	if remoteInfo.Size() > maxBytes {
+		return backup.ArchiveEntry{}, fmt.Errorf("remote archive %s is %d bytes, over the %d-byte maximum", name, remoteInfo.Size(), maxBytes)
+	}
 	src, err := fs.Open(remotePath(config.RemoteDir, name))
 	if err != nil {
 		return backup.ArchiveEntry{}, fmt.Errorf("open remote archive: %w", err)
@@ -276,10 +344,14 @@ func Fetch(_ context.Context, fs RemoteFS, config Config, localDir, name string)
 	}
 	tmpPath := tmp.Name()
 	defer os.Remove(tmpPath)
+	limit := remoteInfo.Size() + fetchSlackBytes
+	if limit < 0 || limit > maxBytes {
+		limit = maxBytes
+	}
 	hash := sha256.New()
-	if _, err := io.Copy(tmp, io.TeeReader(src, hash)); err != nil {
+	if _, err := io.Copy(tmp, io.TeeReader(io.LimitReader(src, limit), hash)); err != nil {
 		_ = tmp.Close()
-		return backup.ArchiveEntry{}, fmt.Errorf("download remote archive: %w", err)
+		return backup.ArchiveEntry{}, remoteOpErr(ctx, fmt.Errorf("download remote archive: %w", err))
 	}
 	if err := tmp.Sync(); err != nil {
 		_ = tmp.Close()
@@ -295,7 +367,23 @@ func Fetch(_ context.Context, fs RemoteFS, config Config, localDir, name string)
 	if info.Size() != remoteInfo.Size() {
 		return backup.ArchiveEntry{}, fmt.Errorf("downloaded size %d != remote %d", info.Size(), remoteInfo.Size())
 	}
-	if err := verifyRemoteSidecar(fs, config, name, hex.EncodeToString(hash.Sum(nil))); err != nil {
+	verified, err := verifyRemoteSidecar(fs, config, name, hex.EncodeToString(hash.Sum(nil)))
+	if err != nil {
+		return backup.ArchiveEntry{}, remoteOpErr(ctx, err)
+	}
+	if !verified {
+		// A pre-sidecar archive carries no digest to check: still prove the
+		// downloaded bytes are a Veil encrypted archive instead of trusting
+		// the .enc name before publishing into the managed restore set
+		// (#1209).
+		if err := probeLocalEncryptedArchive(tmpPath); err != nil {
+			if errors.Is(err, ErrUnencryptedArchive) {
+				err = fmt.Errorf("%w: %q does not start with the Veil encrypted-archive header", err, name)
+			}
+			return backup.ArchiveEntry{}, err
+		}
+	}
+	if err := ctx.Err(); err != nil {
 		return backup.ArchiveEntry{}, err
 	}
 	// Link fails with EEXIST instead of replacing an archive that appeared
@@ -318,31 +406,33 @@ func Fetch(_ context.Context, fs RemoteFS, config Config, localDir, name string)
 }
 
 // verifyRemoteSidecar compares the downloaded digest with <name>.sha256 when
-// the remote carries a sidecar. Missing sidecars are tolerated (archives
-// uploaded before sidecars existed); a mismatched one fails the fetch.
-func verifyRemoteSidecar(fs RemoteFS, config Config, name, digest string) error {
+// the remote carries a sidecar, returning whether a sidecar verified the
+// content. Missing sidecars are tolerated (archives uploaded before sidecars
+// existed) but reported unverified so the caller can apply the format check
+// instead; a mismatched one fails the fetch.
+func verifyRemoteSidecar(fs RemoteFS, config Config, name, digest string) (bool, error) {
 	body, err := fs.ReadFile(remotePath(config.RemoteDir, name+sidecarSuffix))
 	if errors.Is(err, os.ErrNotExist) {
-		return nil
+		return false, nil
 	}
 	if err != nil {
-		return fmt.Errorf("read remote checksum sidecar: %w", err)
+		return false, fmt.Errorf("read remote checksum sidecar: %w", err)
 	}
 	if len(body) > maxSidecarBytes {
-		return errors.New("remote checksum sidecar exceeds the size limit")
+		return false, errors.New("remote checksum sidecar exceeds the size limit")
 	}
 	fields := strings.Fields(string(body))
 	if len(fields) != 2 || fields[1] != name {
-		return fmt.Errorf("remote checksum sidecar for %s is malformed", name)
+		return false, fmt.Errorf("remote checksum sidecar for %s is malformed", name)
 	}
 	expected, err := hex.DecodeString(fields[0])
 	if err != nil || len(expected) != sha256.Size {
-		return fmt.Errorf("remote checksum sidecar for %s carries an invalid digest", name)
+		return false, fmt.Errorf("remote checksum sidecar for %s carries an invalid digest", name)
 	}
 	if !equalHexDigest(fields[0], digest) {
-		return fmt.Errorf("downloaded archive %s does not match its remote checksum", name)
+		return false, fmt.Errorf("downloaded archive %s does not match its remote checksum", name)
 	}
-	return nil
+	return true, nil
 }
 
 func equalHexDigest(a, b string) bool {
