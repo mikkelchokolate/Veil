@@ -208,12 +208,12 @@ func TestRestoreRollbackRefusesToUnlinkForeignTargets(t *testing.T) {
 func TestRestoreRollbackRejectsPlantedSafetyLeaf(t *testing.T) {
 	tests := []struct {
 		name        string
-		record      func(root string, live []byte) restoreJournalDiskFile
+		record      func() restoreJournalDiskFile
 		wantErrPart string
 	}{
 		{
 			name: "claimed_no_previous",
-			record: func(_ string, live []byte) restoreJournalDiskFile {
+			record: func() restoreJournalDiskFile {
 				return restoreJournalDiskFile{
 					Name: "state.json", TargetID: "state.json",
 					StagedName: ".restore-state-new", SafetyName: ".restore-state-old",
@@ -224,7 +224,7 @@ func TestRestoreRollbackRejectsPlantedSafetyLeaf(t *testing.T) {
 		},
 		{
 			name: "forged_consistent_previous",
-			record: func(_ string, _ []byte) restoreJournalDiskFile {
+			record: func() restoreJournalDiskFile {
 				return restoreJournalDiskFile{
 					Name: "state.json", TargetID: "state.json",
 					StagedName: ".restore-state-new", SafetyName: ".restore-state-old",
@@ -254,7 +254,7 @@ func TestRestoreRollbackRejectsPlantedSafetyLeaf(t *testing.T) {
 				Version: 2, TransactionID: "planted", Phase: "prepared", WALCleanupPhase: "pending",
 				Files: []restoreJournalDiskFile{
 					{Name: "state.key", TargetID: "state.key", StagedName: ".restore-key-new", SafetyName: ".restore-key-old", IntendedDigest: backupChecksum([]byte("planted-key")), Phase: "prepared"},
-					test.record(root, []byte("live-state")),
+					test.record(),
 				},
 			}
 			payload, err := json.Marshal(disk)
