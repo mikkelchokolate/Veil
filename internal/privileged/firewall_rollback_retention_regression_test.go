@@ -10,7 +10,7 @@ import (
 )
 
 func TestFirewallRollbackFailureRetainsJournalForStartupRecovery(t *testing.T) {
-	root := t.TempDir()
+	root := firewallRoot0700(t)
 	request := transactionalFirewallRequest()
 	request.Action = FirewallActionPrepare
 	failing := func(_ context.Context, command []string, _ time.Duration) (string, error) {
@@ -26,7 +26,12 @@ func TestFirewallRollbackFailureRetainsJournalForStartupRecovery(t *testing.T) {
 		t.Fatal("expected firewall reconciliation failure")
 	}
 	journalPath := filepath.Join(root, ".firewall-transaction.json")
-	journal, err := readFirewallJournal(root)
+	dir, err := openFirewallJournalRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	journal, err := readFirewallJournal(dir)
+	_ = dir.Close()
 	if err != nil {
 		t.Fatalf("rollback failure deleted recovery journal: %v", err)
 	}

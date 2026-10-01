@@ -38,7 +38,8 @@ func TestPromotionRecoversSIGKILLAfterEveryArtifactPublication(t *testing.T) {
 			// Re-entering the privileged promotion subsystem represents helper
 			// startup/recovery before another operation is accepted.
 			withStubbedArtifactOwnership(t, func() {
-				if _, err := promoteResolvedArtifacts(filepath.Join(root, "backups"), fixedPromotionNow, ResolvedPromotion{}); err != nil {
+				recovery := ResolvedPromotion{ValidateDestination: allowPromotionDestinationsUnder(root)}
+				if _, err := promoteResolvedArtifacts(filepath.Join(root, "backups"), fixedPromotionNow, recovery); err != nil {
 					t.Fatalf("recover interrupted promotion: %v", err)
 				}
 			})
@@ -73,7 +74,8 @@ func TestPromotionRollbackRecoversSIGKILLAfterEveryArtifactPublication(t *testin
 
 			runPromotionCrashHelper(t, root, "rollback", promoted.BackupID, faultArtifact)
 			withStubbedArtifactOwnership(t, func() {
-				if _, err := promoteResolvedArtifacts(filepath.Join(root, "backups"), fixedPromotionNow, ResolvedPromotion{}); err != nil {
+				recovery := ResolvedPromotion{ValidateDestination: allowPromotionDestinationsUnder(root)}
+				if _, err := promoteResolvedArtifacts(filepath.Join(root, "backups"), fixedPromotionNow, recovery); err != nil {
 					t.Fatalf("recover interrupted rollback: %v", err)
 				}
 			})
@@ -176,7 +178,7 @@ func TestPromotionCrashProcess(t *testing.T) {
 	case "promote":
 		_, _ = promoteResolvedArtifacts(filepath.Join(root, "backups"), fixedPromotionNow, request)
 	case "rollback":
-		_, _ = restorePromotedArtifacts(filepath.Join(root, "backups"), backupID)
+		_, _ = restorePromotedArtifacts(filepath.Join(root, "backups"), backupID, allowPromotionDestinationsUnder(root), 0)
 	default:
 		os.Exit(94)
 	}
@@ -251,8 +253,16 @@ func preparePromotionFixture(t *testing.T, root string, count int) ResolvedPromo
 	return request
 }
 
+// allowPromotionDestinationsUnder stands in for the policy-derived
+// ResolvedPromotion.ValidateDestination hook: journals and manifests under the
+// backup root are attacker-authored, so recovery requires a validator (#1218,
+// #1228). The test policy accepts exactly the destinations this fixture uses.
+func allowPromotionDestinationsUnder(root string) func(string, string) bool {
+	return func(_, destination string) bool { return pathWithin(root, destination) }
+}
+
 func promotionRequestForRoot(root string, count int) ResolvedPromotion {
-	request := ResolvedPromotion{}
+	request := ResolvedPromotion{ValidateDestination: allowPromotionDestinationsUnder(root)}
 	for i := 1; i <= count; i++ {
 		request.Artifacts = append(request.Artifacts, ResolvedArtifact{
 			ID:          fmt.Sprintf("mieru/config-%d.json", i),
@@ -416,5 +426,96 @@ func assertPromotionSet(t *testing.T, request ResolvedPromotion, want string) {
 	t.Helper()
 	if got := classifyPromotionSet(t, request); got != want {
 		t.Fatalf("promotion set=%s want=%s", got, want)
+	}
+}
+
+// Regression for #1218/#1228: the transaction journal is persisted under the
+// service-writable backup root, so an attacker can plant one whose records
+// name destinations outside the managed tree. Recovery consumes a journal
+// only when the caller's destination policy still permits every record —
+// a nil policy must fail closed rather than replay attacker paths as root.
+func TestPromotionRecoveryRejectsJournalWithoutDestinationPolicy(t *testing.T) {
+	root := t.TempDir()
+	backupRoot := filepath.Join(root, "backups")
+	victim := filepath.Join(root, "generated", "victim.conf")
+	writeFileWithParents(t, victim, []byte("keep"))
+	stagePromotionJournal(t, backupRoot, promotionTransactionJournal{
+		Version: 1, TransactionID: "planted", Kind: "promotion", Phase: "artifact-1-published",
+		Manifest: promotionManifest{
+			Version: 1, BackupID: "safety", Kind: "promotion", Phase: "prepared",
+			Records: []promotionManifestRecord{{
+				ArtifactID: "victim.conf", Destination: victim, HadPrevious: false, Phase: "published",
+			}},
+		},
+	})
+	if err := recoverPromotionTransactionWithPolicy(backupRoot, nil, 0); err == nil {
+		t.Fatal("recovery consumed a journal without a destination policy")
+	}
+	assertFileContent(t, victim, "keep")
+}
+
+func TestPromotionRecoveryRejectsJournalDestinationOutsidePolicy(t *testing.T) {
+	root := t.TempDir()
+	backupRoot := filepath.Join(root, "backups")
+	// HadPrevious=false turns the restore into a delete: a planted journal
+	// record naming an unmanaged path is an arbitrary root-level delete.
+	victim := filepath.Join(root, "victim.conf")
+	writeFileWithParents(t, victim, []byte("keep"))
+	stagePromotionJournal(t, backupRoot, promotionTransactionJournal{
+		Version: 1, TransactionID: "planted", Kind: "promotion", Phase: "artifact-1-published",
+		Manifest: promotionManifest{
+			Version: 1, BackupID: "safety", Kind: "promotion", Phase: "prepared",
+			Records: []promotionManifestRecord{{
+				ArtifactID: "victim.conf", Destination: victim, HadPrevious: false, Phase: "published",
+			}},
+		},
+	})
+	validate := allowPromotionDestinationsUnder(filepath.Join(root, "generated"))
+	if err := recoverPromotionTransactionWithPolicy(backupRoot, validate, 0); err == nil {
+		t.Fatal("recovery consumed a journal with a destination outside policy")
+	}
+	assertFileContent(t, victim, "keep")
+}
+
+// Regression for #1218: a planted restore manifest record whose destination
+// is not managed must be rejected before the rollback transaction writes or
+// deletes anything as root.
+func TestRestorePromotedArtifactsRejectsUnmanagedDestination(t *testing.T) {
+	root := t.TempDir()
+	backupRoot := filepath.Join(root, "backups")
+	backupID := "20260605T120000.000000000Z"
+	backupDir := filepath.Join(backupRoot, backupID)
+	if err := os.MkdirAll(backupDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	victim := filepath.Join(root, "victim.conf")
+	writeFileWithParents(t, victim, []byte("keep"))
+	manifest := promotionManifest{
+		BackupID: backupID,
+		Records: []promotionManifestRecord{{
+			ArtifactID: "victim.conf", Destination: victim, HadPrevious: false,
+		}},
+	}
+	body, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(backupDir, "manifest.json"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	validate := allowPromotionDestinationsUnder(filepath.Join(root, "generated"))
+	if _, err := restorePromotedArtifacts(backupRoot, backupID, validate, 0); err == nil {
+		t.Fatal("restore accepted a manifest destination outside policy")
+	}
+	assertFileContent(t, victim, "keep")
+}
+
+func stagePromotionJournal(t *testing.T, root string, journal promotionTransactionJournal) {
+	t.Helper()
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePromotionJournal(root, journal); err != nil {
+		t.Fatal(err)
 	}
 }

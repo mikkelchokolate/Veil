@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 	"golang.org/x/sys/unix"
 )
 
@@ -50,8 +51,17 @@ func (g *fenceGuard) Accept(token FenceToken) (resultErr error) {
 	if err := os.MkdirAll(filepath.Dir(g.path), 0o700); err != nil {
 		return err
 	}
-	lockPath := g.path + ".lock"
-	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	// Pin the fence directory on a descriptor and refuse a symlinked leaf: the
+	// lock path lives under the service-writable state root, so a planted
+	// symlink would otherwise redirect a root-owned O_CREATE open (#1229-F5).
+	fenceDir, err := safefs.OpenDir(filepath.Dir(g.path))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		resultErr = errors.Join(resultErr, fenceDir.Close())
+	}()
+	lock, err := openLockFileAt(fenceDir, filepath.Base(g.path)+".lock")
 	if err != nil {
 		return err
 	}

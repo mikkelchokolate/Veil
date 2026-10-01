@@ -61,7 +61,7 @@ func TestRestorePromotedArtifactsRejectsTraversalBackupID(t *testing.T) {
 	}
 
 	for _, id := range []string{"..", "."} {
-		if _, err := restorePromotedArtifacts(backupRoot, id); err == nil {
+		if _, err := restorePromotedArtifacts(backupRoot, id, allowPromotionDestinationsUnder(root), 0); err == nil {
 			t.Fatalf("restore with traversal backup id %q succeeded", id)
 		}
 	}

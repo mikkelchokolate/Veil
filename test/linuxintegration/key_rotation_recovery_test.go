@@ -83,6 +83,7 @@ func TestIntegrationPrivilegedKeyRotationRecoveryAcrossDurablePhases(t *testing.
 				recoveryCalls.Add(1)
 				return statecommit.RecoverKeyRotation(statecommit.RecoverKeyRotationOptions{
 					StatePath:    fixture.statePath,
+					KeyPath:      fixture.keyPath,
 					DatabasePath: fixture.databasePath,
 				})
 			}

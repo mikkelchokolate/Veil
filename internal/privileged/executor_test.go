@@ -317,7 +317,9 @@ func TestProductionExecutorRestoresPromotionByOpaqueBackupID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("promote: %v", err)
 	}
-	if _, err := executor.Promote(context.Background(), ResolvedPromotion{RestoreBackupID: promoted.BackupID}); err != nil {
+	if _, err := executor.Promote(context.Background(), ResolvedPromotion{
+		RestoreBackupID: promoted.BackupID, ValidateDestination: allowPromotionDestinationsUnder(root),
+	}); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
 	body, err := os.ReadFile(destination)
@@ -354,7 +356,7 @@ func TestProductionExecutorUsesOnlyFixedCommandMappings(t *testing.T) {
 	executor := NewProductionExecutor(ProductionConfig{
 		RunCommand:          run,
 		BinaryPath:          executablePath,
-		PromotionBackupRoot: t.TempDir(),
+		PromotionBackupRoot: firewallRoot0700(t),
 		FirewallCommands: map[string][]string{
 			"allow-panel": {"ufw", "allow", "2096/tcp", "comment", "Veil panel"},
 		},
@@ -404,7 +406,7 @@ func TestProductionExecutorFirewallReloadsAfterApplyingRules(t *testing.T) {
 	run := func(_ context.Context, command []string, _ time.Duration) (string, error) {
 		return model.runner(context.Background(), command, 0)
 	}
-	executor := NewProductionExecutor(ProductionConfig{RunCommand: run, PromotionBackupRoot: t.TempDir()})
+	executor := NewProductionExecutor(ProductionConfig{RunCommand: run, PromotionBackupRoot: firewallRoot0700(t)})
 
 	firewall, err := executor.Firewall(context.Background(), ResolvedFirewall{Rules: []FirewallRule{
 		{Command: "ufw", Args: []string{"allow", "2096/tcp", "comment", "Veil Panel"}},
@@ -772,7 +774,7 @@ func TestRestorePromotedArtifactsHandlesMissingDestination(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(backupDir, "manifest.json"), body, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	result, err := restorePromotedArtifacts(root+"/backups", "20260605T120000.000000000Z")
+	result, err := restorePromotedArtifacts(root+"/backups", "20260605T120000.000000000Z", allowPromotionDestinationsUnder(root), 0)
 	if err != nil {
 		t.Fatalf("restore: %v", err)
 	}
@@ -795,7 +797,7 @@ func TestRestorePromotedArtifactsRejectsManifestMismatch(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(backupDir, "manifest.json"), body, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := restorePromotedArtifacts(root, "20260605T120000.000000000Z")
+	_, err := restorePromotedArtifacts(root, "20260605T120000.000000000Z", allowPromotionDestinationsUnder(root), 0)
 	if err == nil {
 		t.Fatal("expected manifest mismatch error")
 	}
@@ -1179,7 +1181,7 @@ func TestRestorePromotedArtifactsRejectsCorruptManifest(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(backupDir, "manifest.json"), []byte("not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := restorePromotedArtifacts(root, "20260605T120000.000000000Z")
+	_, err := restorePromotedArtifacts(root, "20260605T120000.000000000Z", allowPromotionDestinationsUnder(root), 0)
 	if err == nil {
 		t.Fatal("expected corrupt manifest error")
 	}
@@ -1198,7 +1200,7 @@ func TestRestorePromotedArtifactsBackupReadError(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(backupDir, "manifest.json"), body, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := restorePromotedArtifacts(root, "20260605T120000.000000000Z")
+	_, err := restorePromotedArtifacts(root, "20260605T120000.000000000Z", allowPromotionDestinationsUnder(root), 0)
 	if err == nil {
 		t.Fatal("expected backup read error")
 	}
