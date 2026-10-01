@@ -31,7 +31,8 @@ func TestCommittedPromotionMarkerDeletionFailureFinalizesWithoutRollback(t *test
 
 	promotionJournalRemove = originalRemove
 	withStubbedArtifactOwnership(t, func() {
-		if _, err := promoteResolvedArtifacts(backupRoot, fixedPromotionNow, ResolvedPromotion{}); err != nil {
+		recovery := ResolvedPromotion{ValidateDestination: allowPromotionDestinationsUnder(root)}
+		if _, err := promoteResolvedArtifacts(backupRoot, fixedPromotionNow, recovery); err != nil {
 			t.Fatalf("finalize committed promotion: %v", err)
 		}
 	})
