@@ -213,7 +213,9 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 			if err := backup.RecoverInterruptedRestore(config.StatePath, config.KeyPath, databasePath); err != nil {
 				return fmt.Errorf("recover interrupted backup restore: %w", err)
 			}
-			return statecommit.RecoverKeyRotation(statecommit.RecoverKeyRotationOptions{StatePath: config.StatePath})
+			return statecommit.RecoverKeyRotation(statecommit.RecoverKeyRotationOptions{
+				StatePath: config.StatePath, KeyPath: config.KeyPath,
+			})
 		}
 	}
 	baseRecovery := config.RecoverKeyRotationWorkflow
@@ -603,7 +605,7 @@ func promoteResolvedArtifacts(backupRoot string, now func() time.Time, request R
 		return PromoteResult{}, fmt.Errorf("recover interrupted promotion: %w", err)
 	}
 	if request.RestoreBackupID != "" {
-		return restorePromotedArtifacts(backupRoot, request.RestoreBackupID)
+		return restorePromotedArtifacts(backupRoot, request.RestoreBackupID, request.ValidateDestination, request.FenceGeneration)
 	}
 	return executePromotionTransactionFenced(backupRoot, now, "promotion", request.Artifacts, request.RemoveArtifacts,
 		request.FenceGeneration, request.ValidateDestination)
@@ -664,7 +666,7 @@ func backupPromotionDestination(root, backupID string, artifact ResolvedArtifact
 	return record, nil
 }
 
-func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
+func restorePromotedArtifacts(root, backupID string, validateDestination func(string, string) bool, fenceGeneration uint64) (PromoteResult, error) {
 	// Defense in depth: the restore ID reaches the helper through persisted
 	// promotion records, so it is re-validated here even though
 	// ResolvePromotion already rejects non-canonical IDs — "." or ".." would
@@ -673,7 +675,10 @@ func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
 	if !isValidPromotionBackupID(backupID) {
 		return PromoteResult{}, newError(ErrorInvalidRequest, "invalid promotion backup id")
 	}
-	if err := recoverPromotionTransaction(root); err != nil {
+	// The journal and manifest live under the service-writable backup root and
+	// are attacker-authored: recovery and restore must re-validate every
+	// destination against the caller's policy before touching it (#1218, #1228).
+	if err := recoverPromotionTransactionWithPolicy(root, validateDestination, fenceGeneration); err != nil {
 		return PromoteResult{}, fmt.Errorf("recover interrupted promotion: %w", err)
 	}
 	manifestPath := filepath.Join(root, backupID, "manifest.json")
@@ -696,6 +701,10 @@ func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
 	for _, record := range manifest.Records {
 		if record.ArtifactID == "" || record.Destination == "" {
 			return PromoteResult{}, errors.New("promotion backup manifest has an invalid record")
+		}
+		if validateDestination == nil || !validateDestination(record.ArtifactID, record.Destination) {
+			return PromoteResult{}, newError(ErrorForbiddenOperation,
+				fmt.Sprintf("promotion restore destination is not managed for %s", record.ArtifactID))
 		}
 		if record.HadPrevious {
 			if record.WasSymlink {
@@ -727,7 +736,8 @@ func restorePromotedArtifacts(root, backupID string) (PromoteResult, error) {
 			removes = append(removes, ResolvedArtifact{ID: record.ArtifactID, Destination: record.Destination})
 		}
 	}
-	result, err := executePromotionTransaction(root, time.Now, "rollback", writes, removes)
+	result, err := executePromotionTransactionFenced(root, time.Now, "rollback", writes, removes,
+		fenceGeneration, validateDestination)
 	if err != nil {
 		return PromoteResult{}, err
 	}

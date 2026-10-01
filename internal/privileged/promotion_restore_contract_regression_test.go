@@ -62,7 +62,7 @@ func TestRestorePromotedArtifactsSeparatesRestoredAndRemoved(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := restorePromotedArtifacts(backupRoot, backupID)
+	result, err := restorePromotedArtifacts(backupRoot, backupID, allowPromotionDestinationsUnder(root), 0)
 	if err != nil {
 		t.Fatalf("restore: %v", err)
 	}

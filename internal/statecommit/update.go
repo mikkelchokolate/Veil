@@ -46,7 +46,7 @@ func Update(options UpdateOptions, mutate func(*model.ManagementSnapshot) error)
 	}
 	err := managementstate.WithSnapshotBarrier(options.StatePath, func() error {
 		if err := recoverKeyRotationLocked(RecoverKeyRotationOptions{
-			StatePath: options.StatePath, DatabasePath: options.DatabasePath,
+			StatePath: options.StatePath, KeyPath: options.KeyPath, DatabasePath: options.DatabasePath,
 		}); err != nil {
 			return fmt.Errorf("state commit: recover key rotation before update: %w", err)
 		}

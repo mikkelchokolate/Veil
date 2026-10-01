@@ -237,7 +237,9 @@ func startRecoveryHelper(t *testing.T, dir, statePath string) string {
 		},
 		CaddyLoad: func(context.Context, privileged.CaddyLoadRequest) error { return nil },
 		RecoverKeyRotation: func(context.Context) error {
-			return statecommit.RecoverKeyRotation(statecommit.RecoverKeyRotationOptions{StatePath: statePath})
+			return statecommit.RecoverKeyRotation(statecommit.RecoverKeyRotationOptions{
+				StatePath: statePath, KeyPath: policy.KeyPath,
+			})
 		},
 	}))
 	ctx, cancel := context.WithCancel(context.Background())

@@ -203,7 +203,9 @@ func TestRotateKeyCredentialRowsFollowJournalRecoveryDecision(t *testing.T) {
 			if !errors.Is(err, errKeyRotationInterrupted) {
 				t.Fatalf("RotateKey error=%v", err)
 			}
-			if err := RecoverKeyRotation(RecoverKeyRotationOptions{StatePath: fixture.statePath, DatabasePath: fixture.databasePath}); err != nil {
+			if err := RecoverKeyRotation(RecoverKeyRotationOptions{
+				StatePath: fixture.statePath, KeyPath: fixture.keyPath, DatabasePath: fixture.databasePath,
+			}); err != nil {
 				t.Fatal(err)
 			}
 			liveKey, err := os.ReadFile(fixture.keyPath)
@@ -254,7 +256,7 @@ func TestRotateKeyJournalRecordsBothFilesRevisionsOwnershipAndSafetyPaths(t *tes
 			t.Fatalf("rotation journal missing %q: %s", key, body)
 		}
 	}
-	record, ok, err := loadKeyRotationJournal(fixture.statePath)
+	record, ok, err := loadKeyRotationJournal(fixture.statePath, fixture.keyPath, fixture.keyPath)
 	if err != nil || !ok {
 		t.Fatalf("load typed journal: ok=%v err=%v", ok, err)
 	}
@@ -313,7 +315,8 @@ func TestRotateKeyRecoveryRestoresSeparateSourceAndExistingTargetKeys(t *testing
 		t.Fatalf("RotateKey error=%v want simulated interruption", err)
 	}
 	if err := RecoverKeyRotation(RecoverKeyRotationOptions{
-		StatePath: fixture.statePath, DatabasePath: fixture.databasePath,
+		StatePath: fixture.statePath, KeyPath: fixture.keyPath, TargetKeyPath: targetPath,
+		DatabasePath: fixture.databasePath,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -404,12 +407,97 @@ func TestRotateKeyRecoveryFailsClosedOnUnknownDigestCombination(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := RecoverKeyRotation(RecoverKeyRotationOptions{
-		StatePath: fixture.statePath, DatabasePath: fixture.databasePath,
+		StatePath: fixture.statePath, KeyPath: fixture.keyPath, DatabasePath: fixture.databasePath,
 	}); err == nil {
 		t.Fatal("recovery accepted a state digest that matched neither side of the journal")
 	}
 	if _, err := os.Stat(KeyRotationJournalPath(fixture.statePath)); err != nil {
 		t.Fatalf("fail-closed recovery removed decision record: %v", err)
+	}
+}
+
+func TestRecoverKeyRotationRejectsJournalPointingAtUnrelatedPath(t *testing.T) {
+	fixture := newKeyRotationFixture(t)
+	_, err := RotateKey(RotateKeyOptions{
+		StatePath: fixture.statePath, KeyPath: fixture.keyPath, DatabasePath: fixture.databasePath,
+		Now: fixedRotationTime, interruptAfter: rotationPhaseStatePublished,
+	})
+	if !errors.Is(err, errKeyRotationInterrupted) {
+		t.Fatalf("RotateKey error=%v want simulated interruption", err)
+	}
+	// The journal lives in a service-writable directory: an attacker rewriting
+	// its source/live destination fields must not redirect the privileged
+	// restore or delete at an unrelated file (#1217, #1229-F4).
+	victim := filepath.Join(filepath.Dir(fixture.statePath), "victim.key")
+	if err := os.WriteFile(victim, []byte("victim-bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	journal, ok, err := loadKeyRotationJournal(fixture.statePath, fixture.keyPath, fixture.keyPath)
+	if err != nil || !ok {
+		t.Fatalf("load journal: ok=%v err=%v", ok, err)
+	}
+	journal.SourceKeyPath = victim
+	journal.LiveKeyPath = victim
+	if err := writeKeyRotationJournal(journal); err != nil {
+		t.Fatal(err)
+	}
+	if err := RecoverKeyRotation(RecoverKeyRotationOptions{
+		StatePath: fixture.statePath, KeyPath: fixture.keyPath, DatabasePath: fixture.databasePath,
+	}); err == nil {
+		t.Fatal("recovery accepted a journal pointing at an unrelated path")
+	}
+	body, err := os.ReadFile(victim)
+	if err != nil || !bytes.Equal(body, []byte("victim-bytes")) {
+		t.Fatalf("journal-supplied path was modified: body=%q err=%v", body, err)
+	}
+}
+
+func TestRecoverKeyRotationIgnoresJournalFileMetadata(t *testing.T) {
+	fixture := newKeyRotationFixture(t)
+	_, err := RotateKey(RotateKeyOptions{
+		StatePath: fixture.statePath, KeyPath: fixture.keyPath, DatabasePath: fixture.databasePath,
+		Now: fixedRotationTime, interruptAfter: rotationPhaseStatePublished,
+	})
+	if !errors.Is(err, errKeyRotationInterrupted) {
+		t.Fatalf("RotateKey error=%v want simulated interruption", err)
+	}
+	keyBefore, err := os.Lstat(fixture.keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateBefore, err := os.Lstat(fixture.statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Attacker-authored mode/uid/gid fields must not steer the privileged
+	// restore: rollback derives metadata from the live files instead (#1217).
+	journal, ok, err := loadKeyRotationJournal(fixture.statePath, fixture.keyPath, fixture.keyPath)
+	if err != nil || !ok {
+		t.Fatalf("load journal: ok=%v err=%v", ok, err)
+	}
+	journal.PreviousKeyMode, journal.PreviousKeyUID, journal.PreviousKeyGID = 0o777, 1337, 1337
+	journal.PreviousStateMode, journal.PreviousStateUID, journal.PreviousStateGID = 0o777, 1337, 1337
+	if err := writeKeyRotationJournal(journal); err != nil {
+		t.Fatal(err)
+	}
+	if err := RecoverKeyRotation(RecoverKeyRotationOptions{
+		StatePath: fixture.statePath, KeyPath: fixture.keyPath, DatabasePath: fixture.databasePath,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	keyAfter, err := os.Lstat(fixture.keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateAfter, err := os.Lstat(fixture.statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if keyAfter.Mode().Perm() != keyBefore.Mode().Perm() || keyAfter.Mode().Perm() == 0o777 {
+		t.Fatalf("restored key mode=%v want live mode %v", keyAfter.Mode().Perm(), keyBefore.Mode().Perm())
+	}
+	if stateAfter.Mode().Perm() != stateBefore.Mode().Perm() || stateAfter.Mode().Perm() == 0o777 {
+		t.Fatalf("restored state mode=%v want live mode %v", stateAfter.Mode().Perm(), stateBefore.Mode().Perm())
 	}
 }
 
@@ -430,7 +518,7 @@ func testInterruptedKeyRotationRecovery(t *testing.T, phase keyRotationPhase, co
 		t.Fatalf("phase %s did not leave durable journal: %v", phase, err)
 	}
 	if err := RecoverKeyRotation(RecoverKeyRotationOptions{
-		StatePath: fixture.statePath, DatabasePath: fixture.databasePath,
+		StatePath: fixture.statePath, KeyPath: fixture.keyPath, DatabasePath: fixture.databasePath,
 	}); err != nil {
 		t.Fatalf("recover phase %s: %v", phase, err)
 	}

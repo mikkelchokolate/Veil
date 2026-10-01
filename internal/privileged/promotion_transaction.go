@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 const promotionTransactionJournalName = ".promotion-transaction.json"
@@ -53,7 +54,17 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 	if err := os.MkdirAll(backupRoot, 0o700); err != nil {
 		return PromoteResult{}, fmt.Errorf("create promotion backup root: %w", err)
 	}
-	lockFile, err := os.OpenFile(filepath.Join(backupRoot, ".promotion.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	// Pin the backup root on a descriptor and refuse a symlinked lock leaf:
+	// the root lives under the service-writable state tree, so a planted
+	// symlink would otherwise redirect a root-owned O_CREATE open (#1229-F5).
+	backupDir, err := safefs.OpenDir(backupRoot)
+	if err != nil {
+		return PromoteResult{}, fmt.Errorf("open promotion backup root: %w", err)
+	}
+	defer func() {
+		resultErr = errors.Join(resultErr, backupDir.Close())
+	}()
+	lockFile, err := openLockFileAt(backupDir, ".promotion.lock")
 	if err != nil {
 		return PromoteResult{}, fmt.Errorf("open promotion lock: %w", err)
 	}
@@ -241,10 +252,6 @@ func rollbackPromotionAfterError(root string, journal promotionTransactionJourna
 	return cause
 }
 
-func recoverPromotionTransaction(root string) error {
-	return recoverPromotionTransactionWithPolicy(root, nil, 0)
-}
-
 func recoverPromotionTransactionWithPolicy(root string, validateDestination func(string, string) bool, acceptedGeneration uint64) error {
 	path := filepath.Join(root, promotionTransactionJournalName)
 	body, err := os.ReadFile(path)
@@ -277,8 +284,12 @@ func recoverPromotionTransactionWithPolicy(root string, validateDestination func
 }
 
 func validatePromotionDestinations(journal promotionTransactionJournal, validate func(string, string) bool) error {
+	// The journal is persisted under the service-writable backup root, so it
+	// is attacker-authored: without the caller's destination policy there is
+	// no proof its records still name managed paths, and recovery must fail
+	// closed instead of trusting them (#1218, #1228).
 	if validate == nil {
-		return nil
+		return errors.New("promotion journal recovery requires a destination policy")
 	}
 	for _, record := range journal.Manifest.Records {
 		if !validate(record.ArtifactID, record.Destination) {
@@ -374,6 +385,9 @@ func restorePromotionPreTransaction(root string, journal *promotionTransactionJo
 		}
 	}
 	if journal.ManifestPath != "" {
+		if !pathWithin(root, journal.ManifestPath) {
+			return errors.New("promotion journal manifest path escapes backup root")
+		}
 		if err := os.Remove(journal.ManifestPath); err != nil {
 			if !errors.Is(err, os.ErrNotExist) {
 				return err

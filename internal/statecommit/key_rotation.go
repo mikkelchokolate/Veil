@@ -63,11 +63,18 @@ type RotateKeyOptions struct {
 	interruptAfter keyRotationPhase
 }
 
-// RecoverKeyRotationOptions identifies the state and SQLite stores needed to
-// resolve a durable key-rotation journal before any cipher is constructed.
+// RecoverKeyRotationOptions identifies the state, key and SQLite stores needed
+// to resolve a durable key-rotation journal before any cipher is constructed.
+// KeyPath/TargetKeyPath are the live rotation endpoints the caller itself was
+// configured with; a journal that names different source/live key paths is
+// rejected, because the journal is attacker-authored and must carry only
+// digests/phases — never destinations (#1217, #1229-F4). TargetKeyPath
+// defaults to KeyPath like RotateKey.
 type RecoverKeyRotationOptions struct {
-	StatePath    string
-	DatabasePath string
+	StatePath     string
+	KeyPath       string
+	TargetKeyPath string
+	DatabasePath  string
 }
 
 // KeyRotationResult reports the operator-visible safety copies retained by a
@@ -153,7 +160,8 @@ func RotateKey(options RotateKeyOptions) (KeyRotationResult, error) {
 	}
 	err := managementstate.WithSnapshotBarrier(options.StatePath, func() error {
 		if err := recoverKeyRotationLocked(RecoverKeyRotationOptions{
-			StatePath: options.StatePath, DatabasePath: options.DatabasePath,
+			StatePath: options.StatePath, KeyPath: options.KeyPath,
+			TargetKeyPath: options.TargetKeyPath, DatabasePath: options.DatabasePath,
 		}); err != nil {
 			return fmt.Errorf("state commit: recover previous key rotation: %w", err)
 		}
@@ -271,7 +279,7 @@ func rotateKeyLocked(options RotateKeyOptions) (KeyRotationResult, error) {
 	if !previousTargetKeyExists {
 		journal.PreviousTargetKeyMode, journal.PreviousTargetKeyUID, journal.PreviousTargetKeyGID = 0, -1, -1
 	}
-	if err := validateKeyRotationJournal(journal, options.StatePath); err != nil {
+	if err := validateKeyRotationJournal(journal, options.StatePath, options.KeyPath, options.TargetKeyPath); err != nil {
 		return result, err
 	}
 	if err := writeRotationFile(journal.PreviousKeyPath, sourceKey, sourceKeyMeta); err != nil {
@@ -399,7 +407,11 @@ func WithKeyRotationRecovery(options RecoverKeyRotationOptions, callback func() 
 }
 
 func recoverKeyRotationLocked(options RecoverKeyRotationOptions) error {
-	journal, ok, err := loadKeyRotationJournal(options.StatePath)
+	liveKeyPath := options.TargetKeyPath
+	if liveKeyPath == "" {
+		liveKeyPath = options.KeyPath
+	}
+	journal, ok, err := loadKeyRotationJournal(options.StatePath, options.KeyPath, liveKeyPath)
 	if err != nil || !ok {
 		return err
 	}
@@ -638,7 +650,12 @@ func rollbackKeyRotation(journal keyRotationJournal) error {
 	if err != nil {
 		return err
 	}
-	stateMeta := rotationFileMetadata{mode: os.FileMode(journal.PreviousStateMode), uid: journal.PreviousStateUID, gid: journal.PreviousStateGID}
+	// Journal mode/uid/gid fields are attacker-authored; the restore applies
+	// the metadata the destination file actually has right now (#1217).
+	stateMeta, err := liveRotationMetadata(journal.LiveStatePath)
+	if err != nil {
+		return fmt.Errorf("restore previous state: %w", err)
+	}
 	if err := writeRotationFile(journal.LiveStatePath, previousState, stateMeta); err != nil {
 		return fmt.Errorf("restore previous state: %w", err)
 	}
@@ -646,7 +663,10 @@ func rollbackKeyRotation(journal keyRotationJournal) error {
 	if err != nil {
 		return err
 	}
-	keyMeta := rotationFileMetadata{mode: os.FileMode(journal.PreviousKeyMode), uid: journal.PreviousKeyUID, gid: journal.PreviousKeyGID}
+	keyMeta, err := liveRotationMetadata(journal.SourceKeyPath)
+	if err != nil {
+		return fmt.Errorf("restore previous source key: %w", err)
+	}
 	if err := writeRotationFile(journal.SourceKeyPath, previousKey, keyMeta); err != nil {
 		return fmt.Errorf("restore previous source key: %w", err)
 	}
@@ -656,7 +676,10 @@ func rollbackKeyRotation(journal keyRotationJournal) error {
 			if err != nil {
 				return err
 			}
-			targetMeta := rotationFileMetadata{mode: os.FileMode(journal.PreviousTargetKeyMode), uid: journal.PreviousTargetKeyUID, gid: journal.PreviousTargetKeyGID}
+			targetMeta, err := liveRotationMetadata(journal.LiveKeyPath)
+			if err != nil {
+				return fmt.Errorf("restore previous target key: %w", err)
+			}
 			if err := writeRotationFile(journal.LiveKeyPath, previousTarget, targetMeta); err != nil {
 				return fmt.Errorf("restore previous target key: %w", err)
 			}
@@ -755,7 +778,7 @@ func writeKeyRotationJournal(journal keyRotationJournal) error {
 	return writeRotationFile(KeyRotationJournalPath(journal.LiveStatePath), append(body, '\n'), rotationFileMetadata{mode: 0o600, uid: -1, gid: -1})
 }
 
-func loadKeyRotationJournal(statePath string) (keyRotationJournal, bool, error) {
+func loadKeyRotationJournal(statePath, sourceKeyPath, liveKeyPath string) (keyRotationJournal, bool, error) {
 	var journal keyRotationJournal
 	body, err := os.ReadFile(KeyRotationJournalPath(statePath))
 	if errors.Is(err, os.ErrNotExist) {
@@ -776,13 +799,13 @@ func loadKeyRotationJournal(statePath string) (keyRotationJournal, bool, error) 
 		}
 		return journal, false, fmt.Errorf("state commit: decode key-rotation journal: %w", err)
 	}
-	if err := validateKeyRotationJournal(journal, statePath); err != nil {
+	if err := validateKeyRotationJournal(journal, statePath, sourceKeyPath, liveKeyPath); err != nil {
 		return journal, false, err
 	}
 	return journal, true, nil
 }
 
-func validateKeyRotationJournal(journal keyRotationJournal, statePath string) error {
+func validateKeyRotationJournal(journal keyRotationJournal, statePath, sourceKeyPath, liveKeyPath string) error {
 	if journal.Version != keyRotationJournalVersion {
 		return fmt.Errorf("state commit: unsupported key-rotation journal version %d", journal.Version)
 	}
@@ -793,6 +816,17 @@ func validateKeyRotationJournal(journal keyRotationJournal, statePath string) er
 	}
 	if journal.LiveStatePath != statePath || journal.SourceKeyPath == "" || journal.LiveKeyPath == "" {
 		return errors.New("state commit: key-rotation journal live paths are invalid")
+	}
+	// The journal lives in a service-writable directory and is
+	// attacker-authored, so its destination fields are never trusted as
+	// destinations: the rollback write/delete targets are pinned to the live
+	// key paths the recovery caller was configured with (#1217, #1229-F4).
+	if sourceKeyPath == "" || liveKeyPath == "" {
+		return errors.New("state commit: key-rotation recovery requires the configured key paths")
+	}
+	if filepath.Clean(journal.SourceKeyPath) != filepath.Clean(sourceKeyPath) ||
+		filepath.Clean(journal.LiveKeyPath) != filepath.Clean(liveKeyPath) {
+		return errors.New("state commit: key-rotation journal key paths do not match the configured key paths")
 	}
 	if journal.PreviousRevision == math.MaxUint64 || journal.IntendedRevision != journal.PreviousRevision+1 {
 		return errors.New("state commit: key-rotation journal revision boundary is invalid")
@@ -832,6 +866,31 @@ func readAndVerifyRotationArtifact(path, wantDigest string) ([]byte, error) {
 		return nil, fmt.Errorf("state commit: rotation artifact %s digest=%s want=%s", path, got, wantDigest)
 	}
 	return body, nil
+}
+
+// liveRotationMetadata derives the mode/ownership a rollback applies to a
+// live path from the file currently sitting there — never from journal fields.
+// The live file's metadata is either the pre-rotation file's own or what the
+// rotation itself staged, so lstat is the ground truth for the restored owner
+// and mode. The mode is masked to owner+group permission bits and a missing
+// destination falls back to 0600 with no ownership change.
+func liveRotationMetadata(path string) (rotationFileMetadata, error) {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return rotationFileMetadata{mode: 0o600, uid: -1, gid: -1}, nil
+	}
+	if err != nil {
+		return rotationFileMetadata{}, err
+	}
+	if !info.Mode().IsRegular() {
+		return rotationFileMetadata{}, fmt.Errorf("state commit: %s is not a regular file", path)
+	}
+	metadata := fileMetadata(info)
+	metadata.mode = metadata.mode.Perm() & 0o640
+	if metadata.mode == 0 {
+		metadata.mode = 0o600
+	}
+	return metadata, nil
 }
 
 func readOptionalRotationFile(path string, exactSize int64) ([]byte, bool, rotationFileMetadata, error) {

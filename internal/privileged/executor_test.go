@@ -317,7 +317,9 @@ func TestProductionExecutorRestoresPromotionByOpaqueBackupID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("promote: %v", err)
 	}
-	if _, err := executor.Promote(context.Background(), ResolvedPromotion{RestoreBackupID: promoted.BackupID}); err != nil {
+	if _, err := executor.Promote(context.Background(), ResolvedPromotion{
+		RestoreBackupID: promoted.BackupID, ValidateDestination: allowPromotionDestinationsUnder(root),
+	}); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
 	body, err := os.ReadFile(destination)
@@ -772,7 +774,7 @@ func TestRestorePromotedArtifactsHandlesMissingDestination(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(backupDir, "manifest.json"), body, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	result, err := restorePromotedArtifacts(root+"/backups", "20260605T120000.000000000Z")
+	result, err := restorePromotedArtifacts(root+"/backups", "20260605T120000.000000000Z", allowPromotionDestinationsUnder(root), 0)
 	if err != nil {
 		t.Fatalf("restore: %v", err)
 	}
@@ -795,7 +797,7 @@ func TestRestorePromotedArtifactsRejectsManifestMismatch(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(backupDir, "manifest.json"), body, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := restorePromotedArtifacts(root, "20260605T120000.000000000Z")
+	_, err := restorePromotedArtifacts(root, "20260605T120000.000000000Z", allowPromotionDestinationsUnder(root), 0)
 	if err == nil {
 		t.Fatal("expected manifest mismatch error")
 	}
@@ -1179,7 +1181,7 @@ func TestRestorePromotedArtifactsRejectsCorruptManifest(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(backupDir, "manifest.json"), []byte("not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := restorePromotedArtifacts(root, "20260605T120000.000000000Z")
+	_, err := restorePromotedArtifacts(root, "20260605T120000.000000000Z", allowPromotionDestinationsUnder(root), 0)
 	if err == nil {
 		t.Fatal("expected corrupt manifest error")
 	}
@@ -1198,7 +1200,7 @@ func TestRestorePromotedArtifactsBackupReadError(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(backupDir, "manifest.json"), body, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := restorePromotedArtifacts(root, "20260605T120000.000000000Z")
+	_, err := restorePromotedArtifacts(root, "20260605T120000.000000000Z", allowPromotionDestinationsUnder(root), 0)
 	if err == nil {
 		t.Fatal("expected backup read error")
 	}

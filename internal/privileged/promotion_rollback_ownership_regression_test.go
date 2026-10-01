@@ -156,7 +156,8 @@ func TestPromotionRecoveryReappliesRuntimeArtifactOwnership(t *testing.T) {
 	}
 	chmodPath = func(string, os.FileMode) error { return nil }
 
-	if _, err := promoteResolvedArtifacts(backupRoot, fixedPromotionNow, ResolvedPromotion{}); err != nil {
+	recovery := ResolvedPromotion{ValidateDestination: allowPromotionDestinationsUnder(root)}
+	if _, err := promoteResolvedArtifacts(backupRoot, fixedPromotionNow, recovery); err != nil {
 		t.Fatalf("recover interrupted promotion: %v", err)
 	}
 	assertFileContent(t, protocolDst, "old-edge")
