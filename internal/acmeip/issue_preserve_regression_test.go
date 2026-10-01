@@ -103,10 +103,6 @@ type fsCleanupSystem struct {
 }
 
 func (s *fsCleanupSystem) CombinedOutput(cmd string, args ...string) ([]byte, error) {
-	key := s.key(cmd, args...)
-	if res, ok := s.commands[key]; ok && res.writeOwned != nil {
-		res.writeOwned()
-	}
 	return s.fakeSystem.CombinedOutput(cmd, args...)
 }
 
@@ -122,6 +118,13 @@ func (s *fsCleanupSystem) Stat(name string) (os.FileInfo, error) {
 		return fi, nil
 	}
 	return s.fakeSystem.Stat(name)
+}
+
+func (s *fsCleanupSystem) Lstat(name string) (os.FileInfo, error) {
+	if fi, err := os.Lstat(name); err == nil {
+		return fi, nil
+	}
+	return s.fakeSystem.Lstat(name)
 }
 
 func (s *fsCleanupSystem) Run(cmd string, args ...string) error {

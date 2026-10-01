@@ -109,17 +109,19 @@ func (r RuntimeRoutes) tlsCertInfo() veilruntime.TLSCertInfo {
 			info.ManagedBy = "caddy"
 			info.IssuerSource = pair.IssuerName
 			info.IssuerKind = caddycert.IssuerKind(pair.IssuerName)
-			return info
+			return sanitizeViewerTLSCert(info)
 		}
+		// The lookup error embeds the Caddy storage dir — the domain alone
+		// is all a viewer needs (#1208).
 		info := veilruntime.TLSCertInfo{Source: "caddy", ManagedBy: "caddy"}
-		info.Error = fmt.Sprintf("no Caddy-managed certificate for %s: %v", expectedDomain, err)
+		info.Error = fmt.Sprintf("no Caddy-managed certificate for %s", expectedDomain)
 		return info
 	}
 	info := veilruntime.ReadTLSCertForDomain(envPath, expectedDomain)
 	if info.Path != "" {
 		info.Source = "env"
 	}
-	return info
+	return sanitizeViewerTLSCert(info)
 }
 
 // tlsExpectedDomain returns the hostname the panel TLS certificate must

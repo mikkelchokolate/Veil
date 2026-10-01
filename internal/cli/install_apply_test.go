@@ -136,6 +136,32 @@ func TestProbeInstalledPanelAcceptsVeilHealthz(t *testing.T) {
 	}
 }
 
+// Issue #1214: Go forwards custom headers verbatim through redirects, so the
+// install-time healthz probe must strip X-Veil-Token when a redirect crosses
+// origins — otherwise a hostile redirect target collects the install token.
+func TestProbeInstalledPanelStripsTokenOnCrossOriginRedirect(t *testing.T) {
+	var leaked bool
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Veil-Token") != "" {
+			leaked = true
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	t.Cleanup(target.Close)
+	redirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+r.URL.Path, http.StatusFound)
+	}))
+	t.Cleanup(redirector.Close)
+	contract := statusflow.ContractFromServe(redirector.Listener.Addr().String(), false, "/", "", "")
+	if err := probeInstalledPanel(context.Background(), contract, "secret-token"); err != nil {
+		t.Fatalf("redirected healthz: %v", err)
+	}
+	if leaked {
+		t.Fatal("X-Veil-Token leaked across a cross-origin redirect")
+	}
+}
+
 func TestApplyRURecommendedInstallUsesDefaultBackupDirAndPrintsPanelCredentials(t *testing.T) {
 	withMockedInstallRuntimes(t)
 	oldApply := installApplyFunc

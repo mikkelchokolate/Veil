@@ -12,7 +12,7 @@ import (
 // Proxy client sessions must never reach server-local, private, link-local,
 // CGNAT, multicast, reserved or unspecified destinations: a proxy that can
 // reach them turns into a local pivot (e.g. Caddy's unauthenticated admin
-// API on 127.0.0.1:2019) (issues #1095, #1096, #1097).
+// API on 127.42.0.1:2019) (issues #1095, #1096, #1097, #1213).
 //
 // The list is deliberately exhaustive rather than "private only": a proxy
 // egress policy must fail closed on every non-public destination class.
@@ -26,7 +26,7 @@ var egressDenyCIDRs = []string{
 	"192.168.0.0/16",
 	// RFC 6598 CGNAT shared address space.
 	"100.64.0.0/10",
-	// Loopback — host control planes live here (Caddy admin 127.0.0.1:2019,
+	// Loopback — host control planes live here (Caddy admin 127.42.0.1:2019,
 	// panel backend, mita appctl over TCP, DNS stub resolvers).
 	"127.0.0.0/8",
 	// Link-local — includes cloud metadata 169.254.169.254 (SSRF credential
