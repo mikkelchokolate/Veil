@@ -119,7 +119,8 @@ export function PasskeysCard() {
 	const soleFactorDelete = (id: string) =>
 		totp.data?.enabled !== true && list.length === 1 && list[0].id === id;
 	const deleteNeedsPassword =
-		needsPassword || (confirmDelete !== null && soleFactorDelete(confirmDelete.id));
+		needsPassword ||
+		(confirmDelete !== null && soleFactorDelete(confirmDelete.id));
 
 	const remove = useMutation({
 		mutationFn: (id: string) =>
