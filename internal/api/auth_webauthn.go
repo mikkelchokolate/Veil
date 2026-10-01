@@ -79,25 +79,31 @@ func decodeOptionalJSONRequest(w http.ResponseWriter, r *http.Request, v any) bo
 // second-factor mark, or the caller re-presents the account password. The
 // password path is throttled through the login backoff family so the gate
 // cannot be turned into a password oracle.
-func (s *managementState) passkeyCredentialGate(w http.ResponseWriter, r *http.Request, session Session, user model.User, password string) bool {
-	if session.SecondFactor {
-		return true
+//
+// soleFactorRemoval raises the bar to TOTP-disable's contract (#1232): when
+// the mutation would disarm the account's LAST second factor, the session
+// mark is not sufficient — a stolen 2FA-complete session must not be able to
+// permanently lower the account to password-only login. The account password
+// is required either way.
+func (s *managementState) passkeyCredentialGate(w http.ResponseWriter, r *http.Request, session Session, user model.User, password string, soleFactorRemoval bool) (allowed, passwordProved bool) {
+	if session.SecondFactor && !soleFactorRemoval {
+		return true, false
 	}
 	if strings.TrimSpace(password) == "" {
 		writeError(w, "password is required", http.StatusBadRequest)
-		return false
+		return false, false
 	}
 	throttleKey := "passkey-manage:" + loginThrottleKey(r, user.Username)
 	if retryAfter := s.loginBackoffRemaining(throttleKey); retryAfter > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
 		writeError(w, "too many attempts", http.StatusTooManyRequests)
-		return false
+		return false, false
 	}
 	releaseBcrypt := acquireBcryptWork()
 	if releaseBcrypt == nil {
 		w.Header().Set("Retry-After", "1")
 		writeError(w, "too many attempts", http.StatusTooManyRequests)
-		return false
+		return false, false
 	}
 	matched := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) == nil
 	releaseBcrypt()
@@ -109,9 +115,9 @@ func (s *managementState) passkeyCredentialGate(w http.ResponseWriter, r *http.R
 			Success: false, Error: "invalid password",
 		})
 		writeError(w, "invalid password", http.StatusBadRequest)
-		return false
+		return false, false
 	}
-	return true
+	return true, true
 }
 
 // handleMyPasskeys serves GET /api/v1/users/me/passkeys — the credential
@@ -160,10 +166,10 @@ func (s *managementState) handleMyPasskeyRegisterBegin(w http.ResponseWriter, r 
 		writeError(w, "passkey limit reached", http.StatusBadRequest)
 		return
 	}
-	if !s.passkeyCredentialGate(w, r, session, user, req.Password) {
+	if allowed, _ := s.passkeyCredentialGate(w, r, session, user, req.Password, false); !allowed {
 		return
 	}
-	wa, _, err := webAuthnForRequest(r)
+	wa, _, err := s.webAuthnForRequest(r)
 	if err != nil {
 		s.recordRequestAudit(r, audit.Record{
 			Actor: user.Username, Action: "user.passkey.register.begin", Target: user.Username,
@@ -196,6 +202,9 @@ func (s *managementState) handleMyPasskeyRegisterBegin(w http.ResponseWriter, r 
 		Actor: user.Username, Action: "user.passkey.register.begin", Target: user.Username,
 		Success: true,
 	})
+	// The ceremony options carry the single-use registration challenge —
+	// secret-grade for the idempotency store (#1221).
+	markIdempotencySecretResponse(w, "passkey-register:"+user.Username, 1)
 	writeJSON(w, creation)
 }
 
@@ -264,7 +273,7 @@ func (s *managementState) handleMyPasskeyRegisterFinish(w http.ResponseWriter, r
 		writeError(w, "invalid passkey response", http.StatusBadRequest)
 		return
 	}
-	wa, _, err := webAuthnForRequest(r)
+	wa, _, err := s.webAuthnForRequest(r)
 	if err != nil {
 		writeError(w, "passkey registration is unavailable", http.StatusInternalServerError)
 		return
@@ -360,13 +369,20 @@ func (s *managementState) handleMyPasskeyRegisterFinish(w http.ResponseWriter, r
 		Actor: user.Username, Action: "user.passkey.register", Target: user.Username,
 		Success: true, Details: map[string]any{"id": passkey.ID},
 	})
+	// Factor-creating responses are secret-grade for the idempotency store —
+	// encrypted at rest with the short replay TTL (#1221).
+	markIdempotencySecretResponse(w, "passkey:"+passkey.ID, 1)
 	writeJSONStatus(w, http.StatusCreated, passkeyListEntryOf(passkey))
 }
 
 // handleMyPasskeyByID serves DELETE /api/v1/users/me/passkeys/{id}. Removing
-// a credential never revokes sessions (#1171): the auth middleware's
-// factor-requirement check releases the mark requirement automatically once
-// the last factor is gone.
+// a non-final credential never revokes sessions (#1171): the auth
+// middleware's factor-requirement check releases the mark requirement
+// automatically once the last factor is gone. But when the deleted
+// credential IS the account's last second factor the removal is factor-grade
+// (#1232): the session mark alone is insufficient — the gate requires the
+// account password — and every other session is revoked with the factor, the
+// same contract TOTP disable upholds.
 func (s *managementState) handleMyPasskeyByID(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		methodNotAllowed(w, http.MethodDelete)
@@ -392,7 +408,11 @@ func (s *managementState) handleMyPasskeyByID(w http.ResponseWriter, r *http.Req
 	if !decodeOptionalJSONRequest(w, r, &req) {
 		return
 	}
-	if !s.passkeyCredentialGate(w, r, session, user, req.Password) {
+	// This endpoint deletes exactly one credential, so removing the last
+	// factor means: no armed TOTP and this ID is the only passkey.
+	soleFactor := !user.TOTPEnabled && len(user.Passkeys) == 1 && user.Passkeys[0].ID == passkeyID
+	allowed, passwordProved := s.passkeyCredentialGate(w, r, session, user, req.Password, soleFactor)
+	if !allowed {
 		return
 	}
 	deleted := false
@@ -414,8 +434,42 @@ func (s *managementState) handleMyPasskeyByID(w http.ResponseWriter, r *http.Req
 		}
 		update := current
 		update.Passkeys = kept
-		_, mErr := mutation.SetUserPasskeys(user.Username, update)
-		return mErr
+		// Recompute under the lock: if this deletion disarms the account the
+		// sessions that enjoyed the factor's protection must not outlive it.
+		disarmed := current.HasSecondFactor() && !update.HasSecondFactor()
+		if disarmed && !passwordProved {
+			// The pre-lock snapshot said this wasn't the last factor, but a
+			// concurrent delete/TOTP removal raced in — refuse rather than
+			// disarm the account without a password proof (#1232).
+			return errPasswordProofRequired
+		}
+		var intent sessionRevocationIntent
+		if disarmed {
+			var intentErr error
+			intent, intentErr = s.sessionRegistry().MarkUsernameRevocationPending(user.Username)
+			if intentErr != nil {
+				return fmt.Errorf("%w: %v", errSessionRevocationPersistence, intentErr)
+			}
+		}
+		if _, mErr := mutation.SetUserPasskeys(user.Username, update); mErr != nil {
+			if disarmed {
+				_ = s.sessionRegistry().CancelUsernameRevocation(intent)
+			}
+			return mErr
+		}
+		if disarmed {
+			if _, revokeErr := s.sessionRegistry().DeleteUsernameExceptPersisted(user.Username, currentSessionToken(r)); revokeErr != nil {
+				if _, restoreErr := mutation.SetUserPasskeys(user.Username, current); restoreErr != nil {
+					return fmt.Errorf("%w: %v (restore user: %v)", errSessionRevocationPersistence, revokeErr, restoreErr)
+				}
+				_ = s.sessionRegistry().CancelUsernameRevocation(intent)
+				return fmt.Errorf("%w: %v", errSessionRevocationPersistence, revokeErr)
+			}
+			if cancelErr := s.sessionRegistry().CancelUsernameRevocation(intent); cancelErr != nil {
+				_ = cancelErr
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		s.recordRequestAudit(r, audit.Record{
@@ -425,6 +479,10 @@ func (s *managementState) handleMyPasskeyByID(w http.ResponseWriter, r *http.Req
 		switch {
 		case errors.Is(err, errUserNotFound), errors.Is(err, errPasskeyNotFound):
 			writeNotFound(w)
+		case errors.Is(err, errSessionRevocationPersistence):
+			writeError(w, errSessionRevocationPersistence.Error(), http.StatusInternalServerError)
+		case errors.Is(err, errPasswordProofRequired):
+			writeError(w, "password is required", http.StatusBadRequest)
 		default:
 			writeError(w, "failed to delete passkey", http.StatusInternalServerError)
 		}
@@ -438,7 +496,10 @@ func (s *managementState) handleMyPasskeyByID(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNoContent)
 }
 
-var errPasskeyNotFound = errors.New("passkey not found")
+var (
+	errPasskeyNotFound       = errors.New("passkey not found")
+	errPasswordProofRequired = errors.New("password is required")
+)
 
 // handleV1UserFactorReset serves the admin factor-reset routes under
 // /api/v1/users/{username}/: "totp" clears the TOTP factor (auth_totp.go) and
@@ -469,10 +530,13 @@ func (s *managementState) handleV1UserFactorReset(w http.ResponseWriter, r *http
 }
 
 // handleV1UserPasskeyReset clears every passkey of the target user — the
-// admin escape for a lost authenticator. Sessions are deliberately NOT
-// revoked: unlike TOTP reset, dropping a possession factor cannot let an
-// existing session bypass a still-armed factor, and the requirement says a
-// passkey removal must never invalidate sessions (#1171).
+// admin escape for a lost authenticator. While TOTP stays armed, sessions
+// are deliberately NOT revoked: dropping a possession factor cannot let an
+// existing session bypass the still-armed factor (#1171). When the passkeys
+// were the account's ONLY factor, though, the reset permanently lowers the
+// login floor to password-only — the same "a session must never survive the
+// removal of the factor it bypassed" contract TOTP reset upholds, so every
+// session the target holds is revoked with them (#1232).
 func (s *managementState) handleV1UserPasskeyReset(w http.ResponseWriter, r *http.Request, username string) {
 	err := s.withMutation(func(mutation managementstate.Mutation) error {
 		current, found := s.findUserLocked(username)
@@ -482,20 +546,48 @@ func (s *managementState) handleV1UserPasskeyReset(w http.ResponseWriter, r *htt
 		if len(current.Passkeys) == 0 {
 			return nil // already clean; keep reset idempotent
 		}
+		soleFactor := !current.TOTPEnabled
+		var intent sessionRevocationIntent
+		if soleFactor {
+			var intentErr error
+			intent, intentErr = s.sessionRegistry().MarkUsernameRevocationPending(username)
+			if intentErr != nil {
+				return fmt.Errorf("%w: %v", errSessionRevocationPersistence, intentErr)
+			}
+		}
 		update := current
 		update.ClearPasskeys()
-		_, mErr := mutation.SetUserPasskeys(username, update)
-		return mErr
+		if _, mErr := mutation.SetUserPasskeys(username, update); mErr != nil {
+			if soleFactor {
+				_ = s.sessionRegistry().CancelUsernameRevocation(intent)
+			}
+			return mErr
+		}
+		if soleFactor {
+			// DeleteUsernamePersisted fulfils the revocation intent itself
+			// (it drops the pending intent on success), so no cancel here.
+			if _, revokeErr := s.sessionRegistry().DeleteUsernamePersisted(username); revokeErr != nil {
+				if _, restoreErr := mutation.SetUserPasskeys(username, current); restoreErr != nil {
+					return fmt.Errorf("%w: %v (restore user: %v)", errSessionRevocationPersistence, revokeErr, restoreErr)
+				}
+				_ = s.sessionRegistry().CancelUsernameRevocation(intent)
+				return fmt.Errorf("%w: %v", errSessionRevocationPersistence, revokeErr)
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		s.recordRequestAudit(r, audit.Record{
 			Action: "user.passkey.reset", Target: username, Success: false, Error: err.Error(),
 		})
-		if errors.Is(err, errUserNotFound) {
+		switch {
+		case errors.Is(err, errUserNotFound):
 			writeNotFound(w)
-			return
+		case errors.Is(err, errSessionRevocationPersistence):
+			writeError(w, errSessionRevocationPersistence.Error(), http.StatusInternalServerError)
+		default:
+			writeError(w, "failed to persist passkey reset", http.StatusInternalServerError)
 		}
-		writeError(w, "failed to persist passkey reset", http.StatusInternalServerError)
 		return
 	}
 	s.catchUpAfterPanelMutation()

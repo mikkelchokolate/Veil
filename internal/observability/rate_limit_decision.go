@@ -84,6 +84,20 @@ func isRateLimitedReadPath(path string) bool {
 		strings.HasPrefix(path, "/s/") {
 		return true
 	}
+	// #1203: every */history read under /api/v1/traffic/ range-scans and
+	// aggregates the retention window on the single-connection management
+	// DB — the aggregate's user-controlled `from` can walk all of it — and
+	// /api/v1/presence re-queries clients, bindings, and per-binding last
+	// activity on that same connection. A trailing slash routes to the same
+	// history handlers, so the suffix check trims it first.
+	// /api/v1/traffic/stream is gated above; top, summary, and per-client
+	// totals stay unlimited by design.
+	if path == "/api/v1/presence" {
+		return true
+	}
+	if strings.HasPrefix(path, "/api/v1/traffic/") {
+		return strings.HasSuffix(strings.TrimRight(path, "/"), "/history")
+	}
 	// /api/warp returns the full WARP privateKey/licenseKey to admin readers
 	// (#617). Expensive host diagnostics: /api/disk walks Veil state trees
 	// recursively (#641), /api/connections attributes every listener through

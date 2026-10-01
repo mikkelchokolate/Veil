@@ -134,10 +134,52 @@ func (s *managementState) handleTOTPVerify(w http.ResponseWriter, r *http.Reques
 
 	method := ""
 	if req.Code != "" {
-		if !validateTOTPCode(s.loginBackoffTime(), current.TOTPSecret, req.Code) {
+		matchedStep, valid := validateTOTPCode(s.loginBackoffTime(), current.TOTPSecret, req.Code)
+		if !valid {
 			fail("invalid verification code")
 			return
 		}
+		// RFC 6238 §5.2 (#1220): an accepted code must never verify twice.
+		// Persist the matched timestep as the account's anti-replay watermark
+		// BEFORE the session exists — exactly like recovery-code consumption
+		// below, a crash between session mint and write-back would otherwise
+		// leave the code replayable on a fresh challenge.
+		err := s.withMutation(func(mutation managementstate.Mutation) error {
+			fresh, ok := s.findUserLocked(pending.Username)
+			if !ok || !fresh.TOTPEnabled || fresh.TOTPSecret == "" || fresh.PasswordHash != pending.PasswordHash {
+				return errTOTPVerifyFailed
+			}
+			if matchedStep <= fresh.TOTPLastStep {
+				return errTOTPCodeConsumed
+			}
+			update := fresh
+			update.TOTPLastStep = matchedStep
+			_, mErr := mutation.SetUserTOTP(pending.Username, update)
+			return mErr
+		})
+		if errors.Is(err, errTOTPCodeConsumed) {
+			fail("verification code already used")
+			return
+		}
+		if errors.Is(err, errTOTPVerifyFailed) {
+			fail("invalid verification code")
+			return
+		}
+		if err != nil {
+			s.recordRequestAudit(r, audit.Record{
+				Actor:   pending.Username,
+				Action:  "auth.totp.verify",
+				Target:  "panel",
+				Success: false,
+				Error:   "replay watermark persistence failed",
+			})
+			writeError(w, "failed to persist verification", http.StatusInternalServerError)
+			// Transient persist failure — release the claim so a retry on
+			// the same challenge is not wedged until the TTL.
+			s.pendingSecondFactors().Release(token)
+			return
+		}
+		s.catchUpAfterPanelMutation()
 		method = "totp"
 	} else {
 		// Recovery codes are single-use AND the consumption must be durable
@@ -238,6 +280,9 @@ func (s *managementState) handleTOTPVerify(w http.ResponseWriter, r *http.Reques
 		Success: true,
 		Details: map[string]any{"secondFactor": method},
 	})
+	// The body carries the fresh session's CSRF token — session-minting
+	// responses are secret-grade for the idempotency store (#1221).
+	markIdempotencySecretResponse(w, "session:"+pending.Username, 1)
 	s.setSessionCookie(w, r, session.Token, 86400)
 	writeJSON(w, map[string]any{
 		"success":      true,

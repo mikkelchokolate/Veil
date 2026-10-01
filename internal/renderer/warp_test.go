@@ -295,7 +295,10 @@ func TestRenderWarpSingBoxConfigKeepsProxyOffWarp(t *testing.T) {
 // SetDefaults must still migrate them to the band default so the emitted
 // bind matches what the upstreams dial.
 func TestRenderWarpSingBoxMigratesOutOfBandLoopbackSocksListen(t *testing.T) {
-	for _, listen := range []string{"127.0.0.1", "127.0.0.5", "::1"} {
+	// Band endpoints (127.41.0.0/127.41.255.255) are loopback literals too —
+	// NormalizeWarpSocksListen rewrites them to the default like any other
+	// unusable loopback, matching warp.SetDefaults on the write path.
+	for _, listen := range []string{"127.0.0.1", "127.0.0.5", "::1", "127.41.0.0", "127.41.255.255"} {
 		body, err := RenderWarpSingBox(WarpSingBoxConfig{
 			Endpoint:      "engage.cloudflareclient.com:2408",
 			PrivateKey:    "warp-private-key",
