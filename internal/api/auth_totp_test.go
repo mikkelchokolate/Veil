@@ -327,7 +327,10 @@ func TestTOTPEnrollmentLifecycle(t *testing.T) {
 	}
 
 	// Disable with a live authenticator code clears every second-factor
-	// field (factor-grade contract — password alone is rejected).
+	// field (factor-grade contract — password alone is rejected). Advance
+	// one timestep: reusing the confirm step's code is now a replay and is
+	// correctly rejected (#1220).
+	*now = now.Add(30 * time.Second)
 	disableCode := totpCode(t, state.users[0].TOTPSecret, *now)
 	rec = authedTOTPRequest(t, state, session, http.MethodDelete, "/api/v1/users/me/totp", `{"code":"`+disableCode+`"}`)
 	if rec.Code != http.StatusOK {
@@ -545,5 +548,144 @@ func TestPendingChallengeCookieIsNotASession(t *testing.T) {
 	// not registered as a session.
 	if _, ok := state.sessionRegistry().Get(pending); ok {
 		t.Fatal("pending_2fa token resolved as a session")
+	}
+}
+
+// RFC 6238 §5.2 (#1220): an accepted code must never verify twice inside
+// its ±1-step validity window. The verify path records the consumed
+// timestep on the account, a fresh challenge presenting the same code is
+// rejected, and the NEXT step's code still verifies.
+func TestTOTPVerifyRejectsReplayedStepAcrossChallenges(t *testing.T) {
+	user := totpTestUser(t, "correct-password-123")
+	user.TOTPEnabled = true
+	user.TOTPSecret = "JBSWY3DPEHPK3PXP"
+	state, now := totpTestState(t, user)
+
+	code := totpCode(t, "JBSWY3DPEHPK3PXP", *now)
+	pending := cookieValue(totpLogin(t, state, "correct-password-123"), pendingSecondFactorCookie)
+	rec := totpVerify(t, state, pending, `{"code":"`+code+`"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("first verify status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if want := (*now).Unix() / totpPeriod; state.users[0].TOTPLastStep != want {
+		t.Fatalf("verify watermark=%d, want matched step %d", state.users[0].TOTPLastStep, want)
+	}
+
+	// Fresh login, SAME code inside its window: rejected as replayed and
+	// no session is minted.
+	pending = cookieValue(totpLogin(t, state, "correct-password-123"), pendingSecondFactorCookie)
+	if pending == "" {
+		t.Fatal("second login minted no pending challenge")
+	}
+	rec = totpVerify(t, state, pending, `{"code":"`+code+`"}`)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("replayed code status=%d, want 401 (body %q)", rec.Code, rec.Body.String())
+	}
+	if cookieValue(rec, "veil_session") != "" {
+		t.Fatal("session minted for a replayed code")
+	}
+
+	// The next timestep's code verifies — the watermark blocks only what
+	// was already consumed.
+	*now = now.Add(totpPeriod * time.Second)
+	pending = cookieValue(totpLogin(t, state, "correct-password-123"), pendingSecondFactorCookie)
+	rec = totpVerify(t, state, pending, `{"code":"`+totpCode(t, "JBSWY3DPEHPK3PXP", *now)+`"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("next-step verify status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if want := (*now).Unix() / totpPeriod; state.users[0].TOTPLastStep != want {
+		t.Fatalf("watermark after next-step verify=%d, want %d", state.users[0].TOTPLastStep, want)
+	}
+}
+
+// The confirming code is spent at confirm time and the disabling code's
+// step is persisted while the rest of the factor clears (#1220): neither
+// ceremony leaves a code replayable for login, and teardown cannot rewind
+// the monotonic watermark.
+func TestTOTPConfirmAndDisableAdvanceReplayWatermark(t *testing.T) {
+	user := totpTestUser(t, "correct-password-123")
+	state, now := totpTestState(t, user)
+	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+
+	rec := authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("enroll status=%d", rec.Code)
+	}
+	pendingSecret := state.users[0].TOTPPendingSecret
+	code := totpCode(t, pendingSecret, *now)
+	rec = authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/confirm", `{"code":"`+code+`"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("confirm status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if want := (*now).Unix() / totpPeriod; state.users[0].TOTPLastStep != want {
+		t.Fatalf("confirm watermark=%d, want %d", state.users[0].TOTPLastStep, want)
+	}
+
+	// The code that armed the factor cannot complete a fresh login.
+	pending := cookieValue(totpLogin(t, state, "correct-password-123"), pendingSecondFactorCookie)
+	rec = totpVerify(t, state, pending, `{"code":"`+code+`"}`)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("confirm code replayed into login status=%d, want 401", rec.Code)
+	}
+
+	// Disable spends its own step: the watermark survives ClearTOTP while
+	// every other factor field is dropped.
+	*now = now.Add(2 * totpPeriod * time.Second)
+	disableCode := totpCode(t, state.users[0].TOTPSecret, *now)
+	rec = authedTOTPRequest(t, state, session, http.MethodDelete, "/api/v1/users/me/totp", `{"code":"`+disableCode+`"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("disable status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if state.users[0].TOTPEnabled || state.users[0].HasUsableTOTPSecret() {
+		t.Fatalf("disable left TOTP state: %+v", state.users[0])
+	}
+	if want := (*now).Unix() / totpPeriod; state.users[0].TOTPLastStep != want {
+		t.Fatalf("disable watermark=%d, want %d", state.users[0].TOTPLastStep, want)
+	}
+}
+
+// Admin reset clears the factor but never the monotonic watermark: a code
+// spent under the old secret must stay spent if the same material were
+// ever re-armed (#1220).
+func TestTOTPAdminResetPreservesReplayWatermark(t *testing.T) {
+	user := totpTestUser(t, "correct-password-123")
+	user.TOTPEnabled = true
+	user.TOTPSecret = "JBSWY3DPEHPK3PXP"
+	user.TOTPLastStep = 4242
+	state, _ := totpTestState(t, user)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/alice/totp", nil)
+	req = req.WithContext(context.WithValue(req.Context(), contextKeyRole, "admin"))
+	rec := httptest.NewRecorder()
+	state.handleV1UserTOTPReset(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("admin reset status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if state.users[0].HasUsableTOTPSecret() {
+		t.Fatal("reset left TOTP state")
+	}
+	if got := state.users[0].TOTPLastStep; got != 4242 {
+		t.Fatalf("reset rewound the replay watermark: %d", got)
+	}
+}
+
+// validateTOTPCode reports the matched timestep for every code inside the
+// ±1 skew window so callers can record it (#1220).
+func TestValidateTOTPCodeReturnsMatchedStep(t *testing.T) {
+	secret := "JBSWY3DPEHPK3PXP"
+	now := time.Unix(1_700_000_000, 0)
+	current := now.Unix() / totpPeriod
+	for _, offset := range []int64{0, 1, -1} {
+		code := totpCode(t, secret, now.Add(time.Duration(offset)*totpPeriod*time.Second))
+		step, ok := validateTOTPCode(now, secret, code)
+		if !ok || step != current+offset {
+			t.Fatalf("offset %d: step=%d ok=%v, want step %d", offset, step, ok, current+offset)
+		}
+	}
+	if _, ok := validateTOTPCode(now, secret, "000000"); ok {
+		t.Fatal("bogus code validated")
+	}
+	if _, ok := validateTOTPCode(now, "", totpCode(t, secret, now)); ok {
+		t.Fatal("empty secret validated")
 	}
 }
