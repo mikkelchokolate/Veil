@@ -229,3 +229,72 @@ func TestConnectionLimitCapabilityMatchesValidator(t *testing.T) {
 		t.Error("capability must keep advertising hysteria2 connection limits regardless of inbound enabled state")
 	}
 }
+
+// TestInboundUpdateRejectsConnectionLimitedClients (#1224): an inbound PUT
+// whose CANDIDATE post-update state cannot enforce connection limits —
+// disabled, or moved to a protocol without admission hooks — while clients
+// carrying deviceLimit/ipLimit remain bound would silently neutralize those
+// limits. Mirror the quota-bound guard (#1118) and reject with 409.
+func TestInboundUpdateRejectsConnectionLimitedClients(t *testing.T) {
+	router, state := newApplyTrackedRouterWithState(t)
+	t.Cleanup(func() { _ = state.Close() })
+
+	inboundResponse := v1Request(t, router, http.MethodPost, "/api/inbounds",
+		`{"name":"lim-put-hy","protocol":"hysteria2","transport":"udp","port":27480,"enabled":true}`)
+	if inboundResponse.Code != http.StatusCreated && inboundResponse.Code != http.StatusOK {
+		t.Fatalf("create inbound: %d %s", inboundResponse.Code, inboundResponse.Body.String())
+	}
+	clientResponse := v1Request(t, router, http.MethodPost, "/api/v1/clients",
+		`{"name":"put-limited","deviceLimit":2,"ipLimit":1,"bindings":[{"inboundId":"lim-put-hy","runtimeIdentity":"put_limited","credential":"lim-secret"}]}`)
+	if clientResponse.Code != http.StatusCreated {
+		t.Fatalf("create limited client: %d %s", clientResponse.Code, clientResponse.Body.String())
+	}
+
+	// Switching to a protocol without admission hooks strips enforcement.
+	put := v1Request(t, router, http.MethodPut, "/api/inbounds/lim-put-hy",
+		`{"name":"lim-put-hy","protocol":"mieru","transport":"tcp","port":27480,"enabled":true}`)
+	if put.Code != http.StatusConflict {
+		t.Fatalf("protocol switch with connection-limited clients: %d %s, want 409", put.Code, put.Body.String())
+	}
+	// Disabling the inbound strips enforcement the same way.
+	disable := v1Request(t, router, http.MethodPut, "/api/inbounds/lim-put-hy",
+		`{"name":"lim-put-hy","protocol":"hysteria2","transport":"udp","port":27480,"enabled":false}`)
+	if disable.Code != http.StatusConflict {
+		t.Fatalf("disable with connection-limited clients: %d %s, want 409", disable.Code, disable.Body.String())
+	}
+	// A same-protocol enabled update keeps enforcement — never blocked.
+	ok := v1Request(t, router, http.MethodPut, "/api/inbounds/lim-put-hy",
+		`{"name":"lim-put-hy","protocol":"hysteria2","transport":"udp","port":27480,"enabled":true}`)
+	if ok.Code != http.StatusOK {
+		t.Fatalf("same-protocol update: %d %s", ok.Code, ok.Body.String())
+	}
+
+	// A stale binding left over from restore/legacy data still blocks the
+	// limit-stripping update: once the limited client's binding is disabled
+	// the guard must clear, so a wedged state stays fixable.
+	stale := v1Request(t, router, http.MethodPost, "/api/v1/clients",
+		`{"name":"put-stale","deviceLimit":2,"bindings":[{"inboundId":"lim-put-hy","enabled":false,"runtimeIdentity":"put_stale","credential":"lim-secret"}]}`)
+	if stale.Code != http.StatusCreated {
+		t.Fatalf("create stale-bound client: %d %s", stale.Code, stale.Body.String())
+	}
+	staleClient := unwrapClient(t, stale.Body.Bytes())
+	for _, b := range staleClient["bindings"].([]any) {
+		binding, _ := b.(map[string]any)
+		if binding["inboundId"] != "lim-put-hy" {
+			continue
+		}
+		enable := v1Request(t, router, http.MethodPatch,
+			"/api/v1/clients/"+staleClient["id"].(string)+"/bindings/"+binding["id"].(string),
+			fmt.Sprintf(`{"enabled":true,"version":%d}`, int(binding["version"].(float64))))
+		if enable.Code != http.StatusOK {
+			t.Fatalf("re-enable binding: %d %s", enable.Code, enable.Body.String())
+		}
+	}
+	// Still enabled — the disable PUT must keep rejecting while ANY enabled
+	// limited binding remains (here two clients now carry one each).
+	disableAgain := v1Request(t, router, http.MethodPut, "/api/inbounds/lim-put-hy",
+		`{"name":"lim-put-hy","protocol":"hysteria2","transport":"udp","port":27480,"enabled":false}`)
+	if disableAgain.Code != http.StatusConflict {
+		t.Fatalf("disable after re-enable: %d %s, want 409", disableAgain.Code, disableAgain.Body.String())
+	}
+}

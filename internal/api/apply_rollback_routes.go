@@ -416,6 +416,11 @@ func applyManagementSnapshotExact(state *managementState, snapshot managementSna
 	state.settings = cloned.Settings
 	state.inbounds = cloned.Inbounds
 	state.pruneHy2AuthSecretsLocked()
+	// The inbound set and the committed client table were both replaced —
+	// tracker entries for names/IDs that did not survive can never reconcile
+	// (#1206).
+	state.pruneHy2AdmissionInboundsLocked()
+	state.pruneHy2AdmissionToLiveClients()
 	state.rules = cloned.Rules
 	state.routingPreset = cloned.RoutingPreset
 	state.routingSource = cloned.RoutingSource

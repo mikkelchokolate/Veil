@@ -383,6 +383,15 @@ WHERE client_id=? AND target_generation=? AND target_payload_hash=? AND state<>'
 // ApplyQuotaMutationTx writes the planned depleted/reset fields using the
 // generation bound at plan time. An intervening client edit must conflict
 // instead of applying a stale quota decision to a newer version.
+//
+// A ResetPeriod mutation is applied AFTER the caller rebuilt current-period
+// counters inside this same transaction (ResetQuotaPeriodTx). The planner
+// clears Depleted unconditionally at a boundary, but samples collected late
+// for the new period (or a daemon that kept reporting across the downtime)
+// can rebuild counters that already exceed the quota — clearing the flag
+// then re-enables the client until the next reconcile tick (#1225). The
+// rebuilt totals are visible inside this transaction, so depletion is
+// re-evaluated against them instead of trusting the planned false.
 func ApplyQuotaMutationTx(tx *Tx, mutation QuotaMutation) error {
 	if tx == nil {
 		return fmt.Errorf("client: quota mutation transaction is required")
@@ -397,6 +406,14 @@ func ApplyQuotaMutationTx(tx *Tx, mutation QuotaMutation) error {
 		if current.Version != wantVersion {
 			return ErrVersionConflict
 		}
+	}
+	if mutation.ResetPeriod && current.QuotaBytes != nil {
+		var upload, download int64
+		if err := tx.QueryRow(`SELECT COALESCE(SUM(upload_bytes),0), COALESCE(SUM(download_bytes),0)
+FROM traffic_counters WHERE client_id=?`, mutation.ClientID).Scan(&upload, &download); err != nil {
+			return fmt.Errorf("client: read rebuilt quota counters: %w", err)
+		}
+		mutation.Depleted = QuotaReached(upload, download, *current.QuotaBytes)
 	}
 	current.Depleted = mutation.Depleted
 	if mutation.NextResetAt != nil {

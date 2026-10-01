@@ -185,6 +185,21 @@ WHERE b.inbound_id=? AND b.enabled=1 AND c.quota_bytes IS NOT NULL`, inboundID).
 	return count, nil
 }
 
+// ConnectionLimitedBindingCount reports how many ENABLED bindings on the
+// inbound belong to clients carrying a deviceLimit or ipLimit. An inbound
+// update that strips connection-limit enforcement (disabling the inbound or
+// moving it to a protocol whose runtime cannot enforce the limits) while any
+// are attached would silently neutralize them (#1224), so the API rejects
+// such updates exactly like the quota-bound guard.
+func (q queries) ConnectionLimitedBindingCount(inboundID string) (int, error) {
+	var count int
+	if err := q.q.QueryRow(`SELECT COUNT(*) FROM client_bindings b JOIN clients c ON c.id=b.client_id
+WHERE b.inbound_id=? AND b.enabled=1 AND (c.device_limit IS NOT NULL OR c.ip_limit IS NOT NULL)`, inboundID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("client: count connection-limited bindings: %w", err)
+	}
+	return count, nil
+}
+
 func (r *Repository) CountBindingsForInbound(inboundID string) (int, error) {
 	var count int
 	if err := r.db.QueryRow(`SELECT COUNT(*) FROM client_bindings WHERE inbound_id=?`, inboundID).Scan(&count); err != nil {
@@ -609,6 +624,34 @@ func (q queries) GetMigrationMarker(key string) (*MigrationMarker, error) {
 		return nil, fmt.Errorf("client: read migration marker: %w", err)
 	}
 	return &m, nil
+}
+
+// MigrationMarkerKeys returns the set of marker keys sharing the given
+// prefix (e.g. LegacyProfileMarkerPrefix) so a caller can resolve "was this
+// row migrated" for a whole slice in ONE query instead of a marker read per
+// row — the per-admission Hysteria2 auth path uses this so repository reads
+// never run under the management-state mutex (#1206).
+func (q queries) MigrationMarkerKeys(prefix string) (map[string]struct{}, error) {
+	rows, err := q.q.Query(`SELECT key FROM migration_markers WHERE key LIKE ? ESCAPE '\'`, escapeLikePrefix(prefix)+"%")
+	if err != nil {
+		return nil, fmt.Errorf("client: list migration markers: %w", err)
+	}
+	defer rows.Close()
+	out := make(map[string]struct{})
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return nil, fmt.Errorf("client: scan migration marker key: %w", err)
+		}
+		out[key] = struct{}{}
+	}
+	return out, rows.Err()
+}
+
+// escapeLikePrefix escapes LIKE metacharacters so the prefix itself is always
+// literal in a 'prefix%' pattern (ESCAPE '\' clause at the call site).
+func escapeLikePrefix(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
 }
 
 // PutMigrationMarker records (or replaces) a migration marker.

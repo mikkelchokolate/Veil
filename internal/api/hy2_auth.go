@@ -51,6 +51,16 @@ const (
 	// tracked for as long as /online still contains them — no wall-clock TTL
 	// applies to a live session (#1180).
 	defaultHy2AuthSessionTTL = 30 * time.Second
+	// maxHy2AuthInFlight bounds concurrent auth admissions — each can run
+	// credential decryption and a /online stats read for a remote-triggered
+	// request, so unbounded concurrency is an amplification surface (#1206).
+	maxHy2AuthInFlight = 32
+	// maxHy2AuthRebindAttempts/hy2AuthRebindBackoff bound the listener's
+	// self-recovery after a Serve failure: enough retries to ride out a
+	// transient error without a spin loop — a persistent failure converges
+	// on the next reload instead (#1206).
+	maxHy2AuthRebindAttempts = 3
+	hy2AuthRebindBackoff     = time.Second
 )
 
 type hy2AuthRequest struct {
@@ -163,6 +173,18 @@ func (t *hy2AdmissionTracker) admit(clientID, key string, ip netip.Addr, online 
 		sessions = make(map[string]*hy2LiveSession)
 		t.sessions[clientID] = sessions
 	}
+	// Empty submaps must not outlive their last entry: a client whose
+	// admissions all expired or reconciled away would otherwise pin a map
+	// allocation until the client is deleted (#1206). Deferred so commit
+	// writes below still land in the parent maps.
+	defer func() {
+		if len(pending) == 0 {
+			delete(t.pending, clientID)
+		}
+		if len(sessions) == 0 {
+			delete(t.sessions, clientID)
+		}
+	}()
 	// Lazy expiry keeps the pending map bounded without a background reaper.
 	for seen, entry := range pending {
 		if !entry.expires.After(now) {
@@ -340,13 +362,108 @@ func (t *hy2AdmissionTracker) reconcileSessionsLocked(sessions map[string]*hy2Li
 	}
 }
 
+// hy2SessionInbound extracts the inbound half of a session key —
+// "<inbound>\x00<addr>" — for inbound-scoped pruning.
+func hy2SessionInbound(key string) string {
+	if i := strings.IndexByte(key, 0); i >= 0 {
+		return key[:i]
+	}
+	return key
+}
+
+// dropClient removes every admission record for a client that left the store
+// (delete) — its pending and session maps would otherwise live for the
+// process lifetime since nothing reconciles a nonexistent client (#1206).
+func (t *hy2AdmissionTracker) dropClient(clientID string) {
+	t.mu.Lock()
+	delete(t.pending, clientID)
+	delete(t.sessions, clientID)
+	t.mu.Unlock()
+}
+
+// dropInbound removes one client's session tuples for a single inbound — the
+// binding-detach counterpart of dropClient: the client's sessions on OTHER
+// inbounds must stay tracked (#1206).
+func (t *hy2AdmissionTracker) dropInbound(clientID, inboundName string) {
+	prefix := inboundName + "\x00"
+	t.mu.Lock()
+	if pending := t.pending[clientID]; pending != nil {
+		for key := range pending {
+			if strings.HasPrefix(key, prefix) {
+				delete(pending, key)
+			}
+		}
+		if len(pending) == 0 {
+			delete(t.pending, clientID)
+		}
+	}
+	if sessions := t.sessions[clientID]; sessions != nil {
+		for key := range sessions {
+			if strings.HasPrefix(key, prefix) {
+				delete(sessions, key)
+			}
+		}
+		if len(sessions) == 0 {
+			delete(t.sessions, clientID)
+		}
+	}
+	t.mu.Unlock()
+}
+
+// retainClients drops tracker state for every client not in keep — the
+// wholesale-table replacement (rollback/restore) counterpart of dropClient.
+func (t *hy2AdmissionTracker) retainClients(keep map[string]struct{}) {
+	t.mu.Lock()
+	for clientID := range t.pending {
+		if _, ok := keep[clientID]; !ok {
+			delete(t.pending, clientID)
+		}
+	}
+	for clientID := range t.sessions {
+		if _, ok := keep[clientID]; !ok {
+			delete(t.sessions, clientID)
+		}
+	}
+	t.mu.Unlock()
+}
+
+// retainInbounds drops session tuples whose inbound prefix is not a live
+// inbound name — the inbound-delete counterpart of dropClient, mirrored on
+// pruneHy2AuthSecretsLocked (#1206).
+func (t *hy2AdmissionTracker) retainInbounds(keep map[string]struct{}) {
+	t.mu.Lock()
+	for clientID, pending := range t.pending {
+		for key := range pending {
+			if _, ok := keep[hy2SessionInbound(key)]; !ok {
+				delete(pending, key)
+			}
+		}
+		if len(pending) == 0 {
+			delete(t.pending, clientID)
+		}
+	}
+	for clientID, sessions := range t.sessions {
+		for key := range sessions {
+			if _, ok := keep[hy2SessionInbound(key)]; !ok {
+				delete(sessions, key)
+			}
+		}
+		if len(sessions) == 0 {
+			delete(t.sessions, clientID)
+		}
+	}
+	t.mu.Unlock()
+}
+
 // hy2AuthSecretEntry is the memoized Argon2 path secret for one inbound,
-// validated by the shared password it was derived from. Keyed in
-// s.hy2AuthSecrets by inbound name — password rotation overwrites the entry,
-// so the map stays bounded by the inbound count.
+// validated by every input the derivation consumes — the shared password AND
+// the per-install CredentialDerivationSecret (#1205). Keyed in
+// s.hy2AuthSecrets by inbound name; a rotation of either input overwrites
+// the entry, so the map stays bounded by the inbound count.
 type hy2AuthSecretEntry struct {
-	password string
-	secret   string
+	derivationSecret string
+	password         string
+	secret           string
 }
 
 // hy2AuthServer bundles the listener and server so Close can shut both down.
@@ -377,7 +494,8 @@ func (s *managementState) pruneHy2AuthSecretsLocked() {
 // per request). Caller must hold s.clientLifecycleMu. A bind failure is
 // logged and leaves the endpoint down: rendered configs referencing it fail
 // closed at the daemon (connection refused denies every session) instead of
-// silently skipping limit enforcement.
+// silently skipping limit enforcement. A Serve failure after a successful
+// bind clears s.hy2Auth and retries via recoverHy2AuthListener (#1206).
 func (s *managementState) ensureHy2AuthLocked() {
 	if s.hy2Auth != nil {
 		return
@@ -390,7 +508,7 @@ func (s *managementState) ensureHy2AuthLocked() {
 		addr = runtimeports.Hysteria2HTTPAuthAddress()
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc(hysteria2.HTTPAuthPathPrefix, s.handleHy2Auth)
+	mux.HandleFunc(hysteria2.HTTPAuthPathPrefix, s.serveHy2Auth)
 	srv := &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -403,12 +521,127 @@ func (s *managementState) ensureHy2AuthLocked() {
 		return
 	}
 	s.hy2Auth = &hy2AuthServer{server: srv, listener: ln}
+	s.hy2AuthInflight = make(chan struct{}, maxHy2AuthInFlight)
 	go func() {
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("hy2auth: internal auth listener stopped unexpectedly: %v", err)
+			s.recoverHy2AuthListener(srv)
 		}
 	}()
 	log.Printf("hy2auth: internal Hysteria2 auth listener bound on %s", addr)
+}
+
+// serveHy2Auth bounds concurrent admissions: each request can run credential
+// decryption and a /online stats read, and the only legitimate caller is the
+// loopback unit, so excess concurrency is pressure, not parallelism (#1206).
+// Overflow denies instead of queueing — the daemon treats a deny as an auth
+// failure and retries.
+func (s *managementState) serveHy2Auth(w http.ResponseWriter, r *http.Request) {
+	if inflight := s.hy2AuthInflight; inflight != nil {
+		select {
+		case inflight <- struct{}{}:
+			defer func() { <-inflight }()
+		default:
+			writeJSON(w, hy2AuthResponse{OK: false})
+			return
+		}
+	}
+	s.handleHy2Auth(w, r)
+}
+
+// recoverHy2AuthListener rebinds the internal auth listener after its Serve
+// loop died unexpectedly (#1206). The failed server is only detached when
+// s.hy2Auth still points at it — a Close/detach or a reload that already
+// swapped in a replacement wins — then the bind retries a few times; a
+// persistent failure leaves s.hy2Auth nil so the next reload or the next
+// Serve error retries again (the endpoint fails closed meanwhile).
+func (s *managementState) recoverHy2AuthListener(failed *http.Server) {
+	s.mu.Lock()
+	s.clientLifecycleMu.Lock()
+	if s.hy2Auth == nil || s.hy2Auth.server != failed || s.clientSubsystemStopping {
+		s.clientLifecycleMu.Unlock()
+		s.mu.Unlock()
+		return
+	}
+	s.hy2Auth = nil
+	s.clientLifecycleMu.Unlock()
+	s.mu.Unlock()
+	// http.Server.Serve always closes the listener on return; Close() the
+	// server so any in-flight connection to the dead listener drains.
+	_ = failed.Close()
+
+	for attempt := 1; attempt <= maxHy2AuthRebindAttempts; attempt++ {
+		if attempt > 1 {
+			time.Sleep(hy2AuthRebindBackoff)
+		}
+		s.mu.Lock()
+		s.clientLifecycleMu.Lock()
+		if s.clientSubsystemStopping || s.hy2Auth != nil {
+			s.clientLifecycleMu.Unlock()
+			s.mu.Unlock()
+			return
+		}
+		s.ensureHy2AuthLocked()
+		rebound := s.hy2Auth != nil
+		s.clientLifecycleMu.Unlock()
+		s.mu.Unlock()
+		if rebound {
+			return
+		}
+	}
+	log.Printf("hy2auth: auth listener still unbound after %d rebind attempts — next reload or state change retries", maxHy2AuthRebindAttempts)
+}
+
+// pruneHy2AdmissionClient drops all admission-tracker state for a client
+// that left the store (client delete). Without it a deleted client's
+// pending/session records linger for the panel's lifetime (#1206).
+func (s *managementState) pruneHy2AdmissionClient(clientID string) {
+	if s.hy2Limiter != nil {
+		s.hy2Limiter.dropClient(clientID)
+	}
+}
+
+// pruneHy2AdmissionInbound drops one client's tracker tuples for a single
+// inbound — the binding-detach counterpart of pruneHy2AdmissionClient.
+func (s *managementState) pruneHy2AdmissionInbound(clientID, inboundID string) {
+	if s.hy2Limiter != nil {
+		s.hy2Limiter.dropInbound(clientID, inboundID)
+	}
+}
+
+// pruneHy2AdmissionInboundsLocked drops tracker tuples whose inbound prefix
+// no longer names a live inbound. Call under s.mu wherever the inbound set
+// is replaced — alongside pruneHy2AuthSecretsLocked (#1206).
+func (s *managementState) pruneHy2AdmissionInboundsLocked() {
+	if s.hy2Limiter == nil {
+		return
+	}
+	live := make(map[string]struct{}, len(s.inbounds))
+	for _, in := range s.inbounds {
+		live[in.Name] = struct{}{}
+	}
+	s.hy2Limiter.retainInbounds(live)
+}
+
+// pruneHy2AdmissionToLiveClients retains tracker state only for client IDs
+// still in the store. Call after wholesale client-table replacement
+// (rollback, backup restore, subsystem reload) — per-mutation deletions use
+// the cheaper targeted drops (#1206). Touches only clientLifecycleMu-guarded
+// fields plus a repo read, so initClientSubsystem may call it too.
+func (s *managementState) pruneHy2AdmissionToLiveClients() {
+	if s.hy2Limiter == nil || s.clientRepo == nil {
+		return
+	}
+	clients, err := s.clientRepo.AllClients()
+	if err != nil {
+		log.Printf("hy2auth: cannot prune admission tracker for live clients: %v", err)
+		return
+	}
+	keep := make(map[string]struct{}, len(clients))
+	for _, c := range clients {
+		keep[c.ID] = struct{}{}
+	}
+	s.hy2Limiter.retainClients(keep)
 }
 
 // stopHy2AuthLocked detaches the listener under s.mu; the caller closes it
@@ -468,20 +701,24 @@ func (s *managementState) handleHy2Auth(w http.ResponseWriter, r *http.Request) 
 		deny()
 		return
 	}
-	// The Argon2 derivation is keyed solely by (inbound.Name, shared
-	// password), so a {password -> secret} entry per inbound is exact: a
-	// password rotation replaces the stored entry instead of accumulating
+	// The Argon2 derivation consumes (inbound.Name, shared password,
+	// per-install derivation secret), so a cache entry is exact only when all
+	// inputs match — a rotation of the shared password or the management-key
+	// derivative (#1205) replaces the stored entry instead of accumulating
 	// stale ones, bounding the map by the inbound count.
 	password := hysteria2.SharedPassword(settings, inbound)
 	var expectedSecret string
 	if cached, ok := s.hy2AuthSecrets.Load(inbound.Name); ok {
-		if entry, ok := cached.(hy2AuthSecretEntry); ok && subtle.ConstantTimeCompare([]byte(entry.password), []byte(password)) == 1 {
+		if entry, ok := cached.(hy2AuthSecretEntry); ok &&
+			subtle.ConstantTimeCompare([]byte(entry.password), []byte(password)) == 1 &&
+			subtle.ConstantTimeCompare([]byte(entry.derivationSecret), []byte(settings.CredentialDerivationSecret)) == 1 {
 			expectedSecret = entry.secret
 		}
 	}
 	if expectedSecret == "" {
 		expectedSecret = hysteria2.HTTPAuthSecret(settings, inbound)
-		s.hy2AuthSecrets.Store(inbound.Name, hy2AuthSecretEntry{password: password, secret: expectedSecret})
+		s.hy2AuthSecrets.Store(inbound.Name, hy2AuthSecretEntry{
+			derivationSecret: settings.CredentialDerivationSecret, password: password, secret: expectedSecret})
 	}
 	if subtle.ConstantTimeCompare([]byte(providedSecret), []byte(expectedSecret)) != 1 {
 		deny()
@@ -497,15 +734,20 @@ func (s *managementState) handleHy2Auth(w http.ResponseWriter, r *http.Request) 
 	// Rebuild the effective credential view exactly like the render path:
 	// migrated legacy profiles are suppressed, normalized runtime
 	// credentials replace same-named legacy entries, and an enabled binding
-	// with no active credential fails the whole resolution closed.
-	s.mu.Lock()
+	// with no active credential fails the whole resolution closed. ALL of it
+	// runs unlocked — repository reads, marker loads, decryption, and
+	// serialization must never serialize on s.mu, because this is the
+	// remote-facing per-admission path (#1206).
 	effective := inbound
-	if err := s.suppressMigratedLegacyProfiles(&effective); err != nil {
-		s.mu.Unlock()
-		deny()
-		return
+	if len(effective.Profiles) > 0 {
+		markers, markErr := legacyProfileMarkers(repo)
+		if markErr != nil {
+			log.Printf("event=hy2_auth_marker_error inbound=%q err=%q (failing closed)", inbound.Name, markErr)
+			deny()
+			return
+		}
+		suppressMigratedLegacyProfiles(markers, &effective)
 	}
-	s.mu.Unlock()
 	normalized, err := svc.CredentialsForInbound(inbound.Name)
 	if err != nil {
 		log.Printf("event=hy2_auth_credential_error inbound=%q err=%q (failing closed)", inbound.Name, err)
@@ -671,15 +913,14 @@ func (s *managementState) hy2ClientOnlineSessions(ctx context.Context, settings 
 	var total int64
 	for name, bindingIDs := range byInbound {
 		in := targets[name]
-		s.mu.Lock()
-		effective := in
-		if err := s.suppressMigratedLegacyProfiles(&effective); err != nil {
-			s.mu.Unlock()
-			return 0, err
-		}
-		s.mu.Unlock()
-		identities := trafficIdentityMap(name, effective.Profiles, allBindings, allClients, time.Now().Unix())
-		counts, _, err := online(ctx, settings, effective, identities)
+		// Identity folding uses the RAW profile list: a migrated profile's
+		// username still maps to its StableClientID binding so live sessions
+		// admitted before the migration keep counting toward the right
+		// client, and trafficIdentityMap resolves migrated usernames before
+		// generic name aliases (#1225). No marker reads needed here — the
+		// stats fold only cares which binding a reported username serves.
+		identities := trafficIdentityMap(name, in.Profiles, allBindings, allClients, time.Now().Unix())
+		counts, _, err := online(ctx, settings, in, identities)
 		if err != nil {
 			return 0, fmt.Errorf("online sessions for inbound %s: %w", name, err)
 		}

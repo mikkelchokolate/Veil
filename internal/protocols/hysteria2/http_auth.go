@@ -18,16 +18,28 @@ import (
 const HTTPAuthPathPrefix = "/api/internal/hy2-auth/"
 
 // HTTPAuthSecret derives the per-inbound shared secret embedded in the
-// rendered auth.http.url. It is a separate derivation domain from the
-// traffic-stats secret so leaking one cannot reveal the other, and it is
+// rendered auth.http.url. The KDF input mixes the inbound's effective shared
+// password with Settings.CredentialDerivationSecret — the per-install secret
+// derived from the management-state encryption key — so an empty or weak
+// shared password cannot leave the callback path publicly computable or
+// cheaply guessable (issue #1205). It is a separate derivation domain from
+// the traffic-stats secret so leaking one cannot reveal the other, and it is
 // stable across restarts so a rendered config keeps authenticating the unit
 // it was written for. It never appears in public API output — only in the
 // on-disk rendered YAML, which is already treated as secret material.
+//
+// Residual: render contexts without a per-install secret (ad-hoc callers
+// that never loaded managed state — the panel itself always has one) fall
+// back to password-only derivation, matching the pre-#1205 behavior.
 func HTTPAuthSecret(settings model.Settings, inbound model.Inbound) string {
-	password := []byte(hysteria2Password(settings, inbound))
+	password := hysteria2Password(settings, inbound)
+	material := password
+	if settings.CredentialDerivationSecret != "" {
+		material = settings.CredentialDerivationSecret + "\x00" + password
+	}
 	salt := []byte("veil-hysteria2-http-auth\x00" + inbound.Name)
 	digest := argon2.IDKey(
-		password,
+		[]byte(material),
 		salt,
 		trafficStatsArgonTime,
 		trafficStatsArgonMemory,

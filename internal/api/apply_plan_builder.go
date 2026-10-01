@@ -364,7 +364,12 @@ func addPanelDirectBindOwner(settings Settings, owners map[bindregistry.BindKey]
 			Message: fmt.Sprintf("Panel direct listener has invalid port in panelListen %q", settings.PanelListen),
 		}}
 	}
-	key := bindregistry.BindKey{Address: host, Port: port, Network: bindregistry.ListenTCP}
+	// Normalize the listen host: panelListen=":8443" splits to Address="" —
+	// the wildcard — while inbound owners register as "0.0.0.0". Registering
+	// the raw "" key would skip this duplicate check and defer to
+	// ValidateNoConflicts' canonical collapse, which used to last-writer-wins
+	// one claimant away (#1225).
+	key := bindregistry.BindKey{Address: bindregistry.NormalizeAddress(host), Port: port, Network: bindregistry.ListenTCP}
 	if existing, ok := owners[key]; ok && existing != owner {
 		return []bindregistry.Conflict{{
 			Key:     key,
