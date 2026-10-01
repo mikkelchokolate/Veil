@@ -120,7 +120,10 @@ export function PasskeysCard() {
 	// it is loading (or failed) totp.data is undefined and !== true would
 	// briefly over-prompt for the account password on a sole-passkey delete.
 	const soleFactorDelete = (id: string) =>
-		totp.isSuccess && totp.data.enabled !== true && list.length === 1 && list[0].id === id;
+		totp.isSuccess &&
+		totp.data.enabled !== true &&
+		list.length === 1 &&
+		list[0].id === id;
 	const deleteNeedsPassword =
 		needsPassword ||
 		(confirmDelete !== null && soleFactorDelete(confirmDelete.id));
