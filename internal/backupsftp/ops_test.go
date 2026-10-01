@@ -1,9 +1,9 @@
 package backupsftp
 
 import (
-	"encoding/binary"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
