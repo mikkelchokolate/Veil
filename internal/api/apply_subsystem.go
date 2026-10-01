@@ -340,6 +340,10 @@ func initClientSubsystem(s *managementState) {
 	// present, but binding it unconditionally keeps the listener free of
 	// render-order dependencies.
 	s.ensureHy2AuthLocked()
+	// The tracker survives reloads/restores with the listener, so clients
+	// the reloaded store no longer carries must not keep admission records
+	// (#1206).
+	s.pruneHy2AdmissionToLiveClients()
 	// Periodic panel IP-certificate renewal (#1170): the shortlived profile
 	// yields ~6-day certificates and acme.sh runs with --no-cron for helper
 	// issuance, so this worker is the renewal driver. It self-gates on

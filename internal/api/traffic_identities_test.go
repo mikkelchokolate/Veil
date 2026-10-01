@@ -99,3 +99,33 @@ func TestTrafficIdentityMapSkipsRenderExcludedClients(t *testing.T) {
 		t.Fatalf("expected exactly the live client's 2 identities, got %#v", identities)
 	}
 }
+
+// TestHysteria2TrafficIdentityMapMigratedUsernameBeatsClientName (#1225): a
+// migrated legacy profile username must fold onto the migrated client's
+// StableClientID binding even when another client's NAME collides with that
+// username — the generic name alias is a fallback, not a claim. Otherwise a
+// renamed/normalized client could steal sessions still reporting under the
+// migrated username.
+func TestHysteria2TrafficIdentityMapMigratedUsernameBeatsClientName(t *testing.T) {
+	migratedID := client.StableClientID("hy", "alice")
+	identities := trafficIdentityMap(
+		"hy",
+		[]ClientProfile{{Username: "alice", Enabled: true}},
+		[]client.Binding{
+			{ID: "bind-migrated", ClientID: migratedID, InboundID: "hy", RuntimeIdentity: "v_migrated", Enabled: true},
+			{ID: "bind-squatter", ClientID: "client-squatter", InboundID: "hy", RuntimeIdentity: "v_squatter", Enabled: true},
+		},
+		[]client.Client{
+			{ID: migratedID, Name: "renamed-away", Enabled: true},
+			{ID: "client-squatter", Name: "alice", Enabled: true},
+		},
+		time.Now().Unix(),
+	)
+	if identities["alice"] != "bind-migrated" {
+		t.Fatalf("migrated legacy username claimed by a name-squatting client: %#v", identities)
+	}
+	// The squatter's own canonical identity is unaffected.
+	if identities["v_squatter"] != "bind-squatter" {
+		t.Fatalf("canonical runtime identity missing: %#v", identities)
+	}
+}

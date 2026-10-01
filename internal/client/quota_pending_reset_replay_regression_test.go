@@ -116,3 +116,65 @@ FROM quota_enforcement WHERE client_id=? AND state<>'superseded'`, created.ID).
 		t.Fatalf("quotaResetAt=%v, want next boundary %d", reloaded.QuotaResetAt, nextBoundary)
 	}
 }
+
+// Regression for #1225: a quota rollover whose REBUILT post-reset counters
+// already exceed the quota must keep the client depleted. The planner clears
+// Depleted unconditionally at the boundary — but samples collected late for
+// the new period (or a daemon that kept reporting across the panel's
+// downtime) rebuild counters that are already over quota, so applying the
+// planned false revives the client until the next reconcile tick.
+func TestApplyQuotaMutationReevaluatesDepletedAfterPeriodReset(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+	traffic := NewTrafficStore(db)
+
+	quota := int64(1000)
+	now := time.Now().UTC()
+	past := now.Add(-time.Hour).Unix()
+	created, err := repo.Create(Client{
+		Name: "rollover-still-depleted", Enabled: true, QuotaBytes: &quota,
+		QuotaResetPolicy: ResetMonthly, QuotaResetAt: &past, Depleted: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := repo.CreateBinding(Binding{ClientID: created.ID, InboundID: "inbound", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A sample inside the NEW period already exceeds the quota — the reset
+	// rebuilds counters from retained samples (bucket_start >= periodStart),
+	// so post-reset usage is over the limit the moment the rollover commits.
+	if err := traffic.RecordSample(Sample{BindingID: binding.ID, UploadBytes: 2000, AtUnix: now.Unix()}); err != nil {
+		t.Fatal(err)
+	}
+
+	reconciler := NewTransactionalReconciler(repo, traffic, 0, func(mutation QuotaMutation) error {
+		return traffic.WithRecordLock(func() error {
+			return repo.WithTx(func(tx *Tx) error {
+				if mutation.ResetPeriod {
+					if err := ResetQuotaPeriodTx(tx, mutation.ClientID, mutation.CurrentPeriodStart); err != nil {
+						return err
+					}
+				}
+				return ApplyQuotaMutationTx(tx, mutation)
+			})
+		})
+	})
+	reconciler.now = func() time.Time { return now }
+	if _, err := reconciler.ReconcileOnce(); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	reloaded, err := repo.Get(created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reloaded.Depleted {
+		t.Fatal("rollover cleared depleted even though rebuilt post-reset counters exceed the quota")
+	}
+	if reloaded.QuotaResetAt == nil || *reloaded.QuotaResetAt <= now.Unix() {
+		t.Fatalf("quotaResetAt did not advance past now: %v", reloaded.QuotaResetAt)
+	}
+}

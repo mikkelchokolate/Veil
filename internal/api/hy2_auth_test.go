@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"sync"
 	"testing"
@@ -636,5 +637,394 @@ func TestHy2AuthIPLimitDeadPendingCannotPinRegisteredSlot(t *testing.T) {
 	}
 	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "4.4.4.4:4000", Auth: auth}); resp.OK {
 		t.Fatal("fourth IP admitted past ipLimit=2")
+	}
+}
+
+// #1205: the memoized path secret is keyed by BOTH inputs the derivation
+// consumes — a rotation of the per-install CredentialDerivationSecret must
+// replace the cached entry and rotate the working URL, and the shared
+// password stays part of the cache key.
+func TestHy2AuthSecretCacheTracksInstallSecret(t *testing.T) {
+	s, _ := newHy2AuthTestState(t)
+	s.hy2AuthOnline = stubOnline(0)
+	s.settings.CredentialDerivationSecret = "install-one"
+	oldPath := hy2AuthPath(s, "hy2")
+	want := hysteria2.SharedPassword(s.settings, s.inbounds[0])
+	// First request populates s.hy2AuthSecrets for the inbound.
+	if resp := doHy2Auth(s, oldPath, hy2AuthRequest{Addr: "1.2.3.4:1", Auth: want}); !resp.OK {
+		t.Fatal("baseline auth denied")
+	}
+
+	s.settings.CredentialDerivationSecret = "install-two"
+	newPath := hy2AuthPath(s, "hy2")
+	if newPath == oldPath {
+		t.Fatal("install-secret rotation did not rotate the path secret")
+	}
+	// The stale cached entry must not keep authorizing the old URL.
+	if resp := doHy2Auth(s, oldPath, hy2AuthRequest{Addr: "1.2.3.4:2", Auth: want}); resp.OK {
+		t.Fatal("stale path secret accepted after install-secret rotation")
+	}
+	if resp := doHy2Auth(s, newPath, hy2AuthRequest{Addr: "1.2.3.4:3", Auth: want}); !resp.OK {
+		t.Fatal("rotated path secret denied")
+	}
+
+	// A shared-password change invalidates the cache entry the same way.
+	s.inbounds[0].Password = "rotated-shared"
+	rotatedPath := hy2AuthPath(s, "hy2")
+	if rotatedPath == newPath {
+		t.Fatal("shared-password rotation did not rotate the path secret")
+	}
+	wantRotated := hysteria2.SharedPassword(s.settings, s.inbounds[0])
+	if resp := doHy2Auth(s, rotatedPath, hy2AuthRequest{Addr: "1.2.3.4:4", Auth: wantRotated}); !resp.OK {
+		t.Fatal("password-rotated path secret denied")
+	}
+}
+
+// #1206: migrated legacy profiles are suppressed from the merged credential
+// table the callback authenticates against — the same view the renderer
+// emits. The marker set is read outside s.mu, but the suppression itself is
+// identical, so the migrated username must stop authenticating the moment
+// the marker lands while the normalized binding's credential works.
+func TestHy2AuthSuppressesMigratedLegacyCredential(t *testing.T) {
+	s, svc := newHy2AuthTestState(t)
+	s.hy2AuthOnline = stubOnline(0)
+	s.inbounds[0].Profiles = []model.ClientProfile{{
+		Name: "alice", Username: "alice", Password: "legacy-pass", Enabled: true,
+	}}
+	path := hy2AuthPath(s, "hy2")
+	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "1.2.3.4:10", Auth: "alice:legacy-pass"}); !resp.OK {
+		t.Fatal("legacy profile credential denied before migration")
+	}
+
+	// The migration shape: a normalized client on the stable derived ID with
+	// a binding to this inbound, plus the per-profile marker.
+	view, err := svc.Create(client.Client{
+		ID: client.StableClientID("hy2", "alice"), Name: "alice", Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := svc.AddBinding(view.ID, "hy2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetCredential(b.ID, "password", "normalized-pass"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.clientRepo.PutMigrationMarker(client.MigrationMarker{
+		Key:       client.LegacyProfileMarkerKey("hy2", "alice"),
+		Version:   client.LegacyProfileMarkerVersion,
+		AppliedAt: time.Now().Unix(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "1.2.3.4:11", Auth: "alice:legacy-pass"}); resp.OK {
+		t.Fatal("migrated legacy credential still authenticates")
+	}
+	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "1.2.3.4:12", Auth: b.RuntimeIdentity + ":normalized-pass"}); !resp.OK {
+		t.Fatal("normalized binding credential denied after migration")
+	}
+}
+
+// #1206: the /online stats read must NOT run under s.mu — it is remote I/O
+// on the per-admission path, and holding the state mutex across it would
+// stall every management operation behind a slow stats call.
+func TestHy2AuthOnlineReadRunsOutsideStateMutex(t *testing.T) {
+	s, svc := newHy2AuthTestState(t)
+	inOnline := make(chan struct{}, 1)
+	release := make(chan struct{})
+	s.hy2AuthOnline = func(context.Context, model.Settings, model.Inbound, map[string]string) (map[string]int64, []string, error) {
+		inOnline <- struct{}{}
+		<-release
+		return map[string]int64{}, nil, nil
+	}
+	view, err := svc.Create(client.Client{Name: "mu", Enabled: true, DeviceLimit: intPtr(4)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := svc.AddBinding(view.ID, "hy2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetCredential(b.ID, "password", "pw"); err != nil {
+		t.Fatal(err)
+	}
+	path := hy2AuthPath(s, "hy2")
+
+	done := make(chan hy2AuthResponse, 1)
+	go func() {
+		done <- doHy2Auth(s, path, hy2AuthRequest{Addr: "1.2.3.4:1", Auth: b.RuntimeIdentity + ":pw"})
+	}()
+	select {
+	case <-inOnline:
+	case <-time.After(5 * time.Second):
+		t.Fatal("admission never reached the online read")
+	}
+	// While the handler is blocked inside the stats read, s.mu must be free.
+	locked := make(chan struct{})
+	go func() {
+		s.mu.Lock()
+		// A trivial read keeps the critical section non-empty: the probe's
+		// signal is that Lock() returned promptly while the handler is
+		// blocked in the stats read.
+		_ = s.statePath
+		s.mu.Unlock()
+		close(locked)
+	}()
+	select {
+	case <-locked:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("state mutex held across the /online read")
+	}
+	close(release)
+	if resp := <-done; !resp.OK {
+		t.Fatal("admission denied after the online read")
+	}
+}
+
+// #1206: the in-flight bound denies overflow instead of queueing — each
+// admission can run decryption plus a stats read, so unbounded concurrency
+// is a remote-triggered amplification surface.
+func TestHy2AuthInFlightBoundDeniesOverflow(t *testing.T) {
+	s, _ := newHy2AuthTestState(t)
+	s.hy2AuthOnline = stubOnline(0)
+	s.hy2AuthInflight = make(chan struct{}, 1)
+	s.hy2AuthInflight <- struct{}{} // occupy the only slot
+
+	rec := httptest.NewRecorder()
+	s.serveHy2Auth(rec, httptest.NewRequest(http.MethodPost, hy2AuthPath(s, "hy2"),
+		strings.NewReader(`{"addr":"1.2.3.4:1","auth":"x:y"}`)))
+	var denied hy2AuthResponse
+	if err := json.NewDecoder(rec.Body).Decode(&denied); err != nil {
+		t.Fatalf("decode deny body: %v", err)
+	}
+	if denied.OK {
+		t.Fatal("over-cap admission was allowed")
+	}
+	<-s.hy2AuthInflight
+
+	// With a slot free the request reaches the real handler — a valid
+	// credential must still admit.
+	svc := s.clientService
+	view, err := svc.Create(client.Client{Name: "slot", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := svc.AddBinding(view.ID, "hy2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetCredential(b.ID, "password", "pw"); err != nil {
+		t.Fatal(err)
+	}
+	rec2 := httptest.NewRecorder()
+	body, _ := json.Marshal(hy2AuthRequest{Addr: "1.2.3.4:2", Auth: b.RuntimeIdentity + ":pw"})
+	s.serveHy2Auth(rec2, httptest.NewRequest(http.MethodPost, hy2AuthPath(s, "hy2"), strings.NewReader(string(body))))
+	var admitted hy2AuthResponse
+	if err := json.NewDecoder(rec2.Body).Decode(&admitted); err != nil {
+		t.Fatalf("decode admit body: %v", err)
+	}
+	if !admitted.OK {
+		t.Fatal("valid credential denied after the in-flight slot freed")
+	}
+}
+
+// #1206: when the listener's Serve loop dies unexpectedly the state must
+// rebind — a permanently dead listener fails every admission closed while
+// the panel looks healthy. Closing the listener socket externally simulates
+// the failure.
+func TestHy2AuthListenerRebindsAfterServeFailure(t *testing.T) {
+	s, _ := newHy2AuthTestState(t)
+	s.hy2AuthListenAddr = "127.0.0.1:0"
+	s.clientLifecycleMu.Lock()
+	s.ensureHy2AuthLocked()
+	s.clientLifecycleMu.Unlock()
+	first := s.hy2Auth
+	if first == nil {
+		t.Fatal("listener did not bind")
+	}
+	defer func() {
+		s.mu.Lock()
+		detached := s.detachHy2AuthLocked()
+		s.mu.Unlock()
+		if detached != nil {
+			_ = detached.server.Close()
+		}
+	}()
+
+	// Kill the listener underneath Serve — the recovery path must detach the
+	// dead server and bind a fresh listener.
+	_ = first.listener.Close()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		s.mu.Lock()
+		current := s.hy2Auth
+		s.mu.Unlock()
+		if current != nil && current != first {
+			return // rebound
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("listener did not rebind after the Serve failure")
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
+
+// #1206: tracker prune hooks — dropClient removes every record for a deleted
+// client, dropInbound removes only the detached inbound's tuples, and the
+// retain* forms mirror wholesale client/inbound replacement (rollback,
+// restore, reload).
+func TestHy2AdmissionTrackerPrunesRemovedState(t *testing.T) {
+	tracker := newHy2AdmissionTracker(time.Minute, nil)
+	ip, _ := netip.ParseAddr("203.0.113.7")
+	ip2, _ := netip.ParseAddr("203.0.113.8")
+	ip3, _ := netip.ParseAddr("203.0.113.9")
+	admit := func(clientID, inbound, addr string, source netip.Addr) {
+		t.Helper()
+		ok, reason := tracker.admit(clientID, inbound+"\x00"+addr, source, 0, 4, 4)
+		if !ok {
+			t.Fatalf("admit %s/%s denied: %s", clientID, addr, reason)
+		}
+	}
+	admit("client-a", "hy2", "203.0.113.7:1000", ip)
+	admit("client-a", "other", "203.0.113.7:1001", ip)
+	admit("client-b", "hy2", "203.0.113.8:2000", ip2)
+
+	// Binding detach prunes ONLY that inbound's tuples for the client.
+	tracker.dropInbound("client-a", "hy2")
+	tracker.mu.Lock()
+	if _, ok := tracker.sessions["client-a"]["hy2\x00203.0.113.7:1000"]; ok {
+		t.Fatal("detached inbound tuple still tracked")
+	}
+	if _, ok := tracker.sessions["client-a"]["other\x00203.0.113.7:1001"]; !ok {
+		t.Fatal("cross-inbound tuple dropped by detach prune")
+	}
+	if _, ok := tracker.sessions["client-b"]["hy2\x00203.0.113.8:2000"]; !ok {
+		t.Fatal("unrelated client tuple dropped by detach prune")
+	}
+	tracker.mu.Unlock()
+
+	// Client delete drops all of that client's records.
+	tracker.dropClient("client-a")
+	tracker.mu.Lock()
+	if len(tracker.sessions["client-a"]) != 0 || len(tracker.pending["client-a"]) != 0 {
+		t.Fatal("deleted client left admission records behind")
+	}
+	tracker.mu.Unlock()
+
+	// Inbound-set replacement drops tuples for inbounds that no longer exist.
+	tracker.retainInbounds(map[string]struct{}{"other": {}})
+	tracker.mu.Lock()
+	if _, ok := tracker.sessions["client-b"]; ok {
+		t.Fatal("stale inbound tuple survived the inbound-set prune")
+	}
+	tracker.mu.Unlock()
+
+	// Wholesale client replacement keeps only live client IDs.
+	admit("client-c", "other", "203.0.113.9:3000", ip3)
+	tracker.retainClients(map[string]struct{}{"client-c": {}})
+	tracker.mu.Lock()
+	if len(tracker.sessions) != 1 || len(tracker.pending) != 1 {
+		t.Fatalf("retainClients kept stale clients: sessions=%v pending=%v", tracker.sessions, tracker.pending)
+	}
+	if _, ok := tracker.sessions["client-c"]["other\x00203.0.113.9:3000"]; !ok {
+		t.Fatal("retainClients dropped a live client's session")
+	}
+	tracker.mu.Unlock()
+}
+
+// #1206: deleting a client through the API must drop its admission records —
+// nothing reconciles a client that no longer exists, so its pending/session
+// maps would pin memory for the process lifetime.
+func TestHy2AuthClientDeletePrunesAdmissionState(t *testing.T) {
+	router, state := newApplyTrackedRouterWithState(t)
+
+	inboundResponse := v1Request(t, router, http.MethodPost, "/api/inbounds",
+		`{"name":"prune-hy","protocol":"hysteria2","transport":"udp","port":27460,"enabled":true}`)
+	if inboundResponse.Code != http.StatusCreated && inboundResponse.Code != http.StatusOK {
+		t.Fatalf("create inbound: %d %s", inboundResponse.Code, inboundResponse.Body.String())
+	}
+	clientResponse := v1Request(t, router, http.MethodPost, "/api/v1/clients",
+		`{"name":"prune-client","deviceLimit":2,"bindings":[{"inboundId":"prune-hy","credential":"pw"}]}`)
+	if clientResponse.Code != http.StatusCreated {
+		t.Fatalf("create client: %d %s", clientResponse.Code, clientResponse.Body.String())
+	}
+	clientID := unwrapClient(t, clientResponse.Body.Bytes())["id"].(string)
+
+	if state.hy2Limiter == nil {
+		t.Fatal("admission tracker not initialized")
+	}
+	ip, _ := netip.ParseAddr("203.0.113.10")
+	if ok, reason := state.hy2Limiter.admit(clientID, "prune-hy\x00203.0.113.10:1000", ip, 0, 2, 2); !ok {
+		t.Fatalf("seed admission denied: %s", reason)
+	}
+
+	del := v1Request(t, router, http.MethodDelete, "/api/v1/clients/"+clientID, "")
+	if del.Code != http.StatusOK {
+		t.Fatalf("delete client: %d %s", del.Code, del.Body.String())
+	}
+	state.hy2Limiter.mu.Lock()
+	defer state.hy2Limiter.mu.Unlock()
+	if len(state.hy2Limiter.pending[clientID]) != 0 || len(state.hy2Limiter.sessions[clientID]) != 0 {
+		t.Fatal("deleted client left admission records behind")
+	}
+}
+
+// #1206: detaching one binding prunes only that inbound's session tuples —
+// the client's sessions on other bindings keep tracking.
+func TestHy2AuthBindingDeletePrunesOnlyThatInbound(t *testing.T) {
+	router, state := newApplyTrackedRouterWithState(t)
+
+	for _, tc := range []struct {
+		name string
+		port int
+	}{{"detach-a", 27461}, {"detach-b", 27462}} {
+		resp := v1Request(t, router, http.MethodPost, "/api/inbounds",
+			fmt.Sprintf(`{"name":%q,"protocol":"hysteria2","transport":"udp","port":%d,"enabled":true}`, tc.name, tc.port))
+		if resp.Code != http.StatusCreated && resp.Code != http.StatusOK {
+			t.Fatalf("create inbound %s: %d %s", tc.name, resp.Code, resp.Body.String())
+		}
+	}
+	clientResponse := v1Request(t, router, http.MethodPost, "/api/v1/clients",
+		`{"name":"detach-client","deviceLimit":4,"bindings":[{"inboundId":"detach-a","credential":"pw"},{"inboundId":"detach-b","credential":"pw"}]}`)
+	if clientResponse.Code != http.StatusCreated {
+		t.Fatalf("create client: %d %s", clientResponse.Code, clientResponse.Body.String())
+	}
+	created := unwrapClient(t, clientResponse.Body.Bytes())
+	clientID := created["id"].(string)
+	var bindingAID string
+	for _, raw := range created["bindings"].([]any) {
+		b := raw.(map[string]any)
+		if b["inboundId"] == "detach-a" {
+			bindingAID = b["id"].(string)
+		}
+	}
+	if bindingAID == "" {
+		t.Fatal("detach-a binding id missing from create response")
+	}
+
+	if state.hy2Limiter == nil {
+		t.Fatal("admission tracker not initialized")
+	}
+	ip, _ := netip.ParseAddr("203.0.113.11")
+	for _, inbound := range []string{"detach-a", "detach-b"} {
+		if ok, reason := state.hy2Limiter.admit(clientID, inbound+"\x00203.0.113.11:1000", ip, 0, 4, 4); !ok {
+			t.Fatalf("seed admission on %s denied: %s", inbound, reason)
+		}
+	}
+
+	del := v1Request(t, router, http.MethodDelete, "/api/v1/clients/"+clientID+"/bindings/"+bindingAID, "")
+	if del.Code != http.StatusOK {
+		t.Fatalf("detach binding: %d %s", del.Code, del.Body.String())
+	}
+	state.hy2Limiter.mu.Lock()
+	defer state.hy2Limiter.mu.Unlock()
+	if _, ok := state.hy2Limiter.sessions[clientID]["detach-a\x00203.0.113.11:1000"]; ok {
+		t.Fatal("detached inbound's session tuple still tracked")
+	}
+	if _, ok := state.hy2Limiter.sessions[clientID]["detach-b\x00203.0.113.11:1000"]; !ok {
+		t.Fatal("binding detach pruned the other inbound's session tuple")
 	}
 }
