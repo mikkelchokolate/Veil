@@ -85,25 +85,25 @@ func decodeOptionalJSONRequest(w http.ResponseWriter, r *http.Request, v any) bo
 // mark is not sufficient — a stolen 2FA-complete session must not be able to
 // permanently lower the account to password-only login. The account password
 // is required either way.
-func (s *managementState) passkeyCredentialGate(w http.ResponseWriter, r *http.Request, session Session, user model.User, password string, soleFactorRemoval bool) bool {
+func (s *managementState) passkeyCredentialGate(w http.ResponseWriter, r *http.Request, session Session, user model.User, password string, soleFactorRemoval bool) (allowed, passwordProved bool) {
 	if session.SecondFactor && !soleFactorRemoval {
-		return true
+		return true, false
 	}
 	if strings.TrimSpace(password) == "" {
 		writeError(w, "password is required", http.StatusBadRequest)
-		return false
+		return false, false
 	}
 	throttleKey := "passkey-manage:" + loginThrottleKey(r, user.Username)
 	if retryAfter := s.loginBackoffRemaining(throttleKey); retryAfter > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
 		writeError(w, "too many attempts", http.StatusTooManyRequests)
-		return false
+		return false, false
 	}
 	releaseBcrypt := acquireBcryptWork()
 	if releaseBcrypt == nil {
 		w.Header().Set("Retry-After", "1")
 		writeError(w, "too many attempts", http.StatusTooManyRequests)
-		return false
+		return false, false
 	}
 	matched := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) == nil
 	releaseBcrypt()
@@ -115,9 +115,9 @@ func (s *managementState) passkeyCredentialGate(w http.ResponseWriter, r *http.R
 			Success: false, Error: "invalid password",
 		})
 		writeError(w, "invalid password", http.StatusBadRequest)
-		return false
+		return false, false
 	}
-	return true
+	return true, true
 }
 
 // handleMyPasskeys serves GET /api/v1/users/me/passkeys — the credential
@@ -166,7 +166,7 @@ func (s *managementState) handleMyPasskeyRegisterBegin(w http.ResponseWriter, r 
 		writeError(w, "passkey limit reached", http.StatusBadRequest)
 		return
 	}
-	if !s.passkeyCredentialGate(w, r, session, user, req.Password, false) {
+	if allowed, _ := s.passkeyCredentialGate(w, r, session, user, req.Password, false); !allowed {
 		return
 	}
 	wa, _, err := s.webAuthnForRequest(r)
@@ -411,7 +411,8 @@ func (s *managementState) handleMyPasskeyByID(w http.ResponseWriter, r *http.Req
 	// This endpoint deletes exactly one credential, so removing the last
 	// factor means: no armed TOTP and this ID is the only passkey.
 	soleFactor := !user.TOTPEnabled && len(user.Passkeys) == 1 && user.Passkeys[0].ID == passkeyID
-	if !s.passkeyCredentialGate(w, r, session, user, req.Password, soleFactor) {
+	allowed, passwordProved := s.passkeyCredentialGate(w, r, session, user, req.Password, soleFactor)
+	if !allowed {
 		return
 	}
 	deleted := false
@@ -436,6 +437,12 @@ func (s *managementState) handleMyPasskeyByID(w http.ResponseWriter, r *http.Req
 		// Recompute under the lock: if this deletion disarms the account the
 		// sessions that enjoyed the factor's protection must not outlive it.
 		disarmed := current.HasSecondFactor() && !update.HasSecondFactor()
+		if disarmed && !passwordProved {
+			// The pre-lock snapshot said this wasn't the last factor, but a
+			// concurrent delete/TOTP removal raced in — refuse rather than
+			// disarm the account without a password proof (#1232).
+			return errPasswordProofRequired
+		}
 		var intent sessionRevocationIntent
 		if disarmed {
 			var intentErr error
@@ -474,6 +481,8 @@ func (s *managementState) handleMyPasskeyByID(w http.ResponseWriter, r *http.Req
 			writeNotFound(w)
 		case errors.Is(err, errSessionRevocationPersistence):
 			writeError(w, errSessionRevocationPersistence.Error(), http.StatusInternalServerError)
+		case errors.Is(err, errPasswordProofRequired):
+			writeError(w, "password is required", http.StatusBadRequest)
 		default:
 			writeError(w, "failed to delete passkey", http.StatusInternalServerError)
 		}
@@ -487,7 +496,10 @@ func (s *managementState) handleMyPasskeyByID(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNoContent)
 }
 
-var errPasskeyNotFound = errors.New("passkey not found")
+var (
+	errPasskeyNotFound       = errors.New("passkey not found")
+	errPasswordProofRequired = errors.New("password is required")
+)
 
 // handleV1UserFactorReset serves the admin factor-reset routes under
 // /api/v1/users/{username}/: "totp" clears the TOTP factor (auth_totp.go) and

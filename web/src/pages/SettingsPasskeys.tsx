@@ -116,8 +116,11 @@ export function PasskeysCard() {
 	// True when deleting `id` would disarm the account's last second factor
 	// (sole passkey, no TOTP) — the gate then demands the account password
 	// even from a marked session (#1232).
+	// Only resolve once the TOTP status query has actually answered — while
+	// it is loading (or failed) totp.data is undefined and !== true would
+	// briefly over-prompt for the account password on a sole-passkey delete.
 	const soleFactorDelete = (id: string) =>
-		totp.data?.enabled !== true && list.length === 1 && list[0].id === id;
+		totp.isSuccess && totp.data.enabled !== true && list.length === 1 && list[0].id === id;
 	const deleteNeedsPassword =
 		needsPassword ||
 		(confirmDelete !== null && soleFactorDelete(confirmDelete.id));
