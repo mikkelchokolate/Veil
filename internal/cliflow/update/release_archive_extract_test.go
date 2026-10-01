@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"strings"
 	"testing"
 )
 
@@ -51,6 +52,26 @@ func TestUpdateReleaseArchiveReturnsErrorForCorruptTar(t *testing.T) {
 	_, err := archive.ExtractVeilBinary()
 	if err == nil {
 		t.Fatal("expected error for corrupt tar")
+	}
+}
+
+// #1212: a "veil" member larger than the 100 MiB cap must error instead of
+// being silently truncated by the LimitReader and installed half-written.
+func TestUpdateReleaseArchiveRejectsOversizedBinary(t *testing.T) {
+	const maxBinSize = 100 * 1024 * 1024
+	// Zero bytes keep the gzip layer small while the declared member size
+	// exceeds the cap.
+	archive := NewReleaseArchive(createTestTarGz(t, "veil", make([]byte, maxBinSize+1)))
+
+	binary, err := archive.ExtractVeilBinary()
+	if err == nil {
+		t.Fatal("expected error for oversized veil binary")
+	}
+	if !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("error should explain the size cap: %v", err)
+	}
+	if binary != nil {
+		t.Fatalf("no binary bytes may be returned on rejection, got %d", len(binary))
 	}
 }
 

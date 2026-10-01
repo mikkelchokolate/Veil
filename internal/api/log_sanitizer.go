@@ -13,21 +13,27 @@ const maxServiceLogResponseBytes = 256 * 1024
 // so renderer YAML that is start-of-line is mid-line in GET /api/logs.
 const logJournalctlPrefix = `(?:\d{4}-\d{2}-\d{2}T[^\s]+\s+\S+\s+\S+:)?`
 
-const logJSONSecretKey = `(?:password|passwd|token|secret|private[_-]?key|license[_-]?key|authorization|auth_credentials|auth_pass|basic_auth)`
+// logSecretKeyName matches a secret-bearing key name suffix-tolerantly
+// (#1212): the [a-z0-9_-]* leader lets underscore/hyphen-compounded names
+// (access_token, client_secret, VEIL_API_TOKEN, db_password, api_key, ...)
+// reach the secret word — plain \btoken\b never matched inside X_TOKEN
+// because '_' is a word character. Bare suffixes still match (the leader
+// accepts empty), and over-redaction is the safe direction for a sanitizer.
+const logSecretKeyName = `[a-z0-9_-]*(?:authorizations?|auth_pass|auth|passwords?|passwds?|passphrases?|tokens?|secrets?|psks?|credentials?|keys?)`
 
 var (
 	logBearerPattern = regexp.MustCompile(`(?i)(\bbearer\s+)[A-Za-z0-9._~+/=-]+`)
 	// JSON string values must consume escapes — "[^"]*" stops at the first
 	// backslash-escaped quote, so {"password":"ab\"cd"} used to leak `cd"}`
 	// (#1091).
-	logJSONSecretPattern       = regexp.MustCompile(`(?i)("` + logJSONSecretKey + `"\s*:\s*")(?:[^"\\]|\\.)*(")`)
-	logJSONSecretArrayPattern  = regexp.MustCompile(`(?i)("` + logJSONSecretKey + `"\s*:\s*\[)((?:"(?:[^"\\]|\\.)*"|[^\]])*)(\])`)
+	logJSONSecretPattern       = regexp.MustCompile(`(?i)("` + logSecretKeyName + `"\s*:\s*")(?:[^"\\]|\\.)*(")`)
+	logJSONSecretArrayPattern  = regexp.MustCompile(`(?i)("` + logSecretKeyName + `"\s*:\s*\[)((?:"(?:[^"\\]|\\.)*"|[^\]])*)(\])`)
 	logJSONQuotedStringPattern = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)
 	// The value arm is quote-aware: a value opening with " or ' consumes
 	// escapes and everything up to the closing quote (or end-of-line when
 	// unclosed), so `password="abc def"` no longer leaks ` def"`; bare values
 	// run to whitespace so `token=abc,def` no longer leaks `,def` (#1091).
-	logSecretPattern       = regexp.MustCompile(`(?i)(\b(?:password|passwd|token|secret|private[_-]?key|license[_-]?key|authorization|auth_pass)\b["']?[ 	]*(?::|=|[ 	])[ 	]*)("(?:[^"\\\n]|\\.)*"?[^\s]*|'(?:[^'\\\n]|\\.)*'?[^\s]*|[^\s]+)`)
+	logSecretPattern       = regexp.MustCompile(`(?i)(\b` + logSecretKeyName + `\b["']?[ 	]*(?::|=|[ 	])[ 	]*)("(?:[^"\\\n]|\\.)*"?[^\s]*|'(?:[^'\\\n]|\\.)*'?[^\s]*|[^\s]+)`)
 	logUserInfoPattern     = regexp.MustCompile(`(://[^:/\s]+:)[^@/\s]+(@)`)
 	logUserInfoOnlyPattern = regexp.MustCompile(`(://)[^@/:\s]+(@)`)
 	logFragmentKeyPattern  = regexp.MustCompile(`(#)[0-9a-fA-F]{32,64}(\$)`)
@@ -50,7 +56,10 @@ var (
 	// IDENT: prefixes — matching the userpass block handling below. `(?i)`
 	// because echoed third-party config is not always lowercase (`Password:`,
 	// `KEY:`, `Auth_Credentials:` — issue #1091).
-	logYAMLSecretPattern = regexp.MustCompile(`(?im)^(` + logJournalctlPrefix + `\s*(?:password|passwd|token|secret|private[_-]?key|license[_-]?key|auth_pass|auth_credentials|key)\s*:\s*)([^#\n][^\n]*)$`)
+	// The post-key whitespace must stay horizontal: with \s* a bare key-only
+	// line ("auth:" — now reachable via suffix matching, #1212) would jump
+	// the newline and redact the next line's content.
+	logYAMLSecretPattern = regexp.MustCompile(`(?im)^(` + logJournalctlPrefix + `\s*` + logSecretKeyName + `[ \t]*:[ \t]*)([^#\n][^\n]*)$`)
 	// hysteria2 userpass map: "alice: SECRET" entries nested directly under a
 	// "userpass:" key. The block pattern captures userpass: plus ALL following
 	// INDENTED lines; the callback then redacts only the entries that are
