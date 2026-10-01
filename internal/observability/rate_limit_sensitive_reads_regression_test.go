@@ -32,6 +32,12 @@ func TestSensitiveReadPathsUseDedicatedLimits(t *testing.T) {
 		"/api/runtime/observation",
 		"/api/v1/events",
 		"/api/v1/traffic/stream",
+		// #1203: retention-window traffic scans and the presence recompute
+		// ride the single-connection management DB — a viewer must not
+		// stall it through unthrottled reads.
+		"/api/v1/traffic/history",
+		"/api/v1/traffic/c-1/history",
+		"/api/v1/presence",
 	} {
 		if !isRateLimitedReadPath(path) {
 			t.Errorf("GET %s must select the read-path rate limit", path)
@@ -44,6 +50,11 @@ func TestSensitiveReadPathsUseDedicatedLimits(t *testing.T) {
 		// /api/settings is polled by the UI and stays off the read-path list
 		// deliberately (its GET response redacts secrets for viewers).
 		"/api/settings",
+		// #1203: the ungated /api/v1/traffic/ siblings — only */history and
+		// the SSE stream carry budgets; top is pinned unlimited by design.
+		"/api/v1/traffic/top",
+		"/api/v1/traffic/summary",
+		"/api/v1/traffic/c-1",
 		"/api/system",
 		"/api/network",
 		"/api/status",
@@ -65,6 +76,8 @@ func TestSensitiveReadRequestsGetThrottled(t *testing.T) {
 			"/api/disk":                {RatePerMinute: 60, Burst: 1},
 			"/api/connections":         {RatePerMinute: 60, Burst: 1},
 			"/api/runtime/observation": {RatePerMinute: 60, Burst: 1},
+			"/api/v1/traffic/":         {RatePerMinute: 60, Burst: 1},
+			"/api/v1/presence":         {RatePerMinute: 60, Burst: 1},
 		},
 		limits: map[string]EndpointLimit{
 			"/s/":               {RatePerMinute: 30, Burst: 1},
@@ -90,6 +103,9 @@ func TestSensitiveReadRequestsGetThrottled(t *testing.T) {
 		{http.MethodGet, "/api/connections", "203.0.113.14"},
 		{http.MethodGet, "/api/runtime/observation", "203.0.113.15"},
 		{http.MethodGet, "/s/tok", "203.0.113.16"},
+		{http.MethodGet, "/api/v1/traffic/history", "203.0.113.17"},
+		{http.MethodGet, "/api/v1/traffic/c-1/history", "203.0.113.18"},
+		{http.MethodGet, "/api/v1/presence", "203.0.113.19"},
 	} {
 		req := httptest.NewRequest(tc.method, tc.path, nil)
 		req.RemoteAddr = tc.ip + ":443"
@@ -171,6 +187,12 @@ func TestDefaultPolicyThrottlesCredentialAndDiagnosticReads(t *testing.T) {
 		{"/api/v1/clients/c-1/tokens", "203.0.113.24", 12},
 		{"/api/v1/clients/c-1/tokens/t-1", "203.0.113.25", 12},
 		{"/api/v1/clients/c-1/links", "203.0.113.26", 12},
+		// #1203: the aggregate history scan takes the 6/min burst-2 tier;
+		// the indexed per-client history and the presence recompute take the
+		// moderate 12/min burst-4 tier.
+		{"/api/v1/traffic/history", "203.0.113.27", 2},
+		{"/api/v1/traffic/c-1/history", "203.0.113.28", 4},
+		{"/api/v1/presence", "203.0.113.29", 4},
 	} {
 		for i := 0; i < tc.burst; i++ {
 			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
@@ -190,6 +212,25 @@ func TestDefaultPolicyThrottlesCredentialAndDiagnosticReads(t *testing.T) {
 		}
 		if rec.Header().Get("Retry-After") == "" {
 			t.Fatalf("GET %s 429 missing Retry-After", tc.path)
+		}
+	}
+
+	// #1203: the "/api/v1/traffic/" read-limits prefix must not throttle the
+	// ungated siblings under it — /api/v1/traffic/top is pinned unlimited
+	// and summary/per-client totals never joined the read-path list.
+	for _, path := range []string{
+		"/api/v1/traffic/top",
+		"/api/v1/traffic/summary",
+		"/api/v1/traffic/c-1",
+	} {
+		for i := 0; i < 20; i++ {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.RemoteAddr = "203.0.113.40:443"
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("GET %s request %d: %d, want 200 (ungated read)", path, i+1, rec.Code)
+			}
 		}
 	}
 }

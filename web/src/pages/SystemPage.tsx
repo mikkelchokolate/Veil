@@ -49,13 +49,14 @@ function Meter({
 	);
 }
 
-/** Managed-service process list fed by GET /api/processes (5s poll). */
+/** Managed-service process list fed by GET /api/processes (15s poll — the
+ * endpoint carries a 6/min read budget, so faster polls 429-flap, #1204). */
 function ProcessesCard() {
 	const { t } = useI18n();
 	const proc = useQuery<ProcessesStats>({
 		queryKey: ["processes"],
 		queryFn: () => apiFetch("/api/processes"),
-		refetchInterval: 5000,
+		refetchInterval: 15000,
 	});
 
 	// Deterministic order: name ascending, pid as the tiebreaker.
