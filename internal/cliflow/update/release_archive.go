@@ -33,6 +33,12 @@ func (a ReleaseArchive) ExtractVeilBinary() ([]byte, error) {
 		}
 		if hdr.Name == "veil" || hdr.Name == "./veil" {
 			const maxBinSize = 100 * 1024 * 1024 // 100 MB
+			// The header size is authoritative for tar members, so compare it
+			// before reading: a LimitReader-only cap would silently install a
+			// truncated binary (#1212).
+			if hdr.Size > maxBinSize {
+				return nil, fmt.Errorf("veil binary size %d exceeds the %d-byte limit", hdr.Size, maxBinSize)
+			}
 			return io.ReadAll(io.LimitReader(tr, maxBinSize))
 		}
 	}

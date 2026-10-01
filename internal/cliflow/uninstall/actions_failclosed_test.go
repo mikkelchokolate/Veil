@@ -41,9 +41,9 @@ func TestRemovePathRefusesUnmarkedDirectory(t *testing.T) {
 	}
 }
 
-// TestRemovePathAllowsVeilManagedTrees locks the #1025 allowlist: a real
-// uninstall must still remove directories that carry Veil markers, carry a
-// Veil-managed basename, or are empty.
+// TestRemovePathAllowsVeilManagedTrees locks the #1025/#1093 allowlist: a
+// real uninstall must still remove directories that carry Veil markers,
+// carry a Veil-managed basename, or are empty.
 func TestRemovePathAllowsVeilManagedTrees(t *testing.T) {
 	host := t.TempDir()
 	cases := map[string]func(dir string){
@@ -53,9 +53,15 @@ func TestRemovePathAllowsVeilManagedTrees(t *testing.T) {
 				t.Fatal(err)
 			}
 		},
-		// Runtime state layouts (.local/.config, certificates, acme).
-		"runtime-state": func(dir string) {
-			if err := os.MkdirAll(filepath.Join(dir, ".local"), 0o755); err != nil {
+		// The install/repair sentinel is the canonical ownership proof.
+		"sentinel": func(dir string) {
+			if err := os.WriteFile(filepath.Join(dir, ".veil-managed"), []byte(""), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+		// The state database marks a Veil var dir.
+		"database": func(dir string) {
+			if err := os.WriteFile(filepath.Join(dir, "veil.db"), []byte("x"), 0o600); err != nil {
 				t.Fatal(err)
 			}
 		},
@@ -73,13 +79,13 @@ func TestRemovePathAllowsVeilManagedTrees(t *testing.T) {
 		}
 	}
 	// Veil-managed basenames are provisioned by install/drop-ins even without
-	// a marker file.
+	// a marker file — this is also what blesses runtime-state layouts: a
+	// caddy/mita state dir legitimately holds generic child names such as
+	// certificates/acme, so those names are scoped to the basename check
+	// rather than marking arbitrary directories (#1211).
 	for _, base := range []string{"veil", "caddy", "mita", "veil-backup.service.d"} {
 		dir := filepath.Join(host, "named", base)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "unit.conf"), []byte("x"), 0o644); err != nil {
+		if err := os.MkdirAll(filepath.Join(dir, "certificates", "acme"), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		if err := ensureRemovablePath(dir); err != nil {
@@ -102,6 +108,38 @@ func TestRemovePathAllowsVeilManagedTrees(t *testing.T) {
 	}
 	if err := ensureRemovablePath(filepath.Join(host, "absent")); err != nil {
 		t.Fatalf("absent path: %v", err)
+	}
+}
+
+// TestRemovePathRefusesGenericMarkerDirs pins the #1093/#1211 contract: the
+// broad generic names the pre-narrowing marker list carried are present in
+// countless non-Veil directories, so none of them may bless an
+// operator-supplied dir for rm -rf on its own — `--var-dir /home/operator`
+// must be refused even though ~/.config exists.
+func TestRemovePathRefusesGenericMarkerDirs(t *testing.T) {
+	generic := []string{
+		"state.json", "generated", "www", "panel", "tls", "certs",
+		"backups", "staging", "autocert", ".local", ".config",
+		"certificates", "acme",
+	}
+	for _, marker := range generic {
+		t.Run(marker, func(t *testing.T) {
+			host := t.TempDir()
+			dir := filepath.Join(host, "operator")
+			if err := os.MkdirAll(filepath.Join(dir, marker), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			// A second unmarked entry keeps the dir non-empty even where the
+			// marker is a file — the refusal must come from the marker check.
+			if err := os.WriteFile(filepath.Join(dir, "keep.me"), []byte("x"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := ensureRemovablePath(dir); err == nil {
+				t.Fatalf("generic marker %q must not bless %s for removal", marker, dir)
+			} else if !strings.Contains(err.Error(), "not Veil-managed") {
+				t.Fatalf("marker %q: error should explain the refusal: %v", marker, err)
+			}
+		})
 	}
 }
 

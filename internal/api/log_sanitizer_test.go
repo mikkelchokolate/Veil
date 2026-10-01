@@ -274,6 +274,72 @@ func TestSanitizeServiceLogOutputSecretFormats(t *testing.T) {
 			wantClean:   true,
 			wantPresent: []string{"other: keepme"},
 		},
+		{
+			// #1212: '_' is a word char, so \btoken\b never matched inside
+			// compounded names — underscore/hyphen-compounded secret keys
+			// must redact by their suffix.
+			name:      "underscore-compounded access_token assignment",
+			in:        "env access_token=" + secret,
+			wantClean: true,
+		},
+		{
+			name:      "underscore-compounded client_secret JSON",
+			in:        `{"client_secret":"` + secret + `"}`,
+			wantClean: true,
+		},
+		{
+			name:      "uppercase compounded VEIL_API_TOKEN",
+			in:        "VEIL_API_TOKEN=" + secret,
+			wantClean: true,
+		},
+		{
+			name:      "underscore-compounded db_password assignment",
+			in:        "db_password=" + secret,
+			wantClean: true,
+		},
+		{
+			name:      "api_key JSON",
+			in:        `{"api_key":"` + secret + `"}`,
+			wantClean: true,
+		},
+		{
+			name:      "bare psk assignment",
+			in:        "psk=" + secret,
+			wantClean: true,
+		},
+		{
+			name:      "bare passphrase assignment",
+			in:        "passphrase=" + secret,
+			wantClean: true,
+		},
+		{
+			name:      "YAML compounded secret key",
+			in:        "tls:\n  access_token: " + secret + "\n  mode: on",
+			wantClean: true,
+		},
+		{
+			name:      "YAML compounded private key suffix",
+			in:        "crypto:\n  signing_key: " + secret,
+			wantClean: true,
+		},
+		{
+			name:      "JSON array under compounded secret key",
+			in:        `{"refresh_tokens":["` + secret + `","x"]}`,
+			wantClean: true,
+		},
+		{
+			name:      "hyphen-compounded secret key",
+			in:        "client-secret=" + secret,
+			wantClean: true,
+		},
+		{
+			// Keys not ending in a secret word still pass through — matching
+			// is suffix-tolerant, not substring.
+			name:        "non-suffix key survives",
+			in:          "-----BEGIN PRIVATE KEY-----\nMII" + secret + "x\ntokenizer: keepme",
+			wantClean:   true,
+			wantPresent: []string{"tokenizer: keepme"},
+		},
 	}
 
 	for _, tc := range cases {
