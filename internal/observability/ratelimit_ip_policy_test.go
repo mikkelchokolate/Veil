@@ -198,6 +198,15 @@ func TestIsRateLimitedReadPath(t *testing.T) {
 		{"/api/logs?unit=caddy&lines=50", true},
 		{"/api/v1/events", true},
 		{"/api/v1/traffic/stream", true},
+		// #1203: the aggregate and per-client traffic history reads scan the
+		// retention window on the single-connection management DB; presence
+		// re-queries clients/bindings/last-activity on it. A trailing slash
+		// routes to the same handlers and must stay gated too.
+		{"/api/v1/traffic/history", true},
+		{"/api/v1/traffic/history/", true},
+		{"/api/v1/traffic/history//", true},
+		{"/api/v1/traffic/client-1/history", true},
+		{"/api/v1/presence", true},
 		{"/api/client-links", true},
 		{"/api/client-links/subscription", true},
 		{"/api/v1/clients/client-1/links", true},
@@ -223,6 +232,10 @@ func TestIsRateLimitedReadPath(t *testing.T) {
 		// (30/min) must actually gate it.
 		{"/s/some-feed-token", true},
 		{"/api/v1/traffic/top", false},
+		// Ungated siblings under /api/v1/traffic/ — only the */history reads
+		// and the SSE stream carry budgets.
+		{"/api/v1/traffic/summary", false},
+		{"/api/v1/traffic/client-1", false},
 		// Cheap single-file diagnostics stay unlimited; only the expensive
 		// scans above are gated.
 		{"/api/system", false},
