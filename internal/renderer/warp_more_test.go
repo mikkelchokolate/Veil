@@ -51,6 +51,29 @@ func TestRenderWarpSingBoxValidation(t *testing.T) {
 			cfg:       WarpSingBoxConfig{Endpoint: "engage.cloudflareclient.com:2408", PrivateKey: "k", LocalAddress: ", ,", PeerPublicKey: "p", SocksPort: 40000},
 			wantError: "WARP local address is required",
 		},
+		{
+			// #1215: a restored/legacy non-loopback socksListen must fail the
+			// render, not emit verbatim — "0.0.0.0" would bind an
+			// unauthenticated open proxy on every interface.
+			name:      "socks listen wildcard refused",
+			cfg:       WarpSingBoxConfig{Endpoint: "engage.cloudflareclient.com:2408", PrivateKey: "k", LocalAddress: "172.16.0.2/32", PeerPublicKey: "p", SocksListen: "0.0.0.0", SocksPort: 40000},
+			wantError: "WARP SOCKS listen must be an IPv4 address inside 127.41.0.0/16",
+		},
+		{
+			name:      "socks listen lan address refused",
+			cfg:       WarpSingBoxConfig{Endpoint: "engage.cloudflareclient.com:2408", PrivateKey: "k", LocalAddress: "172.16.0.2/32", PeerPublicKey: "p", SocksListen: "192.168.1.10", SocksPort: 40000},
+			wantError: "WARP SOCKS listen must be an IPv4 address inside 127.41.0.0/16",
+		},
+		{
+			name:      "socks listen hostname refused",
+			cfg:       WarpSingBoxConfig{Endpoint: "engage.cloudflareclient.com:2408", PrivateKey: "k", LocalAddress: "172.16.0.2/32", PeerPublicKey: "p", SocksListen: "localhost", SocksPort: 40000},
+			wantError: "WARP SOCKS listen must be an IPv4 address inside 127.41.0.0/16",
+		},
+		{
+			name:      "socks listen ipv6 wildcard refused",
+			cfg:       WarpSingBoxConfig{Endpoint: "engage.cloudflareclient.com:2408", PrivateKey: "k", LocalAddress: "172.16.0.2/32", PeerPublicKey: "p", SocksListen: "::", SocksPort: 40000},
+			wantError: "WARP SOCKS listen must be an IPv4 address inside 127.41.0.0/16",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
