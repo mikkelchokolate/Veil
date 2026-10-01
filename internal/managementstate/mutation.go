@@ -404,6 +404,7 @@ func (m Mutation) SetUserTOTP(username string, totp model.User) (model.User, err
 	updated.TOTPSecret = totp.TOTPSecret
 	updated.TOTPPendingSecret = totp.TOTPPendingSecret
 	updated.TOTPRecoveryHashes = append([]string(nil), totp.TOTPRecoveryHashes...)
+	updated.TOTPLastStep = totp.TOTPLastStep
 	(*m.target.Users)[idx] = updated
 	if err := m.save(); err != nil {
 		*m.target.Users = previous
