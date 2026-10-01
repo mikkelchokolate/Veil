@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 )
 
 func TestConfigValidate(t *testing.T) {
@@ -47,18 +49,39 @@ func TestConfigValidate(t *testing.T) {
 			}, "absolute",
 		},
 		{
-			"key under /root hidden by ProtectHome", func(c *Config) {
+			"key under /root outside managed config dir", func(c *Config) {
 				c.AuthType = AuthTypeKey
 				c.Password = ""
 				c.KeyPath = "/root/.ssh/id_ed25519"
-			}, "ProtectHome",
+			}, "must live under the managed config dir",
 		},
 		{
-			"key under /home hidden by ProtectHome", func(c *Config) {
+			"key under /home outside managed config dir", func(c *Config) {
 				c.AuthType = AuthTypeKey
 				c.Password = ""
 				c.KeyPath = "/home/veil/.ssh/id_ed25519"
-			}, "ProtectHome",
+			}, "must live under the managed config dir",
+		},
+		{
+			"key under state dir rejected", func(c *Config) {
+				c.AuthType = AuthTypeKey
+				c.Password = ""
+				c.KeyPath = "/var/lib/veil/id_ed25519"
+			}, "must live under the managed config dir",
+		},
+		{
+			"key path escaping the managed dir rejected", func(c *Config) {
+				c.AuthType = AuthTypeKey
+				c.Password = ""
+				c.KeyPath = "/etc/veil/../shadow"
+			}, "must live under the managed config dir",
+		},
+		{
+			"key under a sibling etc prefix rejected", func(c *Config) {
+				c.AuthType = AuthTypeKey
+				c.Password = ""
+				c.KeyPath = "/etc/veil2/id_ed25519"
+			}, "must live under the managed config dir",
 		},
 	}
 	for _, tc := range cases {
@@ -71,9 +94,37 @@ func TestConfigValidate(t *testing.T) {
 	}
 }
 
+// #1229-F7: a key path is only valid inside the managed config dir, so the
+// privileged helper never reads or signs with an operator-unmanaged file.
+// The managed dir resolves through hostenv so custom installs keep working.
+func TestConfigValidateKeyPathConfinedToEtcDir(t *testing.T) {
+	etcDir := t.TempDir()
+	t.Setenv("VEIL_ETC_DIR", etcDir)
+	keyPath := filepath.Join(etcDir, "backup-sftp.key")
+	config := Config{
+		Enabled: true, Host: "backups.example.com", User: "veil",
+		RemoteDir: "/srv/veil-backups", AuthType: AuthTypeKey,
+		KeyPath: keyPath,
+	}
+	if err := config.Validate(); err != nil {
+		t.Fatalf("managed-dir key path rejected: %v", err)
+	}
+	config.KeyPath = filepath.Join(etcDir, "keys", "backup-sftp.key")
+	if err := config.Validate(); err != nil {
+		t.Fatalf("nested managed-dir key path rejected: %v", err)
+	}
+	config.KeyPath = filepath.Join(t.TempDir(), "id_ed25519")
+	if err := config.Validate(); err == nil {
+		t.Fatal("key path outside the managed config dir accepted")
+	}
+}
+
 func TestConfigSaveLoadRoundtripKeepsSecretsLocal(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ConfigFileName)
+	// Pin the managed config root so hostenv env leakage cannot move the
+	// key-path confinement target (#1229).
+	t.Setenv("VEIL_ETC_DIR", hostenv.DefaultEtcDir)
 	config := Config{
 		Enabled: true, Host: "backups.example.com", Port: 2222, User: "veil",
 		RemoteDir: "/srv/veil-backups", AuthType: AuthTypeKey,

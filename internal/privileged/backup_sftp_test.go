@@ -310,7 +310,9 @@ func TestBackupSftpListAndFetch(t *testing.T) {
 	fixture := newSftpBackupFixture(t, remote, nil)
 	fixture.saveConfig(t, true)
 	dir := fixture.remoteDir
-	remote.SetFile(path.Join(dir, "veil_backup_20260101_020000.tar.gz.enc"), []byte("remote-archive"))
+	// No sidecar: the fetch relies on the encrypted-archive magic check for
+	// pre-sidecar content (#1209).
+	remote.SetFile(path.Join(dir, "veil_backup_20260101_020000.tar.gz.enc"), []byte("VEILBACK\x03remote-archive"))
 	remote.SetFile(path.Join(dir, "notes.txt"), []byte("not-managed"))
 	// An archive in another node's namespace is invisible to list/fetch (#1184).
 	remote.SetFile("/srv/veil-backups/veil-node-ffffffffffffffffffffffffffffffff/veil_backup_20260102_020000.tar.gz.enc", []byte("other-node"))
@@ -340,7 +342,7 @@ func TestBackupSftpListAndFetch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != "remote-archive" {
+	if string(got) != "VEILBACK\x03remote-archive" {
 		t.Fatalf("fetched=%q", got)
 	}
 	if status := backupsftp.LoadStatus(fixture.sftpPaths.StatusPath); status.LastFetchArchive != "veil_backup_20260101_020000.tar.gz.enc" {

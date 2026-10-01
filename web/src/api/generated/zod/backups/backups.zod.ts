@@ -431,7 +431,7 @@ export const PutApiBackupsSftpBody = zod.object({
   "user": zod.string(),
   "remoteDir": zod.string().describe('Shared-safe destination directory. This installation uploads, lists, fetches, and prunes only inside its own `veil-node-<install-id>` subdirectory; archives other nodes or older versions left directly under `remoteDir` are never touched.'),
   "authType": zod.enum(['key', 'password']),
-  "keyPath": zod.string().optional().describe('Absolute path of the private key readable by root.'),
+  "keyPath": zod.string().optional().describe('Absolute path of the private key, confined to the managed /etc/veil directory.'),
   "keyPassphrase": zod.string().optional().describe('Write-only; omit to keep the stored value.'),
   "password": zod.string().optional().describe('Write-only; omit to keep the stored value.'),
   "hostKey": zod.string().optional().describe('Pinned server host key in authorized_keys format. Write-only; omit to keep, empty string clears back to TOFU.')
