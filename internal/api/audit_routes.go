@@ -135,5 +135,13 @@ func (s *managementState) auditActor(r *http.Request) (string, string) {
 			return session.Username, session.Role
 		}
 	}
-	return "api-token", "admin"
+	// Public routes return before the context identity is populated, so a
+	// request that arrives here carrying NO resolvable credential is
+	// anonymous — claiming api-token/admin would audit unauthenticated
+	// pressure as privileged traffic (#1222). The static-token label is
+	// reserved for requests that actually presented it.
+	if s.authToken != "" && validAuthToken(r, s.authToken) {
+		return "api-token", "admin"
+	}
+	return "anonymous", ""
 }

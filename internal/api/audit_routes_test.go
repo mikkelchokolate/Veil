@@ -120,3 +120,61 @@ func TestAuditEndpointRequiresAdminAndReturnsBoundedHistory(t *testing.T) {
 		}
 	}
 }
+
+// An unauthenticated factor-verify failure must NOT be audited as
+// api-token/admin (#1222): public routes reach recordRequestAudit before
+// any identity lands in the request context, so the fallback for a
+// credential-less request is anonymous, and only a request that actually
+// presented the static token earns the api-token label.
+func TestAnonymousFactorFailureAuditsAsAnonymousNotAPIToken(t *testing.T) {
+	recorder := audit.NewRecorder(filepath.Join(t.TempDir(), "panel.jsonl"), audit.RecorderOptions{})
+	user := totpTestUser(t, "correct-password-123")
+	user.TOTPEnabled = true
+	user.TOTPSecret = "JBSWY3DPEHPK3PXP"
+	state, _ := totpTestState(t, user)
+	state.audit = recorder
+	state.authToken = "panel-static-token"
+
+	// No cookie, no token: the failure is anonymous traffic.
+	rec := totpVerify(t, state, "bogus-pending-token", `{"code":"123456"}`)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("verify without challenge status=%d", rec.Code)
+	}
+	records, err := recorder.List(10, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("audit records=%+v", records)
+	}
+	if records[0].Actor != "anonymous" || records[0].Role != "" {
+		t.Fatalf("anonymous failure audited as %+v", records[0])
+	}
+
+	// A request that presents the real static token still resolves to
+	// api-token/admin.
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/totp/verify", strings.NewReader(`{"code":"123456"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Veil-Token", "panel-static-token")
+	rec = httptest.NewRecorder()
+	state.handleTOTPVerify(rec, req)
+	records, err = recorder.List(10, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 2 || records[0].Actor != "api-token" || records[0].Role != "admin" {
+		t.Fatalf("static-token failure audited as %+v", records)
+	}
+
+	// And a session-cookie request resolves to its owner.
+	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+	req = httptest.NewRequest(http.MethodPost, "/api/auth/totp/verify", strings.NewReader(`{"code":"123456"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "veil_session", Value: session.Token})
+	rec = httptest.NewRecorder()
+	state.handleTOTPVerify(rec, req)
+	records, _ = recorder.List(10, time.Time{})
+	if len(records) != 3 || records[0].Actor != "alice" || records[0].Role != "admin" {
+		t.Fatalf("session failure audited as %+v", records)
+	}
+}

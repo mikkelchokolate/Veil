@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pquerna/otp"
+	"github.com/pquerna/otp/hotp"
 	"github.com/pquerna/otp/totp"
 )
 
@@ -55,18 +56,39 @@ func generateTOTPSecret(username string) (secret string, uri string, err error) 
 }
 
 // validateTOTPCode checks a 6-digit code against the secret at the given time
-// with ±1 period of clock-skew tolerance.
-func validateTOTPCode(now time.Time, secret, code string) bool {
-	if strings.TrimSpace(secret) == "" || strings.TrimSpace(code) == "" {
-		return false
+// with ±1 period of clock-skew tolerance. On success it returns the matched
+// timestep so the caller can record it as the account's anti-replay watermark:
+// RFC 6238 §5.2 requires the verifier to reject a second presentation of an
+// already-accepted OTP within the same step (#1220).
+func validateTOTPCode(now time.Time, secret, code string) (int64, bool) {
+	code = strings.TrimSpace(code)
+	secret = strings.TrimSpace(secret)
+	if secret == "" || code == "" {
+		return 0, false
 	}
-	ok, err := totp.ValidateCustom(strings.TrimSpace(code), secret, now, totp.ValidateOpts{
-		Period:    totpPeriod,
-		Skew:      totpSkew,
-		Digits:    otp.DigitsSix,
-		Algorithm: otp.AlgorithmSHA1,
-	})
-	return err == nil && ok
+	current := now.Unix() / totpPeriod
+	// Same counter enumeration as totp.ValidateCustom: t, then t+i, t-i per
+	// skew step.
+	steps := []int64{current}
+	for i := int64(1); i <= totpSkew; i++ {
+		steps = append(steps, current+i, current-i)
+	}
+	for _, step := range steps {
+		if step < 0 {
+			continue
+		}
+		ok, err := hotp.ValidateCustom(code, uint64(step), secret, hotp.ValidateOpts{
+			Digits:    otp.DigitsSix,
+			Algorithm: otp.AlgorithmSHA1,
+		})
+		if err != nil {
+			return 0, false
+		}
+		if ok {
+			return step, true
+		}
+	}
+	return 0, false
 }
 
 // generateRecoveryCodes returns count plaintext codes ("XXXX-XXXX") and their

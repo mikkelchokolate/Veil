@@ -10,6 +10,7 @@ import { apiFetch, mutationErrorMessage } from "../api/fetcher";
 import type {
 	PasskeyInfo,
 	PasskeyListResponse,
+	TOTPStatusResponse,
 	WebAuthnCreationOptions,
 } from "../api/generated/models";
 import { useAuth } from "../auth/AuthContext";
@@ -24,8 +25,10 @@ import { useI18n } from "../i18n/I18nContext";
 /** Self-service passkey management (#1171): list registered WebAuthn
  * credentials, register a new one through a credential-gated begin/finish
  * ceremony, and delete individual keys. The server requires either a session
- * that already satisfied a second factor or the account password — the form
- * therefore only prompts for the password when the session lacks the mark. */
+ * that already satisfied a second factor or the account password — and when
+ * the deletion would remove the account's LAST second factor the password is
+ * mandatory even on a marked session (#1232), so the delete dialog prompts
+ * whenever the session lacks the mark or the target is the sole factor. */
 export function PasskeysCard() {
 	const { t } = useI18n();
 	const { session, refresh } = useAuth();
@@ -45,6 +48,13 @@ export function PasskeysCard() {
 	const passkeys = useQuery<PasskeyListResponse>({
 		queryKey: ["passkeys"],
 		queryFn: () => apiFetch("/api/v1/users/me/passkeys"),
+	});
+	// Deleting the sole passkey while no TOTP is armed removes the account's
+	// LAST second factor — the server then requires the account password even
+	// on a second-factor-complete session (#1232).
+	const totp = useQuery<TOTPStatusResponse>({
+		queryKey: ["totp-status"],
+		queryFn: () => apiFetch("/api/v1/users/me/totp"),
 	});
 	const invalidate = () =>
 		void qc.invalidateQueries({ queryKey: ["passkeys"] });
@@ -102,11 +112,24 @@ export function PasskeysCard() {
 		},
 	});
 
+	const list = passkeys.data?.passkeys ?? [];
+	// True when deleting `id` would disarm the account's last second factor
+	// (sole passkey, no TOTP) — the gate then demands the account password
+	// even from a marked session (#1232).
+	const soleFactorDelete = (id: string) =>
+		totp.data?.enabled !== true && list.length === 1 && list[0].id === id;
+	const deleteNeedsPassword =
+		needsPassword || (confirmDelete !== null && soleFactorDelete(confirmDelete.id));
+
 	const remove = useMutation({
 		mutationFn: (id: string) =>
 			apiFetch(`/api/v1/users/me/passkeys/${encodeURIComponent(id)}`, {
 				method: "DELETE",
-				body: JSON.stringify(needsPassword ? { password: deletePassword } : {}),
+				body: JSON.stringify(
+					needsPassword || soleFactorDelete(id)
+						? { password: deletePassword }
+						: {},
+				),
 			}),
 		onSuccess: () => {
 			setConfirmDelete(null);
@@ -129,8 +152,6 @@ export function PasskeysCard() {
 		e.preventDefault();
 		if (confirmDelete) remove.mutate(confirmDelete.id);
 	}
-
-	const list = passkeys.data?.passkeys ?? [];
 
 	return (
 		<div className="card">
@@ -271,7 +292,7 @@ export function PasskeysCard() {
 					</p>
 					{error ? <FormMessage>{error}</FormMessage> : null}
 					<form className="form-stack" onSubmit={onDeleteSubmit}>
-						{needsPassword ? (
+						{deleteNeedsPassword ? (
 							<FormItem>
 								<Label htmlFor="passkey-delete-password">
 									{t("auth.password")}
@@ -292,7 +313,7 @@ export function PasskeysCard() {
 								variant="danger"
 								disabled={
 									remove.isPending ||
-									(needsPassword && deletePassword.trim() === "")
+									(deleteNeedsPassword && deletePassword.trim() === "")
 								}
 							>
 								{remove.isPending

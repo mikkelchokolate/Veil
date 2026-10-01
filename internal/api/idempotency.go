@@ -34,6 +34,19 @@ type idempotencyEntry struct {
 	done        chan struct{}
 	doneOnce    sync.Once
 	completed   bool
+	// secret marks a response flagged by its handler as secret-grade (TOTP
+	// seeds, recovery codes, ceremony challenges, session-minting bodies).
+	// Secret entries age out after secretReplayTTL — the in-memory analogue
+	// of the durable store's encrypted 5-minute envelope (#1221).
+	secret bool
+}
+
+// retention is how long a completed entry may still be replayed.
+func (e *idempotencyEntry) retention() time.Duration {
+	if e.secret {
+		return secretReplayTTL
+	}
+	return idempotencyTTL
 }
 
 func (e *idempotencyEntry) signal() { e.doneOnce.Do(func() { close(e.done) }) }
@@ -181,6 +194,14 @@ func (s *idempotencyStore) Middleware(next http.Handler) http.Handler {
 		if status == 0 {
 			status = http.StatusOK
 		}
+		// The handler's secret marking decides the entry's retention AND is
+		// stripped from the wire — internal X-Veil-Internal-* headers must
+		// never reach the client or the stored replay record (the durable
+		// path does the same before completeDurable).
+		secret := capture.header.Get(idempotencySensitivityHeader) == "secret"
+		for _, internalHeader := range []string{idempotencyOutcomeHeader, idempotencySensitivityHeader, idempotencyResourceHeader, idempotencySecretGenerationHeader} {
+			capture.header.Del(internalHeader)
+		}
 		responseStatus := status
 		responseBody := append([]byte(nil), capture.body.Bytes()...)
 		if capture.overflow && status >= http.StatusOK && status < http.StatusBadRequest {
@@ -189,7 +210,7 @@ func (s *idempotencyStore) Middleware(next http.Handler) http.Handler {
 			capture.header.Set("Content-Type", "application/json")
 		}
 		if status >= http.StatusOK && status < http.StatusBadRequest {
-			s.complete(scope, entry, responseStatus, capture.header, responseBody)
+			s.complete(scope, entry, responseStatus, capture.header, responseBody, secret)
 		} else {
 			s.abort(scope, entry)
 		}
@@ -208,7 +229,7 @@ func (s *idempotencyStore) acquire(scope, fingerprint string) (*idempotencyEntry
 	}
 	now := s.now()
 	for key, entry := range s.entries {
-		if entry.completed && now.Sub(entry.createdAt) >= idempotencyTTL {
+		if entry.completed && now.Sub(entry.createdAt) >= entry.retention() {
 			delete(s.entries, key)
 		}
 	}
@@ -231,13 +252,17 @@ func (s *idempotencyStore) acquire(scope, fingerprint string) (*idempotencyEntry
 	return entry, true, false, false
 }
 
-func (s *idempotencyStore) complete(scope string, entry *idempotencyEntry, status int, header http.Header, body []byte) {
+func (s *idempotencyStore) complete(scope string, entry *idempotencyEntry, status int, header http.Header, body []byte, secret bool) {
 	s.mu.Lock()
 	if !s.closed && s.entries[scope] == entry {
 		entry.status = status
 		entry.header = header.Clone()
 		entry.header.Del("X-Request-ID")
+		// Set-Cookie is dropped on the durable path too — a replayed
+		// credential-set header is never re-served (#1221, #1222).
+		entry.header.Del("Set-Cookie")
 		entry.body = append([]byte(nil), body...)
+		entry.secret = secret
 		entry.completed = true
 	}
 	entry.signal()
