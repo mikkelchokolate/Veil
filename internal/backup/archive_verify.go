@@ -325,36 +325,6 @@ func checkpointSQLiteRestoreBoundary(path string) error {
 	return nil
 }
 
-func validateSQLiteSnapshot(body []byte, expectedDesiredRevision *uint64, expectedStateDigest string) error {
-	tmp, err := os.CreateTemp("", "veil-verify-db-*.sqlite")
-	if err != nil {
-		return err
-	}
-	path := tmp.Name()
-	defer os.Remove(path)
-	if _, err := tmp.Write(body); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	db, err := storage.OpenExisting(path)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-	var result string
-	if err := db.QueryRow(`PRAGMA quick_check`).Scan(&result); err != nil {
-		return err
-	}
-	if result != "ok" {
-		return fmt.Errorf("SQLite quick_check: %s", result)
-	}
-	_, err = validateSQLiteDesiredSnapshotDB(db, expectedDesiredRevision, expectedStateDigest)
-	return err
-}
-
 func validateSQLiteDesiredSnapshotPath(path string, expectedDesiredRevision *uint64, expectedStateDigest string) (uint64, error) {
 	db, err := storage.OpenExisting(path)
 	if err != nil {
