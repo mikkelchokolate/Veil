@@ -1,6 +1,5 @@
 package backup
 
-
 // Dir represents a backup directory path.
 type Dir struct {
 	Path string
@@ -45,4 +44,3 @@ func CleanupBackup(backupDir string, backupID string) error {
 func ListBackups(backupDir string) ([]string, error) {
 	return NewLifecycle(backupDir).List()
 }
-
