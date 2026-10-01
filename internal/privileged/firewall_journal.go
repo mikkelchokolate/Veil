@@ -56,10 +56,9 @@ func openFirewallJournalRoot(root string) (*safefs.Dir, error) {
 		return nil, err
 	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || stat.Uid != uint32(effectiveUID()) || int64(stat.Gid) != int64(os.Getegid()) ||
-		info.Mode().Perm() != 0o700 {
+	if !ok || stat.Uid != uint32(effectiveUID()) || info.Mode().Perm() != 0o700 {
 		_ = dir.Close()
-		return nil, fmt.Errorf("firewall transaction root %s is not a helper-owned 0700 directory", root)
+		return nil, fmt.Errorf("firewall transaction root %s is not a helper-owned 0700 directory (uid=%d mode=%#o)", root, stat.Uid, info.Mode().Perm())
 	}
 	return dir, nil
 }
