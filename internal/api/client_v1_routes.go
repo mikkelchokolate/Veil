@@ -465,6 +465,11 @@ func (s *managementState) migrateLegacyInboundsLocked(tx *client.Tx, inbounds []
 				Name: p.Name, Username: p.Username, Password: p.Password, Enabled: p.Enabled,
 			})
 		}
+		if len(profiles) == 0 {
+			// Every profile was marker-skipped — same as startup, which
+			// never invokes the migrator with an empty set.
+			continue
+		}
 		res, err := s.clientMigrator.MigrateInboundProfilesTx(tx, in.Name, in.Protocol, profiles)
 		if err != nil {
 			return nil, false, fmt.Errorf("migrate inbound %s: %w", in.Name, err)

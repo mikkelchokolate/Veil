@@ -196,6 +196,26 @@ func TestPublicSubscriptionDropsDisabledBindingLive(t *testing.T) {
 	if strings.Contains(after.Body.String(), "live_gate_identity") {
 		t.Fatalf("disabled binding still served its link before apply converged: %q", after.Body.String())
 	}
+
+	// Detach-before-apply takes the same live-row gate: re-enable, then
+	// delete the binding row — the link must leave the feed.
+	bindings, err = state.clientRepo.BindingsForClient(clientID)
+	if err != nil || len(bindings) != 1 {
+		t.Fatalf("live bindings after disable: %v %d", err, len(bindings))
+	}
+	if _, err := state.clientService.SetBindingEnabled(bindingID, true, bindings[0].Version); err != nil {
+		t.Fatalf("re-enable binding: %v", err)
+	}
+	if err := state.clientRepo.DeleteBinding(bindingID); err != nil {
+		t.Fatalf("delete binding: %v", err)
+	}
+	detached := publicRawSubscription(t, router, issued.Plaintext)
+	if detached.Code != http.StatusOK {
+		t.Fatalf("subscription status after detach = %d body=%q", detached.Code, detached.Body.String())
+	}
+	if strings.Contains(detached.Body.String(), "live_gate_identity") {
+		t.Fatalf("detached binding still served its link before apply converged: %q", detached.Body.String())
+	}
 }
 
 func TestAuthenticatedLinksConvergeAfterSuccessfulApply(t *testing.T) {
