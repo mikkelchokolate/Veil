@@ -452,7 +452,7 @@ func TestFetchRejectsArchiveOverConfiguredLimit(t *testing.T) {
 
 	localDir := t.TempDir()
 	_, err := Fetch(context.Background(), fs, sftpTestConfig(), localDir, name)
-	if err == nil || !strings.Contains(err.Error(), "size") {
+	if err == nil || !strings.Contains(err.Error(), "maximum") {
 		t.Fatalf("over-limit fetch err=%v, want the configured-maximum rejection", err)
 	}
 	if entries, _ := os.ReadDir(localDir); len(entries) != 0 {
