@@ -259,7 +259,8 @@ function historyChartOption(
 const HISTORY_LIMIT = 60;
 
 /** Aggregate bucketed traffic history (GET /api/v1/traffic/history). Buckets
- * carry per-bucket deltas, not cumulative totals — the chart stacks them. */
+ * carry per-bucket deltas, not cumulative totals — the chart stacks them.
+ * The 30s poll stays well inside the endpoint's 6/min read tier (#1203). */
 function HistoryCard() {
 	const { t } = useI18n();
 	const history = useQuery<TrafficHistoryResponse>({
@@ -324,17 +325,19 @@ function PresenceSourceCell({ item }: { item: PresenceItem }) {
 	return <span className="muted">{label === key ? item.source : label}</span>;
 }
 
-/** Per-client online presence fed by GET /api/v1/presence (5s poll). */
+/** Per-client online presence fed by GET /api/v1/presence (10s poll — the
+ * endpoint carries a 12/min read budget, so 5s polls left no headroom,
+ * #1203/#1204). */
 function PresenceCard() {
 	const { t } = useI18n();
 	const presence = useQuery<PresenceResponse>({
 		queryKey: ["traffic", "presence"],
 		queryFn: () => apiFetch("/api/v1/presence"),
-		refetchInterval: 5000,
+		refetchInterval: 10000,
 	});
 
 	// API already sorts by clientId; sort anyway so a backend reorder can
-	// never reshuffle the table between 5s polls.
+	// never reshuffle the table between polls.
 	const items = [...(presence.data?.items ?? [])].sort((a, b) =>
 		a.clientId.localeCompare(b.clientId),
 	);
@@ -392,13 +395,15 @@ function PresenceCard() {
 	);
 }
 
-/** Listening sockets snapshot fed by GET /api/connections (10s poll). */
+/** Listening sockets snapshot fed by GET /api/connections (15s poll — the
+ * endpoint carries a 6/min read budget; 10s polls left zero headroom for
+ * retries/remounts, #1204). */
 function ListenersCard() {
 	const { t } = useI18n();
 	const conn = useQuery<ConnectionsStats>({
 		queryKey: ["traffic", "connections"],
 		queryFn: () => apiFetch("/api/connections"),
-		refetchInterval: 10000,
+		refetchInterval: 15000,
 	});
 
 	// Deterministic order: port ascending, then proto/address tiebreakers —

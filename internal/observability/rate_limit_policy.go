@@ -57,6 +57,23 @@ func DefaultRateLimitPolicy() RateLimitPolicy {
 			// attribution, and a process scan in one request, so it gets a
 			// stricter budget than the single-purpose diagnostics above.
 			"/api/runtime/observation": {RatePerMinute: 3, Burst: 1},
+			// #1203: the aggregate traffic history read sums the whole
+			// retention window through the single-connection management DB —
+			// its user-controlled `from` can stall every management-plane
+			// SQLite user — so it takes the expensive-scan tier with
+			// /api/connections. The subtree prefix gives the indexed
+			// per-client {id}/history reads the moderate events/stream tier;
+			// the longer "/api/v1/traffic/stream" all-method limit still
+			// wins there, and top/summary/totals are never gated. Presence
+			// re-queries clients, bindings, and last-activity on the same
+			// single connection — moderate, not heavy.
+			"/api/v1/traffic/history": {RatePerMinute: 6, Burst: 2},
+			// Note: every gated read under the /api/v1/traffic/ subtree
+			// that isn't the exact aggregate key shares this one IP bucket —
+			// fine while the UI polls only the aggregate; a client-detail
+			// view fanning out {id}/history reads would need its own tier.
+			"/api/v1/traffic/": {RatePerMinute: 12, Burst: 4},
+			"/api/v1/presence": {RatePerMinute: 12, Burst: 4},
 		},
 	}
 }

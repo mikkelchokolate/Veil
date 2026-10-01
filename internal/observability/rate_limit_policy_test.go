@@ -54,6 +54,13 @@ func TestRateLimitPolicyIncludesExpensivePanelOperations(t *testing.T) {
 		// tier as the other O(#PIDs) diagnostics scans.
 		"/api/processes":           {RatePerMinute: 6, Burst: 2},
 		"/api/runtime/observation": {RatePerMinute: 3, Burst: 1},
+		// #1203: the aggregate history scan is the heaviest read in the
+		// panel (full retention window, single DB connection) while the
+		// indexed per-client history and the presence recompute share the
+		// moderate events/stream tier.
+		"/api/v1/traffic/history": {RatePerMinute: 6, Burst: 2},
+		"/api/v1/traffic/":        {RatePerMinute: 12, Burst: 4},
+		"/api/v1/presence":        {RatePerMinute: 12, Burst: 4},
 	}
 	readLimits := policy.ReadEndpointLimits()
 	if len(readLimits) != len(wantRead) {
