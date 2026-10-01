@@ -454,11 +454,20 @@ ON CONFLICT(id) DO UPDATE SET historical_applied_revision=excluded.historical_ap
 	if err := db.Close(); err != nil {
 		return err
 	}
+	// Sidecar cleanup goes through a pinned parent directory and
+	// descriptor-relative removes so a swapped directory component cannot
+	// redirect the unlink (#1219).
+	sidecarDir, err := safefs.OpenDir(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	defer sidecarDir.Close()
+	dbLeaf := filepath.Base(path)
 	for _, suffix := range []string{"-wal", "-shm"} {
-		if err := os.Remove(path + suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := restoreRemove(sidecarDir, dbLeaf+suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
-		if err := syncRestoreParent(path + suffix); err != nil {
+		if err := sidecarDir.File().Sync(); err != nil {
 			return err
 		}
 	}
@@ -559,9 +568,16 @@ func rollbackRestoreJournal(dirs restoreJournalDirs, root string, journal *resto
 			return err
 		}
 		targetLeaf := filepath.Base(record.TargetPath)
-		if record.HadPrevious {
-			safetyLeaf := filepath.Base(record.SafetyPath)
-			info, statErr := dir.StatAt(safetyLeaf)
+		safetyLeaf := filepath.Base(record.SafetyPath)
+		info, statErr := dir.StatAt(safetyLeaf)
+		if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+			return statErr
+		}
+		// HadPrevious in the journal is attacker-authored — re-derive it
+		// from live evidence so a planted "no previous" bit cannot make
+		// root unlink state.json/state.key/veil.db: a present safety leaf
+		// proves a previous inode was parked (#1219).
+		if record.HadPrevious || statErr == nil {
 			if statErr == nil {
 				// The safety swap must move the inode the journal actually
 				// recorded: a swapped symlink or multi-linked entry is
@@ -578,8 +594,6 @@ func rollbackRestoreJournal(dirs restoreJournalDirs, root string, journal *resto
 				if err := dir.File().Sync(); err != nil {
 					return err
 				}
-			} else if !errors.Is(statErr, os.ErrNotExist) {
-				return statErr
 			}
 			digest, err := digestJournalLeaf(dir, targetLeaf)
 			if err != nil {
@@ -594,11 +608,23 @@ func rollbackRestoreJournal(dirs restoreJournalDirs, root string, journal *resto
 			// Journal Mode/UID/GID are treated as untrusted hints and never
 			// applied (#1219).
 		} else {
-			if err := restoreRemove(dir, targetLeaf); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return err
-			}
-			if err := dir.File().Sync(); err != nil {
-				return err
+			// Only unlink a target this transaction provably published —
+			// the live leaf must hash to the recorded intended digest. A
+			// foreign file is never removed on journal say-so (#1219).
+			digest, err := digestJournalLeaf(dir, targetLeaf)
+			switch {
+			case errors.Is(err, os.ErrNotExist):
+			case err != nil:
+				return fmt.Errorf("recover %s: %w", record.Name, err)
+			case digest != record.IntendedDigest:
+				return fmt.Errorf("restore rollback refuses to remove foreign file %s", record.Name)
+			default:
+				if err := restoreRemove(dir, targetLeaf); err != nil && !errors.Is(err, os.ErrNotExist) {
+					return err
+				}
+				if err := dir.File().Sync(); err != nil {
+					return err
+				}
 			}
 		}
 		if err := restoreRemove(dir, filepath.Base(record.StagedPath)); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -979,15 +1005,6 @@ func removeRestoreJournal(rootDir *safefs.Dir) error {
 		return err
 	}
 	return rootDir.File().Sync()
-}
-
-func syncRestoreParent(path string) error {
-	directory, err := os.Open(filepath.Dir(path))
-	if err != nil {
-		return err
-	}
-	defer directory.Close()
-	return directory.Sync()
 }
 
 func readRestoreRevision(databasePath string) (uint64, error) {

@@ -494,12 +494,33 @@ func (l Lifecycle) rollbackRestoredFiles(safetyID string, restored []string) err
 		return nil
 	}
 	if safetyID == "" {
-		// No safety backup: only remove destinations that sit under the
-		// configured managed roots — a manifest path is never trusted enough
-		// to delete outside them (#1219).
+		// No safety backup: re-check each destination against the
+		// configured managed roots — a manifest path is never trusted
+		// enough to delete outside them — and unlink leaf-relative through
+		// a pinned parent so a swapped directory redirects nothing (#1219).
+		allowedRoots, err := l.resolvedRestoreRoots()
+		if err != nil {
+			return err
+		}
 		var first error
 		for _, path := range restored {
-			if err := os.Remove(path); err != nil && !os.IsNotExist(err) && first == nil {
+			abs, err := filepath.Abs(path)
+			if err != nil || (len(allowedRoots) > 0 && !backupPathUnderAnyRoot(allowedRoots, abs)) {
+				if first == nil {
+					first = fmt.Errorf("restore destination %s is outside the allowed roots", path)
+				}
+				continue
+			}
+			parent, err := safefs.OpenDir(filepath.Dir(abs))
+			if err != nil {
+				if first == nil {
+					first = err
+				}
+				continue
+			}
+			err = parent.RemoveAt(filepath.Base(abs))
+			parent.Close()
+			if err != nil && !os.IsNotExist(err) && first == nil {
 				first = err
 			}
 		}

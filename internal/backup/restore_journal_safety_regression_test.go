@@ -156,6 +156,46 @@ func TestRestoreRecoveryRejectsUntrustedSafetyObjectsBeforeMutation(t *testing.T
 	}
 }
 
+// TestRestoreRollbackRefusesToUnlinkForeignTargets covers the #1219 residual
+// found in review: `hadPrevious` is attacker-authored, so a planted journal
+// claiming "no previous file existed" must not make recovery unlink live
+// state.json/state.key. Rollback only removes a target whose live digest
+// equals the transaction-published intended digest.
+func TestRestoreRollbackRefusesToUnlinkForeignTargets(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state.json")
+	keyPath := filepath.Join(root, "state.key")
+	for path, body := range map[string]string{statePath: "live-state", keyPath: "live-key"} {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	disk := restoreJournalDisk{
+		Version: 2, TransactionID: "planted", Phase: "prepared", WALCleanupPhase: "pending",
+		Files: []restoreJournalDiskFile{
+			{Name: "state.json", TargetID: "state.json", StagedName: ".restore-state-new", SafetyName: ".restore-state-old", IntendedDigest: backupChecksum([]byte("planted-state")), Phase: "prepared"},
+			{Name: "state.key", TargetID: "state.key", StagedName: ".restore-key-new", SafetyName: ".restore-key-old", IntendedDigest: backupChecksum([]byte("planted-key")), Phase: "prepared"},
+		},
+	}
+	payload, err := json.Marshal(disk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, restoreTransactionJournalName), payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RecoverInterruptedRestore(statePath, keyPath, ""); err == nil {
+		t.Fatal("planted hadPrevious:false journal was silently accepted")
+	}
+	for path, want := range map[string]string{statePath: "live-state", keyPath: "live-key"} {
+		got, err := os.ReadFile(path)
+		if err != nil || string(got) != want {
+			t.Fatalf("recovery unlinked live member %s: body=%q err=%v", path, got, err)
+		}
+	}
+}
+
 // TestMalformedRestoreJournalQuarantinedOnce covers #1219: a journal that
 // fails validation is renamed to a non-replayable quarantine leaf and the
 // failure is reported once — recovery must neither replay the poisoned
