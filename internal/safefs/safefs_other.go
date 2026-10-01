@@ -72,6 +72,20 @@ func (d *Dir) CreateFileAt(name string, mode os.FileMode) (*os.File, error) {
 	return os.OpenFile(filepath.Join(d.path, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode.Perm())
 }
 
+// AppendFileAt opens child name for appending after an lstat symlink check,
+// creating it when missing.
+func (d *Dir) AppendFileAt(name string, mode os.FileMode) (*os.File, error) {
+	path := filepath.Join(d.path, name)
+	info, err := os.Lstat(path)
+	switch {
+	case err != nil && !errors.Is(err, os.ErrNotExist):
+		return nil, err
+	case err == nil && info.Mode()&os.ModeSymlink != 0:
+		return nil, errors.New("managed path must not be a symlink")
+	}
+	return os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, mode.Perm())
+}
+
 // CreateTempAt creates a uniquely named file inside d.
 func (d *Dir) CreateTempAt(prefix string, mode os.FileMode) (*os.File, string, error) {
 	file, err := os.CreateTemp(d.path, prefix+"*")

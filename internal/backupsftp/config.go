@@ -32,6 +32,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 )
 
 const (
@@ -140,14 +141,8 @@ func (c Config) Validate() error {
 		if !filepath.IsAbs(keyPath) && !strings.HasPrefix(filepath.ToSlash(keyPath), "/") {
 			return errors.New("SFTP key path must be absolute")
 		}
-		// The helper and the scheduled backup unit run with ProtectHome=yes,
-		// so a key hidden under /root, /home, or /run/user would be unreadable
-		// at upload time (the same constraint backup passphrase paths obey).
-		slash := filepath.ToSlash(filepath.Clean(keyPath))
-		for _, prefix := range []string{"/root", "/home", "/run/user"} {
-			if slash == prefix || strings.HasPrefix(slash, prefix+"/") {
-				return fmt.Errorf("SFTP key path %s is hidden by ProtectHome=yes; store it under the etc dir", keyPath)
-			}
+		if err := checkManagedKeyPath(keyPath); err != nil {
+			return err
 		}
 		if len(c.KeyPassphrase) > MaxKeyPassphraseBts {
 			return errors.New("key passphrase exceeds the size limit")
@@ -169,6 +164,24 @@ func (c Config) Validate() error {
 		if _, _, _, _, err := ssh.ParseAuthorizedKey([]byte(pinned)); err != nil {
 			return fmt.Errorf("host key is not a valid authorized_keys entry: %w", err)
 		}
+	}
+	return nil
+}
+
+// checkManagedKeyPath confines key-file paths to the managed config dir: the
+// helper and the scheduled unit read the key as root and sign with it, so an
+// arbitrary path would turn destination configuration into a signing oracle
+// plus a root-side read of any file on the host (#1229). Confinement to the
+// etc dir also keeps the path clear of the ProtectHome=yes mounts (/root,
+// /home, /run/user) that would hide it at upload time. Validate applies this
+// at the write boundary; authMethods re-applies it so a config that never
+// passed through SaveConfig still cannot pick a path outside the managed
+// tree.
+func checkManagedKeyPath(keyPath string) error {
+	slash := filepath.ToSlash(filepath.Clean(strings.TrimSpace(keyPath)))
+	etcDir := filepath.ToSlash(hostenv.EtcDir())
+	if !strings.HasPrefix(slash, etcDir+"/") {
+		return fmt.Errorf("SFTP key path %s must live under the managed config dir %s", keyPath, hostenv.EtcDir())
 	}
 	return nil
 }

@@ -126,6 +126,24 @@ func (d *Dir) CreateFileAt(name string, mode os.FileMode) (*os.File, error) {
 	return file, nil
 }
 
+// AppendFileAt opens child name relative to d for appending, creating it
+// when missing: O_WRONLY|O_CREAT|O_APPEND|O_NOFOLLOW. A symlinked leaf fails
+// ELOOP instead of redirecting a privileged append into an attacker-chosen
+// file (#1229).
+func (d *Dir) AppendFileAt(name string, mode os.FileMode) (*os.File, error) {
+	fd, err := unix.Openat(int(d.file.Fd()), name, unix.O_WRONLY|unix.O_CREAT|unix.O_APPEND|unix.O_NOFOLLOW|unix.O_CLOEXEC, uint32(mode.Perm()))
+	if err != nil {
+		return nil, err
+	}
+	path := filepath.Join(d.path, name)
+	file := os.NewFile(uintptr(fd), path)
+	if file == nil {
+		_ = unix.Close(fd)
+		return nil, fmt.Errorf("open managed file %s", path)
+	}
+	return file, nil
+}
+
 // CreateTempAt creates a uniquely named file inside d (prefix + random hex)
 // with O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW, returning the file and the chosen
 // leaf name. Use with RenameAt for atomic temp+publish inside a pinned

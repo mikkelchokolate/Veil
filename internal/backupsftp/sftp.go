@@ -12,11 +12,14 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 // RemoteFS abstracts the SFTP operations the destination logic needs so
@@ -46,6 +49,55 @@ var Dial Dialer = dialSFTP
 
 const handshakeTimeout = 30 * time.Second
 
+// transferIOTimeout bounds any single socket read/write once the SSH
+// handshake completes: a TCP-alive but unresponsive server fails the in-flight
+// SFTP request instead of wedging the operation forever (#1202). The deadline
+// re-arms on every I/O call, so healthy transfers of any size are unaffected.
+const transferIOTimeout = 2 * time.Minute
+
+// stallGuardConn enforces two deadline regimes on the SSH transport. While a
+// caller holds an absolute SetDeadline (the handshake bound), I/O runs under
+// it untouched; once that deadline is cleared, every Read/Write re-arms an
+// idle deadline first, so a request the server stops answering fails fast
+// rather than parking until the connection dies.
+type stallGuardConn struct {
+	net.Conn
+	idle time.Duration
+	mu   sync.Mutex
+	live bool
+}
+
+func (c *stallGuardConn) Read(p []byte) (int, error) {
+	c.arm()
+	return c.Conn.Read(p)
+}
+
+func (c *stallGuardConn) Write(p []byte) (int, error) {
+	c.arm()
+	return c.Conn.Write(p)
+}
+
+// SetDeadline drives the mode switch: a non-zero deadline is a one-shot
+// absolute bound (handshake), and clearing it arms the per-I/O stall guard
+// for the session that follows. Split SetReadDeadline/SetWriteDeadline are
+// intentionally not overridden — no caller uses them, and a partial deadline
+// would fight the guard's own arming; add tracking here before adopting one.
+func (c *stallGuardConn) SetDeadline(t time.Time) error {
+	c.mu.Lock()
+	c.live = t.IsZero()
+	c.mu.Unlock()
+	return c.Conn.SetDeadline(t)
+}
+
+func (c *stallGuardConn) arm() {
+	c.mu.Lock()
+	live := c.live
+	c.mu.Unlock()
+	if live {
+		_ = c.Conn.SetDeadline(time.Now().Add(c.idle))
+	}
+}
+
 func dialSFTP(ctx context.Context, config Config, knownHostsPath string) (RemoteFS, error) {
 	auth, err := authMethods(config)
 	if err != nil {
@@ -62,13 +114,16 @@ func dialSFTP(ctx context.Context, config Config, knownHostsPath string) (Remote
 		return nil, fmt.Errorf("sftp dial %s: %w", address, err)
 	}
 	// Bound the SSH handshake through the socket deadline; the context only
-	// covers the TCP dial.
+	// covers the TCP dial. The stall guard keeps it absolute — handshake I/O
+	// must not renew it — and only switches to per-I/O deadlines once the
+	// session is established (#1202).
+	guarded := &stallGuardConn{Conn: conn, idle: transferIOTimeout}
 	deadline := time.Now().Add(handshakeTimeout)
 	if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
 		deadline = ctxDeadline
 	}
-	_ = conn.SetDeadline(deadline)
-	sshConn, chans, reqs, err := ssh.NewClientConn(conn, address, &ssh.ClientConfig{
+	_ = guarded.SetDeadline(deadline)
+	sshConn, chans, reqs, err := ssh.NewClientConn(guarded, address, &ssh.ClientConfig{
 		User:            config.User,
 		Auth:            auth,
 		HostKeyCallback: hostKeyCallback,
@@ -78,7 +133,7 @@ func dialSFTP(ctx context.Context, config Config, knownHostsPath string) (Remote
 		_ = conn.Close()
 		return nil, fmt.Errorf("sftp handshake %s: %w", address, err)
 	}
-	_ = conn.SetDeadline(time.Time{})
+	_ = guarded.SetDeadline(time.Time{})
 	client := ssh.NewClient(sshConn, chans, reqs)
 	fsClient, err := sftp.NewClient(client)
 	if err != nil {
@@ -99,6 +154,9 @@ func authMethods(config Config) ([]ssh.AuthMethod, error) {
 		keyPath := strings.TrimSpace(config.KeyPath)
 		if keyPath == "" {
 			return nil, errors.New("sftp destination has no key path configured")
+		}
+		if err := checkManagedKeyPath(keyPath); err != nil {
+			return nil, err
 		}
 		body, err := readRegularFile(keyPath, 1024*1024)
 		if err != nil {
@@ -174,7 +232,18 @@ func appendKnownHost(path, hostname string, key ssh.PublicKey) error {
 			return err
 		}
 	}
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	// The known_hosts file lives under the state dir, where a lower-privileged
+	// service account may control dentries: resolve the append through a
+	// pinned directory handle with O_NOFOLLOW so a planted symlink cannot
+	// redirect this root write into an arbitrary file (#1229). OpenDirFollow
+	// keeps an operator-managed symlinked state root working while still
+	// pinning the resolved inode.
+	parent, err := safefs.OpenDirFollow(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("record sftp host key: %w", err)
+	}
+	defer parent.Close()
+	file, err := parent.AppendFileAt(filepath.Base(path), 0o600)
 	if err != nil {
 		return fmt.Errorf("record sftp host key: %w", err)
 	}
