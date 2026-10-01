@@ -130,6 +130,10 @@ func (s *managementState) withMutation(fn func(managementstate.Mutation) error) 
 		// can orphan per-inbound hy2 auth secrets — drop stale entries so a
 		// removed name never leaves its derived secret resident.
 		s.pruneHy2AuthSecretsLocked()
+		// Same for the admission tracker: session tuples key on
+		// "<inbound>\x00<addr>", so a deleted inbound would otherwise squat
+		// on tracker entries that can never reconcile (#1206).
+		s.pruneHy2AdmissionInboundsLocked()
 	}
 	return err
 }
@@ -191,10 +195,12 @@ func (s *managementState) inboundsWithRuntimeCredentialsLocked() ([]Inbound, err
 	}
 	out := make([]Inbound, len(s.inbounds))
 	copy(out, s.inbounds)
+	markers, err := legacyProfileMarkers(s.clientRepo)
+	if err != nil {
+		return nil, err
+	}
 	for i := range out {
-		if err := s.suppressMigratedLegacyProfiles(&out[i]); err != nil {
-			return nil, err
-		}
+		suppressMigratedLegacyProfiles(markers, &out[i])
 		creds, err := s.clientService.CredentialsForInbound(out[i].Name)
 		if err != nil {
 			return nil, fmt.Errorf("resolve runtime credentials for inbound %s: %w", out[i].Name, err)
@@ -232,10 +238,12 @@ func (s *managementState) inboundsWithRuntimeCredentialsLocked() ([]Inbound, err
 func (s *managementState) inboundsWithPinnedCredentialsLocked() ([]Inbound, error) {
 	out := make([]Inbound, len(s.inbounds))
 	copy(out, s.inbounds)
+	markers, err := legacyProfileMarkers(s.clientRepo)
+	if err != nil {
+		return nil, err
+	}
 	for i := range out {
-		if err := s.suppressMigratedLegacyProfiles(&out[i]); err != nil {
-			return nil, err
-		}
+		suppressMigratedLegacyProfiles(markers, &out[i])
 	}
 	// Build lookup by binding and the exact protocol-required kind. A binding
 	// can legitimately have several credential kinds, so binding ID alone is
@@ -306,39 +314,48 @@ func (s *managementState) inboundsWithPinnedCredentialsLocked() ([]Inbound, erro
 	return out, nil
 }
 
+// legacyProfileMarkers loads the legacy_profile/* migration marker set once
+// so a batch of inbound copies filters without a query per profile. Admission
+// paths call it WITHOUT holding s.mu — the repository is concurrency-safe and
+// per-admission reads must never serialize on the state mutex (#1206). A nil
+// repository yields a nil set, which suppresses nothing.
+func legacyProfileMarkers(repo *client.Repository) (map[string]struct{}, error) {
+	if repo == nil {
+		return nil, nil
+	}
+	markers, err := repo.MigrationMarkerKeys(client.LegacyProfileMarkerPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("read legacy profile markers: %w", err)
+	}
+	return markers, nil
+}
+
 // suppressMigratedLegacyProfiles drops embedded profiles that were handed to
-// the normalized client domain (a per-profile migration marker exists in the
-// store). After migration the legacy credential must never authenticate
-// outside the normalized lifecycle: disable/expire/deplete/rotate/delete act
-// on normalized rows only, and deleting the normalized client must not
-// resurrect the legacy credential (#1117). Profiles without markers were never
-// migrated and keep their legacy rendering. The Profiles slice is rebuilt —
-// callers share the backing array with s.inbounds, so mutating in place would
-// corrupt live state.
-func (s *managementState) suppressMigratedLegacyProfiles(inbound *Inbound) error {
-	if len(inbound.Profiles) == 0 || s.clientRepo == nil {
-		return nil
+// the normalized client domain (a marker key exists in the set returned by
+// legacyProfileMarkers). After migration the legacy credential must never
+// authenticate outside the normalized lifecycle: disable/expire/deplete/
+// rotate/delete act on normalized rows only, and deleting the normalized
+// client must not resurrect the legacy credential (#1117). Profiles without
+// markers were never migrated and keep their legacy rendering. The Profiles
+// slice is rebuilt — callers share the backing array with s.inbounds, so
+// mutating in place would corrupt live state. Pure filtering, no I/O.
+func suppressMigratedLegacyProfiles(markers map[string]struct{}, inbound *Inbound) {
+	if len(inbound.Profiles) == 0 {
+		return
 	}
 	kept := make([]model.ClientProfile, 0, len(inbound.Profiles))
 	suppressed := false
 	for _, profile := range inbound.Profiles {
-		if profile.Username == "" {
-			kept = append(kept, profile)
-			continue
-		}
-		marker, err := s.clientRepo.GetMigrationMarker(legacyProfileMarkerKey(inbound.Name, profile.Username))
-		if err != nil {
-			return fmt.Errorf("read legacy profile marker for %s/%s: %w", inbound.Name, profile.Username, err)
-		}
-		if marker != nil {
-			suppressed = true
-			continue
+		if profile.Username != "" {
+			if _, migrated := markers[legacyProfileMarkerKey(inbound.Name, profile.Username)]; migrated {
+				suppressed = true
+				continue
+			}
 		}
 		kept = append(kept, profile)
 	}
 	inbound.Profiles = kept
 	inbound.LegacyProfilesSuppressed = inbound.LegacyProfilesSuppressed || suppressed
-	return nil
 }
 
 func (s *managementState) snapshotLocked() (managementSnapshot, error) {
