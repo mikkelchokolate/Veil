@@ -185,7 +185,7 @@ func assertHelperCommittedRestoreJob(t *testing.T, job BackupRestoreJob) {
 func writeAPIRestoreJournal(t *testing.T, root, phase, stateDigest, keyDigest, statePrev, keyPrev string) {
 	t.Helper()
 	body, err := json.Marshal(map[string]any{
-		"version": 2, "transactionId": "tx-panel", "phase": phase, "walCleanupPhase": "pending",
+		"version": 2, "transactionId": "tx-panel", "phase": phase, "walShmCleanupPhase": "pending",
 		"files": []map[string]any{
 			{"name": "state.json", "targetId": "state.json", "stagedName": ".restore-state-new", "safetyName": "state.json.pre-restore-test", "hadPrevious": true, "previousDigest": statePrev, "intendedDigest": stateDigest, "mode": 384, "phase": phase},
 			{"name": "state.key", "targetId": "state.key", "stagedName": ".restore-key-new", "safetyName": "state.key.pre-restore-test", "hadPrevious": true, "previousDigest": keyPrev, "intendedDigest": keyDigest, "mode": 384, "phase": phase},
