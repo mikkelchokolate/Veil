@@ -139,6 +139,31 @@ func TestHy2AuthSharedPasswordInbound(t *testing.T) {
 	}
 }
 
+// #1200: an inbound with normalized binding rows is credential-managed —
+// when zero credentials resolve the handler must fail closed like the
+// renderers do, not fall through to shared-password acceptance.
+func TestHy2AuthSharedPasswordDeniedWhenBindingsExist(t *testing.T) {
+	s, svc := newHy2AuthTestState(t)
+	s.hy2AuthOnline = stubOnline(0)
+	view, err := svc.Create(client.Client{Name: "revoked", Enabled: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddBinding(view.ID, "hy2"); err != nil {
+		t.Fatal(err)
+	}
+	// Client disabled, no credential: the merged table resolves to zero
+	// rows, but a binding row still pins the inbound as managed.
+	path := hy2AuthPath(s, "hy2")
+	shared := hysteria2.SharedPassword(s.settings, s.inbounds[0])
+	if shared == "" {
+		t.Fatal("no shared password derived")
+	}
+	if resp := doHy2Auth(s, path, hy2AuthRequest{Addr: "1.2.3.4:5000", Auth: shared}); resp.OK {
+		t.Fatal("shared password admitted on a credential-managed inbound")
+	}
+}
+
 func TestHy2AuthDeviceLimitEnforcedAcrossOnlineAndPending(t *testing.T) {
 	s, svc := newHy2AuthTestState(t)
 	s.hy2AuthOnline = stubOnline(0)

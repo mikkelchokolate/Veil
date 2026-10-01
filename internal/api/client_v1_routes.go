@@ -448,6 +448,19 @@ func (s *managementState) migrateLegacyInboundsLocked(tx *client.Tx, inbounds []
 		}
 		profiles := make([]client.LegacyProfile, 0, len(in.Profiles))
 		for _, p := range in.Profiles {
+			// Honor the same per-profile marker gate the startup path
+			// applies (#1198): a recorded marker means the profile already
+			// migrated once, so re-feeding it would resurrect a client,
+			// binding or credential the operator deliberately deleted.
+			if p.Username != "" {
+				marker, markerErr := tx.GetMigrationMarker(legacyProfileMarkerKey(in.Name, p.Username))
+				if markerErr != nil {
+					return nil, false, markerErr
+				}
+				if marker != nil {
+					continue
+				}
+			}
 			profiles = append(profiles, client.LegacyProfile{
 				Name: p.Name, Username: p.Username, Password: p.Password, Enabled: p.Enabled,
 			})

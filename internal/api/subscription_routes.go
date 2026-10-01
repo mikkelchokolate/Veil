@@ -311,6 +311,27 @@ func (s *managementState) appliedSubscription(clientID string) (client.View, []m
 				return client.View{}, nil, revisions.Applied, revisions.Desired, bindErr
 			}
 			liveActive = client.ComputeStatus(live, time.Now().UTC(), false, false, len(liveBindings) == 0) == client.StatusActive
+			// The leak the live re-check plugs is credential-granular, so
+			// the gate must be too (#1199): a binding detached or disabled
+			// after the snapshot committed must stop serving its link
+			// immediately, not after the next apply converges. Drop any
+			// rendered binding whose live row is missing or disabled,
+			// along with its plaintext.
+			liveEnabled := make(map[string]bool, len(liveBindings))
+			for _, binding := range liveBindings {
+				liveEnabled[binding.ID] = binding.Enabled
+			}
+			kept := bindings[:0]
+			inboundIDs = inboundIDs[:0]
+			for _, binding := range bindings {
+				if !liveEnabled[binding.ID] {
+					delete(plaintext, binding.ID)
+					continue
+				}
+				kept = append(kept, binding)
+				inboundIDs = append(inboundIDs, binding.InboundID)
+			}
+			bindings = kept
 		case errors.Is(liveErr, client.ErrNotFound):
 			liveActive = false
 		default:

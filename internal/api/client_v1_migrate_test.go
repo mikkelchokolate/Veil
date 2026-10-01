@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -91,7 +92,10 @@ func TestV1MigrateLegacyCommitsRepairOnlyChanges(t *testing.T) {
 	}
 
 	// Simulate the interrupted-migration shape: the client and binding rows
-	// committed but the credential did not.
+	// committed but the credential AND the per-profile provenance marker
+	// did not. The marker must go too — a recorded marker means the
+	// migration finished, and re-feeding that profile is a resurrection,
+	// not a repair (#1198).
 	countCredentials := func() int {
 		count := -1
 		if err := st.clientRepo.WithTx(func(tx *client.Tx) error {
@@ -105,7 +109,10 @@ func TestV1MigrateLegacyCommitsRepairOnlyChanges(t *testing.T) {
 		t.Fatalf("initial migration left %d credential rows", got)
 	}
 	if err := st.clientRepo.WithTx(func(tx *client.Tx) error {
-		_, err := tx.Exec(`DELETE FROM client_credentials`)
+		if _, err := tx.Exec(`DELETE FROM client_credentials`); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`DELETE FROM migration_markers`)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -131,5 +138,62 @@ func TestV1MigrateLegacyCommitsRepairOnlyChanges(t *testing.T) {
 	}
 	if got := countCredentials(); got < 1 {
 		t.Fatalf("repair run rolled the credential back: %d rows after commit", got)
+	}
+}
+
+// TestV1MigrateLegacyDoesNotResurrectDeletedClient covers #1198: the API
+// re-run used to feed every embedded profile with no marker gate, so a
+// deleted migrated client (and its revoked credential) came back on the
+// next POST. A recorded per-profile marker now skips the profile — the
+// same contract the startup migration path honors.
+func TestV1MigrateLegacyDoesNotResurrectDeletedClient(t *testing.T) {
+	r, st := newApplyTrackedRouterWithState(t)
+
+	inboundBody := strings.NewReader(`{"name":"hy2","protocol":"hysteria2","transport":"udp","port":18443,"enabled":true,"profiles":[{"name":"legacybob","username":"legacybob","password":"bob-pass","enabled":true}]}`)
+	iw := httptest.NewRecorder()
+	ireq := httptest.NewRequest(http.MethodPost, "/api/inbounds", inboundBody)
+	ireq.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(iw, ireq)
+	if iw.Code != http.StatusOK && iw.Code != http.StatusCreated {
+		t.Fatalf("create inbound: %d %s", iw.Code, iw.Body.String())
+	}
+
+	mw := httptest.NewRecorder()
+	r.ServeHTTP(mw, httptest.NewRequest(http.MethodPost, "/api/v1/clients/migrate-legacy", strings.NewReader(`{}`)))
+	if mw.Code != http.StatusOK {
+		t.Fatalf("migrate: %d %s", mw.Code, mw.Body.String())
+	}
+	clientID := client.StableClientID("hy2", "legacybob")
+	if _, err := st.clientRepo.Get(clientID); err != nil {
+		t.Fatalf("migrated client missing: %v", err)
+	}
+
+	// Delete the migrated client — the provenance marker persists by
+	// design (#1117).
+	dw := httptest.NewRecorder()
+	r.ServeHTTP(dw, httptest.NewRequest(http.MethodDelete, "/api/v1/clients/"+clientID, nil))
+	if dw.Code != http.StatusOK && dw.Code != http.StatusNoContent {
+		t.Fatalf("delete client: %d %s", dw.Code, dw.Body.String())
+	}
+	if _, err := st.clientRepo.Get(clientID); !errors.Is(err, client.ErrNotFound) {
+		t.Fatalf("client still present after delete: %v", err)
+	}
+
+	mw2 := httptest.NewRecorder()
+	r.ServeHTTP(mw2, httptest.NewRequest(http.MethodPost, "/api/v1/clients/migrate-legacy", strings.NewReader(`{}`)))
+	if mw2.Code != http.StatusOK {
+		t.Fatalf("re-migrate: %d %s", mw2.Code, mw2.Body.String())
+	}
+	var mresp2 map[string]any
+	if err := json.NewDecoder(mw2.Body).Decode(&mresp2); err != nil {
+		t.Fatalf("decode re-migrate: %v", err)
+	}
+	for _, key := range []string{"clientsCreated", "bindingsCreated", "credentialsCreated"} {
+		if created, _ := mresp2[key].(float64); created != 0 {
+			t.Fatalf("re-run resurrected state: %s=%v (%v)", key, created, mresp2)
+		}
+	}
+	if _, err := st.clientRepo.Get(clientID); !errors.Is(err, client.ErrNotFound) {
+		t.Fatalf("deleted client resurrected: %v", err)
 	}
 }

@@ -149,6 +149,55 @@ func TestPublicSubscriptionUsesLastAppliedImmutableSnapshot(t *testing.T) {
 	}
 }
 
+// TestPublicSubscriptionDropsDisabledBindingLive covers #1199: the live
+// re-check added by #1126 was client-granular while the leak it plugs is
+// credential-granular — a binding detached or disabled after the snapshot
+// committed kept serving its link until the next apply. The feed now
+// drops any rendered binding whose live row is missing or disabled.
+func TestPublicSubscriptionDropsDisabledBindingLive(t *testing.T) {
+	router, state := newApplyTrackedRouterWithState(t)
+	t.Cleanup(func() { _ = state.Close() })
+	inboundResponse := v1Request(t, router, http.MethodPost, "/api/inbounds",
+		`{"name":"live-gate-hy","protocol":"hysteria2","transport":"udp","port":27443,"enabled":true}`)
+	if inboundResponse.Code != http.StatusCreated && inboundResponse.Code != http.StatusOK {
+		t.Fatalf("create inbound: %d %s", inboundResponse.Code, inboundResponse.Body.String())
+	}
+	clientResponse := v1Request(t, router, http.MethodPost, "/api/v1/clients",
+		`{"name":"live-gate-client","bindings":[{"inboundId":"live-gate-hy","runtimeIdentity":"live_gate_identity","credential":"live-gate-credential"}]}`)
+	if clientResponse.Code != http.StatusCreated {
+		t.Fatalf("create client: %d %s", clientResponse.Code, clientResponse.Body.String())
+	}
+	created := unwrapClient(t, clientResponse.Body.Bytes())
+	clientID := created["id"].(string)
+	bindingID := created["bindings"].([]any)[0].(map[string]any)["id"].(string)
+	issued, err := state.tokenStore.Issue(clientID, "live-gate-test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := publicRawSubscription(t, router, issued.Plaintext)
+	if before.Code != http.StatusOK || !strings.Contains(before.Body.String(), "live_gate_identity") {
+		t.Fatalf("baseline subscription missing link: %d %q", before.Code, before.Body.String())
+	}
+
+	// Disable the binding live WITHOUT bumping a desired revision — the
+	// applied snapshot still carries it enabled.
+	bindings, err := state.clientRepo.BindingsForClient(clientID)
+	if err != nil || len(bindings) != 1 {
+		t.Fatalf("live bindings: %v %d", err, len(bindings))
+	}
+	if _, err := state.clientService.SetBindingEnabled(bindingID, false, bindings[0].Version); err != nil {
+		t.Fatalf("disable binding: %v", err)
+	}
+
+	after := publicRawSubscription(t, router, issued.Plaintext)
+	if after.Code != http.StatusOK {
+		t.Fatalf("subscription status after disable = %d body=%q", after.Code, after.Body.String())
+	}
+	if strings.Contains(after.Body.String(), "live_gate_identity") {
+		t.Fatalf("disabled binding still served its link before apply converged: %q", after.Body.String())
+	}
+}
+
 func TestAuthenticatedLinksConvergeAfterSuccessfulApply(t *testing.T) {
 	router, state := newApplyTrackedRouterWithState(t)
 	inboundResponse := v1Request(t, router, http.MethodPost, "/api/inbounds",
