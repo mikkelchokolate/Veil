@@ -107,7 +107,7 @@ func TestRollbackRestoreBringsFilesBack(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"rollback", "restore", backupID, "--backup-dir", backupDir, "--yes"})
+	cmd.SetArgs([]string{"rollback", "restore", backupID, "--backup-dir", backupDir, "--yes", "--restore-root", dir})
 
 	err = cmd.Execute()
 	if err != nil {
@@ -347,7 +347,7 @@ func TestRollbackRestoreWithAuditLog(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"rollback", "restore", backupID, "--backup-dir", backupDir, "--yes", "--audit-log", auditPath})
+	cmd.SetArgs([]string{"rollback", "restore", backupID, "--backup-dir", backupDir, "--yes", "--audit-log", auditPath, "--restore-root", dir})
 
 	err = cmd.Execute()
 	if err != nil {
@@ -491,7 +491,7 @@ func TestRollbackRestoreNoAuditFlagBackwardCompatible(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"rollback", "restore", backupID, "--backup-dir", backupDir, "--yes"})
+	cmd.SetArgs([]string{"rollback", "restore", backupID, "--backup-dir", backupDir, "--yes", "--restore-root", dir})
 
 	err = cmd.Execute()
 	if err != nil {

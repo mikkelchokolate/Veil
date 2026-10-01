@@ -1,6 +1,7 @@
 package backupsftp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -245,7 +246,7 @@ func TestLoadConfigEmptyPathIsNil(t *testing.T) {
 func writeNamedLocalArchive(t *testing.T, name, body string) string {
 	t.Helper()
 	localPath := filepath.Join(t.TempDir(), name)
-	if err := os.WriteFile(localPath, append([]byte("VEILBACK\x03"), []byte(body)...), 0o600); err != nil {
+	if err := os.WriteFile(localPath, encryptedFixture([]byte(body)), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return localPath
@@ -380,7 +381,7 @@ func TestRemoteNamespaceIsolatesSharedDirectory(t *testing.T) {
 	}
 	for _, day := range days {
 		foreign := path.Join(otherDir, "veil_backup_"+day+"_030000.tar.gz.enc")
-		if got := fs.File(foreign); string(got) != "VEILBACK\x03b-"+day {
+		if got := fs.File(foreign); !bytes.Equal(got, encryptedFixture([]byte("b-"+day))) {
 			t.Fatalf("node B archive was touched: %s=%q", foreign, got)
 		}
 	}

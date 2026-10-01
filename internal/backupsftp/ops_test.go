@@ -1,6 +1,7 @@
 package backupsftp
 
 import (
+	"encoding/binary"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -23,13 +24,24 @@ func sftpTestConfig() Config {
 	}
 }
 
+// encryptedFixture builds a structurally valid v3 (chunked) archive header
+// around body — magic + version + 28-byte salt/nonce + 4-byte big-endian
+// frame length — so fixtures satisfy the strict IsEncryptedArchivePrefix
+// proof, not just the magic prefix (#1223).
+func encryptedFixture(body []byte) []byte {
+	payload := append([]byte("VEILBACK\x03"), make([]byte, 28)...)
+	var flen [4]byte
+	binary.BigEndian.PutUint32(flen[:], uint32(len(body)))
+	return append(payload, append(flen[:], body...)...)
+}
+
 // writeLocalArchive writes a local file whose content passes the encrypted
 // archive gate: the given body sits behind the Veil encryption magic so the
 // fixture looks like a real .enc payload (#1188).
 func writeLocalArchive(t *testing.T, body []byte) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "veil_backup_20260101_020000.tar.gz.enc")
-	payload := append([]byte("VEILBACK\x03"), body...)
+	payload := encryptedFixture(body)
 	if err := os.WriteFile(path, payload, 0o600); err != nil {
 		t.Fatal(err)
 	}
