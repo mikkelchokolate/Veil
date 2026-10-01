@@ -222,7 +222,9 @@ func TestBackupSftpRemoteListAndFetch(t *testing.T) {
 	}
 	seedSftpInstallID(t, state)
 	name := "veil_backup_20260101_020000.tar.gz.enc"
-	remote.SetFile(sftpTestRemoteDir+"/"+name, []byte("remote-archive"))
+	// No sidecar: the fetch relies on the encrypted-archive magic check for
+	// pre-sidecar content (#1209).
+	remote.SetFile(sftpTestRemoteDir+"/"+name, []byte("VEILBACK\x03remote-archive"))
 	// A foreign archive outside this node's namespace must never be listed
 	// or fetchable (#1184).
 	remote.SetFile("/srv/veil-backups/veil_backup_20260102_020000.tar.gz.enc", []byte("foreign"))
@@ -251,7 +253,7 @@ func TestBackupSftpRemoteListAndFetch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != "remote-archive" {
+	if string(got) != "VEILBACK\x03remote-archive" {
 		t.Fatalf("fetched=%q", got)
 	}
 

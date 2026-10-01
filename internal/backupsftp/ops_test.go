@@ -6,11 +6,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/backup"
 	"github.com/mikkelchokolate/Veil/internal/testutil/sftpfake"
@@ -320,13 +323,31 @@ func TestFetchDownloadsAndVerifies(t *testing.T) {
 	}
 }
 
+// Pre-sidecar archives carry no digest: fetch still publishes them, but only
+// after the downloaded bytes prove the Veil encrypted-archive magic (#1209).
 func TestFetchWithoutSidecarStillPublishes(t *testing.T) {
 	dir := "/srv/veil-backups"
 	fs := sftpfake.New()
 	name := "veil_backup_20260101_020000.tar.gz.enc"
-	fs.SetFile(path.Join(dir, name), []byte("archive"))
+	fs.SetFile(path.Join(dir, name), []byte("VEILBACK\x03archive"))
 	if _, err := Fetch(context.Background(), fs, sftpTestConfig(), t.TempDir(), name); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// #1209: without a sidecar the download is not verified content — a .enc name
+// alone must not publish bytes that are not a Veil encrypted archive.
+func TestFetchWithoutSidecarRejectsPlaintext(t *testing.T) {
+	dir := "/srv/veil-backups"
+	fs := sftpfake.New()
+	name := "veil_backup_20260101_020000.tar.gz.enc"
+	fs.SetFile(path.Join(dir, name), []byte("not-an-encrypted-archive"))
+	localDir := t.TempDir()
+	if _, err := Fetch(context.Background(), fs, sftpTestConfig(), localDir, name); !errors.Is(err, ErrUnencryptedArchive) {
+		t.Fatalf("sidecar-less plaintext fetch err=%v, want ErrUnencryptedArchive", err)
+	}
+	if entries, _ := os.ReadDir(localDir); len(entries) != 0 {
+		t.Fatalf("rejected fetch left files: %v", entries)
 	}
 }
 
@@ -356,5 +377,169 @@ func TestFetchRejectsBadNamesAndMissingRemote(t *testing.T) {
 	_, err := Fetch(context.Background(), fs, sftpTestConfig(), t.TempDir(), "veil_backup_20260101_020000.tar.gz.enc")
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("missing remote should map to ErrNotExist, got %v", err)
+	}
+}
+
+// lyingRemoteFS is the hostile-server shape for the fetch bound (#1202):
+// Stat declares statSize but Open streams an unbounded payload, so a fetch
+// that trusts the declared size must still cut the stream at the bound.
+type lyingRemoteFS struct {
+	*sftpfake.MemFS
+	statSize int64
+	stream   io.Reader
+}
+
+func (f lyingRemoteFS) Stat(name string) (os.FileInfo, error) {
+	if _, err := f.MemFS.Stat(name); err != nil {
+		return nil, err
+	}
+	return lyingFileInfo{size: f.statSize}, nil
+}
+
+func (f lyingRemoteFS) Open(string) (io.ReadCloser, error) {
+	return io.NopCloser(f.stream), nil
+}
+
+type lyingFileInfo struct{ size int64 }
+
+func (i lyingFileInfo) Name() string      { return "archive" }
+func (i lyingFileInfo) Size() int64       { return i.size }
+func (i lyingFileInfo) Mode() os.FileMode { return 0o600 }
+func (i lyingFileInfo) ModTime() time.Time {
+	return time.Unix(0, 0)
+}
+func (i lyingFileInfo) IsDir() bool { return false }
+func (i lyingFileInfo) Sys() any    { return nil }
+
+// endlessReader never reaches EOF: without io.LimitReader the fetch copy
+// would stream into the local backup dir forever.
+type endlessReader struct{}
+
+func (endlessReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 'x'
+	}
+	return len(p), nil
+}
+
+// #1202: a server that declares a small archive but streams endlessly must be
+// cut at the declared size plus slack — the fetch fails on the size check and
+// nothing is published.
+func TestFetchBoundsDownloadToDeclaredSize(t *testing.T) {
+	dir := "/srv/veil-backups"
+	name := "veil_backup_20260101_020000.tar.gz.enc"
+	fs := lyingRemoteFS{MemFS: sftpfake.New(), statSize: 8, stream: endlessReader{}}
+	fs.SetFile(path.Join(dir, name), []byte("x"))
+
+	localDir := t.TempDir()
+	_, err := Fetch(context.Background(), fs, sftpTestConfig(), localDir, name)
+	if err == nil || !strings.Contains(err.Error(), "size") {
+		t.Fatalf("oversized stream err=%v, want size mismatch", err)
+	}
+	if entries, _ := os.ReadDir(localDir); len(entries) != 0 {
+		t.Fatalf("failed fetch left files: %v", entries)
+	}
+}
+
+// #1202: even an honestly-declared archive larger than the configured backup
+// ceiling can never be restored, so the download stops at that bound too.
+func TestFetchRejectsArchiveOverConfiguredLimit(t *testing.T) {
+	t.Setenv("VEIL_BACKUP_MAX_BYTES", "4096")
+	dir := "/srv/veil-backups"
+	name := "veil_backup_20260101_020000.tar.gz.enc"
+	fs := lyingRemoteFS{MemFS: sftpfake.New(), statSize: 1 << 20, stream: endlessReader{}}
+	fs.SetFile(path.Join(dir, name), []byte("x"))
+
+	localDir := t.TempDir()
+	_, err := Fetch(context.Background(), fs, sftpTestConfig(), localDir, name)
+	if err == nil || !strings.Contains(err.Error(), "maximum") {
+		t.Fatalf("over-limit fetch err=%v, want the configured-maximum rejection", err)
+	}
+	if entries, _ := os.ReadDir(localDir); len(entries) != 0 {
+		t.Fatalf("failed fetch left files: %v", entries)
+	}
+}
+
+// #1202: an already-cancelled context must refuse all four remote ops before
+// any remote I/O happens.
+func TestOpsHonorCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	fs := sftpfake.New()
+	config := sftpTestConfig()
+	name := "veil_backup_20260101_020000.tar.gz.enc"
+
+	if _, err := Upload(ctx, fs, config, writeLocalArchive(t, []byte("x")), name); !errors.Is(err, context.Canceled) {
+		t.Fatalf("upload err=%v, want context.Canceled", err)
+	}
+	if _, err := List(ctx, fs, config); !errors.Is(err, context.Canceled) {
+		t.Fatalf("list err=%v, want context.Canceled", err)
+	}
+	if _, err := Prune(ctx, fs, config, backup.RetentionPolicy{Daily: 1}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("prune err=%v, want context.Canceled", err)
+	}
+	if _, err := Fetch(ctx, fs, config, t.TempDir(), name); !errors.Is(err, context.Canceled) {
+		t.Fatalf("fetch err=%v, want context.Canceled", err)
+	}
+	if len(fs.Ops) != 0 {
+		t.Fatalf("cancelled ops touched the remote: %v", fs.Ops)
+	}
+}
+
+// stallFS wedges every ReadDir until the connection is closed — the
+// TCP-alive but unresponsive server shape from #1202. The remote op can only
+// return once cancellation closes the filesystem.
+type stallFS struct {
+	*sftpfake.MemFS
+	entered  chan struct{}
+	released chan struct{}
+	once     sync.Once
+}
+
+func newStallFS() *stallFS {
+	return &stallFS{
+		MemFS:    sftpfake.New(),
+		entered:  make(chan struct{}, 1),
+		released: make(chan struct{}),
+	}
+}
+
+func (f *stallFS) ReadDir(string) ([]os.FileInfo, error) {
+	select {
+	case f.entered <- struct{}{}:
+	default:
+	}
+	<-f.released
+	return nil, errors.New("connection lost")
+}
+
+func (f *stallFS) Close() error {
+	f.once.Do(func() { close(f.released) })
+	return f.MemFS.Close()
+}
+
+// #1202: the caller's context must reach the List inside Prune — before the
+// fix Prune called List(context.Background()), so a wedged remote listing
+// ignored cancellation forever.
+func TestPrunePropagatesContextToList(t *testing.T) {
+	fs := newStallFS()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := Prune(ctx, fs, sftpTestConfig(), backup.RetentionPolicy{Daily: 1})
+		done <- err
+	}()
+	<-fs.entered
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("prune succeeded after cancellation")
+		}
+		if !fs.Closed() {
+			t.Fatal("cancellation did not close the remote connection")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("prune hung after context cancellation")
 	}
 }

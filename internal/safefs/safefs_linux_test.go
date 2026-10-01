@@ -257,3 +257,55 @@ func TestMkdirAtAndOpenDirAtDescend(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// AppendFileAt is the TOFU known_hosts primitive (#1229-F6): it must append
+// to a real file but refuse a swapped-in symlink instead of redirecting a
+// root write into an attacker-chosen target.
+func TestAppendFileAtAppendsButRejectsSymlink(t *testing.T) {
+	root := t.TempDir()
+	dir, err := OpenDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dir.Close()
+
+	f, err := dir.AppendFileAt("known_hosts", 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("one\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// Appending again must extend, not truncate.
+	f, err = dir.AppendFileAt("known_hosts", 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("two\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(root, "known_hosts"))
+	if err != nil || string(body) != "one\ntwo\n" {
+		t.Fatalf("appended content = %q, %v", body, err)
+	}
+
+	outside := filepath.Join(t.TempDir(), "victim")
+	if err := os.WriteFile(outside, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "swapped")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dir.AppendFileAt("swapped", 0o600); !errors.Is(err, unix.ELOOP) {
+		t.Fatalf("AppendFileAt symlink error = %v, want ELOOP", err)
+	}
+	if body, err := os.ReadFile(outside); err != nil || string(body) != "keep" {
+		t.Fatalf("symlink target modified: %q, %v", body, err)
+	}
+}

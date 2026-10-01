@@ -170,9 +170,15 @@ func TestBackupCreateSftpDisabledSkipsUploadCLI(t *testing.T) {
 func TestBackupPruneMirrorsRemoteRetentionCLI(t *testing.T) {
 	remote := sftpfake.New()
 	stubCLISftpDial(t, remote, nil)
-	// stateDir is what the CLI engine resolves from --dir's parent.
+	// #1209: the SFTP state dir resolves from the state file's directory —
+	// the same derivation `backup create` uses — not from --dir's parent, so
+	// an operator-chosen backup dir never mints a second remote namespace.
 	stateDir := t.TempDir()
-	backupDir := filepath.Join(stateDir, "backups")
+	t.Setenv("VEIL_STATE_PATH", filepath.Join(stateDir, "state.json"))
+	// --dir deliberately sits in an unrelated tree: remote state must not
+	// be derived from it.
+	backupRoot := t.TempDir()
+	backupDir := filepath.Join(backupRoot, "backups")
 	if err := os.MkdirAll(backupDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -219,6 +225,11 @@ func TestBackupPruneMirrorsRemoteRetentionCLI(t *testing.T) {
 	}
 	if !remote.Has("/srv/veil-backups/veil_backup_20260204_020000.tar.gz.enc") {
 		t.Fatal("foreign archive outside the node namespace was pruned")
+	}
+	// The remote namespace identity must come from the state dir, never
+	// minted fresh beside --dir.
+	if _, err := os.Stat(filepath.Join(backupRoot, backupsftp.InstallIDFileName)); !os.IsNotExist(err) {
+		t.Fatal("install id minted beside --dir instead of the state dir")
 	}
 }
 
