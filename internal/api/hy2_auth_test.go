@@ -765,6 +765,10 @@ func TestHy2AuthOnlineReadRunsOutsideStateMutex(t *testing.T) {
 	locked := make(chan struct{})
 	go func() {
 		s.mu.Lock()
+		// A trivial read keeps the critical section non-empty: the probe's
+		// signal is that Lock() returned promptly while the handler is
+		// blocked in the stats read.
+		_ = s.statePath
 		s.mu.Unlock()
 		close(locked)
 	}()

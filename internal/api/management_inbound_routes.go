@@ -351,7 +351,7 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 				}
 				if count > 0 {
 					s.logUserAction(r, "update_inbound", name, false, "connection-limited clients attached")
-					writeError(w, "inbound update would remove connection-limit enforcement for bound clients", http.StatusConflict)
+					writeError(w, "inbound update would remove connection-limit enforcement for bound clients — detach them or keep a limit-capable protocol", http.StatusConflict)
 					return nil
 				}
 			}
