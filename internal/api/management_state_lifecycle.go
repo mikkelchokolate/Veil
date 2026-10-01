@@ -648,6 +648,7 @@ func (s *managementState) resetMutableStateToDefaultsLocked() {
 	s.settings.CredentialDerivationSecret = secrets.DeriveToken(s.cipher, veilmodel.CredentialDerivationLabel)
 	s.inbounds = defaults.Inbounds
 	s.pruneHy2AuthSecretsLocked()
+	s.pruneHy2AdmissionInboundsLocked()
 	s.rules = defaults.Rules
 	s.routingPreset = ""
 	s.routingSource = RoutingSource{}

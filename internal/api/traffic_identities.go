@@ -54,11 +54,12 @@ func trafficIdentityMap(inboundName string, profiles []ClientProfile, bindings [
 		identities[name] = bindingID
 	}
 
-	for _, binding := range inboundBindings {
-		if current, ok := clientByID[binding.ClientID]; ok {
-			alias(current.Name, binding.ID)
-		}
-	}
+	// Migrated legacy usernames claim their identity BEFORE client-name
+	// aliases: a normalized client whose name merely equals a legacy username
+	// would otherwise steal sessions that still report under it, while the
+	// migrated client's own binding (StableClientID) is the row the daemon
+	// actually serves that username for (#1225). Unmigrated profiles have no
+	// StableClientID binding, so this pass only ever claims migrated ones.
 	for _, profile := range profiles {
 		if !profile.Enabled {
 			continue
@@ -79,6 +80,11 @@ func trafficIdentityMap(inboundName string, profiles []ClientProfile, bindings [
 				identities[username] = binding.ID
 				break
 			}
+		}
+	}
+	for _, binding := range inboundBindings {
+		if current, ok := clientByID[binding.ClientID]; ok {
+			alias(current.Name, binding.ID)
 		}
 	}
 	return identities

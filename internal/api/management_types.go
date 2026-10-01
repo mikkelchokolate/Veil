@@ -180,6 +180,10 @@ type managementState struct {
 	hy2Auth           *hy2AuthServer
 	hy2AuthListenAddr string
 	hy2AuthOnline     func(ctx context.Context, settings model.Settings, inbound model.Inbound, identities map[string]string) (map[string]int64, []string, error)
+	// hy2AuthInflight bounds concurrent admissions on the internal listener
+	// (serveHy2Auth). Rebuilt with each (re)bind; nil in tests that call the
+	// handler without ensureHy2AuthLocked.
+	hy2AuthInflight chan struct{}
 	// hy2Limiter enforces deviceLimit/ipLimit at session admission against
 	// the daemon's live /online count: deviceLimit bridges the
 	// auth→registration gap with pending watermarks, while ipLimit keeps
@@ -187,9 +191,9 @@ type managementState struct {
 	// contains them (#1173, #1180).
 	hy2Limiter *hy2AdmissionTracker
 	// hy2AuthSecrets memoizes the Argon2-derived per-inbound path secret
-	// (keyed by name+"\x00"+password) so reconnect storms do not re-run the KDF
-	// on every admission. Bounded by the number of distinct inbound/password
-	// pairs ever seen.
+	// (keyed by inbound name, validated against every derivation input —
+	// shared password and CredentialDerivationSecret) so reconnect storms do
+	// not re-run the KDF on every admission. Bounded by the inbound count.
 	hy2AuthSecrets          sync.Map
 	clientSubsystemStopping bool
 	applyReadinessMu        sync.Mutex
