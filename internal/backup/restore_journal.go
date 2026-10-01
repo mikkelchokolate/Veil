@@ -589,10 +589,17 @@ func rollbackRestoreJournal(dirs restoreJournalDirs, root string, journal *resto
 				// journal+safety pair has no such footprint and is
 				// refused before it can clobber live state.
 				published := false
-				if digest, err := digestJournalLeaf(dir, targetLeaf); err == nil && digest == record.IntendedDigest {
+				targetDigest, targetErr := digestJournalLeaf(dir, targetLeaf)
+				if targetErr == nil && targetDigest == record.IntendedDigest {
 					published = true
 				}
-				if !published {
+				if !published && errors.Is(targetErr, os.ErrNotExist) {
+					// Mid-publish crash window: the target was parked to
+					// safety and the staged->target rename never ran, so
+					// the intact staged leaf is the publish evidence. It
+					// counts only while the target is absent — a staged
+					// leaf next to a live target is forgeable noise and
+					// must not unlock the rename (#1219).
 					if digest, err := digestJournalLeaf(dir, filepath.Base(record.StagedPath)); err == nil && digest == record.IntendedDigest {
 						published = true
 					}
