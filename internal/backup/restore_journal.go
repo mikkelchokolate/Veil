@@ -579,9 +579,24 @@ func rollbackRestoreJournal(dirs restoreJournalDirs, root string, journal *resto
 		// proves a previous inode was parked (#1219).
 		if record.HadPrevious || statErr == nil {
 			if statErr == nil {
-				// The safety swap must move the inode the journal actually
-				// recorded: a swapped symlink or multi-linked entry is
-				// rejected here instead of renamed into place (#1219).
+				// The parked inode must prove it IS the recorded previous
+				// file BEFORE it is renamed over the live target — a
+				// planted journal can pair "no previous" with a dropped
+				// safety leaf to clobber live state (#1219). Without a
+				// well-formed PreviousDigest there is nothing to verify
+				// against, so the rename is refused.
+				if !isSHA256HexDigest(record.PreviousDigest) {
+					return fmt.Errorf("restore safety member %s exists but journal records no previous digest", record.Name)
+				}
+				safetyDigest, err := digestJournalLeaf(dir, safetyLeaf)
+				if err != nil {
+					return fmt.Errorf("recover safety %s: %w", record.Name, err)
+				}
+				if safetyDigest != record.PreviousDigest {
+					return fmt.Errorf("recover safety digest mismatch for %s", record.Name)
+				}
+				// A swapped symlink or multi-linked entry is rejected here
+				// instead of renamed into place (#1219).
 				if !info.Mode().IsRegular() {
 					return fmt.Errorf("restore safety member is not a regular file: %s", record.Name)
 				}

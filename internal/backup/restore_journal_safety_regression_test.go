@@ -196,6 +196,49 @@ func TestRestoreRollbackRefusesToUnlinkForeignTargets(t *testing.T) {
 	}
 }
 
+// TestRestoreRollbackRejectsPlantedSafetyLeaf covers the remaining #1219
+// rename-before-verify gap: a planted journal can claim hadPrevious:false
+// while dropping a forged ".restore-state-old" leaf next to the target.
+// The parked inode must hash to a well-formed recorded PreviousDigest
+// BEFORE it is renamed over the live leaf — an empty previousDigest with
+// a present safety leaf is refused, so state.json keeps its live content.
+func TestRestoreRollbackRejectsPlantedSafetyLeaf(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state.json")
+	keyPath := filepath.Join(root, "state.key")
+	for path, body := range map[string]string{statePath: "live-state", keyPath: "live-key"} {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The attacker drops a forged "previous" inode while the journal
+	// claims there was none.
+	if err := os.WriteFile(filepath.Join(root, ".restore-state-old"), []byte("forged-state"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	disk := restoreJournalDisk{
+		Version: 2, TransactionID: "planted", Phase: "prepared", WALCleanupPhase: "pending",
+		Files: []restoreJournalDiskFile{
+			{Name: "state.json", TargetID: "state.json", StagedName: ".restore-state-new", SafetyName: ".restore-state-old", IntendedDigest: backupChecksum([]byte("planted-state")), Phase: "prepared"},
+		},
+	}
+	payload, err := json.Marshal(disk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, restoreTransactionJournalName), payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RecoverInterruptedRestore(statePath, keyPath, ""); err == nil {
+		t.Fatal("planted safety leaf with no previous digest was silently accepted")
+	}
+	got, err := os.ReadFile(statePath)
+	if err != nil || string(got) != "live-state" {
+		t.Fatalf("planted safety leaf clobbered live state.json: body=%q err=%v", got, err)
+	}
+}
+
 // TestMalformedRestoreJournalQuarantinedOnce covers #1219: a journal that
 // fails validation is renamed to a non-replayable quarantine leaf and the
 // failure is reported once — recovery must neither replay the poisoned
