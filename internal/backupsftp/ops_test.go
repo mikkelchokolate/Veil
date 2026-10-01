@@ -341,7 +341,7 @@ func TestFetchWithoutSidecarStillPublishes(t *testing.T) {
 	dir := "/srv/veil-backups"
 	fs := sftpfake.New()
 	name := "veil_backup_20260101_020000.tar.gz.enc"
-	fs.SetFile(path.Join(dir, name), []byte("VEILBACK\x03archive"))
+	fs.SetFile(path.Join(dir, name), encryptedFixture([]byte("archive")))
 	if _, err := Fetch(context.Background(), fs, sftpTestConfig(), t.TempDir(), name); err != nil {
 		t.Fatal(err)
 	}

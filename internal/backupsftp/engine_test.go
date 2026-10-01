@@ -194,7 +194,7 @@ func TestRemoteListAndFetchRecordStatus(t *testing.T) {
 	name := "veil_backup_20260101_020000.tar.gz.enc"
 	// No sidecar: the fetch relies on the encrypted-archive magic check
 	// for pre-sidecar content (#1209).
-	fs.SetFile(path.Join(testRemoteDir, name), []byte("VEILBACK\x03archive"))
+	fs.SetFile(path.Join(testRemoteDir, name), encryptedFixture([]byte("archive")))
 
 	entries, err := engine.RemoteList(context.Background(), sftpTestConfig())
 	if err != nil || len(entries) != 1 || entries[0].Name != name {

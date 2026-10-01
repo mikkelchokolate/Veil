@@ -1,8 +1,10 @@
 package privileged
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"os"
@@ -118,6 +120,16 @@ func (f sftpBackupFixture) saveConfig(t *testing.T, enabled bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// sftpEncryptedArchive builds a structurally valid v3 (chunked) archive
+// header around body so fixtures satisfy the strict IsEncryptedArchivePrefix
+// proof, not just the magic prefix (#1209).
+func sftpEncryptedArchive(body []byte) []byte {
+	payload := append([]byte("VEILBACK\x03"), make([]byte, 28)...)
+	var flen [4]byte
+	binary.BigEndian.PutUint32(flen[:], uint32(len(body)))
+	return append(payload, append(flen[:], body...)...)
 }
 
 func TestBackupCreateUploadsToConfiguredSftp(t *testing.T) {
@@ -312,7 +324,7 @@ func TestBackupSftpListAndFetch(t *testing.T) {
 	dir := fixture.remoteDir
 	// No sidecar: the fetch relies on the encrypted-archive magic check for
 	// pre-sidecar content (#1209).
-	remote.SetFile(path.Join(dir, "veil_backup_20260101_020000.tar.gz.enc"), []byte("VEILBACK\x03remote-archive"))
+	remote.SetFile(path.Join(dir, "veil_backup_20260101_020000.tar.gz.enc"), sftpEncryptedArchive([]byte("remote-archive")))
 	remote.SetFile(path.Join(dir, "notes.txt"), []byte("not-managed"))
 	// An archive in another node's namespace is invisible to list/fetch (#1184).
 	remote.SetFile("/srv/veil-backups/veil-node-ffffffffffffffffffffffffffffffff/veil_backup_20260102_020000.tar.gz.enc", []byte("other-node"))
@@ -342,7 +354,7 @@ func TestBackupSftpListAndFetch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != "VEILBACK\x03remote-archive" {
+	if !bytes.Equal(got, sftpEncryptedArchive([]byte("remote-archive"))) {
 		t.Fatalf("fetched=%q", got)
 	}
 	if status := backupsftp.LoadStatus(fixture.sftpPaths.StatusPath); status.LastFetchArchive != "veil_backup_20260101_020000.tar.gz.enc" {
