@@ -50,6 +50,15 @@ func RenderWarpSingBox(cfg WarpSingBoxConfig) (string, error) {
 	// bypass SetDefaults never emit a bind the protocol units cannot reach
 	// (#1160).
 	cfg.SocksListen = model.NormalizeWarpSocksListen(cfg.SocksListen)
+	// The renderer must enforce the same band contract warp.Validate applies
+	// on the write path: normalization only rewrites loopback literals, so a
+	// persisted or restored non-loopback value ("0.0.0.0", ::, a hostname)
+	// would otherwise emit verbatim and sing-box would bind an
+	// unauthenticated open proxy on every interface (#358, #1215). Fail the
+	// render rather than let out-of-band state reach the daemon.
+	if !model.WarpSocksListenInBand(cfg.SocksListen) {
+		return "", errors.New("WARP SOCKS listen must be an IPv4 address inside " + model.WarpSocksEgressBand)
+	}
 	if cfg.SocksPort == 0 {
 		cfg.SocksPort = 40000
 	}

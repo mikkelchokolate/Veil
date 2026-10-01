@@ -853,6 +853,12 @@ END;
 -- source IPs a client's sessions may come from; NULL means unlimited
 -- (#1173).
 ALTER TABLE clients ADD COLUMN ip_limit INTEGER;
+-- The pre-v30 trigger admitted 0 (only <0 aborted), so a database may carry
+-- historical device_limit=0 rows — and the every-Open integrity scan
+-- already rejects them, wedging startup (#1212). Normalize them to the
+-- contract's "unlimited" sentinel before the tightened guards exist.
+UPDATE clients SET device_limit=NULL WHERE device_limit=0;
+UPDATE clients SET ip_limit=NULL WHERE ip_limit=0;
 -- Tighten the domain guards for both connection-limit columns. The service
 -- contract is "positive integer or null": 0 used to pass the old <0 rule
 -- yet meant nothing (it would read as "block everything" while null means
@@ -867,6 +873,43 @@ CREATE TRIGGER validate_clients_update BEFORE UPDATE ON clients
 WHEN NEW.enabled NOT IN (0,1) OR NEW.depleted NOT IN (0,1) OR NEW.quota_bytes < 0
   OR NEW.device_limit <= 0 OR NEW.ip_limit <= 0
 BEGIN SELECT RAISE(ABORT, 'invalid client domain values'); END;
+`,
+		// The original body tightened the triggers but never NULLed the
+		// historical device_limit=0 rows the pre-v30 trigger had admitted,
+		// so the every-Open integrity scan wedged databases carrying them
+		// (#1212).
+		legacySQL: []string{`
+-- ipLimit mirrors deviceLimit: a positive cap on the number of distinct
+-- source IPs a client's sessions may come from; NULL means unlimited
+-- (#1173).
+ALTER TABLE clients ADD COLUMN ip_limit INTEGER;
+-- Tighten the domain guards for both connection-limit columns. The service
+-- contract is "positive integer or null": 0 used to pass the old <0 rule
+-- yet meant nothing (it would read as "block everything" while null means
+-- unlimited), so the storage layer now enforces the same contract.
+DROP TRIGGER IF EXISTS validate_clients_insert;
+CREATE TRIGGER validate_clients_insert BEFORE INSERT ON clients
+WHEN NEW.enabled NOT IN (0,1) OR NEW.depleted NOT IN (0,1) OR NEW.quota_bytes < 0
+  OR NEW.device_limit <= 0 OR NEW.ip_limit <= 0
+BEGIN SELECT RAISE(ABORT, 'invalid client domain values'); END;
+DROP TRIGGER IF EXISTS validate_clients_update;
+CREATE TRIGGER validate_clients_update BEFORE UPDATE ON clients
+WHEN NEW.enabled NOT IN (0,1) OR NEW.depleted NOT IN (0,1) OR NEW.quota_bytes < 0
+  OR NEW.device_limit <= 0 OR NEW.ip_limit <= 0
+BEGIN SELECT RAISE(ABORT, 'invalid client domain values'); END;
+`},
+	},
+	{
+		version: 31,
+		name:    "client_connection_limits_heal",
+		sql: `
+-- Heal for databases that already applied the ORIGINAL v30 body (kept in
+-- v30's legacySQL) while carrying device_limit=0/ip_limit=0 rows the pre-v30
+-- trigger had admitted: v30 has run and will not re-run, so without this the
+-- every-Open integrity scan keeps rejecting the rows and wedging startup
+-- (#1212 review). The UPDATEs are idempotent — a healthy DB is a no-op.
+UPDATE clients SET device_limit=NULL WHERE device_limit=0;
+UPDATE clients SET ip_limit=NULL WHERE ip_limit=0;
 `,
 	},
 }
