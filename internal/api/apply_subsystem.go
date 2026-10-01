@@ -266,7 +266,23 @@ func (s *managementState) bindingCapabilityForInbound(inboundID string) *client.
 func initClientSubsystem(s *managementState) {
 	s.clientLifecycleMu.Lock()
 	defer s.clientLifecycleMu.Unlock()
-	if s.db == nil || s.cipher == nil || s.clientSubsystemStopping {
+	if s.clientSubsystemStopping {
+		return
+	}
+	// Periodic panel IP-certificate renewal (#1170): the shortlived profile
+	// yields ~6-day certificates and acme.sh runs with --no-cron for helper
+	// issuance, so this worker is the renewal driver. It only needs the
+	// privileged backend plus a fencing lease — and the lease store falls
+	// back to an ad-hoc veil.db handle when the normalized store is down —
+	// so it must start even when the SQLite subsystem never came up,
+	// otherwise a degraded database silently stops certificate renewals
+	// (#1208). It self-gates on panelAccess=="direct" so non-direct installs
+	// pay nothing per tick.
+	if s.ipCertRenewalWorker == nil {
+		s.ipCertRenewalWorker = newIPCertRenewalWorker(s)
+		s.ipCertRenewalWorker.Start()
+	}
+	if s.db == nil || s.cipher == nil {
 		return
 	}
 	clientRepo := client.NewRepository(s.db)
@@ -340,14 +356,6 @@ func initClientSubsystem(s *managementState) {
 	// present, but binding it unconditionally keeps the listener free of
 	// render-order dependencies.
 	s.ensureHy2AuthLocked()
-	// Periodic panel IP-certificate renewal (#1170): the shortlived profile
-	// yields ~6-day certificates and acme.sh runs with --no-cron for helper
-	// issuance, so this worker is the renewal driver. It self-gates on
-	// panelAccess=="direct" so non-direct installs pay nothing per tick.
-	if s.ipCertRenewalWorker == nil {
-		s.ipCertRenewalWorker = newIPCertRenewalWorker(s)
-		s.ipCertRenewalWorker.Start()
-	}
 }
 
 // registerTrafficProvidersLocked creates and registers TrafficProviders for

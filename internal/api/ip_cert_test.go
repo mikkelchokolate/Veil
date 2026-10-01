@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -398,3 +399,36 @@ func TestIPCertHTTP01PortValidation(t *testing.T) {
 }
 
 // Compile-time guard: the issue_ip_cert request carries the fence through.
+
+// Issue #1208: acme.sh installs with --no-cron, so the in-daemon renewal
+// worker is the only renewal driver — it must start and run even when the
+// SQLite subsystem never came up (degraded-DB mode). The fencing lease falls
+// back to an ad-hoc veil.db handle and proceeds unfenced when none exists.
+func TestInitClientSubsystemStartsIPCertWorkerWithoutDB(t *testing.T) {
+	defer swapIPCertSeams(t, false, nil)()
+	state := &managementState{settings: Settings{PanelAccess: "direct"}}
+	initClientSubsystem(state)
+	if state.ipCertRenewalWorker == nil {
+		t.Fatal("renewal worker absent in degraded-DB mode")
+	}
+	state.ipCertRenewalWorker.Stop()
+}
+
+func TestIPCertWorkerSyncOnceWithDegradedDB(t *testing.T) {
+	defer swapIPCertSeams(t, true, nil)()
+	backend := &ipCertPrivilegedClient{}
+	state := directIPCertState(backend)
+	// statePath without a veil.db on disk: the lease store stays nil and the
+	// issuance proceeds unfenced — degraded DB must not starve renewals.
+	state.statePath = filepath.Join(t.TempDir(), "state.json")
+	worker := newIPCertRenewalWorker(state)
+	if err := worker.SyncOnce(context.Background()); err != nil {
+		t.Fatalf("degraded-DB SyncOnce: %v", err)
+	}
+	if backend.issueCalls.Load() != 1 {
+		t.Fatal("degraded-DB mode must still reach the issuer")
+	}
+	if backend.gotRequest.Fence.Owner != "" {
+		t.Fatal("expected an unfenced request when no veil.db exists")
+	}
+}

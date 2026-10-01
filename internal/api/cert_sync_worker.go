@@ -335,7 +335,12 @@ func (w *certSyncWorker) syncOnce(ctx context.Context) (map[string]certSyncOutco
 		// unknown" and must NOT drop pending entries (#1168 review).
 		return nil, []hysteria2CertSyncTarget{}, nil
 	}
+	// The fencing lease store reads s.db/statePath — fields that swap under
+	// s.mu during storage recovery — so minting it must re-take the mutex
+	// rather than race the degraded/reload path (#1208).
+	s.mu.Lock()
 	fence, release, err := s.acquireRuntimeFence("cert-sync")
+	s.mu.Unlock()
 	if err != nil {
 		return nil, nil, fmt.Errorf("cert-sync: acquire fence: %w", err)
 	}

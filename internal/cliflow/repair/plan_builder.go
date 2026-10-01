@@ -566,6 +566,16 @@ func maybeIssueLEIPCert(ctx context.Context, profile *installer.RURecommendedPro
 		CAServer:       acmeCAURL,
 		CARoot:         acmeCARoot,
 		HTTP01ViaCaddy: viaCaddy,
+		// The in-daemon renewal worker is the sole renewal driver — acme.sh
+		// must not register its own crontab that would bypass the opt-out and
+		// the renewal gate, and the panel restart rides the deferred timer so
+		// a renewal never drops the panel mid-apply (#1201).
+		NoCron:            true,
+		DeferPanelRestart: true,
+		// Share the helper's root-owned acme.sh home so install/repair and
+		// renewals keep one bookkeeping (and the exec'd script stays out of
+		// service-writable space, #1226).
+		HomeDir: filepath.Join(opts.EtcDir, "acme"),
 		// profile.ACMEInsecure already folds the persisted
 		// VEIL_ACME_INSECURE in — a repair shell that does not export it
 		// must still verify the controlled-CA endpoint the same way the

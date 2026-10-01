@@ -3,8 +3,11 @@ package acmeip
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -31,6 +34,15 @@ type IssuedCert struct {
 // without competing for :80 (#1181). The renderer MUST emit the matching
 // reverse-proxy upstream for the same port.
 const CaddyFrontedHTTP01Port = 44080
+
+// CaddyFrontedHTTP01Host is the loopback address the parked acme.sh listener
+// binds via --local-address (#1207). It lives in the reserved 127.42.0.0/16
+// band — deliberately NOT 127.0.0.1 — because no unit-level egress filter
+// (veil-warp, veil-hysteria2@, veil-mieru) pierces that band, so a sandboxed
+// or broadly-bindable proxy process can neither claim the listener's address
+// ahead of acme.sh nor dial it to steal the challenge path. The rendered
+// reverse-proxy upstream dials this exact address.
+const CaddyFrontedHTTP01Host = "127.42.0.2"
 
 // IssueOptions configures a Let's Encrypt IP-certificate request.
 type IssueOptions struct {
@@ -90,6 +102,9 @@ type System interface {
 	Chmod(name string, perm os.FileMode) error
 	Chown(name string, uid, gid int) error
 	Stat(name string) (os.FileInfo, error)
+	// Lstat must not follow a trailing symlink — the acme.sh execution gate
+	// uses it to prove the script path is a real file, not a plant (#1226).
+	Lstat(name string) (os.FileInfo, error)
 	HomeDir() (string, error)
 	IsPortFree(port int) bool
 }
@@ -151,6 +166,10 @@ func (defaultSystem) Chmod(name string, perm os.FileMode) error {
 
 func (defaultSystem) Stat(name string) (os.FileInfo, error) {
 	return os.Stat(name)
+}
+
+func (defaultSystem) Lstat(name string) (os.FileInfo, error) {
+	return os.Lstat(name)
 }
 
 // userHomeDirFunc allows tests to mock the os.UserHomeDir fallback.
@@ -266,16 +285,21 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 	if err != nil {
 		return IssuedCert{}, fmt.Errorf("acme.sh setup: %w", err)
 	}
-	if opts.HTTP01ViaCaddy && !sys.IsPortFree(httpPort) {
+	caddyParked := false
+	if opts.HTTP01ViaCaddy && !sys.IsPortFree(80) {
 		// The managed Caddy edge owns the public HTTP-01 port — typically the
 		// permanent -acme challenge server a hysteria2-domain plan renders on
 		// :80 — so acme.sh --standalone can never bind it (#1181). The
 		// rendered /.well-known/acme-challenge/ reverse-proxy route forwards
-		// every non-certmagic token to this internal loopback port, so the
-		// standalone listener parks there and the public :80 path keeps
-		// working end to end. When the public port is still free (Caddy
-		// stopped mid-restart) standalone simply binds it directly.
+		// every non-certmagic token to the parked listener, so standalone
+		// parks on the dedicated loopback address and the public :80 path
+		// keeps working end to end. The probe targets the PUBLIC edge port —
+		// not the operator's --le-ip-cert-port override — because the Caddy
+		// route unconditionally forwards to the internal port (#1208). When
+		// the public port is still free (Caddy stopped mid-restart)
+		// standalone simply binds the requested port directly.
 		httpPort = CaddyFrontedHTTP01Port
+		caddyParked = true
 	}
 	if !sys.IsPortFree(httpPort) {
 		return IssuedCert{}, fmt.Errorf("port %d is already in use; Let's Encrypt HTTP-01 validation needs a free port %d (forward external port 80 if you use a non-standard port)", httpPort, httpPort)
@@ -305,7 +329,15 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		// other CAs (e.g. a controlled test CA) reject profile/days overrides.
 		issueArgs = append(issueArgs, "--certificate-profile", "shortlived", "--days", "3")
 	}
-	issueArgs = append(issueArgs, "--httpport", strconv.Itoa(httpPort), "--force")
+	issueArgs = append(issueArgs, "--httpport", strconv.Itoa(httpPort))
+	if caddyParked {
+		// Bind only the reserved-band loopback address the rendered route
+		// dials — a wildcard listener on the internal port would be
+		// claimable/servable by any local process between issuance runs
+		// (#1207).
+		issueArgs = append(issueArgs, "--local-address", CaddyFrontedHTTP01Host)
+	}
+	issueArgs = append(issueArgs, "--force")
 	if opts.Insecure {
 		issueArgs = append(issueArgs, "--insecure")
 	}
@@ -352,34 +384,39 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		"--fullchain-file", certPath,
 		"--reloadcmd", reloadCmd,
 	}
-	prevCert, _ := sys.ReadFile(certPath)
-	prevKey, _ := sys.ReadFile(keyPath)
+	prevCert := snapshotFileState(sys, certPath)
+	prevKey := snapshotFileState(sys, keyPath)
 	out, installErr := runWithContext(ctx, sys, acmeSh, installArgs...)
 	newCert, certErr := sys.ReadFile(certPath)
 	newKey, keyErr := sys.ReadFile(keyPath)
 	installed := certErr == nil && keyErr == nil && validateIssuedMaterial(newCert, newKey, opts.PublicIPv4, opts.PublicIPv6) == nil &&
-		(!bytes.Equal(prevCert, newCert) || !bytes.Equal(prevKey, newKey) || len(prevCert) == 0)
+		(!bytes.Equal(prevCert.data, newCert) || !bytes.Equal(prevKey.data, newKey) || len(prevCert.data) == 0)
 	if !installed {
-		if len(prevCert) > 0 {
-			_ = sys.WriteFile(certPath, prevCert, 0o644)
-		}
-		if len(prevKey) > 0 {
-			_ = sys.WriteFile(keyPath, prevKey, 0o640)
-		}
-		if installErr != nil {
+		// Rollback restores bytes AND the original ownership/mode: WriteFile
+		// alone would leave whatever metadata acme.sh's installcert left
+		// behind, which can differ from the operator-managed predecessor
+		// (#1208). A failed restore surfaces — a panel left running on
+		// mis-owned material must not look like a clean failure.
+		var primary error
+		switch {
+		case installErr != nil:
 			cleanupAcmeState(sys, acmeSh, opts.PublicIPv4, opts.PublicIPv6, preexistingACME)
-			return IssuedCert{}, fmt.Errorf("install certificate: %w (output: %s)", installErr, string(out))
+			primary = fmt.Errorf("install certificate: %w (output: %s)", installErr, string(out))
+		case certErr != nil:
+			primary = fmt.Errorf("install certificate: read %s: %w", certPath, certErr)
+		case keyErr != nil:
+			primary = fmt.Errorf("install certificate: read %s: %w", keyPath, keyErr)
+		default:
+			if err := validateIssuedMaterial(newCert, newKey, opts.PublicIPv4, opts.PublicIPv6); err != nil {
+				primary = fmt.Errorf("install certificate: %w", err)
+			} else {
+				primary = fmt.Errorf("install certificate: destination still has previous material")
+			}
 		}
-		if certErr != nil {
-			return IssuedCert{}, fmt.Errorf("install certificate: read %s: %w", certPath, certErr)
+		if err := errors.Join(prevCert.restore(sys, certPath), prevKey.restore(sys, keyPath)); err != nil {
+			primary = fmt.Errorf("%w (rollback restore: %v)", primary, err)
 		}
-		if keyErr != nil {
-			return IssuedCert{}, fmt.Errorf("install certificate: read %s: %w", keyPath, keyErr)
-		}
-		if err := validateIssuedMaterial(newCert, newKey, opts.PublicIPv4, opts.PublicIPv6); err != nil {
-			return IssuedCert{}, fmt.Errorf("install certificate: %w", err)
-		}
-		return IssuedCert{}, fmt.Errorf("install certificate: destination still has previous material")
+		return IssuedCert{}, primary
 	}
 
 	if err := fixCertOwnership(sys, certPath, keyPath); err != nil {
@@ -472,13 +509,60 @@ func acmeShInstallScriptMode(noCron bool) string {
 		installArgs += " --no-cron --no-profile"
 	}
 	return `set -e
+mkdir -p "$HOME" && chmod 0700 "$HOME"
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 curl -fsSL "` + acmeShTarballURL + `" -o "$tmpdir/acme.sh.tar.gz"
 echo "` + acmeShTarballSHA256 + `  $tmpdir/acme.sh.tar.gz" | sha256sum -c -
 tar -xzf "$tmpdir/acme.sh.tar.gz" -C "$tmpdir"
 cd "$tmpdir/acme.sh-` + acmeShVersion + `"
-sh ./acme.sh ` + installArgs
+NO_DETECT_SH=1 sh ./acme.sh ` + installArgs
+}
+
+// acmeShScriptSHA256 is the SHA-256 of the acme.sh payload inside the pinned
+// tarball. The installer runs with NO_DETECT_SH=1 so upstream --install never
+// rewrites the shebang — the file it places at <home>/.acme.sh/acme.sh keeps
+// exactly these bytes, which lets the trust gate below prove provenance by
+// digest instead of trusting mere presence. It is a var so tests can point
+// the gate at their fake payload.
+var acmeShScriptSHA256 = "c7d68b021cfd6380ea83a82962abde5b484779fee0b97d38681dfa1396bbc8d7"
+
+// trustedAcmeSh reports whether the existing acme.sh at acmeSh (under home)
+// is safe for root to exec: a non-symlink regular file, not group/other
+// writable, root-owned when the caller can check ownership, inside dirs that
+// are themselves root-owned and not group/other-writable, AND byte-identical
+// to the pinned release payload. The legacy /var/lib/veil/acme home was
+// service-writable, so "the file exists" alone let a compromised veil-uid
+// process hand root an arbitrary script to run (issue #1226).
+func trustedAcmeSh(sys System, home, acmeSh string) bool {
+	if !rootOwnedDir(sys, home) || !rootOwnedDir(sys, filepath.Dir(acmeSh)) {
+		return false
+	}
+	fi, err := sys.Lstat(acmeSh)
+	if err != nil || !fi.Mode().IsRegular() || fi.Mode().Perm()&0o022 != 0 || fi.Mode().Perm()&0o100 == 0 {
+		return false
+	}
+	if getuidFunc() == 0 && !fileOwnedByUID(fi, 0) {
+		return false
+	}
+	payload, err := sys.ReadFile(acmeSh)
+	if err != nil {
+		return false
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]) == acmeShScriptSHA256
+}
+
+// rootOwnedDir reports whether path is a directory that group/other users
+// cannot write and — when running as root — that is owned by uid 0. It is
+// the structural half of the acme.sh trust gate: a writable home means every
+// file inside it is forgeable by the directory's owner (#1226).
+func rootOwnedDir(sys System, path string) bool {
+	fi, err := sys.Lstat(path)
+	if err != nil || !fi.IsDir() || fi.Mode().Perm()&0o022 != 0 {
+		return false
+	}
+	return getuidFunc() != 0 || fileOwnedByUID(fi, 0)
 }
 
 func ensureAcmeSh(ctx context.Context, sys System) (string, error) {
@@ -490,9 +574,42 @@ func ensureAcmeShMode(ctx context.Context, sys System, noCron bool) (string, err
 	if err != nil {
 		return "", fmt.Errorf("home directory: %w", err)
 	}
-	acmeSh := filepath.Join(home, ".acme.sh", "acme.sh")
-	if _, err := sys.Stat(acmeSh); err == nil {
+	acmeDir := filepath.Join(home, ".acme.sh")
+	acmeSh := filepath.Join(acmeDir, "acme.sh")
+	if trustedAcmeSh(sys, home, acmeSh) {
 		return acmeSh, nil
+	}
+
+	// Anything already sitting on those paths failed the trust gate, so it
+	// is untrusted input rather than a partial install to skip: a symlinked
+	// or foreign-owned directory is removed outright (healing in place would
+	// still leave the reinstall writing into attacker-chosen space), while a
+	// real directory merely loses its group/other write and gains root
+	// ownership before the reinstall overwrites the payload (#1226).
+	for _, dir := range []string{home, acmeDir} {
+		fi, err := sys.Lstat(dir)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return "", fmt.Errorf("stat acme home %s: %w", dir, err)
+		}
+		if !fi.IsDir() {
+			_ = sys.Run("rm", "-rf", dir)
+			continue
+		}
+		if fi.Mode().Perm()&0o022 != 0 {
+			_ = sys.Chmod(dir, 0o700)
+		}
+		if getuidFunc() == 0 && !fileOwnedByUID(fi, 0) {
+			_ = sys.Chown(dir, 0, 0)
+		}
+	}
+	if _, err := sys.Lstat(acmeSh); err == nil {
+		// A file, directory, or symlink with the wrong digest/mode/owner
+		// never reaches exec; rm first so the installer's cp cannot be
+		// steered through a surviving link.
+		_ = sys.Run("rm", "-rf", acmeSh)
 	}
 
 	for _, tool := range []string{"curl", "sha256sum", "tar", "mktemp"} {
@@ -505,8 +622,11 @@ func ensureAcmeShMode(ctx context.Context, sys System, noCron bool) (string, err
 		return "", fmt.Errorf("install acme.sh %s: %w (output: %s)", acmeShVersion, err, string(out))
 	}
 
-	if _, err := sys.Stat(acmeSh); err != nil {
-		return "", fmt.Errorf("acme.sh did not appear at %s after install", acmeSh)
+	// The reinstall must produce a fully trusted file — a directory that
+	// could not be healed, a surviving symlink, or a payload that is not the
+	// pinned release all fail closed here instead of exec'ing.
+	if !trustedAcmeSh(sys, home, acmeSh) {
+		return "", fmt.Errorf("installed %s fails provenance or ownership validation", acmeSh)
 	}
 	return acmeSh, nil
 }
@@ -665,6 +785,57 @@ func fixCertOwnership(sys System, certPath, keyPath string) error {
 	}
 	if err := sys.Chown(keyPath, 0, gid); err != nil {
 		return fmt.Errorf("chown %s: %w", keyPath, err)
+	}
+	return nil
+}
+
+// fileStateSnapshot captures a file's bytes plus its ownership/mode metadata
+// so the installcert rollback restores the predecessor completely — bytes
+// alone would silently keep whatever mode/owner acme.sh left (#1208).
+type fileStateSnapshot struct {
+	data   []byte
+	mode   os.FileMode
+	uid    int
+	gid    int
+	haveID bool
+	ok     bool
+}
+
+func snapshotFileState(sys System, path string) fileStateSnapshot {
+	var snap fileStateSnapshot
+	data, err := sys.ReadFile(path)
+	if err != nil || len(data) == 0 {
+		return snap
+	}
+	snap.data = data
+	snap.ok = true
+	if fi, err := sys.Stat(path); err == nil {
+		snap.mode = fi.Mode().Perm()
+		snap.uid, snap.gid, snap.haveID = fileOwnership(fi)
+	}
+	return snap
+}
+
+func (snap fileStateSnapshot) restore(sys System, path string) error {
+	if !snap.ok {
+		return nil
+	}
+	mode := snap.mode
+	if mode == 0 {
+		mode = 0o644
+	}
+	if err := sys.WriteFile(path, snap.data, mode); err != nil {
+		return fmt.Errorf("rollback %s: %w", path, err)
+	}
+	// WriteFile leaves a pre-existing file's mode untouched and never sets
+	// ownership — restore both explicitly.
+	if err := sys.Chmod(path, mode); err != nil {
+		return fmt.Errorf("rollback %s mode: %w", path, err)
+	}
+	if snap.haveID {
+		if err := sys.Chown(path, snap.uid, snap.gid); err != nil {
+			return fmt.Errorf("rollback %s ownership: %w", path, err)
+		}
 	}
 	return nil
 }

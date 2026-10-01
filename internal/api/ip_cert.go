@@ -212,26 +212,50 @@ func panelIPCertIssueRequest(ctx context.Context, settings Settings, inbounds []
 // (worker/CLI entry points that are not inside a durable apply operation) a
 // one-shot runtime fencing lease is minted and released around the helper
 // call, matching every other privileged mutation.
-func (s *managementState) issuePanelIPCert(ctx context.Context, settings Settings, inbounds []Inbound, backend privileged.Client, fence privileged.FenceToken) error {
+// ipCertIssueTarget applies the access-mode/opt-out/renewal gates and
+// resolves the issuance backend. It only touches the passed snapshot fields,
+// so callers may run it without holding s.mu.
+func ipCertIssueTarget(settings Settings, backend privileged.Client) (certPath, keyPath string, issuer privileged.IPCertIssuer, run bool, err error) {
 	if settings.PanelAccess != "direct" || panelIPCertOptedOut() {
-		return nil
+		return "", "", nil, false, nil
 	}
 	certPath, keyPath, ok := panelIPCertPaths()
 	if !ok {
 		// Operator-managed TLS material outside <etc>/panel: nothing the
 		// helper is allowed to renew.
-		return nil
+		return "", "", nil, false, nil
 	}
 	if !ipCertNeedsRenewal(certPath, ipCertNow()) {
-		return nil
+		return "", "", nil, false, nil
 	}
-	issuer, ok := backend.(privileged.IPCertIssuer)
+	issuer, ok = backend.(privileged.IPCertIssuer)
 	if !ok || issuer == nil {
-		return errors.New("privileged IP certificate issuer is unavailable")
+		return "", "", nil, false, errors.New("privileged IP certificate issuer is unavailable")
+	}
+	return certPath, keyPath, issuer, true, nil
+}
+
+// issueIPCertRequest builds the helper request and performs the privileged
+// call once the gate outcome and fencing token are already resolved.
+func issueIPCertRequest(ctx context.Context, settings Settings, inbounds []Inbound, certPath, keyPath string, issuer privileged.IPCertIssuer, fence privileged.FenceToken) error {
+	request, err := panelIPCertIssueRequest(ctx, settings, inbounds, certPath, keyPath, fence)
+	if err != nil {
+		return err
+	}
+	_, err = issuer.IssueIPCert(ctx, request)
+	return err
+}
+
+func (s *managementState) issuePanelIPCert(ctx context.Context, settings Settings, inbounds []Inbound, backend privileged.Client, fence privileged.FenceToken) error {
+	certPath, keyPath, issuer, run, err := ipCertIssueTarget(settings, backend)
+	if err != nil || !run {
+		return err
 	}
 	var release func()
 	if fence.Owner == "" || fence.Generation == 0 {
-		var err error
+		// Caller holds s.mu (the apply hook's Locked contract) — the lease
+		// store reads s.db/statePath, which swap under that mutex during
+		// storage recovery (#1208).
 		fence, release, err = s.acquireRuntimeFence("ip-cert-issue")
 		if err != nil {
 			return fmt.Errorf("acquire fencing lease: %w", err)
@@ -240,12 +264,7 @@ func (s *managementState) issuePanelIPCert(ctx context.Context, settings Setting
 	if release != nil {
 		defer release()
 	}
-	request, err := panelIPCertIssueRequest(ctx, settings, inbounds, certPath, keyPath, fence)
-	if err != nil {
-		return err
-	}
-	_, err = issuer.IssueIPCert(ctx, request)
-	return err
+	return issueIPCertRequest(ctx, settings, inbounds, certPath, keyPath, issuer, fence)
 }
 
 // PostServiceActionsLocked is the applyflow post-policy hook (#1169): in
@@ -356,6 +375,11 @@ func (w *ipCertRenewalWorker) Signal() {
 // transient timer (DeferPanelRestart), so a successful renewal reloads the
 // certificate shortly after this call returns without depending on the
 // worker goroutine still being alive.
+//
+// The fencing lease is minted under a SECOND s.mu hold after the gates pass:
+// acquireRuntimeFence reads s.db/statePath, which storage recovery swaps
+// under that mutex, so resolving it unlocked raced the degraded-DB path
+// (#1208).
 func (w *ipCertRenewalWorker) SyncOnce(ctx context.Context) error {
 	s := w.state
 	if s == nil {
@@ -366,5 +390,18 @@ func (w *ipCertRenewalWorker) SyncOnce(ctx context.Context) error {
 	inbounds := s.inbounds
 	backend := s.privileged
 	s.mu.Unlock()
-	return s.issuePanelIPCert(ctx, settings, inbounds, backend, privileged.FenceToken{})
+	certPath, keyPath, issuer, run, err := ipCertIssueTarget(settings, backend)
+	if err != nil || !run {
+		return err
+	}
+	s.mu.Lock()
+	fence, release, err := s.acquireRuntimeFence("ip-cert-issue")
+	s.mu.Unlock()
+	if err != nil {
+		return fmt.Errorf("acquire fencing lease: %w", err)
+	}
+	if release != nil {
+		defer release()
+	}
+	return issueIPCertRequest(ctx, settings, inbounds, certPath, keyPath, issuer, fence)
 }
