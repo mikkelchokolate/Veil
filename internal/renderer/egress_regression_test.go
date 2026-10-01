@@ -13,7 +13,7 @@ import (
 )
 
 // #1095: without an ACL Hysteria2 proxies to ANY destination the host can
-// reach — including the unauthenticated Caddy admin API on 127.0.0.1:2019.
+// reach — including the unauthenticated Caddy admin API on 127.42.0.1:2019.
 // The ACL is mandatory even with no WARP upstream, and the leading reject
 // block must precede every operator rule so no user route reopens a denied
 // range.

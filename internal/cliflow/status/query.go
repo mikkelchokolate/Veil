@@ -412,10 +412,13 @@ func unsafeAllowPublicHTTP() bool {
 // different origin has the credential stripped. Same-origin redirects keep
 // working.
 func ProbeHTTPClient(rawURL string) *http.Client {
-	return tokenSafeClient(HTTPClient(rawURL))
+	return TokenSafeClient(HTTPClient(rawURL))
 }
 
-func tokenSafeClient(client *http.Client) *http.Client {
+// TokenSafeClient wraps client so X-Veil-Token is stripped when a redirect
+// crosses origins (#1113) — exported for other token-bearing probes such as
+// the install-time panel health check (#1214).
+func TokenSafeClient(client *http.Client) *http.Client {
 	if client == nil {
 		client = http.DefaultClient
 	}

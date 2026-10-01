@@ -19,7 +19,7 @@ func TestMain(m *testing.M) {
 	}
 	// Caddy's Admin API is a process-external mutation boundary just like
 	// systemd and the privileged helper. Docker CI can share the host network,
-	// so the production default (127.0.0.1:2019) must never be reachable from a
+	// so the production default (127.42.0.1:2019) must never be reachable from a
 	// unit test that happens to exercise apply. Tests for Admin API behavior
 	// explicitly override this seam and restore it to this hermetic baseline.
 	caddyAdminLoader = func([]byte) error { return nil }

@@ -347,16 +347,17 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 			fmt.Fprintln(cmd.ErrOrStderr(), "Falling back to the generated self-signed certificate.")
 		}
 	}
-	if profile.PanelAccess == "direct" && profile.PanelPublicIP == "" {
-		// Issuance already recorded the pair it actually resolved. When it
-		// did not run (opted out or unreachable), keep the previously
-		// persisted identity — an explicit --public-ip from an earlier
-		// install outranks a fresh auto-detection — and only then fall back
-		// to this run's resolved literal (#1186).
+	// Issuance already recorded the pair it actually resolved. When it did
+	// not run (opted out, unreachable, or a non-direct access mode), keep
+	// the previously persisted identity — an explicit --public-ip from an
+	// earlier install outranks a fresh auto-detection — so an access-mode
+	// flip does not silently drop the recorded renewal identity (#1208).
+	if profile.PanelPublicIP == "" {
 		profile.PanelPublicIP = existingEnv["VEIL_PANEL_PUBLIC_IP"]
-		if profile.PanelPublicIP == "" && resolvedIP != nil {
-			profile.PanelPublicIP = resolvedIP.String()
-		}
+	}
+	if profile.PanelAccess == "direct" && profile.PanelPublicIP == "" && resolvedIP != nil {
+		// Only then fall back to this run's resolved literal (#1186).
+		profile.PanelPublicIP = resolvedIP.String()
 	}
 
 	// 4. Apply profile configurations (veil.env, caddyfile, systemd unit files, etc.)
@@ -567,6 +568,14 @@ func issueLEIPCertForProfile(ctx context.Context, profile *installer.RURecommend
 		Insecure:       profile.ACMEInsecure,
 		CARoot:         profile.ACMECARoot,
 		HTTP01ViaCaddy: viaCaddy,
+		// The in-daemon renewal worker is the sole renewal driver — acme.sh
+		// must not register a root crontab that would bypass the LE opt-out
+		// and restart the panel synchronously mid-apply, and issuance shares
+		// the helper's root-owned acme.sh home so one bookkeeping covers the
+		// same identifier (#1201, #1226).
+		NoCron:            true,
+		DeferPanelRestart: true,
+		HomeDir:           filepath.Join(opts.EtcDir, "acme"),
 	})
 	if err != nil {
 		return err
@@ -742,6 +751,10 @@ func probeInstalledPanel(ctx context.Context, contract statusflow.ContainerHealt
 	if err != nil {
 		return err
 	}
+	// Strip X-Veil-Token on cross-origin redirects — the same policy the
+	// status probes apply — so a redirected probe cannot leak the install
+	// token to a different host (#1214).
+	client = statusflow.TokenSafeClient(client)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err

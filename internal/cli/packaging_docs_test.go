@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 	"gopkg.in/yaml.v3"
 )
 
@@ -581,6 +583,44 @@ func TestSystemdUnitsShipHardenedByDefault(t *testing.T) {
 	}
 	if strings.Contains(backupConfig, "CapabilityBoundingSet=\n") {
 		t.Fatalf("veil-backup.service must not drop all capabilities:\n%s", backupConfig)
+	}
+}
+
+// #1213: the managed Caddy admin API is unauthenticated by design, so the
+// listen address must sit outside every sandboxed unit's IPAddressAllow set —
+// systemd's filter does not distinguish directions, and veil-warp allows
+// 127.0.0.1 for ingress-source reasons.
+func TestCaddyAdminAddressOutsideSandboxAllowLists(t *testing.T) {
+	if runtimeports.CaddyAdminHost == "127.0.0.1" {
+		t.Fatal("CaddyAdminHost must not share the warp-allowed 127.0.0.1")
+	}
+	admin := netip.MustParseAddr(runtimeports.CaddyAdminHost)
+	for _, unit := range []string{
+		"../../packaging/systemd/veil-caddy.service",
+		"../../packaging/systemd/veil-hysteria2@.service",
+		"../../packaging/systemd/veil-olcrtc@.service",
+		"../../packaging/systemd/veil-mieru.service",
+		"../../packaging/systemd/veil-warp.service",
+		"../../packaging/systemd/veil-backup.service",
+	} {
+		body, err := os.ReadFile(unit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range strings.Split(strings.ReplaceAll(string(body), "\r\n", "\n"), "\n") {
+			if !strings.HasPrefix(line, "IPAddressAllow=") {
+				continue
+			}
+			for _, field := range strings.Fields(strings.TrimPrefix(line, "IPAddressAllow=")) {
+				prefix, err := netip.ParsePrefix(field)
+				if err != nil {
+					t.Fatalf("%s: unparseable IPAddressAllow entry %q: %v", unit, field, err)
+				}
+				if prefix.Contains(admin) {
+					t.Fatalf("%s IPAddressAllow entry %s covers the Caddy admin address %s", unit, prefix, admin)
+				}
+			}
+		}
 	}
 }
 

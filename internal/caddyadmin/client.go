@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 )
 
 const defaultAdminTimeout = 30 * time.Second
@@ -21,7 +23,7 @@ type Client struct {
 
 func NewClient(endpoint string) Client {
 	if endpoint == "" {
-		endpoint = "http://127.0.0.1:2019"
+		endpoint = runtimeports.CaddyAdminEndpoint()
 	}
 	return Client{AdminEndpoint: endpoint, HTTPClient: &http.Client{Timeout: defaultAdminTimeout}}
 }

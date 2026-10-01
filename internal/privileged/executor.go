@@ -31,6 +31,7 @@ import (
 	updateflow "github.com/mikkelchokolate/Veil/internal/cliflow/update"
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/releaseverify"
+	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 	"github.com/mikkelchokolate/Veil/internal/safefs"
 	"github.com/mikkelchokolate/Veil/internal/service"
 	"github.com/mikkelchokolate/Veil/internal/statecommit"
@@ -149,8 +150,10 @@ type ProductionConfig struct {
 	// --etc-dir install issues into its own <etc>/panel tree (#1169/#1170).
 	IPCertDir string
 	// IPCertHomeDir is the acme.sh install/account home the helper uses. The
-	// helper unit runs ProtectHome=yes so /root/.acme.sh is unreachable; the
-	// working dir lives under the writable state root instead.
+	// helper unit runs ProtectHome=yes so /root/.acme.sh is unreachable, and
+	// the helper execs the installed script as root — so the home must live
+	// in the root-owned etc tree, NOT the service-writable state root where
+	// the veil uid could plant a script for root to run (#1226).
 	IPCertHomeDir string
 	// IssueIPCert is the issuance seam — production runs
 	// acmeip.IssueIPCert; tests substitute a stub.
@@ -169,8 +172,11 @@ func DefaultProductionConfig(policy Policy, version string) ProductionConfig {
 		BackupRoot:           policy.BackupRoot,
 		CertDirs:             append([]string(nil), policy.CertDirs...),
 		IPCertDir:            policy.PanelCertDir,
-		IPCertHomeDir:        filepath.Join(policy.StateRoot, "acme"),
-		VeilVersion:          version,
+		// Root-owned like the panel cert dir: the service-writable StateRoot
+		// let a compromised veil uid plant an acme.sh the helper would exec
+		// as root (#1226).
+		IPCertHomeDir: filepath.Join(filepath.Dir(policy.PanelCertDir), "acme"),
+		VeilVersion:   version,
 	}
 }
 
@@ -226,7 +232,7 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 		return baseRecovery(ctx)
 	}
 	if config.CaddyAdminURL == "" {
-		config.CaddyAdminURL = "http://127.0.0.1:2019/load"
+		config.CaddyAdminURL = runtimeports.CaddyAdminEndpoint() + "/load"
 	}
 	if config.HTTPClient == nil {
 		config.HTTPClient = &http.Client{Timeout: 10 * time.Second}
@@ -238,7 +244,7 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 		config.IPCertDir = filepath.Join(hostenv.EtcDir(), "panel")
 	}
 	if config.IPCertHomeDir == "" {
-		config.IPCertHomeDir = filepath.Join(hostenv.VarDir(), "acme")
+		config.IPCertHomeDir = filepath.Join(hostenv.EtcDir(), "acme")
 	}
 	return Executor{
 		Promote: func(_ context.Context, request ResolvedPromotion) (PromoteResult, error) {
@@ -1420,8 +1426,9 @@ func runIssueIPCert(ctx context.Context, request IssueIPCertRequest, config Prod
 		DeferPanelRestart: request.DeferPanelRestart,
 		// Veil's in-daemon worker owns renewal (#1170) and the helper's
 		// sandbox cannot write a crontab anyway — install acme.sh without one.
-		// HomeDir keeps acme.sh state under the writable state root instead of
-		// the ProtectHome-masked /root.
+		// HomeDir keeps acme.sh state in the root-owned etc tree: under the
+		// service-writable state root a compromised veil uid could plant a
+		// script for root to exec, and ProtectHome masks /root (#1226).
 		NoCron:  true,
 		HomeDir: config.IPCertHomeDir,
 	})

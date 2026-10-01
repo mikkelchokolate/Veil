@@ -173,7 +173,7 @@ func RenderHysteria2(cfg Hysteria2Config) (string, error) {
 	// The egress ACL is ALWAYS emitted — with or without a WARP upstream —
 	// because without it Hysteria2 proxies client requests to ANY destination
 	// the server can reach, including loopback control planes (Caddy admin on
-	// 127.0.0.1:2019, the panel backend, DNS stubs) and private/link-local
+	// 127.42.0.1:2019, the panel backend, DNS stubs) and private/link-local
 	// infrastructure (#1095). The leading reject() rules are evaluated before
 	// every operator routing rule, so no user rule can reopen them; Hysteria's
 	// ACL engine matches resolved IPv4/IPv6 too, so a domain name that resolves

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"sort"
@@ -15,6 +16,8 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/bindregistry"
 	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
 	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 )
 
 func RenderCaddyJSON(plan caddyassembly.CaddyRenderPlan, caps caddycapabilities.CaddyCapabilities) ([]byte, error) {
@@ -29,7 +32,7 @@ func RenderCaddyJSON(plan caddyassembly.CaddyRenderPlan, caps caddycapabilities.
 	if err != nil {
 		return nil, err
 	}
-	cfg := caddyConfig{Admin: map[string]any{"listen": "127.0.0.1:2019"}, Apps: map[string]any{}}
+	cfg := caddyConfig{Admin: map[string]any{"listen": runtimeports.CaddyAdminAddress()}, Apps: map[string]any{}}
 	cfg.Apps["http"] = httpApp
 	cfg.Apps["tls"] = tlsApp
 	return json.MarshalIndent(cfg, "", "  ")
@@ -174,6 +177,7 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 	// the panel IP certificate renews via --standalone on the internal port
 	// this passthrough route proxies to while Caddy holds public :80 (#1181).
 	caddyOwnsPublicHTTP := key.Port == 80 && key.Network == bindregistry.ListenTCP
+	passthrough := acmeHTTP01PassthroughRoute()
 	// Keep Panel HTTPS on TCP only. Caddy's default protocol set includes h3,
 	// which binds UDP on the same port and makes Hysteria2 (QUIC/UDP 443)
 	// fail live validation and fail to start next to Panel Caddy.
@@ -190,8 +194,8 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 	switch owner.Kind {
 	case caddyassembly.CaddyOwnerPanel:
 		routes := panelRoutes(owner.Domain, owner.BackendPort, owner.WebBasePath, true)
-		if caddyOwnsPublicHTTP {
-			routes = append([]map[string]any{acmeHTTP01PassthroughRoute()}, routes...)
+		if caddyOwnsPublicHTTP && passthrough != nil {
+			routes = append([]map[string]any{passthrough}, routes...)
 		}
 		server["routes"] = routes
 		server["errors"] = panelErrorRoutes()
@@ -268,8 +272,8 @@ func renderServer(key bindregistry.BindKey, owner caddyassembly.CaddyBindOwner, 
 			})
 		}
 		routes = append(routes, proxyRoute)
-		if caddyOwnsPublicHTTP {
-			routes = append([]map[string]any{acmeHTTP01PassthroughRoute()}, routes...)
+		if caddyOwnsPublicHTTP && passthrough != nil {
+			routes = append([]map[string]any{passthrough}, routes...)
 		}
 		server["routes"] = routes
 	}
@@ -327,10 +331,48 @@ func renderAcmeChallengeServer(key bindregistry.BindKey, owner caddyassembly.Acm
 		// certmagic answers tokens for challenges Caddy itself is solving
 		// before routes run; every other token falls through to this
 		// passthrough, which is how the panel IP certificate renews through
-		// acme.sh --standalone while Caddy owns :80 (#1181).
-		server["routes"] = []map[string]any{acmeHTTP01PassthroughRoute()}
+		// acme.sh --standalone while Caddy owns :80 (#1181). nil (no recorded
+		// panel IP identity) leaves the challenge server with no routes —
+		// it must not proxy arbitrary hosts to the parked port (#1207).
+		if route := acmeHTTP01PassthroughRoute(); route != nil {
+			server["routes"] = []map[string]any{route}
+		}
 	}
 	return server
+}
+
+// panelIPCertChallengeHosts lists the Host identities the acme.sh challenge
+// passthrough may answer — the panel IP certificate's SAN identities, kept
+// from the persisted VEIL_PANEL_PUBLIC_IP (#1186). IPv6 literals are emitted
+// bracketed and bare because clients differ on which form they send in the
+// Host header. A seam keeps tests off the process environment.
+var panelIPCertChallengeHosts = func() []string {
+	// The process environment wins; a render running outside veil.service
+	// (install/repair shells, the privileged helper) falls back to the
+	// persisted veil.env so a missing export cannot silently drop the route
+	// (#1207).
+	raw := os.Getenv("VEIL_PANEL_PUBLIC_IP")
+	if raw == "" {
+		raw = hostenv.ReadEnvFile(filepath.Join(hostenv.EtcDir(), "veil.env"))["VEIL_PANEL_PUBLIC_IP"]
+	}
+	var hosts []string
+	for _, item := range strings.Split(raw, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		// Only real IPs may pin the matcher — a poisoned veil.env carrying
+		// hostnames or wildcards must not widen the passthrough (#1207).
+		addr, err := netip.ParseAddr(item)
+		if err != nil {
+			continue
+		}
+		hosts = append(hosts, addr.String())
+		if addr.Is6() {
+			hosts = append(hosts, "["+addr.String()+"]")
+		}
+	}
+	return hosts
 }
 
 // acmeHTTP01PassthroughRoute proxies the ACME http-01 challenge path to the
@@ -340,13 +382,29 @@ func renderAcmeChallengeServer(key bindregistry.BindKey, owner caddyassembly.Acm
 // front panel-IP issuance the same way the dedicated -acme challenge server
 // does. The handler is deliberately a plain reverse_proxy: no auth, no
 // path rewriting — acme.sh serves exactly this prefix itself.
+//
+// Two narrowings keep the permanent route from being a free proxy to an
+// unprivileged port for every terminated host (#1207): the host matcher pins
+// it to the panel certificate's own identities (any other Host is left to
+// the rest of the routes), and the upstream dials the dedicated 127.42.x
+// loopback acme.sh binds — a band no unit-level egress filter pierces, so a
+// sandboxed proxy service cannot squat the address between issuances.
+// Returns nil when no panel IP identity is recorded: without it the route
+// cannot be host-pinned and must not exist.
 func acmeHTTP01PassthroughRoute() map[string]any {
+	hosts := panelIPCertChallengeHosts()
+	if len(hosts) == 0 {
+		return nil
+	}
 	return map[string]any{
-		"match": []map[string]any{{"path": []string{"/.well-known/acme-challenge/*"}}},
+		"match": []map[string]any{{
+			"host": hosts,
+			"path": []string{"/.well-known/acme-challenge/*"},
+		}},
 		"handle": []map[string]any{{
 			"handler": "reverse_proxy",
 			"upstreams": []map[string]any{
-				{"dial": "localhost:" + portString(acmeip.CaddyFrontedHTTP01Port)},
+				{"dial": acmeip.CaddyFrontedHTTP01Host + ":" + portString(acmeip.CaddyFrontedHTTP01Port)},
 			},
 		}},
 		"terminal": true,
