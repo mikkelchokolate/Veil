@@ -899,6 +899,19 @@ WHEN NEW.enabled NOT IN (0,1) OR NEW.depleted NOT IN (0,1) OR NEW.quota_bytes < 
 BEGIN SELECT RAISE(ABORT, 'invalid client domain values'); END;
 `},
 	},
+	{
+		version: 31,
+		name:    "client_connection_limits_heal",
+		sql: `
+-- Heal for databases that already applied the ORIGINAL v30 body (kept in
+-- v30's legacySQL) while carrying device_limit=0/ip_limit=0 rows the pre-v30
+-- trigger had admitted: v30 has run and will not re-run, so without this the
+-- every-Open integrity scan keeps rejecting the rows and wedging startup
+-- (#1212 review). The UPDATEs are idempotent — a healthy DB is a no-op.
+UPDATE clients SET device_limit=NULL WHERE device_limit=0;
+UPDATE clients SET ip_limit=NULL WHERE ip_limit=0;
+`,
+	},
 }
 
 func migrationChecksumText(name, sql string) string {

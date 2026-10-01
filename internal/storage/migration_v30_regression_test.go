@@ -85,3 +85,45 @@ func TestMigration30LegacyChecksumAccepted(t *testing.T) {
 		t.Fatalf("legacy v30 checksum must be accepted: %v", err)
 	}
 }
+
+// TestMigration31HealsLegacyV30ZeroRows (#1212 review): a database that
+// applied the ORIGINAL v30 body while carrying device_limit=0 rows is wedged
+// — the every-Open integrity scan rejects them and v30 will never re-run.
+// Migration 31 must heal those rows so the scan passes.
+func TestMigration31HealsLegacyV30ZeroRows(t *testing.T) {
+	db := openHistoryDB(t, "v31-heal.db")
+	if _, err := db.Exec(`CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,name TEXT NOT NULL,checksum TEXT NOT NULL DEFAULT '',applied_at INTEGER NOT NULL DEFAULT 0)`); err != nil {
+		t.Fatal(err)
+	}
+	for _, migration := range migrations[:29] {
+		if _, err := db.Exec(migration.sql); err != nil {
+			t.Fatalf("apply migration %d: %v", migration.version, err)
+		}
+		if _, err := db.Exec(`INSERT INTO schema_migrations(version,name,checksum) VALUES(?,?,?)`, migration.version, migration.name, migrationChecksum(migration)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The pre-v30 trigger admits the zero row the original body never healed.
+	if _, err := db.Exec(`INSERT INTO clients(id,name,enabled,created_at,updated_at,version,quota_reset_policy,device_limit)
+	  VALUES('c1','legacy-zero',1,0,0,1,'never',0)`); err != nil {
+		t.Fatalf("pre-v30 trigger must still admit device_limit=0: %v", err)
+	}
+	v30 := migrations[29]
+	if _, err := db.Exec(v30.legacySQL[0]); err != nil {
+		t.Fatalf("apply legacy v30 body: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO schema_migrations(version,name,checksum) VALUES(?,?,?)`,
+		v30.version, v30.name, migrationChecksumText(v30.name, v30.legacySQL[0])); err != nil {
+		t.Fatal(err)
+	}
+	if err := Migrate(db); err != nil {
+		t.Fatalf("v31 heal must let an old-v30 database with zero rows open: %v", err)
+	}
+	var deviceLimit sql.NullInt64
+	if err := db.QueryRow(`SELECT device_limit FROM clients WHERE id='c1'`).Scan(&deviceLimit); err != nil {
+		t.Fatal(err)
+	}
+	if deviceLimit.Valid {
+		t.Fatalf("device_limit = %v, want NULL after v31 heal", deviceLimit.Int64)
+	}
+}

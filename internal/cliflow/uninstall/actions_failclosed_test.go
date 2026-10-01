@@ -65,6 +65,17 @@ func TestRemovePathAllowsVeilManagedTrees(t *testing.T) {
 				t.Fatal(err)
 			}
 		},
+		// state.key and backup.passphrase are the remaining markers.
+		"statekey": func(dir string) {
+			if err := os.WriteFile(filepath.Join(dir, "state.key"), []byte("x"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"passphrase": func(dir string) {
+			if err := os.WriteFile(filepath.Join(dir, "backup.passphrase"), []byte("x"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
 		// Empty half-created custom dirs are still removed.
 		"empty": func(dir string) {},
 	}
