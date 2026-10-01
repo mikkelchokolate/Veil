@@ -83,14 +83,21 @@ func (a Actions) RemovePath(path string) error {
 	return a.fileRemover(path)
 }
 
-// stateDirMarkers are files and directories whose presence proves a directory
-// belongs to Veil (or to a Veil-managed runtime's state): a marked tree is
-// what install/apply created, so removing it is cleanup rather than vandalism.
+// stateDirMarkers are files whose presence proves a directory belongs to
+// Veil: a marked tree is what install/apply created, so removing it is
+// cleanup rather than vandalism. The list is intentionally narrow (issues
+// #1093, #1211) — only names Veil itself writes: the .veil-managed sentinel
+// emitted by install/repair, veil.env, state.key, backup.passphrase, and
+// veil.db. Generic names (.config, .local, www, certs, backups, staging,
+// tls, panel, generated, acme, autocert, state.json, certificates) appear
+// in countless non-Veil directories — a single one would bless a misdirected
+// dir (e.g. --var-dir /home/operator with ~/.config present) for rm -rf,
+// which is exactly the misconfiguration this guard exists for. Veil-managed
+// runtime layouts that legitimately carry generic child names (caddy/
+// mita state dirs holding certificates/acme) are covered by the
+// veilManagedBaseName check instead, matching scripts/uninstall.sh.
 var stateDirMarkers = []string{
-	"veil.env", "state.json", "state.key", "generated", "www", "panel",
-	"tls", "certs", "backup.passphrase", "backups", "staging", "autocert",
-	// Veil-managed runtime state layouts (caddy StateDirectory, mita).
-	".local", ".config", "certificates", "acme",
+	".veil-managed", "veil.env", "state.key", "backup.passphrase", "veil.db",
 }
 
 // veilManagedBaseName reports whether a directory name is one Veil provisions
