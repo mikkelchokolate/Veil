@@ -1665,7 +1665,7 @@ type BackupSftpPutRequest struct {
 	// KeyPassphrase Write-only; omit to keep the stored value.
 	KeyPassphrase *string `json:"keyPassphrase,omitempty"`
 
-	// KeyPath Absolute path of the private key readable by root.
+	// KeyPath Absolute path of the private key, confined to the managed /etc/veil directory.
 	KeyPath *string `json:"keyPath,omitempty"`
 
 	// Password Write-only; omit to keep the stored value.

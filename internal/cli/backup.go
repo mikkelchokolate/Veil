@@ -315,10 +315,15 @@ func newBackupCommand(version string) *cobra.Command {
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Retention: kept %d, deleted %d, dry-run=%t\n", len(result.Kept), len(result.Deleted), dryRun)
 			if !dryRun {
-				// Mirror the policy onto the configured remote destination;
-				// state-dir paths derive from the backup dir's parent so the
-				// scheduled unit's writable mount covers them.
-				engine := backupSftpEngineCLI(sftpConfigPath, filepath.Dir(backupDir))
+				// Mirror the policy onto the configured remote destination.
+				// The SFTP state dir resolves from the state file the same
+				// way `backup create` derives it — deriving it from --dir
+				// instead would mint a fresh install id beside an
+				// operator-chosen backup dir and silently prune a different
+				// (empty) remote namespace (#1209).
+				env := serveflow.NewEnvironment()
+				resolvedState, _ := env.StatePath(statePath)
+				engine := backupSftpEngineCLI(sftpConfigPath, filepath.Dir(resolvedState))
 				printRemotePruneResult(cmd, engine, policy)
 			}
 			return nil
@@ -448,6 +453,7 @@ func newBackupCommand(version string) *cobra.Command {
 		cmd.AddCommand(subCmd)
 	}
 	addRetentionFlags(pruneCmd, &daily, &weekly, &monthly)
+	pruneCmd.Flags().StringVar(&statePath, "state", "", "management state JSON path; locates the SFTP state dir for remote retention, defaults to VEIL_STATE_PATH or /var/lib/veil/state.json")
 	pruneCmd.Flags().BoolVar(&dryRun, "dry-run", false, "show deletions without removing archives")
 	pruneCmd.Flags().StringVar(&sftpConfigPath, "sftp-config", defaultBackupSftpConfigPath(), "SFTP destination config path; set to an empty value to skip remote prune")
 

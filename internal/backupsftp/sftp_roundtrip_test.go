@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -313,6 +314,60 @@ func TestSftpDialPinnedKeyMismatchFails(t *testing.T) {
 	}
 }
 
+// #1229-F6: the TOFU append must not follow a symlinked known_hosts — the
+// state dir sits where a lower-privileged account can plant dentries, and the
+// append runs as root.
+func TestAppendKnownHostRefusesSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "sentinel")
+	if err := os.WriteFile(target, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	knownHosts := filepath.Join(dir, KnownHostsFileName)
+	if err := os.Symlink(target, knownHosts); err != nil {
+		t.Skipf("symlinks unavailable on this platform: %v", err)
+	}
+	err := appendKnownHost(knownHosts, "backups.example.com:22", newSFTPHostKey(t).PublicKey())
+	if err == nil {
+		t.Fatal("append through a symlinked known_hosts succeeded")
+	}
+	body, err := os.ReadFile(target)
+	if err != nil || string(body) != "keep" {
+		t.Fatalf("symlink target modified: %q, %v", body, err)
+	}
+	if linked, err := os.ReadFile(knownHosts); err == nil && string(linked) != "keep" {
+		t.Fatal("append wrote through the symlink")
+	}
+}
+
+// #1202: the stall guard keeps the handshake's absolute deadline untouched,
+// then switches to per-I/O deadlines once it is cleared — an idle socket must
+// time out on its own instead of wedging a transfer forever.
+func TestStallGuardConnDeadlineModes(t *testing.T) {
+	c1, c2 := net.Pipe()
+	defer c1.Close()
+	defer c2.Close()
+	guarded := &stallGuardConn{Conn: c1, idle: 80 * time.Millisecond}
+
+	// Handshake mode: an absolute SetDeadline bounds the read directly.
+	_ = guarded.SetDeadline(time.Now().Add(60 * time.Millisecond))
+	if _, err := guarded.Read(make([]byte, 1)); err == nil {
+		t.Fatal("handshake-phase read did not observe the absolute deadline")
+	}
+
+	// Post-handshake: clearing the deadline arms the stall guard — the next
+	// stalled read must fail near the idle bound, not at the (already past)
+	// handshake deadline and not never.
+	_ = guarded.SetDeadline(time.Time{})
+	start := time.Now()
+	if _, err := guarded.Read(make([]byte, 1)); err == nil {
+		t.Fatal("stalled read never timed out")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("stalled read took %v to fail", elapsed)
+	}
+}
+
 func TestSftpDialKeyAuth(t *testing.T) {
 	server := startSFTPServer(t, "veil", "pw-secret")
 	_, clientKey, err := ed25519.GenerateKey(rand.Reader)
@@ -325,12 +380,16 @@ func TestSftpDialKeyAuth(t *testing.T) {
 	}
 	server.setPublicKey(signer.PublicKey())
 
-	// Write the client private key in OpenSSH PEM form for authMethods.
+	// Write the client private key in OpenSSH PEM form for authMethods. The
+	// dial path confines key files to the managed etc dir (#1229), so point
+	// VEIL_ETC_DIR at a tempdir and keep the key inside it.
+	etcDir := t.TempDir()
+	t.Setenv("VEIL_ETC_DIR", etcDir)
 	pemBlock, err := ssh.MarshalPrivateKey(clientKey, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	keyPath := filepath.Join(t.TempDir(), "id_ed25519")
+	keyPath := filepath.Join(etcDir, "id_ed25519")
 	if err := os.WriteFile(keyPath, pem.EncodeToMemory(pemBlock), 0o600); err != nil {
 		t.Fatal(err)
 	}
