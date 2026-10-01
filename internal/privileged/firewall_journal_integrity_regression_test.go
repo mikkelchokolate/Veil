@@ -73,8 +73,21 @@ func TestFirewallRecoveryFailsClosedOnUnverifiedJournalRoot(t *testing.T) {
 	}
 }
 
-func TestFirewallJournalRejectsUnknownPhase(t *testing.T) {
+// firewallRoot0700 returns a t.TempDir() leaf tightened to the 0700 mode the
+// firewall transaction-root contract requires: on recent Go versions the
+// numbered TempDir child is created 0777&umask (0755 on CI), so a bare
+// TempDir is — correctly — rejected as "not a helper-owned 0700 directory".
+func firewallRoot0700(t *testing.T) string {
+	t.Helper()
 	root := t.TempDir()
+	if err := os.Chmod(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestFirewallJournalRejectsUnknownPhase(t *testing.T) {
+	root := firewallRoot0700(t)
 	journal := firewallTransactionJournal{
 		Version: firewallJournalVersion, TransactionID: "planted", Phase: "bogus",
 	}
@@ -96,7 +109,7 @@ func TestFirewallJournalRejectsUnknownPhase(t *testing.T) {
 }
 
 func TestFirewallJournalRejectsMalformedInitialEntries(t *testing.T) {
-	root := t.TempDir()
+	root := firewallRoot0700(t)
 	journal := firewallTransactionJournal{
 		Version: firewallJournalVersion, TransactionID: "planted", Phase: "prepared",
 		Initial: ufwState{

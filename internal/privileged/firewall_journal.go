@@ -235,6 +235,15 @@ func rollbackFirewallJournal(_ context.Context, runner CommandRunner, journal fi
 			return fmt.Errorf("firewall journal initial state is invalid: %w", err)
 		}
 	}
+	// A journal whose only recorded state is the legacy Rules map predates the
+	// validated Entries format: its "allow <target>" replay strings are not
+	// grammar-checked, so rather than running them, fail closed and let the
+	// caller quarantine (#1227 review). Journals written by this version carry
+	// Entries for every non-empty ruleset, so a Rules-only body can only be
+	// stale or attacker-authored.
+	if len(journal.Initial.Entries) == 0 && len(journal.Initial.Rules) > 0 {
+		return errors.New("firewall journal carries only the legacy rules map; refusing replay")
+	}
 	watchdogCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	return restoreUFWState(watchdogCtx, runner, journal.Initial, desired)

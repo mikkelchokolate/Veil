@@ -12,7 +12,7 @@ import (
 )
 
 func TestRecoverKeyRotationIgnoresStickyAppliedFirewallJournal(t *testing.T) {
-	root := t.TempDir()
+	root := firewallRoot0700(t)
 	writeStickyFirewallJournal(t, root, "applied")
 	var ranUFW bool
 	executor := NewProductionExecutor(ProductionConfig{
@@ -36,7 +36,7 @@ func TestRecoverKeyRotationIgnoresStickyAppliedFirewallJournal(t *testing.T) {
 }
 
 func TestRecoverKeyRotationQuarantinesUnrollbackablePreparedJournal(t *testing.T) {
-	root := t.TempDir()
+	root := firewallRoot0700(t)
 	writeStickyFirewallJournal(t, root, "prepared")
 	executor := NewProductionExecutor(ProductionConfig{
 		PromotionBackupRoot: root,
@@ -58,7 +58,7 @@ func TestRecoverKeyRotationQuarantinesUnrollbackablePreparedJournal(t *testing.T
 }
 
 func TestFirewallAppliedJournalIsCommittedNotRolledBack(t *testing.T) {
-	root := t.TempDir()
+	root := firewallRoot0700(t)
 	writeStickyFirewallJournal(t, root, "applied")
 	var commands []string
 	config := ProductionConfig{

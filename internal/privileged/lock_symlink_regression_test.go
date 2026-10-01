@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
@@ -81,7 +83,7 @@ func TestPromotionLockRejectsSymlinkedBackupRoot(t *testing.T) {
 }
 
 func TestFirewallLockRejectsSymlinkedLockFile(t *testing.T) {
-	root := t.TempDir()
+	root := firewallRoot0700(t)
 	victim := filepath.Join(root, "victim")
 	if err := os.Symlink(victim, filepath.Join(root, firewallLockName)); err != nil {
 		t.Fatal(err)
@@ -89,8 +91,8 @@ func TestFirewallLockRejectsSymlinkedLockFile(t *testing.T) {
 	_, err := withFirewallLock(root, func(*safefs.Dir) (FirewallResult, error) {
 		return FirewallResult{}, nil
 	})
-	if err == nil {
-		t.Fatal("firewall transaction followed a symlinked lock file")
+	if !errors.Is(err, unix.ELOOP) {
+		t.Fatalf("firewall lock open error = %v, want ELOOP from the symlinked leaf", err)
 	}
 	if _, statErr := os.Lstat(victim); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("symlinked lock opened %s: %v", victim, statErr)

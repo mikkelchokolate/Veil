@@ -39,6 +39,11 @@ type preparedPromotionOperation struct {
 	symlinkTarget string
 }
 
+// executePromotionTransaction is the un-fenced variant kept for tests and
+// one-off callers: it passes a nil destination policy, which fails closed on
+// recovery (validatePromotionDestinations) rather than replaying an
+// unauthenticated journal — production apply paths must use
+// executePromotionTransactionFenced with a real policy.
 func executePromotionTransaction(backupRoot string, now func() time.Time, kind string, writes, removes []ResolvedArtifact) (result PromoteResult, resultErr error) {
 	return executePromotionTransactionFenced(backupRoot, now, kind, writes, removes, 0, nil)
 }
@@ -57,6 +62,10 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 	// Pin the backup root on a descriptor and refuse a symlinked lock leaf:
 	// the root lives under the service-writable state tree, so a planted
 	// symlink would otherwise redirect a root-owned O_CREATE open (#1229-F5).
+	// Unlike the firewall transaction root this directory is not required to
+	// be helper-owned 0700 — promotion's hard boundary is the caller's
+	// destination policy (validatePromotionDestinations), which authenticates
+	// every record a recovered journal may touch (#1218).
 	backupDir, err := safefs.OpenDir(backupRoot)
 	if err != nil {
 		return PromoteResult{}, fmt.Errorf("open promotion backup root: %w", err)
@@ -253,6 +262,11 @@ func rollbackPromotionAfterError(root string, journal promotionTransactionJourna
 }
 
 func recoverPromotionTransactionWithPolicy(root string, validateDestination func(string, string) bool, acceptedGeneration uint64) error {
+	// Residual TOCTOU: the journal/manifest reads below are path-based, not
+	// fd-pinned like the firewall journal — an attacker racing the leaf could
+	// swap what we read. It is narrowed, not eliminated, because every
+	// destination the journal may authorize is re-validated against the
+	// caller's live policy before any replay (#1228 review).
 	path := filepath.Join(root, promotionTransactionJournalName)
 	body, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {

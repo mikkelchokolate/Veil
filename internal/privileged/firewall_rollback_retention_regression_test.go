@@ -10,7 +10,7 @@ import (
 )
 
 func TestFirewallRollbackFailureRetainsJournalForStartupRecovery(t *testing.T) {
-	root := t.TempDir()
+	root := firewallRoot0700(t)
 	request := transactionalFirewallRequest()
 	request.Action = FirewallActionPrepare
 	failing := func(_ context.Context, command []string, _ time.Duration) (string, error) {
