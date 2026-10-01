@@ -14,6 +14,11 @@ import (
 
 var errTOTPVerifyFailed = errors.New("invalid verification code")
 
+// errTOTPCodeConsumed means the presented code matched a timestep that was
+// already accepted once — the RFC 6238 §5.2 replay rejection carried by
+// User.TOTPLastStep (#1220).
+var errTOTPCodeConsumed = errors.New("verification code already used")
+
 // errEnrollingSessionGone means the session that ran the TOTP confirm is no
 // longer in the registry — the factor must not be armed behind it, so the
 // confirm rolls back and the operator re-enrolls from a fresh session.
@@ -151,6 +156,10 @@ func (s *managementState) handleMyTOTPEnroll(w http.ResponseWriter, r *http.Requ
 	s.recordRequestAudit(r, audit.Record{
 		Actor: user.Username, Action: "user.totp.enroll", Target: user.Username, Success: true,
 	})
+	// The pending seed is secret-grade: the idempotency layer must persist
+	// this response encrypted with the short replay TTL, not plaintext for
+	// 24h (#1221).
+	markIdempotencySecretResponse(w, "totp-enroll:"+user.Username, 1)
 	writeJSON(w, map[string]any{
 		"secret":     secret,
 		"otpauthUri": uri,
@@ -186,7 +195,8 @@ func (s *managementState) handleMyTOTPConfirm(w http.ResponseWriter, r *http.Req
 		writeError(w, "too many attempts", http.StatusTooManyRequests)
 		return
 	}
-	if !validateTOTPCode(s.loginBackoffTime(), user.TOTPPendingSecret, req.Code) {
+	matchedStep, valid := validateTOTPCode(s.loginBackoffTime(), user.TOTPPendingSecret, req.Code)
+	if !valid {
 		delay := s.recordLoginFailure(throttleKey)
 		w.Header().Set("Retry-After", strconv.Itoa(int(delay.Seconds())+1))
 		s.recordRequestAudit(r, audit.Record{
@@ -226,6 +236,12 @@ func (s *managementState) handleMyTOTPConfirm(w http.ResponseWriter, r *http.Req
 		update.TOTPSecret = current.TOTPPendingSecret
 		update.TOTPPendingSecret = ""
 		update.TOTPRecoveryHashes = hashes
+		// The confirming code is now spent: recording its timestep keeps the
+		// same code from replaying as a login factor inside its validity
+		// window (RFC 6238 §5.2, #1220). The watermark only moves forward.
+		if matchedStep > update.TOTPLastStep {
+			update.TOTPLastStep = matchedStep
+		}
 		if _, mErr := mutation.SetUserTOTP(user.Username, update); mErr != nil {
 			_ = s.sessionRegistry().CancelUsernameRevocation(intent)
 			return mErr
@@ -285,6 +301,10 @@ func (s *managementState) handleMyTOTPConfirm(w http.ResponseWriter, r *http.Req
 		Actor: user.Username, Action: "user.totp.confirm", Target: user.Username,
 		Success: true, Details: map[string]any{"recoveryCodes": recoveryCodeCount},
 	})
+	// The recovery codes are the only plaintext copy ever issued — the
+	// idempotency cache must store this response encrypted with the short
+	// secret replay TTL (#1221).
+	markIdempotencySecretResponse(w, "totp-recovery:"+user.Username, 1)
 	writeJSON(w, map[string]any{
 		"enabled":       true,
 		"recoveryCodes": codes,
@@ -323,7 +343,10 @@ func (s *managementState) handleMyTOTPDisable(w http.ResponseWriter, r *http.Req
 		writeError(w, "too many attempts", http.StatusTooManyRequests)
 		return
 	}
-	if !validateTOTPCode(s.loginBackoffTime(), user.TOTPSecret, req.Code) {
+	// A code at or below the recorded watermark was already spent — replayed
+	// codes are rejected exactly like wrong ones (RFC 6238 §5.2, #1220).
+	matchedStep, valid := validateTOTPCode(s.loginBackoffTime(), user.TOTPSecret, req.Code)
+	if !valid || matchedStep <= user.TOTPLastStep {
 		delay := s.recordLoginFailure(throttleKey)
 		w.Header().Set("Retry-After", strconv.Itoa(int(delay.Seconds())+1))
 		s.recordRequestAudit(r, audit.Record{
@@ -338,12 +361,20 @@ func (s *managementState) handleMyTOTPDisable(w http.ResponseWriter, r *http.Req
 		if !found {
 			return errUserNotFound
 		}
+		// Re-check the watermark under the mutation lock: a code consumed by
+		// a concurrent verify/disable since the pre-check must fail here.
+		if matchedStep <= current.TOTPLastStep {
+			return errTOTPCodeConsumed
+		}
 		intent, intentErr := s.sessionRegistry().MarkUsernameRevocationPending(user.Username)
 		if intentErr != nil {
 			return fmt.Errorf("%w: %v", errSessionRevocationPersistence, intentErr)
 		}
 		update := current
 		update.ClearTOTP()
+		// Persist the consumed step in the same durable write: the code that
+		// disarmed the factor must never be replayable (#1220).
+		update.TOTPLastStep = matchedStep
 		if _, mErr := mutation.SetUserTOTP(user.Username, update); mErr != nil {
 			_ = s.sessionRegistry().CancelUsernameRevocation(intent)
 			return mErr
@@ -366,6 +397,8 @@ func (s *managementState) handleMyTOTPDisable(w http.ResponseWriter, r *http.Req
 		switch {
 		case errors.Is(err, errUserNotFound):
 			writeNotFound(w)
+		case errors.Is(err, errTOTPCodeConsumed):
+			writeError(w, "invalid authenticator code", http.StatusBadRequest)
 		case errors.Is(err, errSessionRevocationPersistence):
 			writeError(w, errSessionRevocationPersistence.Error(), http.StatusInternalServerError)
 		default:

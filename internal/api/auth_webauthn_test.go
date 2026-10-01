@@ -537,22 +537,40 @@ func TestWebAuthnRegistrationLifecycle(t *testing.T) {
 		t.Fatalf("list leaked public key material: %v", entry)
 	}
 
-	// A second-factor session deletes without re-presenting a password.
+	// The passkey is the account's ONLY second factor, so its removal is
+	// factor-grade (#1232): even a marked session must re-present the
+	// account password — the mark alone cannot lower the login floor.
 	rec = authedPasskeyRequest(t, state, session, http.MethodDelete, "/api/v1/users/me/passkeys/"+key.storedPasskey().ID, nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("last-factor delete without password status=%d, want 400", rec.Code)
+	}
+	if len(state.users[0].Passkeys) != 1 {
+		t.Fatal("last passkey deleted without a password re-entry")
+	}
+	rec = authedPasskeyRequest(t, state, session, http.MethodDelete, "/api/v1/users/me/passkeys/"+key.storedPasskey().ID, []byte(`{"password":"correct-password-123"}`))
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("delete status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	if len(state.users[0].Passkeys) != 0 {
 		t.Fatalf("delete left passkeys: %v", state.users[0].Passkeys)
 	}
+	// Disarming the account revoked every OTHER session; the one that
+	// proved the password survives (#1232, #1171 revocation pattern).
+	if _, ok := state.sessionRegistry().Get(session.Token); !ok {
+		t.Fatal("the deleting session was revoked with the last factor")
+	}
 }
 
 func TestWebAuthnAdminResetClearsCredentials(t *testing.T) {
 	key := newSoftPasskey(t)
 	user := webauthnTestUser(t, "correct-password-123", key)
+	// TOTP stays armed through the reset, so the login floor cannot drop:
+	// a live user session must survive (#1171). The sole-factor case that
+	// revokes sessions is covered by
+	// TestWebAuthnAdminResetRevokesSessionsWhenSoleFactor (#1232).
+	user.TOTPEnabled = true
+	user.TOTPSecret = "JBSWY3DPEHPK3PXP"
 	state, _ := totpTestState(t, user)
-	// A live user session must survive the reset — passkey removal never
-	// revokes sessions (#1171), unlike the TOTP reset.
 	userSession := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/alice/passkeys", nil)
@@ -649,5 +667,209 @@ func TestPasskeyArmsSecondFactorRequirement(t *testing.T) {
 	state.mu.Unlock()
 	if !state.sessionMeetsFactorRequirement(session) {
 		t.Fatal("session still required the mark after the last factor was removed")
+	}
+}
+
+// Deleting the account's LAST second factor is factor-grade (#1232): the
+// second-factor session mark alone must not downgrade a passkey-only
+// account to password-only login — the account password is required, and
+// every other session dies with the factor (TOTP-disable's contract).
+func TestMyPasskeysDeleteLastFactorRequiresPasswordAndRevokesSessions(t *testing.T) {
+	key := newSoftPasskey(t)
+	user := webauthnTestUser(t, "correct-password-123", key)
+	state, _ := totpTestState(t, user)
+	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+	other := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+	if _, err := state.sessionRegistry().MarkSecondFactorPersisted(session.Token); err != nil {
+		t.Fatalf("mark session: %v", err)
+	}
+	if _, err := state.sessionRegistry().MarkSecondFactorPersisted(other.Token); err != nil {
+		t.Fatalf("mark other session: %v", err)
+	}
+	path := "/api/v1/users/me/passkeys/" + key.storedPasskey().ID
+
+	// Even the 2FA-complete session mark is insufficient for last-factor
+	// removal — a stolen session must not downgrade the account.
+	rec := authedPasskeyRequest(t, state, session, http.MethodDelete, path, nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("last-factor delete on marked session status=%d, want 400", rec.Code)
+	}
+	if len(state.users[0].Passkeys) != 1 {
+		t.Fatal("session mark alone deleted the last factor")
+	}
+	rec = authedPasskeyRequest(t, state, session, http.MethodDelete, path, []byte(`{"password":"wrong-password"}`))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("last-factor delete with bad password status=%d, want 400", rec.Code)
+	}
+	// Step past the credential-gate backoff before the good attempt.
+	state.loginBackoffNow = func() time.Time { return time.Now().Add(time.Hour) }
+	rec = authedPasskeyRequest(t, state, session, http.MethodDelete, path, []byte(`{"password":"correct-password-123"}`))
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("last-factor delete status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(state.users[0].Passkeys) != 0 {
+		t.Fatalf("delete left passkeys: %v", state.users[0].Passkeys)
+	}
+	// The factor is gone: every session except the one that proved the
+	// password must be revoked with it.
+	if _, ok := state.sessionRegistry().Get(other.Token); ok {
+		t.Fatal("sibling session survived the last-factor deletion")
+	}
+	if _, ok := state.sessionRegistry().Get(session.Token); !ok {
+		t.Fatal("the deleting session was revoked with the last factor")
+	}
+}
+
+// Removing one of SEVERAL passkeys keeps the lighter contract (#1171): a
+// second-factor-marked session deletes without re-presenting the password
+// and no sessions are revoked, because the account still has a factor.
+func TestMyPasskeysDeleteNonLastFactorKeepsSessionMarkPath(t *testing.T) {
+	first, second := newSoftPasskey(t), newSoftPasskey(t)
+	user := totpTestUser(t, "correct-password-123")
+	user.Passkeys = []model.Passkey{first.storedPasskey(), second.storedPasskey()}
+	state, _ := totpTestState(t, user)
+	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+	if _, err := state.sessionRegistry().MarkSecondFactorPersisted(session.Token); err != nil {
+		t.Fatalf("mark session: %v", err)
+	}
+
+	rec := authedPasskeyRequest(t, state, session, http.MethodDelete, "/api/v1/users/me/passkeys/"+first.storedPasskey().ID, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("non-last delete status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(state.users[0].Passkeys) != 1 || state.users[0].Passkeys[0].ID != second.storedPasskey().ID {
+		t.Fatalf("wrong credential removed: %+v", state.users[0].Passkeys)
+	}
+	if _, ok := state.sessionRegistry().Get(session.Token); !ok {
+		t.Fatal("non-last-factor delete revoked the session")
+	}
+}
+
+// An admin reset that strips the account's LAST factor permanently lowers
+// the login floor to password-only — every session the target holds must
+// be revoked with it, the same contract TOTP reset upholds (#1232).
+func TestWebAuthnAdminResetRevokesSessionsWhenSoleFactor(t *testing.T) {
+	key := newSoftPasskey(t)
+	user := webauthnTestUser(t, "correct-password-123", key)
+	state, _ := totpTestState(t, user)
+	first := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+	second := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/alice/passkeys", nil)
+	req = req.WithContext(context.WithValue(req.Context(), contextKeyRole, "admin"))
+	rec := httptest.NewRecorder()
+	state.handleV1UserFactorReset(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("admin reset status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(state.users[0].Passkeys) != 0 {
+		t.Fatalf("reset left passkeys: %v", state.users[0].Passkeys)
+	}
+	for _, token := range []string{first.Token, second.Token} {
+		if _, ok := state.sessionRegistry().Get(token); ok {
+			t.Fatal("target session survived the last-factor reset")
+		}
+	}
+}
+
+// With a configured domain the RP ID is pinned to it and the request Host
+// must sit inside that domain tree — an unrelated Host is refused rather
+// than silently minting credentials bound to an attacker-controlled RP
+// (#1222). Without configuration the Host fallback still serves.
+func TestWebAuthnRPPinsConfiguredDomainAndValidatesHost(t *testing.T) {
+	user := totpTestUser(t, "correct-password-123")
+	state, _ := totpTestState(t, user)
+	state.settings.Domain = "panel.example.com"
+
+	req := httptest.NewRequest(http.MethodPost, "https://panel.example.com/api/v1/auth/webauthn/begin", nil)
+	wa, rpID, err := state.webAuthnForRequest(req)
+	if err != nil || rpID != "panel.example.com" {
+		t.Fatalf("configured-domain rpID=%q err=%v wa=%v", rpID, err, wa)
+	}
+	// A subdomain of the configured domain is admitted.
+	req = httptest.NewRequest(http.MethodPost, "https://deep.panel.example.com:8443/api/v1/auth/webauthn/begin", nil)
+	if _, rpID, err = state.webAuthnForRequest(req); err != nil || rpID != "panel.example.com" {
+		t.Fatalf("subdomain rpID=%q err=%v", rpID, err)
+	}
+	// An unrelated — or lookalike-suffix — Host is refused.
+	for _, host := range []string{"evil.example", "panel.example.com.evil.example"} {
+		req = httptest.NewRequest(http.MethodPost, "https://"+host+"/api/v1/auth/webauthn/begin", nil)
+		if _, _, err = state.webAuthnForRequest(req); err == nil {
+			t.Fatalf("foreign host %q configured an RP", host)
+		}
+	}
+	// PanelDomain under caddy access wins over the site domain.
+	state.settings.PanelAccess = "caddy"
+	state.settings.PanelDomain = "dash.example.org"
+	req = httptest.NewRequest(http.MethodPost, "https://dash.example.org/api/v1/auth/webauthn/begin", nil)
+	if _, rpID, err = state.webAuthnForRequest(req); err != nil || rpID != "dash.example.org" {
+		t.Fatalf("panel-domain rpID=%q err=%v", rpID, err)
+	}
+	req = httptest.NewRequest(http.MethodPost, "https://panel.example.com/api/v1/auth/webauthn/begin", nil)
+	if _, _, err = state.webAuthnForRequest(req); err == nil {
+		t.Fatal("site-domain host admitted while the caddy panel domain is configured")
+	}
+	// No configured domain: the request Host is the RP ID fallback.
+	state.settings.Domain = ""
+	state.settings.PanelAccess = ""
+	state.settings.PanelDomain = ""
+	req = httptest.NewRequest(http.MethodPost, "https://direct.test:9443/api/v1/auth/webauthn/begin", nil)
+	if _, rpID, err = state.webAuthnForRequest(req); err != nil || rpID != "direct.test" {
+		t.Fatalf("host-fallback rpID=%q err=%v", rpID, err)
+	}
+}
+
+// Every factor ceremony response carries secret material (the single-use
+// challenge or a session-minting body), so the idempotency store must file
+// it secret-grade — encrypted, 5-minute replay TTL (#1221).
+func TestWebAuthnCeremonyResponsesMarkSecretIdempotentResponses(t *testing.T) {
+	key := newSoftPasskey(t)
+	user := webauthnTestUser(t, "correct-password-123", key)
+	state, _ := totpTestState(t, user)
+	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+
+	store := newIdempotencyStore()
+	defer store.Close()
+	count := func() int {
+		store.mu.Lock()
+		defer store.mu.Unlock()
+		secret := 0
+		for _, entry := range store.entries {
+			if entry.secret {
+				secret++
+			}
+		}
+		return secret
+	}
+
+	// Passkey registration begin — the creation challenge.
+	beginRegister := store.Middleware(http.HandlerFunc(state.handleMyPasskeyRegisterBegin))
+	req := httptest.NewRequest(http.MethodPost, "https://"+webAuthnTestHost+"/api/v1/users/me/passkeys/register/begin",
+		bytes.NewReader([]byte(`{"password":"correct-password-123","name":"x"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", "register-begin")
+	req.AddCookie(&http.Cookie{Name: "veil_session", Value: session.Token})
+	req = req.WithContext(context.WithValue(req.Context(), contextKeyUsername, "alice"))
+	rec := httptest.NewRecorder()
+	beginRegister.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("register begin status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if count() != 1 {
+		t.Fatalf("register begin secret entries=%d, want 1", count())
+	}
+
+	// WebAuthn login begin — the assertion challenge.
+	pending := webAuthnPendingLogin(t, state, "correct-password-123")
+	beginLogin := store.Middleware(http.HandlerFunc(state.handleWebAuthnLoginBegin))
+	req = webauthnRequest(t, http.MethodPost, "https://"+webAuthnTestHost+"/api/v1/auth/webauthn/begin", nil, pending)
+	req.Header.Set("Idempotency-Key", "login-begin")
+	rec = httptest.NewRecorder()
+	beginLogin.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login begin status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if count() != 2 {
+		t.Fatalf("login begin secret entries=%d, want 2", count())
 	}
 }

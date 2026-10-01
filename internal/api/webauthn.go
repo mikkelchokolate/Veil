@@ -45,29 +45,75 @@ var errWebAuthnUnavailable = errors.New("webauthn relying party could not be con
 // padding, so it is URL-safe by construction.
 var passkeyIDEncoding = base64.RawURLEncoding
 
-// webAuthnForRequest builds the relying-party config from the request Host:
-// the RP ID is the host with any port stripped, so the same code serves a
-// direct https://panel:8443 panel and a caddy-fronted https://panel.example.com
-// without configuration. Origins are https://<host:port> always, plus
-// http:// loopback origins for local development (the only plain-HTTP origins
+// webAuthnConfiguredDomain returns the panel's public host as configured:
+// the dedicated panel domain under caddy-fronted access, else the site
+// domain — the same source publicSubscriptionURL uses (#1222).
+func (s *managementState) webAuthnConfiguredDomain() string {
+	s.mu.Lock()
+	settings := s.settings
+	s.mu.Unlock()
+	domain := strings.Trim(strings.TrimSpace(settings.Domain), "[]")
+	if strings.EqualFold(strings.TrimSpace(settings.PanelAccess), "caddy") {
+		if panel := strings.Trim(strings.TrimSpace(settings.PanelDomain), "[]"); panel != "" {
+			domain = panel
+		}
+	}
+	// Tolerate a host[:port] being configured: the RP ID is a bare host.
+	if host, _, err := net.SplitHostPort(domain); err == nil {
+		domain = strings.Trim(host, "[]")
+	}
+	return strings.ToLower(domain)
+}
+
+// webAuthnHostWithin reports whether host equals the RP domain or sits under
+// it as a subdomain — the Host allow-list check a configured RP applies to
+// ceremony requests (#1222).
+func webAuthnHostWithin(host, rpID string) bool {
+	return host == rpID || strings.HasSuffix(host, "."+rpID)
+}
+
+// webAuthnForRequest builds the relying-party config. When a panel domain is
+// configured it PINS the RP ID: credentials then bind to one stable origin
+// family regardless of which Host alias served the request, and a request
+// Host outside the configured domain tree is refused — it could only mint
+// credentials the canonical origin can never use anyway (#1222). Without a
+// configured domain the RP ID falls back to the request Host so the same
+// code serves a direct https://panel:8443 panel and unconfigured dev panels.
+// Origins are https://<host:port> for every admitted host, plus http://
+// loopback origins for local development (the only plain-HTTP origins
 // browsers will run WebAuthn on anyway — a secure-context requirement, not a
 // policy we can weaken).
-func webAuthnForRequest(r *http.Request) (*webauthn.WebAuthn, string, error) {
+func (s *managementState) webAuthnForRequest(r *http.Request) (*webauthn.WebAuthn, string, error) {
 	hostPort := r.Host
 	if hostPort == "" && r.URL != nil {
 		hostPort = r.URL.Host
 	}
-	rpID := hostPort
+	requestHost := hostPort
 	if host, _, err := net.SplitHostPort(hostPort); err == nil {
-		rpID = host
+		requestHost = host
 	}
 	// SplitHostPort leaves IPv6 brackets off; a bare-literal request line
 	// can still carry them, so normalize both directions.
-	rpID = strings.TrimPrefix(strings.TrimSuffix(rpID, "]"), "[")
-	if rpID == "" {
-		return nil, "", errWebAuthnUnavailable
+	requestHost = strings.ToLower(strings.TrimPrefix(strings.TrimSuffix(requestHost, "]"), "["))
+	rpID := requestHost
+	var origins []string
+	if configured := s.webAuthnConfiguredDomain(); configured != "" {
+		if !webAuthnHostWithin(requestHost, configured) {
+			return nil, "", errWebAuthnUnavailable
+		}
+		rpID = configured
+		origins = []string{"https://" + configured}
+		if hostPort != "" && !strings.EqualFold(hostPort, configured) {
+			// The request's own host:port (validated above to sit inside
+			// the RP domain) covers subdomain and non-standard-port access.
+			origins = append(origins, "https://"+hostPort)
+		}
+	} else {
+		if rpID == "" {
+			return nil, "", errWebAuthnUnavailable
+		}
+		origins = []string{"https://" + hostPort}
 	}
-	origins := []string{"https://" + hostPort}
 	if rpID == "localhost" || rpID == "127.0.0.1" || rpID == "::1" {
 		// Dev mode: the browser may reach the panel at either loopback name.
 		// The port belongs to the request — a vite dev server on :5173 and a
