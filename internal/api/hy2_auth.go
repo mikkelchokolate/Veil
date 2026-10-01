@@ -748,6 +748,18 @@ func (s *managementState) handleHy2Auth(w http.ResponseWriter, r *http.Request) 
 		}
 		suppressMigratedLegacyProfiles(markers, &effective)
 	}
+	// Render-path parity (#1200): any binding row — even disabled,
+	// expired, depleted, or credential-less — marks the inbound as
+	// credential-managed, so an empty merged table must fail closed via
+	// HadClientProfiles instead of accepting the shared inbound
+	// password.
+	count, countErr := repo.CountBindingsForInbound(inbound.Name)
+	if countErr != nil {
+		log.Printf("event=hy2_auth_credential_error inbound=%q err=%q (failing closed)", inbound.Name, countErr)
+		deny()
+		return
+	}
+	effective.HasClientBindings = count > 0
 	normalized, err := svc.CredentialsForInbound(inbound.Name)
 	if err != nil {
 		log.Printf("event=hy2_auth_credential_error inbound=%q err=%q (failing closed)", inbound.Name, err)
