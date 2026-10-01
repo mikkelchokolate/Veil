@@ -534,6 +534,10 @@ var acmeShScriptSHA256 = "c7d68b021cfd6380ea83a82962abde5b484779fee0b97d38681dfa
 // to the pinned release payload. The legacy /var/lib/veil/acme home was
 // service-writable, so "the file exists" alone let a compromised veil-uid
 // process hand root an arbitrary script to run (issue #1226).
+//
+// Invariant: the gate walks home and .acme.sh only — packaging must keep
+// /etc/veil itself root-owned and not writable by the service uid, since a
+// writable ancestor could swap the whole tree between checks.
 func trustedAcmeSh(sys System, home, acmeSh string) bool {
 	if !rootOwnedDir(sys, home) || !rootOwnedDir(sys, filepath.Dir(acmeSh)) {
 		return false
@@ -580,36 +584,34 @@ func ensureAcmeShMode(ctx context.Context, sys System, noCron bool) (string, err
 		return acmeSh, nil
 	}
 
-	// Anything already sitting on those paths failed the trust gate, so it
-	// is untrusted input rather than a partial install to skip: a symlinked
-	// or foreign-owned directory is removed outright (healing in place would
-	// still leave the reinstall writing into attacker-chosen space), while a
-	// real directory merely loses its group/other write and gains root
-	// ownership before the reinstall overwrites the payload (#1226).
-	for _, dir := range []string{home, acmeDir} {
-		fi, err := sys.Lstat(dir)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return "", fmt.Errorf("stat acme home %s: %w", dir, err)
-		}
-		if !fi.IsDir() {
-			_ = sys.Run("rm", "-rf", dir)
-			continue
-		}
+	// Anything already sitting on home failed the trust gate, so it is
+	// untrusted input rather than a partial install to skip: a non-directory
+	// is removed outright (healing in place would still leave the reinstall
+	// writing into attacker-chosen space), while a real directory merely
+	// loses its group/other write and gains root ownership (#1226).
+	fi, err := sys.Lstat(home)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+	case err != nil:
+		return "", fmt.Errorf("stat acme home %s: %w", home, err)
+	case !fi.IsDir():
+		_ = sys.Run("rm", "-rf", home)
+	default:
 		if fi.Mode().Perm()&0o022 != 0 {
-			_ = sys.Chmod(dir, 0o700)
+			_ = sys.Chmod(home, 0o700)
 		}
 		if getuidFunc() == 0 && !fileOwnedByUID(fi, 0) {
-			_ = sys.Chown(dir, 0, 0)
+			_ = sys.Chown(home, 0, 0)
 		}
 	}
-	if _, err := sys.Lstat(acmeSh); err == nil {
-		// A file, directory, or symlink with the wrong digest/mode/owner
-		// never reaches exec; rm first so the installer's cp cannot be
-		// steered through a surviving link.
-		_ = sys.Run("rm", "-rf", acmeSh)
+	// The .acme.sh payload tree is wiped wholesale once the gate fails:
+	// healing the directory and deleting only acme.sh would leave
+	// attacker-planted siblings (deploy hooks, account.conf) alive for a
+	// later trusted exec to consume (#1226).
+	if _, err := sys.Lstat(acmeDir); err == nil {
+		_ = sys.Run("rm", "-rf", acmeDir)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("stat acme dir %s: %w", acmeDir, err)
 	}
 
 	for _, tool := range []string{"curl", "sha256sum", "tar", "mktemp"} {
