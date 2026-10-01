@@ -146,7 +146,7 @@ func TestRunIssueIPCertDefaultsAndOptionMapping(t *testing.T) {
 		t.Fatal("helper issuance must disable acme.sh cron — Veil owns renewal (#1170)")
 	}
 	if got.HomeDir != config.IPCertHomeDir {
-		t.Fatalf("acme.sh home = %q, want state-rooted %q", got.HomeDir, config.IPCertHomeDir)
+		t.Fatalf("acme.sh home = %q, want %q", got.HomeDir, config.IPCertHomeDir)
 	}
 	if !got.DeferPanelRestart {
 		t.Fatal("deferred panel restart flag not propagated")
@@ -306,8 +306,8 @@ func TestDefaultProductionConfigPopulatesIPCert(t *testing.T) {
 	if config.IPCertDir != policy.PanelCertDir {
 		t.Fatalf("IPCertDir = %q, want %q", config.IPCertDir, policy.PanelCertDir)
 	}
-	if config.IPCertHomeDir != filepath.Join(policy.StateRoot, "acme") {
-		t.Fatalf("IPCertHomeDir = %q", config.IPCertHomeDir)
+	if want := filepath.Join(filepath.Dir(policy.PanelCertDir), "acme"); config.IPCertHomeDir != want {
+		t.Fatalf("IPCertHomeDir = %q, want %q", config.IPCertHomeDir, want)
 	}
 	executor := NewProductionExecutor(config)
 	if executor.IssueIPCert == nil {

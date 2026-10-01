@@ -116,17 +116,18 @@ func (m ManagedMaterial) EnvContent() (string, error) {
 	}
 	// Persist the panel IP-certificate lifecycle choices so the daemon
 	// renewal worker, the apply post-hook and `veil cert renew` all reuse the
-	// install-time contract instead of re-deriving it (#1186/#1187).
-	if input.PanelAccess == "direct" {
-		if input.PanelPublicIP != "" {
-			entries = append(entries, envKV{"VEIL_PANEL_PUBLIC_IP", input.PanelPublicIP})
-		}
-		if input.PanelLEIPCert != "" {
-			entries = append(entries, envKV{"VEIL_PANEL_LE_IP_CERT", input.PanelLEIPCert})
-		}
-		if port := strings.TrimSpace(input.PanelHTTP01Port); port != "" && port != "80" {
-			entries = append(entries, envKV{"VEIL_PANEL_HTTP01_PORT", port})
-		}
+	// install-time contract instead of re-deriving it (#1186/#1187). Emission
+	// keys on the values being present, NOT on the current access mode — a
+	// direct->caddy->direct round trip must not silently drop the recorded
+	// identity/opt-out/port (#1208).
+	if input.PanelPublicIP != "" {
+		entries = append(entries, envKV{"VEIL_PANEL_PUBLIC_IP", input.PanelPublicIP})
+	}
+	if input.PanelLEIPCert != "" {
+		entries = append(entries, envKV{"VEIL_PANEL_LE_IP_CERT", input.PanelLEIPCert})
+	}
+	if port := strings.TrimSpace(input.PanelHTTP01Port); port != "" && port != "80" {
+		entries = append(entries, envKV{"VEIL_PANEL_HTTP01_PORT", port})
 	}
 	if paths := input.Paths; paths.EtcDir != "" {
 		entries = append(entries,

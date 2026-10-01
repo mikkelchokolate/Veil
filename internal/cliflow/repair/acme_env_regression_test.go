@@ -117,3 +117,48 @@ func repairPlanEnvContent(plan installer.RepairPlan, path string) string {
 	}
 	return ""
 }
+
+// Issue #1208: a repair that flips the panel to a non-direct access mode must
+// still carry the recorded IP-certificate identity/opt-out/port forward —
+// dropping VEIL_PANEL_PUBLIC_IP silently disables renewal of the cert the
+// install already issued when the panel later returns to direct mode.
+func TestRepairPreservesIPCertEnvAcrossAccessMode(t *testing.T) {
+	t.Setenv("VEIL_PANEL_PUBLIC_IP", "")
+	t.Setenv("VEIL_PANEL_LE_IP_CERT", "")
+	t.Setenv("VEIL_PANEL_HTTP01_PORT", "")
+
+	etcDir := t.TempDir()
+	varDir := t.TempDir()
+	envBody := "VEIL_API_TOKEN=tok-1\nVEIL_PANEL_ACCESS=caddy\nVEIL_LISTEN=127.0.0.1:2096\nVEIL_DOMAIN=panel.example.com\nVEIL_EMAIL=admin@example.com\n" +
+		"VEIL_PANEL_PUBLIC_IP=203.0.113.9,2001:db8::7\nVEIL_PANEL_LE_IP_CERT=1\nVEIL_PANEL_HTTP01_PORT=8443\n"
+	if err := os.WriteFile(filepath.Join(etcDir, "veil.env"), []byte(envBody), 0o600); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+	state := `{
+  "settings": {"panelListen":"127.0.0.1:2096","panelAccess":"caddy","webBasePath":"/panel-secret/","mode":"server","domain":"panel.example.com","email":"admin@example.com"},
+  "inbounds": [],
+  "routingRules": [],
+  "warp": {"endpoint":"engage.cloudflareclient.com:2408"}
+}`
+	if err := os.WriteFile(filepath.Join(varDir, "state.json"), []byte(state), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+
+	plan, err := BuildPlanFromOptions(Options{Profile: "ru-recommended", EtcDir: etcDir, VarDir: varDir, SystemdDir: t.TempDir()}, PlanDependencies{Secret: func(label string) string { return "x-" + label }})
+	if err != nil {
+		t.Fatalf("BuildPlanFromOptions: %v", err)
+	}
+	env := repairPlanEnvContent(plan, filepath.Join(etcDir, "veil.env"))
+	if env == "" {
+		t.Fatalf("plan has no veil.env action: %+v", plan)
+	}
+	for _, want := range []string{
+		"VEIL_PANEL_PUBLIC_IP=203.0.113.9,2001:db8::7\n",
+		"VEIL_PANEL_LE_IP_CERT=1\n",
+		"VEIL_PANEL_HTTP01_PORT=8443\n",
+	} {
+		if !strings.Contains(env, want) {
+			t.Fatalf("rewritten veil.env lost %q:\n%s", want, env)
+		}
+	}
+}

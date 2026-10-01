@@ -46,6 +46,19 @@ func (r RuntimeRoutes) handleInboundTLS(w http.ResponseWriter, req *http.Request
 	writeJSON(w, r.inboundTLSStatuses())
 }
 
+// sanitizeViewerTLSCert scrubs host-internal detail out of a certificate
+// payload headed to a viewer-role client: the absolute on-disk path and raw
+// os error strings disclose the box's filesystem layout, which a viewer has
+// no use for (#1208). Certificate metadata (subject, issuer, SANs, expiry)
+// stays — that is the point of the endpoint.
+func sanitizeViewerTLSCert(info veilruntime.TLSCertInfo) veilruntime.TLSCertInfo {
+	info.Path = ""
+	if strings.HasPrefix(info.Error, "read certificate:") {
+		info.Error = "certificate file is unreadable"
+	}
+	return info
+}
+
 func (r RuntimeRoutes) inboundTLSStatuses() []InboundTLSStatus {
 	s := r.State
 	if s == nil {
@@ -85,9 +98,11 @@ func hysteria2InboundTLSStatus(worker *certSyncWorker, liveRoot string, settings
 	}
 	certPath, keyPath, err := liveHysteria2TLSPaths(liveRoot, inbound.Name)
 	if err != nil {
+		// The underlying error carries live-config paths — keep the
+		// viewer-facing string to the inbound identity only (#1208).
 		status.Cert = veilruntime.TLSCertInfo{
 			Source: veilruntime.TLSCertSourceMissing,
-			Error:  fmt.Sprintf("no live hysteria2 TLS config for inbound %s: %v", inbound.Name, err),
+			Error:  fmt.Sprintf("no live hysteria2 TLS config for inbound %s", inbound.Name),
 		}
 		return status
 	}
@@ -97,7 +112,7 @@ func hysteria2InboundTLSStatus(worker *certSyncWorker, liveRoot string, settings
 	if info.Error == "" && keyPath != "" {
 		if _, err := os.Stat(keyPath); err != nil {
 			info.Valid = false
-			info.Error = fmt.Sprintf("key file unavailable: %v", err)
+			info.Error = "key file unavailable"
 		}
 	}
 	// When the served bytes are exactly the pair Caddy storage holds, enrich
@@ -114,7 +129,7 @@ func hysteria2InboundTLSStatus(worker *certSyncWorker, liveRoot string, settings
 			}
 		}
 	}
-	status.Cert = info
+	status.Cert = sanitizeViewerTLSCert(info)
 	return status
 }
 
@@ -130,9 +145,11 @@ func caddyServedInboundTLSStatus(settings Settings, inbound Inbound) (InboundTLS
 	status := InboundTLSStatus{Name: inbound.Name, Protocol: inbound.Protocol, Domain: domain}
 	pair, err := findCaddyTLSCertPair("", domain)
 	if err != nil {
+		// Lookup failures embed the Caddy storage dir — viewers only need
+		// the domain that has no managed certificate (#1208).
 		status.Cert = veilruntime.TLSCertInfo{
 			Source: veilruntime.TLSCertSourceMissing,
-			Error:  fmt.Sprintf("no Caddy-managed certificate for %s: %v", domain, err),
+			Error:  fmt.Sprintf("no Caddy-managed certificate for %s", domain),
 		}
 		return status, true
 	}
@@ -140,7 +157,7 @@ func caddyServedInboundTLSStatus(settings Settings, inbound Inbound) (InboundTLS
 	info.ManagedBy = "caddy"
 	info.IssuerSource = pair.IssuerName
 	info.IssuerKind = caddycert.IssuerKind(pair.IssuerName)
-	status.Cert = info
+	status.Cert = sanitizeViewerTLSCert(info)
 	return status, true
 }
 

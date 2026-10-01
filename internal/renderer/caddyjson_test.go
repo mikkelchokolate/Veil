@@ -953,12 +953,18 @@ func TestRenderCaddyJSONAdminEndpoint(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected top-level admin block, got %T", cfg["admin"])
 	}
-	if admin["listen"] != "127.0.0.1:2019" {
-		t.Errorf("admin.listen = %v, want 127.0.0.1:2019", admin["listen"])
+	// #1213: admin.listen must sit on the dedicated 127.42.0.0/16 band that no
+	// sandboxed unit's IPAddressAllow covers — not 127.0.0.1, which
+	// veil-warp.service can dial.
+	if admin["listen"] != "127.42.0.1:2019" {
+		t.Errorf("admin.listen = %v, want 127.42.0.1:2019", admin["listen"])
 	}
 }
 
 func TestRenderCaddyJSONHttp01ChallengeServer(t *testing.T) {
+	// #1207: the passthrough exists only while a panel IP identity is
+	// persisted (VEIL_PANEL_PUBLIC_IP) and is host-pinned to it.
+	t.Setenv("VEIL_PANEL_PUBLIC_IP", "203.0.113.10")
 	plan := caddyassembly.CaddyRenderPlan{
 		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
 			{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}: {
@@ -1012,10 +1018,14 @@ func TestRenderCaddyJSONHttp01ChallengeServer(t *testing.T) {
 	if route["terminal"] != true {
 		t.Fatalf("passthrough route must be terminal, got %v", route)
 	}
+	matches := route["match"].([]any)[0].(map[string]any)
+	if hosts, ok := matches["host"].([]any); !ok || len(hosts) != 1 || hosts[0] != "203.0.113.10" {
+		t.Fatalf("passthrough must be host-pinned to the panel IP identity, got %v", matches)
+	}
 	handlers := route["handle"].([]any)
 	upstreams := handlers[0].(map[string]any)["upstreams"].([]any)
-	if len(upstreams) != 1 || upstreams[0].(map[string]any)["dial"] != "localhost:44080" {
-		t.Fatalf("passthrough must proxy to acme.sh's internal port 44080, got %v", upstreams)
+	if len(upstreams) != 1 || upstreams[0].(map[string]any)["dial"] != "127.42.0.2:44080" {
+		t.Fatalf("passthrough must proxy to acme.sh's dedicated loopback 127.42.0.2:44080, got %v", upstreams)
 	}
 
 	tlsApp := apps["tls"].(map[string]any)
@@ -1034,6 +1044,7 @@ func TestRenderCaddyJSONHttp01ChallengeServer(t *testing.T) {
 }
 
 func TestRenderCaddyJSONHttp01ChallengeHandlerEndToEnd(t *testing.T) {
+	t.Setenv("VEIL_PANEL_PUBLIC_IP", "203.0.113.10")
 	settings := model.Settings{
 		PanelAccess:       "direct",
 		AcmeChallengeMode: "http-01",
@@ -1086,8 +1097,115 @@ func TestRenderCaddyJSONHttp01ChallengeHandlerEndToEnd(t *testing.T) {
 	}
 	raw, _ := json.Marshal(routes[0])
 	if !strings.Contains(string(raw), `/.well-known/acme-challenge/*`) ||
-		!strings.Contains(string(raw), `localhost:44080`) {
-		t.Fatalf("passthrough route missing the challenge path or internal port: %s", raw)
+		!strings.Contains(string(raw), `127.42.0.2:44080`) {
+		t.Fatalf("passthrough route missing the challenge path or dedicated loopback: %s", raw)
+	}
+}
+
+// #1207: without a persisted panel IP identity there is nothing to host-pin
+// the passthrough to — no universal acme-challenge proxy may be rendered.
+func TestRenderCaddyJSONNoPassthroughWithoutPanelIPIdentity(t *testing.T) {
+	t.Setenv("VEIL_PANEL_PUBLIC_IP", "")
+	t.Setenv("VEIL_ETC_DIR", t.TempDir())
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}: {
+				Kind:        caddyassembly.CaddyOwnerNaive,
+				Domain:      "proxy.example.com",
+				InboundName: "naive-1",
+				Transport:   "tcp",
+				NaiveUsers:  []caddyassembly.CaddyNaiveUser{{Username: "u", Password: "p"}},
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"proxy.example.com": {Domain: "proxy.example.com", Email: "admin@example.com"},
+		},
+		ACMEChallenges: map[bindregistry.BindKey]caddyassembly.AcmeChallengeOwner{
+			{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}: {
+				ChallengeMode: "http-01",
+				Domains:       []string{"proxy.example.com"},
+			},
+		},
+		DefaultChallengeMode: "http-01",
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "acme-challenge") || strings.Contains(string(data), "44080") {
+		t.Fatalf("no acme.sh passthrough may render without a panel IP identity:\n%s", data)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	challengeServer := cfg["apps"].(map[string]any)["http"].(map[string]any)["servers"].(map[string]any)["tcp-0.0.0.0-80-acme"].(map[string]any)
+	if routes := challengeServer["routes"].([]any); len(routes) != 0 {
+		t.Fatalf("challenge server must carry no routes without a panel IP identity, got %v", routes)
+	}
+}
+
+// #1207: a poisoned VEIL_PANEL_PUBLIC_IP must not widen the host matcher —
+// non-IP values are dropped, so no route renders when nothing valid remains.
+func TestRenderCaddyJSONNoPassthroughForPoisonedPanelIP(t *testing.T) {
+	t.Setenv("VEIL_PANEL_PUBLIC_IP", "evil.example.com, ,*")
+	t.Setenv("VEIL_ETC_DIR", t.TempDir())
+	plan := caddyassembly.CaddyRenderPlan{
+		ACMEChallenges: map[bindregistry.BindKey]caddyassembly.AcmeChallengeOwner{
+			{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}: {
+				ChallengeMode: "http-01",
+				Domains:       []string{"proxy.example.com"},
+			},
+		},
+		DefaultChallengeMode: "http-01",
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "acme-challenge") || strings.Contains(string(data), "44080") {
+		t.Fatalf("no acme.sh passthrough may render for a non-IP panel identity:\n%s", data)
+	}
+}
+
+// #1207: renderers that run outside veil.service (install/repair shells, the
+// privileged helper) never inherit VEIL_PANEL_PUBLIC_IP — the host pin must
+// fall back to the persisted veil.env instead of silently dropping the route.
+func TestRenderCaddyJSONPassthroughFallsBackToPersistedEnv(t *testing.T) {
+	etc := t.TempDir()
+	t.Setenv("VEIL_ETC_DIR", etc)
+	t.Setenv("VEIL_PANEL_PUBLIC_IP", "")
+	if err := os.WriteFile(filepath.Join(etc, "veil.env"), []byte("VEIL_PANEL_PUBLIC_IP=198.51.100.9\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	plan := caddyassembly.CaddyRenderPlan{
+		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{
+			{Address: "0.0.0.0", Port: 443, Network: bindregistry.ListenTCP}: {
+				Kind:        caddyassembly.CaddyOwnerNaive,
+				Domain:      "proxy.example.com",
+				InboundName: "naive-1",
+				Transport:   "tcp",
+				NaiveUsers:  []caddyassembly.CaddyNaiveUser{{Username: "u", Password: "p"}},
+			},
+		},
+		Domains: map[string]caddyassembly.CaddyDomainCertSpec{
+			"proxy.example.com": {Domain: "proxy.example.com", Email: "admin@example.com"},
+		},
+		ACMEChallenges: map[bindregistry.BindKey]caddyassembly.AcmeChallengeOwner{
+			{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}: {
+				ChallengeMode: "http-01",
+				Domains:       []string{"proxy.example.com"},
+			},
+		},
+		DefaultChallengeMode: "http-01",
+	}
+	data, err := RenderCaddyJSON(plan, caddycapabilities.CaddyCapabilities{ForwardProxy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := string(data)
+	if !strings.Contains(raw, "198.51.100.9") || !strings.Contains(raw, `127.42.0.2:44080`) {
+		t.Fatalf("passthrough must host-pin to the persisted panel IP identity:\n%s", raw)
 	}
 }
 
@@ -1210,6 +1328,7 @@ func TestRenderCaddyJSONHttp01ValidatesWithCaddy(t *testing.T) {
 // public port. certmagic still answers tokens for challenges Caddy itself
 // is solving before these routes run.
 func TestRenderCaddyJSONACMEChallengeOn80ProxiesToInternalAcme(t *testing.T) {
+	t.Setenv("VEIL_PANEL_PUBLIC_IP", "203.0.113.10")
 	plan := caddyassembly.CaddyRenderPlan{
 		ACMEChallenges: map[bindregistry.BindKey]caddyassembly.AcmeChallengeOwner{
 			{Address: "0.0.0.0", Port: 80, Network: bindregistry.ListenTCP}: {
@@ -1229,8 +1348,9 @@ func TestRenderCaddyJSONACMEChallengeOn80ProxiesToInternalAcme(t *testing.T) {
 	for _, want := range []string{
 		`"/.well-known/acme-challenge/*"`,
 		`"reverse_proxy"`,
-		`"localhost:44080"`,
+		`"127.42.0.2:44080"`,
 		`"terminal": true`,
+		`"203.0.113.10"`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("-acme :80 server missing %s:\n%s", want, s)

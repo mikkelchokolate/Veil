@@ -62,8 +62,12 @@ func TestTLSEndpointReturnsCertInfoWhenConfigured(t *testing.T) {
 	if !info.Valid {
 		t.Errorf("expected valid cert, got error: %s", info.Error)
 	}
-	if info.Path != certPath {
-		t.Errorf("expected path %s, got %s", certPath, info.Path)
+	// #1208: /api/tls is viewer-capable — the filesystem path must not leak.
+	if info.Path != "" {
+		t.Errorf("viewer-facing cert info must not expose the path, got %q", info.Path)
+	}
+	if strings.Contains(w.Body.String(), certPath) {
+		t.Errorf("response must not contain the on-disk cert path: %s", w.Body.String())
 	}
 	if info.Source != "env" {
 		t.Errorf("expected source=env for VEIL_TLS_CERT, got %q", info.Source)
@@ -173,8 +177,8 @@ func TestTLSEndpointSurfacesCaddyManagedCertificate(t *testing.T) {
 	if info.Source != "caddy" {
 		t.Fatalf("expected source=caddy, got %q", info.Source)
 	}
-	if info.Path != certPath {
-		t.Fatalf("expected path %s, got %s", certPath, info.Path)
+	if info.Path != "" {
+		t.Fatalf("viewer-facing cert info must not expose the path, got %q", info.Path)
 	}
 	if len(info.DNSNames) != 1 || info.DNSNames[0] != "panel.example.com" {
 		t.Fatalf("expected dnsNames [panel.example.com], got %v", info.DNSNames)
@@ -278,8 +282,8 @@ func TestTLSEndpointReportsCaddyIssuerSource(t *testing.T) {
 	if !info.Valid {
 		t.Fatalf("expected valid caddy-managed cert, got %+v", info)
 	}
-	if info.Path != certPath || info.ManagedBy != "caddy" {
-		t.Fatalf("expected caddy-managed cert path, got %+v", info)
+	if info.Path != "" || info.ManagedBy != "caddy" {
+		t.Fatalf("expected caddy-managed cert without path disclosure, got %+v", info)
 	}
 	if info.IssuerSource != "local" || info.IssuerKind != "internal" {
 		t.Fatalf("internal-CA fallback must be visible as issuerSource=local issuerKind=internal, got %+v", info)
@@ -345,7 +349,7 @@ func TestTLSEndpointEnvCertSkipsCaddyLookup(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&info); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !info.Valid || info.Path != certPath || info.ManagedBy != "" {
+	if !info.Valid || info.Path != "" || info.ManagedBy != "" {
 		t.Fatalf("expected explicit VEIL_TLS_CERT info only, got %+v", info)
 	}
 }
@@ -372,4 +376,32 @@ func generateSelfSignedCert(domain string) (certPEM, keyPEM []byte) {
 	keyBytes, _ := x509.MarshalECPrivateKey(key)
 	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
 	return
+}
+
+// Issue #1208: /api/tls is viewer-capable, so an unreadable cert must surface
+// a generic error — never the raw os error that embeds the on-disk path.
+func TestTLSEndpointHidesFilesystemDetail(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "gone.pem")
+	t.Setenv("VEIL_TLS_CERT", missing)
+
+	r, _ := newTestRouter(ServerInfo{Version: "test"})
+	req := httptest.NewRequest(http.MethodGet, "/api/tls", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var info veilruntime.TLSCertInfo
+	if err := json.NewDecoder(w.Body).Decode(&info); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if info.Path != "" {
+		t.Fatalf("viewer-facing cert info must not expose the path, got %q", info.Path)
+	}
+	if info.Error != "certificate file is unreadable" {
+		t.Fatalf("expected generic unreadable error, got %q", info.Error)
+	}
+	if strings.Contains(w.Body.String(), missing) || strings.Contains(w.Body.String(), "no such file") {
+		t.Fatalf("response leaked filesystem detail: %s", w.Body.String())
+	}
 }

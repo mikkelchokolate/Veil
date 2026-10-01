@@ -37,9 +37,12 @@ func TestEnvContentPersistsIPCertLifecycle(t *testing.T) {
 	}
 }
 
-// Non-direct panels never own the standalone IP certificate — the knobs
-// must not leak into their env.
-func TestEnvContentOmitsIPCertKnobsOutsideDirect(t *testing.T) {
+// Issue #1208: the recorded IP-certificate lifecycle knobs must survive an
+// access-mode change — a direct→caddy→direct round trip dropping
+// VEIL_PANEL_PUBLIC_IP silently disables renewal for a cert the install
+// already issued. Emission keys on the values being present, not on the
+// current mode.
+func TestEnvContentKeepsIPCertKnobsAcrossAccessModes(t *testing.T) {
 	t.Parallel()
 
 	m := NewManagedMaterial(Input{
@@ -53,9 +56,9 @@ func TestEnvContentOmitsIPCertKnobsOutsideDirect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnvContent: %v", err)
 	}
-	for _, key := range []string{"VEIL_PANEL_PUBLIC_IP", "VEIL_PANEL_LE_IP_CERT", "VEIL_PANEL_HTTP01_PORT"} {
-		if strings.Contains(env, key) {
-			t.Fatalf("EnvContent leaked %s for a non-direct panel:\n%s", key, env)
+	for _, want := range []string{"VEIL_PANEL_PUBLIC_IP=203.0.113.9\n", "VEIL_PANEL_LE_IP_CERT=0\n"} {
+		if !strings.Contains(env, want) {
+			t.Fatalf("access-mode change dropped %q:\n%s", want, env)
 		}
 	}
 }

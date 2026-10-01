@@ -6,8 +6,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -24,6 +26,7 @@ import (
 type fakeFileInfo struct {
 	name string
 	mode os.FileMode
+	sys  any
 }
 
 func (f fakeFileInfo) Name() string       { return f.name }
@@ -31,7 +34,11 @@ func (f fakeFileInfo) Size() int64        { return 0 }
 func (f fakeFileInfo) Mode() os.FileMode  { return f.mode }
 func (f fakeFileInfo) ModTime() time.Time { return time.Time{} }
 func (f fakeFileInfo) IsDir() bool        { return f.mode.IsDir() }
-func (f fakeFileInfo) Sys() any           { return nil }
+func (f fakeFileInfo) Sys() any           { return f.sys }
+
+// fakeAcmeShScript is the payload the fake install writes for acme.sh; the
+// trust gate's pinned digest is pointed at it by TestMain (#1226).
+var fakeAcmeShScript = []byte("#!/bin/sh\n# fake acme.sh payload\n")
 
 type fakeSystem struct {
 	home           string
@@ -114,6 +121,23 @@ func unwrapEnv(cmd string, args []string) (string, []string) {
 func (f *fakeSystem) Run(cmd string, args ...string) error {
 	f.events = append(f.events, "cleanup")
 	f.runCalls = append(f.runCalls, append([]string{cmd}, args...))
+	// rm -rf must actually drop the entries — the acme.sh trust gate relies on
+	// a planted path being gone before the reinstall rewrites it (#1226).
+	if cmd == "rm" && len(args) > 0 && args[0] == "-rf" {
+		for _, path := range args[1:] {
+			prefix := path + string(filepath.Separator)
+			for key := range f.files {
+				if key == path || strings.HasPrefix(key, prefix) {
+					delete(f.files, key)
+				}
+			}
+			for key := range f.fileData {
+				if key == path || strings.HasPrefix(key, prefix) {
+					delete(f.fileData, key)
+				}
+			}
+		}
+	}
 	res, ok := f.commands[f.key(cmd, args...)]
 	if !ok {
 		return nil
@@ -167,12 +191,16 @@ func (f *fakeSystem) CombinedOutput(cmd string, args ...string) ([]byte, error) 
 	if !ok {
 		return nil, fmt.Errorf("unexpected command: %s %v", cmd, args)
 	}
+	if res.writeOwned != nil {
+		res.writeOwned()
+	}
 	if res.err == nil || res.writeFiles {
 		if realCmd == "sh" && len(realArgs) >= 2 {
 			script := realArgs[1]
 			if strings.Contains(script, acmeShTarballURL) && f.installAcmeSh {
 				acme := filepath.Join(effectiveHome, ".acme.sh", "acme.sh")
-				f.files[acme] = &fakeFileInfo{name: "acme.sh", mode: 0o755}
+				f.files[acme] = &fakeFileInfo{name: "acme.sh", mode: 0o755, sys: fakeSysStat(0, 0)}
+				f.fileData[acme] = fakeAcmeShScript
 			}
 			if strings.Contains(script, "socat") && f.installSocat {
 				f.lookPaths["socat"] = "/usr/bin/socat"
@@ -304,19 +332,48 @@ func (f *fakeSystem) Chmod(name string, perm os.FileMode) error {
 		return f.chmodErr
 	}
 	if fi, ok := f.files[name]; ok {
-		fi.mode = perm
+		// chmod only touches permission bits — a healed directory must stay a
+		// directory for the trust gate's IsDir check (#1226).
+		fi.mode = (fi.mode &^ os.ModePerm) | (perm & os.ModePerm)
 	}
 	return nil
 }
 
 func (f *fakeSystem) Chown(name string, uid, gid int) error {
 	f.chownCalls = append(f.chownCalls, chownCall{name: name, uid: uid, gid: gid})
+	if fi, ok := f.files[name]; ok {
+		fakeSetOwner(fi, uid, gid)
+	}
 	return nil
 }
 
 func (f *fakeSystem) Stat(name string) (os.FileInfo, error) {
 	if fi, ok := f.files[name]; ok {
 		return fi, nil
+	}
+	return nil, os.ErrNotExist
+}
+
+// Lstat mirrors Stat but synthesizes missing parent directories as
+// root-owned 0755: a path that prefixes a known file reports as a directory
+// so the acme.sh trust gate sees sane parents without tests seeding every
+// level (#1226). An explicit files entry — e.g. a planted writable dir —
+// always wins over synthesis.
+func (f *fakeSystem) Lstat(name string) (os.FileInfo, error) {
+	if fi, ok := f.files[name]; ok {
+		return fi, nil
+	}
+	want := filepath.Clean(name)
+	for key := range f.files {
+		for dir := filepath.Dir(key); ; dir = filepath.Dir(dir) {
+			if filepath.Clean(dir) == want {
+				return &fakeFileInfo{name: filepath.Base(name), mode: os.ModeDir | 0o755, sys: fakeSysStat(0, 0)}, nil
+			}
+			if parent := filepath.Dir(dir); parent != dir {
+				continue
+			}
+			break
+		}
 	}
 	return nil, os.ErrNotExist
 }
@@ -331,7 +388,8 @@ func (f *fakeSystem) IsPortFree(port int) bool {
 
 func (f *fakeSystem) setAcmeInstalled() {
 	acme := filepath.Join(f.home, ".acme.sh", "acme.sh")
-	f.files[acme] = &fakeFileInfo{name: "acme.sh", mode: 0o755}
+	f.files[acme] = &fakeFileInfo{name: "acme.sh", mode: 0o755, sys: fakeSysStat(0, 0)}
+	f.fileData[acme] = fakeAcmeShScript
 }
 
 // TestIssueIPCertRequiresPublicIP locks the actual product contract: an IP
@@ -1149,6 +1207,10 @@ func TestIssueIPCertCustomCAServerWithoutInsecure(t *testing.T) {
 // containers) get a deterministic veil-proxy gid; individual tests that need
 // real or failing lookups override lookupGroupIDFunc themselves.
 func TestMain(m *testing.M) {
+	// The trust gate verifies the installed acme.sh against the pinned
+	// release digest; tests point it at the fake payload instead (#1226).
+	sum := sha256.Sum256(fakeAcmeShScript)
+	acmeShScriptSHA256 = hex.EncodeToString(sum[:])
 	orig := lookupGroupIDFunc
 	lookupGroupIDFunc = func(name string) int {
 		if name == "veil-proxy" {
@@ -1326,7 +1388,7 @@ func TestIssueIPCertCaddyFrontedParksInternalPort(t *testing.T) {
 	certPath, keyPath := "/tmp/ipcert/tls.crt", "/tmp/ipcert/tls.key"
 	acmeSh := filepath.Join(sys.home, ".acme.sh", "acme.sh")
 	sys.commands[sys.key(acmeSh, "--set-default-ca", "--server", "letsencrypt")] = commandResult{out: "OK"}
-	sys.commands[sys.key(acmeSh, "--issue", "-d", "1.2.3.4", "--standalone", "--server", "letsencrypt", "--certificate-profile", "shortlived", "--days", "3", "--httpport", "44080", "--force")] = commandResult{out: "Cert issued"}
+	sys.commands[sys.key(acmeSh, "--issue", "-d", "1.2.3.4", "--standalone", "--server", "letsencrypt", "--certificate-profile", "shortlived", "--days", "3", "--httpport", "44080", "--local-address", CaddyFrontedHTTP01Host, "--force")] = commandResult{out: "Cert issued"}
 	sys.commands[sys.key(acmeSh, "--installcert", "-d", "1.2.3.4", "--key-file", keyPath, "--fullchain-file", certPath, "--reloadcmd", renewReloadCmd(certPath, keyPath))] = commandResult{out: "Installed"}
 
 	cert, err := IssueIPCert(context.Background(), IssueOptions{

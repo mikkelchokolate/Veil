@@ -31,7 +31,7 @@ func renderOneInbound(t *testing.T, inbound model.Inbound, paths generatedconfig
 
 // #1095: every Hysteria2 config — even without a WARP upstream — must carry
 // the deny-by-default ACL so proxy sessions cannot pivot to loopback control
-// planes (Caddy admin 127.0.0.1:2019), private ranges or link-local metadata.
+// planes (Caddy admin 127.42.0.1:2019), private ranges or link-local metadata.
 func TestRenderConfigEmitsEgressDenyACLWithoutWarp(t *testing.T) {
 	body, _ := renderOneInbound(t, model.Inbound{
 		Name: "hy2", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true,
