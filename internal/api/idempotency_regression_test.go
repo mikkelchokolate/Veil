@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -106,5 +107,149 @@ func TestMutationWithoutIdempotencyKeyIsNotCached(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatalf("calls=%d", calls)
+	}
+}
+
+// A stored replay must never re-serve Set-Cookie — the durable store
+// already drops it and the in-memory path now matches (#1221, #1222).
+// The FIRST response still delivers its cookie; only the replay strips it.
+func TestInMemoryIdempotencyReplayStripsSetCookie(t *testing.T) {
+	store := newIdempotencyStore()
+	defer store.Close()
+	handler := store.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.SetCookie(w, &http.Cookie{Name: "veil_session", Value: "stale-token"})
+		w.Header().Set("X-Result", "ok")
+		writeJSONStatus(w, http.StatusOK, map[string]any{"ok": true})
+	}))
+	request := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/totp/verify", nil)
+		req.Header.Set("Idempotency-Key", "verify-1")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+	if first := request(); cookieValue(first, "veil_session") != "stale-token" {
+		t.Fatal("first response lost its Set-Cookie")
+	}
+	replay := request()
+	if replay.Header().Get("Idempotency-Replayed") != "true" {
+		t.Fatalf("expected replay, got %v", replay.Header())
+	}
+	if got := replay.Header().Get("Set-Cookie"); got != "" {
+		t.Fatalf("replay re-served Set-Cookie: %q", got)
+	}
+	if replay.Header().Get("X-Result") != "ok" {
+		t.Fatal("replay dropped a normal response header")
+	}
+}
+
+// Secret-marked responses get the short replay TTL — the in-memory
+// analogue of the durable store's encrypted 5-minute envelope — and the
+// internal X-Veil-Internal-* marking headers never reach the wire or the
+// stored record (#1221). Unmarked responses keep the 24h public TTL.
+func TestInMemoryIdempotencySecretResponseExpiresEarly(t *testing.T) {
+	store := newIdempotencyStore()
+	defer store.Close()
+	now := time.Now()
+	store.now = func() time.Time { return now }
+	handler := store.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		markIdempotencySecretResponse(w, "totp-enroll:alice", 1)
+		writeJSONStatus(w, http.StatusOK, map[string]any{"secret": "SEED"})
+	}))
+	request := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/users/me/totp/enroll", nil)
+		req.Header.Set("Idempotency-Key", "enroll-1")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+	first := request()
+	if first.Code != http.StatusOK {
+		t.Fatalf("first status=%d body=%s", first.Code, first.Body.String())
+	}
+	for _, header := range []string{idempotencySensitivityHeader, idempotencyResourceHeader, idempotencySecretGenerationHeader, idempotencyOutcomeHeader} {
+		if got := first.Header().Get(header); got != "" {
+			t.Fatalf("internal header %s leaked to the client: %q", header, got)
+		}
+	}
+	if replay := request(); replay.Header().Get("Idempotency-Replayed") != "true" {
+		t.Fatal("secret response did not replay inside its TTL")
+	}
+	now = now.Add(secretReplayTTL + time.Second)
+	if third := request(); third.Header().Get("Idempotency-Replayed") == "true" {
+		t.Fatal("secret entry replayed past its 5-minute TTL")
+	}
+
+	// Control: an unmarked response still replays well past secretReplayTTL.
+	var calls atomic.Int32
+	public := store.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSONStatus(w, http.StatusOK, map[string]any{"call": calls.Add(1)})
+	}))
+	pubReq := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/clients", nil)
+		req.Header.Set("Idempotency-Key", "public-1")
+		rec := httptest.NewRecorder()
+		public.ServeHTTP(rec, req)
+		return rec
+	}
+	pubReq()
+	now = now.Add(secretReplayTTL + time.Minute)
+	if rec := pubReq(); rec.Header().Get("Idempotency-Replayed") != "true" || calls.Load() != 1 {
+		t.Fatalf("public entry expired early: replay=%q calls=%d", rec.Header().Get("Idempotency-Replayed"), calls.Load())
+	}
+}
+
+// Factor endpoints must mark their secret-bearing responses so BOTH
+// idempotency backends route them into the encrypted short-TTL lane
+// (#1221). The TOTP enroll body carries the seed; a second-factor login
+// verify mints a session.
+func TestFactorEndpointsMarkSecretIdempotentResponses(t *testing.T) {
+	user := totpTestUser(t, "correct-password-123")
+	user.TOTPEnabled = true
+	user.TOTPSecret = "JBSWY3DPEHPK3PXP"
+	state, now := totpTestState(t, user)
+	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+	store := newIdempotencyStore()
+	defer store.Close()
+
+	// TOTP enroll (seed + otpauth URI) through the middleware.
+	enroll := store.Middleware(http.HandlerFunc(state.handleMyTOTPEnroll))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/me/totp/enroll", nil)
+	req.Header.Set("Idempotency-Key", "enroll-secret")
+	req.AddCookie(&http.Cookie{Name: "veil_session", Value: session.Token})
+	req = req.WithContext(context.WithValue(req.Context(), contextKeyUsername, "alice"))
+	rec := httptest.NewRecorder()
+	enroll.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("enroll status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// TOTP login verify (session-minting body) through the middleware.
+	verify := store.Middleware(http.HandlerFunc(state.handleTOTPVerify))
+	pending := cookieValue(totpLogin(t, state, "correct-password-123"), pendingSecondFactorCookie)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/totp/verify", strings.NewReader(
+		`{"code":"`+totpCode(t, "JBSWY3DPEHPK3PXP", *now)+`"}`))
+	req.RemoteAddr = "203.0.113.9:443"
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", "verify-secret")
+	req.AddCookie(&http.Cookie{Name: pendingSecondFactorCookie, Value: pending})
+	rec = httptest.NewRecorder()
+	verify.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("verify status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if len(store.entries) != 2 {
+		t.Fatalf("entries=%d, want 2", len(store.entries))
+	}
+	for scope, entry := range store.entries {
+		if !entry.secret {
+			t.Fatalf("factor response %q stored without the secret mark", scope)
+		}
+		if entry.header.Get(idempotencySensitivityHeader) != "" || entry.header.Get("Set-Cookie") != "" {
+			t.Fatalf("stored record for %q leaked internal/cookie headers: %v", scope, entry.header)
+		}
 	}
 }

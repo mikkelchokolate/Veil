@@ -571,7 +571,7 @@ export const en: Record<string, string> = {
 	"settings.totp.copied": "Copied",
 	"settings.totp.disableTitle": "Disable two-factor authentication?",
 	"settings.totp.disableDescription":
-		"Enter a current authenticator code to confirm. All your other sessions will be revoked. If you lost your authenticator, ask an admin to reset two-factor authentication.",
+		"Enter a current authenticator code to confirm. A code that was just used to confirm or sign in is rejected as a replay — wait for the next one. All your other sessions will be revoked. If you lost your authenticator, ask an admin to reset two-factor authentication.",
 	"settings.totp.disabling": "Disabling…",
 	"settings.totp.error.status": "Failed to load two-factor status",
 	"settings.totp.error.enroll": "Failed to start enrollment",
