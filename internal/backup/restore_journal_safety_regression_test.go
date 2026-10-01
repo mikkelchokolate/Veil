@@ -209,6 +209,7 @@ func TestRestoreRollbackRejectsPlantedSafetyLeaf(t *testing.T) {
 	tests := []struct {
 		name        string
 		record      func() restoreJournalDiskFile
+		plantStaged bool
 		wantErrPart string
 	}{
 		{
@@ -234,6 +235,19 @@ func TestRestoreRollbackRejectsPlantedSafetyLeaf(t *testing.T) {
 			},
 			wantErrPart: "never published",
 		},
+		{
+			name: "staged_beside_live_target",
+			record: func() restoreJournalDiskFile {
+				return restoreJournalDiskFile{
+					Name: "state.json", TargetID: "state.json",
+					StagedName: ".restore-state-new", SafetyName: ".restore-state-old",
+					HadPrevious: true, PreviousDigest: backupChecksum([]byte("forged-state")),
+					IntendedDigest: backupChecksum([]byte("planted-state")), Phase: "prepared",
+				}
+			},
+			plantStaged: true,
+			wantErrPart: "never published",
+		},
 	}
 
 	for _, test := range tests {
@@ -249,6 +263,14 @@ func TestRestoreRollbackRejectsPlantedSafetyLeaf(t *testing.T) {
 			// The attacker drops a forged "previous" inode for state.json.
 			if err := os.WriteFile(filepath.Join(root, ".restore-state-old"), []byte("forged-state"), 0o600); err != nil {
 				t.Fatal(err)
+			}
+			if test.plantStaged {
+				// A staged leaf hashing to IntendedDigest counts as
+				// publish evidence only while the target is absent —
+				// beside a live target it is forgeable noise (#1219).
+				if err := os.WriteFile(filepath.Join(root, ".restore-state-new"), []byte("planted-state"), 0o600); err != nil {
+					t.Fatal(err)
+				}
 			}
 			disk := restoreJournalDisk{
 				Version: 2, TransactionID: "planted", Phase: "prepared", WALCleanupPhase: "pending",
