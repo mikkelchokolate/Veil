@@ -9,7 +9,7 @@ Object.defineProperty(window, "scrollTo", {
 });
 
 // MSW: intercept fetch so tests run against a mock Veil API.
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
 afterEach(() => {
 	server.resetHandlers();
 	cleanup();

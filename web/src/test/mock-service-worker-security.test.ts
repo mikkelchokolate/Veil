@@ -24,7 +24,12 @@ function loadWorker(origin = "https://panel.example"): WorkerHarness {
 	const clientsGet = vi.fn(async () => ({
 		id: "client-1",
 		frameType: "nested",
-		postMessage: vi.fn(),
+		// Acknowledge on the reply port like a real client so sendToClient
+		// (awaited by msw 3's handler) settles.
+		postMessage: vi.fn((_message: unknown, ports: MessagePort[] = []) => {
+			ports[0]?.postMessage({});
+			ports[0]?.close();
+		}),
 	}));
 	const sandbox = {
 		self: {
@@ -48,8 +53,20 @@ function loadWorker(origin = "https://panel.example"): WorkerHarness {
 	vm.runInContext(worker, sandbox);
 	const message = handlers.get("message");
 	if (!message) throw new Error("worker did not register a message handler");
+	// msw 3's handler is synchronous and defers its async work through
+	// event.waitUntil; collect those promises so callers can await completion.
+	const run: WorkerHarness["message"] = async (event) => {
+		const pending: Promise<unknown>[] = [];
+		await message({
+			...event,
+			waitUntil: (promise: Promise<unknown>) => {
+				pending.push(promise);
+			},
+		});
+		await Promise.all(pending);
+	};
 	return {
-		message: message as WorkerHarness["message"],
+		message: run,
 		clientsGet,
 	};
 }

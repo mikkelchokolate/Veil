@@ -16,7 +16,7 @@ import { HttpResponse, http } from "./handlers";
 // mock API as the jsdom suite, but executed in an actual browser engine via
 // the MSW Service Worker, catching jsdom-only blind spots (real fetch, real
 // DOM, real event loop).
-beforeAll(() => worker.start({ onUnhandledRequest: "error", quiet: true }));
+beforeAll(() => worker.start({ onUnhandledFrame: "error", quiet: true }));
 afterAll(() => worker.stop());
 
 function renderApp(initialPath = "/clients") {
