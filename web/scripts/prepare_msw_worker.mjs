@@ -4,7 +4,10 @@ import { resolve } from "node:path";
 const workerPath = resolve(process.cwd(), "public/mockServiceWorker.js");
 const worker = await readFile(workerPath, "utf8");
 const newline = worker.includes("\r\n") ? "\r\n" : "\n";
-const messageHandler = `addEventListener('message', async function (event) {${newline}`;
+// msw 3 registers a synchronous handler that defers work via event.waitUntil;
+// the guard is inserted as its first statement so a foreign-origin message
+// returns before clientId, self.clients or event.waitUntil are touched.
+const messageHandler = `addEventListener('message', function (event) {${newline}`;
 const originGuard = [
 	"  if (event.origin !== self.location.origin) {",
 	"    return",

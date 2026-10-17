@@ -17,15 +17,15 @@ CI_UBUNTU_BASE="ubuntu:24.04@sha256:a61567bd31828687156d735ea8eb01ba4e37636e225d
 # --- Release Dockerfile base images (digest-pinned; asserted by verify_versions) ---
 # These mirror the ARG defaults in the root Dockerfile exactly — tag AND digest.
 CI_NODE_IMAGE_DIGEST="sha256:ef24c5053d50fdc3e4e56eb4e7ddb7861874ab0fdc797046ba897581deb8e868" # node:26.8.2-alpine
-CI_GO_IMAGE_DIGEST="sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125"   # golang:1.27.1-alpine
+CI_GO_IMAGE_DIGEST="sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d"   # golang:1.27.2-alpine
 CI_ALPINE_VERSION="3.24"
 CI_ALPINE_IMAGE_DIGEST="sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"   # alpine:3.24
 
 # --- Core toolchain ---------------------------------------------------------
-CI_GO_VERSION="1.27.1"
-CI_GO_TARBALL_SHA256="63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445" # go1.27.1.linux-amd64.tar.gz
+CI_GO_VERSION="1.27.2"
+CI_GO_TARBALL_SHA256="ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5" # go1.27.2.linux-amd64.tar.gz
 # linux-arm64 pin matches internal/runtimeinstall/gotoolchain.go defaultGoSHA256.
-CI_GO_TARBALL_SHA256_ARM64="3450b45a3f9ee8568792736a5c5e70a1f2e9b36c35a8f74958c03e51d7d92bec" # go1.27.1.linux-arm64.tar.gz
+CI_GO_TARBALL_SHA256_ARM64="94f3e30b8e374bc285e7dadc11e0865726b9bc6e85b841ccceaabc0214c6b7c8" # go1.27.2.linux-arm64.tar.gz
 # The live-host network path intermittently stalls Go's HTTP/2 proxy connections
 # with bytes stuck in Send-Q. Pin HTTP/1.1 transport for deterministic clean-cache
 # downloads in both local CI and GitHub Actions. Fall back to checksum-verified
@@ -42,7 +42,7 @@ CI_NPM_VERSION="12.0.2"
 CI_PNPM_VERSION="12.4.1"
 
 # --- Go CI tools ------------------------------------------------------------
-CI_STATICCHECK_VERSION="2026.2.1" # honnef.co/go/tools/cmd/staticcheck@2026.2.1
+CI_STATICCHECK_VERSION="2026.2.2" # honnef.co/go/tools/cmd/staticcheck@2026.2.2
 CI_GOVULNCHECK_VERSION="v1.7.0"   # golang.org/x/vuln/cmd/govulncheck
 CI_NFPM_VERSION="v2.47.0"         # github.com/goreleaser/nfpm/v2/cmd/nfpm
 CI_REDOCLY_VERSION="2.52.1"       # @redocly/cli (OpenAPI lint)
@@ -63,7 +63,7 @@ CI_DOCKER_BUILDX_SHA256="9447199cdb435f25880548343c128a4b6650e8891ee598905d8d29d
 # --- Browser ----------------------------------------------------------------
 # Must match test/browser/package.json @playwright/test and web/package.json
 # playwright. vm-build.sh asserts this at image build time.
-CI_PLAYWRIGHT_VERSION="1.63.0"
+CI_PLAYWRIGHT_VERSION="1.64.0"
 
 # --- Protocol runtimes (server + clients) ------------------------------------
 # Server runtimes are what `veil runtime install` would fetch; for required CI
