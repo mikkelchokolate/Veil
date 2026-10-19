@@ -72,6 +72,9 @@ func (v SettingsValidation) NormalizeAndValidate(settings *Settings, current Set
 			return errors.New("email: " + err.Error())
 		}
 	}
+	if err := normalizePanelIdentity(settings); err != nil {
+		return err
+	}
 	if settings.PanelListen != "" {
 		host, portStr, err := net.SplitHostPort(settings.PanelListen)
 		if err != nil || host == "" {
@@ -199,6 +202,45 @@ func (v SettingsValidation) normalizeProtocolFields(settings *Settings, current 
 		if val != nil {
 			settings.ProtocolFields[f.Key] = val
 			setFlatFieldValue(settings, f.Key, val)
+		}
+	}
+	return nil
+}
+
+// normalizePanelIdentity validates the Panel Caddy identity fields with the
+// same rules as every sibling domain/email field (issue #1291). They used to
+// be type-coerced only, so panelDomain="*" became a {"host":["*"]} matcher on
+// the panel and /s/* subscription routes (the panel answered for every Host
+// header), a garbage panelEmail reached ACME registration, and an
+// out-of-range panelPublicPort rendered an unbindable listener. The final
+// (provided or inherited) value is checked: a legacy invalid value fails
+// closed and is corrected by submitting a valid one in the same PUT.
+func normalizePanelIdentity(settings *Settings) error {
+	if settings.PanelDomain != "" {
+		domain := strings.ToLower(strings.TrimSpace(settings.PanelDomain))
+		if err := hostenv.ValidateDomain(domain); err != nil {
+			return errors.New("panelDomain: " + err.Error())
+		}
+		settings.PanelDomain = domain
+		if _, ok := settings.ProtocolFields["panelDomain"]; ok {
+			settings.ProtocolFields["panelDomain"] = domain
+		}
+	}
+	if settings.PanelEmail != "" {
+		if err := hostenv.ValidateEmail(settings.PanelEmail); err != nil {
+			return errors.New("panelEmail: " + err.Error())
+		}
+	}
+	// 0 means "unset" (renderers default to 443); anything else must be a
+	// bindable TCP port. A fractional JSON number is truncated by the flat
+	// copy, so check the protocolFields copy too rather than persisting a
+	// value the renderer and the stored map disagree on.
+	if settings.PanelPublicPort < 0 || settings.PanelPublicPort > 65535 {
+		return errors.New("panelPublicPort must be an integer between 1 and 65535")
+	}
+	if raw, ok := settings.ProtocolFields["panelPublicPort"]; ok && raw != nil {
+		if f, isFloat := raw.(float64); isFloat && (f != float64(int64(f)) || f < 0 || f > 65535) {
+			return errors.New("panelPublicPort must be an integer between 1 and 65535")
 		}
 	}
 	return nil

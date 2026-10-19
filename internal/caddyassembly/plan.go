@@ -94,9 +94,12 @@ func BuildRenderPlanForEtcDir(
 	fallbackBase := NaiveFallbackBaseForEtcDir(etcDir)
 
 	if settings.PanelAccess == "caddy" {
-		panelDomain := settings.PanelDomain
+		// Fold like domain.go's ACME-email map and the settings validator
+		// (#1291): Caddy host matchers and TLS subjects must not depend on
+		// the operator's casing or stray whitespace.
+		panelDomain := strings.ToLower(strings.TrimSpace(settings.PanelDomain))
 		if panelDomain == "" {
-			panelDomain = settings.Domain
+			panelDomain = strings.ToLower(strings.TrimSpace(settings.Domain))
 		}
 		panelPublicPort := settings.PanelPublicPort
 		if panelPublicPort == 0 {
