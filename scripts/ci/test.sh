@@ -106,8 +106,9 @@ if os_path := __import__("os").environ.get("GITHUB_STEP_SUMMARY"):
 PY
 }
 
-if [ "${test_phase}" != aggregate ]; then
+# Every phase needs web/dist restored: `go list ./...` embeds it.
 ci_test_stage "frontend artifact restore" frontend_stage
+if [ "${test_phase}" != aggregate ]; then
 if [ "${owns_static}" = 1 ]; then
   ci_test_stage "go.mod tidy drift" tidy_stage
   ci_test_stage gofmt gofmt_stage
