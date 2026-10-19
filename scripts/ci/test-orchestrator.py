@@ -173,6 +173,8 @@ def main() -> int:
                         help="total number of machines splitting the full task plan")
     parser.add_argument("--machine-shard", type=int, default=1,
                         help="1-based index of this machine; it runs only its assigned tasks")
+    parser.add_argument("--machine1-preload-ms", type=int, default=0,
+                        help="extra non-test work (static checks, SDK suite) machine 1 runs, to balance against")
     parser.add_argument("--serial-roots", default="TestRollbackPreservesRuntimeIdentityAndProtocolConfigBytes")
     args = parser.parse_args()
     repo = args.repo.resolve()
@@ -242,6 +244,7 @@ def main() -> int:
     # serial lane always belongs to machine 1.  The aggregate phase checks the
     # union of slices equals the full plan, so no task can silently vanish.
     machine_load = [0] * machine_shards
+    machine_load[0] = max(0, args.machine1_preload_ms) if machine_shards > 1 else 0
     assignment: dict[str, int] = {}
     for task in sorted(tasks, key=lambda t: (-t.weight_ms, t.name)):
         if task.serial:

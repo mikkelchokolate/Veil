@@ -159,7 +159,8 @@ python3 "${CI_SCRIPTS_DIR}/test-orchestrator.py" \
   --artifact-dir "${CI_ARTIFACT_DIR}" \
   --coverage-dir "${CI_ARTIFACT_DIR}/coverage-tasks" \
   --workers "${test_workers}" \
-  --api-shards "${CI_API_SHARDS:-4}" \
+  --api-shards "${CI_API_SHARDS:-$((4 * machine_shards))}" \
+  --machine1-preload-ms "${CI_TEST_MACHINE1_PRELOAD_MS:-150000}" \
   --task-timeout "${CI_TEST_TASK_TIMEOUT:-1800}" \
   --roots-json "${CI_ARTIFACT_DIR}/test-roots.json" \
   --machine-shards "${machine_shards}" \
