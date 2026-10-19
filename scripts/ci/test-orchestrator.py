@@ -24,17 +24,24 @@ from typing import Any
 
 ROOT_RE = re.compile(r"^Test[A-Za-z0-9_]+$")
 PACKAGE_FALLBACK_WEIGHTS = {
-    "github.com/mikkelchokolate/Veil/internal/client": 372_000,
-    "github.com/mikkelchokolate/Veil/internal/backup": 250_000,
-    "github.com/mikkelchokolate/Veil/internal/cli": 237_000,
-    "github.com/mikkelchokolate/Veil/internal/privileged": 156_000,
-    "github.com/mikkelchokolate/Veil/internal/apply": 154_000,
-    "github.com/mikkelchokolate/Veil/internal/runtimeinstall": 97_000,
-    "github.com/mikkelchokolate/Veil/internal/statecommit": 90_000,
-    "github.com/mikkelchokolate/Veil/internal/storage": 30_000,
-    "github.com/mikkelchokolate/Veil/internal/service": 21_000,
-    "github.com/mikkelchokolate/Veil/internal/generatedconfig": 21_000,
+    # Observed hosted-runner wall times (ci run 39010530467, 2026-10-17).
+    "github.com/mikkelchokolate/Veil/internal/client": 282_000,
+    "github.com/mikkelchokolate/Veil/internal/backup": 264_000,
+    "github.com/mikkelchokolate/Veil/internal/runtimeinstall": 222_000,
+    "github.com/mikkelchokolate/Veil/internal/cli": 154_000,
+    "github.com/mikkelchokolate/Veil/internal/privileged": 128_000,
+    "github.com/mikkelchokolate/Veil/internal/statecommit": 64_000,
+    "github.com/mikkelchokolate/Veil/internal/apply": 49_000,
+    "github.com/mikkelchokolate/Veil/internal/storage": 48_000,
+    "github.com/mikkelchokolate/Veil/internal/cliflow/serve": 23_000,
+    "github.com/mikkelchokolate/Veil/internal/generatedconfig": 23_000,
+    "github.com/mikkelchokolate/Veil/internal/service": 23_000,
+    "github.com/mikkelchokolate/Veil/internal/cliflow/update": 18_000,
 }
+# Mean observed wall time per API root under -race with 4 concurrent tasks
+# (2065s across ~1180 roots); used only to weigh API lanes against packages
+# when distributing tasks across machine shards.
+API_ROOT_FALLBACK_MS = 1_750
 
 
 @dataclass
@@ -162,6 +169,12 @@ def main() -> int:
     parser.add_argument("--task-timeout", type=int, default=1800)
     parser.add_argument("--timing-manifest", type=Path)
     parser.add_argument("--roots-json", type=Path)
+    parser.add_argument("--machine-shards", type=int, default=1,
+                        help="total number of machines splitting the full task plan")
+    parser.add_argument("--machine-shard", type=int, default=1,
+                        help="1-based index of this machine; it runs only its assigned tasks")
+    parser.add_argument("--machine1-preload-ms", type=int, default=0,
+                        help="extra non-test work (static checks, SDK suite) machine 1 runs, to balance against")
     parser.add_argument("--serial-roots", default="TestRollbackPreservesRuntimeIdentityAndProtocolConfigBytes")
     args = parser.parse_args()
     repo = args.repo.resolve()
@@ -176,7 +189,10 @@ def main() -> int:
     workers = args.workers or min(os.cpu_count() or 1, 4)
     workers = max(1, workers)
     api_shards = args.api_shards or workers
-    api_shards = max(1, min(api_shards, workers))
+    machine_shards = max(1, args.machine_shards)
+    if not 1 <= args.machine_shard <= machine_shards:
+        raise SystemExit(f"--machine-shard must be in 1..{machine_shards}")
+    api_shards = max(1, min(api_shards, workers * machine_shards))
     task_gomaxprocs = os.environ.get("CI_TEST_TASK_GOMAXPROCS", "1")
     manifest = load_manifest(args.timing_manifest)
     packages = [line.strip() for line in args.packages_file.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -191,7 +207,7 @@ def main() -> int:
         raise SystemExit(f"serial roots are not listed: {', '.join(sorted(bad_serial))}")
 
     parallel_roots = [root for root in api_roots if root not in serial_names]
-    root_weights = {root: manifest.get((args.api_package, root), 1000) for root in parallel_roots}
+    root_weights = {root: manifest.get((args.api_package, root), API_ROOT_FALLBACK_MS) for root in parallel_roots}
     lanes = lpt_partition(parallel_roots, root_weights, api_shards)
     tasks: list[Task] = []
     task_index = 0
@@ -219,17 +235,40 @@ def main() -> int:
         tasks.append(Task(
             name="api-serial", package=args.api_package, roots=serial_roots,
             command=["go", "test", args.api_package, "-race", "-count=1", "-timeout", f"{args.task_timeout}s", "-json", "-run", regex_for(serial_roots), f"-coverprofile={profile}"],
-            profile=profile, weight_ms=sum(manifest.get((args.api_package, root), 1000) for root in serial_roots), serial=True,
+            profile=profile, weight_ms=sum(manifest.get((args.api_package, root), API_ROOT_FALLBACK_MS) for root in serial_roots), serial=True,
         ))
         plan_rows.append({"task": "api-serial", "roots": serial_roots, "estimatedMs": tasks[-1].weight_ms, "serial": True})
 
+    # Deterministic machine assignment: every machine computes the identical
+    # full plan and LPT-partitions it, then runs only its own slice.  The
+    # serial lane always belongs to machine 1.  The aggregate phase checks the
+    # union of slices equals the full plan, so no task can silently vanish.
+    machine_load = [0] * machine_shards
+    machine_load[0] = max(0, args.machine1_preload_ms) if machine_shards > 1 else 0
+    assignment: dict[str, int] = {}
+    for task in sorted(tasks, key=lambda t: (-t.weight_ms, t.name)):
+        if task.serial:
+            target = 0
+        else:
+            target = min(range(machine_shards), key=lambda i: (machine_load[i], i))
+        machine_load[target] += task.weight_ms
+        assignment[task.name] = target + 1
+    all_task_names = sorted(task.name for task in tasks)
+    (artifact / "planned-tasks.txt").write_text("\n".join(all_task_names) + "\n", encoding="utf-8")
+    (artifact / f"machine-assignment-{args.machine_shard}.json").write_text(json.dumps({
+        "machineShards": machine_shards, "machineShard": args.machine_shard,
+        "assignment": assignment, "estimatedLoadMs": machine_load,
+    }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tasks = [task for task in tasks if assignment[task.name] == args.machine_shard]
+
     (artifact / "shard-plan.json").write_text(json.dumps({
+        "machineShards": machine_shards, "machineShard": args.machine_shard,
         "workers": workers, "taskGOMAXPROCS": task_gomaxprocs,
         "apiShards": plan_rows, "packages": packages,
         "timingManifest": str(args.timing_manifest) if args.timing_manifest else None,
     }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     total_by_lane = [sum(root_weights[root] for root in lane) for lane in lanes]
-    balance = [f"workers={workers} api_shards={api_shards}", "API estimated lanes:"]
+    balance = [f"workers={workers} api_shards={api_shards} machine_shard={args.machine_shard}/{machine_shards}", "API estimated lanes:"]
     balance.extend(f"lane-{i}: {value/1000:.3f}s ({len(lanes[i])} roots)" for i, value in enumerate(total_by_lane))
     if total_by_lane:
         balance.append(f"skew={max(total_by_lane)-min(total_by_lane):.3f}ms")
