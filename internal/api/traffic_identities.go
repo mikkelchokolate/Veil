@@ -22,7 +22,34 @@ import (
 // Alias it (and the current client name) onto the migrated binding so
 // accounting is not marked degraded for identities the panel itself still
 // serves.
+//
+// The returned keys are matched exactly, which is what mieru needs: its
+// usernames are case-sensitive. Hysteria2 callers must use
+// hysteria2TrafficIdentityMap instead.
 func trafficIdentityMap(inboundName string, profiles []ClientProfile, bindings []client.Binding, clients []client.Client, now int64) map[string]string {
+	return buildTrafficIdentityMap(inboundName, profiles, bindings, clients, now, func(identity string) string { return identity })
+}
+
+// hysteria2TrafficIdentityMap is trafficIdentityMap in Hysteria2's key space.
+// The daemon lowercases every username it authenticates and reports
+// (splitUserPass upstream; hy2AuthCallback returns the lowercased ID), and the
+// stats provider looks bindings up by strings.ToLower(identity). Folding the
+// keys HERE — not only later in hysteria2.NewStatsProvider — keeps the claim
+// priority (RuntimeIdentity > migrated legacy username > client name alias)
+// intact across case-only collisions: with case-preserved keys, a client
+// named "Alice" and another binding's canonical RuntimeIdentity "alice" were
+// two distinct entries, and the provider's sorted fold then handed "alice" to
+// the name alias because "Alice" sorts first — that binding's sessions and
+// traffic were attributed to the wrong client (deviceLimit/ipLimit charged to
+// the victim, usage accounting misattributed) (#1282).
+func hysteria2TrafficIdentityMap(inboundName string, profiles []ClientProfile, bindings []client.Binding, clients []client.Client, now int64) map[string]string {
+	return buildTrafficIdentityMap(inboundName, profiles, bindings, clients, now, strings.ToLower)
+}
+
+// buildTrafficIdentityMap implements both maps; key canonicalises every
+// identity before it is checked for an existing claim or stored, so first
+// claim wins in the runtime's own key space.
+func buildTrafficIdentityMap(inboundName string, profiles []ClientProfile, bindings []client.Binding, clients []client.Client, now int64, key func(string) string) map[string]string {
 	identities := make(map[string]string)
 	clientByID := make(map[string]client.Client, len(clients))
 	for _, current := range clients {
@@ -39,12 +66,18 @@ func trafficIdentityMap(inboundName string, profiles []ClientProfile, bindings [
 		}
 		inboundBindings = append(inboundBindings, binding)
 		if binding.RuntimeIdentity != "" {
-			identities[binding.RuntimeIdentity] = binding.ID
+			// RuntimeIdentity is unique per inbound byte-for-byte, but two
+			// rows may still collide after folding; the earliest binding
+			// (AllBindings is ordered by created_at) keeps the claim.
+			identity := key(binding.RuntimeIdentity)
+			if _, exists := identities[identity]; !exists {
+				identities[identity] = binding.ID
+			}
 		}
 	}
 
 	alias := func(name, bindingID string) {
-		name = strings.TrimSpace(name)
+		name = key(strings.TrimSpace(name))
 		if name == "" {
 			return
 		}
@@ -71,13 +104,16 @@ func trafficIdentityMap(inboundName string, profiles []ClientProfile, bindings [
 		if username == "" {
 			continue
 		}
-		if _, exists := identities[username]; exists {
+		identity := key(username)
+		if _, exists := identities[identity]; exists {
 			continue
 		}
+		// StableClientID is derived from the username as stored — fold only
+		// the lookup key, never the migration identity.
 		wantClient := client.StableClientID(inboundName, username)
 		for _, binding := range inboundBindings {
 			if binding.ClientID == wantClient {
-				identities[username] = binding.ID
+				identities[identity] = binding.ID
 				break
 			}
 		}
