@@ -63,12 +63,58 @@ caddy_stage() {
   "${runtime_dir}/sing-box" version >/dev/null
 }
 
+# CI_TEST_PHASE selects how much of the job this invocation runs:
+#   all       (default) the complete job on one machine — local `make ci`,
+#             release.yml, and any caller that does not opt into sharding.
+#   shard     one of CI_TEST_MACHINE_SHARDS machines: runs only its slice of
+#             the orchestrator plan (machine 1 also owns the static checks and
+#             the SDK suite) and leaves raw logs/profiles for aggregation.
+#   aggregate no tests: merges every shard's artifacts from
+#             CI_TEST_SHARD_ARTIFACTS, proves the union equals the full plan,
+#             then runs the unchanged root verification, coverage merge,
+#             inventory report, coverage gates, and shell hygiene.
+test_phase="${CI_TEST_PHASE:-all}"
+machine_shards="${CI_TEST_MACHINE_SHARDS:-1}"
+machine_shard="${CI_TEST_MACHINE_SHARD:-1}"
+case "${test_phase}" in
+  all) machine_shards=1; machine_shard=1 ;;
+  shard|aggregate) ;;
+  *) ci_die "unknown CI_TEST_PHASE=${test_phase}" ;;
+esac
+owns_static=0
+if [ "${test_phase}" = all ] || { [ "${test_phase}" = shard ] && [ "${machine_shard}" = 1 ]; }; then
+  owns_static=1
+fi
+
+write_timings() {
+  # Keep both JSONL (append-friendly) and a JSON array for artifact consumers.
+  python3 - "${CI_ARTIFACT_DIR}/timings.jsonl" "${CI_ARTIFACT_DIR}/timings.json" "${test_phase}:${machine_shard}/${machine_shards}" <<'PY'
+import json, sys
+src, dst, label = sys.argv[1:]
+rows = []
+for line in open(src, encoding="utf-8"):
+    if line.strip():
+        rows.append(json.loads(line))
+with open(dst, "w", encoding="utf-8") as stream:
+    json.dump(rows, stream, indent=2)
+    stream.write("\n")
+summary = f"\n## test job timings ({label})\n\n| step | ms |\n| --- | ---: |\n"
+summary += "".join(f"| {r['step']} | {r['ms']} |\n" for r in rows)
+if os_path := __import__("os").environ.get("GITHUB_STEP_SUMMARY"):
+    with open(os_path, "a", encoding="utf-8") as stream:
+        stream.write(summary)
+PY
+}
+
+if [ "${test_phase}" != aggregate ]; then
 ci_test_stage "frontend artifact restore" frontend_stage
-ci_test_stage "go.mod tidy drift" tidy_stage
-ci_test_stage gofmt gofmt_stage
-ci_test_stage go-vet ci_run go-vet go vet ./...
-ci_test_stage "OpenAPI verification" ci_run verify-openapi make verify-openapi
-ci_test_stage "SDK verification" ci_run verify-sdk make verify-sdk
+if [ "${owns_static}" = 1 ]; then
+  ci_test_stage "go.mod tidy drift" tidy_stage
+  ci_test_stage gofmt gofmt_stage
+  ci_test_stage go-vet ci_run go-vet go vet ./...
+  ci_test_stage "OpenAPI verification" ci_run verify-openapi make verify-openapi
+  ci_test_stage "SDK verification" ci_run verify-sdk make verify-sdk
+fi
 ci_test_stage build ci_run build make build
 ci_test_stage "validator runtimes" caddy_stage
 
@@ -78,8 +124,11 @@ ci_test_stage "validator runtimes" caddy_stage
 # threshold, which always measured the product statement universe (#438).
 rm -rf "${CI_ARTIFACT_DIR}/coverage-tasks"
 mkdir -p "${CI_ARTIFACT_DIR}/coverage-tasks"
+if [ "${owns_static}" = 1 ]; then
 ci_test_stage "SDK tests" ci_run sdk-tests go test ./sdk/go -race -count=1 -json \
   "-coverprofile=${CI_ARTIFACT_DIR}/coverage-tasks/coverage-sdk.out"
+fi
+fi  # end of non-aggregate pre-test stages
 
 # test-orchestrator.py is the live bounded scheduler for package + API shard
 # tasks; verify-test-shards.py then proves every API root executed exactly
@@ -92,6 +141,7 @@ printf '%s\n' "${non_api_packages}" > "${CI_ARTIFACT_DIR}/product-packages.txt"
 ci_test_stage "test discovery" python3 "${CI_SCRIPTS_DIR}/test-inventory.py" \
   --repo "${CI_ROOT}" --artifact-dir "${CI_ARTIFACT_DIR}"
 
+if [ "${test_phase}" != aggregate ]; then
 test_workers="${CI_TEST_WORKERS:-}"
 if [ -z "${test_workers}" ]; then
   test_workers="$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc)"
@@ -112,6 +162,8 @@ python3 "${CI_SCRIPTS_DIR}/test-orchestrator.py" \
   --api-shards "${CI_API_SHARDS:-4}" \
   --task-timeout "${CI_TEST_TASK_TIMEOUT:-1800}" \
   --roots-json "${CI_ARTIFACT_DIR}/test-roots.json" \
+  --machine-shards "${machine_shards}" \
+  --machine-shard "${machine_shard}" \
   "${manifest_args[@]}" \
   ${CI_API_SERIAL_ROOTS:+--serial-roots "${CI_API_SERIAL_ROOTS}"} \
   2>&1 | tee -a "${CI_ARTIFACT_DIR}/product-test.log"
@@ -120,6 +172,63 @@ set -e
 if [ "${orchestrator_rc}" -ne 0 ]; then
   ci_fail_banner
   exit "${orchestrator_rc}"
+fi
+fi
+
+if [ "${test_phase}" = shard ]; then
+  write_timings
+  ci_log "test shard ${machine_shard}/${machine_shards} passed; aggregation runs in the test job"
+  exit 0
+fi
+
+merge_shards_stage() {
+  local src="${CI_TEST_SHARD_ARTIFACTS:?CI_TEST_SHARD_ARTIFACTS is unset}"
+  local dirs=() d i name
+  for i in $(seq 1 "${machine_shards}"); do
+    d="${src}/ci-test-shard-${i}"
+    [ -f "${d}/planned-tasks.txt" ] || { echo "shard ${i} artifacts missing (${d})" >&2; return 1; }
+    [ -f "${d}/test-task-logs.txt" ] || { echo "shard ${i} did not finish (no test-task-logs.txt)" >&2; return 1; }
+    dirs+=("${d}")
+  done
+  rm -rf "${CI_ARTIFACT_DIR}/test-tasks" "${CI_ARTIFACT_DIR}/coverage-tasks"
+  mkdir -p "${CI_ARTIFACT_DIR}/test-tasks" "${CI_ARTIFACT_DIR}/coverage-tasks"
+  cp "${dirs[0]}/planned-tasks.txt" "${CI_ARTIFACT_DIR}/planned-tasks.txt"
+  : > "${CI_ARTIFACT_DIR}/test-task-logs.txt"
+  : > "${CI_ARTIFACT_DIR}/product-test.log"
+  for d in "${dirs[@]}"; do
+    # Every machine must have computed the identical full plan.
+    cmp -s "${d}/planned-tasks.txt" "${CI_ARTIFACT_DIR}/planned-tasks.txt" \
+      || { echo "shard plan mismatch in ${d}" >&2; return 1; }
+    while IFS= read -r name; do
+      [ -n "${name}" ] || continue
+      name="$(basename "${name}")"
+      [ ! -e "${CI_ARTIFACT_DIR}/test-tasks/${name}" ] || { echo "task log ${name} produced twice" >&2; return 1; }
+      cp "${d}/test-tasks/${name}" "${CI_ARTIFACT_DIR}/test-tasks/${name}"
+      printf '%s\n' "${CI_ARTIFACT_DIR}/test-tasks/${name}" >> "${CI_ARTIFACT_DIR}/test-task-logs.txt"
+    done < "${d}/test-task-logs.txt"
+    for name in "${d}/coverage-tasks/"*.out; do
+      [ -f "${name}" ] || continue
+      [ ! -e "${CI_ARTIFACT_DIR}/coverage-tasks/$(basename "${name}")" ] \
+        || { echo "coverprofile $(basename "${name}") produced twice" >&2; return 1; }
+      cp "${name}" "${CI_ARTIFACT_DIR}/coverage-tasks/"
+    done
+    cp -f "${d}"/machine-assignment-*.json "${CI_ARTIFACT_DIR}/" 2>/dev/null || true
+    [ ! -f "${d}/product-test.log" ] || cat "${d}/product-test.log" >> "${CI_ARTIFACT_DIR}/product-test.log"
+  done
+  [ -f "${dirs[0]}/sdk-tests.log" ] || { echo "shard 1 produced no sdk-tests.log" >&2; return 1; }
+  [ -f "${CI_ARTIFACT_DIR}/coverage-tasks/coverage-sdk.out" ] || { echo "shard 1 produced no SDK coverprofile" >&2; return 1; }
+  cp "${dirs[0]}/sdk-tests.log" "${CI_ARTIFACT_DIR}/sdk-tests.log"
+  sort -o "${CI_ARTIFACT_DIR}/test-task-logs.txt" "${CI_ARTIFACT_DIR}/test-task-logs.txt"
+  # The union of executed tasks must be exactly the planned task set: a lost
+  # or duplicated machine slice is a failure, never a smaller green run.
+  if ! diff <(sed 's#.*/##; s#\.json$##' "${CI_ARTIFACT_DIR}/test-task-logs.txt") \
+            <(grep -v '^$' "${CI_ARTIFACT_DIR}/planned-tasks.txt" | sort); then
+    echo "executed task set differs from the planned task set" >&2
+    return 1
+  fi
+}
+if [ "${test_phase}" = aggregate ]; then
+  ci_test_stage "merge machine shards" merge_shards_stage
 fi
 
 # Shard verification (issue #429): every discovered API root must appear
@@ -215,23 +324,7 @@ bash scripts/install-main.sh --help >/dev/null
 git diff --check
 '
 
-# Keep both JSONL (append-friendly) and a JSON array for artifact consumers.
-python3 - "${CI_ARTIFACT_DIR}/timings.jsonl" "${CI_ARTIFACT_DIR}/timings.json" <<'PY'
-import json, sys
-src, dst = sys.argv[1:]
-rows = []
-for line in open(src, encoding="utf-8"):
-    if line.strip():
-        rows.append(json.loads(line))
-with open(dst, "w", encoding="utf-8") as stream:
-    json.dump(rows, stream, indent=2)
-    stream.write("\n")
-summary = "\n## test job timings\n\n| step | ms |\n| --- | ---: |\n"
-summary += "".join(f"| {r['step']} | {r['ms']} |\n" for r in rows)
-if os_path := __import__("os").environ.get("GITHUB_STEP_SUMMARY"):
-    with open(os_path, "a", encoding="utf-8") as stream:
-        stream.write(summary)
-PY
+write_timings
 
 total_coverage="$(go tool cover -func=coverage.out | awk '$1 == "total:" {print $NF}' | tr -d '%')"
 ci_log "test job passed (coverage ${total_coverage}%, workers ${CI_TEST_WORKERS:-auto})"

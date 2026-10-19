@@ -64,10 +64,23 @@ jobs:
           path: .artifacts/ci/
           if-no-files-found: ignore
 
-  test:
+  # The backend suite is split across machines: every leg computes the same
+  # full orchestrator plan and runs only its LPT-assigned slice (leg 1 also
+  # owns tidy/gofmt/vet/OpenAPI/SDK checks and the SDK suite). The literal
+  # `test` job below — the required check — merges every leg's logs and
+  # coverprofiles, proves the union equals the full plan, and runs the
+  # unchanged root verification, coverage merge/gates, and inventory report.
+  test-shard:
     needs: frontend
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     env:
       CI_FRONTEND_DIST_ARTIFACT_DIR: .artifacts/ci/frontend-dist
+      CI_TEST_PHASE: shard
+      CI_TEST_MACHINE_SHARDS: 3
+      CI_TEST_MACHINE_SHARD: ${{ matrix.shard }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -103,7 +116,49 @@ jobs:
             sudo DEBIAN_FRONTEND=noninteractive apt-get update
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bubblewrap
           fi
-      - name: test job
+      - name: test shard
+        run: bash scripts/ci/test.sh
+      - name: Upload shard artifacts (task logs, coverprofiles, plan)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-test-shard-${{ matrix.shard }}
+          path: .artifacts/ci/
+          if-no-files-found: ignore
+
+  # Literal `test` check context required by the branch ruleset. Fails
+  # closed: runs even when a leg fails/cancels and refuses anything but a
+  # successful matrix, then re-verifies the merged results itself.
+  test:
+    needs: test-shard
+    if: always()
+    env:
+      CI_TEST_PHASE: aggregate
+      CI_TEST_MACHINE_SHARDS: 3
+      CI_TEST_SHARD_ARTIFACTS: .artifacts/shards
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Fail unless every test shard succeeded
+        env:
+          TEST_SHARD_RESULT: ${{ needs.test-shard.result }}
+        run: |
+          echo "test-shard result: ${TEST_SHARD_RESULT}"
+          [ "${TEST_SHARD_RESULT}" = "success" ]
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download shard artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ci-test-shard-*
+          path: .artifacts/shards
+      - id: versions
+        run: |
+          source scripts/ci/versions.sh
+          echo "go_version=${CI_GO_VERSION}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ steps.versions.outputs.go_version }}
+      - name: test aggregate (merge, verify, coverage gates)
         run: bash scripts/ci/test.sh
       - name: Upload CI artifacts (incl. product-test.log and coverage)
         if: always()
