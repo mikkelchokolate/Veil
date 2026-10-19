@@ -931,7 +931,7 @@ func (s *managementState) hy2ClientOnlineSessions(ctx context.Context, settings 
 		// client, and trafficIdentityMap resolves migrated usernames before
 		// generic name aliases (#1225). No marker reads needed here — the
 		// stats fold only cares which binding a reported username serves.
-		identities := trafficIdentityMap(name, in.Profiles, allBindings, allClients, time.Now().Unix())
+		identities := hysteria2TrafficIdentityMap(name, in.Profiles, allBindings, allClients, time.Now().Unix())
 		counts, _, err := online(ctx, settings, in, identities)
 		if err != nil {
 			return 0, fmt.Errorf("online sessions for inbound %s: %w", name, err)

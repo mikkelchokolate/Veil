@@ -401,7 +401,7 @@ func (s *managementState) buildTrafficProvidersLocked() ([]client.TrafficProvide
 		if inbound.Protocol != "hysteria2" || !inbound.Enabled {
 			continue
 		}
-		bindings := trafficIdentityMap(inbound.Name, inbound.Profiles, allBindings, allClients, now)
+		bindings := hysteria2TrafficIdentityMap(inbound.Name, inbound.Profiles, allBindings, allClients, now)
 		endpoint := fmt.Sprintf("http://127.0.0.1:%d/traffic", inbound.Port)
 		secret := hysteria2.TrafficStatsSecret(settings, inbound)
 		// The unit authenticates with the trafficStats block of its published
