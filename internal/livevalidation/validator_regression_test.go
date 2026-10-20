@@ -45,14 +45,15 @@ func TestValidatorStillRejectsForeignPortOwner(t *testing.T) {
 	assertErrorIssue(t, response, "port_in_use")
 }
 
-// TestValidatorRejectsInternalReservedTCPPorts covers #1061 and #1191: the
-// loopback TCP ports Veil services bind (Hysteria2 traffic stats on 61000,
-// the Hysteria2 auth callback on 61001, managed Caddy admin on 2019) must be
+// TestValidatorRejectsInternalReservedTCPPorts covers #1061, #1191 and #1285:
+// the loopback TCP ports Veil services bind (Hysteria2 traffic stats on 61000,
+// the Hysteria2 auth callback on 61001, managed Caddy admin on 2019, the
+// parked acme.sh HTTP-01 listener on 44080) must be
 // rejected for public TCP inbounds regardless of whether the service
 // currently exists — a wildcard listener on any of them claims the loopback
 // address and wedges the service on first use.
 func TestValidatorRejectsInternalReservedTCPPorts(t *testing.T) {
-	for _, port := range []int{runtimeports.Hysteria2TrafficStatsPort, runtimeports.Hysteria2HTTPAuthPort, runtimeports.CaddyAdminPort} {
+	for _, port := range []int{runtimeports.Hysteria2TrafficStatsPort, runtimeports.Hysteria2HTTPAuthPort, runtimeports.CaddyAdminPort, runtimeports.ACMEHTTP01ParkedPort} {
 		response := testValidator().Validate(context.Background(), Request{
 			Inbounds: []model.Inbound{{
 				Name: "edge", Protocol: "mieru", Transport: "tcp", Port: port, Enabled: true, Password: "secret",
@@ -66,7 +67,7 @@ func TestValidatorRejectsInternalReservedTCPPorts(t *testing.T) {
 // the reserved loopback listeners are TCP-only, so a UDP inbound on the same
 // numeric port does not collide with them.
 func TestValidatorAllowsUDPOnReservedTCPPorts(t *testing.T) {
-	for _, port := range []int{runtimeports.Hysteria2TrafficStatsPort, runtimeports.Hysteria2HTTPAuthPort, runtimeports.CaddyAdminPort} {
+	for _, port := range []int{runtimeports.Hysteria2TrafficStatsPort, runtimeports.Hysteria2HTTPAuthPort, runtimeports.CaddyAdminPort, runtimeports.ACMEHTTP01ParkedPort} {
 		response := testValidator().Validate(context.Background(), Request{
 			Inbounds: []model.Inbound{{
 				Name: "edge", Protocol: "mieru", Transport: "udp", Port: port, Enabled: true, Password: "secret",
@@ -74,6 +75,21 @@ func TestValidatorAllowsUDPOnReservedTCPPorts(t *testing.T) {
 		})
 		if hasIssueCode(response, "reserved_internal_port") {
 			t.Fatalf("UDP %d must not collide with a TCP-only reserved port: %+v", port, response)
+		}
+	}
+}
+
+// TestReservedInternalTCPPortsMatchesRuntimeports keeps the live validator's
+// table in lockstep with runtimeports.ReservedInternalTCPPorts — a new Veil
+// loopback listener added there must be rejected here too (#1285).
+func TestReservedInternalTCPPortsMatchesRuntimeports(t *testing.T) {
+	want := runtimeports.ReservedInternalTCPPorts()
+	if len(reservedInternalTCPPorts) != len(want) {
+		t.Fatalf("reservedInternalTCPPorts has %d entries, runtimeports lists %v", len(reservedInternalTCPPorts), want)
+	}
+	for _, port := range want {
+		if _, ok := reservedInternalTCPPorts[port]; !ok {
+			t.Fatalf("reservedInternalTCPPorts is missing %d", port)
 		}
 	}
 }
