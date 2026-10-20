@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -17,6 +18,8 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 var ErrSessionNotFound = errors.New("session not found")
@@ -698,7 +701,7 @@ func (r *SessionRegistry) load() error {
 		return nil
 	}
 	snapshotLoaded := false
-	body, err := os.ReadFile(r.path)
+	body, err := readSessionStoreFile(r.path)
 	if err == nil {
 		var file sessionStoreFile
 		if err := json.Unmarshal(body, &file); err != nil {
@@ -804,7 +807,9 @@ func (r *SessionRegistry) storageHealthyLocked() error {
 	if r.path == "" {
 		return nil
 	}
-	info, err := os.Stat(r.path)
+	// Lstat: a symlink planted at the snapshot path reports as itself (not a
+	// regular file) instead of vouching for whatever it points at (#1284).
+	info, err := os.Lstat(r.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -821,7 +826,7 @@ func (r *SessionRegistry) persistUpsertLocked(record storedSession) error {
 	if r.path == "" {
 		return nil
 	}
-	if _, err := os.Stat(r.path); errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Lstat(r.path); errors.Is(err, os.ErrNotExist) {
 		return r.saveLocked()
 	} else if err != nil {
 		return err
@@ -846,12 +851,30 @@ func (r *SessionRegistry) appendJournalLocked(record sessionJournalRecord) error
 		return err
 	}
 	body = append(body, '\n')
-	if err := os.MkdirAll(filepath.Dir(r.path), 0o700); err != nil {
-		return err
-	}
-	file, err := os.OpenFile(r.journalPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	// The session directory (/var/lib/veil) is writable by the unprivileged
+	// service account, while root CLI paths (`veil admin set` →
+	// DeleteByUsername) append here too. Resolve the journal through a pinned
+	// directory handle with O_NOFOLLOW|O_NONBLOCK and fstat the descriptor, so
+	// a planted symlink cannot turn this append into a root create/append of
+	// an arbitrary file and a planted FIFO cannot hang the caller (#1284).
+	parent, err := openSessionStoreDir(r.path)
 	if err != nil {
 		return err
+	}
+	defer parent.Close()
+	journalName := filepath.Base(r.journalPath())
+	file, err := parent.AppendFileAt(journalName, 0o600)
+	if err != nil {
+		return fmt.Errorf("open session journal: %w", err)
+	}
+	info, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		_ = file.Close()
+		return fmt.Errorf("session journal %s is not a regular file", r.journalPath())
 	}
 	if _, err := file.Write(body); err != nil {
 		_ = file.Close()
@@ -861,13 +884,15 @@ func (r *SessionRegistry) appendJournalLocked(record sessionJournalRecord) error
 		_ = file.Close()
 		return err
 	}
+	// Size from the descriptor we just wrote, not a fresh path lookup.
+	info, statErr := file.Stat()
 	if err := file.Close(); err != nil {
 		return err
 	}
-	if err := syncSessionDirectory(r.path); err != nil {
+	if err := parent.File().Sync(); err != nil {
 		return err
 	}
-	if info, err := os.Stat(r.journalPath()); err == nil && info.Size() > 1024*1024 {
+	if statErr == nil && info.Size() > 1024*1024 {
 		if compactErr := r.compactJournalLocked(); compactErr != nil {
 			r.storageErr = compactErr
 		}
@@ -895,7 +920,7 @@ func (r *SessionRegistry) loadJournalLocked() error {
 	if r.path == "" {
 		return nil
 	}
-	body, err := os.ReadFile(r.journalPath())
+	body, err := readSessionStoreFile(r.journalPath())
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -995,17 +1020,26 @@ func (r *SessionRegistry) saveLocked() error {
 }
 
 func writeSessionFile(path string, body []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".sessions-*")
+	// Temp create, chmod and publish all go through one pinned directory
+	// handle: the chmod is an fchmod on the O_EXCL-created descriptor, so a
+	// temp name swapped for a symlink between write and chmod can no longer
+	// redirect a root chmod onto an arbitrary file (#1284).
+	parent, err := openSessionStoreDir(path)
 	if err != nil {
 		return err
 	}
-	tmpPath := tmp.Name()
+	defer parent.Close()
+	tmp, tmpName, err := parent.CreateTempAt(".sessions-", 0o600)
+	if err != nil {
+		return err
+	}
 	cleanup := func() {
 		_ = tmp.Close()
-		_ = os.Remove(tmpPath)
+		_ = parent.RemoveAt(tmpName)
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		cleanup()
+		return err
 	}
 	if _, err := tmp.Write(body); err != nil {
 		cleanup()
@@ -1016,24 +1050,74 @@ func writeSessionFile(path string, body []byte) error {
 		return err
 	}
 	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpPath)
+		_ = parent.RemoveAt(tmpName)
 		return err
 	}
-	if err := os.Chmod(tmpPath, 0o600); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
+	name := filepath.Base(path)
 	if runtime.GOOS == "windows" {
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			_ = os.Remove(tmpPath)
+		if err := parent.RemoveAt(name); err != nil && !errors.Is(err, os.ErrNotExist) {
+			_ = parent.RemoveAt(tmpName)
 			return err
 		}
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath)
+	if err := parent.RenameAt(tmpName, name); err != nil {
+		_ = parent.RemoveAt(tmpName)
 		return err
 	}
-	return syncSessionDirectory(path)
+	return parent.File().Sync()
+}
+
+// maxSessionStoreFileBytes bounds a snapshot/journal read. The journal is
+// compacted past 1 MiB and the snapshot is capped by the per-user session
+// bound, so anything near this size is not a file Veil wrote.
+const maxSessionStoreFileBytes = 64 << 20
+
+// openSessionStoreDir creates (when missing) and pins the directory holding
+// the session store. The directory itself is operator-configured (next to
+// state.json), so a symlinked root is followed once and then pinned; every
+// leaf below it is resolved relative to the handle without following.
+func openSessionStoreDir(path string) (*safefs.Dir, error) {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	return safefs.OpenDirFollow(dir)
+}
+
+// readSessionStoreFile reads the session snapshot or journal without
+// following a planted leaf symlink and without blocking on (or reading from)
+// a FIFO/device: the leaf is opened O_NOFOLLOW|O_NONBLOCK relative to the
+// pinned parent and must fstat as a regular file. A missing directory or leaf
+// reports os.ErrNotExist like os.ReadFile did (#1284).
+func readSessionStoreFile(path string) ([]byte, error) {
+	parent, err := safefs.OpenDirFollow(filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	defer parent.Close()
+	file, err := parent.OpenFileAt(filepath.Base(path))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("open session store file %s: %w", path, err)
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("session store file %s is not a regular file", path)
+	}
+	body, err := io.ReadAll(io.LimitReader(file, maxSessionStoreFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxSessionStoreFileBytes {
+		return nil, fmt.Errorf("session store file %s exceeds %d bytes", path, maxSessionStoreFileBytes)
+	}
+	return body, nil
 }
 
 func syncSessionDirectory(path string) error {

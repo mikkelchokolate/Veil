@@ -309,3 +309,38 @@ func TestAppendFileAtAppendsButRejectsSymlink(t *testing.T) {
 		t.Fatalf("symlink target modified: %q, %v", body, err)
 	}
 }
+
+// #1284: a FIFO planted at an append target must not park the privileged
+// writer until a reader appears. With no reader, O_WRONLY|O_NONBLOCK fails
+// ENXIO immediately; without O_NONBLOCK the open blocks forever.
+func TestAppendFileAtOnFIFODoesNotBlock(t *testing.T) {
+	root := t.TempDir()
+	if err := unix.Mkfifo(filepath.Join(root, "planted.fifo"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := OpenDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dir.Close()
+	done := make(chan error, 1)
+	go func() {
+		f, err := dir.AppendFileAt("planted.fifo", 0o600)
+		if err == nil {
+			_ = f.Close()
+		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, unix.ENXIO) {
+			t.Fatalf("AppendFileAt on reader-less FIFO error = %v, want ENXIO", err)
+		}
+	case <-time.After(2 * time.Second):
+		// Unblock the parked open so the goroutine does not leak past the test.
+		if reader, err := os.OpenFile(filepath.Join(root, "planted.fifo"), os.O_RDONLY|unix.O_NONBLOCK, 0); err == nil {
+			_ = reader.Close()
+		}
+		t.Fatal("AppendFileAt blocked on a FIFO — O_NONBLOCK missing")
+	}
+}
