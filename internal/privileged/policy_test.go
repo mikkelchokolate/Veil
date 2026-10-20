@@ -56,7 +56,7 @@ func TestPolicyRequiresEncryptedBackupBasename(t *testing.T) {
 
 func TestPolicyResolvesArtifactIDsInsideManagedRoots(t *testing.T) {
 	policy := testPolicy(t)
-	resolved, err := policy.ResolvePromotion(PromoteRequest{ArtifactIDs: []string{"mieru"}})
+	resolved, err := policy.ResolvePromotion(placeholderPromoteRequest("mieru"))
 	if err != nil {
 		t.Fatalf("resolve promotion: %v", err)
 	}
@@ -118,17 +118,15 @@ func TestPolicyResolvesOnlyRegisteredUpdateArtifacts(t *testing.T) {
 
 func TestPolicyResolvesManagedDynamicArtifactIDs(t *testing.T) {
 	policy := testPolicy(t)
-	resolved, err := policy.ResolvePromotion(PromoteRequest{
-		ArtifactIDs: []string{
-			"caddy/config.json",
-			"hysteria2/udp-edge.yaml",
-			"olcrtc/rtc-edge.yaml",
-			"mieru/server_config.json",
-			"sing-box/warp.json",
-			"rules/geoip.dat",
-			"rules/geosite.dat",
-		},
-	})
+	resolved, err := policy.ResolvePromotion(placeholderPromoteRequest(
+		"caddy/config.json",
+		"hysteria2/udp-edge.yaml",
+		"olcrtc/rtc-edge.yaml",
+		"mieru/server_config.json",
+		"sing-box/warp.json",
+		"rules/geoip.dat",
+		"rules/geosite.dat",
+	))
 	if err != nil {
 		t.Fatalf("resolve dynamic artifacts: %v", err)
 	}
@@ -163,7 +161,7 @@ func TestPolicyAllowsLegacyCaddyfileOnlyForRemoval(t *testing.T) {
 	}
 
 	for _, id := range []string{"caddy/legacy.Caddyfile", "caddy/orphan.json"} {
-		_, err := policy.ResolvePromotion(PromoteRequest{ArtifactIDs: []string{id}})
+		_, err := policy.ResolvePromotion(placeholderPromoteRequest(id))
 		assertOperationErrorCode(t, err, ErrorNotFound)
 	}
 

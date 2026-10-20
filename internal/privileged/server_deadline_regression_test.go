@@ -35,7 +35,7 @@ func TestServerExtendsDeadlineToOperationBudget(t *testing.T) {
 		Version:   ProtocolVersion,
 		RequestID: "long-promote",
 		Operation: OperationPromote,
-		Promote:   &PromoteRequest{ArtifactIDs: []string{"mieru"}},
+		Promote:   ptrPromoteRequest(placeholderPromoteRequest("mieru")),
 	}
 	raw, err := json.Marshal(request)
 	if err != nil {
@@ -85,7 +85,7 @@ func TestServerContextDeadlineStillBoundsOperation(t *testing.T) {
 		Version:   ProtocolVersion,
 		RequestID: "ctx-bound-promote",
 		Operation: OperationPromote,
-		Promote:   &PromoteRequest{ArtifactIDs: []string{"mieru"}},
+		Promote:   ptrPromoteRequest(placeholderPromoteRequest("mieru")),
 	}
 	raw, err := json.Marshal(request)
 	if err != nil {

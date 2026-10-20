@@ -298,6 +298,7 @@ func TestRollbackPromotedConfigsDoesNotRestartNewlyAddedInbound(t *testing.T) {
 	state.inbounds = []Inbound{{Name: "edge", Protocol: "hysteria2", Transport: "udp", Port: 443, Enabled: true}}
 	ctx := NewManagementApplyContext(state)
 
+	attestStagedConfigsForTest(t, state, staged)
 	liveFiles, _, records, err := ctx.promoteStagedConfigs([]string{staged})
 	if err != nil {
 		t.Fatalf("promote staged configs: %v", err)

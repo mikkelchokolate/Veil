@@ -10,7 +10,12 @@ import (
 	"strings"
 )
 
-func publicationArtifactDigests(stagingRoot, liveRoot string, writes, removals []string) (string, string, error) {
+// publicationArtifactDigests builds the expected and previous live manifests.
+// writeDigests maps every written artifact ID to the stage-time digest of
+// the bytes the panel rendered; the staging tree is not re-read, so the
+// expected manifest records what was validated, not whatever a veil-uid
+// writer left there since (#1269).
+func publicationArtifactDigests(writeDigests map[string]string, liveRoot string, writes, removals []string) (string, string, error) {
 	ids := append(append([]string(nil), writes...), removals...)
 	sort.Strings(ids)
 	expected := sha256.New()
@@ -20,9 +25,9 @@ func publicationArtifactDigests(stagingRoot, liveRoot string, writes, removals [
 			return "", "", fmt.Errorf("invalid publication artifact %q", id)
 		}
 		if publicationContains(writes, id) {
-			digest, err := publicationFileDigest(filepath.Join(stagingRoot, filepath.FromSlash(id)))
-			if err != nil {
-				return "", "", err
+			digest, ok := writeDigests[id]
+			if !ok || digest == "" {
+				return "", "", fmt.Errorf("publication artifact %q has no stage-time digest", id)
 			}
 			fmt.Fprintf(expected, "%s\x00%s\n", id, digest)
 		} else {

@@ -55,6 +55,10 @@ func TestPromotionLockCoversPreflightThroughPublicationAcrossProcesses(t *testin
 		"VEIL_PROMOTION_SOURCE="+source,
 		"VEIL_PROMOTION_DESTINATION="+destination,
 		"VEIL_PROMOTION_DONE="+done,
+		// The caller attests the bytes it will have staged once the lock is
+		// released: a preflight read that escaped the lock would see the
+		// earlier version and be refused on digest (#1269).
+		"VEIL_PROMOTION_EXPECTED_DIGEST="+promotionDigest([]byte("version-after-lock-release")),
 	)
 	if err := command.Start(); err != nil {
 		readyWrite.Close()
@@ -129,6 +133,7 @@ func TestPromotionLockSubprocessHelper(t *testing.T) {
 	}
 	result, err := executePromotionTransaction(os.Getenv("VEIL_PROMOTION_BACKUP_ROOT"), time.Now, "promotion", []ResolvedArtifact{{
 		ID: "caddy/config.json", Source: os.Getenv("VEIL_PROMOTION_SOURCE"), Destination: os.Getenv("VEIL_PROMOTION_DESTINATION"),
+		expectedDigest: os.Getenv("VEIL_PROMOTION_EXPECTED_DIGEST"),
 	}}, nil)
 	if err != nil {
 		t.Fatal(err)

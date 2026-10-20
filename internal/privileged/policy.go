@@ -1,6 +1,7 @@
 package privileged
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -95,6 +96,10 @@ type ResolvedArtifact struct {
 	// read descriptor-relative from the pinned promotion backup root, used
 	// instead of re-resolving Source by path (#1274).
 	sourceBody []byte
+	// expectedDigest is the caller-attested SHA-256 of the staged Source
+	// bytes (PromoteRequest.ArtifactDigests). The transaction refuses to
+	// publish a staged source whose bytes do not hash to it (#1269).
+	expectedDigest string
 }
 
 type ResolvedPromotion struct {
@@ -216,7 +221,7 @@ func (p Policy) ResolveJournal(request JournalRequest) (ResolvedJournal, error) 
 
 func (p Policy) ResolvePromotion(request PromoteRequest) (ResolvedPromotion, error) {
 	if request.RestoreBackupID != "" {
-		if len(request.ArtifactIDs) != 0 || len(request.RemoveArtifactIDs) != 0 ||
+		if len(request.ArtifactIDs) != 0 || len(request.RemoveArtifactIDs) != 0 || len(request.ArtifactDigests) != 0 ||
 			!isValidPromotionBackupID(request.RestoreBackupID) {
 			return ResolvedPromotion{}, newError(ErrorInvalidRequest, "invalid promotion restore request")
 		}
@@ -234,8 +239,45 @@ func (p Policy) ResolvePromotion(request PromoteRequest) (ResolvedPromotion, err
 	if len(artifacts) == 0 && len(removeArtifacts) == 0 {
 		return ResolvedPromotion{}, newError(ErrorInvalidRequest, "at least one artifact is required")
 	}
+	if err := bindStagedArtifactDigests(artifacts, request.ArtifactDigests); err != nil {
+		return ResolvedPromotion{}, err
+	}
 	return ResolvedPromotion{Artifacts: artifacts, RemoveArtifacts: removeArtifacts, FenceGeneration: request.Fence.Generation,
 		ValidateDestination: p.promotionDestinationAllowed}, nil
+}
+
+// bindStagedArtifactDigests attaches the caller's SHA-256 of every staged
+// write to its resolved artifact. The staging root is writable by the veil
+// uid, so path resolution alone says nothing about the bytes that will be
+// published: every staged write must carry exactly one well-formed digest,
+// and a digest naming anything other than a staged write is rejected rather
+// than ignored (#1269).
+func bindStagedArtifactDigests(artifacts []ResolvedArtifact, digests map[string]string) error {
+	if len(digests) != len(artifacts) {
+		return newError(ErrorInvalidRequest, "every staged artifact requires exactly one digest")
+	}
+	for index := range artifacts {
+		digest, ok := digests[artifacts[index].ID]
+		if !ok || !isPromotionDigest(digest) {
+			return newError(ErrorInvalidRequest, "staged artifact digest is missing or malformed")
+		}
+		artifacts[index].expectedDigest = digest
+	}
+	return nil
+}
+
+// isPromotionDigest reports whether value is a lowercase hex SHA-256, the
+// exact form promotionDigest produces.
+func isPromotionDigest(value string) bool {
+	if len(value) != sha256.Size*2 {
+		return false
+	}
+	for _, r := range value {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func (p Policy) promotionDestinationAllowed(id, destination string) bool {

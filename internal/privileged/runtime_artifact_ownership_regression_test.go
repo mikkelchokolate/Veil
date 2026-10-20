@@ -72,11 +72,11 @@ func TestPromotionPublishesProtocolArtifactReadableByVeilProxy(t *testing.T) {
 
 	executor := NewProductionExecutor(ProductionConfig{PromotionBackupRoot: filepath.Join(root, "backups")})
 	result, err := executor.Promote(context.Background(), ResolvedPromotion{
-		Artifacts: []ResolvedArtifact{{
+		Artifacts: attestStagedArtifacts(t, []ResolvedArtifact{{
 			ID:          "hysteria2/edge.yaml",
 			Source:      source,
 			Destination: destination,
-		}},
+		}}),
 	})
 	if err != nil {
 		t.Fatalf("promote: %v", err)

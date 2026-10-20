@@ -79,12 +79,14 @@ func TestPrivilegedApplyUsesLogicalArtifactIDsAndOpaqueRollback(t *testing.T) {
 	}
 	state := newManagementState(ServerInfo{Mode: "dev", ApplyRoot: root, Privileged: client})
 	context := NewManagementApplyContext(state)
+	attestStagedConfigsForTest(t, state, staged)
 	liveFiles, _, records, err := context.promoteStagedConfigs([]string{staged})
 	if err != nil {
 		t.Fatalf("promote staged configs: %v", err)
 	}
 	if !reflect.DeepEqual(client.promotions, []privileged.PromoteRequest{{
-		ArtifactIDs: []string{"caddy/config.json"},
+		ArtifactIDs:     []string{"caddy/config.json"},
+		ArtifactDigests: map[string]string{"caddy/config.json": sha256Hex([]byte("config"))},
 	}}) {
 		t.Fatalf("promotion requests=%+v", client.promotions)
 	}

@@ -74,18 +74,38 @@ func (m RoutingSourceMaterial) WithContext(ctx context.Context) RoutingSourceMat
 }
 
 func (m RoutingSourceMaterial) WriteGenerated() ([]string, error) {
+	written, _, err := m.WriteGeneratedWithDigests()
+	return written, err
+}
+
+// WriteGeneratedWithDigests publishes the routing files like WriteGenerated
+// and also returns the lowercase hex SHA-256 of the verified bytes it wrote,
+// keyed by written path. The digests come from memory, not from re-reading
+// the staged files, so a caller can attest exactly what it fetched and
+// verified even though the staging tree is writable by others (#1269).
+func (m RoutingSourceMaterial) WriteGeneratedWithDigests() ([]string, map[string]string, error) {
 	bodies := make(map[string][]byte, len(m.source.Files))
 	for _, file := range m.source.Files {
 		if !routingSourceNamePattern.MatchString(file.Name) || path.Base(file.Name) != file.Name {
-			return nil, fmt.Errorf("invalid routing source filename %q", file.Name)
+			return nil, nil, fmt.Errorf("invalid routing source filename %q", file.Name)
 		}
 		body, err := m.Fetch(file)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		bodies[file.Name] = body
 	}
-	return m.publishRoutingFiles(bodies)
+	written, err := m.publishRoutingFiles(bodies)
+	if err != nil {
+		return nil, nil, err
+	}
+	rulesRoot := filepath.Join(m.applyRoot, "generated", "rules")
+	digests := make(map[string]string, len(bodies))
+	for name, body := range bodies {
+		sum := sha256.Sum256(body)
+		digests[filepath.Join(rulesRoot, name)] = hex.EncodeToString(sum[:])
+	}
+	return written, digests, nil
 }
 
 type publishedRoutingFile struct {

@@ -185,7 +185,7 @@ func TestServerDispatchesAllOperations(t *testing.T) {
 		wantOK    bool
 	}{
 		{
-			name: "promote", operation: OperationPromote, payload: &PromoteRequest{ArtifactIDs: []string{"mieru"}},
+			name: "promote", operation: OperationPromote, payload: ptrPromoteRequest(placeholderPromoteRequest("mieru")),
 			setup: func(e *Executor, calls *int) {
 				e.Promote = func(context.Context, ResolvedPromotion) (PromoteResult, error) {
 					*calls++

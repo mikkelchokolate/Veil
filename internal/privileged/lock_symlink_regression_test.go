@@ -53,9 +53,9 @@ func TestPromotionLockRejectsSymlinkedLockFile(t *testing.T) {
 	}
 	source := filepath.Join(root, "staged.json")
 	writeFileWithParents(t, source, []byte("new"))
-	_, err := executePromotionTransaction(backupRoot, time.Now, "promotion", []ResolvedArtifact{{
+	_, err := executePromotionTransaction(backupRoot, time.Now, "promotion", attestStagedArtifacts(t, []ResolvedArtifact{{
 		ID: "cfg", Source: source, Destination: filepath.Join(root, "live.json"),
-	}}, nil)
+	}}), nil)
 	if err == nil {
 		t.Fatal("promotion followed a symlinked lock file")
 	}

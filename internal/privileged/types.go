@@ -93,10 +93,15 @@ type FenceToken struct {
 }
 
 type PromoteRequest struct {
-	ArtifactIDs       []string   `json:"artifactIds,omitempty"`
-	RemoveArtifactIDs []string   `json:"removeArtifactIds,omitempty"`
-	RestoreBackupID   string     `json:"restoreBackupId,omitempty"`
-	Fence             FenceToken `json:"fence"`
+	ArtifactIDs []string `json:"artifactIds,omitempty"`
+	// ArtifactDigests maps every ArtifactIDs entry to the lowercase hex
+	// SHA-256 of the bytes the panel rendered and validated. The staging root
+	// is writable by the veil uid, so the helper publishes a staged artifact
+	// only when the bytes it reads still hash to this value (#1269).
+	ArtifactDigests   map[string]string `json:"artifactDigests,omitempty"`
+	RemoveArtifactIDs []string          `json:"removeArtifactIds,omitempty"`
+	RestoreBackupID   string            `json:"restoreBackupId,omitempty"`
+	Fence             FenceToken        `json:"fence"`
 }
 
 type PromoteResult struct {
