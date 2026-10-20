@@ -40,6 +40,10 @@ var testHooks = struct {
 	openEntryAt    func(e *managedEntry) (*os.File, error)
 	mkdirEntryAt   func(dir *safefs.Dir, name string, mode os.FileMode) error
 	openDirEntryAt func(dir *safefs.Dir, name string) (*safefs.Dir, error)
+	// rootCrontab is root's crontab, scrubbed of legacy acme.sh entries by
+	// Prepare (#1245). Package tests replace it so they never touch the
+	// crontab of the machine running them.
+	rootCrontab RootCrontab
 }{
 	prepareAccountDeps: DefaultAccountDependencies,
 	lstat:              os.Lstat,
@@ -54,6 +58,7 @@ var testHooks = struct {
 	openEntryAt:        func(e *managedEntry) (*os.File, error) { return e.parent.OpenFileAt(e.name) },
 	mkdirEntryAt:       func(dir *safefs.Dir, name string, mode os.FileMode) error { return dir.MkdirAt(name, mode) },
 	openDirEntryAt:     func(dir *safefs.Dir, name string) (*safefs.Dir, error) { return dir.OpenDirAt(name) },
+	rootCrontab:        systemRootCrontab{},
 }
 
 // walkManagedDirHook is the test-only override for walkManagedDir; nil means
@@ -176,6 +181,14 @@ func DefaultAccountDependencies() AccountDependencies {
 }
 
 func Prepare(paths Paths) error {
+	if paths.EtcDir == "" || paths.VarDir == "" {
+		return fmt.Errorf("etc and var directories are required")
+	}
+	// Remove the pre-#1240 root cron job before anything else: it execs a
+	// script inside the service-writable VarDir as root every day (#1245).
+	if _, err := StripLegacyAcmeCron(testHooks.rootCrontab, paths.VarDir); err != nil {
+		return fmt.Errorf("remove legacy acme.sh cron entry: %w", err)
+	}
 	identity, err := EnsureAccount(testHooks.prepareAccountDeps())
 	if err != nil {
 		return err
@@ -358,6 +371,11 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 		if err := setOptionalFile(filepath.Join(paths.VarDir, name), 0o600, panel.UID, panel.GID); err != nil {
 			return err
 		}
+	}
+	// The pre-#1240 acme.sh home is dead state; keep the service uid from
+	// rewriting the script a legacy root cron job may still run (#1245).
+	if err := lockDownLegacyAcmeHome(paths.VarDir, paths.RootUID, paths.RootGID); err != nil {
+		return err
 	}
 	for _, dir := range []string{"backups", "promotion-backups", "migration-backups"} {
 		if err := applyBackupTreeOwnership(filepath.Join(paths.VarDir, dir), paths.RootUID, paths.RootGID); err != nil {
