@@ -182,3 +182,82 @@ func TestUninstallScriptRefusesGenericallyMarkedDir(t *testing.T) {
 		t.Fatalf("generic-marked dir content must survive: %v\n%s", statErr, out)
 	}
 }
+
+// TestUninstallScriptRefusesSymlinkOrDirMarker is the #1242 shell-side
+// regression: is_safe_state_dir used `[ -e "$dir/$marker" ]`, which follows a
+// symlink leaf, so an unmarked dir holding `veil.db -> <existing file>` passed
+// the guard and reached rm -rf. Markers must be regular non-symlink files —
+// a symlinked or directory-shaped marker name proves nothing.
+func TestUninstallScriptRefusesSymlinkOrDirMarker(t *testing.T) {
+	checkBash(t)
+	plants := map[string]func(t *testing.T, root, varDir string){
+		"symlink-to-file": func(t *testing.T, root, varDir string) {
+			target := filepath.Join(root, "hosts")
+			if err := os.WriteFile(target, []byte("127.0.0.1 localhost\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(target, filepath.Join(varDir, "veil.db")); err != nil {
+				t.Skipf("symlinks unsupported: %v", err)
+			}
+		},
+		"symlink-to-dir": func(t *testing.T, root, varDir string) {
+			if err := os.Symlink(root, filepath.Join(varDir, "state.key")); err != nil {
+				t.Skipf("symlinks unsupported: %v", err)
+			}
+		},
+		"directory": func(t *testing.T, root, varDir string) {
+			if err := os.Mkdir(filepath.Join(varDir, ".veil-managed"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	for kind, plant := range plants {
+		t.Run(kind, func(t *testing.T) {
+			root := t.TempDir()
+			installDir := filepath.Join(root, "bin")
+			etcDir := filepath.Join(root, "etc", "veil")
+			varDir := filepath.Join(root, "documents")
+			systemdDir := filepath.Join(root, "systemd")
+			for _, dir := range []string{installDir, etcDir, varDir, systemdDir} {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.WriteFile(filepath.Join(etcDir, "veil.env"), []byte("VEIL_API_TOKEN=x\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(varDir, "thesis.txt"), []byte("keep me"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			plant(t, root, varDir)
+			if err := os.WriteFile(filepath.Join(systemdDir, "veil.service"), []byte("[Service]\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			cmd := exec.Command("bash", "../../scripts/uninstall.sh",
+				"--install-dir", installDir,
+				"--etc-dir", etcDir,
+				"--var-dir", varDir,
+				"--systemd-dir", systemdDir,
+				"--yes",
+			)
+			cmd.Env = append(os.Environ(),
+				"VEIL_UNINSTALL_ALLOW_NONROOT=1",
+				"VEIL_VENDOR_SYSTEMD_DIRS="+filepath.Join(root, "vendor"),
+				"VEIL_SYSCTL_CONF="+filepath.Join(root, "sysctl.conf"),
+				"VEIL_CADDY_STATE_DIR="+filepath.Join(root, "caddy-state"),
+				"VEIL_MITA_STATE_DIR="+filepath.Join(root, "mita-state"),
+			)
+			out, err := cmd.CombinedOutput()
+			if err == nil {
+				t.Fatalf("uninstall must refuse a dir whose only marker is a %s:\n%s", kind, out)
+			}
+			if !strings.Contains(string(out), "Refusing to remove") {
+				t.Fatalf("expected a refusal explaining the guard, got:\n%s", out)
+			}
+			if _, statErr := os.Stat(filepath.Join(varDir, "thesis.txt")); statErr != nil {
+				t.Fatalf("unmarked directory content must survive: %v\n%s", statErr, out)
+			}
+		})
+	}
+}

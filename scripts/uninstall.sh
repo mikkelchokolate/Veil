@@ -143,8 +143,9 @@ print_leftover_plan() {
 # is_safe_state_dir gates operator-supplied dirs before rm -rf: a leftover
 # cleanup must never escalate an env/flag-supplied directory (VEIL_ETC_DIR,
 # --var-dir, ...) into wiping a system tree (issue #1025). A directory is
-# removable when it is absent/not a dir, carries a distinctive Veil marker,
-# has a Veil-managed basename, or is empty — anything else fails closed.
+# removable when it is absent/not a dir, carries a distinctive Veil marker
+# (a regular, non-symlink file — issue #1242), has a Veil-managed basename,
+# or is empty — anything else fails closed.
 #
 # The marker list is intentionally narrow (issue #1093): only names Veil
 # itself writes — the .veil-managed sentinel emitted by install/repair, the
@@ -164,8 +165,14 @@ is_safe_state_dir() {
   case "$base" in
     veil | caddy | mita | veil-* | veil.*) return 0 ;;
   esac
+  # Markers must be regular files in their own right (issue #1242): -e (and
+  # -f) follow a symlink leaf, so a planted `veil.db -> /etc/hosts` would
+  # otherwise bless a misdirected dir for rm -rf. Veil writes every marker as
+  # a plain file; symlinks, directories, FIFOs and devices never count.
   for marker in .veil-managed veil.env state.key backup.passphrase veil.db; do
-    [ -e "$dir/$marker" ] && return 0
+    if [ ! -L "$dir/$marker" ] && [ -f "$dir/$marker" ]; then
+      return 0
+    fi
   done
   # An empty directory holds nothing to lose — but a directory that cannot be
   # listed is unknown, not empty, so a failed ls must fail closed too.

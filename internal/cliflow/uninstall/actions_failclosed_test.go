@@ -161,3 +161,80 @@ func TestRemovePathRefusesFilesystemRoot(t *testing.T) {
 		t.Fatal("filesystem root must be refused")
 	}
 }
+
+// TestRemovePathRefusesNonRegularMarkers is the #1242 regression: the marker
+// check used os.Stat, which follows a symlink leaf, so an unmarked dir holding
+// `veil.db -> <any existing file>` was blessed for os.RemoveAll. A marker name
+// only proves ownership when it is a regular file in its own right — symlinks
+// (to files or dirs, dangling or not), directories and FIFOs must not bless.
+func TestRemovePathRefusesNonRegularMarkers(t *testing.T) {
+	host := t.TempDir()
+	target := filepath.Join(host, "hosts")
+	if err := os.WriteFile(target, []byte("127.0.0.1 localhost\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	targetDir := filepath.Join(host, "elsewhere")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, marker := range stateDirMarkers {
+		plants := map[string]func(path string) error{
+			"symlink-to-file":  func(path string) error { return os.Symlink(target, path) },
+			"symlink-to-dir":   func(path string) error { return os.Symlink(targetDir, path) },
+			"symlink-dangling": func(path string) error { return os.Symlink(filepath.Join(host, "missing"), path) },
+			"directory":        func(path string) error { return os.Mkdir(path, 0o755) },
+		}
+		for kind, plant := range plants {
+			t.Run(marker+"/"+kind, func(t *testing.T) {
+				dir := filepath.Join(t.TempDir(), "operator")
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, "thesis.txt"), []byte("keep me"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				if err := plant(filepath.Join(dir, marker)); err != nil {
+					t.Skipf("cannot plant %s on this platform: %v", kind, err)
+				}
+				called := false
+				actions := NewActions(nil, func(string) error {
+					called = true
+					return nil
+				})
+				err := actions.RemovePath(dir)
+				if err == nil {
+					t.Fatalf("%s marker %q must not bless %s for removal", kind, marker, dir)
+				}
+				if !strings.Contains(err.Error(), "not Veil-managed") {
+					t.Fatalf("error should explain the refusal: %v", err)
+				}
+				if called {
+					t.Fatal("file remover must not run for a refused path")
+				}
+			})
+		}
+	}
+	// The symlink target itself is untouched by the refused run.
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("symlink target must survive: %v", err)
+	}
+}
+
+// TestRemovePathAllowsRegularMarkerBesideDecoy keeps the #1242 fix from
+// over-refusing: one regular marker still blesses the tree even when another
+// marker name is a symlink.
+func TestRemovePathAllowsRegularMarkerBesideDecoy(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "elsewhere"), filepath.Join(dir, "veil.env")); err != nil {
+		t.Skipf("symlinks unsupported: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "veil.db"), []byte("sqlite"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureRemovablePath(dir); err != nil {
+		t.Fatalf("regular veil.db marker must still bless the tree: %v", err)
+	}
+}
