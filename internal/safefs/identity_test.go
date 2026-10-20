@@ -3,7 +3,6 @@
 package safefs
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,4 +63,4 @@ func TestFileIdentityRejectsForeignSys(t *testing.T) {
 
 type fakeInfo struct{ os.FileInfo }
 
-func (fakeInfo) Sys() any { return fmt.Sprint("not a stat") }
+func (fakeInfo) Sys() any { return "not a stat" }
