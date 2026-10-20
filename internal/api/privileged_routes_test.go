@@ -46,7 +46,10 @@ type recordingPrivilegedClient struct {
 	restartErr            error
 	stageUpdate           func(privileged.UpdateRequest) (privileged.UpdateResult, error)
 	reachableErr          error
-	err                   error
+	// serviceActionErr, when set, decides each ServiceAction outcome (after
+	// the request is recorded); otherwise err applies to every action.
+	serviceActionErr func(privileged.ServiceActionRequest) error
+	err              error
 }
 
 func (c *recordingPrivilegedClient) Reachable(context.Context) error {
@@ -235,6 +238,9 @@ func TestPrivilegedApplyHealthChecksTimeoutUnstableOlcrtc(t *testing.T) {
 
 func (c *recordingPrivilegedClient) ServiceAction(_ context.Context, request privileged.ServiceActionRequest) error {
 	c.serviceActions = append(c.serviceActions, request)
+	if c.serviceActionErr != nil {
+		return c.serviceActionErr(request)
+	}
 	return c.err
 }
 

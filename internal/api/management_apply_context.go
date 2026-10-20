@@ -361,10 +361,27 @@ func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []S
 		}
 		result := ctx.runPrivilegedServiceAction(runtime.Unit, privileged.ServiceAction(runtime.PromotedVerb))
 		if !result.Success && adminLoadErr != nil {
-			if result.Error == "" {
-				result.Error = fmt.Sprintf("caddy admin load failed: %v; systemd fallback failed", adminLoadErr)
+			// Both config-preserving paths missed the running Caddy. The
+			// expected case is the #1276 migration: a Caddy started from a
+			// pre-#1276 config still serves its admin API on loopback TCP,
+			// while the helper dials the admin Unix socket and `caddy
+			// reload` dials the socket named by the new config. A restart
+			// (the config was already validated before promotion) is the
+			// only way to reach the socket-bound config, so it runs as the
+			// last resort before the apply is failed.
+			reloadErr := result.Error
+			restart := ctx.runPrivilegedServiceAction(runtime.Unit, privileged.ServiceActionRestart)
+			if restart.Success {
+				result = restart
 			} else {
-				result.Error = fmt.Sprintf("caddy admin load failed: %v; systemd fallback failed: %s", adminLoadErr, result.Error)
+				result.Error = fmt.Sprintf("caddy admin load failed: %v; systemd fallback failed", adminLoadErr)
+				if reloadErr != "" {
+					result.Error += ": " + reloadErr
+				}
+				result.Error += "; restart fallback failed"
+				if restart.Error != "" {
+					result.Error += ": " + restart.Error
+				}
 			}
 		}
 		results = append(results, result)

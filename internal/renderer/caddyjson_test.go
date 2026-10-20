@@ -953,11 +953,16 @@ func TestRenderCaddyJSONAdminEndpoint(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected top-level admin block, got %T", cfg["admin"])
 	}
-	// #1213: admin.listen must sit on the dedicated 127.42.0.0/16 band that no
-	// sandboxed unit's IPAddressAllow covers — not 127.0.0.1, which
-	// veil-warp.service can dial.
-	if admin["listen"] != "127.42.0.1:2019" {
-		t.Errorf("admin.listen = %v, want 127.42.0.1:2019", admin["listen"])
+	// #1276: the admin API is unauthenticated, so it must not be a TCP
+	// listener any local uid can dial. It binds an owner-only (0200) Unix
+	// socket inside veil-caddy's StateDirectory instead.
+	if admin["listen"] != "unix//var/lib/caddy/admin.sock|0200" {
+		t.Errorf("admin.listen = %v, want unix//var/lib/caddy/admin.sock|0200", admin["listen"])
+	}
+	for key := range admin {
+		if key != "listen" {
+			t.Errorf("unexpected admin key %q: %v", key, admin)
+		}
 	}
 }
 

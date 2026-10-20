@@ -538,3 +538,39 @@ func TestRuntimeUnitsLockExactAddressFamiliesAndCapabilities(t *testing.T) {
 		}
 	}
 }
+
+// #1276: the Caddy admin API is an owner-only Unix socket in Caddy's
+// StateDirectory. Hysteria2, olcRTC and WARP run as the same veil-proxy uid,
+// so the socket mode alone does not keep them out; they mask the whole Caddy
+// state tree (which also holds Caddy's ACME account and TLS keys). The
+// leading "-" tolerates hosts where Caddy never ran. veil-caddy itself must
+// keep it writable, and the custom-path drop-ins must re-add the mask after
+// resetting the packaged InaccessiblePaths list.
+func TestProxySiblingUnitsMaskCaddyAdminSocket(t *testing.T) {
+	const mask = "InaccessiblePaths=-/var/lib/caddy\n"
+	units := RenderSystemdUnits(SystemdConfig{})
+	custom := SystemdConfig{EtcDir: "/opt/veil/etc", VarDir: "/opt/veil/var"}
+	for _, name := range []string{UnitHysteria2, UnitOlcrtc, UnitWarp} {
+		if !strings.Contains(units[name], mask) {
+			t.Fatalf("%s must mask the Caddy state dir holding the admin socket:\n%s", name, units[name])
+		}
+		dropIn, ok := RenderInstallDropIn(name, custom)
+		if !ok {
+			t.Fatalf("%s: expected install drop-in", name)
+		}
+		reset := strings.Index(dropIn, "InaccessiblePaths=\n")
+		if reset < 0 || !strings.Contains(dropIn[reset:], mask) {
+			t.Fatalf("%s drop-in must re-add the Caddy state mask after resetting InaccessiblePaths:\n%s", name, dropIn)
+		}
+	}
+	caddy := units[UnitCaddy]
+	if strings.Contains(caddy, "-/var/lib/caddy") {
+		t.Fatalf("%s must keep its own StateDirectory reachable:\n%s", UnitCaddy, caddy)
+	}
+	if !strings.Contains(caddy, "StateDirectory=caddy\n") {
+		t.Fatalf("%s must own StateDirectory=caddy for the admin socket:\n%s", UnitCaddy, caddy)
+	}
+	if dropIn, ok := RenderInstallDropIn(UnitCaddy, custom); ok && strings.Contains(dropIn, "/var/lib/caddy") {
+		t.Fatalf("%s drop-in must not mask its own StateDirectory:\n%s", UnitCaddy, dropIn)
+	}
+}

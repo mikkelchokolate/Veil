@@ -158,10 +158,13 @@ type ProductionConfig struct {
 	IPCertHomeDir string
 	// IssueIPCert is the issuance seam — production runs
 	// acmeip.IssueIPCert; tests substitute a stub.
-	IssueIPCert   func(context.Context, acmeip.IssueOptions) (acmeip.IssuedCert, error)
-	CaddyAdminURL string
-	HTTPClient    *http.Client
-	Now           func() time.Time
+	IssueIPCert func(context.Context, acmeip.IssueOptions) (acmeip.IssuedCert, error)
+	// CaddyAdminEndpoint is the managed Caddy Admin API endpoint, either a
+	// Caddy-style "unix/<path>" socket (the production default, #1276) or an
+	// http:// base URL.
+	CaddyAdminEndpoint string
+	HTTPClient         *http.Client
+	Now                func() time.Time
 }
 
 func DefaultProductionConfig(policy Policy, version string) ProductionConfig {
@@ -236,8 +239,8 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 		_ = recoverFirewallTransaction(ctx, config)
 		return baseRecovery(ctx)
 	}
-	if config.CaddyAdminURL == "" {
-		config.CaddyAdminURL = runtimeports.CaddyAdminEndpoint() + "/load"
+	if config.CaddyAdminEndpoint == "" {
+		config.CaddyAdminEndpoint = runtimeports.CaddyAdminEndpoint()
 	}
 	if config.HTTPClient == nil {
 		config.HTTPClient = &http.Client{Timeout: 10 * time.Second}
@@ -411,8 +414,7 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 			return runSyncCaddyCert(ctx, request, config)
 		},
 		CaddyLoad: func(ctx context.Context, request CaddyLoadRequest) error {
-			endpoint := strings.TrimSuffix(config.CaddyAdminURL, "/load")
-			client := caddyadmin.NewClient(endpoint)
+			client := caddyadmin.NewClient(config.CaddyAdminEndpoint)
 			client.HTTPClient = config.HTTPClient
 			return client.LoadConfigContext(ctx, request.Config)
 		},

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path"
 	"strings"
+
+	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 )
 
 const (
@@ -390,7 +392,7 @@ PrivateTmp=true
 IPAddressAllow=` + egressAllowHysteria2Unit + `
 IPAddressDeny=` + egressDenySystemd() + `
 InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
-
+` + caddyStateMaskLine + `
 [Install]
 WantedBy=multi-user.target
 `,
@@ -419,7 +421,7 @@ PrivateTmp=true
 IPAddressAllow=` + egressAllowOlcrtcUnit + `
 IPAddressDeny=` + egressDenySystemd() + `
 InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
-
+` + caddyStateMaskLine + `
 [Install]
 WantedBy=multi-user.target
 `,
@@ -462,7 +464,7 @@ UMask=0077
 IPAddressAllow=` + egressAllowWarpUnit + `
 IPAddressDeny=` + egressDenySystemd() + `
 InaccessiblePaths=/run/veil/helper.sock ` + varDir + `
-
+` + caddyStateMaskLine + `
 [Install]
 WantedBy=multi-user.target
 `,
@@ -605,6 +607,12 @@ func dropInUnitOverrides(name string, cfg SystemdConfig) string {
 	return "ConditionPathExists=\nConditionPathExists=" + systemdQuote(path.Join(cfg.EtcDir, "backup.passphrase")) + "\n"
 }
 
+// caddyStateMaskLine masks veil-caddy's StateDirectory (the owner-only Caddy
+// admin API socket plus Caddy's ACME account and TLS keys) from the protocol
+// units that share its veil-proxy uid, where the socket mode alone cannot
+// keep them out (#1276). The "-" prefix tolerates hosts where Caddy never ran.
+const caddyStateMaskLine = "InaccessiblePaths=-" + runtimeports.CaddyStateDir + "\n"
+
 // dropInInaccessiblePaths resets the packaged helper-socket/state mask and
 // re-points it at the configured VarDir. The packaged /var/lib/veil stays
 // masked alongside a custom VarDir: an abandoned tree can still hold panel
@@ -689,10 +697,12 @@ func dropInServiceOverrides(name string, cfg SystemdConfig) string {
 		b.WriteString("ExecStart=\n")
 		b.WriteString("ExecStart=" + systemdQuoteExec(cfg.HysteriaBinary) + " server --config " + systemdQuoteExecInstanceConfig(path.Join(cfg.EtcDir, "generated", "hysteria2", "%i.yaml")) + "\n")
 		b.WriteString(dropInInaccessiblePaths(cfg.VarDir))
+		b.WriteString(caddyStateMaskLine)
 	case UnitOlcrtc:
 		b.WriteString("ExecStart=\n")
 		b.WriteString("ExecStart=" + systemdQuoteExec(cfg.OlcrtcBinary) + " " + systemdQuoteExecInstanceConfig(path.Join(cfg.EtcDir, "generated", "olcrtc", "%i.yaml")) + "\n")
 		b.WriteString(dropInInaccessiblePaths(cfg.VarDir))
+		b.WriteString(caddyStateMaskLine)
 	case UnitWarp:
 		config := systemdQuoteExec(path.Join(cfg.EtcDir, "generated", "sing-box", "warp.json"))
 		singBoxBin := systemdQuoteExec(cfg.SingBoxBinary)
@@ -701,6 +711,7 @@ func dropInServiceOverrides(name string, cfg SystemdConfig) string {
 		b.WriteString("ExecReload=\n")
 		b.WriteString("ExecReload=" + singBoxBin + " check -c " + config + "\n")
 		b.WriteString(dropInInaccessiblePaths(cfg.VarDir))
+		b.WriteString(caddyStateMaskLine)
 	case UnitMieru:
 		mieruBin := systemdQuoteExec(cfg.MieruBinary)
 		mieruConfig := systemdQuoteExec(path.Join(cfg.EtcDir, "generated", "mieru", "server_config.json"))
