@@ -123,8 +123,6 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		var role string
 		var isCookieSession bool
 		var sessionToken string
-		var sessionBootstrap bool
-		var sessionSecondFactor bool
 
 		hasStaticToken := false
 		if opts.Token != "" && validAuthToken(r, opts.Token) {
@@ -142,48 +140,8 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 				}
 				sessionToken = cookie.Value
 				if sess, ok := state.sessionRegistry().Get(cookie.Value); ok {
-					username = sess.Username
-					role = sess.Role
-					isCookieSession = true
-					sessionBootstrap = sess.Bootstrap
-					sessionSecondFactor = sess.SecondFactor
+					username, role, isCookieSession = state.authorizeCookieSession(sessionToken, sess)
 				}
-			}
-		}
-
-		if isCookieSession {
-			state.mu.Lock()
-			matched := false
-			ownerFactorEnabled := false
-			for _, user := range state.users {
-				if user.Username == username {
-					role = user.Role
-					matched = true
-					// ANY armed second factor (TOTP or a registered passkey)
-					// requires the session mark, not TOTP alone — a
-					// passkey-only account must be equally protected (#1171).
-					ownerFactorEnabled = user.HasSecondFactor()
-					break
-				}
-			}
-			// A fallback-minted bootstrap session has no user row by design;
-			// it skips user-match revocation ONLY while the NaivePassword
-			// fallback precondition still holds — zero users, fallback
-			// configured, and the instance never provisioned (#1112). The
-			// moment a real account exists or the instance was ever
-			// provisioned, it is revoked like any orphaned session.
-			bootstrapValid := sessionBootstrap && username == "admin" &&
-				len(state.users) == 0 && state.settings.NaivePassword != "" &&
-				!state.usersProvisionedLocked()
-			state.mu.Unlock()
-			// Second factor, fail closed: once the owner has any factor armed
-			// (TOTP enabled or a passkey registered), a session without the
-			// second-factor mark — e.g. one minted before enrollment — is
-			// revoked rather than trusted. The pending_2fa cookie is never
-			// consulted here; only a verified session counts (#1172, #1171).
-			if (matched && ownerFactorEnabled && !sessionSecondFactor) || (!matched && !bootstrapValid) {
-				state.sessionRegistry().Delete(sessionToken)
-				username, role, isCookieSession = "", "", false
 			}
 		}
 
@@ -231,6 +189,9 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		ctx := r.Context()
 		ctx = context.WithValue(ctx, contextKeyUsername, username)
 		ctx = context.WithValue(ctx, contextKeyRole, role)
+		if isCookieSession {
+			ctx = context.WithValue(ctx, contextKeySessionToken, sessionToken)
+		}
 		r = r.WithContext(ctx)
 		next.ServeHTTP(w, r)
 	})
@@ -278,6 +239,11 @@ type contextKey string
 const (
 	contextKeyUsername contextKey = "username"
 	contextKeyRole     contextKey = "role"
+	// contextKeySessionToken carries the veil_session token that
+	// authenticated the request — set only when a cookie session (not the
+	// static API token or dev-anonymous) was the principal — so long-lived
+	// handlers can re-check it after the middleware returns (#1290).
+	contextKeySessionToken contextKey = "sessionToken"
 )
 
 func validAuthToken(r *http.Request, want string) bool {
@@ -303,4 +269,48 @@ func bearerToken(header string) string {
 		return ""
 	}
 	return strings.TrimSpace(header[len(scheme):])
+}
+
+// authorizeCookieSession applies the user-match, second-factor and bootstrap
+// rules to a session the registry still holds, revoking it when they fail,
+// and returns the principal's current username and role. authMiddleware runs
+// it on every request; long-lived SSE streams re-run it before every frame so
+// revocation reaches an already-open stream (#1290).
+func (state *managementState) authorizeCookieSession(sessionToken string, sess Session) (string, string, bool) {
+	username := sess.Username
+	role := sess.Role
+	state.mu.Lock()
+	matched := false
+	ownerFactorEnabled := false
+	for _, user := range state.users {
+		if user.Username == username {
+			role = user.Role
+			matched = true
+			// ANY armed second factor (TOTP or a registered passkey)
+			// requires the session mark, not TOTP alone — a
+			// passkey-only account must be equally protected (#1171).
+			ownerFactorEnabled = user.HasSecondFactor()
+			break
+		}
+	}
+	// A fallback-minted bootstrap session has no user row by design;
+	// it skips user-match revocation ONLY while the NaivePassword
+	// fallback precondition still holds — zero users, fallback
+	// configured, and the instance never provisioned (#1112). The
+	// moment a real account exists or the instance was ever
+	// provisioned, it is revoked like any orphaned session.
+	bootstrapValid := sess.Bootstrap && username == "admin" &&
+		len(state.users) == 0 && state.settings.NaivePassword != "" &&
+		!state.usersProvisionedLocked()
+	state.mu.Unlock()
+	// Second factor, fail closed: once the owner has any factor armed
+	// (TOTP enabled or a passkey registered), a session without the
+	// second-factor mark — e.g. one minted before enrollment — is
+	// revoked rather than trusted. The pending_2fa cookie is never
+	// consulted here; only a verified session counts (#1172, #1171).
+	if (matched && ownerFactorEnabled && !sess.SecondFactor) || (!matched && !bootstrapValid) {
+		state.sessionRegistry().Delete(sessionToken)
+		return "", "", false
+	}
+	return username, role, true
 }
