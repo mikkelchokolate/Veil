@@ -764,7 +764,7 @@ func TestRestorePromotedArtifactsHandlesMissingDestination(t *testing.T) {
 	root := t.TempDir()
 	destination := filepath.Join(root, "generated", "gone.json")
 	backupDir := filepath.Join(root, "backups", "20260605T120000.000000000Z")
-	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+	if err := os.MkdirAll(backupDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	manifest := promotionManifest{BackupID: "20260605T120000.000000000Z", Records: []promotionManifestRecord{

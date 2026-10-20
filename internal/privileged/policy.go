@@ -91,6 +91,10 @@ type ResolvedArtifact struct {
 	// SymlinkTarget is internal transaction metadata used only to restore a
 	// removed symlink without ever reading/copying its target contents.
 	SymlinkTarget string
+	// sourceBody is internal transaction metadata: a restore source already
+	// read descriptor-relative from the pinned promotion backup root, used
+	// instead of re-resolving Source by path (#1274).
+	sourceBody []byte
 }
 
 type ResolvedPromotion struct {
