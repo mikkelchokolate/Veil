@@ -182,7 +182,7 @@ export function ApplyJobDetailPage() {
 
 	const job = useQuery<ApplyJob>({
 		queryKey: ["apply", "jobs", jobId],
-		queryFn: () => apiFetch(`/api/apply/jobs/${jobId}`),
+		queryFn: () => apiFetch(`/api/apply/jobs/${encodeURIComponent(jobId)}`),
 		refetchInterval: 5000,
 	});
 
@@ -224,7 +224,7 @@ export function ApplyJobDetailPage() {
 				applyJob?: ApplyJob;
 				success?: boolean;
 				error?: string;
-			}>(`/api/apply/jobs/${jobId}/retry`, {
+			}>(`/api/apply/jobs/${encodeURIComponent(jobId)}/retry`, {
 				method: "POST",
 			});
 			// A 200 with success=false is an explicit execution failure — the

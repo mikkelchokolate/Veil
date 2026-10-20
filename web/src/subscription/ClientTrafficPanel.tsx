@@ -45,7 +45,7 @@ export function ClientTrafficPanel({ clientId }: { clientId: string }) {
 	const { t } = useI18n();
 	const traffic = useQuery<ClientTraffic>({
 		queryKey: ["traffic", clientId],
-		queryFn: () => apiFetch(`/api/v1/traffic/${clientId}`),
+		queryFn: () => apiFetch(`/api/v1/traffic/${encodeURIComponent(clientId)}`),
 		refetchInterval: 10000,
 	});
 

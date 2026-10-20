@@ -373,10 +373,13 @@ export function InboundsPage() {
 				return;
 			}
 			try {
-				const result = (await apiFetch(`/api/protocols/${form.protocol}/room`, {
-					method: "POST",
-					body: JSON.stringify({ provider }),
-				})) as { roomID?: string };
+				const result = (await apiFetch(
+					`/api/protocols/${encodeURIComponent(form.protocol)}/room`,
+					{
+						method: "POST",
+						body: JSON.stringify({ provider }),
+					},
+				)) as { roomID?: string };
 				if (!result.roomID) {
 					throw new Error("empty room response");
 				}

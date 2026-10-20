@@ -18,7 +18,8 @@ export function ClientConnectionLinks({ clientId }: { clientId: string }) {
 	const [copied, setCopied] = useState<string | null>(null);
 	const links = useQuery<{ items?: ClientLink[] } | ClientLink[]>({
 		queryKey: ["clients", clientId, "links"],
-		queryFn: () => apiFetch(`/api/v1/clients/${clientId}/links`),
+		queryFn: () =>
+			apiFetch(`/api/v1/clients/${encodeURIComponent(clientId)}/links`),
 	});
 	const items: ClientLink[] = Array.isArray(links.data)
 		? links.data
