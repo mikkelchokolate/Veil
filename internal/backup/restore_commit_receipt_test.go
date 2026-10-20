@@ -62,8 +62,8 @@ func writeTestRestoreJournal(t *testing.T, root, phase, stateDigest, keyDigest s
 	body, err := json.Marshal(restoreJournalDisk{
 		Version: 2, TransactionID: "tx-test", Phase: phase, WALCleanupPhase: "pending",
 		Files: []restoreJournalDiskFile{
-			{Name: "state.json", TargetID: "state.json", StagedName: ".restore-state-new", SafetyName: "state.json.pre-restore-test", HadPrevious: true, PreviousDigest: checksumHex([]byte("old-state")), IntendedDigest: stateDigest, Mode: 0o600, Phase: phase},
-			{Name: "state.key", TargetID: "state.key", StagedName: ".restore-key-new", SafetyName: "state.key.pre-restore-test", HadPrevious: true, PreviousDigest: checksumHex([]byte("old-key")), IntendedDigest: keyDigest, Mode: 0o600, Phase: phase},
+			{Name: "state.json", TargetID: "state.json", StagedName: ".veil-restore-state-new", SafetyName: "state.json.pre-restore-test", HadPrevious: true, PreviousDigest: checksumHex([]byte("old-state")), IntendedDigest: stateDigest, Mode: 0o600, Phase: phase},
+			{Name: "state.key", TargetID: "state.key", StagedName: ".veil-restore-key-new", SafetyName: "state.key.pre-restore-test", HadPrevious: true, PreviousDigest: checksumHex([]byte("old-key")), IntendedDigest: keyDigest, Mode: 0o600, Phase: phase},
 		},
 	})
 	if err != nil {

@@ -43,10 +43,14 @@ func TestCommittedRestoreRecoveryActuallyCleansWALAndSHMBeforeJournalRemoval(t *
 		Version: 2, TransactionID: "txn", Phase: "committed", IntendedRevision: 1,
 		WALCleanupPhase: "committed", FenceGeneration: 1,
 		Files: []restoreJournalFile{
-			{Name: "state.json", TargetPath: statePath, StagedPath: filepath.Join(root, ".state.stage"), SafetyPath: filepath.Join(root, ".state.safety"), IntendedDigest: backupChecksum(stateBody), Phase: "committed"},
-			{Name: "state.key", TargetPath: keyPath, StagedPath: filepath.Join(root, ".key.stage"), SafetyPath: filepath.Join(root, ".key.safety"), IntendedDigest: backupChecksum(keyBody), Phase: "committed"},
-			{Name: "veil.db", TargetPath: databasePath, StagedPath: filepath.Join(root, ".db.stage"), SafetyPath: filepath.Join(root, ".db.safety"), IntendedDigest: backupChecksum(databaseBody), Phase: "committed"},
+			{Name: "state.json", TargetPath: statePath, StagedPath: filepath.Join(root, ".veil-restore-state"), SafetyPath: filepath.Join(root, "state.json.pre-restore-wal"), IntendedDigest: backupChecksum(stateBody), Phase: "committed"},
+			{Name: "state.key", TargetPath: keyPath, StagedPath: filepath.Join(root, ".veil-restore-key"), SafetyPath: filepath.Join(root, "state.key.pre-restore-wal"), IntendedDigest: backupChecksum(keyBody), Phase: "committed"},
+			{Name: "veil.db", TargetPath: databasePath, StagedPath: filepath.Join(root, ".veil-restore-db"), SafetyPath: filepath.Join(root, "veil.db.pre-restore-wal"), IntendedDigest: backupChecksum(databaseBody), Phase: "committed"},
 		},
+	}
+	// Recovery only honours journals sealed by the writer (#1256).
+	if journal.sealKey, err = newRestoreJournalSealKey(root); err != nil {
+		t.Fatal(err)
 	}
 	if err := writeRestoreJournal(root, journal); err != nil {
 		t.Fatal(err)

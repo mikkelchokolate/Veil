@@ -54,3 +54,14 @@ func unsafeSafetyLinkCount(info os.FileInfo) bool {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	return !ok || stat.Nlink != 1
 }
+
+// untrustedRestoreJournalSeal reports whether the journal seal key could have
+// been read or planted by anyone but this process: it must be owned by the
+// effective uid and carry no group/other permission bits (#1256).
+func untrustedRestoreJournalSeal(info os.FileInfo) bool {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return true
+	}
+	return int(stat.Uid) != os.Geteuid() || info.Mode().Perm()&0o077 != 0
+}

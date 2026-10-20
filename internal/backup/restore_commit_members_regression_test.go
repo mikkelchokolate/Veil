@@ -21,9 +21,9 @@ func TestRestoreJournalRequiresExactUniqueMemberSet(t *testing.T) {
 	base := restoreJournalDisk{
 		Version: 2, TransactionID: "tx", Phase: "prepared", WALCleanupPhase: "pending",
 		Files: []restoreJournalDiskFile{
-			{Name: "state.json", TargetID: "state.json", StagedName: ".state.stage", SafetyName: ".state.old", IntendedDigest: digest, Phase: "prepared"},
-			{Name: "state.key", TargetID: "state.key", StagedName: ".key.stage", SafetyName: ".key.old", IntendedDigest: digest, Phase: "prepared"},
-			{Name: "veil.db", TargetID: "veil.db", StagedName: ".db.stage", SafetyName: ".db.old", IntendedDigest: digest, Phase: "prepared"},
+			{Name: "state.json", TargetID: "state.json", StagedName: ".veil-restore-state", SafetyName: "state.json.pre-restore-old", IntendedDigest: digest, Phase: "prepared"},
+			{Name: "state.key", TargetID: "state.key", StagedName: ".veil-restore-key", SafetyName: "state.key.pre-restore-old", IntendedDigest: digest, Phase: "prepared"},
+			{Name: "veil.db", TargetID: "veil.db", StagedName: ".veil-restore-db", SafetyName: "veil.db.pre-restore-old", IntendedDigest: digest, Phase: "prepared"},
 		},
 	}
 	for _, tc := range []struct {

@@ -17,3 +17,8 @@ func unsafeJournalHardLink(os.FileInfo) bool { return false }
 // unsafeSafetyLinkCount on Windows cannot observe link counts through
 // os.FileInfo.Sys(); the nofollow open still rejects swapped symlinks.
 func unsafeSafetyLinkCount(os.FileInfo) bool { return false }
+
+// untrustedRestoreJournalSeal: POSIX ownership and permission bits are not
+// observable through os.FileInfo on Windows; the pinned nofollow open and the
+// regular-file check still apply.
+func untrustedRestoreJournalSeal(os.FileInfo) bool { return false }

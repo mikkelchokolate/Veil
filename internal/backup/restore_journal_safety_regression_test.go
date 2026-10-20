@@ -173,20 +173,22 @@ func TestRestoreRollbackRefusesToUnlinkForeignTargets(t *testing.T) {
 	disk := restoreJournalDisk{
 		Version: 2, TransactionID: "planted", Phase: "prepared", WALCleanupPhase: "pending",
 		Files: []restoreJournalDiskFile{
-			{Name: "state.json", TargetID: "state.json", StagedName: ".restore-state-new", SafetyName: ".restore-state-old", IntendedDigest: backupChecksum([]byte("planted-state")), Phase: "prepared"},
-			{Name: "state.key", TargetID: "state.key", StagedName: ".restore-key-new", SafetyName: ".restore-key-old", IntendedDigest: backupChecksum([]byte("planted-key")), Phase: "prepared"},
+			{Name: "state.json", TargetID: "state.json", StagedName: ".veil-restore-state-new", SafetyName: "state.json.pre-restore-old", IntendedDigest: backupChecksum([]byte("planted-state")), Phase: "prepared"},
+			{Name: "state.key", TargetID: "state.key", StagedName: ".veil-restore-key-new", SafetyName: "state.key.pre-restore-old", IntendedDigest: backupChecksum([]byte("planted-key")), Phase: "prepared"},
 		},
 	}
-	payload, err := json.Marshal(disk)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, restoreTransactionJournalName), payload, 0o600); err != nil {
+	// Sealed with a valid key so the digest guard itself stays exercised
+	// behind journal authentication (#1256).
+	if err := os.WriteFile(filepath.Join(root, restoreTransactionJournalName), sealTestRestoreJournal(t, root, disk), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := RecoverInterruptedRestore(statePath, keyPath, ""); err == nil {
+	err := RecoverInterruptedRestore(statePath, keyPath, "")
+	if err == nil {
 		t.Fatal("planted hadPrevious:false journal was silently accepted")
+	}
+	if !strings.Contains(err.Error(), "foreign file") {
+		t.Fatalf("recovery failed for the wrong reason: %v", err)
 	}
 	for path, want := range map[string]string{statePath: "live-state", keyPath: "live-key"} {
 		got, err := os.ReadFile(path)
@@ -217,7 +219,7 @@ func TestRestoreRollbackRejectsPlantedSafetyLeaf(t *testing.T) {
 			record: func() restoreJournalDiskFile {
 				return restoreJournalDiskFile{
 					Name: "state.json", TargetID: "state.json",
-					StagedName: ".restore-state-new", SafetyName: ".restore-state-old",
+					StagedName: ".veil-restore-state-new", SafetyName: "state.json.pre-restore-old",
 					IntendedDigest: backupChecksum([]byte("planted-state")), Phase: "prepared",
 				}
 			},
@@ -228,7 +230,7 @@ func TestRestoreRollbackRejectsPlantedSafetyLeaf(t *testing.T) {
 			record: func() restoreJournalDiskFile {
 				return restoreJournalDiskFile{
 					Name: "state.json", TargetID: "state.json",
-					StagedName: ".restore-state-new", SafetyName: ".restore-state-old",
+					StagedName: ".veil-restore-state-new", SafetyName: "state.json.pre-restore-old",
 					HadPrevious: true, PreviousDigest: backupChecksum([]byte("forged-state")),
 					IntendedDigest: backupChecksum([]byte("planted-state")), Phase: "prepared",
 				}
@@ -240,7 +242,7 @@ func TestRestoreRollbackRejectsPlantedSafetyLeaf(t *testing.T) {
 			record: func() restoreJournalDiskFile {
 				return restoreJournalDiskFile{
 					Name: "state.json", TargetID: "state.json",
-					StagedName: ".restore-state-new", SafetyName: ".restore-state-old",
+					StagedName: ".veil-restore-state-new", SafetyName: "state.json.pre-restore-old",
 					HadPrevious: true, PreviousDigest: backupChecksum([]byte("forged-state")),
 					IntendedDigest: backupChecksum([]byte("planted-state")), Phase: "prepared",
 				}
@@ -261,33 +263,31 @@ func TestRestoreRollbackRejectsPlantedSafetyLeaf(t *testing.T) {
 				}
 			}
 			// The attacker drops a forged "previous" inode for state.json.
-			if err := os.WriteFile(filepath.Join(root, ".restore-state-old"), []byte("forged-state"), 0o600); err != nil {
+			if err := os.WriteFile(filepath.Join(root, "state.json.pre-restore-old"), []byte("forged-state"), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			if test.plantStaged {
 				// A staged leaf hashing to IntendedDigest counts as
 				// publish evidence only while the target is absent —
 				// beside a live target it is forgeable noise (#1219).
-				if err := os.WriteFile(filepath.Join(root, ".restore-state-new"), []byte("planted-state"), 0o600); err != nil {
+				if err := os.WriteFile(filepath.Join(root, ".veil-restore-state-new"), []byte("planted-state"), 0o600); err != nil {
 					t.Fatal(err)
 				}
 			}
 			disk := restoreJournalDisk{
 				Version: 2, TransactionID: "planted", Phase: "prepared", WALCleanupPhase: "pending",
 				Files: []restoreJournalDiskFile{
-					{Name: "state.key", TargetID: "state.key", StagedName: ".restore-key-new", SafetyName: ".restore-key-old", IntendedDigest: backupChecksum([]byte("planted-key")), Phase: "prepared"},
+					{Name: "state.key", TargetID: "state.key", StagedName: ".veil-restore-key-new", SafetyName: "state.key.pre-restore-old", IntendedDigest: backupChecksum([]byte("planted-key")), Phase: "prepared"},
 					test.record(),
 				},
 			}
-			payload, err := json.Marshal(disk)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(root, restoreTransactionJournalName), payload, 0o600); err != nil {
+			// Sealed with a valid key so the publish-evidence guard itself
+			// stays exercised behind journal authentication (#1256).
+			if err := os.WriteFile(filepath.Join(root, restoreTransactionJournalName), sealTestRestoreJournal(t, root, disk), 0o600); err != nil {
 				t.Fatal(err)
 			}
 
-			err = RecoverInterruptedRestore(statePath, keyPath, "")
+			err := RecoverInterruptedRestore(statePath, keyPath, "")
 			if err == nil {
 				t.Fatal("planted journal+safety pair was silently accepted")
 			}
