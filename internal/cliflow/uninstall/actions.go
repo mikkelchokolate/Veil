@@ -113,8 +113,9 @@ func veilManagedBaseName(base string) bool {
 // here verbatim, and without a guard `veil uninstall --var-dir /` would
 // escalate into rm -rf of a system tree (issue #1025). A path is removable
 // when it is absent or not a directory (RemoveAll then touches only the node),
-// when it carries a Veil-owned marker, when its basename is a Veil-managed
-// name, or when it is empty — anything else fails closed for manual review.
+// when it carries a Veil-owned marker (a regular, non-symlink file — issue
+// #1242), when its basename is a Veil-managed name, or when it is empty —
+// anything else fails closed for manual review.
 func ensureRemovablePath(path string) error {
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -135,7 +136,7 @@ func ensureRemovablePath(path string) error {
 		return nil
 	}
 	for _, marker := range stateDirMarkers {
-		if _, err := os.Stat(filepath.Join(clean, marker)); err == nil {
+		if isRegularMarker(filepath.Join(clean, marker)) {
 			return nil
 		}
 	}
@@ -145,6 +146,18 @@ func ensureRemovablePath(path string) error {
 		return nil
 	}
 	return fmt.Errorf("refusing to remove %s: directory is not Veil-managed (no marker found); remove it manually or pass --keep-data", path)
+}
+
+// isRegularMarker reports whether a marker entry is a regular file in its own
+// right. The check is Lstat-based on purpose (issue #1242): os.Stat follows a
+// symlink leaf, so a misdirected dir holding `veil.db -> /etc/hosts` (or any
+// other link to an existing node) would be "proven" Veil-managed and handed
+// to os.RemoveAll. Veil writes every marker as a plain file, so a symlink,
+// directory, FIFO, socket or device under a marker name is never proof of
+// ownership and must not bless the tree.
+func isRegularMarker(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.Mode().IsRegular()
 }
 
 func (a Actions) ReloadSystemdDaemon() error {
