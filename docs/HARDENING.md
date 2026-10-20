@@ -122,6 +122,14 @@ X-Veil-Token: <token>
   compatibility before writing.
 - Restore creates `.pre-restore-*` safety copies. Keep them until service
   health and all enabled Inbounds are verified.
+- The crash-recovery journal (`/var/lib/veil/.veil-restore-journal.json`)
+  lives in the service-writable state root, so recovery only honours a
+  journal sealed with the per-transaction key `/etc/veil/.veil-journal-seal.key`
+  (owner-only, retired when the transaction ends). A planted, tampered or
+  replayed journal is quarantined untouched instead of renaming or unlinking
+  `state.key`. A journal left by a pre-upgrade binary carries no seal and is
+  likewise quarantined; resolve such an interrupted restore by hand from the
+  `.pre-restore-*` copies.
 - Rotate state encryption with `veil admin rotate-key` after suspected key
   exposure or migration from an untrusted host, then export a new archive.
 

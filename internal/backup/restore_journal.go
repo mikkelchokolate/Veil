@@ -102,6 +102,9 @@ type restoreTransactionJournal struct {
 	WALCleanupPhase  string               `json:"walShmCleanupPhase"`
 	Files            []restoreJournalFile `json:"files"`
 	FenceGeneration  uint64               `json:"fenceGeneration"`
+	// sealKey authenticates every journal revision written for this
+	// transaction; it is never serialized (#1256).
+	sealKey []byte
 }
 
 type restoreJournalFile struct {
@@ -127,6 +130,9 @@ type restoreJournalDisk struct {
 	WALCleanupPhase  string                   `json:"walShmCleanupPhase"`
 	Files            []restoreJournalDiskFile `json:"files"`
 	FenceGeneration  uint64                   `json:"fenceGeneration"`
+	// Seal is the HMAC-SHA256 of the journal (with Seal cleared) under the
+	// per-transaction key kept beside state.key (#1256).
+	Seal string `json:"seal,omitempty"`
 }
 
 type restoreJournalDiskFile struct {
@@ -182,7 +188,15 @@ func RecoverInterruptedRestore(statePath, keyPath, databasePath string) error {
 	// The journal is attacker-influenced: anything that fails validation — or
 	// fails its own recovery — is quarantined once and reported, never
 	// replayed, so a malformed journal cannot wedge recovery forever (#1219).
+	sealDir := ""
+	if keyPath != "" {
+		sealDir = filepath.Dir(filepath.Clean(keyPath))
+	}
 	fail := func(cause error) error {
+		// A quarantined journal is never replayed, so its seal key is
+		// retired with it: a copy of the journal put back later must not
+		// verify (#1256).
+		retireRestoreJournalSealKey(sealDir)
 		if quarantineErr := quarantineRestoreJournal(rootDir); quarantineErr != nil {
 			return fmt.Errorf("%w (restore journal quarantine failed: %v)", cause, quarantineErr)
 		}
@@ -191,6 +205,20 @@ func RecoverInterruptedRestore(statePath, keyPath, databasePath string) error {
 	var disk restoreJournalDisk
 	if err := json.Unmarshal(body, &disk); err != nil {
 		return fail(fmt.Errorf("decode restore transaction journal: %w", err))
+	}
+	// Authenticate before trusting a single field: every digest in the
+	// journal is computable by anyone who can read the live targets, so only
+	// the writer's MAC — keyed by a secret the service uid can neither read
+	// nor plant — proves the journal belongs to a live transaction (#1256).
+	if sealDir == "" {
+		return fail(errors.New("restore journal cannot be authenticated without a key path"))
+	}
+	sealKey, err := loadRestoreJournalSealKey(sealDir)
+	if err != nil {
+		return fail(fmt.Errorf("restore journal is not authenticated: %w", err))
+	}
+	if err := verifyRestoreJournalSeal(sealKey, disk); err != nil {
+		return fail(err)
 	}
 	// The expected member set is derived from the journal's own member names:
 	// a legacy restore journal legitimately carries only state.json+state.key
@@ -204,6 +232,7 @@ func RecoverInterruptedRestore(statePath, keyPath, databasePath string) error {
 	if journal.Version != 2 || journal.TransactionID == "" || len(journal.Files) < 2 {
 		return fail(errors.New("invalid restore transaction journal"))
 	}
+	journal.sealKey = sealKey
 	dirs := restoreJournalDirs{}
 	defer dirs.Close()
 	if err := validateRestoreJournalMembers(dirs, journal.Files); err != nil {
@@ -243,7 +272,11 @@ func RecoverInterruptedRestore(statePath, keyPath, databasePath string) error {
 		if err := writeRestoreCommitReceipt(rootPath); err != nil {
 			return fail(err)
 		}
-		return removeRestoreJournal(rootDir)
+		if err := removeRestoreJournal(rootDir); err != nil {
+			return err
+		}
+		retireRestoreJournalSealKey(sealDir)
+		return nil
 	}
 	if err := rollbackRestoreJournal(dirs, rootPath, &journal); err != nil {
 		return fail(err)
@@ -334,6 +367,11 @@ func prepareRestoreJournalFenced(statePath string, staged []*stagedRestoreFile, 
 		}
 		journal.Files = append(journal.Files, record)
 	}
+	sealKey, err := newRestoreJournalSealKey(restoreJournalSealDir(journal.Files))
+	if err != nil {
+		return restoreTransactionJournal{}, err
+	}
+	journal.sealKey = sealKey
 	root := filepath.Dir(statePath)
 	if err := ClearRestoreCommitReceipt(root); err != nil {
 		return restoreTransactionJournal{}, err
@@ -553,8 +591,11 @@ func completeRestoreJournal(root, databasePath string, journal *restoreTransacti
 	}
 	defer rootDir.Close()
 	if err := removeRestoreJournal(rootDir); err != nil {
+		// The journal survives for idempotent startup finalization, so
+		// its seal key must survive with it.
 		return fmt.Errorf("%w: %v", errRestoreCommitted, err)
 	}
+	retireRestoreJournalSealKey(restoreJournalSealDir(journal.Files))
 	return nil
 }
 
@@ -704,7 +745,11 @@ func rollbackRestoreJournal(dirs restoreJournalDirs, root string, journal *resto
 	if err != nil {
 		return err
 	}
-	return removeRestoreJournal(rootDir)
+	if err := removeRestoreJournal(rootDir); err != nil {
+		return err
+	}
+	retireRestoreJournalSealKey(restoreJournalSealDir(journal.Files))
+	return nil
 }
 
 func writeRestoreJournal(root string, journal restoreTransactionJournal) error {
@@ -724,6 +769,14 @@ func writeRestoreJournal(root string, journal restoreTransactionJournal) error {
 			Mode: file.Mode, UID: file.UID, GID: file.GID, Phase: file.Phase,
 		})
 	}
+	if len(journal.sealKey) == 0 {
+		return errors.New("restore journal has no seal key")
+	}
+	seal, err := computeRestoreJournalSeal(journal.sealKey, disk)
+	if err != nil {
+		return err
+	}
+	disk.Seal = seal
 	body, err := json.Marshal(disk)
 	if err != nil {
 		return err
@@ -803,7 +856,7 @@ func decodeRestoreJournal(body []byte, expected map[string]string) (restoreTrans
 		if !ok || file.TargetID != file.Name {
 			return restoreTransactionJournal{}, fmt.Errorf("restore journal target mismatch for %s", file.Name)
 		}
-		if !safeRestoreLeaf(file.StagedName) || !safeRestoreLeaf(file.SafetyName) || file.StagedName == file.SafetyName {
+		if !restoreJournalStagedLeaf(file.StagedName) || !restoreJournalSafetyLeaf(file.SafetyName, filepath.Base(target)) || file.StagedName == file.SafetyName {
 			return restoreTransactionJournal{}, fmt.Errorf("restore journal has unsafe member names for %s", file.Name)
 		}
 		if !restoreJournalMemberPhases[file.Phase] {
@@ -847,6 +900,22 @@ func decodeRestoreJournal(body []byte, expected map[string]string) (restoreTrans
 
 func safeRestoreLeaf(name string) bool {
 	return name != "" && name != "." && name != ".." && filepath.Base(name) == name
+}
+
+// restoreJournalStagedLeaf admits only the ".veil-restore-*" temps a restore
+// actually stages — never the journal, the commit receipt, the member target
+// or any other sibling (#1256 addendum).
+func restoreJournalStagedLeaf(name string) bool {
+	return safeRestoreLeaf(name) && len(name) > len(".veil-restore-") && strings.HasPrefix(name, ".veil-restore-") &&
+		name != restoreTransactionJournalName && name != restoreCommitReceiptName
+}
+
+// restoreJournalSafetyLeaf admits only "<member>.pre-restore-<suffix>"
+// safeties of the member's own target, so a journal cannot name a sibling
+// secret such as veil.env as the "previous" inode (#1256 addendum).
+func restoreJournalSafetyLeaf(name, targetLeaf string) bool {
+	prefix := targetLeaf + ".pre-restore-"
+	return safeRestoreLeaf(name) && len(name) > len(prefix) && strings.HasPrefix(name, prefix)
 }
 
 func validateRestoreJournalMembers(dirs restoreJournalDirs, files []restoreJournalFile) error {
