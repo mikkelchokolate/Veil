@@ -168,11 +168,13 @@ func (d *Dir) CreateFileAt(name string, mode os.FileMode) (*os.File, error) {
 }
 
 // AppendFileAt opens child name relative to d for appending, creating it
-// when missing: O_WRONLY|O_CREAT|O_APPEND|O_NOFOLLOW. A symlinked leaf fails
-// ELOOP instead of redirecting a privileged append into an attacker-chosen
-// file (#1229).
+// when missing: O_WRONLY|O_CREAT|O_APPEND|O_NOFOLLOW|O_NONBLOCK. A symlinked
+// leaf fails ELOOP instead of redirecting a privileged append into an
+// attacker-chosen file (#1229). O_NONBLOCK keeps a planted FIFO from parking
+// the caller until a reader appears: with no reader the open fails ENXIO,
+// with one it succeeds and the caller's fstat must reject the type (#1284).
 func (d *Dir) AppendFileAt(name string, mode os.FileMode) (*os.File, error) {
-	fd, err := unix.Openat(int(d.file.Fd()), name, unix.O_WRONLY|unix.O_CREAT|unix.O_APPEND|unix.O_NOFOLLOW|unix.O_CLOEXEC, uint32(mode.Perm()))
+	fd, err := unix.Openat(int(d.file.Fd()), name, unix.O_WRONLY|unix.O_CREAT|unix.O_APPEND|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, uint32(mode.Perm()))
 	if err != nil {
 		return nil, err
 	}
