@@ -77,7 +77,9 @@ mode:
 ```bash
 sudo veil admin reset
 # or set your own account
-sudo veil admin set --username admin --password 'use-a-long-random-password' --role admin
+sudo veil admin set --username admin --role admin   # prompts for the password without echo
+# non-interactive: read it from stdin or a file instead of argv
+printf '%s\n' "$PANEL_PASSWORD" | sudo veil admin set --username admin --role admin --password-stdin
 ```
 
 When `veil serve` listens on a non-loopback address, it refuses to start unless
@@ -112,7 +114,7 @@ Passwords are auto-generated when omitted. You can replace them in the Panel.
 | `veil status` | Show managed service status (`--json` for machine output). |
 | `veil doctor` | Run host readiness checks (required/optional commands). |
 | `veil admin reset` | Reset the administrator with new random credentials. |
-| `veil admin set` | Set or update a user (`--username`, `--password`, `--role admin\|viewer`). |
+| `veil admin set` | Set or update a user (`--username`, `--role admin\|viewer`; password via interactive prompt, `--password-stdin` or `--password-file`; legacy `--password` is visible in the process list). |
 | `veil admin show` | List registered users and roles. |
 | `veil admin rotate-key` | Rotate the AES state key and re-encrypt state. |
 | `veil config validate` | Validate a Management state file without starting a server. |

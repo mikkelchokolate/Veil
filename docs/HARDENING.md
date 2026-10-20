@@ -42,7 +42,9 @@ other non-loopback address) requires both:
 
 1. API token auth from `--auth-token` or `VEIL_API_TOKEN`.
 2. User/session auth already present in Management state (`veil admin reset` or
-   `veil admin set --username admin --password ...`).
+   `veil admin set --username admin`, which prompts for the password; use
+   `--password-stdin` or `--password-file` for automation — `--password` puts
+   the secret in `/proc/<pid>/cmdline`, readable by every local user).
 
 It also requires native TLS and authenticated metrics. Plain public HTTP is
 refused before the server opens its socket. The

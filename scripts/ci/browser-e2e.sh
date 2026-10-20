@@ -83,13 +83,14 @@ start_panel() { # <name> <listen-args...>
   mkdir -p "${log_root}"
   ${SUDO} mkdir -p "${root}/state" "${root}/etc" "${root}/apply" "${root}/live"
   ${SUDO} chown -R veil:veil "${root}/state" "${root}/etc" "${root}/apply" "${root}/live"
-  run_as_veil env \
+  # --password-stdin keeps the credential out of /proc/<pid>/cmdline (#1261).
+  printf '%s\n' 'Browser-E2E-Password-123!' | run_as_veil env \
     VEIL_STATE_PATH="${root}/state/state.json" \
     VEIL_KEY_PATH="${root}/etc/state.key" \
     VEIL_APPLY_ROOT="${root}/apply" \
     VEIL_LIVE_ROOT="${root}/live" \
     VEIL_API_TOKEN=browser-e2e-token \
-    ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' \
+    ./dist/veil admin set --username browser-admin --password-stdin \
       --role admin --state "${root}/state/state.json" --key-path "${root}/etc/state.key"
   run_as_veil env \
     VEIL_STATE_PATH="${root}/state/state.json" \
@@ -109,7 +110,7 @@ ${SUDO} chown -R veil:veil /var/lib/veil /etc/veil
 openssl rand -hex 32 | ${SUDO} tee /etc/veil/backup.passphrase >/dev/null
 ${SUDO} chown veil:veil /etc/veil/backup.passphrase
 ${SUDO} chmod 600 /etc/veil/backup.passphrase
-run_as_veil ./dist/veil admin set --username browser-admin --password 'Browser-E2E-Password-123!' \
+printf '%s\n' 'Browser-E2E-Password-123!' | run_as_veil ./dist/veil admin set --username browser-admin --password-stdin \
   --role admin --state /var/lib/veil/state.json --key-path /etc/veil/state.key
 # Keep this ephemeral fixture bounded. Production intentionally defaults to
 # 16 GiB, while verify preflight conservatively reserves the configured policy

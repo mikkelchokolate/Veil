@@ -107,7 +107,7 @@ This command restores the state file, stages the generated files, restarts the a
 ### Panel Access Forbidden (401 Unauthorized)
 - **Symptom:** `/api/*`, `/healthz` on a public listener, or `/metrics` with authenticated metrics returns `401 Unauthorized`.
 - **Cause:** The request has no valid `VEIL_API_TOKEN`, bearer token, or `veil_session` cookie. Cookie-backed mutating requests may also be missing `X-CSRF-Token`.
-- **Resolution:** For API clients, view the correct token in `/etc/veil/veil.env` under `VEIL_API_TOKEN` and attach `Authorization: Bearer <token>` or `X-Veil-Token: <token>`. For browser access, sign in through the Panel login page. If no user exists, run `sudo veil admin reset` or `sudo veil admin set --username admin --password '...' --role admin`.
+- **Resolution:** For API clients, view the correct token in `/etc/veil/veil.env` under `VEIL_API_TOKEN` and attach `Authorization: Bearer <token>` or `X-Veil-Token: <token>`. For browser access, sign in through the Panel login page. If no user exists, run `sudo veil admin reset` or `sudo veil admin set --username admin --role admin` (prompts for the password; `--password-stdin` for scripts).
 
 ### Public Serve Refuses to Start
 - **Symptom:** `veil serve --listen 0.0.0.0:2096` exits before binding.

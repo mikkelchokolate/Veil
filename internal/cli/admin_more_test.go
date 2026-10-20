@@ -19,6 +19,7 @@ func TestAdminSetRejectsMissingPassword(t *testing.T) {
 	cmd := newFastRootCommand("test")
 	cmd.SetOut(os.Stdout)
 	cmd.SetErr(os.Stderr)
+	cmd.SetIn(strings.NewReader(""))
 	cmd.SetArgs([]string{
 		"admin", "set",
 		"--state", filepath.Join(t.TempDir(), "state.json"),
@@ -26,7 +27,7 @@ func TestAdminSetRejectsMissingPassword(t *testing.T) {
 	})
 
 	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "--password is required") {
+	if err == nil || !strings.Contains(err.Error(), "password is required") || !strings.Contains(err.Error(), "--password-stdin") {
 		t.Fatalf("expected missing password error, got %v", err)
 	}
 }

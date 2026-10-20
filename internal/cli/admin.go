@@ -131,15 +131,26 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 	var customUsername string
 	var customPassword string
 	var customRole string
+	var customPasswordStdin bool
+	var customPasswordFile string
 
 	setCmd := &cobra.Command{
 		Use:   "set",
 		Short: "Set or update custom administrative credentials",
+		Long: "Set or update a Panel user. The password is read from --password-stdin,\n" +
+			"--password-file, or an interactive no-echo prompt when standard input is a\n" +
+			"terminal. --password still works but exposes the password in the process list.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if customPassword == "" {
-				return fmt.Errorf("--password is required")
+			password, err := resolveAdminPassword(adminPasswordSource{
+				argv:     customPassword,
+				argvSet:  cmd.Flags().Changed("password"),
+				useStdin: customPasswordStdin,
+				file:     customPasswordFile,
+			}, cmd.InOrStdin(), cmd.ErrOrStderr())
+			if err != nil {
+				return err
 			}
-			if err := api.ValidatePanelPassword(customPassword); err != nil {
+			if err := api.ValidatePanelPassword(password); err != nil {
 				return err
 			}
 			roleFlagSet := cmd.Flags().Changed("role")
@@ -155,7 +166,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 			resolvedState, _ := env.StatePath(statePath)
 			resolvedKey, _ := env.KeyPath(keyPath)
 
-			hashed, err := hasher.Hash([]byte(customPassword))
+			hashed, err := hasher.Hash([]byte(password))
 			if err != nil {
 				return fmt.Errorf("hash password: %w", err)
 			}
@@ -227,7 +238,9 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 	}
 
 	setCmd.Flags().StringVar(&customUsername, "username", "", "username to set or update; defaults to the first administrator in state")
-	setCmd.Flags().StringVar(&customPassword, "password", "", "custom password to set (required)")
+	setCmd.Flags().StringVar(&customPassword, "password", "", "password to set; deprecated: visible to every local user via the process list, prefer --password-stdin, --password-file or the interactive prompt")
+	setCmd.Flags().BoolVar(&customPasswordStdin, "password-stdin", false, "read the password from standard input (one line)")
+	setCmd.Flags().StringVar(&customPasswordFile, "password-file", "", "read the password from a regular file (one line; symlinks are refused)")
 	setCmd.Flags().StringVar(&customRole, "role", "admin", "role of the user (admin or viewer)")
 
 	showCmd := &cobra.Command{
