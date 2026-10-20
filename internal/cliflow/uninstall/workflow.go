@@ -30,6 +30,11 @@ var defaultVendorSystemdDirs = []string{"/lib/systemd/system", "/usr/lib/systemd
 // prefix, and uninstall must match it (issue #375).
 var legacyInstanceUnitGlobs = []string{"veil-caddy@*.service"}
 
+// firewallPlanLine describes the UFW cleanup in the uninstall plan. The
+// management SSH allow survives so an active UFW does not lock the operator
+// out (#1289).
+const firewallPlanLine = `UFW allow rules commented "Veil …" (panel, proxy ports, ACME challenge); "Veil management SSH" is kept`
+
 type Options struct {
 	DryRun        bool
 	Yes           bool
@@ -59,6 +64,12 @@ type Dependencies struct {
 	ServiceStopper  func(string) error
 	FileRemover     func(string) error
 	SystemdReloader func() error
+	// FirewallCleaner deletes Veil-managed UFW allow rules (every "Veil …"
+	// comment except the management SSH allow) and returns the deleted
+	// targets. It runs only on a full removal: --keep-data keeps the rules so
+	// a reinstall that reuses the configuration keeps its ports open
+	// (#1289). Nil skips the step.
+	FirewallCleaner func() ([]string, error)
 }
 
 func Run(opts Options, out io.Writer, errOut io.Writer, deps Dependencies) error {
@@ -88,6 +99,18 @@ func Run(opts Options, out io.Writer, errOut io.Writer, deps Dependencies) error
 	for _, svc := range TemplateInstanceUnits(opts) {
 		if err := deps.ServiceStopper(svc); err != nil {
 			warn("service %s: %v", svc, err)
+		}
+	}
+	if !opts.PreservesData() && deps.FirewallCleaner != nil {
+		// Services are already stopped, so nothing Veil-managed listens on
+		// these ports any more. Leaving the allows would expose whatever
+		// binds them next (#1289).
+		removed, err := deps.FirewallCleaner()
+		for _, target := range removed {
+			fmt.Fprintf(out, "Removed Veil firewall rule %s\n", target)
+		}
+		if err != nil {
+			warn("firewall: %v", err)
 		}
 	}
 	for _, path := range Paths(opts) {
@@ -133,6 +156,13 @@ func Plan(opts Options) string {
 		for _, path := range stateDataPaths(opts) {
 			b.WriteString(fmt.Sprintf("  - %s\n", path))
 		}
+	}
+	if opts.PreservesData() {
+		b.WriteString("Preserved firewall rules:\n")
+		b.WriteString("  - Veil-managed UFW allow rules (kept with --keep-data)\n")
+	} else {
+		b.WriteString("Remove firewall rules:\n")
+		b.WriteString("  - " + firewallPlanLine + "\n")
 	}
 	b.WriteString("Remove systemd units:\n")
 	for _, path := range SystemdUnitPaths(opts) {

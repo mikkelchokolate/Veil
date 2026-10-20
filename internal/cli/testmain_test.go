@@ -30,5 +30,7 @@ func TestMain(m *testing.M) {
 		}
 		return nil
 	}
+	// Uninstall tests must never run the host's real ufw (#1289).
+	uninstallFirewallCleaner = func() ([]string, error) { return nil, nil }
 	os.Exit(m.Run())
 }

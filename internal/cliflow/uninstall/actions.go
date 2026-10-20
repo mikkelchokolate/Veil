@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/firewall"
 	veilruntime "github.com/mikkelchokolate/Veil/internal/runtime"
 )
 
@@ -37,7 +38,19 @@ var defaultActions = func() Actions {
 
 func DefaultDependencies() Dependencies {
 	actions := defaultActions()
-	return Dependencies{ServiceStopper: actions.StopAndDisableService, FileRemover: actions.RemovePath, SystemdReloader: actions.ReloadSystemdDaemon}
+	return Dependencies{ServiceStopper: actions.StopAndDisableService, FileRemover: actions.RemovePath, SystemdReloader: actions.ReloadSystemdDaemon, FirewallCleaner: actions.RemoveManagedFirewallRules}
+}
+
+// RemoveManagedFirewallRules deletes the Veil-managed UFW rules through the
+// default command runner (#1289).
+func RemoveManagedFirewallRules() ([]string, error) {
+	return defaultActions().RemoveManagedFirewallRules()
+}
+
+// RemoveManagedFirewallRules deletes every Veil-managed UFW rule except the
+// management SSH allow. Hosts without ufw are a no-op.
+func (a Actions) RemoveManagedFirewallRules() ([]string, error) {
+	return firewall.NewUFWApplierWithRunner(a.runner).RemoveManagedRules()
 }
 
 func StopAndDisableService(service string) error {

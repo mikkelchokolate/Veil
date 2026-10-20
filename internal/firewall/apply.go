@@ -145,6 +145,62 @@ func (a UFWApplier) PruneStaleManagedRules(desired []Rule) (int, error) {
 	return len(stale), nil
 }
 
+// IsManagementSSHComment reports whether a Veil-managed rule is the
+// management SSH allow. Uninstall keeps exactly this rule: deleting it from an
+// active UFW would cut the operator's own session (#1289).
+func IsManagementSSHComment(comment string) bool {
+	return strings.TrimSpace(comment) == "Veil management SSH"
+}
+
+// RemoveManagedRules deletes every Veil-managed ufw rule except the
+// management SSH allow — the uninstall counterpart of PruneStaleManagedRules
+// with an empty desired set, except that ACME challenge rules go too, since
+// nothing Veil-managed is left to issue certificates (#1289). It never enables
+// or disables UFW. A host without ufw installed is a no-op. It returns the
+// deleted targets in sorted order; on a delete failure it still attempts the
+// remaining rules and reports every failure.
+func (a UFWApplier) RemoveManagedRules() ([]string, error) {
+	out := a.runUFW(15*time.Second, "status")
+	if out.NotFound {
+		return nil, nil
+	}
+	if out.Err != nil || out.TimedOut {
+		return nil, fmt.Errorf("read ufw status: %v (output: %s)", out.Err, out.Output)
+	}
+	snap, err := parseUFWStatus(out.Output)
+	if err != nil {
+		return nil, fmt.Errorf("parse ufw status: %w", err)
+	}
+	targets := make([]string, 0)
+	for target, comment := range snap.Rules {
+		if !IsVeilManagedComment(comment) || IsManagementSSHComment(comment) {
+			continue
+		}
+		targets = append(targets, target)
+	}
+	sort.Strings(targets)
+	removed := make([]string, 0, len(targets))
+	var failures []string
+	for _, target := range targets {
+		del := a.runUFW(15*time.Second, "delete", "allow", target)
+		if del.Err != nil {
+			failures = append(failures, fmt.Sprintf("delete %s: %v (output: %s)", target, del.Err, strings.TrimSpace(del.Output)))
+			continue
+		}
+		removed = append(removed, target)
+	}
+	if len(removed) > 0 && snap.Active {
+		reload := a.runUFW(15*time.Second, "reload")
+		if reload.Err != nil {
+			failures = append(failures, fmt.Sprintf("reload ufw: %v (output: %s)", reload.Err, strings.TrimSpace(reload.Output)))
+		}
+	}
+	if len(failures) > 0 {
+		return removed, fmt.Errorf("remove Veil firewall rules: %s", strings.Join(failures, "; "))
+	}
+	return removed, nil
+}
+
 // UFWRulesFromResponses converts display-oriented rule responses into ufw commands.
 func UFWRulesFromResponses(responses []RuleResponse) []Rule {
 	rules := make([]Rule, 0, len(responses))
