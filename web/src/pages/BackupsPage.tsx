@@ -4,6 +4,7 @@ import {
 	ApiError,
 	apiFetch,
 	apiUrl,
+	assertSameOriginRedirect,
 	mutationErrorMessage,
 	notifyUnauthorized,
 } from "../api/fetcher";
@@ -96,7 +97,7 @@ export function BackupsPage() {
 		queryFn: async () => {
 			try {
 				return await apiFetch<RestoreJob>(
-					`/api/backup-restore-jobs/${activeJob?.id}`,
+					`/api/backup-restore-jobs/${encodeURIComponent(activeJob?.id ?? "")}`,
 				);
 			} catch (err) {
 				if (
@@ -270,6 +271,9 @@ export function BackupsPage() {
 			const res = await fetch(apiUrl(path), {
 				credentials: "same-origin",
 			});
+			// #1279: same cross-origin-redirect rejection as apiFetch, so a
+			// redirect-delivered foreign body never becomes the saved archive.
+			assertSameOriginRedirect(res);
 			if (!res.ok) {
 				notifyUnauthorized(path, res.status);
 				throw new Error(`download failed: ${res.status}`);

@@ -85,6 +85,46 @@ describe("apiFetch request policy", () => {
 		}
 	});
 
+	// #1279: a decoded route param like "foo/../users" interpolated into an
+	// API path must not let URL normalization retarget another endpoint.
+	it("rejects dot-segment and backslash path traversal", () => {
+		for (const value of [
+			"/api/v1/clients/foo/../users",
+			"/api/v1/clients/../users",
+			"/api/v1/clients/./x",
+			"/api/v1/clients/%2e%2E/users",
+			"/api/v1/clients/.%2e/users",
+			"/api/v1/clients/..",
+			"/api/v1/clients/foo\\..\\users",
+			"/api/v1/clients/foo%5c..%5cusers",
+		]) {
+			expect(() => fetcher.apiUrl(value), value).toThrow(
+				/dot segments|backslash/i,
+			);
+		}
+	});
+
+	it("still accepts encoded params and dots inside segments or the query", () => {
+		for (const value of [
+			`/api/v1/clients/${encodeURIComponent("foo/../users")}`,
+			"/api/backups/veil..2026.enc/download",
+			"/api/backups/.hidden.enc/download",
+			"/api/v1/clients?q=../x",
+			"/api/v1/clients#..",
+		]) {
+			expect(fetcher.apiUrl(value)).toBe(value);
+		}
+	});
+
+	it("refuses a traversal path before any request is sent", async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(
+			fetcher.apiFetch("/api/v1/clients/foo/../users"),
+		).rejects.toThrow(/dot segments/i);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it("honors a per-request timeout and does not forward it to fetch", async () => {
 		vi.useFakeTimers();
 		const fetchMock = vi.fn((_url: string, options?: RequestInit) => {

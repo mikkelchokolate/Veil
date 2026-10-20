@@ -22,7 +22,12 @@ const fetcherMocks = vi.hoisted(() => ({
 	isAdmin: { value: true },
 }));
 
-vi.mock("../api/fetcher", () => ({
+vi.mock("../api/fetcher", async () => ({
+	// #1279: the real redirect assertion, so the download test proves the
+	// raw blob fetch rejects a cross-origin redirect like apiFetch does.
+	assertSameOriginRedirect: (
+		await vi.importActual<typeof import("../api/fetcher")>("../api/fetcher")
+	).assertSameOriginRedirect,
 	ApiError: class ApiError extends Error {
 		status: number;
 		body: unknown;
@@ -613,6 +618,58 @@ describe("BackupsPage", () => {
 		expect(
 			await screen.findByText(/download failed: 401/i),
 		).toBeInTheDocument();
+	});
+
+	// #1279: the raw blob download must apply apiFetch's cross-origin
+	// redirect rejection — a redirect-delivered foreign body must never be
+	// handed to the operator as the downloaded archive.
+	it("rejects a cross-origin redirected download instead of saving it", async () => {
+		fetcherMocks.apiFetch.mockResolvedValue({
+			items: [
+				{
+					name: "veil.enc",
+					size: 42,
+					createdAt: "2026-08-17T03:39:09Z",
+					encrypted: true,
+				},
+			],
+		});
+		const redirected = new Response("attacker-body");
+		Object.defineProperty(redirected, "redirected", { value: true });
+		Object.defineProperty(redirected, "url", {
+			value: "https://attacker.example/evil.enc",
+		});
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(redirected));
+		const createObjectURL = vi.fn(() => "blob:backup");
+		vi.stubGlobal(
+			"URL",
+			class extends URL {
+				static createObjectURL = createObjectURL;
+				static revokeObjectURL() {}
+			},
+		);
+		const click = vi
+			.spyOn(HTMLAnchorElement.prototype, "click")
+			.mockImplementation(() => {});
+
+		const queryClient = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={queryClient}>
+				<I18nProvider>
+					<BackupsPage />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+
+		fireEvent.click(await screen.findByRole("button", { name: "Download" }));
+
+		expect(
+			await screen.findByText(/cross-origin api redirect rejected/i),
+		).toBeInTheDocument();
+		expect(createObjectURL).not.toHaveBeenCalled();
+		expect(click).not.toHaveBeenCalled();
 	});
 
 	// #697: a live create response can carry a warning (e.g. prune failure)

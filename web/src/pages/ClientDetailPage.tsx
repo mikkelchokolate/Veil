@@ -224,7 +224,7 @@ export function ClientDetailPage() {
 
 	const client = useQuery<ClientDetail>({
 		queryKey: ["clients", clientId],
-		queryFn: () => apiFetch(`/api/v1/clients/${clientId}`),
+		queryFn: () => apiFetch(`/api/v1/clients/${encodeURIComponent(clientId)}`),
 	});
 
 	const inbounds = useQuery<{ items?: InboundOption[] } | InboundOption[]>({
@@ -260,7 +260,8 @@ export function ClientDetailPage() {
 
 	const audit = useQuery<{ items?: AuditEntry[] } | AuditEntry[]>({
 		queryKey: ["clients", clientId, "audit"],
-		queryFn: () => apiFetch(`/api/v1/clients/${clientId}/audit`),
+		queryFn: () =>
+			apiFetch(`/api/v1/clients/${encodeURIComponent(clientId)}/audit`),
 		enabled: tab === "audit",
 	});
 	const auditItems: AuditEntry[] = Array.isArray(audit.data)

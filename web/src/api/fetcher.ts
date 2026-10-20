@@ -84,6 +84,30 @@ export function panelBasePath(): string {
 	return href.endsWith("/") ? href.slice(0, -1) : href;
 }
 
+/**
+ * #1279: a route param such as `/clients/foo%2F..%2Fusers` reaches call sites
+ * decoded (`foo/../users`). Interpolated raw into `/api/v1/clients/${id}`, the
+ * URL parser collapses the dot segment and the request silently retargets a
+ * different same-origin endpoint inside the admin session. Every call site
+ * should encodeURIComponent its params, but the Orval-generated builders do
+ * not, so the shared choke point refuses any path whose pathname carries a
+ * `.`/`..` segment (raw or percent-encoded) or a backslash (which WHATWG URL
+ * parsing treats as `/` for http(s)).
+ */
+function assertNoPathTraversal(path: string) {
+	const end = path.search(/[?#]/);
+	const pathname = end === -1 ? path : path.slice(0, end);
+	if (pathname.includes("\\") || /%5c/i.test(pathname)) {
+		throw new Error("API path must not contain backslashes");
+	}
+	for (const segment of pathname.split("/")) {
+		const normalized = segment.replace(/%2e/gi, ".");
+		if (normalized === "." || normalized === "..") {
+			throw new Error("API path must not contain dot segments");
+		}
+	}
+}
+
 export function apiUrl(path: string): string {
 	if (/^[a-z][a-z0-9+.-]*:/i.test(path) || path.startsWith("//")) {
 		throw new Error("API path must be same-origin and relative");
@@ -91,6 +115,7 @@ export function apiUrl(path: string): string {
 	if (!path.startsWith("/")) {
 		throw new Error("API path must start with /");
 	}
+	assertNoPathTraversal(path);
 	return `${panelBasePath()}${path}`;
 }
 
@@ -195,7 +220,9 @@ function parseRetryAfterSeconds(response: Response): number | undefined {
 	return undefined;
 }
 
-function assertSameOriginRedirect(response: Response) {
+/** Exported so raw fetch call sites (blob downloads) apply the same
+ * cross-origin-redirect rejection as apiFetch (#1279). */
+export function assertSameOriginRedirect(response: Response) {
 	if (!response.redirected) return;
 	const finalURL = new URL(response.url, window.location.href);
 	if (finalURL.origin !== window.location.origin) {

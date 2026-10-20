@@ -112,15 +112,19 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 
 	const tokens = useQuery<{ items: SubscriptionToken[] }>({
 		queryKey: ["clients", clientId, "tokens"],
-		queryFn: () => apiFetch(`/api/v1/clients/${clientId}/tokens`),
+		queryFn: () =>
+			apiFetch(`/api/v1/clients/${encodeURIComponent(clientId)}/tokens`),
 	});
 
 	const create = useMutation({
 		mutationFn: () =>
-			apiFetch<IssuedToken>(`/api/v1/clients/${clientId}/tokens`, {
-				method: "POST",
-				body: JSON.stringify({ label }),
-			}),
+			apiFetch<IssuedToken>(
+				`/api/v1/clients/${encodeURIComponent(clientId)}/tokens`,
+				{
+					method: "POST",
+					body: JSON.stringify({ label }),
+				},
+			),
 		onSuccess: (res) => {
 			setLabel("");
 			setError(null);
@@ -140,7 +144,7 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 			expiresAt?: number;
 		}) =>
 			apiFetch<IssuedToken>(
-				`/api/v1/clients/${clientId}/tokens/${tokenId}/rotate`,
+				`/api/v1/clients/${encodeURIComponent(clientId)}/tokens/${encodeURIComponent(tokenId)}/rotate`,
 				{
 					method: "POST",
 					...(expiresAt != null ? { body: JSON.stringify({ expiresAt }) } : {}),
@@ -160,9 +164,12 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 
 	const revoke = useMutation({
 		mutationFn: (tokenId: string) =>
-			apiFetch(`/api/v1/clients/${clientId}/tokens/${tokenId}`, {
-				method: "DELETE",
-			}),
+			apiFetch(
+				`/api/v1/clients/${encodeURIComponent(clientId)}/tokens/${encodeURIComponent(tokenId)}`,
+				{
+					method: "DELETE",
+				},
+			),
 		onSuccess: () => {
 			setError(null);
 			setRevokeTarget(null);

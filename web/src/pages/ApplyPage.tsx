@@ -111,7 +111,9 @@ export function ApplyPage() {
 				applyJob?: { id?: string; errorMessage?: string; errorCode?: string };
 				success?: boolean;
 				error?: string;
-			}>(`/api/apply/jobs/${jobId}/retry`, { method: "POST" });
+			}>(`/api/apply/jobs/${encodeURIComponent(jobId)}/retry`, {
+				method: "POST",
+			});
 			// success=false in a 200 is an explicit execution failure (#544).
 			if (data.success === false) {
 				throw new ApiError(
