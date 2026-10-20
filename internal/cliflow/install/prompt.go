@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 )
 
 type Prompt struct {
@@ -118,6 +120,12 @@ func (p Prompt) promptPanelPort(reader *bufio.Reader) (int, error) {
 		}
 		if parsed < 1 || parsed > 65535 {
 			fmt.Fprintln(p.out, "Port must be between 1 and 65535.")
+			continue
+		}
+		// Mirror installer.SelectPanelPort: a reserved port would only fail
+		// after every prompt was answered, so re-ask here instead (#1309).
+		if owner, reserved := runtimeports.ReservedInternalTCPPortOwner(parsed); reserved {
+			fmt.Fprintf(p.out, "Port %d is reserved for %s; choose another port.\n", parsed, owner)
 			continue
 		}
 		return parsed, nil

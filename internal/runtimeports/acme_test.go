@@ -29,3 +29,29 @@ func TestReservedInternalTCPPortsCoversEveryInternalListener(t *testing.T) {
 		}
 	}
 }
+
+// #1309: every reserved port names its owning service so install-time
+// rejections can say which Veil listener the panel would collide with.
+func TestReservedInternalTCPPortOwner(t *testing.T) {
+	want := map[int]string{
+		CaddyAdminPort:            "the Caddy admin listener",
+		ACMEHTTP01ParkedPort:      "the IP-certificate HTTP-01 listener",
+		Hysteria2TrafficStatsPort: "Hysteria2 traffic statistics",
+		Hysteria2HTTPAuthPort:     "the Hysteria2 auth callback",
+	}
+	ports := ReservedInternalTCPPorts()
+	if len(ports) != len(want) {
+		t.Fatalf("ReservedInternalTCPPorts = %v, want exactly the %d ports in %v", ports, len(want), want)
+	}
+	for _, port := range ports {
+		owner, ok := ReservedInternalTCPPortOwner(port)
+		if !ok || owner != want[port] {
+			t.Fatalf("ReservedInternalTCPPortOwner(%d) = %q, %v; want %q, true", port, owner, ok, want[port])
+		}
+	}
+	for _, port := range []int{0, 443, 2096, ACMEHTTP01ParkedPort + 1} {
+		if owner, ok := ReservedInternalTCPPortOwner(port); ok || owner != "" {
+			t.Fatalf("ReservedInternalTCPPortOwner(%d) = %q, %v; want \"\", false", port, owner, ok)
+		}
+	}
+}
