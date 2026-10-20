@@ -1,3 +1,5 @@
+//go:build unix
+
 package privileged
 
 import (
@@ -27,6 +29,11 @@ func openLockFileAt(dir *safefs.Dir, name string) (*os.File, error) {
 		return nil, fmt.Errorf("open lock file %s in %s", name, dir.Path())
 	}
 	return file, nil
+}
+
+// lockFileExclusive blocks until it holds an exclusive flock on file.
+func lockFileExclusive(file *os.File) error {
+	return unix.Flock(int(file.Fd()), unix.LOCK_EX)
 }
 
 func releaseLockedFile(file *os.File) error {

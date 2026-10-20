@@ -8,12 +8,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/mikkelchokolate/Veil/internal/safefs"
-	"golang.org/x/sys/unix"
 )
 
 const (
@@ -55,14 +53,14 @@ func openFirewallJournalRoot(root string) (*safefs.Dir, error) {
 		_ = dir.Close()
 		return nil, err
 	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
+	uid, ok := fileOwnerUID(info)
 	if !ok {
 		_ = dir.Close()
 		return nil, fmt.Errorf("firewall transaction root %s returned unexpected stat type %T", root, info.Sys())
 	}
-	if stat.Uid != uint32(effectiveUID()) || info.Mode().Perm() != 0o700 {
+	if uid != uint32(effectiveUID()) || info.Mode().Perm() != 0o700 {
 		_ = dir.Close()
-		return nil, fmt.Errorf("firewall transaction root %s is not a helper-owned 0700 directory (uid=%d mode=%#o)", root, stat.Uid, info.Mode().Perm())
+		return nil, fmt.Errorf("firewall transaction root %s is not a helper-owned 0700 directory (uid=%d mode=%#o)", root, uid, info.Mode().Perm())
 	}
 	return dir, nil
 }
@@ -88,7 +86,7 @@ func withFirewallLock(root string, action func(*safefs.Dir) (FirewallResult, err
 	defer func() {
 		resultErr = errors.Join(resultErr, releaseLockedFile(lock))
 	}()
-	if err := unix.Flock(int(lock.Fd()), unix.LOCK_EX); err != nil {
+	if err := lockFileExclusive(lock); err != nil {
 		return FirewallResult{}, err
 	}
 	return action(dir)

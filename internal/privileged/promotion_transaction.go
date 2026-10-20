@@ -11,8 +11,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/google/uuid"
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/safefs"
@@ -80,7 +78,7 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 	defer func() {
 		resultErr = errors.Join(resultErr, releaseLockedFile(lockFile))
 	}()
-	if err := unix.Flock(int(lockFile.Fd()), unix.LOCK_EX); err != nil {
+	if err := lockFileExclusive(lockFile); err != nil {
 		return PromoteResult{}, fmt.Errorf("lock promotion root: %w", err)
 	}
 	if err := recoverPromotionTransactionWithPolicy(backupRoot, validateDestination, fenceGeneration); err != nil {

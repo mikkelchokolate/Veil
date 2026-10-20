@@ -511,8 +511,8 @@ func runProductionUpdate(config ProductionConfig, request ResolvedUpdate) (Updat
 		return UpdateResult{}, err
 	}
 	inode := "unknown"
-	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
-		inode = fmt.Sprintf("%d:%d:%d:%d", stat.Dev, stat.Ino, stat.Ctim.Sec, stat.Ctim.Nsec)
+	if tag, ok := safefs.FileIdentity(info); ok {
+		inode = tag
 	}
 	if installedDigest != expectedDigest {
 		return UpdateResult{}, errors.New("installed panel binary digest does not match verified archive")
@@ -938,8 +938,8 @@ func readBackupArchiveFromStableDescriptor(config ProductionConfig, request Reso
 			return BackupResult{}, copyErr
 		}
 		identity := "unknown"
-		if stat, ok := info.Sys().(*syscall.Stat_t); ok {
-			identity = fmt.Sprintf("%d:%d:%d:%d", stat.Dev, stat.Ino, stat.Ctim.Sec, stat.Ctim.Nsec)
+		if tag, ok := safefs.FileIdentity(info); ok {
+			identity = tag
 		}
 		idBytes := make([]byte, 16)
 		if _, randomErr := rand.Read(idBytes); randomErr != nil {
