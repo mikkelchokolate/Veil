@@ -46,6 +46,19 @@ func rejectPrivilegedPanelPort(port int) error {
 	return nil
 }
 
+// RejectReservedPanelPort refuses a panel port that one of Veil's own
+// loopback services binds (runtimeports.ReservedInternalTCPPorts). The panel
+// listens on a wildcard or 127.0.0.1 address, which collides with the
+// service's loopback bind on the same numeric port, and management-state
+// validation rejects such a settings.panelListen — so the installer must not
+// persist it either (#1309).
+func RejectReservedPanelPort(port int) error {
+	if owner, ok := runtimeports.ReservedInternalTCPPortOwner(port); ok {
+		return fmt.Errorf("panel port %d is reserved for %s; choose another port", port, owner)
+	}
+	return nil
+}
+
 // RandomHighPort draws a uniformly random port from [RandomPortMin,
 // RandomPortMax] that is not one of Veil's own loopback TCP ports
 // (runtimeports.ReservedInternalTCPPorts). A panel listening on a reserved
@@ -89,6 +102,9 @@ func SelectPanelPort(requested int, randomPort func() (int, error)) (port int, r
 		if err := rejectPrivilegedPanelPort(requested); err != nil {
 			return 0, false, err
 		}
+		if err := RejectReservedPanelPort(requested); err != nil {
+			return 0, false, err
+		}
 		return requested, false, nil
 	}
 	if randomPort == nil {
@@ -102,6 +118,9 @@ func SelectPanelPort(requested int, randomPort func() (int, error)) (port int, r
 		return 0, false, fmt.Errorf("random panel port is invalid: %d", port)
 	}
 	if err := rejectPrivilegedPanelPort(port); err != nil {
+		return 0, false, err
+	}
+	if err := RejectReservedPanelPort(port); err != nil {
 		return 0, false, err
 	}
 	return port, true, nil

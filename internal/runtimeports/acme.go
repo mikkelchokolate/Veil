@@ -30,16 +30,27 @@ func ACMEHTTP01ParkedAddress() string {
 	return net.JoinHostPort(ACMEHTTP01ParkedHost, strconv.Itoa(ACMEHTTP01ParkedPort))
 }
 
+// reservedInternalTCPPorts names every loopback TCP port a Veil-owned
+// service may bind, together with the service that owns it. The owner strings
+// match the wording management-state validation uses in its rejections.
+var reservedInternalTCPPorts = []struct {
+	port  int
+	owner string
+}{
+	{CaddyAdminPort, "the Caddy admin listener"},
+	{ACMEHTTP01ParkedPort, "the IP-certificate HTTP-01 listener"},
+	{Hysteria2TrafficStatsPort, "Hysteria2 traffic statistics"},
+	{Hysteria2HTTPAuthPort, "the Hysteria2 auth callback"},
+}
+
 // ReservedInternalTCPPorts returns, in ascending order, every loopback TCP
 // port a Veil-owned service may bind. A public/wildcard TCP listener on any
 // of these numeric ports collides with the service regardless of start
 // order, so callers that pick or validate public TCP ports must avoid them.
 func ReservedInternalTCPPorts() []int {
-	ports := []int{
-		CaddyAdminPort,
-		ACMEHTTP01ParkedPort,
-		Hysteria2TrafficStatsPort,
-		Hysteria2HTTPAuthPort,
+	ports := make([]int, 0, len(reservedInternalTCPPorts))
+	for _, reserved := range reservedInternalTCPPorts {
+		ports = append(ports, reserved.port)
 	}
 	sort.Ints(ports)
 	return ports
@@ -48,10 +59,17 @@ func ReservedInternalTCPPorts() []int {
 // IsReservedInternalTCPPort reports whether port is one of
 // ReservedInternalTCPPorts.
 func IsReservedInternalTCPPort(port int) bool {
-	for _, reserved := range ReservedInternalTCPPorts() {
-		if port == reserved {
-			return true
+	_, ok := ReservedInternalTCPPortOwner(port)
+	return ok
+}
+
+// ReservedInternalTCPPortOwner returns a human-readable name of the Veil
+// service that owns port when port is one of ReservedInternalTCPPorts.
+func ReservedInternalTCPPortOwner(port int) (string, bool) {
+	for _, reserved := range reservedInternalTCPPorts {
+		if port == reserved.port {
+			return reserved.owner, true
 		}
 	}
-	return false
+	return "", false
 }
