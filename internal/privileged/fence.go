@@ -10,7 +10,6 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/safefs"
-	"golang.org/x/sys/unix"
 )
 
 type fenceState struct {
@@ -68,7 +67,7 @@ func (g *fenceGuard) Accept(token FenceToken) (resultErr error) {
 	defer func() {
 		resultErr = errors.Join(resultErr, releaseLockedFile(lock))
 	}()
-	if err := unix.Flock(int(lock.Fd()), unix.LOCK_EX); err != nil {
+	if err := lockFileExclusive(lock); err != nil {
 		return err
 	}
 	state := fenceState{}

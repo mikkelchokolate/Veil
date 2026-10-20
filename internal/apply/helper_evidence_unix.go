@@ -3,9 +3,10 @@
 package apply
 
 import (
-	"fmt"
 	"io/fs"
 	"syscall"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 // helperEvidenceDirRootControlled reports whether the directory holding an
@@ -29,9 +30,5 @@ func helperEvidenceFileRootOwned(info fs.FileInfo) bool {
 // activation manifest. The second return is false when the platform cannot
 // supply an inode identity — callers then skip the comparison.
 func installedPathInodeTag(info fs.FileInfo) (string, bool) {
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return "", false
-	}
-	return fmt.Sprintf("%d:%d:%d:%d", stat.Dev, stat.Ino, stat.Ctim.Sec, stat.Ctim.Nsec), true
+	return safefs.FileIdentity(info)
 }

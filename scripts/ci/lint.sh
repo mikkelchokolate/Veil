@@ -29,23 +29,17 @@ if [ ! -f web/dist/index.html ]; then
   echo '<!doctype html><title>analysis stub</title>' > web/dist/index.html
 fi
 
-# GOOS=windows compile gate: every package that does not transitively require
-# the Unix-only internal/backup (syscall.Statfs et al — genuinely
-# platform-bound) must stay Windows-compilable — unix/syscall symbols in
-# portable packages like managementstate have regressed twice already and no
-# gate caught it (issues #1011, #1085). Excluding by dependency keeps the gate
-# honest: a new Unix-only package must be added to the exclusion pattern
-# deliberately instead of silently widening the gap.
-windows_portable="$(go list -f '{{.ImportPath}} {{join .Deps ","}}' ./... \
-  | grep -v 'internal/backup[,/ ]' | cut -d' ' -f1)"
-# shellcheck disable=SC2086  # package list is generated, newline-separated
-ci_run windows-cross-compile env GOOS=windows go build ${windows_portable}
-
-# internal/backup itself must compile on Windows now: the platform-bound
-# pieces (statfs, Stat_t ownership/link-count, O_NOFOLLOW opens) live behind
-# _linux/_windows files, so the package is no longer genuinely Unix-only
-# (#1210).
-ci_run windows-backup-compile env GOOS=windows go build ./internal/backup
+# Cross-compile gate (#1243): the WHOLE tree — cmd/veil included — must build
+# for Windows, macOS and FreeBSD. The previous gate excluded every package
+# that transitively imported internal/backup, which after #1210 meant it
+# silently skipped internal/privileged, internal/api and cmd/veil: the
+# fs-hardening wave reintroduced unix.Flock / Stat_t.Ctim / syscall.Kill
+# there and the gate stayed green (issues #1011, #1085, #1210, #1243).
+# Platform-bound code belongs behind _linux/_unix/_other files; nothing may
+# be excluded from this list.
+for cross_goos in windows darwin freebsd; do
+  ci_run "${cross_goos}-cross-compile" env GOOS="${cross_goos}" GOARCH=amd64 go build ./...
+done
 
 GOBIN_PATH="$(go env GOPATH)/bin"
 export PATH="${GOBIN_PATH}:${PATH}"

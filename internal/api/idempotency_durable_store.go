@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -77,8 +76,7 @@ func idempotencyOwnerAlive(owner string) bool {
 	if err != nil || pid <= 0 {
 		return false
 	}
-	err = syscall.Kill(pid, 0)
-	return err == nil || errors.Is(err, syscall.EPERM)
+	return processAlive(pid)
 }
 
 func (s *idempotencyStore) serveDurable(w http.ResponseWriter, r *http.Request, next http.Handler, key, scope, fingerprint string) {
