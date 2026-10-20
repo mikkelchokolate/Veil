@@ -239,9 +239,11 @@ func (s *managementState) serveSharedSSE(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	identity := clientIP(r)
-	if username, ok := r.Context().Value(contextKeyUsername).(string); ok && username != "" {
+	username, _ := r.Context().Value(contextKeyUsername).(string)
+	if username != "" {
 		identity = username + "|" + identity
 	}
+	stillAuthorized := s.sseAuthorizationCheck(r, username)
 	hub := s.sharedSSEBroadcaster()
 	if hub == nil {
 		writeError(w, "streaming unavailable", http.StatusServiceUnavailable)
@@ -267,7 +269,7 @@ func (s *managementState) serveSharedSSE(w http.ResponseWriter, r *http.Request,
 		case <-r.Context().Done():
 			return
 		case snapshot, ok := <-updates:
-			if !ok {
+			if !ok || !stillAuthorized() {
 				return
 			}
 			if types["apply"] && len(snapshot.apply) > 0 {
@@ -284,6 +286,9 @@ func (s *managementState) serveSharedSSE(w http.ResponseWriter, r *http.Request,
 				return
 			}
 		case <-heartbeat.C:
+			if !stillAuthorized() {
+				return
+			}
 			if _, err := w.Write([]byte(": heartbeat\n\n")); err != nil {
 				return
 			}
@@ -291,5 +296,35 @@ func (s *managementState) serveSharedSSE(w http.ResponseWriter, r *http.Request,
 				return
 			}
 		}
+	}
+}
+
+// sseAuthorizationCheck returns the per-frame authorization check for a
+// long-lived stream. authMiddleware authenticates the request once, but the
+// stream then runs without a write deadline, so without a re-check logout,
+// "revoke other sessions", password/factor changes, user delete, role
+// changes and absolute/idle expiry never reached an open stream (#1290).
+// A cookie-session stream re-validates its session (Peek: a background stream
+// is not user activity, so it neither slides nor outlives the idle window)
+// and re-runs the middleware's user/factor/bootstrap rules before every
+// frame; the stream closes as soon as the principal changes or loses the
+// endpoint capability. Static API-token and dev-anonymous principals carry
+// no session and keep the check a no-op.
+func (s *managementState) sseAuthorizationCheck(r *http.Request, username string) func() bool {
+	sessionToken, _ := r.Context().Value(contextKeySessionToken).(string)
+	if sessionToken == "" {
+		return func() bool { return true }
+	}
+	capability, known := capabilityForEndpoint(r.Method, r.URL.Path)
+	return func() bool {
+		if !known {
+			return false
+		}
+		sess, ok := s.sessionRegistry().Peek(sessionToken)
+		if !ok {
+			return false
+		}
+		current, role, ok := s.authorizeCookieSession(sessionToken, sess)
+		return ok && current == username && capabilityAllowsRole(capability, role)
 	}
 }

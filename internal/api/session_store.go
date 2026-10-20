@@ -473,6 +473,32 @@ func (r *SessionRegistry) Get(token string) (Session, bool) {
 	return publicSession(record, token, r.rawCSRF[tokenHash]), true
 }
 
+// Peek reports whether token still names a live, unexpired session without
+// sliding its idle window or persisting anything. Long-lived streams use it
+// to re-check their authorization (#1290): a background event stream is not
+// user activity, so it must neither extend the idle timeout nor outlive it.
+// Expired records are left for Get to reap.
+func (r *SessionRegistry) Peek(token string) (Session, bool) {
+	tokenHash := hashSessionSecret(token)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := r.storageHealthyLocked(); err != nil {
+		return Session{}, false
+	}
+	record, ok := r.sessions[tokenHash]
+	if !ok {
+		return Session{}, false
+	}
+	now := r.now().UTC()
+	if now.Before(record.LastSeenAt) {
+		now = record.LastSeenAt
+	}
+	if sessionExpired(record, now) {
+		return Session{}, false
+	}
+	return publicSession(record, token, r.rawCSRF[tokenHash]), true
+}
+
 func (r *SessionRegistry) ValidateCSRF(token, provided string) bool {
 	if token == "" || provided == "" {
 		return false
