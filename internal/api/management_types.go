@@ -116,6 +116,9 @@ type managementState struct {
 	// backs delayGlobalUsernameAttempt; per-(client,username) buckets alone
 	// cannot stop a spray distributed across many IPv6 prefixes (#1101).
 	loginGlobalLimiter *observability.RateLimiterEngine
+	// secondFactorBudget is the process-wide per-username second-factor
+	// guess budget (reserveSecondFactorGuess); guarded by mu (#1286).
+	secondFactorBudget map[string]secondFactorBudgetState
 	httpRateLimiter    *observability.RateLimiter
 	idempotency        *idempotencyStore
 	loginBackoff       map[string]loginBackoffState

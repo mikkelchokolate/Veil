@@ -33,6 +33,14 @@ func DefaultRateLimitPolicy() RateLimitPolicy {
 			// belongs in the expensive-mutation tier next to apply plans,
 			// not on the 100/min shared default (#1144).
 			"/api/profiles/ru-recommended/preview": {RatePerMinute: 6, Burst: 2},
+			// The second-factor stage is as guessable as the password stage
+			// (#1286): each pending_2fa route gets the strict /api/auth/login
+			// tier instead of the 100/min shared default. Every prefix is its
+			// own per-address bucket, so a passkey begin+finish never competes
+			// with a TOTP verify or the password POST that preceded it.
+			"/api/v1/auth/totp/verify":     {RatePerMinute: 10, Burst: 3},
+			"/api/v1/auth/webauthn/begin":  {RatePerMinute: 10, Burst: 3},
+			"/api/v1/auth/webauthn/finish": {RatePerMinute: 10, Burst: 3},
 		},
 		readLimits: map[string]EndpointLimit{
 			// Credential reads gated by isRateLimitedReadPath (#583/#594).

@@ -29,6 +29,10 @@ func TestRateLimitPolicyIncludesExpensivePanelOperations(t *testing.T) {
 		// #1144: the preview renders a full profile (keygen / caddy probe)
 		// per call — the apply-plan cost tier, not the default bucket.
 		"/api/profiles/ru-recommended/preview": {RatePerMinute: 6, Burst: 2},
+		// #1286: the pending_2fa routes share the strict login tier.
+		"/api/v1/auth/totp/verify":     {RatePerMinute: 10, Burst: 3},
+		"/api/v1/auth/webauthn/begin":  {RatePerMinute: 10, Burst: 3},
+		"/api/v1/auth/webauthn/finish": {RatePerMinute: 10, Burst: 3},
 	}
 	limits := policy.EndpointLimits()
 	if len(limits) != len(wantLimits) {

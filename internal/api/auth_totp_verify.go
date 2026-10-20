@@ -13,8 +13,10 @@ import (
 // authorizes ONLY this route; a valid factor mints the real veil_session.
 // Exactly one of {code, recoveryCode} is required. The pending stage shares
 // the login throttling machinery (per-(client,username) budget + exponential
-// backoff), hard-caps attempts per challenge, and fails closed on any account
-// change since the password was verified (#1172).
+// backoff), hard-caps attempts per challenge, draws every wrong guess from a
+// process-wide per-username budget that client rotation cannot reset (#1286),
+// and fails closed on any account change since the password was verified
+// (#1172).
 func (s *managementState) handleTOTPVerify(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, http.MethodPost)
@@ -85,10 +87,40 @@ func (s *managementState) handleTOTPVerify(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Process-wide per-username guess budget (#1286): the throttles above
+	// are scoped to one client /64 and the attempt cap to one challenge, so
+	// rotating prefixes and re-minting challenges with a known password used
+	// to buy fresh guesses without bound. One guess is reserved before the
+	// factor is evaluated (so concurrent guesses cannot overrun the budget)
+	// and refunded unless the attempt ends as a wrong guess.
+	refundGuess, budgetWait, budgetOK := s.reserveSecondFactorGuess(pending.Username)
+	if !budgetOK {
+		w.Header().Set("Retry-After", strconv.Itoa(int(budgetWait.Seconds())+1))
+		s.recordRequestAudit(r, audit.Record{
+			Actor:   pending.Username,
+			Action:  "auth.totp.verify.rate_limited",
+			Target:  "panel",
+			Success: false,
+			Error:   "per-username second-factor guess budget exhausted",
+		})
+		writeError(w, "too many attempts", http.StatusTooManyRequests)
+		s.pendingSecondFactors().Release(token)
+		return
+	}
+	guessCounted := false
+	defer func() {
+		if !guessCounted {
+			refundGuess()
+		}
+	}()
+
 	fail := func(auditErr string) {
-		// Every failure counts twice: against the shared login backoff and
-		// against the pending challenge's own attempt cap. Exhaustion destroys
-		// the challenge so the caller must restart at the password stage.
+		guessCounted = true
+		// Every failure counts three times: against the shared login backoff,
+		// against the pending challenge's own attempt cap, and against the
+		// process-wide per-username guess budget. Exhaustion of the cap
+		// destroys the challenge so the caller must restart at the password
+		// stage.
 		exhausted := s.pendingSecondFactors().RecordFailure(token)
 		if !exhausted {
 			// Retryable failure: free the in-flight lease so the next code
