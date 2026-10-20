@@ -114,6 +114,24 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 			return fmt.Errorf("duplicate promotion destination %s", cleanDestination)
 		}
 		seenDestinations[cleanDestination] = struct{}{}
+		// A staged source lives in the veil-writable staging root: read and
+		// authenticate it against the caller's digest before touching the
+		// destination or the backup root, so rewritten staged bytes are
+		// refused outright instead of after a safety copy was taken (#1269).
+		var stagedBody []byte
+		if !remove && artifact.SymlinkTarget == "" && artifact.sourceBody == nil {
+			if artifact.expectedDigest == "" {
+				return fmt.Errorf("staged promotion artifact %s has no expected digest", artifact.ID)
+			}
+			body, err := readManagedConfigFile(artifact.Source)
+			if err != nil {
+				return err
+			}
+			if promotionDigest(body) != artifact.expectedDigest {
+				return newError(ErrorConflict, fmt.Sprintf("staged promotion artifact %s does not match its expected digest", artifact.ID))
+			}
+			stagedBody = body
+		}
 		info, statErr := os.Lstat(cleanDestination)
 		if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
 			return statErr
@@ -163,7 +181,6 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 			record.OldDigest = promotionDigest(oldBody)
 		}
 		operation := preparedPromotionOperation{artifact: artifact, remove: remove}
-		var err error
 		if artifact.SymlinkTarget != "" {
 			operation.symlinkTarget = artifact.SymlinkTarget
 			record.Operation = "symlink"
@@ -175,11 +192,8 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 			operation.body = artifact.sourceBody
 			record.NewDigest = promotionDigest(operation.body)
 		} else if !remove {
-			operation.body, err = readManagedConfigFile(artifact.Source)
-			if err != nil {
-				return err
-			}
-			record.NewDigest = promotionDigest(operation.body)
+			operation.body = stagedBody
+			record.NewDigest = artifact.expectedDigest
 		}
 		operations = append(operations, operation)
 		journal.Manifest.Records = append(journal.Manifest.Records, record)

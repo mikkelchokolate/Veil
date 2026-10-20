@@ -141,11 +141,13 @@ func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
 
 func (ctx ManagementApplyContext) writeApplyStageLocked(plan ApplyPlanResponse) ([]string, []ConfigValidationResult, []string, error) {
 	s := ctx.state
+	// A digest set only ever authenticates the stage write that produced it.
+	s.stagedArtifactDigests = nil
 	snapshot, err := s.snapshotLocked()
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	return WriteApplyStage(ApplyStageInput{
+	written, validations, renderedPaths, digests, err := writeApplyStage(ApplyStageInput{
 		Context:       ctx.operationContext(),
 		ApplyRoot:     s.applyRoot,
 		Cipher:        s.cipher,
@@ -155,11 +157,23 @@ func (ctx ManagementApplyContext) writeApplyStageLocked(plan ApplyPlanResponse) 
 		Render:        s.renderManagementConfigsLocked,
 		Validate:      stagedConfigValidator,
 	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	s.stagedArtifactDigests = digests
+	return written, validations, renderedPaths, nil
 }
 
 func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]string, []string, []livePromotionRecord, error) {
 	generatedRoot := filepath.Join(ctx.state.applyRoot, "generated")
+	// The staging tree is writable by the veil uid, so the helper is bound to
+	// the bytes this process rendered and validated: every promoted artifact
+	// carries the in-memory digest recorded by the stage write, and the
+	// helper refuses staged bytes that no longer match (#1269).
+	stagedDigests := ctx.state.stagedArtifactDigests
+	ctx.state.stagedArtifactDigests = nil
 	artifactIDs := make([]string, 0, len(stagedPaths))
+	artifactDigests := make(map[string]string, len(stagedPaths))
 	for _, stagedPath := range stagedPaths {
 		if _, ok := NewLiveConfigPromotion(ctx.state.applyRoot, nil).LivePathForStagedConfig(stagedPath); !ok {
 			continue
@@ -168,7 +182,13 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 			return nil, nil, nil, applyflow.MarkPreMutationError(fmt.Errorf("staged config escapes generated root: %s", stagedPath))
 		}
-		artifactIDs = append(artifactIDs, filepath.ToSlash(relative))
+		digest, ok := stagedDigests[filepath.Clean(stagedPath)]
+		if !ok || digest == "" {
+			return nil, nil, nil, applyflow.MarkPreMutationError(fmt.Errorf("staged config has no stage-time digest: %s", stagedPath))
+		}
+		id := filepath.ToSlash(relative)
+		artifactIDs = append(artifactIDs, id)
+		artifactDigests[id] = digest
 	}
 	activeFiles := make([]string, 0, len(artifactIDs))
 	for _, id := range artifactIDs {
@@ -241,7 +261,7 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 		return nil, nil, nil, applyflow.MarkPreMutationError(fmt.Errorf("privileged helper is unavailable"))
 	}
 	publicationArtifacts := append(append([]string(nil), artifactIDs...), removeIDs...)
-	expectedManifest, previousManifest, err := publicationArtifactDigests(generatedRoot, ctx.state.liveRoot, artifactIDs, removeIDs)
+	expectedManifest, previousManifest, err := publicationArtifactDigests(artifactDigests, ctx.state.liveRoot, artifactIDs, removeIDs)
 	if err != nil {
 		return nil, nil, nil, applyflow.MarkPreMutationError(fmt.Errorf("build publication manifest: %w", err))
 	}
@@ -257,7 +277,8 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 		return nil, nil, nil, fmt.Errorf("persist publication phase before promotion: %w", err)
 	}
 	result, err := ctx.state.privileged.Promote(ctx.operationContext(), privileged.PromoteRequest{
-		ArtifactIDs: artifactIDs, RemoveArtifactIDs: removeIDs, Fence: ctx.fenceToken(),
+		ArtifactIDs: artifactIDs, ArtifactDigests: promoteArtifactDigests(artifactDigests),
+		RemoveArtifactIDs: removeIDs, Fence: ctx.fenceToken(),
 	})
 	if err != nil {
 		return nil, nil, nil, err
@@ -283,6 +304,15 @@ func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]
 	}
 	ctx.state.orphanedUnits = mergeOrphanedUnits(orphanedUnits, wantsOrphans)
 	return liveFiles, backupFiles, records, nil
+}
+
+// promoteArtifactDigests returns nil for a removal-only promotion so the
+// request carries no digest the helper would have to reject as unbound.
+func promoteArtifactDigests(digests map[string]string) map[string]string {
+	if len(digests) == 0 {
+		return nil
+	}
+	return digests
 }
 
 func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []ServiceActionResult {

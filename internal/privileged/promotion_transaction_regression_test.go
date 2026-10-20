@@ -137,6 +137,7 @@ func TestPromotionCrashProcess(t *testing.T) {
 	}
 	marker := filepath.Join(root, "crash-marker")
 	request := promotionRequestForRoot(root, 3)
+	request.Artifacts = attestStagedArtifacts(t, request.Artifacts)
 	originalEffectiveUID := effectiveUID
 	originalLookupGroup := lookupGroup
 	originalChownPath := chownPath
@@ -250,6 +251,7 @@ func preparePromotionFixture(t *testing.T, root string, count int) ResolvedPromo
 			t.Fatal(err)
 		}
 	}
+	request.Artifacts = attestStagedArtifacts(t, request.Artifacts)
 	return request
 }
 

@@ -50,7 +50,7 @@ func TestAdapterCallsExecutorWithResolvedValues(t *testing.T) {
 		},
 	})
 
-	if _, err := adapter.Promote(context.Background(), PromoteRequest{ArtifactIDs: []string{"mieru"}}); err != nil {
+	if _, err := adapter.Promote(context.Background(), placeholderPromoteRequest("mieru")); err != nil {
 		t.Fatalf("promote: %v", err)
 	}
 	if _, err := adapter.Journal(context.Background(), JournalRequest{Unit: "veil.service", Lines: 5000}); err != nil {
@@ -140,7 +140,7 @@ func TestAdapterReturnsOperationFailedWhenExecutorNil(t *testing.T) {
 	adapter := NewLocalAdapter(testPolicy(t), Executor{})
 	cases := []func() error{
 		func() error {
-			_, err := adapter.Promote(context.Background(), PromoteRequest{ArtifactIDs: []string{"mieru"}})
+			_, err := adapter.Promote(context.Background(), placeholderPromoteRequest("mieru"))
 			return err
 		},
 		func() error {
@@ -196,7 +196,7 @@ func TestAdapterPropagatesExecutorErrors(t *testing.T) {
 	})
 	cases := []func() error{
 		func() error {
-			_, err := adapter.Promote(context.Background(), PromoteRequest{ArtifactIDs: []string{"mieru"}})
+			_, err := adapter.Promote(context.Background(), placeholderPromoteRequest("mieru"))
 			return err
 		},
 		func() error {

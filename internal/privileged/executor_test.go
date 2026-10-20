@@ -60,7 +60,7 @@ func TestProductionExecutorPromotesResolvedArtifactsWithSafetyCopy(t *testing.T)
 		Now:                 func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) },
 	})
 	result, err := executor.Promote(context.Background(), ResolvedPromotion{
-		Artifacts: []ResolvedArtifact{{ID: "mieru", Source: source, Destination: destination}},
+		Artifacts: attestStagedArtifacts(t, []ResolvedArtifact{{ID: "mieru", Source: source, Destination: destination}}),
 	})
 	if err != nil {
 		t.Fatalf("promote: %v", err)
@@ -105,11 +105,11 @@ func TestProductionExecutorFailsWhenProtocolConfigOwnershipCannotBeSet(t *testin
 		PromotionBackupRoot: filepath.Join(root, "backups"),
 	})
 	_, err := executor.Promote(context.Background(), ResolvedPromotion{
-		Artifacts: []ResolvedArtifact{{
+		Artifacts: attestStagedArtifacts(t, []ResolvedArtifact{{
 			ID:          "mieru/server_config.json",
 			Source:      source,
 			Destination: destination,
-		}},
+		}}),
 	})
 	if !errors.Is(err, ownershipErr) {
 		t.Fatalf("promote error = %v, want injected ownership error", err)
@@ -221,11 +221,11 @@ func TestProductionExecutorPublishesCaddyArtifactReadableByVeilProxy(t *testing.
 	}
 
 	executor := NewProductionExecutor(ProductionConfig{PromotionBackupRoot: filepath.Join(root, "backups")})
-	if _, err := executor.Promote(context.Background(), ResolvedPromotion{Artifacts: []ResolvedArtifact{{
+	if _, err := executor.Promote(context.Background(), ResolvedPromotion{Artifacts: attestStagedArtifacts(t, []ResolvedArtifact{{
 		ID:          "caddy/config.json",
 		Source:      source,
 		Destination: destination,
-	}}}); err != nil {
+	}})}); err != nil {
 		t.Fatalf("promote: %v", err)
 	}
 
@@ -278,11 +278,11 @@ func TestProductionExecutorPromotionFailsClosedWithoutRoot(t *testing.T) {
 	}
 
 	executor := NewProductionExecutor(ProductionConfig{PromotionBackupRoot: filepath.Join(root, "backups")})
-	if _, err := executor.Promote(context.Background(), ResolvedPromotion{Artifacts: []ResolvedArtifact{{
+	if _, err := executor.Promote(context.Background(), ResolvedPromotion{Artifacts: attestStagedArtifacts(t, []ResolvedArtifact{{
 		ID:          "hysteria2/edge.yaml",
 		Source:      source,
 		Destination: destination,
-	}}}); err == nil {
+	}})}); err == nil {
 		t.Fatal("expected non-root promotion to fail closed")
 	}
 	if _, statErr := os.Stat(destination); statErr != nil && !os.IsNotExist(statErr) {
@@ -312,7 +312,7 @@ func TestProductionExecutorRestoresPromotionByOpaqueBackupID(t *testing.T) {
 		Now:                 func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) },
 	})
 	promoted, err := executor.Promote(context.Background(), ResolvedPromotion{
-		Artifacts: []ResolvedArtifact{{ID: "caddy/edge.Caddyfile", Source: source, Destination: destination}},
+		Artifacts: attestStagedArtifacts(t, []ResolvedArtifact{{ID: "caddy/edge.Caddyfile", Source: source, Destination: destination}}),
 	})
 	if err != nil {
 		t.Fatalf("promote: %v", err)
@@ -1131,7 +1131,9 @@ func TestRunProductionUpdateRejectsMissingArchive(t *testing.T) {
 
 func TestPromoteResolvedArtifactsSourceReadError(t *testing.T) {
 	_, err := promoteResolvedArtifacts(t.TempDir(), time.Now, ResolvedPromotion{
-		Artifacts: []ResolvedArtifact{{ID: "missing", Source: "/does/not/exist", Destination: filepath.Join(t.TempDir(), "dst")}},
+		// A well-formed digest, so only the failed source read can stop it.
+		Artifacts: []ResolvedArtifact{{ID: "missing", Source: "/does/not/exist", Destination: filepath.Join(t.TempDir(), "dst"),
+			expectedDigest: promotionDigest([]byte("anything"))}},
 	})
 	if err == nil {
 		t.Fatal("expected source read error")
@@ -1155,7 +1157,10 @@ func TestPromoteResolvedArtifactsRejectsSymlinkedSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := promoteResolvedArtifacts(filepath.Join(root, "backups"), time.Now, ResolvedPromotion{
-		Artifacts: []ResolvedArtifact{{ID: "cfg", Source: source, Destination: filepath.Join(root, "gen", "cfg.json")}},
+		// The digest matches the symlink target, so only the no-follow read
+		// can refuse it.
+		Artifacts: []ResolvedArtifact{{ID: "cfg", Source: source, Destination: filepath.Join(root, "gen", "cfg.json"),
+			expectedDigest: promotionDigest([]byte("outside"))}},
 	})
 	if err == nil {
 		t.Fatal("expected symlinked source to be rejected")

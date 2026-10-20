@@ -47,7 +47,7 @@ func TestSocketClientCallsAllOperations(t *testing.T) {
 	client := NewSocketClient(path)
 	ctx := context.Background()
 
-	if _, err := client.Promote(ctx, PromoteRequest{ArtifactIDs: []string{"mieru"}}); err != nil {
+	if _, err := client.Promote(ctx, placeholderPromoteRequest("mieru")); err != nil {
 		t.Fatalf("promote: %v", err)
 	}
 	if err := client.ServiceAction(ctx, ServiceActionRequest{Unit: "veil.service", Action: ServiceActionRestart}); err != nil {

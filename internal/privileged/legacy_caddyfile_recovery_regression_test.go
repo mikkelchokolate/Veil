@@ -55,7 +55,7 @@ func TestInterruptedLegacyCaddyfileRemovalDoesNotBlockLaterPromote(t *testing.T)
 		t.Fatal(err)
 	}
 
-	resolved, err := policy.ResolvePromotion(PromoteRequest{ArtifactIDs: []string{"caddy/config.json"}})
+	resolved, err := policy.ResolvePromotion(attestedPromoteRequest(t, policy, "caddy/config.json"))
 	if err != nil {
 		t.Fatalf("resolve caddy/config.json: %v", err)
 	}

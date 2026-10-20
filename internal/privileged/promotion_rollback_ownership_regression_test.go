@@ -62,11 +62,11 @@ func TestPromotionRollbackReappliesRuntimeArtifactOwnership(t *testing.T) {
 
 	executor := NewProductionExecutor(ProductionConfig{PromotionBackupRoot: filepath.Join(root, "backups")})
 	_, err := executor.Promote(context.Background(), ResolvedPromotion{
-		Artifacts: []ResolvedArtifact{
+		Artifacts: attestStagedArtifacts(t, []ResolvedArtifact{
 			{ID: "hysteria2/edge.yaml", Source: protocol1Src, Destination: protocol1Dst},
 			{ID: "caddy/config.json", Source: caddySrc, Destination: caddyDst},
 			{ID: "hysteria2/core.yaml", Source: protocol2Src, Destination: protocol2Dst},
-		},
+		}),
 	})
 	if err == nil {
 		t.Fatal("expected injected second-artifact ownership error")

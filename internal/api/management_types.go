@@ -102,6 +102,11 @@ type managementState struct {
 	// lifecycle state instead of unconditionally enable+starting units that
 	// may have been stopped or disabled (#1135).
 	previousServiceStates map[string]string
+	// stagedArtifactDigests maps each cleaned staged path written by the
+	// last stage write to the SHA-256 of the bytes this process rendered or
+	// verified; the next promotion sends them so the helper refuses staged
+	// bytes rewritten in the veil-writable staging tree (#1269).
+	stagedArtifactDigests map[string]string
 	sessions              *SessionRegistry
 	// pending2FA holds the short-lived post-password/pre-factor challenges
 	// shared by every second-factor mechanism (TOTP now, WebAuthn later).

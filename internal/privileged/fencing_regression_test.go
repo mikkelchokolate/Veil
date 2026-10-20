@@ -85,7 +85,7 @@ func TestPrivilegedRuntimeMutationsRejectOlderFencingGeneration(t *testing.T) {
 		{
 			name: "promote",
 			run: func(t *testing.T, adapter *LocalAdapter, generation uint64) error {
-				request := PromoteRequest{ArtifactIDs: []string{"mieru"}}
+				request := placeholderPromoteRequest("mieru")
 				setRegressionFenceToken(t, &request, "apply-owner", generation)
 				_, err := adapter.Promote(context.Background(), request)
 				return err

@@ -196,7 +196,7 @@ func TestPromotionRefusesNon0700BackupRoot(t *testing.T) {
 	writeFileWithParents(t, source, []byte("next"))
 	executor := NewProductionExecutor(ProductionConfig{PromotionBackupRoot: f.backupRoot})
 	_, err := executor.Promote(context.Background(), ResolvedPromotion{
-		Artifacts:           []ResolvedArtifact{{ID: "caddy/config.json", Source: source, Destination: f.destination}},
+		Artifacts:           attestStagedArtifacts(t, []ResolvedArtifact{{ID: "caddy/config.json", Source: source, Destination: f.destination}}),
 		ValidateDestination: f.validate,
 	})
 	if err == nil || !strings.Contains(err.Error(), "helper-owned 0700") {

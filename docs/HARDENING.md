@@ -240,6 +240,13 @@ runbook.
   key, apply predefined firewall material, install a checksum-verified staged
   Veil binary, and restart the Panel. Arbitrary commands, paths, units, and
   shell input are rejected.
+- **Promotion is content-bound.** The staging tree is writable by the `veil`
+  uid, so a promote request carries the SHA-256 of every staged artifact,
+  taken from the bytes the Panel rendered and validated in memory (and the
+  verified routing `.dat` bodies), never from a re-read of staging. The helper
+  rejects a request with a missing or malformed digest and refuses to publish
+  a staged file whose bytes no longer hash to it, before it touches the
+  destination or the backup root.
 - **Writable paths.** The Panel owns `/var/lib/veil/state.json`,
   `/var/lib/veil/sessions.json`, `/var/lib/veil/audit`, staging, and updates.
   Root retains `/etc/veil/state.key`, backup passphrases, live generated
