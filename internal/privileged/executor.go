@@ -677,7 +677,7 @@ func backupPromotionDestination(root, backupID string, artifact ResolvedArtifact
 	return record, nil
 }
 
-func restorePromotedArtifacts(root, backupID string, validateDestination func(string, string) bool, fenceGeneration uint64) (PromoteResult, error) {
+func restorePromotedArtifacts(root, backupID string, validateDestination func(string, string) bool, fenceGeneration uint64) (_ PromoteResult, resultErr error) {
 	// Defense in depth: the restore ID reaches the helper through persisted
 	// promotion records, so it is re-validated here even though
 	// ResolvePromotion already rejects non-canonical IDs — "." or ".." would
@@ -696,7 +696,17 @@ func restorePromotedArtifacts(root, backupID string, validateDestination func(st
 	if !pathWithin(filepath.Clean(root), manifestPath) {
 		return PromoteResult{}, newError(ErrorForbiddenOperation, "promotion backup manifest escapes backup root")
 	}
-	body, err := os.ReadFile(manifestPath)
+	// The manifest and every safety copy it names are read descriptor-relative
+	// under the pinned helper-owned root: a lexical pathWithin plus a leaf
+	// O_NOFOLLOW still follows a symlinked intermediate directory, which
+	// turned a planted manifest into an arbitrary root read exfiltrated to a
+	// proxy-readable destination (#1274).
+	rootDir, err := openPromotionBackupRoot(root)
+	if err != nil {
+		return PromoteResult{}, err
+	}
+	defer func() { resultErr = errors.Join(resultErr, rootDir.Close()) }()
+	body, err := readPromotionBackupMember(rootDir, root, manifestPath)
 	if err != nil {
 		return PromoteResult{}, err
 	}
@@ -722,7 +732,7 @@ func restorePromotedArtifacts(root, backupID string, validateDestination func(st
 				if record.OldLinkTarget == "" {
 					return PromoteResult{}, errors.New("promotion backup symlink metadata is invalid")
 				}
-				if record.OldDigest != "" && promotionDigest([]byte(record.OldLinkTarget)) != record.OldDigest {
+				if record.OldDigest == "" || promotionDigest([]byte(record.OldLinkTarget)) != record.OldDigest {
 					return PromoteResult{}, fmt.Errorf("promotion backup symlink digest mismatch for %s", record.ArtifactID)
 				}
 				writes = append(writes, ResolvedArtifact{ID: record.ArtifactID, Destination: record.Destination, SymlinkTarget: record.OldLinkTarget})
@@ -735,14 +745,16 @@ func restorePromotedArtifacts(root, backupID string, validateDestination func(st
 			if source == "" || !pathWithin(root, source) {
 				return PromoteResult{}, errors.New("promotion backup manifest safety path is invalid")
 			}
-			previous, err := readManagedConfigFile(source)
+			previous, err := readPromotionBackupMember(rootDir, root, source)
 			if err != nil {
 				return PromoteResult{}, err
 			}
-			if record.OldDigest != "" && promotionDigest(previous) != record.OldDigest {
+			// An empty digest is an unauthenticated record, not a skipped
+			// check: every safety copy the helper writes records one (#1274).
+			if record.OldDigest == "" || promotionDigest(previous) != record.OldDigest {
 				return PromoteResult{}, fmt.Errorf("promotion backup digest mismatch for %s", record.ArtifactID)
 			}
-			writes = append(writes, ResolvedArtifact{ID: record.ArtifactID, Source: source, Destination: record.Destination})
+			writes = append(writes, ResolvedArtifact{ID: record.ArtifactID, Source: source, Destination: record.Destination, sourceBody: previous})
 		} else {
 			removes = append(removes, ResolvedArtifact{ID: record.ArtifactID, Destination: record.Destination})
 		}

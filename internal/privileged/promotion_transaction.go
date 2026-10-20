@@ -54,19 +54,17 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 	if backupRoot == "" {
 		return PromoteResult{}, errors.New("promotion backup root is required")
 	}
-	if err := os.MkdirAll(backupRoot, 0o700); err != nil {
-		return PromoteResult{}, fmt.Errorf("create promotion backup root: %w", err)
-	}
 	// Pin the backup root on a descriptor and refuse a symlinked lock leaf:
 	// the root lives under the service-writable state tree, so a planted
 	// symlink would otherwise redirect a root-owned O_CREATE open (#1229-F5).
-	// Unlike the firewall transaction root this directory is not required to
-	// be helper-owned 0700 — promotion's hard boundary is the caller's
-	// destination policy (validatePromotionDestinations), which authenticates
-	// every record a recovered journal may touch (#1218).
-	backupDir, err := safefs.OpenDir(backupRoot)
+	// The destination policy (validatePromotionDestinations) authenticates
+	// only ArtifactID/Destination; the SafetyPath/ManifestPath members a
+	// recovered journal reads and deletes are trusted only because the root
+	// is the helper-owned 0700 directory, the same contract the firewall
+	// transaction root enforces on this very directory (#1227, #1274).
+	backupDir, err := openPromotionBackupRoot(backupRoot)
 	if err != nil {
-		return PromoteResult{}, fmt.Errorf("open promotion backup root: %w", err)
+		return PromoteResult{}, err
 	}
 	defer func() {
 		resultErr = errors.Join(resultErr, backupDir.Close())
@@ -81,7 +79,7 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 	if err := lockFileExclusive(lockFile); err != nil {
 		return PromoteResult{}, fmt.Errorf("lock promotion root: %w", err)
 	}
-	if err := recoverPromotionTransactionWithPolicy(backupRoot, validateDestination, fenceGeneration); err != nil {
+	if err := recoverPromotionTransactionAt(backupDir, backupRoot, validateDestination, fenceGeneration); err != nil {
 		return PromoteResult{}, fmt.Errorf("recover interrupted promotion: %w", err)
 	}
 	if len(writes) == 0 && len(removes) == 0 {
@@ -158,7 +156,7 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 		}
 		record.Phase = "prepared"
 		if record.HadPrevious && !record.WasSymlink {
-			oldBody, err := readManagedConfigFile(record.BackupPath)
+			oldBody, err := readPromotionBackupMember(backupDir, backupRoot, record.BackupPath)
 			if err != nil {
 				return err
 			}
@@ -170,6 +168,12 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 			operation.symlinkTarget = artifact.SymlinkTarget
 			record.Operation = "symlink"
 			record.NewDigest = promotionDigest([]byte(artifact.SymlinkTarget))
+		} else if !remove && artifact.sourceBody != nil {
+			// A restore source was already read descriptor-relative from the
+			// pinned backup root; re-resolving its path here would reopen the
+			// swap window the pinned read closed (#1274).
+			operation.body = artifact.sourceBody
+			record.NewDigest = promotionDigest(operation.body)
 		} else if !remove {
 			operation.body, err = readManagedConfigFile(artifact.Source)
 			if err != nil {
@@ -220,12 +224,12 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 			}
 		}
 		if err != nil {
-			return PromoteResult{}, rollbackPromotionAfterError(backupRoot, journal, err)
+			return PromoteResult{}, rollbackPromotionAfterError(backupDir, backupRoot, journal, err)
 		}
 		journal.Manifest.Records[index].Phase = "published"
 		journal.Phase = fmt.Sprintf("artifact-%d-published", index+1)
 		if err := writePromotionJournal(backupRoot, journal); err != nil {
-			return PromoteResult{}, rollbackPromotionAfterError(backupRoot, journal, err)
+			return PromoteResult{}, rollbackPromotionAfterError(backupDir, backupRoot, journal, err)
 		}
 		if safety := journal.Manifest.Records[index].SafetyPath; safety != "" {
 			result.BackupArtifacts = append(result.BackupArtifacts, safety)
@@ -237,14 +241,14 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 	journal.Manifest.Phase = "committed"
 	manifestBody, err := json.Marshal(journal.Manifest)
 	if err != nil {
-		return PromoteResult{}, rollbackPromotionAfterError(backupRoot, journal, err)
+		return PromoteResult{}, rollbackPromotionAfterError(backupDir, backupRoot, journal, err)
 	}
 	if err := atomicfile.Write(manifestPath, manifestBody, 0o600, 0o700); err != nil {
-		return PromoteResult{}, rollbackPromotionAfterError(backupRoot, journal, err)
+		return PromoteResult{}, rollbackPromotionAfterError(backupDir, backupRoot, journal, err)
 	}
 	journal.Phase = "manifest-committed"
 	if err := writePromotionJournal(backupRoot, journal); err != nil {
-		return PromoteResult{}, rollbackPromotionAfterError(backupRoot, journal, err)
+		return PromoteResult{}, rollbackPromotionAfterError(backupDir, backupRoot, journal, err)
 	}
 	if err := removePromotionJournal(backupRoot); err != nil {
 		return PromoteResult{}, err
@@ -252,26 +256,40 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 	return result, nil
 }
 
-func rollbackPromotionAfterError(root string, journal promotionTransactionJournal, cause error) error {
-	if err := restorePromotionPreTransaction(root, &journal); err != nil {
+func rollbackPromotionAfterError(rootDir *safefs.Dir, root string, journal promotionTransactionJournal, cause error) error {
+	if err := restorePromotionPreTransaction(rootDir, root, &journal); err != nil {
 		return fmt.Errorf("%v; automatic promotion rollback failed: %w", cause, err)
 	}
 	return cause
 }
 
-func recoverPromotionTransactionWithPolicy(root string, validateDestination func(string, string) bool, acceptedGeneration uint64) error {
-	// Residual TOCTOU: the journal/manifest reads below are path-based, not
-	// fd-pinned like the firewall journal — an attacker racing the leaf could
-	// swap what we read. It is narrowed, not eliminated, because every
-	// destination the journal may authorize is re-validated against the
-	// caller's live policy before any replay (#1228 review).
-	path := filepath.Join(root, promotionTransactionJournalName)
-	body, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
+func recoverPromotionTransactionWithPolicy(root string, validateDestination func(string, string) bool, acceptedGeneration uint64) (resultErr error) {
+	if root == "" {
+		// No configured root means no journal can exist to recover; every
+		// mutating path rejects the empty root on its own.
 		return nil
 	}
+	rootDir, err := openPromotionBackupRoot(root)
 	if err != nil {
 		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, rootDir.Close()) }()
+	return recoverPromotionTransactionAt(rootDir, root, validateDestination, acceptedGeneration)
+}
+
+// recoverPromotionTransactionAt replays or rolls back an interrupted
+// transaction found under the pinned, helper-owned backup root. The journal
+// and every backup-tree member it names (SafetyPath, ManifestPath) are read
+// and removed descriptor-relative to rootDir, so neither a swapped root nor a
+// symlinked intermediate directory can redirect them (#1274); every
+// destination is re-validated against the caller's live policy (#1218, #1228).
+func recoverPromotionTransactionAt(rootDir *safefs.Dir, root string, validateDestination func(string, string) bool, acceptedGeneration uint64) error {
+	body, err := readPromotionJournalAt(rootDir)
+	if err != nil {
+		return err
+	}
+	if body == nil {
+		return nil
 	}
 	var journal promotionTransactionJournal
 	if err := json.Unmarshal(body, &journal); err != nil {
@@ -287,12 +305,12 @@ func recoverPromotionTransactionWithPolicy(root string, validateDestination func
 		return err
 	}
 	if journal.Phase == "manifest-committed" && journal.Manifest.Phase == "committed" {
-		if err := verifyCommittedPromotion(root, journal); err != nil {
+		if err := verifyCommittedPromotion(rootDir, root, journal); err != nil {
 			return err
 		}
 		return removePromotionJournal(root)
 	}
-	return restorePromotionPreTransaction(root, &journal)
+	return restorePromotionPreTransaction(rootDir, root, &journal)
 }
 
 func validatePromotionDestinations(journal promotionTransactionJournal, validate func(string, string) bool) error {
@@ -311,11 +329,11 @@ func validatePromotionDestinations(journal promotionTransactionJournal, validate
 	return nil
 }
 
-func verifyCommittedPromotion(root string, journal promotionTransactionJournal) error {
+func verifyCommittedPromotion(rootDir *safefs.Dir, root string, journal promotionTransactionJournal) error {
 	if journal.ManifestPath == "" || !pathWithin(root, journal.ManifestPath) {
 		return errors.New("committed promotion manifest escapes backup root")
 	}
-	body, err := os.ReadFile(journal.ManifestPath)
+	body, err := readPromotionBackupMember(rootDir, root, journal.ManifestPath)
 	if err != nil {
 		return err
 	}
@@ -356,7 +374,7 @@ func verifyCommittedPromotion(root string, journal promotionTransactionJournal) 
 	return nil
 }
 
-func restorePromotionPreTransaction(root string, journal *promotionTransactionJournal) error {
+func restorePromotionPreTransaction(rootDir *safefs.Dir, root string, journal *promotionTransactionJournal) error {
 	journal.Phase = "rolling-back"
 	_ = writePromotionJournal(root, *journal)
 	for index := len(journal.Manifest.Records) - 1; index >= 0; index-- {
@@ -365,19 +383,25 @@ func restorePromotionPreTransaction(root string, journal *promotionTransactionJo
 			if record.SafetyPath == "" || !pathWithin(root, record.SafetyPath) {
 				return fmt.Errorf("promotion safety path is outside backup root for %s", record.ArtifactID)
 			}
+			// Every record the helper writes with HadPrevious carries the
+			// digest of the bytes it backed up; an empty digest is not
+			// "skip the check" but an unauthenticated record (#1274).
+			if record.OldDigest == "" {
+				return fmt.Errorf("promotion safety record for %s has no digest", record.ArtifactID)
+			}
 			if record.WasSymlink {
-				if record.OldDigest != "" && promotionDigest([]byte(record.OldLinkTarget)) != record.OldDigest {
+				if promotionDigest([]byte(record.OldLinkTarget)) != record.OldDigest {
 					return fmt.Errorf("promotion symlink metadata digest mismatch for %s", record.ArtifactID)
 				}
 				if err := writePromotionSymlink(record.ArtifactID, record.Destination, record.OldLinkTarget); err != nil {
 					return err
 				}
 			} else {
-				body, err := readManagedConfigFile(record.SafetyPath)
+				body, err := readPromotionBackupMember(rootDir, root, record.SafetyPath)
 				if err != nil {
 					return err
 				}
-				if record.OldDigest != "" && promotionDigest(body) != record.OldDigest {
+				if promotionDigest(body) != record.OldDigest {
 					return fmt.Errorf("promotion safety digest mismatch for %s", record.ArtifactID)
 				}
 				if err := atomicfile.Write(record.Destination, body, 0o600, 0o700); err != nil {
@@ -400,11 +424,7 @@ func restorePromotionPreTransaction(root string, journal *promotionTransactionJo
 		if !pathWithin(root, journal.ManifestPath) {
 			return errors.New("promotion journal manifest path escapes backup root")
 		}
-		if err := os.Remove(journal.ManifestPath); err != nil {
-			if !errors.Is(err, os.ErrNotExist) {
-				return err
-			}
-		} else if err := syncPromotionParent(journal.ManifestPath); err != nil {
+		if err := removePromotionBackupMember(rootDir, root, journal.ManifestPath); err != nil {
 			return err
 		}
 	}

@@ -44,25 +44,7 @@ func firewallJournalPath(root string) string {
 // swap or symlink it; a leaf that is not an owned 0700 directory fails closed
 // before any journal inside it is trusted (#1227).
 func openFirewallJournalRoot(root string) (*safefs.Dir, error) {
-	dir, err := safefs.OpenDir(root)
-	if err != nil {
-		return nil, err
-	}
-	info, err := dir.File().Stat()
-	if err != nil {
-		_ = dir.Close()
-		return nil, err
-	}
-	uid, ok := fileOwnerUID(info)
-	if !ok {
-		_ = dir.Close()
-		return nil, fmt.Errorf("firewall transaction root %s returned unexpected stat type %T", root, info.Sys())
-	}
-	if uid != uint32(effectiveUID()) || info.Mode().Perm() != 0o700 {
-		_ = dir.Close()
-		return nil, fmt.Errorf("firewall transaction root %s is not a helper-owned 0700 directory (uid=%d mode=%#o)", root, uid, info.Mode().Perm())
-	}
-	return dir, nil
+	return openHelperOwnedDir("firewall transaction root", root, uint32(effectiveUID()))
 }
 
 func withFirewallLock(root string, action func(*safefs.Dir) (FirewallResult, error)) (result FirewallResult, resultErr error) {
