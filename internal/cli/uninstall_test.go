@@ -385,3 +385,47 @@ func TestUninstallServiceStopperDelegatesToRealImplementation(t *testing.T) {
 func init() {
 	os.RemoveAll("/tmp/veil-uninstall-test")
 }
+
+// TestUninstallYesWiresFirewallCleaner proves the CLI hands the #1289
+// firewall cleanup to the workflow on a full removal and skips it under
+// --keep-data.
+func TestUninstallYesWiresFirewallCleaner(t *testing.T) {
+	origStop, origRemove, origReload, origFW := uninstallServiceStopper, uninstallFileRemover, uninstallSystemdReloader, uninstallFirewallCleaner
+	t.Cleanup(func() {
+		uninstallServiceStopper, uninstallFileRemover, uninstallSystemdReloader, uninstallFirewallCleaner = origStop, origRemove, origReload, origFW
+	})
+	uninstallServiceStopper = func(string) error { return nil }
+	uninstallFileRemover = func(string) error { return nil }
+	uninstallSystemdReloader = func() error { return nil }
+	for _, tc := range []struct {
+		name      string
+		extra     []string
+		wantCalls int
+	}{
+		{name: "full", wantCalls: 1},
+		{name: "keep-data", extra: []string{"--keep-data"}, wantCalls: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			uninstallFirewallCleaner = func() ([]string, error) { calls++; return []string{"2096/tcp"}, nil }
+			host := t.TempDir()
+			cmd := NewRootCommand("test")
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs(append([]string{
+				"uninstall", "--yes",
+				"--etc-dir", filepath.Join(host, "etc"),
+				"--var-dir", filepath.Join(host, "var"),
+				"--systemd-dir", filepath.Join(host, "systemd"),
+				"--install-dir", filepath.Join(host, "bin"),
+			}, tc.extra...))
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("uninstall: %v\n%s", err, out.String())
+			}
+			if calls != tc.wantCalls {
+				t.Fatalf("firewall cleaner calls = %d, want %d\n%s", calls, tc.wantCalls, out.String())
+			}
+		})
+	}
+}

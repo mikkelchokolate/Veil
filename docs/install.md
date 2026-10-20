@@ -275,6 +275,12 @@ install` writes under `/etc/systemd/system` and any packaged units left under
 (`/etc/sysctl.d/99-veil-quic.conf`), **and** the configuration and state in
 `/etc/veil` and `/var/lib/veil` (including encrypted backups), so a later
 install starts fresh with a new password and panel path.
+A full removal also deletes the UFW allow rules Veil created (every rule
+commented `Veil …`: panel, proxy ports and the ACME `80/tcp` challenge), so no
+port stays open for whatever binds it next. The `Veil management SSH` allow is
+kept so an active UFW cannot lock you out; delete it by hand if you no longer
+need it. `--keep-data` leaves the firewall untouched, and the plan printed
+before removal lists the firewall step.
 The locked `veil` account is preserved. Review and export backups first:
 
 ```bash

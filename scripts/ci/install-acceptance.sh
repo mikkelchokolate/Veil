@@ -58,6 +58,17 @@ CUSTOM_ROOT=/opt/veil-ci
 CUSTOM_ETC="${CUSTOM_ROOT}/etc"
 CUSTOM_VAR="${CUSTOM_ROOT}/var"
 
+# assert_no_veil_firewall_rules: a full uninstall must close every UFW allow
+# Veil opened except the management SSH allow (issue #1289).
+assert_no_veil_firewall_rules() {
+  command -v ufw >/dev/null 2>&1 || return 0
+  local leftovers
+  leftovers="$(${SUDO} env LC_ALL=C ufw status | grep -F '# Veil ' | grep -vF '# Veil management SSH' || true)"
+  if [ -n "${leftovers}" ]; then
+    ci_die "$1 left Veil-managed ufw rules open: ${leftovers}"
+  fi
+}
+
 uninstall_leg() {
   ci_step "uninstall --keep-data"
   ci_run veil-uninstall ${SUDO} /usr/local/bin/veil uninstall --yes --keep-data
@@ -759,6 +770,7 @@ if [ -z "${IA_PHASE_MARKER}" ]; then
   if systemctl is-active --quiet veil.service; then
     ci_die "veil.service still active after custom-root uninstall"
   fi
+  assert_no_veil_firewall_rules "custom-root uninstall"
 fi
 
 # --- 7. Reboot persistence (smolvm system VM only) ---------------------------

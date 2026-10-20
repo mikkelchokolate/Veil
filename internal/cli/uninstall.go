@@ -11,6 +11,7 @@ import (
 var uninstallServiceStopper = uninstallflow.StopAndDisableService
 var uninstallFileRemover = uninstallflow.RemovePath
 var uninstallSystemdReloader = uninstallflow.ReloadSystemdDaemon
+var uninstallFirewallCleaner = uninstallflow.RemoveManagedFirewallRules
 
 func newUninstallCommand() *cobra.Command {
 	var dryRun bool
@@ -45,12 +46,15 @@ func newUninstallCommand() *cobra.Command {
 			"Purge also removes the Caddy/Mita state dirs (--caddy-state-dir, --mita-state-dir,\n" +
 			"defaulting to VEIL_CADDY_STATE_DIR / VEIL_MITA_STATE_DIR or /var/lib/caddy and\n" +
 			"/var/lib/mita); use --keep-data if they are shared with a system Caddy/mita.\n" +
+			"A full removal also deletes Veil-managed UFW allow rules (comment \"Veil …\"),\n" +
+			"keeping \"Veil management SSH\"; --keep-data leaves the firewall untouched.\n" +
 			"The veil system account is always preserved.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return uninstallflow.Run(uninstallflow.Options{DryRun: dryRun, Yes: yes, Purge: purge, KeepData: keepData, EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, InstallDir: installDir, CaddyStateDir: caddyStateDir, MitaStateDir: mitaStateDir, VendorSystemdDirs: vendorSystemdDirs, SysctlConfPath: sysctlConfPath}, cmd.OutOrStdout(), cmd.ErrOrStderr(), uninstallflow.Dependencies{
 				ServiceStopper:  uninstallServiceStopper,
 				FileRemover:     uninstallFileRemover,
 				SystemdReloader: uninstallSystemdReloader,
+				FirewallCleaner: uninstallFirewallCleaner,
 			})
 		},
 	}
