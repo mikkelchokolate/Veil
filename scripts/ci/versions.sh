@@ -63,7 +63,7 @@ CI_DOCKER_BUILDX_SHA256="9447199cdb435f25880548343c128a4b6650e8891ee598905d8d29d
 # --- Browser ----------------------------------------------------------------
 # Must match test/browser/package.json @playwright/test and web/package.json
 # playwright. vm-build.sh asserts this at image build time.
-CI_PLAYWRIGHT_VERSION="1.64.0"
+CI_PLAYWRIGHT_VERSION="1.64.1"
 
 # --- Protocol runtimes (server + clients) ------------------------------------
 # Server runtimes are what `veil runtime install` would fetch; for required CI
