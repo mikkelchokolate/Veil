@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 )
 
 // randomReader is overridable in tests so that RandomHighPort error paths can be
@@ -44,14 +46,39 @@ func rejectPrivilegedPanelPort(port int) error {
 	return nil
 }
 
+// RandomHighPort draws a uniformly random port from [RandomPortMin,
+// RandomPortMax] that is not one of Veil's own loopback TCP ports
+// (runtimeports.ReservedInternalTCPPorts). A panel listening on a reserved
+// port — e.g. the parked acme.sh HTTP-01 port 44080 (#1285) — would make the
+// corresponding Veil service fail to bind, so those ports are skipped
+// deterministically instead of rejected after the fact.
 func RandomHighPort() (int, error) {
 	var b [8]byte
 	if _, err := randomReader(b[:]); err != nil {
 		return 0, err
 	}
 	n := binary.BigEndian.Uint64(b[:])
-	span := uint64(RandomPortMax - RandomPortMin + 1)
-	return RandomPortMin + int(n%span), nil
+	reserved := reservedPortsInRandomRange()
+	span := uint64(RandomPortMax - RandomPortMin + 1 - len(reserved))
+	port := RandomPortMin + int(n%span)
+	// reserved is ascending: shifting past each reserved port at or below
+	// the candidate maps the span-sized index onto the non-reserved ports.
+	for _, r := range reserved {
+		if port >= r {
+			port++
+		}
+	}
+	return port, nil
+}
+
+func reservedPortsInRandomRange() []int {
+	var reserved []int
+	for _, port := range runtimeports.ReservedInternalTCPPorts() {
+		if port >= RandomPortMin && port <= RandomPortMax {
+			reserved = append(reserved, port)
+		}
+	}
+	return reserved
 }
 
 func SelectPanelPort(requested int, randomPort func() (int, error)) (port int, random bool, err error) {

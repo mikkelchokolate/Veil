@@ -489,10 +489,13 @@ func inboundListenPort(settings model.Settings, inbound model.Inbound) int {
 // reserved unconditionally — the stats/admin listeners may appear later
 // (e.g. the first Hysteria2 inbound added after the TCP rule), and the
 // Hysteria2 auth callback listener is bound on every panel start (#1191).
+// The parked acme.sh HTTP-01 listener binds whenever the panel IP
+// certificate renews behind a Caddy-owned :80 (#1285).
 var reservedInternalTCPPorts = map[int]string{
 	runtimeports.Hysteria2TrafficStatsPort: "the Hysteria2 traffic stats API",
 	runtimeports.Hysteria2HTTPAuthPort:     "the Hysteria2 auth callback",
 	runtimeports.CaddyAdminPort:            "the managed Caddy admin API",
+	runtimeports.ACMEHTTP01ParkedPort:      "the IP-certificate HTTP-01 listener",
 }
 
 func ownedBinding(settings model.Settings, candidate model.Inbound, current []model.Inbound) bool {

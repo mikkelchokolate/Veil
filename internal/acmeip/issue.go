@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 )
 
 // IssuedCert holds the on-disk paths of a successfully issued certificate.
@@ -33,7 +34,10 @@ type IssuedCert struct {
 // /.well-known/acme-challenge/* to it, so the panel IP certificate renews
 // without competing for :80 (#1181). The renderer MUST emit the matching
 // reverse-proxy upstream for the same port.
-const CaddyFrontedHTTP01Port = 44080
+//
+// The canonical value lives in runtimeports so desired-state validation can
+// reserve it without importing this package (#1285).
+const CaddyFrontedHTTP01Port = runtimeports.ACMEHTTP01ParkedPort
 
 // CaddyFrontedHTTP01Host is the loopback address the parked acme.sh listener
 // binds via --local-address (#1207). It lives in the reserved 127.42.0.0/16
@@ -42,7 +46,7 @@ const CaddyFrontedHTTP01Port = 44080
 // or broadly-bindable proxy process can neither claim the listener's address
 // ahead of acme.sh nor dial it to steal the challenge path. The rendered
 // reverse-proxy upstream dials this exact address.
-const CaddyFrontedHTTP01Host = "127.42.0.2"
+const CaddyFrontedHTTP01Host = runtimeports.ACMEHTTP01ParkedHost
 
 // IssueOptions configures a Let's Encrypt IP-certificate request.
 type IssueOptions struct {
