@@ -207,6 +207,16 @@ runbook.
   only the daemon and the `veil` panel account (a supplementary `veil-mita`
   member, needed for `mita get metrics`) can connect — `veil-proxy` peers are
   denied and cannot even signal the daemon.
+- **Caddy admin API is a Unix socket.** The managed Caddy Admin API is
+  unauthenticated, so it is not a TCP listener: `admin.listen` is
+  `unix//var/lib/caddy/admin.sock|0200`, an owner-only (`veil-proxy`) socket
+  inside `veil-caddy.service`'s `StateDirectory=caddy`. Unrelated local uids
+  cannot connect (only `veil-proxy` and root, i.e. the privileged helper's
+  `CaddyLoad`), and the `veil-proxy` siblings `veil-hysteria2@`,
+  `veil-olcrtc@` and `veil-warp` carry `InaccessiblePaths=-/var/lib/caddy`,
+  which also hides Caddy's ACME account and TLS keys from them. A Caddy still
+  running a pre-socket config is moved over by a one-time restart on the next
+  apply.
 - **Privileged helper.** Root-only operations are exposed by
   `veil-helper.socket` at `/run/veil/helper.sock`. The socket is
   `root:veil 0660` inside a root-owned traverse-only directory

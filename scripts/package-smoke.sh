@@ -270,6 +270,13 @@ assert_unit_hardening() {
     grep -qxF 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE' "$unitdir/$unit" || fail "$unit CapabilityBoundingSet"
     grep -qxF 'AmbientCapabilities=CAP_NET_BIND_SERVICE' "$unitdir/$unit" || fail "$unit AmbientCapabilities"
   done
+  # Caddy admin API socket lives in /var/lib/caddy (#1276): same-uid edge
+  # siblings mask it; veil-caddy keeps its own StateDirectory.
+  for unit in veil-hysteria2@.service veil-olcrtc@.service veil-warp.service; do
+    grep -qxF 'InaccessiblePaths=-/var/lib/caddy' "$unitdir/$unit" || fail "$unit Caddy state mask"
+  done
+  ! grep -E '^InaccessiblePaths=.*/var/lib/caddy' "$unitdir/veil-caddy.service" >/dev/null \
+    || fail "veil-caddy.service masks its own StateDirectory"
   # veil-mieru.service runs as the dedicated veil-mita identity (issue #624):
   # its appctl UDS is a control plane, so it must not share the veil-proxy
   # edge uid/gid — only the supplementary group for generated-config reads.

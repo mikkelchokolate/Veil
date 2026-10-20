@@ -191,6 +191,16 @@ for unit in veil-caddy.service veil-hysteria2@.service veil-olcrtc@.service veil
   assert_unit "$unit" 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE'
   assert_unit "$unit" 'AmbientCapabilities=CAP_NET_BIND_SERVICE'
 done
+# The Caddy admin API is an owner-only veil-proxy Unix socket in Caddy's
+# StateDirectory (#1276); the same-uid edge siblings must mask that tree, and
+# veil-caddy itself must not.
+for unit in veil-hysteria2@.service veil-olcrtc@.service veil-warp.service; do
+  assert_unit "$unit" 'InaccessiblePaths=-/var/lib/caddy'
+done
+if grep -E '^InaccessiblePaths=.*/var/lib/caddy' packaging/systemd/veil-caddy.service >/dev/null; then
+  echo "unit contract violation: veil-caddy.service masks its own StateDirectory" >&2
+  exit 1
+fi
 # veil-mieru.service is deliberately NOT a veil-proxy unit (issue #624): the
 # dedicated veil-mita identity owns the appctl socket and state dir, keeps
 # veil-proxy only as a supplementary group for reading generated config, and

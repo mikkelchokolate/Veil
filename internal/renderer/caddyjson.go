@@ -32,7 +32,7 @@ func RenderCaddyJSON(plan caddyassembly.CaddyRenderPlan, caps caddycapabilities.
 	if err != nil {
 		return nil, err
 	}
-	cfg := caddyConfig{Admin: map[string]any{"listen": runtimeports.CaddyAdminAddress()}, Apps: map[string]any{}}
+	cfg := caddyConfig{Admin: map[string]any{"listen": runtimeports.CaddyAdminListen()}, Apps: map[string]any{}}
 	cfg.Apps["http"] = httpApp
 	cfg.Apps["tls"] = tlsApp
 	return json.MarshalIndent(cfg, "", "  ")

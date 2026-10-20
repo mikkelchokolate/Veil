@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/runtimeports"
@@ -28,6 +30,45 @@ func NewClient(endpoint string) Client {
 	return Client{AdminEndpoint: endpoint, HTTPClient: &http.Client{Timeout: defaultAdminTimeout}}
 }
 
+// unixSocketPath reports whether endpoint uses Caddy's "unix/<path>" network
+// address syntax and returns the socket path. A "|<mode>" permission suffix
+// (valid in Caddy's admin.listen) is ignored: it only governs how Caddy
+// creates the socket.
+func unixSocketPath(endpoint string) (string, bool) {
+	rest, ok := strings.CutPrefix(endpoint, "unix/")
+	if !ok || rest == "" {
+		return "", false
+	}
+	if i := strings.LastIndexByte(rest, '|'); i >= 0 {
+		rest = rest[:i]
+	}
+	return rest, rest != ""
+}
+
+// requestBase resolves the URL prefix for admin requests and, for a Unix
+// socket endpoint, rewires the client to dial that socket. The HTTP authority
+// is 127.0.0.1: Caddy accepts only a loopback Host (or none) on unix-socket
+// admin listeners (#1276).
+func (c Client) requestBase(httpClient *http.Client) string {
+	socket, ok := unixSocketPath(c.AdminEndpoint)
+	if !ok {
+		return c.AdminEndpoint
+	}
+	var transport *http.Transport
+	if base, isTransport := httpClient.Transport.(*http.Transport); isTransport && base != nil {
+		transport = base.Clone()
+	} else {
+		transport = http.DefaultTransport.(*http.Transport).Clone()
+	}
+	transport.Proxy = nil
+	transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+		var dialer net.Dialer
+		return dialer.DialContext(ctx, "unix", socket)
+	}
+	httpClient.Transport = transport
+	return "http://127.0.0.1"
+}
+
 func (c Client) LoadConfig(configJSON []byte) error {
 	return c.LoadConfigContext(context.Background(), configJSON)
 }
@@ -45,7 +86,8 @@ func (c Client) LoadConfigContext(ctx context.Context, configJSON []byte) error 
 	clientCopy.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
-	loadURL := c.AdminEndpoint + "/load"
+	base := c.requestBase(&clientCopy)
+	loadURL := base + "/load"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, loadURL, bytes.NewReader(configJSON))
 	if err != nil {
 		return err
@@ -61,7 +103,7 @@ func (c Client) LoadConfigContext(ctx context.Context, configJSON []byte) error 
 		return fmt.Errorf("caddy admin returned %s", resp.Status)
 	}
 
-	verifyReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.AdminEndpoint+"/config/", nil)
+	verifyReq, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/config/", nil)
 	if err != nil {
 		return err
 	}
