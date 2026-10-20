@@ -403,7 +403,7 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	fmt.Fprint(cmd.OutOrStdout(), installflow.CredentialSummary(profile))
 	if reusedExistingState {
 		fmt.Fprintf(cmd.OutOrStdout(), "Reused the existing admin login and panel path from %s; your previous password still applies.\n", resolvedStatePath)
-		fmt.Fprintf(cmd.OutOrStdout(), "To set a new password: sudo veil admin set --username %s --password 'NEW' --role admin\n", profile.Username)
+		fmt.Fprintf(cmd.OutOrStdout(), "To set a new password: sudo veil admin set --username %s --role admin (prompts for the password)\n", profile.Username)
 		fmt.Fprintln(cmd.OutOrStdout(), "To wipe and start fresh instead: run sudo veil uninstall, then reinstall.")
 	}
 	if err := writeAuditInstall(opts.AuditLog, result.BackupID, true, "", result.WrittenFiles); err != nil {

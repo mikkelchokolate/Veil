@@ -76,7 +76,9 @@ credentials explicitly if setup has not already been completed:
 ```bash
 sudo veil admin reset
 # or
-sudo veil admin set --username admin --password 'use-a-long-random-password' --role admin
+sudo veil admin set --username admin --role admin   # prompts for the password without echo
+# non-interactive: read it from stdin or a file instead of argv
+printf '%s\n' "$PANEL_PASSWORD" | sudo veil admin set --username admin --role admin --password-stdin
 ```
 
 Direct public `veil serve` listeners require native TLS, a configured Panel

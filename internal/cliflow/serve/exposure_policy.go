@@ -23,7 +23,7 @@ func (ExposurePolicy) Validate(in ExposureInput) error {
 		return nil
 	}
 	if !in.SessionAuthConfigured {
-		return fmt.Errorf("public Panel listen or reverse-proxy exposure requires user/session auth; run `veil admin reset` or `veil admin set --username admin --password <password>`")
+		return fmt.Errorf("public Panel listen or reverse-proxy exposure requires user/session auth; run `veil admin reset` or `veil admin set --username admin`")
 	}
 	if (in.PublicListen || in.PanelAccess == "direct") && !in.TokenConfigured {
 		return fmt.Errorf("direct public Panel exposure requires an API token")

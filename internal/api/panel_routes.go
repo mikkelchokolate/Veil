@@ -106,7 +106,7 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 		noUsers := len(routes.State.users) == 0
 		routes.State.mu.Unlock()
 		if routes.Info.PublicListen && noUsers {
-			writeError(w, "first-run admin setup is required before public Panel access; run `veil admin reset` or `veil admin set --username admin --password <password>`", http.StatusServiceUnavailable)
+			writeError(w, "first-run admin setup is required before public Panel access; run `veil admin reset` or `veil admin set --username admin`", http.StatusServiceUnavailable)
 			return
 		}
 	}
@@ -192,7 +192,7 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				if routes.Info.PublicListen && noUsers {
-					writeError(w, "first-run admin setup is required before public Panel access; run `veil admin reset` or `veil admin set --username admin --password <password>`", http.StatusServiceUnavailable)
+					writeError(w, "first-run admin setup is required before public Panel access; run `veil admin reset` or `veil admin set --username admin`", http.StatusServiceUnavailable)
 					return
 				}
 				if !noUsers {

@@ -79,7 +79,7 @@ func (Environment) ValidatePublicExposure(listen string, tokenSource string, ses
 	if !missingToken && !missingSession {
 		return nil
 	}
-	return fmt.Errorf("public Panel listen %s requires both API token auth (--auth-token or VEIL_API_TOKEN) and user/session auth (run `veil admin reset` or `veil admin set --username admin --password <password>` before first public start)", listen)
+	return fmt.Errorf("public Panel listen %s requires both API token auth (--auth-token or VEIL_API_TOKEN) and user/session auth (run `veil admin reset` or `veil admin set --username admin` before first public start)", listen)
 }
 
 func (Environment) IsPublicListen(listen string) (bool, error) {
