@@ -58,6 +58,15 @@ func TestUninstallEnvWarningComparesCleanedPaths(t *testing.T) {
 	if errOut.Len() != 0 {
 		t.Fatalf("cleaned-equal packaged paths reported as overrides:\n%s", errOut.String())
 	}
+	// The flow consumes the vendor list via strings.Fields and single paths
+	// via strings.TrimSpace, so padded spellings are still the packaged
+	// targets and must not warn (#1342 review).
+	t.Setenv("VEIL_VENDOR_SYSTEMD_DIRS", "  /lib/systemd/system \t /usr/lib/systemd/system ")
+	t.Setenv("VEIL_CADDY_STATE_DIR", " /var/lib/caddy ")
+	warnUninstallEnvOverrides(&errOut, nil)
+	if errOut.Len() != 0 {
+		t.Fatalf("whitespace-padded packaged targets reported as overrides:\n%s", errOut.String())
+	}
 	t.Setenv("VEIL_SYSCTL_CONF", "/tmp/elsewhere/99-veil-quic.conf")
 	warnUninstallEnvOverrides(&errOut, nil)
 	if !strings.Contains(errOut.String(), "VEIL_SYSCTL_CONF=/tmp/elsewhere/99-veil-quic.conf") {
