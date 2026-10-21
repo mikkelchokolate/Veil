@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 func TestCommittedPromotionMarkerDeletionFailureFinalizesWithoutRollback(t *testing.T) {
@@ -13,12 +15,12 @@ func TestCommittedPromotionMarkerDeletionFailureFinalizesWithoutRollback(t *test
 	backupRoot := filepath.Join(root, "backups")
 	originalRemove := promotionJournalRemove
 	failed := false
-	promotionJournalRemove = func(path string) error {
-		if !failed && filepath.Base(path) == promotionTransactionJournalName {
+	promotionJournalRemove = func(rootDir *safefs.Dir, name string) error {
+		if !failed && name == promotionTransactionJournalName {
 			failed = true
 			return errors.New("injected committed marker unlink failure")
 		}
-		return os.Remove(path)
+		return originalRemove(rootDir, name)
 	}
 	defer func() { promotionJournalRemove = originalRemove }()
 

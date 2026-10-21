@@ -145,7 +145,7 @@ func TestPromotionRecoveryReappliesRuntimeArtifactOwnership(t *testing.T) {
 			},
 		},
 	}
-	if err := writePromotionJournal(backupRoot, journal); err != nil {
+	if err := writePromotionJournalAtPath(backupRoot, journal); err != nil {
 		t.Fatalf("write crash journal: %v", err)
 	}
 

@@ -648,7 +648,7 @@ type promotionManifestRecord struct {
 	OldLinkTarget string `json:"oldLinkTarget,omitempty"`
 }
 
-func backupPromotionDestination(root, backupID string, artifact ResolvedArtifact) (promotionManifestRecord, error) {
+func backupPromotionDestination(rootDir *safefs.Dir, root, backupID string, artifact ResolvedArtifact) (promotionManifestRecord, error) {
 	record := promotionManifestRecord{ArtifactID: artifact.ID, Destination: artifact.Destination}
 	// Lstat (not Stat/ReadFile) so a symlink swapped in after policy resolution
 	// is detected. Reading a symlink would copy the target's content — possibly
@@ -665,11 +665,11 @@ func backupPromotionDestination(root, backupID string, artifact ResolvedArtifact
 	if err != nil {
 		return promotionManifestRecord{}, err
 	}
-	if root == "" {
+	if root == "" || rootDir == nil {
 		return promotionManifestRecord{}, errors.New("promotion backup root is required")
 	}
 	path := filepath.Join(root, backupID, filepath.Clean(artifact.ID))
-	if err := atomicfile.Write(path, body, 0o600, 0o700); err != nil {
+	if err := writePromotionBackupMember(rootDir, root, path, body); err != nil {
 		return promotionManifestRecord{}, err
 	}
 	record.BackupPath = path
