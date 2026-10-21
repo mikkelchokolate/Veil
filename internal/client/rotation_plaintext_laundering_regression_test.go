@@ -245,10 +245,26 @@ func TestRotationRefusalHintsUnstickRotation(t *testing.T) {
 		t.Fatalf("token rotation after clearing token_ciphertext as hinted: %v", err)
 	}
 
+	// Plant into the binding's active credential: the hint says to rotate it
+	// first so deleting the planted row cannot leave an enabled binding with
+	// no active credential (which would fail every render).
 	if _, err := db.Exec(`UPDATE client_credentials SET encrypted_value=? WHERE id=?`, []byte("attacker-chosen-password"), cred.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := creds.Rotate(binding.ID, "password", "new-secret"); err != nil {
+	if active, err := creds.ActiveForBinding(binding.ID, "password"); err != nil || active.ID != cred.ID {
+		t.Fatalf("planted row is not the active credential: %+v, %v", active, err)
+	}
+	if !strings.Contains(func() string {
+		err := rotate(credentials)
+		if err == nil {
+			t.Fatal("rotation accepted planted active credential")
+		}
+		return err.Error()
+	}(), "rotate it first") {
+		t.Fatal("credential refusal does not tell the operator to rotate an active credential before deleting it")
+	}
+	replacement, err := creds.Rotate(binding.ID, "password", "new-secret")
+	if err != nil {
 		t.Fatalf("credential rotate: %v", err)
 	}
 	err = rotate(credentials)
@@ -263,5 +279,12 @@ func TestRotationRefusalHintsUnstickRotation(t *testing.T) {
 	}
 	if err := rotate(credentials); err != nil {
 		t.Fatalf("credential rotation after deleting the row as hinted: %v", err)
+	}
+	active, err := creds.ActiveForBinding(binding.ID, "password")
+	if err != nil || active.ID != replacement.ID {
+		t.Fatalf("binding lost its active credential after following the hint: %+v, %v", active, err)
+	}
+	if got, err := creds.Reveal(active.ID); err != nil || got != "new-secret" {
+		t.Fatalf("Reveal(active) = %q, %v", got, err)
 	}
 }

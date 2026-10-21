@@ -215,7 +215,7 @@ func (t *Tx) ReencryptCredentials(oldCipher, newCipher *secrets.Cipher) error {
 		// Same laundering guard as ReencryptSubscriptionTokens (#1283): a
 		// planted non-"ve1:" value must not become a real ciphertext.
 		if !secrets.IsEncrypted(string(credential.value)) {
-			return fmt.Errorf("client: credential %s ciphertext is invalid; refusing master-key rotation (delete that client_credentials row, then retry; rotating or revoking does not help because the old row is kept and still rotated)", credential.id)
+			return fmt.Errorf("client: credential %s ciphertext is invalid; refusing master-key rotation (if it is the binding's active credential, rotate it first so the binding keeps a valid one; then delete that old client_credentials row and retry; rotating or revoking alone does not help because the old row is kept and still rotated)", credential.id)
 		}
 		plaintext, err := oldCipher.Decrypt(string(credential.value))
 		if err != nil {
