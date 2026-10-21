@@ -35,7 +35,10 @@ func TestTokenRevealRejectsPlantedPlaintextCiphertext(t *testing.T) {
 	defer db.Close()
 	repo := NewRepository(db)
 	ts := NewTokenStore(db).WithCipher(newTestCipher(t))
-	c, _ := repo.Create(Client{Name: "alice", Enabled: true, QuotaResetPolicy: ResetNever})
+	c, err := repo.Create(Client{Name: "alice", Enabled: true, QuotaResetPolicy: ResetNever})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
 	issued, err := ts.Issue(c.ID, "phone", nil)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
