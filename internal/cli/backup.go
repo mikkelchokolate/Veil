@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/backupsftp"
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/syspath"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -26,7 +26,7 @@ const (
 )
 
 var backupSystemctlRun = func(args ...string) error {
-	return exec.Command("systemctl", args...).Run()
+	return syspath.Command("systemctl", args...).Run()
 }
 
 func reloadRunningPanelAfterRestore() (bool, error) {

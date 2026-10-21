@@ -2,8 +2,9 @@ package service
 
 import (
 	"context"
-	"os/exec"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/syspath"
 )
 
 type SystemdActionModule struct {
@@ -52,7 +53,7 @@ type SystemdExecRunner struct{}
 func (SystemdExecRunner) Run(command string, args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), systemdCommandTimeout(command, args...))
 	defer cancel()
-	cmd := exec.CommandContext(ctx, command, args...)
+	cmd := syspath.CommandContext(ctx, command, args...)
 	return cmd.Run()
 }
 
