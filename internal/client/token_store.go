@@ -313,9 +313,22 @@ func validateTokenMetadata(label string, expiresAt *int64) error {
 	return nil
 }
 
-// Revoke invalidates a token by ID.
+// revokeTokenQ revokes a live token row and destroys its sealed issuance
+// binding in the same statement. revoked_at is a plain veil.db column, so a
+// revoked row that kept a valid binding could be re-activated by a veil.db
+// writer with `revoked_at=NULL` (#1346). openToken refuses an empty seal, so
+// once the binding is gone the row never authenticates again, whatever
+// revoked_at says.
+const revokeTokenQ = `UPDATE subscription_tokens SET revoked_at=?, token_ciphertext='' WHERE id=? AND revoked_at IS NULL`
+
+// scrubRevokedBindingsQ clears bindings that revoked rows still carry because
+// they were revoked by a build without revokeTokenQ (#1346).
+const scrubRevokedBindingsQ = `UPDATE subscription_tokens SET token_ciphertext='' WHERE revoked_at IS NOT NULL AND token_ciphertext<>''`
+
+// Revoke invalidates a token by ID. Revocation is terminal: the row's sealed
+// binding is destroyed with it (#1346).
 func (s *TokenStore) Revoke(id string) error {
-	res, err := s.db.Exec(`UPDATE subscription_tokens SET revoked_at=? WHERE id=? AND revoked_at IS NULL`, nowUnix(), id)
+	res, err := s.db.Exec(revokeTokenQ, nowUnix(), id)
 	if err != nil {
 		return fmt.Errorf("client: revoke token: %w", err)
 	}
@@ -466,8 +479,11 @@ const TokenBindingMarkerKey = "subscription_token_binding_v1"
 
 // tokenBinding is the AEAD-sealed record that ties a token to the row the
 // panel issued it on. Every field that decides who the token authenticates as
-// and for how long is inside the seal; revoked_at/enabled only ever narrow
-// access and stay plain columns.
+// and for how long is inside the seal. revoked_at and enabled stay plain
+// columns, so a veil.db writer can flip them either way: enabled is meant to
+// be reversible, and revocation is made terminal by destroying the seal in
+// the same UPDATE that sets revoked_at (revokeTokenQ, #1346), not by trusting
+// the column.
 type tokenBinding struct {
 	Version   string `json:"v"`
 	ID        string `json:"id"`
@@ -549,11 +565,29 @@ func (s *TokenStore) ensureLegacyBindingsSealed() error {
 	if s.legacySealed {
 		return nil
 	}
-	if _, err := s.sealLegacyBindings(); err != nil {
+	if _, err := s.completeLegacyPassLocked(); err != nil {
 		return fmt.Errorf("client: seal legacy token bindings: %w", err)
 	}
-	s.legacySealed = true
 	return nil
+}
+
+// completeLegacyPassLocked runs the one-shot legacy re-seal and then clears
+// the bindings that rows revoked before #1346 still carry, so a cleared
+// revoked_at cannot bring them back. The clear runs after the pass so its
+// tamper accounting sees the database as it was; it is idempotent. Both entry
+// points (startup and the first Issue/Rotate) go through here, and
+// legacySealed is only set once both steps succeeded, so a failed clear is
+// retried by the next caller. Requires legacyMu.
+func (s *TokenStore) completeLegacyPassLocked() (int, error) {
+	resealed, err := s.sealLegacyBindings()
+	if err != nil {
+		return resealed, err
+	}
+	if _, err := s.db.Exec(scrubRevokedBindingsQ); err != nil {
+		return resealed, fmt.Errorf("client: clear revoked token bindings: %w", err)
+	}
+	s.legacySealed = true
+	return resealed, nil
 }
 
 // SealLegacyBindings re-seals, once per database, the token rows issued
@@ -580,11 +614,7 @@ func (s *TokenStore) SealLegacyBindings() (int, error) {
 	}
 	s.legacyMu.Lock()
 	defer s.legacyMu.Unlock()
-	resealed, err := s.sealLegacyBindings()
-	if err == nil {
-		s.legacySealed = true
-	}
-	return resealed, err
+	return s.completeLegacyPassLocked()
 }
 
 func (s *TokenStore) sealLegacyBindings() (int, error) {
@@ -820,8 +850,10 @@ func (t *Tx) issueTokenTx(clientID, label string, expiresAt *int64) (IssuedToken
 }
 
 // RevokeTokenTx invalidates a token by ID inside the transaction.
+// Like Revoke it destroys the sealed binding (#1346); rotation revokes the
+// old row through here.
 func (t *Tx) RevokeTokenTx(id string) error {
-	res, err := t.q.Exec(`UPDATE subscription_tokens SET revoked_at=? WHERE id=? AND revoked_at IS NULL`, nowUnix(), id)
+	res, err := t.q.Exec(revokeTokenQ, nowUnix(), id)
 	if err != nil {
 		return fmt.Errorf("client: revoke token: %w", err)
 	}
@@ -925,7 +957,7 @@ func (t *Tx) ReencryptSubscriptionTokens(oldCipher, newCipher *secrets.Cipher) e
 		// that under the new key would launder a planted plaintext row into a
 		// valid ciphertext that Reveal then accepts (#1283), so refuse it.
 		if !secrets.IsEncrypted(string(token.value)) {
-			return fmt.Errorf("client: token %s ciphertext is invalid; refusing master-key rotation (delete its subscription_tokens row, or revoke it and clear its token_ciphertext, then retry; revoking alone does not help because revoked rows are still rotated)", token.id)
+			return fmt.Errorf("client: token %s ciphertext is invalid; refusing master-key rotation (revoke it, which also clears its token_ciphertext, or delete its subscription_tokens row, then retry; a row that is already revoked but still holds a ciphertext from an older build is cleared on the next panel start, or clear its token_ciphertext by hand)", token.id)
 		}
 		// Issuance bindings (#1281) are sealed under the token subkey; rows
 		// issued before them still carry a bare master-cipher seal, which
