@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mikkelchokolate/Veil/internal/runtimeinstall"
 	"github.com/mikkelchokolate/Veil/internal/systemdunits"
 )
 
@@ -172,6 +173,19 @@ func Plan(opts Options) string {
 	b.WriteString(fmt.Sprintf("  - %s\n", filepath.ToSlash(opts.SysctlConfPath)))
 	b.WriteString("Remove binary:\n")
 	b.WriteString(fmt.Sprintf("  - %s\n", BinaryPath(opts)))
+	if opts.PreservesData() {
+		b.WriteString("Preserved runtime binaries:\n")
+		b.WriteString("  - runtimes Veil installed into " + filepath.ToSlash(opts.InstallDir) + " (kept with --keep-data)\n")
+		return b.String()
+	}
+	b.WriteString("Remove runtime binaries installed by Veil:\n")
+	runtimePaths := RuntimeBinaryPaths(opts)
+	if len(runtimePaths) == 0 {
+		b.WriteString("  - none recorded (no Veil runtime provenance in " + filepath.ToSlash(opts.InstallDir) + ")\n")
+	}
+	for _, path := range runtimePaths {
+		b.WriteString(fmt.Sprintf("  - %s\n", path))
+	}
 	return b.String()
 }
 
@@ -218,6 +232,28 @@ func Paths(opts Options) []string {
 	// removed even under --keep-data (issue #486).
 	paths = append(paths, filepath.ToSlash(opts.SysctlConfPath))
 	paths = append(paths, BinaryPath(opts))
+	// Runtime binaries (caddy, hysteria, sing-box, mita, olcrtc) go on a full
+	// removal so a later install starts fresh instead of adopting stale
+	// binaries left on PATH (#1289). --keep-data keeps them: `veil install`
+	// does not fetch runtimes, so an in-place upgrade that reuses the
+	// configuration must find its protocol binaries still in place.
+	if !opts.PreservesData() {
+		paths = append(paths, RuntimeBinaryPaths(opts)...)
+	}
+	return paths
+}
+
+// RuntimeBinaryPaths lists the runtime binaries Veil's installer wrote into
+// the install dir, plus its provenance bookkeeping. Only files whose current
+// bytes match the digest recorded at install time are included, so a system
+// or operator-provided caddy at the same path is never removed (#1289).
+func RuntimeBinaryPaths(opts Options) []string {
+	opts = opts.WithDefaults()
+	artifacts := runtimeinstall.ManagedRuntimeArtifacts(opts.InstallDir)
+	paths := make([]string, 0, len(artifacts))
+	for _, path := range artifacts {
+		paths = append(paths, filepath.ToSlash(path))
+	}
 	return paths
 }
 

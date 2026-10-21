@@ -281,6 +281,14 @@ port stays open for whatever binds it next. The `Veil management SSH` allow is
 kept so an active UFW cannot lock you out; delete it by hand if you no longer
 need it. `--keep-data` leaves the firewall untouched, and the plan printed
 before removal lists the firewall step.
+A full removal also deletes the runtime binaries `veil runtime install` put in
+the install dir (`caddy`, `hysteria`, `sing-box`, `mita`, `olcrtc`) together
+with its provenance record (`.veil-runtime-generation.json`). Only binaries
+whose bytes still match the SHA-256 recorded at install time are removed; a
+system or hand-built `caddy` at the same path is never touched, and without
+the record nothing but the `veil` binary goes. `--keep-data` keeps the
+runtimes, because `veil install` does not fetch them and an in-place upgrade
+needs them in place.
 The Caddy/mita runtime state dirs (`/var/lib/caddy`, `/var/lib/mita`) share
 their names with the stock system Caddy/mita packages, so they are removed only
 when a Veil service account (`veil-proxy`, `veil-mita`, `veil`) owns them or

@@ -48,6 +48,8 @@ func newUninstallCommand() *cobra.Command {
 			"/var/lib/mita); use --keep-data if they are shared with a system Caddy/mita.\n" +
 			"A full removal also deletes Veil-managed UFW allow rules (comment \"Veil …\"),\n" +
 			"keeping \"Veil management SSH\"; --keep-data leaves the firewall untouched.\n" +
+			"A full removal also deletes the runtime binaries Veil installed into --install-dir\n" +
+			"(only those whose bytes match Veil's install record); --keep-data keeps them.\n" +
 			"The veil system account is always preserved.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return uninstallflow.Run(uninstallflow.Options{DryRun: dryRun, Yes: yes, Purge: purge, KeepData: keepData, EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, InstallDir: installDir, CaddyStateDir: caddyStateDir, MitaStateDir: mitaStateDir, VendorSystemdDirs: vendorSystemdDirs, SysctlConfPath: sysctlConfPath}, cmd.OutOrStdout(), cmd.ErrOrStderr(), uninstallflow.Dependencies{
