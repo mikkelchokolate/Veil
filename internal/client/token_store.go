@@ -433,6 +433,12 @@ func (s *TokenStore) Reveal(id string) (string, error) {
 	if !ciphertext.Valid || ciphertext.String == "" {
 		return "", ErrSecretUnavailable
 	}
+	// token_ciphertext is only ever written via Cipher.Encrypt; refuse the
+	// legacy plaintext passthrough of Cipher.Decrypt so a planted row cannot
+	// be echoed back as a "revealed" token (#1283).
+	if !secrets.IsEncrypted(ciphertext.String) {
+		return "", fmt.Errorf("client: stored token ciphertext is invalid")
+	}
 	plaintext, err := s.cipher.Decrypt(ciphertext.String)
 	if err != nil {
 		return "", fmt.Errorf("client: decrypt token: %w", err)
