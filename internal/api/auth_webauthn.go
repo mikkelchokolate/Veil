@@ -86,6 +86,15 @@ func decodeOptionalJSONRequest(w http.ResponseWriter, r *http.Request, v any) bo
 // permanently lower the account to password-only login. The account password
 // is required either way.
 func (s *managementState) passkeyCredentialGate(w http.ResponseWriter, r *http.Request, session Session, user model.User, password string, soleFactorRemoval bool) (allowed, passwordProved bool) {
+	return s.factorCredentialGate(w, r, session, user, password, soleFactorRemoval, "passkey-manage", "user.passkey.manage")
+}
+
+// factorCredentialGate is the shared credential-grade gate for every
+// self-service mutation that creates or removes a second factor (passkeys
+// #1232, TOTP enrollment #1250). throttleScope keys the login-backoff family
+// so each surface keeps its own password-failure budget; auditAction names
+// the failed-password audit record.
+func (s *managementState) factorCredentialGate(w http.ResponseWriter, r *http.Request, session Session, user model.User, password string, soleFactorRemoval bool, throttleScope, auditAction string) (allowed, passwordProved bool) {
 	if session.SecondFactor && !soleFactorRemoval {
 		return true, false
 	}
@@ -93,7 +102,7 @@ func (s *managementState) passkeyCredentialGate(w http.ResponseWriter, r *http.R
 		writeError(w, "password is required", http.StatusBadRequest)
 		return false, false
 	}
-	throttleKey := "passkey-manage:" + loginThrottleKey(r, user.Username)
+	throttleKey := throttleScope + ":" + loginThrottleKey(r, user.Username)
 	if retryAfter := s.loginBackoffRemaining(throttleKey); retryAfter > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
 		writeError(w, "too many attempts", http.StatusTooManyRequests)
@@ -111,7 +120,7 @@ func (s *managementState) passkeyCredentialGate(w http.ResponseWriter, r *http.R
 		delay := s.recordLoginFailure(throttleKey)
 		w.Header().Set("Retry-After", strconv.Itoa(int(delay.Seconds())+1))
 		s.recordRequestAudit(r, audit.Record{
-			Actor: user.Username, Action: "user.passkey.manage", Target: user.Username,
+			Actor: user.Username, Action: auditAction, Target: user.Username,
 			Success: false, Error: "invalid password",
 		})
 		writeError(w, "invalid password", http.StatusBadRequest)

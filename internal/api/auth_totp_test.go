@@ -283,7 +283,7 @@ func TestTOTPEnrollmentLifecycle(t *testing.T) {
 	}
 
 	// Enroll returns a pending secret; the factor is not yet enabled.
-	rec = authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", "")
+	rec = authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", `{"password":"correct-password-123"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("enroll status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -347,7 +347,7 @@ func TestTOTPConfirmRevokesPreEnrollmentSessions(t *testing.T) {
 	enrolling := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
 	stale := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
 
-	authedTOTPRequest(t, state, enrolling, http.MethodPost, "/api/v1/users/me/totp/enroll", "")
+	authedTOTPRequest(t, state, enrolling, http.MethodPost, "/api/v1/users/me/totp/enroll", `{"password":"correct-password-123"}`)
 	secret := state.users[0].TOTPPendingSecret
 	code := totpCode(t, secret, *now)
 	rec := authedTOTPRequest(t, state, enrolling, http.MethodPost, "/api/v1/users/me/totp/confirm", `{"code":"`+code+`"}`)
@@ -424,7 +424,7 @@ func TestTOTPConfirmRollsBackWhenEnrollingSessionGone(t *testing.T) {
 	state, now := totpTestState(t, user)
 	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
 
-	rec := authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", "")
+	rec := authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", `{"password":"correct-password-123"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("enroll status=%d", rec.Code)
 	}
@@ -607,7 +607,7 @@ func TestTOTPConfirmAndDisableAdvanceReplayWatermark(t *testing.T) {
 	state, now := totpTestState(t, user)
 	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
 
-	rec := authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", "")
+	rec := authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", `{"password":"correct-password-123"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("enroll status=%d", rec.Code)
 	}
@@ -687,5 +687,92 @@ func TestValidateTOTPCodeReturnsMatchedStep(t *testing.T) {
 	}
 	if _, ok := validateTOTPCode(now, "", totpCode(t, secret, now)); ok {
 		t.Fatal("empty secret validated")
+	}
+}
+
+// A stolen cookie session on a factor-less account must not be able to mint
+// a TOTP seed (#1250): enroll is the factor-creating step, so it carries the
+// same credential-grade gate as passkey registration (#1232). Without the
+// password the attacker gets no seed, no pending secret is stored, and the
+// owner's other sessions survive.
+func TestTOTPEnrollRequiresPasswordOnUnmarkedSession(t *testing.T) {
+	user := totpTestUser(t, "correct-password-123")
+	state, _ := totpTestState(t, user)
+	stolen := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+	owner := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+
+	for name, body := range map[string]string{
+		"no body":        "",
+		"empty password": `{"password":"   "}`,
+		"wrong password": `{"password":"not-the-password"}`,
+	} {
+		rec := authedTOTPRequest(t, state, stolen, http.MethodPost, "/api/v1/users/me/totp/enroll", body)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s: enroll status=%d body=%s, want 400", name, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), "otpauth") || strings.Contains(rec.Body.String(), `"secret"`) {
+			t.Fatalf("%s: gated enroll leaked a seed: %s", name, rec.Body.String())
+		}
+		if state.users[0].TOTPPendingSecret != "" || state.users[0].TOTPEnabled {
+			t.Fatalf("%s: gated enroll mutated TOTP state: %+v", name, state.users[0])
+		}
+	}
+
+	// Confirm has nothing to activate: the only path to a pending secret
+	// is the gated enroll.
+	rec := authedTOTPRequest(t, state, stolen, http.MethodPost, "/api/v1/users/me/totp/confirm", `{"code":"123456"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("confirm without enrollment status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, ok := state.sessionRegistry().Get(owner.Token); !ok {
+		t.Fatal("owner session revoked by a gated enroll attempt")
+	}
+	if state.users[0].TOTPEnabled {
+		t.Fatal("TOTP armed without a credential-grade proof")
+	}
+}
+
+// Wrong passwords at the enroll gate share the login backoff family so the
+// gate cannot be ground as a password oracle (#1250).
+func TestTOTPEnrollWrongPasswordIsThrottled(t *testing.T) {
+	user := totpTestUser(t, "correct-password-123")
+	state, _ := totpTestState(t, user)
+	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+
+	rec := authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", `{"password":"wrong-1"}`)
+	if rec.Code != http.StatusBadRequest || rec.Header().Get("Retry-After") == "" {
+		t.Fatalf("wrong password status=%d retry-after=%q", rec.Code, rec.Header().Get("Retry-After"))
+	}
+	// Even the correct password is refused while the backoff is active.
+	rec = authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", `{"password":"correct-password-123"}`)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("enroll inside backoff status=%d body=%s, want 429", rec.Code, rec.Body.String())
+	}
+	if state.users[0].TOTPPendingSecret != "" {
+		t.Fatal("throttled enroll stored a pending secret")
+	}
+}
+
+// A session that already completed a second factor keeps the passwordless
+// (re-)enroll path, matching passkeyCredentialGate (#1250).
+func TestTOTPEnrollAllowsSecondFactorMarkedSessionWithoutPassword(t *testing.T) {
+	user := totpTestUser(t, "correct-password-123")
+	user.TOTPEnabled = true
+	user.TOTPSecret = "JBSWY3DPEHPK3PXP"
+	state, _ := totpTestState(t, user)
+	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+	if marked, err := state.sessionRegistry().MarkSecondFactorPersisted(session.Token); err != nil || !marked {
+		t.Fatalf("mark second factor: marked=%v err=%v", marked, err)
+	}
+
+	rec := authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("marked-session enroll status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if state.users[0].TOTPPendingSecret == "" {
+		t.Fatal("marked-session enroll stored no pending secret")
+	}
+	if state.users[0].TOTPSecret != "JBSWY3DPEHPK3PXP" || !state.users[0].TOTPEnabled {
+		t.Fatal("re-enroll replaced the active factor before confirm")
 	}
 }

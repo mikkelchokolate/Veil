@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { ApiError, apiFetch, mutationErrorMessage } from "../api/fetcher";
+import { useAuth } from "../auth/AuthContext";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "../components/ui/dialog";
@@ -25,11 +26,18 @@ interface TotpEnrollment {
 /** Self-service TOTP second-factor management (#1172): enroll wizard with a
  * QR/secret pair, one-time recovery codes shown exactly once, and a
  * credential-gated disable. Available to every cookie session (admin AND
- * viewer) — this is an account property, not an admin panel. */
+ * viewer) — this is an account property, not an admin panel.
+ *
+ * Enrollment is credential-gated like passkey registration (#1250): a
+ * session that has not completed a second factor must re-enter the account
+ * password before the server mints a seed. */
 export function TotpCard() {
 	const { t } = useI18n();
+	const { session } = useAuth();
 	const qc = useQueryClient();
 	const [error, setError] = useState<string | null>(null);
+	const [enrollPrompt, setEnrollPrompt] = useState(false);
+	const [enrollPassword, setEnrollPassword] = useState("");
 	const [enrollment, setEnrollment] = useState<TotpEnrollment | null>(null);
 	const [confirmCode, setConfirmCode] = useState("");
 	const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
@@ -44,12 +52,19 @@ export function TotpCard() {
 	const invalidate = () =>
 		void qc.invalidateQueries({ queryKey: ["totp-status"] });
 
+	// Same gate as passkey registration: only a second-factor-complete
+	// session may mint a seed without re-presenting the password (#1250).
+	const needsPassword = session?.secondFactor !== true;
+
 	const enroll = useMutation({
-		mutationFn: () =>
+		mutationFn: (password: string | null) =>
 			apiFetch<TotpEnrollment>("/api/v1/users/me/totp/enroll", {
 				method: "POST",
+				...(password !== null ? { body: JSON.stringify({ password }) } : {}),
 			}),
 		onSuccess: (data) => {
+			setEnrollPrompt(false);
+			setEnrollPassword("");
 			setEnrollment(data);
 			setConfirmCode("");
 			setRecoveryCodes(null);
@@ -96,6 +111,11 @@ export function TotpCard() {
 	function onConfirmSubmit(e: FormEvent) {
 		e.preventDefault();
 		confirm.mutate();
+	}
+
+	function onEnrollPasswordSubmit(e: FormEvent) {
+		e.preventDefault();
+		enroll.mutate(enrollPassword);
 	}
 
 	function onDisableSubmit(e: FormEvent) {
@@ -153,7 +173,12 @@ export function TotpCard() {
 							onClick={() => {
 								setError(null);
 								setRecoveryCodes(null);
-								enroll.mutate();
+								if (needsPassword) {
+									setEnrollPassword("");
+									setEnrollPrompt(true);
+								} else {
+									enroll.mutate(null);
+								}
 							}}
 						>
 							{status.data?.pendingEnrollment
@@ -265,6 +290,41 @@ export function TotpCard() {
 					</div>
 				</div>
 			) : null}
+
+			<Dialog open={enrollPrompt} onOpenChange={setEnrollPrompt}>
+				<DialogContent>
+					<DialogTitle>{t("settings.totp.enable")}</DialogTitle>
+					<p className="muted">
+						{t("settings.totp.enrollPasswordDescription")}
+					</p>
+					{error ? <FormMessage>{error}</FormMessage> : null}
+					<form className="form-stack" onSubmit={onEnrollPasswordSubmit}>
+						<FormItem>
+							<Label htmlFor="totp-enroll-password">{t("auth.password")}</Label>
+							<Input
+								id="totp-enroll-password"
+								type="password"
+								autoComplete="current-password"
+								value={enrollPassword}
+								onChange={(e) => setEnrollPassword(e.target.value)}
+								required
+							/>
+						</FormItem>
+						<div style={{ display: "flex", gap: 8 }}>
+							<Button
+								type="submit"
+								variant="primary"
+								disabled={enroll.isPending || enrollPassword.trim() === ""}
+							>
+								{t("common.confirm")}
+							</Button>
+							<Button type="button" onClick={() => setEnrollPrompt(false)}>
+								{t("common.cancel")}
+							</Button>
+						</div>
+					</form>
+				</DialogContent>
+			</Dialog>
 
 			<Dialog open={disabling} onOpenChange={setDisabling}>
 				<DialogContent>

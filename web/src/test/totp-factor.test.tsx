@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { AuthProvider } from "../auth/AuthContext";
+import { AuthProvider, useAuth } from "../auth/AuthContext";
 import { LoginView } from "../auth/LoginView";
 import { I18nProvider } from "../i18n/I18nContext";
 import { TotpCard } from "../pages/SettingsTotp";
@@ -20,13 +20,27 @@ function renderLogin() {
 	);
 }
 
+// Surfaces the loaded session's second-factor mark so tests can wait for the
+// auth status before acting on the card's credential gate (#1250).
+function SessionProbe() {
+	const { session } = useAuth();
+	return session?.authenticated ? (
+		<span data-testid="session-probe">
+			{session.secondFactor ? "marked" : "unmarked"}
+		</span>
+	) : null;
+}
+
 function renderTotpCard() {
 	const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 	return render(
 		<QueryClientProvider client={qc}>
-			<I18nProvider>
-				<TotpCard />
-			</I18nProvider>
+			<AuthProvider>
+				<I18nProvider>
+					<SessionProbe />
+					<TotpCard />
+				</I18nProvider>
+			</AuthProvider>
 		</QueryClientProvider>,
 	);
 }
@@ -145,5 +159,74 @@ describe("TOTP self-disable dialog (#1172)", () => {
 		expect(
 			await screen.findByRole("button", { name: /restart enrollment/i }),
 		).toBeInTheDocument();
+	});
+});
+
+describe("TOTP enroll credential gate (#1250)", () => {
+	it("asks an unmarked session for the account password before enrolling", async () => {
+		const bodies: string[] = [];
+		server.use(
+			http.post("/api/v1/users/me/totp/enroll", async ({ request }) => {
+				bodies.push(await request.text());
+				return HttpResponse.json({
+					secret: "JBSWY3DPEHPK3PXP",
+					otpauthUri: "otpauth://totp/Veil:admin?secret=JBSWY3DPEHPK3PXP",
+					issuer: "Veil",
+				});
+			}),
+		);
+		renderTotpCard();
+		const user = userEvent.setup();
+		expect(await screen.findByTestId("session-probe")).toHaveTextContent(
+			"unmarked",
+		);
+		await user.click(
+			await screen.findByRole("button", { name: /enable authenticator/i }),
+		);
+		// No seed is requested until the password is supplied.
+		expect(bodies).toHaveLength(0);
+		const submit = screen.getByRole("button", { name: /^confirm$/i });
+		expect(submit).toBeDisabled();
+		await user.type(screen.getByLabelText(/password/i), "hunter2-password");
+		await user.click(submit);
+		await waitFor(() => expect(bodies).toHaveLength(1));
+		expect(JSON.parse(bodies[0])).toEqual({ password: "hunter2-password" });
+		expect(
+			await screen.findByDisplayValue("JBSWY3DPEHPK3PXP"),
+		).toBeInTheDocument();
+	});
+
+	it("enrolls a second-factor-marked session without a password prompt", async () => {
+		const bodies: string[] = [];
+		server.use(
+			http.get("/api/auth/status", () =>
+				HttpResponse.json({
+					authenticated: true,
+					username: "admin",
+					role: "admin",
+					csrfToken: "test-csrf",
+					secondFactor: true,
+				}),
+			),
+			http.post("/api/v1/users/me/totp/enroll", async ({ request }) => {
+				bodies.push(await request.text());
+				return HttpResponse.json({
+					secret: "JBSWY3DPEHPK3PXP",
+					otpauthUri: "otpauth://totp/Veil:admin?secret=JBSWY3DPEHPK3PXP",
+					issuer: "Veil",
+				});
+			}),
+		);
+		renderTotpCard();
+		const user = userEvent.setup();
+		expect(await screen.findByTestId("session-probe")).toHaveTextContent(
+			"marked",
+		);
+		await user.click(
+			await screen.findByRole("button", { name: /enable authenticator/i }),
+		);
+		await waitFor(() => expect(bodies).toHaveLength(1));
+		expect(bodies[0]).toBe("");
+		expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument();
 	});
 });

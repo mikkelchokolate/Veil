@@ -83,6 +83,7 @@ import type {
   TOTPConfirmRequest,
   TOTPConfirmResponse,
   TOTPDisableRequest,
+  TOTPEnrollRequest,
   TOTPEnrollResponse,
   TOTPStatusResponse,
   TOTPVerifyRequest,
@@ -1451,16 +1452,33 @@ export const getPostApiV1UsersMeTotpEnrollUrl = () => {
  * pending enrollment secret (not yet active) and returns it with an
  * `otpauth://` provisioning URI. The factor activates only when
  * `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+ * Credential-grade gate (#1250): the session must already carry the
+ * second-factor mark, or the account password must be re-presented
+ * here. Wrong passwords share the login backoff family.
  * @summary Start TOTP second-factor enrollment
  */
-export const postApiV1UsersMeTotpEnroll = async ( options?: Parameters<typeof apiFetch>[1]): Promise<TOTPEnrollResponse> => {
+export const postApiV1UsersMeTotpEnroll = async (tOTPEnrollRequest?: TOTPEnrollRequest, options?: Parameters<typeof apiFetch>[1]): Promise<TOTPEnrollResponse> => {
 
-  return apiFetch<TOTPEnrollResponse>(getPostApiV1UsersMeTotpEnrollUrl(),
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<TOTPEnrollResponse>(getPostApiV1UsersMeTotpEnrollUrl(),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(tOTPEnrollRequest)
   }
 );}
 
@@ -1468,23 +1486,23 @@ export const postApiV1UsersMeTotpEnroll = async ( options?: Parameters<typeof ap
 
 
 
-export const getPostApiV1UsersMeTotpEnrollQueryKey = () => {
+export const getPostApiV1UsersMeTotpEnrollQueryKey = (tOTPEnrollRequest?: TOTPEnrollRequest,) => {
     return [
-    'POST', `/api/v1/users/me/totp/enroll`
+    'POST', `/api/v1/users/me/totp/enroll`, tOTPEnrollRequest
     ] as const;
     }
 
 
-export const getPostApiV1UsersMeTotpEnrollQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiV1UsersMeTotpEnrollQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(tOTPEnrollRequest?: TOTPEnrollRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getPostApiV1UsersMeTotpEnrollQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getPostApiV1UsersMeTotpEnrollQueryKey(tOTPEnrollRequest);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>> = ({ signal }) => postApiV1UsersMeTotpEnroll({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>> = ({ signal }) => postApiV1UsersMeTotpEnroll(tOTPEnrollRequest, { signal, ...requestOptions });
 
 
 
@@ -1494,11 +1512,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiV1UsersMeTotpEnrollQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>>
-export type PostApiV1UsersMeTotpEnrollQueryError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse
+export type PostApiV1UsersMeTotpEnrollQueryError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse
 
 
-export function usePostApiV1UsersMeTotpEnroll<TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError, TData>> & Pick<
+export function usePostApiV1UsersMeTotpEnroll<TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+ tOTPEnrollRequest: undefined |  TOTPEnrollRequest, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>,
           TError,
@@ -1507,8 +1525,8 @@ export function usePostApiV1UsersMeTotpEnroll<TData = Awaited<ReturnType<typeof 
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1UsersMeTotpEnroll<TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError, TData>> & Pick<
+export function usePostApiV1UsersMeTotpEnroll<TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+ tOTPEnrollRequest?: TOTPEnrollRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>,
           TError,
@@ -1517,20 +1535,20 @@ export function usePostApiV1UsersMeTotpEnroll<TData = Awaited<ReturnType<typeof 
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1UsersMeTotpEnroll<TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export function usePostApiV1UsersMeTotpEnroll<TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+ tOTPEnrollRequest?: TOTPEnrollRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
  * @summary Start TOTP second-factor enrollment
  */
 
-export function usePostApiV1UsersMeTotpEnroll<TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError = UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ServiceUnavailableResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export function usePostApiV1UsersMeTotpEnroll<TData = Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError = BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | ErrorEnvelope | ServiceUnavailableResponse>(
+ tOTPEnrollRequest?: TOTPEnrollRequest, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1UsersMeTotpEnroll>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getPostApiV1UsersMeTotpEnrollQueryOptions(options)
+  const queryOptions = getPostApiV1UsersMeTotpEnrollQueryOptions(tOTPEnrollRequest,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

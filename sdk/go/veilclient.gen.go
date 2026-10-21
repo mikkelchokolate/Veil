@@ -2847,6 +2847,12 @@ type TOTPDisableRequest struct {
 	Code string `json:"code"`
 }
 
+// TOTPEnrollRequest defines model for TOTPEnrollRequest.
+type TOTPEnrollRequest struct {
+	// Password Required when the session does not carry the second-factor mark.
+	Password *string `json:"password,omitempty"`
+}
+
 // TOTPEnrollResponse defines model for TOTPEnrollResponse.
 type TOTPEnrollResponse struct {
 	Issuer string `json:"issuer"`
@@ -3855,6 +3861,9 @@ type DeleteApiV1UsersMeTotpJSONRequestBody = TOTPDisableRequest
 
 // PostApiV1UsersMeTotpConfirmJSONRequestBody defines body for PostApiV1UsersMeTotpConfirm for application/json ContentType.
 type PostApiV1UsersMeTotpConfirmJSONRequestBody = TOTPConfirmRequest
+
+// PostApiV1UsersMeTotpEnrollJSONRequestBody defines body for PostApiV1UsersMeTotpEnroll for application/json ContentType.
+type PostApiV1UsersMeTotpEnrollJSONRequestBody = TOTPEnrollRequest
 
 // PostApiValidationJSONRequestBody defines body for PostApiValidation for application/json ContentType.
 type PostApiValidationJSONRequestBody = ValidationRequest
@@ -5399,15 +5408,35 @@ type ClientInterface interface {
 	// Corresponds with POST /api/v1/users/me/totp/confirm (the `PostApiV1UsersMeTotpConfirm` operationId).
 	PostApiV1UsersMeTotpConfirm(ctx context.Context, params *PostApiV1UsersMeTotpConfirmParams, body PostApiV1UsersMeTotpConfirmJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostApiV1UsersMeTotpEnrollWithBody Start TOTP second-factor enrollment
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token`. Mints a
+	// pending enrollment secret (not yet active) and returns it with an
+	// `otpauth://` provisioning URI. The factor activates only when
+	// `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+	// Credential-grade gate (#1250): the session must already carry the
+	// second-factor mark, or the account password must be re-presented
+	// here. Wrong passwords share the login backoff family.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/users/me/totp/enroll (the `PostApiV1UsersMeTotpEnroll` operationId).
+	PostApiV1UsersMeTotpEnrollWithBody(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostApiV1UsersMeTotpEnroll Start TOTP second-factor enrollment
 	//
 	// Requires the `veil_session` cookie and `X-CSRF-Token`. Mints a
 	// pending enrollment secret (not yet active) and returns it with an
 	// `otpauth://` provisioning URI. The factor activates only when
 	// `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+	// Credential-grade gate (#1250): the session must already carry the
+	// second-factor mark, or the account password must be re-presented
+	// here. Wrong passwords share the login backoff family.
+	//
+	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/v1/users/me/totp/enroll (the `PostApiV1UsersMeTotpEnroll` operationId).
-	PostApiV1UsersMeTotpEnroll(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostApiV1UsersMeTotpEnroll(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, body PostApiV1UsersMeTotpEnrollJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteApiV1UsersUsernamePasskeys Reset a user's passkeys
 	//
@@ -8264,16 +8293,46 @@ func (c *Client) PostApiV1UsersMeTotpConfirm(ctx context.Context, params *PostAp
 	return c.Client.Do(req)
 }
 
+// PostApiV1UsersMeTotpEnrollWithBody Start TOTP second-factor enrollment
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token`. Mints a
+// pending enrollment secret (not yet active) and returns it with an
+// `otpauth://` provisioning URI. The factor activates only when
+// `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+// Credential-grade gate (#1250): the session must already carry the
+// second-factor mark, or the account password must be re-presented
+// here. Wrong passwords share the login backoff family.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/users/me/totp/enroll (the `PostApiV1UsersMeTotpEnroll` operationId).
+func (c *Client) PostApiV1UsersMeTotpEnrollWithBody(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1UsersMeTotpEnrollRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // PostApiV1UsersMeTotpEnroll Start TOTP second-factor enrollment
 //
 // Requires the `veil_session` cookie and `X-CSRF-Token`. Mints a
 // pending enrollment secret (not yet active) and returns it with an
 // `otpauth://` provisioning URI. The factor activates only when
 // `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+// Credential-grade gate (#1250): the session must already carry the
+// second-factor mark, or the account password must be re-presented
+// here. Wrong passwords share the login backoff family.
+//
+// Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/v1/users/me/totp/enroll (the `PostApiV1UsersMeTotpEnroll` operationId).
-func (c *Client) PostApiV1UsersMeTotpEnroll(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1UsersMeTotpEnrollRequest(c.Server, params)
+func (c *Client) PostApiV1UsersMeTotpEnroll(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, body PostApiV1UsersMeTotpEnrollJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1UsersMeTotpEnrollRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -13713,8 +13772,19 @@ func NewPostApiV1UsersMeTotpConfirmRequestWithBody(server string, params *PostAp
 	return req, nil
 }
 
-// NewPostApiV1UsersMeTotpEnrollRequest constructs an http.Request for the PostApiV1UsersMeTotpEnroll method
-func NewPostApiV1UsersMeTotpEnrollRequest(server string, params *PostApiV1UsersMeTotpEnrollParams) (*http.Request, error) {
+// NewPostApiV1UsersMeTotpEnrollRequest calls the generic PostApiV1UsersMeTotpEnroll builder with application/json body
+func NewPostApiV1UsersMeTotpEnrollRequest(server string, params *PostApiV1UsersMeTotpEnrollParams, body PostApiV1UsersMeTotpEnrollJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1UsersMeTotpEnrollRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostApiV1UsersMeTotpEnrollRequestWithBody constructs an http.Request for the PostApiV1UsersMeTotpEnroll method, with any body, and a specified content type
+func NewPostApiV1UsersMeTotpEnrollRequestWithBody(server string, params *PostApiV1UsersMeTotpEnrollParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -13732,10 +13802,12 @@ func NewPostApiV1UsersMeTotpEnrollRequest(server string, params *PostApiV1UsersM
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -15681,17 +15753,35 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/v1/users/me/totp/confirm (the `PostApiV1UsersMeTotpConfirm` operationId).
 	PostApiV1UsersMeTotpConfirmWithResponse(ctx context.Context, params *PostApiV1UsersMeTotpConfirmParams, body PostApiV1UsersMeTotpConfirmJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1UsersMeTotpConfirmResponse, error)
 
+	// PostApiV1UsersMeTotpEnrollWithBodyWithResponse Start TOTP second-factor enrollment
+	//
+	// Requires the `veil_session` cookie and `X-CSRF-Token`. Mints a
+	// pending enrollment secret (not yet active) and returns it with an
+	// `otpauth://` provisioning URI. The factor activates only when
+	// `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+	// Credential-grade gate (#1250): the session must already carry the
+	// second-factor mark, or the account password must be re-presented
+	// here. Wrong passwords share the login backoff family.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/users/me/totp/enroll (the `PostApiV1UsersMeTotpEnroll` operationId).
+	PostApiV1UsersMeTotpEnrollWithBodyWithResponse(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1UsersMeTotpEnrollResponse, error)
+
 	// PostApiV1UsersMeTotpEnrollWithResponse Start TOTP second-factor enrollment
 	//
 	// Requires the `veil_session` cookie and `X-CSRF-Token`. Mints a
 	// pending enrollment secret (not yet active) and returns it with an
 	// `otpauth://` provisioning URI. The factor activates only when
 	// `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+	// Credential-grade gate (#1250): the session must already carry the
+	// second-factor mark, or the account password must be re-presented
+	// here. Wrong passwords share the login backoff family.
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/users/me/totp/enroll (the `PostApiV1UsersMeTotpEnroll` operationId).
-	PostApiV1UsersMeTotpEnrollWithResponse(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, reqEditors ...RequestEditorFn) (*PostApiV1UsersMeTotpEnrollResponse, error)
+	PostApiV1UsersMeTotpEnrollWithResponse(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, body PostApiV1UsersMeTotpEnrollJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1UsersMeTotpEnrollResponse, error)
 
 	// DeleteApiV1UsersUsernamePasskeysWithResponse Reset a user's passkeys
 	//
@@ -23893,26 +23983,42 @@ type PostApiV1UsersMeTotpEnrollResponse401Headers struct {
 	WWWAuthenticate *string
 }
 
+// PostApiV1UsersMeTotpEnrollResponse429Headers the declared response headers of an HTTP 429 response for PostApiV1UsersMeTotpEnroll
+type PostApiV1UsersMeTotpEnrollResponse429Headers struct {
+	RetryAfter *int
+}
+
 type PostApiV1UsersMeTotpEnrollResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *TOTPEnrollResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
 	// JSON401 the response for an HTTP 401 `application/json` response
 	JSON401 *Unauthorized
 	// JSON403 the response for an HTTP 403 `application/json` response
 	JSON403 *Forbidden
 	// JSON404 the response for an HTTP 404 `application/json` response
 	JSON404 *NotFound
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *ErrorEnvelope
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *ServiceUnavailable
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *PostApiV1UsersMeTotpEnrollResponse401Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *PostApiV1UsersMeTotpEnrollResponse429Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PostApiV1UsersMeTotpEnrollResponse) GetJSON200() *TOTPEnrollResponse {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiV1UsersMeTotpEnrollResponse) GetJSON400() *BadRequest {
+	return r.JSON400
 }
 
 // GetJSON401 returns the response for an HTTP 401 `application/json` response
@@ -23928,6 +24034,11 @@ func (r PostApiV1UsersMeTotpEnrollResponse) GetJSON403() *Forbidden {
 // GetJSON404 returns the response for an HTTP 404 `application/json` response
 func (r PostApiV1UsersMeTotpEnrollResponse) GetJSON404() *NotFound {
 	return r.JSON404
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r PostApiV1UsersMeTotpEnrollResponse) GetJSON429() *ErrorEnvelope {
+	return r.JSON429
 }
 
 // GetJSON503 returns the response for an HTTP 503 `application/json` response
@@ -27089,18 +27200,42 @@ func (c *ClientWithResponses) PostApiV1UsersMeTotpConfirmWithResponse(ctx contex
 	return ParsePostApiV1UsersMeTotpConfirmResponse(rsp)
 }
 
+// PostApiV1UsersMeTotpEnrollWithBodyWithResponse Start TOTP second-factor enrollment
+//
+// Requires the `veil_session` cookie and `X-CSRF-Token`. Mints a
+// pending enrollment secret (not yet active) and returns it with an
+// `otpauth://` provisioning URI. The factor activates only when
+// `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+// Credential-grade gate (#1250): the session must already carry the
+// second-factor mark, or the account password must be re-presented
+// here. Wrong passwords share the login backoff family.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/users/me/totp/enroll (the `PostApiV1UsersMeTotpEnroll` operationId).
+func (c *ClientWithResponses) PostApiV1UsersMeTotpEnrollWithBodyWithResponse(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1UsersMeTotpEnrollResponse, error) {
+	rsp, err := c.PostApiV1UsersMeTotpEnrollWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1UsersMeTotpEnrollResponse(rsp)
+}
+
 // PostApiV1UsersMeTotpEnrollWithResponse Start TOTP second-factor enrollment
 //
 // Requires the `veil_session` cookie and `X-CSRF-Token`. Mints a
 // pending enrollment secret (not yet active) and returns it with an
 // `otpauth://` provisioning URI. The factor activates only when
 // `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+// Credential-grade gate (#1250): the session must already carry the
+// second-factor mark, or the account password must be re-presented
+// here. Wrong passwords share the login backoff family.
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/users/me/totp/enroll (the `PostApiV1UsersMeTotpEnroll` operationId).
-func (c *ClientWithResponses) PostApiV1UsersMeTotpEnrollWithResponse(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, reqEditors ...RequestEditorFn) (*PostApiV1UsersMeTotpEnrollResponse, error) {
-	rsp, err := c.PostApiV1UsersMeTotpEnroll(ctx, params, reqEditors...)
+func (c *ClientWithResponses) PostApiV1UsersMeTotpEnrollWithResponse(ctx context.Context, params *PostApiV1UsersMeTotpEnrollParams, body PostApiV1UsersMeTotpEnrollJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1UsersMeTotpEnrollResponse, error) {
+	rsp, err := c.PostApiV1UsersMeTotpEnroll(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -33834,6 +33969,13 @@ func ParsePostApiV1UsersMeTotpEnrollResponse(rsp *http.Response) (*PostApiV1User
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Unauthorized
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -33855,6 +33997,13 @@ func ParsePostApiV1UsersMeTotpEnrollResponse(rsp *http.Response) (*PostApiV1User
 		}
 		response.JSON404 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest ServiceUnavailable
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -33875,6 +34024,16 @@ func ParsePostApiV1UsersMeTotpEnrollResponse(rsp *http.Response) (*PostApiV1User
 			headers.WWWAuthenticate = &value
 		}
 		response.Headers401 = &headers
+	case rsp.StatusCode == 429:
+		var headers PostApiV1UsersMeTotpEnrollResponse429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers429 = &headers
 	}
 
 	return response, nil

@@ -3475,10 +3475,26 @@ paths:
 
         `/api/v1/users/me/totp/confirm` verifies a code generated from it.
 
+        Credential-grade gate (#1250): the session must already carry the
+
+        second-factor mark, or the account password must be re-presented
+
+        here. Wrong passwords share the login backoff family.
+
         '
       security:
       - sessionCookie: []
         csrfToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TOTPEnrollRequest'
+            examples:
+              password:
+                value:
+                  password: correct horse battery staple
       responses:
         '200':
           description: Pending enrollment created.
@@ -3492,12 +3508,23 @@ paths:
                     secret: JBSWY3DPEHPK3PXP
                     otpauthUri: otpauth://totp/Veil:admin?secret=JBSWY3DPEHPK3PXP&issuer=Veil
                     issuer: Veil
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          description: Too many attempts; the Retry-After header carries the backoff.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
       x-roles:
@@ -5640,6 +5667,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PasskeyInfo'
+    TOTPEnrollRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        password:
+          type: string
+          format: password
+          description: Required when the session does not carry the second-factor mark.
     PasskeyRegisterBeginRequest:
       type: object
       additionalProperties: false

@@ -337,6 +337,9 @@ export const DeleteApiV1UsersMeTotpResponse = zod.object({
  * pending enrollment secret (not yet active) and returns it with an
  * `otpauth://` provisioning URI. The factor activates only when
  * `/api/v1/users/me/totp/confirm` verifies a code generated from it.
+ * Credential-grade gate (#1250): the session must already carry the
+ * second-factor mark, or the account password must be re-presented
+ * here. Wrong passwords share the login backoff family.
  * @summary Start TOTP second-factor enrollment
  */
 export const postApiV1UsersMeTotpEnrollHeaderIdempotencyKeyMax = 128;
@@ -347,6 +350,10 @@ export const postApiV1UsersMeTotpEnrollHeaderIdempotencyKeyRegExp = new RegExp('
 
 export const PostApiV1UsersMeTotpEnrollHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(postApiV1UsersMeTotpEnrollHeaderIdempotencyKeyMax).regex(postApiV1UsersMeTotpEnrollHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
+})
+
+export const PostApiV1UsersMeTotpEnrollBody = zod.object({
+  "password": zod.string().optional().describe('Required when the session does not carry the second-factor mark.')
 })
 
 export const PostApiV1UsersMeTotpEnrollResponse = zod.object({
