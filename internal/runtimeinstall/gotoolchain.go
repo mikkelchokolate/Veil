@@ -19,12 +19,20 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/syspath"
 )
 
 // test hooks (overridden by tests to avoid depending on the host toolchain).
 var (
 	knownGoBinsFn = knownGoBins
 	findBestGoFn  = findBestGo
+	// runningAsRootFn reports whether the process is privileged. Under root
+	// the Go toolchain is resolved only from fixed root-owned locations and
+	// the ambient PATH, HOME and GOROOT are ignored (issue #1332): `sudo -E`
+	// or a provisioning script can hand root a poisoned environment, and the
+	// selected toolchain builds binaries that Veil's systemd units exec.
+	runningAsRootFn = func() bool { return os.Geteuid() == 0 }
 )
 
 const defaultGoVersion = "1.27.3"
@@ -81,16 +89,23 @@ func knownGoBins() []string {
 		seen[p] = struct{}{}
 		candidates = append(candidates, p)
 	}
-	if p, err := exec.LookPath("go"); err == nil {
+	privileged := runningAsRootFn()
+	if privileged {
+		if p, err := syspath.LookPath("go"); err == nil {
+			add(p)
+		}
+	} else if p, err := exec.LookPath("go"); err == nil {
 		add(p)
 	}
 	add("/usr/local/go/bin/go")
 	add("/opt/go/bin/go")
-	if home, err := os.UserHomeDir(); err == nil {
-		add(filepath.Join(home, "go", "bin", "go"))
-	}
-	if goroot := os.Getenv("GOROOT"); goroot != "" {
-		add(filepath.Join(goroot, "bin", "go"))
+	if !privileged {
+		if home, err := os.UserHomeDir(); err == nil {
+			add(filepath.Join(home, "go", "bin", "go"))
+		}
+		if goroot := os.Getenv("GOROOT"); goroot != "" {
+			add(filepath.Join(goroot, "bin", "go"))
+		}
 	}
 	matches, _ := filepath.Glob("/usr/lib/go-*/bin/go")
 	for _, m := range matches {
@@ -374,6 +389,17 @@ func goRootFor(ctx context.Context, goBin string) string {
 	return filepath.Dir(filepath.Dir(resolved))
 }
 
+// buildPATH returns the PATH entry for a go build: the inherited PATH plus the
+// toolchain directory, except under root where the inherited PATH is replaced
+// by syspath.TrustedPATH so the build's helpers (gcc, git, ...) are never
+// resolved from an attacker-influenced search path (issue #1332).
+func buildPATH(inherited, goBinDir string) string {
+	if runningAsRootFn() {
+		inherited = syspath.TrustedPATH()
+	}
+	return "PATH=" + inherited + ":" + goBinDir
+}
+
 // goBuildEnv returns the environment for running a go build with the given go
 // binary. Sets GOROOT to the toolchain the binary belongs to, and ensures the
 // binary's directory is in PATH.
@@ -414,7 +440,7 @@ func goBuildEnv(ctx context.Context, goBin string) []string {
 			filtered = append(filtered, "GOBIN="+goBinDir)
 			hasGobin = true
 		case strings.HasPrefix(e, "PATH=") || strings.HasPrefix(e, "Path="):
-			filtered = append(filtered, e+":"+goBinDir)
+			filtered = append(filtered, buildPATH(e[len("PATH="):], goBinDir))
 			hasPath = true
 		case strings.HasPrefix(e, "GOTOOLCHAIN="):
 			// Ignore inherited toolchain policy; we explicitly pin below.
@@ -429,7 +455,7 @@ func goBuildEnv(ctx context.Context, goBin string) []string {
 		filtered = append(filtered, "GOBIN="+goBinDir)
 	}
 	if !hasPath {
-		filtered = append(filtered, "PATH="+os.Getenv("PATH")+":"+goBinDir)
+		filtered = append(filtered, buildPATH(os.Getenv("PATH"), goBinDir))
 	}
 	// Force the selected go binary to use its own toolchain. Without this, a
 	// go.mod in the current working directory can trigger GOTOOLCHAIN=auto to
