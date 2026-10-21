@@ -144,8 +144,9 @@ print_leftover_plan() {
 # cleanup must never escalate an env/flag-supplied directory (VEIL_ETC_DIR,
 # --var-dir, ...) into wiping a system tree (issue #1025). A directory is
 # removable when it is absent/not a dir, carries a distinctive Veil marker
-# (a regular, non-symlink file — issue #1242), has a Veil-managed basename,
-# or is empty — anything else fails closed.
+# (a regular, non-symlink file — issue #1242), has a Veil-authored basename,
+# is a caddy/mita dir owned by a Veil service account (#1244), or is empty —
+# anything else fails closed.
 #
 # The marker list is intentionally narrow (issue #1093): only names Veil
 # itself writes — the .veil-managed sentinel emitted by install/repair, the
@@ -162,8 +163,23 @@ is_safe_state_dir() {
   # directories can contain a tree worth guarding.
   [ -d "$dir" ] && [ ! -L "$dir" ] || return 0
   base="$(basename "$dir")"
+  # Only Veil-authored names are blessed by name (issue #1244): the packaged
+  # veil dirs and the generated unit drop-in dirs. A bare veil-*/veil.* prefix
+  # (e.g. /opt/veil-backup-2020) is an operator dir that shares the prefix.
   case "$base" in
-    veil | caddy | mita | veil-* | veil.*) return 0 ;;
+    veil | veil.service.d | veil.socket.d | veil.timer.d | \
+      veil-*.service.d | veil-*.socket.d | veil-*.timer.d) return 0 ;;
+  esac
+  # caddy/mita are also the stock system Caddy/mita dir names (/var/lib/caddy,
+  # /etc/caddy, /var/lib/mita): the name proves nothing. Install re-owns them
+  # to the dedicated veil-proxy / veil-mita identities (#623/#660), so only a
+  # Veil-service-owned tree (or a marked one, below) is removable.
+  case "$base" in
+    caddy | mita)
+      case "$(stat -c %U "$dir" 2>/dev/null)" in
+        veil | veil-proxy | veil-mita) return 0 ;;
+      esac
+      ;;
   esac
   # Markers must be regular files in their own right (issue #1242): -e (and
   # -f) follow a symlink leaf, so a planted `veil.db -> /etc/hosts` would

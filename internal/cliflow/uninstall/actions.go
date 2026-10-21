@@ -3,7 +3,9 @@ package uninstall
 import (
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -107,18 +109,69 @@ func (a Actions) RemovePath(path string) error {
 // dir (e.g. --var-dir /home/operator with ~/.config present) for rm -rf,
 // which is exactly the misconfiguration this guard exists for. Veil-managed
 // runtime layouts that legitimately carry generic child names (caddy/
-// mita state dirs holding certificates/acme) are covered by the
-// veilManagedBaseName check instead, matching scripts/uninstall.sh.
+// mita state dirs holding certificates/acme) are covered by the Veil
+// service-account ownership check instead (#1244), matching
+// scripts/uninstall.sh.
 var stateDirMarkers = []string{
 	".veil-managed", "veil.env", "state.key", "backup.passphrase", "veil.db",
 }
 
-// veilManagedBaseName reports whether a directory name is one Veil provisions
-// for itself or its managed runtimes (the packaged defaults plus generated
-// unit drop-in dirs such as veil-backup.service.d).
+// veilManagedBaseName reports whether a directory name is one Veil authors
+// for itself: the packaged /etc/veil and /var/lib/veil defaults, and the
+// generated systemd drop-in dirs (veil.service.d, veil-backup.service.d,
+// veil-helper.socket.d, veil-backup.timer.d). A bare veil-*/veil.* prefix is
+// NOT enough (issue #1244): `--var-dir /opt/veil-backup-2020` is an operator
+// directory that merely shares the prefix, so only the drop-in shape — a
+// veil-/veil. unit name with a .service.d/.socket.d/.timer.d suffix — is
+// blessed by name.
 func veilManagedBaseName(base string) bool {
-	return base == "veil" || base == "caddy" || base == "mita" ||
-		strings.HasPrefix(base, "veil-") || strings.HasPrefix(base, "veil.")
+	if base == "veil" {
+		return true
+	}
+	if !strings.HasPrefix(base, "veil-") && !strings.HasPrefix(base, "veil.") {
+		return false
+	}
+	for _, suffix := range []string{".service.d", ".socket.d", ".timer.d"} {
+		if strings.HasSuffix(base, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+// sharedRuntimeBaseName reports whether a directory name is one Veil shares
+// with stock system packages: /var/lib/caddy is the stock Caddy data dir
+// (certificates, ACME accounts) and /etc/caddy its config dir, /var/lib/mita
+// the stock mita state dir. The name alone proves nothing (issue #1244) — the
+// tree must be owned by a Veil service identity (install re-owns
+// /var/lib/caddy to veil-proxy and /var/lib/mita to veil-mita, #623/#660) or
+// carry a Veil marker before it may be wiped.
+func sharedRuntimeBaseName(base string) bool {
+	return base == "caddy" || base == "mita"
+}
+
+// veilServiceAccounts are the dedicated identities Veil provisions; a
+// directory owned by one of them was created or re-owned by Veil.
+var veilServiceAccounts = []string{"veil", "veil-proxy", "veil-mita"}
+
+// ownedByVeilServiceAccount reports whether a directory's owner is one of
+// veilServiceAccounts. It is a variable so tests can simulate the accounts
+// without creating system users.
+var ownedByVeilServiceAccount = func(info os.FileInfo) bool {
+	uid, ok := fileOwnerUID(info)
+	if !ok {
+		return false
+	}
+	for _, name := range veilServiceAccounts {
+		account, err := user.Lookup(name)
+		if err != nil {
+			continue
+		}
+		if account.Uid == strconv.FormatUint(uint64(uid), 10) {
+			return true
+		}
+	}
+	return false
 }
 
 // ensureRemovablePath guards operator-supplied directories before they reach
@@ -127,8 +180,9 @@ func veilManagedBaseName(base string) bool {
 // escalate into rm -rf of a system tree (issue #1025). A path is removable
 // when it is absent or not a directory (RemoveAll then touches only the node),
 // when it carries a Veil-owned marker (a regular, non-symlink file — issue
-// #1242), when its basename is a Veil-managed name, or when it is empty —
-// anything else fails closed for manual review.
+// #1242), when its basename is a Veil-authored name (#1244), when it is a
+// shared runtime dir (caddy/mita) owned by a Veil service account, or when it
+// is empty — anything else fails closed for manual review.
 func ensureRemovablePath(path string) error {
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -145,7 +199,11 @@ func ensureRemovablePath(path string) error {
 	if clean == filepath.Dir(clean) {
 		return fmt.Errorf("refusing to remove filesystem root %s", path)
 	}
-	if veilManagedBaseName(filepath.Base(clean)) {
+	base := filepath.Base(clean)
+	if veilManagedBaseName(base) {
+		return nil
+	}
+	if sharedRuntimeBaseName(base) && ownedByVeilServiceAccount(info) {
 		return nil
 	}
 	for _, marker := range stateDirMarkers {

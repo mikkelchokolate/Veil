@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -259,5 +260,73 @@ func TestUninstallScriptRefusesSymlinkOrDirMarker(t *testing.T) {
 				t.Fatalf("unmarked directory content must survive: %v\n%s", statErr, out)
 			}
 		})
+	}
+}
+
+// TestUninstallScriptRequiresProofForSharedCaddyDir is the #1244 shell-side
+// regression: /var/lib/caddy is also the stock system Caddy data dir, so the
+// `caddy` basename alone must not bless it for rm -rf. A caddy dir owned by a
+// non-Veil account fails closed; a Veil-marked one is still removed.
+func TestUninstallScriptRequiresProofForSharedCaddyDir(t *testing.T) {
+	checkBash(t)
+	for _, name := range []string{"veil", "veil-proxy", "veil-mita"} {
+		if u, err := user.Current(); err == nil && u.Username == name {
+			t.Skipf("test runs as Veil service account %s", name)
+		}
+	}
+	for _, marked := range []bool{false, true} {
+		root := t.TempDir()
+		installDir := filepath.Join(root, "bin")
+		etcDir := filepath.Join(root, "etc", "veil")
+		varDir := filepath.Join(root, "var", "lib", "veil")
+		caddyDir := filepath.Join(root, "var", "lib", "caddy")
+		systemdDir := filepath.Join(root, "systemd")
+		for _, dir := range []string{installDir, etcDir, varDir, filepath.Join(caddyDir, "caddy", "certificates"), systemdDir} {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		stockKey := filepath.Join(caddyDir, "caddy", "certificates", "site.key")
+		if err := os.WriteFile(stockKey, []byte("stock caddy cert"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if marked {
+			if err := os.WriteFile(filepath.Join(caddyDir, ".veil-managed"), []byte("veil\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(systemdDir, "veil.service"), []byte("[Service]\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command("bash", "../../scripts/uninstall.sh",
+			"--install-dir", installDir,
+			"--etc-dir", etcDir,
+			"--var-dir", varDir,
+			"--systemd-dir", systemdDir,
+			"--yes",
+		)
+		cmd.Env = append(os.Environ(),
+			"VEIL_UNINSTALL_ALLOW_NONROOT=1",
+			"VEIL_VENDOR_SYSTEMD_DIRS="+filepath.Join(root, "vendor"),
+			"VEIL_SYSCTL_CONF="+filepath.Join(root, "sysctl.conf"),
+			"VEIL_CADDY_STATE_DIR="+caddyDir,
+			"VEIL_MITA_STATE_DIR="+filepath.Join(root, "var", "lib", "mita"),
+		)
+		out, err := cmd.CombinedOutput()
+		if !marked {
+			if err == nil || !strings.Contains(string(out), "Refusing to remove "+caddyDir) {
+				t.Fatalf("unowned, unmarked caddy dir must fail closed, err=%v:\n%s", err, out)
+			}
+			if _, statErr := os.Stat(stockKey); statErr != nil {
+				t.Fatalf("stock caddy data must survive: %v\n%s", statErr, out)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("marked caddy dir should be removed: %v\n%s", err, out)
+		}
+		if _, statErr := os.Lstat(caddyDir); !os.IsNotExist(statErr) {
+			t.Fatalf("marked caddy dir %s should be removed:\n%s", caddyDir, out)
+		}
 	}
 }
