@@ -27,11 +27,11 @@ var (
 	findBestGoFn  = findBestGo
 )
 
-const defaultGoVersion = "1.27.2"
+const defaultGoVersion = "1.27.3"
 
 var defaultGoSHA256 = map[string]string{
-	"linux-amd64": "ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5",
-	"linux-arm64": "94f3e30b8e374bc285e7dadc11e0865726b9bc6e85b841ccceaabc0214c6b7c8",
+	"linux-amd64": "65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40",
+	"linux-arm64": "a06e99309dbcbdca1a8ccd2282c3ee146e55930886e26b4f1193269587165f49",
 }
 
 // goVersionRE extracts "1.27.1" from strings like "go version go1.27.1 linux/amd64"

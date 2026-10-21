@@ -17,15 +17,15 @@ CI_UBUNTU_BASE="ubuntu:24.04@sha256:a61567bd31828687156d735ea8eb01ba4e37636e225d
 # --- Release Dockerfile base images (digest-pinned; asserted by verify_versions) ---
 # These mirror the ARG defaults in the root Dockerfile exactly — tag AND digest.
 CI_NODE_IMAGE_DIGEST="sha256:ef24c5053d50fdc3e4e56eb4e7ddb7861874ab0fdc797046ba897581deb8e868" # node:26.8.2-alpine
-CI_GO_IMAGE_DIGEST="sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d"   # golang:1.27.2-alpine
+CI_GO_IMAGE_DIGEST="sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd"   # golang:1.27.3-alpine
 CI_ALPINE_VERSION="3.24"
 CI_ALPINE_IMAGE_DIGEST="sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"   # alpine:3.24
 
 # --- Core toolchain ---------------------------------------------------------
-CI_GO_VERSION="1.27.2"
-CI_GO_TARBALL_SHA256="ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5" # go1.27.2.linux-amd64.tar.gz
+CI_GO_VERSION="1.27.3"
+CI_GO_TARBALL_SHA256="65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40" # go1.27.3.linux-amd64.tar.gz
 # linux-arm64 pin matches internal/runtimeinstall/gotoolchain.go defaultGoSHA256.
-CI_GO_TARBALL_SHA256_ARM64="94f3e30b8e374bc285e7dadc11e0865726b9bc6e85b841ccceaabc0214c6b7c8" # go1.27.2.linux-arm64.tar.gz
+CI_GO_TARBALL_SHA256_ARM64="a06e99309dbcbdca1a8ccd2282c3ee146e55930886e26b4f1193269587165f49" # go1.27.3.linux-arm64.tar.gz
 # The live-host network path intermittently stalls Go's HTTP/2 proxy connections
 # with bytes stuck in Send-Q. Pin HTTP/1.1 transport for deterministic clean-cache
 # downloads in both local CI and GitHub Actions. Fall back to checksum-verified

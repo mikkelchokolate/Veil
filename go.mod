@@ -1,6 +1,6 @@
 module github.com/mikkelchokolate/Veil
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/go-webauthn/webauthn v0.18.2
