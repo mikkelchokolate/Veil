@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -24,6 +23,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/service"
 	"github.com/mikkelchokolate/Veil/internal/statecommit"
+	"github.com/mikkelchokolate/Veil/internal/syspath"
 )
 
 type PlanDependencies struct {
@@ -124,7 +124,9 @@ func (d PlanDependencies) lookPath() func(string) (string, error) {
 	if d.LookPath != nil {
 		return d.LookPath
 	}
-	return exec.LookPath
+	// Resolved paths are rendered into systemd units; never take them from
+	// the ambient PATH of a root-run repair (#1262).
+	return syspath.LookPath
 }
 
 func addPanelStateRepairActions(plan installer.RepairPlan, opts Options, deps PlanDependencies, resolvedIP string) (installer.RepairPlan, error) {

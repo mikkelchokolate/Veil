@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -32,6 +31,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/service"
 	"github.com/mikkelchokolate/Veil/internal/statecommit"
+	"github.com/mikkelchokolate/Veil/internal/syspath"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -85,7 +85,7 @@ var activeForeignFirewallFunc = func(ctx context.Context) string {
 	}
 	for _, unit := range []string{"firewalld.service", "nftables.service", "iptables.service"} {
 		probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		err := exec.CommandContext(probeCtx, "systemctl", "is-active", "--quiet", unit).Run()
+		err := syspath.CommandContext(probeCtx, "systemctl", "is-active", "--quiet", unit).Run()
 		cancel()
 		if err == nil {
 			return strings.TrimSuffix(unit, ".service")
@@ -102,7 +102,7 @@ var provisionUFWCommandFunc = func(ctx context.Context, name string, args ...str
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	out, err := exec.CommandContext(probeCtx, name, args...).CombinedOutput()
+	out, err := syspath.CommandContext(probeCtx, name, args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s %s: %w (output: %s)", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
@@ -639,7 +639,10 @@ func resolvePublicIPForDirectInstall(ctx context.Context, opts ruRecommendedInst
 	return hostenv.ResolvePublicIP(ctx, publicIP, installPublicIPClient, installPublicIPEndpoints)
 }
 
-var execLookPath = exec.LookPath
+// execLookPath resolves host tools for root-run install paths. It searches only
+// the fixed system directories (syspath.TrustedDirs), never the ambient PATH,
+// so a poisoned PATH cannot plant a ufw/caddy/package-manager shim (#1262).
+var execLookPath = syspath.LookPath
 
 func waitForInstalledPanelReady(cmd *cobra.Command, profile installer.RURecommendedProfile, opts ruRecommendedInstallOptions) error {
 	ctx := context.Background()
@@ -791,7 +794,7 @@ var installVerifyCaddyRouteFunc = verifyInstalledCaddyRoute
 
 // installCaddyUnitActiveFunc reports whether veil-caddy.service is active.
 var installCaddyUnitActiveFunc = func(ctx context.Context) error {
-	return exec.CommandContext(ctx, "systemctl", "is-active", "--quiet", "veil-caddy.service").Run()
+	return syspath.CommandContext(ctx, "systemctl", "is-active", "--quiet", "veil-caddy.service").Run()
 }
 
 // verifyInstalledCaddyRoute proves the public reverse-proxy leg after a caddy

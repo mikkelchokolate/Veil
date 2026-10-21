@@ -4,17 +4,17 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os/exec"
 	"time"
 
 	doctorflow "github.com/mikkelchokolate/Veil/internal/cliflow/doctor"
 	versionflow "github.com/mikkelchokolate/Veil/internal/cliflow/version"
+	"github.com/mikkelchokolate/Veil/internal/syspath"
 	"github.com/spf13/cobra"
 )
 
 var (
 	errCommandNotFound = errors.New("command not found")
-	commandLookPath    = exec.LookPath
+	commandLookPath    = syspath.LookPath
 	versionCheckClient = &http.Client{Timeout: 10 * time.Second}
 )
 

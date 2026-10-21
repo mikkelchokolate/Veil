@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/syspath"
 )
 
 type RuntimeCommandInput struct {
@@ -52,7 +54,7 @@ func (RuntimeCommandExecutor) Run(input RuntimeCommandInput) RuntimeCommandOutpu
 		result.Err = errors.New("command is empty")
 		return result
 	}
-	binary, err := exec.LookPath(command[0])
+	binary, err := syspath.LookPath(command[0])
 	if err != nil {
 		result.NotFound = true
 		result.Err = errors.New(command[0] + " not found")
@@ -65,8 +67,9 @@ func (RuntimeCommandExecutor) Run(input RuntimeCommandInput) RuntimeCommandOutpu
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, binary, command[1:]...)
+	cmd.Env = syspath.Env(os.Environ())
 	if len(input.Env) > 0 {
-		cmd.Env = mergeCommandEnv(os.Environ(), input.Env)
+		cmd.Env = mergeCommandEnv(cmd.Env, input.Env)
 	}
 	out, err := cmd.CombinedOutput()
 	result.Output = strings.TrimSpace(string(out))

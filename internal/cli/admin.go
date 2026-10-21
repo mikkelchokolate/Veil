@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -14,13 +13,14 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/statecommit"
+	"github.com/mikkelchokolate/Veil/internal/syspath"
 	"github.com/spf13/cobra"
 )
 
 var adminNotifyPanel = notifyRunningPanel
 
 var adminSystemctlRun = func(args ...string) error {
-	return exec.Command("systemctl", args...).Run()
+	return syspath.Command("systemctl", args...).Run()
 }
 
 func notifyRunningPanel() error {

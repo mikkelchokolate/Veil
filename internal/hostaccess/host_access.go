@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
 	"sort"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/safefs"
+	"github.com/mikkelchokolate/Veil/internal/syspath"
 )
 
 // testHooks are package-level indirections that allow tests to inject errors
@@ -175,7 +175,7 @@ func DefaultAccountDependencies() AccountDependencies {
 		LookupUser:  user.Lookup,
 		LookupGroup: user.LookupGroup,
 		Run: func(name string, args ...string) error {
-			return exec.Command(name, args...).Run()
+			return syspath.Command(name, args...).Run()
 		},
 	}
 }
