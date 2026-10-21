@@ -86,6 +86,23 @@ type hysteria2YAML struct {
 	// bandwidth and the QUIC path then stalls ("pauses") under load.
 	IgnoreClientBandwidth bool               `yaml:"ignoreClientBandwidth"`
 	QUIC                  *hysteria2QUICYAML `yaml:"quic,omitempty"`
+	// Resolver is rendered only when the host's own resolver is unreachable
+	// under the unit's egress filter; see hysteria2_resolver.go (#1288).
+	Resolver *hysteria2ResolverYAML `yaml:"resolver,omitempty"`
+}
+
+// hysteria2ResolverYAML mirrors apernet/hysteria serverConfigResolver for the
+// DNS-over-HTTPS form (resolver.type=https).
+type hysteria2ResolverYAML struct {
+	Type  string                    `yaml:"type"`
+	HTTPS *hysteria2ResolverDoHYAML `yaml:"https,omitempty"`
+}
+
+type hysteria2ResolverDoHYAML struct {
+	Addr     string `yaml:"addr"`
+	Timeout  string `yaml:"timeout"`
+	SNI      string `yaml:"sni"`
+	Insecure bool   `yaml:"insecure"`
 }
 
 // hysteria2HTTPAuthYAML mirrors apernet/hysteria serverConfigAuthHTTP:
@@ -170,6 +187,7 @@ func RenderHysteria2(cfg Hysteria2Config) (string, error) {
 		MaxIdleTimeout:  "2m",
 		KeepAlivePeriod: "10s",
 	}
+	doc.Resolver = hysteria2ResolverProbe()
 	// The egress ACL is ALWAYS emitted — with or without a WARP upstream —
 	// because without it Hysteria2 proxies client requests to ANY destination
 	// the server can reach, including loopback control planes (Caddy admin on
