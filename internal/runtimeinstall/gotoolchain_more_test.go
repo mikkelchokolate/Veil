@@ -183,6 +183,7 @@ func TestGoLocalEnv(t *testing.T) {
 }
 
 func TestGoBuildEnv(t *testing.T) {
+	asUnprivileged(t)
 	t.Setenv("PATH", "/usr/bin")
 	t.Setenv("GOPROXY", "https://proxy")
 	env := goBuildEnv(context.Background(), "/usr/local/go/bin/go")
@@ -210,6 +211,7 @@ func TestGoBuildEnv(t *testing.T) {
 }
 
 func TestGoBuildEnvPreservesExisting(t *testing.T) {
+	asUnprivileged(t)
 	t.Setenv("GOROOT", "/old")
 	t.Setenv("GOBIN", "/oldbin")
 	t.Setenv("PATH", "/usr/bin")
@@ -237,6 +239,7 @@ func TestGoBuildEnvPreservesExisting(t *testing.T) {
 }
 
 func TestGoBuildEnvHandlesWindowsPath(t *testing.T) {
+	asUnprivileged(t)
 	t.Setenv("Path", "/usr/bin")
 	env := goBuildEnv(context.Background(), "/usr/local/go/bin/go")
 	hasPath := false
