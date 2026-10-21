@@ -481,3 +481,41 @@ func TestCertRenewHonorsPersistedOptOut(t *testing.T) {
 		t.Fatalf("explicit VEIL_PANEL_LE_IP_CERT=1 must re-enable renewal: %+v", captured)
 	}
 }
+
+// #1334 review: VEIL_ACME_INSECURE is parsed as a bool with process-env
+// precedence, so an explicit =0 in the shell beats a persisted =1 and a
+// malformed value never enables insecure issuance.
+func TestCertRenewACMEInsecureParsesBoolWithEnvPrecedence(t *testing.T) {
+	for _, tc := range []struct {
+		name, persisted, env string
+		setEnv               bool
+		want                 bool
+	}{
+		{name: "env 0 beats persisted 1", persisted: "1", env: "0", setEnv: true, want: false},
+		{name: "persisted 1", persisted: "1", want: true},
+		{name: "persisted 0", persisted: "0", want: false},
+		{name: "persisted bogus", persisted: "bogus", want: false},
+		{name: "env bogus over persisted unset", env: "bogus", setEnv: true, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			etc := t.TempDir()
+			t.Setenv("VEIL_ETC_DIR", etc)
+			t.Setenv("VEIL_ACME_INSECURE", tc.env)
+			if !tc.setEnv {
+				os.Unsetenv("VEIL_ACME_INSECURE")
+			}
+			content := "VEIL_PANEL_PUBLIC_IP=203.0.113.9\n"
+			if tc.persisted != "" {
+				content += "VEIL_ACME_INSECURE=" + tc.persisted + "\n"
+			}
+			writeVeilEnv(t, etc, content)
+			captured, _ := stubCertRenew(t, nil)
+			if err := runCertRenew(certFlagCommand(&bytes.Buffer{}), "auto", "", 80, "", ""); err != nil {
+				t.Fatalf("renew failed: %v", err)
+			}
+			if captured.Insecure != tc.want {
+				t.Fatalf("Insecure = %v, want %v", captured.Insecure, tc.want)
+			}
+		})
+	}
+}

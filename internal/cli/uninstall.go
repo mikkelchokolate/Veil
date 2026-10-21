@@ -54,7 +54,7 @@ func newUninstallCommand() *cobra.Command {
 			"(only those whose bytes match Veil's install record); --keep-data keeps them.\n" +
 			"The veil system account is always preserved.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			warnUninstallEnvOverrides(cmd.ErrOrStderr())
+			warnUninstallEnvOverrides(cmd.ErrOrStderr(), cmd.Flags().Changed)
 			return uninstallflow.Run(uninstallflow.Options{DryRun: dryRun, Yes: yes, Purge: purge, KeepData: keepData, EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, InstallDir: installDir, CaddyStateDir: caddyStateDir, MitaStateDir: mitaStateDir, VendorSystemdDirs: vendorSystemdDirs, SysctlConfPath: sysctlConfPath}, cmd.OutOrStdout(), cmd.ErrOrStderr(), uninstallflow.Dependencies{
 				ServiceStopper:  uninstallServiceStopper,
 				FileRemover:     uninstallFileRemover,
@@ -83,15 +83,23 @@ func newUninstallCommand() *cobra.Command {
 // are read from the (root) process environment — a `sudo -E` or an exported
 // shell profile silently retargets removals (issue #1263) — so any override
 // is surfaced on stderr before the plan runs.
-var uninstallEnvOverrides = []struct{ name, packaged string }{
-	{"VEIL_CADDY_STATE_DIR", "/var/lib/caddy"},
-	{"VEIL_MITA_STATE_DIR", "/var/lib/mita"},
-	{"VEIL_VENDOR_SYSTEMD_DIRS", "/lib/systemd/system /usr/lib/systemd/system"},
-	{"VEIL_SYSCTL_CONF", "/etc/sysctl.d/" + uninstallflow.QUICSysctlConfName},
+// flag names the CLI flag that, when given explicitly, replaces the env value
+// (empty when the target has no flag).
+var uninstallEnvOverrides = []struct{ name, packaged, flag string }{
+	{"VEIL_CADDY_STATE_DIR", "/var/lib/caddy", "caddy-state-dir"},
+	{"VEIL_MITA_STATE_DIR", "/var/lib/mita", "mita-state-dir"},
+	{"VEIL_VENDOR_SYSTEMD_DIRS", "/lib/systemd/system /usr/lib/systemd/system", ""},
+	{"VEIL_SYSCTL_CONF", "/etc/sysctl.d/" + uninstallflow.QUICSysctlConfName, ""},
 }
 
-func warnUninstallEnvOverrides(errOut io.Writer) {
+// warnUninstallEnvOverrides reports env overrides that actually retarget the
+// run: an override whose flag was passed explicitly is not used, so warning
+// about it would be wrong (#1334 review).
+func warnUninstallEnvOverrides(errOut io.Writer, flagChanged func(string) bool) {
 	for _, override := range uninstallEnvOverrides {
+		if override.flag != "" && flagChanged != nil && flagChanged(override.flag) {
+			continue
+		}
 		value := strings.Join(strings.Fields(os.Getenv(override.name)), " ")
 		if value == "" || value == override.packaged {
 			continue
