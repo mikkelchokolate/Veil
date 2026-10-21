@@ -659,13 +659,19 @@ func TestPasskeyArmsSecondFactorRequirement(t *testing.T) {
 
 	// A passkey-only account arms the factor requirement the same as TOTP:
 	// sessions minted before the credential was registered are retired.
-	if state.sessionMeetsFactorRequirement(session) {
+	// Drives authorizeCookieSession, the rule the middleware, the status
+	// endpoint and SSE actually run.
+	if _, _, ok := state.authorizeCookieSession(session.Token, session); ok {
 		t.Fatal("pre-enrollment session accepted after passkey was armed")
+	}
+	if _, ok := state.sessionRegistry().Get(session.Token); ok {
+		t.Fatal("pre-enrollment session was not revoked after passkey was armed")
 	}
 	state.mu.Lock()
 	state.users[0].Passkeys = nil
 	state.mu.Unlock()
-	if !state.sessionMeetsFactorRequirement(session) {
+	fresh := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+	if _, _, ok := state.authorizeCookieSession(fresh.Token, fresh); !ok {
 		t.Fatal("session still required the mark after the last factor was removed")
 	}
 }
