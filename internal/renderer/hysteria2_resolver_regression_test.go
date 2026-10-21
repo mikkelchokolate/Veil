@@ -16,6 +16,17 @@ const (
 		"eth0\t0000000A\t00000000\t0001\t0\t0\t100\t00FFFFFF\t0\t0\t0\n"
 	testIPv4NoDefault = "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n" +
 		"eth0\t0000000A\t00000000\t0001\t0\t0\t100\t00FFFFFF\t0\t0\t0\n"
+	// OpenVPN def1 / wg-quick split default: 0.0.0.0/1 + 128.0.0.0/1, no
+	// 0.0.0.0/0. Fixtures use the little-endian layout of amd64/arm64.
+	testIPv4SplitDefault = "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n" +
+		"tun0\t00000000\t0108080A\t0003\t0\t0\t0\t00000080\t0\t0\t0\n" +
+		"tun0\t00000080\t0108080A\t0003\t0\t0\t0\t00000080\t0\t0\t0\n"
+	// A 0.0.0.0/0 that is administratively unreachable (RTF_REJECT).
+	testIPv4RejectDefault = "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n" +
+		"lo\t00000000\t00000000\t0201\t0\t0\t0\t00000000\t0\t0\t0\n"
+	// A Destination=0 row with a non-zero mask (0.0.0.0/8) does not cover 1.1.1.1.
+	testIPv4ZeroDestNarrowMask = "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n" +
+		"eth0\t00000000\t00000000\t0001\t0\t0\t0\t000000FF\t0\t0\t0\n"
 	// The kernel always keeps an unreachable ::/0 on lo; only a non-lo ::/0
 	// row is a real default route.
 	testIPv6LoopbackOnly = "00000000000000000000000000000000 00 00000000000000000000000000000000 00 00000000000000000000000000000000 ffffffff 00000001 00000000 00200200       lo\n"
@@ -29,6 +40,9 @@ func withHysteria2HostProbe(t *testing.T, resolvConf string, confErr error, v4, 
 	t.Cleanup(func() {
 		hysteria2ReadResolvConf, hysteria2ReadIPv4Routes, hysteria2ReadIPv6Routes = oldConf, oldV4, oldV6
 	})
+	oldEnabled := hysteria2ProbeHostInTests
+	t.Cleanup(func() { hysteria2ProbeHostInTests = oldEnabled })
+	hysteria2ProbeHostInTests = true
 	hysteria2ReadResolvConf = func() ([]byte, error) { return []byte(resolvConf), confErr }
 	hysteria2ReadIPv4Routes = func() ([]byte, error) { return []byte(v4), nil }
 	hysteria2ReadIPv6Routes = func() ([]byte, error) { return []byte(v6), nil }
@@ -78,6 +92,7 @@ func TestRenderHysteria2ResolverFollowsHostNameserverReachability(t *testing.T) 
 		{name: "public IPv6 nameserver", conf: "nameserver 2a01:4ff:ff00::add:1\n", v6: testIPv6DefaultRoute},
 		{name: "IPv6-only host on resolved stub", conf: "nameserver 127.0.0.53\n", v4: testIPv4NoDefault, v6: testIPv6DefaultRoute},
 		{name: "one reachable among denied", conf: "nameserver 10.0.0.2\nnameserver 1.1.1.1\n", v4: testIPv4DefaultRoute},
+		{name: "IPv4-mapped resolved stub", conf: "nameserver ::ffff:127.0.0.53\n", v4: testIPv4DefaultRoute},
 		{name: "unreadable resolv.conf", confErr: fs.ErrPermission, v4: testIPv4DefaultRoute},
 
 		{name: "AWS VPC resolver", conf: "search ec2.internal\nnameserver 172.31.0.2\n", v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
@@ -87,6 +102,11 @@ func TestRenderHysteria2ResolverFollowsHostNameserverReachability(t *testing.T) 
 		{name: "zoned IPv6 link-local", conf: "nameserver fe80::1%eth0\n", v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
 		{name: "IPv4-mapped loopback", conf: "nameserver ::ffff:127.0.0.1\n", v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
 		{name: "commented-out public nameserver", conf: "# nameserver 1.1.1.1\nnameserver 192.168.1.1\n", v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
+		{name: "reachable nameserver past the third is ignored", conf: "nameserver 10.0.0.2\nnameserver 10.0.0.3\nnameserver 172.31.0.2\nnameserver 1.1.1.1\n", v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
+		{name: "unparseable nameserver does not count toward three", conf: "nameserver bogus\nnameserver 10.0.0.2\nnameserver 10.0.0.3\nnameserver 1.1.1.1\n", v4: testIPv4DefaultRoute},
+		{name: "split IPv4 default beats IPv6 default", conf: "nameserver 10.0.0.2\n", v4: testIPv4SplitDefault, v6: testIPv6DefaultRoute, want: hysteria2DoHResolverAddrV4},
+		{name: "rejected IPv4 default is not reachability", conf: "nameserver 10.0.0.2\n", v4: testIPv4RejectDefault, v6: testIPv6DefaultRoute, want: hysteria2DoHResolverAddrV6},
+		{name: "zero destination with narrow mask", conf: "nameserver 10.0.0.2\n", v4: testIPv4ZeroDestNarrowMask, v6: testIPv6DefaultRoute, want: hysteria2DoHResolverAddrV6},
 		{name: "no resolv.conf", confErr: fs.ErrNotExist, v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
 		{name: "empty resolv.conf", conf: "", v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
 		{name: "dual-stack denied nameserver", conf: "nameserver 10.0.0.2\n", v4: testIPv4DefaultRoute, v6: testIPv6DefaultRoute, want: hysteria2DoHResolverAddrV4},
@@ -153,5 +173,16 @@ func TestHysteria2DoHResolverAddrsPassEgressFilter(t *testing.T) {
 		if addrInEgressDeny(addr) {
 			t.Fatalf("%s falls inside the egress deny set", addr)
 		}
+	}
+}
+
+// Inside a test binary the host probe stays off unless a renderer test opts
+// in, so packages that render Hysteria2 configs get the same output on every
+// machine, whatever its resolv.conf says.
+func TestRenderHysteria2HostProbeOffInOtherTests(t *testing.T) {
+	withHysteria2HostProbe(t, "nameserver 172.31.0.2\n", nil, testIPv4DefaultRoute, "")
+	hysteria2ProbeHostInTests = false
+	if doc := renderHysteria2ResolverDoc(t, Hysteria2Config{ListenPort: 443, Password: "secret"}); doc.Resolver != nil {
+		t.Fatalf("host probe ran inside a test binary without opting in: %+v", *doc.Resolver)
 	}
 }
