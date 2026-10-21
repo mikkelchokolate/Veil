@@ -19,6 +19,7 @@ func TestRepairLifecycleEnvParsesACMEInsecureAsBool(t *testing.T) {
 		{name: "persisted bogus", persisted: "bogus", want: false},
 		{name: "env 0 beats persisted 1", persisted: "1", env: "0", setEnv: true, want: false},
 		{name: "unset", want: false},
+		{name: "env 0, nothing persisted", env: "0", setEnv: true, want: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			etc := t.TempDir()

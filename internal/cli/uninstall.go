@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	uninstallflow "github.com/mikkelchokolate/Veil/internal/cliflow/uninstall"
@@ -85,11 +86,14 @@ func newUninstallCommand() *cobra.Command {
 // is surfaced on stderr before the plan runs.
 // flag names the CLI flag that, when given explicitly, replaces the env value
 // (empty when the target has no flag).
-var uninstallEnvOverrides = []struct{ name, packaged, flag string }{
-	{"VEIL_CADDY_STATE_DIR", "/var/lib/caddy", "caddy-state-dir"},
-	{"VEIL_MITA_STATE_DIR", "/var/lib/mita", "mita-state-dir"},
-	{"VEIL_VENDOR_SYSTEMD_DIRS", "/lib/systemd/system /usr/lib/systemd/system", ""},
-	{"VEIL_SYSCTL_CONF", "/etc/sysctl.d/" + uninstallflow.QUICSysctlConfName, ""},
+var uninstallEnvOverrides = []struct {
+	name, packaged, flag string
+	list                 bool
+}{
+	{name: "VEIL_CADDY_STATE_DIR", packaged: "/var/lib/caddy", flag: "caddy-state-dir"},
+	{name: "VEIL_MITA_STATE_DIR", packaged: "/var/lib/mita", flag: "mita-state-dir"},
+	{name: "VEIL_VENDOR_SYSTEMD_DIRS", packaged: "/lib/systemd/system /usr/lib/systemd/system", list: true},
+	{name: "VEIL_SYSCTL_CONF", packaged: "/etc/sysctl.d/" + uninstallflow.QUICSysctlConfName},
 }
 
 // warnUninstallEnvOverrides reports env overrides that actually retarget the
@@ -100,8 +104,14 @@ func warnUninstallEnvOverrides(errOut io.Writer, flagChanged func(string) bool) 
 		if override.flag != "" && flagChanged != nil && flagChanged(override.flag) {
 			continue
 		}
-		value := strings.Join(strings.Fields(os.Getenv(override.name)), " ")
-		if value == "" || value == override.packaged {
+		// Normalise the way the uninstall flow consumes each knob: the
+		// vendor dir list is whitespace-split, single paths are trimmed and
+		// compared cleaned so ".../99-veil-quic.conf/" is not an override.
+		value := strings.TrimSpace(os.Getenv(override.name))
+		if override.list {
+			value = strings.Join(strings.Fields(value), " ")
+		}
+		if value == "" || value == override.packaged || (!override.list && filepath.Clean(value) == override.packaged) {
 			continue
 		}
 		fmt.Fprintf(errOut, "warning: %s=%s from the environment overrides the packaged uninstall target %s\n", override.name, value, override.packaged)

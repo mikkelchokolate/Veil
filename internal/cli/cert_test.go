@@ -496,6 +496,7 @@ func TestCertRenewACMEInsecureParsesBoolWithEnvPrecedence(t *testing.T) {
 		{name: "persisted 0", persisted: "0", want: false},
 		{name: "persisted bogus", persisted: "bogus", want: false},
 		{name: "env bogus over persisted unset", env: "bogus", setEnv: true, want: false},
+		{name: "env 0, nothing persisted", env: "0", setEnv: true, want: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			etc := t.TempDir()

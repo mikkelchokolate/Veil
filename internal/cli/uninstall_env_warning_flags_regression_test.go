@@ -38,3 +38,20 @@ func TestUninstallEnvWarningRespectsExplicitFlags(t *testing.T) {
 		t.Fatalf("env override in effect but not warned about:\n%s", withoutFlag)
 	}
 }
+
+// #1334 review: a cleaned-equal path (trailing slash) is the packaged target
+// and must not be reported as an override.
+func TestUninstallEnvWarningComparesCleanedPaths(t *testing.T) {
+	t.Setenv("VEIL_SYSCTL_CONF", "/etc/sysctl.d/99-veil-quic.conf/")
+	t.Setenv("VEIL_CADDY_STATE_DIR", "/var/lib/caddy/")
+	var errOut bytes.Buffer
+	warnUninstallEnvOverrides(&errOut, nil)
+	if errOut.Len() != 0 {
+		t.Fatalf("cleaned-equal packaged paths reported as overrides:\n%s", errOut.String())
+	}
+	t.Setenv("VEIL_SYSCTL_CONF", "/tmp/elsewhere/99-veil-quic.conf")
+	warnUninstallEnvOverrides(&errOut, nil)
+	if !strings.Contains(errOut.String(), "VEIL_SYSCTL_CONF=/tmp/elsewhere/99-veil-quic.conf") {
+		t.Fatalf("real override not reported:\n%s", errOut.String())
+	}
+}

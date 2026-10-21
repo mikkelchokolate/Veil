@@ -4,6 +4,16 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+### Changed
+
+- #1263/#1334: `VEIL_AUTO_TLS` is parsed strictly by `veil serve`
+  with `strconv.ParseBool` (`1`, `t`, `T`, `true`, `TRUE`, `True` and the
+  matching false forms). Values such as `yes` or
+  `on` used to enable auto-TLS and now stop startup with
+  `VEIL_AUTO_TLS must be a boolean` — check Docker/compose environments.
+  `VEIL_ACME_INSECURE` instead treats any non-true value as false, so a
+  typo can never disable ACME TLS verification.
+
 ### Fixed
 
 - #622: package postinstall no longer sweeps every symlink under
