@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -102,7 +104,11 @@ func (r *SessionRegistry) ReloadFromDisk() error {
 	fresh.persistInterval = r.persistInterval
 	// Loading under r.mu keeps this process's own journal appends from
 	// interleaving with the read.
-	if err := fresh.load(); err != nil {
+	if err := fresh.loadFromDisk(false); err != nil {
+		// Keep memory (the snapshot alone may still hold sessions only the
+		// journal revoked), but still honour every revocation intent that
+		// can be read from the journal.
+		r.absorbDiskRevocationsLocked()
 		return fmt.Errorf("reload Panel sessions from %s: %w", r.path, err)
 	}
 	rawCSRF := make(map[string]string, len(fresh.sessions))
@@ -116,7 +122,85 @@ func (r *SessionRegistry) ReloadFromDisk() error {
 	// r.pendingRevocations is kept: those are this process's own outstanding
 	// intents, still awaiting their delete_many or cancel. Replay has just
 	// applied them, which only revokes sessions they were going to revoke.
+	// fresh.pendingRevocations (the CLI's intents) is dropped: replay has
+	// already applied them to the map adopted above, so a later checkpoint
+	// that no longer carries them cannot resurrect anything, and any rewrite
+	// before that re-absorbs them from disk first.
 	return nil
+}
+
+// absorbDiskRevocationsLocked applies the revocation intents in the on-disk
+// journal to the in-memory sessions, exactly as a restart's replay would.
+// Every whole-store rewrite (snapshot save, journal checkpoint) calls it
+// first: the rewrite discards the journal, and another process (the root
+// CLI) may have journaled a revocation since this process last read it
+// (#1265). Intents this process itself still holds as pending are skipped,
+// so an in-flight credential change keeps the session it means to keep.
+//
+// It is best effort: unreadable journals and malformed lines are skipped
+// (the rewrite that follows replaces them anyway). Revoking is the only
+// effect, so a stale intent can at worst force an extra re-login.
+func (r *SessionRegistry) absorbDiskRevocationsLocked() {
+	if r.path == "" || len(r.sessions) == 0 {
+		return
+	}
+	body, err := readSessionStoreFile(r.journalPath())
+	if err != nil {
+		return
+	}
+	var intents []sessionRevocationIntent
+	for _, line := range bytes.Split(body, []byte{'\n'}) {
+		if len(line) == 0 {
+			continue
+		}
+		var record sessionJournalRecord
+		if json.Unmarshal(line, &record) != nil {
+			continue
+		}
+		switch record.Operation {
+		case "revoke_username":
+			intent := sessionRevocationIntent{Username: record.Username, Through: record.Through}
+			if validRevocationIntent(intent) {
+				intents = append(intents, intent)
+			}
+		case "revoke_all":
+			intent := sessionRevocationIntent{Through: record.Through, All: true}
+			if record.Username == "" && validRevocationIntent(intent) {
+				intents = append(intents, intent)
+			}
+		case "revoke_cancel":
+			if record.Username != "" {
+				intents = cancelPendingRevocation(intents, record.Username, record.Through)
+			}
+		case "replace_all":
+			intents = intents[:0]
+			for _, intent := range record.Revocations {
+				if validRevocationIntent(intent) {
+					intents = append(intents, intent)
+				}
+			}
+		}
+	}
+	for _, intent := range intents {
+		if r.holdsPendingIntentLocked(intent) {
+			continue
+		}
+		for tokenHash, session := range r.sessions {
+			if intent.covers(session) {
+				delete(r.sessions, tokenHash)
+				delete(r.rawCSRF, tokenHash)
+			}
+		}
+	}
+}
+
+func (r *SessionRegistry) holdsPendingIntentLocked(intent sessionRevocationIntent) bool {
+	for _, pending := range r.pendingRevocations {
+		if pending.All == intent.All && pending.Username == intent.Username && pending.Through.Equal(intent.Through) {
+			return true
+		}
+	}
+	return false
 }
 
 // sessionStoreDirMissing reports whether the directory that would hold the

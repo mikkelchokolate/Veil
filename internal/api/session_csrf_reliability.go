@@ -24,7 +24,10 @@ func (r *SessionRegistry) EnsureCSRFPersisted(token string) (string, bool, error
 	record.CSRFHash = hashSessionSecret(csrf)
 	r.sessions[tokenHash] = record
 	r.rawCSRF[tokenHash] = csrf
-	if err := r.saveLocked(); err != nil {
+	// A journaled upsert, not a whole-store rewrite: after a restart every
+	// session lacks a raw CSRF token, and rewriting the store from memory
+	// here would drop revocations the root CLI journaled since (#1265).
+	if err := r.persistUpsertLocked(record); err != nil {
 		r.sessions[tokenHash] = previousRecord
 		if hadPreviousCSRF {
 			r.rawCSRF[tokenHash] = previousCSRF
@@ -32,6 +35,11 @@ func (r *SessionRegistry) EnsureCSRFPersisted(token string) (string, bool, error
 			delete(r.rawCSRF, tokenHash)
 		}
 		return "", false, err
+	}
+	if _, ok := r.sessions[tokenHash]; !ok {
+		// persistUpsertLocked fell back to a snapshot rewrite, which applied
+		// an on-disk revocation covering this session.
+		return "", false, nil
 	}
 	return csrf, true, nil
 }

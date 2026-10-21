@@ -66,8 +66,9 @@ func afterAdminCredentialWrite(statePath string, usernames []string, revokeAll b
 	if errors.Is(err, errPanelNotActive) {
 		if warn != nil {
 			fmt.Fprintln(warn, "warning: veil.service is not active, so no running Panel was reloaded. "+
-				"The change and the session revocation take effect when the Panel next starts. "+
-				"If the Panel runs outside systemd, send it SIGHUP or restart it now.")
+				"The revocation is recorded on disk and applies when a Panel starts or receives SIGHUP. "+
+				"A Panel running outside systemd keeps serving the revoked sessions until then: "+
+				"send it SIGHUP or restart it now.")
 		}
 		return nil
 	}

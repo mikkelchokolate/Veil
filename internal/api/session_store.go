@@ -153,6 +153,13 @@ type sessionStoreFile struct {
 //
 // All marks a cross-process "revoke every session" intent journaled by the
 // root CLI (`veil admin reset` / `rotate-key`, #1265); Username is empty then.
+//
+// Intents journaled by the root CLI are never cancelled or consumed in the
+// journal: every replay re-applies them until a checkpoint or snapshot
+// rewrite drops them. That is harmless (they are positional, so sessions
+// created after Through survive) and required: they are what keeps a
+// session upsert journaled after them from resurrecting a revoked session.
+// Do not "optimise" replay to skip them.
 type sessionRevocationIntent struct {
 	Username string    `json:"username"`
 	Through  time.Time `json:"through"`
@@ -763,6 +770,15 @@ func (r *SessionRegistry) applyPendingRevocationsLocked() {
 }
 
 func (r *SessionRegistry) load() error {
+	return r.loadFromDisk(true)
+}
+
+// loadFromDisk reads the snapshot and replays the journal. A journal that
+// fails to parse next to a readable snapshot is quarantined at startup
+// (quarantineBadJournal); a SIGHUP reload instead reports the error and keeps
+// the in-memory sessions, because the snapshot alone can still hold sessions
+// that only the journal revoked (#1265).
+func (r *SessionRegistry) loadFromDisk(quarantineBadJournal bool) error {
 	if r.path == "" {
 		return nil
 	}
@@ -794,7 +810,7 @@ func (r *SessionRegistry) load() error {
 		return err
 	}
 	if err := r.loadJournalLocked(); err != nil {
-		if snapshotLoaded {
+		if snapshotLoaded && quarantineBadJournal {
 			_ = r.quarantineJournalLocked()
 			return nil
 		}
@@ -971,6 +987,9 @@ func (r *SessionRegistry) appendJournalLocked(record sessionJournalRecord) error
 }
 
 func (r *SessionRegistry) compactJournalLocked() error {
+	// The checkpoint replaces the journal, which may hold revocations another
+	// process (the root CLI) journaled since this process loaded it (#1265).
+	r.absorbDiskRevocationsLocked()
 	record := sessionJournalRecord{Operation: "replace_all", Sessions: make([]storedSession, 0, len(r.sessions))}
 	for _, session := range r.sessions {
 		record.Sessions = append(record.Sessions, session)
@@ -1077,6 +1096,9 @@ func (r *SessionRegistry) saveLocked() error {
 	if r.path == "" {
 		return nil
 	}
+	// The rewrite removes the journal; apply the revocations it holds first,
+	// or a revocation journaled by the root CLI would be lost (#1265).
+	r.absorbDiskRevocationsLocked()
 	file := sessionStoreFile{Version: 1, Sessions: make([]storedSession, 0, len(r.sessions))}
 	for _, session := range r.sessions {
 		file.Sessions = append(file.Sessions, session)

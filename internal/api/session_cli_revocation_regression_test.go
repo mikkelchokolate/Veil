@@ -295,3 +295,192 @@ func TestManagementStateReloadPicksUpCLISessionRevocation(t *testing.T) {
 		t.Fatal("SIGHUP reload dropped an unrelated session")
 	}
 }
+
+// Review follow-up (#1347): every Panel-side whole-store rewrite used to
+// drop the CLI's journal records. After a Panel restart no session has a raw
+// CSRF token in memory, so the first auth-status or page load used to call
+// EnsureCSRFPersisted → saveLocked and rewrite the store from memory.
+
+func restartedPanel(t *testing.T, statePath string, now func() time.Time) *SessionRegistry {
+	t.Helper()
+	panel, err := NewSessionRegistry(persistedSessionStorePath(statePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	panel.now = now
+	return panel
+}
+
+func TestEnsureCSRFAfterRestartDoesNotDropCLIRevokeAll(t *testing.T) {
+	statePath, panel, _ := cliRevocationFixture(t)
+	alice := mustCreate(t, panel, "alice", "admin")
+	restarted := restartedPanel(t, statePath, panel.now)
+
+	if err := RevokeAllPersistedSessions(statePath); err != nil {
+		t.Fatal(err)
+	}
+	// auth-status / SPA index with the pre-restart cookie, before SIGHUP.
+	if _, _, err := restarted.EnsureCSRFPersisted(alice.Token); err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.ReloadFromDisk(); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := restarted.Get(alice.Token); ok {
+		t.Fatal("EnsureCSRFPersisted before SIGHUP undid revoke-all")
+	}
+}
+
+func TestEnsureCSRFAfterRestartDoesNotDropCLIUserRevocation(t *testing.T) {
+	statePath, panel, _ := cliRevocationFixture(t)
+	alice := mustCreate(t, panel, "alice", "admin")
+	restarted := restartedPanel(t, statePath, panel.now)
+
+	if err := RevokeUsernamePersistedSessions(statePath, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := restarted.EnsureCSRFPersisted(alice.Token); err != nil {
+		t.Fatal(err)
+	}
+	// The CSRF hash goes into the journal as an upsert; the store is not
+	// rewritten from memory, so the CLI's records are still there.
+	journal, err := os.ReadFile(persistedSessionStorePath(statePath) + ".journal")
+	if err != nil || !strings.Contains(string(journal), `"revoke_username"`) {
+		t.Fatalf("EnsureCSRFPersisted rewrote the store and dropped the CLI's journal records (err=%v)", err)
+	}
+	// No SIGHUP at all (unit inactive, Panel outside systemd): the revocation
+	// must still hold at the next start.
+	if _, ok := restartedPanel(t, statePath, panel.now).Get(alice.Token); ok {
+		t.Fatal("EnsureCSRFPersisted undid the CLI revocation permanently")
+	}
+}
+
+func TestPanelSnapshotRewriteAbsorbsCLIRevocations(t *testing.T) {
+	statePath, panel, base := cliRevocationFixture(t)
+	alice := mustCreate(t, panel, "alice", "admin")
+	bob := mustCreate(t, panel, "bob", "viewer")
+	if err := RevokeUsernamePersistedSessions(statePath, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	panel.now = func() time.Time { return base.Add(2 * time.Minute) }
+	fresh := mustCreate(t, panel, "alice", "admin")
+	// A whole-store rewrite before SIGHUP (bound eviction in Create, or the
+	// missing-snapshot fallback) must not drop the CLI's records.
+	panel.mu.Lock()
+	err := panel.saveLocked()
+	panel.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := panel.Get(alice.Token); ok {
+		t.Fatal("the rewrite did not apply the on-disk revocation it discarded")
+	}
+	restarted := restartedPanel(t, statePath, panel.now)
+	if _, ok := restarted.Get(alice.Token); ok {
+		t.Fatal("snapshot rewrite resurrected a CLI-revoked session")
+	}
+	for name, token := range map[string]string{"bob": bob.Token, "fresh alice": fresh.Token} {
+		if _, ok := restarted.Get(token); !ok {
+			t.Fatalf("snapshot rewrite dropped %s's live session", name)
+		}
+	}
+}
+
+func TestPanelCompactionAbsorbsCLIRevocations(t *testing.T) {
+	statePath, panel, _ := cliRevocationFixture(t)
+	alice := mustCreate(t, panel, "alice", "admin")
+	if err := RevokeAllPersistedSessions(statePath); err != nil {
+		t.Fatal(err)
+	}
+	panel.mu.Lock()
+	err := panel.compactJournalLocked()
+	panel.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := restartedPanel(t, statePath, panel.now).Get(alice.Token); ok {
+		t.Fatal("journal compaction before SIGHUP resurrected a revoked session")
+	}
+}
+
+func TestAbsorbSkipsThisProcessPendingIntent(t *testing.T) {
+	statePath, panel, base := cliRevocationFixture(t)
+	alice := mustCreate(t, panel, "alice", "admin")
+	// An in-flight Panel credential change (TOTP confirm keeps the current
+	// session): its own pending intent must not be applied by a rewrite.
+	panel.now = func() time.Time { return base.Add(time.Second) }
+	intent, err := panel.MarkUsernameRevocationPending("alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	panel.mu.Lock()
+	err = panel.saveLocked()
+	panel.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := panel.Get(alice.Token); !ok {
+		t.Fatal("a rewrite applied this process's own in-flight intent")
+	}
+	if err := panel.CancelUsernameRevocation(intent); err != nil {
+		t.Fatal(err)
+	}
+	_ = statePath
+}
+
+func TestReloadWithUnparseableJournalKeepsMemoryButAppliesRevocations(t *testing.T) {
+	statePath, panel, _ := cliRevocationFixture(t)
+	alice := mustCreate(t, panel, "alice", "admin")
+	bob := mustCreate(t, panel, "bob", "viewer")
+	if err := RevokeUsernamePersistedSessions(statePath, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	journal := persistedSessionStorePath(statePath) + ".journal"
+	f, err := os.OpenFile(journal, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("{not json}\n"); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+
+	if err := panel.ReloadFromDisk(); err == nil {
+		t.Fatal("a bad journal at SIGHUP must be reported, not quarantined silently")
+	}
+	if _, err := os.Lstat(journal); err != nil {
+		t.Fatalf("SIGHUP reload quarantined the journal: %v", err)
+	}
+	if _, ok := panel.Get(alice.Token); ok {
+		t.Fatal("reload error swallowed the readable CLI revocation")
+	}
+	if _, ok := panel.Get(bob.Token); !ok {
+		t.Fatal("reload error dropped an unrelated session")
+	}
+}
+
+func TestAbsorbHonoursCancelsFromOtherProcesses(t *testing.T) {
+	statePath, panel, base := cliRevocationFixture(t)
+	alice := mustCreate(t, panel, "alice", "admin")
+	other, err := NewSessionRegistry(persistedSessionStorePath(statePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	other.now = func() time.Time { return base.Add(time.Second) }
+	intent, err := other.MarkUsernameRevocationPending("alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := other.CancelUsernameRevocation(intent); err != nil {
+		t.Fatal(err)
+	}
+	panel.mu.Lock()
+	err = panel.saveLocked()
+	panel.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := panel.Get(alice.Token); !ok {
+		t.Fatal("a rewrite applied an intent its own journal had cancelled")
+	}
+}

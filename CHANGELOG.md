@@ -28,8 +28,13 @@ All notable changes to Veil will be documented in this file.
   rewriting every in-memory session to disk, which undid the invalidation
   for good. Files the root CLI writes in the session store are handed to the
   store directory's owner, so the unprivileged panel can still read them.
-  When `veil.service` is not active, the CLI now prints a warning that no
-  running panel was reloaded instead of reporting success silently. A
+  Every panel-side rewrite of the whole store (snapshot save, journal
+  compaction) first applies the revocations journaled on disk, and the CSRF
+  refresh after a panel restart journals an upsert instead of rewriting the
+  store, so the revocation also holds when the panel rewrites sessions
+  before it is signalled. When `veil.service` is not active, the CLI now
+  prints a warning that no running panel was reloaded, instead of reporting
+  success without one. A
   `revoke_cancel` record now retracts only the intent it was paired with.
   Downgrading to an older build makes it quarantine a journal that holds a
   `revoke_all` record, which logs everyone out once.
