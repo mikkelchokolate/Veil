@@ -16,6 +16,10 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1334: `veil uninstall` no longer warns that `VEIL_CADDY_STATE_DIR` /
+  `VEIL_MITA_STATE_DIR` retarget removal when `--caddy-state-dir` /
+  `--mita-state-dir` was passed explicitly, nor for a value that only
+  differs from the packaged path by a trailing slash.
 - #622: package postinstall no longer sweeps every symlink under
   /etc/veil/www on each upgrade — the legacy /var/lib/veil/www migration
   copies only regular files and directories, skips source symlinks, and

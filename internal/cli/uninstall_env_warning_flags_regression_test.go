@@ -33,6 +33,11 @@ func TestUninstallEnvWarningRespectsExplicitFlags(t *testing.T) {
 		t.Fatalf("VEIL_MITA_STATE_DIR is still in effect and must be warned about:\n%s", withFlag)
 	}
 
+	withMitaFlag := run("--mita-state-dir", "/var/lib/mita")
+	if strings.Contains(withMitaFlag, "VEIL_MITA_STATE_DIR") {
+		t.Fatalf("warned about VEIL_MITA_STATE_DIR although --mita-state-dir overrode it:\n%s", withMitaFlag)
+	}
+
 	withoutFlag := run()
 	if !strings.Contains(withoutFlag, "VEIL_CADDY_STATE_DIR=/tmp/veil-1334-elsewhere") {
 		t.Fatalf("env override in effect but not warned about:\n%s", withoutFlag)
@@ -44,6 +49,10 @@ func TestUninstallEnvWarningRespectsExplicitFlags(t *testing.T) {
 func TestUninstallEnvWarningComparesCleanedPaths(t *testing.T) {
 	t.Setenv("VEIL_SYSCTL_CONF", "/etc/sysctl.d/99-veil-quic.conf/")
 	t.Setenv("VEIL_CADDY_STATE_DIR", "/var/lib/caddy/")
+	// Neutralise the other overrides so a dev shell or runner exporting them
+	// cannot fail this test for unrelated reasons (empty is skipped).
+	t.Setenv("VEIL_MITA_STATE_DIR", "")
+	t.Setenv("VEIL_VENDOR_SYSTEMD_DIRS", "")
 	var errOut bytes.Buffer
 	warnUninstallEnvOverrides(&errOut, nil)
 	if errOut.Len() != 0 {
@@ -53,5 +62,20 @@ func TestUninstallEnvWarningComparesCleanedPaths(t *testing.T) {
 	warnUninstallEnvOverrides(&errOut, nil)
 	if !strings.Contains(errOut.String(), "VEIL_SYSCTL_CONF=/tmp/elsewhere/99-veil-quic.conf") {
 		t.Fatalf("real override not reported:\n%s", errOut.String())
+	}
+}
+
+// Every override's flag mapping must name a real uninstall flag: pflag's
+// Changed returns false for an unknown name, so a typo or a later rename
+// would silently bring the false warning back.
+func TestUninstallEnvOverrideFlagsExist(t *testing.T) {
+	flags := newUninstallCommand().Flags()
+	for _, override := range uninstallEnvOverrides {
+		if override.flag == "" {
+			continue
+		}
+		if flags.Lookup(override.flag) == nil {
+			t.Errorf("%s maps to unknown uninstall flag --%s", override.name, override.flag)
+		}
 	}
 }
