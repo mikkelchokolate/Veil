@@ -84,6 +84,8 @@ func TestRootGoBuildEnvDropsAmbientBuildControls(t *testing.T) {
 	}
 	t.Setenv("GOPROXY", "https://goproxy.example")
 	t.Setenv("HTTPS_PROXY", "http://egress.example:3128")
+	t.Setenv("SSL_CERT_FILE", "/etc/egress/ca.pem")
+	t.Setenv("SSL_CERT_DIR", "/etc/egress/certs")
 	t.Setenv("LC_ALL", "C.UTF-8")
 
 	m := envMap(t, goBuildEnv(context.Background(), "/usr/local/go/bin/go"))
@@ -99,22 +101,24 @@ func TestRootGoBuildEnvDropsAmbientBuildControls(t *testing.T) {
 		}
 	}
 	want := map[string]string{
-		"HOME":         home,
-		"GOENV":        "off",
-		"GOFLAGS":      "",
-		"GOPATH":       filepath.Join(home, "go"),
-		"GOMODCACHE":   filepath.Join(home, "go", "pkg", "mod"),
-		"GOCACHE":      filepath.Join(home, ".cache", "go-build"),
-		"GOTOOLCHAIN":  "local",
-		"GOSUMDB":      "sum.golang.org",
-		"GONOSUMDB":    "",
-		"GONOSUMCHECK": "",
-		"GOPRIVATE":    "",
-		"GOINSECURE":   "",
-		"GOBIN":        "/usr/local/go/bin",
-		"GOPROXY":      "https://goproxy.example",
-		"HTTPS_PROXY":  "http://egress.example:3128",
-		"LC_ALL":       "C.UTF-8",
+		"HOME":          home,
+		"GOENV":         "off",
+		"GOFLAGS":       "",
+		"GOPATH":        filepath.Join(home, "go"),
+		"GOMODCACHE":    filepath.Join(home, "go", "pkg", "mod"),
+		"GOCACHE":       filepath.Join(home, ".cache", "go-build"),
+		"GOTOOLCHAIN":   "local",
+		"GOSUMDB":       "sum.golang.org",
+		"GONOSUMDB":     "",
+		"GONOSUMCHECK":  "",
+		"GOPRIVATE":     "",
+		"GOINSECURE":    "",
+		"GOBIN":         "/usr/local/go/bin",
+		"GOPROXY":       "https://goproxy.example",
+		"HTTPS_PROXY":   "http://egress.example:3128",
+		"SSL_CERT_FILE": "/etc/egress/ca.pem",
+		"SSL_CERT_DIR":  "/etc/egress/certs",
+		"LC_ALL":        "C.UTF-8",
 	}
 	for k, v := range want {
 		if got, ok := m[k]; !ok || got != v {
@@ -253,6 +257,11 @@ func TestRootGOSUMDBKeepsOnlyBuiltinKeyedSumDB(t *testing.T) {
 		"sum.golang.org+deadbeef+AAAA":                               "sum.golang.org",
 		"evil.example+1234+AAAA https://evil":                        "sum.golang.org",
 		"sum.golang.org https://a https://b":                         "sum.golang.org",
+		// cmd/go's built-in alias for the same key via the China mirror.
+		"sum.golang.google.cn":               "sum.golang.org https://sum.golang.google.cn",
+		" sum.golang.google.cn ":             "sum.golang.org https://sum.golang.google.cn",
+		"sum.golang.google.cn https://evil":  "sum.golang.org",
+		"sum.golang.google.cn+deadbeef+AAAA": "sum.golang.org",
 	} {
 		if got := rootGOSUMDB(in); got != want {
 			t.Errorf("rootGOSUMDB(%q) = %q, want %q", in, got, want)

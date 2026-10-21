@@ -511,8 +511,16 @@ var rootHomeFn = rootAccountHome
 // sum.golang.org verified with Go's built-in key, optionally via a mirror
 // URL ("sum.golang.org https://mirror/sumdb/sum.golang.org"). A custom
 // name+key, "off", or anything else falls back to sum.golang.org (#1337).
+// "sum.golang.google.cn" is cmd/go's built-in alias for sum.golang.org via
+// that mirror (same key), so it is kept, spelled out the way cmd/go expands
+// it. With the default GOPROXY, sumdb lookups are already proxied through
+// the module proxy; the mirror form is only needed when the proxy does not
+// support sumdb proxying.
 func rootGOSUMDB(ambient string) string {
 	fields := strings.Fields(ambient)
+	if len(fields) == 1 && fields[0] == "sum.golang.google.cn" {
+		return "sum.golang.org https://sum.golang.google.cn"
+	}
 	if len(fields) >= 1 && len(fields) <= 2 && fields[0] == "sum.golang.org" {
 		if len(fields) == 1 || strings.HasPrefix(fields[1], "https://") {
 			return strings.Join(fields, " ")
