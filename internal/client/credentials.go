@@ -23,10 +23,16 @@ func NewCredentialStore(db *sql.DB, cipher *secrets.Cipher) *CredentialStore {
 }
 
 // RevealEncrypted decrypts immutable credential bytes without consulting the
-// mutable credential table.
+// mutable credential table. Like Reveal, it refuses anything that is not a
+// "ve1:" ciphertext: secrets.Cipher.Decrypt passes legacy plaintext through
+// verbatim, which would let a tampered snapshot row echo attacker-chosen bytes
+// into rendered subscription links (#1283).
 func (s *CredentialStore) RevealEncrypted(encrypted []byte) (string, error) {
 	if s == nil || s.cipher == nil {
 		return "", fmt.Errorf("client: credential cipher unavailable")
+	}
+	if !secrets.IsEncrypted(string(encrypted)) {
+		return "", errors.New("client: credential snapshot ciphertext is invalid")
 	}
 	plaintext, err := s.cipher.Decrypt(string(encrypted))
 	if err != nil {
