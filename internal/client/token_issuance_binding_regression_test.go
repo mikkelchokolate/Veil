@@ -625,6 +625,29 @@ func TestSealLegacyBindingsWarnsWhenBindingBlocksPass(t *testing.T) {
 	}
 }
 
+// #1281 review (b7afb669): when both causes fire, the warning names both,
+// joined once, with no dangling separator.
+func TestSealLegacyBindingsWarnsWithBothCauses(t *testing.T) {
+	f, exec := newBindingFixture(t)
+	if _, err := f.ts.Issue(f.bob.ID, "honest", nil); err != nil {
+		t.Fatal(err)
+	}
+	exec(`DELETE FROM migration_markers WHERE key=?`, TokenBindingMarkerKey)
+	plantLegacyToken(t, f, exec, "legacy", f.alice.ID, "legacy-token-plaintext")
+	exec(`INSERT INTO subscription_tokens (id, client_id, token_hash, token_prefix, enabled, created_at, created_by, label, token_ciphertext)
+	      VALUES ('live-blank', ?, ?, 'b', 1, ?, '', '', '')`, f.bob.ID, sha("live-blank"), time.Now().Unix())
+	logs := captureLog(t)
+	restarted := freshTokenStore(t, f)
+	if resealed, err := restarted.SealLegacyBindings(); err != nil || resealed != 0 {
+		t.Fatalf("SealLegacyBindings = %d, %v; want 0", resealed, err)
+	}
+	assertTokenRefused(t, restarted, "legacy-token-plaintext")
+	want := "because the database also holds 1 sealed binding(s) (the one-shot pass already ran; its marker was missing) and 1 live token row(s) without a valid seal;"
+	if got := logs.String(); !strings.Contains(got, "1 pre-#1281 token(s) were NOT re-sealed") || !strings.Contains(got, want) {
+		t.Fatalf("stranded-token warning does not name both causes; log = %q", got)
+	}
+}
+
 func captureLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var logs bytes.Buffer
