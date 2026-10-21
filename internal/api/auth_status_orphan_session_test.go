@@ -15,7 +15,9 @@ func authStatusFor(t *testing.T, state *managementState, token string) map[strin
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
 	req.AddCookie(&http.Cookie{Name: "veil_session", Value: token})
 	rec := httptest.NewRecorder()
-	state.handlePersistentAuthStatus(rec, req)
+	// Drive the routed handler (/api/auth/status -> handleEffectiveAuthStatus),
+	// including its Healthy(), static-token and dev-anonymous gates.
+	state.handleEffectiveAuthStatus(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
