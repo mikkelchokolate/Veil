@@ -38,10 +38,16 @@ func (d ClientAccessDelivery) SubscriptionPayload() string {
 	return strings.Join(uris, "\n") + "\n"
 }
 
+// clientArtifactFilename derives a download filename from the credential
+// name. Names are not charset-bounded, so beyond the cosmetic separator
+// folding it reuses sanitizeFilename's header-safety rules (control/format
+// runes dropped; `/`, `\`, `"`, `;` replaced) so the result is safe to put in
+// a Content-Disposition header if an artifact endpoint ever emits one (#1277).
 func clientArtifactFilename(link ClientLink) string {
 	name := strings.NewReplacer("/", "-", " ", "-", "_", "-").Replace(link.Name)
+	name = strings.TrimSpace(sanitizeHeaderText(name))
 	if name == "" {
 		name = link.Protocol
 	}
-	return name + ".json"
+	return sanitizeFilename(name) + ".json"
 }

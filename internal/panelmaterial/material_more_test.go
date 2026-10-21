@@ -185,3 +185,21 @@ func TestFallbackIndexHTMLDefaultDomain(t *testing.T) {
 		t.Fatalf("expected default title Veil, got:\n%s", got)
 	}
 }
+
+// Issue #1277: state.json's domain is veil-writable and not shape-checked on
+// load, so the publicly served fallback page must escape it.
+func TestFallbackIndexHTMLEscapesDomain(t *testing.T) {
+	t.Parallel()
+
+	got := fallbackIndexHTML(`</title><script>alert(1)</script>`)
+	if strings.Contains(got, "<script>") || strings.Contains(got, "</title><") {
+		t.Fatalf("domain interpolated unescaped:\n%s", got)
+	}
+	want := "<title>&lt;/title&gt;&lt;script&gt;alert(1)&lt;/script&gt;</title>"
+	if !strings.Contains(got, want) {
+		t.Fatalf("expected escaped title %q, got:\n%s", want, got)
+	}
+	if plain := fallbackIndexHTML("vpn.example.com"); !strings.Contains(plain, "<title>vpn.example.com</title>") {
+		t.Fatalf("plain domain altered:\n%s", plain)
+	}
+}

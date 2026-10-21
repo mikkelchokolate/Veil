@@ -243,6 +243,19 @@ func normalizePanelIdentity(settings *Settings) error {
 			return errors.New("panelPublicPort must be an integer between 1 and 65535")
 		}
 	}
+	// Issue #1277: defaultInboundPublicPort and defaultAcmeEmail were written
+	// verbatim. The port is the fallback public port for every new inbound
+	// (0 = unset → 443), and the email becomes the ACME contact when no
+	// panelEmail is set, so both get the same checks as their panel siblings.
+	if settings.DefaultInboundPublicPort < 0 || settings.DefaultInboundPublicPort > 65535 {
+		return errors.New("defaultInboundPublicPort must be an integer between 1 and 65535")
+	}
+	if email := strings.TrimSpace(settings.DefaultAcmeEmail); email != "" {
+		if err := hostenv.ValidateEmail(email); err != nil {
+			return errors.New("defaultAcmeEmail: " + err.Error())
+		}
+		settings.DefaultAcmeEmail = email
+	}
 	return nil
 }
 
