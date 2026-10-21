@@ -4,7 +4,10 @@ import "testing"
 
 // TestEnvBoolFailsClosed is the #1263 regression: security booleans must
 // follow strconv.ParseBool, so "0"/"false"/typos never enable them.
-func TestEnvBoolFailsClosed(t *testing.T) {
+// Malformed input fails closed. "no"/"off" are false only because
+// strconv.ParseBool rejects them as malformed — they are not accepted
+// spellings, and must not be "fixed" into ones that could enable a knob.
+func TestEnvBoolMalformedInputFailsClosed(t *testing.T) {
 	for value, want := range map[string]bool{
 		"":        false,
 		"0":       false,

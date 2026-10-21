@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	uninstallflow "github.com/mikkelchokolate/Veil/internal/cliflow/uninstall"
@@ -54,7 +55,7 @@ func newUninstallCommand() *cobra.Command {
 			"(only those whose bytes match Veil's install record); --keep-data keeps them.\n" +
 			"The veil system account is always preserved.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			warnUninstallEnvOverrides(cmd.ErrOrStderr())
+			warnUninstallEnvOverrides(cmd.ErrOrStderr(), cmd.Flags().Changed)
 			return uninstallflow.Run(uninstallflow.Options{DryRun: dryRun, Yes: yes, Purge: purge, KeepData: keepData, EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, InstallDir: installDir, CaddyStateDir: caddyStateDir, MitaStateDir: mitaStateDir, VendorSystemdDirs: vendorSystemdDirs, SysctlConfPath: sysctlConfPath}, cmd.OutOrStdout(), cmd.ErrOrStderr(), uninstallflow.Dependencies{
 				ServiceStopper:  uninstallServiceStopper,
 				FileRemover:     uninstallFileRemover,
@@ -83,17 +84,34 @@ func newUninstallCommand() *cobra.Command {
 // are read from the (root) process environment — a `sudo -E` or an exported
 // shell profile silently retargets removals (issue #1263) — so any override
 // is surfaced on stderr before the plan runs.
-var uninstallEnvOverrides = []struct{ name, packaged string }{
-	{"VEIL_CADDY_STATE_DIR", "/var/lib/caddy"},
-	{"VEIL_MITA_STATE_DIR", "/var/lib/mita"},
-	{"VEIL_VENDOR_SYSTEMD_DIRS", "/lib/systemd/system /usr/lib/systemd/system"},
-	{"VEIL_SYSCTL_CONF", "/etc/sysctl.d/" + uninstallflow.QUICSysctlConfName},
+// flag names the CLI flag that, when given explicitly, replaces the env value
+// (empty when the target has no flag).
+var uninstallEnvOverrides = []struct {
+	name, packaged, flag string
+	list                 bool
+}{
+	{name: "VEIL_CADDY_STATE_DIR", packaged: "/var/lib/caddy", flag: "caddy-state-dir"},
+	{name: "VEIL_MITA_STATE_DIR", packaged: "/var/lib/mita", flag: "mita-state-dir"},
+	{name: "VEIL_VENDOR_SYSTEMD_DIRS", packaged: "/lib/systemd/system /usr/lib/systemd/system", list: true},
+	{name: "VEIL_SYSCTL_CONF", packaged: "/etc/sysctl.d/" + uninstallflow.QUICSysctlConfName},
 }
 
-func warnUninstallEnvOverrides(errOut io.Writer) {
+// warnUninstallEnvOverrides reports env overrides that actually retarget the
+// run: an override whose flag was passed explicitly is not used, so warning
+// about it would be wrong (#1334 review).
+func warnUninstallEnvOverrides(errOut io.Writer, flagChanged func(string) bool) {
 	for _, override := range uninstallEnvOverrides {
-		value := strings.Join(strings.Fields(os.Getenv(override.name)), " ")
-		if value == "" || value == override.packaged {
+		if override.flag != "" && flagChanged != nil && flagChanged(override.flag) {
+			continue
+		}
+		// Normalise the way the uninstall flow consumes each knob: the
+		// vendor dir list is whitespace-split, single paths are trimmed and
+		// compared cleaned so ".../99-veil-quic.conf/" is not an override.
+		value := strings.TrimSpace(os.Getenv(override.name))
+		if override.list {
+			value = strings.Join(strings.Fields(value), " ")
+		}
+		if value == "" || value == override.packaged || (!override.list && filepath.Clean(value) == override.packaged) {
 			continue
 		}
 		fmt.Fprintf(errOut, "warning: %s=%s from the environment overrides the packaged uninstall target %s\n", override.name, value, override.packaged)
