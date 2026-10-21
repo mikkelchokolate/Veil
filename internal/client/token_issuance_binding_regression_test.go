@@ -3,8 +3,11 @@ package client
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
 // #1281: a subscription_tokens row must not be self-authorizing. A veil.db
@@ -196,28 +199,194 @@ func TestIssuedAndRotatedTokensAuthenticateAndReveal(t *testing.T) {
 	assertTokenRefused(t, f.ts, issued.Plaintext)
 }
 
-// Rows issued before #1281 sealed the bare plaintext. They stay valid: the
-// AEAD still proves the panel wrote that (hash, ciphertext) pair.
-func TestLegacyBareCiphertextTokenStillAuthenticates(t *testing.T) {
-	f, exec := newBindingFixture(t)
-	plaintext := "legacy-token-plaintext"
+// plantLegacyToken inserts a row the way the panel issued tokens before
+// #1281: the bare token sealed under the master cipher.
+func plantLegacyToken(t *testing.T, f *bindingFixture, exec func(string, ...any), id, clientID, plaintext string) {
+	t.Helper()
 	sealed, err := f.ts.cipher.Encrypt(plaintext)
 	if err != nil {
 		t.Fatal(err)
 	}
 	exec(`INSERT INTO subscription_tokens (id, client_id, token_hash, token_prefix, enabled, created_at, created_by, label, token_ciphertext)
-	      VALUES ('legacy', ?, ?, 'legacy-t', 1, ?, '', '', ?)`, f.alice.ID, sha(plaintext), time.Now().Unix(), sealed)
+	      VALUES (?, ?, ?, 'legacy-t', 1, ?, '', '', ?)`, id, clientID, sha(plaintext), time.Now().Unix(), sealed)
+}
+
+// #1281 review: a client's own credential is sealed under the same master
+// cipher as a pre-#1281 token. Copying it into a planted row must not turn
+// "/s/<my own password>" into another client's subscription.
+func TestCredentialCiphertextPlantedAsTokenDoesNotAuthenticate(t *testing.T) {
+	f, exec := newBindingFixture(t)
+	repo := NewRepository(f.ts.db)
+	binding, err := repo.CreateBinding(Binding{ClientID: f.bob.ID, InboundID: "hy", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Production runs the one-shot re-seal when it wires the store.
+	if _, err := f.ts.SealLegacyBindings(); err != nil {
+		t.Fatal(err)
+	}
+	const bobPassword = "bob-own-hysteria2-password"
+	cred, err := NewCredentialStore(f.ts.db, f.ts.cipher).Set(binding.ID, "password", bobPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec(`INSERT INTO subscription_tokens (id, client_id, token_hash, token_prefix, enabled, created_at, created_by, label, token_ciphertext)
+	      VALUES ('planted-cred', ?, ?, 'x', 1, ?, '', '', (SELECT encrypted_value FROM client_credentials WHERE id=?))`,
+		f.alice.ID, sha(bobPassword), time.Now().Unix(), cred.ID)
+	assertTokenRefused(t, f.ts, bobPassword)
+	if got, err := f.ts.Reveal("planted-cred"); err == nil {
+		t.Fatalf("Reveal of a planted credential ciphertext = %q, want error", got)
+	}
+	// The one-shot re-seal has already run on this database, so running it
+	// again (a panel restart) must not launder the planted row either.
+	if _, err := f.ts.SealLegacyBindings(); err != nil {
+		t.Fatal(err)
+	}
+	assertTokenRefused(t, f.ts, bobPassword)
+}
+
+func TestSealLegacyBindingsResealsPreBindingTokensOnce(t *testing.T) {
+	f, exec := newBindingFixture(t)
+	const plaintext = "legacy-token-plaintext"
+	plantLegacyToken(t, f, exec, "legacy", f.alice.ID, plaintext)
+	// A bare master-cipher seal never authenticates by itself.
+	assertTokenRefused(t, f.ts, plaintext)
+
+	resealed, err := f.ts.SealLegacyBindings()
+	if err != nil || resealed != 1 {
+		t.Fatalf("SealLegacyBindings = %d, %v; want 1", resealed, err)
+	}
 	if got, err := f.ts.LookupReadOnly(plaintext); err != nil || got == nil || got.ClientID != f.alice.ID {
-		t.Fatalf("legacy lookup = %+v, %v", got, err)
+		t.Fatalf("re-sealed legacy lookup = %+v, %v", got, err)
 	}
 	if revealed, err := f.ts.Reveal("legacy"); err != nil || revealed != plaintext {
-		t.Fatalf("legacy reveal = %q, %v", revealed, err)
+		t.Fatalf("re-sealed legacy reveal = %q, %v", revealed, err)
 	}
-	// A legacy ciphertext whose plaintext does not hash to the row is refused.
-	exec(`UPDATE subscription_tokens SET token_hash=? WHERE id='legacy'`, sha("atk-chosen"))
-	assertTokenRefused(t, f.ts, "atk-chosen")
-	if got, err := f.ts.Reveal("legacy"); err == nil {
-		t.Fatalf("Reveal of a legacy row with a rewritten hash = %q, want error", got)
+	listed, err := f.ts.ListForClient(f.alice.ID)
+	if err != nil || len(listed) != 1 || !listed[0].HasSecret {
+		t.Fatalf("re-sealed legacy list = %+v, %v", listed, err)
+	}
+	// Once re-sealed, the row is bound to its client like a new token.
+	exec(`UPDATE subscription_tokens SET client_id=? WHERE id='legacy'`, f.bob.ID)
+	assertTokenRefused(t, f.ts, plaintext)
+	exec(`UPDATE subscription_tokens SET client_id=? WHERE id='legacy'`, f.alice.ID)
+
+	// The pass is one-shot: a bare seal planted after it stays refused.
+	plantLegacyToken(t, f, exec, "late", f.alice.ID, "late-legacy-plaintext")
+	if resealed, err := f.ts.SealLegacyBindings(); err != nil || resealed != 0 {
+		t.Fatalf("second SealLegacyBindings = %d, %v; want 0", resealed, err)
+	}
+	assertTokenRefused(t, f.ts, "late-legacy-plaintext")
+	if _, err := f.ts.Reveal("late"); !errors.Is(err, ErrSecretUnavailable) {
+		t.Fatalf("Reveal of a late bare seal = %v, want ErrSecretUnavailable", err)
+	}
+	listed, err = f.ts.ListForClient(f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, token := range listed {
+		if want := token.ID == "legacy"; token.HasSecret != want {
+			t.Fatalf("HasSecret(%s) = %v, want %v", token.ID, token.HasSecret, want)
+		}
+	}
+}
+
+func TestSealLegacyBindingsRefusesWhenMarkerWasDeleted(t *testing.T) {
+	f, exec := newBindingFixture(t)
+	issued, err := f.ts.Issue(f.alice.ID, "new", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.ts.SealLegacyBindings(); err != nil {
+		t.Fatal(err)
+	}
+	exec(`DELETE FROM migration_markers WHERE key=?`, TokenBindingMarkerKey)
+	plantLegacyToken(t, f, exec, "planted", f.alice.ID, "planted-after-upgrade")
+	// A database that already holds a sealed binding has been through the
+	// pass; a missing marker means tampering, so nothing is re-sealed.
+	if resealed, err := f.ts.SealLegacyBindings(); err != nil || resealed != 0 {
+		t.Fatalf("SealLegacyBindings after marker deletion = %d, %v; want 0", resealed, err)
+	}
+	assertTokenRefused(t, f.ts, "planted-after-upgrade")
+	if got, err := f.ts.LookupReadOnly(issued.Plaintext); err != nil || got == nil {
+		t.Fatalf("honest token lookup = %+v, %v", got, err)
+	}
+	var count int
+	if err := f.ts.db.QueryRow(`SELECT COUNT(*) FROM migration_markers WHERE key=?`, TokenBindingMarkerKey).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("marker not restored: count=%d err=%v", count, err)
+	}
+}
+
+func TestReencryptSubscriptionTokensCarriesBindingsAndLegacySeals(t *testing.T) {
+	f, exec := newBindingFixture(t)
+	// A pre-#1281 database rotated offline before the upgraded panel ever
+	// started: only bare master-cipher seals exist.
+	plantLegacyToken(t, f, exec, "legacy", f.bob.ID, "legacy-token-plaintext")
+	newCipher := rotationTestCipher(t, 200)
+	reencryptTokens(t, f, f.ts.cipher, newCipher)
+	rotated := NewTokenStore(f.ts.db).WithCipher(newCipher)
+	t.Cleanup(rotated.Close)
+	if resealed, err := rotated.SealLegacyBindings(); err != nil || resealed != 1 {
+		t.Fatalf("SealLegacyBindings after rotation = %d, %v; want 1", resealed, err)
+	}
+	if got, err := rotated.LookupReadOnly("legacy-token-plaintext"); err != nil || got == nil || got.ClientID != f.bob.ID {
+		t.Fatalf("legacy lookup after rotation = %+v, %v", got, err)
+	}
+	// Bindings move to the next key as bindings.
+	issued, err := rotated.Issue(f.alice.ID, "new", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextCipher := rotationTestCipher(t, 100)
+	reencryptTokens(t, f, newCipher, nextCipher)
+	next := NewTokenStore(f.ts.db).WithCipher(nextCipher)
+	t.Cleanup(next.Close)
+	for _, plaintext := range []string{issued.Plaintext, "legacy-token-plaintext"} {
+		if got, err := next.LookupReadOnly(plaintext); err != nil || got == nil {
+			t.Fatalf("binding lookup after second rotation = %+v, %v", got, err)
+		}
+		assertTokenRefused(t, rotated, plaintext)
+	}
+}
+
+func rotationTestCipher(t *testing.T, seed byte) *secrets.Cipher {
+	t.Helper()
+	var key [secrets.KeySize]byte
+	for i := range key {
+		key[i] = seed - byte(i)
+	}
+	c, err := secrets.NewCipher(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func reencryptTokens(t *testing.T, f *bindingFixture, from, to *secrets.Cipher) {
+	t.Helper()
+	tx, err := NewRepository(f.ts.db).BeginTx()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.ReencryptSubscriptionTokens(from, to); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestIssueResealsLegacyTokensFirst(t *testing.T) {
+	f, exec := newBindingFixture(t)
+	// The startup pass failed or has not run yet; the first issuance must
+	// not strand pre-#1281 tokens by creating a binding ahead of it.
+	plantLegacyToken(t, f, exec, "legacy", f.alice.ID, "legacy-token-plaintext")
+	if _, err := f.ts.Issue(f.bob.ID, "new", nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := f.ts.LookupReadOnly("legacy-token-plaintext"); err != nil || got == nil || got.ClientID != f.alice.ID {
+		t.Fatalf("legacy lookup after first issue = %+v, %v", got, err)
 	}
 }
 
@@ -240,6 +409,9 @@ func TestTokenStoreWithoutCipherFailsClosed(t *testing.T) {
 	if _, err := bare.Issue(alice.ID, "", nil); err == nil {
 		t.Fatal("Issue without a cipher must fail: the row could never be verified")
 	}
+	if _, err := bare.SealLegacyBindings(); err == nil {
+		t.Fatal("SealLegacyBindings without a cipher must fail")
+	}
 	assertTokenRefused(t, bare, issued.Plaintext)
 }
 
@@ -250,6 +422,26 @@ func TestTokenBindingWithUnknownVersionDoesNotAuthenticate(t *testing.T) {
 		t.Fatal(err)
 	}
 	payload, err := json.Marshal(tokenBinding{Version: "veil-subscription-token-binding-v0", ID: issued.Token.ID, ClientID: f.alice.ID, Token: issued.Plaintext})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := f.ts.binding.Encrypt(string(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec(`UPDATE subscription_tokens SET token_ciphertext=? WHERE id=?`, sealed, issued.Token.ID)
+	assertTokenRefused(t, f.ts, issued.Plaintext)
+}
+
+// A well-formed binding sealed under the master key instead of the token
+// subkey is refused: only the subkey proves a token seal.
+func TestTokenBindingSealedUnderMasterKeyDoesNotAuthenticate(t *testing.T) {
+	f, exec := newBindingFixture(t)
+	issued, err := f.ts.Issue(f.alice.ID, "phone", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(tokenBinding{Version: tokenBindingVersion, ID: issued.Token.ID, ClientID: f.alice.ID, Token: issued.Plaintext})
 	if err != nil {
 		t.Fatal(err)
 	}
