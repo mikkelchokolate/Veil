@@ -14,8 +14,11 @@ import (
 
 var (
 	errCommandNotFound = errors.New("command not found")
-	commandLookPath    = syspath.LookPath
-	versionCheckClient = &http.Client{Timeout: 10 * time.Second}
+	// defaultCommandLookPath is the production resolver; TestMain stubs
+	// commandLookPath, so #1262 regressions assert on the default directly.
+	defaultCommandLookPath = syspath.LookPath
+	commandLookPath        = defaultCommandLookPath
+	versionCheckClient     = &http.Client{Timeout: 10 * time.Second}
 )
 
 func NewRootCommand(version string) *cobra.Command {
