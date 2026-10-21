@@ -53,6 +53,35 @@ All notable changes to Veil will be documented in this file.
   snapshots themselves cannot be edited, but the live client tables are not
   authenticated: an edit there is copied into the next revision a mutation
   commits and seals, as the live gate already reads it.
+- #1265: session revocation by `veil admin set`, `admin reset` and
+  `admin rotate-key` now reaches the running panel. The panel's SIGHUP
+  reload re-reads `sessions.json` and its journal, so sessions the CLI
+  revoked stop working right away instead of living on for up to 24 hours.
+  The CLI records the revocation as a durable journal intent (`revoke_username`,
+  or the new `revoke_all`) that covers every session created before it ran,
+  so a session record the panel writes before it handles the signal cannot
+  bring a revoked session back. `admin reset` and `rotate-key` no longer
+  delete `sessions.json`: the panel used to answer a missing snapshot by
+  rewriting every in-memory session to disk, which undid the invalidation
+  for good. Files the root CLI writes in the session store are handed to the
+  store directory's owner, so the unprivileged panel can still read them.
+  Every panel-side rewrite of the whole store (snapshot save, journal
+  compaction) first applies the revocations journaled on disk, and the CSRF
+  refresh after a panel restart journals an upsert instead of rewriting the
+  store, so the revocation also holds when the panel rewrites sessions
+  before it is signalled. The panel and the CLI take an exclusive advisory
+  lock on `sessions.json.lock` (owned by the store directory's owner) around
+  every whole-store rewrite, journal append and store load, so a CLI command
+  that coincides with a panel rewrite can no longer have its revocation
+  dropped between the rewrite's journal read and its journal removal. The
+  lock uses `flock` and applies on Unix hosts; elsewhere the store is not
+  shared with a root CLI. The service-identity migration now also re-owns
+  `sessions.json.journal` and `sessions.json.lock`. When `veil.service` is not active, the CLI now
+  prints a warning that no running panel was reloaded, instead of reporting
+  success without one. A
+  `revoke_cancel` record now retracts only the intent it was paired with.
+  Downgrading to an older build makes it quarantine a journal that holds a
+  `revoke_all` record, which logs everyone out once.
 
 - #1281: a `subscription_tokens` row no longer authorizes itself. The panel
   seals each token's id, client, expiry and plaintext into

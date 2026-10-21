@@ -150,9 +150,38 @@ type sessionStoreFile struct {
 // created at or before Through" marker. It is journaled before a credential
 // mutation commits so a crash between the mutation commit and the delete_many
 // record cannot leave old-credential sessions valid past restart (#1059).
+//
+// All marks a cross-process "revoke every session" intent journaled by the
+// root CLI (`veil admin reset` / `rotate-key`, #1265); Username is empty then.
+//
+// Intents journaled by the root CLI are never cancelled or consumed in the
+// journal: every replay re-applies them until a checkpoint or snapshot
+// rewrite drops them. That is harmless (they are positional, so sessions
+// created after Through survive) and required: they are what keeps a
+// session upsert journaled after them from resurrecting a revoked session.
+// Do not "optimise" replay to skip them.
 type sessionRevocationIntent struct {
 	Username string    `json:"username"`
 	Through  time.Time `json:"through"`
+	All      bool      `json:"all,omitempty"`
+}
+
+// covers reports whether the intent revokes session.
+func (intent sessionRevocationIntent) covers(session storedSession) bool {
+	if !intent.All && session.Username != intent.Username {
+		return false
+	}
+	return !session.CreatedAt.After(intent.Through)
+}
+
+func validRevocationIntent(intent sessionRevocationIntent) bool {
+	if intent.Through.IsZero() {
+		return false
+	}
+	if intent.All {
+		return intent.Username == ""
+	}
+	return intent.Username != ""
 }
 
 type sessionJournalRecord struct {
@@ -189,6 +218,11 @@ type SessionRegistry struct {
 	// replay at load and serialized into replace_all checkpoints so an
 	// intent outstanding across a compaction still applies (#1059).
 	pendingRevocations []sessionRevocationIntent
+	// storeLock is the held cross-process store lock (sessions.json.lock)
+	// and storeLockDepth its reentrancy count; both are guarded by mu. See
+	// acquireStoreLockLocked.
+	storeLock      *os.File
+	storeLockDepth int
 }
 
 var globalSessions = mustNewSessionRegistry("")
@@ -221,7 +255,15 @@ func InvalidatePersistedSessions(statePath string) error {
 }
 
 func NewSessionRegistry(path string) (*SessionRegistry, error) {
-	registry := &SessionRegistry{
+	registry := newUnloadedSessionRegistry(path)
+	if err := registry.loadAndBound(); err != nil {
+		return nil, err
+	}
+	return registry, nil
+}
+
+func newUnloadedSessionRegistry(path string) *SessionRegistry {
+	return &SessionRegistry{
 		path:            path,
 		sessions:        make(map[string]storedSession),
 		rawCSRF:         make(map[string]string),
@@ -230,15 +272,59 @@ func NewSessionRegistry(path string) (*SessionRegistry, error) {
 		absoluteTimeout: defaultSessionAbsoluteTimeout,
 		persistInterval: 5 * time.Minute,
 	}
-	if err := registry.load(); err != nil {
-		return nil, err
+}
+
+func (r *SessionRegistry) loadAndBound() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := r.load(); err != nil {
+		return err
 	}
-	if evicted := registry.enforceSessionBoundLocked("", ""); len(evicted) > 0 {
-		if err := registry.saveLocked(); err != nil {
-			return nil, err
+	if evicted := r.enforceSessionBoundLocked("", ""); len(evicted) > 0 {
+		if err := r.saveLocked(); err != nil {
+			return err
 		}
 	}
-	return registry, nil
+	return nil
+}
+
+// acquireStoreLockLocked takes the cross-process session store lock (an
+// exclusive flock on sessions.json.lock) and returns its release; r.mu must
+// be held for both calls. It is reentrant per registry, so a rewrite nested
+// in an append (compaction) or a CLI command holding the lock across several
+// operations does not deadlock on itself.
+//
+// Every whole-store rewrite (snapshot save, journal checkpoint), every
+// journal append and every load takes it, in the Panel and in the root CLI
+// alike. r.mu only serializes one process; without this lock a CLI
+// revocation appended between a Panel rewrite's journal read and its journal
+// remove/replace was lost (#1265), and a CLI rewrite could likewise drop a
+// Panel append.
+func (r *SessionRegistry) acquireStoreLockLocked() (func(), error) {
+	if r.path == "" {
+		return func() {}, nil
+	}
+	if r.storeLockDepth == 0 {
+		file, err := lockSessionStore(r.path)
+		if err != nil {
+			return nil, err
+		}
+		r.storeLock = file
+	}
+	r.storeLockDepth++
+	return r.releaseStoreLockLocked, nil
+}
+
+func (r *SessionRegistry) releaseStoreLockLocked() {
+	r.storeLockDepth--
+	if r.storeLockDepth == 0 {
+		unlockSessionStore(r.storeLock)
+		r.storeLock = nil
+	}
+}
+
+func sessionStoreLockPath(path string) string {
+	return path + ".lock"
 }
 
 func mustNewSessionRegistry(path string) *SessionRegistry {
@@ -685,20 +771,38 @@ func (r *SessionRegistry) CancelUsernameRevocation(intent sessionRevocationInten
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.path != "" {
+		// The cancel names the exact intent it retracts (Through), so it can
+		// never retract a different intent for the same user, such as one
+		// the root CLI journaled concurrently (#1265).
 		if err := r.appendJournalLocked(sessionJournalRecord{
-			Operation: "revoke_cancel", Username: intent.Username,
+			Operation: "revoke_cancel", Username: intent.Username, Through: intent.Through,
 		}); err != nil {
 			return err
 		}
 	}
-	r.pendingRevocations = dropPendingRevocations(r.pendingRevocations, intent.Username)
+	r.pendingRevocations = cancelPendingRevocation(r.pendingRevocations, intent.Username, intent.Through)
 	return nil
+}
+
+// cancelPendingRevocation drops the per-user intents a revoke_cancel record
+// retracts. A cancel with a Through bound (written since #1265) retracts only
+// the intent with that exact bound; a legacy cancel without one retracts every
+// per-user intent for the username. "All" intents are never cancelled.
+func cancelPendingRevocation(intents []sessionRevocationIntent, username string, through time.Time) []sessionRevocationIntent {
+	kept := intents[:0]
+	for _, intent := range intents {
+		if !intent.All && intent.Username == username && (through.IsZero() || intent.Through.Equal(through)) {
+			continue
+		}
+		kept = append(kept, intent)
+	}
+	return kept
 }
 
 func dropPendingRevocations(intents []sessionRevocationIntent, username string) []sessionRevocationIntent {
 	kept := intents[:0]
 	for _, intent := range intents {
-		if intent.Username != username {
+		if intent.All || intent.Username != username {
 			kept = append(kept, intent)
 		}
 	}
@@ -713,7 +817,7 @@ func dropPendingRevocations(intents []sessionRevocationIntent, username string) 
 func (r *SessionRegistry) applyPendingRevocationsLocked() {
 	for _, intent := range r.pendingRevocations {
 		for tokenHash, session := range r.sessions {
-			if session.Username == intent.Username && !session.CreatedAt.After(intent.Through) {
+			if intent.covers(session) {
 				delete(r.sessions, tokenHash)
 				delete(r.rawCSRF, tokenHash)
 			}
@@ -723,6 +827,20 @@ func (r *SessionRegistry) applyPendingRevocationsLocked() {
 }
 
 func (r *SessionRegistry) load() error {
+	release, err := r.acquireStoreLockLocked()
+	if err != nil {
+		return err
+	}
+	defer release()
+	return r.loadFromDisk(true)
+}
+
+// loadFromDisk reads the snapshot and replays the journal. A journal that
+// fails to parse next to a readable snapshot is quarantined at startup
+// (quarantineBadJournal); a SIGHUP reload instead reports the error and keeps
+// the in-memory sessions, because the snapshot alone can still hold sessions
+// that only the journal revoked (#1265).
+func (r *SessionRegistry) loadFromDisk(quarantineBadJournal bool) error {
 	if r.path == "" {
 		return nil
 	}
@@ -754,7 +872,7 @@ func (r *SessionRegistry) load() error {
 		return err
 	}
 	if err := r.loadJournalLocked(); err != nil {
-		if snapshotLoaded {
+		if snapshotLoaded && quarantineBadJournal {
 			_ = r.quarantineJournalLocked()
 			return nil
 		}
@@ -876,6 +994,14 @@ func (r *SessionRegistry) appendJournalLocked(record sessionJournalRecord) error
 	if err != nil {
 		return err
 	}
+	// Under the store lock, so a concurrent whole-store rewrite in another
+	// process cannot read the journal before this line and remove or
+	// replace it after (#1265).
+	release, err := r.acquireStoreLockLocked()
+	if err != nil {
+		return err
+	}
+	defer release()
 	body = append(body, '\n')
 	// The session directory (/var/lib/veil) is writable by the unprivileged
 	// service account, while root CLI paths (`veil admin set` →
@@ -902,6 +1028,10 @@ func (r *SessionRegistry) appendJournalLocked(record sessionJournalRecord) error
 		_ = file.Close()
 		return fmt.Errorf("session journal %s is not a regular file", r.journalPath())
 	}
+	if err := matchSessionStoreOwner(parent.File(), file); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("chown session journal: %w", err)
+	}
 	if _, err := file.Write(body); err != nil {
 		_ = file.Close()
 		return err
@@ -927,6 +1057,16 @@ func (r *SessionRegistry) appendJournalLocked(record sessionJournalRecord) error
 }
 
 func (r *SessionRegistry) compactJournalLocked() error {
+	// The checkpoint replaces the journal, which may hold revocations another
+	// process (the root CLI) journaled since this process loaded it (#1265).
+	// The store lock keeps another process from appending between the read
+	// below and the replace.
+	release, err := r.acquireStoreLockLocked()
+	if err != nil {
+		return err
+	}
+	defer release()
+	r.absorbDiskRevocationsLocked()
 	record := sessionJournalRecord{Operation: "replace_all", Sessions: make([]storedSession, 0, len(r.sessions))}
 	for _, session := range r.sessions {
 		record.Sessions = append(record.Sessions, session)
@@ -992,7 +1132,7 @@ func (r *SessionRegistry) loadJournalLocked() error {
 			// carries every intent pending when it was written (#1059).
 			r.pendingRevocations = nil
 			for _, intent := range record.Revocations {
-				if intent.Username == "" || intent.Through.IsZero() {
+				if !validRevocationIntent(intent) {
 					return errors.New("invalid session journal revocation intent")
 				}
 				r.pendingRevocations = append(r.pendingRevocations, intent)
@@ -1004,11 +1144,20 @@ func (r *SessionRegistry) loadJournalLocked() error {
 			r.pendingRevocations = append(r.pendingRevocations, sessionRevocationIntent{
 				Username: record.Username, Through: record.Through,
 			})
+		case "revoke_all":
+			// Journaled by the root CLI (`veil admin reset`/`rotate-key`):
+			// every session created at or before Through is revoked, even
+			// one a later upsert re-adds (#1265).
+			intent := sessionRevocationIntent{Through: record.Through, All: true}
+			if record.Username != "" || !validRevocationIntent(intent) {
+				return errors.New("invalid session journal revocation intent")
+			}
+			r.pendingRevocations = append(r.pendingRevocations, intent)
 		case "revoke_cancel":
 			if record.Username == "" {
 				return errors.New("invalid session journal revocation cancel")
 			}
-			r.pendingRevocations = dropPendingRevocations(r.pendingRevocations, record.Username)
+			r.pendingRevocations = cancelPendingRevocation(r.pendingRevocations, record.Username, record.Through)
 		default:
 			return errors.New("invalid session journal operation")
 		}
@@ -1024,6 +1173,16 @@ func (r *SessionRegistry) saveLocked() error {
 	if r.path == "" {
 		return nil
 	}
+	// The rewrite removes the journal; apply the revocations it holds first,
+	// or a revocation journaled by the root CLI would be lost (#1265). The
+	// store lock keeps another process from appending between the read and
+	// the remove.
+	release, err := r.acquireStoreLockLocked()
+	if err != nil {
+		return err
+	}
+	defer release()
+	r.absorbDiskRevocationsLocked()
 	file := sessionStoreFile{Version: 1, Sessions: make([]storedSession, 0, len(r.sessions))}
 	for _, session := range r.sessions {
 		file.Sessions = append(file.Sessions, session)
@@ -1064,6 +1223,10 @@ func writeSessionFile(path string, body []byte) error {
 		_ = parent.RemoveAt(tmpName)
 	}
 	if err := tmp.Chmod(0o600); err != nil {
+		cleanup()
+		return err
+	}
+	if err := matchSessionStoreOwner(parent.File(), tmp); err != nil {
 		cleanup()
 		return err
 	}
