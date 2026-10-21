@@ -70,6 +70,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# The sysctl drop-in is removed with rm -f as root; VEIL_SYSCTL_CONF is an
+# environment override, so a poisoned root env could otherwise point it at any
+# file (issue #1263). Only a file named 99-veil-quic.conf is ever removed.
+if [[ "$(basename "${SYSCTL_CONF}")" != "99-veil-quic.conf" ]]; then
+  echo "Refusing to use sysctl drop-in ${SYSCTL_CONF}: uninstall only removes a file named 99-veil-quic.conf (check VEIL_SYSCTL_CONF)." >&2
+  exit 1
+fi
+
 require_root() {
   # VEIL_UNINSTALL_ALLOW_NONROOT lets fixture-based contract tests (and smolvm
   # CI) drive the cleanup path against redirected dirs; without it a non-root

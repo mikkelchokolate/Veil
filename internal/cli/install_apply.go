@@ -465,8 +465,9 @@ var installPublicIPFamilyDetectFunc = hostenv.DetectPublicIPForFamily
 func applyInstallEnvToProfile(profile *installer.RURecommendedProfile, opts ruRecommendedInstallOptions, existingEnv map[string]string) {
 	profile.ACMECAURL = installEnvFirstNonEmpty(strings.TrimSpace(os.Getenv("VEIL_ACME_CA_URL")), existingEnv["VEIL_ACME_CA_URL"])
 	profile.ACMECARoot = installEnvFirstNonEmpty(strings.TrimSpace(os.Getenv("VEIL_ACME_CA_ROOT")), existingEnv["VEIL_ACME_CA_ROOT"])
-	profile.ACMEInsecure = strings.TrimSpace(os.Getenv("VEIL_ACME_INSECURE")) != "" ||
-		strings.TrimSpace(existingEnv["VEIL_ACME_INSECURE"]) != ""
+	// ParseBool semantics with process-env precedence: VEIL_ACME_INSECURE=0
+	// must keep TLS verification on rather than persist "=1" (#1263).
+	profile.ACMEInsecure = hostenv.EnvBoolOrFile(existingEnv, "VEIL_ACME_INSECURE")
 	if opts.LEIPCertSet {
 		profile.PanelLEIPCertEnv = "1"
 		if !opts.LEIPCert {

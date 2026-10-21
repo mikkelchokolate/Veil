@@ -75,6 +75,9 @@ type Dependencies struct {
 
 func Run(opts Options, out io.Writer, errOut io.Writer, deps Dependencies) error {
 	opts = opts.WithDefaults()
+	if err := ValidateSysctlConfPath(opts.SysctlConfPath); err != nil {
+		return err
+	}
 	fmt.Fprintln(out, "Veil uninstall plan")
 	fmt.Fprintln(out, Plan(opts))
 	if opts.DryRun {
@@ -187,6 +190,24 @@ func Plan(opts Options) string {
 		b.WriteString(fmt.Sprintf("  - %s\n", path))
 	}
 	return b.String()
+}
+
+// QUICSysctlConfName is the only file name uninstall will delete as the
+// sysctl drop-in.
+const QUICSysctlConfName = "99-veil-quic.conf"
+
+// ValidateSysctlConfPath gates the sysctl drop-in target before it reaches
+// the remover. The path is overridable (VEIL_SYSCTL_CONF) for tests and
+// alternate layouts, but it is removed unconditionally and as root, and
+// ensureRemovablePath passes regular files straight through — so
+// VEIL_SYSCTL_CONF=/etc/important.conf would delete an arbitrary file
+// (issue #1263). Only a file named 99-veil-quic.conf (the drop-in Veil
+// writes) is accepted; anything else fails closed before any step runs.
+func ValidateSysctlConfPath(path string) error {
+	if filepath.Base(filepath.Clean(path)) != QUICSysctlConfName {
+		return fmt.Errorf("refusing to use sysctl drop-in %s: uninstall only removes a file named %s (check VEIL_SYSCTL_CONF)", path, QUICSysctlConfName)
+	}
+	return nil
 }
 
 func Services() []string {

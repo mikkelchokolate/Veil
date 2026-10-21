@@ -243,8 +243,7 @@ func repairPanelAuthToken(plan installer.RepairPlan, etcDir string, secret insta
 // pinned public IP (#1186/#1187/#1189).
 func repairLifecycleEnv(opts Options) (publicIP, leIPCert, http01Port string, insecure bool) {
 	values := readRepairEnv(filepath.Join(opts.EtcDir, "veil.env"))
-	insecure = strings.TrimSpace(os.Getenv("VEIL_ACME_INSECURE")) != "" ||
-		strings.TrimSpace(values["VEIL_ACME_INSECURE"]) != ""
+	insecure = hostenv.EnvBoolOrFile(values, "VEIL_ACME_INSECURE")
 	if opts.LEIPCertSet {
 		leIPCert = "1"
 		if !opts.LEIPCert {

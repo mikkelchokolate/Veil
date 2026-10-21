@@ -106,7 +106,7 @@ func panelIPCertOptedOut() bool {
 // additionally becomes acme.sh's --ca-bundle (#1189).
 func ipCertACMEConfig() (caServer string, insecure bool, caRoot string) {
 	return strings.TrimSpace(ipCertGetenv("VEIL_ACME_CA_URL")),
-		strings.TrimSpace(ipCertGetenv("VEIL_ACME_INSECURE")) != "",
+		hostenv.EnvBool(ipCertGetenv("VEIL_ACME_INSECURE")),
 		strings.TrimSpace(ipCertGetenv("VEIL_ACME_CA_ROOT"))
 }
 

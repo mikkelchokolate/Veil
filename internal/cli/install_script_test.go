@@ -321,7 +321,7 @@ func TestUninstallScriptFailsClosedWhenBinaryMissingButStateRemains(t *testing.T
 		filepath.Join(systemdDir, "timers.target.wants", "veil-backup.timer"),
 		filepath.Join(root, "vendor", "veil.service"),
 		filepath.Join(root, "vendor", "multi-user.target.wants", "veil.service"),
-		filepath.Join(root, "sysctl.conf"),
+		filepath.Join(root, "99-veil-quic.conf"),
 	}
 	for _, path := range leftovers {
 		plant(path)
@@ -337,7 +337,7 @@ func TestUninstallScriptFailsClosedWhenBinaryMissingButStateRemains(t *testing.T
 	cmd.Env = append(os.Environ(),
 		"VEIL_UNINSTALL_ALLOW_NONROOT=1",
 		"VEIL_VENDOR_SYSTEMD_DIRS="+filepath.Join(root, "vendor"),
-		"VEIL_SYSCTL_CONF="+filepath.Join(root, "sysctl.conf"),
+		"VEIL_SYSCTL_CONF="+filepath.Join(root, "99-veil-quic.conf"),
 		"VEIL_CADDY_STATE_DIR="+filepath.Join(root, "caddy-state"),
 		"VEIL_MITA_STATE_DIR="+filepath.Join(root, "mita-state"),
 	)
@@ -384,7 +384,7 @@ func TestUninstallScriptFailsClosedWhenBinaryMissingButStateRemains(t *testing.T
 		)
 		detect.Env = append(os.Environ(),
 			"VEIL_VENDOR_SYSTEMD_DIRS="+filepath.Join(wantsRoot, "vendor"),
-			"VEIL_SYSCTL_CONF="+filepath.Join(wantsRoot, "sysctl.conf"),
+			"VEIL_SYSCTL_CONF="+filepath.Join(wantsRoot, "99-veil-quic.conf"),
 			"VEIL_CADDY_STATE_DIR="+filepath.Join(wantsRoot, "caddy-state"),
 			"VEIL_MITA_STATE_DIR="+filepath.Join(wantsRoot, "mita-state"),
 		)

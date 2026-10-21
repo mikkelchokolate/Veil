@@ -48,7 +48,7 @@ func TestUninstallScriptRefusesUnmarkedStateDir(t *testing.T) {
 	cmd.Env = append(os.Environ(),
 		"VEIL_UNINSTALL_ALLOW_NONROOT=1",
 		"VEIL_VENDOR_SYSTEMD_DIRS="+filepath.Join(root, "vendor"),
-		"VEIL_SYSCTL_CONF="+filepath.Join(root, "sysctl.conf"),
+		"VEIL_SYSCTL_CONF="+filepath.Join(root, "99-veil-quic.conf"),
 		"VEIL_CADDY_STATE_DIR="+filepath.Join(root, "caddy-state"),
 		"VEIL_MITA_STATE_DIR="+filepath.Join(root, "mita-state"),
 	)
@@ -108,7 +108,7 @@ func TestUninstallScriptRemovesMarkedStateDir(t *testing.T) {
 	cmd.Env = append(os.Environ(),
 		"VEIL_UNINSTALL_ALLOW_NONROOT=1",
 		"VEIL_VENDOR_SYSTEMD_DIRS="+filepath.Join(root, "vendor"),
-		"VEIL_SYSCTL_CONF="+filepath.Join(root, "sysctl.conf"),
+		"VEIL_SYSCTL_CONF="+filepath.Join(root, "99-veil-quic.conf"),
 		"VEIL_CADDY_STATE_DIR="+filepath.Join(root, "caddy-state"),
 		"VEIL_MITA_STATE_DIR="+filepath.Join(root, "mita-state"),
 	)
@@ -168,7 +168,7 @@ func TestUninstallScriptRefusesGenericallyMarkedDir(t *testing.T) {
 	cmd.Env = append(os.Environ(),
 		"VEIL_UNINSTALL_ALLOW_NONROOT=1",
 		"VEIL_VENDOR_SYSTEMD_DIRS="+filepath.Join(root, "vendor"),
-		"VEIL_SYSCTL_CONF="+filepath.Join(root, "sysctl.conf"),
+		"VEIL_SYSCTL_CONF="+filepath.Join(root, "99-veil-quic.conf"),
 		"VEIL_CADDY_STATE_DIR="+filepath.Join(root, "caddy-state"),
 		"VEIL_MITA_STATE_DIR="+filepath.Join(root, "mita-state"),
 	)
@@ -245,7 +245,7 @@ func TestUninstallScriptRefusesSymlinkOrDirMarker(t *testing.T) {
 			cmd.Env = append(os.Environ(),
 				"VEIL_UNINSTALL_ALLOW_NONROOT=1",
 				"VEIL_VENDOR_SYSTEMD_DIRS="+filepath.Join(root, "vendor"),
-				"VEIL_SYSCTL_CONF="+filepath.Join(root, "sysctl.conf"),
+				"VEIL_SYSCTL_CONF="+filepath.Join(root, "99-veil-quic.conf"),
 				"VEIL_CADDY_STATE_DIR="+filepath.Join(root, "caddy-state"),
 				"VEIL_MITA_STATE_DIR="+filepath.Join(root, "mita-state"),
 			)
@@ -308,7 +308,7 @@ func TestUninstallScriptRequiresProofForSharedCaddyDir(t *testing.T) {
 		cmd.Env = append(os.Environ(),
 			"VEIL_UNINSTALL_ALLOW_NONROOT=1",
 			"VEIL_VENDOR_SYSTEMD_DIRS="+filepath.Join(root, "vendor"),
-			"VEIL_SYSCTL_CONF="+filepath.Join(root, "sysctl.conf"),
+			"VEIL_SYSCTL_CONF="+filepath.Join(root, "99-veil-quic.conf"),
 			"VEIL_CADDY_STATE_DIR="+caddyDir,
 			"VEIL_MITA_STATE_DIR="+filepath.Join(root, "var", "lib", "mita"),
 		)

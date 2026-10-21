@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -52,6 +54,7 @@ func newUninstallCommand() *cobra.Command {
 			"(only those whose bytes match Veil's install record); --keep-data keeps them.\n" +
 			"The veil system account is always preserved.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			warnUninstallEnvOverrides(cmd.ErrOrStderr())
 			return uninstallflow.Run(uninstallflow.Options{DryRun: dryRun, Yes: yes, Purge: purge, KeepData: keepData, EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, InstallDir: installDir, CaddyStateDir: caddyStateDir, MitaStateDir: mitaStateDir, VendorSystemdDirs: vendorSystemdDirs, SysctlConfPath: sysctlConfPath}, cmd.OutOrStdout(), cmd.ErrOrStderr(), uninstallflow.Dependencies{
 				ServiceStopper:  uninstallServiceStopper,
 				FileRemover:     uninstallFileRemover,
@@ -73,4 +76,26 @@ func newUninstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&mitaStateDir, "mita-state-dir", mitaStateDir, "Mita state directory removed on purge (env VEIL_MITA_STATE_DIR)")
 
 	return cmd
+}
+
+// uninstallEnvOverrides are the VEIL_* variables that redirect uninstall's
+// destructive targets. They exist for tests and alternate layouts, but they
+// are read from the (root) process environment — a `sudo -E` or an exported
+// shell profile silently retargets removals (issue #1263) — so any override
+// is surfaced on stderr before the plan runs.
+var uninstallEnvOverrides = []struct{ name, packaged string }{
+	{"VEIL_CADDY_STATE_DIR", "/var/lib/caddy"},
+	{"VEIL_MITA_STATE_DIR", "/var/lib/mita"},
+	{"VEIL_VENDOR_SYSTEMD_DIRS", "/lib/systemd/system /usr/lib/systemd/system"},
+	{"VEIL_SYSCTL_CONF", "/etc/sysctl.d/" + uninstallflow.QUICSysctlConfName},
+}
+
+func warnUninstallEnvOverrides(errOut io.Writer) {
+	for _, override := range uninstallEnvOverrides {
+		value := strings.Join(strings.Fields(os.Getenv(override.name)), " ")
+		if value == "" || value == override.packaged {
+			continue
+		}
+		fmt.Fprintf(errOut, "warning: %s=%s from the environment overrides the packaged uninstall target %s\n", override.name, value, override.packaged)
+	}
 }
