@@ -484,3 +484,80 @@ func TestAbsorbHonoursCancelsFromOtherProcesses(t *testing.T) {
 		t.Fatal("a rewrite applied an intent its own journal had cancelled")
 	}
 }
+
+// EnsureCSRFPersisted falls back to a snapshot rewrite when sessions.json is
+// missing; that rewrite absorbs the CLI's journaled revocation, and the
+// session it covers must then be reported gone instead of handed a CSRF token.
+func TestEnsureCSRFMissingSnapshotFallbackHonoursCLIRevocation(t *testing.T) {
+	statePath, panel, _ := cliRevocationFixture(t)
+	alice := mustCreate(t, panel, "alice", "admin")
+	restarted := restartedPanel(t, statePath, panel.now)
+
+	if err := RevokeUsernamePersistedSessions(statePath, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	sessionPath := persistedSessionStorePath(statePath)
+	if err := os.Remove(sessionPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(sessionPath + ".journal"); err != nil {
+		t.Fatalf("the journal must stay in place: %v", err)
+	}
+	csrf, ok, err := restarted.EnsureCSRFPersisted(alice.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok || csrf != "" {
+		t.Fatalf("a CLI-revoked session got a CSRF token from the snapshot fallback (ok=%v csrf=%q)", ok, csrf)
+	}
+	if _, ok := restarted.Get(alice.Token); ok {
+		t.Fatal("the snapshot fallback kept the CLI-revoked session in memory")
+	}
+}
+
+// A replace_all checkpoint carries the intents outstanding when it was
+// written. A Panel rewrite that discards such a checkpoint (written by a
+// compaction in another process) must still apply them.
+func TestPanelRewriteAbsorbsIntentsCarriedByAnotherProcessCheckpoint(t *testing.T) {
+	statePath, panel, base := cliRevocationFixture(t)
+	alice := mustCreate(t, panel, "alice", "admin")
+	bob := mustCreate(t, panel, "bob", "viewer")
+
+	other, err := NewSessionRegistry(persistedSessionStorePath(statePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	other.now = func() time.Time { return base.Add(time.Second) }
+	if _, err := other.MarkUsernameRevocationPending("alice"); err != nil {
+		t.Fatal(err)
+	}
+	other.mu.Lock()
+	err = other.compactJournalLocked()
+	other.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	journal, err := os.ReadFile(persistedSessionStorePath(statePath) + ".journal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(strings.TrimSpace(string(journal)), "\n") != 0 || !strings.Contains(string(journal), `"replace_all"`) || !strings.Contains(string(journal), `"revocations"`) {
+		t.Fatalf("expected a single checkpoint line carrying the intent, got %s", journal)
+	}
+
+	panel.mu.Lock()
+	err = panel.saveLocked()
+	panel.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := panel.Get(alice.Token); ok {
+		t.Fatal("the rewrite dropped an intent carried by another process's checkpoint")
+	}
+	if _, ok := restartedPanel(t, statePath, panel.now).Get(alice.Token); ok {
+		t.Fatal("the checkpoint's intent was lost by the rewrite")
+	}
+	if _, ok := panel.Get(bob.Token); !ok {
+		t.Fatal("the checkpoint's intent revoked an unrelated session")
+	}
+}

@@ -218,6 +218,11 @@ type SessionRegistry struct {
 	// replay at load and serialized into replace_all checkpoints so an
 	// intent outstanding across a compaction still applies (#1059).
 	pendingRevocations []sessionRevocationIntent
+	// storeLock is the held cross-process store lock (sessions.json.lock)
+	// and storeLockDepth its reentrancy count; both are guarded by mu. See
+	// acquireStoreLockLocked.
+	storeLock      *os.File
+	storeLockDepth int
 }
 
 var globalSessions = mustNewSessionRegistry("")
@@ -250,7 +255,15 @@ func InvalidatePersistedSessions(statePath string) error {
 }
 
 func NewSessionRegistry(path string) (*SessionRegistry, error) {
-	registry := &SessionRegistry{
+	registry := newUnloadedSessionRegistry(path)
+	if err := registry.loadAndBound(); err != nil {
+		return nil, err
+	}
+	return registry, nil
+}
+
+func newUnloadedSessionRegistry(path string) *SessionRegistry {
+	return &SessionRegistry{
 		path:            path,
 		sessions:        make(map[string]storedSession),
 		rawCSRF:         make(map[string]string),
@@ -259,15 +272,59 @@ func NewSessionRegistry(path string) (*SessionRegistry, error) {
 		absoluteTimeout: defaultSessionAbsoluteTimeout,
 		persistInterval: 5 * time.Minute,
 	}
-	if err := registry.load(); err != nil {
-		return nil, err
+}
+
+func (r *SessionRegistry) loadAndBound() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := r.load(); err != nil {
+		return err
 	}
-	if evicted := registry.enforceSessionBoundLocked("", ""); len(evicted) > 0 {
-		if err := registry.saveLocked(); err != nil {
-			return nil, err
+	if evicted := r.enforceSessionBoundLocked("", ""); len(evicted) > 0 {
+		if err := r.saveLocked(); err != nil {
+			return err
 		}
 	}
-	return registry, nil
+	return nil
+}
+
+// acquireStoreLockLocked takes the cross-process session store lock (an
+// exclusive flock on sessions.json.lock) and returns its release; r.mu must
+// be held for both calls. It is reentrant per registry, so a rewrite nested
+// in an append (compaction) or a CLI command holding the lock across several
+// operations does not deadlock on itself.
+//
+// Every whole-store rewrite (snapshot save, journal checkpoint), every
+// journal append and every load takes it, in the Panel and in the root CLI
+// alike. r.mu only serializes one process; without this lock a CLI
+// revocation appended between a Panel rewrite's journal read and its journal
+// remove/replace was lost (#1265), and a CLI rewrite could likewise drop a
+// Panel append.
+func (r *SessionRegistry) acquireStoreLockLocked() (func(), error) {
+	if r.path == "" {
+		return func() {}, nil
+	}
+	if r.storeLockDepth == 0 {
+		file, err := lockSessionStore(r.path)
+		if err != nil {
+			return nil, err
+		}
+		r.storeLock = file
+	}
+	r.storeLockDepth++
+	return r.releaseStoreLockLocked, nil
+}
+
+func (r *SessionRegistry) releaseStoreLockLocked() {
+	r.storeLockDepth--
+	if r.storeLockDepth == 0 {
+		unlockSessionStore(r.storeLock)
+		r.storeLock = nil
+	}
+}
+
+func sessionStoreLockPath(path string) string {
+	return path + ".lock"
 }
 
 func mustNewSessionRegistry(path string) *SessionRegistry {
@@ -770,6 +827,11 @@ func (r *SessionRegistry) applyPendingRevocationsLocked() {
 }
 
 func (r *SessionRegistry) load() error {
+	release, err := r.acquireStoreLockLocked()
+	if err != nil {
+		return err
+	}
+	defer release()
 	return r.loadFromDisk(true)
 }
 
@@ -932,6 +994,14 @@ func (r *SessionRegistry) appendJournalLocked(record sessionJournalRecord) error
 	if err != nil {
 		return err
 	}
+	// Under the store lock, so a concurrent whole-store rewrite in another
+	// process cannot read the journal before this line and remove or
+	// replace it after (#1265).
+	release, err := r.acquireStoreLockLocked()
+	if err != nil {
+		return err
+	}
+	defer release()
 	body = append(body, '\n')
 	// The session directory (/var/lib/veil) is writable by the unprivileged
 	// service account, while root CLI paths (`veil admin set` →
@@ -989,6 +1059,13 @@ func (r *SessionRegistry) appendJournalLocked(record sessionJournalRecord) error
 func (r *SessionRegistry) compactJournalLocked() error {
 	// The checkpoint replaces the journal, which may hold revocations another
 	// process (the root CLI) journaled since this process loaded it (#1265).
+	// The store lock keeps another process from appending between the read
+	// below and the replace.
+	release, err := r.acquireStoreLockLocked()
+	if err != nil {
+		return err
+	}
+	defer release()
 	r.absorbDiskRevocationsLocked()
 	record := sessionJournalRecord{Operation: "replace_all", Sessions: make([]storedSession, 0, len(r.sessions))}
 	for _, session := range r.sessions {
@@ -1097,7 +1174,14 @@ func (r *SessionRegistry) saveLocked() error {
 		return nil
 	}
 	// The rewrite removes the journal; apply the revocations it holds first,
-	// or a revocation journaled by the root CLI would be lost (#1265).
+	// or a revocation journaled by the root CLI would be lost (#1265). The
+	// store lock keeps another process from appending between the read and
+	// the remove.
+	release, err := r.acquireStoreLockLocked()
+	if err != nil {
+		return err
+	}
+	defer release()
 	r.absorbDiskRevocationsLocked()
 	file := sessionStoreFile{Version: 1, Sessions: make([]storedSession, 0, len(r.sessions))}
 	for _, session := range r.sessions {

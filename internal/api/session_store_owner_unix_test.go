@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"syscall"
 	"testing"
+	"time"
 )
 
 // The root CLI writes the Panel's session store during revocation (#1265).
@@ -54,7 +55,7 @@ func TestRootCLISessionWritesMatchStoreDirectoryOwner(t *testing.T) {
 	if err := RevokeUsernamePersistedSessions(statePath, "alice"); err != nil {
 		t.Fatal(err)
 	}
-	var snapshot, journal int
+	var snapshot, journal, lock int
 	for _, c := range calls {
 		if c.uid != int(stat.Uid) || c.gid != int(stat.Gid) {
 			t.Fatalf("chown %s to %d:%d, want store directory owner %d:%d", c.name, c.uid, c.gid, stat.Uid, stat.Gid)
@@ -62,11 +63,75 @@ func TestRootCLISessionWritesMatchStoreDirectoryOwner(t *testing.T) {
 		switch {
 		case c.name == "sessions.json.journal":
 			journal++
+		case c.name == "sessions.json.lock":
+			lock++
 		case len(c.name) > 10 && c.name[:10] == ".sessions-":
 			snapshot++
 		}
 	}
-	if snapshot == 0 || journal == 0 {
-		t.Fatalf("root writes not handed to the store owner (snapshot=%d journal=%d): %v", snapshot, journal, calls)
+	if snapshot == 0 || journal == 0 || lock == 0 {
+		t.Fatalf("root writes not handed to the store owner (snapshot=%d journal=%d lock=%d): %v", snapshot, journal, lock, calls)
+	}
+}
+
+// The store lock is opened through the pinned directory like the journal: a
+// planted symlink or an extra hard link at the lock path must be refused,
+// not followed into (or chowned onto) another file.
+func TestSessionStoreLockRefusesPlantedLinks(t *testing.T) {
+	dir := t.TempDir()
+	path := persistedSessionStorePath(filepath.Join(dir, "state.json"))
+	target := filepath.Join(dir, "victim")
+	if err := os.WriteFile(target, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, sessionStoreLockPath(path)); err != nil {
+		t.Fatal(err)
+	}
+	if file, err := lockSessionStore(path); err == nil {
+		unlockSessionStore(file)
+		t.Fatal("store lock followed a planted symlink")
+	}
+	if err := os.Remove(sessionStoreLockPath(path)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(target, sessionStoreLockPath(path)); err != nil {
+		t.Fatal(err)
+	}
+	if file, err := lockSessionStore(path); err == nil {
+		unlockSessionStore(file)
+		t.Fatal("store lock accepted a hard-linked inode")
+	}
+	registry := newUnloadedSessionRegistry(path)
+	if _, err := registry.MarkUsernameRevocationPending("alice"); err == nil {
+		t.Fatal("journal append ran without the store lock")
+	}
+}
+
+// The lock must actually exclude another holder: a second open of the same
+// store blocks until the first releases it.
+func TestSessionStoreLockExcludesSecondHolder(t *testing.T) {
+	path := persistedSessionStorePath(filepath.Join(t.TempDir(), "state.json"))
+	first, err := lockSessionStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acquired := make(chan struct{})
+	go func() {
+		second, err := lockSessionStore(path)
+		if err == nil {
+			unlockSessionStore(second)
+		}
+		close(acquired)
+	}()
+	select {
+	case <-acquired:
+		t.Fatal("a second holder took the store lock while it was held")
+	case <-time.After(100 * time.Millisecond):
+	}
+	unlockSessionStore(first)
+	select {
+	case <-acquired:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the store lock was not handed over after release")
 	}
 }

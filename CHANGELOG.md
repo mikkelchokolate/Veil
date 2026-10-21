@@ -32,7 +32,13 @@ All notable changes to Veil will be documented in this file.
   compaction) first applies the revocations journaled on disk, and the CSRF
   refresh after a panel restart journals an upsert instead of rewriting the
   store, so the revocation also holds when the panel rewrites sessions
-  before it is signalled. When `veil.service` is not active, the CLI now
+  before it is signalled. The panel and the CLI take an exclusive advisory
+  lock on `sessions.json.lock` (owned by the store directory's owner) around
+  every whole-store rewrite, journal append and store load, so a CLI command
+  that coincides with a panel rewrite can no longer have its revocation
+  dropped between the rewrite's journal read and its journal removal. The
+  lock uses `flock` and applies on Unix hosts; elsewhere the store is not
+  shared with a root CLI. When `veil.service` is not active, the CLI now
   prints a warning that no running panel was reloaded, instead of reporting
   success without one. A
   `revoke_cancel` record now retracts only the intent it was paired with.

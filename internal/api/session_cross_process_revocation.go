@@ -27,6 +27,10 @@ import (
 // username and deletes the user's sessions from the on-disk store. It never
 // cancels the intent: the credential change it pairs with has already been
 // committed by the caller.
+//
+// The whole load, intent append and delete runs under the cross-process
+// store lock, so a Panel snapshot rewrite or compaction either absorbs the
+// intent or runs entirely before it.
 func RevokeUsernamePersistedSessions(statePath, username string) error {
 	sessionPath := persistedSessionStorePath(statePath)
 	if sessionPath == "" || username == "" {
@@ -35,8 +39,13 @@ func RevokeUsernamePersistedSessions(statePath, username string) error {
 	if missing, err := sessionStoreDirMissing(sessionPath); err != nil || missing {
 		return err
 	}
-	registry, err := NewSessionRegistry(sessionPath)
+	registry := newUnloadedSessionRegistry(sessionPath)
+	release, err := registry.holdStoreLock()
 	if err != nil {
+		return fmt.Errorf("lock Panel sessions: %w", err)
+	}
+	defer release()
+	if err := registry.loadAndBound(); err != nil {
 		return fmt.Errorf("load Panel sessions: %w", err)
 	}
 	if _, err := registry.MarkUsernameRevocationPending(username); err != nil {
@@ -69,6 +78,14 @@ func RevokeAllPersistedSessions(statePath string) error {
 	registry := newSessionRegistryWithoutLoad(sessionPath)
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
+	// One store-lock hold across the empty snapshot and the intent append:
+	// a Panel append can then not land between them and be discarded, and a
+	// Panel rewrite either runs before the snapshot or absorbs the intent.
+	release, err := registry.acquireStoreLockLocked()
+	if err != nil {
+		return fmt.Errorf("lock Panel sessions: %w", err)
+	}
+	defer release()
 	intent := sessionRevocationIntent{Through: registry.now().UTC(), All: true}
 	// Track the intent in memory first so a compaction triggered by the
 	// append (oversized journal) still carries it in its checkpoint.
@@ -97,6 +114,13 @@ func (r *SessionRegistry) ReloadFromDisk() error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// Read the snapshot and journal as one consistent pair: a rewrite in
+	// another process cannot publish between the two reads.
+	release, err := r.acquireStoreLockLocked()
+	if err != nil {
+		return fmt.Errorf("lock Panel sessions at %s: %w", r.path, err)
+	}
+	defer release()
 	fresh := newSessionRegistryWithoutLoad(r.path)
 	fresh.now = r.now
 	fresh.idleTimeout = r.idleTimeout
@@ -192,6 +216,23 @@ func (r *SessionRegistry) absorbDiskRevocationsLocked() {
 			}
 		}
 	}
+}
+
+// holdStoreLock takes the cross-process store lock for a caller that runs
+// several registry operations as one unit (the root CLI); each operation
+// re-enters it. Release it with the returned function.
+func (r *SessionRegistry) holdStoreLock() (func(), error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	release, err := r.acquireStoreLockLocked()
+	if err != nil {
+		return nil, err
+	}
+	return func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		release()
+	}, nil
 }
 
 func (r *SessionRegistry) holdsPendingIntentLocked(intent sessionRevocationIntent) bool {
