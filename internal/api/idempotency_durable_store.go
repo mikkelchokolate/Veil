@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
 type durableIdempotencyRecord struct {
@@ -686,6 +687,12 @@ func (s *idempotencyStore) replayDurableIdempotencyResponse(w http.ResponseWrite
 	if record.Encrypted {
 		if record.ReplayExpiresAt <= s.now().UTC().Unix() || s.replayCipher == nil || len(body) == 0 {
 			writeError(w, "one-time secret replay envelope expired", http.StatusGone)
+			return
+		}
+		// Cipher.Decrypt passes non-"ve1:" input through verbatim; an
+		// encrypted=1 row must hold a real ciphertext (#1283 follow-up).
+		if !secrets.IsEncrypted(string(body)) {
+			writeError(w, "one-time secret replay envelope unavailable", http.StatusGone)
 			return
 		}
 		plaintext, err := s.replayCipher.Decrypt(string(body))

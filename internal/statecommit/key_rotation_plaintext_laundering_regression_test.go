@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/apply"
@@ -22,10 +23,14 @@ import (
 
 func assertRotateKeyRefusedAndKeyKept(t *testing.T, fixture keyRotationFixture) {
 	t.Helper()
-	if _, err := RotateKey(RotateKeyOptions{
+	_, err := RotateKey(RotateKeyOptions{
 		StatePath: fixture.statePath, KeyPath: fixture.keyPath, DatabasePath: fixture.databasePath,
-	}); err == nil {
+	})
+	if err == nil {
 		t.Fatal("RotateKey re-sealed a planted plaintext value under the new key")
+	}
+	if !strings.Contains(err.Error(), "ciphertext is invalid") {
+		t.Fatalf("RotateKey failed for an unrelated reason: %v", err)
 	}
 	key, err := os.ReadFile(fixture.keyPath)
 	if err != nil {

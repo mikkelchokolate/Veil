@@ -571,7 +571,7 @@ func (t *Tx) ReencryptSubscriptionTokens(oldCipher, newCipher *secrets.Cipher) e
 		// that under the new key would launder a planted plaintext row into a
 		// valid ciphertext that Reveal then accepts (#1283), so refuse it.
 		if !secrets.IsEncrypted(string(token.value)) {
-			return fmt.Errorf("client: token %s ciphertext is invalid; refusing master-key rotation", token.id)
+			return fmt.Errorf("client: token %s ciphertext is invalid; refusing master-key rotation (revoke the token or delete its subscription_tokens row, then retry)", token.id)
 		}
 		plaintext, err := oldCipher.Decrypt(string(token.value))
 		if err != nil {

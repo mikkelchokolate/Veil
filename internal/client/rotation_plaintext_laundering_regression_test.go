@@ -1,6 +1,7 @@
 package client
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -42,6 +43,9 @@ func TestReencryptSubscriptionTokensRefusesPlantedPlaintext(t *testing.T) {
 			t.Fatalf("rotation accepted planted %q; post-rotation Reveal = %q, %v", planted, got, revealErr)
 		}
 		_ = tx.Rollback()
+		if !strings.Contains(rotateErr.Error(), "ciphertext is invalid") {
+			t.Fatalf("rotation of planted %q failed for an unrelated reason: %v", planted, rotateErr)
+		}
 	}
 }
 
@@ -64,9 +68,9 @@ func TestReencryptCredentialsRefusesPlantedPlaintext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Length > 12 so the planted rows also satisfy the migration-time sanity
-	// check; the bare-prefix case is covered by the Reveal test below.
-	for _, planted := range []string{"attacker-chosen-password", "VE1:attacker-chosen"} {
+	// The >12-byte length rule is a migration-time check, not a CHECK
+	// constraint, so a bare "ve1:" row can be planted directly too.
+	for _, planted := range []string{"attacker-chosen-password", "VE1:attacker-chosen", "ve1:"} {
 		if _, err := db.Exec(`UPDATE client_credentials SET encrypted_value=? WHERE id=?`, []byte(planted), cred.ID); err != nil {
 			t.Fatalf("plant: %v", err)
 		}
@@ -81,6 +85,9 @@ func TestReencryptCredentialsRefusesPlantedPlaintext(t *testing.T) {
 			t.Fatalf("rotation accepted planted %q; post-rotation Reveal = %q, %v", planted, got, revealErr)
 		}
 		_ = tx.Rollback()
+		if !strings.Contains(rotateErr.Error(), "ciphertext is invalid") {
+			t.Fatalf("rotation of planted %q failed for an unrelated reason: %v", planted, rotateErr)
+		}
 	}
 }
 
@@ -142,5 +149,38 @@ func TestCredentialRevealRejectsBarePrefix(t *testing.T) {
 	}
 	if got, err := store.Reveal(cred.ID); err == nil {
 		t.Fatalf("Reveal of bare ve1: = %q, want error", got)
+	}
+}
+
+// Rollback restore must not re-insert a non-"ve1:" snapshot credential as a
+// live row: Reveal would refuse it and every later rotation would fail closed.
+func TestReplaceSnapshotRefusesPlaintextCredential(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+	c, err := repo.Create(Client{Name: "erin", Enabled: true, QuotaResetPolicy: ResetNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := repo.CreateBinding(Binding{ClientID: c.ID, InboundID: "hy", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	planted := Credential{
+		ID: "planted-credential", BindingID: binding.ID, Kind: "password",
+		EncryptedValue: []byte("attacker-chosen-password"), KeyVersion: 1, CredentialVersion: 1,
+	}
+	tx, err := repo.BeginTx()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = ReplaceSnapshotTx(tx, []Client{c}, []Binding{binding}, []Credential{planted})
+	_ = tx.Rollback()
+	if err == nil || !strings.Contains(err.Error(), "ciphertext is invalid") {
+		t.Fatalf("ReplaceSnapshotTx with plaintext credential err=%v, want ciphertext is invalid", err)
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM client_credentials WHERE id=?`, planted.ID).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("planted credential rows=%d err=%v", count, err)
 	}
 }
