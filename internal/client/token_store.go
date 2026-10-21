@@ -366,7 +366,7 @@ func (s *TokenStore) RotateWithExpiry(id string, expiresAt *int64, expirySupplie
 		return IssuedToken{}, err
 	}
 	tx := &Tx{queries: queries{q: raw}, tx: raw}
-	issued, err := tx.RotateTokenWithExpiryTx(id, expiresAt, expirySupplied)
+	issued, err := tx.rotateTokenWithExpiryTx(id, expiresAt, expirySupplied)
 	if err != nil {
 		_ = raw.Rollback()
 		return IssuedToken{}, err
@@ -699,11 +699,11 @@ func (s *TokenStore) Reveal(id string) (string, error) {
 // These run inside a caller-managed Tx so token writes commit atomically with
 // the desired-revision bump and the immutable snapshot.
 
-// IssueTokenTx creates a token row inside the transaction, returning plaintext
+// issueTokenTx creates a token row inside the transaction, returning plaintext
 // once. The row has no sealed issuance binding yet and does not authenticate
 // until TokenStore seals it (RotateWithExpiry does so in the same
-// transaction, #1281).
-func (t *Tx) IssueTokenTx(clientID, label string, expiresAt *int64) (IssuedToken, error) {
+// transaction, #1281). Unexported so no caller can hand out an unsealed row.
+func (t *Tx) issueTokenTx(clientID, label string, expiresAt *int64) (IssuedToken, error) {
 	if err := validateTokenMetadata(label, expiresAt); err != nil {
 		return IssuedToken{}, err
 	}
@@ -755,14 +755,12 @@ func (t *Tx) SetTokenEnabledTx(id string, enabled bool) error {
 	return nil
 }
 
-// RotateTokenTx revokes the given token and issues a fresh one for the same
-// client — revoke + issue inside the transaction so a token can never be
-// revoked without its replacement being stored.
-func (t *Tx) RotateTokenTx(id string) (IssuedToken, error) {
-	return t.RotateTokenWithExpiryTx(id, nil, false)
-}
-
-func (t *Tx) RotateTokenWithExpiryTx(id string, expiresAt *int64, expirySupplied bool) (IssuedToken, error) {
+// rotateTokenWithExpiryTx revokes the given token and issues a fresh,
+// still unsealed one for the same client inside the transaction, so a token
+// can never be revoked without its replacement being stored. Only
+// TokenStore.RotateWithExpiry calls it; it seals the new row in the same
+// transaction.
+func (t *Tx) rotateTokenWithExpiryTx(id string, expiresAt *int64, expirySupplied bool) (IssuedToken, error) {
 	row := t.q.QueryRow(`SELECT id, client_id, token_hash, token_prefix, enabled, expires_at, created_at, last_used_at, revoked_at, created_by, label
   FROM subscription_tokens WHERE id=?`, id)
 	tok, err := scanToken(row, true)
@@ -784,7 +782,7 @@ func (t *Tx) RotateTokenWithExpiryTx(id string, expiresAt *int64, expirySupplied
 	if err := t.RevokeTokenTx(id); err != nil {
 		return IssuedToken{}, err
 	}
-	return t.IssueTokenTx(tok.ClientID, tok.Label, tok.ExpiresAt)
+	return t.issueTokenTx(tok.ClientID, tok.Label, tok.ExpiresAt)
 }
 
 // ReencryptSubscriptionTokens moves every stored token reveal ciphertext to a
