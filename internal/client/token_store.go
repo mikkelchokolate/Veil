@@ -565,11 +565,29 @@ func (s *TokenStore) ensureLegacyBindingsSealed() error {
 	if s.legacySealed {
 		return nil
 	}
-	if _, err := s.sealLegacyBindings(); err != nil {
+	if _, err := s.completeLegacyPassLocked(); err != nil {
 		return fmt.Errorf("client: seal legacy token bindings: %w", err)
 	}
-	s.legacySealed = true
 	return nil
+}
+
+// completeLegacyPassLocked runs the one-shot legacy re-seal and then clears
+// the bindings that rows revoked before #1346 still carry, so a cleared
+// revoked_at cannot bring them back. The clear runs after the pass so its
+// tamper accounting sees the database as it was; it is idempotent. Both entry
+// points (startup and the first Issue/Rotate) go through here, and
+// legacySealed is only set once both steps succeeded, so a failed clear is
+// retried by the next caller. Requires legacyMu.
+func (s *TokenStore) completeLegacyPassLocked() (int, error) {
+	resealed, err := s.sealLegacyBindings()
+	if err != nil {
+		return resealed, err
+	}
+	if _, err := s.db.Exec(scrubRevokedBindingsQ); err != nil {
+		return resealed, fmt.Errorf("client: clear revoked token bindings: %w", err)
+	}
+	s.legacySealed = true
+	return resealed, nil
 }
 
 // SealLegacyBindings re-seals, once per database, the token rows issued
@@ -596,18 +614,7 @@ func (s *TokenStore) SealLegacyBindings() (int, error) {
 	}
 	s.legacyMu.Lock()
 	defer s.legacyMu.Unlock()
-	resealed, err := s.sealLegacyBindings()
-	if err != nil {
-		return resealed, err
-	}
-	s.legacySealed = true
-	// Rows revoked before #1346 kept their binding; destroy it now so a
-	// cleared revoked_at cannot bring them back. This runs after the legacy
-	// pass so its tamper accounting sees the database as it was.
-	if _, err := s.db.Exec(scrubRevokedBindingsQ); err != nil {
-		return resealed, fmt.Errorf("client: clear revoked token bindings: %w", err)
-	}
-	return resealed, nil
+	return s.completeLegacyPassLocked()
 }
 
 func (s *TokenStore) sealLegacyBindings() (int, error) {
@@ -950,7 +957,7 @@ func (t *Tx) ReencryptSubscriptionTokens(oldCipher, newCipher *secrets.Cipher) e
 		// that under the new key would launder a planted plaintext row into a
 		// valid ciphertext that Reveal then accepts (#1283), so refuse it.
 		if !secrets.IsEncrypted(string(token.value)) {
-			return fmt.Errorf("client: token %s ciphertext is invalid; refusing master-key rotation (revoke it, which also clears its token_ciphertext, or delete its subscription_tokens row, then retry; a row that is already revoked keeps a stale ciphertext from an older build and needs its token_ciphertext cleared by hand)", token.id)
+			return fmt.Errorf("client: token %s ciphertext is invalid; refusing master-key rotation (revoke it, which also clears its token_ciphertext, or delete its subscription_tokens row, then retry; a row that is already revoked but still holds a ciphertext from an older build is cleared on the next panel start, or clear its token_ciphertext by hand)", token.id)
 		}
 		// Issuance bindings (#1281) are sealed under the token subkey; rows
 		// issued before them still carry a bare master-cipher seal, which

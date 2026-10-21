@@ -140,3 +140,52 @@ func TestUnRevokedScrubbedRowBlocksLegacyPassReArm(t *testing.T) {
 	assertTokenRefused(t, restarted, issued.Plaintext)
 	assertTokenRefused(t, restarted, "attacker-chosen-legacy")
 }
+
+// #1348 review: when the startup pass did not complete, the first Issue or
+// Rotate finishes it through ensureLegacyBindingsSealed; that path must clear
+// revoked rows' bindings too.
+func TestFirstIssueAfterFailedStartupScrubsRevokedBindings(t *testing.T) {
+	f, exec := newBindingFixture(t)
+	revoked, err := f.ts.Issue(f.alice.ID, "revoked-pre-1346", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec(`UPDATE subscription_tokens SET revoked_at=? WHERE id=?`, nowUnix(), revoked.Token.ID)
+
+	// A restarted store whose startup SealLegacyBindings never succeeded.
+	restarted := NewTokenStore(f.ts.db).WithCipher(f.ts.cipher)
+	t.Cleanup(restarted.Close)
+	if _, err := restarted.Issue(f.bob.ID, "first-after-restart", nil); err != nil {
+		t.Fatal(err)
+	}
+	if c := storedTokenCiphertext(t, f, revoked.Token.ID); c != "" {
+		t.Fatalf("first Issue must complete the revoked-binding clear, token_ciphertext=%q", c)
+	}
+	exec(`UPDATE subscription_tokens SET revoked_at=NULL WHERE id=?`, revoked.Token.ID)
+	assertTokenRefused(t, restarted, revoked.Plaintext)
+}
+
+// A failed clear must not mark the pass complete: the next caller retries it.
+func TestFailedRevokedBindingClearIsRetried(t *testing.T) {
+	f, exec := newBindingFixture(t)
+	revoked, err := f.ts.Issue(f.alice.ID, "revoked-pre-1346", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec(`UPDATE subscription_tokens SET revoked_at=? WHERE id=?`, nowUnix(), revoked.Token.ID)
+	exec(`CREATE TRIGGER fail_scrub BEFORE UPDATE OF token_ciphertext ON subscription_tokens
+	      WHEN NEW.token_ciphertext='' AND OLD.revoked_at IS NOT NULL
+	      BEGIN SELECT RAISE(ABORT,'injected scrub failure'); END`)
+	restarted := NewTokenStore(f.ts.db).WithCipher(f.ts.cipher)
+	t.Cleanup(restarted.Close)
+	if _, err := restarted.SealLegacyBindings(); err == nil {
+		t.Fatal("SealLegacyBindings must report a failed clear")
+	}
+	exec(`DROP TRIGGER fail_scrub`)
+	if _, err := restarted.Issue(f.bob.ID, "retry", nil); err != nil {
+		t.Fatal(err)
+	}
+	if c := storedTokenCiphertext(t, f, revoked.Token.ID); c != "" {
+		t.Fatalf("a failed clear must be retried by the next Issue, token_ciphertext=%q", c)
+	}
+}

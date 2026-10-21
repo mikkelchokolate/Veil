@@ -252,7 +252,7 @@ func TestRotationRefusalHintsUnstickRotation(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = rotate(tokens)
-	if err == nil || !strings.Contains(err.Error(), "needs its token_ciphertext cleared by hand") {
+	if err == nil || !strings.Contains(err.Error(), "is cleared on the next panel start, or clear its token_ciphertext by hand") {
 		t.Fatalf("stale revoked token: rotation err=%v, want refusal with the hand-clear hint", err)
 	}
 	if err := ts.Revoke(stale.Token.ID); err == nil {
