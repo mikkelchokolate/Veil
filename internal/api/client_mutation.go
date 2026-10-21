@@ -156,7 +156,7 @@ func (s *managementState) recordRevisionInTxLocked(tx *client.Tx, stateDigest st
 	if err != nil {
 		return 0, err
 	}
-	if err := apply.SaveSnapshotTxBound(tx, rev, payload, stateDigest); err != nil {
+	if err := apply.SaveSnapshotTxBound(tx, s.applySnapshots.Seal(), rev, payload, stateDigest); err != nil {
 		return 0, err
 	}
 	return rev, nil

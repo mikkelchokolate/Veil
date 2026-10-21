@@ -257,7 +257,8 @@ func TestStartupBindsDigestForConsistentLegacySnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := state.db.Exec(`UPDATE revision_snapshots SET state_sha256='' WHERE revision=?`, revisions.Desired); err != nil {
+	simulatePreSealStateFile(t, state)
+	if _, err := state.db.Exec(`UPDATE revision_snapshots SET state_sha256='', payload_mac='' WHERE revision=?`, revisions.Desired); err != nil {
 		t.Fatalf("simulate pre-v4 snapshot row: %v", err)
 	}
 	statePath := state.statePath

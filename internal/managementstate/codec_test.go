@@ -1,6 +1,7 @@
 package managementstate
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -224,5 +225,47 @@ func TestCodecMoveToProtocolFieldsLeavesEmptyObjectUntouched(t *testing.T) {
 	result := moveToProtocolFields(obj, settingsProtocolFieldKeys)
 	if _, exists := result["protocolFields"]; exists {
 		t.Fatal("expected no protocolFields when no keys moved")
+	}
+}
+
+func TestEncodedSchemaVersionReadsOnDiskBytes(t *testing.T) {
+	cases := map[string]int{
+		`{"schemaVersion":5,"settings":{}}`: 5,
+		`{"schemaVersion":6}`:               6,
+		`{"settings":{}}`:                   1,
+		`not json`:                          1,
+	}
+	for body, want := range cases {
+		if got := EncodedSchemaVersion([]byte(body)); got != want {
+			t.Fatalf("EncodedSchemaVersion(%s)=%d want %d", body, got, want)
+		}
+	}
+}
+
+func TestReencodeAtCurrentSchemaIsDeterministicAndKeepsCiphertexts(t *testing.T) {
+	legacy := []byte(`{"schemaVersion":5,"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"example.com","protocolFields":{"hysteria2Password":"ve1:opaque-ciphertext"}}}`)
+	first, err := ReencodeAtCurrentSchema(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := ReencodeAtCurrentSchema(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(first, second) {
+		t.Fatal("re-encoding the same state bytes is not deterministic")
+	}
+	if got := EncodedSchemaVersion(first); got != CurrentSchemaVersion || got < SnapshotSealSchemaVersion {
+		t.Fatalf("re-encoded schema=%d want %d", got, CurrentSchemaVersion)
+	}
+	if !bytes.Contains(first, []byte("ve1:opaque-ciphertext")) {
+		t.Fatalf("re-encoding altered a stored ciphertext: %s", first)
+	}
+	again, err := ReencodeAtCurrentSchema(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(again, first) {
+		t.Fatal("re-encoding a current-schema file changed it")
 	}
 }

@@ -302,9 +302,9 @@ FROM expiration_enforcement WHERE client_id=? AND target_generation=? AND target
 			return err
 		}
 		if s.statePath == "" {
-			err = apply.SaveSnapshotTx(tx, revision, payload)
+			err = apply.SaveSnapshotTx(tx, s.applySnapshots.Seal(), revision, payload)
 		} else {
-			err = apply.SaveSnapshotTxBound(tx, revision, payload, stateDigest)
+			err = apply.SaveSnapshotTxBound(tx, s.applySnapshots.Seal(), revision, payload, stateDigest)
 		}
 		if err != nil {
 			return err

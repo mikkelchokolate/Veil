@@ -63,7 +63,7 @@ func TestRotateKeyReencryptsHistoricSnapshotsForRollback(t *testing.T) {
 		_ = tx.Rollback()
 		t.Fatal(err)
 	}
-	if err := apply.SaveSnapshotTxBound(tx, revision, payload, hex.EncodeToString(digest[:])); err != nil {
+	if err := apply.SaveSnapshotTxBound(tx, snapshotSealFor(t, cipherFromBytes(t, fixture.oldKey)), revision, payload, hex.EncodeToString(digest[:])); err != nil {
 		_ = tx.Rollback()
 		t.Fatal(err)
 	}
@@ -89,7 +89,12 @@ func TestRotateKeyReencryptsHistoricSnapshotsForRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	loaded, err := apply.NewSnapshotStore(db).Load(revision)
+	rotatedStore := apply.NewSnapshotStore(db)
+	if err := rotatedStore.SetCipher(newCipher); err != nil {
+		t.Fatal(err)
+	}
+	// #1280: the rotated row must be re-sealed under the new key.
+	loaded, err := rotatedStore.Load(revision)
 	if err != nil {
 		t.Fatal(err)
 	}

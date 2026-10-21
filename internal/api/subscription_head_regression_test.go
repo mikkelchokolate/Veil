@@ -97,6 +97,7 @@ func TestSubscriptionIgnoresAnotherClientsCorruptCredential(t *testing.T) {
 	if _, err := state.db.Exec(`UPDATE revision_snapshots SET payload=? WHERE revision=?`, payload, revisions.Applied); err != nil {
 		t.Fatal(err)
 	}
+	resealSnapshotForTest(t, state, revisions.Applied)
 
 	req := httptest.NewRequest(http.MethodGet, "/s/"+firstToken+"?format=raw", nil)
 	w := httptest.NewRecorder()
