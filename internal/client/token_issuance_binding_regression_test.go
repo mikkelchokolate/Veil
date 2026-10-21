@@ -596,15 +596,40 @@ func TestSealLegacyBindingsWarnsWhenLegacyTokensAreStranded(t *testing.T) {
 	plantLegacyToken(t, f, exec, "legacy", f.alice.ID, "legacy-token-plaintext")
 	exec(`INSERT INTO subscription_tokens (id, client_id, token_hash, token_prefix, enabled, created_at, created_by, label, token_ciphertext)
 	      VALUES ('live-blank', ?, ?, 'b', 1, ?, '', '', '')`, f.bob.ID, sha("live-blank"), time.Now().Unix())
-	var logs bytes.Buffer
-	prev, prevFlags := log.Writer(), log.Flags()
-	log.SetOutput(&logs)
-	t.Cleanup(func() { log.SetOutput(prev); log.SetFlags(prevFlags) })
+	logs := captureLog(t)
 	if resealed, err := f.ts.SealLegacyBindings(); err != nil || resealed != 0 {
 		t.Fatalf("SealLegacyBindings = %d, %v; want 0", resealed, err)
 	}
 	assertTokenRefused(t, f.ts, "legacy-token-plaintext")
-	if !strings.Contains(logs.String(), "1 pre-#1281 token(s) were NOT re-sealed") {
-		t.Fatalf("missing stranded-token warning; log = %q", logs.String())
+	if got := logs.String(); !strings.Contains(got, "1 pre-#1281 token(s) were NOT re-sealed") ||
+		!strings.Contains(got, "1 live token row(s) without a valid seal") || strings.Contains(got, "sealed binding(s)") {
+		t.Fatalf("stranded-token warning does not name the live-row cause; log = %q", got)
 	}
+}
+
+// The same warning, when a sealed binding (marker deleted) blocks the pass.
+func TestSealLegacyBindingsWarnsWhenBindingBlocksPass(t *testing.T) {
+	f, exec := newBindingFixture(t)
+	if _, err := f.ts.Issue(f.bob.ID, "honest", nil); err != nil {
+		t.Fatal(err)
+	}
+	exec(`DELETE FROM migration_markers WHERE key=?`, TokenBindingMarkerKey)
+	plantLegacyToken(t, f, exec, "legacy", f.alice.ID, "legacy-token-plaintext")
+	logs := captureLog(t)
+	if resealed, err := freshTokenStore(t, f).SealLegacyBindings(); err != nil || resealed != 0 {
+		t.Fatalf("SealLegacyBindings = %d, %v; want 0", resealed, err)
+	}
+	if got := logs.String(); !strings.Contains(got, "1 pre-#1281 token(s) were NOT re-sealed") ||
+		!strings.Contains(got, "1 sealed binding(s)") || strings.Contains(got, "live token row(s)") {
+		t.Fatalf("stranded-token warning does not name the binding cause; log = %q", got)
+	}
+}
+
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var logs bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(prev) })
+	return &logs
 }

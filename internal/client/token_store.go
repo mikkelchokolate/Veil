@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -696,7 +697,14 @@ func (s *TokenStore) sealLegacyBindings() (int, error) {
 	if discarded > 0 {
 		// Fail closed, but loudly: the marker is now written, so these
 		// tokens are never retried and must be re-issued (#1281 review).
-		log.Printf("subscription tokens: %d pre-#1281 token(s) were NOT re-sealed and no longer authenticate, because the database also holds %d sealed binding(s) and %d live token row(s) without a valid seal; re-issue or rotate those tokens", discarded, bound, unsealable)
+		var why []string
+		if bound > 0 {
+			why = append(why, fmt.Sprintf("%d sealed binding(s) (the one-shot pass already ran; its marker was missing)", bound))
+		}
+		if unsealable > 0 {
+			why = append(why, fmt.Sprintf("%d live token row(s) without a valid seal", unsealable))
+		}
+		log.Printf("subscription tokens: %d pre-#1281 token(s) were NOT re-sealed and no longer authenticate, because the database also holds %s; re-issue or rotate those tokens", discarded, strings.Join(why, " and "))
 	}
 	if credentialCopies > 0 {
 		log.Printf("subscription tokens: refused to re-seal %d token row(s) whose sealed value is a stored client credential (possible veil.db tampering)", credentialCopies)
