@@ -362,7 +362,7 @@ func runCertRenew(cmd *cobra.Command, publicIP, email string, port int, etcDirFl
 		// the process environment still wins for an explicit override
 		// (#1189).
 		CAServer:       hostenv.EnvOrFile(envValues, "VEIL_ACME_CA_URL"),
-		Insecure:       hostenv.EnvOrFile(envValues, "VEIL_ACME_INSECURE") != "",
+		Insecure:       hostenv.EnvBoolOrFile(envValues, "VEIL_ACME_INSECURE"),
 		CARoot:         hostenv.EnvOrFile(envValues, "VEIL_ACME_CA_ROOT"),
 		HTTP01ViaCaddy: viaCaddy,
 		// The panel itself consumes this certificate; its restart rides a

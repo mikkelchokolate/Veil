@@ -274,8 +274,20 @@ type AutoTLSConfig struct {
 }
 
 func (e Environment) AutoTLS(autoTLS bool, autoTLSDir string, statePath string, keyPath string) (AutoTLSConfig, error) {
-	if !autoTLS && strings.TrimSpace(os.Getenv("VEIL_AUTO_TLS")) == "" {
-		return AutoTLSConfig{}, nil
+	if !autoTLS {
+		// ParseBool, not a non-empty check: VEIL_AUTO_TLS=false must not
+		// enable auto-TLS (#1263); a malformed value fails loudly.
+		value := strings.TrimSpace(os.Getenv("VEIL_AUTO_TLS"))
+		if value == "" {
+			return AutoTLSConfig{}, nil
+		}
+		enabled, err := strconv.ParseBool(value)
+		if err != nil {
+			return AutoTLSConfig{}, fmt.Errorf("VEIL_AUTO_TLS must be a boolean: %w", err)
+		}
+		if !enabled {
+			return AutoTLSConfig{}, nil
+		}
 	}
 	domain, email, err := e.SettingsFromState(statePath, keyPath)
 	if err != nil {

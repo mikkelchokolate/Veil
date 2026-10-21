@@ -709,6 +709,22 @@ func TestEnvironmentAutoTLS(t *testing.T) {
 		t.Setenv("VEIL_AUTO_TLS", "")
 	})
 
+	// #1263: VEIL_AUTO_TLS=false used to ENABLE auto-TLS (non-empty check).
+	t.Run("disabled via explicit false env", func(t *testing.T) {
+		for _, value := range []string{"0", "false", "FALSE"} {
+			t.Setenv("VEIL_AUTO_TLS", value)
+			cfg, err := env.AutoTLS(false, "", statePath, "")
+			if err != nil || cfg.Enabled {
+				t.Fatalf("VEIL_AUTO_TLS=%s: cfg=%+v err=%v, want disabled", value, cfg, err)
+			}
+		}
+		t.Setenv("VEIL_AUTO_TLS", "maybe")
+		if _, err := env.AutoTLS(false, "", statePath, ""); err == nil || !strings.Contains(err.Error(), "VEIL_AUTO_TLS must be a boolean") {
+			t.Fatalf("malformed VEIL_AUTO_TLS must fail loudly, got %v", err)
+		}
+		t.Setenv("VEIL_AUTO_TLS", "")
+	})
+
 	t.Run("missing domain", func(t *testing.T) {
 		store := managementstate.NewStore(statePath, nil)
 		if err := store.Save(model.ManagementSnapshot{Settings: model.Settings{Email: "admin@example.com"}}); err != nil {
