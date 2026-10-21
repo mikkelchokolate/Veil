@@ -69,6 +69,32 @@ assert_no_veil_firewall_rules() {
   fi
 }
 
+# A full uninstall removes the runtime binaries `veil runtime install` wrote
+# (issue #1289). The caddy leg after the custom-root teardown still needs
+# them, so stash them first, prove the uninstall removed every one, then
+# restore them (with their provenance record) for the remaining legs.
+VEIL_RUNTIME_BINS="hysteria mita caddy olcrtc sing-box"
+RUNTIME_STASH=/tmp/veil-runtime.keep
+stash_runtime_binaries() {
+  local bin
+  ${SUDO} rm -rf "${RUNTIME_STASH}"
+  ${SUDO} mkdir -p "${RUNTIME_STASH}"
+  for bin in ${VEIL_RUNTIME_BINS} .veil-runtime-generation.json; do
+    ${SUDO} cp -a "/usr/local/bin/${bin}" "${RUNTIME_STASH}/${bin}" \
+      || ci_die "cannot stash /usr/local/bin/${bin} before $1"
+  done
+}
+assert_runtime_binaries_removed_then_restore() {
+  local bin
+  for bin in ${VEIL_RUNTIME_BINS} .veil-runtime-generation.json; do
+    if ${SUDO} test -e "/usr/local/bin/${bin}" || ${SUDO} test -L "/usr/local/bin/${bin}"; then
+      ci_die "$1 left Veil-installed runtime ${bin} in /usr/local/bin"
+    fi
+    ${SUDO} cp -a "${RUNTIME_STASH}/${bin}" "/usr/local/bin/${bin}"
+  done
+  ${SUDO} rm -rf "${RUNTIME_STASH}"
+}
+
 uninstall_leg() {
   ci_step "uninstall --keep-data"
   ci_run veil-uninstall ${SUDO} /usr/local/bin/veil uninstall --yes --keep-data
@@ -283,9 +309,11 @@ if [ -n "${IA_PHASE_MARKER}" ] && [ -f "${IA_PHASE_MARKER}" ]; then
   # uninstall also removes the shared /usr/local/bin/veil binary — stash and
   # restore it so the caddy leg can reinstall.
   ${SUDO} cp -a /usr/local/bin/veil /tmp/veil-binary.keep
+  stash_runtime_binaries "custom-root uninstall"
   ci_run veil-uninstall-custom ${SUDO} /usr/local/bin/veil uninstall --yes --etc-dir "${CUSTOM_ETC}" --var-dir "${CUSTOM_VAR}"
   ${SUDO} install -m 0755 /tmp/veil-binary.keep /usr/local/bin/veil
   ${SUDO} rm -f /tmp/veil-binary.keep
+  assert_runtime_binaries_removed_then_restore "custom-root uninstall"
   ${SUDO} test ! -e "${CUSTOM_ETC}" || ci_die "custom etc dir left after custom-root uninstall"
   ${SUDO} test ! -e "${CUSTOM_VAR}" || ci_die "custom var dir left after custom-root uninstall"
   if systemctl is-active --quiet veil.service; then
@@ -762,9 +790,11 @@ if [ -z "${IA_PHASE_MARKER}" ]; then
   # uninstall also removes the shared /usr/local/bin/veil binary — the caddy
   # leg below needs it to reinstall, so stash and restore it.
   ${SUDO} cp -a /usr/local/bin/veil /tmp/veil-binary.keep
+  stash_runtime_binaries "custom-root uninstall"
   ci_run veil-uninstall-custom ${SUDO} /usr/local/bin/veil uninstall --yes --etc-dir "${CUSTOM_ETC}" --var-dir "${CUSTOM_VAR}"
   ${SUDO} install -m 0755 /tmp/veil-binary.keep /usr/local/bin/veil
   ${SUDO} rm -f /tmp/veil-binary.keep
+  assert_runtime_binaries_removed_then_restore "custom-root uninstall"
   ${SUDO} test ! -e "${CUSTOM_ETC}" || ci_die "custom etc dir left after custom-root uninstall"
   ${SUDO} test ! -e "${CUSTOM_VAR}" || ci_die "custom var dir left after custom-root uninstall"
   if systemctl is-active --quiet veil.service; then

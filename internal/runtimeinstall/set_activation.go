@@ -204,6 +204,18 @@ func activateRuntimeSet(binDir string, journal *runtimeSetJournal) error {
 		}
 	}
 	manifest := runtimeGenerationManifest{Version: 1, TransactionID: journal.TransactionID, PublishedAt: time.Now().UTC().Unix(), Digests: make(map[string]string, len(journal.Items))}
+	// Carry forward digests of runtimes this transaction did not touch: the
+	// manifest is also the provenance record `veil uninstall` trusts, and a
+	// later single-runtime install must not erase the proof that Veil wrote
+	// the others (#1289). Entries whose bytes changed are dropped by the
+	// uninstall digest check, not here.
+	if previous, ok := readRuntimeGenerationManifest(filepath.Join(binDir, runtimeSetManifestName)); ok {
+		for name, digest := range previous.Digests {
+			if safeManagedRuntimeName(name) {
+				manifest.Digests[name] = digest
+			}
+		}
+	}
 	for _, item := range journal.Items {
 		manifest.Digests[filepath.Base(item.Target)] = item.NewDigest
 	}
