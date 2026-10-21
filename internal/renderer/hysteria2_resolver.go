@@ -142,8 +142,14 @@ const (
 
 // hasIPv4RouteTo parses /proc/net/route and reports whether a usable route
 // covers target. Any covering route counts, not just 0.0.0.0/0, so the
-// 0.0.0.0/1 + 128.0.0.0/1 pair installed by OpenVPN def1 or wg-quick counts
-// as IPv4 reachability. Destination and Mask are printed as host-order u32s.
+// 0.0.0.0/1 + 128.0.0.0/1 pair installed by OpenVPN def1 (or wg-quick on
+// macOS/BSD) counts as IPv4 reachability. Destination and Mask are printed
+// as host-order u32s.
+//
+// Both /proc route files show only the main table. Linux wg-quick and other
+// policy routing keep the main-table default, so this is enough in practice;
+// a host whose only default lives in a non-main table is misjudged and gets
+// the IPv4 address.
 func hasIPv4RouteTo(table []byte, target netip.Addr) bool {
 	t := target.As4()
 	scanner := bufio.NewScanner(bytes.NewReader(table))

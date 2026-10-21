@@ -16,8 +16,9 @@ const (
 		"eth0\t0000000A\t00000000\t0001\t0\t0\t100\t00FFFFFF\t0\t0\t0\n"
 	testIPv4NoDefault = "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n" +
 		"eth0\t0000000A\t00000000\t0001\t0\t0\t100\t00FFFFFF\t0\t0\t0\n"
-	// OpenVPN def1 / wg-quick split default: 0.0.0.0/1 + 128.0.0.0/1, no
-	// 0.0.0.0/0. Fixtures use the little-endian layout of amd64/arm64.
+	// OpenVPN def1 (or wg-quick on macOS/BSD) split default: 0.0.0.0/1 +
+	// 128.0.0.0/1, no 0.0.0.0/0. Fixtures use the little-endian layout of
+	// amd64/arm64.
 	testIPv4SplitDefault = "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n" +
 		"tun0\t00000000\t0108080A\t0003\t0\t0\t0\t00000080\t0\t0\t0\n" +
 		"tun0\t00000080\t0108080A\t0003\t0\t0\t0\t00000080\t0\t0\t0\n"
@@ -27,6 +28,15 @@ const (
 	// A Destination=0 row with a non-zero mask (0.0.0.0/8) does not cover 1.1.1.1.
 	testIPv4ZeroDestNarrowMask = "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n" +
 		"eth0\t00000000\t00000000\t0001\t0\t0\t0\t000000FF\t0\t0\t0\n"
+	// A 0.0.0.0/0 whose RTF_UP bit is clear (flags 0002: gateway only).
+	testIPv4DownDefault = "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n" +
+		"eth0\t00000000\t0100000A\t0002\t0\t0\t100\t00000000\t0\t0\t0\n"
+	// The next three each defeat exactly one IPv6 check: a non-lo ::/0 with
+	// RTF_REJECT (unreachable default on eth0), a lo ::/0 without RTF_REJECT,
+	// and a non-lo ::/0 whose RTF_UP bit is clear.
+	testIPv6RejectNonLo = "00000000000000000000000000000000 00 00000000000000000000000000000000 00 00000000000000000000000000000000 ffffffff 00000001 00000000 00000201     eth0\n"
+	testIPv6LoNoReject  = "00000000000000000000000000000000 00 00000000000000000000000000000000 00 00000000000000000000000000000000 ffffffff 00000001 00000000 00000001       lo\n"
+	testIPv6DownDefault = "00000000000000000000000000000000 00 00000000000000000000000000000000 00 fe800000000000000000000000000001 00000400 00000002 00000000 00040002     eth0\n"
 	// The kernel always keeps an unreachable ::/0 on lo; only a non-lo ::/0
 	// row is a real default route.
 	testIPv6LoopbackOnly = "00000000000000000000000000000000 00 00000000000000000000000000000000 00 00000000000000000000000000000000 ffffffff 00000001 00000000 00200200       lo\n"
@@ -112,6 +122,10 @@ func TestRenderHysteria2ResolverFollowsHostNameserverReachability(t *testing.T) 
 		{name: "dual-stack denied nameserver", conf: "nameserver 10.0.0.2\n", v4: testIPv4DefaultRoute, v6: testIPv6DefaultRoute, want: hysteria2DoHResolverAddrV4},
 		{name: "IPv6-only host denied nameserver", conf: "nameserver fd00::53\n", v4: testIPv4NoDefault, v6: testIPv6DefaultRoute, want: hysteria2DoHResolverAddrV6},
 		{name: "only lo ::/0 is not IPv6 default", conf: "nameserver 10.0.0.2\n", v4: testIPv4NoDefault, v6: testIPv6LoopbackOnly, want: hysteria2DoHResolverAddrV4},
+		{name: "down IPv4 default is not reachability", conf: "nameserver 10.0.0.2\n", v4: testIPv4DownDefault, v6: testIPv6DefaultRoute, want: hysteria2DoHResolverAddrV6},
+		{name: "rejected non-lo IPv6 default is not reachability", conf: "nameserver 10.0.0.2\n", v4: testIPv4NoDefault, v6: testIPv6RejectNonLo, want: hysteria2DoHResolverAddrV4},
+		{name: "lo IPv6 default without reject flag is not reachability", conf: "nameserver 10.0.0.2\n", v4: testIPv4NoDefault, v6: testIPv6LoNoReject, want: hysteria2DoHResolverAddrV4},
+		{name: "down IPv6 default is not reachability", conf: "nameserver 10.0.0.2\n", v4: testIPv4NoDefault, v6: testIPv6DownDefault, want: hysteria2DoHResolverAddrV4},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
