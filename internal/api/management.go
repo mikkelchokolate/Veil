@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -382,6 +383,15 @@ func (s *managementState) Reload() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Sessions revoked by the root CLI (`veil admin set/reset/rotate-key`)
+	// live only on disk until the running registry re-reads them (#1265).
+	// This runs even when the state reload below fails: a revocation must
+	// not depend on the rest of the state being loadable.
+	if s.sessions != nil {
+		if err := s.sessions.ReloadFromDisk(); err != nil {
+			log.Printf("SIGHUP: %v", err)
+		}
+	}
 	err := NewManagementStateLifecycle(s).ReloadLocked()
 	if err != nil {
 		s.startupStateLoadFailed = true

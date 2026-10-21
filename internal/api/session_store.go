@@ -150,9 +150,31 @@ type sessionStoreFile struct {
 // created at or before Through" marker. It is journaled before a credential
 // mutation commits so a crash between the mutation commit and the delete_many
 // record cannot leave old-credential sessions valid past restart (#1059).
+//
+// All marks a cross-process "revoke every session" intent journaled by the
+// root CLI (`veil admin reset` / `rotate-key`, #1265); Username is empty then.
 type sessionRevocationIntent struct {
 	Username string    `json:"username"`
 	Through  time.Time `json:"through"`
+	All      bool      `json:"all,omitempty"`
+}
+
+// covers reports whether the intent revokes session.
+func (intent sessionRevocationIntent) covers(session storedSession) bool {
+	if !intent.All && session.Username != intent.Username {
+		return false
+	}
+	return !session.CreatedAt.After(intent.Through)
+}
+
+func validRevocationIntent(intent sessionRevocationIntent) bool {
+	if intent.Through.IsZero() {
+		return false
+	}
+	if intent.All {
+		return intent.Username == ""
+	}
+	return intent.Username != ""
 }
 
 type sessionJournalRecord struct {
@@ -685,20 +707,38 @@ func (r *SessionRegistry) CancelUsernameRevocation(intent sessionRevocationInten
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.path != "" {
+		// The cancel names the exact intent it retracts (Through), so it can
+		// never retract a different intent for the same user, such as one
+		// the root CLI journaled concurrently (#1265).
 		if err := r.appendJournalLocked(sessionJournalRecord{
-			Operation: "revoke_cancel", Username: intent.Username,
+			Operation: "revoke_cancel", Username: intent.Username, Through: intent.Through,
 		}); err != nil {
 			return err
 		}
 	}
-	r.pendingRevocations = dropPendingRevocations(r.pendingRevocations, intent.Username)
+	r.pendingRevocations = cancelPendingRevocation(r.pendingRevocations, intent.Username, intent.Through)
 	return nil
+}
+
+// cancelPendingRevocation drops the per-user intents a revoke_cancel record
+// retracts. A cancel with a Through bound (written since #1265) retracts only
+// the intent with that exact bound; a legacy cancel without one retracts every
+// per-user intent for the username. "All" intents are never cancelled.
+func cancelPendingRevocation(intents []sessionRevocationIntent, username string, through time.Time) []sessionRevocationIntent {
+	kept := intents[:0]
+	for _, intent := range intents {
+		if !intent.All && intent.Username == username && (through.IsZero() || intent.Through.Equal(through)) {
+			continue
+		}
+		kept = append(kept, intent)
+	}
+	return kept
 }
 
 func dropPendingRevocations(intents []sessionRevocationIntent, username string) []sessionRevocationIntent {
 	kept := intents[:0]
 	for _, intent := range intents {
-		if intent.Username != username {
+		if intent.All || intent.Username != username {
 			kept = append(kept, intent)
 		}
 	}
@@ -713,7 +753,7 @@ func dropPendingRevocations(intents []sessionRevocationIntent, username string) 
 func (r *SessionRegistry) applyPendingRevocationsLocked() {
 	for _, intent := range r.pendingRevocations {
 		for tokenHash, session := range r.sessions {
-			if session.Username == intent.Username && !session.CreatedAt.After(intent.Through) {
+			if intent.covers(session) {
 				delete(r.sessions, tokenHash)
 				delete(r.rawCSRF, tokenHash)
 			}
@@ -902,6 +942,10 @@ func (r *SessionRegistry) appendJournalLocked(record sessionJournalRecord) error
 		_ = file.Close()
 		return fmt.Errorf("session journal %s is not a regular file", r.journalPath())
 	}
+	if err := matchSessionStoreOwner(parent.File(), file); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("chown session journal: %w", err)
+	}
 	if _, err := file.Write(body); err != nil {
 		_ = file.Close()
 		return err
@@ -992,7 +1036,7 @@ func (r *SessionRegistry) loadJournalLocked() error {
 			// carries every intent pending when it was written (#1059).
 			r.pendingRevocations = nil
 			for _, intent := range record.Revocations {
-				if intent.Username == "" || intent.Through.IsZero() {
+				if !validRevocationIntent(intent) {
 					return errors.New("invalid session journal revocation intent")
 				}
 				r.pendingRevocations = append(r.pendingRevocations, intent)
@@ -1004,11 +1048,20 @@ func (r *SessionRegistry) loadJournalLocked() error {
 			r.pendingRevocations = append(r.pendingRevocations, sessionRevocationIntent{
 				Username: record.Username, Through: record.Through,
 			})
+		case "revoke_all":
+			// Journaled by the root CLI (`veil admin reset`/`rotate-key`):
+			// every session created at or before Through is revoked, even
+			// one a later upsert re-adds (#1265).
+			intent := sessionRevocationIntent{Through: record.Through, All: true}
+			if record.Username != "" || !validRevocationIntent(intent) {
+				return errors.New("invalid session journal revocation intent")
+			}
+			r.pendingRevocations = append(r.pendingRevocations, intent)
 		case "revoke_cancel":
 			if record.Username == "" {
 				return errors.New("invalid session journal revocation cancel")
 			}
-			r.pendingRevocations = dropPendingRevocations(r.pendingRevocations, record.Username)
+			r.pendingRevocations = cancelPendingRevocation(r.pendingRevocations, record.Username, record.Through)
 		default:
 			return errors.New("invalid session journal operation")
 		}
@@ -1064,6 +1117,10 @@ func writeSessionFile(path string, body []byte) error {
 		_ = parent.RemoveAt(tmpName)
 	}
 	if err := tmp.Chmod(0o600); err != nil {
+		cleanup()
+		return err
+	}
+	if err := matchSessionStoreOwner(parent.File(), tmp); err != nil {
 		cleanup()
 		return err
 	}

@@ -3,8 +3,9 @@ package cli
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
-	"path/filepath"
+	"io"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/api"
@@ -23,9 +24,14 @@ var adminSystemctlRun = func(args ...string) error {
 	return syspath.Command("systemctl", args...).Run()
 }
 
+// errPanelNotActive reports that veil.service is not active, so no running
+// Panel was signalled. The on-disk revocation still takes effect when a Panel
+// next starts; a Panel running outside systemd must be signalled by hand.
+var errPanelNotActive = errors.New("veil.service is not active")
+
 func notifyRunningPanel() error {
 	if err := adminSystemctlRun("is-active", "--quiet", "veil.service"); err != nil {
-		return nil
+		return errPanelNotActive
 	}
 	if err := adminSystemctlRun("kill", "-s", "HUP", "veil.service"); err != nil {
 		return fmt.Errorf("veil.service is running but could not be reloaded; stop the unit first: %w", err)
@@ -34,18 +40,17 @@ func notifyRunningPanel() error {
 }
 
 func revokePersistedUserSessions(statePath, username string) error {
-	registry, err := api.NewSessionRegistry(filepath.Join(filepath.Dir(statePath), "sessions.json"))
-	if err != nil {
-		return err
-	}
-	_, err = registry.DeleteByUsername(username)
-	return err
+	return api.RevokeUsernamePersistedSessions(statePath, username)
 }
 
-func afterAdminCredentialWrite(statePath string, usernames []string, revokeAll bool) error {
+// afterAdminCredentialWrite revokes the affected Panel sessions on disk and
+// signals the running Panel, whose SIGHUP reload re-reads the session store
+// (#1265). The revocation is journaled as a positional intent, so it holds
+// even if the Panel writes a session record before it handles the signal.
+func afterAdminCredentialWrite(statePath string, usernames []string, revokeAll bool, warn io.Writer) error {
 	if revokeAll {
-		if err := api.InvalidatePersistedSessions(statePath); err != nil {
-			return err
+		if err := api.RevokeAllPersistedSessions(statePath); err != nil {
+			return fmt.Errorf("revoke Panel sessions: %w", err)
 		}
 	} else {
 		for _, username := range usernames {
@@ -57,7 +62,16 @@ func afterAdminCredentialWrite(statePath string, usernames []string, revokeAll b
 			}
 		}
 	}
-	return adminNotifyPanel()
+	err := adminNotifyPanel()
+	if errors.Is(err, errPanelNotActive) {
+		if warn != nil {
+			fmt.Fprintln(warn, "warning: veil.service is not active, so no running Panel was reloaded. "+
+				"The change and the session revocation take effect when the Panel next starts. "+
+				"If the Panel runs outside systemd, send it SIGHUP or restart it now.")
+		}
+		return nil
+	}
+	return err
 }
 
 func administratorCount(users []model.User) int {
@@ -117,7 +131,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 				return fmt.Errorf("save state: %w", err)
 			}
 
-			if err := afterAdminCredentialWrite(resolvedState, nil, true); err != nil {
+			if err := afterAdminCredentialWrite(resolvedState, nil, true, cmd.ErrOrStderr()); err != nil {
 				return fmt.Errorf("credentials were reset but the running Panel was not updated: %w", err)
 			}
 
@@ -226,7 +240,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 				return fmt.Errorf("save state: %w", err)
 			}
 
-			if err := afterAdminCredentialWrite(resolvedState, []string{username}, false); err != nil {
+			if err := afterAdminCredentialWrite(resolvedState, []string{username}, false, cmd.ErrOrStderr()); err != nil {
 				return fmt.Errorf("credentials were saved but the running Panel was not updated: %w", err)
 			}
 
@@ -299,7 +313,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 			}); err != nil {
 				return fmt.Errorf("rotate state key: %w", err)
 			}
-			if err := afterAdminCredentialWrite(resolvedState, nil, true); err != nil {
+			if err := afterAdminCredentialWrite(resolvedState, nil, true, cmd.ErrOrStderr()); err != nil {
 				return fmt.Errorf("state key was rotated but the running Panel was not updated: %w", err)
 			}
 

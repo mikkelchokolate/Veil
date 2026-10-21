@@ -16,6 +16,24 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1265: session revocation by `veil admin set`, `admin reset` and
+  `admin rotate-key` now reaches the running panel. The panel's SIGHUP
+  reload re-reads `sessions.json` and its journal, so sessions the CLI
+  revoked stop working right away instead of living on for up to 24 hours.
+  The CLI records the revocation as a durable journal intent (`revoke_username`,
+  or the new `revoke_all`) that covers every session created before it ran,
+  so a session record the panel writes before it handles the signal cannot
+  bring a revoked session back. `admin reset` and `rotate-key` no longer
+  delete `sessions.json`: the panel used to answer a missing snapshot by
+  rewriting every in-memory session to disk, which undid the invalidation
+  for good. Files the root CLI writes in the session store are handed to the
+  store directory's owner, so the unprivileged panel can still read them.
+  When `veil.service` is not active, the CLI now prints a warning that no
+  running panel was reloaded instead of reporting success silently. A
+  `revoke_cancel` record now retracts only the intent it was paired with.
+  Downgrading to an older build makes it quarantine a journal that holds a
+  `revoke_all` record, which logs everyone out once.
+
 - #1281: a `subscription_tokens` row no longer authorizes itself. The panel
   seals each token's id, client, expiry and plaintext into
   `token_ciphertext` under a token-only subkey of the state key, and

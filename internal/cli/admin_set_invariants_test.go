@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -277,7 +278,27 @@ func TestNotifyRunningPanelSkipsWhenInactive(t *testing.T) {
 		t.Fatalf("unexpected systemctl %v", args)
 		return nil
 	}
-	if err := notifyRunningPanel(); err != nil {
-		t.Fatal(err)
+	// Inactive is reported (not silently swallowed) so the caller can warn
+	// that no running Panel picked up the revocation (#1265).
+	if err := notifyRunningPanel(); !errors.Is(err, errPanelNotActive) {
+		t.Fatalf("err = %v, want errPanelNotActive", err)
+	}
+}
+
+func TestAfterAdminCredentialWriteWarnsWhenPanelInactive(t *testing.T) {
+	orig := adminNotifyPanel
+	defer func() { adminNotifyPanel = orig }()
+	adminNotifyPanel = func() error { return errPanelNotActive }
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	var warn bytes.Buffer
+	if err := afterAdminCredentialWrite(statePath, []string{"alice"}, false, &warn); err != nil {
+		t.Fatalf("inactive Panel must not fail the command: %v", err)
+	}
+	if !strings.Contains(warn.String(), "veil.service is not active") || !strings.Contains(warn.String(), "SIGHUP") {
+		t.Fatalf("missing inactive-Panel warning: %q", warn.String())
+	}
+	adminNotifyPanel = func() error { return errors.New("boom") }
+	if err := afterAdminCredentialWrite(statePath, nil, true, &warn); err == nil {
+		t.Fatal("a failed reload of an active Panel must still be an error")
 	}
 }
