@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -649,7 +650,9 @@ func (s *TokenStore) sealLegacyBindings() (int, error) {
 	if err := rows.Err(); err != nil {
 		return 0, fmt.Errorf("client: list tokens for binding re-seal: %w", err)
 	}
+	discarded := 0
 	if bound > 0 || unsealable > 0 {
+		discarded = len(legacy)
 		legacy = nil
 	}
 	if len(legacy) > 0 {
@@ -690,12 +693,21 @@ func (s *TokenStore) sealLegacyBindings() (int, error) {
 	if err := raw.Commit(); err != nil {
 		return 0, err
 	}
+	if discarded > 0 {
+		// Fail closed, but loudly: the marker is now written, so these
+		// tokens are never retried and must be re-issued (#1281 review).
+		log.Printf("subscription tokens: %d pre-#1281 token(s) were NOT re-sealed and no longer authenticate, because the database also holds %d sealed binding(s) and %d live token row(s) without a valid seal; re-issue or rotate those tokens", discarded, bound, unsealable)
+	}
+	if credentialCopies > 0 {
+		log.Printf("subscription tokens: refused to re-seal %d token row(s) whose sealed value is a stored client credential (possible veil.db tampering)", credentialCopies)
+	}
 	return len(legacy), nil
 }
 
-// storedCredentialPlaintexts collects every client credential plaintext so the legacy re-seal can refuse a bare seal copied from (or
-// equal to) a credential: a client knows its own credential plaintext, and
-// both are sealed under the same master cipher (#1281 review).
+// storedCredentialPlaintexts collects every client credential plaintext so
+// the legacy re-seal can refuse a bare seal copied from (or equal to) a
+// credential: a client knows its own credential plaintext, and both are
+// sealed under the same master cipher (#1281 review).
 func storedCredentialPlaintexts(q DBTX, cipher *secrets.Cipher) (map[string]struct{}, error) {
 	out := map[string]struct{}{}
 	rows, err := q.Query(`SELECT encrypted_value FROM client_credentials`)

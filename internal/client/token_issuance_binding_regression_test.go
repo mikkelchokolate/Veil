@@ -1,9 +1,12 @@
 package client
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"log"
+	"strings"
 	"testing"
 	"time"
 
@@ -583,4 +586,25 @@ func TestReencryptSubscriptionTokensDropsBareSealsAfterMarker(t *testing.T) {
 		t.Fatalf("honest token after rotation = %+v, %v", got, err)
 	}
 	assertTokenRefused(t, rotated, bobPassword)
+}
+
+// #1281 review (3ea9abe9): a live row without a valid seal blocks the
+// one-shot pass, which strands the pre-#1281 tokens for good once the marker
+// is written. That must fail closed and must be logged for the operator.
+func TestSealLegacyBindingsWarnsWhenLegacyTokensAreStranded(t *testing.T) {
+	f, exec := newBindingFixture(t)
+	plantLegacyToken(t, f, exec, "legacy", f.alice.ID, "legacy-token-plaintext")
+	exec(`INSERT INTO subscription_tokens (id, client_id, token_hash, token_prefix, enabled, created_at, created_by, label, token_ciphertext)
+	      VALUES ('live-blank', ?, ?, 'b', 1, ?, '', '', '')`, f.bob.ID, sha("live-blank"), time.Now().Unix())
+	var logs bytes.Buffer
+	prev, prevFlags := log.Writer(), log.Flags()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(prev); log.SetFlags(prevFlags) })
+	if resealed, err := f.ts.SealLegacyBindings(); err != nil || resealed != 0 {
+		t.Fatalf("SealLegacyBindings = %d, %v; want 0", resealed, err)
+	}
+	assertTokenRefused(t, f.ts, "legacy-token-plaintext")
+	if !strings.Contains(logs.String(), "1 pre-#1281 token(s) were NOT re-sealed") {
+		t.Fatalf("missing stranded-token warning; log = %q", logs.String())
+	}
 }

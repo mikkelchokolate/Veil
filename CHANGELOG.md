@@ -31,8 +31,11 @@ All notable changes to Veil will be documented in this file.
   and are dropped by state-key rotation. Because the marker lives in
   veil.db, the one-shot pass also refuses to run while any sealed binding
   or any live row it cannot re-seal is present, and it never re-seals a
-  value that is a stored client credential. Residual: a veil.db writer who
-  deletes the marker, every live token row and the copied credential, then
+  value that is a stored client credential. Upgrade note: a live token row
+  with an empty or invalid seal also blocks that pass, so pre-upgrade tokens
+  are then not re-sealed; the panel logs a warning, and those tokens must be
+  re-issued. Residual: a veil.db writer who deletes the marker, deletes or
+  revokes every live token row, and deletes the copied credential, then
   waits for a panel restart, can still get one known non-credential
   master-key plaintext re-sealed. Rows without a `ve1:` ciphertext, which
   only pre-0.7.0 development builds could produce, are refused too; rotate
