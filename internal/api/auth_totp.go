@@ -116,8 +116,23 @@ func (s *managementState) handleMyTOTPEnroll(w http.ResponseWriter, r *http.Requ
 		methodNotAllowed(w, http.MethodPost)
 		return
 	}
-	_, user, ok := s.sessionUserForFactor(w, r)
+	session, user, ok := s.sessionUserForFactor(w, r)
 	if !ok {
+		return
+	}
+	var req struct {
+		Password string `json:"password"`
+	}
+	if !decodeOptionalJSONRequest(w, r, &req) {
+		return
+	}
+	// Minting a seed is the factor-creating step: whoever holds the seed
+	// can confirm it, arm TOTP, revoke every other session and lock the
+	// owner out. Enrollment therefore needs the same credential-grade proof
+	// as passkey registration — a second-factor-marked session or the
+	// account password — not just a live cookie (#1250). Confirm is gated
+	// transitively: it only activates a pending secret this gate minted.
+	if allowed, _ := s.factorCredentialGate(w, r, session, user, req.Password, false, "totp-enroll", "user.totp.enroll"); !allowed {
 		return
 	}
 	secret, uri, err := generateTOTPSecret(user.Username)

@@ -214,7 +214,8 @@ func TestFactorEndpointsMarkSecretIdempotentResponses(t *testing.T) {
 
 	// TOTP enroll (seed + otpauth URI) through the middleware.
 	enroll := store.Middleware(http.HandlerFunc(state.handleMyTOTPEnroll))
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/me/totp/enroll", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/me/totp/enroll", strings.NewReader(`{"password":"correct-password-123"}`))
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Idempotency-Key", "enroll-secret")
 	req.AddCookie(&http.Cookie{Name: "veil_session", Value: session.Token})
 	req = req.WithContext(context.WithValue(req.Context(), contextKeyUsername, "alice"))

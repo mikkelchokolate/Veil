@@ -248,6 +248,7 @@ export * from './tLSCertInfoSource.msw.ts';
 export * from './tOTPConfirmRequest.msw.ts';
 export * from './tOTPConfirmResponse.msw.ts';
 export * from './tOTPDisableRequest.msw.ts';
+export * from './tOTPEnrollRequest.msw.ts';
 export * from './tOTPEnrollResponse.msw.ts';
 export * from './tOTPStatusResponse.msw.ts';
 export * from './tOTPVerifyRequest.msw.ts';

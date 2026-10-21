@@ -554,6 +554,8 @@ export const en: Record<string, string> = {
 	"settings.totp.description":
 		"Require a code from an authenticator app in addition to the password when signing in.",
 	"settings.totp.enable": "Enable authenticator app",
+	"settings.totp.enrollPasswordDescription":
+		"Re-enter your account password to start enrollment.",
 	"settings.totp.restartEnrollment": "Restart enrollment",
 	"settings.totp.enrollScan":
 		"Scan this QR code with your authenticator app, or enter the secret manually.",

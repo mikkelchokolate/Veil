@@ -458,6 +458,8 @@ export const ru: Record<string, string> = {
 	"settings.totp.description":
 		"Требовать код из приложения-аутентификатора в дополнение к паролю при входе.",
 	"settings.totp.enable": "Включить аутентификатор",
+	"settings.totp.enrollPasswordDescription":
+		"Введите пароль от учётной записи, чтобы начать регистрацию.",
 	"settings.totp.restartEnrollment": "Начать регистрацию заново",
 	"settings.totp.enrollScan":
 		"Отсканируйте QR-код приложением-аутентификатором или введите секрет вручную.",
