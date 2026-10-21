@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/secrets"
 )
 
 // ReplaceSnapshotTx replaces the normalized desired client configuration from
@@ -216,6 +218,12 @@ func restoreSnapshotCredentials(tx *Tx, credentials []Credential) error {
 	for _, item := range credentials {
 		if item.ID == "" || item.BindingID == "" || item.Kind == "" || len(item.EncryptedValue) == 0 {
 			return fmt.Errorf("client: invalid credential in immutable snapshot")
+		}
+		// A non-"ve1:" value is never produced by CredentialStore; restoring
+		// it would plant a live row that Reveal refuses and that makes every
+		// later master-key rotation fail closed (#1283 follow-up).
+		if !secrets.IsEncrypted(string(item.EncryptedValue)) {
+			return fmt.Errorf("client: snapshot credential %s ciphertext is invalid", item.ID)
 		}
 		if item.CreatedAt == 0 {
 			item.CreatedAt = now
