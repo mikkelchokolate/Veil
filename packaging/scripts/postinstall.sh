@@ -118,7 +118,8 @@ fi
 # autocert} at veil:veil with dirs 0700 and files 0600; the root-owned
 # backups/promotion-backups/migration-backups trees (directories 0700 only —
 # backup member modes carry restore semantics and are never flattened);
-# /var/lib/veil/{state.json,sessions.json} at veil:veil 0600; the legacy
+# /var/lib/veil/{state.json,sessions.json,sessions.json.journal,
+# sessions.json.lock} at veil:veil 0600; the legacy
 # /var/lib/veil/www carry-over into /etc/veil/www (regular files and real
 # directories only, never symlinks); the runtime-shared subtrees
 # /etc/veil/{generated,tls,certs,www} and /etc/veil/panel at root:veil-proxy
