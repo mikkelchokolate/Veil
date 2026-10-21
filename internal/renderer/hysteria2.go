@@ -86,7 +86,8 @@ type hysteria2YAML struct {
 	// bandwidth and the QUIC path then stalls ("pauses") under load.
 	IgnoreClientBandwidth bool               `yaml:"ignoreClientBandwidth"`
 	QUIC                  *hysteria2QUICYAML `yaml:"quic,omitempty"`
-	// Resolver is always rendered: see hysteria2DefaultResolver (#1288).
+	// Resolver is rendered only when the host's own resolver is unreachable
+	// under the unit's egress filter; see hysteria2_resolver.go (#1288).
 	Resolver *hysteria2ResolverYAML `yaml:"resolver,omitempty"`
 }
 
@@ -102,36 +103,6 @@ type hysteria2ResolverDoHYAML struct {
 	Timeout  string `yaml:"timeout"`
 	SNI      string `yaml:"sni"`
 	Insecure bool   `yaml:"insecure"`
-}
-
-// Hysteria2 runs under the kernel egress filter (IPAddressDeny= the full
-// private/loopback/link-local/CGNAT set, see egress.go), which only pierces
-// the systemd-resolved stubs. Without an explicit resolver Hysteria2 falls
-// back to /etc/resolv.conf, and on every host whose nameserver lives in a
-// denied range (AWS VPC 172.31.0.2 / 169.254.169.253, GCP/OCI 169.254.169.254,
-// Alibaba 100.100.2.136, LXC/home-lab 10.x/192.168.x, local dnsmasq on
-// 127.0.0.1) every client lookup is dropped by the cgroup BPF filter: domain
-// traffic and domain ACL rules fail silently while the unit stays active
-// (#1288). Pinning a public DoH resolver addressed by literal IP keeps DNS
-// inside the filter's allowed (public) space, needs no bootstrap lookup, and
-// uses 443 so censorship-grade networks are not forced onto plaintext :53.
-// Hysteria wraps the ACL engine with the resolver, so the reject() rules
-// still match the resolved addresses.
-const (
-	hysteria2DefaultResolverAddr    = "1.1.1.1:443"
-	hysteria2DefaultResolverSNI     = "cloudflare-dns.com"
-	hysteria2DefaultResolverTimeout = "10s"
-)
-
-func hysteria2DefaultResolver() *hysteria2ResolverYAML {
-	return &hysteria2ResolverYAML{
-		Type: "https",
-		HTTPS: &hysteria2ResolverDoHYAML{
-			Addr:    hysteria2DefaultResolverAddr,
-			Timeout: hysteria2DefaultResolverTimeout,
-			SNI:     hysteria2DefaultResolverSNI,
-		},
-	}
 }
 
 // hysteria2HTTPAuthYAML mirrors apernet/hysteria serverConfigAuthHTTP:
@@ -216,7 +187,7 @@ func RenderHysteria2(cfg Hysteria2Config) (string, error) {
 		MaxIdleTimeout:  "2m",
 		KeepAlivePeriod: "10s",
 	}
-	doc.Resolver = hysteria2DefaultResolver()
+	doc.Resolver = hysteria2ResolverProbe()
 	// The egress ACL is ALWAYS emitted — with or without a WARP upstream —
 	// because without it Hysteria2 proxies client requests to ANY destination
 	// the server can reach, including loopback control planes (Caddy admin on

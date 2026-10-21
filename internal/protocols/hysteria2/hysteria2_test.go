@@ -1168,20 +1168,30 @@ func TestRenderConfigHTTPAuthWhenCredentialLimited(t *testing.T) {
 		t.Fatalf("expected one rendered artifact, got %d (rendered=%v)", len(artifacts), rendered)
 	}
 	body := artifacts[0].Body
-	for _, want := range []string{
-		"type: http",
-		"url: " + HTTPAuthURL(settings, limited),
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("rendered config missing %q:\n%s", want, body)
-		}
+	// Parse auth structurally: a "type: http" substring would also match a
+	// rendered resolver.type: https (#1288).
+	var doc struct {
+		Auth struct {
+			Type     string            `yaml:"type"`
+			Password string            `yaml:"password"`
+			UserPass map[string]string `yaml:"userpass"`
+			HTTP     struct {
+				URL string `yaml:"url"`
+			} `yaml:"http"`
+		} `yaml:"auth"`
+	}
+	if err := yaml.Unmarshal([]byte(body), &doc); err != nil {
+		t.Fatalf("rendered config is not YAML: %v\n%s", err, body)
+	}
+	if doc.Auth.Type != "http" {
+		t.Errorf("auth type = %q, want http:\n%s", doc.Auth.Type, body)
+	}
+	if want := HTTPAuthURL(settings, limited); doc.Auth.HTTP.URL != want {
+		t.Errorf("auth.http.url = %q, want %q", doc.Auth.HTTP.URL, want)
 	}
 	// HTTP auth replaces the static modes entirely.
-	if strings.Contains(body, "userpass") || strings.Contains(body, "type: password") {
+	if doc.Auth.UserPass != nil || doc.Auth.Password != "" || strings.Contains(body, "userpass") {
 		t.Errorf("static auth leaked into an http-auth config:\n%s", body)
-	}
-	if !strings.Contains(body, "type: http\n") && !strings.Contains(body, "type: http\r\n") {
-		t.Errorf("auth type is not http:\n%s", body)
 	}
 }
 

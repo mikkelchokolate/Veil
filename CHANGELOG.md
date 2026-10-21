@@ -16,13 +16,14 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
-- #1288: Hysteria2 configs now pin an explicit DNS-over-HTTPS resolver
-  (`1.1.1.1:443`, SNI `cloudflare-dns.com`). The unit's kernel egress
-  filter drops lookups to any private, loopback or link-local nameserver,
-  so on hosts without the systemd-resolved stub (AWS/GCP/OCI non-Ubuntu
-  images, LXC, local dnsmasq) every domain request and domain ACL rule
-  used to fail while the service stayed active. Mieru and WARP are still
-  affected; see docs/known-limitations.md.
+- #1288: on hosts where no `/etc/resolv.conf` nameserver is reachable under
+  the Hysteria2 unit's kernel egress filter (AWS/GCP/OCI non-Ubuntu images,
+  LXC, local dnsmasq), the rendered Hysteria2 config now pins a Cloudflare
+  DNS-over-HTTPS resolver: `1.1.1.1:443`, or the IPv6 address on IPv6-only
+  hosts. Before this, every domain request and domain ACL rule failed while
+  the service stayed active. Hosts on the systemd-resolved stub or a public
+  nameserver keep their system resolver. Mieru and WARP are still affected;
+  see docs/known-limitations.md.
 - #1334: `veil uninstall` no longer warns that `VEIL_CADDY_STATE_DIR` /
   `VEIL_MITA_STATE_DIR` retarget removal when `--caddy-state-dir` /
   `--mita-state-dir` was passed explicitly, nor for a value that only
