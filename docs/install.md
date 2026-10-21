@@ -281,6 +281,13 @@ port stays open for whatever binds it next. The `Veil management SSH` allow is
 kept so an active UFW cannot lock you out; delete it by hand if you no longer
 need it. `--keep-data` leaves the firewall untouched, and the plan printed
 before removal lists the firewall step.
+The Caddy/mita runtime state dirs (`/var/lib/caddy`, `/var/lib/mita`) share
+their names with the stock system Caddy/mita packages, so they are removed only
+when a Veil service account (`veil-proxy`, `veil-mita`, `veil`) owns them or
+they carry a `.veil-managed` marker; otherwise the uninstall refuses before
+deleting anything (use `--keep-data`, or point `--caddy-state-dir` /
+`--mita-state-dir` elsewhere). A `veil-*` prefix on an operator directory does
+not count as proof either.
 The locked `veil` account is preserved. Review and export backups first:
 
 ```bash

@@ -2,6 +2,7 @@ package uninstall
 
 import (
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -89,12 +90,9 @@ func TestRemovePathAllowsVeilManagedTrees(t *testing.T) {
 			t.Fatalf("%s: %v", name, err)
 		}
 	}
-	// Veil-managed basenames are provisioned by install/drop-ins even without
-	// a marker file — this is also what blesses runtime-state layouts: a
-	// caddy/mita state dir legitimately holds generic child names such as
-	// certificates/acme, so those names are scoped to the basename check
-	// rather than marking arbitrary directories (#1211).
-	for _, base := range []string{"veil", "caddy", "mita", "veil-backup.service.d"} {
+	// Veil-authored basenames (the packaged veil dirs and generated unit
+	// drop-in dirs) are blessed by name even without a marker file.
+	for _, base := range []string{"veil", "veil.service.d", "veil-backup.service.d", "veil-helper.socket.d", "veil-backup.timer.d"} {
 		dir := filepath.Join(host, "named", base)
 		if err := os.MkdirAll(filepath.Join(dir, "certificates", "acme"), 0o755); err != nil {
 			t.Fatal(err)
@@ -236,5 +234,98 @@ func TestRemovePathAllowsRegularMarkerBesideDecoy(t *testing.T) {
 	}
 	if err := ensureRemovablePath(dir); err != nil {
 		t.Fatalf("regular veil.db marker must still bless the tree: %v", err)
+	}
+}
+
+// TestRemovePathRequiresProofForSharedRuntimeNames is the #1244 regression:
+// caddy/mita are the stock system Caddy/mita dir names, so the basename alone
+// must not bless /var/lib/caddy, /etc/caddy or /var/lib/mita for rm -rf. A
+// shared-name dir is removable only when a Veil service account owns it or it
+// carries a Veil marker.
+func TestRemovePathRequiresProofForSharedRuntimeNames(t *testing.T) {
+	owned := false
+	prev := ownedByVeilServiceAccount
+	ownedByVeilServiceAccount = func(os.FileInfo) bool { return owned }
+	t.Cleanup(func() { ownedByVeilServiceAccount = prev })
+
+	host := t.TempDir()
+	var removed []string
+	actions := NewActions(nil, func(path string) error { removed = append(removed, path); return nil })
+	for _, base := range []string{"caddy", "mita"} {
+		dir := filepath.Join(host, "var", "lib", base)
+		if err := os.MkdirAll(filepath.Join(dir, "certificates", "acme"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "certificates", "acme", "account.key"), []byte("stock caddy"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		owned = false
+		err := actions.RemovePath(dir)
+		if err == nil || !strings.Contains(err.Error(), "not Veil-managed") {
+			t.Fatalf("%s: foreign-owned shared dir must be refused, got %v", base, err)
+		}
+		owned = true
+		if err := actions.RemovePath(dir); err != nil {
+			t.Fatalf("%s: Veil-service-owned dir must be removable: %v", base, err)
+		}
+		owned = false
+		if err := os.WriteFile(filepath.Join(dir, ".veil-managed"), []byte("veil\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := actions.RemovePath(dir); err != nil {
+			t.Fatalf("%s: marked shared dir must be removable: %v", base, err)
+		}
+	}
+	if len(removed) != 4 {
+		t.Fatalf("expected exactly the 4 proven removals, got %v", removed)
+	}
+	// /etc/caddy misdirected as --etc-dir is the stock Caddy config dir.
+	etcCaddy := filepath.Join(host, "etc", "caddy")
+	if err := os.MkdirAll(etcCaddy, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(etcCaddy, "Caddyfile"), []byte(":80\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureRemovablePath(etcCaddy); err == nil {
+		t.Fatal("--etc-dir /etc/caddy must be refused without ownership or marker proof")
+	}
+}
+
+// TestRemovePathRefusesVeilPrefixedOperatorDirs pins the second #1244 arm: a
+// veil-*/veil.* prefix only blesses Veil's own systemd drop-in shape, never an
+// operator directory that happens to share the prefix.
+func TestRemovePathRefusesVeilPrefixedOperatorDirs(t *testing.T) {
+	host := t.TempDir()
+	for _, base := range []string{"veil-backup-2020", "veil.old", "veil-backup.service", "veil-notes.d"} {
+		dir := filepath.Join(host, "opt", base)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "data.tar"), []byte("operator archive"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := ensureRemovablePath(dir); err == nil {
+			t.Fatalf("%s: veil-prefixed operator dir must be refused", base)
+		}
+	}
+}
+
+// TestOwnedByVeilServiceAccountRejectsForeignOwner exercises the real owner
+// check: a scratch dir owned by the test user (never a Veil service account
+// on a CI runner) carries no ownership proof.
+func TestOwnedByVeilServiceAccountRejectsForeignOwner(t *testing.T) {
+	dir := t.TempDir()
+	info, err := os.Lstat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range veilServiceAccounts {
+		if u, err := user.Current(); err == nil && u.Username == name {
+			t.Skipf("test runs as Veil service account %s", name)
+		}
+	}
+	if ownedByVeilServiceAccount(info) {
+		t.Fatal("a dir owned by the test user must not count as Veil-service-owned")
 	}
 }
