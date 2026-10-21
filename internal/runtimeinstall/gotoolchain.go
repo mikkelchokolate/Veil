@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -189,6 +190,10 @@ func goLocalEnv() []string {
 		out = append(out, e)
 	}
 	out = append(out, "GOTOOLCHAIN=local")
+	if runningAsRootFn() {
+		// The probe must not read a go env file from an ambient HOME (#1337).
+		out = append(out, "GOENV=off")
+	}
 	return out
 }
 
@@ -407,11 +412,13 @@ func goBuildEnv(ctx context.Context, goBin string) []string {
 	env := os.Environ()
 	goroot := goRootFor(ctx, goBin)
 	goBinDir := filepath.Dir(goBin)
+	if runningAsRootFn() {
+		return rootGoBuildEnv(env, goroot, goBinDir)
+	}
 	filtered := make([]string, 0, len(env)+5)
 	hasGoroot := false
 	hasGobin := false
 	hasPath := false
-	hasGonosumdb := false
 	hasGoproxy := false
 	preservePrefixes := []string{"GONOSUMDB=", "GOSUMDB=", "GOPRIVATE=", "GONOSUMCHECK=", "GOFLAGS=", "GOPROXY=", "GOMODCACHE="}
 	for _, e := range env {
@@ -419,9 +426,6 @@ func goBuildEnv(ctx context.Context, goBin string) []string {
 		for _, pfx := range preservePrefixes {
 			if strings.HasPrefix(e, pfx) {
 				filtered = append(filtered, e)
-				if pfx == "GONOSUMDB=" {
-					hasGonosumdb = true
-				}
 				if pfx == "GOPROXY=" {
 					hasGoproxy = true
 				}
@@ -461,11 +465,112 @@ func goBuildEnv(ctx context.Context, goBin string) []string {
 	// go.mod in the current working directory can trigger GOTOOLCHAIN=auto to
 	// switch to a different toolchain, breaking version detection and builds.
 	filtered = append(filtered, "GOTOOLCHAIN=local")
-	if !hasGonosumdb {
-		filtered = append(filtered, "GONOSUMDB=*")
-	}
+	// No blanket GONOSUMDB: the pinned Caddy/forwardproxy/runtime modules are
+	// public and must be verified against sum.golang.org (#1337). An operator
+	// who exports GONOSUMDB still gets it (unprivileged builds only).
 	if !hasGoproxy {
 		filtered = append(filtered, "GOPROXY=https://proxy.golang.org,direct")
 	}
 	return filtered
+}
+
+// rootGoBuildEnvAllowed lists the only ambient variables a root go build may
+// inherit (#1337). Everything else comes from the root-run process's possibly
+// poisoned environment (sudo -E, a provisioning script) and is dropped:
+// GOFLAGS (-toolexec), GOENV/HOME/XDG_* (a go env file can set GOFLAGS, CC,
+// GOPROXY), GOPATH/GOMODCACHE/GOCACHE (planted module sources or build
+// outputs), CC/CXX/CGO_*, GIT_* and GOAUTH (commands the build would exec),
+// and GONOSUMDB/GOPRIVATE/GONOPROXY/GOINSECURE (checksum-database bypass).
+// GOSUMDB is handled separately by rootGOSUMDB.
+var rootGoBuildEnvAllowed = map[string]bool{
+	"LANG": true, "LANGUAGE": true, "TZ": true, "TERM": true,
+	// Network egress settings an operator may genuinely need (RU hosts,
+	// TLS-intercepting egress proxies). They cannot change what is built:
+	// every module is verified against the sum.golang.org checksum database
+	// with Go's built-in key, which this env forces on, so a hostile proxy,
+	// mirror or CA can at worst make the build fail.
+	"HTTP_PROXY": true, "HTTPS_PROXY": true, "NO_PROXY": true,
+	"http_proxy": true, "https_proxy": true, "no_proxy": true,
+	"SSL_CERT_FILE": true, "SSL_CERT_DIR": true,
+	"GOPROXY": true,
+}
+
+// rootAccountHome returns root's home directory from the account database,
+// never from the ambient HOME.
+func rootAccountHome() string {
+	if u, err := user.LookupId("0"); err == nil && filepath.IsAbs(u.HomeDir) && u.HomeDir != "/" {
+		return u.HomeDir
+	}
+	return "/root"
+}
+
+// rootHomeFn is rootAccountHome; overridden by tests.
+var rootHomeFn = rootAccountHome
+
+// rootGOSUMDB keeps an ambient GOSUMDB only when it still names
+// sum.golang.org verified with Go's built-in key, optionally via a mirror
+// URL ("sum.golang.org https://mirror/sumdb/sum.golang.org"). A custom
+// name+key, "off", or anything else falls back to sum.golang.org (#1337).
+// "sum.golang.google.cn" is cmd/go's built-in alias for sum.golang.org via
+// that mirror (same key), so it is kept, spelled out the way cmd/go expands
+// it. With the default GOPROXY, sumdb lookups are already proxied through
+// the module proxy; the mirror form is only needed when the proxy does not
+// support sumdb proxying.
+func rootGOSUMDB(ambient string) string {
+	fields := strings.Fields(ambient)
+	if len(fields) == 1 && fields[0] == "sum.golang.google.cn" {
+		return "sum.golang.org https://sum.golang.google.cn"
+	}
+	if len(fields) >= 1 && len(fields) <= 2 && fields[0] == "sum.golang.org" {
+		if len(fields) == 1 || strings.HasPrefix(fields[1], "https://") {
+			return strings.Join(fields, " ")
+		}
+	}
+	return "sum.golang.org"
+}
+
+// rootGoBuildEnv is goBuildEnv under root: an allowlisted environment with
+// fixed caches under root's own home, no go env file, no inherited GOFLAGS
+// and mandatory checksum-database verification (#1337).
+func rootGoBuildEnv(ambient []string, goroot, goBinDir string) []string {
+	out := make([]string, 0, 24)
+	hasGoproxy := false
+	sumdb := ""
+	for _, e := range ambient {
+		key, value, _ := strings.Cut(e, "=")
+		if key == "GOSUMDB" {
+			sumdb = value
+			continue
+		}
+		if !rootGoBuildEnvAllowed[key] && !strings.HasPrefix(key, "LC_") {
+			continue
+		}
+		if key == "GOPROXY" {
+			hasGoproxy = true
+		}
+		out = append(out, e)
+	}
+	if !hasGoproxy {
+		out = append(out, "GOPROXY=https://proxy.golang.org,direct")
+	}
+	home := rootHomeFn()
+	return append(out,
+		"HOME="+home,
+		"GOENV=off",
+		"GOFLAGS=",
+		"GOPATH="+filepath.Join(home, "go"),
+		"GOMODCACHE="+filepath.Join(home, "go", "pkg", "mod"),
+		"GOCACHE="+filepath.Join(home, ".cache", "go-build"),
+		"GOROOT="+goroot,
+		"GOBIN="+goBinDir,
+		buildPATH("", goBinDir),
+		"GOTOOLCHAIN=local",
+		"GOSUMDB="+rootGOSUMDB(sumdb),
+		"GONOSUMDB=",
+		"GONOSUMCHECK=",
+		"GOPRIVATE=",
+		"GONOPROXY=",
+		"GOINSECURE=",
+		"GOVCS=",
+	)
 }
