@@ -16,6 +16,18 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1270: `POST /api/apply/rollback` now runs the restored client rows
+  through the same domain rules as every live writer, and refuses with 422
+  (`selected immutable revision is invalid: ...`) instead of committing
+  them. That covers `deviceLimit`/`ipLimit` below 1, a negative or
+  over-range `quotaBytes`, an unknown `quotaResetPolicy`, depletion without a
+  quota, a non-positive `expiresAt` and malformed names. Before, the storage
+  triggers turned some of these into an opaque 500 and let the rest commit.
+  The rollback also refuses device/IP limits on a client whose enabled
+  binding lands on an inbound that does not enforce them in the restored
+  configuration (the #1224 rule). Bindings already disabled live do not
+  count. A revision taken before those rules were tightened can no longer
+  be rolled back to as-is; fix the client in the current revision instead.
 - #1346: revoking or rotating a subscription token now destroys its sealed
   issuance binding (`token_ciphertext` is cleared in the same `UPDATE` that
   sets `revoked_at`). Before, the binding stayed valid, so a veil.db writer

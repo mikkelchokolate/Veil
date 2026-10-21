@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -24,6 +25,12 @@ type applyRollbackRequest struct {
 }
 
 var rollbackRuntimeIdentityPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,48}$`)
+
+// errRollbackSnapshotInvalid marks a rollback refused because the selected
+// revision, once merged with the live security posture, would commit state
+// the normal write paths reject. The handler reports it as 422, not as a
+// commit failure (#1270).
+var errRollbackSnapshotInvalid = errors.New("selected immutable revision is invalid")
 
 func (s *managementState) handleApplyRollback(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -85,6 +92,10 @@ func (s *managementState) handleApplyRollback(w http.ResponseWriter, r *http.Req
 
 	actor := actorFromRequest(r)
 	newRevision, err := s.commitIntentionalRollbackLocked(request.SelectedRevision, payload, selected, actor)
+	if errors.Is(err, errRollbackSnapshotInvalid) {
+		writeError(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
 	if err != nil {
 		writeError(w, "rollback commit failed: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -130,6 +141,13 @@ func (s *managementState) commitIntentionalRollbackLocked(selectedRevision uint6
 		if err := graftRollbackClientSecurityTx(tx, &selected); err != nil {
 			_ = tx.Rollback()
 			return err
+		}
+		// Checked after the graft so the verdict covers exactly the rows
+		// ReplaceSnapshotTx is about to write: bindings deleted or disabled
+		// live since the snapshot no longer count (#1270).
+		if err := validateRollbackConnectionLimits(selected); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("%w: %v", errRollbackSnapshotInvalid, err)
 		}
 		encodedState, err := store.Marshal(selected)
 		if err != nil {
@@ -215,6 +233,16 @@ func validateRollbackNormalizedSnapshot(snapshot managementSnapshot) error {
 		}
 		clients[current.ID] = struct{}{}
 	}
+	// Domain values go through the same validate() rules as every live
+	// writer. Without this a legacy or crafted revision could restore
+	// deviceLimit=0, a negative quota, a non-positive expiry, or an unknown
+	// reset policy that the API refuses (#1270).
+	restoredClients, _, _ := clientRowsFromImmutableSnapshot(snapshot)
+	for _, restored := range restoredClients {
+		if err := client.ValidateRestoredClient(restored); err != nil {
+			return fmt.Errorf("client %q: %v", restored.ID, err)
+		}
+	}
 	inbounds := make(map[string]struct{}, len(snapshot.Inbounds))
 	for _, inbound := range snapshot.Inbounds {
 		if inbound.Name == "" {
@@ -259,6 +287,34 @@ func validateRollbackNormalizedSnapshot(snapshot managementSnapshot) error {
 			return fmt.Errorf("credential %q references missing binding %q", credential.ID, credential.BindingID)
 		}
 		credentials[credential.ID] = struct{}{}
+	}
+	return nil
+}
+
+// validateRollbackConnectionLimits applies the #1224 contract that
+// validateConnectionLimitBindingsLocked enforces on every live write to the
+// state a rollback is about to commit: a client may carry deviceLimit/ipLimit
+// only when each of its ENABLED bindings lands on an enabled inbound whose
+// protocol enforces connection limits. The inbounds are the selected
+// snapshot's, because the rollback restores them together with the clients.
+// Otherwise the limits would commit silently inert while the API advertises
+// them as enforced (#1270).
+func validateRollbackConnectionLimits(snapshot managementSnapshot) error {
+	capable := make(map[string]bool, len(snapshot.Inbounds))
+	for _, inbound := range snapshot.Inbounds {
+		capable[inbound.Name] = inbound.Enabled && protocolConnectionLimits(inbound.Protocol)
+	}
+	limited := make(map[string]bool, len(snapshot.Clients))
+	for _, item := range snapshot.Clients {
+		limited[item.ID] = item.DeviceLimit != nil || item.IPLimit != nil
+	}
+	for _, binding := range snapshot.Bindings {
+		if !binding.Enabled || !limited[binding.ClientID] {
+			continue
+		}
+		if !capable[binding.InboundID] {
+			return fmt.Errorf("client %q: device/ip limits are unsupported for inbound %s", binding.ClientID, binding.InboundID)
+		}
 	}
 	return nil
 }
