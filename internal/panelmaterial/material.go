@@ -2,6 +2,7 @@ package panelmaterial
 
 import (
 	"fmt"
+	"html"
 	"os"
 	"path/filepath"
 	"strings"
@@ -246,10 +247,16 @@ func shadowsPackagedUnit(systemdDir, vendorDir, name string) bool {
 	return err == nil
 }
 
+// fallbackIndexHTML renders the public naive fallback page. The domain comes
+// from state.json, which is veil-writable and not shape-checked on load, so
+// it is HTML-escaped before interpolation: a planted
+// `</title><script>` domain must not become stored XSS on the next root-run
+// material regeneration (#1277).
 func fallbackIndexHTML(domain string) string {
 	if domain == "" {
 		domain = "Veil"
 	}
+	domain = html.EscapeString(domain)
 	return `<!doctype html>
 <html lang="en">
 <head>

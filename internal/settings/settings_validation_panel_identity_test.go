@@ -127,3 +127,48 @@ func TestSettingsValidationInheritedWildcardPanelDomainFailsClosedUntilReplaced(
 		t.Fatalf("PanelDomain = %q after repair", repair.PanelDomain)
 	}
 }
+
+// Issue #1277: defaultInboundPublicPort and defaultAcmeEmail were accepted
+// without range/shape validation.
+func TestSettingsValidationRejectsInvalidInboundDefaults(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(*Settings)
+		wantErr string
+	}{
+		{"port above range", func(s *Settings) { s.DefaultInboundPublicPort = 70000 }, "defaultInboundPublicPort must be"},
+		{"negative port", func(s *Settings) { s.DefaultInboundPublicPort = -1 }, "defaultInboundPublicPort must be"},
+		{"garbage email", func(s *Settings) { s.DefaultAcmeEmail = "not-an-email" }, "defaultAcmeEmail:"},
+		{"display-name email", func(s *Settings) { s.DefaultAcmeEmail = "Admin <admin@example.com>" }, "defaultAcmeEmail:"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			settings := panelIdentityBase()
+			tc.mutate(&settings)
+			err := NewSettingsValidationWithFieldSchemas(panelIdentitySchemas()).NormalizeAndValidate(&settings, Settings{})
+			if err == nil {
+				t.Fatalf("NormalizeAndValidate accepted %+v", settings)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("err = %q, want it to contain %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestSettingsValidationAcceptsValidInboundDefaults(t *testing.T) {
+	for _, port := range []int{0, 1, 443, 65535} {
+		settings := panelIdentityBase()
+		settings.DefaultInboundPublicPort = port
+		settings.DefaultAcmeEmail = " admin@example.com "
+		if err := NewSettingsValidationWithFieldSchemas(panelIdentitySchemas()).NormalizeAndValidate(&settings, Settings{}); err != nil {
+			t.Fatalf("port %d: NormalizeAndValidate: %v", port, err)
+		}
+		if settings.DefaultInboundPublicPort != port {
+			t.Fatalf("DefaultInboundPublicPort = %d, want %d", settings.DefaultInboundPublicPort, port)
+		}
+		if settings.DefaultAcmeEmail != "admin@example.com" {
+			t.Fatalf("DefaultAcmeEmail = %q, want trimmed", settings.DefaultAcmeEmail)
+		}
+	}
+}
