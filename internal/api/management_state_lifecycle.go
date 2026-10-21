@@ -521,7 +521,7 @@ func (l ManagementStateLifecycle) verifyCurrentStateRevisionLocked() error {
 		return fmt.Errorf("read desired revision: %w", err)
 	}
 	if revisions.Desired == 0 {
-		return nil
+		return l.anchorSnapshotSealingWithoutRevisionLocked()
 	}
 	if l.state.applySnapshots.Seal() == nil {
 		return errors.New("revision snapshot authentication is not armed")
@@ -598,6 +598,31 @@ func (l ManagementStateLifecycle) verifyCurrentStateRevisionLocked() error {
 		return fmt.Errorf("publish management state at schema %d: %w", managementstate.CurrentSchemaVersion, err)
 	}
 	log.Printf("revision snapshots: state.json upgraded to schema %d; unsealed desired revisions are refused from now on (#1280)", managementstate.CurrentSchemaVersion)
+	return nil
+}
+
+// anchorSnapshotSealingWithoutRevisionLocked closes the legacy pass on an
+// install that has no desired revision yet: there is no row to seal or
+// re-bind, but a pre-SnapshotSealSchemaVersion state.json left in place would
+// keep the pass armed for a row a veil.db writer plants later (#1280 review).
+func (l ManagementStateLifecycle) anchorSnapshotSealingWithoutRevisionLocked() error {
+	stateBody, err := os.ReadFile(l.state.statePath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read management state: %w", err)
+	}
+	if managementstate.EncodedSchemaVersion(stateBody) >= managementstate.SnapshotSealSchemaVersion {
+		return nil
+	}
+	upgraded, err := managementstate.ReencodeAtCurrentSchema(stateBody)
+	if err != nil {
+		return fmt.Errorf("upgrade management state for snapshot sealing: %w", err)
+	}
+	if err := managementstate.NewStore(l.state.statePath, l.state.cipher).SaveEncoded(upgraded); err != nil {
+		return fmt.Errorf("publish management state at schema %d: %w", managementstate.CurrentSchemaVersion, err)
+	}
 	return nil
 }
 

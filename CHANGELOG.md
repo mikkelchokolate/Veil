@@ -33,8 +33,9 @@ All notable changes to Veil will be documented in this file.
   projection check as the v4 digest binding) and checking that every
   credential in it is a valid state-key ciphertext. If that check fails,
   startup stops, as for a digest mismatch. It then rewrites `state.json` at
-  schema 6, re-binding the sealed row to the new bytes; schema 6 records,
-  outside veil.db, that the one-time legacy pass is over. From then on an
+  schema 6, re-binding the sealed row to the new bytes (an install with no
+  desired revision yet gets the rewrite too); schema 6 records, outside
+  veil.db, that the one-time legacy pass is over. From then on an
   unsealed desired row (a blanked `payload_mac`, or a planted higher desired
   revision) stops startup instead of being re-sealed. Every `state.json`
   this release writes is schema 6, so older Veil builds refuse it (newer
@@ -43,8 +44,11 @@ All notable changes to Veil will be documented in this file.
   the upgrade is refused. If the applied revision lagged the desired one at
   upgrade time, the public feed is unavailable until the next successful
   apply. Residual: a veil.db writer who acts before the first start of this
-  release can still shape the client, binding and credential-assignment
-  sections of the one legacy desired row (only its `state.json` part and the
+  release, or before the first start after restoring a pre-upgrade backup
+  (restore republishes that backup's schema-5 `state.json`, which re-opens
+  the legacy pass on purpose so its desired row can be sealed), can still
+  shape the client, binding and credential-assignment sections of the one
+  legacy desired row (only its `state.json` part and the
   validity of its credential ciphertexts are proven). After that start, the
   snapshots themselves cannot be edited, but the live client tables are not
   authenticated: an edit there is copied into the next revision a mutation

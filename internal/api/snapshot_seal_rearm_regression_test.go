@@ -3,9 +3,13 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/atomicfile"
+	"github.com/mikkelchokolate/Veil/internal/managementstate"
 )
 
 // #1345 review: the legacy re-seal pass at startup used to be selected purely
@@ -120,5 +124,49 @@ func TestStartupRefusesBlankedMACOnSealedDesiredRowWithSwappedCredentials(t *tes
 				}
 			}
 		})
+	}
+}
+
+// #1345 re-review: an install whose desired revision is still 0 at the first
+// start of a sealing build must also get the state.json anchor, or a row a
+// veil.db writer plants later is sealed by the legacy pass.
+func TestStartupAnchorsSnapshotSealingWithoutDesiredRevision(t *testing.T) {
+	_, state := newApplyTrackedRouterWithState(t)
+	revisions, err := state.applyRevisions.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revisions.Desired != 0 {
+		t.Fatalf("fixture desired=%d, want 0", revisions.Desired)
+	}
+	// The state file as a pre-#1280 build left it.
+	preSeal := []byte(`{"schemaVersion":5,"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"hy.example.com"}}`)
+	if err := atomicfile.Write(state.statePath, preSeal, 0o600, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	restarted := restartPanel(t, state)
+	if restarted.startupStateLoadFailed {
+		t.Fatal("startup failed on a desired-0 install")
+	}
+	body, err := os.ReadFile(restarted.statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := managementstate.EncodedSchemaVersion(body); got < managementstate.SnapshotSealSchemaVersion {
+		t.Fatalf("state.json after a desired-0 start is schema %d, want >= %d", got, managementstate.SnapshotSealSchemaVersion)
+	}
+
+	// A veil.db writer plants an unsealed desired row that would pass every
+	// legacy check: its payload is the state file itself and it is bound to
+	// the current digest.
+	if _, err := restarted.db.Exec(`INSERT INTO revision_snapshots(revision, payload, state_sha256, created_at, payload_mac) VALUES(1, ?, ?, 1, '')`,
+		string(body), managementstate.EncodedStateSHA256(body)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restarted.db.Exec(`UPDATE revisions SET desired_revision=1 WHERE id=1`); err != nil {
+		t.Fatal(err)
+	}
+	if again := restartPanel(t, restarted); !again.startupStateLoadFailed {
+		t.Fatal("the legacy pass sealed a row planted after the first start of a desired-0 install")
 	}
 }

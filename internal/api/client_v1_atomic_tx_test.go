@@ -270,6 +270,13 @@ func TestStartupMigrateLegacyMarkerBackupAndIdempotency(t *testing.T) {
 	if err := atomicfile.Write(statePath, seededState, 0o600, 0o700); err != nil {
 		t.Fatalf("write state: %v", err)
 	}
+	// Before the migration runs, startup re-encodes a pre-#1280 state file at
+	// SnapshotSealSchemaVersion (same content, ciphertexts untouched), so that
+	// is the file the safety copy must hold.
+	preMigrationState, err := managementstate.ReencodeAtCurrentSchema(seededState)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Boot 1: normal startup path runs the migration.
 	st1 := newManagementState(info)
@@ -309,7 +316,7 @@ func TestStartupMigrateLegacyMarkerBackupAndIdempotency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("backup missing state.json.bak: %v", err)
 	}
-	if !bytes.Equal(stateBak, seededState) {
+	if !bytes.Equal(stateBak, preMigrationState) {
 		t.Fatalf("state.json.bak diverges from the pre-migration state file: %s", stateBak)
 	}
 	dbBakPath := filepath.Join(backups[0], "veil.db.bak")
@@ -338,7 +345,7 @@ func TestStartupMigrateLegacyMarkerBackupAndIdempotency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read state backup: %v", err)
 	}
-	if string(stateBackup) != string(seededState) {
+	if string(stateBackup) != string(preMigrationState) {
 		t.Fatalf("state.json.bak does not match the pre-migration state file")
 	}
 	// The database copy is produced by VACUUM INTO; prove it is a consistent,
