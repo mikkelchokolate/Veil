@@ -37,6 +37,16 @@ func TestInstallCaddyBinaryIsNotResolvedFromAmbientPATH(t *testing.T) {
 	dir := plantPATHShims(t, "caddy", "ufw")
 	shim := filepath.Join(dir, "caddy")
 	profile := installer.RURecommendedProfile{InstallPanelCaddy: true}
+	// TestMain stubs commandLookPath to /usr/bin/<name>; restore the
+	// production resolver so these assertions are not vacuous.
+	oldLookPath := commandLookPath
+	commandLookPath = defaultCommandLookPath
+	t.Cleanup(func() { commandLookPath = oldLookPath })
+	for _, name := range []string{"caddy", "ufw"} {
+		if got, err := defaultCommandLookPath(name); err == nil && filepath.Dir(got) == dir {
+			t.Fatalf("defaultCommandLookPath resolved the PATH shim %q", got)
+		}
+	}
 
 	if got := installPlanCaddyBinary(profile); got == shim {
 		t.Fatalf("installPlanCaddyBinary resolved the PATH shim %q", got)
@@ -66,7 +76,8 @@ func TestPrivilegedHelpersDoNotExecAmbientPATHShims(t *testing.T) {
 
 	_ = adminSystemctlRun("is-active", "--quiet", "veil-test-nonexistent-1262.service")
 	assertShimNotRun(t, dir, "systemctl")
-	_ = backupSystemctlRun("is-active", "--quiet", "veil-test-nonexistent-1262.service")
+	// backupSystemctlRun is stubbed by TestMain; exercise the production runner.
+	_ = defaultBackupSystemctlRun("is-active", "--quiet", "veil-test-nonexistent-1262.service")
 	assertShimNotRun(t, dir, "systemctl")
 	_ = activeForeignFirewallFunc(context.Background())
 	assertShimNotRun(t, dir, "systemctl")

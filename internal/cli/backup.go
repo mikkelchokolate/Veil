@@ -25,9 +25,13 @@ const (
 	backupScheduleDropInName             = "passphrase-path.conf"
 )
 
-var backupSystemctlRun = func(args ...string) error {
+// defaultBackupSystemctlRun is the production systemctl runner; TestMain
+// stubs backupSystemctlRun, so #1262 regressions exercise this directly.
+func defaultBackupSystemctlRun(args ...string) error {
 	return syspath.Command("systemctl", args...).Run()
 }
+
+var backupSystemctlRun = defaultBackupSystemctlRun
 
 func reloadRunningPanelAfterRestore() (bool, error) {
 	if err := backupSystemctlRun("is-active", "--quiet", "veil.service"); err != nil {

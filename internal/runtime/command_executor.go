@@ -14,7 +14,9 @@ import (
 type RuntimeCommandInput struct {
 	Command []string
 	Timeout time.Duration
-	Env     []string
+	// Env overrides entries of the process environment for the child. A PATH
+	// override is ignored: children always get syspath.TrustedPATH() (#1262).
+	Env []string
 }
 
 type RuntimeCommandOutput struct {
@@ -67,10 +69,10 @@ func (RuntimeCommandExecutor) Run(input RuntimeCommandInput) RuntimeCommandOutpu
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, binary, command[1:]...)
-	cmd.Env = syspath.Env(os.Environ())
-	if len(input.Env) > 0 {
-		cmd.Env = mergeCommandEnv(cmd.Env, input.Env)
-	}
+	// Scrub last: callers such as generatedconfig.RunFixedConfigValidation
+	// pass append(os.Environ(), ...) as overrides, so merging after the scrub
+	// would hand the ambient (possibly poisoned) PATH back to the child (#1262).
+	cmd.Env = syspath.Env(mergeCommandEnv(os.Environ(), input.Env))
 	out, err := cmd.CombinedOutput()
 	result.Output = strings.TrimSpace(string(out))
 	if ctx.Err() == context.DeadlineExceeded {

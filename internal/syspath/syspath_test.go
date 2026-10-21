@@ -74,8 +74,11 @@ func TestLookPathPathForms(t *testing.T) {
 	if got, err := LookPath(shim); err != nil || got != shim {
 		t.Fatalf("explicit absolute path = %q, %v; want accepted", got, err)
 	}
-	if _, err := LookPath("./" + filepath.Base(shim)); err == nil {
-		t.Fatal("relative path with separator must be rejected")
+	// Run from the shim's directory so "./name" exists and is executable:
+	// only the relative-path rejection, not a failed stat, can refuse it.
+	t.Chdir(filepath.Dir(shim))
+	if _, err := LookPath("./" + filepath.Base(shim)); err == nil || !strings.Contains(err.Error(), "relative path") {
+		t.Fatalf("relative path with separator err = %v, want relative-path rejection", err)
 	}
 	if _, err := LookPath(""); err == nil {
 		t.Fatal("empty name must be rejected")
