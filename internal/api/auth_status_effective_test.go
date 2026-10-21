@@ -37,7 +37,9 @@ func TestEffectiveAuthStatusFallsBackToCookieForInvalidStaticToken(t *testing.T)
 	if err != nil {
 		t.Fatalf("Create viewer session: %v", err)
 	}
-	state := &managementState{authToken: "static-secret", sessions: registry}
+	// The cookie fallback applies the middleware's user-match rule, so the
+	// session's owner must exist (#1266).
+	state := &managementState{authToken: "static-secret", sessions: registry, users: []User{{Username: "viewer", Role: "viewer"}}}
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
 	req.Header.Set("X-Veil-Token", "wrong-token")
 	req.AddCookie(&http.Cookie{Name: "veil_session", Value: viewer.Token})
