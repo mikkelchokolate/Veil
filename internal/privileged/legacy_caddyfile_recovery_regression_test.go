@@ -39,7 +39,7 @@ func TestInterruptedLegacyCaddyfileRemovalDoesNotBlockLaterPromote(t *testing.T)
 			}},
 		},
 	}
-	if err := writePromotionJournal(backupRoot, journal); err != nil {
+	if err := writePromotionJournalAtPath(backupRoot, journal); err != nil {
 		t.Fatal(err)
 	}
 
@@ -104,7 +104,7 @@ func TestInterruptedLegacyCaddyfileRestoreRecovers(t *testing.T) {
 			}},
 		},
 	}
-	if err := writePromotionJournal(backupRoot, journal); err != nil {
+	if err := writePromotionJournalAtPath(backupRoot, journal); err != nil {
 		t.Fatal(err)
 	}
 	if err := recoverPromotionTransactionWithPolicy(backupRoot, policy.promotionDestinationAllowed, 0); err != nil {

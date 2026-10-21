@@ -755,7 +755,7 @@ func TestBackupPromotionDestinationRequiresRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	artifact := ResolvedArtifact{ID: "x", Source: "", Destination: destination}
-	if _, err := backupPromotionDestination("", "id", artifact); err == nil {
+	if _, err := backupPromotionDestination(nil, "", "id", artifact); err == nil {
 		t.Fatal("expected empty backup root to fail")
 	}
 }
@@ -1172,7 +1172,7 @@ func TestBackupPromotionDestinationReadError(t *testing.T) {
 	if err := os.MkdirAll(artifact.Destination, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := backupPromotionDestination(t.TempDir(), "id", artifact); err == nil {
+	if _, err := backupPromotionDestination(nil, t.TempDir(), "id", artifact); err == nil {
 		t.Fatal("expected destination read error")
 	}
 }

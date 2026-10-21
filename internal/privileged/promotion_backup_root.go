@@ -116,6 +116,38 @@ func openPromotionBackupMemberParent(rootDir *safefs.Dir, root, path string) (*s
 	return current, parts[len(parts)-1], nil
 }
 
+// writePromotionBackupMember atomically writes a helper-authored member of the
+// backup tree (a safety copy or a committed manifest) descriptor-relative
+// under the pinned root: missing intermediate directories are created 0700
+// with mkdirat, every component is opened O_NOFOLLOW|O_DIRECTORY, and the leaf
+// is published via a create-exclusive temp sibling plus renameat. A root
+// swapped or a directory replaced by a symlink after the root was pinned can
+// therefore not redirect the helper's own writes (#1274).
+func writePromotionBackupMember(rootDir *safefs.Dir, root, path string, body []byte) (resultErr error) {
+	parts, err := promotionBackupMemberParts(root, path)
+	if err != nil {
+		return err
+	}
+	current, err := rootDir.OpenDirAt(".")
+	if err != nil {
+		return err
+	}
+	for _, part := range parts[:len(parts)-1] {
+		if err := current.MkdirAt(part, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
+			_ = current.Close()
+			return fmt.Errorf("create promotion backup directory for %s: %w", path, err)
+		}
+		next, err := current.OpenDirAt(part)
+		_ = current.Close()
+		if err != nil {
+			return fmt.Errorf("open promotion backup directory for %s: %w", path, err)
+		}
+		current = next
+	}
+	defer func() { resultErr = errors.Join(resultErr, current.Close()) }()
+	return atomicWriteFileAt(current, parts[len(parts)-1], body, 0o600)
+}
+
 // readPromotionBackupMember reads a regular file recorded inside the backup
 // tree, resolving it descriptor-relative under the pinned root.
 func readPromotionBackupMember(rootDir *safefs.Dir, root, path string) (body []byte, resultErr error) {

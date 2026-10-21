@@ -2,6 +2,7 @@ package privileged
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 const promotionCrashHelperEnv = "VEIL_PROMOTION_CRASH_HELPER"
@@ -517,7 +520,18 @@ func stagePromotionJournal(t *testing.T, root string, journal promotionTransacti
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := writePromotionJournal(root, journal); err != nil {
+	if err := writePromotionJournalAtPath(root, journal); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// writePromotionJournalAtPath pins root and writes the journal through the
+// descriptor-relative production path, for tests that stage a crash journal.
+func writePromotionJournalAtPath(root string, journal promotionTransactionJournal) (resultErr error) {
+	rootDir, err := safefs.OpenDir(root)
+	if err != nil {
+		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, rootDir.Close()) }()
+	return writePromotionJournal(rootDir, journal)
 }

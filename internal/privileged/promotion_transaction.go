@@ -18,7 +18,9 @@ import (
 
 const promotionTransactionJournalName = ".promotion-transaction.json"
 
-var promotionJournalRemove = os.Remove
+// promotionJournalRemove unlinks the journal leaf inside the pinned backup
+// root; it is a hook so tests can inject a committed-marker unlink failure.
+var promotionJournalRemove = func(rootDir *safefs.Dir, name string) error { return rootDir.RemoveAt(name) }
 
 type promotionTransactionJournal struct {
 	Version         int               `json:"version"`
@@ -152,7 +154,7 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 				return fmt.Errorf("invalid promotion artifact id %q", artifact.ID)
 			}
 			safetyPath := filepath.Join(backupRoot, backupID, cleanID)
-			if err := atomicfile.Write(safetyPath, []byte(linkTarget), 0o600, 0o700); err != nil {
+			if err := writePromotionBackupMember(backupDir, backupRoot, safetyPath, []byte(linkTarget)); err != nil {
 				return err
 			}
 			record.BackupPath, record.SafetyPath = safetyPath, safetyPath
@@ -161,7 +163,7 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 			record.OldDigest = promotionDigest([]byte(linkTarget))
 		} else {
 			var err error
-			record, err = backupPromotionDestination(backupRoot, backupID, artifact)
+			record, err = backupPromotionDestination(backupDir, backupRoot, backupID, artifact)
 			if err != nil {
 				return err
 			}
@@ -211,7 +213,7 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 			return PromoteResult{}, err
 		}
 	}
-	if err := writePromotionJournal(backupRoot, journal); err != nil {
+	if err := writePromotionJournal(backupDir, journal); err != nil {
 		return PromoteResult{}, err
 	}
 
@@ -242,7 +244,7 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 		}
 		journal.Manifest.Records[index].Phase = "published"
 		journal.Phase = fmt.Sprintf("artifact-%d-published", index+1)
-		if err := writePromotionJournal(backupRoot, journal); err != nil {
+		if err := writePromotionJournal(backupDir, journal); err != nil {
 			return PromoteResult{}, rollbackPromotionAfterError(backupDir, backupRoot, journal, err)
 		}
 		if safety := journal.Manifest.Records[index].SafetyPath; safety != "" {
@@ -257,14 +259,14 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 	if err != nil {
 		return PromoteResult{}, rollbackPromotionAfterError(backupDir, backupRoot, journal, err)
 	}
-	if err := atomicfile.Write(manifestPath, manifestBody, 0o600, 0o700); err != nil {
+	if err := writePromotionBackupMember(backupDir, backupRoot, manifestPath, manifestBody); err != nil {
 		return PromoteResult{}, rollbackPromotionAfterError(backupDir, backupRoot, journal, err)
 	}
 	journal.Phase = "manifest-committed"
-	if err := writePromotionJournal(backupRoot, journal); err != nil {
+	if err := writePromotionJournal(backupDir, journal); err != nil {
 		return PromoteResult{}, rollbackPromotionAfterError(backupDir, backupRoot, journal, err)
 	}
-	if err := removePromotionJournal(backupRoot); err != nil {
+	if err := removePromotionJournal(backupDir); err != nil {
 		return PromoteResult{}, err
 	}
 	return result, nil
@@ -322,7 +324,7 @@ func recoverPromotionTransactionAt(rootDir *safefs.Dir, root string, validateDes
 		if err := verifyCommittedPromotion(rootDir, root, journal); err != nil {
 			return err
 		}
-		return removePromotionJournal(root)
+		return removePromotionJournal(rootDir)
 	}
 	return restorePromotionPreTransaction(rootDir, root, &journal)
 }
@@ -390,7 +392,7 @@ func verifyCommittedPromotion(rootDir *safefs.Dir, root string, journal promotio
 
 func restorePromotionPreTransaction(rootDir *safefs.Dir, root string, journal *promotionTransactionJournal) error {
 	journal.Phase = "rolling-back"
-	_ = writePromotionJournal(root, *journal)
+	_ = writePromotionJournal(rootDir, *journal)
 	for index := len(journal.Manifest.Records) - 1; index >= 0; index-- {
 		record := &journal.Manifest.Records[index]
 		if record.HadPrevious {
@@ -430,7 +432,7 @@ func restorePromotionPreTransaction(rootDir *safefs.Dir, root string, journal *p
 		}
 		record.Phase = "rolled-back"
 		journal.Phase = fmt.Sprintf("artifact-%d-rolled-back", index+1)
-		if err := writePromotionJournal(root, *journal); err != nil {
+		if err := writePromotionJournal(rootDir, *journal); err != nil {
 			return err
 		}
 	}
@@ -443,26 +445,28 @@ func restorePromotionPreTransaction(rootDir *safefs.Dir, root string, journal *p
 		}
 	}
 	journal.Phase = "rolled-back"
-	if err := writePromotionJournal(root, *journal); err != nil {
+	if err := writePromotionJournal(rootDir, *journal); err != nil {
 		return err
 	}
-	return removePromotionJournal(root)
+	return removePromotionJournal(rootDir)
 }
 
-func writePromotionJournal(root string, journal promotionTransactionJournal) error {
+// writePromotionJournal publishes the journal descriptor-relative inside the
+// pinned backup root (temp sibling + renameat), so a root swapped after it was
+// pinned cannot redirect the helper's own journal write (#1274).
+func writePromotionJournal(rootDir *safefs.Dir, journal promotionTransactionJournal) error {
 	body, err := json.Marshal(journal)
 	if err != nil {
 		return err
 	}
-	return atomicfile.Write(filepath.Join(root, promotionTransactionJournalName), body, 0o600, 0o700)
+	return atomicWriteFileAt(rootDir, promotionTransactionJournalName, body, 0o600)
 }
 
-func removePromotionJournal(root string) error {
-	path := filepath.Join(root, promotionTransactionJournalName)
-	if err := promotionJournalRemove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+func removePromotionJournal(rootDir *safefs.Dir) error {
+	if err := promotionJournalRemove(rootDir, promotionTransactionJournalName); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	return syncPromotionParent(path)
+	return rootDir.File().Sync()
 }
 
 func removePromotionDestination(path string) error {
