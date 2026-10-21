@@ -298,6 +298,14 @@ func initClientSubsystem(s *managementState) {
 		WithApplyReadiness(s.clientApplyReadiness)
 	s.clientMigrator = client.NewMigrator(clientRepo, clientCreds, client.WithIncludeDisabled())
 	s.tokenStore = client.NewTokenStore(s.db).WithCipher(s.cipher)
+	// One-shot: give tokens issued before #1281 their issuance binding.
+	// Until it succeeds those rows do not authenticate (fail closed); the
+	// next subsystem init retries.
+	if resealed, err := s.tokenStore.SealLegacyBindings(); err != nil {
+		log.Printf("subscription tokens: seal legacy issuance bindings: %v", err)
+	} else if resealed > 0 {
+		log.Printf("subscription tokens: sealed issuance bindings for %d legacy token(s)", resealed)
+	}
 	s.subRenderer = client.NewSubscriptionRenderer(clientRepo, clientCreds)
 	if s.trafficStore == nil {
 		s.trafficStore = client.NewTrafficStore(s.db)

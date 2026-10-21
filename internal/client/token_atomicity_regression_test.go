@@ -19,7 +19,7 @@ func TestConcurrentRevokeWinsLookupAndLastUsedTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := NewTokenStore(db)
+	store := NewTokenStore(db).WithCipher(newTestCipher(t))
 	issued, err := store.Issue(created.ID, "race", nil)
 	if err != nil {
 		t.Fatal(err)

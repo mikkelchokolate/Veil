@@ -16,6 +16,30 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1281: a `subscription_tokens` row no longer authorizes itself. The panel
+  seals each token's id, client, expiry and plaintext into
+  `token_ciphertext` under a token-only subkey of the state key, and
+  `/s/{token}` plus token reveal only accept a row whose sealed binding
+  matches it. Without `/etc/veil/state.key`, a veil.db writer can no longer
+  plant a row for a chosen token, rewrite a row's `token_hash`, re-point a
+  token at another client, rename it, or extend its expiry. Copying another
+  `ve1:` value, such as a client's own credential, into a token row no
+  longer works either. On the first start after upgrading, tokens issued
+  earlier, which sealed the bare token under the master key, are re-sealed
+  into bindings once, and a `migration_markers` row records this. Bare
+  seals planted after that are refused, are not re-sealed on later starts
+  and are dropped by state-key rotation. Because the marker lives in
+  veil.db, the one-shot pass also refuses to run while any sealed binding
+  or any live row it cannot re-seal is present, and it never re-seals a
+  value that is a stored client credential. Upgrade note: a live token row
+  with an empty or invalid seal also blocks that pass, so pre-upgrade tokens
+  are then not re-sealed; the panel logs a warning, and those tokens must be
+  re-issued. Residual: a veil.db writer who deletes the marker, deletes or
+  revokes every live token row, and deletes the copied credential, then
+  waits for a panel restart, can still get one known non-credential
+  master-key plaintext re-sealed. Rows without a `ve1:` ciphertext, which
+  only pre-0.7.0 development builds could produce, are refused too; rotate
+  them.
 - #1288: on hosts where no `/etc/resolv.conf` nameserver is reachable under
   the Hysteria2 unit's kernel egress filter (AWS/GCP/OCI non-Ubuntu images,
   LXC, local dnsmasq), the rendered Hysteria2 config now pins a Cloudflare
