@@ -279,7 +279,7 @@ func TestHandleAuthStatusUnauthenticated(t *testing.T) {
 	state := &managementState{sessions: mustNewSessionRegistry("")}
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
 	rec := httptest.NewRecorder()
-	state.handleAuthStatus(rec, req)
+	state.handleEffectiveAuthStatus(rec, req)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"authenticated":false`) {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -326,11 +326,13 @@ func TestClientIPIgnoresXForwardedForFromUntrustedPeer(t *testing.T) {
 func TestHandleAuthStatusMethodsAndCSRFPaths(t *testing.T) {
 	registry, _ := NewSessionRegistry("")
 	session, _ := registry.Create(SessionCreateInput{Username: "alice", Role: "admin"})
-	state := &managementState{sessions: registry}
+	// The routed status handler applies the middleware's user-match rule
+	// (#1266), so the session needs a live user row to count as authenticated.
+	state := &managementState{sessions: registry, users: []User{{Username: "alice", Role: "admin"}}}
 
 	post := httptest.NewRequest(http.MethodPost, "/api/auth/status", nil)
 	rec := httptest.NewRecorder()
-	state.handleAuthStatus(rec, post)
+	state.handleEffectiveAuthStatus(rec, post)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST status=%d", rec.Code)
 	}
@@ -338,7 +340,7 @@ func TestHandleAuthStatusMethodsAndCSRFPaths(t *testing.T) {
 	get := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
 	get.AddCookie(&http.Cookie{Name: "veil_session", Value: session.Token})
 	rec = httptest.NewRecorder()
-	state.handleAuthStatus(rec, get)
+	state.handleEffectiveAuthStatus(rec, get)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"authenticated":true`) {
 		t.Fatalf("GET status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -354,7 +356,7 @@ func TestHandleAuthStatusMethodsAndCSRFPaths(t *testing.T) {
 	get = httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
 	get.AddCookie(&http.Cookie{Name: "veil_session", Value: session.Token})
 	rec = httptest.NewRecorder()
-	state.handleAuthStatus(rec, get)
+	state.handleEffectiveAuthStatus(rec, get)
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("csrf error status=%d body=%s", rec.Code, rec.Body.String())
 	}

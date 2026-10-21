@@ -66,26 +66,6 @@ func (s *managementState) findUserLocked(username string) (model.User, bool) {
 	return model.User{}, false
 }
 
-// sessionMeetsFactorRequirement reports whether an existing session may still
-// be used: once its owner has ANY second factor armed (TOTP enabled or at
-// least one passkey) the session must carry the second-factor mark — minted
-// by a factor verify step or upgraded at enrollment/registration time.
-// Sessions minted before enrollment are retired on sight, which is also what
-// makes "privilege changes revoke sessions" hold for 2FA (#1172, #1171).
-func (s *managementState) sessionMeetsFactorRequirement(sess Session) bool {
-	if sess.SecondFactor {
-		return true
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, user := range s.users {
-		if user.Username == sess.Username {
-			return !user.HasSecondFactor()
-		}
-	}
-	return true
-}
-
 // handleMyTOTP serves GET (status) and DELETE (disable) on
 // /api/v1/users/me/totp for the cookie session's own account.
 func (s *managementState) handleMyTOTP(w http.ResponseWriter, r *http.Request) {

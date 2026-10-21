@@ -348,7 +348,7 @@ func TestAuthLoginLogoutStatusEndpoints(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
 	req.AddCookie(sessionCookie)
 	w = httptest.NewRecorder()
-	state.handleAuthStatus(w, req)
+	state.handleEffectiveAuthStatus(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status expected 200, got %d", w.Code)
 	}
@@ -400,7 +400,7 @@ func TestAuthLoginLogoutStatusEndpoints(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
 	req.AddCookie(expiredSessionCookie)
 	w = httptest.NewRecorder()
-	state.handleAuthStatus(w, req)
+	state.handleEffectiveAuthStatus(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status after logout expected 200, got %d", w.Code)
 	}
