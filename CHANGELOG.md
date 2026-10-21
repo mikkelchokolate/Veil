@@ -16,6 +16,13 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1346: revoking or rotating a subscription token now destroys its sealed
+  issuance binding (`token_ciphertext` is cleared in the same `UPDATE` that
+  sets `revoked_at`). Before, the binding stayed valid, so a veil.db writer
+  without `/etc/veil/state.key` could re-activate a revoked or rotated-out
+  token with `UPDATE subscription_tokens SET revoked_at=NULL`. Rows revoked
+  by an earlier build are cleared on the next panel start. `enabled` stays a
+  reversible plain column by design.
 - #1280: `revision_snapshots` rows are now authenticated. Each row carries a
   `payload_mac` (migration v32): an HMAC-SHA256 keyed from
   `/etc/veil/state.key` over its revision, creation time, state-file digest

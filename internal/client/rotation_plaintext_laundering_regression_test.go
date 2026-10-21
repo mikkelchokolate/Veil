@@ -186,9 +186,9 @@ func TestReplaceSnapshotRefusesPlaintextCredential(t *testing.T) {
 }
 
 // The refusal message is an operator runbook: following it must actually let
-// rotation succeed, and the advice it rules out (revoke/rotate) must really be
-// insufficient, because revoked rows keep their ciphertext and are still
-// rotated.
+// rotation succeed. For tokens, revoking is a remedy since #1346 (revocation
+// clears token_ciphertext); a row that is already revoked but still holds a
+// stale ciphertext is still rotated and must be cleared by hand.
 func TestRotationRefusalHintsUnstickRotation(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
@@ -228,20 +228,37 @@ func TestRotationRefusalHintsUnstickRotation(t *testing.T) {
 	if _, err := db.Exec(`UPDATE subscription_tokens SET token_ciphertext=? WHERE id=?`, "attacker-chosen-token", issued.Token.ID); err != nil {
 		t.Fatal(err)
 	}
+	err = rotate(tokens)
+	if err == nil || !strings.Contains(err.Error(), "ciphertext is invalid") {
+		t.Fatalf("planted token: rotation err=%v, want refusal", err)
+	}
+	if !strings.Contains(err.Error(), "revoke it, which also clears its token_ciphertext") {
+		t.Fatalf("token refusal must offer revocation as the remedy: %v", err)
+	}
 	if err := ts.Revoke(issued.Token.ID); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
+	if err := rotate(tokens); err != nil {
+		t.Fatalf("token rotation after revoking as hinted: %v", err)
+	}
+
+	// A row revoked by an older build (revoked_at set, ciphertext kept) is
+	// still rotated; the hint's hand-clear step must unstick it.
+	stale, err := ts.Issue(c.ID, "stale", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE subscription_tokens SET token_ciphertext=?, revoked_at=? WHERE id=?`, "attacker-chosen-token", nowUnix(), stale.Token.ID); err != nil {
+		t.Fatal(err)
+	}
 	err = rotate(tokens)
-	if err == nil || !strings.Contains(err.Error(), "ciphertext is invalid") {
-		t.Fatalf("revoked planted token: rotation err=%v, want refusal (revoke must not be a remedy)", err)
+	if err == nil || !strings.Contains(err.Error(), "needs its token_ciphertext cleared by hand") {
+		t.Fatalf("stale revoked token: rotation err=%v, want refusal with the hand-clear hint", err)
 	}
-	if strings.Contains(err.Error(), "revoke the token") {
-		t.Fatalf("token refusal still recommends revoking: %v", err)
+	if err := ts.Revoke(stale.Token.ID); err == nil {
+		t.Fatal("revoking an already-revoked row must not report success")
 	}
-	if !strings.Contains(err.Error(), "revoke it and clear its token_ciphertext") {
-		t.Fatalf("token refusal must keep the revoke step before clearing the ciphertext: %v", err)
-	}
-	if _, err := db.Exec(`UPDATE subscription_tokens SET token_ciphertext='' WHERE id=?`, issued.Token.ID); err != nil {
+	if _, err := db.Exec(`UPDATE subscription_tokens SET token_ciphertext='' WHERE id=?`, stale.Token.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := rotate(tokens); err != nil {
