@@ -567,6 +567,12 @@ func (t *Tx) ReencryptSubscriptionTokens(oldCipher, newCipher *secrets.Cipher) e
 		return fmt.Errorf("client: list tokens for master-key rotation: %w", err)
 	}
 	for _, token := range tokens {
+		// Cipher.Decrypt passes non-"ve1:" input through verbatim. Re-sealing
+		// that under the new key would launder a planted plaintext row into a
+		// valid ciphertext that Reveal then accepts (#1283), so refuse it.
+		if !secrets.IsEncrypted(string(token.value)) {
+			return fmt.Errorf("client: token %s ciphertext is invalid; refusing master-key rotation", token.id)
+		}
 		plaintext, err := oldCipher.Decrypt(string(token.value))
 		if err != nil {
 			return fmt.Errorf("client: decrypt token %s for master-key rotation: %w", token.id, err)

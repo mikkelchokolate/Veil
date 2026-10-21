@@ -212,6 +212,11 @@ func (t *Tx) ReencryptCredentials(oldCipher, newCipher *secrets.Cipher) error {
 		return fmt.Errorf("client: list credentials for master-key rotation: %w", err)
 	}
 	for _, credential := range credentials {
+		// Same laundering guard as ReencryptSubscriptionTokens (#1283): a
+		// planted non-"ve1:" value must not become a real ciphertext.
+		if !secrets.IsEncrypted(string(credential.value)) {
+			return fmt.Errorf("client: credential %s ciphertext is invalid; refusing master-key rotation", credential.id)
+		}
 		plaintext, err := oldCipher.Decrypt(string(credential.value))
 		if err != nil {
 			return fmt.Errorf("client: decrypt credential %s for master-key rotation: %w", credential.id, err)
@@ -313,7 +318,7 @@ func (s *CredentialStore) Reveal(id string) (string, error) {
 		return "", fmt.Errorf("client: credential cipher unavailable")
 	}
 	value := string(cred.EncryptedValue)
-	if !strings.HasPrefix(value, "ve1:") {
+	if !secrets.IsEncrypted(value) {
 		return "", errors.New("client: normalized credential ciphertext is invalid")
 	}
 	return s.cipher.Decrypt(value)
