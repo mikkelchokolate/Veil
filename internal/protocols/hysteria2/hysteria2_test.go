@@ -11,6 +11,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/protocols/schema"
 	"github.com/mikkelchokolate/Veil/internal/runtimeinstall"
 	"golang.org/x/crypto/argon2"
+	"gopkg.in/yaml.v3"
 )
 
 func TestPluginMetadata(t *testing.T) {
@@ -1204,11 +1205,22 @@ func TestRenderConfigKeepsUserpassWhenNoCredentialLimited(t *testing.T) {
 		t.Fatalf("expected one rendered artifact, got %d", len(artifacts))
 	}
 	body := artifacts[0].Body
-	if strings.Contains(body, "type: http") || strings.Contains(body, HTTPAuthPathPrefix) {
+	// Match auth.type structurally: a substring check for "type: http" also
+	// matches the always-rendered "resolver.type: https" (#1288).
+	var doc struct {
+		Auth struct {
+			Type string         `yaml:"type"`
+			HTTP map[string]any `yaml:"http"`
+		} `yaml:"auth"`
+	}
+	if err := yaml.Unmarshal([]byte(body), &doc); err != nil {
+		t.Fatalf("rendered config is not YAML: %v\n%s", err, body)
+	}
+	if doc.Auth.Type == "http" || doc.Auth.HTTP != nil || strings.Contains(body, HTTPAuthPathPrefix) {
 		t.Errorf("unlimited credentials must not switch to http auth:\n%s", body)
 	}
-	if !strings.Contains(body, "type: userpass") {
-		t.Errorf("expected userpass auth for normalized creds:\n%s", body)
+	if doc.Auth.Type != "userpass" {
+		t.Errorf("expected userpass auth for normalized creds, got %q:\n%s", doc.Auth.Type, body)
 	}
 }
 
