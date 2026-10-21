@@ -567,6 +567,11 @@ func reencryptRevisionSnapshotsTx(tx *client.Tx, oldCipher, newCipher *secrets.C
 			if value == "" {
 				continue
 			}
+			// RevealEncrypted refuses non-"ve1:" snapshot credentials (#1283);
+			// rotation must not re-seal one into a ciphertext it would accept.
+			if !secrets.IsEncrypted(value) {
+				return fmt.Errorf("state commit: snapshot %d credential %s ciphertext is invalid; refusing key rotation (the retained revision snapshot is tampered; remove that revision_snapshots row, then retry)", row.revision, snapshot.Credentials[index].ID)
+			}
 			plaintext, err := oldCipher.Decrypt(value)
 			if err != nil {
 				return fmt.Errorf("state commit: decrypt snapshot %d credential %s: %w", row.revision, snapshot.Credentials[index].ID, err)
@@ -630,6 +635,9 @@ func reencryptIdempotencyReplayTx(tx *client.Tx, oldCipher, newCipher *secrets.C
 		return fmt.Errorf("state commit: list idempotency envelopes for key rotation: %w", err)
 	}
 	for _, row := range envelopes {
+		if !secrets.IsEncrypted(string(row.body)) {
+			return fmt.Errorf("state commit: idempotency envelope %s ciphertext is invalid; refusing key rotation (delete that idempotency_results row, then retry)", row.id)
+		}
 		plaintext, err := oldReplay.Decrypt(string(row.body))
 		if err != nil {
 			return fmt.Errorf("state commit: decrypt idempotency envelope %s for key rotation: %w", row.id, err)

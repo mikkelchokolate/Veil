@@ -177,40 +177,6 @@ func (s *managementState) handleLogout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"success": true})
 }
 
-func (s *managementState) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		methodNotAllowed(w, http.MethodGet)
-		return
-	}
-
-	cookie, err := r.Cookie("veil_session")
-	if err == nil {
-		if sess, ok := s.sessionRegistry().Get(cookie.Value); ok {
-			csrf, csrfOK, csrfErr := s.sessionRegistry().EnsureCSRFPersisted(cookie.Value)
-			if csrfErr != nil {
-				writeError(w, "failed to refresh session", http.StatusInternalServerError)
-				return
-			}
-			if !csrfOK {
-				writeJSON(w, map[string]any{"authenticated": false})
-				return
-			}
-			writeJSON(w, map[string]any{
-				"authenticated": true,
-				"username":      sess.Username,
-				"role":          sess.Role,
-				"locale":        s.userLocale(sess.Username),
-				"csrfToken":     csrf,
-			})
-			return
-		}
-	}
-
-	writeJSON(w, map[string]any{
-		"authenticated": false,
-	})
-}
-
 func (s *managementState) handleAuthLocale(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, http.MethodPost)

@@ -522,15 +522,20 @@ func TestTOTPSessionWithoutFactorMarkIsRevoked(t *testing.T) {
 	state, _ := totpTestState(t, user)
 	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
 
-	// Pre-enrollment sessions are accepted while the factor is off.
-	if !state.sessionMeetsFactorRequirement(session) {
+	// Pre-enrollment sessions are accepted while the factor is off. This
+	// drives authorizeCookieSession, the rule the middleware, the status
+	// endpoint and SSE actually run.
+	if _, _, ok := state.authorizeCookieSession(session.Token, session); !ok {
 		t.Fatal("session rejected before TOTP enrollment")
 	}
 	state.mu.Lock()
 	state.users[0].TOTPEnabled = true
 	state.mu.Unlock()
-	if state.sessionMeetsFactorRequirement(session) {
+	if _, _, ok := state.authorizeCookieSession(session.Token, session); ok {
 		t.Fatal("pre-enrollment session still accepted after TOTP enabled")
+	}
+	if _, ok := state.sessionRegistry().Get(session.Token); ok {
+		t.Fatal("pre-enrollment session was not revoked after TOTP enabled")
 	}
 }
 
