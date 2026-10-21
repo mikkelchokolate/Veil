@@ -46,11 +46,15 @@ func (s *managementState) handlePersistentAuthStatus(w http.ResponseWriter, r *h
 	if err == nil {
 		if sess, ok := s.sessionRegistry().Get(cookie.Value); ok {
 			// The status endpoint is the SPA's source of truth for "am I
-			// logged in". Enforce the same second-factor revocation the API
-			// middleware applies or a pre-enrollment cookie would report
-			// authenticated forever while every real call 401s (#1172).
-			if !s.sessionMeetsFactorRequirement(sess) {
-				_ = s.sessionRegistry().Delete(cookie.Value)
+			// logged in". Apply exactly the rules the API middleware applies
+			// — user-match (a deleted user's session is revoked, #1266),
+			// second-factor (#1172) and bootstrap-fallback validity — or a
+			// cookie the middleware would revoke on the next protected call
+			// reports authenticated (and gets a CSRF hash persisted) here.
+			// The middleware's view of the role is the user row's current
+			// role, not the one frozen into the session at login.
+			username, role, ok := s.authorizeCookieSession(cookie.Value, sess)
+			if !ok {
 				writeJSON(w, map[string]any{"authenticated": false})
 				return
 			}
@@ -65,9 +69,9 @@ func (s *managementState) handlePersistentAuthStatus(w http.ResponseWriter, r *h
 			}
 			writeJSON(w, map[string]any{
 				"authenticated": true,
-				"username":      sess.Username,
-				"role":          sess.Role,
-				"locale":        s.userLocale(sess.Username),
+				"username":      username,
+				"role":          role,
+				"locale":        s.userLocale(username),
 				"csrfToken":     csrf,
 				// Lets factor-management UIs skip the redundant password
 				// prompt when this session already satisfied a second
