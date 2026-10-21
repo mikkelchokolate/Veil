@@ -238,6 +238,9 @@ func TestRotationRefusalHintsUnstickRotation(t *testing.T) {
 	if strings.Contains(err.Error(), "revoke the token") {
 		t.Fatalf("token refusal still recommends revoking: %v", err)
 	}
+	if !strings.Contains(err.Error(), "revoke it and clear its token_ciphertext") {
+		t.Fatalf("token refusal must keep the revoke step before clearing the ciphertext: %v", err)
+	}
 	if _, err := db.Exec(`UPDATE subscription_tokens SET token_ciphertext='' WHERE id=?`, issued.Token.ID); err != nil {
 		t.Fatal(err)
 	}
