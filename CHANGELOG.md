@@ -38,7 +38,8 @@ All notable changes to Veil will be documented in this file.
   that coincides with a panel rewrite can no longer have its revocation
   dropped between the rewrite's journal read and its journal removal. The
   lock uses `flock` and applies on Unix hosts; elsewhere the store is not
-  shared with a root CLI. When `veil.service` is not active, the CLI now
+  shared with a root CLI. The service-identity migration now also re-owns
+  `sessions.json.journal` and `sessions.json.lock`. When `veil.service` is not active, the CLI now
   prints a warning that no running panel was reloaded, instead of reporting
   success without one. A
   `revoke_cancel` record now retracts only the intent it was paired with.

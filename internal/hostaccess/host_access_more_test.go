@@ -553,3 +553,51 @@ func TestMigrateProxyStateDirChownErrorFailsClosed(t *testing.T) {
 		t.Fatalf("expected chown mita error, got: %v", err)
 	}
 }
+
+// The Panel opens the session journal and the session store lock (#1265)
+// read-write; Migrate must hand both to the service identity with the
+// snapshot, or a lock file left by a previous identity breaks every session
+// write.
+func TestMigrateReownsSessionJournalAndLock(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX ownership test")
+	}
+	root := t.TempDir()
+	etcDir := filepath.Join(root, "etc", "veil")
+	varDir := filepath.Join(root, "var", "lib", "veil")
+	if err := os.MkdirAll(etcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(varDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	names := []string{"sessions.json", "sessions.json.journal", "sessions.json.lock"}
+	for _, name := range names {
+		if err := os.WriteFile(filepath.Join(varDir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	originalChown := testHooks.chown
+	defer func() { testHooks.chown = originalChown }()
+	chowned := map[string]bool{}
+	testHooks.chown = func(path string, uid, gid int) error {
+		chowned[filepath.Base(path)] = true
+		return originalChown(path, uid, gid)
+	}
+	uid, gid := os.Getuid(), os.Getgid()
+	if err := Migrate(Paths{EtcDir: etcDir, VarDir: varDir, RootUID: uid, RootGID: gid}, Identity{UID: uid, GID: gid}, time.Now); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	for _, name := range names {
+		if !chowned[name] {
+			t.Fatalf("Migrate did not re-own %s", name)
+		}
+		info, err := os.Stat(filepath.Join(varDir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("%s mode = %v, want 0600", name, info.Mode().Perm())
+		}
+	}
+}

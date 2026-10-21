@@ -367,7 +367,10 @@ func Migrate(paths Paths, panel Identity, now func() time.Time) error {
 			}
 		}
 	}
-	for _, name := range []string{"state.json", "sessions.json"} {
+	// The session journal and the session store lock (#1265) are opened
+	// O_RDWR by the unprivileged Panel too: one left owned by a previous
+	// identity would make every session load, save and append fail.
+	for _, name := range []string{"state.json", "sessions.json", "sessions.json.journal", "sessions.json.lock"} {
 		if err := setOptionalFile(filepath.Join(paths.VarDir, name), 0o600, panel.UID, panel.GID); err != nil {
 			return err
 		}

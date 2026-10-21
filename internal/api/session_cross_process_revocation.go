@@ -128,6 +128,9 @@ func (r *SessionRegistry) ReloadFromDisk() error {
 	fresh.persistInterval = r.persistInterval
 	// Loading under r.mu keeps this process's own journal appends from
 	// interleaving with the read.
+	// fresh must not take the store lock itself: flock is per open file
+	// description, so a second lockSessionStore in this process would block
+	// forever on the lock r already holds. loadFromDisk does not acquire it.
 	if err := fresh.loadFromDisk(false); err != nil {
 		// Keep memory (the snapshot alone may still hold sessions only the
 		// journal revoked), but still honour every revocation intent that
