@@ -163,12 +163,13 @@ func TestRootGoBuildDoesNotRunAmbientToolexec(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for name, setup := range map[string]func(){
-		"GOFLAGS":     func() { t.Setenv("GOFLAGS", "-toolexec="+shim) },
-		"go env file": func() { t.Setenv("HOME", attackerHome); t.Setenv("XDG_CONFIG_HOME", "") },
+	for name, setup := range map[string]func(*testing.T){
+		"GOFLAGS":     func(t *testing.T) { t.Setenv("GOFLAGS", "-toolexec="+shim) },
+		"go env file": func(t *testing.T) { t.Setenv("HOME", attackerHome); t.Setenv("XDG_CONFIG_HOME", "") },
 	} {
 		t.Run(name, func(t *testing.T) {
-			setup()
+			// Subtest-scoped Setenv: each case tests exactly one vector.
+			setup(t)
 			_ = os.Remove(marker)
 			cmd := exec.Command(goBin, "build", "-o", filepath.Join(work, "out"), ".")
 			cmd.Dir = mod
@@ -200,5 +201,67 @@ func TestGoBuildEnvNoBlanketGONOSUMDB(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// #1341 review: the production root-home lookup (not the test stub) is what
+// defeats the ambient-HOME vector, so pin it directly.
+func TestRootAccountHomeIgnoresAmbientHOME(t *testing.T) {
+	ambient := t.TempDir()
+	t.Setenv("HOME", ambient)
+	got := rootAccountHome()
+	if got == ambient || !filepath.IsAbs(got) || got == "/" {
+		t.Fatalf("rootAccountHome() = %q with HOME=%q; want root's account home", got, ambient)
+	}
+}
+
+// #1341 review: the toolchain probes (go version / go env GOROOT, whose
+// output becomes GOROOT= in the root build env) must not read a go env file
+// under root.
+func TestGoLocalEnvDisablesGoEnvFileUnderRoot(t *testing.T) {
+	has := func() bool {
+		for _, e := range goLocalEnv() {
+			if e == "GOENV=off" {
+				return true
+			}
+		}
+		return false
+	}
+	t.Run("root", func(t *testing.T) {
+		asRoot(t)
+		if !has() {
+			t.Fatal("goLocalEnv under root lacks GOENV=off")
+		}
+	})
+	t.Run("unprivileged", func(t *testing.T) {
+		asUnprivileged(t)
+		if has() {
+			t.Fatal("goLocalEnv unprivileged must keep the user's go env file")
+		}
+	})
+}
+
+// #1341 review: an ambient GOSUMDB survives under root only if it still
+// verifies sum.golang.org with Go's built-in key (a mirror URL is fine).
+func TestRootGOSUMDBKeepsOnlyBuiltinKeyedSumDB(t *testing.T) {
+	for in, want := range map[string]string{
+		"":               "sum.golang.org",
+		"off":            "sum.golang.org",
+		"sum.golang.org": "sum.golang.org",
+		"sum.golang.org https://mirror.example/sumdb/sum.golang.org": "sum.golang.org https://mirror.example/sumdb/sum.golang.org",
+		"sum.golang.org http://mirror.example":                       "sum.golang.org",
+		"sum.golang.org+deadbeef+AAAA":                               "sum.golang.org",
+		"evil.example+1234+AAAA https://evil":                        "sum.golang.org",
+		"sum.golang.org https://a https://b":                         "sum.golang.org",
+	} {
+		if got := rootGOSUMDB(in); got != want {
+			t.Errorf("rootGOSUMDB(%q) = %q, want %q", in, got, want)
+		}
+	}
+	asRoot(t)
+	withRootHome(t)
+	t.Setenv("GOSUMDB", "sum.golang.org https://mirror.example/sumdb/sum.golang.org")
+	if got := envMap(t, goBuildEnv(context.Background(), "/usr/local/go/bin/go"))["GOSUMDB"]; got != "sum.golang.org https://mirror.example/sumdb/sum.golang.org" {
+		t.Fatalf("root build env GOSUMDB = %q, want the builtin-keyed mirror kept", got)
 	}
 }

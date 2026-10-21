@@ -475,29 +475,50 @@ func goBuildEnv(ctx context.Context, goBin string) []string {
 }
 
 // rootGoBuildEnvAllowed lists the only ambient variables a root go build may
-// inherit (#1337). Everything else — GOFLAGS (-toolexec), GOENV/HOME/XDG_*
-// (a go env file can set GOFLAGS/CC/GOPROXY), GOPATH/GOMODCACHE/GOCACHE
-// (planted module sources or build outputs), CC/CXX/CGO_* and GIT_* (exec
-// hooks), GONOSUMDB/GOSUMDB/GOPRIVATE/GOINSECURE (checksum bypass) — comes
-// from the root-run process's possibly poisoned environment (sudo -E, a
-// provisioning script) and is dropped.
+// inherit (#1337). Everything else comes from the root-run process's possibly
+// poisoned environment (sudo -E, a provisioning script) and is dropped:
+// GOFLAGS (-toolexec), GOENV/HOME/XDG_* (a go env file can set GOFLAGS, CC,
+// GOPROXY), GOPATH/GOMODCACHE/GOCACHE (planted module sources or build
+// outputs), CC/CXX/CGO_*, GIT_* and GOAUTH (commands the build would exec),
+// and GONOSUMDB/GOPRIVATE/GONOPROXY/GOINSECURE (checksum-database bypass).
+// GOSUMDB is handled separately by rootGOSUMDB.
 var rootGoBuildEnvAllowed = map[string]bool{
 	"LANG": true, "LANGUAGE": true, "TZ": true, "TERM": true,
-	// Network egress settings an operator may genuinely need (RU hosts).
-	// They cannot change what is built: every module is verified against
-	// the sum.golang.org checksum database, which this env forces on.
+	// Network egress settings an operator may genuinely need (RU hosts,
+	// TLS-intercepting egress proxies). They cannot change what is built:
+	// every module is verified against the sum.golang.org checksum database
+	// with Go's built-in key, which this env forces on, so a hostile proxy,
+	// mirror or CA can at worst make the build fail.
 	"HTTP_PROXY": true, "HTTPS_PROXY": true, "NO_PROXY": true,
 	"http_proxy": true, "https_proxy": true, "no_proxy": true,
+	"SSL_CERT_FILE": true, "SSL_CERT_DIR": true,
 	"GOPROXY": true,
 }
 
-// rootHomeFn returns root's home directory from the account database, never
-// from the ambient HOME. Overridden by tests.
-var rootHomeFn = func() string {
+// rootAccountHome returns root's home directory from the account database,
+// never from the ambient HOME.
+func rootAccountHome() string {
 	if u, err := user.LookupId("0"); err == nil && filepath.IsAbs(u.HomeDir) && u.HomeDir != "/" {
 		return u.HomeDir
 	}
 	return "/root"
+}
+
+// rootHomeFn is rootAccountHome; overridden by tests.
+var rootHomeFn = rootAccountHome
+
+// rootGOSUMDB keeps an ambient GOSUMDB only when it still names
+// sum.golang.org verified with Go's built-in key, optionally via a mirror
+// URL ("sum.golang.org https://mirror/sumdb/sum.golang.org"). A custom
+// name+key, "off", or anything else falls back to sum.golang.org (#1337).
+func rootGOSUMDB(ambient string) string {
+	fields := strings.Fields(ambient)
+	if len(fields) >= 1 && len(fields) <= 2 && fields[0] == "sum.golang.org" {
+		if len(fields) == 1 || strings.HasPrefix(fields[1], "https://") {
+			return strings.Join(fields, " ")
+		}
+	}
+	return "sum.golang.org"
 }
 
 // rootGoBuildEnv is goBuildEnv under root: an allowlisted environment with
@@ -506,8 +527,13 @@ var rootHomeFn = func() string {
 func rootGoBuildEnv(ambient []string, goroot, goBinDir string) []string {
 	out := make([]string, 0, 24)
 	hasGoproxy := false
+	sumdb := ""
 	for _, e := range ambient {
-		key, _, _ := strings.Cut(e, "=")
+		key, value, _ := strings.Cut(e, "=")
+		if key == "GOSUMDB" {
+			sumdb = value
+			continue
+		}
 		if !rootGoBuildEnvAllowed[key] && !strings.HasPrefix(key, "LC_") {
 			continue
 		}
@@ -531,7 +557,7 @@ func rootGoBuildEnv(ambient []string, goroot, goBinDir string) []string {
 		"GOBIN="+goBinDir,
 		buildPATH("", goBinDir),
 		"GOTOOLCHAIN=local",
-		"GOSUMDB=sum.golang.org",
+		"GOSUMDB="+rootGOSUMDB(sumdb),
 		"GONOSUMDB=",
 		"GONOSUMCHECK=",
 		"GOPRIVATE=",
