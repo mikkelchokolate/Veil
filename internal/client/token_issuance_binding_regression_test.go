@@ -452,3 +452,135 @@ func TestTokenBindingSealedUnderMasterKeyDoesNotAuthenticate(t *testing.T) {
 	exec(`UPDATE subscription_tokens SET token_ciphertext=? WHERE id=?`, sealed, issued.Token.ID)
 	assertTokenRefused(t, f.ts, issued.Plaintext)
 }
+
+// freshTokenStore models a panel restart: the in-memory legacySealed flag is
+// gone and only veil.db (plus the state key) carries over.
+func freshTokenStore(t *testing.T, f *bindingFixture) *TokenStore {
+	t.Helper()
+	ts := NewTokenStore(f.ts.db).WithCipher(f.ts.cipher)
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+// plantCredentialCopy copies bob's real credential ciphertext into a row for
+// alice whose token_hash is sha256(bob's password) (#1281 review).
+func plantCredentialCopy(t *testing.T, f *bindingFixture, exec func(string, ...any), id, password string) {
+	t.Helper()
+	binding, err := NewRepository(f.ts.db).CreateBinding(Binding{ClientID: f.bob.ID, InboundID: "hy-" + id, Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cred, err := NewCredentialStore(f.ts.db, f.ts.cipher).Set(binding.ID, "password", password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec(`INSERT INTO subscription_tokens (id, client_id, token_hash, token_prefix, enabled, created_at, created_by, label, token_ciphertext)
+	      VALUES (?, ?, ?, 'x', 1, ?, '', '', (SELECT encrypted_value FROM client_credentials WHERE id=?))`,
+		id, f.alice.ID, sha(password), time.Now().Unix(), cred.ID)
+}
+
+// #1281 review (f936a087): deleting the marker and blanking every honest
+// binding must not re-arm the one-shot re-seal on the next restart.
+func TestSealLegacyBindingsNotReArmedByMarkerDeletionAndBlankedRows(t *testing.T) {
+	f, exec := newBindingFixture(t)
+	issued, err := f.ts.Issue(f.alice.ID, "honest", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.ts.SealLegacyBindings(); err != nil {
+		t.Fatal(err)
+	}
+	const bobPassword = "bob-own-hysteria2-password"
+	exec(`DELETE FROM migration_markers WHERE key=?`, TokenBindingMarkerKey)
+	exec(`UPDATE subscription_tokens SET token_ciphertext='' WHERE id=?`, issued.Token.ID)
+	plantLegacyToken(t, f, exec, "planted-bare", f.alice.ID, "planted-after-upgrade")
+	plantCredentialCopy(t, f, exec, "planted-cred", bobPassword)
+
+	restarted := freshTokenStore(t, f)
+	if resealed, err := restarted.SealLegacyBindings(); err != nil || resealed != 0 {
+		t.Fatalf("SealLegacyBindings after marker deletion + blanking = %d, %v; want 0", resealed, err)
+	}
+	assertTokenRefused(t, restarted, bobPassword)
+	assertTokenRefused(t, restarted, "planted-after-upgrade")
+	var count int
+	if err := f.ts.db.QueryRow(`SELECT COUNT(*) FROM migration_markers WHERE key=?`, TokenBindingMarkerKey).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("marker not restored: count=%d err=%v", count, err)
+	}
+}
+
+// #1281 review (f936a087): on an install that never issued a token there is
+// no honest row to blank, so the credential-copy primitive must be refused
+// by the re-seal itself, both as a byte copy and as a fresh seal of the same
+// credential plaintext.
+func TestSealLegacyBindingsNeverResealsCredentialSeals(t *testing.T) {
+	f, exec := newBindingFixture(t)
+	const bobPassword = "bob-own-hysteria2-password"
+	plantCredentialCopy(t, f, exec, "planted-cred", bobPassword)
+	const otherPassword = "bob-other-credential"
+	if _, err := NewCredentialStore(f.ts.db, f.ts.cipher).Set(mustBinding(t, f, "hy-other"), "password", otherPassword); err != nil {
+		t.Fatal(err)
+	}
+	plantLegacyToken(t, f, exec, "planted-reseal", f.alice.ID, otherPassword)
+
+	restarted := freshTokenStore(t, f)
+	if resealed, err := restarted.SealLegacyBindings(); err != nil || resealed != 0 {
+		t.Fatalf("SealLegacyBindings with credential seals = %d, %v; want 0", resealed, err)
+	}
+	assertTokenRefused(t, restarted, bobPassword)
+	assertTokenRefused(t, restarted, otherPassword)
+	if _, err := restarted.Reveal("planted-cred"); err == nil {
+		t.Fatal("Reveal of a planted credential ciphertext succeeded")
+	}
+}
+
+func mustBinding(t *testing.T, f *bindingFixture, inbound string) string {
+	t.Helper()
+	binding, err := NewRepository(f.ts.db).CreateBinding(Binding{ClientID: f.bob.ID, InboundID: inbound, Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return binding.ID
+}
+
+// A revoked row never authenticates, so a revoked row with a cleared
+// ciphertext (the operator recovery the master-key rotation error suggests)
+// must not strand the pre-#1281 tokens of an honest upgrade.
+func TestSealLegacyBindingsIgnoresRevokedBlankRows(t *testing.T) {
+	f, exec := newBindingFixture(t)
+	plantLegacyToken(t, f, exec, "legacy", f.alice.ID, "legacy-token-plaintext")
+	exec(`INSERT INTO subscription_tokens (id, client_id, token_hash, token_prefix, enabled, created_at, revoked_at, created_by, label, token_ciphertext)
+	      VALUES ('revoked-blank', ?, ?, 'r', 0, ?, ?, '', '', '')`, f.bob.ID, sha("revoked"), time.Now().Unix(), time.Now().Unix())
+	if resealed, err := f.ts.SealLegacyBindings(); err != nil || resealed != 1 {
+		t.Fatalf("SealLegacyBindings = %d, %v; want 1", resealed, err)
+	}
+	if got, err := f.ts.LookupReadOnly("legacy-token-plaintext"); err != nil || got == nil || got.ClientID != f.alice.ID {
+		t.Fatalf("legacy lookup = %+v, %v", got, err)
+	}
+}
+
+// #1281 review (f936a087): after the one-shot pass, master-key rotation must
+// not carry a bare seal (a planted credential copy) forward to the new key.
+func TestReencryptSubscriptionTokensDropsBareSealsAfterMarker(t *testing.T) {
+	f, exec := newBindingFixture(t)
+	issued, err := f.ts.Issue(f.alice.ID, "honest", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const bobPassword = "bob-own-hysteria2-password"
+	plantCredentialCopy(t, f, exec, "planted-cred", bobPassword)
+	newCipher := rotationTestCipher(t, 200)
+	reencryptTokens(t, f, f.ts.cipher, newCipher)
+	var stale string
+	if err := f.ts.db.QueryRow(`SELECT token_ciphertext FROM subscription_tokens WHERE id='planted-cred'`).Scan(&stale); err != nil {
+		t.Fatal(err)
+	}
+	if stale != "" {
+		t.Fatalf("bare seal carried across master-key rotation: %q", stale)
+	}
+	rotated := NewTokenStore(f.ts.db).WithCipher(newCipher)
+	t.Cleanup(rotated.Close)
+	if got, err := rotated.LookupReadOnly(issued.Plaintext); err != nil || got == nil {
+		t.Fatalf("honest token after rotation = %+v, %v", got, err)
+	}
+	assertTokenRefused(t, rotated, bobPassword)
+}

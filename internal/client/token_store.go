@@ -84,6 +84,10 @@ func (s *TokenStore) WithCipher(cipher *secrets.Cipher) *TokenStore {
 // issuance bindings. Token seals use their own subkey so no other ciphertext
 // sealed under the state key (client credentials, snapshot secrets) can
 // ever open as a token binding (#1281).
+//
+// DeriveCipher and DeriveToken share the sha256(key || label) construction,
+// so tokenBindingVersion must never be passed to DeriveToken (or reused as
+// any other derivation label): that would print this subkey as hex.
 func TokenBindingCipher(master *secrets.Cipher) (*secrets.Cipher, error) {
 	return secrets.DeriveCipher(master, tokenBindingVersion)
 }
@@ -556,9 +560,18 @@ func (s *TokenStore) ensureLegacyBindingsSealed() error {
 // apart from any other master-cipher seal. Each row whose master-cipher
 // plaintext hashes to its token_hash becomes a binding of its current
 // (id, client, expiry). The run is recorded in migration_markers; after that
-// only subkey-sealed bindings authenticate. A database that already holds a
-// subkey-sealed binding has been through this pass, so a missing marker there
-// means it was deleted: the marker is restored and nothing is re-sealed.
+// only subkey-sealed bindings authenticate.
+//
+// The marker lives in veil.db, so a veil.db writer can delete it. A missing
+// marker is therefore only trusted on a database that looks exactly like a
+// pre-#1281 one: every row is either revoked or a re-sealable bare seal.
+// Any subkey-sealed binding, and any live row with a blank, foreign or
+// non-matching ciphertext (what an honest row looks like after it was
+// blanked, #1281 review), means the pass already ran: the marker is restored
+// and nothing is re-sealed. Separately, a bare seal whose plaintext is a
+// stored client credential (a byte copy of its ciphertext opens to it) is
+// never re-sealed, so a client cannot launder its own credential seal into a
+// token for another client.
 func (s *TokenStore) SealLegacyBindings() (int, error) {
 	if s == nil {
 		return 0, ErrSecretUnavailable
@@ -590,8 +603,8 @@ func (s *TokenStore) sealLegacyBindings() (int, error) {
 		return 0, nil
 	}
 	rows, err := raw.Query(`SELECT id,client_id,token_hash,token_prefix,enabled,expires_at,
- created_at,last_used_at,revoked_at,created_by,label,token_ciphertext FROM subscription_tokens
- WHERE token_ciphertext IS NOT NULL AND token_ciphertext<>'' ORDER BY id`)
+ created_at,last_used_at,revoked_at,created_by,label,COALESCE(token_ciphertext,'') FROM subscription_tokens
+ ORDER BY id`)
 	if err != nil {
 		return 0, fmt.Errorf("client: list tokens for binding re-seal: %w", err)
 	}
@@ -600,7 +613,7 @@ func (s *TokenStore) sealLegacyBindings() (int, error) {
 		plaintext string
 	}
 	var legacy []legacyRow
-	bound := 0
+	bound, unsealable, credentialCopies := 0, 0, 0
 	for rows.Next() {
 		token, ciphertext, err := scanTokenWithCiphertext(rows)
 		if err != nil {
@@ -611,12 +624,21 @@ func (s *TokenStore) sealLegacyBindings() (int, error) {
 			bound++
 			continue
 		}
-		if !secrets.IsEncrypted(ciphertext) {
-			continue
+		plaintext := ""
+		if secrets.IsEncrypted(ciphertext) {
+			if opened, err := s.cipher.Decrypt(ciphertext); err == nil {
+				plaintext = opened
+			}
 		}
-		plaintext, err := s.cipher.Decrypt(ciphertext)
-		if err != nil || plaintext == "" ||
+		if plaintext == "" ||
 			subtle.ConstantTimeCompare([]byte(hashToken(plaintext)), []byte(token.TokenHash)) != 1 {
+			// A revoked row never authenticates again, so it says nothing
+			// about whether the pass ran. A live row that is neither a
+			// binding nor a re-sealable bare seal is what an honest row
+			// looks like after a veil.db writer blanked it.
+			if token.RevokedAt == nil {
+				unsealable++
+			}
 			continue
 		}
 		legacy = append(legacy, legacyRow{token: token, plaintext: plaintext})
@@ -627,8 +649,25 @@ func (s *TokenStore) sealLegacyBindings() (int, error) {
 	if err := rows.Err(); err != nil {
 		return 0, fmt.Errorf("client: list tokens for binding re-seal: %w", err)
 	}
-	if bound > 0 {
+	if bound > 0 || unsealable > 0 {
 		legacy = nil
+	}
+	if len(legacy) > 0 {
+		credentials, err := storedCredentialPlaintexts(raw, s.cipher)
+		if err != nil {
+			return 0, err
+		}
+		kept := legacy[:0]
+		for _, row := range legacy {
+			// A byte copy of a credential ciphertext opens to that
+			// credential's plaintext, so this also covers copies.
+			if _, ok := credentials[row.plaintext]; ok {
+				credentialCopies++
+				continue
+			}
+			kept = append(kept, row)
+		}
+		legacy = kept
 	}
 	for _, row := range legacy {
 		sealed, err := s.sealToken(row.token, row.plaintext)
@@ -639,7 +678,9 @@ func (s *TokenStore) sealLegacyBindings() (int, error) {
 			return 0, fmt.Errorf("client: persist token %s binding re-seal: %w", row.token.ID, err)
 		}
 	}
-	details, err := json.Marshal(map[string]int{"resealed": len(legacy), "already_bound": bound})
+	details, err := json.Marshal(map[string]int{
+		"resealed": len(legacy), "already_bound": bound, "unsealable_live": unsealable, "credential_copies": credentialCopies,
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -650,6 +691,33 @@ func (s *TokenStore) sealLegacyBindings() (int, error) {
 		return 0, err
 	}
 	return len(legacy), nil
+}
+
+// storedCredentialPlaintexts collects every client credential plaintext so the legacy re-seal can refuse a bare seal copied from (or
+// equal to) a credential: a client knows its own credential plaintext, and
+// both are sealed under the same master cipher (#1281 review).
+func storedCredentialPlaintexts(q DBTX, cipher *secrets.Cipher) (map[string]struct{}, error) {
+	out := map[string]struct{}{}
+	rows, err := q.Query(`SELECT encrypted_value FROM client_credentials`)
+	if err != nil {
+		return out, fmt.Errorf("client: list credentials for binding re-seal: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var value []byte
+		if err := rows.Scan(&value); err != nil {
+			return out, fmt.Errorf("client: scan credential for binding re-seal: %w", err)
+		}
+		if secrets.IsEncrypted(string(value)) {
+			if plaintext, err := cipher.Decrypt(string(value)); err == nil && plaintext != "" {
+				out[plaintext] = struct{}{}
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return out, fmt.Errorf("client: list credentials for binding re-seal: %w", err)
+	}
+	return out, nil
 }
 
 func sameExpiry(a, b *int64) bool {
@@ -824,6 +892,14 @@ func (t *Tx) ReencryptSubscriptionTokens(oldCipher, newCipher *secrets.Cipher) e
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("client: list tokens for master-key rotation: %w", err)
 	}
+	// Once the one-shot legacy re-seal has run, a bare master-cipher seal
+	// never authenticates again; carrying it to the new key would only keep
+	// a planted row (for example a copied credential ciphertext) alive for a
+	// later re-armed pass (#1281 review). Drop those instead.
+	marker, err := t.GetMigrationMarker(TokenBindingMarkerKey)
+	if err != nil {
+		return fmt.Errorf("client: read token binding marker for master-key rotation: %w", err)
+	}
 	for _, token := range tokens {
 		// Cipher.Decrypt passes non-"ve1:" input through verbatim. Re-sealing
 		// that under the new key would launder a planted plaintext row into a
@@ -837,6 +913,12 @@ func (t *Tx) ReencryptSubscriptionTokens(oldCipher, newCipher *secrets.Cipher) e
 		to := newBinding
 		plaintext, err := oldBinding.Decrypt(string(token.value))
 		if err != nil {
+			if marker != nil {
+				if _, err := t.q.Exec(`UPDATE subscription_tokens SET token_ciphertext='' WHERE id=?`, token.id); err != nil {
+					return fmt.Errorf("client: drop token %s stale seal during master-key rotation: %w", token.id, err)
+				}
+				continue
+			}
 			to = newCipher
 			plaintext, err = oldCipher.Decrypt(string(token.value))
 		}
