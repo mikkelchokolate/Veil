@@ -184,3 +184,84 @@ func TestReplaceSnapshotRefusesPlaintextCredential(t *testing.T) {
 		t.Fatalf("planted credential rows=%d err=%v", count, err)
 	}
 }
+
+// The refusal message is an operator runbook: following it must actually let
+// rotation succeed, and the advice it rules out (revoke/rotate) must really be
+// insufficient, because revoked rows keep their ciphertext and are still
+// rotated.
+func TestRotationRefusalHintsUnstickRotation(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+	oldCipher, newCipher := newTestCipher(t), newTestCipher(t)
+	ts := NewTokenStore(db).WithCipher(oldCipher)
+	t.Cleanup(ts.Close)
+	creds := NewCredentialStore(db, oldCipher)
+	c, err := repo.Create(Client{Name: "frank", Enabled: true, QuotaResetPolicy: ResetNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	issued, err := ts.Issue(c.ID, "phone", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := repo.CreateBinding(Binding{ClientID: c.ID, InboundID: "hy", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cred, err := creds.Set(binding.ID, "password", "real-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotate := func(fn func(*Tx) error) error {
+		tx, err := repo.BeginTx()
+		if err != nil {
+			t.Fatal(err)
+		}
+		rotateErr := fn(tx)
+		_ = tx.Rollback()
+		return rotateErr
+	}
+	tokens := func(tx *Tx) error { return tx.ReencryptSubscriptionTokens(oldCipher, newCipher) }
+	credentials := func(tx *Tx) error { return tx.ReencryptCredentials(oldCipher, newCipher) }
+
+	if _, err := db.Exec(`UPDATE subscription_tokens SET token_ciphertext=? WHERE id=?`, "attacker-chosen-token", issued.Token.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.Revoke(issued.Token.ID); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+	err = rotate(tokens)
+	if err == nil || !strings.Contains(err.Error(), "ciphertext is invalid") {
+		t.Fatalf("revoked planted token: rotation err=%v, want refusal (revoke must not be a remedy)", err)
+	}
+	if strings.Contains(err.Error(), "revoke the token") {
+		t.Fatalf("token refusal still recommends revoking: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE subscription_tokens SET token_ciphertext='' WHERE id=?`, issued.Token.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := rotate(tokens); err != nil {
+		t.Fatalf("token rotation after clearing token_ciphertext as hinted: %v", err)
+	}
+
+	if _, err := db.Exec(`UPDATE client_credentials SET encrypted_value=? WHERE id=?`, []byte("attacker-chosen-password"), cred.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := creds.Rotate(binding.ID, "password", "new-secret"); err != nil {
+		t.Fatalf("credential rotate: %v", err)
+	}
+	err = rotate(credentials)
+	if err == nil || !strings.Contains(err.Error(), "ciphertext is invalid") || !strings.Contains(err.Error(), cred.ID) {
+		t.Fatalf("rotated-away planted credential: rotation err=%v, want refusal on %s (rotate must not be a remedy)", err, cred.ID)
+	}
+	if strings.Contains(err.Error(), "rotate or revoke the credential") {
+		t.Fatalf("credential refusal still recommends rotate/revoke: %v", err)
+	}
+	if _, err := db.Exec(`DELETE FROM client_credentials WHERE id=?`, cred.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := rotate(credentials); err != nil {
+		t.Fatalf("credential rotation after deleting the row as hinted: %v", err)
+	}
+}
