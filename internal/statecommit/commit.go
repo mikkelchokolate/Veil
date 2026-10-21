@@ -75,6 +75,10 @@ func saveWithDBLocked(db *sql.DB, snapshot model.ManagementSnapshot, options Opt
 	if err != nil {
 		return 0, err
 	}
+	seal, err := apply.NewSnapshotSeal(options.Cipher)
+	if err != nil {
+		return 0, fmt.Errorf("state commit: %w", err)
+	}
 	commit, err := store.PrepareStateCommit(encoded, revisions.Desired, revisions.Desired+1)
 	if err != nil {
 		return 0, err
@@ -100,7 +104,7 @@ func saveWithDBLocked(db *sql.DB, snapshot model.ManagementSnapshot, options Opt
 		return 0, rollbackState(fmt.Errorf("state commit: revision advanced to %d, want %d", revision, revisions.Desired+1))
 	}
 	stateDigest := commit.Journal().IntendedStateSHA256
-	if err := apply.SaveSnapshotTxBound(tx, revision, payload, stateDigest); err != nil {
+	if err := apply.SaveSnapshotTxBound(tx, seal, revision, payload, stateDigest); err != nil {
 		_ = tx.Rollback()
 		return 0, rollbackState(err)
 	}

@@ -16,6 +16,32 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1280: `revision_snapshots` rows are now authenticated. Each row carries a
+  `payload_mac` (migration v32): an HMAC-SHA256 keyed from
+  `/etc/veil/state.key` over its revision, creation time, state-file digest
+  and exact payload. The `/s/{token}` feed, the apply render path, rollback
+  and startup only read rows whose MAC verifies. A veil.db writer without the
+  state key can therefore no longer rewrite the applied row to point
+  subscribers at its own endpoints with their real credentials, nor plant a
+  desired row (attacker-authored or plaintext credentials, `ve1:garbage`)
+  for the privileged apply. A planted row at a revision the panel is about to
+  commit is refused, not adopted. State-key rotation re-seals rows under the
+  new key, and only those that verify under the old key; it refuses to
+  rotate while an edited sealed row is present. Upgrade note: rows written
+  before this release have no MAC. On the first start, the panel seals the
+  desired row only after proving it against `state.json` (the same
+  projection check as the v4 digest binding) and checking that every
+  credential in it is a valid state-key ciphertext. If that check fails,
+  startup stops, as for a digest mismatch. Other pre-upgrade rows stay
+  unsealed, so rollback to a revision older than the upgrade is refused.
+  If the applied revision lagged the desired one at upgrade time, the
+  public feed is unavailable until the next successful apply. Residual: for
+  that one legacy desired row, only the `state.json` part and the validity
+  of its credential ciphertexts are proven. Its client and binding sections,
+  and which client each `ve1:` credential is filed under, are trusted as
+  they stood at the first upgraded start. New snapshots copy those sections
+  from the live client tables, which a veil.db writer can still edit.
+
 - #1281: a `subscription_tokens` row no longer authorizes itself. The panel
   seals each token's id, client, expiry and plaintext into
   `token_ciphertext` under a token-only subkey of the state key, and

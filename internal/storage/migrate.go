@@ -912,6 +912,17 @@ UPDATE clients SET device_limit=NULL WHERE device_limit=0;
 UPDATE clients SET ip_limit=NULL WHERE ip_limit=0;
 `,
 	},
+	{
+		version: 32,
+		name:    "revision_snapshot_payload_mac",
+		sql: `
+-- #1280: rows are authenticated by an HMAC keyed from the state key. Existing
+-- rows start unsealed (''); the panel seals the desired row at startup only
+-- after proving it against state.json, and refuses every other unsealed row.
+ALTER TABLE revision_snapshots
+  ADD COLUMN payload_mac TEXT NOT NULL DEFAULT '';
+`,
+	},
 }
 
 func migrationChecksumText(name, sql string) string {

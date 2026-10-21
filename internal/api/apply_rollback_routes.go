@@ -181,7 +181,7 @@ func (s *managementState) commitIntentionalRollbackLocked(selectedRevision uint6
 			_ = tx.Rollback()
 			return rollbackState(fmt.Errorf("desired revision advanced to %d, want %d", newRevision, current.Desired+1))
 		}
-		if err := apply.SaveSnapshotTxBound(tx, newRevision, snapshotPayload, stateCommit.Journal().IntendedStateSHA256); err != nil {
+		if err := apply.SaveSnapshotTxBound(tx, s.applySnapshots.Seal(), newRevision, snapshotPayload, stateCommit.Journal().IntendedStateSHA256); err != nil {
 			_ = tx.Rollback()
 			return rollbackState(err)
 		}

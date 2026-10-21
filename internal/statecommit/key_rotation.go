@@ -507,7 +507,12 @@ func commitRotationRevision(
 		_ = tx.Rollback()
 		return 0, fmt.Errorf("state commit: key rotation advanced revision to %d, want %d", revision, journal.IntendedRevision)
 	}
-	if err := apply.SaveSnapshotTxBound(tx, revision, payload, journal.IntendedStateSHA256); err != nil {
+	newSeal, err := apply.NewSnapshotSeal(newCipher)
+	if err != nil {
+		_ = tx.Rollback()
+		return 0, fmt.Errorf("state commit: %w", err)
+	}
+	if err := apply.SaveSnapshotTxBound(tx, newSeal, revision, payload, journal.IntendedStateSHA256); err != nil {
 		_ = tx.Rollback()
 		return 0, err
 	}
@@ -528,18 +533,29 @@ func reencryptRevisionSnapshotsTx(tx *client.Tx, oldCipher, newCipher *secrets.C
 	if oldCipher == nil || newCipher == nil {
 		return fmt.Errorf("state commit: snapshot rotation ciphers unavailable")
 	}
-	rows, err := tx.Query(`SELECT revision, payload FROM revision_snapshots ORDER BY revision`)
+	oldSeal, err := apply.NewSnapshotSeal(oldCipher)
+	if err != nil {
+		return fmt.Errorf("state commit: %w", err)
+	}
+	newSeal, err := apply.NewSnapshotSeal(newCipher)
+	if err != nil {
+		return fmt.Errorf("state commit: %w", err)
+	}
+	rows, err := tx.Query(`SELECT revision, payload, state_sha256, created_at, payload_mac FROM revision_snapshots ORDER BY revision`)
 	if err != nil {
 		return fmt.Errorf("state commit: list snapshots for key rotation: %w", err)
 	}
 	type snapshotRow struct {
-		revision uint64
-		payload  string
+		revision    uint64
+		payload     string
+		stateSHA256 string
+		createdAt   int64
+		mac         string
 	}
 	var snapshots []snapshotRow
 	for rows.Next() {
 		var row snapshotRow
-		if err := rows.Scan(&row.revision, &row.payload); err != nil {
+		if err := rows.Scan(&row.revision, &row.payload, &row.stateSHA256, &row.createdAt, &row.mac); err != nil {
 			_ = rows.Close()
 			return fmt.Errorf("state commit: scan snapshot for key rotation: %w", err)
 		}
@@ -552,6 +568,14 @@ func reencryptRevisionSnapshotsTx(tx *client.Tx, oldCipher, newCipher *secrets.C
 		return fmt.Errorf("state commit: list snapshots for key rotation: %w", err)
 	}
 	for _, row := range snapshots {
+		// A sealed row must authenticate under the old key before rotation
+		// re-seals it under the new one; otherwise rotation would launder a
+		// row a veil.db writer edited into a valid seal (#1280). Unsealed
+		// (pre-#1280) rows stay unsealed and remain unreadable to the panel.
+		sealed := row.mac != ""
+		if sealed && !oldSeal.Verify(row.revision, row.createdAt, row.stateSHA256, []byte(row.payload), row.mac) {
+			return fmt.Errorf("state commit: snapshot %d is not authenticated by the current state key; refusing key rotation (the retained revision snapshot is tampered; remove that revision_snapshots row, then retry)", row.revision)
+		}
 		var snapshot model.ManagementSnapshot
 		if err := json.Unmarshal([]byte(row.payload), &snapshot); err != nil {
 			return fmt.Errorf("state commit: decode snapshot %d for key rotation: %w", row.revision, err)
@@ -589,7 +613,11 @@ func reencryptRevisionSnapshotsTx(tx *client.Tx, oldCipher, newCipher *secrets.C
 		if err != nil {
 			return fmt.Errorf("state commit: marshal snapshot %d for key rotation: %w", row.revision, err)
 		}
-		if _, err := tx.Exec(`UPDATE revision_snapshots SET payload=? WHERE revision=?`, string(payload), row.revision); err != nil {
+		mac := ""
+		if sealed {
+			mac = newSeal.MAC(row.revision, row.createdAt, row.stateSHA256, payload)
+		}
+		if _, err := tx.Exec(`UPDATE revision_snapshots SET payload=?, payload_mac=? WHERE revision=?`, string(payload), mac, row.revision); err != nil {
 			return fmt.Errorf("state commit: persist rotated snapshot %d: %w", row.revision, err)
 		}
 	}

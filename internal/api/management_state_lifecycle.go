@@ -339,6 +339,13 @@ func (l ManagementStateLifecycle) loadCoherentStateModeLocked(deferApplyRecovery
 		if l.state.statePath == "" {
 			return nil
 		}
+		// A reload may have replaced the master cipher; snapshot reads must
+		// authenticate under the current key (#1280).
+		if l.state.applySnapshots != nil {
+			if err := l.state.applySnapshots.SetCipher(l.state.cipher); err != nil {
+				return fmt.Errorf("arm revision snapshot authentication: %w", err)
+			}
+		}
 		if err := l.recoverPendingCommitLocked(); err != nil {
 			return fmt.Errorf("recover interrupted state mutation: %w", err)
 		}
@@ -523,25 +530,41 @@ func (l ManagementStateLifecycle) verifyCurrentStateRevisionLocked() error {
 	if err != nil {
 		return err
 	}
-	if storedDigest != "" {
-		if storedDigest != currentDigest {
-			return fmt.Errorf("management state digest does not match desired revision %d", revisions.Desired)
+	if storedDigest != "" && storedDigest != currentDigest {
+		return fmt.Errorf("management state digest does not match desired revision %d", revisions.Desired)
+	}
+	sealed, err := l.state.applySnapshots.IsSealed(revisions.Desired)
+	if err != nil {
+		return err
+	}
+	if sealed {
+		// Sealed rows are authenticated on every read; a bad MAC must stop
+		// startup here rather than at the first render (#1280).
+		if storedDigest == "" {
+			return fmt.Errorf("sealed desired revision %d has no state digest", revisions.Desired)
+		}
+		if _, err := l.state.applySnapshots.Load(revisions.Desired); err != nil {
+			return fmt.Errorf("desired revision %d: %w", revisions.Desired, err)
 		}
 		return nil
 	}
 
-	// Migration v4 adds the digest column to legacy snapshot rows. Bind it
-	// only after proving the decrypted state-file projection is identical to
-	// the desired immutable snapshot; otherwise fail closed.
+	// Legacy desired row: written before migration v4 (no digest) and/or
+	// before migration v32 (no payload MAC, #1280). Bind and seal it only
+	// after proving the decrypted state-file projection is identical to the
+	// desired immutable snapshot and that it carries no plaintext credential;
+	// otherwise fail closed. state.json is outside veil.db, so this proof does
+	// not trust anything a veil.db writer controls beyond the client rows the
+	// live tables already expose.
 	store := managementstate.NewStore(l.state.statePath, l.state.cipher)
 	fileSnapshot, ok, err := store.Load()
 	if err != nil {
-		return fmt.Errorf("load management state for legacy digest binding: %w", err)
+		return fmt.Errorf("load management state for legacy snapshot binding: %w", err)
 	}
 	if !ok {
 		return errors.New("management state is missing for nonzero desired revision")
 	}
-	payload, err := l.state.applySnapshots.Load(revisions.Desired)
+	payload, err := l.state.applySnapshots.LoadUnsealed(revisions.Desired)
 	if err != nil {
 		return err
 	}
@@ -549,13 +572,45 @@ func (l ManagementStateLifecycle) verifyCurrentStateRevisionLocked() error {
 	if err := json.Unmarshal(payload, &revisionSnapshot); err != nil {
 		return fmt.Errorf("decode desired revision snapshot %d: %w", revisions.Desired, err)
 	}
+	if err := legacySnapshotCredentialsSealed(revisionSnapshot, l.state.cipher); err != nil {
+		return fmt.Errorf("legacy desired revision snapshot %d: %w", revisions.Desired, err)
+	}
 	if err := l.state.decryptSnapshot(&revisionSnapshot); err != nil {
 		return fmt.Errorf("decrypt desired revision snapshot %d: %w", revisions.Desired, err)
 	}
 	if !reflect.DeepEqual(stateFileProjection(fileSnapshot), stateFileProjection(revisionSnapshot)) {
 		return fmt.Errorf("legacy management state does not match desired revision %d", revisions.Desired)
 	}
-	return l.state.applySnapshots.BindStateDigest(revisions.Desired, currentDigest)
+	if storedDigest == "" {
+		if err := l.state.applySnapshots.BindStateDigest(revisions.Desired, currentDigest); err != nil {
+			return err
+		}
+	}
+	if err := l.state.applySnapshots.SealLegacy(revisions.Desired, payload, currentDigest); err != nil {
+		return err
+	}
+	log.Printf("revision snapshots: sealed legacy desired revision %d after verifying it against state.json (#1280); other pre-upgrade revisions stay unsealed and cannot be rolled back to", revisions.Desired)
+	return nil
+}
+
+// legacySnapshotCredentialsSealed refuses a legacy snapshot whose client
+// credential values are not state-key ciphertexts: decryptSnapshot and the
+// render path would otherwise take a planted plaintext (or garbage "ve1:")
+// value verbatim (#1280 chain B).
+func legacySnapshotCredentialsSealed(snapshot managementSnapshot, cipher *secrets.Cipher) error {
+	for _, credential := range snapshot.Credentials {
+		value := string(credential.EncryptedValue)
+		if value == "" {
+			continue
+		}
+		if !secrets.IsEncrypted(value) {
+			return fmt.Errorf("credential %s is not encrypted", credential.ID)
+		}
+		if _, err := cipher.Decrypt(value); err != nil {
+			return fmt.Errorf("credential %s does not decrypt under the state key", credential.ID)
+		}
+	}
+	return nil
 }
 
 func stateFileProjection(snapshot managementSnapshot) managementSnapshot {

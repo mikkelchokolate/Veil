@@ -184,6 +184,12 @@ func initApplySubsystemMode(s *managementState, deferStartupRecovery bool) {
 	s.applyRevisions = apply.NewRevisionStore(s.db)
 	s.applyJobs = apply.NewJobStore(s.db)
 	s.applySnapshots = apply.NewSnapshotStore(s.db)
+	if s.cipher != nil {
+		// #1280: every snapshot read is authenticated under the state key.
+		if err := s.applySnapshots.SetCipher(s.cipher); err != nil {
+			log.Printf("apply subsystem: arm snapshot authentication: %v", err)
+		}
+	}
 	if deferStartupRecovery {
 		s.applyRunner = apply.NewRunnerDeferredStartupRecovery(s.applyRevisions, s.applyJobs, apply.ContextExecutorFunc(s.executeApplyRevisionContext))
 	} else {
@@ -674,9 +680,9 @@ func (s *managementState) bumpDesiredRevisionLocked(stateDigests ...string) (uin
 	if s.applySnapshots != nil {
 		var snapshotErr error
 		if s.statePath == "" {
-			snapshotErr = apply.SaveSnapshotTx(tx, rev, payload)
+			snapshotErr = apply.SaveSnapshotTx(tx, s.applySnapshots.Seal(), rev, payload)
 		} else {
-			snapshotErr = apply.SaveSnapshotTxBound(tx, rev, payload, stateDigest)
+			snapshotErr = apply.SaveSnapshotTxBound(tx, s.applySnapshots.Seal(), rev, payload, stateDigest)
 		}
 		if snapshotErr != nil {
 			_ = tx.Rollback()

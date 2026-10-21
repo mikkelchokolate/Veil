@@ -77,7 +77,7 @@ func TestRotateKeyRefusesPlantedPlaintextSnapshotCredential(t *testing.T) {
 		_ = tx.Rollback()
 		t.Fatal(err)
 	}
-	if err := apply.SaveSnapshotTxBound(tx, revision, payload, hex.EncodeToString(digest[:])); err != nil {
+	if err := apply.SaveSnapshotTxBound(tx, snapshotSealFor(t, cipherFromBytes(t, fixture.oldKey)), revision, payload, hex.EncodeToString(digest[:])); err != nil {
 		_ = tx.Rollback()
 		t.Fatal(err)
 	}

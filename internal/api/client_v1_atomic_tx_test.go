@@ -462,6 +462,7 @@ func TestStartupMigrateLegacyRestoredStateMigratesNewProfiles(t *testing.T) {
 	); err != nil {
 		t.Fatalf("bind restored state to desired snapshot: %v", err)
 	}
+	resealSnapshotForTest(t, st1, rev1.Desired)
 	st2 := newManagementState(info)
 	_, total, err = st2.clientRepo.List(client.ListFilter{})
 	if err != nil {
