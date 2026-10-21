@@ -14,7 +14,9 @@ import (
 type RuntimeCommandInput struct {
 	Command []string
 	Timeout time.Duration
-	Env     []string
+	// Env overrides entries of the process environment for the child. A PATH
+	// override is ignored: children always get syspath.TrustedPATH() (#1262).
+	Env []string
 }
 
 type RuntimeCommandOutput struct {
