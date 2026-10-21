@@ -61,6 +61,7 @@ func TestGoVersionAtLeast(t *testing.T) {
 }
 
 func TestKnownGoBins(t *testing.T) {
+	asUnprivileged(t) // exercises the non-root ambient lookup (#1332)
 	t.Setenv("GOROOT", "/fake/goroot")
 	bins := knownGoBins()
 	seen := map[string]int{}
@@ -78,6 +79,7 @@ func TestKnownGoBins(t *testing.T) {
 }
 
 func TestKnownGoBinsIncludesHome(t *testing.T) {
+	asUnprivileged(t) // exercises the non-root ambient lookup (#1332)
 	t.Setenv("HOME", "/fakehome")
 	bins := knownGoBins()
 	hasHome := false
@@ -105,6 +107,7 @@ func makeFakeGoBin(t *testing.T, dir, output string) string {
 }
 
 func TestFindBestGo(t *testing.T) {
+	asUnprivileged(t) // exercises the non-root ambient lookup (#1332)
 	root := t.TempDir()
 	oldDir := filepath.Join(root, "old")
 	newDir := filepath.Join(root, "new")
@@ -248,6 +251,7 @@ func TestGoBuildEnvHandlesWindowsPath(t *testing.T) {
 }
 
 func TestResolveGoFindsSystemGo(t *testing.T) {
+	asUnprivileged(t) // exercises the non-root ambient lookup (#1332)
 	dir := t.TempDir()
 	p := makeFakeGoBin(t, dir, "echo 'go version go1.99.0 linux/amd64'")
 	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
@@ -553,6 +557,7 @@ func TestResolveGoFindBestGoError(t *testing.T) {
 }
 
 func TestGoBuildEnvAddsPathWhenMissing(t *testing.T) {
+	asUnprivileged(t) // exercises the non-root ambient lookup (#1332)
 	t.Setenv("PATH", "")
 	t.Setenv("Path", "")
 	os.Unsetenv("PATH")

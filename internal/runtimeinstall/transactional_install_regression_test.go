@@ -202,7 +202,7 @@ func TestCaddyNaiveBuildVerifiesModuleGraphBeforeReadonlyBuild(t *testing.T) {
 		calls = append(calls, append([]string(nil), args...))
 		return nil, nil
 	}
-	if err := runCaddyNaiveBuild(t.Context(), "veil-test-go-stub", cacheDir, outPath); err != nil {
+	if err := runCaddyNaiveBuild(t.Context(), "/opt/veil-test/go-stub", cacheDir, outPath); err != nil {
 		t.Fatalf("runCaddyNaiveBuild: %v", err)
 	}
 	if len(calls) < 2 {

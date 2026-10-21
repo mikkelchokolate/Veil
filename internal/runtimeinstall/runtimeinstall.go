@@ -40,6 +40,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/syspath"
 )
 
 // Method describes how a runtime binary is acquired.
@@ -415,19 +417,21 @@ func runSandboxedVersionProbe(ctx context.Context, binary string, args []string)
 	if dependencyErr != nil {
 		return "", fmt.Errorf("resolve runtime probe dependencies: %w", dependencyErr)
 	}
-	command := "systemd-run"
+	command, lookupErr := syspath.LookPath("systemd-run")
 	var commandArgs []string
 	if _, err := os.Stat("/run/systemd/private"); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			return "", fmt.Errorf("inspect systemd manager: %w", err)
 		}
-		var lookupErr error
-		command, lookupErr = exec.LookPath("bwrap")
+		command, lookupErr = syspath.LookPath("bwrap")
 		if lookupErr != nil {
 			return "", errors.New("no supported runtime version-probe sandbox is available")
 		}
 		commandArgs = insertBubblewrapProbeBinds(bubblewrapVersionProbeArgs(binary, args), dependencies)
 	} else {
+		if lookupErr != nil {
+			return "", fmt.Errorf("resolve systemd-run: %w", lookupErr)
+		}
 		rootDir, createErr := os.MkdirTemp("/var/tmp", "veil-runtime-probe-root-*")
 		if createErr != nil {
 			return "", fmt.Errorf("create systemd probe root: %w", createErr)
@@ -535,7 +539,7 @@ func (o Options) withDefaults() Options {
 		o.EnsureGo = tc.Ensure
 	}
 	if o.LookPath == nil {
-		o.LookPath = exec.LookPath
+		o.LookPath = syspath.LookPath
 	}
 	if o.RunVersion == nil {
 		o.RunVersion = runSandboxedVersionProbe
@@ -1105,7 +1109,13 @@ var execBuildCommand = func(ctx context.Context, dir string, env []string, args 
 // pins Caddy v2.11.4 and the naive forwardproxy fork via a replace directive,
 // and compiles a static binary to outPath.
 func runCaddyNaiveBuild(ctx context.Context, goBin, cacheDir, outPath string) error {
-	if resolved, err := exec.LookPath(goBin); err == nil {
+	if !filepath.IsAbs(goBin) {
+		// A bare toolchain name is resolved from trusted system dirs only,
+		// never the ambient PATH (issue #1332).
+		resolved, err := syspath.LookPath(goBin)
+		if err != nil {
+			return fmt.Errorf("resolve go toolchain: %w", err)
+		}
 		goBin = resolved
 	}
 	buildDir := filepath.Join(cacheDir, "build-caddy")
