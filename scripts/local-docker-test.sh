@@ -29,7 +29,7 @@ MSYS_NO_PATHCONV=1 docker run --rm -i \
 	-e "TEST_ARGS_Q=${args_q}" \
 	-v "${repo_root}:/src:ro" \
 	-v veil-gomod:/go/pkg/mod \
-	-w /tmp golang:1.27.2 bash -s <<'INNER'
+	-w /tmp golang:1.27.3 bash -s <<'INNER'
 set -euo pipefail
 mkdir -p /tmp/work /tmp/gocache /tmp/gomodcache
 cp -a /src/. /tmp/work/

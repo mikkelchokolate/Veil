@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/safefs"
@@ -34,8 +35,11 @@ type Lifecycle struct {
 	// non-empty, every entry's OriginalPath must live under one of these
 	// roots (checked lexically and, for existing leaves, through
 	// EvalSymlinks), so a tampered manifest cannot aim a privileged restore
-	// at an attacker-chosen path (#1219). nil keeps legacy behavior for
-	// callers that restore into caller-controlled test roots.
+	// at an attacker-chosen path (#1219). Destination parents are then
+	// reached descriptor-relative from the pinned root, never through an
+	// intermediate symlink (#1253). nil keeps legacy behavior for callers
+	// that restore into caller-controlled test roots; no production restore
+	// path runs without roots (the CLI rollback always sets them).
 	RestoreRoots []string
 }
 
@@ -262,9 +266,38 @@ func (l Lifecycle) Restore(backupID string) ([]string, error) {
 		return nil, err
 	}
 
+	// Parent destination directories are pinned once for the whole restore,
+	// before anything is read or written: staging, metadata preservation and
+	// the final rename are all resolved descriptor-relative, so a destination
+	// dir (or leaf) swapped mid-flight redirects nothing (#1219). With
+	// managed roots configured, each parent is reached by walking from the
+	// pinned root one O_NOFOLLOW|O_DIRECTORY openat per component (creating
+	// missing ones with mkdirat), so an intermediate symlink planted under
+	// service-writable ground fails closed instead of steering a root-run
+	// restore (or its parent creation) outside the allowlist (#1253).
+	parentDirs := map[string]*safefs.Dir{}
+	defer func() {
+		for _, dir := range parentDirs {
+			_ = dir.Close()
+		}
+	}()
+	entryParents := make([]*safefs.Dir, len(entries))
+	for i, entry := range entries {
+		parentPath := filepath.Dir(entry.OriginalPath)
+		parent, ok := parentDirs[parentPath]
+		if !ok {
+			parent, err = openRestoreParent(allowedRoots, parentPath)
+			if err != nil {
+				return nil, fmt.Errorf("open parent dir %s: %w", parentPath, err)
+			}
+			parentDirs[parentPath] = parent
+		}
+		entryParents[i] = parent
+	}
+
 	existingPaths := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		if _, err := os.Lstat(entry.OriginalPath); err == nil {
+	for i, entry := range entries {
+		if _, err := entryParents[i].StatAt(filepath.Base(entry.OriginalPath)); err == nil {
 			existingPaths = append(existingPaths, entry.OriginalPath)
 		} else if !os.IsNotExist(err) {
 			return nil, fmt.Errorf("stat %s: %w", entry.OriginalPath, err)
@@ -277,28 +310,6 @@ func (l Lifecycle) Restore(backupID string) ([]string, error) {
 			return nil, fmt.Errorf("create safety backup before restore: %w", safetyErr)
 		}
 		safetyID = id
-	}
-
-	// Parent destination directories are pinned once for the whole restore:
-	// staging, metadata preservation and the final rename are all resolved
-	// descriptor-relative, so a destination dir (or leaf) swapped mid-flight
-	// redirects nothing (#1219).
-	parentDirs := map[string]*safefs.Dir{}
-	defer func() {
-		for _, dir := range parentDirs {
-			_ = dir.Close()
-		}
-	}()
-	pinParent := func(parentPath string) (*safefs.Dir, error) {
-		if dir, ok := parentDirs[parentPath]; ok {
-			return dir, nil
-		}
-		dir, err := safefs.OpenDir(parentPath)
-		if err != nil {
-			return nil, err
-		}
-		parentDirs[parentPath] = dir
-		return dir, nil
 	}
 
 	type stagedRestore struct {
@@ -315,15 +326,8 @@ func (l Lifecycle) Restore(backupID string) ([]string, error) {
 		}
 	}()
 
-	for _, entry := range entries {
-		parentPath := filepath.Dir(entry.OriginalPath)
-		if err := os.MkdirAll(parentPath, 0o755); err != nil {
-			return nil, restoreErr(safetyID, fmt.Sprintf("create parent dir %s", parentPath), err)
-		}
-		parent, err := pinParent(parentPath)
-		if err != nil {
-			return nil, restoreErr(safetyID, fmt.Sprintf("open parent dir %s", parentPath), err)
-		}
+	for i, entry := range entries {
+		parent := entryParents[i]
 		tmpLeaf, err := stageManifestEntry(backupDir, entry, parent, filepath.Base(entry.OriginalPath))
 		if err != nil {
 			return nil, restoreErr(safetyID, fmt.Sprintf("restore %s", entry.OriginalPath), err)
@@ -335,7 +339,7 @@ func (l Lifecycle) Restore(backupID string) ([]string, error) {
 	for i, item := range staged {
 		destLeaf := filepath.Base(item.dest)
 		if err := restoreCommitRename(item.parent, item.tmpLeaf, destLeaf); err != nil {
-			rollbackErr := l.rollbackRestoredFiles(safetyID, restored)
+			rollbackErr := l.rollbackRestoredFiles(safetyID, restored, parentDirs)
 			if rollbackErr != nil {
 				return nil, fmt.Errorf("restore %s: %v (safety backup %s); restore safety backup: %w", item.dest, err, safetyID, rollbackErr)
 			}
@@ -346,6 +350,72 @@ func (l Lifecycle) Restore(backupID string) ([]string, error) {
 		restored = append(restored, item.dest)
 	}
 	return restored, nil
+}
+
+// openRestoreParent pins parentPath for a restore. Without managed roots
+// (legacy callers restoring into caller-controlled test trees) it keeps the
+// historical MkdirAll + leaf-no-follow open. With managed roots it opens the
+// longest configured root containing parentPath (operator-chosen, so it may
+// itself be reached through a symlink) and then descends one component at a
+// time with descriptor-relative O_NOFOLLOW|O_DIRECTORY opens, creating a
+// missing component with mkdirat(0755) relative to its pinned parent. A
+// component that is a symlink (or any non-directory) fails closed (#1253).
+func openRestoreParent(allowedRoots []string, parentPath string) (*safefs.Dir, error) {
+	if len(allowedRoots) == 0 {
+		if err := os.MkdirAll(parentPath, 0o755); err != nil {
+			return nil, err
+		}
+		return safefs.OpenDir(parentPath)
+	}
+	root := ""
+	for _, candidate := range allowedRoots {
+		if (parentPath == candidate || backupPathWithin(candidate, parentPath)) && len(candidate) > len(root) {
+			root = candidate
+		}
+	}
+	if root == "" {
+		return nil, fmt.Errorf("restore parent %s is outside the allowed roots", parentPath)
+	}
+	dir, err := safefs.OpenDirFollow(root)
+	if os.IsNotExist(err) {
+		if mkErr := os.MkdirAll(root, 0o755); mkErr != nil {
+			return nil, mkErr
+		}
+		dir, err = safefs.OpenDirFollow(root)
+	}
+	if err != nil {
+		return nil, err
+	}
+	rel, err := filepath.Rel(root, parentPath)
+	if err != nil {
+		_ = dir.Close()
+		return nil, err
+	}
+	if rel == "." {
+		return dir, nil
+	}
+	for _, component := range strings.Split(rel, string(filepath.Separator)) {
+		if component == "" || component == "." || component == ".." {
+			_ = dir.Close()
+			return nil, fmt.Errorf("restore parent %s has an invalid component %q", parentPath, component)
+		}
+		next, err := dir.OpenDirAt(component)
+		if os.IsNotExist(err) {
+			if mkErr := dir.MkdirAt(component, 0o755); mkErr != nil && !os.IsExist(mkErr) {
+				_ = dir.Close()
+				return nil, mkErr
+			}
+			next, err = dir.OpenDirAt(component)
+		}
+		if err != nil {
+			path := filepath.Join(dir.Path(), component)
+			_ = dir.Close()
+			return nil, fmt.Errorf("%s is not a real directory below restore root %s: %w", path, root, err)
+		}
+		_ = dir.Close()
+		dir = next
+	}
+	return dir, nil
 }
 
 // stageManifestEntry streams one validated member into a fresh temp inside
@@ -489,9 +559,18 @@ func restoreErr(safetyID, op string, err error) error {
 	return fmt.Errorf("%s: %w (safety backup %s)", op, err, safetyID)
 }
 
-func (l Lifecycle) rollbackRestoredFiles(safetyID string, restored []string) error {
+// rollbackRestoredFiles undoes the already-committed part of a restore. The
+// parents pinned by Restore are reused, so the undo acts on exactly the
+// directories the restore wrote into and never re-resolves a path (#1253).
+func (l Lifecycle) rollbackRestoredFiles(safetyID string, restored []string, parents map[string]*safefs.Dir) error {
 	if len(restored) == 0 {
 		return nil
+	}
+	pinned := func(path string) (*safefs.Dir, error) {
+		if dir, ok := parents[filepath.Dir(path)]; ok && dir != nil {
+			return dir, nil
+		}
+		return nil, fmt.Errorf("restore parent of %s was not pinned", path)
 	}
 	if safetyID == "" {
 		// No safety backup: re-check each destination against the
@@ -511,7 +590,7 @@ func (l Lifecycle) rollbackRestoredFiles(safetyID string, restored []string) err
 				}
 				continue
 			}
-			parent, err := safefs.OpenDir(filepath.Dir(abs))
+			parent, err := pinned(abs)
 			if err != nil {
 				if first == nil {
 					first = err
@@ -519,7 +598,6 @@ func (l Lifecycle) rollbackRestoredFiles(safetyID string, restored []string) err
 				continue
 			}
 			err = parent.RemoveAt(filepath.Base(abs))
-			parent.Close()
 			if err != nil && !os.IsNotExist(err) && first == nil {
 				first = err
 			}
@@ -549,7 +627,7 @@ func (l Lifecycle) rollbackRestoredFiles(safetyID string, restored []string) err
 	}
 	for _, path := range restored {
 		entry, ok := byOrig[path]
-		parent, err := safefs.OpenDir(filepath.Dir(path))
+		parent, err := pinned(path)
 		if err != nil {
 			return err
 		}
@@ -557,14 +635,12 @@ func (l Lifecycle) rollbackRestoredFiles(safetyID string, restored []string) err
 			// Not in the safety manifest — remove only the leaf relative to
 			// the pinned parent so a swapped parent can redirect nothing.
 			err := parent.RemoveAt(filepath.Base(path))
-			parent.Close()
 			if err != nil && !os.IsNotExist(err) {
 				return err
 			}
 			continue
 		}
 		err = copyBackupMemberToDest(safetyDir, entry, parent, filepath.Base(path))
-		parent.Close()
 		if err != nil {
 			return err
 		}
