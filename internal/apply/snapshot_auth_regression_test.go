@@ -203,3 +203,41 @@ func TestSnapshotBindStateDigestNeverTouchesSealedRow(t *testing.T) {
 		t.Fatalf("sealed row must stay readable: %v", err)
 	}
 }
+
+func TestSnapshotResealStateDigestOnlyMovesAnAuthenticatedRow(t *testing.T) {
+	store := armedSnapshotStore(t)
+	from, to := snapshotTestDigest("state-v5"), snapshotTestDigest("state-v6")
+	if err := store.SaveBound(12, []byte(`{"v":12}`), from); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ResealStateDigest(12, snapshotTestDigest("other"), to); err == nil {
+		t.Fatal("ResealStateDigest moved a row bound to another digest")
+	}
+	if err := store.ResealStateDigest(12, from, "not-a-digest"); err == nil {
+		t.Fatal("ResealStateDigest accepted an invalid target digest")
+	}
+	if err := store.ResealStateDigest(12, from, to); err != nil {
+		t.Fatal(err)
+	}
+	if digest, err := store.StateDigest(12); err != nil || digest != to {
+		t.Fatalf("resealed digest=%q err=%v", digest, err)
+	}
+	if got, err := store.Load(12); err != nil || string(got) != `{"v":12}` {
+		t.Fatalf("resealed row: %q %v", got, err)
+	}
+
+	// Unsealed or edited rows are never promoted.
+	if _, err := store.db.Exec(`INSERT INTO revision_snapshots(revision,payload,state_sha256) VALUES(13,'{"v":13}',?)`, from); err != nil {
+		t.Fatal(err)
+	}
+	requireUnauthenticated(t, store.ResealStateDigest(13, from, to), "unsealed row")
+	if _, err := store.db.Exec(`UPDATE revision_snapshots SET payload='{"v":"edited"}' WHERE revision=12`); err != nil {
+		t.Fatal(err)
+	}
+	requireUnauthenticated(t, store.ResealStateDigest(12, to, from), "edited sealed row")
+
+	unarmed := NewSnapshotStore(store.db)
+	if err := unarmed.ResealStateDigest(12, to, from); err == nil {
+		t.Fatal("an unarmed store resealed a row")
+	}
+}

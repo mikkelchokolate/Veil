@@ -13,7 +13,14 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
-const CurrentSchemaVersion = 5
+const CurrentSchemaVersion = 6
+
+// SnapshotSealSchemaVersion is the first state.json schema written only by
+// builds that seal every revision_snapshots row under the state key (#1280).
+// A state file at or above it proves, from outside veil.db, that the one-shot
+// legacy snapshot sealing pass is over, so an unsealed desired row can only be
+// a veil.db edit and must stop startup.
+const SnapshotSealSchemaVersion = 6
 
 // settingsProtocolFieldKeys are legacy flat settings fields that are now kept
 // inside settings.protocolFields for dynamic UI/validation.
@@ -109,6 +116,38 @@ var migrations = map[int]func(map[string]interface{}) (map[string]interface{}, e
 		}
 		return raw, nil
 	},
+	5: func(raw map[string]interface{}) (map[string]interface{}, error) {
+		// Migration from version 5 to 6: no field changes. Version 6 marks a
+		// state file written by a build that seals revision snapshots
+		// (SnapshotSealSchemaVersion, #1280), which startup reads from the
+		// on-disk bytes via EncodedSchemaVersion.
+		return raw, nil
+	},
+}
+
+// EncodedSchemaVersion returns the schemaVersion recorded in exact state.json
+// bytes, before any in-memory migration. A missing or invalid value reads as 1,
+// matching Decode.
+func EncodedSchemaVersion(body []byte) int {
+	var raw struct {
+		SchemaVersion *float64 `json:"schemaVersion"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil || raw.SchemaVersion == nil {
+		return 1
+	}
+	return int(*raw.SchemaVersion)
+}
+
+// ReencodeAtCurrentSchema deterministically rewrites exact state.json bytes at
+// CurrentSchemaVersion without decrypting or re-encrypting any value, so the
+// same input always yields the same output (and digest).
+func ReencodeAtCurrentSchema(body []byte) ([]byte, error) {
+	codec := NewManagementStateCodec()
+	snapshot, err := codec.Decode(body)
+	if err != nil {
+		return nil, err
+	}
+	return codec.Encode(snapshot)
 }
 
 // migrateFallbackRootValue rewrites a legacy /var/lib/veil fallbackRoot on a

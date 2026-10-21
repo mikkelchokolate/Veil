@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
@@ -522,40 +523,94 @@ func (l ManagementStateLifecycle) verifyCurrentStateRevisionLocked() error {
 	if revisions.Desired == 0 {
 		return nil
 	}
-	currentDigest, err := stateFileDigest(l.state.statePath)
+	if l.state.applySnapshots.Seal() == nil {
+		return errors.New("revision snapshot authentication is not armed")
+	}
+	stateBody, err := os.ReadFile(l.state.statePath)
 	if err != nil {
 		return fmt.Errorf("digest management state: %w", err)
 	}
+	currentDigest := managementstate.EncodedStateSHA256(stateBody)
+	// The "legacy sealing is over" fact lives in state.json, not veil.db
+	// (#1280): every state file this build writes is at
+	// SnapshotSealSchemaVersion, and startup upgrades a pre-#1280 file right
+	// after sealing its desired row. Under such a file an unsealed desired row
+	// can only come from a veil.db writer (blanked MAC, planted row), so it is
+	// fatal rather than a candidate for the legacy pass.
+	sealingInForce := managementstate.EncodedSchemaVersion(stateBody) >= managementstate.SnapshotSealSchemaVersion
 	storedDigest, err := l.state.applySnapshots.StateDigest(revisions.Desired)
 	if err != nil {
 		return err
-	}
-	if storedDigest != "" && storedDigest != currentDigest {
-		return fmt.Errorf("management state digest does not match desired revision %d", revisions.Desired)
 	}
 	sealed, err := l.state.applySnapshots.IsSealed(revisions.Desired)
 	if err != nil {
 		return err
 	}
-	if sealed {
-		// Sealed rows are authenticated on every read; a bad MAC must stop
-		// startup here rather than at the first render (#1280).
-		if storedDigest == "" {
-			return fmt.Errorf("sealed desired revision %d has no state digest", revisions.Desired)
+	if !sealed {
+		if sealingInForce {
+			return fmt.Errorf("desired revision %d: %w: state.json was written by a snapshot-sealing build, so an unsealed desired row is a veil.db edit", revisions.Desired, apply.ErrSnapshotUnauthenticated)
 		}
-		if _, err := l.state.applySnapshots.Load(revisions.Desired); err != nil {
-			return fmt.Errorf("desired revision %d: %w", revisions.Desired, err)
+		if storedDigest != "" && storedDigest != currentDigest {
+			return fmt.Errorf("management state digest does not match desired revision %d", revisions.Desired)
+		}
+		if err := l.sealLegacyDesiredRevisionLocked(revisions.Desired, storedDigest, currentDigest); err != nil {
+			return err
+		}
+		storedDigest = currentDigest
+	}
+
+	// Sealed rows are authenticated on every read; a bad MAC must stop
+	// startup here rather than at the first render (#1280).
+	if storedDigest == "" {
+		return fmt.Errorf("sealed desired revision %d has no state digest", revisions.Desired)
+	}
+	if _, err := l.state.applySnapshots.Load(revisions.Desired); err != nil {
+		return fmt.Errorf("desired revision %d: %w", revisions.Desired, err)
+	}
+	if sealingInForce {
+		if storedDigest != currentDigest {
+			return fmt.Errorf("management state digest does not match desired revision %d", revisions.Desired)
 		}
 		return nil
 	}
 
-	// Legacy desired row: written before migration v4 (no digest) and/or
-	// before migration v32 (no payload MAC, #1280). Bind and seal it only
-	// after proving the decrypted state-file projection is identical to the
-	// desired immutable snapshot and that it carries no plaintext credential;
-	// otherwise fail closed. state.json is outside veil.db, so this proof does
-	// not trust anything a veil.db writer controls beyond the client rows the
-	// live tables already expose.
+	// state.json predates SnapshotSealSchemaVersion: anchor the end of the
+	// legacy pass in it. The authenticated row is re-bound to the upgraded
+	// bytes first and the file is published second; the rewrite is a pure
+	// function of the old bytes, so a crash in between is finished here on the
+	// next start (the sealed row already names the upgraded digest).
+	upgraded, err := managementstate.ReencodeAtCurrentSchema(stateBody)
+	if err != nil {
+		return fmt.Errorf("upgrade management state for snapshot sealing: %w", err)
+	}
+	upgradedDigest := managementstate.EncodedStateSHA256(upgraded)
+	switch storedDigest {
+	case currentDigest:
+		if err := l.state.applySnapshots.ResealStateDigest(revisions.Desired, currentDigest, upgradedDigest); err != nil {
+			return err
+		}
+	case upgradedDigest:
+		// Interrupted upgrade: the row was re-bound, the file not yet written.
+	default:
+		return fmt.Errorf("management state digest does not match desired revision %d", revisions.Desired)
+	}
+	if err := managementstate.NewStore(l.state.statePath, l.state.cipher).SaveEncoded(upgraded); err != nil {
+		return fmt.Errorf("publish management state at schema %d: %w", managementstate.CurrentSchemaVersion, err)
+	}
+	log.Printf("revision snapshots: state.json upgraded to schema %d; unsealed desired revisions are refused from now on (#1280)", managementstate.CurrentSchemaVersion)
+	return nil
+}
+
+// sealLegacyDesiredRevisionLocked seals a desired row written before
+// migration v4 (no digest) and/or migration v32 (no payload MAC, #1280). It is
+// reached only while state.json is below SnapshotSealSchemaVersion, i.e.
+// before the first start of a sealing build. It binds and seals the row only
+// after proving the decrypted state-file projection is identical to the
+// desired snapshot and that every credential is a state-key ciphertext;
+// otherwise it fails closed. The client, binding and credential-assignment
+// sections are not covered by state.json and are trusted as they stood at
+// that first start.
+func (l ManagementStateLifecycle) sealLegacyDesiredRevisionLocked(revision uint64, storedDigest, currentDigest string) error {
 	store := managementstate.NewStore(l.state.statePath, l.state.cipher)
 	fileSnapshot, ok, err := store.Load()
 	if err != nil {
@@ -564,32 +619,32 @@ func (l ManagementStateLifecycle) verifyCurrentStateRevisionLocked() error {
 	if !ok {
 		return errors.New("management state is missing for nonzero desired revision")
 	}
-	payload, err := l.state.applySnapshots.LoadUnsealed(revisions.Desired)
+	payload, err := l.state.applySnapshots.LoadUnsealed(revision)
 	if err != nil {
 		return err
 	}
 	var revisionSnapshot managementSnapshot
 	if err := json.Unmarshal(payload, &revisionSnapshot); err != nil {
-		return fmt.Errorf("decode desired revision snapshot %d: %w", revisions.Desired, err)
+		return fmt.Errorf("decode desired revision snapshot %d: %w", revision, err)
 	}
 	if err := legacySnapshotCredentialsSealed(revisionSnapshot, l.state.cipher); err != nil {
-		return fmt.Errorf("legacy desired revision snapshot %d: %w", revisions.Desired, err)
+		return fmt.Errorf("legacy desired revision snapshot %d: %w", revision, err)
 	}
 	if err := l.state.decryptSnapshot(&revisionSnapshot); err != nil {
-		return fmt.Errorf("decrypt desired revision snapshot %d: %w", revisions.Desired, err)
+		return fmt.Errorf("decrypt desired revision snapshot %d: %w", revision, err)
 	}
 	if !reflect.DeepEqual(stateFileProjection(fileSnapshot), stateFileProjection(revisionSnapshot)) {
-		return fmt.Errorf("legacy management state does not match desired revision %d", revisions.Desired)
+		return fmt.Errorf("legacy management state does not match desired revision %d", revision)
 	}
 	if storedDigest == "" {
-		if err := l.state.applySnapshots.BindStateDigest(revisions.Desired, currentDigest); err != nil {
+		if err := l.state.applySnapshots.BindStateDigest(revision, currentDigest); err != nil {
 			return err
 		}
 	}
-	if err := l.state.applySnapshots.SealLegacy(revisions.Desired, payload, currentDigest); err != nil {
+	if err := l.state.applySnapshots.SealLegacy(revision, payload, currentDigest); err != nil {
 		return err
 	}
-	log.Printf("revision snapshots: sealed legacy desired revision %d after verifying it against state.json (#1280); other pre-upgrade revisions stay unsealed and cannot be rolled back to", revisions.Desired)
+	log.Printf("revision snapshots: sealed legacy desired revision %d after verifying it against state.json (#1280); other pre-upgrade revisions stay unsealed and cannot be rolled back to", revision)
 	return nil
 }
 

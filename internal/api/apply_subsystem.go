@@ -174,6 +174,18 @@ func initApplySubsystemMode(s *managementState, deferStartupRecovery bool) {
 		log.Printf("apply subsystem: persistent SQLite unavailable: %v", err)
 		return
 	}
+	snapshots := apply.NewSnapshotStore(db)
+	if s.cipher != nil {
+		// #1280: every snapshot read is authenticated under the state key.
+		// An unarmed store would serve rows unauthenticated, so fail closed
+		// exactly like an unavailable database.
+		if err := snapshots.SetCipher(s.cipher); err != nil {
+			_ = db.Close()
+			s.storageDegradedErr = fmt.Errorf("arm revision snapshot authentication: %w", err)
+			log.Printf("apply subsystem: arm revision snapshot authentication: %v", err)
+			return
+		}
+	}
 	s.storageDegradedErr = nil
 	s.db = db
 	if s.idempotency != nil {
@@ -183,13 +195,7 @@ func initApplySubsystemMode(s *managementState, deferStartupRecovery bool) {
 	}
 	s.applyRevisions = apply.NewRevisionStore(s.db)
 	s.applyJobs = apply.NewJobStore(s.db)
-	s.applySnapshots = apply.NewSnapshotStore(s.db)
-	if s.cipher != nil {
-		// #1280: every snapshot read is authenticated under the state key.
-		if err := s.applySnapshots.SetCipher(s.cipher); err != nil {
-			log.Printf("apply subsystem: arm snapshot authentication: %v", err)
-		}
-	}
+	s.applySnapshots = snapshots
 	if deferStartupRecovery {
 		s.applyRunner = apply.NewRunnerDeferredStartupRecovery(s.applyRevisions, s.applyJobs, apply.ContextExecutorFunc(s.executeApplyRevisionContext))
 	} else {

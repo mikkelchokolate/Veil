@@ -283,6 +283,41 @@ func (s *SnapshotStore) SealLegacy(revision uint64, verifiedPayload []byte, stat
 	return nil
 }
 
+// ResealStateDigest moves an authenticated row from one state.json digest to
+// another and re-seals it. Startup uses it when it rewrites a pre-#1280
+// state.json at SnapshotSealSchemaVersion: the payload is unchanged and only
+// the bound file bytes change. The row must authenticate under the current
+// seal and still carry fromSHA256; the update is a compare-and-set on the
+// verified MAC.
+func (s *SnapshotStore) ResealStateDigest(revision uint64, fromSHA256, toSHA256 string) error {
+	seal := s.Seal()
+	if seal == nil {
+		return fmt.Errorf("apply: snapshot seal for revision %d is unavailable", revision)
+	}
+	if !validStateSHA256(toSHA256) {
+		return fmt.Errorf("apply: state digest for revision %d is invalid", revision)
+	}
+	row, err := s.loadAuthenticated(revision)
+	if err != nil {
+		return err
+	}
+	if row.stateSHA256 != fromSHA256 {
+		return fmt.Errorf("apply: snapshot rev %d is not bound to the expected state digest", revision)
+	}
+	mac := seal.MAC(revision, row.createdAt, toSHA256, []byte(row.payload))
+	result, err := s.db.Exec(
+		`UPDATE revision_snapshots SET state_sha256 = ?, payload_mac = ? WHERE revision = ? AND payload_mac = ? AND payload = ? AND state_sha256 = ? AND created_at = ?`,
+		toSHA256, mac, revision, row.mac, row.payload, fromSHA256, row.createdAt,
+	)
+	if err != nil {
+		return fmt.Errorf("apply: reseal snapshot rev %d: %w", revision, err)
+	}
+	if n, err := result.RowsAffected(); err != nil || n != 1 {
+		return fmt.Errorf("apply: snapshot rev %d changed before resealing", revision)
+	}
+	return nil
+}
+
 // EffectiveAt returns the immutable row creation time used to evaluate legacy
 // snapshots written before effectiveAt became part of the JSON payload. The
 // creation time is covered by the row MAC.
