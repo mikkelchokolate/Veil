@@ -204,6 +204,7 @@ func TestRollbackRejectsInvalidNormalizedSnapshotOwnershipAndIdentity(t *testing
 			if _, err := state.db.Exec(`UPDATE revision_snapshots SET payload=? WHERE revision=?`, string(corruptPayload), selected.Desired); err != nil {
 				t.Fatal(err)
 			}
+			resealSnapshotForTest(t, state, selected.Desired)
 
 			currentClient, err := state.clientRepo.Get(clientID)
 			if err != nil {

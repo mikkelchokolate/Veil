@@ -16,6 +16,43 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1280: `revision_snapshots` rows are now authenticated. Each row carries a
+  `payload_mac` (migration v32): an HMAC-SHA256 keyed from
+  `/etc/veil/state.key` over its revision, creation time, state-file digest
+  and exact payload. The `/s/{token}` feed, the apply render path, rollback
+  and startup only read rows whose MAC verifies. A veil.db writer without the
+  state key can therefore no longer rewrite the applied row to point
+  subscribers at its own endpoints with their real credentials, nor plant a
+  desired row (attacker-authored or plaintext credentials, `ve1:garbage`)
+  for the privileged apply. A planted row at a revision the panel is about to
+  commit is refused, not adopted. State-key rotation re-seals rows under the
+  new key, and only those that verify under the old key; it refuses to
+  rotate while an edited sealed row is present. Upgrade note: rows written
+  before this release have no MAC. On the first start, the panel seals the
+  desired row only after proving it against `state.json` (the same
+  projection check as the v4 digest binding) and checking that every
+  credential in it is a valid state-key ciphertext. If that check fails,
+  startup stops, as for a digest mismatch. It then rewrites `state.json` at
+  schema 6, re-binding the sealed row to the new bytes (an install with no
+  desired revision yet gets the rewrite too); schema 6 records, outside
+  veil.db, that the one-time legacy pass is over. From then on an
+  unsealed desired row (a blanked `payload_mac`, or a planted higher desired
+  revision) stops startup instead of being re-sealed. Every `state.json`
+  this release writes is schema 6, so older Veil builds refuse it (newer
+  schema); downgrading after the first start needs a pre-upgrade backup.
+  Other pre-upgrade rows stay unsealed, so rollback to a revision older than
+  the upgrade is refused. If the applied revision lagged the desired one at
+  upgrade time, the public feed is unavailable until the next successful
+  apply. Residual: a veil.db writer who acts before the first start of this
+  release, or before the first start after restoring a pre-upgrade backup
+  (restore republishes that backup's schema-5 `state.json`, which re-opens
+  the legacy pass on purpose so its desired row can be sealed), can still
+  shape the client, binding and credential-assignment sections of the one
+  legacy desired row (only its `state.json` part and the
+  validity of its credential ciphertexts are proven). After that start, the
+  snapshots themselves cannot be edited, but the live client tables are not
+  authenticated: an edit there is copied into the next revision a mutation
+  commits and seals, as the live gate already reads it.
 - #1265: session revocation by `veil admin set`, `admin reset` and
   `admin rotate-key` now reaches the running panel. The panel's SIGHUP
   reload re-reads `sessions.json` and its journal, so sessions the CLI
