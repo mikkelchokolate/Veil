@@ -16,6 +16,17 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1281: a `subscription_tokens` row no longer authorizes itself. The panel
+  now seals each token's id, client, expiry and plaintext into
+  `token_ciphertext` with the state key, and `/s/{token}` plus token reveal
+  only accept a row whose sealed binding matches it. A veil.db writer
+  without `/etc/veil/state.key` can no longer plant a row for a chosen
+  token, rewrite a row's `token_hash`, re-point a token at another client,
+  rename it, or extend its expiry to pull another client's credentials.
+  Tokens issued before this release keep working (their ciphertext still
+  proves the panel issued that token), but only rotation gives them the
+  client/expiry binding. Rows without a `ve1:` ciphertext, which only
+  pre-0.7.0 development builds could produce, are refused; rotate them.
 - #1288: on hosts where no `/etc/resolv.conf` nameserver is reachable under
   the Hysteria2 unit's kernel egress filter (AWS/GCP/OCI non-Ubuntu images,
   LXC, local dnsmasq), the rendered Hysteria2 config now pins a Cloudflare

@@ -4,10 +4,13 @@ import (
 	"container/list"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -78,6 +81,12 @@ func (s *TokenStore) IssueBy(clientID, label, createdBy string, expiresAt *int64
 	if err := validateTokenMetadata(label, expiresAt); err != nil {
 		return IssuedToken{}, err
 	}
+	// Every row must carry a sealed issuance binding, otherwise lookups
+	// refuse it (#1281); issuing a token that can never authenticate would
+	// only hand the operator a dead link.
+	if s == nil || s.cipher == nil {
+		return IssuedToken{}, ErrSecretUnavailable
+	}
 	plaintext, err := generateToken()
 	if err != nil {
 		return IssuedToken{}, err
@@ -105,11 +114,11 @@ func (s *TokenStore) IssueBy(clientID, label, createdBy string, expiresAt *int64
 		}
 		return IssuedToken{}, err
 	}
-	ciphertext, err := s.encryptPlaintext(plaintext)
+	ciphertext, err := s.sealToken(t, plaintext)
 	if err != nil {
 		return IssuedToken{}, err
 	}
-	t.HasSecret = ciphertext != ""
+	t.HasSecret = true
 	_, err = raw.Exec(`INSERT INTO subscription_tokens
 	  (id, client_id, token_hash, token_prefix, enabled, expires_at, created_at, created_by, label, token_ciphertext)
 	  VALUES(?,?,?,?,?,?,?,?,?,?)`,
@@ -137,21 +146,31 @@ func (s *TokenStore) LookupByPlaintext(plaintext string) (*SubscriptionToken, er
 	return token, nil
 }
 
+// LookupReadOnly resolves an active token. A row only authenticates when its
+// token_ciphertext is a panel-sealed issuance binding (see sealToken) that
+// matches the row's id, client, expiry and token hash. A veil.db writer
+// without the state key can therefore neither plant a row for a chosen
+// token, nor re-point, re-hash or extend an issued one (#1281). Rows that
+// fail verification are an indistinguishable miss, like unknown tokens.
 func (s *TokenStore) LookupReadOnly(plaintext string) (*SubscriptionToken, error) {
-	if plaintext == "" {
+	if plaintext == "" || s == nil || s.cipher == nil {
 		return nil, nil
 	}
 	h := hashToken(plaintext)
 	now := nowUnix()
 	row := s.db.QueryRow(`SELECT id,client_id,token_hash,token_prefix,enabled,expires_at,
- created_at,last_used_at,revoked_at,created_by,label FROM subscription_tokens
+ created_at,last_used_at,revoked_at,created_by,label,token_ciphertext FROM subscription_tokens
  WHERE token_hash=? AND revoked_at IS NULL AND enabled=1 AND (expires_at IS NULL OR expires_at>?)`, []byte(h), now)
-	token, err := scanToken(row, true)
+	token, ciphertext, err := scanTokenWithCiphertext(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("client: lookup token: %w", err)
+	}
+	opened, ok := s.openToken(token, ciphertext)
+	if !ok || subtle.ConstantTimeCompare([]byte(opened), []byte(plaintext)) != 1 {
+		return nil, nil
 	}
 	return &token, nil
 }
@@ -316,6 +335,9 @@ func (s *TokenStore) Rotate(id string) (IssuedToken, error) {
 }
 
 func (s *TokenStore) RotateWithExpiry(id string, expiresAt *int64, expirySupplied bool) (IssuedToken, error) {
+	if s == nil || s.cipher == nil {
+		return IssuedToken{}, ErrSecretUnavailable
+	}
 	raw, err := s.db.Begin()
 	if err != nil {
 		return IssuedToken{}, err
@@ -326,18 +348,16 @@ func (s *TokenStore) RotateWithExpiry(id string, expiresAt *int64, expirySupplie
 		_ = raw.Rollback()
 		return IssuedToken{}, err
 	}
-	ciphertext, err := s.encryptPlaintext(issued.Plaintext)
+	ciphertext, err := s.sealToken(issued.Token, issued.Plaintext)
 	if err != nil {
 		_ = raw.Rollback()
 		return IssuedToken{}, err
 	}
-	if ciphertext != "" {
-		if _, err := raw.Exec(`UPDATE subscription_tokens SET token_ciphertext=? WHERE id=?`, ciphertext, issued.Token.ID); err != nil {
-			_ = raw.Rollback()
-			return IssuedToken{}, fmt.Errorf("client: persist rotated token: %w", err)
-		}
-		issued.Token.HasSecret = true
+	if _, err := raw.Exec(`UPDATE subscription_tokens SET token_ciphertext=? WHERE id=?`, ciphertext, issued.Token.ID); err != nil {
+		_ = raw.Rollback()
+		return IssuedToken{}, fmt.Errorf("client: persist rotated token: %w", err)
 	}
+	issued.Token.HasSecret = true
 	if err := raw.Commit(); err != nil {
 		return IssuedToken{}, err
 	}
@@ -400,15 +420,82 @@ func (s *TokenStore) markRecoverableSecrets(clientID string, tokens []Subscripti
 	return nil
 }
 
-func (s *TokenStore) encryptPlaintext(plaintext string) (string, error) {
-	if s == nil || s.cipher == nil || plaintext == "" {
-		return "", nil
+// tokenBindingVersion tags the sealed issuance binding stored in
+// token_ciphertext. Rows issued before #1281 sealed the bare token plaintext.
+const tokenBindingVersion = "veil-subscription-token-binding-v1"
+
+// tokenBinding is the AEAD-sealed record that ties a token to the row the
+// panel issued it on. Every field that decides who the token authenticates as
+// and for how long is inside the seal; revoked_at/enabled only ever narrow
+// access and stay plain columns.
+type tokenBinding struct {
+	Version   string `json:"v"`
+	ID        string `json:"id"`
+	ClientID  string `json:"client_id"`
+	ExpiresAt *int64 `json:"expires_at"`
+	Token     string `json:"token"`
+}
+
+func (s *TokenStore) sealToken(t SubscriptionToken, plaintext string) (string, error) {
+	if s == nil || s.cipher == nil {
+		return "", ErrSecretUnavailable
 	}
-	value, err := s.cipher.Encrypt(plaintext)
+	if plaintext == "" {
+		return "", fmt.Errorf("client: seal token: empty plaintext")
+	}
+	payload, err := json.Marshal(tokenBinding{
+		Version: tokenBindingVersion, ID: t.ID, ClientID: t.ClientID, ExpiresAt: t.ExpiresAt, Token: plaintext,
+	})
+	if err != nil {
+		return "", fmt.Errorf("client: seal token: %w", err)
+	}
+	value, err := s.cipher.Encrypt(string(payload))
 	if err != nil {
 		return "", fmt.Errorf("client: encrypt token: %w", err)
 	}
 	return value, nil
+}
+
+// openToken verifies the row's token_ciphertext against the row and returns
+// the token plaintext it authorizes. It refuses anything the panel did not
+// seal: an empty or non-"ve1:" value (Cipher.Decrypt would pass it through,
+// #1283), a ciphertext that does not authenticate under the state key, a
+// binding for another id/client/expiry, and a token that does not hash to
+// the row's token_hash. Legacy rows that sealed the bare token are accepted
+// on the AEAD plus hash check alone.
+func (s *TokenStore) openToken(row SubscriptionToken, ciphertext string) (string, bool) {
+	if s == nil || s.cipher == nil || !secrets.IsEncrypted(ciphertext) {
+		return "", false
+	}
+	opened, err := s.cipher.Decrypt(ciphertext)
+	if err != nil || opened == "" {
+		return "", false
+	}
+	token := opened
+	if opened[0] == '{' {
+		var binding tokenBinding
+		decoder := json.NewDecoder(strings.NewReader(opened))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&binding); err != nil || decoder.More() {
+			return "", false
+		}
+		if binding.Version != tokenBindingVersion || binding.ID != row.ID || binding.ClientID != row.ClientID ||
+			!sameExpiry(binding.ExpiresAt, row.ExpiresAt) || binding.Token == "" {
+			return "", false
+		}
+		token = binding.Token
+	}
+	if subtle.ConstantTimeCompare([]byte(hashToken(token)), []byte(row.TokenHash)) != 1 {
+		return "", false
+	}
+	return token, true
+}
+
+func sameExpiry(a, b *int64) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }
 
 // Reveal decrypts the stored subscription token so the panel can rebuild the
@@ -417,31 +504,30 @@ func (s *TokenStore) Reveal(id string) (string, error) {
 	if s == nil || s.cipher == nil {
 		return "", ErrSecretUnavailable
 	}
-	var ciphertext sql.NullString
 	// Reveal mirrors SubscriptionToken.IsActive: revoked, disabled, and
 	// expired tokens no longer authenticate, so their secret must not be
 	// recoverable through the store either (#966).
-	err := s.db.QueryRow(`SELECT token_ciphertext FROM subscription_tokens
+	row := s.db.QueryRow(`SELECT id,client_id,token_hash,token_prefix,enabled,expires_at,
+ created_at,last_used_at,revoked_at,created_by,label,token_ciphertext FROM subscription_tokens
 	  WHERE id=? AND revoked_at IS NULL AND enabled=1
-	    AND (expires_at IS NULL OR expires_at > ?)`, id, nowUnix()).Scan(&ciphertext)
+	    AND (expires_at IS NULL OR expires_at > ?)`, id, nowUnix())
+	token, ciphertext, err := scanTokenWithCiphertext(row)
 	if err == sql.ErrNoRows {
 		return "", ErrNotFound
 	}
 	if err != nil {
 		return "", fmt.Errorf("client: reveal token: %w", err)
 	}
-	if !ciphertext.Valid || ciphertext.String == "" {
+	if ciphertext == "" {
 		return "", ErrSecretUnavailable
 	}
-	// token_ciphertext is only ever written via Cipher.Encrypt; refuse the
-	// legacy plaintext passthrough of Cipher.Decrypt so a planted row cannot
-	// be echoed back as a "revealed" token (#1283).
-	if !secrets.IsEncrypted(ciphertext.String) {
+	// token_ciphertext is only ever written via sealToken; refuse the legacy
+	// plaintext passthrough of Cipher.Decrypt (#1283) and any binding that
+	// does not match this row, so a planted or re-pointed row cannot be
+	// echoed back as a "revealed" token (#1281).
+	plaintext, ok := s.openToken(token, ciphertext)
+	if !ok {
 		return "", fmt.Errorf("client: stored token ciphertext is invalid")
-	}
-	plaintext, err := s.cipher.Decrypt(ciphertext.String)
-	if err != nil {
-		return "", fmt.Errorf("client: decrypt token: %w", err)
 	}
 	return plaintext, nil
 }
@@ -450,7 +536,10 @@ func (s *TokenStore) Reveal(id string) (string, error) {
 // These run inside a caller-managed Tx so token writes commit atomically with
 // the desired-revision bump and the immutable snapshot.
 
-// IssueTokenTx creates a token inside the transaction, returning plaintext once.
+// IssueTokenTx creates a token row inside the transaction, returning plaintext
+// once. The row has no sealed issuance binding yet and does not authenticate
+// until TokenStore seals it (RotateWithExpiry does so in the same
+// transaction, #1281).
 func (t *Tx) IssueTokenTx(clientID, label string, expiresAt *int64) (IssuedToken, error) {
 	if err := validateTokenMetadata(label, expiresAt); err != nil {
 		return IssuedToken{}, err
@@ -586,6 +675,21 @@ func (t *Tx) ReencryptSubscriptionTokens(oldCipher, newCipher *secrets.Cipher) e
 		}
 	}
 	return nil
+}
+
+func scanTokenWithCiphertext(row scanner) (SubscriptionToken, string, error) {
+	var t SubscriptionToken
+	var hashBytes []byte
+	var enabled int
+	var ciphertext sql.NullString
+	err := row.Scan(&t.ID, &t.ClientID, &hashBytes, &t.Prefix, &enabled,
+		&t.ExpiresAt, &t.CreatedAt, &t.LastUsedAt, &t.RevokedAt, &t.CreatedBy, &t.Label, &ciphertext)
+	if err != nil {
+		return SubscriptionToken{}, "", err
+	}
+	t.TokenHash = string(hashBytes)
+	t.Enabled = enabled == 1
+	return t, ciphertext.String, nil
 }
 
 func scanToken(row scanner, withHash bool) (SubscriptionToken, error) {
