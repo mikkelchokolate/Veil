@@ -15,7 +15,9 @@ func authStatusFor(t *testing.T, state *managementState, token string) map[strin
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
 	req.AddCookie(&http.Cookie{Name: "veil_session", Value: token})
 	rec := httptest.NewRecorder()
-	state.handlePersistentAuthStatus(rec, req)
+	// Drive the routed handler (/api/auth/status -> handleEffectiveAuthStatus),
+	// including its Healthy(), static-token and dev-anonymous gates.
+	state.handleEffectiveAuthStatus(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -97,5 +99,36 @@ func TestAuthStatusBootstrapSessionFollowsMiddlewareRule(t *testing.T) {
 	state.mu.Unlock()
 	if body := authStatusFor(t, state, sess.Token); body["authenticated"] != false {
 		t.Fatalf("bootstrap session must be revoked once a real user exists: %v", body)
+	}
+	if _, ok := state.sessionRegistry().Get(sess.Token); ok {
+		t.Fatal("bootstrap session still in the registry after a real user exists")
+	}
+}
+
+// The other two bootstrap preconditions: zero users but the instance was
+// provisioned before (users later all deleted), and no fallback configured.
+// Either one revokes the bootstrap session on the status endpoint (#1112).
+func TestAuthStatusBootstrapSessionRevokedWhenProvisionedOrFallbackOff(t *testing.T) {
+	for name, mutate := range map[string]func(*managementState){
+		"previously provisioned":  func(s *managementState) { s.usersEverExisted = true },
+		"fallback not configured": func(s *managementState) { s.settings.NaivePassword = "" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			state := orphanStatusTestState(t, nil)
+			state.settings.NaivePassword = "fallback-secret"
+			sess, err := state.sessionRegistry().Create(SessionCreateInput{Username: "admin", Role: "admin", Bootstrap: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			state.mu.Lock()
+			mutate(state)
+			state.mu.Unlock()
+			if body := authStatusFor(t, state, sess.Token); body["authenticated"] != false {
+				t.Fatalf("bootstrap session must not authenticate: %v", body)
+			}
+			if _, ok := state.sessionRegistry().Get(sess.Token); ok {
+				t.Fatal("bootstrap session still in the registry")
+			}
+		})
 	}
 }
