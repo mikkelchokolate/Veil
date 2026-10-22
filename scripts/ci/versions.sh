@@ -80,6 +80,10 @@ CI_MIERU_CLIENT_SHA256="d586405d33b10e907ec28e4f420b74e25d3240af826d8a396e127e76
 CI_NAIVE_CLIENT_TAG="v150.0.7871.63-1"
 CI_NAIVE_CLIENT_ASSET="naiveproxy-v150.0.7871.63-1-linux-x64.tar.xz"
 CI_NAIVE_CLIENT_SHA256="0c4f506ce66a7881892fd6932b542c53fc06ac2351987756096c61e753c687bf"
+# Temporary (#1373): upstream deleted this exact asset. Only a 404 for the asset
+# named here soft-skips the naive e2e data path; a 404 for any other pinned
+# asset (e.g. a mistyped bump) stays fatal. Remove once the mirror is pinned.
+CI_NAIVE_CLIENT_KNOWN_GONE_ASSET="naiveproxy-v150.0.7871.63-1-linux-x64.tar.xz"
 
 CI_SINGBOX_TAG="v1.14.0"
 CI_SINGBOX_ASSET="sing-box-1.14.0-linux-amd64.tar.gz"

@@ -56,6 +56,33 @@ pinned_runtime_download_cache_complete() { # <cache-dir>
   done < <(pinned_runtime_download_shas)
 }
 
+# Upstream klzgrad removed the naiveproxy client binaries from every release
+# (#1373). A 404 is tolerated ONLY when the pinned asset is the one explicitly
+# declared gone in versions.sh (CI_NAIVE_CLIENT_KNOWN_GONE_ASSET): it leaves a
+# marker so e2e.sh skips the naive data path loudly. A 404 for any other asset,
+# any other HTTP failure, and any checksum mismatch stay fatal.
+NAIVE_CLIENT_UNAVAILABLE_MARKER="naive.unavailable"
+
+fetch_naive_client() { # <url> <file> <sha256> <dest-dir>; 0=installed-ready, 2=unavailable(404)
+  local code
+  code="$(curl --silent --show-error --location --output "$2" --write-out '%{http_code}' "$1")" || {
+    echo "naiveproxy client download failed: $1" >&2
+    return 1
+  }
+  if [ "${code}" = "404" ] && [ -n "${CI_NAIVE_CLIENT_KNOWN_GONE_ASSET:-}" ] \
+    && [ "${CI_NAIVE_CLIENT_ASSET:-}" = "${CI_NAIVE_CLIENT_KNOWN_GONE_ASSET}" ]; then
+    rm -f "$2"
+    printf 'pinned naiveproxy client asset returned HTTP 404: %s\n' "$1" >"$4/${NAIVE_CLIENT_UNAVAILABLE_MARKER}"
+    echo "::warning title=naiveproxy client unavailable::pinned asset $1 returned 404; the naive e2e data path will be SKIPPED"
+    return 2
+  fi
+  if [ "${code}" != "200" ]; then
+    echo "naiveproxy client download returned HTTP ${code}: $1" >&2
+    return 1
+  fi
+  echo "$3  $2" | sha256sum --check - >/dev/null
+}
+
 caddy_test_runtime_is_pinned() { # <binary>
   [ -x "$1" ] || return 1
   go version -m "$1" | awk -v caddy="${CI_CADDY_VERSION}" -v proxy="${CI_FORWARDPROXY_VERSION}" '
@@ -198,9 +225,14 @@ install_pinned_runtimes() { # <destdir> <veil-binary-for-caddy-build>
     mkdir -p mieru-client && tar -xzf mieru.tar.gz -C mieru-client
     install -m 0755 "$(find mieru-client -type f -name mieru | head -n1)" "${dest}/mieru"
 
-    fetch_verified "https://github.com/klzgrad/naiveproxy/releases/download/${CI_NAIVE_CLIENT_TAG}/${CI_NAIVE_CLIENT_ASSET}" naive.tar.xz "${CI_NAIVE_CLIENT_SHA256}"
-    mkdir -p naive-client && tar -xJf naive.tar.xz -C naive-client
-    install -m 0755 "$(find naive-client -type f -name naive | head -n1)" "${dest}/naive"
+    naive_rc=0
+    fetch_naive_client "https://github.com/klzgrad/naiveproxy/releases/download/${CI_NAIVE_CLIENT_TAG}/${CI_NAIVE_CLIENT_ASSET}" naive.tar.xz "${CI_NAIVE_CLIENT_SHA256}" "${dest}" || naive_rc=$?
+    if [ "${naive_rc}" -eq 0 ]; then
+      mkdir -p naive-client && tar -xJf naive.tar.xz -C naive-client
+      install -m 0755 "$(find naive-client -type f -name naive | head -n1)" "${dest}/naive"
+    elif [ "${naive_rc}" -ne 2 ]; then
+      exit "${naive_rc}"
+    fi
 
     install_singbox_from_workdir "${dest}"
   )
