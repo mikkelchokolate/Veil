@@ -16,6 +16,27 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1288: Mieru (`veil-mieru`) now resolves names on hosts where no
+  `/etc/resolv.conf` nameserver is reachable under the protocol units'
+  kernel egress filter (AWS VPC `172.31.0.2`, `169.254.169.253/.254`,
+  Alibaba `100.100.2.136`, LXC/home-lab `10.x`/`192.168.x`, a local dnsmasq
+  on `127.0.0.1`). mita has no resolver setting, so the unit now runs
+  `veil egress-resolv-conf` as root before mita starts. On such hosts it
+  writes `/run/veil-mieru/resolv.conf` naming Cloudflare's public resolvers
+  (`1.1.1.1`, `1.0.0.1`, or `2606:4700:4700::1111`/`::1001` on hosts that
+  route only IPv6 to Cloudflare), and the unit bind-mounts it read-only over
+  `/etc/resolv.conf` in its own mount namespace. This is plain DNS on port
+  53, because mita's resolver cannot speak DoH. Other hosts get no file and
+  keep the host resolver unchanged. A missing `/etc/resolv.conf` is left
+  alone. The check runs at every unit start, so no re-apply is needed after
+  the host DNS changes. Hosts that install the packaged unit pick this up on
+  upgrade; installs with custom paths pick it up on the next `veil install`
+  or `veil repair`. `veil doctor`, `veil install` and `veil repair` report
+  the fallback nameservers in their DNS warning, and `veil doctor --json`
+  has a new `mieruNameservers` field. `veil update` does not re-render
+  install-managed units, so when the loaded `veil-mieru.service` predates
+  the hook, `veil doctor` keeps saying Mieru domain lookups fail, sets
+  `mieruUnitOutdated`, and points at `veil repair`.
 - #1288: root `veil install` and `veil repair` now print the same
   protocol-unit DNS warning as `veil doctor`. The install capability report
   has a new `egress-dns` row: `ok` when a `/etc/resolv.conf` nameserver is

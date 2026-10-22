@@ -73,6 +73,7 @@ func NewRootCommandWithOptions(version string, options RootOptions) *cobra.Comma
 	cmd.AddCommand(newUpdateCommand(version))
 	cmd.AddCommand(newStatusCommand(version))
 	cmd.AddCommand(newHealthcheckCommand())
+	cmd.AddCommand(newEgressResolvConfCommand())
 	cmd.AddCommand(newConfigCommand())
 	cmd.AddCommand(newAdminCommand(options.PasswordHasher))
 	cmd.AddCommand(newBackupCommand(version))
@@ -93,9 +94,21 @@ func printDoctor(cmd *cobra.Command, version string, jsonOutput bool) {
 func buildDoctorSummary(version string) doctorSummary {
 	readiness := doctorflow.NewReadiness(version, commandLookPath)
 	if runtime.GOOS == "linux" {
-		readiness = readiness.WithEgressDNS(doctorEgressDNSProbe)
+		readiness = readiness.WithEgressDNS(doctorEgressDNSWithMieruUnitState)
 	}
 	return readiness.Summary()
+}
+
+// doctorEgressDNSWithMieruUnitState runs the egress DNS probe and asks
+// systemd about the loaded veil-mieru.service only when the probe promised
+// a Mieru fallback, so a healthy host does not fork `systemctl show` on
+// every doctor run.
+func doctorEgressDNSWithMieruUnitState() doctorflow.EgressDNSCheck {
+	check := doctorEgressDNSProbe()
+	if len(check.MieruNameservers) == 0 {
+		return check
+	}
+	return withMieruUnitFallbackState(check, doctorMieruUnitFallbackProbe())
 }
 
 // doctorEgressDNSProbe runs the same host probe the Hysteria2 and WARP
@@ -116,6 +129,7 @@ func egressDNSCheckFromReport(report renderer.EgressDNSReport) doctorflow.Egress
 		ResolvConfMissing: report.ResolvConfMissing,
 		ReadError:         report.ReadError,
 		PinnedDoH:         report.PinnedDoH,
+		MieruNameservers:  append([]string(nil), report.MieruNameservers...),
 	}
 }
 

@@ -493,6 +493,8 @@ Environment=MITA_LOG_NO_TIMESTAMP=true
 RuntimeDirectory=veil-mieru
 RuntimeDirectoryMode=0750
 StateDirectory=mita
+` + mieruResolvConfComment + `ExecStartPre=` + mieruResolvConfExecStartPre(veilBin) + `
+BindReadOnlyPaths=` + mieruResolvConfBind + `
 ExecStart=` + mieruBin + ` run
 ExecStartPost=` + mieruActivationExecStartPost(mieruBin, mieruConfig) + `
 ExecStop=` + mieruBin + ` stop
@@ -625,6 +627,25 @@ func dropInInaccessiblePaths(varDir string) string {
 	return "InaccessiblePaths=\nInaccessiblePaths=" + masked + "\n"
 }
 
+// mieruResolvConfComment, mieruResolvConfExecStartPre and
+// mieruResolvConfBind give veil-mieru DNS on hosts whose nameservers the
+// egress filter denies (#1288, see renderer.MieruResolvConfPath). They are
+// shared by the full unit render and the install drop-in.
+const mieruResolvConfComment = `# DNS under the egress filter (#1288): mita has no resolver setting and
+# always reads /etc/resolv.conf. As root ("+", outside the sandbox) veil
+# writes a public fallback resolv.conf into the runtime directory only when
+# no host nameserver is reachable under the filter below, and removes it
+# otherwise. The read-only bind is skipped ("-") when the file is absent, so
+# those hosts keep the host resolver. The leading "-" keeps a probe failure
+# from blocking mita.
+`
+
+const mieruResolvConfBind = "-" + MieruResolvConfPath + ":/etc/resolv.conf"
+
+func mieruResolvConfExecStartPre(veilBin string) string {
+	return "-+" + veilBin + " egress-resolv-conf --output " + MieruResolvConfPath
+}
+
 // mieruActivationExecStartPost is the ExecStartPost one-liner that waits for
 // the mita RPC socket, applies the generated config, and starts the daemon.
 // Shared by the full unit render and the install drop-in so the packaged unit
@@ -715,6 +736,8 @@ func dropInServiceOverrides(name string, cfg SystemdConfig) string {
 	case UnitMieru:
 		mieruBin := systemdQuoteExec(cfg.MieruBinary)
 		mieruConfig := systemdQuoteExec(path.Join(cfg.EtcDir, "generated", "mieru", "server_config.json"))
+		b.WriteString("ExecStartPre=\n")
+		b.WriteString("ExecStartPre=" + mieruResolvConfExecStartPre(veilBin) + "\n")
 		b.WriteString("ExecStart=\n")
 		b.WriteString("ExecStart=" + mieruBin + " run\n")
 		b.WriteString("ExecStartPost=\n")

@@ -214,6 +214,10 @@ assert_unit veil-mieru.service 'UMask=0007'
 assert_unit veil-mieru.service 'InaccessiblePaths=/run/veil/helper.sock /var/lib/veil'
 assert_unit veil-mieru.service 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE'
 assert_unit veil-mieru.service 'AmbientCapabilities=CAP_NET_BIND_SERVICE'
+# mita has no resolver setting: the fallback resolv.conf (#1288) is written
+# by veil as root before mita starts and bound read-only only when present.
+assert_unit veil-mieru.service 'ExecStartPre=-+/usr/local/bin/veil egress-resolv-conf --output /run/veil-mieru/resolv.conf'
+assert_unit veil-mieru.service 'BindReadOnlyPaths=-/run/veil-mieru/resolv.conf:/etc/resolv.conf'
 assert_unit veil-helper.socket 'SocketUser=root'
 assert_unit veil-helper.socket 'SocketGroup=veil'
 assert_unit veil-helper.socket 'SocketMode=0660'

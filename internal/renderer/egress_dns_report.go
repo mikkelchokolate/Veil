@@ -23,6 +23,10 @@ type EgressDNSReport struct {
 	// PinnedDoH is the Cloudflare DoH address the Hysteria2 and WARP
 	// renderers pin when no nameserver is reachable. Empty otherwise.
 	PinnedDoH string `json:"pinnedDoH,omitempty"`
+	// MieruNameservers are the public nameservers veil-mieru resolves
+	// through on such a host (MieruResolvConf). Empty when Mieru keeps the
+	// host resolver, including when /etc/resolv.conf is missing.
+	MieruNameservers []string `json:"mieruNameservers,omitempty"`
 }
 
 // ProbeEgressDNS reads /etc/resolv.conf and the routing tables with the same
@@ -47,6 +51,9 @@ func ProbeEgressDNS() EgressDNSReport {
 	}
 	if !report.Reachable {
 		report.PinnedDoH = pickFilteredHostDoHAddr()
+		if !report.ResolvConfMissing {
+			report.MieruNameservers = mieruFallbackNameservers(report.PinnedDoH)
+		}
 	}
 	return report
 }

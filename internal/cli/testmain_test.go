@@ -29,6 +29,8 @@ func TestMain(m *testing.M) {
 	doctorEgressDNSProbe = func() doctorflow.EgressDNSCheck {
 		return doctorflow.EgressDNSCheck{Nameservers: []string{"127.0.0.53"}, Reachable: true}
 	}
+	// ...nor on the test host's systemd.
+	doctorMieruUnitFallbackProbe = func() mieruUnitFallbackState { return mieruUnitFallbackUnknown }
 	backupSystemdDir = filepath.Join(os.TempDir(), "veil-cli-test-systemd")
 	backupSystemctlRun = func(args ...string) error {
 		if len(args) > 0 && args[0] == "is-active" {
