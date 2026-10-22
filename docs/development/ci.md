@@ -67,10 +67,16 @@ run attempts, including their required jobs; missing, skipped, cancelled or
 failed checks cannot authorize publication. If main CI is still running, the
 gate waits up to 20 minutes and otherwise fails closed.
 
+Tag only after both main workflows are green; the bounded wait is not a
+replacement for that release check. Main CodeQL runs are not cancelled by a
+newer push. A cancelled/failed run must be rerun successfully before tagging.
+
 Release archive/package builds restore the frontend from that verified CI
 run. The existing dist verifier checks the source SHA, complete file/hash
 manifest, regular-file-only tree and real SPA shape before embedding it.
 There is no fallback to an unverified build or artifact from another commit.
+The frontend artifact must still be within GitHub's retention window. If it
+has expired, rerun the full CI on that main commit before retrying the release.
 
 The release still tests its **actual shipped packages** on both architectures,
 executes the **pushed container images** for version and SPA checks on both

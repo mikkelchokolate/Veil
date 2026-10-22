@@ -1,12 +1,85 @@
 package cli
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 )
+
+func TestReleaseGateRequiredJobsMatchSourceWorkflows(t *testing.T) {
+	output, err := exec.Command("python3", "-c", `import json,runpy; print(json.dumps({k: sorted(v) for k,v in runpy.run_path('../../scripts/ci/release-ci-gate.py')['REQUIRED_JOBS'].items()}))`).CombinedOutput()
+	if err != nil {
+		t.Fatalf("load release gate REQUIRED_JOBS: %v: %s", err, output)
+	}
+	var required map[string][]string
+	if err := json.Unmarshal(output, &required); err != nil || len(required) != 2 {
+		t.Fatalf("invalid release gate REQUIRED_JOBS: %v: %s", err, output)
+	}
+	for _, filename := range []string{"ci.yml", "codeql.yml"} {
+		body, err := os.ReadFile("../../.github/workflows/" + filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var workflow struct {
+			Concurrency map[string]string `yaml:"concurrency"`
+			Jobs        map[string]struct {
+				Name     string                            `yaml:"name"`
+				Strategy struct{ Matrix map[string][]any } `yaml:"strategy"`
+			} `yaml:"jobs"`
+		}
+		if err := yaml.Unmarshal(body, &workflow); err != nil {
+			t.Fatalf("%s: unsupported workflow/matrix shape: %v", filename, err)
+		}
+		if workflow.Concurrency["cancel-in-progress"] != "${{ github.event_name == 'pull_request' }}" {
+			t.Errorf("%s must preserve main CI proof and only cancel superseded PR runs", filename)
+		}
+		var names []string
+		for id, job := range workflow.Jobs {
+			name := job.Name
+			if name == "" {
+				name = id
+			}
+			matrix := job.Strategy.Matrix
+			if len(matrix) == 0 {
+				names = append(names, name)
+				continue
+			}
+			if len(matrix) != 1 {
+				t.Fatalf("%s/%s: unsupported multi-axis matrix; update the release job-name contract", filename, id)
+			}
+			for axis, values := range matrix {
+				if len(values) == 0 {
+					t.Fatalf("%s/%s: empty matrix", filename, id)
+				}
+				for _, value := range values {
+					if axis == "include" {
+						row, ok := value.(map[string]any)
+						language, languageOK := row["language"].(string)
+						if !ok || !languageOK || language == "" || len(row) != 2 || name != "analyze (${{ matrix.language }})" {
+							t.Fatalf("%s/%s: unsupported include/name shape; update the release job-name contract", filename, id)
+						}
+						names = append(names, "analyze ("+language+")")
+					} else {
+						if job.Name != "" || (axis != "arch" && axis != "shard") {
+							t.Fatalf("%s/%s: unsupported matrix/name shape; update the release job-name contract", filename, id)
+						}
+						names = append(names, fmt.Sprintf("%s (%v)", id, value))
+					}
+				}
+			}
+		}
+		slices.Sort(names)
+		if !slices.Equal(names, required[filename]) {
+			t.Errorf("%s job names differ from release REQUIRED_JOBS: workflow=%v gate=%v", filename, names, required[filename])
+		}
+	}
+}
 
 func TestReleaseWorkflowRequiresVerifiedCIAndShippedPackageGates(t *testing.T) {
 	body, err := os.ReadFile("../../.github/workflows/release.yml")
