@@ -27,6 +27,16 @@ func blankPlainQuotedStrings(line string) string {
 	return strings.ReplaceAll(line, `"`, "")
 }
 
+// normalizeGuard drops an optional ${{ }} wrapper and surrounding space so a
+// harmless reformat of a job's if: does not break the guard pin.
+func normalizeGuard(cond string) string {
+	cond = strings.TrimSpace(cond)
+	if strings.HasPrefix(cond, "${{") && strings.HasSuffix(cond, "}}") {
+		cond = strings.TrimSpace(cond[3 : len(cond)-2])
+	}
+	return cond
+}
+
 // Issue #1373: the source-built naiveproxy mirror must be manual-only and
 // main-only, verify the upstream tag→commit binding, land on the ci-deps
 // prerelease (never latest, never a version release) and never overwrite an
@@ -43,6 +53,9 @@ func TestNaiveClientBuildWorkflowContract(t *testing.T) {
 		Jobs map[string]struct {
 			If          string            `yaml:"if"`
 			Permissions map[string]string `yaml:"permissions"`
+			Steps       []struct {
+				Run string `yaml:"run"`
+			} `yaml:"steps"`
 		} `yaml:"jobs"`
 	}
 	if err := yaml.Unmarshal(body, &parsed); err != nil {
@@ -54,11 +67,31 @@ func TestNaiveClientBuildWorkflowContract(t *testing.T) {
 	if _, ok := parsed.On["workflow_dispatch"]; !ok {
 		t.Fatalf("workflow must be triggered only by workflow_dispatch, got %v", parsed.On)
 	}
+	// Every job except the loud refusal must be main-only, so a job added
+	// later (e.g. arm64) cannot run unreviewed workflow code from a branch.
 	for _, name := range []string{"build-linux-x64", "publish"} {
-		job, ok := parsed.Jobs[name]
-		if !ok || job.If != "github.ref == 'refs/heads/main'" {
+		if _, ok := parsed.Jobs[name]; !ok {
+			t.Fatalf("%s job is missing", name)
+		}
+	}
+	for name, job := range parsed.Jobs {
+		if name == "require-main" {
+			continue
+		}
+		if normalizeGuard(job.If) != "github.ref == 'refs/heads/main'" {
 			t.Fatalf("%s job must be guarded to main, got %q", name, job.If)
 		}
+	}
+	// A non-main dispatch must fail, not look green with every job skipped.
+	refuse, ok := parsed.Jobs["require-main"]
+	if !ok || normalizeGuard(refuse.If) != "github.ref != 'refs/heads/main'" {
+		t.Fatalf("require-main job must run exactly when the ref is not main, got %q", refuse.If)
+	}
+	if len(refuse.Permissions) != 0 {
+		t.Fatalf("require-main must have no permissions, got %v", refuse.Permissions)
+	}
+	if len(refuse.Steps) != 1 || !strings.Contains(refuse.Steps[0].Run, "::error::") || !strings.HasSuffix(strings.TrimSpace(refuse.Steps[0].Run), "exit 1") {
+		t.Fatalf("require-main must emit an ::error:: and exit 1, got %+v", refuse.Steps)
 	}
 	wantPerms := map[string]map[string]string{
 		"build-linux-x64": {"contents": "read", "id-token": "write", "attestations": "write"},
