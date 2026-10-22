@@ -71,7 +71,10 @@ const (
 		"which may be unreachable under their egress filter (#1288)"
 )
 
-func egressDNSWarning(check EgressDNSCheck) string {
+// EgressDNSWarning returns the operator warning for check, or "" when the
+// host resolver is reachable from the protocol units. install and repair
+// print the same text as doctor so the three never disagree (#1288).
+func EgressDNSWarning(check EgressDNSCheck) string {
 	switch {
 	case check.ReadError != "":
 		return fmt.Sprintf(egressDNSWarningUnknown, check.ReadError)
@@ -119,7 +122,7 @@ func (d Readiness) Summary() Summary {
 	}
 	if d.egressDNS != nil {
 		check := d.egressDNS()
-		check.Warning = egressDNSWarning(check)
+		check.Warning = EgressDNSWarning(check)
 		if check.Nameservers == nil {
 			check.Nameservers = []string{}
 		}

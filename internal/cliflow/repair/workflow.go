@@ -38,6 +38,11 @@ func (o Options) mutates() bool { return o.Yes && !o.DryRun }
 type Dependencies struct {
 	BuildPlan func(Options) (installer.RepairPlan, error)
 	ApplyPlan func(installer.RepairPlan, Options) error
+	// EgressDNSWarning, when set, returns the protocol-unit DNS warning
+	// (#1288) or "". Repair re-renders the Hysteria2 and WARP configs, whose
+	// resolver choice follows this probe, so the operator sees it next to the
+	// plan, including on --dry-run.
+	EgressDNSWarning func() string
 }
 
 func Run(opts Options, out io.Writer, deps Dependencies) error {
@@ -50,6 +55,11 @@ func Run(opts Options, out io.Writer, deps Dependencies) error {
 	}
 	fmt.Fprintln(out, "Veil repair plan")
 	fmt.Fprintln(out, plan.Summary())
+	if deps.EgressDNSWarning != nil {
+		if warning := deps.EgressDNSWarning(); warning != "" {
+			fmt.Fprintln(out, "warning: "+warning)
+		}
+	}
 	if opts.DryRun {
 		return nil
 	}
