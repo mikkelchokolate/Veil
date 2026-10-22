@@ -123,6 +123,64 @@ func TestInboundProtocolSwitchRejectsQuotaBoundClients(t *testing.T) {
 	}
 }
 
+// TestInboundUpdateRejectsStaleQuotaBindingOnIncapableInbound (#1351): the
+// quota guard checks the POST-UPDATE inbound, not only the transition. A
+// quota-bound binding left enabled on an already-disabled inbound (restore,
+// legacy data) must not be carried through another edit that keeps the
+// inbound disabled; re-enabling it on hysteria2 is never blocked, so the
+// wedged state stays fixable. Before #1351 the guard fired only when the
+// update itself removed enforcement, so the first PUT returned 200.
+func TestInboundUpdateRejectsStaleQuotaBindingOnIncapableInbound(t *testing.T) {
+	router, state := newApplyTrackedRouterWithState(t)
+	t.Cleanup(func() { _ = state.Close() })
+
+	inboundResponse := v1Request(t, router, http.MethodPost, "/api/inbounds",
+		`{"name":"stale-quota-hy","protocol":"hysteria2","transport":"udp","port":27446,"enabled":true}`)
+	if inboundResponse.Code != http.StatusCreated && inboundResponse.Code != http.StatusOK {
+		t.Fatalf("create inbound: %d %s", inboundResponse.Code, inboundResponse.Body.String())
+	}
+	clientResponse := v1Request(t, router, http.MethodPost, "/api/v1/clients",
+		`{"name":"stale-quota-client","quotaBytes":1073741824,"bindings":[{"inboundId":"stale-quota-hy","enabled":false,"runtimeIdentity":"stale_quota_identity","credential":"stale-quota-secret"}]}`)
+	if clientResponse.Code != http.StatusCreated {
+		t.Fatalf("create quota client: %d %s", clientResponse.Code, clientResponse.Body.String())
+	}
+	// No enabled quota-bound binding yet, so disabling is allowed.
+	disable := v1Request(t, router, http.MethodPut, "/api/inbounds/stale-quota-hy",
+		`{"name":"stale-quota-hy","protocol":"hysteria2","transport":"udp","port":27446,"enabled":false}`)
+	if disable.Code != http.StatusOK {
+		t.Fatalf("disable without enabled quota bindings: %d %s", disable.Code, disable.Body.String())
+	}
+	// Stale data: the binding is enabled behind the API's back.
+	if _, err := state.db.Exec(`UPDATE client_bindings SET enabled=1`); err != nil {
+		t.Fatal(err)
+	}
+
+	keepDisabled := v1Request(t, router, http.MethodPut, "/api/inbounds/stale-quota-hy",
+		`{"name":"stale-quota-hy","protocol":"hysteria2","transport":"udp","port":27446,"enabled":false}`)
+	if keepDisabled.Code != http.StatusConflict {
+		t.Fatalf("edit keeping the inbound disabled under a quota-bound binding: %d %s, want 409", keepDisabled.Code, keepDisabled.Body.String())
+	}
+	// Pin the 409 to the quota guard: the connection-limit guard answers
+	// with the same status, so a status-only check could be satisfied by it
+	// if this fixture ever gains a deviceLimit/ipLimit.
+	if body := keepDisabled.Body.String(); !strings.Contains(body, "would remove quota enforcement") || !strings.Contains(body, "quota-capable protocol") {
+		t.Fatalf("keep-disabled 409 must come from the quota guard with its remediation hint, got %s", body)
+	}
+	toMieru := v1Request(t, router, http.MethodPut, "/api/inbounds/stale-quota-hy",
+		`{"name":"stale-quota-hy","protocol":"mieru","transport":"tcp","port":27446,"enabled":true}`)
+	if toMieru.Code != http.StatusConflict {
+		t.Fatalf("enable on a protocol without quota enforcement: %d %s, want 409", toMieru.Code, toMieru.Body.String())
+	}
+	if body := toMieru.Body.String(); !strings.Contains(body, "would remove quota enforcement") {
+		t.Fatalf("mieru 409 must come from the quota guard, got %s", body)
+	}
+	fix := v1Request(t, router, http.MethodPut, "/api/inbounds/stale-quota-hy",
+		`{"name":"stale-quota-hy","protocol":"hysteria2","transport":"udp","port":27446,"enabled":true}`)
+	if fix.Code != http.StatusOK {
+		t.Fatalf("re-enabling on hysteria2 must stay possible: %d %s", fix.Code, fix.Body.String())
+	}
+}
+
 // TestMigratedLegacyProfilesSuppressedAtRender (#1117): after the
 // migrate-legacy endpoint hands embedded profiles to the normalized domain,
 // the render copy must exclude them — otherwise disable/expire/delete of

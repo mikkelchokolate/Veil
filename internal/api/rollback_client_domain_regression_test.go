@@ -276,3 +276,84 @@ func TestRollbackStillRefusesDomainValuesOfRetainedClients(t *testing.T) {
 	})
 	assertRollbackRefusedUnchanged(t, router, state, selected, "deviceLimit")
 }
+
+// #1351 / #1173: a quota restored onto a binding whose (restored) inbound
+// cannot enforce it would commit silently inert: the runtime never rejects
+// the depleted client while the API shows the quota as set, and the next
+// quota edit on that client is refused with 400. The rollback must refuse it
+// just as validateQuotaBindingsLocked refuses the live write.
+func TestRollbackRefusesQuotaOnIncapableInbound(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*managementSnapshot)
+	}{
+		{"inbound_disabled", func(s *managementSnapshot) { s.Inbounds[0].Enabled = false }},
+		{"inbound_protocol_without_quota_enforcement", func(s *managementSnapshot) {
+			// Inbound stays enabled; only the protocolQuotaEnforcement half
+			// of the capability predicate fails.
+			s.Inbounds[0].Protocol = "mieru"
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			router, state, selected := rollbackDomainFixture(t, `"quotaBytes":1048576,`, tc.mutate)
+			assertRollbackRefusedUnchanged(t, router, state, selected, "quota enforcement is unsupported for inbound rollback-domain-hy")
+		})
+	}
+}
+
+// The quota capability verdict covers exactly the rows the rollback writes:
+// a quota on a capable inbound goes through, a binding disabled live after
+// the snapshot stays disabled (#1099) and so does not count, and a client
+// without a quota is never checked. Without these controls the refusal above
+// could pass by refusing every rollback that touches the inbound.
+func TestRollbackQuotaCheckFollowsMergedBindings(t *testing.T) {
+	rollback := func(t *testing.T, router http.Handler, state *managementState, selected uint64) {
+		t.Helper()
+		before, err := state.applyRevisions.Get()
+		if err != nil {
+			t.Fatal(err)
+		}
+		response := v1Request(t, router, http.MethodPost, "/api/apply/rollback",
+			jsonBody(t, map[string]any{"selectedRevision": selected, "confirm": true}))
+		if response.Code != http.StatusOK {
+			t.Fatalf("rollback status = %d, want 200: %s", response.Code, response.Body.String())
+		}
+		if after, _ := state.applyRevisions.Get(); after.Desired != before.Desired+1 {
+			t.Fatalf("desired revision = %d, want %d", after.Desired, before.Desired+1)
+		}
+	}
+	t.Run("capable_inbound", func(t *testing.T) {
+		router, state, selected := rollbackDomainFixture(t, `"quotaBytes":1048576,`, func(*managementSnapshot) {})
+		rollback(t, router, state, selected)
+		clients, err := state.clientRepo.AllClients()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(clients) != 1 || clients[0].QuotaBytes == nil || *clients[0].QuotaBytes != 1048576 {
+			t.Fatalf("quota not restored on a capable inbound: %+v", clients)
+		}
+	})
+	t.Run("binding_disabled_live", func(t *testing.T) {
+		router, state, selected := rollbackDomainFixture(t, `"quotaBytes":1048576,`, func(s *managementSnapshot) {
+			s.Inbounds[0].Enabled = false
+		})
+		if _, err := state.db.Exec(`UPDATE client_bindings SET enabled=0`); err != nil {
+			t.Fatal(err)
+		}
+		rollback(t, router, state, selected)
+		bindings, err := state.clientRepo.AllBindings()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(bindings) != 1 || bindings[0].Enabled {
+			t.Fatalf("live-disabled binding was re-enabled by rollback: %+v", bindings)
+		}
+	})
+	t.Run("quotaless_client_on_disabled_inbound", func(t *testing.T) {
+		router, state, selected := rollbackDomainFixture(t, "", func(s *managementSnapshot) {
+			s.Inbounds[0].Enabled = false
+		})
+		rollback(t, router, state, selected)
+	})
+}

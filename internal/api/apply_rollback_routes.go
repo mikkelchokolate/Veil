@@ -156,6 +156,11 @@ func (s *managementState) commitIntentionalRollbackLocked(selectedRevision uint6
 			_ = tx.Rollback()
 			return fmt.Errorf("%w: %v", errRollbackSnapshotInvalid, err)
 		}
+		// Same post-graft scope for the #1173 quota contract (#1351).
+		if err := validateRollbackQuotaBindings(selected); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("%w: %v", errRollbackSnapshotInvalid, err)
+		}
 		encodedState, err := store.Marshal(selected)
 		if err != nil {
 			_ = tx.Rollback()
@@ -340,6 +345,36 @@ func validateRollbackConnectionLimits(snapshot managementSnapshot) error {
 		}
 		if !capable[binding.InboundID] {
 			return fmt.Errorf("client %q: device/ip limits are unsupported for inbound %s", binding.ClientID, binding.InboundID)
+		}
+	}
+	return nil
+}
+
+// validateRollbackQuotaBindings applies the #1173 contract that
+// validateQuotaBindingsLocked enforces on every live write to the state a
+// rollback is about to commit: a client may carry quotaBytes only when each
+// of its ENABLED bindings lands on an enabled inbound whose protocol rejects
+// a depleted client. As with validateRollbackConnectionLimits, the inbounds
+// are the selected snapshot's and the bindings are the post-graft ones, so a
+// binding disabled or deleted live since the snapshot does not count.
+// Otherwise the quota would commit silently inert (the runtime never rejects
+// the depleted client) while the API shows it as set, and the next quota
+// edit on that client would be refused with 400 (#1351).
+func validateRollbackQuotaBindings(snapshot managementSnapshot) error {
+	capable := make(map[string]bool, len(snapshot.Inbounds))
+	for _, inbound := range snapshot.Inbounds {
+		capable[inbound.Name] = inbound.Enabled && protocolQuotaEnforcement(inbound.Protocol)
+	}
+	quota := make(map[string]bool, len(snapshot.Clients))
+	for _, item := range snapshot.Clients {
+		quota[item.ID] = item.QuotaBytes != nil
+	}
+	for _, binding := range snapshot.Bindings {
+		if !binding.Enabled || !quota[binding.ClientID] {
+			continue
+		}
+		if !capable[binding.InboundID] {
+			return fmt.Errorf("client %q: quota enforcement is unsupported for inbound %s", binding.ClientID, binding.InboundID)
 		}
 	}
 	return nil
