@@ -154,7 +154,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh attestation verify "${BUNDLE}.tar.xz" -R "${GITHUB_REPOSITORY}" \
-            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/naive-client-build.yml"
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/naive-client-build.yml" \
+            --source-ref refs/heads/main \
+            --deny-self-hosted-runners
       # The workflow never creates the ci-deps release/tag itself: creating a
       # tag with GITHUB_TOKEN at a commit whose workflow files differ from the
       # default branch is refused (HTTP 403 "Resource not accessible by

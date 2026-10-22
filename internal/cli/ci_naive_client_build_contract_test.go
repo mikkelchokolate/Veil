@@ -2,11 +2,27 @@ package cli
 
 import (
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 )
+
+// quotedString matches a double-quoted shell string (no escaped quotes in
+// this workflow).
+var quotedString = regexp.MustCompile(`"[^"]*"`)
+
+// blankPlainQuotedStrings empties double-quoted strings that contain no
+// command substitution, so their text is not mistaken for a command.
+func blankPlainQuotedStrings(line string) string {
+	return quotedString.ReplaceAllStringFunc(line, func(q string) string {
+		if strings.Contains(q, "$(") || strings.Contains(q, "`") {
+			return q
+		}
+		return `""`
+	})
+}
 
 // Issue #1373: the source-built naiveproxy mirror must be manual-only and
 // main-only, verify the upstream tag→commit binding, land on the ci-deps
@@ -68,9 +84,13 @@ func TestNaiveClientBuildWorkflowContract(t *testing.T) {
 	}
 	for _, line := range strings.Split(wf, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "echo ") || strings.HasPrefix(trimmed, "#") {
+		if strings.HasPrefix(trimmed, "#") {
 			continue
 		}
+		// Only the text of plain quoted strings (e.g. the ::error:: hint telling
+		// the owner how to create ci-deps) is exempt; anything chained after an
+		// echo, or inside a "$(...)" substitution, is still scanned.
+		trimmed = blankPlainQuotedStrings(trimmed)
 		if strings.Contains(trimmed, "release create") || strings.Contains(trimmed, "gh api") || strings.Contains(trimmed, "git push") || strings.Contains(trimmed, "git tag") {
 			t.Fatalf("workflow must not create the ci-deps release/tag itself: %q", trimmed)
 		}
@@ -90,7 +110,10 @@ func TestNaiveClientBuildWorkflowContract(t *testing.T) {
 		"needs: build-linux-x64",
 		`sha256sum --check "${BUNDLE}.tar.xz.sha256"`,
 		"if-no-files-found: error",
-		`gh attestation verify "${BUNDLE}.tar.xz" -R "${GITHUB_REPOSITORY}"`,
+		`gh attestation verify "${BUNDLE}.tar.xz" -R "${GITHUB_REPOSITORY}" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/naive-client-build.yml" \
+            --source-ref refs/heads/main \
+            --deny-self-hosted-runners`,
 		`test "$(gh release view ci-deps --json isPrerelease -q .isPrerelease)" = true`,
 		"refusing to overwrite",
 		"actions/attest-build-provenance@",
