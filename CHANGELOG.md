@@ -16,6 +16,17 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1257 (F3): promotion journal recovery and promotion restore no longer
+  recreate a symlink at a managed destination from a `wasSymlink` /
+  `oldLinkTarget` record. The link target was checked only against a digest
+  stored in the same record, so a forged journal or manifest could make the
+  helper create a root-owned link to any target at a managed path, which
+  normal promote refuses to publish over. The helper never publishes symlinks
+  there, so a rolled-back or restored symlink record now leaves the
+  destination absent. A restore reports it under removed artifacts.
+  Operators who deliberately symlinked a managed path: rolling back a
+  promote that removed that link no longer brings it back.
+
 - #1257 (F2): the privileged helper now recovers an interrupted promotion
   journal only while holding `.promotion.lock`. Before, `promote`, promotion
   restore and journal recovery replayed or rolled back the on-disk journal

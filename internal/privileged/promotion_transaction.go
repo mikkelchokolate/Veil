@@ -33,10 +33,9 @@ type promotionTransactionJournal struct {
 }
 
 type preparedPromotionOperation struct {
-	artifact      ResolvedArtifact
-	remove        bool
-	body          []byte
-	symlinkTarget string
+	artifact ResolvedArtifact
+	remove   bool
+	body     []byte
 }
 
 // executePromotionTransaction is the un-fenced variant kept for tests and
@@ -154,7 +153,7 @@ func executePromotionTransactionLocked(backupDir *safefs.Dir, backupRoot string,
 		// destination or the backup root, so rewritten staged bytes are
 		// refused outright instead of after a safety copy was taken (#1269).
 		var stagedBody []byte
-		if !remove && artifact.SymlinkTarget == "" && artifact.sourceBody == nil {
+		if !remove && artifact.sourceBody == nil {
 			if artifact.expectedDigest == "" {
 				return fmt.Errorf("staged promotion artifact %s has no expected digest", artifact.ID)
 			}
@@ -177,6 +176,9 @@ func executePromotionTransactionLocked(backupDir *safefs.Dir, backupRoot string,
 		}
 		record := promotionManifestRecord{ArtifactID: artifact.ID, Destination: artifact.Destination}
 		if isDestinationSymlink {
+			// Only a removal reaches here. The link target is recorded for
+			// the audit trail; rollback and restore never recreate the link
+			// (#1257 F3), they leave the destination absent.
 			linkTarget, err := os.Readlink(cleanDestination)
 			if err != nil {
 				return err
@@ -216,11 +218,7 @@ func executePromotionTransactionLocked(backupDir *safefs.Dir, backupRoot string,
 			record.OldDigest = promotionDigest(oldBody)
 		}
 		operation := preparedPromotionOperation{artifact: artifact, remove: remove}
-		if artifact.SymlinkTarget != "" {
-			operation.symlinkTarget = artifact.SymlinkTarget
-			record.Operation = "symlink"
-			record.NewDigest = promotionDigest([]byte(artifact.SymlinkTarget))
-		} else if !remove && artifact.sourceBody != nil {
+		if !remove && artifact.sourceBody != nil {
 			// A restore source was already read descriptor-relative from the
 			// pinned backup root; re-resolving its path here would reopen the
 			// swap window the pinned read closed (#1274).
@@ -257,11 +255,6 @@ func executePromotionTransactionLocked(backupDir *safefs.Dir, backupRoot string,
 			err = removePromotionDestination(operation.artifact.Destination)
 			if err == nil {
 				result.RemovedArtifacts = append(result.RemovedArtifacts, operation.artifact.ID)
-			}
-		} else if operation.symlinkTarget != "" {
-			err = writePromotionSymlink(operation.artifact.ID, operation.artifact.Destination, operation.symlinkTarget)
-			if err == nil {
-				result.WrittenArtifacts = append(result.WrittenArtifacts, operation.artifact.ID)
 			}
 		} else {
 			err = atomicfile.Write(operation.artifact.Destination, operation.body, 0o600, 0o700)
@@ -407,6 +400,9 @@ func verifyCommittedPromotion(rootDir *safefs.Dir, root string, journal promotio
 				return err
 			}
 		case "symlink":
+			// Read-only legacy support: binaries before #1257 F3 published
+			// symlinks on restore, so a committed journal they left behind
+			// still verifies. Nothing writes this operation any more.
 			target, err := os.Readlink(record.Destination)
 			if err != nil || promotionDigest([]byte(target)) != record.NewDigest {
 				return fmt.Errorf("committed promotion symlink mismatch for %s", record.ArtifactID)
@@ -443,7 +439,14 @@ func restorePromotionPreTransaction(rootDir *safefs.Dir, root string, journal *p
 				if promotionDigest([]byte(record.OldLinkTarget)) != record.OldDigest {
 					return fmt.Errorf("promotion symlink metadata digest mismatch for %s", record.ArtifactID)
 				}
-				if err := writePromotionSymlink(record.ArtifactID, record.Destination, record.OldLinkTarget); err != nil {
+				// The helper never publishes a symlink at a managed
+				// destination (prepare refuses to write over one), so a
+				// removed symlink is not recreated: the journal lives in the
+				// backup root, and recreating OldLinkTarget would let a forged
+				// record plant a root-owned link to an arbitrary target that
+				// normal promote refuses (#1257 F3). The destination stays
+				// absent, which is the state the next apply expects anyway.
+				if err := removePromotionDestination(record.Destination); err != nil {
 					return err
 				}
 			} else {
@@ -508,24 +511,6 @@ func removePromotionDestination(path string) error {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
-		return err
-	}
-	return syncPromotionParent(path)
-}
-
-func writePromotionSymlink(artifactID, path, target string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	if err := os.Symlink(target, path); err != nil {
-		return err
-	}
-	// MkdirAll leaves fresh parents root:root 0700; restore the veil-proxy
-	// traversal contract for the generated tree (audit #524).
-	if err := ensureRuntimeArtifactSymlinkParents(artifactID, path); err != nil {
 		return err
 	}
 	return syncPromotionParent(path)
