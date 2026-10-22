@@ -13,9 +13,50 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/ci/versions.sh
 . "${_script_dir}/versions.sh"
 
+# Optional content-addressed download cache (CI restores it via actions/cache
+# keyed on the pinned SHA256 set). Entries are named by their pinned SHA256 and
+# are re-verified on every use, so a stale, truncated or tampered entry is
+# discarded and re-fetched — the cache can never widen what is accepted, it
+# only keeps CI working while an upstream release asset is unavailable.
 fetch_verified() { # <url> <file> <sha256>
-  curl --fail --silent --show-error --location "$1" -o "$2"
-  echo "$3  $2" | sha256sum --check - >/dev/null
+  local url="$1" file="$2" sha="$3" cache_dir="${CI_RUNTIME_DOWNLOAD_CACHE:-}" cached=""
+  if [ -n "${cache_dir}" ]; then
+    cached="${cache_dir}/${sha}"
+    if [ -f "${cached}" ] && echo "${sha}  ${cached}" | sha256sum --check --status -; then
+      cp "${cached}" "${file}"
+      echo "${sha}  ${file}" | sha256sum --check - >/dev/null
+      printf '[ci] verified cached download %s (sha256 %s)\n' "${file}" "${sha}"
+      return 0
+    fi
+    rm -f "${cached}"
+  fi
+  curl --fail --silent --show-error --location "${url}" -o "${file}"
+  echo "${sha}  ${file}" | sha256sum --check - >/dev/null
+  if [ -n "${cached}" ]; then
+    mkdir -p "${cache_dir}"
+    cp "${file}" "${cached}.tmp.$$"
+    mv -f "${cached}.tmp.$$" "${cached}"
+  fi
+}
+
+# SHA256 pins of every asset install_pinned_runtimes downloads. The CI cache
+# key is derived from this list, and a cache is only saved once it is complete.
+# Must list exactly the pins passed to fetch_verified in this file
+# (TestCIRuntimeDownloadShasMatchFetchSites enforces it). The naive client is
+# deliberately NOT cached: fetch_naive_client owns the #1373 404 soft-skip and
+# downloads directly, so listing its pin would make the cache never complete.
+# Its durable replacement is the ci-deps mirror (#1375, #1373 phase B).
+pinned_runtime_download_shas() {
+  printf '%s\n' "${CI_HYSTERIA_SHA256}" "${CI_MITA_SHA256}" "${CI_MIERU_CLIENT_SHA256}" \
+    "${CI_SINGBOX_SHA256}"
+}
+
+pinned_runtime_download_cache_complete() { # <cache-dir>
+  local sha
+  while IFS= read -r sha; do
+    [ -f "$1/${sha}" ] || return 1
+    echo "${sha}  $1/${sha}" | sha256sum --check --status - || return 1
+  done < <(pinned_runtime_download_shas)
 }
 
 # Upstream klzgrad removed the naiveproxy client binaries from every release
