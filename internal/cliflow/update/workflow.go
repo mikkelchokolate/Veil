@@ -26,6 +26,7 @@ type WorkflowDependencies struct {
 	FetchRelease             func() (*Release, error)
 	DownloadAsset            func(string) ([]byte, error)
 	VerifyReleaseEvidence    func(releaseverify.Evidence) error
+	SourceUpdateCommit       func(current, tag string) (string, error)
 	Executable               func() (string, error)
 	ReplaceBinaryFromArchive func(currentPath string, archive []byte, yes bool) (string, error)
 	RestartUpdated           func(currentPath string, backupPath string, opts WorkflowOptions) error
@@ -60,18 +61,27 @@ func RunWorkflow(opts WorkflowOptions, out io.Writer, deps WorkflowDependencies)
 	}
 	fmt.Fprintf(out, "Latest release: %s\n", release.TagName)
 
-	// 2. Compare versions. A non-release build (main-<sha>, dev) does not
-	// order against tags — Compare sorts it before every release, which would
-	// silently downgrade a newer source build to the latest release and can
-	// strand the panel on an older DB schema (issue #1104). Only --force may
-	// proceed.
+	// Non-semver builds need either a verified forward ancestry proof or an
+	// explicit override; Compare alone would silently downgrade newer sources.
+	sourceCommit := ""
 	if !versionflow.IsReleaseVersion(opts.CurrentVersion) {
-		fmt.Fprintf(out, "Current version (%s) is not a release build; installing %s may be a downgrade.\n", opts.CurrentVersion, release.TagName)
-		if !opts.Force {
-			fmt.Fprintln(out, "Use --force to install it anyway.")
-			return nil
+		if !opts.Force && versionflow.SourceBuildCommit(opts.CurrentVersion) != "" && deps.SourceUpdateCommit != nil {
+			sourceCommit, err = deps.SourceUpdateCommit(opts.CurrentVersion, release.TagName)
+			if err != nil {
+				return fmt.Errorf("cannot prove a safe source-to-release update (use --force to override): %w", err)
+			}
+			if !fullCommit(sourceCommit) {
+				return fmt.Errorf("source-to-release update proof returned an invalid commit identity")
+			}
+			fmt.Fprintf(out, "Updating %s → %s (release contains the running source commit)\n", opts.CurrentVersion, release.TagName)
+		} else {
+			fmt.Fprintf(out, "Current version (%s) is not a release build; installing %s may be a downgrade.\n", opts.CurrentVersion, release.TagName)
+			if !opts.Force {
+				fmt.Fprintln(out, "Use --force to install it anyway.")
+				return nil
+			}
+			fmt.Fprintf(out, "Updating %s → %s (forced)\n", opts.CurrentVersion, release.TagName)
 		}
-		fmt.Fprintf(out, "Updating %s → %s (forced)\n", opts.CurrentVersion, release.TagName)
 	} else {
 		cmp := versionflow.Compare(opts.CurrentVersion, release.TagName)
 		switch {
@@ -95,7 +105,10 @@ func RunWorkflow(opts WorkflowOptions, out io.Writer, deps WorkflowDependencies)
 	assetName := AssetName()
 	fmt.Fprintf(out, "Downloading %s...\n", assetName)
 	fmt.Fprintf(out, "Downloading checksums.txt...\n")
-	asset, err := NewReleaseAssetsWithVerifier(release, deps.DownloadAsset, deps.VerifyReleaseEvidence).DownloadVerifiedArchive()
+	asset, err := NewReleaseAssetsWithVerifier(release, deps.DownloadAsset, func(evidence releaseverify.Evidence) error {
+		evidence.SourceCommit = sourceCommit
+		return deps.VerifyReleaseEvidence(evidence)
+	}).DownloadVerifiedArchive()
 	if err != nil {
 		return err
 	}
