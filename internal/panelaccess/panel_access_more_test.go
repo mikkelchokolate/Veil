@@ -73,7 +73,7 @@ func TestCaddyRouteRejectsInvalidConfiguration(t *testing.T) {
 	}
 }
 
-func TestGeneratedConfigPropagatesRenderError(t *testing.T) {
+func TestGeneratedConfigRequiresDomain(t *testing.T) {
 	// Empty domain makes GeneratedConfig's domain guard fail while CaddyRoute succeeds.
 	settings := model.Settings{PanelAccess: "caddy", PanelListen: "127.0.0.1:2096", Domain: "", Email: "admin@example.com", WebBasePath: "panel-secret"}
 	access := New(settings, func(protocol string) bool { return protocol == "naiveproxy" })
@@ -82,7 +82,7 @@ func TestGeneratedConfigPropagatesRenderError(t *testing.T) {
 		t.Fatal("Expected GeneratedConfig to return ok=false")
 	}
 	if err == nil || !strings.Contains(err.Error(), "domain is required") {
-		t.Fatalf("Expected renderer domain error, got ok=%v err=%v", ok, err)
+		t.Fatalf("Expected GeneratedConfig domain error, got ok=%v err=%v", ok, err)
 	}
 }
 

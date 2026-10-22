@@ -61,8 +61,13 @@ func TestRenderCaddyJSONNaiveUsesPublicTLSOnly(t *testing.T) {
 			}
 		}
 		for _, subject := range policy.Subjects {
-			if subject == "vpn.example.com" && policy.Issuers[0]["email"] == "admin@example.com" {
-				covered = true
+			if subject != "vpn.example.com" {
+				continue
+			}
+			for _, issuer := range policy.Issuers {
+				if issuer["email"] == "admin@example.com" {
+					covered = true
+				}
 			}
 		}
 	}
