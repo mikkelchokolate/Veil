@@ -318,7 +318,7 @@ The project uses the Go module path `github.com/mikkelchokolate/Veil`, which is 
 
 ---
 
-## 6. File and Directory Structure
+## 7. File and Directory Structure
 
 When installed natively on a Linux host, Veil manages the following directories and configurations:
 
