@@ -29,19 +29,22 @@ func TestCINaiveClientFetchOnlySkipsOn404(t *testing.T) {
 	payload := "naive-tarball"
 	sum := sha256.Sum256([]byte(payload))
 	good := hex.EncodeToString(sum[:])
+	const gone = "https://example.invalid/v1/a.tar.xz"
 
 	for _, tc := range []struct {
-		name, code, sha, asset, gone string
-		wantRC                       int
-		wantMarker                   bool
+		name, code, sha, url, gone string
+		wantRC                     int
+		wantMarker                 bool
 	}{
-		{"available and verified", "200", good, "a.tar.xz", "a.tar.xz", 0, false},
-		{"available but checksum mismatch", "200", strings.Repeat("0", 64), "a.tar.xz", "a.tar.xz", 1, false},
-		{"known-gone asset 404 soft-skips", "404", good, "a.tar.xz", "a.tar.xz", 2, true},
-		{"404 for a different (bumped) asset stays fatal", "404", good, "b.tar.xz", "a.tar.xz", 1, false},
-		{"404 with no known-gone asset stays fatal", "404", good, "a.tar.xz", "", 1, false},
-		{"server error stays fatal", "500", good, "a.tar.xz", "a.tar.xz", 1, false},
-		{"rate limit stays fatal", "403", good, "a.tar.xz", "a.tar.xz", 1, false},
+		{"available and verified", "200", good, gone, gone, 0, false},
+		{"available but checksum mismatch", "200", strings.Repeat("0", 64), gone, gone, 1, false},
+		{"known-gone URL 404 soft-skips", "404", good, gone, gone, 2, true},
+		{"404 for a different (bumped) asset stays fatal", "404", good, "https://example.invalid/v1/b.tar.xz", gone, 1, false},
+		{"404 for a bumped tag with a stale asset name stays fatal", "404", good, "https://example.invalid/v2/a.tar.xz", gone, 1, false},
+		{"404 for a mirror with the same file name stays fatal", "404", good, "https://example.invalid/ci-deps/a.tar.xz", gone, 1, false},
+		{"404 with no known-gone URL stays fatal", "404", good, gone, "", 1, false},
+		{"server error stays fatal", "500", good, gone, gone, 1, false},
+		{"rate limit stays fatal", "403", good, gone, gone, 1, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -53,8 +56,8 @@ func TestCINaiveClientFetchOnlySkipsOn404(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(bin, "curl"), []byte(fakeCurl), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			cmd := exec.Command("bash", "-c", "set -euo pipefail\n"+helper+"\nrc=0; fetch_naive_client https://example.invalid/naive.tar.xz \"$DEST/naive.tar.xz\" \"$PIN\" \"$DEST\" || rc=$?; exit $rc")
-			cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "FIXTURE_PAYLOAD="+payload, "FIXTURE_CODE="+tc.code, "PIN="+tc.sha, "DEST="+dir, "CI_NAIVE_CLIENT_ASSET="+tc.asset, "CI_NAIVE_CLIENT_KNOWN_GONE_ASSET="+tc.gone)
+			cmd := exec.Command("bash", "-c", "set -euo pipefail\n"+helper+"\nrc=0; fetch_naive_client \"$URL\" \"$DEST/naive.tar.xz\" \"$PIN\" \"$DEST\" || rc=$?; exit $rc")
+			cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "FIXTURE_PAYLOAD="+payload, "FIXTURE_CODE="+tc.code, "PIN="+tc.sha, "DEST="+dir, "URL="+tc.url, "CI_NAIVE_CLIENT_KNOWN_GONE_URL="+tc.gone)
 			out, _ := cmd.CombinedOutput()
 			if got := cmd.ProcessState.ExitCode(); got != tc.wantRC {
 				t.Fatalf("exit code = %d, want %d; output: %s", got, tc.wantRC, out)
@@ -67,6 +70,43 @@ func TestCINaiveClientFetchOnlySkipsOn404(t *testing.T) {
 				t.Fatalf("404 skip must emit a ::warning:: annotation; output: %s", out)
 			}
 		})
+	}
+}
+
+// The #1373 escape hatch must name exactly the URL runtimes.sh fetches. Once the
+// pin is bumped or repointed (e.g. at the ci-deps mirror), a leftover value
+// would be dead at best, so it must be removed in the same change.
+func TestCINaiveClientKnownGoneURLIsCurrent(t *testing.T) {
+	checkBash(t)
+	cmd := exec.Command("bash", "-c", `set -euo pipefail
+source ../../scripts/ci/runtimes.sh
+printf '%s\n%s\n%s\n' "$(naive_client_url)" "${CI_NAIVE_CLIENT_KNOWN_GONE_URL:-}" "${CI_NAIVE_CLIENT_ASSET}"`)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("sourcing runtimes.sh: %v\n%s", err, stderr.String())
+	}
+	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("unexpected output %q", out)
+	}
+	if asset := lines[2]; asset == "" || !strings.HasSuffix(lines[0], "/"+asset) || strings.Contains(lines[0], "//"+asset) {
+		t.Fatalf("naive_client_url = %q must end in /<tag>/%s with both pins non-empty", lines[0], asset)
+	}
+	fetched, gone := lines[0], lines[1]
+	if !strings.HasPrefix(fetched, "https://") {
+		t.Fatalf("naive_client_url = %q, want an https URL", fetched)
+	}
+	if gone != "" && gone != fetched {
+		t.Fatalf("CI_NAIVE_CLIENT_KNOWN_GONE_URL = %q no longer matches the fetched naive URL %q; remove it (#1373)", gone, fetched)
+	}
+	body, err := os.ReadFile("../../scripts/ci/runtimes.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `fetch_naive_client "$(naive_client_url)"`) {
+		t.Fatal("runtimes.sh must fetch the naive client via naive_client_url so the known-gone check sees the real URL")
 	}
 }
 
