@@ -16,12 +16,29 @@ func TestSystemdApplyPlanForManagedUnits(t *testing.T) {
 		{Command: "systemctl", Args: []string{"enable", "veil.service"}},
 		{Command: "systemctl", Args: []string{"enable", "veil-naive.service"}},
 		{Command: "systemctl", Args: []string{"enable", "veil-hysteria2.service"}},
-		{Command: "systemctl", Args: []string{"restart", "veil.service"}},
-		{Command: "systemctl", Args: []string{"restart", "veil-naive.service"}},
-		{Command: "systemctl", Args: []string{"restart", "veil-hysteria2.service"}},
+		{Command: "systemctl", Args: []string{"restart", "veil.service", "veil-naive.service", "veil-hysteria2.service"}},
 	}
 	if !reflect.DeepEqual(plan, want) {
 		t.Fatalf("unexpected plan:\n got: %#v\nwant: %#v", plan, want)
+	}
+}
+
+func TestSystemdInstallPlanQueuesHelperAndPanelRestartTogether(t *testing.T) {
+	for _, units := range [][]string{
+		{"veil-helper.socket", "veil.service"},
+		{"veil-helper.socket", "veil.service", "veil-caddy.service"},
+	} {
+		plan := SystemdApplyPlan(units)
+		var restarts [][]string
+		for _, action := range plan {
+			if len(action.Args) > 0 && action.Args[0] == "restart" {
+				restarts = append(restarts, action.Args)
+			}
+		}
+		want := [][]string{append([]string{"restart"}, units...)}
+		if !reflect.DeepEqual(restarts, want) {
+			t.Fatalf("dependent install restarts = %v, want %v", restarts, want)
+		}
 	}
 }
 

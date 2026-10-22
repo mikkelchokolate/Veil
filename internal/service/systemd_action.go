@@ -33,9 +33,9 @@ func (m SystemdActionModule) Plan() []SystemdAction {
 	for _, unit := range clean {
 		actions = append(actions, SystemdAction{Command: "systemctl", Args: []string{"enable", unit}})
 	}
-	for _, unit := range clean {
-		actions = append(actions, SystemdAction{Command: "systemctl", Args: []string{"restart", unit}})
-	}
+	// Queue dependent units before waiting, so their restart jobs can merge
+	// instead of stopping/starting the panel between separate commands.
+	actions = append(actions, SystemdAction{Command: "systemctl", Args: append([]string{"restart"}, clean...)})
 	return actions
 }
 
