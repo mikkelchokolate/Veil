@@ -16,6 +16,15 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1257 (F2): the privileged helper now recovers an interrupted promotion
+  journal only while holding `.promotion.lock`. Before, `promote`, promotion
+  restore and journal recovery replayed or rolled back the on-disk journal
+  first and took the lock afterwards, so a second concurrent request could
+  roll back a transaction another request was still publishing under the
+  lock (restoring its safety copies over freshly published artifacts and
+  deleting its journal), leaving a torn mix at managed destinations. A
+  restore now also reads its manifest under the same lock hold.
+
 - #1355: `POST /api/apply/rollback` now supersedes the live quota-enforcement
   record of a client restored with a different quota plan (quota bytes, reset
   policy or reset boundary) than its live row, as a live reset-policy or

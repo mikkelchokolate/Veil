@@ -614,9 +614,10 @@ func isUFWDuplicateRule(output string) bool {
 }
 
 func promoteResolvedArtifacts(backupRoot string, now func() time.Time, request ResolvedPromotion) (PromoteResult, error) {
-	if err := recoverPromotionTransactionWithPolicy(backupRoot, request.ValidateDestination, request.FenceGeneration); err != nil {
-		return PromoteResult{}, fmt.Errorf("recover interrupted promotion: %w", err)
-	}
+	// No recovery here: both paths below recover an interrupted journal only
+	// after taking the promotion lock. An unlocked pre-recovery let a second
+	// concurrent request roll back a transaction that another request was
+	// still publishing under the lock (#1257 F2).
 	if request.RestoreBackupID != "" {
 		return restorePromotedArtifacts(backupRoot, request.RestoreBackupID, request.ValidateDestination, request.FenceGeneration)
 	}
@@ -679,7 +680,7 @@ func backupPromotionDestination(rootDir *safefs.Dir, root, backupID string, arti
 	return record, nil
 }
 
-func restorePromotedArtifacts(root, backupID string, validateDestination func(string, string) bool, fenceGeneration uint64) (_ PromoteResult, resultErr error) {
+func restorePromotedArtifacts(root, backupID string, validateDestination func(string, string) bool, fenceGeneration uint64) (PromoteResult, error) {
 	// Defense in depth: the restore ID reaches the helper through persisted
 	// promotion records, so it is re-validated here even though
 	// ResolvePromotion already rejects non-canonical IDs — "." or ".." would
@@ -691,78 +692,31 @@ func restorePromotedArtifacts(root, backupID string, validateDestination func(st
 	// The journal and manifest live under the service-writable backup root and
 	// are attacker-authored: recovery and restore must re-validate every
 	// destination against the caller's policy before touching it (#1218, #1228).
-	if err := recoverPromotionTransactionWithPolicy(root, validateDestination, fenceGeneration); err != nil {
-		return PromoteResult{}, fmt.Errorf("recover interrupted promotion: %w", err)
+	if root == "" {
+		return PromoteResult{}, errors.New("promotion backup root is required")
 	}
 	manifestPath := filepath.Join(root, backupID, "manifest.json")
 	if !pathWithin(filepath.Clean(root), manifestPath) {
 		return PromoteResult{}, newError(ErrorForbiddenOperation, "promotion backup manifest escapes backup root")
 	}
+	// Recovery, the manifest read and the restore transaction all run under
+	// one hold of the promotion lock: recovering outside it could roll back a
+	// concurrent transaction mid-publish (#1257 F2), and the restore must
+	// read the manifest against the same recovered state it then publishes.
 	// The manifest and every safety copy it names are read descriptor-relative
 	// under the pinned helper-owned root: a lexical pathWithin plus a leaf
 	// O_NOFOLLOW still follows a symlinked intermediate directory, which
 	// turned a planted manifest into an arbitrary root read exfiltrated to a
 	// proxy-readable destination (#1274).
-	rootDir, err := openPromotionBackupRoot(root)
-	if err != nil {
-		return PromoteResult{}, err
-	}
-	defer func() { resultErr = errors.Join(resultErr, rootDir.Close()) }()
-	body, err := readPromotionBackupMember(rootDir, root, manifestPath)
-	if err != nil {
-		return PromoteResult{}, err
-	}
-	var manifest promotionManifest
-	if err := json.Unmarshal(body, &manifest); err != nil {
-		return PromoteResult{}, err
-	}
-	if manifest.BackupID != backupID {
-		return PromoteResult{}, errors.New("promotion backup manifest mismatch")
-	}
-	writes := make([]ResolvedArtifact, 0, len(manifest.Records))
-	removes := make([]ResolvedArtifact, 0, len(manifest.Records))
-	for _, record := range manifest.Records {
-		if record.ArtifactID == "" || record.Destination == "" {
-			return PromoteResult{}, errors.New("promotion backup manifest has an invalid record")
+	var result PromoteResult
+	err := withPromotionLock(root, validateDestination, fenceGeneration, func(rootDir *safefs.Dir) error {
+		writes, removes, err := loadPromotionRestoreManifest(rootDir, root, backupID, manifestPath, validateDestination)
+		if err != nil {
+			return err
 		}
-		if validateDestination == nil || !validateDestination(record.ArtifactID, record.Destination) {
-			return PromoteResult{}, newError(ErrorForbiddenOperation,
-				fmt.Sprintf("promotion restore destination is not managed for %s", record.ArtifactID))
-		}
-		if record.HadPrevious {
-			if record.WasSymlink {
-				if record.OldLinkTarget == "" {
-					return PromoteResult{}, errors.New("promotion backup symlink metadata is invalid")
-				}
-				if record.OldDigest == "" || promotionDigest([]byte(record.OldLinkTarget)) != record.OldDigest {
-					return PromoteResult{}, fmt.Errorf("promotion backup symlink digest mismatch for %s", record.ArtifactID)
-				}
-				writes = append(writes, ResolvedArtifact{ID: record.ArtifactID, Destination: record.Destination, SymlinkTarget: record.OldLinkTarget})
-				continue
-			}
-			source := record.SafetyPath
-			if source == "" {
-				source = record.BackupPath
-			}
-			if source == "" || !pathWithin(root, source) {
-				return PromoteResult{}, errors.New("promotion backup manifest safety path is invalid")
-			}
-			previous, err := readPromotionBackupMember(rootDir, root, source)
-			if err != nil {
-				return PromoteResult{}, err
-			}
-			// An empty digest is an unauthenticated record, not a skipped
-			// check: every safety copy the helper writes records one (#1274).
-			if record.OldDigest == "" || promotionDigest(previous) != record.OldDigest {
-				return PromoteResult{}, fmt.Errorf("promotion backup digest mismatch for %s", record.ArtifactID)
-			}
-			writes = append(writes, ResolvedArtifact{ID: record.ArtifactID, Source: source, Destination: record.Destination, sourceBody: previous})
-		} else {
-			removes = append(removes, ResolvedArtifact{ID: record.ArtifactID, Destination: record.Destination})
-		}
-	}
-	result, err := executePromotionTransactionFenced(root, time.Now, "rollback", writes, removes,
-		fenceGeneration, validateDestination)
+		result, err = executePromotionTransactionLocked(rootDir, root, time.Now, "rollback", writes, removes, fenceGeneration)
+		return err
+	})
 	if err != nil {
 		return PromoteResult{}, err
 	}
@@ -772,6 +726,67 @@ func restorePromotedArtifacts(root, backupID string, validateDestination func(st
 	// rely on the distinction to reload restored services and to stop/disable
 	// units whose just-created configs no longer exist.
 	return result, nil
+}
+
+// loadPromotionRestoreManifest reads and authenticates the manifest of backup
+// backupID and turns it into the restore transaction's writes and removes.
+// The caller holds the promotion lock on rootDir.
+func loadPromotionRestoreManifest(rootDir *safefs.Dir, root, backupID, manifestPath string,
+	validateDestination func(string, string) bool) ([]ResolvedArtifact, []ResolvedArtifact, error) {
+	body, err := readPromotionBackupMember(rootDir, root, manifestPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	var manifest promotionManifest
+	if err := json.Unmarshal(body, &manifest); err != nil {
+		return nil, nil, err
+	}
+	if manifest.BackupID != backupID {
+		return nil, nil, errors.New("promotion backup manifest mismatch")
+	}
+	writes := make([]ResolvedArtifact, 0, len(manifest.Records))
+	removes := make([]ResolvedArtifact, 0, len(manifest.Records))
+	for _, record := range manifest.Records {
+		if record.ArtifactID == "" || record.Destination == "" {
+			return nil, nil, errors.New("promotion backup manifest has an invalid record")
+		}
+		if validateDestination == nil || !validateDestination(record.ArtifactID, record.Destination) {
+			return nil, nil, newError(ErrorForbiddenOperation,
+				fmt.Sprintf("promotion restore destination is not managed for %s", record.ArtifactID))
+		}
+		if record.HadPrevious {
+			if record.WasSymlink {
+				if record.OldLinkTarget == "" {
+					return nil, nil, errors.New("promotion backup symlink metadata is invalid")
+				}
+				if record.OldDigest == "" || promotionDigest([]byte(record.OldLinkTarget)) != record.OldDigest {
+					return nil, nil, fmt.Errorf("promotion backup symlink digest mismatch for %s", record.ArtifactID)
+				}
+				writes = append(writes, ResolvedArtifact{ID: record.ArtifactID, Destination: record.Destination, SymlinkTarget: record.OldLinkTarget})
+				continue
+			}
+			source := record.SafetyPath
+			if source == "" {
+				source = record.BackupPath
+			}
+			if source == "" || !pathWithin(root, source) {
+				return nil, nil, errors.New("promotion backup manifest safety path is invalid")
+			}
+			previous, err := readPromotionBackupMember(rootDir, root, source)
+			if err != nil {
+				return nil, nil, err
+			}
+			// An empty digest is an unauthenticated record, not a skipped
+			// check: every safety copy the helper writes records one (#1274).
+			if record.OldDigest == "" || promotionDigest(previous) != record.OldDigest {
+				return nil, nil, fmt.Errorf("promotion backup digest mismatch for %s", record.ArtifactID)
+			}
+			writes = append(writes, ResolvedArtifact{ID: record.ArtifactID, Source: source, Destination: record.Destination, sourceBody: previous})
+		} else {
+			removes = append(removes, ResolvedArtifact{ID: record.ArtifactID, Destination: record.Destination})
+		}
+	}
+	return writes, removes, nil
 }
 
 // runtimeArtifactGID resolves the group generated runtime artifacts are shared

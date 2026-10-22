@@ -53,8 +53,30 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 	if len(writes) == 0 && len(removes) == 0 && backupRoot == "" {
 		return PromoteResult{}, nil
 	}
+	resultErr = withPromotionLock(backupRoot, validateDestination, fenceGeneration, func(backupDir *safefs.Dir) error {
+		var err error
+		result, err = executePromotionTransactionLocked(backupDir, backupRoot, now, kind, writes, removes, fenceGeneration)
+		return err
+	})
+	if resultErr != nil {
+		return PromoteResult{}, resultErr
+	}
+	return result, nil
+}
+
+// withPromotionLock pins the backup root, takes the exclusive .promotion.lock
+// flock, recovers any interrupted transaction under that lock, and only then
+// runs fn (nil fn = recovery only). Recovery must never run outside the lock:
+// it replays or rolls back whatever journal is on disk, and an unlocked
+// recovery racing a concurrent promotion that holds the lock mid-publish
+// would roll back that live transaction's published artifacts and delete its
+// journal, leaving a torn mix at the managed destinations (#1257 F2). flock
+// is per open file description, so fn must not call back into anything that
+// takes this lock again.
+func withPromotionLock(backupRoot string, validateDestination func(string, string) bool, fenceGeneration uint64,
+	fn func(backupDir *safefs.Dir) error) (resultErr error) {
 	if backupRoot == "" {
-		return PromoteResult{}, errors.New("promotion backup root is required")
+		return errors.New("promotion backup root is required")
 	}
 	// Pin the backup root on a descriptor and refuse a symlinked lock leaf:
 	// the root lives under the service-writable state tree, so a planted
@@ -66,24 +88,35 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 	// transaction root enforces on this very directory (#1227, #1274).
 	backupDir, err := openPromotionBackupRoot(backupRoot)
 	if err != nil {
-		return PromoteResult{}, err
+		return err
 	}
 	defer func() {
 		resultErr = errors.Join(resultErr, backupDir.Close())
 	}()
 	lockFile, err := openLockFileAt(backupDir, ".promotion.lock")
 	if err != nil {
-		return PromoteResult{}, fmt.Errorf("open promotion lock: %w", err)
+		return fmt.Errorf("open promotion lock: %w", err)
 	}
 	defer func() {
 		resultErr = errors.Join(resultErr, releaseLockedFile(lockFile))
 	}()
 	if err := lockFileExclusive(lockFile); err != nil {
-		return PromoteResult{}, fmt.Errorf("lock promotion root: %w", err)
+		return fmt.Errorf("lock promotion root: %w", err)
 	}
 	if err := recoverPromotionTransactionAt(backupDir, backupRoot, validateDestination, fenceGeneration); err != nil {
-		return PromoteResult{}, fmt.Errorf("recover interrupted promotion: %w", err)
+		return fmt.Errorf("recover interrupted promotion: %w", err)
 	}
+	if fn == nil {
+		return nil
+	}
+	return fn(backupDir)
+}
+
+// executePromotionTransactionLocked runs one promotion transaction. The
+// caller must hold the promotion lock on backupDir (withPromotionLock) and
+// have recovered any interrupted journal under it.
+func executePromotionTransactionLocked(backupDir *safefs.Dir, backupRoot string, now func() time.Time, kind string,
+	writes, removes []ResolvedArtifact, fenceGeneration uint64) (PromoteResult, error) {
 	if len(writes) == 0 && len(removes) == 0 {
 		return PromoteResult{}, nil
 	}
@@ -217,7 +250,7 @@ func executePromotionTransactionFenced(backupRoot string, now func() time.Time, 
 		return PromoteResult{}, err
 	}
 
-	result = PromoteResult{BackupID: backupID}
+	result := PromoteResult{BackupID: backupID}
 	for index, operation := range operations {
 		var err error
 		if operation.remove {
@@ -279,18 +312,19 @@ func rollbackPromotionAfterError(rootDir *safefs.Dir, root string, journal promo
 	return cause
 }
 
-func recoverPromotionTransactionWithPolicy(root string, validateDestination func(string, string) bool, acceptedGeneration uint64) (resultErr error) {
+// recoverPromotionTransactionWithPolicy is the recovery-only entry point. No
+// production path calls it any more: every live path recovers inside its own
+// withPromotionLock hold (#1257 F2). It is kept, locked, for tests and so a
+// future recovery-only caller cannot reintroduce an unlocked recovery.
+func recoverPromotionTransactionWithPolicy(root string, validateDestination func(string, string) bool, acceptedGeneration uint64) error {
 	if root == "" {
 		// No configured root means no journal can exist to recover; every
 		// mutating path rejects the empty root on its own.
 		return nil
 	}
-	rootDir, err := openPromotionBackupRoot(root)
-	if err != nil {
-		return err
-	}
-	defer func() { resultErr = errors.Join(resultErr, rootDir.Close()) }()
-	return recoverPromotionTransactionAt(rootDir, root, validateDestination, acceptedGeneration)
+	// Recovery takes the promotion lock like every transaction does, so it
+	// can never roll back a concurrent transaction mid-publish (#1257 F2).
+	return withPromotionLock(root, validateDestination, acceptedGeneration, nil)
 }
 
 // recoverPromotionTransactionAt replays or rolls back an interrupted
