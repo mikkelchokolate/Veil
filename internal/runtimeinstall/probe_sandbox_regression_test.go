@@ -24,6 +24,7 @@ func TestRuntimeVersionProbeSandboxRejectsHostEscapeCapabilities(t *testing.T) {
 		"--property=CapabilityBoundingSet=",
 		"--property=RestrictAddressFamilies=AF_UNIX",
 		"--property=SystemCallArchitectures=native",
+		"--property=SystemCallFilter=@system-service",
 		"--property=MemoryMax=128M",
 		"--property=TasksMax=32",
 	}
@@ -44,6 +45,44 @@ func TestRuntimeVersionProbeSandboxRejectsHostEscapeCapabilities(t *testing.T) {
 		if strings.Contains(option, "PrivateNetwork=no") {
 			t.Fatalf("attacker-controlled runtime argument escaped into systemd-run options: %q", args)
 		}
+		if strings.HasPrefix(option, "--property=SystemCallFilter=") && option != "--property=SystemCallFilter=@system-service" {
+			t.Fatalf("sandbox broadens the system-service syscall allowlist: %q", option)
+		}
+	}
+}
+
+func TestRuntimeVersionProbeDependencyTargetsRejectEscape(t *testing.T) {
+	for _, dependency := range []string{"../outside/loader", "/../outside/loader", "/"} {
+		t.Run(dependency, func(t *testing.T) {
+			parent := t.TempDir()
+			root := filepath.Join(parent, "sandbox")
+			outside := filepath.Join(parent, "outside")
+			for _, directory := range []string{root, outside} {
+				if err := os.Mkdir(directory, 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			before, err := os.Stat(outside)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := prepareRuntimeProbeDependencyTargets(root, []string{dependency}); err == nil {
+				t.Fatal("accepted dependency outside the sandbox")
+			}
+			after, err := os.Stat(outside)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if before.Mode() != after.Mode() {
+				t.Fatalf("outside directory permissions changed: %v -> %v", before.Mode(), after.Mode())
+			}
+			for _, directory := range []string{root, outside} {
+				entries, err := os.ReadDir(directory)
+				if err != nil || len(entries) != 0 {
+					t.Fatalf("dependency rejection changed %s: entries=%v error=%v", directory, entries, err)
+				}
+			}
+		})
 	}
 }
 
@@ -123,7 +162,7 @@ func TestRuntimeVersionProbeFromPrivateTmpHelper(t *testing.T) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "/usr/bin/systemd-run", "--quiet", "--pipe", "--wait", "--collect",
 		"--property=Type=exec", "--property=PrivateTmp=yes", "--property=ProtectSystem=strict",
-		"--property=ProtectHome=yes", "--property=ReadWritePaths="+shared,
+		"--property=ProtectHome=yes", "--property=UMask=0077", "--property=ReadWritePaths="+shared,
 		"--", binary, "-test.run=^TestRuntimeVersionProbePrivateTmpHelper$", "-test.v")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("probe from hardened helper failed: %v\n%s", err, output)

@@ -38,7 +38,7 @@ func defaultInstallRuntimesDuringInstall(cmd *cobra.Command, opts ruRecommendedI
 	fmt.Fprintln(cmd.OutOrStdout())
 	result := runtimeEnsureFunc(cmd.Context(), runtimeinstall.Options{BinDir: runtimeinstall.DefaultBinDir(), Arch: arch}, provider.RuntimeInstall(arch))
 	if result.Err == nil && !result.Installed {
-		result.Err = fmt.Errorf("Caddy runtime was not installed: %s", result.SkipReason)
+		result.Err = fmt.Errorf("caddy runtime was not installed: %s", result.SkipReason)
 	}
 	if result.Err != nil {
 		fmt.Fprintln(cmd.ErrOrStderr(), "You can retry with: sudo veil runtime install --only naiveproxy")

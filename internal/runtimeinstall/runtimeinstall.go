@@ -230,7 +230,7 @@ func runtimeVersionProbeArgsAtRoot(binary, sandboxBinary, root string, args []st
 		"--property=RestrictSUIDSGID=yes", "--property=LockPersonality=yes", "--property=MemoryDenyWriteExecute=yes",
 		"--property=CapabilityBoundingSet=", "--property=RestrictAddressFamilies=AF_UNIX",
 		"--property=SystemCallArchitectures=native",
-		"--property=SystemCallFilter=@system-service ~@mount @privileged @resources @raw-io @reboot @swap @obsolete @debug",
+		"--property=SystemCallFilter=@system-service",
 		"--property=MemoryMax=128M", "--property=TasksMax=32", "--property=CPUQuota=25%", "--property=RuntimeMaxSec=15s",
 		"--property=WorkingDirectory=/empty", "--property=UMask=0077",
 		"--property=BindReadOnlyPaths=" + binary + ":" + sandboxBinary,
@@ -322,10 +322,20 @@ func runtimeProbeDependencies(binary string) ([]string, error) {
 }
 
 func prepareRuntimeProbeDependencyTargets(root string, dependencies []string) error {
+	root = filepath.Clean(root)
 	for _, dependency := range dependencies {
 		target := filepath.Join(root, strings.TrimPrefix(dependency, "/"))
+		relative, err := filepath.Rel(root, target)
+		if err != nil || relative == "." || !filepath.IsLocal(relative) {
+			return fmt.Errorf("runtime probe dependency %q escapes sandbox root", dependency)
+		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
+		}
+		for directory := filepath.Dir(target); directory != root; directory = filepath.Dir(directory) {
+			if err := os.Chmod(directory, 0o755); err != nil {
+				return err
+			}
 		}
 		file, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o400)
 		if err != nil {
@@ -443,9 +453,14 @@ func runSandboxedVersionProbe(ctx context.Context, binary string, args []string)
 		if err := os.Chmod(rootDir, 0o755); err != nil {
 			return "", err
 		}
-		for path, mode := range map[string]os.FileMode{"probe": 0o755, "empty": 0o555, "tmp": 0o1777} {
-			if err := os.Mkdir(filepath.Join(rootDir, path), mode); err != nil {
+		// The helper's private umask must not block the sandbox's DynamicUser.
+		for path, mode := range map[string]os.FileMode{"probe": 0o755, "empty": 0o555, "tmp": 0o777 | os.ModeSticky} {
+			directory := filepath.Join(rootDir, path)
+			if err := os.Mkdir(directory, mode); err != nil {
 				return "", fmt.Errorf("prepare systemd probe root: %w", err)
+			}
+			if err := os.Chmod(directory, mode); err != nil {
+				return "", fmt.Errorf("set systemd probe root permissions: %w", err)
 			}
 		}
 		if err := prepareRuntimeProbeDependencyTargets(rootDir, dependencies); err != nil {
