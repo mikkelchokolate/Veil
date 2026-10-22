@@ -22,7 +22,7 @@ All notable changes to Veil will be documented in this file.
   like clearing the quota through the API: the flag is dropped and the
   client's pending quota enforcement target is superseded. Before, the
   rollback committed `depleted=true` with `quotaBytes=null` (a state every
-  writer refuses) to the clients table, `state.json` and the new revision.
+  writer refuses) to the clients table and the new immutable revision.
   A client whose restored revision still has a quota keeps its live
   depletion as before.
 - #1270: `POST /api/apply/rollback` now runs the restored client rows

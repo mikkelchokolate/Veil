@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
@@ -14,8 +13,8 @@ import (
 // snapshot client, including one whose restored configuration has no quota.
 // That committed depleted=true with quotaBytes=null — a state every live
 // writer refuses (validate: "depletion state requires quotaBytes") — into
-// the clients table, state.json, the new immutable revision and the
-// in-memory snapshot, and left the client's pending "depleted" enforcement
+// the clients table, the new immutable revision and the in-memory
+// snapshot, and left the client's pending "depleted" enforcement
 // target active. Restoring "no quota" is an explicit transition to
 // unlimited, exactly like a quota clear through the API: the derived
 // depletion state is dropped and the enforcement target superseded.
@@ -66,24 +65,16 @@ func TestRollbackToQuotalessSnapshotDropsLiveDepletion(t *testing.T) {
 		t.Fatalf("%d quota enforcement target(s) still active for a client restored to unlimited", active)
 	}
 
+	// The panel's in-memory snapshot is rebuilt from the normalized DB rows;
+	// the new immutable revision payload is what the graft produced (state.json
+	// never carries client rows — Store.Marshal strips them). Each source must
+	// actually contain the client, or the check would pass vacuously.
 	state.mu.Lock()
 	inMemory, err := state.snapshotLocked()
 	state.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
-	persisted, _, err := managementstate.NewStore(state.statePath, state.cipher).Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for label, clients := range map[string][]model.ClientSnapshot{"in-memory snapshot": inMemory.Clients, "state.json": persisted.Clients} {
-		for _, item := range clients {
-			if item.ID == clientID && (item.Depleted || item.QuotaBytes != nil) {
-				t.Fatalf("%s carries quota=%v depleted=%v, want null/false", label, item.QuotaBytes, item.Depleted)
-			}
-		}
-	}
-
 	current, err := state.applyRevisions.Get()
 	if err != nil {
 		t.Fatal(err)
@@ -96,9 +87,22 @@ func TestRollbackToQuotalessSnapshotDropsLiveDepletion(t *testing.T) {
 	if err := json.Unmarshal(payload, &stored); err != nil {
 		t.Fatal(err)
 	}
-	for _, item := range stored.Clients {
-		if item.ID == clientID && (item.Depleted || item.QuotaBytes != nil) {
-			t.Fatalf("new immutable revision carries quota=%v depleted=%v, want null/false", item.QuotaBytes, item.Depleted)
+	for label, clients := range map[string][]model.ClientSnapshot{
+		"in-memory snapshot":     inMemory.Clients,
+		"new immutable revision": stored.Clients,
+	} {
+		found := false
+		for _, item := range clients {
+			if item.ID != clientID {
+				continue
+			}
+			found = true
+			if item.Depleted || item.QuotaBytes != nil {
+				t.Errorf("%s carries quota=%v depleted=%v, want null/false", label, item.QuotaBytes, item.Depleted)
+			}
+		}
+		if !found {
+			t.Errorf("%s does not contain the restored client %s", label, clientID)
 		}
 	}
 }
