@@ -712,15 +712,16 @@ func (s *managementState) handleBackupRestoreJob(w http.ResponseWriter, r *http.
 		return
 	}
 	job, ok := s.backupRestoreJob(id)
-	authorized := ok && requestHasAdminRole(s, r)
-	if ok && !authorized && job.ownerSessionToken != "" {
-		if cookie, err := r.Cookie("veil_session"); err == nil {
-			authorized = subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(job.ownerSessionToken)) == 1
-		}
-	}
 	// A caller who is neither an admin nor the job's owner gets the same 404
 	// as for an unknown id, so a leaked job id cannot be confirmed to exist
-	// (#1268 item 2).
+	// (#1268 item 2). Both checks run whether or not the id exists, so the
+	// work done does not depend on existence either.
+	isAdmin := requestHasAdminRole(s, r)
+	isOwner := false
+	if cookie, err := r.Cookie("veil_session"); err == nil {
+		isOwner = subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(job.ownerSessionToken)) == 1
+	}
+	authorized := ok && (isAdmin || (job.ownerSessionToken != "" && isOwner))
 	if !authorized {
 		writeNotFound(w)
 		return

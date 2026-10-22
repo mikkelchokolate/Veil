@@ -64,6 +64,13 @@ func TestBackupRestoreJobNonOwnerCannotProbeExistence(t *testing.T) {
 		})
 	}
 
+	// An empty cookie value must not "match" a job that has no owner token.
+	emptyCookie := viewerRestoreJobRequest("job-unowned", "")
+	emptyCookie.Header.Set("Cookie", "veil_session=")
+	if rec := serve(emptyCookie); rec.Code != missing.Code || rec.Body.String() != missing.Body.String() {
+		t.Fatalf("empty cookie on an unowned job answered %d %q, want the unknown-id response", rec.Code, rec.Body.String())
+	}
+
 	if rec := serve(viewerRestoreJobRequest("job-1", owner.Token)); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"id":"job-1"`) {
 		t.Fatalf("owner read: status=%d body=%s", rec.Code, rec.Body.String())
 	}
