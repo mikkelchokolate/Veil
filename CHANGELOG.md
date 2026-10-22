@@ -24,6 +24,8 @@ All notable changes to Veil will be documented in this file.
   normal promote refuses to publish over. The helper never publishes symlinks
   there, so a rolled-back or restored symlink record now leaves the
   destination absent. A restore reports it under removed artifacts.
+  Operators who deliberately symlinked a managed path: rolling back a
+  promote that removed that link no longer brings it back.
 
 - #1257 (F2): the privileged helper now recovers an interrupted promotion
   journal only while holding `.promotion.lock`. Before, `promote`, promotion

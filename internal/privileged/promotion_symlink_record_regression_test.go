@@ -149,3 +149,76 @@ func TestPromotionRollbackOfRemovedSymlinkLeavesDestinationAbsent(t *testing.T) 
 		assertFileContent(t, outside, "secret")
 	})
 }
+
+// verifyCommittedPromotion keeps a read-only "symlink" case so a committed
+// journal left by a binary that still published symlinks on restore verifies
+// and is retired without touching the link; a link that no longer matches
+// the committed digest still fails closed.
+func TestPromotionRecoveryVerifiesLegacyCommittedSymlinkJournal(t *testing.T) {
+	for _, tamper := range []bool{false, true} {
+		name := "matching_link"
+		if tamper {
+			name = "retargeted_link"
+		}
+		t.Run(name, func(t *testing.T) {
+			withStubbedArtifactOwnership(t, func() {
+				root := t.TempDir()
+				backupRoot := filepath.Join(root, "backups")
+				destination := filepath.Join(root, "live", "config-1.json")
+				if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				const legacyTarget = "config-1.real.json"
+				linked := legacyTarget
+				if tamper {
+					linked = "elsewhere.json"
+				}
+				if err := os.Symlink(linked, destination); err != nil {
+					t.Fatal(err)
+				}
+				backupID := fixedPromotionBackupID()
+				manifest := promotionManifest{
+					Version: 1, TransactionID: "legacy", BackupID: backupID, Kind: "rollback", Phase: "committed",
+					Records: []promotionManifestRecord{{
+						TransactionID: "legacy", ArtifactID: "mieru/config-1.json", Destination: destination,
+						NewDigest: promotionDigest([]byte(legacyTarget)), Operation: "symlink", Phase: "committed",
+					}},
+				}
+				manifestPath := filepath.Join(backupRoot, backupID, "manifest.json")
+				body, err := json.Marshal(manifest)
+				if err != nil {
+					t.Fatal(err)
+				}
+				writeFileWithParents(t, manifestPath, body)
+				stagePromotionJournal(t, backupRoot, promotionTransactionJournal{
+					Version: 1, TransactionID: "legacy", Kind: "rollback", Phase: "manifest-committed",
+					ManifestPath: manifestPath, Manifest: manifest,
+				})
+
+				err = recoverPromotionTransactionWithPolicy(backupRoot, allowPromotionDestinationsUnder(root), 0)
+				journalErr := func() error {
+					_, statErr := os.Stat(filepath.Join(backupRoot, promotionTransactionJournalName))
+					return statErr
+				}()
+				if tamper {
+					if err == nil {
+						t.Fatal("recovery accepted a committed symlink journal whose link was retargeted")
+					}
+					if journalErr != nil {
+						t.Fatalf("recovery retired a journal it could not verify: %v", journalErr)
+					}
+				} else {
+					if err != nil {
+						t.Fatalf("recover legacy committed symlink journal: %v", err)
+					}
+					if !errors.Is(journalErr, os.ErrNotExist) {
+						t.Fatalf("journal after recovery: %v", journalErr)
+					}
+				}
+				if got, err := os.Readlink(destination); err != nil || got != linked {
+					t.Fatalf("recovery touched the committed link: target=%q err=%v, want %q", got, err, linked)
+				}
+			})
+		})
+	}
+}

@@ -400,6 +400,9 @@ func verifyCommittedPromotion(rootDir *safefs.Dir, root string, journal promotio
 				return err
 			}
 		case "symlink":
+			// Read-only legacy support: binaries before #1257 F3 published
+			// symlinks on restore, so a committed journal they left behind
+			// still verifies. Nothing writes this operation any more.
 			target, err := os.Readlink(record.Destination)
 			if err != nil || promotionDigest([]byte(target)) != record.NewDigest {
 				return fmt.Errorf("committed promotion symlink mismatch for %s", record.ArtifactID)
