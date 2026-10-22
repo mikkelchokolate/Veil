@@ -16,6 +16,14 @@ All notable changes to Veil will be documented in this file.
   record with the archive name, the bytes sent and, if the download did not
   complete, the reason: the helper refused, the mutation fence was held, the
   archive identity drifted mid-stream, or the client disconnected.
+- `veil helper serve` now prints a `warning:` on stderr for every `VEIL_*`
+  variable in its environment that moves a root-helper policy path (state,
+  `state.key`, staging/live roots, backup passphrase and root, SFTP config,
+  status, known_hosts and install id) away from the packaged layout. A manual
+  `sudo -E veil helper serve` with a poisoned shell env no longer retargets key
+  generation and backups silently. The packaged unit's values do not warn.
+  Values are quoted, and a `VEIL_BACKUP_PASSPHRASE` value that is not an
+  absolute path, or that contains blanks, is redacted.
 
 ## [v0.7.3] - 2026-10-22
 

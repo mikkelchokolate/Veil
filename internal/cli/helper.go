@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -66,6 +67,7 @@ func newHelperCommandWithDependencies(deps helperCommandDependencies) *cobra.Com
 			// other software, so peers must also live in the veil.service cgroup
 			// (audit #506). --peer-unit can relax it for manual debugging only.
 			policy := privileged.PeerPolicy{AllowedUID: uid, AllowRoot: false, AllowedUnit: peerUnit}
+			warnHelperPolicyEnvOverrides(cmd.ErrOrStderr())
 			if systemdSocketActivation {
 				if deps.ServeActivated == nil {
 					return fmt.Errorf("systemd socket activation is unavailable")
@@ -105,6 +107,26 @@ func newHelperCommandWithDependencies(deps helperCommandDependencies) *cobra.Com
 	}
 	helper.AddCommand(migrate)
 	return helper
+}
+
+// warnHelperPolicyEnvOverrides names every VEIL_* variable that moves the
+// root helper's policy paths (state, key, staging/live roots, backups, SFTP
+// config) away from the packaged layout. The helper trusts these paths as
+// root, and a manual `sudo -E veil helper serve` inherits the operator's
+// shell env, so a poisoned env would otherwise retarget key generation,
+// backups and restore allowlists without a trace (issue #1263). The packaged
+// unit exports the packaged values, which are not reported.
+func warnHelperPolicyEnvOverrides(errOut io.Writer) {
+	// Values are quoted so an embedded newline cannot forge or split journal
+	// lines in the very warning the operator is meant to trust; a redacted
+	// placeholder is printed as is.
+	for _, override := range privileged.PolicyEnvOverrides() {
+		value := strconv.Quote(override.Value)
+		if override.Redacted {
+			value = override.Value
+		}
+		fmt.Fprintf(errOut, "warning: %s=%s from the environment overrides the packaged helper path %q; the root helper trusts it\n", override.Name, value, override.Packaged)
+	}
 }
 
 func lookupSystemUID(name string) (uint32, error) {
