@@ -252,10 +252,25 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 			methodNotAllowed(w, http.MethodGet)
 			return
 		}
+		// The archive carries the complete panel state, client credentials
+		// included, so every download attempt leaves exactly one backup.download
+		// record: success only once the full bound stream reached the client,
+		// otherwise the reason it stopped (#1268 item 1). The deferred record
+		// also runs when abortTruncatedDownload panics mid-stream.
+		downloadErr := "download did not complete"
+		var streamed int64
+		defer func() {
+			record := audit.Record{
+				Action: "backup.download", Target: name, Success: downloadErr == "",
+				Error: downloadErr, Details: map[string]any{"bytes": streamed},
+			}
+			_ = s.recordRequestAudit(r, record)
+		}()
 		// The download shares the backup mutation fence with create/prune/
 		// delete/restore so a concurrent mutation cannot remove or replace the
 		// archive mid-transfer (#963).
 		if !s.beginBackupRead(w) {
+			downloadErr = "another backup operation is already in progress"
 			return
 		}
 		defer s.backupMutationMu.RUnlock()
@@ -275,6 +290,7 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 				Offset: offset, Limit: 1024 * 1024, TransactionID: transactionID,
 			})
 			if err != nil {
+				downloadErr = err.Error()
 				if offset == 0 {
 					writePrivilegedError(w, err)
 					return
@@ -283,6 +299,7 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 				return
 			}
 			if len(result.Archives) != 1 {
+				downloadErr = "backup helper did not return the archive"
 				if offset == 0 {
 					writeError(w, "backup helper did not return the archive", http.StatusBadGateway)
 					return
@@ -293,6 +310,7 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 			identity := result.Archives[0]
 			if offset == 0 {
 				if result.TransactionID == "" || len(result.ContentDigest) != 64 || result.InodeGeneration == "" || result.BoundSize != identity.Size {
+					downloadErr = "backup helper did not bind a stable stream"
 					writeError(w, "backup helper did not bind a stable stream", http.StatusBadGateway)
 					return
 				}
@@ -305,10 +323,12 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 				// Stream identity drifted after Content-Length was committed:
 				// fail closed by aborting the connection so the truncated body
 				// cannot be mistaken for a complete archive (#963).
+				downloadErr = "archive identity drifted mid-stream; transfer aborted"
 				abortTruncatedDownload()
 				return
 			}
 			if len(result.Data) == 0 && result.More {
+				downloadErr = "backup helper stalled the bound stream"
 				if offset == 0 {
 					// Content-Length was already declared for the archive; drop
 					// it before writing the error body so the error response is
@@ -321,14 +341,18 @@ func (s *managementState) handleBackupByName(w http.ResponseWriter, r *http.Requ
 				return
 			}
 			if _, err := w.Write(result.Data); err != nil {
+				downloadErr = "client connection failed mid-stream: " + err.Error()
 				return
 			}
 			offset += int64(len(result.Data))
+			streamed = offset
 			if !result.More {
 				if offset != expectedSize {
+					downloadErr = "archive stream ended short of its bound size; transfer aborted"
 					abortTruncatedDownload()
 					return
 				}
+				downloadErr = ""
 				break
 			}
 		}

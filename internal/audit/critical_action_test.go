@@ -106,6 +106,7 @@ func TestCriticalAuditActionMatchesLivePanelActions(t *testing.T) {
 		"backup.prune",
 		"backup.delete",
 		"backup.verify",
+		"backup.download",
 		"backup.restore",
 		"backup.restore.start",
 		"auth.login",
