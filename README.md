@@ -2,6 +2,9 @@
 
 Veil is a management panel for NaiveProxy, Hysteria2, olcRTC, and Mieru. It installs the Panel first; proxy Inbounds are added later from the Panel.
 
+Upgrading to v0.7.3? Read the [upgrade guide](docs/install.md#5-upgrading-from-v072)
+first: the state migration requires a pre-upgrade backup for downgrades.
+
 ![Veil panel](docs/assets/veil-panel.gif)
 
 ## Quick start
@@ -28,7 +31,7 @@ and whether to choose a random high Panel port or use a port you enter. Veil
 still installs as a **panel-only** control plane first; you do not need a domain
 or Caddy unless you choose Caddy Panel access or add a NaiveProxy Inbound later.
 
-After install you'll see either direct/local Panel access over generated self-signed HTTPS:
+For local access, the installer prints the Panel's self-signed HTTPS address:
 
 ```text
 Panel access: https://127.0.0.1:<panel-port>/<web-base-path>/
@@ -40,7 +43,9 @@ or, if you choose Caddy Panel access:
 Panel URL: https://vpn.example.com/a1b2c3d4e5f6/
 ```
 
-The HTTPS Panel URL path is randomly generated — only you know it. Direct/local Panel access uses a self-signed certificate, so the browser may ask you to trust it.
+The HTTPS Panel URL path is randomly generated — only you know it. Local access
+uses a self-signed certificate. Direct mode attempts a trusted IP certificate
+and falls back to a self-signed certificate with a warning if issuance fails.
 
 ### Non-interactive examples
 
