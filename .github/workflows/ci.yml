@@ -460,6 +460,7 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npx playwright install --with-deps chromium
+          echo "CI_BROWSER_DEPS_LOCK_SHA256=$(sha256sum package-lock.json | cut -d ' ' -f 1)" >> "$GITHUB_ENV"
       - name: browser-e2e job
         run: bash scripts/ci/browser-e2e.sh
       - name: Upload CI artifacts (incl. panel logs and Playwright reports)
