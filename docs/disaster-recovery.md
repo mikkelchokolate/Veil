@@ -195,6 +195,7 @@ Veil restores:
 
 - legacy encrypted envelope v1;
 - authenticated encrypted envelope v2;
+- current streaming authenticated encrypted envelope v3 (also used by v0.7.2);
 - legacy two-file archive/manifest format v1 (leaves the existing `veil.db`
   untouched);
 - current three-file archive/manifest format v2;

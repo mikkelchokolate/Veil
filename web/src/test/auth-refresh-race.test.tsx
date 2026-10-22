@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
-import { apiFetch } from "../api/fetcher";
+import { StrictMode } from "react";
+import { describe, expect, it, vi } from "vitest";
+import * as fetcher from "../api/fetcher";
 import { AuthProvider, useAuth } from "../auth/AuthContext";
 import { HttpResponse, http, server } from "./server";
 
@@ -47,9 +48,9 @@ function Probe() {
 			<button
 				type="button"
 				onClick={() => {
-					void apiFetch("/api/v1/probe", { method: "POST", body: "{}" }).catch(
-						() => undefined,
-					);
+					void fetcher
+						.apiFetch("/api/v1/probe", { method: "POST", body: "{}" })
+						.catch(() => undefined);
 				}}
 			>
 				probe-csrf
@@ -70,6 +71,61 @@ function renderAuth() {
 }
 
 describe("auth refresh races", () => {
+	it("aborts refresh on unmount and ignores even a late uncancelled failure", async () => {
+		let rejectStatus!: (error: Error) => void;
+		const pendingStatus = new Promise<never>((_resolve, reject) => {
+			rejectStatus = reject;
+		});
+		let signal: AbortSignal | null | undefined;
+		const request = vi
+			.spyOn(fetcher, "apiFetch")
+			.mockImplementationOnce((_path, options) => {
+				signal = options?.signal;
+				return pendingStatus;
+			});
+		const csrf = vi.spyOn(fetcher, "setCsrfToken");
+		try {
+			const view = renderAuth();
+			view.unmount();
+			await act(async () => {
+				rejectStatus(new Error("late status failure"));
+			});
+			expect(signal?.aborted).toBe(true);
+			expect(csrf).not.toHaveBeenCalled();
+		} finally {
+			request.mockRestore();
+			csrf.mockRestore();
+		}
+	});
+
+	it("refreshes normally after StrictMode repeats effect setup and cleanup", async () => {
+		server.use(
+			http.get("*/api/auth/status", () =>
+				HttpResponse.json({
+					authenticated: true,
+					role: "admin",
+					csrfToken: "csrf-current",
+				}),
+			),
+		);
+		const qc = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={qc}>
+				<StrictMode>
+					<AuthProvider>
+						<Probe />
+					</AuthProvider>
+				</StrictMode>
+			</QueryClientProvider>,
+		);
+		await waitFor(() =>
+			expect(screen.getByTestId("session")).toHaveTextContent("csrf-current"),
+		);
+		expect(screen.getByTestId("loading")).toHaveTextContent("false");
+	});
+
 	it("ignores a pre-logout status response that arrives after logout", async () => {
 		const user = userEvent.setup();
 		let session: SessionBody = {

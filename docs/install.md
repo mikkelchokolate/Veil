@@ -24,8 +24,8 @@ same privileged installer handoff. This path is not cosign-signed.
 curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install-main.sh | sh
 ```
 
-After install, `veil help` lists every command. `veil help <command>` shows
-flags for one command.
+After install, `sudo veil` opens the terminal management and recovery menu.
+`veil help` lists every command; `veil help <command>` shows its flags.
 
 The piped `install.sh` is an unprivileged bootstrap. It verifies the pinned
 verifier, `install-privileged.sh`, the Veil archive, signed checksums, and signed
@@ -108,8 +108,9 @@ Exposes the Panel directly on all interfaces on the configured port.
 
 By default, `direct` mode obtains a trusted Let's Encrypt certificate for the
 server's public IP address. Veil requests the `shortlived` certificate profile
-(3-day validity) through `acme.sh` in standalone mode and registers an `acme.sh`
-`reloadcmd` that restarts the Panel on renewal. This removes the browser
+through `acme.sh` and runs its own renewal worker; a successful live apply
+with service actions or `veil repair` can also renew it when due. The renewal
+reload command restarts the Panel. This removes the browser
 certificate warning and prevents cached HSTS policies from causing redirect
 loops when accessing the panel by IP. The certificate's SAN is the public IP
 address (no `CN`).
@@ -119,8 +120,9 @@ address (no `CN`).
   (or the port selected during install) after the IP address, keeping the path.
   If public IP detection is unavailable, pass `--public-ip YOUR_SERVER_IP`
   to `veil install` so it can print the correct address.
-- **Requirements:** Port `80/tcp` must be free and reachable from the internet
-  during install/repair so the Let's Encrypt HTTP-01 challenge can complete.
+- **Requirements:** Port `80/tcp` must be reachable from the internet during
+  issuance and renewal. The HTTP-01 listener needs the port free, or a
+  Veil-managed Caddy route that forwards the challenge to the internal issuer.
 - **Fallback:** If the IP certificate cannot be issued (for example, port 80 is
   already in use), Veil falls back to a self-signed certificate and prints a
   warning.
@@ -171,8 +173,8 @@ Veil's managed systemd units invoke external runtime binaries:
 | olcRTC | `olcrtc` | `veil-olcrtc@.service` | built from source with `go install` |
 
 `veil install` installs the Panel without downloading protocol runtimes.
-The exception is `--panel-access caddy`: when Caddy is missing, the installer
-acquires it so the Panel can be reached through its domain.
+The exception is `--panel-access caddy`: the installer ensures a verified,
+pinned Caddy so the Panel can be reached through its domain.
 
 When you first apply an enabled Inbound, Veil acquires only its missing
 runtime. Enabling WARP acquires `sing-box`. Existing runtimes are reused,
@@ -198,7 +200,98 @@ runtime is present.
 
 ---
 
-## 5. Manual Building from Source
+## 5. Upgrading from v0.7.2
+
+Schedule a maintenance window. v0.7.3 writes **state schema 6** and migrates
+the database; an older binary cannot read the migrated state. A binary-only
+rollback, including `veil update --staged`, does not undo those migrations.
+
+### Back up before the first new start
+
+Using the **old version**, create and verify an encrypted backup. Supply an
+existing protected passphrase file (root-readable, mode `0600`); do not put
+the passphrase in a command-line argument. Replace the verification example's
+archive path with the actual path printed by `backup create`.
+
+```bash
+sudo veil backup create --passphrase-file /root/veil-backup-passphrase \
+  --output-dir /var/lib/veil/backups
+sudo veil backup verify /var/lib/veil/backups/veil_backup_YYYYMMDD_HHMMSS.tar.gz.enc \
+  --passphrase-file /root/veil-backup-passphrase
+```
+
+The v0.7.2 backup includes a consistent `state.json`, `veil.db` and `state.key`.
+Copy the verified archive and its passphrase safely off the server, keeping
+the passphrase separate. Retain the old release/package for disaster recovery.
+For custom layouts, pass the actual `--state /CUSTOM/var/state.json` and
+`--key-path /CUSTOM/etc/state.key` to backup creation; the database is resolved
+beside the state file. Stop if backup creation or verification fails.
+
+### Binary-managed installations
+
+`veil update` targets the current stable GitHub Latest release. Check its
+preview and version before proceeding; these instructions apply when that
+release is v0.7.3. After verifying the backup, stop the old processes before
+replacing the binary: otherwise an automatic restart could launch the new
+Panel while the old helper is still running. Run each step separately and
+stop if any command fails. Do not add `--restart` or `--staged` to the updater.
+Ignore the updater's standalone restart hint; continue with repair below.
+
+```bash
+sudo veil update --dry-run
+sudo systemctl stop veil.service veil-helper.service veil-helper.socket
+sudo veil update --yes
+sudo veil repair --dry-run
+sudo veil repair --yes
+sudo systemctl start veil-helper.socket veil-helper.service veil.service
+veil version
+sudo veil doctor
+sudo veil status
+```
+
+Review the repair preview before applying it. Repeat your installation's
+`--etc-dir`, `--var-dir` and `--systemd-dir` on both repair commands when they
+differ from the defaults. Repair may restart changed services itself; always
+run the explicit start immediately afterward, helper socket first. A no-op
+repair need not start stopped services. Repairs refresh install-managed units,
+including Mieru's DNS fallback hook; a binary update alone does not.
+
+If the updater fails and `veil version` still reports the old version, run
+the explicit `systemctl start` line to restore the old services. If the binary
+has already changed, or repair fails, keep services stopped while inspecting
+the error and follow the [disaster-recovery guide](disaster-recovery.md) with
+the matching pre-upgrade backup and binary. Do not assume a binary rollback
+reverses a migration.
+
+### Native packages and containers
+
+For `.deb`, `.rpm` or `.apk` installations, install the matching v0.7.3 package
+with the package manager instead of overwriting its binary with `veil update`.
+Package hooks refresh managed units and restart services; the pre-upgrade
+backup and post-upgrade checks are still required. For containers, back up the
+mounted state and key before replacing the image with
+`ghcr.io/mikkelchokolate/veil:0.7.3`. Rootless containers still cannot perform
+the host helper's systemd/firewall operations.
+
+### Check the upgraded installation
+
+Sign in and run one confirmed live Apply to refresh generated runtime
+configuration and certificate routes, then check service status and client
+connectivity. This can restart protocol services and interrupt connections.
+First-use runtime installation may need internet access, including when an
+existing binary is untracked or no longer matches the pinned version.
+
+Pre-upgrade unsealed revisions cannot be selected for apply rollback. If the
+applied revision lagged the desired revision, subscription feeds wait for a
+successful apply. Inspect startup warnings for legacy tokens that need
+re-issuance. Do not edit the schema number or delete `veil.db`/`state.key` to
+bypass a migration failure; recover with the matching pre-upgrade backup and
+compatible binary. Use `sudo veil menu` for service logs, diagnostics and
+recovery if the web Panel is unavailable.
+
+---
+
+## 6. Manual Building from Source
 
 If you prefer to compile Veil from source, follow these instructions.
 
@@ -235,7 +328,7 @@ The project uses the Go module path `github.com/mikkelchokolate/Veil`, which is 
 
 ---
 
-## 6. File and Directory Structure
+## 7. File and Directory Structure
 
 When installed natively on a Linux host, Veil manages the following directories and configurations:
 
