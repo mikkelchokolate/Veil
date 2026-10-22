@@ -26,8 +26,10 @@ on:
 permissions:
   contents: read
 
+# Ref-scoped so a stray non-main dispatch fails at once instead of queueing
+# behind (or displacing a pending) main build; main runs still serialize.
 concurrency:
-  group: naive-client-build
+  group: naive-client-build-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:

@@ -51,9 +51,10 @@ func TestNaiveClientBuildWorkflowContract(t *testing.T) {
 	var parsed struct {
 		On   map[string]any `yaml:"on"`
 		Jobs map[string]struct {
-			If          string            `yaml:"if"`
-			Permissions map[string]string `yaml:"permissions"`
-			Steps       []struct {
+			If              string            `yaml:"if"`
+			ContinueOnError any               `yaml:"continue-on-error"`
+			Permissions     map[string]string `yaml:"permissions"`
+			Steps           []struct {
 				Run string `yaml:"run"`
 			} `yaml:"steps"`
 		} `yaml:"jobs"`
@@ -90,8 +91,15 @@ func TestNaiveClientBuildWorkflowContract(t *testing.T) {
 	if len(refuse.Permissions) != 0 {
 		t.Fatalf("require-main must have no permissions, got %v", refuse.Permissions)
 	}
-	if len(refuse.Steps) != 1 || !strings.Contains(refuse.Steps[0].Run, "::error::") || !strings.HasSuffix(strings.TrimSpace(refuse.Steps[0].Run), "exit 1") {
+	wantRefusal := `echo "::error::naive-client-build only builds and publishes from refs/heads/main (dispatched from ${REF}); nothing was built"` + "\nexit 1"
+	if len(refuse.Steps) != 1 || strings.TrimSpace(refuse.Steps[0].Run) != wantRefusal {
 		t.Fatalf("require-main must emit an ::error:: and exit 1, got %+v", refuse.Steps)
+	}
+	// Any continue-on-error would turn the refusal back into a green run.
+	for name, job := range parsed.Jobs {
+		if job.ContinueOnError != nil {
+			t.Fatalf("%s job must not set continue-on-error, got %v", name, job.ContinueOnError)
+		}
 	}
 	wantPerms := map[string]map[string]string{
 		"build-linux-x64": {"contents": "read", "id-token": "write", "attestations": "write"},
@@ -144,6 +152,7 @@ func TestNaiveClientBuildWorkflowContract(t *testing.T) {
 		"./build.sh",
 		"../tests/basic.sh out/Release/naive",
 		"needs: build-linux-x64",
+		"group: naive-client-build-${{ github.ref }}",
 		`sha256sum --check "${BUNDLE}.tar.xz.sha256"`,
 		"if-no-files-found: error",
 		`gh attestation verify "${BUNDLE}.tar.xz" -R "${GITHUB_REPOSITORY}" \
