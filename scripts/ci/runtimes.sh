@@ -204,6 +204,9 @@ install_pinned_runtimes() { # <destdir> <veil-binary-for-caddy-build>
 
     # naiveproxy client: our ci-deps mirror first (#1373), then upstream. Both
     # are verified against the same pin; a mismatch or a miss on both fails.
+    # The upstream fallback is DORMANT for the current pin (upstream's original
+    # tarball had a different sha and is deleted); it only becomes live again
+    # once the pin is repointed at an upstream-published artifact.
     fetch_verified "${CI_NAIVE_CLIENT_MIRROR_URL}" naive.tar.xz "${CI_NAIVE_CLIENT_SHA256}" \
       || fetch_verified "https://github.com/klzgrad/naiveproxy/releases/download/${CI_NAIVE_CLIENT_TAG}/${CI_NAIVE_CLIENT_ASSET}" naive.tar.xz "${CI_NAIVE_CLIENT_SHA256}"
     mkdir -p naive-client && tar -xJf naive.tar.xz -C naive-client

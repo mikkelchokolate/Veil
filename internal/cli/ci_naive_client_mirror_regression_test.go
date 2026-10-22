@@ -79,6 +79,7 @@ func TestCINaiveClientFetchMirrorThenUpstreamBothVerified(t *testing.T) {
 		{"mirror down, upstream verified", "", good, true, "MU"},
 		{"mirror tampered, upstream verified", "evil", good, true, "MU"},
 		{"both down fails", "", "", false, "MU"},
+		{"mirror writes a correct body then errors, upstream verified", "partial-ok", good, true, "MU"},
 		{"mirror tampered, upstream tampered fails", "evil", "evil", false, "MU"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -87,7 +88,9 @@ func TestCINaiveClientFetchMirrorThenUpstreamBothVerified(t *testing.T) {
 curl() {
   local url="${@: -3:1}" out="${@: -1}"
   case "${url}" in
-    *ci-deps*) printf M >>"$HITS"; [ -n "$MIRROR" ] || return 22; printf '%s' "$MIRROR" >"$out" ;;
+    *ci-deps*) printf M >>"$HITS"; [ -n "$MIRROR" ] || return 22
+      if [ "$MIRROR" = partial-ok ]; then printf '%s' "$GOOD" >"$out"; return 18; fi
+      printf '%s' "$MIRROR" >"$out" ;;
     *klzgrad*) printf U >>"$HITS"; [ -n "$UPSTREAM" ] || return 22; printf '%s' "$UPSTREAM" >"$out" ;;
     *) return 99 ;;
   esac

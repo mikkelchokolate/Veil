@@ -83,7 +83,8 @@ CI_NAIVE_CLIENT_ASSET="naiveproxy-v150.0.7871.63-1-linux-x64.tar.xz"
 # source build of upstream tag v150.0.7871.63-1 (commit 3ba967e2), produced by
 # .github/workflows/naive-client-build.yml and mirrored on the ci-deps
 # prerelease with a build-provenance attestation. runtimes.sh tries the mirror
-# first and falls back to the upstream URL; both are sha256-verified.
+# first, then the upstream URL, both sha256-verified; the upstream fallback is
+# dormant for this pin (upstream's deleted tarball had a different checksum).
 CI_NAIVE_CLIENT_SHA256="ac9519d7e4a9919fe0fadb37e747cbca20636ccf874e3ce1e8d47b0ceb8d1709"
 CI_NAIVE_CLIENT_MIRROR_URL="https://github.com/mikkelchokolate/Veil/releases/download/ci-deps/naiveproxy-v150.0.7871.63-1-linux-x64.tar.xz"
 

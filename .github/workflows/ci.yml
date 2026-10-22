@@ -389,7 +389,8 @@ jobs:
       # (or over the repo budget) and PR-scoped entries are invisible to other
       # branches, so the entry saved by a main run is what protects PRs.
       # The naive client is cached too; its durable source is the ci-deps
-      # mirror (#1373), with upstream as a checksum-verified fallback.
+      # mirror (#1373); the checksum-verified upstream fallback is dormant
+      # for the current source-build pin.
       - name: Runtime download cache key
         id: runtime-downloads
         run: |
