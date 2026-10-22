@@ -18,6 +18,12 @@ func TestValidSetupUsernameCountsCharactersAndUTF8Bytes(t *testing.T) {
 		{name: "three multibyte letters", username: "абв", want: true},
 		{name: "sixty four ascii bytes", username: strings.Repeat("a", 64), want: true},
 		{name: "more than sixty four utf8 bytes", username: strings.Repeat("я", 33), want: false},
+		// /api/v1/users/me/* is the caller's self-service route and is matched
+		// before /api/v1/users/{username}/*, so an account literally named "me"
+		// could never be managed by an admin (#1266). The 3-character minimum
+		// is what keeps "me" unrepresentable; lowering it must reserve "me".
+		{name: "self-service alias me is not a username", username: "me", want: false},
+		{name: "self-service alias ME is not a username", username: "ME", want: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := validSetupUsername(tc.username); got != tc.want {

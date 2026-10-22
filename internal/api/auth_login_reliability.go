@@ -112,9 +112,11 @@ func (s *managementState) createSessionForLoginSnapshot(snapshot loginCredential
 
 // issuePendingSecondFactor converts a verified password into a pending_2fa
 // challenge instead of a session. The pending cookie authorizes exactly one
-// route — POST /api/v1/auth/totp/verify — for ~5 minutes. The login backoff
-// budget is deliberately NOT cleared here: the factor-verify failures feed the
-// same per-(client, username) throttle as password failures (#1172).
+// route — POST /api/v1/auth/totp/verify — for ~5 minutes. The password-stage
+// backoff budget is deliberately NOT cleared here. Factor-verify failures are
+// throttled in their own "2fa|"-prefixed per-(client, username) bucket (same
+// limiter and backoff family, separate budget), and both buckets are cleared
+// only once the second factor succeeds (#1172).
 func (s *managementState) issuePendingSecondFactor(w http.ResponseWriter, r *http.Request, snapshot loginCredentialSnapshot) {
 	token, expiresAt, err := s.pendingSecondFactors().Issue(snapshot.Username, snapshot.PasswordHash)
 	if err != nil {
