@@ -13,6 +13,7 @@ import (
 const runtimeHTTPAttempts = 3
 
 // Retry only transport failures and temporary HTTP responses, never integrity checks.
+// shortcut: metadata body reads are not retried; share whole-response retries if truncation becomes recurrent.
 func runtimeHTTPDo(client *http.Client, request *http.Request) (*http.Response, error) {
 	for attempt := 0; ; attempt++ {
 		response, err := client.Do(request.Clone(request.Context()))

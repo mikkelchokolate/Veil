@@ -134,6 +134,20 @@ func TestRunSystemdActionsReturnsErrorOnLaterFailure(t *testing.T) {
 	}
 }
 
+func TestRunSystemdActionsWrapsCommandAndPreservesCause(t *testing.T) {
+	cause := errors.New("exit status 1")
+	runner := CommandRunnerFunc(func(string, ...string) error { return cause })
+	err := RunSystemdActions(runner, []SystemdAction{{Command: "systemctl", Args: []string{"restart", "veil-helper.socket", "veil.service"}}})
+	if !errors.Is(err, cause) {
+		t.Fatalf("command error lost its cause: %v", err)
+	}
+	for _, part := range []string{"systemctl", "restart", "veil-helper.socket", "veil.service"} {
+		if !strings.Contains(err.Error(), part) {
+			t.Fatalf("command error lacks %q: %v", part, err)
+		}
+	}
+}
+
 func TestSystemdCommandTimeout(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping sleep timeout test on Windows")
