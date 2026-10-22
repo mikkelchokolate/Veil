@@ -93,6 +93,7 @@ build_target() {
     --build-arg "CI_NAIVE_CLIENT_TAG=${CI_NAIVE_CLIENT_TAG}" \
     --build-arg "CI_NAIVE_CLIENT_ASSET=${CI_NAIVE_CLIENT_ASSET}" \
     --build-arg "CI_NAIVE_CLIENT_SHA256=${CI_NAIVE_CLIENT_SHA256}" \
+    --build-arg "CI_NAIVE_CLIENT_MIRROR_URL=${CI_NAIVE_CLIENT_MIRROR_URL}" \
     --build-arg "CI_SINGBOX_TAG=${CI_SINGBOX_TAG}" \
     --build-arg "CI_SINGBOX_ASSET=${CI_SINGBOX_ASSET}" \
     --build-arg "CI_SINGBOX_SHA256=${CI_SINGBOX_SHA256}" \

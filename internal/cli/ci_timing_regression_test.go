@@ -225,7 +225,7 @@ cat asset
 	t.Run("completeness requires every pinned asset", func(t *testing.T) {
 		dir := t.TempDir()
 		pins := map[string]string{}
-		for _, name := range []string{"HYSTERIA", "MITA", "MIERU_CLIENT", "SINGBOX"} {
+		for _, name := range []string{"HYSTERIA", "MITA", "MIERU_CLIENT", "NAIVE_CLIENT", "SINGBOX"} {
 			content := "asset " + name + "\n"
 			s := sha256.Sum256([]byte(content))
 			pins[name] = hex.EncodeToString(s[:])
@@ -258,17 +258,16 @@ cat asset
 			t.Fatal("cache missing the sing-box archive reported complete")
 		}
 	})
-	t.Run("naive client is deliberately uncached", func(t *testing.T) {
-		// fetch_naive_client owns the #1373 404 soft-skip and bypasses the cache,
-		// so its pin must stay out of the cache key, or the cache could never be
-		// complete and would never be saved.
+	t.Run("naive client is cached like every other pin", func(t *testing.T) {
+		// #1373: the naive client is fetched via fetch_verified (mirror, then
+		// upstream), so its pin must be part of the cache key/completeness.
 		cmd := exec.Command("bash", "-c", "set -euo pipefail\nCI_HYSTERIA_SHA256=h CI_MITA_SHA256=m CI_MIERU_CLIENT_SHA256=c CI_NAIVE_CLIENT_SHA256=naive-pin CI_SINGBOX_SHA256=s\n"+helpers+"pinned_runtime_download_shas")
 		out, err := cmd.Output()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(string(out), "naive-pin") {
-			t.Fatalf("pinned_runtime_download_shas lists the naive client pin:\n%s", out)
+		if !strings.Contains(string(out), "naive-pin") {
+			t.Fatalf("pinned_runtime_download_shas omits the naive client pin:\n%s", out)
 		}
 	})
 }
