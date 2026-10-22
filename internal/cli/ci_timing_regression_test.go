@@ -269,9 +269,9 @@ cat asset
 		if !strings.Contains(string(out), "naive-pin") {
 			t.Fatalf("pinned_runtime_download_shas omits the naive client pin:\n%s", out)
 		}
-		// Positive check: exactly the four cached pins, so dropping one that
+		// Positive check: exactly the five cached pins, so dropping one that
 		// should be cached is caught here as well as by the fetch-site test.
-		if got, want := string(out), "h\nm\nc\ns\n"; got != want {
+		if got, want := string(out), "h\nm\nc\nnaive-pin\ns\n"; got != want {
 			t.Fatalf("pinned_runtime_download_shas = %q, want %q", got, want)
 		}
 	})
