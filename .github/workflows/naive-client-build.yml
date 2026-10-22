@@ -1,0 +1,131 @@
+name: naive-client-build
+
+# Builds the pinned naiveproxy linux-x64 client from source and mirrors it to
+# the `ci-deps` prerelease (never a version release, never "latest"). Upstream
+# klzgrad/naiveproxy removed all release binaries (#1373); this follows their
+# own .github/workflows/build.yml `linux` job for target_cpu="x64".
+#
+# Manual only. Refuses to overwrite an existing asset so a published checksum
+# pinned in scripts/ci/versions.sh can never silently change.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: upstream klzgrad/naiveproxy tag
+        default: v150.0.7871.63-1
+        required: true
+      commit:
+        description: expected commit SHA of that tag
+        default: 3ba967e2d36cc133a896e81a36257ad4c6ea20f4
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: naive-client-build
+  cancel-in-progress: false
+
+jobs:
+  build-linux-x64:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    permissions:
+      contents: write      # upload to the ci-deps prerelease
+      id-token: write      # build provenance attestation
+      attestations: write
+    env:
+      TAG: ${{ inputs.tag }}
+      COMMIT: ${{ inputs.commit }}
+      EXTRA_FLAGS: 'target_cpu="x64"'
+      BUNDLE: naiveproxy-${{ inputs.tag }}-linux-x64
+      CCACHE_MAXSIZE: 200M
+      CCACHE_MAXFILES: 0
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Validate inputs
+        run: |
+          [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]] || { echo "bad tag ${TAG}"; exit 1; }
+          [[ "${COMMIT}" =~ ^[0-9a-f]{40}$ ]] || { echo "bad commit ${COMMIT}"; exit 1; }
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: klzgrad/naiveproxy
+          ref: ${{ inputs.commit }}
+          path: naiveproxy
+          persist-credentials: false
+      - name: Verify checkout matches tag
+        working-directory: naiveproxy
+        run: |
+          test "$(git rev-parse HEAD)" = "${COMMIT}"
+          test "$(git ls-remote https://github.com/klzgrad/naiveproxy "refs/tags/${TAG}" | cut -f1)" = "${COMMIT}"
+      - name: Install APT packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config ccache bubblewrap
+      - name: Regenerate Debian keyring
+        working-directory: naiveproxy/src
+        run: |
+          rm -f ./build/linux/sysroot_scripts/keyring.gpg
+          GPG_TTY=/dev/null ./build/linux/sysroot_scripts/generate_keyring.sh
+      - name: get-clang.sh
+        working-directory: naiveproxy/src
+        run: ./get-clang.sh
+      - name: build.sh
+        working-directory: naiveproxy/src
+        run: ./build.sh
+      - name: Upstream smoke test
+        working-directory: naiveproxy/src
+        run: ../tests/basic.sh out/Release/naive
+      - name: Pack (upstream bundle layout)
+        id: pack
+        working-directory: naiveproxy/src
+        run: |
+          mkdir "${BUNDLE}"
+          cp out/Release/naive config.json ../LICENSE ../USAGE.txt "${BUNDLE}"
+          tar cJf "${BUNDLE}.tar.xz" "${BUNDLE}"
+          tarball_sha="$(sha256sum "${BUNDLE}.tar.xz" | cut -d' ' -f1)"
+          naive_sha="$(sha256sum out/Release/naive | cut -d' ' -f1)"
+          cat > "${BUNDLE}.provenance.txt" <<PROV
+          asset: ${BUNDLE}.tar.xz
+          sha256: ${tarball_sha}
+          naive_executable_sha256: ${naive_sha}
+          source: https://github.com/klzgrad/naiveproxy
+          tag: ${TAG}
+          commit: ${COMMIT}
+          build: upstream src/get-clang.sh + src/build.sh, EXTRA_FLAGS=${EXTRA_FLAGS}, ubuntu-22.04
+          workflow_run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          workflow_ref: ${GITHUB_WORKFLOW_REF}
+          workflow_sha: ${GITHUB_SHA}
+          PROV
+          sed -i 's/^ *//' "${BUNDLE}.provenance.txt"
+          echo "${tarball_sha}  ${BUNDLE}.tar.xz" > "${BUNDLE}.tar.xz.sha256"
+          echo "tarball=naiveproxy/src/${BUNDLE}.tar.xz" >>"$GITHUB_OUTPUT"
+          { echo "### naiveproxy ${TAG} linux-x64"; echo; echo '```'; cat "${BUNDLE}.provenance.txt"; echo '```'; } >>"$GITHUB_STEP_SUMMARY"
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ steps.pack.outputs.tarball }}
+      - name: Publish to ci-deps prerelease (never overwrite)
+        working-directory: naiveproxy/src
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view ci-deps >/dev/null 2>&1; then
+            gh release create ci-deps --prerelease --latest=false --target "${GITHUB_SHA}" \
+              --title "CI dependencies (not a Veil release)" \
+              --notes "Checksum-pinned third-party CI dependencies mirrored for scripts/ci. Not a Veil release. See #1373."
+          fi
+          test "$(gh release view ci-deps --json isPrerelease -q .isPrerelease)" = true
+          if gh release view ci-deps --json assets -q '.assets[].name' | grep -Fx "${BUNDLE}.tar.xz" >/dev/null; then
+            echo "::error::${BUNDLE}.tar.xz already exists on ci-deps; refusing to overwrite a pinned asset"
+            exit 1
+          fi
+          gh release upload ci-deps "${BUNDLE}.tar.xz" "${BUNDLE}.tar.xz.sha256" "${BUNDLE}.provenance.txt"
