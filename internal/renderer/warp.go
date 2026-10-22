@@ -130,6 +130,12 @@ func RenderWarpSingBox(cfg WarpSingBoxConfig) (string, error) {
 		},
 		"route": renderWarpRoute(cfg.RoutingRules),
 	}
+	// Pin a public DoH resolver only when the host's own resolver is
+	// unreachable under the unit's egress filter (#1288, warp_resolver.go).
+	if dns, resolver, ok := warpDNSOverride(); ok {
+		body["dns"] = dns
+		body["route"].(map[string]any)["default_domain_resolver"] = resolver
+	}
 	encoded, err := json.MarshalIndent(body, "", "  ")
 	if err != nil {
 		return "", err

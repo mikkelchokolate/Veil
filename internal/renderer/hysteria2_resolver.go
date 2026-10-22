@@ -35,55 +35,72 @@ import (
 // resolve result and forwards the domain, so WARP-routed names are still
 // resolved by sing-box.
 const (
-	hysteria2DoHResolverAddrV4  = "1.1.1.1:443"
-	hysteria2DoHResolverAddrV6  = "[2606:4700:4700::1111]:443"
-	hysteria2DoHResolverSNI     = "cloudflare-dns.com"
+	filteredHostDoHAddrV4       = "1.1.1.1:443"
+	filteredHostDoHAddrV6       = "[2606:4700:4700::1111]:443"
+	filteredHostDoHSNI          = "cloudflare-dns.com"
 	hysteria2DoHResolverTimeout = "10s"
 )
 
 // Host probes. Tests replace them; production reads the live host.
 //
 // Inside a test binary the probe is off unless a renderer test enables it
-// (hysteria2ProbeHostInTests). Otherwise every package that renders through
-// RenderHysteria2 (protocols/hysteria2, generatedconfig, api, ...) would get
-// output that depends on the machine's resolv.conf and routing table.
+// (egressHostProbeInTests). Otherwise every package that renders through
+// RenderHysteria2 or RenderWarpSingBox (protocols/hysteria2, generatedconfig,
+// api, ...) would get output that depends on the machine's resolv.conf and
+// routing table.
 var (
-	hysteria2ProbeHostInTests = false
-	hysteria2ReadResolvConf   = func() ([]byte, error) { return os.ReadFile("/etc/resolv.conf") }
-	hysteria2ReadIPv4Routes   = func() ([]byte, error) { return os.ReadFile("/proc/net/route") }
-	hysteria2ReadIPv6Routes   = func() ([]byte, error) { return os.ReadFile("/proc/net/ipv6_route") }
-	hysteria2ResolverProbe    = probeHysteria2Resolver
+	egressHostProbeInTests   = false
+	egressHostReadResolvConf = func() ([]byte, error) { return os.ReadFile("/etc/resolv.conf") }
+	egressHostReadIPv4Routes = func() ([]byte, error) { return os.ReadFile("/proc/net/route") }
+	egressHostReadIPv6Routes = func() ([]byte, error) { return os.ReadFile("/proc/net/ipv6_route") }
+	hysteria2ResolverProbe   = probeHysteria2Resolver
 )
 
 func probeHysteria2Resolver() *hysteria2ResolverYAML {
-	if testing.Testing() && !hysteria2ProbeHostInTests {
+	addr, ok := filteredHostDoHAddr()
+	if !ok {
 		return nil
-	}
-	conf, err := hysteria2ReadResolvConf()
-	if err != nil && !os.IsNotExist(err) {
-		// Unknown host state: keep the daemon's default behaviour rather
-		// than guess. A missing file is handled below: the libc and Go
-		// resolvers then fall back to localhost, which the filter denies.
-		return nil
-	}
-	if hostResolverAllowedByEgressFilter(conf) {
-		return nil
-	}
-	v4, _ := hysteria2ReadIPv4Routes()
-	v6, _ := hysteria2ReadIPv6Routes()
-	addr := hysteria2DoHResolverAddrV4
-	if !hasIPv4RouteTo(v4, addrPortHost(hysteria2DoHResolverAddrV4)) &&
-		hasIPv6RouteTo(v6, addrPortHost(hysteria2DoHResolverAddrV6)) {
-		addr = hysteria2DoHResolverAddrV6
 	}
 	return &hysteria2ResolverYAML{
 		Type: "https",
 		HTTPS: &hysteria2ResolverDoHYAML{
 			Addr:    addr,
 			Timeout: hysteria2DoHResolverTimeout,
-			SNI:     hysteria2DoHResolverSNI,
+			SNI:     filteredHostDoHSNI,
 		},
 	}
+}
+
+// filteredHostDoHAddr is the host probe shared by every renderer whose daemon
+// runs under the egress filter (Hysteria2 here, the WARP sing-box bridge in
+// warp_resolver.go). It reports ok=false when the daemon should keep the host
+// resolver: inside a test binary that has not opted in, when resolv.conf
+// cannot be read for a reason other than absence, or when at least one
+// nameserver is reachable under the filter. Otherwise it returns the public
+// DoH address to pin, IPv6 only on hosts that route the IPv6 address and not
+// the IPv4 one.
+func filteredHostDoHAddr() (string, bool) {
+	if testing.Testing() && !egressHostProbeInTests {
+		return "", false
+	}
+	conf, err := egressHostReadResolvConf()
+	if err != nil && !os.IsNotExist(err) {
+		// Unknown host state: keep the daemon's default behaviour rather
+		// than guess. A missing file is handled below: the libc and Go
+		// resolvers then fall back to localhost, which the filter denies.
+		return "", false
+	}
+	if hostResolverAllowedByEgressFilter(conf) {
+		return "", false
+	}
+	v4, _ := egressHostReadIPv4Routes()
+	v6, _ := egressHostReadIPv6Routes()
+	addr := filteredHostDoHAddrV4
+	if !hasIPv4RouteTo(v4, addrPortHost(filteredHostDoHAddrV4)) &&
+		hasIPv6RouteTo(v6, addrPortHost(filteredHostDoHAddrV6)) {
+		addr = filteredHostDoHAddrV6
+	}
+	return addr, true
 }
 
 // hostResolverAllowedByEgressFilter reports whether at least one resolv.conf

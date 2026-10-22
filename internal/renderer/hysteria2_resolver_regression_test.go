@@ -44,18 +44,18 @@ const (
 		"00000000000000000000000000000000 00 00000000000000000000000000000000 00 fe800000000000000000000000000001 00000400 00000002 00000000 00450003     eth0\n"
 )
 
-func withHysteria2HostProbe(t *testing.T, resolvConf string, confErr error, v4, v6 string) {
+func withEgressHostProbe(t *testing.T, resolvConf string, confErr error, v4, v6 string) {
 	t.Helper()
-	oldConf, oldV4, oldV6 := hysteria2ReadResolvConf, hysteria2ReadIPv4Routes, hysteria2ReadIPv6Routes
+	oldConf, oldV4, oldV6 := egressHostReadResolvConf, egressHostReadIPv4Routes, egressHostReadIPv6Routes
 	t.Cleanup(func() {
-		hysteria2ReadResolvConf, hysteria2ReadIPv4Routes, hysteria2ReadIPv6Routes = oldConf, oldV4, oldV6
+		egressHostReadResolvConf, egressHostReadIPv4Routes, egressHostReadIPv6Routes = oldConf, oldV4, oldV6
 	})
-	oldEnabled := hysteria2ProbeHostInTests
-	t.Cleanup(func() { hysteria2ProbeHostInTests = oldEnabled })
-	hysteria2ProbeHostInTests = true
-	hysteria2ReadResolvConf = func() ([]byte, error) { return []byte(resolvConf), confErr }
-	hysteria2ReadIPv4Routes = func() ([]byte, error) { return []byte(v4), nil }
-	hysteria2ReadIPv6Routes = func() ([]byte, error) { return []byte(v6), nil }
+	oldEnabled := egressHostProbeInTests
+	t.Cleanup(func() { egressHostProbeInTests = oldEnabled })
+	egressHostProbeInTests = true
+	egressHostReadResolvConf = func() ([]byte, error) { return []byte(resolvConf), confErr }
+	egressHostReadIPv4Routes = func() ([]byte, error) { return []byte(v4), nil }
+	egressHostReadIPv6Routes = func() ([]byte, error) { return []byte(v6), nil }
 }
 
 type hysteria2ResolverDoc struct {
@@ -105,31 +105,31 @@ func TestRenderHysteria2ResolverFollowsHostNameserverReachability(t *testing.T) 
 		{name: "IPv4-mapped resolved stub", conf: "nameserver ::ffff:127.0.0.53\n", v4: testIPv4DefaultRoute},
 		{name: "unreadable resolv.conf", confErr: fs.ErrPermission, v4: testIPv4DefaultRoute},
 
-		{name: "AWS VPC resolver", conf: "search ec2.internal\nnameserver 172.31.0.2\n", v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
-		{name: "AWS link-local resolver", conf: "nameserver 169.254.169.253\n", v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
-		{name: "Alibaba CGNAT resolver", conf: "nameserver 100.100.2.136\n", v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
-		{name: "local dnsmasq", conf: "nameserver 127.0.0.1\n", v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
-		{name: "zoned IPv6 link-local", conf: "nameserver fe80::1%eth0\n", v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
-		{name: "IPv4-mapped loopback", conf: "nameserver ::ffff:127.0.0.1\n", v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
-		{name: "commented-out public nameserver", conf: "# nameserver 1.1.1.1\nnameserver 192.168.1.1\n", v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
-		{name: "reachable nameserver past the third is ignored", conf: "nameserver 10.0.0.2\nnameserver 10.0.0.3\nnameserver 172.31.0.2\nnameserver 1.1.1.1\n", v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
+		{name: "AWS VPC resolver", conf: "search ec2.internal\nnameserver 172.31.0.2\n", v4: testIPv4DefaultRoute, want: filteredHostDoHAddrV4},
+		{name: "AWS link-local resolver", conf: "nameserver 169.254.169.253\n", v4: testIPv4DefaultRoute, want: filteredHostDoHAddrV4},
+		{name: "Alibaba CGNAT resolver", conf: "nameserver 100.100.2.136\n", v4: testIPv4DefaultRoute, want: filteredHostDoHAddrV4},
+		{name: "local dnsmasq", conf: "nameserver 127.0.0.1\n", v4: testIPv4DefaultRoute, want: filteredHostDoHAddrV4},
+		{name: "zoned IPv6 link-local", conf: "nameserver fe80::1%eth0\n", v4: testIPv4DefaultRoute, want: filteredHostDoHAddrV4},
+		{name: "IPv4-mapped loopback", conf: "nameserver ::ffff:127.0.0.1\n", v4: testIPv4DefaultRoute, want: filteredHostDoHAddrV4},
+		{name: "commented-out public nameserver", conf: "# nameserver 1.1.1.1\nnameserver 192.168.1.1\n", v4: testIPv4DefaultRoute, want: filteredHostDoHAddrV4},
+		{name: "reachable nameserver past the third is ignored", conf: "nameserver 10.0.0.2\nnameserver 10.0.0.3\nnameserver 172.31.0.2\nnameserver 1.1.1.1\n", v4: testIPv4DefaultRoute, want: filteredHostDoHAddrV4},
 		{name: "unparseable nameserver does not count toward three", conf: "nameserver bogus\nnameserver 10.0.0.2\nnameserver 10.0.0.3\nnameserver 1.1.1.1\n", v4: testIPv4DefaultRoute},
-		{name: "split IPv4 default beats IPv6 default", conf: "nameserver 10.0.0.2\n", v4: testIPv4SplitDefault, v6: testIPv6DefaultRoute, want: hysteria2DoHResolverAddrV4},
-		{name: "rejected IPv4 default is not reachability", conf: "nameserver 10.0.0.2\n", v4: testIPv4RejectDefault, v6: testIPv6DefaultRoute, want: hysteria2DoHResolverAddrV6},
-		{name: "zero destination with narrow mask", conf: "nameserver 10.0.0.2\n", v4: testIPv4ZeroDestNarrowMask, v6: testIPv6DefaultRoute, want: hysteria2DoHResolverAddrV6},
-		{name: "no resolv.conf", confErr: fs.ErrNotExist, v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
-		{name: "empty resolv.conf", conf: "", v4: testIPv4DefaultRoute, want: hysteria2DoHResolverAddrV4},
-		{name: "dual-stack denied nameserver", conf: "nameserver 10.0.0.2\n", v4: testIPv4DefaultRoute, v6: testIPv6DefaultRoute, want: hysteria2DoHResolverAddrV4},
-		{name: "IPv6-only host denied nameserver", conf: "nameserver fd00::53\n", v4: testIPv4NoDefault, v6: testIPv6DefaultRoute, want: hysteria2DoHResolverAddrV6},
-		{name: "only lo ::/0 is not IPv6 default", conf: "nameserver 10.0.0.2\n", v4: testIPv4NoDefault, v6: testIPv6LoopbackOnly, want: hysteria2DoHResolverAddrV4},
-		{name: "down IPv4 default is not reachability", conf: "nameserver 10.0.0.2\n", v4: testIPv4DownDefault, v6: testIPv6DefaultRoute, want: hysteria2DoHResolverAddrV6},
-		{name: "rejected non-lo IPv6 default is not reachability", conf: "nameserver 10.0.0.2\n", v4: testIPv4NoDefault, v6: testIPv6RejectNonLo, want: hysteria2DoHResolverAddrV4},
-		{name: "lo IPv6 default without reject flag is not reachability", conf: "nameserver 10.0.0.2\n", v4: testIPv4NoDefault, v6: testIPv6LoNoReject, want: hysteria2DoHResolverAddrV4},
-		{name: "down IPv6 default is not reachability", conf: "nameserver 10.0.0.2\n", v4: testIPv4NoDefault, v6: testIPv6DownDefault, want: hysteria2DoHResolverAddrV4},
+		{name: "split IPv4 default beats IPv6 default", conf: "nameserver 10.0.0.2\n", v4: testIPv4SplitDefault, v6: testIPv6DefaultRoute, want: filteredHostDoHAddrV4},
+		{name: "rejected IPv4 default is not reachability", conf: "nameserver 10.0.0.2\n", v4: testIPv4RejectDefault, v6: testIPv6DefaultRoute, want: filteredHostDoHAddrV6},
+		{name: "zero destination with narrow mask", conf: "nameserver 10.0.0.2\n", v4: testIPv4ZeroDestNarrowMask, v6: testIPv6DefaultRoute, want: filteredHostDoHAddrV6},
+		{name: "no resolv.conf", confErr: fs.ErrNotExist, v4: testIPv4DefaultRoute, want: filteredHostDoHAddrV4},
+		{name: "empty resolv.conf", conf: "", v4: testIPv4DefaultRoute, want: filteredHostDoHAddrV4},
+		{name: "dual-stack denied nameserver", conf: "nameserver 10.0.0.2\n", v4: testIPv4DefaultRoute, v6: testIPv6DefaultRoute, want: filteredHostDoHAddrV4},
+		{name: "IPv6-only host denied nameserver", conf: "nameserver fd00::53\n", v4: testIPv4NoDefault, v6: testIPv6DefaultRoute, want: filteredHostDoHAddrV6},
+		{name: "only lo ::/0 is not IPv6 default", conf: "nameserver 10.0.0.2\n", v4: testIPv4NoDefault, v6: testIPv6LoopbackOnly, want: filteredHostDoHAddrV4},
+		{name: "down IPv4 default is not reachability", conf: "nameserver 10.0.0.2\n", v4: testIPv4DownDefault, v6: testIPv6DefaultRoute, want: filteredHostDoHAddrV6},
+		{name: "rejected non-lo IPv6 default is not reachability", conf: "nameserver 10.0.0.2\n", v4: testIPv4NoDefault, v6: testIPv6RejectNonLo, want: filteredHostDoHAddrV4},
+		{name: "lo IPv6 default without reject flag is not reachability", conf: "nameserver 10.0.0.2\n", v4: testIPv4NoDefault, v6: testIPv6LoNoReject, want: filteredHostDoHAddrV4},
+		{name: "down IPv6 default is not reachability", conf: "nameserver 10.0.0.2\n", v4: testIPv4NoDefault, v6: testIPv6DownDefault, want: filteredHostDoHAddrV4},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			withHysteria2HostProbe(t, tc.conf, tc.confErr, tc.v4, tc.v6)
+			withEgressHostProbe(t, tc.conf, tc.confErr, tc.v4, tc.v6)
 			doc := renderHysteria2ResolverDoc(t, Hysteria2Config{ListenPort: 443, Password: "secret"})
 			if tc.want == "" {
 				if doc.Resolver != nil {
@@ -143,7 +143,7 @@ func TestRenderHysteria2ResolverFollowsHostNameserverReachability(t *testing.T) 
 			if doc.Resolver.Type != "https" || doc.Resolver.HTTPS.Addr != tc.want {
 				t.Fatalf("resolver = %s %s, want https %s", doc.Resolver.Type, doc.Resolver.HTTPS.Addr, tc.want)
 			}
-			if doc.Resolver.HTTPS.SNI != hysteria2DoHResolverSNI || doc.Resolver.HTTPS.Insecure || doc.Resolver.HTTPS.Timeout == "" {
+			if doc.Resolver.HTTPS.SNI != filteredHostDoHSNI || doc.Resolver.HTTPS.Insecure || doc.Resolver.HTTPS.Timeout == "" {
 				t.Fatalf("resolver TLS settings = %+v", doc.Resolver.HTTPS)
 			}
 		})
@@ -152,7 +152,7 @@ func TestRenderHysteria2ResolverFollowsHostNameserverReachability(t *testing.T) 
 
 // The resolver choice must not depend on the auth mode or the WARP upstream.
 func TestRenderHysteria2ResolverInEveryRenderMode(t *testing.T) {
-	withHysteria2HostProbe(t, "nameserver 172.31.0.2\n", nil, testIPv4DefaultRoute, "")
+	withEgressHostProbe(t, "nameserver 172.31.0.2\n", nil, testIPv4DefaultRoute, "")
 	for name, cfg := range map[string]Hysteria2Config{
 		"password":      {ListenPort: 443, Password: "secret"},
 		"userpass":      {ListenPort: 443, Users: []Hysteria2User{{Username: "a", Password: "b"}}},
@@ -161,8 +161,8 @@ func TestRenderHysteria2ResolverInEveryRenderMode(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			doc := renderHysteria2ResolverDoc(t, cfg)
-			if doc.Resolver == nil || doc.Resolver.HTTPS.Addr != hysteria2DoHResolverAddrV4 {
-				t.Fatalf("resolver = %+v, want DoH %s", doc.Resolver, hysteria2DoHResolverAddrV4)
+			if doc.Resolver == nil || doc.Resolver.HTTPS.Addr != filteredHostDoHAddrV4 {
+				t.Fatalf("resolver = %+v, want DoH %s", doc.Resolver, filteredHostDoHAddrV4)
 			}
 		})
 	}
@@ -172,7 +172,7 @@ func TestRenderHysteria2ResolverInEveryRenderMode(t *testing.T) {
 // unit filter allows. A hostname would need a bootstrap lookup through the
 // denied system resolver.
 func TestHysteria2DoHResolverAddrsPassEgressFilter(t *testing.T) {
-	for _, hostport := range []string{hysteria2DoHResolverAddrV4, hysteria2DoHResolverAddrV6} {
+	for _, hostport := range []string{filteredHostDoHAddrV4, filteredHostDoHAddrV6} {
 		host, port, err := net.SplitHostPort(hostport)
 		if err != nil {
 			t.Fatalf("%q is not host:port: %v", hostport, err)
@@ -194,8 +194,8 @@ func TestHysteria2DoHResolverAddrsPassEgressFilter(t *testing.T) {
 // in, so packages that render Hysteria2 configs get the same output on every
 // machine, whatever its resolv.conf says.
 func TestRenderHysteria2HostProbeOffInOtherTests(t *testing.T) {
-	withHysteria2HostProbe(t, "nameserver 172.31.0.2\n", nil, testIPv4DefaultRoute, "")
-	hysteria2ProbeHostInTests = false
+	withEgressHostProbe(t, "nameserver 172.31.0.2\n", nil, testIPv4DefaultRoute, "")
+	egressHostProbeInTests = false
 	if doc := renderHysteria2ResolverDoc(t, Hysteria2Config{ListenPort: 443, Password: "secret"}); doc.Resolver != nil {
 		t.Fatalf("host probe ran inside a test binary without opting in: %+v", *doc.Resolver)
 	}
