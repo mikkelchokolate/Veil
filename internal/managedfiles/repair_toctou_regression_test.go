@@ -13,6 +13,7 @@ import (
 
 // swapAfterLstat installs planBeforeReadHook so swap runs once, after Plan's
 // Lstat classified the leaf as a correct regular file and before the read.
+// Tests using it must not call t.Parallel(): the hook is a package global.
 func swapAfterLstat(t *testing.T, swap func(path string)) {
 	t.Helper()
 	planBeforeReadHook = swap
@@ -114,6 +115,18 @@ func TestPlanFlagsInodeReplacedAfterLstat(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := os.Rename(replacement, p); err != nil {
+			t.Fatal(err)
+		}
+	})
+	wantReason(t, planOne(t, file), RepairReasonDrifted)
+}
+
+// A same-inode metadata change in the window (SameFile holds, content
+// matches) is caught only by re-checking mode/owner on the fstat info.
+func TestPlanFlagsModeChangedAfterLstat(t *testing.T) {
+	_, file := writeManaged(t, "SECRET=desired\n")
+	swapAfterLstat(t, func(p string) {
+		if err := os.Chmod(p, 0o644); err != nil {
 			t.Fatal(err)
 		}
 	})

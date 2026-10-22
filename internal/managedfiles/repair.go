@@ -119,6 +119,9 @@ func (s Set) Plan() (RepairPlan, error) {
 // is reported as drift so Apply atomically replaces the leaf. The read is
 // bounded to one byte past the desired content: a longer file is drift
 // regardless of what follows, and a huge planted file is never slurped.
+// The no-follow/no-block guarantees are Linux ones: elsewhere
+// safefs.OpenNoFollow is Lstat + os.Open, which narrows but does not close
+// the window (Veil's privileged paths only run on Linux).
 func compareContent(file File, lstatInfo os.FileInfo) (RepairReason, error) {
 	if planBeforeReadHook != nil {
 		planBeforeReadHook(file.Path)
@@ -165,7 +168,8 @@ func compareContent(file File, lstatInfo os.FileInfo) (RepairReason, error) {
 }
 
 // planBeforeReadHook lets tests swap the leaf between Plan's Lstat and its
-// descriptor open. Always nil in production.
+// descriptor open. Always nil in production. It is a package global, so
+// tests that set it must not call t.Parallel().
 var planBeforeReadHook func(path string)
 
 // uniqueFiles collapses entries that name the same path. Identical
