@@ -337,7 +337,7 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 				}
 				if count > 0 {
 					s.logUserAction(r, "update_inbound", name, false, "quota-bound clients attached")
-					writeError(w, "inbound update would remove quota enforcement for bound clients", http.StatusConflict)
+					writeError(w, "inbound update would remove quota enforcement for bound clients — disable those bindings, clear their quota, or keep the inbound enabled on a quota-capable protocol", http.StatusConflict)
 					return nil
 				}
 			}

@@ -160,10 +160,19 @@ func TestInboundUpdateRejectsStaleQuotaBindingOnIncapableInbound(t *testing.T) {
 	if keepDisabled.Code != http.StatusConflict {
 		t.Fatalf("edit keeping the inbound disabled under a quota-bound binding: %d %s, want 409", keepDisabled.Code, keepDisabled.Body.String())
 	}
+	// Pin the 409 to the quota guard: the connection-limit guard answers
+	// with the same status, so a status-only check could be satisfied by it
+	// if this fixture ever gains a deviceLimit/ipLimit.
+	if body := keepDisabled.Body.String(); !strings.Contains(body, "would remove quota enforcement") || !strings.Contains(body, "quota-capable protocol") {
+		t.Fatalf("keep-disabled 409 must come from the quota guard with its remediation hint, got %s", body)
+	}
 	toMieru := v1Request(t, router, http.MethodPut, "/api/inbounds/stale-quota-hy",
 		`{"name":"stale-quota-hy","protocol":"mieru","transport":"tcp","port":27446,"enabled":true}`)
 	if toMieru.Code != http.StatusConflict {
 		t.Fatalf("enable on a protocol without quota enforcement: %d %s, want 409", toMieru.Code, toMieru.Body.String())
+	}
+	if body := toMieru.Body.String(); !strings.Contains(body, "would remove quota enforcement") {
+		t.Fatalf("mieru 409 must come from the quota guard, got %s", body)
 	}
 	fix := v1Request(t, router, http.MethodPut, "/api/inbounds/stale-quota-hy",
 		`{"name":"stale-quota-hy","protocol":"hysteria2","transport":"udp","port":27446,"enabled":true}`)
