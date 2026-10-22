@@ -210,6 +210,12 @@ CI_NAIVE_CLIENT_MIRROR_URL=` + naiveMirrorURL + ` CI_NAIVE_CLIENT_TAG=v150.0.787
 				if _, err := os.Stat(filepath.Join(dir, "corrupted")); err != nil {
 					t.Fatal("harness never corrupted a cache copy; the case does not exercise the cache-hit re-verify")
 				}
+				// The mirror link must reject its corrupted copy; the upstream
+				// link then recovers from the (still valid) cache entry, so
+				// exactly one cache hit is reported as verified.
+				if n := strings.Count(string(out), "[ci] verified cached download"); n != 1 {
+					t.Fatalf("verified cache hits = %d, want 1 (corrupted copy rejected, second link served from cache); output: %s", n, out)
+				}
 			}
 			entry, err := os.ReadFile(filepath.Join(cacheDir, pin))
 			switch {
