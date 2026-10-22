@@ -8,6 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	doctorflow "github.com/mikkelchokolate/Veil/internal/cliflow/doctor"
+
 	"github.com/mikkelchokolate/Veil/internal/firewall"
 	"github.com/mikkelchokolate/Veil/internal/hostaccess"
 	"github.com/mikkelchokolate/Veil/internal/installer"
@@ -23,6 +25,10 @@ func TestMain(m *testing.M) {
 	}
 	installVerifyCaddyRouteFunc = func(*cobra.Command, installer.RURecommendedProfile) error { return nil }
 	commandLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
+	// Doctor output must not depend on the test host's resolv.conf (#1288).
+	doctorEgressDNSProbe = func() doctorflow.EgressDNSCheck {
+		return doctorflow.EgressDNSCheck{Nameservers: []string{"127.0.0.53"}, Reachable: true}
+	}
 	backupSystemdDir = filepath.Join(os.TempDir(), "veil-cli-test-systemd")
 	backupSystemctlRun = func(args ...string) error {
 		if len(args) > 0 && args[0] == "is-active" {

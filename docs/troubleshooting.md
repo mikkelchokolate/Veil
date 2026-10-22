@@ -27,6 +27,14 @@ veil doctor
 ```
 If some binaries (like `caddy`, `hysteria`, or `mieru`) are missing, `veil doctor` will output them as warnings.
 
+On Linux, `veil doctor` also prints a **Protocol DNS (egress filter)** section.
+The protocol units can only reach the systemd-resolved stub (`127.0.0.53`/`.54`)
+and public addresses. If every `/etc/resolv.conf` nameserver is private,
+loopback, link-local or CGNAT, it reports `reachable from protocol units: no
+(warning)`. Hysteria2 and WARP then use a pinned Cloudflare DoH resolver, but
+Mieru cannot resolve domains. Enable systemd-resolved or configure a public
+nameserver, then re-apply. See docs/known-limitations.md (#1288).
+
 ### Protocol fails with status 203/EXEC ("Failed to locate executable")
 
 A protocol unit that fails to start with `status=203/EXEC` means its runtime
