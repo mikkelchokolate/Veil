@@ -49,13 +49,19 @@ func TestNaiveClientBuildWorkflowContract(t *testing.T) {
 	wf := string(body)
 
 	var parsed struct {
-		On   map[string]any `yaml:"on"`
+		On          map[string]any `yaml:"on"`
+		Concurrency struct {
+			Group            string `yaml:"group"`
+			CancelInProgress any    `yaml:"cancel-in-progress"`
+		} `yaml:"concurrency"`
 		Jobs map[string]struct {
 			If              string            `yaml:"if"`
 			ContinueOnError any               `yaml:"continue-on-error"`
 			Permissions     map[string]string `yaml:"permissions"`
 			Steps           []struct {
-				Run string `yaml:"run"`
+				Name            string `yaml:"name"`
+				Run             string `yaml:"run"`
+				ContinueOnError any    `yaml:"continue-on-error"`
 			} `yaml:"steps"`
 		} `yaml:"jobs"`
 	}
@@ -95,11 +101,25 @@ func TestNaiveClientBuildWorkflowContract(t *testing.T) {
 	if len(refuse.Steps) != 1 || strings.TrimSpace(refuse.Steps[0].Run) != wantRefusal {
 		t.Fatalf("require-main must emit an ::error:: and exit 1, got %+v", refuse.Steps)
 	}
-	// Any continue-on-error would turn the refusal back into a green run.
+	// Any continue-on-error, job- or step-level, would turn the refusal (or a
+	// failed build/publish step) back into a green run.
 	for name, job := range parsed.Jobs {
 		if job.ContinueOnError != nil {
 			t.Fatalf("%s job must not set continue-on-error, got %v", name, job.ContinueOnError)
 		}
+		for i, step := range job.Steps {
+			if step.ContinueOnError != nil {
+				t.Fatalf("%s step %d (%q) must not set continue-on-error, got %v", name, i, step.Name, step.ContinueOnError)
+			}
+		}
+	}
+	// Ref-scoped so a stray branch dispatch neither queues behind a main
+	// build nor displaces a pending main run; main runs still serialize.
+	if parsed.Concurrency.Group != "naive-client-build-${{ github.ref }}" {
+		t.Fatalf("concurrency.group = %q, want naive-client-build-${{ github.ref }}", parsed.Concurrency.Group)
+	}
+	if parsed.Concurrency.CancelInProgress != false {
+		t.Fatalf("concurrency.cancel-in-progress = %v, want false", parsed.Concurrency.CancelInProgress)
 	}
 	wantPerms := map[string]map[string]string{
 		"build-linux-x64": {"contents": "read", "id-token": "write", "attestations": "write"},
@@ -152,7 +172,6 @@ func TestNaiveClientBuildWorkflowContract(t *testing.T) {
 		"./build.sh",
 		"../tests/basic.sh out/Release/naive",
 		"needs: build-linux-x64",
-		"group: naive-client-build-${{ github.ref }}",
 		`sha256sum --check "${BUNDLE}.tar.xz.sha256"`,
 		"if-no-files-found: error",
 		`gh attestation verify "${BUNDLE}.tar.xz" -R "${GITHUB_REPOSITORY}" \
