@@ -76,3 +76,21 @@ func TestSystemdExecRunnerSilentFailureKeepsPlainError(t *testing.T) {
 		t.Fatalf("silent failure error = %v, want plain exit status 4", err)
 	}
 }
+
+// Review on #1369: an orphan that inherits the output pipes must not keep Run
+// waiting after systemctl exits.
+func TestSystemdExecRunnerDoesNotWaitForOrphanHoldingOutput(t *testing.T) {
+	tool := writeFailingTool(t, "sleep 60 &\necho 'veil.service failed' >&2\nexit 1\n")
+	start := time.Now()
+	err := SystemdExecRunner{}.Run(tool, "restart", "veil.service")
+	if elapsed := time.Since(start); elapsed > systemdWaitDelay+10*time.Second {
+		t.Fatalf("Run took %v; an orphan holding the pipe blocked it", elapsed)
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+		t.Fatalf("error = %v, want exit status 1", err)
+	}
+	if !strings.Contains(err.Error(), "veil.service failed") {
+		t.Fatalf("error lost output written before exit: %v", err)
+	}
+}

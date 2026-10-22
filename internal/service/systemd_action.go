@@ -60,6 +60,10 @@ func (SystemdExecRunner) Run(command string, args ...string) error {
 	output := &tailBuffer{limit: systemdOutputLimit}
 	cmd.Stdout = output
 	cmd.Stderr = output
+	// Output now flows through pipes, and Wait reads them to EOF. A descendant
+	// that inherits them (an agent systemctl spawns) must not hold Run past
+	// its timeout, so stop reading shortly after the process exits.
+	cmd.WaitDelay = systemdWaitDelay
 	if err := cmd.Run(); err != nil {
 		// A batched `systemctl restart a b c` reports only "exit status 1";
 		// systemctl's own message names the unit that failed, so keep its tail.
@@ -70,6 +74,10 @@ func (SystemdExecRunner) Run(command string, args ...string) error {
 	}
 	return nil
 }
+
+// systemdWaitDelay bounds how long Run waits for output pipes held open by
+// orphaned descendants after systemctl itself has exited or been killed.
+const systemdWaitDelay = 5 * time.Second
 
 // systemdOutputLimit bounds how much systemctl output is kept for an error.
 const systemdOutputLimit = 2048
@@ -97,7 +105,8 @@ func (b *tailBuffer) Write(p []byte) (int, error) {
 func (b *tailBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	// Collapse lines into one; a cut at the head may split a UTF-8 rune.
+	// Collapse lines into one and drop invalid UTF-8 bytes anywhere, including
+	// a rune split by the head cut.
 	text := strings.Join(strings.Fields(strings.ToValidUTF8(string(b.buf), "")), " ")
 	if text == "" {
 		return ""
@@ -116,7 +125,9 @@ func systemdCommandTimeout(command string, args ...string) time.Duration {
 			timeout = 10 * time.Second
 		case "restart":
 			// Preserve the old per-unit budget when restart jobs are queued
-			// together. Flags such as --no-block are not units.
+			// together. Flags such as --no-block are not units. A flag value
+			// passed as a separate arg (--job-mode replace) would count as a
+			// unit; that only over-budgets, and Plan never passes one.
 			units := 0
 			for _, arg := range args[1:] {
 				if !strings.HasPrefix(arg, "-") {
