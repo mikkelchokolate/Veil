@@ -12,14 +12,37 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// requirePython3 returns the python3 path. Locally a missing interpreter skips
+// the python-backed contract; in CI (CI env set) it fails so the release gate
+// contract can never silently skip there (#1370 review).
+func requirePython3(t *testing.T) string {
+	t.Helper()
+	path, err := exec.LookPath("python3")
+	if err != nil {
+		if os.Getenv("CI") != "" {
+			t.Fatalf("python3 is required in CI for the release gate contract: %v", err)
+		}
+		t.Skipf("python3 not found; skipping python-backed release gate contract locally: %v", err)
+	}
+	return path
+}
+
 func TestReleaseGateRequiredJobsMatchSourceWorkflows(t *testing.T) {
-	output, err := exec.Command("python3", "-c", `import json,runpy; print(json.dumps({k: sorted(v) for k,v in runpy.run_path('../../scripts/ci/release-ci-gate.py')['REQUIRED_JOBS'].items()}))`).CombinedOutput()
+	python := requirePython3(t)
+	output, err := exec.Command(python, "-c", `import json,runpy; print(json.dumps({k: sorted(v) for k,v in runpy.run_path('../../scripts/ci/release-ci-gate.py')['REQUIRED_JOBS'].items()}))`).CombinedOutput()
 	if err != nil {
 		t.Fatalf("load release gate REQUIRED_JOBS: %v: %s", err, output)
 	}
 	var required map[string][]string
 	if err := json.Unmarshal(output, &required); err != nil || len(required) != 2 {
 		t.Fatalf("invalid release gate REQUIRED_JOBS: %v: %s", err, output)
+	}
+	// The release gate relies on main push runs never being cancelled by a
+	// newer push; pin the group keys so a rename cannot silently merge
+	// PR/main runs into one cancellable group.
+	wantGroup := map[string]string{
+		"ci.yml":     "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}",
+		"codeql.yml": "codeql-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}",
 	}
 	for _, filename := range []string{"ci.yml", "codeql.yml"} {
 		body, err := os.ReadFile("../../.github/workflows/" + filename)
@@ -38,6 +61,9 @@ func TestReleaseGateRequiredJobsMatchSourceWorkflows(t *testing.T) {
 		}
 		if workflow.Concurrency["cancel-in-progress"] != "${{ github.event_name == 'pull_request' }}" {
 			t.Errorf("%s must preserve main CI proof and only cancel superseded PR runs", filename)
+		}
+		if got := workflow.Concurrency["group"]; got != wantGroup[filename] {
+			t.Errorf("%s concurrency group = %q, want %q (per-PR/per-ref isolation the release gate relies on)", filename, got, wantGroup[filename])
 		}
 		var names []string
 		for id, job := range workflow.Jobs {
