@@ -230,8 +230,9 @@ func (s *managementState) handleWebAuthnLoginFinish(w http.ResponseWriter, r *ht
 	}
 
 	fail := func(auditErr string) {
-		// Every failure counts twice — against the shared login backoff and
-		// against the pending challenge's own attempt cap — exactly like the
+		// Every failure counts twice — against the "2fa|" login-backoff bucket
+		// (separate from the password-stage bucket) and against the pending
+		// challenge's own attempt cap — exactly like the
 		// TOTP path, so the two factor endpoints cannot be combined to
 		// outlive the cap.
 		exhausted := s.pendingSecondFactors().RecordFailure(token)

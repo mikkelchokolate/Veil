@@ -116,8 +116,9 @@ func (s *managementState) handleTOTPVerify(w http.ResponseWriter, r *http.Reques
 
 	fail := func(auditErr string) {
 		guessCounted = true
-		// Every failure counts three times: against the shared login backoff,
-		// against the pending challenge's own attempt cap, and against the
+		// Every failure counts three times: against the "2fa|" login-backoff
+		// bucket (separate from the password-stage bucket), against the
+		// pending challenge's own attempt cap, and against the
 		// process-wide per-username guess budget. Exhaustion of the cap
 		// destroys the challenge so the caller must restart at the password
 		// stage.
