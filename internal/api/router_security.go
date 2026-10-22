@@ -132,8 +132,13 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		}
 
 		if !hasStaticToken {
+			// Only a cookie naming a session the registry holds is worth a
+			// storage health check: a malformed or unknown value is answered
+			// 401 below without the Lstat-under-mutex work Healthy() and
+			// Get() do, so unauthenticated traffic cannot buy disk stats
+			// and registry-lock contention ahead of the rate limiter (#1266).
 			cookie, err := r.Cookie("veil_session")
-			if err == nil {
+			if err == nil && state.sessionRegistry().knows(cookie.Value) {
 				if healthErr := state.sessionRegistry().Healthy(); healthErr != nil {
 					writeError(w, "session storage unavailable", http.StatusServiceUnavailable)
 					return
