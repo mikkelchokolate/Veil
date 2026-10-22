@@ -1485,16 +1485,31 @@ func downloadURL(ctx context.Context, client *http.Client, url string) ([]byte, 
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "veil")
-	resp, err := runtimeHTTPDo(client, req)
-	if err != nil {
-		return nil, err
+	for attempt := 0; ; attempt++ {
+		resp, err := client.Do(req.Clone(ctx))
+		var body []byte
+		if err == nil {
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				err = fmt.Errorf("HTTP %s", resp.Status)
+				_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+			} else {
+				const maxDownload = 200 * 1024 * 1024
+				body, err = io.ReadAll(io.LimitReader(resp.Body, maxDownload))
+			}
+		}
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if !runtimeHTTPRetryable(resp, err) || attempt+1 == runtimeHTTPAttempts {
+			return body, err
+		}
+		if err := runtimeHTTPBackoff(ctx, attempt); err != nil {
+			return nil, err
+		}
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP %s", resp.Status)
-	}
-	const maxDownload = 200 * 1024 * 1024
-	return io.ReadAll(io.LimitReader(resp.Body, maxDownload))
 }
 
 func runGoInstall(ctx context.Context, goBin, binDir, sourcePackage string) error {

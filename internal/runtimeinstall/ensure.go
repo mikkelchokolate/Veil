@@ -73,6 +73,7 @@ func ensure(ctx context.Context, opts Options, runtime Runtime, cache *runtimeVe
 	active := filepath.Join(opts.BinDir, runtime.Binary)
 	manifest, ok := readRuntimeGenerationManifest(filepath.Join(opts.BinDir, runtimeSetManifestName))
 	info, err := os.Lstat(active)
+	// Noncanonical modes require repair even when a cached digest still matches.
 	if ok && err == nil && info.Mode() == 0o755 {
 		digest, err := runtimeFileSHA256(active)
 		if err == nil && digest != "" && digest == manifest.Digests[runtime.Binary] {
