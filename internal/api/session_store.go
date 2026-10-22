@@ -522,14 +522,25 @@ func (r *SessionRegistry) NewSession(username, role string) (Session, error) {
 }
 
 func (r *SessionRegistry) Get(token string) (Session, bool) {
+	// A value Create could never have issued names no session: reject it
+	// before hashing or taking the registry mutex (#1266).
+	if !wellFormedSessionToken(token) {
+		return Session{}, false
+	}
 	tokenHash := hashSessionSecret(token)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if err := r.storageHealthyLocked(); err != nil {
-		return Session{}, false
-	}
+	// Look the token up before the storage health check: an unknown token
+	// is rejected whatever the storage state, so it must not pay the
+	// snapshot Lstat — or the journal-compaction retry storageHealthyLocked
+	// runs after a failure — on behalf of unauthenticated traffic (#1266).
+	// Compaction only ever removes sessions, so a token missing here cannot
+	// become valid by running it first.
 	record, ok := r.sessions[tokenHash]
 	if !ok {
+		return Session{}, false
+	}
+	if err := r.storageHealthyLocked(); err != nil {
 		return Session{}, false
 	}
 	now := r.now().UTC()
@@ -908,6 +919,40 @@ func (r *SessionRegistry) RevalidateToken(token string, restoredRoles map[string
 		}
 	}
 	return true, nil
+}
+
+// sessionTokenLength is the length of every token Create has ever issued:
+// generateRandomHex(32), i.e. 16 random bytes as lowercase hex.
+const sessionTokenLength = 32
+
+// wellFormedSessionToken reports whether token has the exact shape Create
+// issues. Anything else cannot name a stored session, so callers on the
+// unauthenticated path use it to skip session storage entirely (#1266).
+func wellFormedSessionToken(token string) bool {
+	if len(token) != sessionTokenLength {
+		return false
+	}
+	for i := 0; i < len(token); i++ {
+		c := token[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// knows reports whether token names a session held in memory, without
+// touching storage or sliding the idle window. The auth middleware uses it
+// so a cookie that cannot authenticate never reaches Healthy() (#1266).
+func (r *SessionRegistry) knows(token string) bool {
+	if !wellFormedSessionToken(token) {
+		return false
+	}
+	tokenHash := hashSessionSecret(token)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.sessions[tokenHash]
+	return ok
 }
 
 func (r *SessionRegistry) Healthy() error {
