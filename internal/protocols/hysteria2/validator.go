@@ -113,12 +113,24 @@ var masqueradeDenyPrefixes = func() []netip.Prefix {
 // forbidden target from being persisted at all and surfaces the mistake at
 // validation time instead of as an opaque runtime 502.
 //
+// For IP literals this check is the only guard on the loopback bands the
+// unit's IPAddressAllow= deliberately pierces (127.0.0.53/32, 127.0.0.54/32,
+// the 127.40.0.0/16 traffic-stats band and the 127.41.0.0/16 WARP SOCKS
+// band): systemd evaluates Allow before Deny, so the kernel filter would let
+// those dials through.
+//
 // Hostnames that are not IP literals cannot be judged without resolving them
-// (and resolution here would be rebindable anyway); those stay covered by the
-// kernel filter. Only the names that always mean loopback are rejected
-// statically.
+// (and resolution here would be rebindable anyway). The kernel filter covers
+// them for every denied destination EXCEPT those pierced bands: a name that
+// resolves into them (e.g. wildcard DNS such as 127.41.0.1.nip.io) passes
+// both layers. That residual is low impact — the SOCKS listener does not
+// speak HTTP, the stats API requires its own secret and the stub resolvers
+// only answer DNS — and closing it would need a dial-time guard in hysteria
+// itself. Only the names that always mean loopback are rejected statically.
 func validateMasqueradeHost(host string) error {
-	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	// TrimRight, not TrimSuffix: "127.0.0.1.." must not slip past ParseAddr
+	// with an empty last label.
+	host = strings.ToLower(strings.TrimRight(host, "."))
 	if host == "" {
 		return errors.New("host is required")
 	}
@@ -160,6 +172,9 @@ func looksNumericHost(host string) bool {
 	if strings.HasPrefix(label, "0x") {
 		digits = label[2:]
 		isHex = true
+	}
+	if digits == "" {
+		return false
 	}
 	for _, r := range digits {
 		switch {

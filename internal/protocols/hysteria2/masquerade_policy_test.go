@@ -29,8 +29,17 @@ func masqueradeInbound(raw string) model.Inbound {
 func TestValidateInboundRejectsRestrictedMasqueradeTarget(t *testing.T) {
 	p := Plugin{}
 	for _, bad := range []string{
-		"http://127.42.0.1:2019/",          // Caddy admin API
-		"http://127.0.0.1/",                // panel backend
+		"http://127.42.0.1:2019/", // Caddy admin API
+		"http://127.0.0.1/",       // panel backend
+		// The bands veil-hysteria2@.service's IPAddressAllow= pierces: the
+		// kernel filter lets these through, so the validator is the only
+		// guard and a later carve-out in the deny set must not reopen them.
+		"http://127.40.0.1/",               // traffic-stats band
+		"http://127.41.0.1:40000/",         // WARP SOCKS band
+		"http://127.0.0.53/",               // systemd-resolved stub
+		"http://127.0.0.54/",               // systemd-resolved stub
+		"http://127.0.0.1../",              // repeated trailing dots
+		"http://0/",                        // bare numeric host
 		"http://127.1/",                    // inet_aton shorthand loopback
 		"http://2130706433/",               // decimal loopback
 		"http://0x7f000001/",               // hex loopback
@@ -82,6 +91,9 @@ func TestValidateInboundAcceptsPublicMasqueradeTarget(t *testing.T) {
 		"https://localhost.example.com/",
 		"https://example.com.:443/",
 		"https://123.example.com/",
+		"https://foo.0x/",   // bare 0x label is not a number
+		"https://deadbeef/", // hex-looking name without 0x prefix
+		"https://0xdeadbeef.com/",
 	} {
 		issues := p.ValidateInbound(model.Settings{Domain: "hy.example.com"}, masqueradeInbound(good))
 		if got := issueByCode(issues, "hysteria2_masquerade_invalid"); got != nil {
