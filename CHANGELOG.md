@@ -16,6 +16,19 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1351: `POST /api/apply/rollback` now also refuses with 422 a `quotaBytes`
+  restored onto a client whose enabled binding lands on an inbound that
+  cannot enforce it in the restored configuration (disabled, or a protocol
+  without quota enforcement), the #1173 rule every client write already
+  applies. Before, the rollback committed the quota silently inert: the
+  runtime never rejected the depleted client, and the next quota edit on that
+  client was refused with 400. As for device/IP limits, bindings already
+  disabled live do not count. `PUT /api/inbounds/{name}` now checks the
+  updated inbound instead of only the transition: an edit that leaves the
+  inbound disabled or on a protocol without quota enforcement is refused with
+  409 while an enabled quota-bound binding is attached, even if the inbound
+  was already incapable (stale restore or legacy data). Re-enabling it on
+  hysteria2 is never blocked.
 - #1350: `POST /api/apply/rollback` to a revision whose client has no quota
   no longer carries the live `depleted` flag onto the restored client.
   Depletion is derived quota state, so restoring "no quota" is now handled

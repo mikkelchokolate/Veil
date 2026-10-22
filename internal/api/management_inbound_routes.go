@@ -317,13 +317,19 @@ func (s *managementState) handleInboundByName(w http.ResponseWriter, r *http.Req
 				writeValidationFailure(w, validation)
 				return nil
 			}
-			// An update that strips quota enforcement — changing the protocol
-			// away from hysteria2 or disabling the inbound — while quota-bound
-			// clients are still bound would silently stop enforcing their
-			// quotas (#1118). Mirror the DELETE guard and reject with 409.
-			hadQuotaSupport := inbound.Enabled && inbound.Protocol == "hysteria2"
-			hasQuotaSupport := updated.Enabled && updated.Protocol == "hysteria2"
-			if hadQuotaSupport && !hasQuotaSupport && s.clientRepo != nil {
+			// An update that leaves the inbound unable to enforce quotas —
+			// disabled, or on a protocol whose runtime does not reject a
+			// depleted client — while quota-bound clients are still bound
+			// would silently stop enforcing their quotas (#1118). Mirror the
+			// DELETE guard and reject with 409. Like the connection-limit
+			// guard below, check the POST-UPDATE state rather than only the
+			// transition, so a stale quota-bound binding (restore, legacy
+			// data) cannot be carried through an edit of an inbound that is
+			// already incapable; a switch to a quota-capable protocol is never
+			// blocked, so a wedged state stays fixable. The verdict comes from
+			// protocolQuotaEnforcement, the same source the client-side
+			// validator and the rollback check use (#1351).
+			if s.clientRepo != nil && (!updated.Enabled || !protocolQuotaEnforcement(updated.Protocol)) {
 				count, countErr := s.clientRepo.QuotaBoundBindingCount(name)
 				if countErr != nil {
 					writeError(w, "failed to check inbound quota bindings", http.StatusInternalServerError)
