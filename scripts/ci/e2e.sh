@@ -40,10 +40,19 @@ ${SUDO} install -m 0755 "${runtime_dir}/hysteria" /usr/local/bin/hysteria
 ${SUDO} install -m 0755 "${runtime_dir}/mita" /usr/local/bin/mita
 ${SUDO} install -m 0755 "${runtime_dir}/caddy" /usr/local/bin/caddy
 ${SUDO} install -m 0755 "${runtime_dir}/mieru" /usr/local/bin/mieru
-naive_client_available=1
-if [ -f "${runtime_dir}/naive.unavailable" ] && [ ! -x "${runtime_dir}/naive" ]; then
-  naive_client_available=0
-  naive_skip_reason="$(cat "${runtime_dir}/naive.unavailable")"
+# naive_client_gate <runtime_dir>: sets naive_client_available=0 (and the skip
+# reason) only when runtimes.sh left the known-gone marker AND no naive binary
+# exists; a provisioned binary always runs the strict data path (#1373).
+naive_client_gate() {
+  naive_client_available=1
+  naive_skip_reason=""
+  if [ -f "$1/naive.unavailable" ] && [ ! -x "$1/naive" ]; then
+    naive_client_available=0
+    naive_skip_reason="$(cat "$1/naive.unavailable")"
+  fi
+}
+naive_client_gate "${runtime_dir}"
+if [ "${naive_client_available}" -eq 0 ]; then
   echo "::warning title=naive e2e SKIPPED::${naive_skip_reason}"
   if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     printf '> [!WARNING]\n> **naiveproxy e2e SKIPPED**: %s. All other e2e checks still ran.\n' "${naive_skip_reason}" >>"${GITHUB_STEP_SUMMARY}"
