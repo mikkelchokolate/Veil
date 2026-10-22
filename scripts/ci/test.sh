@@ -210,7 +210,7 @@ merge_shards_stage() {
   for i in $(seq 1 "${machine_shards}"); do
     d="$(resolve_shard_artifact_dir "${src}" "${i}")"
     [ -f "${d}/planned-tasks.txt" ] || { echo "shard ${i} artifacts missing (${d})" >&2; return 1; }
-    [ -f "${d}/test-task-logs.txt" ] || { echo "shard ${i} did not finish (no test-task-logs.txt)" >&2; return 1; }
+    [ -f "${d}/test-task-logs.txt" ] || { echo "shard ${i} did not finish (no test-task-logs.txt in ${d})" >&2; return 1; }
     dirs+=("${d}")
     timing_args+=(--merge-task-timings "${d}/task-timings.json")
   done
