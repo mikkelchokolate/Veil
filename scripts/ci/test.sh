@@ -191,16 +191,24 @@ fi
 # attempt of the rerun shard, so the newest attempt is the one that passed
 # (#1367). Falls back to the attempt-less name for local/legacy layouts.
 resolve_shard_artifact_dir() { # <artifacts-root> <shard>
-  local best="" best_n=-1 d n
+  local best="" best_n=-1 d n found=0
   for d in "$1/ci-test-shard-$2-attempt-"*; do
     [ -d "${d}" ] || continue
     n="${d##*-attempt-}"
     case "${n}" in '' | *[!0-9]*) continue ;; esac
+    found=$((found + 1))
     if [ "$((10#${n}))" -gt "${best_n}" ]; then
       best_n="$((10#${n}))"
       best="${d}"
     fi
   done
+  # Say which attempt is merged so a fallback to an older attempt (e.g. the
+  # newest attempt uploaded nothing) is visible in the log on success too.
+  if [ -n "${best}" ]; then
+    echo "shard $2: using attempt ${best_n} (${found} attempt artifact(s) found)" >&2
+  else
+    echo "shard $2: no attempt-scoped artifact, using legacy $1/ci-test-shard-$2" >&2
+  fi
   printf '%s\n' "${best:-$1/ci-test-shard-$2}"
 }
 
