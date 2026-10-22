@@ -10,6 +10,7 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${CI_ROOT}"
 
 ci_run version-consistency python3 scripts/ci/verify_versions.py
+ci_run release-ci-gate python3 -m unittest discover -s scripts/ci -p test_release_ci_gate.py
 
 # Named-root job scripts (e2e/sigkill/filesystem-faults/multi-process and the
 # privilege-boundary named legs) select coverage by literal test name; the

@@ -49,6 +49,7 @@ func TestDockerWorkflowsInjectAndVerifyBuildVersion(t *testing.T) {
 		`VERSION=${{ github.ref_name }}`,
 		`GO_GODEBUG=${{ steps.versions.outputs.go_godebug }}`,
 		`GO_GOPROXY=${{ steps.versions.outputs.go_goproxy }}`,
+		`image="ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_REF_NAME#v}"`,
 		`for platform in linux/amd64 linux/arm64`,
 		`docker pull --platform "${platform}" "${image}"`,
 		`docker run --rm --platform "${platform}" "${image}" version`,

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 func checkBash(t *testing.T) {
@@ -484,44 +486,72 @@ func TestReleaseWorkflowEnforcesQualityGatesBeforePublish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
-	// #668: the release gate runs the same shared Required scripts as
-	// ci.yml — a hand-rolled subset is not the ship gate. Every marker is
-	// asserted inside the quality job's own block: a script path in a
-	// sibling job or a comment is not evidence the gate runs (#762).
-	quality := stripHashComments(t, workflowJobBlock(t, workflow, "quality"))
-	for _, want := range []string{
-		"scripts/ci/frontend.sh",
-		"scripts/ci/test.sh",
-		"scripts/ci/lint.sh",
-		"scripts/ci/privilege-boundary.sh",
-		"scripts/ci/multi-process.sh",
-		"scripts/ci/sigkill.sh",
-		"scripts/ci/filesystem-faults.sh",
-		"go vet ./...",
-		"make build",
-		"gofmt -l",
-		"staticcheck",
-		"govulncheck ./...",
-		"shellcheck scripts/*.sh",
-		"sh -n scripts/install.sh",
-		"sh -n scripts/install-main.sh",
-		"bash -n scripts/install-privileged.sh scripts/uninstall.sh",
-		"bash scripts/install-privileged.sh --help >/dev/null",
-		"bash scripts/uninstall.sh --help >/dev/null",
-		"bash scripts/install-main.sh --help >/dev/null",
-		"git diff --check",
-	} {
-		if !strings.Contains(quality, want) {
-			t.Fatalf("release quality job missing required release gate %q", want)
+	var workflow struct {
+		Jobs map[string]struct {
+			Permissions     map[string]string `yaml:"permissions"`
+			Outputs         map[string]string `yaml:"outputs"`
+			ContinueOnError bool              `yaml:"continue-on-error"`
+			Steps           []struct {
+				ID              string            `yaml:"id"`
+				Run             string            `yaml:"run"`
+				Env             map[string]string `yaml:"env"`
+				ContinueOnError bool              `yaml:"continue-on-error"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(body, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	for _, removed := range []string{"quality", "browser-e2e", "install-acceptance"} {
+		if _, exists := workflow.Jobs[removed]; exists {
+			t.Errorf("release must reuse the exact source CI run instead of rerunning %s", removed)
 		}
 	}
-	installAcceptance := stripHashComments(t, workflowJobBlock(t, workflow, "install-acceptance"))
-	if !strings.Contains(installAcceptance, "scripts/ci/install-acceptance.sh") {
-		t.Fatal("release install-acceptance job does not invoke the shared install-acceptance script")
+	gate, exists := workflow.Jobs["verified-ci"]
+	if !exists {
+		t.Fatal("release lacks the trusted exact-SHA CI/CodeQL gate")
 	}
-	// The publish job's dependency chain is asserted structurally in
-	// TestReleaseWorkflowRequiresBrowserAndPackageGates (parsed YAML needs).
+	if gate.ContinueOnError || gate.Permissions["actions"] != "read" || gate.Permissions["contents"] != "read" {
+		t.Error("release CI gate must fail closed with read-only contents/Actions access")
+	}
+	for permission, grant := range gate.Permissions {
+		if grant != "read" || (permission != "actions" && permission != "contents") {
+			t.Errorf("release CI gate has unnecessary permission %s:%s", permission, grant)
+		}
+	}
+	if gate.Outputs["ci_run_id"] != "${{ steps.verify.outputs.ci_run_id }}" {
+		t.Error("release artifact consumers must use the verified CI run ID")
+	}
+	var sourceChecks strings.Builder
+	verified := false
+	for _, step := range gate.Steps {
+		run := stripHashComments(t, step.Run)
+		if step.ID != "verify" {
+			sourceChecks.WriteString(run + "\n")
+			continue
+		}
+		verified = true
+		if step.ContinueOnError || step.Env["GH_TOKEN"] != "${{ github.token }}" {
+			t.Error("release CI verification must not ignore failure and must use the scoped repository token")
+		}
+		for _, want := range []string{
+			"python3 scripts/ci/release-ci-gate.py",
+			`--repository "${GITHUB_REPOSITORY}"`,
+			`--sha "${GITHUB_SHA}"`,
+		} {
+			if !strings.Contains(run, want) {
+				t.Errorf("release CI verification lacks %q", want)
+			}
+		}
+		for _, want := range []string{`git rev-parse "${GITHUB_REF_NAME}^{commit}"`, `test "${tag_commit}" = "${GITHUB_SHA}"`, `git checkout --detach "${GITHUB_SHA}"`, `test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"`} {
+			if !strings.Contains(sourceChecks.String(), want) {
+				t.Errorf("release must check exact tagged source before trusting CI: missing %q", want)
+			}
+		}
+	}
+	if !verified {
+		t.Error("release lacks an executable CI verification step")
+	}
 }
 
 func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
@@ -611,6 +641,9 @@ func TestCiWorkflowEnforcesProductionGates(t *testing.T) {
 		if !strings.Contains(prepareFrontendScript, want) {
 			t.Fatalf("prepare-frontend-dist.sh missing artifact gate %q", want)
 		}
+	}
+	if !strings.Contains(read("../../scripts/ci/e2e.sh"), "useradd --system --user-group --no-create-home --shell /usr/sbin/nologin veil") {
+		t.Error("scripts/ci/e2e.sh missing veil system user creation")
 	}
 
 	// The live API shard path is test-orchestrator.py (bounded LPT scheduler)

@@ -126,7 +126,9 @@ the SDK suite. The required `test` job (`CI_TEST_PHASE=aggregate`) fails closed
 unless every leg succeeded, merges task logs and coverprofiles, rejects plan
 mismatches, duplicates, or any planned task without a log, then runs the
 unchanged API root verification, coverage merge/gates, and inventory report.
-`make ci`/release keep `CI_TEST_PHASE=all` (the single-machine path).
+`make ci` keeps `CI_TEST_PHASE=all` (the single-machine path). Tagged releases
+reuse successful hosted CI and CodeQL for the exact tagged main commit instead
+of running these source checks again; see [the release gate](ci.md#tagged-releases).
 
 ## Reusing race builds across hosted runs
 

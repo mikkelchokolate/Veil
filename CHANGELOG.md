@@ -4,16 +4,6 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
-### Fixed
-
-- #1369: when a batched `systemctl restart` fails during install or apply,
-  the error now includes the tail of systemctl's own output (capped at
-  2 KiB), so it names the unit that failed instead of a bare
-  `exit status 1`. Flags no longer add to the restart timeout budget. A
-  descendant that keeps systemctl's output open can no longer hold the
-  command past its timeout, and it doesn't turn a successful restart into
-  a failure.
-
 ## [v0.7.3] - 2026-10-22
 
 Faster panel-first installation, recovery controls that work without the web
@@ -109,6 +99,11 @@ before production rollout.
   took 10m20s wall-clock versus the measured [14m04s baseline](https://github.com/mikkelchokolate/Veil/actions/runs/39760774474);
   its slowest shard took 7m23s instead of 11m35s. Race,
   coverage, inventory, browser and cold-install gates remain enabled.
+- Tagged releases reuse successful main CI and CodeQL for their exact source
+  commit instead of repeating source tests, browser E2E and cold installs.
+  Archive/package builds reuse the source- and content-verified frontend from
+  that CI run; shipped-package tests, pushed-image execution checks, signing
+  and provenance remain release gates.
 - Hardened session revocation, subscription-token bindings, authenticated
   revision snapshots, promotion/restore journals, filesystem ownership and
   symlink handling, root tool lookup and Go build environments. Restricted
@@ -138,6 +133,13 @@ before production rollout.
 
 ### Fixed
 
+- #1369: when a batched `systemctl restart` fails during install or apply,
+  the error now includes the tail of systemctl's own output (capped at
+  2 KiB), so it names the unit that failed instead of a bare
+  `exit status 1`. Flags no longer add to the restart timeout budget. A
+  descendant that keeps systemctl's output open can no longer hold the
+  command past its timeout, and it doesn't turn a successful restart into
+  a failure.
 - Direct-mode access URLs retain the configured port, secret base path and
   correct IPv6 brackets; failed public-IP detection is reported honestly.
   Installation restarts dependent services together instead of repeatedly
