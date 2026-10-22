@@ -263,6 +263,27 @@ the error and follow the [disaster-recovery guide](disaster-recovery.md) with
 the matching pre-upgrade backup and binary. Do not assume a binary rollback
 reverses a migration.
 
+### Source-built main installations
+
+Updaters with source-history verification (added after v0.7.3) allow a normal
+Panel/CLI update from `main-<short SHA> (<full SHA>)` only when GitHub confirms
+that the exact running commit is included in the target release. The signed
+download must match that target commit. Newer/diverged source builds, unknown
+stamps and unavailable proof still require an explicit operator override.
+
+An older installed updater cannot acquire this behavior before replacing
+itself. For a one-time transition, first verify the backup and independently
+confirm that the target release contains the running full commit. Follow the
+binary-managed sequence above: use `sudo veil update --dry-run --force` for
+the preview and `sudo veil update --yes --force` for installation. Keep the
+service/socket stop step between them.
+
+Continue with repair and the explicit helper-first start from that sequence;
+do not add `--restart` or `--staged`. Force overrides version ordering, not
+signature/provenance verification, and does not make an incompatible schema
+downgrade safe. If the release does not include the running commit, keep the
+source build or use a matching pre-migration backup and binary for recovery.
+
 ### Native packages and containers
 
 For `.deb`, `.rpm` or `.apk` installations, install the matching v0.7.3 package

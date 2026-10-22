@@ -42,7 +42,11 @@ Use --restart to restart the veil service and perform a health check after updat
 Use --staged for a safer staged rollout: restart + health check with automatic
 rollback to the previous binary if the health check fails.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return updateflow.RunWorkflow(updateflow.WorkflowOptions{CurrentVersion: version, Yes: yes, DryRun: dryRun, Force: force, Restart: restart, Staged: staged, Listen: listen, AuthToken: authToken}, cmd.OutOrStdout(), updateflow.WorkflowDependencies{FetchRelease: fetchLatestRelease, DownloadAsset: downloadAsset, VerifyReleaseEvidence: updateReleaseEvidenceVerifier, RestartUpdated: func(currentPath string, backupPath string, opts updateflow.WorkflowOptions) error {
+			return updateflow.RunWorkflow(updateflow.WorkflowOptions{CurrentVersion: version, Yes: yes, DryRun: dryRun, Force: force, Restart: restart, Staged: staged, Listen: listen, AuthToken: authToken}, cmd.OutOrStdout(), updateflow.WorkflowDependencies{FetchRelease: fetchLatestRelease, DownloadAsset: downloadAsset, VerifyReleaseEvidence: updateReleaseEvidenceVerifier, SourceUpdateCommit: func(current, tag string) (string, error) {
+				catalog := updateflow.NewReleaseCatalog(updateRepoOwner, updateRepoName)
+				catalog.HTTPClient = updateHTTPClient
+				return catalog.SourceUpdateCommit(cmd.Context(), current, tag)
+			}, RestartUpdated: func(currentPath string, backupPath string, opts updateflow.WorkflowOptions) error {
 				return restartUpdatedVeil(cmd, currentPath, backupPath, opts)
 			}})
 		},

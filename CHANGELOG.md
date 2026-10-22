@@ -4,6 +4,14 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+### Fixed
+
+- Source-built `main-<short SHA> (<full SHA>)` installations can update through
+  the Panel or CLI without forcing when GitHub proves the running commit is
+  included in the target release. The downloaded signed provenance is bound
+  to that same target commit. Newer/diverged, unknown or unverifiable builds
+  still require an explicit override; release downgrade protection is unchanged.
+
 ## [v0.7.3] - 2026-10-22
 
 Faster panel-first installation, recovery controls that work without the web

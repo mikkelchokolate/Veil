@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -38,13 +37,14 @@ type updateRefusedError struct{ reason string }
 func (e *updateRefusedError) Error() string { return e.reason }
 
 type panelUpdateStager struct {
-	root          string
-	version       string
-	assetName     string
-	latest        func(context.Context) (*updateflow.Release, error)
-	download      func(context.Context, string) ([]byte, error)
-	verify        func(releaseverify.Evidence) error
-	resolveCommit func(context.Context, string) (string, error)
+	root               string
+	version            string
+	assetName          string
+	latest             func(context.Context) (*updateflow.Release, error)
+	download           func(context.Context, string) ([]byte, error)
+	verify             func(releaseverify.Evidence) error
+	resolveCommit      func(context.Context, string) (string, error)
+	sourceUpdateCommit func(context.Context, string, string) (string, error)
 }
 
 func newPanelUpdateStager(root string, version string) panelUpdateStager {
@@ -61,10 +61,9 @@ func newPanelUpdateStager(root string, version string) panelUpdateStager {
 		download: func(ctx context.Context, url string) ([]byte, error) {
 			return downloadPanelUpdateAsset(ctx, client, url)
 		},
-		verify: releaseverify.Verify,
-		resolveCommit: func(ctx context.Context, tag string) (string, error) {
-			return resolveGitHubTagCommit(ctx, client, updateflow.RepoOwner, updateflow.RepoName, tag)
-		},
+		verify:             releaseverify.Verify,
+		resolveCommit:      catalog.ResolveTagCommit,
+		sourceUpdateCommit: catalog.SourceUpdateCommit,
 	}
 }
 
@@ -76,19 +75,29 @@ func (s panelUpdateStager) Stage(ctx context.Context, force bool) (string, error
 	if err != nil {
 		return "", fmt.Errorf("fetch latest release: %w", err)
 	}
-	// Refuse targets that are not strictly newer than the running version
-	// BEFORE downloading anything: installing the latest tag over a newer
-	// build silently downgrades, and when the running build carries a newer
-	// DB schema the downgraded binary refuses to open state.json, leaving
-	// the panel dead after the restart (issue #1104). Non-release builds
-	// (main-<sha>, dev) never order against tags, so they always require
-	// force.
-	if err := s.checkUpdateTarget(release.TagName, force); err != nil {
-		return "", err
+	// A source stamp has no semver order: only a pinned ancestry proof may
+	// override refusal before asset downloads without risking a downgrade (#1104).
+	var sourceCommit string
+	if targetErr := s.checkUpdateTarget(release.TagName, force); targetErr != nil {
+		if s.sourceUpdateCommit == nil || versionflow.SourceBuildCommit(s.version) == "" {
+			return "", targetErr
+		}
+		sourceCommit, err = s.sourceUpdateCommit(ctx, s.version, release.TagName)
+		if err != nil {
+			return "", &updateRefusedError{reason: fmt.Sprintf("%v; cannot verify a forward source-to-release update: %v", targetErr, err)}
+		}
+		if len(sourceCommit) != 40 {
+			return "", &updateRefusedError{reason: "source update proof has an invalid target commit"}
+		}
+		if _, err := hex.DecodeString(sourceCommit); err != nil {
+			return "", &updateRefusedError{reason: "source update proof has an invalid target commit"}
+		}
 	}
-	sourceCommit, err := s.resolveCommit(ctx, release.TagName)
-	if err != nil {
-		return "", fmt.Errorf("resolve release tag commit: %w", err)
+	if sourceCommit == "" {
+		sourceCommit, err = s.resolveCommit(ctx, release.TagName)
+		if err != nil {
+			return "", fmt.Errorf("resolve release tag commit: %w", err)
+		}
 	}
 	assets := updateflow.NewReleaseAssetsWithVerifier(release, func(url string) ([]byte, error) {
 		return s.download(ctx, url)
@@ -138,8 +147,8 @@ func (s panelUpdateStager) Stage(ctx context.Context, force bool) (string, error
 // checkUpdateTarget refuses an update that is not strictly newer than the
 // running version unless the operator forced it. A current version that does
 // not parse as a release (install-main "main-<sha>" stamps, dev builds) is
-// always refused without force: Compare sorts it before every tag, which is
-// exactly the silent-downgrade path from issue #1104.
+// refused here: Stage requires a separate exact-source ancestry proof before
+// overriding this refusal, or explicit force (#1104).
 func (s panelUpdateStager) checkUpdateTarget(tag string, force bool) error {
 	current := strings.TrimSpace(s.version)
 	if !versionflow.IsReleaseVersion(current) {
@@ -182,55 +191,6 @@ func decodePanelUpdateRequest(r *http.Request) (bool, error) {
 		return false, errors.New("invalid JSON update request; expected {} or {\"force\":true}")
 	}
 	return request.Force, nil
-}
-
-func resolveGitHubTagCommit(ctx context.Context, client *http.Client, owner, repository, tag string) (string, error) {
-	if client == nil || owner == "" || repository == "" || tag == "" {
-		return "", errors.New("GitHub tag resolver is not configured")
-	}
-	endpoint := fmt.Sprintf("https://api.github.com/repos/%s/%s/git/ref/tags/%s", url.PathEscape(owner), url.PathEscape(repository), url.PathEscape(tag))
-	for depth := 0; depth < 3; depth++ {
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-		if err != nil {
-			return "", err
-		}
-		request.Header.Set("Accept", "application/vnd.github+json")
-		request.Header.Set("User-Agent", "veil")
-		response, err := client.Do(request)
-		if err != nil {
-			return "", err
-		}
-		body, readErr := io.ReadAll(io.LimitReader(response.Body, 64<<10))
-		closeErr := response.Body.Close()
-		if readErr != nil {
-			return "", readErr
-		}
-		if closeErr != nil {
-			return "", closeErr
-		}
-		if response.StatusCode < 200 || response.StatusCode >= 300 {
-			return "", fmt.Errorf("GitHub tag lookup status %d", response.StatusCode)
-		}
-		var result struct {
-			Object struct{ SHA, Type string } `json:"object"`
-		}
-		if err := json.Unmarshal(body, &result); err != nil {
-			return "", err
-		}
-		sha := strings.ToLower(strings.TrimSpace(result.Object.SHA))
-		decoded, err := hex.DecodeString(sha)
-		if err != nil || len(decoded) != 20 {
-			return "", errors.New("GitHub tag resolved to an invalid commit identity")
-		}
-		if result.Object.Type == "commit" {
-			return sha, nil
-		}
-		if result.Object.Type != "tag" {
-			return "", fmt.Errorf("GitHub tag resolved to unsupported object type %q", result.Object.Type)
-		}
-		endpoint = fmt.Sprintf("https://api.github.com/repos/%s/%s/git/tags/%s", url.PathEscape(owner), url.PathEscape(repository), sha)
-	}
-	return "", errors.New("GitHub annotated tag chain exceeds maximum depth")
 }
 
 func downloadPanelUpdateAsset(ctx context.Context, client *http.Client, url string) ([]byte, error) {
