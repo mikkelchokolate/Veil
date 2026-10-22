@@ -186,13 +186,31 @@ if [ "${test_phase}" = shard ]; then
   exit 0
 fi
 
+# Shard artifacts are uploaded per run attempt (ci-test-shard-<i>-attempt-<n>):
+# a partial rerun keeps the earlier attempts' artifacts, including the failed
+# attempt of the rerun shard, so the newest attempt is the one that passed
+# (#1367). Falls back to the attempt-less name for local/legacy layouts.
+resolve_shard_artifact_dir() { # <artifacts-root> <shard>
+  local best="" best_n=-1 d n
+  for d in "$1/ci-test-shard-$2-attempt-"*; do
+    [ -d "${d}" ] || continue
+    n="${d##*-attempt-}"
+    case "${n}" in '' | *[!0-9]*) continue ;; esac
+    if [ "$((10#${n}))" -gt "${best_n}" ]; then
+      best_n="$((10#${n}))"
+      best="${d}"
+    fi
+  done
+  printf '%s\n' "${best:-$1/ci-test-shard-$2}"
+}
+
 merge_shards_stage() {
   local src="${CI_TEST_SHARD_ARTIFACTS:?CI_TEST_SHARD_ARTIFACTS is unset}"
   local dirs=() timing_args=() d i name
   for i in $(seq 1 "${machine_shards}"); do
-    d="${src}/ci-test-shard-${i}"
+    d="$(resolve_shard_artifact_dir "${src}" "${i}")"
     [ -f "${d}/planned-tasks.txt" ] || { echo "shard ${i} artifacts missing (${d})" >&2; return 1; }
-    [ -f "${d}/test-task-logs.txt" ] || { echo "shard ${i} did not finish (no test-task-logs.txt)" >&2; return 1; }
+    [ -f "${d}/test-task-logs.txt" ] || { echo "shard ${i} did not finish (no test-task-logs.txt in ${d})" >&2; return 1; }
     dirs+=("${d}")
     timing_args+=(--merge-task-timings "${d}/task-timings.json")
   done
