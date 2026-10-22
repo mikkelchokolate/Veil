@@ -22,7 +22,8 @@ func TestNaiveClientBuildWorkflowContract(t *testing.T) {
 	var parsed struct {
 		On   map[string]any `yaml:"on"`
 		Jobs map[string]struct {
-			If string `yaml:"if"`
+			If          string            `yaml:"if"`
+			Permissions map[string]string `yaml:"permissions"`
 		} `yaml:"jobs"`
 	}
 	if err := yaml.Unmarshal(body, &parsed); err != nil {
@@ -40,16 +41,37 @@ func TestNaiveClientBuildWorkflowContract(t *testing.T) {
 			t.Fatalf("%s job must be guarded to main, got %q", name, job.If)
 		}
 	}
+	wantPerms := map[string]map[string]string{
+		"build-linux-x64": {"contents": "read", "id-token": "write", "attestations": "write"},
+		"publish":         {"contents": "write", "attestations": "read"},
+	}
+	for name, want := range wantPerms {
+		got := parsed.Jobs[name].Permissions
+		if len(got) != len(want) {
+			t.Fatalf("%s permissions = %v, want %v", name, got, want)
+		}
+		for k, v := range want {
+			if got[k] != v {
+				t.Fatalf("%s permissions = %v, want %v", name, got, want)
+			}
+		}
+	}
 	// The build must be preserved as an artifact before (and independently
 	// of) publishing, and the workflow must never create the release/tag.
 	upload := strings.Index(wf, "Upload build as artifact (before any publish)")
+	if attest := strings.Index(wf, "Attest build provenance"); attest < 0 || upload > attest {
+		t.Fatal("artifact upload must precede attestation so an attest failure cannot lose the build")
+	}
 	publish := strings.Index(wf, "Publish to existing ci-deps prerelease")
 	if upload < 0 || publish < 0 || upload > publish {
 		t.Fatal("artifact upload must precede the publish step")
 	}
 	for _, line := range strings.Split(wf, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "gh release create") || strings.HasPrefix(trimmed, "gh api") || strings.Contains(trimmed, "git push") {
+		if strings.HasPrefix(trimmed, "echo ") || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if strings.Contains(trimmed, "release create") || strings.Contains(trimmed, "gh api") || strings.Contains(trimmed, "git push") || strings.Contains(trimmed, "git tag") {
 			t.Fatalf("workflow must not create the ci-deps release/tag itself: %q", trimmed)
 		}
 	}
@@ -68,6 +90,7 @@ func TestNaiveClientBuildWorkflowContract(t *testing.T) {
 		"needs: build-linux-x64",
 		`sha256sum --check "${BUNDLE}.tar.xz.sha256"`,
 		"if-no-files-found: error",
+		`gh attestation verify "${BUNDLE}.tar.xz" -R "${GITHUB_REPOSITORY}"`,
 		`test "$(gh release view ci-deps --json isPrerelease -q .isPrerelease)" = true`,
 		"refusing to overwrite",
 		"actions/attest-build-provenance@",

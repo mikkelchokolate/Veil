@@ -112,12 +112,8 @@ jobs:
           echo "${tarball_sha}  ${BUNDLE}.tar.xz" > "${BUNDLE}.tar.xz.sha256"
           echo "tarball=naiveproxy/src/${BUNDLE}.tar.xz" >>"$GITHUB_OUTPUT"
           { echo "### naiveproxy ${TAG} linux-x64"; echo; echo '```'; cat "${BUNDLE}.provenance.txt"; echo '```'; } >>"$GITHUB_STEP_SUMMARY"
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-path: ${{ steps.pack.outputs.tarball }}
-      # Keep the build even if publishing fails: the artifact is the durable
-      # output, the release upload below is a separate, retryable job.
+      # Keep the build even if attestation or publishing fails: the artifact is
+      # the durable output; the release upload is a separate, retryable job.
       - name: Upload build as artifact (before any publish)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -129,6 +125,11 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ steps.pack.outputs.tarball }}
+
   publish:
     needs: build-linux-x64
     if: github.ref == 'refs/heads/main'
@@ -136,6 +137,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write      # upload assets to the existing ci-deps prerelease
+      attestations: read   # bind the published bytes to the build provenance
     env:
       BUNDLE: naiveproxy-${{ inputs.tag }}-linux-x64
     steps:
@@ -146,6 +148,13 @@ jobs:
       - name: Verify artifact checksum
         working-directory: dist
         run: sha256sum --check "${BUNDLE}.tar.xz.sha256"
+      - name: Verify build provenance attestation
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh attestation verify "${BUNDLE}.tar.xz" -R "${GITHUB_REPOSITORY}" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/naive-client-build.yml"
       # The workflow never creates the ci-deps release/tag itself: creating a
       # tag with GITHUB_TOKEN at a commit whose workflow files differ from the
       # default branch is refused (HTTP 403 "Resource not accessible by
