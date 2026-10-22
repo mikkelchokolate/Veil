@@ -135,6 +135,9 @@ before production rollout.
 - Diagnostics reads the actual firewall response shape instead of crashing
   with `(t.data ?? []).map is not a function`; generated API clients and the
   Go SDK match the response contract.
+- Authentication-status refreshes are cancelled and invalidated when their
+  provider unmounts, preventing stale responses from changing session/CSRF
+  state or updating a page that has already closed.
 - Helper-side runtime probes work with PrivateTmp and a strict umask without
   weakening isolation. Runtime publication/rollback preserves executable
   permissions, managed Caddy is pinned and verified, routine applies avoid

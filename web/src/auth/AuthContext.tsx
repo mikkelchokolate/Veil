@@ -142,7 +142,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 	useEffect(() => {
 		void refresh();
-	}, [refresh]);
+		return () => {
+			epochRef.current += 1;
+			refreshSeqRef.current += 1;
+			abortRefresh();
+		};
+	}, [abortRefresh, refresh]);
 
 	useEffect(() => {
 		setUnauthorizedHandler(() => {
