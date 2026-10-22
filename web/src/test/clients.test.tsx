@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { delay } from "msw";
 import { AuthProvider } from "../auth/AuthContext";
 import { I18nProvider } from "../i18n/I18nContext";
 import { routeTree } from "../routeTree.gen";
@@ -49,6 +50,38 @@ function searchRequests(onSearch: (search: string) => void) {
 }
 
 describe("ClientsPage", () => {
+	it("cancels an obsolete page request when navigating to another page", async () => {
+		const firstRequestStarted = new Promise<AbortSignal>((resolve) => {
+			server.use(
+				http.get("/api/v1/clients", async ({ request }) => {
+					const page = Number(new URL(request.url).searchParams.get("page"));
+					if (page === 1) {
+						resolve(request.signal);
+						await delay("infinite");
+					}
+					return HttpResponse.json({
+						items: [{ id: "c2", name: "Second page", status: "active" }],
+						total: 50,
+						page,
+						pageSize: 25,
+					});
+				}),
+			);
+		});
+		const { router } = await act(async () => {
+			const view = renderClients("/clients?page=1");
+			await view.router.load();
+			return view;
+		});
+		const firstSignal = await firstRequestStarted;
+		expect(firstSignal.aborted).toBe(false);
+		await act(async () => {
+			await router.navigate({ to: "/clients", search: { page: 2 } });
+		});
+		expect(await screen.findByText("Second page")).toBeInTheDocument();
+		expect(firstSignal.aborted).toBe(true);
+	});
+
 	it("renders clients from the API", async () => {
 		server.use(
 			http.get("/api/v1/clients", () =>

@@ -21,8 +21,13 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 work="$(mktemp -d)"
-cleanup() { rm -rf "$work"; }
-trap cleanup EXIT HUP INT TERM
+download_pids=""
+cleanup() {
+  for pid in $download_pids; do wait "$pid" 2>/dev/null || :; done
+  rm -rf "$work"
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
@@ -69,13 +74,22 @@ esac
 
 base="https://github.com/${OFFICIAL_REPO}/releases/download/${tag}"
 asset="veil_${os}_${arch}.tar.gz"
+# BEGIN_RELEASE_DOWNLOADS
 for name in \
   install-privileged.sh install-privileged.sh.bundle \
   checksums.txt checksums.txt.bundle \
   veil.provenance.json veil.provenance.json.bundle \
   "$asset"; do
-  curl -fsSLo "$work/$name" "$base/$name"
+  curl -fsSLo "$work/$name" "$base/$name" &
+  download_pids="$download_pids $!"
 done
+download_failed=0
+for pid in $download_pids; do
+  if ! wait "$pid"; then download_failed=1; fi
+done
+download_pids=""
+[ "$download_failed" -eq 0 ] || { echo "Release download failed" >&2; exit 1; }
+# END_RELEASE_DOWNLOADS
 
 identity="https://github.com/${OFFICIAL_REPO}/.github/workflows/release.yml@refs/tags/${tag}"
 "$cosign" verify-blob --bundle "$work/install-privileged.sh.bundle" \

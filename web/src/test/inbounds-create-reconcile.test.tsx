@@ -1,3 +1,4 @@
+import { runtimeMutationTimeoutMs } from "../api/fetcher";
 import { createInbound } from "../pages/inboundsCreateRecovery";
 
 // Regression for #312: a committed create keeps applying server-side after
@@ -153,7 +154,7 @@ describe("createInbound recovery", () => {
 		};
 		vi.stubGlobal("fetch", installFetchMock(state));
 		const pending = settle(createInbound({ name: "edge" }, "edge"));
-		await vi.advanceTimersByTimeAsync(60_000);
+		await vi.advanceTimersByTimeAsync(runtimeMutationTimeoutMs);
 		const { value, error } = await pending;
 		expect(error).toBeUndefined();
 		expect(value?.success).toBe(true);
@@ -181,7 +182,7 @@ describe("createInbound recovery", () => {
 		};
 		vi.stubGlobal("fetch", installFetchMock(state));
 		const pending = settle(createInbound({ name: "edge" }, "edge"));
-		await vi.advanceTimersByTimeAsync(120_000);
+		await vi.advanceTimersByTimeAsync(2 * runtimeMutationTimeoutMs);
 		const { value, error } = await pending;
 		expect(error).toBeUndefined();
 		expect(value?.success).toBe(true);
@@ -207,7 +208,7 @@ describe("createInbound recovery", () => {
 			};
 			vi.stubGlobal("fetch", installFetchMock(state));
 			const pending = settle(createInbound({ name: "edge" }, "edge"));
-			await vi.advanceTimersByTimeAsync(120_000);
+			await vi.advanceTimersByTimeAsync(2 * runtimeMutationTimeoutMs);
 			const { value, error } = await pending;
 			expect(error).toBeUndefined();
 			expect(value?.success).toBe(false);
@@ -235,7 +236,7 @@ describe("createInbound recovery", () => {
 		};
 		vi.stubGlobal("fetch", installFetchMock(state));
 		const pending = settle(createInbound({ name: "edge" }, "edge"));
-		await vi.advanceTimersByTimeAsync(120_000);
+		await vi.advanceTimersByTimeAsync(2 * runtimeMutationTimeoutMs);
 		const { value, error } = await pending;
 		expect(error).toBeUndefined();
 		expect(value?.success).toBe(false);
@@ -259,7 +260,7 @@ describe("createInbound recovery", () => {
 		};
 		vi.stubGlobal("fetch", installFetchMock(state));
 		const pending = settle(createInbound({ name: "edge" }, "edge"));
-		await vi.advanceTimersByTimeAsync(120_000);
+		await vi.advanceTimersByTimeAsync(2 * runtimeMutationTimeoutMs);
 		const { value, error } = await pending;
 		expect(error).toBeUndefined();
 		expect(value?.success).toBe(false);
@@ -283,7 +284,7 @@ describe("createInbound recovery", () => {
 		};
 		vi.stubGlobal("fetch", installFetchMock(state));
 		const pending = settle(createInbound({ name: "edge" }, "edge"));
-		await vi.advanceTimersByTimeAsync(120_000);
+		await vi.advanceTimersByTimeAsync(2 * runtimeMutationTimeoutMs);
 		const { value, error } = await pending;
 		expect(error).toBeUndefined();
 		expect(value?.success).toBe(false);
@@ -343,7 +344,7 @@ describe("createInbound recovery", () => {
 			}),
 		);
 		const pending = settle(createInbound({ name: "edge" }, "edge"));
-		await vi.advanceTimersByTimeAsync(120_000);
+		await vi.advanceTimersByTimeAsync(2 * runtimeMutationTimeoutMs);
 		const { value, error } = await pending;
 		expect(error).toBeUndefined();
 		expect(value?.success).toBe(false);
@@ -381,7 +382,7 @@ describe("createInbound recovery", () => {
 			}),
 		);
 		const pending = settle(createInbound({ name: "edge" }, "edge"));
-		await vi.advanceTimersByTimeAsync(60_000);
+		await vi.advanceTimersByTimeAsync(runtimeMutationTimeoutMs);
 		const { value, error } = await pending;
 		expect(value).toBeUndefined();
 		expect(error).toBeInstanceOf(Error);
@@ -399,7 +400,7 @@ describe("createInbound recovery", () => {
 		};
 		vi.stubGlobal("fetch", installFetchMock(state));
 		const pending = settle(createInbound({ name: "edge" }, "edge"));
-		await vi.advanceTimersByTimeAsync(120_000);
+		await vi.advanceTimersByTimeAsync(2 * runtimeMutationTimeoutMs);
 		const { value, error } = await pending;
 		expect(value).toBeUndefined();
 		expect(error).toBeInstanceOf(Error);

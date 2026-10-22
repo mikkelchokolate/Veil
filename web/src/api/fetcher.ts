@@ -245,6 +245,8 @@ const defaultTimeoutMs = 15_000;
 // cancel apply itself, which left inbound creates looking like "Create failed"
 // while the host kept applying.
 const defaultMutationTimeoutMs = 60_000;
+// A first protocol enable can download and compile its pinned runtime.
+export const runtimeMutationTimeoutMs = 17 * 60_000;
 
 // TimeoutError/CancelledError carry hardcoded English defaults — surfacing
 // them raw bypasses the active locale (#1018). Callers pass t() so those two
@@ -276,7 +278,13 @@ export async function apiFetch<T>(
 	const method = (options?.method ?? "GET").toUpperCase();
 	const timeoutMs =
 		options?.timeoutMs ??
-		(isSafeMethod(method) ? defaultTimeoutMs : defaultMutationTimeoutMs);
+		(isSafeMethod(method)
+			? defaultTimeoutMs
+			: /^\/api\/(?:apply|inbounds|warp|settings|v1\/clients|routing)(?:\/[^?#]*)?(?:[?#]|$)/.test(
+						path,
+					)
+				? runtimeMutationTimeoutMs
+				: defaultMutationTimeoutMs);
 	const attempts = options?.attempts ?? (isSafeMethod(method) ? 3 : 1);
 	const headers = new Headers(options?.headers ?? {});
 	if (!headers.has("Accept")) headers.set("Accept", "application/json");

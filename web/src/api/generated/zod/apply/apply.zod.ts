@@ -47,6 +47,12 @@ import * as zod from 'zod';
  * @summary Desired/applied revisions and derived system state
  */
 export const GetApiApplyStateResponse = zod.object({
+  "progress": zod.object({
+  "stage": zod.string(),
+  "runtime": zod.string().optional(),
+  "startedAt": zod.int(),
+  "updatedAt": zod.int()
+}).optional().describe('Current apply phase; timestamps are Unix seconds. Omitted when no apply is running.'),
   "desiredRevision": zod.int(),
   "appliedRevision": zod.int(),
   "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded', 'recovering', 'untracked']),
@@ -204,6 +210,12 @@ export const PostApiApplyReconcileResponse = zod.object({
   "applied": zod.int().optional()
 }).optional(),
   "state": zod.object({
+  "progress": zod.object({
+  "stage": zod.string(),
+  "runtime": zod.string().optional(),
+  "startedAt": zod.int(),
+  "updatedAt": zod.int()
+}).optional().describe('Current apply phase; timestamps are Unix seconds. Omitted when no apply is running.'),
   "desiredRevision": zod.int(),
   "appliedRevision": zod.int(),
   "state": zod.enum(['synced', 'pending', 'applying', 'failed', 'rolling_back', 'rolled_back', 'degraded', 'recovering', 'untracked']),

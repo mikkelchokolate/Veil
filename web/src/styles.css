@@ -149,6 +149,20 @@ a {
 	flex: 0 0 auto;
 }
 
+.apply-status-indicator {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 4px;
+	max-width: 360px;
+}
+
+.apply-progress {
+	font-size: 12px;
+	line-height: 1.35;
+	text-align: right;
+}
+
 .page-content {
 	padding: 24px;
 	flex: 1;

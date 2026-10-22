@@ -3,7 +3,11 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -44,6 +48,95 @@ func TestRuntimeInstallCommandReportsPerRuntimeResults(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("runtime install output missing %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestPanelInstallVerifiesCaddyProvenanceBeforeReuse(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("runtime activation requires Linux filesystem semantics")
+	}
+	for _, scenario := range []string{"missing", "untracked", "modified", "old-version", "verified"} {
+		t.Run(scenario, func(t *testing.T) {
+			oldLookPath, oldEnsure := commandLookPath, runtimeEnsureFunc
+			commandLookPath = func(string) (string, error) { return "/usr/sbin/caddy", nil }
+			t.Cleanup(func() { commandLookPath, runtimeEnsureFunc = oldLookPath, oldEnsure })
+			binDir := t.TempDir()
+			active := filepath.Join(binDir, "caddy")
+			calls, builds := 0, 0
+			runtimeEnsureFunc = func(ctx context.Context, opts runtimeinstall.Options, runtime runtimeinstall.Runtime) runtimeinstall.Result {
+				calls++
+				if opts.BinDir != runtimeinstall.DefaultBinDir() || runtime.Name != "naiveproxy" || runtime.Binary != "caddy" || runtime.Method != runtimeinstall.MethodCaddyNaive || runtime.Version == "" {
+					t.Fatalf("panel install requested opts=%+v runtime=%+v", opts, runtime)
+				}
+				opts.BinDir = binDir
+				opts.CaddyCacheDir = t.TempDir()
+				opts.EnsureGo = func(context.Context) (string, error) { return "/usr/local/go/bin/go", nil }
+				opts.BuildCaddy = func(_ context.Context, outPath string) error {
+					builds++
+					return os.WriteFile(outPath, []byte("pinned caddy with forwardproxy"), 0o755)
+				}
+				opts.RunVersion = func(_ context.Context, binary string, _ []string) (string, error) {
+					if scenario == "old-version" && binary == active {
+						return "caddy v2.0.0", nil
+					}
+					return "caddy " + runtime.Version, nil
+				}
+				if scenario != "missing" && scenario != "untracked" {
+					if result := runtimeinstall.Install(ctx, opts, runtime); result.Err != nil {
+						t.Fatal(result.Err)
+					}
+				}
+				if scenario == "untracked" || scenario == "modified" {
+					if err := os.WriteFile(active, []byte("stock caddy"), 0o755); err != nil {
+						t.Fatal(err)
+					}
+				}
+				builds = 0
+				return runtimeinstall.Ensure(ctx, opts, runtime)
+			}
+			cmd := NewRootCommand("test")
+			cmd.SetContext(t.Context())
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			if err := defaultInstallRuntimesDuringInstall(cmd, ruRecommendedInstallOptions{PanelAccess: "caddy"}); err != nil {
+				t.Fatalf("install Caddy: %v\n%s", err, out.String())
+			}
+			wantBuilds := 1
+			if scenario == "verified" {
+				wantBuilds = 0
+			}
+			if calls != 1 || builds != wantBuilds {
+				t.Fatalf("ensure calls=%d, builds=%d, want 1 and %d", calls, builds, wantBuilds)
+			}
+		})
+	}
+}
+
+func TestPanelInstallRejectsUnverifiedCaddyWhenEnsureFailsOrSkips(t *testing.T) {
+	for name, result := range map[string]runtimeinstall.Result{
+		"failed":  {Err: errors.New("offline")},
+		"skipped": {Skipped: true, SkipReason: "Go toolchain unavailable"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			oldLookPath, oldEnsure := commandLookPath, runtimeEnsureFunc
+			commandLookPath = func(string) (string, error) { return "/usr/sbin/caddy", nil }
+			runtimeEnsureFunc = func(context.Context, runtimeinstall.Options, runtimeinstall.Runtime) runtimeinstall.Result {
+				return result
+			}
+			t.Cleanup(func() { commandLookPath, runtimeEnsureFunc = oldLookPath, oldEnsure })
+			cmd := NewRootCommand("test")
+			cmd.SetContext(t.Context())
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			if err := defaultInstallRuntimesDuringInstall(cmd, ruRecommendedInstallOptions{PanelAccess: "caddy"}); err == nil {
+				t.Fatalf("unverified Caddy was accepted: %+v", result)
+			}
+			if !strings.Contains(out.String(), "veil runtime install --only naiveproxy") {
+				t.Fatalf("missing repair guidance: %s", out.String())
+			}
+		})
 	}
 }
 
@@ -122,6 +215,27 @@ func TestRuntimeInstallCommandUnknownOnlyReportsSelection(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unknown runtime name(s) unknown") || !strings.Contains(err.Error(), "supported:") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRuntimeInstallCommandRejectsExplicitEmptySelection(t *testing.T) {
+	old := runtimeInstallFunc
+	runtimeInstallFunc = func(context.Context, runtimeinstall.Options, []string) ([]runtimeinstall.Result, error) {
+		t.Fatal("empty --only selection must not install all runtimes")
+		return nil, nil
+	}
+	t.Cleanup(func() { runtimeInstallFunc = old })
+	for _, selection := range []string{"", ",", " , , "} {
+		t.Run(selection, func(t *testing.T) {
+			cmd := NewRootCommand("test")
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs([]string{"runtime", "install", "--only", selection})
+			if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "at least one runtime") {
+				t.Fatalf("empty selector %q was accepted: %v\n%s", selection, err, out.String())
+			}
+		})
 	}
 }
 

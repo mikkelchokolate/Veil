@@ -52,11 +52,8 @@ func TestInstallInteractiveCancelDoesNotInstallRuntimes(t *testing.T) {
 	}
 }
 
-// TestInstallFailsWhenRuntimeInstallFails is the #1029 regression: a failed
-// protocol-runtime install must abort the install, not degrade to a warning —
-// reporting success would leave protocol units that can never exec their
-// missing binaries.
-func TestInstallFailsWhenRuntimeInstallFails(t *testing.T) {
+// Caddy is required immediately when it exposes the panel itself.
+func TestInstallFailsWhenPanelCaddyRuntimeInstallFails(t *testing.T) {
 	withMockedInstallRuntimes(t)
 	sentinel := errors.New("release download failed")
 	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) error { return sentinel }
@@ -75,7 +72,9 @@ func TestInstallFailsWhenRuntimeInstallFails(t *testing.T) {
 	cmd.SetArgs([]string{
 		"install",
 		"--profile", "ru-recommended",
-		"--panel-access", "local",
+		"--panel-access", "caddy",
+		"--domain", "panel.example.com",
+		"--email", "admin@example.com",
 		"--etc-dir", t.TempDir(),
 		"--var-dir", t.TempDir(),
 		"--systemd-dir", t.TempDir(),
@@ -89,7 +88,7 @@ func TestInstallFailsWhenRuntimeInstallFails(t *testing.T) {
 	}
 }
 
-func TestInstallYesInstallsRuntimesOnce(t *testing.T) {
+func TestLocalPanelInstallDoesNotInstallProtocolRuntimes(t *testing.T) {
 	withMockedInstallRuntimes(t)
 	calls := 0
 	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) error { calls++; return nil }
@@ -110,7 +109,24 @@ func TestInstallYesInstallsRuntimesOnce(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("install --yes: %v\n%s", err, out.String())
 	}
-	if calls != 1 {
-		t.Fatalf("installRuntimesFunc called %d times, want 1", calls)
+	if calls != 0 {
+		t.Fatalf("panel-only install downloaded runtimes %d times", calls)
+	}
+}
+
+func TestDirectPanelInstallDoesNotInstallProtocolRuntimes(t *testing.T) {
+	withMockedInstallRuntimes(t)
+	installRuntimesFunc = func(*cobra.Command, ruRecommendedInstallOptions) error {
+		t.Fatal("direct panel install must defer protocol downloads")
+		return nil
+	}
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"install", "--panel-access", "direct", "--public-ip", "203.0.113.4", "--le-ip-cert=false",
+		"--etc-dir", t.TempDir(), "--var-dir", t.TempDir(), "--systemd-dir", t.TempDir(), "--yes"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("direct panel install: %v\n%s", err, out.String())
 	}
 }

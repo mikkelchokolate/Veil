@@ -413,7 +413,18 @@ func goBuildEnv(ctx context.Context, goBin string) []string {
 	goroot := goRootFor(ctx, goBin)
 	goBinDir := filepath.Dir(goBin)
 	if runningAsRootFn() {
-		return rootGoBuildEnv(env, goroot, goBinDir)
+		clean := rootGoBuildEnv(env, goroot, goBinDir)
+		if home, ok := ctx.Value(buildHomeContextKey{}).(string); ok && home != "" {
+			values := map[string]string{"HOME": home, "GOPATH": filepath.Join(home, "go"),
+				"GOMODCACHE": filepath.Join(home, "go", "pkg", "mod"), "GOCACHE": filepath.Join(home, ".cache", "go-build")}
+			for i, entry := range clean {
+				key, _, _ := strings.Cut(entry, "=")
+				if value, ok := values[key]; ok {
+					clean[i] = key + "=" + value
+				}
+			}
+		}
+		return clean
 	}
 	filtered := make([]string, 0, len(env)+5)
 	hasGoroot := false

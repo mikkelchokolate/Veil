@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { apiFetch } from "../api/fetcher";
 import { useI18n } from "../i18n/I18nContext";
 
@@ -15,6 +16,12 @@ export interface ApplyState {
 	lastSuccessfulJobId?: string;
 	lastFailedJobId?: string;
 	lastError?: ApplyErrorView;
+	progress?: {
+		stage: string;
+		runtime?: string;
+		startedAt: number;
+		updatedAt: number;
+	};
 }
 
 export function useApplyState() {
@@ -22,6 +29,7 @@ export function useApplyState() {
 		queryKey: ["apply", "state"],
 		queryFn: () => apiFetch<ApplyState>("/api/apply/state"),
 		refetchInterval: (query) => {
+			if (query.state.data?.progress) return 1000;
 			const state = query.state.data?.state;
 			if (
 				state === "pending" ||
@@ -80,6 +88,14 @@ export function applyStateLabel(
 export function ApplyStatusIndicator() {
 	const { t } = useI18n();
 	const { data, isError } = useApplyState();
+	const [now, setNow] = useState(Date.now);
+	const hasProgress = !!data?.progress;
+	useEffect(() => {
+		if (!hasProgress) return;
+		setNow(Date.now());
+		const timer = globalThis.setInterval(() => setNow(Date.now()), 1000);
+		return () => globalThis.clearInterval(timer);
+	}, [hasProgress]);
 
 	if (isError) {
 		return (
@@ -92,26 +108,52 @@ export function ApplyStatusIndicator() {
 
 	const variant = applyStateBadgeVariant(data.state);
 	const drift = data.desiredRevision !== data.appliedRevision;
+	const progress = data.progress;
+	const stageKey = `applyProgress.${progress?.stage}`;
+	const stageLabel = t(stageKey);
+	const elapsed = progress
+		? Math.max(0, Math.floor(now / 1000 - progress.startedAt))
+		: 0;
+	const updatedAgo = progress
+		? Math.max(0, Math.floor(now / 1000 - progress.updatedAt))
+		: 0;
 
 	return (
-		<span
-			className={`badge${variant === "default" ? "" : ` badge-${variant}`}`}
-			title={
-				drift
-					? t("applyState.revTooltipDrift", {
-							desired: data.desiredRevision,
+		<div className="apply-status-indicator">
+			<span
+				className={`badge${variant === "default" ? "" : ` badge-${variant}`}`}
+				title={
+					drift
+						? t("applyState.revTooltipDrift", {
+								desired: data.desiredRevision,
+								applied: data.appliedRevision,
+							})
+						: t("applyState.revTooltip", { applied: data.appliedRevision })
+				}
+			>
+				{applyStateLabel(t, data.state)}
+				{drift
+					? t("applyState.revDrift", {
 							applied: data.appliedRevision,
+							desired: data.desiredRevision,
 						})
-					: t("applyState.revTooltip", { applied: data.appliedRevision })
-			}
-		>
-			{applyStateLabel(t, data.state)}
-			{drift
-				? t("applyState.revDrift", {
-						applied: data.appliedRevision,
-						desired: data.desiredRevision,
-					})
-				: ""}
-		</span>
+					: ""}
+			</span>
+			{progress ? (
+				<div className="apply-progress">
+					<div role="status">
+						{stageLabel === stageKey ? t("applyProgress.working") : stageLabel}
+						{progress.runtime ? ` · ${progress.runtime}` : ""}
+					</div>
+					<div className="muted">
+						{t("applyProgress.elapsed", {
+							time: `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`,
+						})}
+						{" · "}
+						{t("applyProgress.updated", { seconds: updatedAgo })}
+					</div>
+				</div>
+			) : null}
+		</div>
 	);
 }

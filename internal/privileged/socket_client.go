@@ -110,6 +110,16 @@ func (c *SocketClient) IssueIPCert(ctx context.Context, request IssueIPCertReque
 	return result, err
 }
 
+func (c *SocketClient) InstallRuntimes(ctx context.Context, request RuntimeInstallRequest) error {
+	return c.call(ctx, RequestEnvelope{Operation: OperationRuntimeInstall, RuntimeInstall: &request}, nil)
+}
+
+func (c *SocketClient) RuntimeInstallStatus(ctx context.Context, request RuntimeInstallStatusRequest) (RuntimeInstallStatusResult, error) {
+	var result RuntimeInstallStatusResult
+	err := c.call(ctx, RequestEnvelope{Operation: OperationRuntimeInstallStatus, RuntimeInstallStatus: &request}, &result)
+	return result, err
+}
+
 // undeliveredError tags a failure that happened before the request could
 // reach the helper: the unix dial failed, so no privileged mutation could
 // have started and callers may safely finalize the attempt as a plain
@@ -213,7 +223,7 @@ func operationBudget(operation Operation, fallback, mutation, backup time.Durati
 		OperationBackupRead, OperationBackupPrune, OperationBackupRestore, OperationBackupDelete,
 		OperationBackupSftp:
 		return backup
-	case OperationPromote, OperationStageUpdate, OperationRotateKey, OperationRecoverKeyRotation, OperationIssueIPCert:
+	case OperationPromote, OperationStageUpdate, OperationRotateKey, OperationRecoverKeyRotation, OperationIssueIPCert, OperationRuntimeInstall:
 		return mutation
 	default:
 		return fallback
@@ -252,3 +262,5 @@ func newRequestID() string {
 }
 
 var _ Client = (*SocketClient)(nil)
+var _ RuntimeInstaller = (*SocketClient)(nil)
+var _ RuntimeInstallObserver = (*SocketClient)(nil)

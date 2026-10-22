@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -191,15 +192,54 @@ func TestWithDefaultsBuildCaddy(t *testing.T) {
 	dir := t.TempDir()
 	goBin := fakeGoScript(t, dir)
 	outPath := filepath.Join(dir, "caddy")
+	// System Go takes precedence over EnsureGo. Force the existing toolchain
+	// seam so this unit test cannot accidentally build Caddy from the network.
+	originalFind, originalExec := findBestGoFn, execBuildCommand
+	t.Cleanup(func() { findBestGoFn, execBuildCommand = originalFind, originalExec })
+	findBestGoFn = func(string) (string, error) { return "", nil }
+	var calls [][]string
+	execBuildCommand = func(ctx context.Context, workDir string, env []string, args ...string) ([]byte, error) {
+		calls = append(calls, append([]string(nil), args...))
+		if workDir != filepath.Join(dir, "build-caddy") {
+			t.Errorf("build directory = %q", workDir)
+		}
+		for _, want := range []string{"GOTOOLCHAIN=local", "GOROOT=" + filepath.Dir(filepath.Dir(goBin))} {
+			if !strings.Contains("\n"+strings.Join(env, "\n")+"\n", "\n"+want+"\n") {
+				t.Errorf("build environment lacks %q", want)
+			}
+		}
+		if len(args) > 1 && args[1] == "build" && !strings.Contains("\n"+strings.Join(env, "\n")+"\n", "\nCGO_ENABLED=0\n") {
+			t.Error("Caddy build must remain static (CGO_ENABLED=0)")
+		}
+		return originalExec(ctx, workDir, env, args...)
+	}
+	ensured := 0
 	opts := Options{
 		CaddyCacheDir: dir,
-		EnsureGo:      func(ctx context.Context) (string, error) { return goBin, nil },
+		EnsureGo: func(ctx context.Context) (string, error) {
+			ensured++
+			return goBin, nil
+		},
 	}.withDefaults()
 	if err := opts.BuildCaddy(context.Background(), outPath); err != nil {
 		t.Fatalf("BuildCaddy: %v", err)
 	}
-	if _, err := os.Stat(outPath); err != nil {
-		t.Fatalf("caddy binary not written: %v", err)
+	if ensured != 1 {
+		t.Fatalf("EnsureGo calls = %d, want 1", ensured)
+	}
+	wantCalls := [][]string{
+		{goBin, "mod", "init", "caddy"},
+		{goBin, "mod", "edit", "-require", "github.com/caddyserver/caddy/v2@v2.11.4"},
+		{goBin, "mod", "edit", "-replace", "github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@d62c80d3dd2c706b6b87579844d2397bddd18317"},
+		{goBin, "mod", "tidy"},
+		{goBin, "mod", "verify"},
+		{goBin, "build", "-mod=readonly", "-o", outPath, "-ldflags=-s -w", "-trimpath", "."},
+	}
+	if !reflect.DeepEqual(calls, wantCalls) {
+		t.Fatalf("build commands = %v, want %v", calls, wantCalls)
+	}
+	if body, err := os.ReadFile(outPath); err != nil || string(body) != "caddy-stub" {
+		t.Fatalf("fake toolchain did not write the binary: body=%q err=%v", body, err)
 	}
 }
 

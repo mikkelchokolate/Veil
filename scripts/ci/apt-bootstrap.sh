@@ -24,8 +24,10 @@ case "$(dpkg --print-architecture 2>/dev/null || uname -m)" in
     APT_REWRITE_TARGET="http://ports.ubuntu.com/ubuntu-ports"
     ;;
   *)
-    APT_MIRROR_URIS="http://archive.ubuntu.com/ubuntu/
-http://security.ubuntu.com/ubuntu/"
+    # This list serves every pocket: security.ubuntu.com also serving ordinary
+    # archive/font packages caused multi-minute downloads. Explicit security
+    # sources stay intact; archive.ubuntu.com carries signed noble-security too.
+    APT_MIRROR_URIS="http://archive.ubuntu.com/ubuntu/"
     APT_REWRITE_TARGET="http://archive.ubuntu.com/ubuntu"
     ;;
 esac

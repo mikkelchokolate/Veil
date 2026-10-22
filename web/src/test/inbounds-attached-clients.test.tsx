@@ -5,7 +5,7 @@ import {
 	createRouter,
 	RouterProvider,
 } from "@tanstack/react-router";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { AuthProvider } from "../auth/AuthContext";
 import { I18nProvider } from "../i18n/I18nContext";
 import { InboundsPage } from "../pages/InboundsPage";
@@ -34,6 +34,40 @@ function renderInbounds() {
 }
 
 describe("InboundsPage attached clients", () => {
+	it("loads a small preview and links to the complete filtered client list", async () => {
+		let pageSize = 0;
+		const clients = Array.from({ length: 12 }, (_, i) => ({
+			id: `client-${i}`,
+			name: `Client ${i}`,
+		}));
+		server.use(
+			http.get("/api/inbounds", () =>
+				HttpResponse.json([
+					{ name: "bound", protocol: "hysteria2", enabled: true },
+				]),
+			),
+			http.get("/api/inbounds/:name/clients", ({ request }) => {
+				pageSize = Number(new URL(request.url).searchParams.get("pageSize"));
+				return HttpResponse.json({
+					items: clients.slice(0, pageSize),
+					total: clients.length,
+				});
+			}),
+		);
+		renderInbounds();
+		const more = await screen.findByRole("link", { name: "+7" });
+		expect(pageSize).toBe(5);
+		expect(more).toHaveAttribute("href", "/clients?inboundId=bound");
+		expect(screen.queryByText("Client 5")).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+		expect(
+			await screen.findByText(/still has 12 attached client/i),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: /confirm delete/i }),
+		).not.toBeInTheDocument();
+	});
+
 	it("shows a client attached to inbound B even when it is outside a global 500-client page", async () => {
 		server.use(
 			http.get("/api/inbounds", () =>

@@ -26,6 +26,9 @@ func TestSystemdCommandTimeoutBranches(t *testing.T) {
 		{"systemctl", []string{"enable", "veil.service"}, 10 * time.Second},
 		{"systemctl", []string{"disable", "veil.service"}, 10 * time.Second},
 		{"systemctl", []string{"restart", "veil.service"}, 30 * time.Second},
+		{"systemctl", []string{"restart", "veil-helper.socket", "veil.service"}, 60 * time.Second},
+		{"systemctl", []string{"restart", "veil-helper.socket", "veil.service", "veil-caddy.service"}, 90 * time.Second},
+		{"systemctl", []string{"restart"}, 30 * time.Second},
 		{"systemctl", []string{"status", "veil.service"}, 10 * time.Second},
 		{"journalctl", []string{"-u", "veil.service"}, 10 * time.Second},
 	}

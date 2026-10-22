@@ -290,26 +290,7 @@ func collectInstallPreflight(ctx context.Context, profile installer.RURecommende
 		add(preflightCheck{ID: "acme", Status: preflightSkipped, Detail: "no ACME issuance for this profile"})
 	}
 
-	// 8. Archive/checksum tools for runtime downloads and verification.
-	for _, tool := range []string{"tar", "gzip", "xz", "sha256sum"} {
-		if _, ok := anyLookPath(tool); ok {
-			add(preflightCheck{ID: "tool-" + tool, Status: preflightOK, Detail: tool + " present"})
-			continue
-		}
-		status, remedy := provision(tool)
-		pkg := tool
-		if tool == "sha256sum" {
-			pkg = "coreutils"
-		}
-		if manager != "" {
-			pkg = distroPackageFor(pkg, manager)
-		}
-		add(preflightCheck{ID: "tool-" + tool, Status: status, Detail: tool + " required for runtime extraction",
-			Remedy:  remedy,
-			Package: pkg})
-	}
-
-	// 9. Caddy binary — the runtime phase provisions the pinned build when the
+	// 8. Caddy binary — the runtime phase provisions the pinned build when the
 	//    profile needs it, so absence is provisionable without a package.
 	if profile.InstallPanelCaddy {
 		if _, ok := anyLookPath("caddy"); ok {

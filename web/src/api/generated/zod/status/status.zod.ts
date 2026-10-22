@@ -119,10 +119,12 @@ export const GetApiStatusResponse = zod.object({
 /**
  * @summary Firewall rule plan and status
  */
-export const GetApiFirewallResponseItem = zod.object({
+export const GetApiFirewallResponse = zod.object({
+  "active": zod.boolean(),
+  "rules": zod.array(zod.object({
   "port": zod.int(),
   "protocol": zod.enum(['tcp', 'udp']),
   "service": zod.string()
+})).nullable()
 })
-export const GetApiFirewallResponse = zod.array(GetApiFirewallResponseItem)
 

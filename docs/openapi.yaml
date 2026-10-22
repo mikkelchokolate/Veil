@@ -2407,9 +2407,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/FirewallRule'
+                $ref: '#/components/schemas/FirewallResponse'
       security:
       - sessionCookie: []
       - bearerAuth: []
@@ -6823,6 +6821,20 @@ components:
           minLength: 1
           maxLength: 4096
           description: Client connection URI or config export string to encode as a QR image.
+    FirewallResponse:
+      type: object
+      required:
+      - active
+      - rules
+      properties:
+        active:
+          type: boolean
+        rules:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/FirewallRule'
     FirewallRule:
       type: object
       required:
@@ -7248,6 +7260,24 @@ components:
       - appliedRevision
       - state
       properties:
+        progress:
+          type: object
+          description: Current apply phase; timestamps are Unix seconds. Omitted when no apply is running.
+          required:
+          - stage
+          - startedAt
+          - updatedAt
+          properties:
+            stage:
+              type: string
+            runtime:
+              type: string
+            startedAt:
+              type: integer
+              format: int64
+            updatedAt:
+              type: integer
+              format: int64
         desiredRevision:
           type: integer
           format: int64

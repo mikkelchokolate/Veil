@@ -1,6 +1,7 @@
 package runtimeinstall
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -8,6 +9,43 @@ import (
 	"testing"
 	"time"
 )
+
+func TestRuntimeInstallCancellationAfterVerificationDoesNotPublish(t *testing.T) {
+	binDir := t.TempDir()
+	oldPayload := []byte("old runtime")
+	oldRuntime := regressionRuntime("v1.2.3", oldPayload)
+	if result := Install(t.Context(), regressionInstallOptions(binDir, oldRuntime, oldPayload), oldRuntime); result.Err != nil {
+		t.Fatal(result.Err)
+	}
+	manifestPath := filepath.Join(binDir, runtimeSetManifestName)
+	oldManifest, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newPayload := []byte("new runtime")
+	newRuntime := regressionRuntime("v1.2.4", newPayload)
+	opts := regressionInstallOptions(binDir, newRuntime, newPayload)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	opts.RunVersion = func(context.Context, string, []string) (string, error) {
+		cancel()
+		return "regression-runtime v1.2.4", nil
+	}
+	if result := Install(ctx, opts, newRuntime); !errors.Is(result.Err, context.Canceled) {
+		t.Fatalf("expected cancellation after successful verification, got %+v", result)
+	}
+	active, err := os.ReadFile(filepath.Join(binDir, oldRuntime.Binary))
+	if err != nil || string(active) != string(oldPayload) {
+		t.Fatalf("active runtime changed: %q %v", active, err)
+	}
+	manifest, err := os.ReadFile(manifestPath)
+	if err != nil || string(manifest) != string(oldManifest) {
+		t.Fatalf("generation manifest changed: %s %v", manifest, err)
+	}
+	if _, err := os.Stat(filepath.Join(binDir, runtimeSetJournalName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("cancelled install prepared a live transaction: %v", err)
+	}
+}
 
 func TestRuntimeSetRecoveryRollsBackEntirePartiallyActivatedGeneration(t *testing.T) {
 	binDir := t.TempDir()

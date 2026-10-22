@@ -20,13 +20,14 @@
 github.com/mikkelchokolate/Veil/internal/hostaccess	TestPrepare
 github.com/mikkelchokolate/Veil/internal/cli	TestPrivilegedInstallFailureRestoresPreviousBinary
 github.com/mikkelchokolate/Veil/internal/apply	TestUpdateRecoveryAcceptsOnlyExactHelperCommittedEvidence
-# The two runtimeinstall sandbox-integration roots need root + a live systemd
+# The runtimeinstall sandbox-integration roots need root + a live systemd
 # manager, so they intentionally skip in this unprivileged job; their execution
-# evidence is the `privilege-boundary` job, which asserts both roots PASS by
+# evidence is the `privilege-boundary` job, which asserts these roots PASS by
 # name (issue #632). The sandbox child entrypoint (TestRuntimeProbeMaliciousHelper)
 # is a subprocess-helper root and lives on test-helper-allowlist.txt instead —
 # its skip is a helper boundary, not an environment condition.
 github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestRuntimeVersionProbeExecutesProtectedHomeBinaryThroughSystemdBind
+github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestRuntimeVersionProbeFromPrivateTmpHelper
 github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestMaliciousRuntimeProbeCannotReadHostSecretsEnvironmentDescriptorsOrNetwork
 # Windows-only by design: the rename-failure simulation uses CreateFile
 # sharing modes (admin_rotate_test_windows.go); unix has no equivalent

@@ -27,9 +27,10 @@ case "${phase}" in
     ci_job_run browser-e2e
     ;;
   system)
+    # Acceptance must exercise first-use downloads before other jobs seed PATH.
+    ci_job_run install-acceptance
     ci_job_run privilege-boundary
     ci_job_run e2e
-    ci_job_run install-acceptance
     ;;
   docker)
     ci_job_run package-smoke

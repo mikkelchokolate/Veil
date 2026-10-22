@@ -1458,9 +1458,17 @@ type ApplyStateResponse struct {
 		Code    *string `json:"code,omitempty"`
 		Message *string `json:"message,omitempty"`
 	} `json:"lastError,omitempty"`
-	LastFailedJobId     *string                 `json:"lastFailedJobId,omitempty"`
-	LastSuccessfulJobId *string                 `json:"lastSuccessfulJobId,omitempty"`
-	State               ApplyStateResponseState `json:"state"`
+	LastFailedJobId     *string `json:"lastFailedJobId,omitempty"`
+	LastSuccessfulJobId *string `json:"lastSuccessfulJobId,omitempty"`
+
+	// Progress Current apply phase; timestamps are Unix seconds. Omitted when no apply is running.
+	Progress *struct {
+		Runtime   *string `json:"runtime,omitempty"`
+		Stage     string  `json:"stage"`
+		StartedAt int64   `json:"startedAt"`
+		UpdatedAt int64   `json:"updatedAt"`
+	} `json:"progress,omitempty"`
+	State ApplyStateResponseState `json:"state"`
 }
 
 // ApplyStateResponseState defines model for ApplyStateResponse.State.
@@ -2118,6 +2126,12 @@ type FieldSchemaScope string
 
 // FieldSchemaType defines model for FieldSchema.Type.
 type FieldSchemaType string
+
+// FirewallResponse defines model for FirewallResponse.
+type FirewallResponse struct {
+	Active bool                              `json:"active"`
+	Rules  nullable.Nullable[[]FirewallRule] `json:"rules"`
+}
 
 // FirewallRule defines model for FirewallRule.
 type FirewallRule struct {
@@ -18516,11 +18530,11 @@ type GetApiFirewallResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *[]FirewallRule
+	JSON200 *FirewallResponse
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GetApiFirewallResponse) GetJSON200() *[]FirewallRule {
+func (r GetApiFirewallResponse) GetJSON200() *FirewallResponse {
 	return r.JSON200
 }
 
@@ -29685,7 +29699,7 @@ func ParseGetApiFirewallResponse(rsp *http.Response) (*GetApiFirewallResponse, e
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []FirewallRule
+		var dest FirewallResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

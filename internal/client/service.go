@@ -696,6 +696,7 @@ func (s *Service) viewWith(c Client,
 			bv.Capability = s.inboundLookup(b.InboundID)
 		}
 		if active, err := activeFn(b.ID, "password"); err == nil && active.ID != "" {
+			hasCreds = true
 			bv.Credential = &CredentialMeta{
 				Configured: true,
 				Kind:       active.Kind,

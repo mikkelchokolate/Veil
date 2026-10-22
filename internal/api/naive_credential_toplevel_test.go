@@ -1,8 +1,11 @@
 package api
 
 import (
+	"context"
 	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 )
 
 // naiveHasCredential must accept the top-level inbound.Password that
@@ -11,6 +14,9 @@ import (
 // inbound.Password, but the validator did not, so a create-then-apply flow was
 // incorrectly rejected.
 func TestBuildApplyPlanAcceptsNaiveProxyWithTopLevelPassword(t *testing.T) {
+	stubCaddyProbe(t, func(context.Context, string) (caddycapabilities.CaddyCapabilities, error) {
+		return caddycapabilities.CaddyCapabilities{ForwardProxy: true, HTTP3: true}, nil
+	})
 	plan := BuildApplyPlan(ApplyPlanInput{
 		Settings: Settings{PanelListen: "127.0.0.1:2096", Mode: "dev", Domain: "vpn.example.com", DefaultAcmeEmail: "admin@example.com"},
 		Inbounds: []Inbound{{

@@ -9,12 +9,13 @@ import {
 } from "../api/generated/diagnostics/diagnostics";
 import type {
 	AuditRecord,
-	FirewallRule,
+	FirewallResponse,
 	LogResult,
 	StatusResponse,
 } from "../api/generated/models";
 import { getApiLogs } from "../api/generated/runtime/runtime";
 import { getApiFirewall, getApiStatus } from "../api/generated/status/status";
+import { GetApiFirewallResponse } from "../api/generated/zod/status/status.zod";
 import { useIsAdmin } from "../auth/AuthContext";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -492,10 +493,11 @@ function SpeedtestCard() {
 /** GET /api/firewall — planned/managed UFW rule view (viewer+). */
 function FirewallCard() {
 	const { t } = useI18n();
-	const firewall = useQuery<FirewallRule[]>({
+	const firewall = useQuery<FirewallResponse>({
 		queryKey: ["firewall"],
-		queryFn: () => getApiFirewall(),
+		queryFn: async () => GetApiFirewallResponse.parse(await getApiFirewall()),
 	});
+	const rules = firewall.data?.rules ?? [];
 
 	return (
 		<div className="card">
@@ -510,7 +512,7 @@ function FirewallCard() {
 						t,
 					)}
 				</FormMessage>
-			) : (firewall.data ?? []).length === 0 ? (
+			) : rules.length === 0 ? (
 				<p className="muted">{t("diagnostics.firewall.empty")}</p>
 			) : (
 				<Table>
@@ -522,7 +524,7 @@ function FirewallCard() {
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{(firewall.data ?? []).map((rule) => (
+						{rules.map((rule) => (
 							<TableRow key={`${rule.protocol}-${rule.port}-${rule.service}`}>
 								<TableCell className="mono">{rule.port}</TableCell>
 								<TableCell className="muted">{rule.protocol}</TableCell>
