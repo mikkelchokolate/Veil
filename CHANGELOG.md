@@ -14,6 +14,18 @@ All notable changes to Veil will be documented in this file.
   `VEIL_ACME_INSECURE` instead treats any non-true value as false, so a
   typo can never disable ACME TLS verification.
 
+### Removed
+
+- #1292: the unused Caddyfile text-template renderers
+  (`renderer.RenderNaiveCaddyfile`, `renderer.RenderPanelCaddyfile` and the
+  `generatedconfig` naive/panel wrappers that called them) are gone. They
+  interpolated credentials, the domain, the WARP upstream and the panel base
+  path into Caddyfile text unquoted, so a value with whitespace or Caddyfile
+  tokens could inject directives. Nothing in production called them: Veil
+  deploys one consolidated Caddy JSON config through the admin API, and that
+  path is unchanged. Its public-TLS-only guard (no internal-CA issuer for a
+  naive domain) now has a JSON-path test.
+
 ### Fixed
 
 - #1292: WARP auto-registration no longer trusts the Cloudflare
@@ -27,10 +39,10 @@ All notable changes to Veil will be documented in this file.
   endpoint instead of resetting it to the stock one; sending `"endpoint":""`
   (the panel's cleared field) still resets it. The peer public key must be
   a base64 32-byte key, the interface addresses must be bare IPv4/IPv6
-  addresses of the right family, and
-  `client_id` must decode to 3 reserved bytes. A malformed response now fails
-  the PUT with a `WARP registration failed: ...` error naming the field,
-  instead of being persisted and later rejected by `sing-box check`.
+  addresses of the right family, and `client_id` must decode to 3 reserved
+  bytes. A malformed response now fails the PUT with a
+  `WARP registration failed: ...` error naming the field, instead of being
+  persisted and later rejected by `sing-box check`.
 - #1292: `veil repair` (and install's repair plan) no longer reads managed
   files through a path that can be swapped after its type check. The
   content comparison now reads through an `O_NOFOLLOW|O_NONBLOCK`

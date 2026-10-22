@@ -3,9 +3,7 @@ package generatedconfig
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"fmt"
 	"net"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -13,7 +11,6 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
-	veilsettings "github.com/mikkelchokolate/Veil/internal/settings"
 )
 
 // randRead is swapped in tests to exercise the olcRTC password generation error path.
@@ -27,91 +24,6 @@ type InboundRenderer struct {
 
 func NewInboundRenderer(settings Settings, paths Paths, warp WarpConfig) InboundRenderer {
 	return InboundRenderer{settings: settings, paths: paths, warp: warp}
-}
-
-func (r InboundRenderer) RenderNaive(inbound Inbound, includePanel bool) (string, error) {
-	var buf strings.Builder
-	buf.WriteString("{\n  order forward_proxy before file_server\n  servers {\n    protocols h1 h2\n  }\n}\n\n")
-
-	password := naivePassword(r.settings, inbound)
-	access, err := clientaccess.BuildClientAccess(r.settings, inbound)
-	if err != nil {
-		return "", err
-	}
-	username := naiveUsername(r.settings, inbound)
-	root := fallbackRoot(r.settings, inbound)
-	users := access.NaiveUsers()
-	if len(users) == 0 && (inbound.HadClientProfiles()) {
-		// Credential-managed inbound with every client revoked: an empty user
-		// list would revive the fallback password inside RenderNaiveCaddyfile
-		// (issue #1098); the sentinel account can never authenticate.
-		user, pass := model.RevokedClientCredential(r.settings, inbound)
-		users = []renderer.NaiveUser{{Username: user, Password: pass}}
-	}
-	naiveConfig := renderer.NaiveConfig{
-		Domain:       model.ResolveInboundDomain(inbound, r.settings),
-		Email:        model.ResolveInboundEmail(inbound, r.settings),
-		ListenPort:   inbound.Port,
-		Username:     username,
-		Password:     password,
-		Users:        users,
-		FallbackRoot: root,
-		// The render paths' etc root (derived from the configured live root)
-		// is authoritative for the fallback tree: a custom --etc-dir install
-		// serves its own <etc>/www, not the packaged one (issue #634). When
-		// the paths carry no etc root the renderer resolves the host's.
-		FallbackBase: r.fallbackBase(),
-	}
-	if r.warp.Enabled {
-		socksPort := r.warp.SocksPort
-		if socksPort == 0 {
-			socksPort = 40000
-		}
-		naiveConfig.Upstream = "socks5://" + net.JoinHostPort(r.warp.SocksDialAddr(), strconv.Itoa(socksPort))
-	}
-	if includePanel && r.settings.PanelAccess == "caddy" {
-		if route, ok, err := panelCaddyRoute(r.settings); err == nil && ok {
-			naiveConfig.PanelPort = route.Port
-			naiveConfig.WebBasePath = route.WebBasePath
-		}
-	}
-	block, err := renderer.RenderNaiveCaddyfile(naiveConfig)
-	if err != nil {
-		return "", err
-	}
-	if idx := strings.Index(block, "\n:"); idx != -1 {
-		block = block[idx+1:]
-	} else if idx := strings.Index(block, "\n"+r.settings.Domain); idx != -1 {
-		block = block[idx+1:]
-	}
-	buf.WriteString(block)
-	buf.WriteString("\n")
-	return buf.String(), nil
-}
-
-func (r InboundRenderer) RenderPanelStandalone() (string, error) {
-	if r.settings.PanelAccess != "caddy" {
-		return "", nil
-	}
-	route, ok, err := panelCaddyRoute(r.settings)
-	if err != nil || !ok {
-		return "", err
-	}
-	var buf strings.Builder
-	buf.WriteString("{\n  order forward_proxy before file_server\n  servers {\n    protocols h1 h2\n  }\n}\n\n")
-
-	panelBlock, err := renderer.RenderPanelCaddyfile(renderer.PanelCaddyConfig{
-		Domain:      r.settings.Domain,
-		Email:       r.settings.Email,
-		PanelPort:   route.Port,
-		WebBasePath: route.WebBasePath,
-	})
-	if err != nil {
-		return "", err
-	}
-	buf.WriteString(panelBlock)
-	buf.WriteString("\n")
-	return buf.String(), nil
 }
 
 func (r InboundRenderer) RenderHysteria2(inbound Inbound) (string, error) {
@@ -181,10 +93,6 @@ func (r InboundRenderer) RenderOlcrtc(inbound Inbound) (string, error) {
 	})
 }
 
-func RenderNaiveInbound(settings Settings, inbound Inbound, warp WarpConfig, includePanel bool) (string, error) {
-	return NewInboundRenderer(settings, Paths{}, warp).RenderNaive(inbound, includePanel)
-}
-
 func RenderHysteria2Inbound(settings Settings, inbound Inbound, warp WarpConfig) (string, error) {
 	return NewInboundRenderer(settings, NewPaths(hostenv.EtcDir()), warp).RenderHysteria2(inbound)
 }
@@ -195,39 +103,6 @@ func RenderOlcrtcInbound(settings Settings, inbound Inbound, warp WarpConfig) (s
 
 func (r InboundRenderer) Paths() Paths {
 	return r.paths
-}
-
-// fallbackBase resolves the managed naive fallback web root base from the
-// configured render paths. Empty means "resolve from the host environment".
-func (r InboundRenderer) fallbackBase() string {
-	if etcRoot := strings.TrimSpace(r.paths.etcRoot()); etcRoot != "" {
-		return filepath.Join(etcRoot, "www")
-	}
-	return ""
-}
-
-type caddyRoute struct {
-	Port        int
-	WebBasePath string
-}
-
-func panelCaddyRoute(settings Settings) (caddyRoute, bool, error) {
-	if settings.PanelAccess != "caddy" {
-		return caddyRoute{}, false, nil
-	}
-	webBasePath := veilsettings.NormalizeWebBasePath(settings.WebBasePath)
-	if webBasePath == "" {
-		return caddyRoute{}, false, fmt.Errorf("webBasePath is required for caddy Panel access")
-	}
-	_, portText, err := net.SplitHostPort(settings.PanelListen)
-	if err != nil {
-		return caddyRoute{}, false, fmt.Errorf("panelListen must be host:port")
-	}
-	port, err := strconv.Atoi(portText)
-	if err != nil || port <= 0 || port > 65535 {
-		return caddyRoute{}, false, fmt.Errorf("panelListen must be host:port")
-	}
-	return caddyRoute{Port: port, WebBasePath: webBasePath}, true, nil
 }
 
 // protocolString reads a string value from a ProtocolFields map, falling back
@@ -246,28 +121,6 @@ func protocolString(m map[string]any, key, fallback string) string {
 		return fallback
 	}
 	return strings.TrimSpace(s)
-}
-
-func naiveUsername(settings Settings, inbound Inbound) string {
-	return model.EffectiveProtocolString(inbound, settings, "naiveUsername", inbound.NaiveUsername, settings.NaiveUsername)
-}
-
-func naivePassword(settings Settings, inbound Inbound) string {
-	return model.EffectiveProtocolPassword(inbound, settings, "naivePassword", inbound.NaivePassword, settings.NaivePassword)
-}
-
-func fallbackRoot(settings Settings, inbound Inbound) string {
-	root := protocolString(inbound.ProtocolFields, "fallbackRoot", "")
-	if root == "" {
-		root = inbound.FallbackRoot
-	}
-	if root == "" {
-		root = protocolString(settings.ProtocolFields, "fallbackRoot", "")
-	}
-	if root == "" {
-		root = settings.FallbackRoot
-	}
-	return root
 }
 
 func hysteria2Password(settings Settings, inbound Inbound) string {
