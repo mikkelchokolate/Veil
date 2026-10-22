@@ -72,14 +72,6 @@ func (a ClientAccess) ClientLinks() []ClientLink {
 	return NewClientAccessProtocolRegistry().BuildLinks(a.settings, a.inbound, a.credentials)
 }
 
-func (a ClientAccess) NaiveUsers() []renderer.NaiveUser {
-	users := make([]renderer.NaiveUser, 0, len(a.credentials))
-	for _, credential := range a.credentials {
-		users = append(users, renderer.NaiveUser{Username: credential.Username, Password: credential.Password})
-	}
-	return users
-}
-
 func (a ClientAccess) Hysteria2Users() []renderer.Hysteria2User {
 	users := make([]renderer.Hysteria2User, 0, len(a.credentials))
 	for _, credential := range a.credentials {
