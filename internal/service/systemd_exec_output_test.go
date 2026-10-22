@@ -94,3 +94,16 @@ func TestSystemdExecRunnerDoesNotWaitForOrphanHoldingOutput(t *testing.T) {
 		t.Fatalf("error lost output written before exit: %v", err)
 	}
 }
+
+// Review on #1369: a systemctl that succeeded must stay a success when an
+// orphan holds the output pipes past WaitDelay.
+func TestSystemdExecRunnerSucceedsWhenOrphanHoldsOutputAfterSuccess(t *testing.T) {
+	tool := writeFailingTool(t, "sleep 60 &\necho ok\nexit 0\n")
+	start := time.Now()
+	if err := (SystemdExecRunner{}).Run(tool, "restart", "veil.service"); err != nil {
+		t.Fatalf("successful command reported as failure: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > systemdWaitDelay+10*time.Second {
+		t.Fatalf("Run took %v; an orphan holding the pipe blocked it", elapsed)
+	}
+}

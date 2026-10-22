@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -64,7 +66,12 @@ func (SystemdExecRunner) Run(command string, args ...string) error {
 	// that inherits them (an agent systemctl spawns) must not hold Run past
 	// its timeout, so stop reading shortly after the process exits.
 	cmd.WaitDelay = systemdWaitDelay
-	if err := cmd.Run(); err != nil {
+	err := cmd.Run()
+	if errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+		// systemctl succeeded; only an orphan kept the output pipes open.
+		err = nil
+	}
+	if err != nil {
 		// A batched `systemctl restart a b c` reports only "exit status 1";
 		// systemctl's own message names the unit that failed, so keep its tail.
 		if detail := output.String(); detail != "" {
