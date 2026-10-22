@@ -5,6 +5,9 @@ name: naive-client-build
 # klzgrad/naiveproxy removed all release binaries (#1373); this follows their
 # own .github/workflows/build.yml `linux` job for target_cpu="x64".
 #
+# Every run is cold (no toolchain/sysroot/ccache restore, unlike upstream) to
+# keep the build self-contained; the 360 min timeout is the hosted ceiling.
+#
 # Manual only. Refuses to overwrite an existing asset so a published checksum
 # pinned in scripts/ci/versions.sh can never silently change.
 
@@ -29,6 +32,8 @@ concurrency:
 
 jobs:
   build-linux-x64:
+    # Only reviewed workflow code on main may publish/attest (and tag ci-deps).
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     timeout-minutes: 360
     permissions:
@@ -40,8 +45,6 @@ jobs:
       COMMIT: ${{ inputs.commit }}
       EXTRA_FLAGS: 'target_cpu="x64"'
       BUNDLE: naiveproxy-${{ inputs.tag }}-linux-x64
-      CCACHE_MAXSIZE: 200M
-      CCACHE_MAXFILES: 0
     defaults:
       run:
         shell: bash
@@ -68,7 +71,7 @@ jobs:
       - name: Install APT packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build pkg-config ccache bubblewrap
+          sudo apt-get install -y ninja-build pkg-config bubblewrap
       - name: Regenerate Debian keyring
         working-directory: naiveproxy/src
         run: |
@@ -103,6 +106,7 @@ jobs:
           workflow_run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
           workflow_ref: ${GITHUB_WORKFLOW_REF}
           workflow_sha: ${GITHUB_SHA}
+          reproducible: no (tar mtimes/owners differ per run); the checksum identifies THIS build only
           PROV
           sed -i 's/^ *//' "${BUNDLE}.provenance.txt"
           echo "${tarball_sha}  ${BUNDLE}.tar.xz" > "${BUNDLE}.tar.xz.sha256"
@@ -125,7 +129,7 @@ jobs:
           fi
           test "$(gh release view ci-deps --json isPrerelease -q .isPrerelease)" = true
           if gh release view ci-deps --json assets -q '.assets[].name' | grep -Fx "${BUNDLE}.tar.xz" >/dev/null; then
-            echo "::error::${BUNDLE}.tar.xz already exists on ci-deps; refusing to overwrite a pinned asset"
+            echo "::error::${BUNDLE}.tar.xz already exists on ci-deps; refusing to overwrite a pinned asset (if a previous run uploaded only part of the asset set, delete the partial ci-deps assets manually after review, then re-run)"
             exit 1
           fi
           gh release upload ci-deps "${BUNDLE}.tar.xz" "${BUNDLE}.tar.xz.sha256" "${BUNDLE}.provenance.txt"
