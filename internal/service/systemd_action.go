@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/syspath"
@@ -55,7 +57,55 @@ func (SystemdExecRunner) Run(command string, args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), systemdCommandTimeout(command, args...))
 	defer cancel()
 	cmd := syspath.CommandContext(ctx, command, args...)
-	return cmd.Run()
+	output := &tailBuffer{limit: systemdOutputLimit}
+	cmd.Stdout = output
+	cmd.Stderr = output
+	if err := cmd.Run(); err != nil {
+		// A batched `systemctl restart a b c` reports only "exit status 1";
+		// systemctl's own message names the unit that failed, so keep its tail.
+		if detail := output.String(); detail != "" {
+			return fmt.Errorf("%w: %s", err, detail)
+		}
+		return err
+	}
+	return nil
+}
+
+// systemdOutputLimit bounds how much systemctl output is kept for an error.
+const systemdOutputLimit = 2048
+
+// tailBuffer keeps the last limit bytes written to it, where systemctl and
+// journal hints put the failing unit.
+type tailBuffer struct {
+	mu        sync.Mutex
+	limit     int
+	buf       []byte
+	truncated bool
+}
+
+func (b *tailBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.buf = append(b.buf, p...)
+	if over := len(b.buf) - b.limit; over > 0 {
+		b.buf = append(b.buf[:0], b.buf[over:]...)
+		b.truncated = true
+	}
+	return len(p), nil
+}
+
+func (b *tailBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	// Collapse lines into one; a cut at the head may split a UTF-8 rune.
+	text := strings.Join(strings.Fields(strings.ToValidUTF8(string(b.buf), "")), " ")
+	if text == "" {
+		return ""
+	}
+	if b.truncated {
+		return "..." + text
+	}
+	return text
 }
 
 func systemdCommandTimeout(command string, args ...string) time.Duration {
@@ -65,8 +115,15 @@ func systemdCommandTimeout(command string, args ...string) time.Duration {
 		case "daemon-reload", "enable", "disable":
 			timeout = 10 * time.Second
 		case "restart":
-			// Preserve the old per-unit budget when restart jobs are queued together.
-			timeout = 30 * time.Second * time.Duration(max(1, len(args)-1))
+			// Preserve the old per-unit budget when restart jobs are queued
+			// together. Flags such as --no-block are not units.
+			units := 0
+			for _, arg := range args[1:] {
+				if !strings.HasPrefix(arg, "-") {
+					units++
+				}
+			}
+			timeout = 30 * time.Second * time.Duration(max(1, units))
 		}
 	}
 	return timeout
