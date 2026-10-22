@@ -132,6 +132,10 @@ func TestPolicyEnvOverridesRedactNonPathPassphrase(t *testing.T) {
 	if got = PolicyEnvOverrides(); len(got) != 1 || !got[0].Redacted || strings.Contains(got[0].Value, "horse") {
 		t.Fatalf("absolute-looking passphrase with blanks must be redacted, got %+v", got)
 	}
+	t.Setenv("VEIL_BACKUP_PASSPHRASE", "/correct\thorse")
+	if got = PolicyEnvOverrides(); len(got) != 1 || !got[0].Redacted || strings.Contains(got[0].Value, "horse") {
+		t.Fatalf("absolute-looking passphrase with a tab must be redacted, got %+v", got)
+	}
 	t.Setenv("VEIL_BACKUP_PASSPHRASE", "/srv/veil/backup.passphrase")
 	got = PolicyEnvOverrides()
 	if len(got) != 1 || got[0].Redacted || got[0].Value != "/srv/veil/backup.passphrase" {
