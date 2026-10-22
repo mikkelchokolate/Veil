@@ -20,7 +20,8 @@ All notable changes to Veil will be documented in this file.
   Hysteria2. On hosts where no `/etc/resolv.conf` nameserver is reachable under
   the unit's kernel egress filter, the rendered `warp.json` pins a Cloudflare
   DNS-over-HTTPS server (`1.1.1.1:443`, or the IPv6 address on IPv6-only
-  hosts), dialed directly and used as `route.default_domain_resolver`. Before
+  hosts, where the resolver also prefers AAAA records), dialed directly and
+  used as `route.default_domain_resolver`. Before
   this, sing-box could not resolve the WARP peer hostname, so the tunnel never
   came up, and client domains and rule-set downloads failed too. Hosts on the
   systemd-resolved stub or a public nameserver render the same config as

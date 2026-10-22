@@ -53,5 +53,14 @@ func warpDNSOverride() (dns map[string]any, defaultDomainResolver map[string]any
 		"servers": []map[string]any{server},
 		"final":   warpDoHServerTag,
 	}
-	return dns, map[string]any{"server": warpDoHServerTag}, true
+	resolver := map[string]any{"server": warpDoHServerTag}
+	// The IPv6 server is chosen only for hosts that route IPv6 and not IPv4
+	// to Cloudflare. There the WireGuard peer and the direct outbounds must
+	// try AAAA records first: sing-box hands the peer's resolved addresses
+	// to wireguard-go in lookup order, so an A record first would aim the
+	// handshake at a family the host cannot route.
+	if parsed.Addr().Is6() {
+		resolver["strategy"] = "prefer_ipv6"
+	}
+	return dns, resolver, true
 }

@@ -35,7 +35,8 @@ type warpResolverDoc struct {
 	} `json:"dns"`
 	Route struct {
 		DefaultDomainResolver *struct {
-			Server string `json:"server"`
+			Server   string `json:"server"`
+			Strategy string `json:"strategy"`
 		} `json:"default_domain_resolver"`
 	} `json:"route"`
 }
@@ -67,6 +68,9 @@ func TestRenderWarpSingBoxResolverFollowsHostNameserverReachability(t *testing.T
 		conf       string
 		v4, v6     string
 		wantServer string // "" = no dns section (host resolver kept)
+		// wantStrategy is the default_domain_resolver strategy: IPv6-only
+		// hosts must try the peer's AAAA records first.
+		wantStrategy string
 	}{
 		{name: "resolved stub", conf: "nameserver 127.0.0.53\n", v4: testIPv4DefaultRoute},
 		{name: "public nameserver", conf: "nameserver 185.12.64.1\n", v4: testIPv4DefaultRoute},
@@ -75,7 +79,7 @@ func TestRenderWarpSingBoxResolverFollowsHostNameserverReachability(t *testing.T
 		{name: "AWS VPC resolver", conf: "nameserver 172.31.0.2\n", v4: testIPv4DefaultRoute, wantServer: "1.1.1.1"},
 		{name: "GCP/OCI link-local resolver", conf: "nameserver 169.254.169.254\n", v4: testIPv4DefaultRoute, wantServer: "1.1.1.1"},
 		{name: "local dnsmasq", conf: "nameserver 127.0.0.1\n", v4: testIPv4DefaultRoute, wantServer: "1.1.1.1"},
-		{name: "IPv6-only host denied nameserver", conf: "nameserver fd00::53\n", v4: testIPv4NoDefault, v6: testIPv6DefaultRoute, wantServer: "2606:4700:4700::1111"},
+		{name: "IPv6-only host denied nameserver", conf: "nameserver fd00::53\n", v4: testIPv4NoDefault, v6: testIPv6DefaultRoute, wantServer: "2606:4700:4700::1111", wantStrategy: "prefer_ipv6"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -107,6 +111,9 @@ func TestRenderWarpSingBoxResolverFollowsHostNameserverReachability(t *testing.T
 			}
 			if doc.Route.DefaultDomainResolver == nil || doc.Route.DefaultDomainResolver.Server != server.Tag {
 				t.Fatalf("route.default_domain_resolver = %+v, want %q: the WireGuard peer and direct outbounds would still use resolv.conf", doc.Route.DefaultDomainResolver, server.Tag)
+			}
+			if got := doc.Route.DefaultDomainResolver.Strategy; got != tc.wantStrategy {
+				t.Fatalf("route.default_domain_resolver.strategy = %q, want %q", got, tc.wantStrategy)
 			}
 		})
 	}
