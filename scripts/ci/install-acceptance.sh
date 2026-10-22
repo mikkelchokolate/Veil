@@ -45,6 +45,7 @@ collect_diagnostics() {
   ${SUDO:-} journalctl --no-pager -n 400 -u veil.service -u veil-helper.service -u veil-helper.socket > "${CI_ARTIFACT_DIR}/veil-units-journal.txt" 2>&1 || true
   ${SUDO:-} journalctl --no-pager -n 200 -u "veil-hysteria2@*" -u "veil-mieru.service" -u "veil-olcrtc@*" -u veil-caddy.service -u veil-warp.service > "${CI_ARTIFACT_DIR}/protocol-units-journal.txt" 2>&1 || true
   if [ "${rc}" -ne 0 ]; then
+    grep -F 'apply runner rejected revision' "${CI_ARTIFACT_DIR}/veil-units-journal.txt" | tail -n 5 >&2 || true
     # Runtime version probes use transient units outside the veil-* namespace.
     ${SUDO:-} journalctl --no-pager -n 200 -u "run-*.service" > "${CI_ARTIFACT_DIR}/runtime-probe-units-journal.txt" 2>&1 || true
   fi

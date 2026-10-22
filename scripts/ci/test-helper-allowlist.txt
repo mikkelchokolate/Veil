@@ -29,3 +29,4 @@ github.com/mikkelchokolate/Veil/internal/privileged	TestPromotionCrashProcess
 github.com/mikkelchokolate/Veil/internal/privileged	TestPromotionLockSubprocessHelper
 github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestRuntimeActivationCrashHelper
 github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestRuntimeProbeMaliciousHelper
+github.com/mikkelchokolate/Veil/internal/runtimeinstall	TestRuntimeVersionProbePrivateTmpHelper

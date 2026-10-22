@@ -39,22 +39,21 @@ gofmt_stage() {
 caddy_stage() {
   local runtime_dir="${VEIL_CI_RUNTIME_DIR:-/opt/veil-runtime}"
   local caddy_ok=1 singbox_ok=1
-  if ! [ -x "${runtime_dir}/caddy" ] \
-    || ! "${runtime_dir}/caddy" list-modules 2>/dev/null | grep -Fx http.handlers.forward_proxy >/dev/null; then
+  # shellcheck source=scripts/ci/runtimes.sh
+  # shellcheck disable=SC1091
+  . "${CI_SCRIPTS_DIR}/runtimes.sh"
+  if ! caddy_test_runtime_is_pinned "${runtime_dir}/caddy"; then
     caddy_ok=0
   fi
   # The generated-config catalog also gates warp artifacts on `sing-box check`
   # — and apply validation is now fail-closed on a missing configured
   # validator (issue #686). The test job must carry the real pinned binary so
   # those validations execute; a validator that cannot run is not a pass.
-  [ -x "${runtime_dir}/sing-box" ] || singbox_ok=0
+  singbox_test_runtime_is_pinned "${runtime_dir}/sing-box" || singbox_ok=0
   if [ "${caddy_ok}" -eq 0 ] || [ "${singbox_ok}" -eq 0 ]; then
     # Fall back to the per-runner cache dir — the pre-provisioned image dir may
     # be root-owned on hosted runners.
     runtime_dir="${VEIL_CI_CADDY_CACHE_DIR:-${HOME}/.cache/veil-caddy-test}"
-    # shellcheck source=scripts/ci/runtimes.sh
-    # shellcheck disable=SC1091
-    . "${CI_SCRIPTS_DIR}/runtimes.sh"
     install_pinned_caddy_for_tests "${runtime_dir}" "./bin/veil"
     install_pinned_singbox_for_tests "${runtime_dir}"
   fi
@@ -149,8 +148,12 @@ if [ -z "${test_workers}" ]; then
   [ "${test_workers}" -le 4 ] || test_workers=4
 fi
 manifest_args=()
-if [ -f "${CI_TEST_TIMING_MANIFEST:-${CI_ARTIFACT_DIR}/timing-manifest.json}" ]; then
-  manifest_args=(--timing-manifest "${CI_TEST_TIMING_MANIFEST:-${CI_ARTIFACT_DIR}/timing-manifest.json}")
+timing_manifest="${CI_TEST_TIMING_MANIFEST:-${CI_ARTIFACT_DIR}/timing-manifest.json}"
+if [ ! -f "${timing_manifest}" ] && [ -z "${CI_TEST_TIMING_MANIFEST:-}" ]; then
+  timing_manifest="${CI_SCRIPTS_DIR}/test-timing-baseline.json"
+fi
+if [ -n "${CI_TEST_TIMING_MANIFEST:-}" ] || [ -f "${timing_manifest}" ]; then
+  manifest_args=(--timing-manifest "${timing_manifest}")
 fi
 set +e
 python3 "${CI_SCRIPTS_DIR}/test-orchestrator.py" \
@@ -185,12 +188,13 @@ fi
 
 merge_shards_stage() {
   local src="${CI_TEST_SHARD_ARTIFACTS:?CI_TEST_SHARD_ARTIFACTS is unset}"
-  local dirs=() d i name
+  local dirs=() timing_args=() d i name
   for i in $(seq 1 "${machine_shards}"); do
     d="${src}/ci-test-shard-${i}"
     [ -f "${d}/planned-tasks.txt" ] || { echo "shard ${i} artifacts missing (${d})" >&2; return 1; }
     [ -f "${d}/test-task-logs.txt" ] || { echo "shard ${i} did not finish (no test-task-logs.txt)" >&2; return 1; }
     dirs+=("${d}")
+    timing_args+=(--merge-task-timings "${d}/task-timings.json")
   done
   rm -rf "${CI_ARTIFACT_DIR}/test-tasks" "${CI_ARTIFACT_DIR}/coverage-tasks"
   mkdir -p "${CI_ARTIFACT_DIR}/test-tasks" "${CI_ARTIFACT_DIR}/coverage-tasks"
@@ -228,6 +232,8 @@ merge_shards_stage() {
     echo "executed task set differs from the planned task set" >&2
     return 1
   fi
+  # Preserve process wall times for the next run's duration-aware placement.
+  python3 "${CI_SCRIPTS_DIR}/test-inventory.py" --artifact-dir "${CI_ARTIFACT_DIR}" "${timing_args[@]}"
 }
 if [ "${test_phase}" = aggregate ]; then
   ci_test_stage "merge machine shards" merge_shards_stage

@@ -18,6 +18,27 @@ fetch_verified() { # <url> <file> <sha256>
   echo "$3  $2" | sha256sum --check - >/dev/null
 }
 
+caddy_test_runtime_is_pinned() { # <binary>
+  [ -x "$1" ] || return 1
+  go version -m "$1" | awk -v caddy="${CI_CADDY_VERSION}" -v proxy="${CI_FORWARDPROXY_VERSION}" '
+    $1 == "dep" && $2 == "github.com/caddyserver/caddy/v2" && $3 == caddy { caddy_ok = 1 }
+    $1 == "=>" && $2 == "github.com/klzgrad/forwardproxy" {
+      # Go records a commit pin as a pseudo-version with its 12-digit revision.
+      if ($3 == proxy || (length(proxy) == 40 && proxy !~ /[^0-9a-f]/ && $3 ~ ("-" substr(proxy, 1, 12) "$"))) proxy_ok = 1
+    }
+    END { exit !(caddy_ok && proxy_ok) }
+  ' || return 1
+  "$1" list-modules 2>/dev/null | grep -Fx http.handlers.forward_proxy >/dev/null
+}
+
+singbox_test_runtime_is_pinned() { # <binary>
+  [ -x "$1" ] || return 1
+  "$1" version 2>/dev/null | awk -v version="${CI_SINGBOX_TAG#v}" '
+    NR == 1 && $0 == "sing-box version " version { found = 1 }
+    END { exit !found }
+  '
+}
+
 install_pinned_caddy_binary() { # <destdir> <veil-binary-for-caddy-build>
   local dest="$1" veil_bin="${2:-}"
   mkdir -p "${dest}"
@@ -70,12 +91,13 @@ EOF
 install_pinned_caddy_for_tests() { # <destdir> <veil-binary-for-caddy-build>
   local dest="$1" veil_bin="${2:-}"
   mkdir -p "${dest}"
-  if [ -x "${dest}/caddy" ] && "${dest}/caddy" list-modules 2>/dev/null | grep -Fx http.handlers.forward_proxy >/dev/null; then
+  if caddy_test_runtime_is_pinned "${dest}/caddy"; then
     printf '[ci] validated cached Caddy test runtime at %s\n' "${dest}"
     return 0
   fi
   rm -f "${dest}/caddy"
   install_pinned_caddy_binary "${dest}" "${veil_bin}"
+  caddy_test_runtime_is_pinned "${dest}/caddy"
   printf '[ci] pinned Caddy test runtime installed to %s\n' "${dest}"
 }
 
@@ -96,7 +118,7 @@ install_singbox_from_workdir() { # <dest>
 install_pinned_singbox_for_tests() { # <destdir>
   local dest="$1"
   mkdir -p "${dest}"
-  if [ -x "${dest}/sing-box" ] && "${dest}/sing-box" version >/dev/null 2>&1; then
+  if singbox_test_runtime_is_pinned "${dest}/sing-box"; then
     printf '[ci] validated cached sing-box test runtime at %s\n' "${dest}"
     return 0
   fi
@@ -112,6 +134,7 @@ install_pinned_singbox_for_tests() { # <destdir>
   )
   trap - RETURN
   rm -rf "${tmp}"
+  singbox_test_runtime_is_pinned "${dest}/sing-box"
   printf '[ci] pinned sing-box test runtime installed to %s\n' "${dest}"
 }
 

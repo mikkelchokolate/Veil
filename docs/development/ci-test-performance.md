@@ -151,15 +151,52 @@ hosted run is required to measure the reduction.
 The same run also failed to save the validator-runtime cache on every
 machine: tar could not read the installer's root-only lock and provenance
 files. Validator preparation consequently took 63–82 seconds per machine.
-The cache now contains only the public Caddy and sing-box binaries; their
-existing runtime validation and source/pin-based cache key remain in place.
-The installer's private metadata keeps its original permissions.
+The cache now contains only the public Caddy and sing-box binaries. Its key
+tracks the runtime/tool pins and provisioning script, not unrelated installer
+or test edits. Reuse checks Caddy's embedded Caddy/forwardproxy module pins,
+the forward-proxy module, and sing-box's exact pinned version. The installer's
+private metadata keeps its original permissions.
 
 The privilege-boundary, protocol E2E, and both package-smoke machines also
 stop installing Node/pnpm: they restore the source-verified frontend build
 and never invoke either tool. In the same baseline run those unused setup
 steps consumed 13, 14, 17, and 10 seconds respectively. Frontend, browser,
 and backend test machines retain their required Node setup.
+
+## Measured scheduling baseline (2026-10-22)
+
+[Main run 39760774474](https://github.com/mikkelchokolate/Veil/actions/runs/39760774474)
+took 14m04s. First API tasks spent roughly 139–213 seconds compiling before
+execution; later tasks reused that work. Real test time also matters:
+runtimeinstall took 334 seconds and backup 281 seconds, while API lanes
+ranged from 101 to 253 seconds. Increasing lane count alone cannot remove
+these package-level bottlenecks, so the bounded 12-lane plan is retained.
+
+Of runtimeinstall's time, 324.57 seconds came from `TestWithDefaultsBuildCaddy`:
+its fake provisioning callback was bypassed by a suitable host Go, causing an
+unintended real network build. The test now selects its fake toolchain through
+the existing seam and checks the complete command sequence, module pins,
+readonly/static build flags, environment, and produced binary. It takes 0.04
+seconds locally under race instrumentation; live install acceptance retains
+the real build. The seed adjusts this package's obsolete wall-time estimate
+by that measured difference; the next hosted manifest replaces it.
+
+The checked-in timing seed records the source run, slow API roots (at least
+five seconds), and measured package process wall times. A successful aggregate
+now preserves every shard's task timings and all observed roots, including
+zero-duration roots. Otherwise package times became zero and fast roots
+incorrectly received the unknown-root fallback. The verified full manifest
+is cached after inventory and coverage gates pass. The frontend job restores
+it once and publishes one snapshot with the shared source-keyed artifact;
+every machine therefore computes the same plan, even if another run finishes
+while this run is starting. Missing caches use the measured seed; new roots
+keep the existing fallback. No tests, race checks, coverage, or inventory gates
+are removed.
+
+[The first cold cache run 39762673218](https://github.com/mikkelchokolate/Veil/actions/runs/39762673218)
+passed all three shards and the aggregate, and successfully saved both the
+race/coverage build caches and validator binaries. A subsequent warm hosted
+run is still required before claiming an end-to-end speedup.
 
 ## First-use runtime acceptance
 
