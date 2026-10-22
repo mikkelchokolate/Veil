@@ -279,7 +279,7 @@ func TestCIRuntimeDownloadShasMatchFetchSites(t *testing.T) {
 	for _, m := range pinVar.FindAllStringSubmatch(script[start:start+end], -1) {
 		listed[m[1]] = true
 	}
-	fetchSite := regexp.MustCompile(`(?m)^\s*fetch_verified\s+"[^"]*"\s+\S+\s+"\$\{(CI_[A-Z0-9_]+_SHA256)\}"`)
+	fetchSite := regexp.MustCompile(`\bfetch_verified\s+"[^"]*"\s+\S+\s+"\$\{(CI_[A-Z0-9_]+_SHA256)\}"`)
 	fetched := map[string]bool{}
 	for _, m := range fetchSite.FindAllStringSubmatch(script, -1) {
 		fetched[m[1]] = true
@@ -288,7 +288,7 @@ func TestCIRuntimeDownloadShasMatchFetchSites(t *testing.T) {
 		t.Fatal("no fetch_verified call sites found")
 	}
 	// Any other fetch_verified call (e.g. a non-literal pin) would escape the set comparison.
-	if calls := regexp.MustCompile(`(?m)^\s*fetch_verified\s`).FindAllString(script, -1); len(calls) != len(fetchSite.FindAllString(script, -1)) {
+	if calls := regexp.MustCompile(`\bfetch_verified\s`).FindAllString(script, -1); len(calls) != len(fetchSite.FindAllString(script, -1)) {
 		t.Fatalf("every fetch_verified call must pass a literal ${CI_*_SHA256} pin: %d calls, %d recognised", len(calls), len(fetchSite.FindAllString(script, -1)))
 	}
 	for v := range fetched {
