@@ -4,9 +4,11 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
-func TestReleaseWorkflowRequiresBrowserAndPackageGates(t *testing.T) {
+func TestReleaseWorkflowRequiresVerifiedCIAndShippedPackageGates(t *testing.T) {
 	body, err := os.ReadFile("../../.github/workflows/release.yml")
 	if err != nil {
 		t.Fatal(err)
@@ -15,10 +17,10 @@ func TestReleaseWorkflowRequiresBrowserAndPackageGates(t *testing.T) {
 	// needs: is parsed out of the YAML per job — a needs: line in the wrong
 	// job, a quoted string, or a comment cannot satisfy the chain (#744).
 	wantNeeds := map[string][]string{
-		"release":        {"quality", "browser-e2e", "install-acceptance"},
-		"package-smoke":  {"release"},
-		"docker-publish": {"quality", "browser-e2e", "package-smoke"},
-		"publish":        {"quality", "browser-e2e", "package-smoke", "release", "docker-publish"},
+		"release":        {"verified-ci"},
+		"package-smoke":  {"verified-ci", "release"},
+		"docker-publish": {"verified-ci", "package-smoke"},
+		"publish":        {"verified-ci", "package-smoke", "release", "docker-publish"},
 	}
 	for job, wants := range wantNeeds {
 		needs := workflowJobNeeds(t, workflow, job)
@@ -61,45 +63,61 @@ func TestReleaseWorkflowRequiresBrowserAndPackageGates(t *testing.T) {
 	}
 }
 
-func TestReleaseWorkflowBuildsFrontendDistBeforeCompile(t *testing.T) {
+func TestReleaseWorkflowRestoresVerifiedFrontendDistBeforeCompile(t *testing.T) {
 	body, err := os.ReadFile("../../.github/workflows/release.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	workflow := strings.ReplaceAll(string(body), "\r\n", "\n")
-	// Each job's own steps must produce web/dist — a marker in a sibling job
-	// or a comment cannot satisfy the per-job contract (#668).
-	quality := stripHashComments(t, workflowJobBlock(t, workflow, "quality"))
-	if !strings.Contains(quality, "scripts/ci/frontend.sh") {
-		t.Error("quality job does not run the shared frontend job (scripts/ci/frontend.sh)")
+	var parsed struct {
+		Jobs map[string]struct {
+			Permissions map[string]string `yaml:"permissions"`
+			Steps       []struct {
+				Uses string            `yaml:"uses"`
+				Run  string            `yaml:"run"`
+				Env  map[string]string `yaml:"env"`
+				With map[string]any    `yaml:"with"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
 	}
-	for _, job := range []string{"browser-e2e", "package-smoke", "release"} {
-		block := stripHashComments(t, workflowJobBlock(t, workflow, job))
-		if !strings.Contains(block, "scripts/ci/prepare-frontend-dist.sh") {
-			t.Errorf("%s job does not build web/dist via prepare-frontend-dist.sh", job)
-		}
-	}
-	if !strings.Contains(quality, "scripts/ci/e2e.sh") {
-		t.Error("quality job does not run the shared e2e leg (scripts/ci/e2e.sh)")
-	}
-	dist := strings.Index(quality, "scripts/ci/frontend.sh")
-	vet := strings.Index(quality, "go vet ./...")
-	if dist < 0 || vet < 0 || dist > vet {
-		t.Fatalf("frontend dist must be built before go vet in the quality job so //go:embed all:dist succeeds")
-	}
-	// The e2e/browser-e2e jobs must invoke their scripts in their own blocks.
-	e2eBlock := stripHashComments(t, workflowJobBlock(t, workflow, "browser-e2e"))
-	if !strings.Contains(e2eBlock, "scripts/ci/browser-e2e.sh") {
-		t.Error("browser-e2e job does not invoke scripts/ci/browser-e2e.sh")
-	}
-	// The veil system user is created by the shared e2e script (single source
-	// of truth for PR CI and release) — assert the real command, not a
-	// comment describing it.
-	e2eBody, err := os.ReadFile("../../scripts/ci/e2e.sh")
-	if err != nil {
+	if err := yaml.Unmarshal(body, &parsed); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stripHashComments(t, strings.ReplaceAll(string(e2eBody), "\r\n", "\n")), "useradd --system --user-group --no-create-home --shell /usr/sbin/nologin veil") {
-		t.Error("scripts/ci/e2e.sh missing veil system user creation")
+	for _, job := range []string{"package-smoke", "release"} {
+		block := parsed.Jobs[job]
+		if block.Permissions["actions"] != "read" {
+			t.Errorf("%s must restore the verified CI artifact with read-only Actions access", job)
+		}
+		download, restore, compile := -1, -1, -1
+		for i, step := range block.Steps {
+			if strings.HasPrefix(step.Uses, "actions/download-artifact@") && step.With["name"] == "ci-frontend-dist-${{ github.sha }}" {
+				download = i
+				for key, want := range map[string]string{
+					"path":         ".artifacts/ci/frontend-dist",
+					"run-id":       "${{ needs.verified-ci.outputs.ci_run_id }}",
+					"repository":   "${{ github.repository }}",
+					"github-token": "${{ github.token }}",
+				} {
+					if step.With[key] != want {
+						t.Errorf("%s frontend download %s=%v, want %q", job, key, step.With[key], want)
+					}
+				}
+			}
+			run := stripHashComments(t, step.Run)
+			if strings.Contains(run, "bash scripts/ci/prepare-frontend-dist.sh") {
+				restore = i
+				if step.Env["CI_FRONTEND_DIST_ARTIFACT_DIR"] != ".artifacts/ci/frontend-dist" {
+					t.Errorf("%s frontend restore must verify the downloaded artifact, not fall back to a new build", job)
+				}
+			}
+			if compile < 0 && (strings.Contains(run, "go build") || strings.Contains(run, "bash scripts/package-smoke.sh")) {
+				compile = i
+			}
+			if strings.HasPrefix(step.Uses, "actions/setup-node@") || strings.HasPrefix(step.Uses, "pnpm/action-setup@") || strings.Contains(run, "pnpm build") {
+				t.Errorf("%s must reuse the tested frontend, not build it again", job)
+			}
+		}
+		if download < 0 || restore <= download || compile <= restore {
+			t.Errorf("%s must download the gated artifact, verify its SHA/content, then compile (download=%d restore=%d compile=%d)", job, download, restore, compile)
+		}
 	}
 }

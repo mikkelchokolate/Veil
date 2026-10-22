@@ -57,6 +57,28 @@ same temporary merge locally (detached worktree, `--no-ff` merge of HEAD into
 `origin/main`) and runs the full gate on that tree. Your branch and working
 copy are never modified and nothing is pushed.
 
+## Tagged releases
+
+Release source checks run once in hosted CI. The `verified-ci` release job
+requires successful `ci.yml` and `codeql.yml` **push runs on main for the exact
+tagged commit**, not a PR merge tree, a similarly named check, or another
+commit. It validates the trusted repository/workflow identities and the latest
+run attempts, including their required jobs; missing, skipped, cancelled or
+failed checks cannot authorize publication. If main CI is still running, the
+gate waits up to 20 minutes and otherwise fails closed.
+
+Release archive/package builds restore the frontend from that verified CI
+run. The existing dist verifier checks the source SHA, complete file/hash
+manifest, regular-file-only tree and real SPA shape before embedding it.
+There is no fallback to an unverified build or artifact from another commit.
+
+The release still tests its **actual shipped packages** on both architectures,
+executes the **pushed container images** for version and SPA checks on both
+architectures, and generates/verifies release checksums, signatures and
+provenance. It does not repeat frontend tests, test shards, browser E2E,
+cold-install acceptance, lint or protocol E2E already covered by the verified
+main CI. Keep those gates enabled in `ci.yml`.
+
 ## The parity contract
 
 The local VM and GitHub Actions deliberately match on:
