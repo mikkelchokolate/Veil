@@ -1257,7 +1257,7 @@ paths:
       tags:
       - backups
       summary: Read queued restore progress
-      description: Requires an admin session or the restore owner's revalidated recovery session. Reading the job does not consume that session; it ends after a short post-success grace.
+      description: Requires an admin session or the restore owner's revalidated recovery session. Reading the job does not consume that session; it ends after a short post-success grace. Callers that are neither an admin nor the job's owner get 404, the same as for an unknown id.
       responses:
         '200':
           description: Current restore job state.
