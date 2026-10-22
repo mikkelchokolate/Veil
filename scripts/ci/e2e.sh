@@ -40,7 +40,26 @@ ${SUDO} install -m 0755 "${runtime_dir}/hysteria" /usr/local/bin/hysteria
 ${SUDO} install -m 0755 "${runtime_dir}/mita" /usr/local/bin/mita
 ${SUDO} install -m 0755 "${runtime_dir}/caddy" /usr/local/bin/caddy
 ${SUDO} install -m 0755 "${runtime_dir}/mieru" /usr/local/bin/mieru
-${SUDO} install -m 0755 "${runtime_dir}/naive" /usr/local/bin/naive
+# naive_client_gate <runtime_dir>: sets naive_client_available=0 (and the skip
+# reason) only when runtimes.sh left the known-gone marker AND no naive binary
+# exists; a provisioned binary always runs the strict data path (#1373).
+naive_client_gate() {
+  naive_client_available=1
+  naive_skip_reason=""
+  if [ -f "$1/naive.unavailable" ] && [ ! -x "$1/naive" ]; then
+    naive_client_available=0
+    naive_skip_reason="$(cat "$1/naive.unavailable")"
+  fi
+}
+naive_client_gate "${runtime_dir}"
+if [ "${naive_client_available}" -eq 0 ]; then
+  echo "::warning title=naive e2e SKIPPED::${naive_skip_reason}"
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    printf '> [!WARNING]\n> **naiveproxy e2e SKIPPED**: %s. All other e2e checks still ran.\n' "${naive_skip_reason}" >>"${GITHUB_STEP_SUMMARY}"
+  fi
+else
+  ${SUDO} install -m 0755 "${runtime_dir}/naive" /usr/local/bin/naive
+fi
 ${SUDO} install -m 0755 "${runtime_dir}/sing-box" /usr/local/bin/sing-box
 
 # olcRTC is source-built and its immutable commit/integrity policy lives in the
@@ -57,10 +76,13 @@ else
 fi
 
 /usr/local/bin/caddy list-modules | grep -Fx http.handlers.forward_proxy
-command -v hysteria caddy mita mieru naive sing-box olcrtc
+required_bins="caddy mita mieru hysteria sing-box olcrtc"
+[ "${naive_client_available}" -eq 1 ] && required_bins="caddy naive mita mieru hysteria sing-box olcrtc"
+# shellcheck disable=SC2086
+command -v ${required_bins}
 
 ci_step "assert protocol binaries are real (not veil shims)"
-for bin in caddy naive mita mieru hysteria sing-box olcrtc; do
+for bin in ${required_bins}; do
   command -v "${bin}" >/dev/null
   [ "$(readlink -f "$(command -v "${bin}")")" != /usr/local/bin/veil ]
 done
@@ -112,8 +134,12 @@ ci_run e2e-mieru-tcp run_proto TestRequiredMieruTCPDataPath
 ci_assert_test_passed "${CI_ARTIFACT_DIR}/e2e-mieru-tcp.log" TestRequiredMieruTCPDataPath
 ci_run e2e-mieru-udp run_proto TestRequiredMieruUDPDataPath
 ci_assert_test_passed "${CI_ARTIFACT_DIR}/e2e-mieru-udp.log" TestRequiredMieruUDPDataPath
-ci_run e2e-naiveproxy run_proto TestRequiredNaiveProxyDataPath
-ci_assert_test_passed "${CI_ARTIFACT_DIR}/e2e-naiveproxy.log" TestRequiredNaiveProxyDataPath
+if [ "${naive_client_available}" -eq 1 ]; then
+  ci_run e2e-naiveproxy run_proto TestRequiredNaiveProxyDataPath
+  ci_assert_test_passed "${CI_ARTIFACT_DIR}/e2e-naiveproxy.log" TestRequiredNaiveProxyDataPath
+else
+  echo "::warning title=naive e2e SKIPPED::TestRequiredNaiveProxyDataPath not run: ${naive_skip_reason}"
+fi
 # WARP outbound runtime: the pinned sing-box must accept the exact config Veil
 # renders — schema drift is the breakage class upstream-compat tracks (#470).
 ci_run e2e-warp-singbox run_proto TestRequiredWarpSingBoxConfig
