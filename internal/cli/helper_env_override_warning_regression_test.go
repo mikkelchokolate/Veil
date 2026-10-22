@@ -5,16 +5,32 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/privileged"
 )
 
-var helperPolicyEnvNames = []string{
-	"VEIL_ETC_DIR", "VEIL_VAR_DIR", "VEIL_STATE_PATH", "VEIL_KEY_PATH", "VEIL_APPLY_ROOT", "VEIL_LIVE_ROOT",
-	"VEIL_BACKUP_PASSPHRASE", "VEIL_BACKUP_ROOT", "VEIL_BACKUP_SFTP_CONFIG", "VEIL_BACKUP_SFTP_STATUS",
-	"VEIL_BACKUP_SFTP_KNOWN_HOSTS", "VEIL_BACKUP_SFTP_INSTALL_ID",
+// The variable list comes from the privileged table itself, so a knob added
+// there is covered here without a second list to keep in sync.
+var helperPolicyEnvNames = privileged.PolicyEnvKnobNames()
+
+func clearHelperPolicyEnv(t *testing.T) {
+	t.Helper()
+	for _, name := range helperPolicyEnvNames {
+		t.Setenv(name, "")
+	}
+}
+
+func helperEnvWarningLines(stderr string) []string {
+	var lines []string
+	for _, line := range strings.Split(stderr, "\n") {
+		if strings.HasPrefix(line, "warning: ") {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
 
 func runHelperServeForEnvWarning(t *testing.T, activation bool) (string, bool) {
@@ -48,16 +64,14 @@ func runHelperServeForEnvWarning(t *testing.T, activation bool) (string, bool) {
 func TestHelperServeWarnsAboutEnvRetargetedPolicyPaths(t *testing.T) {
 	for _, activation := range []bool{false, true} {
 		for _, name := range helperPolicyEnvNames {
-			for _, other := range helperPolicyEnvNames {
-				t.Setenv(other, "")
-			}
+			clearHelperPolicyEnv(t)
 			value := filepath.Join(t.TempDir(), "attacker")
 			t.Setenv(name, value)
 			stderr, served := runHelperServeForEnvWarning(t, activation)
 			if !served {
 				t.Fatalf("activation=%v %s: helper did not reach serve", activation, name)
 			}
-			want := "warning: " + name + "=" + value + " from the environment overrides the packaged helper path"
+			want := "warning: " + name + "=" + strconv.Quote(value) + " from the environment overrides the packaged helper path \""
 			if !strings.Contains(stderr, want) {
 				t.Fatalf("activation=%v: missing warning %q in stderr:\n%s", activation, want, stderr)
 			}
@@ -66,9 +80,7 @@ func TestHelperServeWarnsAboutEnvRetargetedPolicyPaths(t *testing.T) {
 }
 
 func TestHelperServeDoesNotWarnForPackagedEnv(t *testing.T) {
-	for _, name := range helperPolicyEnvNames {
-		t.Setenv(name, "")
-	}
+	clearHelperPolicyEnv(t)
 	// The packaged helper unit's Environment= lines.
 	t.Setenv("VEIL_STATE_PATH", "/var/lib/veil/state.json")
 	t.Setenv("VEIL_KEY_PATH", "/etc/veil/state.key")
@@ -82,5 +94,70 @@ func TestHelperServeDoesNotWarnForPackagedEnv(t *testing.T) {
 		if strings.Contains(stderr, "warning:") {
 			t.Fatalf("activation=%v: packaged env must not warn, got:\n%s", activation, stderr)
 		}
+	}
+}
+
+func TestHelperServeEnvWarningCountMatchesKnobTable(t *testing.T) {
+	if len(helperPolicyEnvNames) < 12 {
+		t.Fatalf("expected the full privileged knob table, got %v", helperPolicyEnvNames)
+	}
+}
+
+// An env value with an embedded newline must not forge a separate journal
+// line inside the warning the operator is meant to trust (#1390 review).
+func TestHelperServeEnvWarningQuotesValues(t *testing.T) {
+	clearHelperPolicyEnv(t)
+	t.Setenv("VEIL_BACKUP_ROOT", "/tmp/evil\nveil: helper policy verified, no overrides")
+	stderr, served := runHelperServeForEnvWarning(t, false)
+	if !served {
+		t.Fatal("helper did not reach serve")
+	}
+	if strings.Contains(stderr, "\nveil: helper policy verified") {
+		t.Fatalf("raw newline from the env reached stderr:\n%s", stderr)
+	}
+	want := `warning: VEIL_BACKUP_ROOT="/tmp/evil\nveil: helper policy verified, no overrides" from the environment overrides the packaged helper path "/var/lib/veil/backups"; the root helper trusts it`
+	if lines := helperEnvWarningLines(stderr); len(lines) != 1 || lines[0] != want {
+		t.Fatalf("want exactly %q, got %q", want, lines)
+	}
+}
+
+// VEIL_BACKUP_PASSPHRASE is a path, but an operator who exports the
+// passphrase itself must not see it echoed into the journal (#1390 review).
+func TestHelperServeEnvWarningRedactsNonPathPassphraseValue(t *testing.T) {
+	clearHelperPolicyEnv(t)
+	secret := "correct horse battery staple"
+	t.Setenv("VEIL_BACKUP_PASSPHRASE", secret)
+	stderr, served := runHelperServeForEnvWarning(t, false)
+	if !served {
+		t.Fatal("helper did not reach serve")
+	}
+	if strings.Contains(stderr, secret) || strings.Contains(stderr, "horse") {
+		t.Fatalf("passphrase-like value echoed to stderr:\n%s", stderr)
+	}
+	want := `warning: VEIL_BACKUP_PASSPHRASE=<redacted: 28 bytes, not an absolute path> from the environment overrides the packaged helper path "/etc/veil/backup.passphrase"; the root helper trusts it`
+	if lines := helperEnvWarningLines(stderr); len(lines) != 1 || lines[0] != want {
+		t.Fatalf("want exactly %q, got %q", want, lines)
+	}
+}
+
+// A helper unit rendered for a custom --etc-dir exports VEIL_KEY_PATH and
+// VEIL_LIVE_ROOT under that root (and the packaged var-dir paths): each start
+// must warn about exactly those two, nothing else.
+func TestHelperServeCustomEtcDirUnitWarnsExactlyForItsRetargetedPaths(t *testing.T) {
+	clearHelperPolicyEnv(t)
+	t.Setenv("VEIL_STATE_PATH", "/var/lib/veil/state.json")
+	t.Setenv("VEIL_KEY_PATH", "/opt/veil/etc/state.key")
+	t.Setenv("VEIL_APPLY_ROOT", "/var/lib/veil/staging")
+	t.Setenv("VEIL_LIVE_ROOT", "/opt/veil/etc/generated")
+	stderr, served := runHelperServeForEnvWarning(t, true)
+	if !served {
+		t.Fatal("helper did not reach serve")
+	}
+	want := []string{
+		`warning: VEIL_KEY_PATH="/opt/veil/etc/state.key" from the environment overrides the packaged helper path "/etc/veil/state.key"; the root helper trusts it`,
+		`warning: VEIL_LIVE_ROOT="/opt/veil/etc/generated" from the environment overrides the packaged helper path "/etc/veil/generated"; the root helper trusts it`,
+	}
+	if got := helperEnvWarningLines(stderr); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("want %q, got %q", want, got)
 	}
 }

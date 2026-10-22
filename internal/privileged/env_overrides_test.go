@@ -119,3 +119,36 @@ func samePolicyPaths(a, b Policy) bool {
 	}
 	return true
 }
+
+func TestPolicyEnvOverridesRedactNonPathPassphrase(t *testing.T) {
+	clearPolicyEnv(t)
+	t.Setenv("VEIL_BACKUP_PASSPHRASE", "hunter2")
+	got := PolicyEnvOverrides()
+	if len(got) != 1 || !got[0].Redacted || got[0].Value != "<redacted: 7 bytes, not an absolute path>" {
+		t.Fatalf("non-path passphrase value must be redacted, got %+v", got)
+	}
+	t.Setenv("VEIL_BACKUP_PASSPHRASE", "/srv/veil/backup.passphrase")
+	got = PolicyEnvOverrides()
+	if len(got) != 1 || got[0].Redacted || got[0].Value != "/srv/veil/backup.passphrase" {
+		t.Fatalf("absolute passphrase path must be reported as is, got %+v", got)
+	}
+	// Only the passphrase knob may redact: a relative path elsewhere is shown.
+	clearPolicyEnv(t)
+	t.Setenv("VEIL_BACKUP_ROOT", "relative/backups")
+	got = PolicyEnvOverrides()
+	if len(got) != 1 || got[0].Redacted || got[0].Value != "relative/backups" {
+		t.Fatalf("non-secret knob must not be redacted, got %+v", got)
+	}
+}
+
+func TestPolicyEnvKnobNamesMatchTable(t *testing.T) {
+	names := PolicyEnvKnobNames()
+	if len(names) != len(policyEnvKnobs) {
+		t.Fatalf("got %d names for %d knobs", len(names), len(policyEnvKnobs))
+	}
+	for i, knob := range policyEnvKnobs {
+		if names[i] != knob.name {
+			t.Fatalf("name %d: %q != %q", i, names[i], knob.name)
+		}
+	}
+}

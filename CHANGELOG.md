@@ -22,6 +22,8 @@ All notable changes to Veil will be documented in this file.
   status, known_hosts and install id) away from the packaged layout. A manual
   `sudo -E veil helper serve` with a poisoned shell env no longer retargets key
   generation and backups silently. The packaged unit's values do not warn.
+  Values are quoted, and a `VEIL_BACKUP_PASSPHRASE` value that is not an
+  absolute path is redacted.
 
 ## [v0.7.3] - 2026-10-22
 

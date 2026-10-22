@@ -117,8 +117,15 @@ func newHelperCommandWithDependencies(deps helperCommandDependencies) *cobra.Com
 // backups and restore allowlists without a trace (issue #1263). The packaged
 // unit exports the packaged values, which are not reported.
 func warnHelperPolicyEnvOverrides(errOut io.Writer) {
+	// Values are quoted so an embedded newline cannot forge or split journal
+	// lines in the very warning the operator is meant to trust; a redacted
+	// placeholder is printed as is.
 	for _, override := range privileged.PolicyEnvOverrides() {
-		fmt.Fprintf(errOut, "warning: %s=%s from the environment overrides the packaged helper path %s; the root helper trusts it\n", override.Name, override.Value, override.Packaged)
+		value := strconv.Quote(override.Value)
+		if override.Redacted {
+			value = override.Value
+		}
+		fmt.Fprintf(errOut, "warning: %s=%s from the environment overrides the packaged helper path %q; the root helper trusts it\n", override.Name, value, override.Packaged)
 	}
 }
 
