@@ -2,11 +2,14 @@ package hysteria2
 
 import (
 	"errors"
+	"fmt"
+	"net/netip"
 	"net/url"
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/model"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
 // ValidateSettings is a no-op for Hysteria2 global settings.
@@ -64,7 +67,7 @@ func (Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) []
 				Severity:    "error",
 				Field:       "masqueradeURL",
 				Message:     "Hysteria2 masquerade URL is invalid: " + err.Error(),
-				Remediation: "Use an absolute http:// or https:// URL.",
+				Remediation: "Use an absolute http:// or https:// URL that points at a public website.",
 				Source:      "hysteria2",
 			})
 		}
@@ -73,7 +76,7 @@ func (Plugin) ValidateInbound(settings model.Settings, inbound model.Inbound) []
 }
 
 // validateMasqueradeURL requires an absolute http(s) URL with a host, mirroring
-// what the hysteria2 server accepts at startup.
+// what the hysteria2 server accepts at startup, and a public destination.
 func validateMasqueradeURL(raw string) error {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
@@ -85,7 +88,103 @@ func validateMasqueradeURL(raw string) error {
 	if parsed.Host == "" {
 		return errors.New("host is required")
 	}
+	return validateMasqueradeHost(parsed.Hostname())
+}
+
+// masqueradeDenyPrefixes is the canonical egress deny set (the same list the
+// veil-hysteria2@.service IPAddressDeny= filter and the Hysteria2 ACL render),
+// parsed once.
+var masqueradeDenyPrefixes = func() []netip.Prefix {
+	cidrs := renderer.EgressDenyCIDRs()
+	prefixes := make([]netip.Prefix, 0, len(cidrs))
+	for _, cidr := range cidrs {
+		prefixes = append(prefixes, netip.MustParsePrefix(cidr))
+	}
+	return prefixes
+}()
+
+// validateMasqueradeHost rejects masquerade targets outside public address
+// space (#1292 F5). masquerade.proxy.url is a server-side reverse-proxy
+// target: hysteria forwards every unauthenticated HTTP/3 visitor to it, so a
+// loopback, private, link-local (cloud metadata), CGNAT, multicast, reserved
+// or unspecified target would bridge the internet to a host-local service
+// such as Caddy's admin API on 127.42.0.1:2019. The unit's kernel egress
+// filter already refuses the dial; mirroring the same deny set here keeps a
+// forbidden target from being persisted at all and surfaces the mistake at
+// validation time instead of as an opaque runtime 502.
+//
+// For IP literals this check is the only guard on the loopback bands the
+// unit's IPAddressAllow= deliberately pierces (127.0.0.53/32, 127.0.0.54/32,
+// the 127.40.0.0/16 traffic-stats band and the 127.41.0.0/16 WARP SOCKS
+// band): systemd evaluates Allow before Deny, so the kernel filter would let
+// those dials through.
+//
+// Hostnames that are not IP literals cannot be judged without resolving them
+// (and resolution here would be rebindable anyway). The kernel filter covers
+// them for every denied destination EXCEPT those pierced bands: a name that
+// resolves into them (e.g. wildcard DNS such as 127.41.0.1.nip.io) passes
+// both layers. That residual is low impact — the SOCKS listener does not
+// speak HTTP, the stats API requires its own secret and the stub resolvers
+// only answer DNS — and closing it would need a dial-time guard in hysteria
+// itself. Only the names that always mean loopback are rejected statically.
+func validateMasqueradeHost(host string) error {
+	// TrimRight, not TrimSuffix: "127.0.0.1.." must not slip past ParseAddr
+	// with an empty last label.
+	host = strings.ToLower(strings.TrimRight(host, "."))
+	if host == "" {
+		return errors.New("host is required")
+	}
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return fmt.Errorf("host %q is a loopback name; the masquerade target must be a public destination", host)
+	}
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		if looksNumericHost(host) {
+			// inet_aton shorthand (127.1, 2130706433, 0x7f000001,
+			// 0177.0.0.1) is not a canonical literal, but some resolvers
+			// still interpret it as an address. A real DNS name never ends
+			// in a numeric label, so refuse rather than guess.
+			return fmt.Errorf("host %q is a non-canonical numeric address; the masquerade target must be a public destination written as a hostname or canonical IP", host)
+		}
+		return nil
+	}
+	addr = addr.WithZone("")
+	for _, candidate := range []netip.Addr{addr, addr.Unmap()} {
+		for _, prefix := range masqueradeDenyPrefixes {
+			if prefix.Contains(candidate) {
+				return fmt.Errorf("host %s is in restricted range %s; the masquerade target must be a public destination", host, prefix)
+			}
+		}
+	}
 	return nil
+}
+
+// looksNumericHost reports whether the last DNS label of host is all decimal
+// digits or a 0x-prefixed hex number, i.e. the host is an IPv4 shorthand form
+// rather than a domain name.
+func looksNumericHost(host string) bool {
+	label := host[strings.LastIndex(host, ".")+1:]
+	if label == "" {
+		return false
+	}
+	digits := label
+	isHex := false
+	if strings.HasPrefix(label, "0x") {
+		digits = label[2:]
+		isHex = true
+	}
+	if digits == "" {
+		return false
+	}
+	for _, r := range digits {
+		switch {
+		case r >= '0' && r <= '9':
+		case isHex && r >= 'a' && r <= 'f':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // NeedsDomain reports that Hysteria2 needs a public domain.
