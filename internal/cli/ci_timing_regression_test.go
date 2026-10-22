@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -122,4 +124,137 @@ singbox_test_runtime_is_pinned "$FIXTURE_BINARY"
 			}
 		})
 	}
+}
+
+func TestCIRuntimeDownloadCacheRequiresPinnedSHA(t *testing.T) {
+	checkBash(t)
+	body, err := os.ReadFile("../../scripts/ci/runtimes.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	start := strings.Index(script, "fetch_verified() {")
+	end := strings.Index(script, "caddy_test_runtime_is_pinned() {")
+	if start < 0 || end < start {
+		t.Fatal("verified download helpers are missing")
+	}
+	helpers := script[start:end]
+	const good = "pinned asset bytes\n"
+	sum := sha256.Sum256([]byte(good))
+	pin := hex.EncodeToString(sum[:])
+	run := func(t *testing.T, cacheDir, download, cached string) (string, error) {
+		t.Helper()
+		if cached != "" {
+			if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(cacheDir, pin), []byte(cached), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		work := t.TempDir()
+		cmd := exec.Command("bash", "-c", `set -euo pipefail
+curl() { # stub: <flags...> <url> -o <file>; empty fixture = upstream 404
+  [ -n "${FIXTURE_DOWNLOAD}" ] || return 22
+  printf '%s' "${FIXTURE_DOWNLOAD}" > "${@: -1}"
+}
+`+helpers+`fetch_verified https://example.invalid/asset asset "$FIXTURE_PIN"
+cat asset
+`)
+		cmd.Dir = work
+		cmd.Env = append(os.Environ(), "CI_RUNTIME_DOWNLOAD_CACHE="+cacheDir,
+			"FIXTURE_DOWNLOAD="+download, "FIXTURE_PIN="+pin)
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+	cacheEntry := func(t *testing.T, cacheDir string) (string, bool) {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(cacheDir, pin))
+		if os.IsNotExist(err) {
+			return "", false
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data), true
+	}
+
+	t.Run("cold cache stores verified download", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "cache")
+		if out, err := run(t, dir, good, ""); err != nil || !strings.HasSuffix(out, good) {
+			t.Fatalf("verified download failed: %v: %s", err, out)
+		}
+		if got, ok := cacheEntry(t, dir); !ok || got != good {
+			t.Fatalf("verified download was not cached: %q", got)
+		}
+	})
+	t.Run("warm cache survives upstream outage", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "cache")
+		if out, err := run(t, dir, "", good); err != nil || !strings.HasSuffix(out, good) {
+			t.Fatalf("verified cache entry was not used: %v: %s", err, out)
+		}
+	})
+	t.Run("tampered cache entry is rejected and dropped", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "cache")
+		if out, err := run(t, dir, "", "tampered\n"); err == nil {
+			t.Fatalf("tampered cache entry was accepted: %s", out)
+		}
+		if _, ok := cacheEntry(t, dir); ok {
+			t.Fatal("tampered cache entry was kept")
+		}
+	})
+	t.Run("tampered cache entry is repaired from upstream", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "cache")
+		if out, err := run(t, dir, good, "tampered\n"); err != nil || !strings.HasSuffix(out, good) {
+			t.Fatalf("upstream fallback failed: %v: %s", err, out)
+		}
+		if got, _ := cacheEntry(t, dir); got != good {
+			t.Fatalf("cache entry was not repaired: %q", got)
+		}
+	})
+	t.Run("mismatched download is rejected and never cached", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "cache")
+		if out, err := run(t, dir, "substituted\n", ""); err == nil {
+			t.Fatalf("mismatched download was accepted: %s", out)
+		}
+		if _, ok := cacheEntry(t, dir); ok {
+			t.Fatal("mismatched download was cached")
+		}
+	})
+	t.Run("completeness requires every pinned asset", func(t *testing.T) {
+		dir := t.TempDir()
+		pins := map[string]string{}
+		for _, name := range []string{"HYSTERIA", "MITA", "MIERU_CLIENT", "NAIVE_CLIENT", "SINGBOX"} {
+			content := "asset " + name + "\n"
+			s := sha256.Sum256([]byte(content))
+			pins[name] = hex.EncodeToString(s[:])
+			if err := os.WriteFile(filepath.Join(dir, pins[name]), []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		check := func() error {
+			env := ""
+			for name, sha := range pins {
+				env += "CI_" + name + "_SHA256=" + sha + "\n"
+			}
+			cmd := exec.Command("bash", "-c", "set -euo pipefail\n"+env+helpers+`pinned_runtime_download_cache_complete "$FIXTURE_DIR"`)
+			cmd.Env = append(os.Environ(), "FIXTURE_DIR="+dir)
+			return cmd.Run()
+		}
+		if err := check(); err != nil {
+			t.Fatalf("complete cache reported incomplete: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, pins["NAIVE_CLIENT"]), []byte("tampered\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := check(); err == nil {
+			t.Fatal("cache with a tampered asset reported complete")
+		}
+		if err := os.Remove(filepath.Join(dir, pins["NAIVE_CLIENT"])); err != nil {
+			t.Fatal(err)
+		}
+		if err := check(); err == nil {
+			t.Fatal("cache missing the naive client reported complete")
+		}
+	})
 }
