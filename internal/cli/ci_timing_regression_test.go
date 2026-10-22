@@ -269,9 +269,21 @@ cat asset
 		if !strings.Contains(string(out), "naive-pin") {
 			t.Fatalf("pinned_runtime_download_shas omits the naive client pin:\n%s", out)
 		}
+		// Positive check: exactly the four cached pins, so dropping one that
+		// should be cached is caught here as well as by the fetch-site test.
+		if got, want := string(out), "h\nm\nc\ns\n"; got != want {
+			t.Fatalf("pinned_runtime_download_shas = %q, want %q", got, want)
+		}
 	})
 }
 
+// TestCIRuntimeDownloadShasMatchFetchSites is deliberately fail-closed and
+// textual: every non-comment occurrence of the word fetch_verified followed by
+// whitespace counts as a call. Two consequences for runtimes.sh authors:
+//   - do not mention fetch_verified inside strings (e.g. echo messages); it is
+//     counted as a call without a literal pin and fails this test;
+//   - keep each fetch_verified call on one line; a call continued with a
+//     trailing backslash is not recognised and is reported as non-literal.
 func TestCIRuntimeDownloadShasMatchFetchSites(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/ci/runtimes.sh")
 	if err != nil {

@@ -35,14 +35,15 @@ func TestCIShardArtifactsResolveNewestAttempt(t *testing.T) {
 		dirs  []string
 		shard string
 		want  string
+		log   string
 	}{
-		{"partial rerun picks the passing attempt", []string{"ci-test-shard-2-attempt-1", "ci-test-shard-2-attempt-2"}, "2", "ci-test-shard-2-attempt-2"},
-		{"attempts compare numerically", []string{"ci-test-shard-1-attempt-9", "ci-test-shard-1-attempt-10"}, "1", "ci-test-shard-1-attempt-10"},
-		{"shard 1 ignores shard 10", []string{"ci-test-shard-1-attempt-1", "ci-test-shard-10-attempt-5"}, "1", "ci-test-shard-1-attempt-1"},
-		{"non-numeric suffix is ignored", []string{"ci-test-shard-3-attempt-1", "ci-test-shard-3-attempt-x"}, "3", "ci-test-shard-3-attempt-1"},
-		{"untouched shard keeps its only attempt", []string{"ci-test-shard-3-attempt-1"}, "3", "ci-test-shard-3-attempt-1"},
-		{"legacy attempt-less layout still resolves", []string{"ci-test-shard-1"}, "1", "ci-test-shard-1"},
-		{"missing shard resolves to the legacy path (merge then fails closed)", nil, "2", "ci-test-shard-2"},
+		{"partial rerun picks the passing attempt", []string{"ci-test-shard-2-attempt-1", "ci-test-shard-2-attempt-2"}, "2", "ci-test-shard-2-attempt-2", "shard 2: using attempt 2 (2 attempt artifact dir(s) found)"},
+		{"attempts compare numerically", []string{"ci-test-shard-1-attempt-9", "ci-test-shard-1-attempt-10"}, "1", "ci-test-shard-1-attempt-10", "shard 1: using attempt 10 (2 attempt artifact dir(s) found)"},
+		{"shard 1 ignores shard 10", []string{"ci-test-shard-1-attempt-1", "ci-test-shard-10-attempt-5"}, "1", "ci-test-shard-1-attempt-1", "shard 1: using attempt 1 (1 attempt artifact dir(s) found)"},
+		{"non-numeric suffix is ignored", []string{"ci-test-shard-3-attempt-1", "ci-test-shard-3-attempt-x"}, "3", "ci-test-shard-3-attempt-1", "shard 3: using attempt 1 (1 attempt artifact dir(s) found)"},
+		{"untouched shard keeps its only attempt", []string{"ci-test-shard-3-attempt-1"}, "3", "ci-test-shard-3-attempt-1", "shard 3: using attempt 1 (1 attempt artifact dir(s) found)"},
+		{"legacy attempt-less layout still resolves", []string{"ci-test-shard-1"}, "1", "ci-test-shard-1", "shard 1: no attempt-scoped artifact, using legacy {root}/ci-test-shard-1"},
+		{"missing shard resolves to the legacy path (merge then fails closed)", nil, "2", "ci-test-shard-2", "shard 2: no attempt-scoped or legacy artifact under {root}"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -53,12 +54,19 @@ func TestCIShardArtifactsResolveNewestAttempt(t *testing.T) {
 			}
 			cmd := exec.Command("bash", "-c", "set -euo pipefail\n"+helper+"\nresolve_shard_artifact_dir \"$ROOT\" \"$SHARD\"")
 			cmd.Env = append(os.Environ(), "ROOT="+root, "SHARD="+tc.shard)
-			out, err := cmd.CombinedOutput()
+			var stderr strings.Builder
+			cmd.Stderr = &stderr
+			out, err := cmd.Output()
 			if err != nil {
-				t.Fatalf("resolve failed: %v: %s", err, out)
+				t.Fatalf("resolve failed: %v: %s", err, stderr.String())
 			}
 			if got, want := strings.TrimSpace(string(out)), filepath.Join(root, tc.want); got != want {
 				t.Fatalf("resolved %q, want %q", got, want)
+			}
+			// The chosen attempt must be logged so a silent fallback to an
+			// older attempt is visible even when the merge succeeds.
+			if got, want := strings.TrimSpace(stderr.String()), strings.ReplaceAll(tc.log, "{root}", root); got != want {
+				t.Fatalf("stderr = %q, want %q", got, want)
 			}
 		})
 	}
