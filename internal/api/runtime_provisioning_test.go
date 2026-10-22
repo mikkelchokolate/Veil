@@ -214,3 +214,19 @@ func TestStagedApplyDoesNotInstallRuntimes(t *testing.T) {
 		t.Fatal("stage-only apply downloaded runtimes or published live progress")
 	}
 }
+
+func TestLegacyUnfencedApplyDoesNotDownloadUnderManagementLock(t *testing.T) {
+	old := provisionApplyRuntimes
+	provisionApplyRuntimes = func(ManagementApplyContext) error {
+		t.Fatal("legacy apply must not download while holding the management lock")
+		return nil
+	}
+	t.Cleanup(func() { provisionApplyRuntimes = old })
+	state := &managementState{applyRoot: t.TempDir(), applyProgress: &applyProgressTracker{}}
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	_, _, _ = NewApplyWorkflow(NewManagementApplyContext(state)).RunLocked(ApplyRequest{Confirm: true, ApplyLive: true})
+	if state.applyProgress.snapshot() != nil {
+		t.Fatal("unfenced apply published runtime download progress")
+	}
+}

@@ -26,7 +26,8 @@ func NewApplyWorkflow(state applyWorkflowState) ApplyWorkflow {
 
 func (w ApplyWorkflow) RunLocked(req ApplyRequest) (ApplyResponse, int, error) {
 	if req.Confirm && req.ApplyLive {
-		if ctx, ok := w.state.(ManagementApplyContext); ok {
+		// Legacy in-memory callers hold the management lock and require preinstalled runtimes.
+		if ctx, ok := w.state.(ManagementApplyContext); ok && ctx.fenceToken().OperationID != "" {
 			defer ctx.clearProgress()
 			ctx.beginProgress()
 			if err := provisionApplyRuntimes(ctx); err != nil {

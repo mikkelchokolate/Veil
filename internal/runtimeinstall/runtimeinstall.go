@@ -1332,7 +1332,7 @@ func fetchReleaseAt(ctx context.Context, client *http.Client, endpoint, fallback
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "veil")
-	resp, err := client.Do(req)
+	resp, err := runtimeHTTPDo(client, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1382,7 +1382,7 @@ func fetchReleaseAssetsWeb(ctx context.Context, client *http.Client, repo, tag s
 	}
 	req.Header.Set("Accept", "text/html")
 	req.Header.Set("User-Agent", "veil")
-	resp, err := client.Do(req)
+	resp, err := runtimeHTTPDo(client, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1410,7 +1410,7 @@ func resolveLatestTagWeb(ctx context.Context, client *http.Client, repo string) 
 		return "", err
 	}
 	req.Header.Set("User-Agent", "veil")
-	resp, err := client.Do(req)
+	resp, err := runtimeHTTPDo(client, req)
 	if err != nil {
 		return "", err
 	}
@@ -1470,7 +1470,7 @@ func downloadURL(ctx context.Context, client *http.Client, url string) ([]byte, 
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "veil")
-	resp, err := client.Do(req)
+	resp, err := runtimeHTTPDo(client, req)
 	if err != nil {
 		return nil, err
 	}

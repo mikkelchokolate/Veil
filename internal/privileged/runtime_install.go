@@ -123,10 +123,6 @@ func runProductionRuntimeInstall(ctx context.Context, config ProductionConfig, r
 	if err != nil {
 		return err
 	}
-	install := config.InstallRuntime
-	if install == nil {
-		install = runtimeinstall.Ensure
-	}
 	// The helper cannot access /root (ProtectHome=yes); keep builds in the
 	// root-owned etc tree, outside the service-writable state directory.
 	buildHome := filepath.Join(filepath.Dir(config.IPCertDir), ".runtime-build")
@@ -146,7 +142,7 @@ func runProductionRuntimeInstall(ctx context.Context, config ProductionConfig, r
 	ctx = runtimeinstall.ContextWithBuildHome(ctx, buildHome)
 	opts := runtimeinstall.Options{BinDir: runtimeinstall.DefaultBinDir(), Arch: arch, CaddyCacheDir: buildHome, Progress: progress}
 	for _, runtime := range selected {
-		result := install(ctx, opts, runtime)
+		result := config.InstallRuntime(ctx, opts, runtime)
 		if result.Err != nil {
 			return fmt.Errorf("install %s runtime: %w", runtime.Name, result.Err)
 		}

@@ -36,7 +36,7 @@ func TestInstallPanelCaddyAccessPrintsPanelURLWithoutProxyStack(t *testing.T) {
 	}
 }
 
-func TestInstallPanelCaddyAccessDryRunShowsResolvedCaddyBinary(t *testing.T) {
+func TestInstallPanelCaddyAccessDryRunShowsManagedCaddyBinary(t *testing.T) {
 	withMockedInstallPreflight(t)
 	oldLookPath := commandLookPath
 	commandLookPath = func(name string) (string, error) {
@@ -56,12 +56,12 @@ func TestInstallPanelCaddyAccessDryRunShowsResolvedCaddyBinary(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("install dry-run: %v\n%s", err, out.String())
 	}
-	if !strings.Contains(out.String(), "Caddy/Panel reverse proxy: /usr/sbin/caddy") {
-		t.Fatalf("dry-run should show resolved Caddy binary path:\n%s", out.String())
+	if !strings.Contains(out.String(), "Caddy/Panel reverse proxy: /usr/local/bin/caddy") {
+		t.Fatalf("dry-run should show managed Caddy binary path:\n%s", out.String())
 	}
 }
 
-func TestInstallPanelCaddyAccessUsesResolvedCaddyBinaryInSystemdUnit(t *testing.T) {
+func TestInstallPanelCaddyAccessUsesManagedCaddyBinaryInSystemdUnit(t *testing.T) {
 	withMockedInstallPreflight(t)
 	oldApply := installApplyFunc
 	oldLookPath := commandLookPath
@@ -115,8 +115,8 @@ func TestInstallPanelCaddyAccessUsesResolvedCaddyBinaryInSystemdUnit(t *testing.
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("install panel caddy: %v\n%s", err, out.String())
 	}
-	if gotPaths.CaddyBinary != "/usr/sbin/caddy" {
-		t.Fatalf("CaddyBinary = %q, want resolved Caddy path", gotPaths.CaddyBinary)
+	if gotPaths.CaddyBinary != "/usr/local/bin/caddy" {
+		t.Fatalf("CaddyBinary = %q, want managed Caddy path", gotPaths.CaddyBinary)
 	}
 }
 
@@ -126,7 +126,7 @@ func TestInstallPanelCaddyAccessRequiresCaddyBinaryForApply(t *testing.T) {
 	oldFirewallBackend := installEnsureFirewallBackendFunc
 	oldRuntimes := installRuntimesFunc
 	commandLookPath = func(name string) (string, error) {
-		if name == "caddy" {
+		if name == "/usr/local/bin/caddy" {
 			return "", errors.New("missing caddy")
 		}
 		return "/usr/bin/" + name, nil

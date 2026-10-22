@@ -259,6 +259,9 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 	if config.IPCertHomeDir == "" {
 		config.IPCertHomeDir = filepath.Join(hostenv.EtcDir(), "acme")
 	}
+	if config.InstallRuntime == nil {
+		config.InstallRuntime = runtimeinstall.NewEnsurer()
+	}
 	progress := &runtimeInstallProgress{now: config.Now}
 	return Executor{
 		InstallRuntimes: func(ctx context.Context, request RuntimeInstallRequest) error {

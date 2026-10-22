@@ -19,23 +19,32 @@ var runtimeInstallFunc = func(ctx context.Context, opts runtimeinstall.Options, 
 	return protocols.InstallSelectedRuntimes(ctx, opts, only)
 }
 
+var runtimeEnsureFunc = runtimeinstall.Ensure
+
 // installRuntimesFunc installs Caddy when it is needed to expose the panel.
 // Protocol runtimes are acquired when their first enabled inbound is applied.
 var installRuntimesFunc = defaultInstallRuntimesDuringInstall
 
 func defaultInstallRuntimesDuringInstall(cmd *cobra.Command, opts ruRecommendedInstallOptions) error {
-	if _, err := commandLookPath("caddy"); err == nil {
-		return nil
-	}
 	arch, err := hostenv.NormalizeArch(hostenv.CurrentPlatform().Arch)
 	if err != nil {
 		return fmt.Errorf("protocol runtime install: %w", err)
 	}
-	fmt.Fprintln(cmd.OutOrStdout())
-	if err := runRuntimeInstall(cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.Context(), runtimeInstallOptions{Arch: arch, Only: []string{"naiveproxy"}}); err != nil {
-		fmt.Fprintln(cmd.ErrOrStderr(), "You can retry with: sudo veil runtime install --only naiveproxy")
-		return fmt.Errorf("install panel Caddy runtime: %w", err)
+	plugin, _ := protocols.NewRegistry().Get("naiveproxy")
+	provider, ok := protocols.AsRuntimeProvider(plugin)
+	if !ok {
+		return fmt.Errorf("panel Caddy runtime is unavailable")
 	}
+	fmt.Fprintln(cmd.OutOrStdout())
+	result := runtimeEnsureFunc(cmd.Context(), runtimeinstall.Options{BinDir: runtimeinstall.DefaultBinDir(), Arch: arch}, provider.RuntimeInstall(arch))
+	if result.Err == nil && !result.Installed {
+		result.Err = fmt.Errorf("Caddy runtime was not installed: %s", result.SkipReason)
+	}
+	if result.Err != nil {
+		fmt.Fprintln(cmd.ErrOrStderr(), "You can retry with: sudo veil runtime install --only naiveproxy")
+		return fmt.Errorf("install panel Caddy runtime: %w", result.Err)
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Panel Caddy runtime verified: %s\n", result.Path)
 	return nil
 }
 

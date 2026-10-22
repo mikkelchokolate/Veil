@@ -105,9 +105,7 @@ func installRuntimeSet(ctx context.Context, opts Options, runtimes []Runtime) []
 		}
 		return runtimeSetFailureFromResults(results, err)
 	}
-	for _, runtime := range runtimes {
-		opts.progress("installing", runtime.Name)
-	}
+	opts.progress("installing", "")
 	if err := activateRuntimeSet(opts.BinDir, &journal); err != nil {
 		return runtimeSetFailureFromResults(results, err)
 	}
