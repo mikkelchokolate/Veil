@@ -231,14 +231,15 @@ beside the state file. Stop if backup creation or verification fails.
 
 `veil update` targets the current stable GitHub Latest release. Check its
 preview and version before proceeding; these instructions apply when that
-release is v0.7.3. Download and verify the new binary first, then stop the old
-processes before repair so a new Panel cannot keep talking to the old helper.
-Do not add `--restart` or `--staged` to this download step.
+release is v0.7.3. After verifying the backup, stop the old processes before
+replacing the binary: otherwise an automatic restart could launch the new
+Panel while the old helper is still running. Run each step separately and
+stop if any command fails. Do not add `--restart` or `--staged` to the updater.
 
 ```bash
 sudo veil update --dry-run
-sudo veil update --yes
 sudo systemctl stop veil.service veil-helper.service veil-helper.socket
+sudo veil update --yes
 sudo veil repair --dry-run
 sudo veil repair --yes
 sudo systemctl start veil-helper.socket veil-helper.service veil.service

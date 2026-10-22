@@ -57,8 +57,9 @@ only the installation and CI optimizations.
   before an offline maintenance window. Cold Caddy/olcRTC source builds have a
   15-minute apply budget and have not been timed on a 1-vCPU/1-GB VPS.
 - `VEIL_AUTO_TLS=yes` and `VEIL_AUTO_TLS=on` are no longer accepted; use a
-  strict boolean such as `true` or `false`. Keep the direct IP-certificate
-  opt-out (`VEIL_PANEL_LE_IP_CERT=0`) if you do not want automatic issuance.
+  strict boolean such as `true` or `false`.
+- Keep the direct IP-certificate opt-out (`VEIL_PANEL_LE_IP_CERT=0`) if you
+  do not want automatic issuance during live Apply or periodic renewal.
 
 See the [installation and upgrade guide](https://github.com/mikkelchokolate/Veil/blob/v0.7.3/docs/install.md)
 and [known limitations](https://github.com/mikkelchokolate/Veil/blob/v0.7.3/docs/known-limitations.md)
@@ -90,11 +91,13 @@ before production rollout.
 - Client operations avoid repeated full-snapshot scans and redundant database
   queries, Inbound client previews are bounded, and abandoned list/history
   requests are cancelled. A 5,000-client fingerprint benchmark improved from
-  about 878 ms to 17 ms; this is a focused benchmark, not a whole-Panel claim.
+  about 878 ms to 17 ms in [#1363](https://github.com/mikkelchokolate/Veil/pull/1363);
+  this is a focused benchmark, not a whole-Panel claim.
 - CI shares measured shard timings, reuses validated build/runtime caches,
   avoids an accidental real Caddy build in a unit test, and reduces duplicate
-  browser setup. The final optimization PR ran in 10m20s versus the measured
-  14m04s baseline; its slowest shard took 7m23s instead of 11m35s. Race,
+  browser setup. The [final optimization CI run](https://github.com/mikkelchokolate/Veil/actions/runs/39773004034)
+  took 10m20s versus the measured [14m04s baseline](https://github.com/mikkelchokolate/Veil/actions/runs/39760774474);
+  its slowest shard took 7m23s instead of 11m35s. Race,
   coverage, inventory, browser and cold-install gates remain enabled.
 - Hardened session revocation, subscription-token bindings, authenticated
   revision snapshots, promotion/restore journals, filesystem ownership and
