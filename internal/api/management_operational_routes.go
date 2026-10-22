@@ -340,6 +340,7 @@ func (s *managementState) applyStateViewLocked() applyStateResponse {
 		resp.State = deriveSystemState(rev, &latest)
 		if latest.Active() {
 			resp.ActiveJobID = latest.ID
+			resp.Progress = s.applyProgress.snapshot()
 		}
 	}
 	if lastOK, ok, _ := s.applyJobs.LatestWithStatus(apply.StatusSucceeded); ok {
@@ -394,13 +395,14 @@ func deriveSystemState(rev apply.Revisions, latest *apply.Job) string {
 
 // applyStateResponse is the JSON shape returned by GET /api/apply/state.
 type applyStateResponse struct {
-	DesiredRevision     uint64          `json:"desiredRevision"`
-	AppliedRevision     uint64          `json:"appliedRevision"`
-	State               string          `json:"state"`
-	ActiveJobID         string          `json:"activeJobId,omitempty"`
-	LastSuccessfulJobID string          `json:"lastSuccessfulJobId,omitempty"`
-	LastFailedJobID     string          `json:"lastFailedJobId,omitempty"`
-	LastError           *applyErrorView `json:"lastError,omitempty"`
+	Progress            *applyProgressView `json:"progress,omitempty"`
+	DesiredRevision     uint64             `json:"desiredRevision"`
+	AppliedRevision     uint64             `json:"appliedRevision"`
+	State               string             `json:"state"`
+	ActiveJobID         string             `json:"activeJobId,omitempty"`
+	LastSuccessfulJobID string             `json:"lastSuccessfulJobId,omitempty"`
+	LastFailedJobID     string             `json:"lastFailedJobId,omitempty"`
+	LastError           *applyErrorView    `json:"lastError,omitempty"`
 }
 
 type applyErrorView struct {

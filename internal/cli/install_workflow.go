@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"path"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/mikkelchokolate/Veil/internal/panelaccess"
+	"github.com/mikkelchokolate/Veil/internal/runtimeinstall"
 	"github.com/spf13/cobra"
 )
 
@@ -171,12 +173,11 @@ func (w RURecommendedInstallWorkflow) Run() error {
 	if err := installEnsureFirewallBackendFunc(cmd.Context(), built, opts); err != nil {
 		return err
 	}
-	// Protocol runtimes are needed before Caddy prerequisite validation, but
-	// only after the operator has accepted the plan. A failed runtime install
-	// fails the whole install — reporting success would leave protocol units
-	// that can never exec their binaries (issue #1029).
-	if err := installRuntimesFunc(cmd, opts); err != nil {
-		return err
+	// Caddy is needed immediately only when it exposes the panel itself.
+	if built.InstallPanelCaddy {
+		if err := installRuntimesFunc(cmd, opts); err != nil {
+			return err
+		}
 	}
 	caddyBinary, err := validateInstallRuntimePrerequisites(built)
 	if err != nil {
@@ -213,20 +214,17 @@ func installPlanCaddyBinary(profile installer.RURecommendedProfile) string {
 	if !profile.InstallPanelCaddy {
 		return ""
 	}
-	path, err := commandLookPath("caddy")
-	if err != nil {
-		return ""
-	}
-	return path
+	return path.Join(runtimeinstall.DefaultBinDir(), "caddy")
 }
 
 func validateInstallRuntimePrerequisites(profile installer.RURecommendedProfile) (string, error) {
 	if profile.InstallPanelCaddy {
-		path, err := commandLookPath("caddy")
+		binary := installPlanCaddyBinary(profile)
+		_, err := commandLookPath(binary)
 		if err != nil {
 			return "", fmt.Errorf("caddy is required for caddy Panel access; install Caddy or use --panel-access local/direct")
 		}
-		return path, nil
+		return binary, nil
 	}
 	return "", nil
 }

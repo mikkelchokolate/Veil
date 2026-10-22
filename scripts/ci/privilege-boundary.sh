@@ -89,16 +89,17 @@ ci_step "runtime version-probe sandbox isolation (root + systemd)"
 if [ "$(id -u)" -eq 0 ]; then
   ci_run privilege-runtime-probe-sandbox \
     go test ./internal/runtimeinstall \
-    -run '^(TestRuntimeVersionProbeExecutesProtectedHomeBinaryThroughSystemdBind|TestMaliciousRuntimeProbeCannotReadHostSecretsEnvironmentDescriptorsOrNetwork)$' \
+    -run '^(TestRuntimeVersionProbeExecutesProtectedHomeBinaryThroughSystemdBind|TestRuntimeVersionProbeFromPrivateTmpHelper|TestMaliciousRuntimeProbeCannotReadHostSecretsEnvironmentDescriptorsOrNetwork)$' \
     -count=1 -v
 else
   ci_run privilege-runtime-probe-sandbox \
     sudo env "PATH=${PATH}" "HOME=${HOME}" go test ./internal/runtimeinstall \
-    -run '^(TestRuntimeVersionProbeExecutesProtectedHomeBinaryThroughSystemdBind|TestMaliciousRuntimeProbeCannotReadHostSecretsEnvironmentDescriptorsOrNetwork)$' \
+    -run '^(TestRuntimeVersionProbeExecutesProtectedHomeBinaryThroughSystemdBind|TestRuntimeVersionProbeFromPrivateTmpHelper|TestMaliciousRuntimeProbeCannotReadHostSecretsEnvironmentDescriptorsOrNetwork)$' \
     -count=1 -v
 fi
 ci_assert_tests_ran "${CI_ARTIFACT_DIR}/privilege-runtime-probe-sandbox.log"
 ci_assert_test_passed "${CI_ARTIFACT_DIR}/privilege-runtime-probe-sandbox.log" TestRuntimeVersionProbeExecutesProtectedHomeBinaryThroughSystemdBind
+ci_assert_test_passed "${CI_ARTIFACT_DIR}/privilege-runtime-probe-sandbox.log" TestRuntimeVersionProbeFromPrivateTmpHelper
 ci_assert_test_passed "${CI_ARTIFACT_DIR}/privilege-runtime-probe-sandbox.log" TestMaliciousRuntimeProbeCannotReadHostSecretsEnvironmentDescriptorsOrNetwork
 
 ci_step "root-gated regression roots (allowlisted skips in the test job)"

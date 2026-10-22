@@ -12,26 +12,28 @@ const ProtocolVersion = 1
 type Operation string
 
 const (
-	OperationPromote            Operation = "promote"
-	OperationServiceAction      Operation = "service_action"
-	OperationServiceStatus      Operation = "service_status"
-	OperationJournal            Operation = "journal"
-	OperationBackupCreate       Operation = "backup_create"
-	OperationBackupList         Operation = "backup_list"
-	OperationBackupVerify       Operation = "backup_verify"
-	OperationBackupRead         Operation = "backup_read"
-	OperationBackupPrune        Operation = "backup_prune"
-	OperationBackupRestore      Operation = "backup_restore"
-	OperationBackupDelete       Operation = "backup_delete"
-	OperationRotateKey          Operation = "rotate_key"
-	OperationRecoverKeyRotation Operation = "recover_key_rotation"
-	OperationFirewallApply      Operation = "firewall_apply"
-	OperationStageUpdate        Operation = "stage_update"
-	OperationRestartPanel       Operation = "restart_panel"
-	OperationSyncCaddyCert      Operation = "sync_caddy_cert"
-	OperationCaddyLoad          Operation = "caddy_load"
-	OperationBackupSftp         Operation = "backup_sftp"
-	OperationIssueIPCert        Operation = "issue_ip_cert"
+	OperationPromote              Operation = "promote"
+	OperationServiceAction        Operation = "service_action"
+	OperationServiceStatus        Operation = "service_status"
+	OperationJournal              Operation = "journal"
+	OperationBackupCreate         Operation = "backup_create"
+	OperationBackupList           Operation = "backup_list"
+	OperationBackupVerify         Operation = "backup_verify"
+	OperationBackupRead           Operation = "backup_read"
+	OperationBackupPrune          Operation = "backup_prune"
+	OperationBackupRestore        Operation = "backup_restore"
+	OperationBackupDelete         Operation = "backup_delete"
+	OperationRotateKey            Operation = "rotate_key"
+	OperationRecoverKeyRotation   Operation = "recover_key_rotation"
+	OperationFirewallApply        Operation = "firewall_apply"
+	OperationStageUpdate          Operation = "stage_update"
+	OperationRestartPanel         Operation = "restart_panel"
+	OperationSyncCaddyCert        Operation = "sync_caddy_cert"
+	OperationCaddyLoad            Operation = "caddy_load"
+	OperationBackupSftp           Operation = "backup_sftp"
+	OperationIssueIPCert          Operation = "issue_ip_cert"
+	OperationRuntimeInstall       Operation = "runtime_install"
+	OperationRuntimeInstallStatus Operation = "runtime_install_status"
 )
 
 func (o Operation) Valid() bool {
@@ -55,7 +57,9 @@ func (o Operation) Valid() bool {
 		OperationSyncCaddyCert,
 		OperationCaddyLoad,
 		OperationBackupSftp,
-		OperationIssueIPCert:
+		OperationIssueIPCert,
+		OperationRuntimeInstall,
+		OperationRuntimeInstallStatus:
 		return true
 	default:
 		return false
@@ -409,23 +413,25 @@ type IssueIPCertResult struct {
 }
 
 type RequestEnvelope struct {
-	Version            int                        `json:"version"`
-	RequestID          string                     `json:"requestId"`
-	Operation          Operation                  `json:"operation"`
-	Promote            *PromoteRequest            `json:"promote,omitempty"`
-	ServiceAction      *ServiceActionRequest      `json:"serviceAction,omitempty"`
-	ServiceStatus      *ServiceStatusRequest      `json:"serviceStatus,omitempty"`
-	Journal            *JournalRequest            `json:"journal,omitempty"`
-	Backup             *BackupRequest             `json:"backup,omitempty"`
-	RotateKey          *RotateKeyRequest          `json:"rotateKey,omitempty"`
-	RecoverKeyRotation *RecoverKeyRotationRequest `json:"recoverKeyRotation,omitempty"`
-	Firewall           *FirewallRequest           `json:"firewall,omitempty"`
-	Update             *UpdateRequest             `json:"update,omitempty"`
-	RestartPanel       *RestartPanelRequest       `json:"restartPanel,omitempty"`
-	SyncCaddyCert      *SyncCaddyCertRequest      `json:"syncCaddyCert,omitempty"`
-	CaddyLoad          *CaddyLoadRequest          `json:"caddyLoad,omitempty"`
-	BackupSftp         *BackupSftpRequest         `json:"backupSftp,omitempty"`
-	IssueIPCert        *IssueIPCertRequest        `json:"issueIpCert,omitempty"`
+	Version              int                          `json:"version"`
+	RequestID            string                       `json:"requestId"`
+	Operation            Operation                    `json:"operation"`
+	Promote              *PromoteRequest              `json:"promote,omitempty"`
+	ServiceAction        *ServiceActionRequest        `json:"serviceAction,omitempty"`
+	ServiceStatus        *ServiceStatusRequest        `json:"serviceStatus,omitempty"`
+	Journal              *JournalRequest              `json:"journal,omitempty"`
+	Backup               *BackupRequest               `json:"backup,omitempty"`
+	RotateKey            *RotateKeyRequest            `json:"rotateKey,omitempty"`
+	RecoverKeyRotation   *RecoverKeyRotationRequest   `json:"recoverKeyRotation,omitempty"`
+	Firewall             *FirewallRequest             `json:"firewall,omitempty"`
+	Update               *UpdateRequest               `json:"update,omitempty"`
+	RestartPanel         *RestartPanelRequest         `json:"restartPanel,omitempty"`
+	SyncCaddyCert        *SyncCaddyCertRequest        `json:"syncCaddyCert,omitempty"`
+	CaddyLoad            *CaddyLoadRequest            `json:"caddyLoad,omitempty"`
+	BackupSftp           *BackupSftpRequest           `json:"backupSftp,omitempty"`
+	IssueIPCert          *IssueIPCertRequest          `json:"issueIpCert,omitempty"`
+	RuntimeInstall       *RuntimeInstallRequest       `json:"runtimeInstall,omitempty"`
+	RuntimeInstallStatus *RuntimeInstallStatusRequest `json:"runtimeInstallStatus,omitempty"`
 }
 
 type ResponseEnvelope struct {
@@ -461,6 +467,8 @@ func (r RequestEnvelope) Validate() error {
 		r.CaddyLoad != nil,
 		r.BackupSftp != nil,
 		r.IssueIPCert != nil,
+		r.RuntimeInstall != nil,
+		r.RuntimeInstallStatus != nil,
 	}
 	count := 0
 	for _, present := range payloads {
@@ -507,6 +515,10 @@ func (r RequestEnvelope) payloadMatchesOperation() bool {
 		return r.BackupSftp != nil
 	case OperationIssueIPCert:
 		return r.IssueIPCert != nil
+	case OperationRuntimeInstall:
+		return r.RuntimeInstall != nil
+	case OperationRuntimeInstallStatus:
+		return r.RuntimeInstallStatus != nil
 	default:
 		return false
 	}

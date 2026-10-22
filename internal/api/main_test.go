@@ -14,6 +14,7 @@ import (
 // production default path (/etc/veil, /var/lib/veil, ...) fails immediately
 // instead of touching the live system when run as root.
 func TestMain(m *testing.M) {
+	provisionApplyRuntimes = func(ManagementApplyContext) error { return nil }
 	serviceStatusReader = func(unit string) ServiceRuntimeStatus {
 		return ServiceRuntimeStatus{Unit: unit, LoadState: "not-found", ActiveState: "inactive", SubState: "dead"}
 	}

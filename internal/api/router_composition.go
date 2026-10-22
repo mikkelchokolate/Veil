@@ -40,6 +40,7 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 		_ = state.idempotency.Close()
 	}
 	restoreGuarded := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		allowRuntimeMutationTime(w, r)
 		if info.RequirePrivilegedHelper {
 			switch r.URL.Path {
 			case "/api/tls", "/api/network", "/api/connections", "/api/processes", "/api/disk", "/api/runtime/observation":

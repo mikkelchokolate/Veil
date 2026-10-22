@@ -49,6 +49,22 @@ jobs:
           cache-dependency-path: web/pnpm-lock.yaml
       - name: frontend job
         run: bash scripts/ci/frontend.sh
+      # Restore once, then publish the same timing snapshot to every machine.
+      # Independent per-shard restores can observe different latest caches.
+      - name: Restore test timing baseline
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .artifacts/ci/test-timing-baseline/timing-manifest.json
+          key: ${{ runner.os }}-${{ runner.arch }}-veil-test-timing-v1-${{ hashFiles('go.mod', 'go.sum', 'scripts/ci/versions.sh') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-veil-test-timing-v1-${{ hashFiles('go.mod', 'go.sum', 'scripts/ci/versions.sh') }}-
+      - name: Publish shared test timing snapshot
+        run: |
+          timing_manifest=.artifacts/ci/test-timing-baseline/timing-manifest.json
+          if [ ! -f "$timing_manifest" ]; then
+            timing_manifest=scripts/ci/test-timing-baseline.json
+          fi
+          cp "$timing_manifest" .artifacts/ci/frontend-dist/timing-manifest.json
       - name: Upload source-keyed frontend dist
         if: success()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -78,6 +94,7 @@ jobs:
         shard: [1, 2, 3]
     env:
       CI_FRONTEND_DIST_ARTIFACT_DIR: .artifacts/ci/frontend-dist
+      CI_TEST_TIMING_MANIFEST: .artifacts/ci/frontend-dist/timing-manifest.json
       CI_TEST_PHASE: shard
       CI_TEST_MACHINE_SHARDS: 3
       CI_TEST_MACHINE_SHARD: ${{ matrix.shard }}
@@ -97,6 +114,17 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ steps.versions.outputs.go_version }}
+      # setup-go's immutable go.sum cache is shared with the quick non-race
+      # jobs, which can fill it before the race+coverage build finishes. Keep
+      # each shard's completed build objects rolling forward as source changes.
+      - name: Restore race and coverage build cache
+        id: test-build-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-${{ runner.arch }}-veil-test-build-v1-${{ matrix.shard }}-${{ hashFiles('go.mod', 'go.sum', 'scripts/ci/versions.sh') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-veil-test-build-v1-${{ matrix.shard }}-${{ hashFiles('go.mod', 'go.sum', 'scripts/ci/versions.sh') }}-
       # test.sh runs `make verify-openapi` (npx redocly) and the panel JS
       # syntax test — Node must be the pinned version, not the runner's
       # ambient one (#422, #432).
@@ -106,8 +134,16 @@ jobs:
       - name: Cache pinned Caddy test runtime
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.cache/veil-caddy-test
-          key: ${{ runner.os }}-${{ runner.arch }}-veil-caddy-test-${{ hashFiles('scripts/ci/versions.sh', 'scripts/ci/runtimes.sh', 'internal/runtimeinstall/**') }}
+          # The installer also writes root-only lock/provenance files. Cache
+          # only the public binaries so tar can save the cache as the runner.
+          path: |
+            ~/.cache/veil-caddy-test/caddy
+            ~/.cache/veil-caddy-test/sing-box
+          key: ${{ runner.os }}-${{ runner.arch }}-veil-caddy-test-v3-${{ hashFiles('scripts/ci/versions.sh', 'scripts/ci/runtimes.sh') }}
+          # Older entries are safe to reuse only after exact module/version
+          # checks in runtimes.sh; installer-only edits do not rebuild Caddy.
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-veil-caddy-test-v2-
       - name: Unstick Ubuntu apt mirrors
         run: bash scripts/ci/apt-bootstrap.sh
       - name: runtime probe sandbox
@@ -118,6 +154,12 @@ jobs:
           fi
       - name: test shard
         run: bash scripts/ci/test.sh
+      - name: Save race and coverage build cache
+        if: success() && steps.test-build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/go-build
+          key: ${{ steps.test-build-cache.outputs.cache-primary-key }}
       - name: Upload shard artifacts (task logs, coverprofiles, plan)
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -166,6 +208,15 @@ jobs:
           go-version: ${{ steps.versions.outputs.go_version }}
       - name: test aggregate (merge, verify, coverage gates)
         run: bash scripts/ci/test.sh
+      - name: Prepare verified test timing baseline
+        run: |
+          mkdir -p .artifacts/ci/test-timing-baseline
+          cp .artifacts/ci/timing-manifest.json .artifacts/ci/test-timing-baseline/timing-manifest.json
+      - name: Save verified test timing baseline
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .artifacts/ci/test-timing-baseline/timing-manifest.json
+          key: ${{ runner.os }}-${{ runner.arch }}-veil-test-timing-v1-${{ hashFiles('go.mod', 'go.sum', 'scripts/ci/versions.sh') }}-${{ github.sha }}
       - name: Upload CI artifacts (incl. product-test.log and coverage)
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -286,18 +337,10 @@ jobs:
       - id: versions
         run: |
           source scripts/ci/versions.sh
-          { echo "go_version=${CI_GO_VERSION}"; echo "node_version=${CI_NODE_VERSION}"; echo "pnpm_version=${CI_PNPM_VERSION}"; } >> "$GITHUB_OUTPUT"
+          echo "go_version=${CI_GO_VERSION}" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ steps.versions.outputs.go_version }}
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: ${{ steps.versions.outputs.pnpm_version }}
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ steps.versions.outputs.node_version }}
-          cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
       - name: privilege-boundary job
         run: bash scripts/ci/privilege-boundary.sh
       - name: Upload CI artifacts
@@ -324,18 +367,10 @@ jobs:
       - id: versions
         run: |
           source scripts/ci/versions.sh
-          { echo "go_version=${CI_GO_VERSION}"; echo "node_version=${CI_NODE_VERSION}"; echo "pnpm_version=${CI_PNPM_VERSION}"; } >> "$GITHUB_OUTPUT"
+          echo "go_version=${CI_GO_VERSION}" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ steps.versions.outputs.go_version }}
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: ${{ steps.versions.outputs.pnpm_version }}
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ steps.versions.outputs.node_version }}
-          cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
       - name: Unstick Ubuntu apt mirrors
         run: bash scripts/ci/apt-bootstrap.sh
       - name: runtime probe sandbox
@@ -425,6 +460,7 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npx playwright install --with-deps chromium
+          echo "CI_BROWSER_DEPS_LOCK_SHA256=$(sha256sum package-lock.json | cut -d ' ' -f 1)" >> "$GITHUB_ENV"
       - name: browser-e2e job
         run: bash scripts/ci/browser-e2e.sh
       - name: Upload CI artifacts (incl. panel logs and Playwright reports)
@@ -460,18 +496,10 @@ jobs:
       - id: versions
         run: |
           source scripts/ci/versions.sh
-          { echo "go_version=${CI_GO_VERSION}"; echo "node_version=${CI_NODE_VERSION}"; echo "pnpm_version=${CI_PNPM_VERSION}"; } >> "$GITHUB_OUTPUT"
+          echo "go_version=${CI_GO_VERSION}" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ steps.versions.outputs.go_version }}
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: ${{ steps.versions.outputs.pnpm_version }}
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ steps.versions.outputs.node_version }}
-          cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
       - name: package-smoke job
         env:
           VEIL_GOARCH: ${{ matrix.arch }}

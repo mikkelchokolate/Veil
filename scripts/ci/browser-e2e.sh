@@ -42,7 +42,13 @@ mkdir -p dist
 go build -trimpath -ldflags "-s -w -X main.version=browser-e2e" -o dist/veil ./cmd/veil
 
 ci_step "pinned Playwright (${CI_PLAYWRIGHT_VERSION})"
-(cd test/browser && npm ci --ignore-scripts)
+browser_lock_sha="$(sha256sum test/browser/package-lock.json | cut -d ' ' -f 1)"
+if [ "${CI_BROWSER_DEPS_LOCK_SHA256:-}" != "${browser_lock_sha}" ]; then
+  (cd test/browser && npm ci --ignore-scripts)
+fi
+installed_playwright="$(cd test/browser && node -p 'require("@playwright/test/package.json").version')"
+[ "${installed_playwright}" = "${CI_PLAYWRIGHT_VERSION}" ] \
+  || ci_die "installed Playwright ${installed_playwright} does not match pinned ${CI_PLAYWRIGHT_VERSION}"
 # Browsers are baked into the CI image (PLAYWRIGHT_BROWSERS_PATH) or
 # provisioned by the workflow before this script runs — never provision at
 # run time. `playwright install --dry-run` exits 0 even when nothing is

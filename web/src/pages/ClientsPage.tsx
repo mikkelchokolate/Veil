@@ -115,19 +115,22 @@ export function ClientsPage() {
 			"list",
 			{ page, pageSize, searchText: searchParam, status, inboundId, sort },
 		],
-		queryFn: () =>
-			listClients({
-				page,
-				pageSize,
-				search: searchParam,
-				inboundId,
-				sort,
-				...(status === "depleted"
-					? { quotaState: "depleted" }
-					: status
-						? { status }
-						: {}),
-			}),
+		queryFn: ({ signal }) =>
+			listClients(
+				{
+					page,
+					pageSize,
+					search: searchParam,
+					inboundId,
+					sort,
+					...(status === "depleted"
+						? { quotaState: "depleted" }
+						: status
+							? { status }
+							: {}),
+				},
+				signal,
+			),
 		placeholderData: keepPreviousData,
 	});
 

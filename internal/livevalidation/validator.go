@@ -220,7 +220,7 @@ func (v Validator) runtimeIssues(ctx context.Context, inbound model.Inbound) []m
 			issues = append(issues, issue(
 				"runtime_binary_missing", SeverityWarning, "protocol", inbound.Name,
 				fmt.Sprintf("Required runtime binary %s is not installed", install.Binary),
-				"Install the protocol runtime before applying.", "live-host",
+				"The required runtime will be installed automatically when this configuration is applied.", "live-host",
 			))
 		}
 	}

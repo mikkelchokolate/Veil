@@ -47,6 +47,7 @@ type managementSnapshot = model.ManagementSnapshot
 
 type managementState struct {
 	mu                         sync.Mutex
+	applyProgress              *applyProgressTracker
 	clientLifecycleMu          sync.RWMutex
 	clientRequestMu            sync.RWMutex
 	passwordHasher             PasswordHasher

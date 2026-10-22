@@ -37,7 +37,7 @@ func newInstallCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "install",
-		Short: "Install and configure Veil managed services",
+		Short: "Install the Veil panel; protocol runtimes are installed on demand",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRURecommendedInstall(cmd, ruRecommendedInstallOptions{
 				Profile:         profile,

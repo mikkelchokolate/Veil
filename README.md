@@ -104,12 +104,18 @@ Passwords are auto-generated when omitted. You can replace them in the Panel.
 
 ## Commands
 
+Run `sudo veil` in a terminal to open the management and recovery menu, or
+`sudo veil menu` to open it explicitly. It manages local services, logs,
+credentials, backups, updates, installation, and selected protocol runtimes even when the
+web Panel is unavailable. Changes require confirmation in the menu.
+
 `veil help` prints the full catalog. `veil help <command>` shows flags for one command.
 
 | Command | Purpose |
 |---|---|
 | `veil help` | Show every command, including nested subcommands. |
-| `veil install` | Install and configure Panel access, credentials, and runtimes. |
+| `veil menu` | Open the terminal management and recovery menu; works without the web Panel. |
+| `veil install` | Install Panel access and credentials; protocol runtimes are acquired on first use (Caddy is acquired immediately when needed to expose the Panel). |
 | `veil serve` | Run the HTTP API and Web Panel. |
 | `veil status` | Show managed service status (`--json` for machine output). |
 | `veil doctor` | Run host readiness checks (required/optional commands, protocol DNS reachability). |
@@ -118,7 +124,7 @@ Passwords are auto-generated when omitted. You can replace them in the Panel.
 | `veil admin show` | List registered users and roles. |
 | `veil admin rotate-key` | Rotate the AES state key and re-encrypt state. |
 | `veil config validate` | Validate a Management state file without starting a server. |
-| `veil runtime install` | Download/verify protocol runtime binaries (`--only`, `--bin-dir`). |
+| `veil runtime install` | Preinstall or repair protocol runtime binaries (`--only`, `--bin-dir`); normally acquired on first use. |
 | `veil backup create` | Create an encrypted archive of Panel state and the encryption key. |
 | `veil backup list` | List managed backup archives. |
 | `veil backup verify` | Decrypt and verify a backup without writing state. |

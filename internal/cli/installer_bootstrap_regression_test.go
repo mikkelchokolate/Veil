@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"os"
@@ -8,10 +9,92 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const exactInstallCommand = "curl -fsSL https://github.com/mikkelchokolate/Veil/releases/latest/download/install.sh | sh"
 const exactMainInstallCommand = "curl -fsSL https://raw.githubusercontent.com/mikkelchokolate/Veil/main/scripts/install-main.sh | sh"
+
+func TestBootstrapDownloadsInParallelAndWaitsBeforeVerificationOrCleanup(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("POSIX sh is unavailable")
+	}
+	body, err := os.ReadFile("../../scripts/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	cleanup := script[strings.Index(script, "download_pids=\"\""):strings.Index(script, "\nos=")]
+	downloads := script[strings.Index(script, "# BEGIN_RELEASE_DOWNLOADS"):strings.Index(script, "# END_RELEASE_DOWNLOADS")]
+	for _, test := range []struct {
+		name, failed string
+		earlyExit    bool
+	}{
+		{name: "success"},
+		{name: "failed download", failed: "install-privileged.sh"},
+		{name: "exit with pending downloads", earlyExit: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			for _, name := range []string{"started", "done", "bin"} {
+				if err := os.Mkdir(filepath.Join(root, name), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			curl := `#!/bin/sh
+set -eu
+output="$2"
+name="${output##*/}"
+touch "$TEST_ROOT/started/$name"
+for attempt in $(seq 1 50); do
+  set -- "$TEST_ROOT"/started/*
+  [ "$#" -eq 7 ] && break
+  sleep 0.02
+done
+[ "$#" -eq 7 ] || { echo "downloads were serialized" >&2; exit 2; }
+[ "$name" != "$TEST_FAILED_DOWNLOAD" ] || exit 1
+sleep 0.05
+printf downloaded > "$output"
+touch "$TEST_ROOT/done/$name"
+`
+			if err := os.WriteFile(filepath.Join(root, "bin", "curl"), []byte(curl), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			block := downloads
+			if test.earlyExit {
+				block = strings.Replace(block, "download_failed=0", "exit 23\ndownload_failed=0", 1)
+			}
+			harness := "set -eu\nwork=\"$TEST_ROOT/work\"\nmkdir \"$work\"\n" + cleanup +
+				"\nbase=https://example.invalid\nasset=veil_linux_amd64.tar.gz\n" + block +
+				"\nprintf verified > \"$TEST_ROOT/verified\"\n"
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			command := exec.CommandContext(ctx, "sh", "-c", harness)
+			command.Env = append(os.Environ(), "PATH="+filepath.Join(root, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"TEST_ROOT="+root, "TEST_FAILED_DOWNLOAD="+test.failed)
+			output, err := command.CombinedOutput()
+			wantSuccess := test.failed == "" && !test.earlyExit
+			if (err == nil) != wantSuccess || ctx.Err() != nil {
+				t.Fatalf("download result: %v (context: %v)\n%s", err, ctx.Err(), output)
+			}
+			_, verifiedErr := os.Stat(filepath.Join(root, "verified"))
+			if (verifiedErr == nil) != wantSuccess {
+				t.Fatalf("verification ran before a complete download set: %v", verifiedErr)
+			}
+			completed, err := os.ReadDir(filepath.Join(root, "done"))
+			wantCompleted := 7
+			if test.failed != "" {
+				wantCompleted--
+			}
+			if err != nil || len(completed) != wantCompleted {
+				t.Fatalf("cleanup did not wait for all downloads: completed %d, want %d, error %v\n%s", len(completed), wantCompleted, err, output)
+			}
+			if _, err := os.Stat(filepath.Join(root, "work")); !os.IsNotExist(err) {
+				t.Fatalf("temporary downloads were not cleaned up: %v", err)
+			}
+		})
+	}
+}
 
 func TestDocumentationUsesExactOneCommandInstaller(t *testing.T) {
 	for _, path := range []string{"../../README.md", "../../docs/install.md"} {

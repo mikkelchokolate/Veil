@@ -334,7 +334,6 @@ export function ClientDetailPage() {
 	}, [client.data, clientId, form.reset, isDirty]);
 
 	const invalidate = () => {
-		void qc.invalidateQueries({ queryKey: ["clients", clientId] });
 		void qc.invalidateQueries({ queryKey: ["clients"] });
 		void qc.invalidateQueries({ queryKey: ["apply"] });
 	};

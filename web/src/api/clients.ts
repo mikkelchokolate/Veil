@@ -23,6 +23,7 @@ export interface ClientListResult<T = unknown> {
 
 export function listClients(
 	params: ClientListParams,
+	signal: AbortSignal,
 ): Promise<ClientListResult> {
 	const qs = new URLSearchParams();
 	if (params.page) qs.set("page", String(params.page));
@@ -33,5 +34,5 @@ export function listClients(
 	if (params.sort) qs.set("sort", params.sort);
 	if (params.inboundId) qs.set("inboundId", params.inboundId);
 	const suffix = qs.size ? `?${qs.toString()}` : "";
-	return apiFetch<ClientListResult>(`/api/v1/clients${suffix}`);
+	return apiFetch<ClientListResult>(`/api/v1/clients${suffix}`, { signal });
 }

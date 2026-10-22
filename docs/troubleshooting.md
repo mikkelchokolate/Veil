@@ -6,6 +6,25 @@ This guide provides steps to diagnose, debug, and recover your Veil installation
 
 ## 1. Verifying Status and Health
 
+### Terminal management and recovery
+
+Run `sudo veil` in an interactive terminal, or `sudo veil menu` explicitly.
+The numbered menu reads local configuration and controls systemd directly,
+so service status, start/stop/restart, and recent logs remain available when
+the web Panel or privileged helper is down. Other actions reuse the existing
+CLI commands for diagnostics, repair, administrator reset, encrypted backups,
+restore, configuration rollback, updates, and selected runtime installation.
+The install/reconfigure action opens the existing interactive installer and
+keeps its prompts and final confirmation.
+
+Repair, updates, and uninstall display their existing preview before asking
+you to type `yes`. Restore verifies the archive before confirmation; resetting
+the administrator replaces existing Panel user accounts and revokes their
+sessions. Backup actions ask for the path to a passphrase file. The menu's
+uninstall action preserves configuration and credentials; use `veil help
+uninstall` for full removal. Root access is needed for host changes. A bare
+`veil` in a script still prints help; existing commands retain their flags.
+
 `veil help` lists every CLI command. Veil also provides built-in tools to inspect the daemon, services, and system configuration:
 
 ### Inspect Service Status
@@ -40,8 +59,10 @@ nameserver, then re-apply. See docs/known-limitations.md (#1288).
 A protocol unit that fails to start with `status=203/EXEC` means its runtime
 binary is not present at the path the systemd unit invokes (for example
 `/usr/local/bin/mita` for Mieru, `/usr/local/bin/hysteria` for Hysteria2).
-`veil install` provisions these runtimes automatically, but if a download was
-skipped or failed you can (re)install them at any time:
+Veil normally acquires a missing runtime when its first enabled Inbound is
+applied, or when WARP is enabled. The Panel installer only acquires Caddy
+when `--panel-access caddy` needs it. If an on-demand download failed, you can
+retry the apply or (re)install the affected runtime explicitly:
 
 ```bash
 sudo veil runtime install
@@ -49,9 +70,9 @@ sudo veil runtime install
 sudo veil runtime install --only mieru
 ```
 
-This downloads `caddy`, `hysteria`, `mita`, and `sing-box` from their upstream
-GitHub releases (verifying published checksums) and builds `olcrtc` from source
-with the Go toolchain. Re-run `veil doctor` afterward to confirm the binaries
+This downloads `hysteria`, `mita`, and `sing-box` from their upstream
+GitHub releases (verifying published checksums) and builds Caddy and `olcrtc`
+from pinned sources with the Go toolchain. Re-run `veil doctor` afterward to confirm the binaries
 are present, then restart the affected unit.
 
 ---

@@ -202,6 +202,21 @@ func (s *Server) dispatch(ctx context.Context, request RequestEnvelope) (any, er
 			return nil, newError(ErrorOperationFailed, "IP certificate issuer is unavailable")
 		}
 		return issuer.IssueIPCert(ctx, *request.IssueIPCert)
+	case OperationRuntimeInstall:
+		installer, ok := s.client.(RuntimeInstaller)
+		if !ok {
+			return nil, newError(ErrorOperationFailed, "runtime installer is unavailable")
+		}
+		if err := installer.InstallRuntimes(ctx, *request.RuntimeInstall); err != nil {
+			return nil, err
+		}
+		return struct{}{}, nil
+	case OperationRuntimeInstallStatus:
+		observer, ok := s.client.(RuntimeInstallObserver)
+		if !ok {
+			return nil, newError(ErrorOperationFailed, "runtime install status is unavailable")
+		}
+		return observer.RuntimeInstallStatus(ctx, *request.RuntimeInstallStatus)
 	default:
 		return nil, newError(ErrorInvalidRequest, "unsupported operation")
 	}

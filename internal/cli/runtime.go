@@ -19,11 +19,10 @@ var runtimeInstallFunc = func(ctx context.Context, opts runtimeinstall.Options, 
 	return protocols.InstallSelectedRuntimes(ctx, opts, only)
 }
 
-// installRuntimesFunc provisions protocol runtimes during `veil install`. A
-// failed runtime install must fail the install closed: reporting success
-// leaves protocol systemd units that can never exec their missing binaries
-// (systemd status 203/EXEC), which is worse than aborting before any file is
-// applied (issue #1029).
+var runtimeEnsureFunc = runtimeinstall.Ensure
+
+// installRuntimesFunc installs Caddy when it is needed to expose the panel.
+// Protocol runtimes are acquired when their first enabled inbound is applied.
 var installRuntimesFunc = defaultInstallRuntimesDuringInstall
 
 func defaultInstallRuntimesDuringInstall(cmd *cobra.Command, opts ruRecommendedInstallOptions) error {
@@ -31,11 +30,21 @@ func defaultInstallRuntimesDuringInstall(cmd *cobra.Command, opts ruRecommendedI
 	if err != nil {
 		return fmt.Errorf("protocol runtime install: %w", err)
 	}
-	fmt.Fprintln(cmd.OutOrStdout())
-	if err := runRuntimeInstall(cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.Context(), runtimeInstallOptions{Arch: arch}); err != nil {
-		fmt.Fprintln(cmd.ErrOrStderr(), "You can retry later with: sudo veil runtime install")
-		return fmt.Errorf("install protocol runtimes: %w", err)
+	plugin, _ := protocols.NewRegistry().Get("naiveproxy")
+	provider, ok := protocols.AsRuntimeProvider(plugin)
+	if !ok {
+		return fmt.Errorf("panel Caddy runtime is unavailable")
 	}
+	fmt.Fprintln(cmd.OutOrStdout())
+	result := runtimeEnsureFunc(cmd.Context(), runtimeinstall.Options{BinDir: runtimeinstall.DefaultBinDir(), Arch: arch}, provider.RuntimeInstall(arch))
+	if result.Err == nil && !result.Installed {
+		result.Err = fmt.Errorf("caddy runtime was not installed: %s", result.SkipReason)
+	}
+	if result.Err != nil {
+		fmt.Fprintln(cmd.ErrOrStderr(), "You can retry with: sudo veil runtime install --only naiveproxy")
+		return fmt.Errorf("install panel Caddy runtime: %w", result.Err)
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Panel Caddy runtime verified: %s\n", result.Path)
 	return nil
 }
 
@@ -157,7 +166,7 @@ func newRuntimeInstallCommand() *cobra.Command {
 		longParts = append(longParts, desc)
 	}
 
-	longBody := "Install acquires the external runtime binaries that Veil's managed systemd\nunits invoke and places them in the bin directory (default /usr/local/bin).\n\nWithout these binaries every protocol fails to start with systemd status\n203/EXEC."
+	longBody := "Preinstall or repair the external runtime binaries that Veil's managed\nsystemd units invoke (default /usr/local/bin). Runtimes are normally acquired\non demand when their first enabled inbound is applied or WARP is enabled.\nUse --only to prepare selected runtimes in advance."
 	if len(longParts) > 0 {
 		longBody += "\n\n" + strings.Join(longParts, "; ") + "."
 	}
@@ -168,6 +177,9 @@ func newRuntimeInstallCommand() *cobra.Command {
 		Short: "Download and install protocol runtime binaries into the bin directory",
 		Long:  longBody,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("only") && len(only) == 0 {
+				return fmt.Errorf("--only requires at least one runtime name")
+			}
 			arch, err := hostenv.NormalizeArch(hostenv.CurrentPlatform().Arch)
 			if err != nil {
 				return err
@@ -236,6 +248,9 @@ func runRuntimeInstall(out io.Writer, errOut io.Writer, ctx context.Context, opt
 func rejectUnknownRuntimeSelection(only []string) error {
 	if len(only) == 0 {
 		return nil
+	}
+	if len(runtimeinstall.NormalizeRuntimeNames(only)) == 0 {
+		return fmt.Errorf("--only requires at least one runtime name")
 	}
 	catalog := make([]runtimeinstall.Runtime, 0, len(runtimeNames()))
 	for _, name := range runtimeNames() {

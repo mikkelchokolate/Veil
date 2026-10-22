@@ -42,3 +42,12 @@ type BackupSftpOperator interface {
 type IPCertIssuer interface {
 	IssueIPCert(context.Context, IssueIPCertRequest) (IssueIPCertResult, error)
 }
+
+// RuntimeInstaller acquires pinned runtimes without widening the core Client.
+type RuntimeInstaller interface {
+	InstallRuntimes(context.Context, RuntimeInstallRequest) error
+}
+
+type RuntimeInstallObserver interface {
+	RuntimeInstallStatus(context.Context, RuntimeInstallStatusRequest) (RuntimeInstallStatusResult, error)
+}

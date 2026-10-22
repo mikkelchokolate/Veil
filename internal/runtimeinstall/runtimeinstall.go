@@ -143,6 +143,8 @@ type Asset struct {
 
 // Options configures an installation run.
 type Options struct {
+	// Progress reports acquisition stages without command output or credentials.
+	Progress func(stage, name string)
 	// BinDir is where binaries are written (default /usr/local/bin).
 	BinDir string
 	// CaddyCacheDir is where the Caddy build workspace is cached. Defaults to
@@ -228,7 +230,7 @@ func runtimeVersionProbeArgsAtRoot(binary, sandboxBinary, root string, args []st
 		"--property=RestrictSUIDSGID=yes", "--property=LockPersonality=yes", "--property=MemoryDenyWriteExecute=yes",
 		"--property=CapabilityBoundingSet=", "--property=RestrictAddressFamilies=AF_UNIX",
 		"--property=SystemCallArchitectures=native",
-		"--property=SystemCallFilter=@system-service ~@mount @privileged @resources @raw-io @reboot @swap @obsolete @debug",
+		"--property=SystemCallFilter=@system-service",
 		"--property=MemoryMax=128M", "--property=TasksMax=32", "--property=CPUQuota=25%", "--property=RuntimeMaxSec=15s",
 		"--property=WorkingDirectory=/empty", "--property=UMask=0077",
 		"--property=BindReadOnlyPaths=" + binary + ":" + sandboxBinary,
@@ -320,10 +322,20 @@ func runtimeProbeDependencies(binary string) ([]string, error) {
 }
 
 func prepareRuntimeProbeDependencyTargets(root string, dependencies []string) error {
+	root = filepath.Clean(root)
 	for _, dependency := range dependencies {
 		target := filepath.Join(root, strings.TrimPrefix(dependency, "/"))
+		relative, err := filepath.Rel(root, target)
+		if err != nil || relative == "." || !filepath.IsLocal(relative) {
+			return fmt.Errorf("runtime probe dependency %q escapes sandbox root", dependency)
+		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
+		}
+		for directory := filepath.Dir(target); directory != root; directory = filepath.Dir(directory) {
+			if err := os.Chmod(directory, 0o755); err != nil {
+				return err
+			}
 		}
 		file, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o400)
 		if err != nil {
@@ -432,7 +444,9 @@ func runSandboxedVersionProbe(ctx context.Context, binary string, args []string)
 		if lookupErr != nil {
 			return "", fmt.Errorf("resolve systemd-run: %w", lookupErr)
 		}
-		rootDir, createErr := os.MkdirTemp("/var/tmp", "veil-runtime-probe-root-*")
+		// PID 1 must see the root too; the helper's PrivateTmp hides /var/tmp.
+		// shortcut: SIGKILL may leave this skeleton; use ownership-aware cleanup if leftovers become significant.
+		rootDir, createErr := os.MkdirTemp(filepath.Dir(binary), ".veil-runtime-probe-root-*")
 		if createErr != nil {
 			return "", fmt.Errorf("create systemd probe root: %w", createErr)
 		}
@@ -440,9 +454,14 @@ func runSandboxedVersionProbe(ctx context.Context, binary string, args []string)
 		if err := os.Chmod(rootDir, 0o755); err != nil {
 			return "", err
 		}
-		for path, mode := range map[string]os.FileMode{"probe": 0o755, "empty": 0o555, "tmp": 0o1777} {
-			if err := os.Mkdir(filepath.Join(rootDir, path), mode); err != nil {
+		// The helper's private umask must not block the sandbox's DynamicUser.
+		for path, mode := range map[string]os.FileMode{"probe": 0o755, "empty": 0o555, "tmp": 0o777 | os.ModeSticky} {
+			directory := filepath.Join(rootDir, path)
+			if err := os.Mkdir(directory, mode); err != nil {
 				return "", fmt.Errorf("prepare systemd probe root: %w", err)
+			}
+			if err := os.Chmod(directory, mode); err != nil {
+				return "", fmt.Errorf("set systemd probe root permissions: %w", err)
 			}
 		}
 		if err := prepareRuntimeProbeDependencyTargets(rootDir, dependencies); err != nil {
@@ -619,6 +638,7 @@ func installOne(ctx context.Context, opts Options, runtime Runtime) Result {
 		path, version, verified, digest, err := installFromRelease(ctx, opts, runtime, true)
 		result.Path, result.Version, result.VerifiedVersion, result.SHA256, result.Err = path, version, verified, digest, err
 	case MethodGoInstall:
+		opts.progress("building", runtime.Name)
 		goBin, err := resolveGo(ctx, opts.CaddyCacheDir, opts.EnsureGo)
 		if err != nil {
 			result.Err = err
@@ -632,6 +652,7 @@ func installOne(ctx context.Context, opts Options, runtime Runtime) Result {
 		path, verified, digest, err := installFromSource(ctx, opts, runtime)
 		result.Path, result.Version, result.VerifiedVersion, result.SHA256, result.Err = path, runtime.Version, verified, digest, err
 	case MethodCaddyNaive:
+		opts.progress("building", runtime.Name)
 		goBin, err := resolveGo(ctx, opts.CaddyCacheDir, opts.EnsureGo)
 		if err != nil {
 			result.Err = err
@@ -652,6 +673,7 @@ func installOne(ctx context.Context, opts Options, runtime Runtime) Result {
 }
 
 func installFromRelease(ctx context.Context, opts Options, runtime Runtime, archive bool) (string, string, string, string, error) {
+	opts.progress("downloading", runtime.Name)
 	release, err := opts.FetchReleaseVersion(ctx, runtime.Repo, runtime.Version)
 	if err != nil {
 		return "", "", "", "", fmt.Errorf("resolve %s release %s: %w", runtime.Repo, runtime.Version, err)
@@ -992,6 +1014,7 @@ func updateRuntimeManifest(root string, runtime Runtime, target, verified, diges
 var semanticVersionPattern = regexp.MustCompile(`(?i)v?([0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?)`)
 
 func verifyRuntimeVersion(ctx context.Context, opts Options, runtime Runtime, stagePath string) (string, error) {
+	opts.progress("verifying", runtime.Name)
 	var output string
 	if len(runtime.VersionArgs) == 1 && runtime.VersionArgs[0] == "__go_buildinfo__" {
 		var err error
@@ -1325,7 +1348,7 @@ func fetchReleaseAt(ctx context.Context, client *http.Client, endpoint, fallback
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "veil")
-	resp, err := client.Do(req)
+	resp, err := runtimeHTTPDo(client, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1375,7 +1398,7 @@ func fetchReleaseAssetsWeb(ctx context.Context, client *http.Client, repo, tag s
 	}
 	req.Header.Set("Accept", "text/html")
 	req.Header.Set("User-Agent", "veil")
-	resp, err := client.Do(req)
+	resp, err := runtimeHTTPDo(client, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1403,7 +1426,7 @@ func resolveLatestTagWeb(ctx context.Context, client *http.Client, repo string) 
 		return "", err
 	}
 	req.Header.Set("User-Agent", "veil")
-	resp, err := client.Do(req)
+	resp, err := runtimeHTTPDo(client, req)
 	if err != nil {
 		return "", err
 	}
@@ -1463,16 +1486,31 @@ func downloadURL(ctx context.Context, client *http.Client, url string) ([]byte, 
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "veil")
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
+	for attempt := 0; ; attempt++ {
+		resp, err := client.Do(req.Clone(ctx))
+		var body []byte
+		if err == nil {
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				err = fmt.Errorf("HTTP %s", resp.Status)
+				_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+			} else {
+				const maxDownload = 200 * 1024 * 1024
+				body, err = io.ReadAll(io.LimitReader(resp.Body, maxDownload))
+			}
+		}
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if !runtimeHTTPRetryable(resp, err) || attempt+1 == runtimeHTTPAttempts {
+			return body, err
+		}
+		if err := runtimeHTTPBackoff(ctx, attempt); err != nil {
+			return nil, err
+		}
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP %s", resp.Status)
-	}
-	const maxDownload = 200 * 1024 * 1024
-	return io.ReadAll(io.LimitReader(resp.Body, maxDownload))
 }
 
 func runGoInstall(ctx context.Context, goBin, binDir, sourcePackage string) error {

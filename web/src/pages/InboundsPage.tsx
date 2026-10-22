@@ -458,9 +458,10 @@ export function InboundsPage() {
 	const attachedQueries = useQueries({
 		queries: inboundItems.map((ib) => ({
 			queryKey: ["clients", "for-inbound", ib.name],
-			queryFn: () =>
+			queryFn: ({ signal }) =>
 				apiFetch(
-					`/api/inbounds/${encodeURIComponent(ib.name)}/clients?pageSize=500`,
+					`/api/inbounds/${encodeURIComponent(ib.name)}/clients?pageSize=5`,
+					{ signal },
 				) as Promise<{ items?: ClientView[]; total?: number }>,
 		})),
 	});
@@ -1250,9 +1251,9 @@ export function InboundsPage() {
 														</Link>
 													))}
 													{attachedTotal > attached.length ? (
-														<span className="muted">
+														<Link to="/clients" search={{ inboundId: ib.name }}>
 															+{attachedTotal - attached.length}
-														</span>
+														</Link>
 													) : null}
 												</span>
 											)}

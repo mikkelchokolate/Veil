@@ -232,6 +232,19 @@ func TestPreflightSkipsHostChecksForNonRoot(t *testing.T) {
 	}
 }
 
+func TestPanelPreflightDoesNotRequireUnusedRuntimeExtractionTools(t *testing.T) {
+	stubPreflightEnv(t, preflightEnv{root: false})
+	report := collectInstallPreflight(context.Background(), installer.RURecommendedProfile{PanelAccess: "local"}, ruRecommendedInstallOptions{})
+	if !report.ready() {
+		t.Fatalf("panel-only install must not require runtime extraction tools: %s", report.String())
+	}
+	for _, tool := range []string{"tar", "gzip", "xz", "sha256sum"} {
+		if _, ok := checkByID(report, "tool-"+tool); ok {
+			t.Fatalf("unused runtime prerequisite %s was checked", tool)
+		}
+	}
+}
+
 func TestPreflightCaddyModeSkipsACME(t *testing.T) {
 	stubPreflightEnv(t, preflightEnv{
 		root: true, systemd: true, manager: "apt-get",

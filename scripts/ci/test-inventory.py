@@ -211,7 +211,9 @@ def write_report(repo: Path, artifact: Path, roots: list[dict[str, Any]], logs: 
         "goarch": os.environ.get("GOARCH", "amd64"),
         "race": True,
         "coverage": True,
-        "roots": [{"package": r["package"], "root": r["root"], "elapsedMs": r.get("elapsedMs", 0)} for r in timings],
+        # Keep measured zero-duration roots too: omitting them makes the next
+        # run assign its much larger unknown-root fallback to fast tests.
+        "roots": [{"package": r["package"], "root": r["root"], "elapsedMs": r.get("elapsedMs", 0)} for r in roots if (r["package"], r["root"]) in observed],
     }
     (artifact / "timing-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     task_rows: list[dict[str, Any]] = []
@@ -303,6 +305,26 @@ def write_report(repo: Path, artifact: Path, roots: list[dict[str, Any]], logs: 
     print(f"inventory verified: {len(roots)} expected roots, {len(observed)} executed roots, {len(skipped)} allowed skips, {helper_count} helper roots")
 
 
+def merge_task_timings(paths: list[Path], artifact: Path) -> None:
+    rows = []
+    seen = set()
+    for path in paths:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            raise SystemExit(f"task timings must be an array: {path}")
+        for row in data:
+            if (not isinstance(row, dict) or not row.get("task") or not row.get("package")
+                    or not isinstance(row.get("elapsed_ms"), int) or row["elapsed_ms"] < 0):
+                raise SystemExit(f"invalid task timing in {path}")
+            if row["task"] in seen:
+                raise SystemExit(f"task timing produced twice: {row['task']}")
+            seen.add(row["task"])
+            rows.append(row)
+    artifact.mkdir(parents=True, exist_ok=True)
+    (artifact / "task-timings.json").write_text(
+        json.dumps(sorted(rows, key=lambda row: row["task"]), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", type=Path, default=Path.cwd())
@@ -311,8 +333,12 @@ def main() -> int:
     parser.add_argument("--roots-json", type=Path)
     parser.add_argument("--skip-allowlist", type=Path)
     parser.add_argument("--helper-allowlist", type=Path)
+    parser.add_argument("--merge-task-timings", type=Path, action="append", default=[])
     parser.add_argument("--log", type=Path, action="append", default=[])
     args = parser.parse_args()
+    if args.merge_task_timings:
+        merge_task_timings(args.merge_task_timings, args.artifact_dir)
+        return 0
     repo = args.repo.resolve()
     roots_path = args.roots_json or (args.artifact_dir / "test-roots.json" if args.log and (args.artifact_dir / "test-roots.json").exists() else None)
     if roots_path:

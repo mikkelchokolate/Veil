@@ -2,6 +2,7 @@ package install
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/installer"
@@ -26,15 +27,21 @@ func PanelURL(profile installer.RURecommendedProfile) string {
 	if basePath == "" {
 		basePath = "/"
 	}
-	if profile.Domain != "" {
+	if profile.Domain != "" && profile.PanelAccess != "direct" {
 		return "https://" + profile.Domain + basePath
 	}
 	if profile.PanelListen != "" {
+		address := profile.PanelListen
+		if profile.PanelAccess == "direct" && profile.Domain != "" {
+			if _, port, err := net.SplitHostPort(address); err == nil {
+				address = net.JoinHostPort(profile.Domain, port)
+			}
+		}
 		scheme := "http"
 		if profile.PanelTLSEnabled {
 			scheme = "https"
 		}
-		return scheme + "://" + profile.PanelListen + basePath
+		return scheme + "://" + address + basePath
 	}
 	return "https://" + profile.Domain + basePath
 }

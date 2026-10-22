@@ -43,6 +43,7 @@ Usage:
 
 Options:
   Veil install only installs Panel; configure protocols as Panel Inbounds
+  Protocol runtimes are acquired on first use; caddy access acquires Caddy if missing
   --version VERSION    Release tag to install, default latest
   --install-dir DIR    Directory for the veil binary, default /usr/local/bin
   --profile NAME       ru-recommended (default)

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/syspath"
@@ -33,16 +34,16 @@ func (m SystemdActionModule) Plan() []SystemdAction {
 	for _, unit := range clean {
 		actions = append(actions, SystemdAction{Command: "systemctl", Args: []string{"enable", unit}})
 	}
-	for _, unit := range clean {
-		actions = append(actions, SystemdAction{Command: "systemctl", Args: []string{"restart", unit}})
-	}
+	// Queue dependent units before waiting, so their restart jobs can merge
+	// instead of stopping/starting the panel between separate commands.
+	actions = append(actions, SystemdAction{Command: "systemctl", Args: append([]string{"restart"}, clean...)})
 	return actions
 }
 
 func (SystemdActionModule) Run(runner CommandRunner, actions []SystemdAction) error {
 	for _, action := range actions {
 		if err := runner.Run(action.Command, action.Args...); err != nil {
-			return err
+			return fmt.Errorf("%s %v: %w", action.Command, action.Args, err)
 		}
 	}
 	return nil
@@ -64,7 +65,8 @@ func systemdCommandTimeout(command string, args ...string) time.Duration {
 		case "daemon-reload", "enable", "disable":
 			timeout = 10 * time.Second
 		case "restart":
-			timeout = 30 * time.Second
+			// Preserve the old per-unit budget when restart jobs are queued together.
+			timeout = 30 * time.Second * time.Duration(max(1, len(args)-1))
 		}
 	}
 	return timeout

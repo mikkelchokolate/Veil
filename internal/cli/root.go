@@ -35,6 +35,9 @@ func NewRootCommandWithOptions(version string, options RootOptions) *cobra.Comma
 		Use:   "veil",
 		Short: "Veil panel and CLI for protocols through Panel Inbounds",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 && operatorMenuTerminal(cmd) {
+				return runOperatorMenu(cmd, version, options, nil)
+			}
 			return cmd.Help()
 		},
 	}
@@ -77,6 +80,7 @@ func NewRootCommandWithOptions(version string, options RootOptions) *cobra.Comma
 	cmd.AddCommand(newCertCommand())
 	cmd.AddCommand(newHelperCommand(version))
 	cmd.AddCommand(newRuntimeCommand())
+	cmd.AddCommand(newMenuCommand(version, options))
 	attachOperatorHelp(cmd)
 	return cmd
 }

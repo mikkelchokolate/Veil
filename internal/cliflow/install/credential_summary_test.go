@@ -51,3 +51,30 @@ func TestCredentialSummaryDisplaysPanelOnlyCredentials(t *testing.T) {
 		}
 	}
 }
+
+func TestDirectPanelURLIncludesListenerPort(t *testing.T) {
+	for _, test := range []struct {
+		name, domain, listen, want string
+	}{
+		{"IPv4", "203.0.113.4", "0.0.0.0:2096", "https://203.0.113.4:2096/secret/"},
+		{"IPv6", "2001:db8::4", "[::]:2096", "https://[2001:db8::4]:2096/secret/"},
+		{"domain and random port", "panel.example.com", "0.0.0.0:35501", "https://panel.example.com:35501/secret/"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			profile := installer.RURecommendedProfile{
+				PanelAccess: "direct", PanelListen: test.listen, Domain: test.domain,
+				PanelTLSEnabled: true, WebBasePath: "/secret/",
+			}
+			if got := PanelURL(profile); got != test.want {
+				t.Fatalf("PanelURL = %q, want %q", got, test.want)
+			}
+			for _, summary := range []string{
+				CredentialSummary(profile), NewPanelSummary(PanelSummaryInput{Profile: profile}).String(),
+			} {
+				if !strings.Contains(summary, test.want) {
+					t.Fatalf("summary missing direct URL %q:\n%s", test.want, summary)
+				}
+			}
+		})
+	}
+}

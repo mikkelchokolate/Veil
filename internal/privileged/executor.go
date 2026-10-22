@@ -32,6 +32,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/releaseverify"
+	"github.com/mikkelchokolate/Veil/internal/runtimeinstall"
 	"github.com/mikkelchokolate/Veil/internal/runtimeports"
 	"github.com/mikkelchokolate/Veil/internal/safefs"
 	"github.com/mikkelchokolate/Veil/internal/service"
@@ -104,20 +105,22 @@ func chmodNoFollow(path string, mode os.FileMode) error {
 }
 
 type Executor struct {
-	Promote            func(context.Context, ResolvedPromotion) (PromoteResult, error)
-	ServiceAction      func(context.Context, ServiceActionRequest) error
-	ServiceStatus      func(context.Context, ServiceStatusRequest) (ServiceStatusResult, error)
-	Journal            func(context.Context, ResolvedJournal) (JournalResult, error)
-	Backup             func(context.Context, ResolvedBackup) (BackupResult, error)
-	BackupSftp         func(context.Context, ResolvedBackupSftp) (BackupSftpResult, error)
-	RotateKey          func(context.Context, RotateKeyRequest) error
-	RecoverKeyRotation func(context.Context) error
-	Firewall           func(context.Context, ResolvedFirewall) (FirewallResult, error)
-	Update             func(context.Context, ResolvedUpdate) (UpdateResult, error)
-	RestartPanel       func(context.Context) error
-	SyncCaddyCert      func(context.Context, SyncCaddyCertRequest) (SyncCaddyCertResult, error)
-	CaddyLoad          func(context.Context, CaddyLoadRequest) error
-	IssueIPCert        func(context.Context, IssueIPCertRequest) (IssueIPCertResult, error)
+	Promote              func(context.Context, ResolvedPromotion) (PromoteResult, error)
+	ServiceAction        func(context.Context, ServiceActionRequest) error
+	ServiceStatus        func(context.Context, ServiceStatusRequest) (ServiceStatusResult, error)
+	Journal              func(context.Context, ResolvedJournal) (JournalResult, error)
+	Backup               func(context.Context, ResolvedBackup) (BackupResult, error)
+	BackupSftp           func(context.Context, ResolvedBackupSftp) (BackupSftpResult, error)
+	RotateKey            func(context.Context, RotateKeyRequest) error
+	RecoverKeyRotation   func(context.Context) error
+	Firewall             func(context.Context, ResolvedFirewall) (FirewallResult, error)
+	Update               func(context.Context, ResolvedUpdate) (UpdateResult, error)
+	RestartPanel         func(context.Context) error
+	SyncCaddyCert        func(context.Context, SyncCaddyCertRequest) (SyncCaddyCertResult, error)
+	CaddyLoad            func(context.Context, CaddyLoadRequest) error
+	IssueIPCert          func(context.Context, IssueIPCertRequest) (IssueIPCertResult, error)
+	InstallRuntimes      func(context.Context, RuntimeInstallRequest) error
+	RuntimeInstallStatus func(context.Context, RuntimeInstallStatusRequest) (RuntimeInstallStatusResult, error)
 }
 
 type CommandRunner func(context.Context, []string, time.Duration) (string, error)
@@ -159,6 +162,8 @@ type ProductionConfig struct {
 	// IssueIPCert is the issuance seam — production runs
 	// acmeip.IssueIPCert; tests substitute a stub.
 	IssueIPCert func(context.Context, acmeip.IssueOptions) (acmeip.IssuedCert, error)
+	// InstallRuntime is the acquisition seam; nil verifies/reuses or installs a pinned runtime.
+	InstallRuntime func(context.Context, runtimeinstall.Options, runtimeinstall.Runtime) runtimeinstall.Result
 	// CaddyAdminEndpoint is the managed Caddy Admin API endpoint, either a
 	// Caddy-style "unix/<path>" socket (the production default, #1276) or an
 	// http:// base URL.
@@ -254,7 +259,25 @@ func NewProductionExecutor(config ProductionConfig) Executor {
 	if config.IPCertHomeDir == "" {
 		config.IPCertHomeDir = filepath.Join(hostenv.EtcDir(), "acme")
 	}
+	if config.InstallRuntime == nil {
+		config.InstallRuntime = runtimeinstall.NewEnsurer()
+	}
+	progress := &runtimeInstallProgress{now: config.Now}
 	return Executor{
+		InstallRuntimes: func(ctx context.Context, request RuntimeInstallRequest) error {
+			update := func(stage, name string) { progress.update(request.Fence.OperationID, stage, name) }
+			progress.start(request.Fence.OperationID)
+			err := runProductionRuntimeInstall(ctx, config, request, update)
+			if err != nil {
+				update("failed", "")
+			} else {
+				update("complete", "")
+			}
+			return err
+		},
+		RuntimeInstallStatus: func(_ context.Context, request RuntimeInstallStatusRequest) (RuntimeInstallStatusResult, error) {
+			return progress.status(request.OperationID), nil
+		},
 		Promote: func(_ context.Context, request ResolvedPromotion) (PromoteResult, error) {
 			return promoteResolvedArtifacts(config.PromotionBackupRoot, config.Now, request)
 		},

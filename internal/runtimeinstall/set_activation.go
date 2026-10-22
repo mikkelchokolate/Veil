@@ -94,6 +94,9 @@ func installRuntimeSet(ctx context.Context, opts Options, runtimes []Runtime) []
 		}
 		return results
 	}
+	if err := ctx.Err(); err != nil {
+		return runtimeSetFailureFromResults(results, err)
+	}
 	journal, err := prepareRuntimeSetActivation(opts.BinDir, results)
 	if err != nil {
 		cleanupErr := cleanupRuntimeStages(opts.BinDir)
@@ -102,6 +105,7 @@ func installRuntimeSet(ctx context.Context, opts Options, runtimes []Runtime) []
 		}
 		return runtimeSetFailureFromResults(results, err)
 	}
+	opts.progress("installing", "")
 	if err := activateRuntimeSet(opts.BinDir, &journal); err != nil {
 		return runtimeSetFailureFromResults(results, err)
 	}
@@ -344,6 +348,9 @@ func copyRuntimeFile(source, target string, mode os.FileMode) (returnErr error) 
 		}
 	}()
 	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	if err := out.Chmod(mode); err != nil {
 		return err
 	}
 	if err := out.Sync(); err != nil {

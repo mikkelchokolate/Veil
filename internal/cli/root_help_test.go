@@ -41,6 +41,7 @@ func TestHelpCommandPrintsOperatorCatalogOfNestedCommands(t *testing.T) {
 		"veil rollback restore",
 		"veil rollback cleanup",
 		"veil runtime install",
+		"veil menu",
 		"veil doctor",
 		"veil install",
 		"veil repair",
@@ -85,6 +86,7 @@ func TestReadmeDocumentsOperatorHelpCatalog(t *testing.T) {
 	root.InitDefaultHelpCmd() // cobra registers `help` lazily at Execute time
 	required := []string{
 		"veil help",
+		"veil menu",
 		"veil install",
 		"veil serve",
 		"veil status",

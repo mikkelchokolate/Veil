@@ -140,7 +140,10 @@ describe("apiFetch request policy", () => {
 			});
 		});
 		vi.stubGlobal("fetch", fetchMock);
-		const pending = fetcher.apiFetch("/api/slow", { timeoutMs: 1_000 });
+		const pending = fetcher.apiFetch("/api/inbounds", {
+			method: "POST",
+			timeoutMs: 1_000,
+		});
 		const outcome = pending.then(
 			() => undefined,
 			(error: unknown) => error,
@@ -201,7 +204,7 @@ describe("apiFetch request policy", () => {
 				});
 			}),
 		);
-		const pending = fetcher.apiFetch("/api/inbounds", {
+		const pending = fetcher.apiFetch("/api/auth/login", {
 			method: "POST",
 			body: "{}",
 		});
@@ -220,6 +223,43 @@ describe("apiFetch request policy", () => {
 		const TimeoutError = (fetcher as FetcherExports).TimeoutError;
 		expect(await outcome).toBeInstanceOf(TimeoutError as new () => Error);
 	});
+
+	it.each([
+		"/api/apply",
+		"/api/apply/reconcile",
+		"/api/inbounds",
+		"/api/inbounds/first?enabled=true",
+		"/api/warp",
+		"/api/settings",
+		"/api/v1/clients/first/bindings",
+		"/api/routing/rules",
+	])(
+		"allows bounded first-runtime build time for mutations to %s",
+		async (path) => {
+			vi.useFakeTimers();
+			let requestSignal: AbortSignal | null | undefined;
+			vi.stubGlobal(
+				"fetch",
+				vi.fn((_url: string, options?: RequestInit) => {
+					requestSignal = options?.signal;
+					return new Promise<Response>((_resolve, reject) => {
+						requestSignal?.addEventListener("abort", () =>
+							reject(new DOMException("aborted", "AbortError")),
+						);
+					});
+				}),
+			);
+			const outcome = fetcher
+				.apiFetch(path, { method: "PUT", body: "{}" })
+				.catch((error: unknown) => error);
+			await vi.advanceTimersByTimeAsync(60_000);
+			expect(requestSignal?.aborted).toBe(false);
+			await vi.advanceTimersByTimeAsync(
+				fetcher.runtimeMutationTimeoutMs - 60_000,
+			);
+			expect(await outcome).toBeInstanceOf(fetcher.TimeoutError);
+		},
+	);
 
 	it("surfaces timeout and API errors instead of a generic fallback", () => {
 		const t = (key: string) => en[key] ?? key;

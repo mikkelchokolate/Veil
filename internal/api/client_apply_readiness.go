@@ -75,12 +75,11 @@ func (s *managementState) computeClientApplyFlags(rev apply.Revisions, job apply
 		}
 	}
 	appliedFP := clientRuntimeFingerprints(applied)
-	for _, current := range desired.Clients {
-		fp := clientRuntimeFingerprint(desired, current.ID)
-		if appliedFP[current.ID] == fp && fp != "" {
+	for clientID, fp := range clientRuntimeFingerprints(desired) {
+		if appliedFP[clientID] == fp && fp != "" {
 			continue
 		}
-		flags[current.ID] = clientApplyFlags{failed: failed, pending: pending && !failed}
+		flags[clientID] = clientApplyFlags{failed: failed, pending: pending && !failed}
 	}
 	return flags
 }
@@ -126,9 +125,28 @@ type clientRuntimeMaterial struct {
 }
 
 func clientRuntimeFingerprints(snapshot model.ManagementSnapshot) map[string]string {
-	out := make(map[string]string, len(snapshot.Clients))
+	// Group once so each client's fingerprint only scans its own rows.
+	clients := make(map[string]*model.ManagementSnapshot, len(snapshot.Clients))
 	for _, current := range snapshot.Clients {
-		out[current.ID] = clientRuntimeFingerprint(snapshot, current.ID)
+		if clients[current.ID] == nil {
+			clients[current.ID] = &model.ManagementSnapshot{Clients: []model.ClientSnapshot{current}}
+		}
+	}
+	owners := make(map[string]string, len(snapshot.Bindings))
+	for _, binding := range snapshot.Bindings {
+		if current := clients[binding.ClientID]; current != nil {
+			current.Bindings = append(current.Bindings, binding)
+			owners[binding.ID] = binding.ClientID
+		}
+	}
+	for _, credential := range snapshot.Credentials {
+		if owner, ok := owners[credential.BindingID]; ok {
+			clients[owner].Credentials = append(clients[owner].Credentials, credential)
+		}
+	}
+	out := make(map[string]string, len(snapshot.Clients))
+	for id, current := range clients {
+		out[id] = clientRuntimeFingerprint(*current, id)
 	}
 	return out
 }
