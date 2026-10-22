@@ -16,6 +16,15 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1355: `POST /api/apply/rollback` now supersedes the live quota-enforcement
+  record of a client restored with a different quota plan (quota bytes, reset
+  policy or reset boundary) than its live row, as a live reset-policy or
+  boundary change already does.
+  Before, the record bound to the old plan stayed active, so enforcement kept
+  using the old values (for example a pending or backing-off "depleted"
+  target after the restored quota was raised).
+  A rollback that restores the same plan leaves the record untouched.
+
 - #1351: `POST /api/apply/rollback` now also refuses with 422 a `quotaBytes`
   restored onto a client whose enabled binding lands on an inbound that
   cannot enforce it in the restored configuration (disabled, or a protocol

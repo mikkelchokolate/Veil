@@ -23,6 +23,9 @@ import (
 //     earlier non-zero value. Depletion is derived quota state, so it is
 //     carried forward only onto a row that still has a quota; a row restored
 //     without one transitions to unlimited like a live quota clear (#1350).
+//     A row restored with a different quota plan (bytes, reset policy or
+//     boundary) supersedes the live enforcement record bound to the old
+//     plan, like a live plan change (#1355).
 //   - A rotated runtime identity stays rotated.
 //   - Credential rows are never deleted or re-activated here. Retained
 //     bindings keep their live rows — active values and revoked tombstones
@@ -73,6 +76,17 @@ func ReplaceSnapshotTx(tx *Tx, clients []Client, bindings []Binding, credentials
 			}
 		} else {
 			item.Depleted = item.Depleted || live.Depleted
+			// A restored quota plan that differs from the live one (bytes,
+			// reset policy or reset boundary) leaves the live enforcement
+			// record bound to the old plan: its target was computed under
+			// the old values. Supersede it in the same tx, as a live plan
+			// change does (prepareQuotaResetTransition), so the reconciler
+			// replans against the restored plan (#1355).
+			if live.quotaPlanDiffers(item) {
+				if err := tx.SupersedeQuotaEnforcement(item.ID); err != nil {
+					return err
+				}
+			}
 		}
 		item.ExpiresAt = earlierExpiry(item.ExpiresAt, live.ExpiresAt)
 		item.UpdatedAt = now
@@ -187,6 +201,25 @@ type liveClientSecurity struct {
 func (row liveClientSecurity) hasQuotaState() bool {
 	return row.QuotaBytes != nil || row.Depleted || row.QuotaResetAt != nil ||
 		(row.QuotaResetPolicy != "" && row.QuotaResetPolicy != ResetNever)
+}
+
+// quotaPlanDiffers reports whether a restored client that still has a quota
+// carries a different effective plan than the live row. It is compared by
+// value, with an empty policy meaning "never" on both sides. This is
+// deliberately stricter about "effective" than prepareQuotaResetTransition,
+// which compares the raw policy strings: there a ""->"never" edit costs only
+// a spurious replan, while here it would drop a record for the same plan.
+func (row liveClientSecurity) quotaPlanDiffers(restored Client) bool {
+	livePolicy, restoredPolicy := row.QuotaResetPolicy, restored.QuotaResetPolicy
+	if livePolicy == "" {
+		livePolicy = ResetNever
+	}
+	if restoredPolicy == "" {
+		restoredPolicy = ResetNever
+	}
+	return !sameInt64Ptr(row.QuotaBytes, restored.QuotaBytes) ||
+		livePolicy != restoredPolicy ||
+		!sameInt64Ptr(row.QuotaResetAt, restored.QuotaResetAt)
 }
 
 func liveClientRow(tx *Tx, id string) (liveClientSecurity, error) {
