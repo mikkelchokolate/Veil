@@ -386,6 +386,8 @@ jobs:
       # Best-effort insurance only: Actions evicts entries unused for 7 days
       # (or over the repo budget) and PR-scoped entries are invisible to other
       # branches, so the entry saved by a main run is what protects PRs.
+      # The naive client is not cached (fetch_naive_client owns the #1373 404
+      # soft-skip); its durable source is the ci-deps mirror from #1375.
       - name: Runtime download cache key
         id: runtime-downloads
         run: |

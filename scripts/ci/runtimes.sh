@@ -42,10 +42,13 @@ fetch_verified() { # <url> <file> <sha256>
 # SHA256 pins of every asset install_pinned_runtimes downloads. The CI cache
 # key is derived from this list, and a cache is only saved once it is complete.
 # Must list exactly the pins passed to fetch_verified in this file
-# (TestCIRuntimeDownloadShasMatchFetchSites enforces it).
+# (TestCIRuntimeDownloadShasMatchFetchSites enforces it). The naive client is
+# deliberately NOT cached: fetch_naive_client owns the #1373 404 soft-skip and
+# downloads directly, so listing its pin would make the cache never complete.
+# Its durable replacement is the ci-deps mirror (#1375, #1373 phase B).
 pinned_runtime_download_shas() {
   printf '%s\n' "${CI_HYSTERIA_SHA256}" "${CI_MITA_SHA256}" "${CI_MIERU_CLIENT_SHA256}" \
-    "${CI_NAIVE_CLIENT_SHA256}" "${CI_SINGBOX_SHA256}"
+    "${CI_SINGBOX_SHA256}"
 }
 
 pinned_runtime_download_cache_complete() { # <cache-dir>
