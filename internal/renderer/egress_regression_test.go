@@ -167,32 +167,10 @@ func TestRenderWarpSingBoxLeadingDenyRulePrecedesUserRules(t *testing.T) {
 	}
 }
 
-// #1096/#1097: Caddy's forward_proxy must carry an explicit deny ACL — its
-// built-in private-range defaults miss unspecified/CGNAT/metadata/mapped
-// space, and the ACL must be present in BOTH render paths (Caddyfile and the
-// JSON catalog) because only one of them ships on a given install.
-func TestRenderNaiveCaddyfileCarriesEgressDenyACL(t *testing.T) {
-	body, err := RenderNaiveCaddyfile(NaiveConfig{
-		Domain:       "vpn.example.com",
-		Username:     "u",
-		Password:     "p",
-		ListenPort:   443,
-		FallbackRoot: "/etc/veil/www/fallback",
-		Upstream:     "socks5://127.41.0.1:40000",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(body, "acl {") {
-		t.Fatalf("no acl block in Caddyfile:\n%s", body)
-	}
-	for _, cidr := range egressDenyCIDRs {
-		if !strings.Contains(body, "deny") || !strings.Contains(body, cidr) {
-			t.Fatalf("acl deny missing %q:\n%s", cidr, body)
-		}
-	}
-}
-
+// #1096/#1097: Caddy's forward_proxy must carry an explicit deny ACL. Its
+// built-in private-range defaults miss unspecified, CGNAT, metadata and mapped
+// space. The consolidated Caddy JSON is the only naive render path since the
+// dead Caddyfile text-template renderer was removed (#1292).
 func TestRenderCaddyJSONForwardProxyDenyACL(t *testing.T) {
 	plan := caddyassembly.CaddyRenderPlan{
 		Servers: map[bindregistry.BindKey]caddyassembly.CaddyBindOwner{

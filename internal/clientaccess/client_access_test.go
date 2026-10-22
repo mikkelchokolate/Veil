@@ -18,8 +18,8 @@ func TestClientAccessBuildsClientLinksAndRendererUsersFromProfiles(t *testing.T)
 	if len(links) != 1 || links[0].Name != "naive/alice" || links[0].URI == "" {
 		t.Fatalf("unexpected links: %+v", links)
 	}
-	users := access.NaiveUsers()
+	users := access.Hysteria2Users()
 	if len(users) != 1 || users[0].Username != "alice-user" || users[0].Password != "alice-pass" {
-		t.Fatalf("unexpected naive users: %+v", users)
+		t.Fatalf("unexpected renderer users: %+v", users)
 	}
 }
