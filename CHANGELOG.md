@@ -28,6 +28,9 @@ All notable changes to Veil will be documented in this file.
   configuration (the #1224 rule). Bindings already disabled live do not
   count. A revision taken before those rules were tightened can no longer
   be rolled back to as-is; fix the client in the current revision instead.
+  Only clients the rollback actually restores are checked: a client deleted
+  since the revision was taken is not resurrected, so its stale values do
+  not block the rollback.
 - #1346: revoking or rotating a subscription token now destroys its sealed
   issuance binding (`token_ciphertext` is cleared in the same `UPDATE` that
   sets `revoked_at`). Before, the binding stayed valid, so a veil.db writer

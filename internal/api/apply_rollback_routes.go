@@ -138,9 +138,16 @@ func (s *managementState) commitIntentionalRollbackLocked(selectedRevision uint6
 		if err != nil {
 			return err
 		}
+		// The snapshot's own client values, captured before the graft
+		// merges the live depletion/enablement/expiry posture onto them.
+		snapshotClients, _, _ := clientRowsFromImmutableSnapshot(selected)
 		if err := graftRollbackClientSecurityTx(tx, &selected); err != nil {
 			_ = tx.Rollback()
 			return err
+		}
+		if err := validateRollbackRestoredClients(snapshotClients, selected); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("%w: %v", errRollbackSnapshotInvalid, err)
 		}
 		// Checked after the graft so the verdict covers exactly the rows
 		// ReplaceSnapshotTx is about to write: bindings deleted or disabled
@@ -233,16 +240,6 @@ func validateRollbackNormalizedSnapshot(snapshot managementSnapshot) error {
 		}
 		clients[current.ID] = struct{}{}
 	}
-	// Domain values go through the same validate() rules as every live
-	// writer. Without this a legacy or crafted revision could restore
-	// deviceLimit=0, a negative quota, a non-positive expiry, or an unknown
-	// reset policy that the API refuses (#1270).
-	restoredClients, _, _ := clientRowsFromImmutableSnapshot(snapshot)
-	for _, restored := range restoredClients {
-		if err := client.ValidateRestoredClient(restored); err != nil {
-			return fmt.Errorf("client %q: %v", restored.ID, err)
-		}
-	}
 	inbounds := make(map[string]struct{}, len(snapshot.Inbounds))
 	for _, inbound := range snapshot.Inbounds {
 		if inbound.Name == "" {
@@ -287,6 +284,35 @@ func validateRollbackNormalizedSnapshot(snapshot managementSnapshot) error {
 			return fmt.Errorf("credential %q references missing binding %q", credential.ID, credential.BindingID)
 		}
 		credentials[credential.ID] = struct{}{}
+	}
+	return nil
+}
+
+// validateRollbackRestoredClients runs the restored client rows through the
+// same validate() rules as every live writer, so a legacy or crafted revision
+// cannot restore deviceLimit=0, a negative or over-range quota, a
+// non-positive expiry, an unknown reset policy, depletion without a quota or
+// a malformed name that the API refuses (#1270).
+//
+// It checks the snapshot's own values (snapshotClients, captured before the
+// graft) but only for the clients the graft retained (merged.Clients). A
+// client deleted live since the snapshot is dropped by the graft (#1099) and
+// never written, so a legacy value on it must not veto the rollback. Using
+// the pre-graft values keeps the depletion clause scoped to the snapshot: a
+// live depleted flag OR-ed onto a quota-less snapshot client is the separate
+// carried-over gap, not something this revision introduced.
+func validateRollbackRestoredClients(snapshotClients []client.Client, merged managementSnapshot) error {
+	retained := make(map[string]struct{}, len(merged.Clients))
+	for _, item := range merged.Clients {
+		retained[item.ID] = struct{}{}
+	}
+	for _, restored := range snapshotClients {
+		if _, ok := retained[restored.ID]; !ok {
+			continue
+		}
+		if err := client.ValidateRestoredClient(restored); err != nil {
+			return fmt.Errorf("client %q: %v", restored.ID, err)
+		}
 	}
 	return nil
 }

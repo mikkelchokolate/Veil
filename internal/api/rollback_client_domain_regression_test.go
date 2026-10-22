@@ -157,6 +157,11 @@ func TestRollbackRefusesConnectionLimitsOnIncapableInbound(t *testing.T) {
 		mutate func(*managementSnapshot)
 	}{
 		{"inbound_disabled", func(s *managementSnapshot) { s.Inbounds[0].Enabled = false }},
+		{"inbound_protocol_without_device_limits", func(s *managementSnapshot) {
+			// Inbound stays enabled; only the protocolConnectionLimits half
+			// of the capability predicate fails.
+			s.Inbounds[0].Protocol = "mieru"
+		}},
 		{"ip_limit_inbound_disabled", func(s *managementSnapshot) {
 			s.Clients[0].DeviceLimit = nil
 			v := 3
@@ -220,4 +225,54 @@ func TestRollbackConnectionLimitCheckFollowsMergedBindings(t *testing.T) {
 			t.Fatalf("live-disabled binding was re-enabled by rollback: %+v", bindings)
 		}
 	})
+}
+
+// A client deleted live since the snapshot is dropped by the graft (#1099)
+// and never written, so a legacy-invalid value on it must not veto the
+// rollback: the CHANGELOG remedy ("fix the client in the current revision")
+// cannot apply to a client that no longer exists (#1270 review).
+func TestRollbackIgnoresDomainValuesOfClientsDeletedLive(t *testing.T) {
+	router, state, selected := rollbackDomainFixture(t, "", func(s *managementSnapshot) {
+		ghost := s.Clients[0]
+		ghost.ID = "rollback-domain-ghost"
+		ghost.Name = "rollback-domain-ghost"
+		zero := 0
+		ghost.DeviceLimit = &zero
+		s.Clients = append(s.Clients, ghost)
+	})
+	before, err := state.applyRevisions.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := v1Request(t, router, http.MethodPost, "/api/apply/rollback",
+		jsonBody(t, map[string]any{"selectedRevision": selected, "confirm": true}))
+	if response.Code != http.StatusOK {
+		t.Fatalf("rollback status = %d, want 200: %s", response.Code, response.Body.String())
+	}
+	if after, _ := state.applyRevisions.Get(); after.Desired != before.Desired+1 {
+		t.Fatalf("desired revision = %d, want %d", after.Desired, before.Desired+1)
+	}
+	clients, err := state.clientRepo.AllClients()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range clients {
+		if item.ID == "rollback-domain-ghost" {
+			t.Fatalf("client deleted live was resurrected by rollback: %+v", item)
+		}
+	}
+}
+
+// The same invalid value on a client the rollback DOES restore is still
+// refused, so the retained-client filter above is not skipping everything.
+func TestRollbackStillRefusesDomainValuesOfRetainedClients(t *testing.T) {
+	router, state, selected := rollbackDomainFixture(t, "", func(s *managementSnapshot) {
+		ghost := s.Clients[0]
+		ghost.ID = "rollback-domain-ghost"
+		ghost.Name = "rollback-domain-ghost"
+		s.Clients = append(s.Clients, ghost)
+		zero := 0
+		s.Clients[0].DeviceLimit = &zero
+	})
+	assertRollbackRefusedUnchanged(t, router, state, selected, "deviceLimit")
 }
