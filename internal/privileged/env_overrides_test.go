@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -124,8 +125,12 @@ func TestPolicyEnvOverridesRedactNonPathPassphrase(t *testing.T) {
 	clearPolicyEnv(t)
 	t.Setenv("VEIL_BACKUP_PASSPHRASE", "hunter2")
 	got := PolicyEnvOverrides()
-	if len(got) != 1 || !got[0].Redacted || got[0].Value != "<redacted: 7 bytes, not an absolute path>" {
+	if len(got) != 1 || !got[0].Redacted || got[0].Value != "<redacted: not an absolute path without spaces>" {
 		t.Fatalf("non-path passphrase value must be redacted, got %+v", got)
+	}
+	t.Setenv("VEIL_BACKUP_PASSPHRASE", "/correct horse battery staple")
+	if got = PolicyEnvOverrides(); len(got) != 1 || !got[0].Redacted || strings.Contains(got[0].Value, "horse") {
+		t.Fatalf("absolute-looking passphrase with blanks must be redacted, got %+v", got)
 	}
 	t.Setenv("VEIL_BACKUP_PASSPHRASE", "/srv/veil/backup.passphrase")
 	got = PolicyEnvOverrides()

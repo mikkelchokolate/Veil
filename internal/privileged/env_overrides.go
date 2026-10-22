@@ -1,7 +1,6 @@
 package privileged
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,7 +29,9 @@ type PolicyEnvOverride struct {
 // mayHoldSecret marks a knob whose name reads like a secret value
 // (VEIL_BACKUP_PASSPHRASE is a *path* to the passphrase file). An operator
 // who exported the passphrase itself by mistake must not have it echoed to
-// stderr or the journal, so a value that is not an absolute path is redacted.
+// stderr or the journal, so a value that is not an absolute path, or that
+// contains blanks (passphrases often do, packaged paths never), is redacted
+// without hinting at its length.
 var policyEnvKnobs = []struct {
 	name, packaged string
 	mayHoldSecret  bool
@@ -65,8 +66,8 @@ func PolicyEnvOverrides() []PolicyEnvOverride {
 			continue
 		}
 		override := PolicyEnvOverride{Name: knob.name, Value: value, Packaged: knob.packaged}
-		if knob.mayHoldSecret && !filepath.IsAbs(value) {
-			override.Value = fmt.Sprintf("<redacted: %d bytes, not an absolute path>", len(value))
+		if knob.mayHoldSecret && (!filepath.IsAbs(value) || strings.ContainsAny(value, " \t")) {
+			override.Value = "<redacted: not an absolute path without spaces>"
 			override.Redacted = true
 		}
 		out = append(out, override)

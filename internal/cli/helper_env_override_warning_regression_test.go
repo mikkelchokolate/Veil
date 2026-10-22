@@ -97,7 +97,10 @@ func TestHelperServeDoesNotWarnForPackagedEnv(t *testing.T) {
 	}
 }
 
-func TestHelperServeEnvWarningCountMatchesKnobTable(t *testing.T) {
+// Guards against an empty or truncated knob list making the per-variable
+// loops above pass vacuously; the exact table is pinned in privileged by
+// TestPolicyEnvKnobsCoverEveryDefaultPolicyEnvRead.
+func TestHelperServeEnvWarningKnobListIsNotTruncated(t *testing.T) {
 	if len(helperPolicyEnvNames) < 12 {
 		t.Fatalf("expected the full privileged knob table, got %v", helperPolicyEnvNames)
 	}
@@ -134,7 +137,7 @@ func TestHelperServeEnvWarningRedactsNonPathPassphraseValue(t *testing.T) {
 	if strings.Contains(stderr, secret) || strings.Contains(stderr, "horse") {
 		t.Fatalf("passphrase-like value echoed to stderr:\n%s", stderr)
 	}
-	want := `warning: VEIL_BACKUP_PASSPHRASE=<redacted: 28 bytes, not an absolute path> from the environment overrides the packaged helper path "/etc/veil/backup.passphrase"; the root helper trusts it`
+	want := `warning: VEIL_BACKUP_PASSPHRASE=<redacted: not an absolute path without spaces> from the environment overrides the packaged helper path "/etc/veil/backup.passphrase"; the root helper trusts it`
 	if lines := helperEnvWarningLines(stderr); len(lines) != 1 || lines[0] != want {
 		t.Fatalf("want exactly %q, got %q", want, lines)
 	}
