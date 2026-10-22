@@ -44,6 +44,6 @@ func BuildDefaultState(input DefaultInput) DefaultState {
 		Rules: []model.RoutingRule{
 			{Name: "default-direct", Match: "geoip:private", Outbound: "direct", Enabled: true},
 		},
-		Warp: model.WarpConfig{Enabled: false, Endpoint: "engage.cloudflareclient.com:2408"},
+		Warp: model.WarpConfig{Enabled: false, Endpoint: model.WarpDefaultEndpoint},
 	}
 }

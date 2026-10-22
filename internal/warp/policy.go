@@ -108,7 +108,7 @@ func validateSocksListen(listen string) error {
 func validateEndpoint(endpoint string) error {
 	endpoint = strings.TrimSpace(endpoint)
 	if endpoint == "" {
-		return nil // defaults to engage.cloudflareclient.com:2408 downstream
+		return nil // defaults to DefaultEndpoint downstream
 	}
 	_, portText, err := net.SplitHostPort(endpoint)
 	if err != nil {

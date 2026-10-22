@@ -40,7 +40,7 @@ func RenderWarpSingBox(cfg WarpSingBoxConfig) (string, error) {
 		return "", errors.New("WARP peer public key is required")
 	}
 	if cfg.Endpoint == "" {
-		cfg.Endpoint = "engage.cloudflareclient.com:2408"
+		cfg.Endpoint = model.WarpDefaultEndpoint
 	}
 	// The default lives on the reserved 127.41.0.0/16 loopback band so the
 	// per-unit egress filter can let protocol daemons reach this SOCKS

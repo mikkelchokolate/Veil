@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/curve25519"
+
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 // test hooks; overridden in tests only.
@@ -41,7 +43,7 @@ const (
 
 // DefaultEndpoint is the public Cloudflare WARP WireGuard endpoint used when
 // neither the operator nor the registrar supplies one.
-const DefaultEndpoint = "engage.cloudflareclient.com:2408"
+const DefaultEndpoint = model.WarpDefaultEndpoint
 
 // Registration is a provisioned Cloudflare WARP account, ready to drop into a
 // WarpConfig. It is obtained for free, with no user input, by registering a

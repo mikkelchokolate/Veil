@@ -197,7 +197,12 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, warp)
 			}
 		case http.MethodPut:
-			var warp WarpConfig
+			// Seed the stored endpoint before decoding: a partial submit
+			// that omits "endpoint" keeps it, so a custom endpoint is not
+			// reset to the stock value or replaced by the registrar's below
+			// (#1292). An explicit "" (the panel's cleared field) still
+			// overwrites it and resets to the stock endpoint.
+			warp := WarpConfig{Endpoint: s.warp.Endpoint}
 			if !decodeJSONRequest(w, r, &warp) {
 				return nil
 			}

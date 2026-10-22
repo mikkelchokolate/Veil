@@ -23,7 +23,9 @@ All notable changes to Veil will be documented in this file.
   endpoint unset or at the stock `engage.cloudflareclient.com:2408`. An
   endpoint the operator set is kept, and a foreign host or IP literal falls
   back to the stock endpoint, so a tampered response cannot repoint WARP
-  egress. The peer public key must be a base64 32-byte key, the interface
+  egress. A `PUT /api/warp` that omits `endpoint` now keeps the stored
+  endpoint instead of resetting it to the stock one; sending `"endpoint":""`
+  (the panel's cleared field) still resets it. The peer public key must be a base64 32-byte key, the interface
   addresses must be bare IPv4/IPv6 addresses of the right family, and
   `client_id` must decode to 3 reserved bytes. A malformed response now fails
   the PUT with a `WARP registration failed: ...` error naming the field,
