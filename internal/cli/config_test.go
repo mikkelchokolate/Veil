@@ -78,14 +78,10 @@ func TestConfigValidateValidState(t *testing.T) {
 	validState := `{
   "settings": {
     "panelListen": "127.0.0.1:2096",
-    "mode": "server",
-    "domain": "vpn.example.com",
-    "defaultAcmeEmail": "admin@example.com",
-    "naiveUsername": "veil",
-    "naivePassword": "secret"
+    "mode": "server"
   },
   "inbounds": [
-    {"name": "naive", "protocol": "naiveproxy", "transport": "tcp", "port": 443, "enabled": true}
+    {"name": "mieru", "protocol": "mieru", "transport": "tcp", "port": 443, "enabled": true, "password": "secret"}
   ],
   "routingRules": [
     {"name": "default", "match": "geoip:private", "outbound": "direct", "enabled": true}

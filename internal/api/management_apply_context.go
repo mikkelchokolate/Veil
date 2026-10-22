@@ -115,6 +115,7 @@ func (ctx ManagementApplyContext) advancePublicationPhaseLocked(phase string) er
 }
 
 func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
+	ctx.reportProgress("planning", "")
 	s := ctx.state
 	plan := NewManagementApplyIntent(ManagementApplyIntentInput{
 		ApplyRoot:       s.applyRoot,
@@ -140,6 +141,7 @@ func (ctx ManagementApplyContext) buildApplyPlanLocked() ApplyPlanResponse {
 }
 
 func (ctx ManagementApplyContext) writeApplyStageLocked(plan ApplyPlanResponse) ([]string, []ConfigValidationResult, []string, error) {
+	ctx.reportProgress("validating", "")
 	s := ctx.state
 	// A digest set only ever authenticates the stage write that produced it.
 	s.stagedArtifactDigests = nil
@@ -165,6 +167,7 @@ func (ctx ManagementApplyContext) writeApplyStageLocked(plan ApplyPlanResponse) 
 }
 
 func (ctx ManagementApplyContext) promoteStagedConfigs(stagedPaths []string) ([]string, []string, []livePromotionRecord, error) {
+	ctx.reportProgress("applying", "")
 	generatedRoot := filepath.Join(ctx.state.applyRoot, "generated")
 	// The staging tree is writable by the veil uid, so the helper is bound to
 	// the bytes this process rendered and validated: every promoted artifact
@@ -316,6 +319,7 @@ func promoteArtifactDigests(digests map[string]string) map[string]string {
 }
 
 func (ctx ManagementApplyContext) reloadPromotedServices(liveFiles []string) []ServiceActionResult {
+	ctx.reportProgress("starting_services", "")
 	results := []ServiceActionResult{}
 
 	// Retire legacy per-inbound Caddy instances before touching the singleton.
@@ -1063,6 +1067,7 @@ func serviceActionRequiresActiveUnit(action ServiceActionResult) bool {
 }
 
 func (ctx ManagementApplyContext) checkServiceHealth(actions []ServiceActionResult) []ServiceHealthResult {
+	ctx.reportProgress("health_check", "")
 	healthActions := filterHealthCheckableActions(actions)
 	if ctx.state.privilegedLocal {
 		return service.NewServiceHealthCollection(func(name string) ServiceHealthResult {

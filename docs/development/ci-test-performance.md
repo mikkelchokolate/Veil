@@ -127,3 +127,53 @@ unless every leg succeeded, merges task logs and coverprofiles, rejects plan
 mismatches, duplicates, or any planned task without a log, then runs the
 unchanged API root verification, coverage merge/gates, and inventory report.
 `make ci`/release keep `CI_TEST_PHASE=all` (the single-machine path).
+
+## Reusing race builds across hosted runs
+
+The [successful main run 39749933809](https://github.com/mikkelchokolate/Veil/actions/runs/39749933809)
+on 2026-10-22 took about 14 minutes. Its slowest backend machine started
+the orchestrator at 08:47:52 UTC, but the first test event in `api-shard-001`
+was at 08:51:36 UTC: about 225 seconds passed before assertions began.
+That task took 415 seconds overall; a later API lane on the same machine
+took 137 seconds including execution.
+
+All Go jobs previously shared setup-go's immutable cache key based on the
+toolchain and `go.sum`. A quick job could populate that cache without the
+race/coverage objects; subsequent exact cache hits prevented the longer test
+jobs from saving their completed builds. Each backend machine now restores
+and saves an additional Go build cache keyed by machine, toolchain/dependency
+pins, and source SHA, restoring the newest compatible source cache. The
+existing module cache remains in use. Go still validates build objects
+against source and flags, and every test still runs with `-race -count=1`
+and coverage. The first run on a new cache family remains cold; an updated
+hosted run is required to measure the reduction.
+
+The same run also failed to save the validator-runtime cache on every
+machine: tar could not read the installer's root-only lock and provenance
+files. Validator preparation consequently took 63–82 seconds per machine.
+The cache now contains only the public Caddy and sing-box binaries; their
+existing runtime validation and source/pin-based cache key remain in place.
+The installer's private metadata keeps its original permissions.
+
+The privilege-boundary, protocol E2E, and both package-smoke machines also
+stop installing Node/pnpm: they restore the source-verified frontend build
+and never invoke either tool. In the same baseline run those unused setup
+steps consumed 13, 14, 17, and 10 seconds respectively. Frontend, browser,
+and backend test machines retain their required Node setup.
+
+## First-use runtime acceptance
+
+`install-acceptance.sh` starts without server runtimes on PATH, including in
+the local system image. It no longer copies the prebuilt runtime set or runs
+an eager `veil runtime install`. It checks that a direct panel-only install
+and a disabled inbound leave every protocol binary absent. Enabling the
+first Hysteria2 inbound must install only Hysteria2; adding Mieru and olcRTC
+must add only their binaries. The first WARP enable supplies generated test
+WireGuard keys, requires the pinned sing-box, validates the generated config,
+and checks the live service. This verifies installation and startup; the
+test keys do not establish a real Cloudflare VPN session. Disabling WARP
+must stop its service. The later Caddy panel-access leg still requires Caddy.
+
+The local full-system phase runs install acceptance first, before the
+protocol E2E job seeds binaries. Optional-runtime stash/restore continues
+checking uninstall cleanup without assuming unused Caddy is already present.

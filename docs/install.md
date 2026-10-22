@@ -115,6 +115,10 @@ loops when accessing the panel by IP. The certificate's SAN is the public IP
 address (no `CN`).
 
 - **URL:** `https://your-server-ip:<panel-port>/<web-base-path>/` (the path is printed at the end of install). `/` without that prefix 404s.
+- If an older installer printed a URL without the panel port, add `:2096`
+  (or the port selected during install) after the IP address, keeping the path.
+  If public IP detection is unavailable, pass `--public-ip YOUR_SERVER_IP`
+  to `veil install` so it can print the correct address.
 - **Requirements:** Port `80/tcp` must be free and reachable from the internet
   during install/repair so the Let's Encrypt HTTP-01 challenge can complete.
 - **Fallback:** If the IP certificate cannot be issued (for example, port 80 is
@@ -160,23 +164,31 @@ Veil's managed systemd units invoke external runtime binaries:
 
 | Protocol | Binary | Unit | Source |
 |---|---|---|---|
-| NaiveProxy | `caddy` | `veil-caddy.service` | `caddyserver/caddy` GitHub release |
+| NaiveProxy | `caddy` | `veil-caddy.service` | pinned Caddy + Naive forwardproxy source build |
 | Hysteria2 | `hysteria` | `veil-hysteria2@.service` | `apernet/hysteria` GitHub release |
 | Mieru | `mita` | `veil-mieru.service` | `enfein/mieru` GitHub release |
 | WARP | `sing-box` | `veil-warp.service` | `SagerNet/sing-box` GitHub release |
 | olcRTC | `olcrtc` | `veil-olcrtc@.service` | built from source with `go install` |
 
-`veil install` provisions these automatically after the Panel is configured.
-Release binaries are downloaded for your architecture and verified against the
-upstream checksums (SHA-256 or SHA-512) where the project publishes them. olcRTC
-ships no release binaries, so it is built from source and requires a Go
-toolchain on the host; if `go` is not present that runtime is skipped with a
-warning and the rest still install.
+`veil install` installs the Panel without downloading protocol runtimes.
+The exception is `--panel-access caddy`: when Caddy is missing, the installer
+acquires it so the Panel can be reached through its domain.
 
-Install or repair the runtimes at any time:
+When you first apply an enabled Inbound, Veil acquires only its missing
+runtime. Enabling WARP acquires `sing-box`. Existing runtimes are reused,
+and creating a disabled Inbound does not trigger a download. The same applies
+when applying configuration through the CLI.
+
+Release binaries are downloaded for your architecture and verified before
+installation. Caddy and olcRTC are built from pinned sources; Veil acquires
+the required Go toolchain when needed. The first use may take longer while
+the required runtime is downloaded or built.
+
+Preinstall selected runtimes before first use (for example, before taking the
+server offline), or repair them at any time:
 
 ```bash
-sudo veil runtime install                  # all runtimes
+sudo veil runtime install                  # explicitly install all runtimes
 sudo veil runtime install --only mieru,hysteria2
 ```
 

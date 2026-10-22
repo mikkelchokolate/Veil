@@ -19,22 +19,22 @@ var runtimeInstallFunc = func(ctx context.Context, opts runtimeinstall.Options, 
 	return protocols.InstallSelectedRuntimes(ctx, opts, only)
 }
 
-// installRuntimesFunc provisions protocol runtimes during `veil install`. A
-// failed runtime install must fail the install closed: reporting success
-// leaves protocol systemd units that can never exec their missing binaries
-// (systemd status 203/EXEC), which is worse than aborting before any file is
-// applied (issue #1029).
+// installRuntimesFunc installs Caddy when it is needed to expose the panel.
+// Protocol runtimes are acquired when their first enabled inbound is applied.
 var installRuntimesFunc = defaultInstallRuntimesDuringInstall
 
 func defaultInstallRuntimesDuringInstall(cmd *cobra.Command, opts ruRecommendedInstallOptions) error {
+	if _, err := commandLookPath("caddy"); err == nil {
+		return nil
+	}
 	arch, err := hostenv.NormalizeArch(hostenv.CurrentPlatform().Arch)
 	if err != nil {
 		return fmt.Errorf("protocol runtime install: %w", err)
 	}
 	fmt.Fprintln(cmd.OutOrStdout())
-	if err := runRuntimeInstall(cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.Context(), runtimeInstallOptions{Arch: arch}); err != nil {
-		fmt.Fprintln(cmd.ErrOrStderr(), "You can retry later with: sudo veil runtime install")
-		return fmt.Errorf("install protocol runtimes: %w", err)
+	if err := runRuntimeInstall(cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.Context(), runtimeInstallOptions{Arch: arch, Only: []string{"naiveproxy"}}); err != nil {
+		fmt.Fprintln(cmd.ErrOrStderr(), "You can retry with: sudo veil runtime install --only naiveproxy")
+		return fmt.Errorf("install panel Caddy runtime: %w", err)
 	}
 	return nil
 }
@@ -157,7 +157,7 @@ func newRuntimeInstallCommand() *cobra.Command {
 		longParts = append(longParts, desc)
 	}
 
-	longBody := "Install acquires the external runtime binaries that Veil's managed systemd\nunits invoke and places them in the bin directory (default /usr/local/bin).\n\nWithout these binaries every protocol fails to start with systemd status\n203/EXEC."
+	longBody := "Preinstall or repair the external runtime binaries that Veil's managed\nsystemd units invoke (default /usr/local/bin). Runtimes are normally acquired\non demand when their first enabled inbound is applied or WARP is enabled.\nUse --only to prepare selected runtimes in advance."
 	if len(longParts) > 0 {
 		longBody += "\n\n" + strings.Join(longParts, "; ") + "."
 	}

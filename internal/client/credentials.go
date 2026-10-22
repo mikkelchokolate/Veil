@@ -289,22 +289,29 @@ func (t *Tx) ActiveCredential(bindingID, kind string) (Credential, error) {
 // activeCredentialQ is the querier-based ActiveForBinding shared by the
 // autocommit store and the transactional Tx path.
 func activeCredentialQ(q interface {
-	QueryRow(query string, args ...any) *sql.Row
+	Query(query string, args ...any) (*sql.Rows, error)
 }, bindingID, kind string) (Credential, error) {
-	var active int
-	if err := q.QueryRow(`SELECT COUNT(*) FROM client_credentials WHERE binding_id=? AND kind=? AND revoked_at IS NULL`, bindingID, kind).Scan(&active); err != nil {
+	rows, err := q.Query(`SELECT id, binding_id, kind, encrypted_value, key_version, credential_version,
+  created_at, rotated_at, revoked_at FROM client_credentials
+  WHERE binding_id=? AND kind=? AND revoked_at IS NULL LIMIT 2`, bindingID, kind)
+	if err != nil {
 		return Credential{}, err
 	}
-	if active == 0 {
+	defer rows.Close()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return Credential{}, err
+		}
 		return Credential{}, sql.ErrNoRows
 	}
-	if active != 1 {
+	credential, err := scanCredential(rows, true)
+	if err != nil {
+		return Credential{}, err
+	}
+	if rows.Next() {
 		return Credential{}, fmt.Errorf("client: ambiguous active credentials for binding %s kind %s", bindingID, kind)
 	}
-	row := q.QueryRow(`SELECT id, binding_id, kind, encrypted_value, key_version, credential_version,
-  created_at, rotated_at, revoked_at FROM client_credentials
-  WHERE binding_id=? AND kind=? AND revoked_at IS NULL`, bindingID, kind)
-	return scanCredential(row, true)
+	return credential, rows.Err()
 }
 
 // Reveal decrypts a credential's plaintext. Use sparingly — only where the

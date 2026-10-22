@@ -815,6 +815,7 @@ func (s *managementState) loadRevisionSnapshotLocked(revision uint64) (managemen
 
 func (s *managementState) newApplyExecutionStateLocked(snapshot managementSnapshot) *managementState {
 	return &managementState{
+		applyProgress:                  s.applyProgress,
 		lifecycleCtx:                   s.lifecycleCtx,
 		statePath:                      s.statePath,
 		applyRoot:                      s.applyRoot,

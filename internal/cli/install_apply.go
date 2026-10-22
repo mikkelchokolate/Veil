@@ -196,8 +196,14 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 
 	// 1a. In direct mode, the panel endpoint is the public IP. Resolve it once
 	// and use it both for the client-link domain and for the LE IP certificate.
-	resolvedIP, _ := resolvePublicIPForDirectInstall(cmd.Context(), opts)
-	if resolvedIP != nil && profile.PanelAccess == "direct" && profile.Domain == "" {
+	resolvedIP, resolveErr := resolvePublicIPForDirectInstall(cmd.Context(), opts)
+	if profile.PanelAccess == "direct" && profile.Domain == "" {
+		if resolveErr != nil {
+			return fmt.Errorf("detect public IP for the direct panel URL: %w; retry with --public-ip YOUR_SERVER_IP or --domain YOUR_SERVER_HOSTNAME", resolveErr)
+		}
+		if resolvedIP == nil {
+			return fmt.Errorf("direct panel access requires a public IP; retry with --public-ip YOUR_SERVER_IP or --domain YOUR_SERVER_HOSTNAME")
+		}
 		profile.Domain = resolvedIP.String()
 	}
 

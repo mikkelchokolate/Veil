@@ -41,9 +41,12 @@
  * OpenAPI spec version: 0.6.3
  */
 import type { ApplyStateResponseLastError } from './applyStateResponseLastError.msw.ts';
+import type { ApplyStateResponseProgress } from './applyStateResponseProgress.msw.ts';
 import type { ApplyStateResponseState } from './applyStateResponseState.msw.ts';
 
 export interface ApplyStateResponse {
+  /** Current apply phase; timestamps are Unix seconds. Omitted when no apply is running. */
+  progress?: ApplyStateResponseProgress;
   desiredRevision: number;
   appliedRevision: number;
   state: ApplyStateResponseState;

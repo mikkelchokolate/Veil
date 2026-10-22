@@ -30,6 +30,7 @@ func printOperatorCatalog(root *cobra.Command, w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  veil [command]")
 	fmt.Fprintln(w, "  veil help [command]")
+	fmt.Fprintln(w, "  veil menu  (or just veil in an interactive terminal)")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Commands:")
 	tw := tabwriter.NewWriter(w, 0, 8, 2, ' ', 0)

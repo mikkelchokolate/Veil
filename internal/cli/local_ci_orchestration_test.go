@@ -22,7 +22,24 @@ func newFakeSmolvmHarness(t *testing.T) *fakeSmolvmHarness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &fakeSmolvmHarness{t: t, repoRoot: repoRoot, fakeBin: t.TempDir(), stateDir: t.TempDir()}
+	h := &fakeSmolvmHarness{t: t, repoRoot: t.TempDir(), fakeBin: t.TempDir(), stateDir: t.TempDir()}
+	// Snapshot creation requires a clean commit, independent of the developer's checkout.
+	for _, dir := range []string{"scripts/ci", "ci/vm"} {
+		if err := os.CopyFS(filepath.Join(h.repoRoot, dir), os.DirFS(filepath.Join(repoRoot, dir))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, args := range [][]string{
+		{"init", "-q"}, {"add", "."},
+		{"-c", "user.name=Veil Test", "-c", "user.email=test@invalid", "-c", "commit.gpgsign=false", "commit", "-qm", "CI orchestration fixture"},
+	} {
+		command := exec.Command("git", args...)
+		command.Dir = h.repoRoot
+		command.Env = append(os.Environ(), "GIT_DIR="+filepath.Join(h.repoRoot, ".git"), "GIT_WORK_TREE="+h.repoRoot)
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("prepare clean CI fixture: %v\n%s", err, output)
+		}
+	}
 
 	writeExecutable := func(name, body string) {
 		t.Helper()
@@ -110,6 +127,8 @@ func (h *fakeSmolvmHarness) run(result, timeout string) (string, string, error) 
 	cmd := exec.Command("bash", filepath.Join(h.repoRoot, "scripts", "ci", "vm-run.sh"), "--image", "system", "--job", "privilege-boundary")
 	cmd.Dir = h.repoRoot
 	cmd.Env = append(os.Environ(),
+		"GIT_DIR="+filepath.Join(h.repoRoot, ".git"),
+		"GIT_WORK_TREE="+h.repoRoot,
 		"PATH="+h.fakeBin+":"+os.Getenv("PATH"),
 		"HOME="+homeDir,
 		"CI_REPO_ROOT="+h.repoRoot,

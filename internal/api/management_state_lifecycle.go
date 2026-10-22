@@ -100,6 +100,7 @@ func newManagementStateProduction(info ServerInfo) *managementState {
 		passwordHasher = productionPasswordHasher()
 	}
 	state := &managementState{
+		applyProgress:                  &applyProgressTracker{},
 		lifecycleCtx:                   lifecycleCtx,
 		lifecycleCancel:                lifecycleCancel,
 		statePath:                      info.StatePath,

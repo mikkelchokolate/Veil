@@ -94,6 +94,9 @@ func installRuntimeSet(ctx context.Context, opts Options, runtimes []Runtime) []
 		}
 		return results
 	}
+	if err := ctx.Err(); err != nil {
+		return runtimeSetFailureFromResults(results, err)
+	}
 	journal, err := prepareRuntimeSetActivation(opts.BinDir, results)
 	if err != nil {
 		cleanupErr := cleanupRuntimeStages(opts.BinDir)
@@ -101,6 +104,9 @@ func installRuntimeSet(ctx context.Context, opts Options, runtimes []Runtime) []
 			err = errors.Join(err, fmt.Errorf("clean failed runtime activation preparation: %w", cleanupErr))
 		}
 		return runtimeSetFailureFromResults(results, err)
+	}
+	for _, runtime := range runtimes {
+		opts.progress("installing", runtime.Name)
 	}
 	if err := activateRuntimeSet(opts.BinDir, &journal); err != nil {
 		return runtimeSetFailureFromResults(results, err)

@@ -143,6 +143,8 @@ type Asset struct {
 
 // Options configures an installation run.
 type Options struct {
+	// Progress reports acquisition stages without command output or credentials.
+	Progress func(stage, name string)
 	// BinDir is where binaries are written (default /usr/local/bin).
 	BinDir string
 	// CaddyCacheDir is where the Caddy build workspace is cached. Defaults to
@@ -619,6 +621,7 @@ func installOne(ctx context.Context, opts Options, runtime Runtime) Result {
 		path, version, verified, digest, err := installFromRelease(ctx, opts, runtime, true)
 		result.Path, result.Version, result.VerifiedVersion, result.SHA256, result.Err = path, version, verified, digest, err
 	case MethodGoInstall:
+		opts.progress("building", runtime.Name)
 		goBin, err := resolveGo(ctx, opts.CaddyCacheDir, opts.EnsureGo)
 		if err != nil {
 			result.Err = err
@@ -632,6 +635,7 @@ func installOne(ctx context.Context, opts Options, runtime Runtime) Result {
 		path, verified, digest, err := installFromSource(ctx, opts, runtime)
 		result.Path, result.Version, result.VerifiedVersion, result.SHA256, result.Err = path, runtime.Version, verified, digest, err
 	case MethodCaddyNaive:
+		opts.progress("building", runtime.Name)
 		goBin, err := resolveGo(ctx, opts.CaddyCacheDir, opts.EnsureGo)
 		if err != nil {
 			result.Err = err
@@ -652,6 +656,7 @@ func installOne(ctx context.Context, opts Options, runtime Runtime) Result {
 }
 
 func installFromRelease(ctx context.Context, opts Options, runtime Runtime, archive bool) (string, string, string, string, error) {
+	opts.progress("downloading", runtime.Name)
 	release, err := opts.FetchReleaseVersion(ctx, runtime.Repo, runtime.Version)
 	if err != nil {
 		return "", "", "", "", fmt.Errorf("resolve %s release %s: %w", runtime.Repo, runtime.Version, err)
@@ -992,6 +997,7 @@ func updateRuntimeManifest(root string, runtime Runtime, target, verified, diges
 var semanticVersionPattern = regexp.MustCompile(`(?i)v?([0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?)`)
 
 func verifyRuntimeVersion(ctx context.Context, opts Options, runtime Runtime, stagePath string) (string, error) {
+	opts.progress("verifying", runtime.Name)
 	var output string
 	if len(runtime.VersionArgs) == 1 && runtime.VersionArgs[0] == "__go_buildinfo__" {
 		var err error

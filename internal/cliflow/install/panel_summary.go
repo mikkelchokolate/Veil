@@ -33,22 +33,13 @@ func (s PanelSummary) String() string {
 		fmt.Fprintf(&b, "Panel port: %d (default)\n", input.PanelPort)
 	}
 	profile := input.Profile
+	if profile.PanelListen == "" {
+		profile.PanelListen = fmt.Sprintf("127.0.0.1:%d", input.PanelPort)
+	}
 	if profile.Domain != "" {
-		fmt.Fprintf(&b, "Panel URL: https://%s%s\n", profile.Domain, profile.WebBasePath)
+		fmt.Fprintf(&b, "Panel URL: %s\n", PanelURL(profile))
 		return b.String()
 	}
-	scheme := "http"
-	if profile.PanelTLSEnabled {
-		scheme = "https"
-	}
-	panelListen := profile.PanelListen
-	if panelListen == "" {
-		panelListen = fmt.Sprintf("127.0.0.1:%d", input.PanelPort)
-	}
-	basePath := profile.WebBasePath
-	if basePath == "" {
-		basePath = "/"
-	}
-	fmt.Fprintf(&b, "Panel access: %s://%s%s\n", scheme, panelListen, basePath)
+	fmt.Fprintf(&b, "Panel access: %s\n", PanelURL(profile))
 	return b.String()
 }

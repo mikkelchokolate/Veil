@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"os/exec"
 	"reflect"
 	"strings"
 	"testing"
@@ -44,6 +46,39 @@ func TestRuntimeInstallCommandReportsPerRuntimeResults(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("runtime install output missing %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestPanelInstallOnlyAcquiresMissingCaddy(t *testing.T) {
+	for _, installed := range []bool{false, true} {
+		t.Run(fmt.Sprint("installed=", installed), func(t *testing.T) {
+			oldLookPath, oldInstall := commandLookPath, runtimeInstallFunc
+			commandLookPath = func(name string) (string, error) {
+				if name == "caddy" && installed {
+					return "/usr/local/bin/caddy", nil
+				}
+				return "", exec.ErrNotFound
+			}
+			called := false
+			runtimeInstallFunc = func(_ context.Context, _ runtimeinstall.Options, only []string) ([]runtimeinstall.Result, error) {
+				called = true
+				if !reflect.DeepEqual(only, []string{"naiveproxy"}) {
+					t.Fatalf("panel install requested %v, want only Caddy", only)
+				}
+				return []runtimeinstall.Result{{Name: "naiveproxy", Binary: "caddy", Installed: true}}, nil
+			}
+			t.Cleanup(func() { commandLookPath, runtimeInstallFunc = oldLookPath, oldInstall })
+			cmd := NewRootCommand("test")
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			if err := defaultInstallRuntimesDuringInstall(cmd, ruRecommendedInstallOptions{PanelAccess: "caddy"}); err != nil {
+				t.Fatalf("install Caddy: %v\n%s", err, out.String())
+			}
+			if called == installed {
+				t.Fatalf("download called=%v, Caddy present=%v", called, installed)
+			}
+		})
 	}
 }
 

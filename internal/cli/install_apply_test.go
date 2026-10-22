@@ -808,11 +808,15 @@ func TestApplyRURecommendedInstallDirectFillsDomainWithPublicIP(t *testing.T) {
 		PanelAccess: "direct",
 	}
 
+	profile.PanelTLSEnabled = true
 	if err := applyRURecommendedInstall(cmd, profile, ruRecommendedInstallOptions{EtcDir: tempEtc, VarDir: tempVar, PanelAccess: "direct", PublicIP: "127.0.0.1"}); err != nil {
 		t.Fatalf("applyRURecommendedInstall: %v", err)
 	}
 	if gotProfile.Domain != "127.0.0.1" {
 		t.Fatalf("expected profile domain to be filled with public IP, got %q", gotProfile.Domain)
+	}
+	if !strings.Contains(out.String(), "Panel: https://127.0.0.1:3000/panel/") {
+		t.Fatalf("direct install must print the public address with its listener port:\n%s", out.String())
 	}
 
 	key, err := secrets.LoadOrCreateKey(filepath.Join(tempEtc, "state.key"))
@@ -832,5 +836,33 @@ func TestApplyRURecommendedInstallDirectFillsDomainWithPublicIP(t *testing.T) {
 	}
 	if snapshot.Settings.Domain != "127.0.0.1" {
 		t.Fatalf("expected state domain to be filled with public IP, got %q", snapshot.Settings.Domain)
+	}
+}
+
+func TestApplyDirectInstallRequiresReachableAddressBeforeSavingState(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "offline", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	oldEndpoints := installPublicIPEndpoints
+	installPublicIPEndpoints = []string{server.URL}
+	t.Cleanup(func() { installPublicIPEndpoints = oldEndpoints })
+	cmd := NewRootCommand("test")
+	cmd.SetContext(context.Background())
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	varDir := t.TempDir()
+	err := applyRURecommendedInstall(cmd, installer.RURecommendedProfile{
+		PanelAccess: "direct", PanelListen: "0.0.0.0:2096",
+	}, ruRecommendedInstallOptions{PanelAccess: "direct", EtcDir: t.TempDir(), VarDir: varDir})
+	if err == nil || !strings.Contains(err.Error(), "--public-ip") {
+		t.Fatalf("expected public-address guidance, got %v", err)
+	}
+	if strings.Contains(out.String(), "Panel:") {
+		t.Fatalf("printed credentials without a reachable direct address:\n%s", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(varDir, "state.json")); !os.IsNotExist(err) {
+		t.Fatalf("saved state before resolving the direct address: %v", err)
 	}
 }

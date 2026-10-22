@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import { afterEach, vi } from "vitest";
 import { ApplyStatusIndicator } from "../apply/ApplyStatusIndicator";
 import { I18nProvider } from "../i18n/I18nContext";
 import { HttpResponse, http, server } from "./server";
@@ -18,6 +19,85 @@ function renderIndicator(locale: "en" | "ru" = "en") {
 // #703: the shell indicator's tooltip and drift suffix are localized — no
 // hardcoded English "rev" copy in a non-English UI.
 describe("ApplyStatusIndicator", () => {
+	afterEach(() => vi.restoreAllMocks());
+	it("keeps elapsed time and server update age moving when progress is unchanged", async () => {
+		const clock = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+		server.use(
+			http.get("/api/apply/state", () =>
+				HttpResponse.json({
+					desiredRevision: 2,
+					appliedRevision: 1,
+					state: "applying",
+					progress: {
+						stage: "building",
+						runtime: "olcrtc",
+						startedAt: 1000,
+						updatedAt: 1000,
+					},
+				}),
+			),
+		);
+		renderIndicator();
+		await screen.findByText("Elapsed 0:00 · Stage updated 0s ago");
+		clock.mockReturnValue(1_010_000);
+		expect(
+			await screen.findByText(
+				"Elapsed 0:10 · Stage updated 10s ago",
+				{},
+				{ timeout: 2000 },
+			),
+		).toBeInTheDocument();
+	});
+
+	it("shows real installation stage and server update age in Russian", async () => {
+		const now = Math.floor(Date.now() / 1000);
+		server.use(
+			http.get("/api/apply/state", () =>
+				HttpResponse.json({
+					desiredRevision: 2,
+					appliedRevision: 1,
+					state: "applying",
+					progress: {
+						stage: "building",
+						runtime: "olcrtc",
+						startedAt: now - 72,
+						updatedAt: now - 5,
+					},
+				}),
+			),
+		);
+		renderIndicator("ru");
+		expect(await screen.findByRole("status")).toHaveTextContent(
+			"Сборка компонента",
+		);
+		expect(screen.getByRole("status")).toHaveTextContent("olcrtc");
+		expect(screen.getByText(/Прошло 1:1[23]/)).toHaveTextContent(
+			/Этап обновлён [56] с назад/,
+		);
+		expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+	});
+
+	it("uses a localized generic label for an unknown progress stage", async () => {
+		const now = Math.floor(Date.now() / 1000);
+		server.use(
+			http.get("/api/apply/state", () =>
+				HttpResponse.json({
+					desiredRevision: 2,
+					appliedRevision: 1,
+					state: "applying",
+					progress: { stage: "future_stage", startedAt: now, updatedAt: now },
+				}),
+			),
+		);
+		renderIndicator();
+		expect(await screen.findByRole("status")).toHaveTextContent(
+			"Applying configuration",
+		);
+		expect(
+			screen.queryByText(/future_stage|applyProgress\./),
+		).not.toBeInTheDocument();
+	});
+
 	it("renders a localized label plus drift tooltip and revision suffix", async () => {
 		server.use(
 			http.get("/api/apply/state", () =>

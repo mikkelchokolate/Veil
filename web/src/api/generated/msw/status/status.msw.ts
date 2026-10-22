@@ -56,7 +56,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  FirewallRule,
+  FirewallResponse,
   HealthResponse,
   LivezResponse,
   ReadyzResponse,
@@ -706,9 +706,9 @@ export const getGetApiFirewallUrl = () => {
 /**
  * @summary Firewall rule plan and status
  */
-export const getApiFirewall = async ( options?: Parameters<typeof apiFetch>[1]): Promise<FirewallRule[]> => {
+export const getApiFirewall = async ( options?: Parameters<typeof apiFetch>[1]): Promise<FirewallResponse> => {
 
-  return apiFetch<FirewallRule[]>(getGetApiFirewallUrl(),
+  return apiFetch<FirewallResponse>(getGetApiFirewallUrl(),
   {
     ...options,
     method: 'GET'

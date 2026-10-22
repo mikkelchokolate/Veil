@@ -75,13 +75,27 @@ assert_no_veil_firewall_rules() {
 # restore them (with their provenance record) for the remaining legs.
 VEIL_RUNTIME_BINS="hysteria mita caddy olcrtc sing-box"
 RUNTIME_STASH=/tmp/veil-runtime.keep
+
+assert_protocol_binaries() {
+  local expected=" $* " bin
+  for bin in ${VEIL_RUNTIME_BINS}; do
+    if [[ "${expected}" == *" ${bin} "* ]]; then
+      ${SUDO} test -x "/usr/local/bin/${bin}" || ci_die "required runtime ${bin} is missing/non-executable"
+    elif ${SUDO} test -e "/usr/local/bin/${bin}" || ${SUDO} test -L "/usr/local/bin/${bin}"; then
+      ci_die "unused runtime ${bin} was installed before it was needed"
+    fi
+  done
+}
+
 stash_runtime_binaries() {
   local bin
   ${SUDO} rm -rf "${RUNTIME_STASH}"
   ${SUDO} mkdir -p "${RUNTIME_STASH}"
   for bin in ${VEIL_RUNTIME_BINS} .veil-runtime-generation.json; do
-    ${SUDO} cp -a "/usr/local/bin/${bin}" "${RUNTIME_STASH}/${bin}" \
-      || ci_die "cannot stash /usr/local/bin/${bin} before $1"
+    if ${SUDO} test -e "/usr/local/bin/${bin}"; then
+      ${SUDO} cp -a "/usr/local/bin/${bin}" "${RUNTIME_STASH}/${bin}" \
+        || ci_die "cannot stash /usr/local/bin/${bin} before $1"
+    fi
   done
 }
 assert_runtime_binaries_removed_then_restore() {
@@ -90,7 +104,9 @@ assert_runtime_binaries_removed_then_restore() {
     if ${SUDO} test -e "/usr/local/bin/${bin}" || ${SUDO} test -L "/usr/local/bin/${bin}"; then
       ci_die "$1 left Veil-installed runtime ${bin} in /usr/local/bin"
     fi
-    ${SUDO} cp -a "${RUNTIME_STASH}/${bin}" "/usr/local/bin/${bin}"
+    if ${SUDO} test -e "${RUNTIME_STASH}/${bin}"; then
+      ${SUDO} cp -a "${RUNTIME_STASH}/${bin}" "/usr/local/bin/${bin}"
+    fi
   done
   ${SUDO} rm -rf "${RUNTIME_STASH}"
 }
@@ -216,6 +232,7 @@ caddy_route_leg() {
   ci_run veil-install-caddy ${SUDO} env \
     VEIL_ACME_CA_URL="https://127.0.0.1:14000/dir" VEIL_ACME_CA_ROOT=/etc/veil/acme-root.pem \
     /usr/local/bin/veil install --yes --panel-access caddy --domain "${domain}" --email "ci@veil-ci.test"
+  assert_protocol_binaries hysteria mita caddy olcrtc sing-box
   systemctl is-active --quiet veil-caddy.service || ci_die "veil-caddy.service is not active after caddy-mode install"
   systemctl is-enabled --quiet veil-caddy.service || ci_die "veil-caddy.service is not enabled"
   # Re-read the base path THIS install wrote — the probe must verify the URL
@@ -337,45 +354,10 @@ ci_step "build and install Veil"
 go build -o /tmp/veil-install-acceptance ./cmd/veil
 ${SUDO} install -m 0755 /tmp/veil-install-acceptance /usr/local/bin/veil
 
-# Pinned runtimes pre-seeded in the CI image keep the install deterministic;
-# on a bare runner the product runtime phase downloads them itself.
-ci_step "protocol runtimes (pinned when the image provides them)"
-runtime_dir="${VEIL_CI_RUNTIME_DIR:-/opt/veil-runtime}"
-for bin in hysteria mita caddy mieru naive olcrtc sing-box; do
-  if [ -x "${runtime_dir}/${bin}" ]; then
-    ${SUDO} install -m 0755 "${runtime_dir}/${bin}" "/usr/local/bin/${bin}"
-  fi
-done
-
-# Pre-fetch any runtimes the image did not seed. GitHub release resolution
-# flakes on shared runner egress IPs (rate limits, transient "no assets
-# found"), and a missing runtime only surfaces minutes later inside the
-# first-inbound leg — retry the fetch here so the install leg stays
-# deterministic.
-ci_step "protocol runtime download (retry on registry flakes)"
-runtime_ok=1
-for _ in $(seq 1 4); do
-  if ${SUDO} /usr/local/bin/veil runtime install; then
-    runtime_ok=0
-    break
-  fi
-  sleep 10
-done
-[ "${runtime_ok}" -eq 0 ] || ci_die "runtime download failed after retries"
-# A green `runtime install` is not evidence the binaries landed: skipped or
-# partially-failed runtimes must not green the first-inbound leg (#409).
-# This is the SERVER set the installer owns (hysteria2->hysteria,
-# mieru->mita, naiveproxy->caddy, olcrtc->olcrtc, warp->sing-box); the
-# mieru/naive CLIENT binaries are e2e tooling, not runtime-install output.
-for bin in hysteria mita caddy olcrtc sing-box; do
-  ${SUDO} test -x "/usr/local/bin/${bin}" \
-    || ci_die "runtime install left ${bin} missing/non-executable in /usr/local/bin"
-done
-# Presence alone is not the pin contract: the installed sing-box must report
-# the version verify_versions.py binds to CI_SINGBOX_TAG.
-singbox_version="$(/usr/local/bin/sing-box version 2>/dev/null | grep -o '[0-9][0-9.]*' | head -1 || true)"
-[ "v${singbox_version}" = "${CI_SINGBOX_TAG}" ] \
-  || ci_die "sing-box reports version '${singbox_version:-none}', want ${CI_SINGBOX_TAG}"
+# Start cold even when /opt/veil-runtime contains image-provisioned E2E tools.
+# Pre-installing server binaries would hide a broken first-use download path.
+ci_step "no protocol runtimes before panel installation"
+assert_protocol_binaries
 
 # --- 1. Capability report: read-only, exit 0 on a supported host --------------
 ci_step "install --check capability report (must not mutate)"
@@ -404,6 +386,7 @@ fi
 
 # --- 2. Real install ----------------------------------------------------------
 ci_run veil-install ${SUDO} /usr/local/bin/veil install "${INSTALL_FLAGS[@]}"
+assert_protocol_binaries
 
 # --- 3. Post-install contract -------------------------------------------------
 ci_step "systemd unit contract"
@@ -470,7 +453,7 @@ api_code() { # method path [body] -> http code; response body in /tmp/ia-resp.js
   local method="$1" path="$2" body="${3:-}" timeout=60
   # Mutations are serialized behind live validation plus a synchronous
   # auto-apply; give POSTs a generous ceiling.
-  [ "${method}" = "POST" ] && timeout=300
+  case "${method}" in POST|PUT) timeout=900 ;; esac
   if [ -n "${body}" ]; then
     curl --http1.1 -sk --max-time "${timeout}" -o /tmp/ia-resp.json -w '%{http_code}' -X "${method}" \
       -H "X-Veil-Token: ${TOKEN}" -H 'Content-Type: application/json' \
@@ -513,10 +496,43 @@ apply_panel() {
     || ci_die "apply confirm did not report applied=true: $(cat /tmp/ia-resp.json)"
 }
 
-create_inbound ci-hy2 '{"name":"ci-hy2","protocol":"hysteria2","transport":"udp","port":34443,"enabled":true,"password":"ci-pass"}'
+ci_step "disabled inbound does not install a runtime"
+create_inbound ci-hy2 '{"name":"ci-hy2","protocol":"hysteria2","transport":"udp","port":34443,"enabled":false,"password":"ci-pass"}'
+assert_protocol_binaries
+ci_step "first inbound enable installs only Hysteria2"
+code="$(api_code PUT /api/inbounds/ci-hy2 '{"name":"ci-hy2","protocol":"hysteria2","transport":"udp","port":34443,"enabled":true,"password":"ci-pass"}')"
+[ "${code}" = "200" ] || ci_die "enable first inbound: HTTP ${code}: $(cat /tmp/ia-resp.json)"
+apply_panel
+assert_protocol_binaries hysteria
+
+ci_step "first WARP enable installs sing-box on demand"
+# Well-formed test keys avoid Cloudflare registration. This leg verifies the
+# actual binary/config/service, without depending on a remote VPN peer.
+warp_private="$(openssl rand -base64 32)"
+warp_peer="$(openssl rand -base64 32)"
+code="$(api_code PUT /api/warp "{\"enabled\":true,\"privateKey\":\"${warp_private}\",\"peerPublicKey\":\"${warp_peer}\",\"localAddress\":\"172.16.0.2/32\",\"endpoint\":\"192.0.2.1:2408\",\"reserved\":[1,2,3]}")"
+[ "${code}" = "200" ] || ci_die "enable WARP: HTTP ${code}: $(cat /tmp/ia-resp.json)"
+apply_panel
+assert_protocol_binaries hysteria sing-box
+singbox_version="$(/usr/local/bin/sing-box version 2>/dev/null | grep -o '[0-9][0-9.]*' | head -1 || true)"
+[ "v${singbox_version}" = "${CI_SINGBOX_TAG}" ] \
+  || ci_die "sing-box reports version '${singbox_version:-none}', want ${CI_SINGBOX_TAG}"
+${SUDO} /usr/local/bin/sing-box check -c /etc/veil/generated/sing-box/warp.json
+systemctl is-active --quiet veil-warp.service || ci_die "WARP runtime is not active after first enable"
+code="$(api_code PUT /api/warp '{"enabled":false}')"
+[ "${code}" = "200" ] || ci_die "disable WARP: HTTP ${code}: $(cat /tmp/ia-resp.json)"
+apply_panel
+if systemctl is-active --quiet veil-warp.service; then
+  ci_die "WARP runtime is still active after disable"
+fi
+
 create_inbound ci-mieru-tcp '{"name":"ci-mieru-tcp","protocol":"mieru","transport":"tcp","port":34444,"enabled":true,"profiles":[{"name":"alice","password":"alice-pass","enabled":true}]}'
+apply_panel
+assert_protocol_binaries hysteria mita sing-box
 create_inbound ci-mieru-udp '{"name":"ci-mieru-udp","protocol":"mieru","transport":"udp","port":34445,"enabled":true,"password":"udp-pass"}'
 create_inbound ci-olc '{"name":"ci-olc","protocol":"olcrtc","transport":"udp","port":34446,"enabled":true,"protocolFields":{"password":"abababababababababababababababababababababababababababababababab","olcrtcAuth":"jitsi","olcrtcTransport":"datachannel","olcrtcRoomID":"https://127.0.0.1:1/veil-ci"}}'
+apply_panel
+assert_protocol_binaries hysteria mita olcrtc sing-box
 
 # Durable idempotency contract: replaying the same mutation with the same
 # Idempotency-Key must return the original response, not a duplicate-name 409
