@@ -90,7 +90,9 @@ func printDoctor(cmd *cobra.Command, version string, jsonOutput bool) {
 func buildDoctorSummary(version string) doctorSummary {
 	readiness := doctorflow.NewReadiness(version, commandLookPath)
 	if runtime.GOOS == "linux" {
-		readiness = readiness.WithEgressDNS(doctorEgressDNSProbe)
+		readiness = readiness.WithEgressDNS(func() doctorflow.EgressDNSCheck {
+			return withMieruUnitFallbackState(doctorEgressDNSProbe(), doctorMieruUnitFallbackProbe())
+		})
 	}
 	return readiness.Summary()
 }

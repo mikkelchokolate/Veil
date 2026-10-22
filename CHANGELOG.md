@@ -33,7 +33,10 @@ All notable changes to Veil will be documented in this file.
   upgrade; installs with custom paths pick it up on the next `veil install`
   or `veil repair`. `veil doctor`, `veil install` and `veil repair` report
   the fallback nameservers in their DNS warning, and `veil doctor --json`
-  has a new `mieruNameservers` field.
+  has a new `mieruNameservers` field. `veil update` does not re-render
+  install-managed units, so when the loaded `veil-mieru.service` predates
+  the hook, `veil doctor` keeps saying Mieru domain lookups fail, sets
+  `mieruUnitOutdated`, and points at `veil repair`.
 - #1288: root `veil install` and `veil repair` now print the same
   protocol-unit DNS warning as `veil doctor`. The install capability report
   has a new `egress-dns` row: `ok` when a `/etc/resolv.conf` nameserver is

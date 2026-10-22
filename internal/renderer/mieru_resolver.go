@@ -24,6 +24,13 @@ import (
 // for Hysteria2 and WARP (IPv6 only on hosts that route IPv6 and not IPv4
 // to Cloudflare).
 //
+// RuntimeDirectory=veil-mieru has no RuntimeDirectoryPreserve=, so systemd
+// wipes it on every stop, including Restart=on-failure cycles: a stale or
+// planted file cannot survive into the next start. The hook's O_EXCL temp
+// file plus rename (and unlink-only removal) is defence in depth on top of
+// that, not the only guard, but it must stay: the hook runs as root in a
+// directory veil-mita owns.
+//
 // A missing /etc/resolv.conf is left alone: bind-mounting over a path that
 // does not exist would make systemd create it on the host's /etc.
 const MieruResolvConfPath = "/run/veil-mieru/resolv.conf"

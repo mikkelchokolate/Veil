@@ -63,18 +63,28 @@ func TestEgressResolvConfCommandWritesFallbackOnDeniedHost(t *testing.T) {
 // DNS is fixed, the next start must drop the file so the bind is skipped.
 // An unreadable resolv.conf also keeps the host file.
 func TestEgressResolvConfRemovesFallbackWhenHostResolverWorks(t *testing.T) {
-	for name, report := range map[string]renderer.EgressDNSReport{
-		"reachable":  {Nameservers: []string{"127.0.0.53"}, Reachable: true},
-		"unreadable": {ReadError: "permission denied"},
-		"missing":    {ResolvConfMissing: true, PinnedDoH: "1.1.1.1:443"},
+	for name, tc := range map[string]struct {
+		report renderer.EgressDNSReport
+		reason string
+	}{
+		"reachable":  {renderer.EgressDNSReport{Nameservers: []string{"127.0.0.53"}, Reachable: true}, "a host nameserver is reachable under the egress filter"},
+		"unreadable": {renderer.EgressDNSReport{ReadError: "permission denied"}, "cannot read /etc/resolv.conf: permission denied"},
+		"missing":    {renderer.EgressDNSReport{ResolvConfMissing: true, PinnedDoH: "1.1.1.1:443"}, "/etc/resolv.conf is missing"},
 	} {
+		report := tc.report
 		t.Run(name, func(t *testing.T) {
 			output := filepath.Join(t.TempDir(), "resolv.conf")
 			if err := os.WriteFile(output, []byte("nameserver 1.1.1.1\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			if err := writeEgressResolvConf(&bytes.Buffer{}, output, report); err != nil {
+			var journal bytes.Buffer
+			if err := writeEgressResolvConf(&journal, output, report); err != nil {
 				t.Fatal(err)
+			}
+			// The journal line must say why, not claim a reachable
+			// resolver on hosts where that is unknown or false.
+			if !strings.Contains(journal.String(), "("+tc.reason+")") {
+				t.Fatalf("journal line %q missing reason %q", journal.String(), tc.reason)
 			}
 			if _, err := os.Lstat(output); !os.IsNotExist(err) {
 				t.Fatalf("fallback resolv.conf must be removed, Lstat err = %v", err)

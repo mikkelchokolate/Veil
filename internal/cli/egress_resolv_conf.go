@@ -48,7 +48,7 @@ func writeEgressResolvConf(out io.Writer, output string, report renderer.EgressD
 		if err := os.Remove(output); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("remove fallback resolv.conf: %w", err)
 		}
-		fmt.Fprintln(out, "host resolver is reachable under the egress filter; keeping /etc/resolv.conf")
+		fmt.Fprintf(out, "no fallback resolv.conf needed or possible (%s); keeping /etc/resolv.conf\n", egressResolvConfKeepReason(report))
 		return nil
 	}
 	// The runtime directory belongs to the unit's service user, so never
@@ -81,4 +81,19 @@ func writeEgressResolvConf(out io.Writer, output string, report renderer.EgressD
 	}
 	fmt.Fprintf(out, "no host nameserver is reachable under the egress filter; resolving through %s (#1288)\n", strings.Join(report.MieruNameservers, ", "))
 	return nil
+}
+
+// egressResolvConfKeepReason names why the host resolv.conf is kept, using
+// the same distinctions as `veil doctor`.
+func egressResolvConfKeepReason(report renderer.EgressDNSReport) string {
+	switch {
+	case report.ReadError != "":
+		return "cannot read /etc/resolv.conf: " + report.ReadError
+	case report.Reachable:
+		return "a host nameserver is reachable under the egress filter"
+	case report.ResolvConfMissing:
+		return "/etc/resolv.conf is missing"
+	default:
+		return "no fallback nameservers"
+	}
 }
