@@ -11,6 +11,11 @@ All notable changes to Veil will be documented in this file.
   included in the target release. The downloaded signed provenance is bound
   to that same target commit. Newer/diverged, unknown or unverifiable builds
   still require an explicit override; release downgrade protection is unchanged.
+- Downloading a backup archive from the Panel now writes a `backup.download`
+  audit record, like every other backup operation. Each attempt gets exactly one
+  record with the archive name, the bytes sent and, if the download did not
+  complete, the reason: the helper refused, the mutation fence was held, the
+  archive identity drifted mid-stream, or the client disconnected.
 
 ## [v0.7.3] - 2026-10-22
 
