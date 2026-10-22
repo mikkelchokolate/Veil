@@ -104,3 +104,30 @@ func TestWithMieruUnitFallbackStateLeavesOtherChecksAlone(t *testing.T) {
 		}
 	}
 }
+
+// TestDoctorSkipsMieruUnitProbeWithoutFallback is the review regression for
+// #1362: doctor asks systemd about veil-mieru.service only when the egress
+// probe promised a Mieru fallback, so a healthy host does not fork
+// `systemctl show` on every run.
+func TestDoctorSkipsMieruUnitProbeWithoutFallback(t *testing.T) {
+	oldDNS, oldUnit := doctorEgressDNSProbe, doctorMieruUnitFallbackProbe
+	t.Cleanup(func() { doctorEgressDNSProbe, doctorMieruUnitFallbackProbe = oldDNS, oldUnit })
+	calls := 0
+	doctorMieruUnitFallbackProbe = func() mieruUnitFallbackState {
+		calls++
+		return mieruUnitFallbackMissing
+	}
+
+	reachable := doctorflow.EgressDNSCheck{Nameservers: []string{"127.0.0.53"}, Reachable: true}
+	doctorEgressDNSProbe = func() doctorflow.EgressDNSCheck { return reachable }
+	if got := doctorEgressDNSWithMieruUnitState(); !reflect.DeepEqual(got, reachable) || calls != 0 {
+		t.Fatalf("reachable host: check = %+v, systemd probes = %d; want unchanged check and no probe", got, calls)
+	}
+
+	denied := doctorflow.EgressDNSCheck{Nameservers: []string{"172.31.0.2"}, MieruNameservers: []string{"1.1.1.1"}}
+	doctorEgressDNSProbe = func() doctorflow.EgressDNSCheck { return denied }
+	got := doctorEgressDNSWithMieruUnitState()
+	if calls != 1 || !got.MieruUnitOutdated || len(got.MieruNameservers) != 0 {
+		t.Fatalf("denied host: check = %+v, systemd probes = %d; want one probe and an outdated unit", got, calls)
+	}
+}
