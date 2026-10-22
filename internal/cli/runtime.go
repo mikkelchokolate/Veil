@@ -168,6 +168,9 @@ func newRuntimeInstallCommand() *cobra.Command {
 		Short: "Download and install protocol runtime binaries into the bin directory",
 		Long:  longBody,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("only") && len(only) == 0 {
+				return fmt.Errorf("--only requires at least one runtime name")
+			}
 			arch, err := hostenv.NormalizeArch(hostenv.CurrentPlatform().Arch)
 			if err != nil {
 				return err
@@ -236,6 +239,9 @@ func runRuntimeInstall(out io.Writer, errOut io.Writer, ctx context.Context, opt
 func rejectUnknownRuntimeSelection(only []string) error {
 	if len(only) == 0 {
 		return nil
+	}
+	if len(runtimeinstall.NormalizeRuntimeNames(only)) == 0 {
+		return fmt.Errorf("--only requires at least one runtime name")
 	}
 	catalog := make([]runtimeinstall.Runtime, 0, len(runtimeNames()))
 	for _, name := range runtimeNames() {

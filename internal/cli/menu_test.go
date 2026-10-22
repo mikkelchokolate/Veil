@@ -85,6 +85,21 @@ func TestMenuActionsStayInMenuAfterFailureAndKeepRuntimeSelection(t *testing.T) 
 	}
 }
 
+func TestMenuRejectsDelimiterOnlyRuntimeSelection(t *testing.T) {
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetIn(strings.NewReader("14\n , , \n0\n"))
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	err := runOperatorMenu(cmd, "test", RootOptions{}, func([]string) error {
+		t.Fatal("delimiter-only selection must not install all runtimes")
+		return nil
+	})
+	if err != nil || !strings.Contains(out.String(), "at least one runtime") {
+		t.Fatalf("invalid runtime selection: %v\n%s", err, out.String())
+	}
+}
+
 func TestMenuMutationRequiresConfirmationAfterPreview(t *testing.T) {
 	for _, answer := range []string{"yes", "no", ""} {
 		cmd := NewRootCommand("test")

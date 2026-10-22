@@ -160,6 +160,27 @@ func TestRuntimeInstallCommandUnknownOnlyReportsSelection(t *testing.T) {
 	}
 }
 
+func TestRuntimeInstallCommandRejectsExplicitEmptySelection(t *testing.T) {
+	old := runtimeInstallFunc
+	runtimeInstallFunc = func(context.Context, runtimeinstall.Options, []string) ([]runtimeinstall.Result, error) {
+		t.Fatal("empty --only selection must not install all runtimes")
+		return nil, nil
+	}
+	t.Cleanup(func() { runtimeInstallFunc = old })
+	for _, selection := range []string{"", ",", " , , "} {
+		t.Run(selection, func(t *testing.T) {
+			cmd := NewRootCommand("test")
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs([]string{"runtime", "install", "--only", selection})
+			if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "at least one runtime") {
+				t.Fatalf("empty selector %q was accepted: %v\n%s", selection, err, out.String())
+			}
+		})
+	}
+}
+
 func TestRuntimeInstallCommandRejectsMixedUnknownOnlyWithoutInstalling(t *testing.T) {
 	old := runtimeInstallFunc
 	called := false
