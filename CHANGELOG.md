@@ -16,6 +16,15 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1350: `POST /api/apply/rollback` to a revision whose client has no quota
+  no longer carries the live `depleted` flag onto the restored client.
+  Depletion is derived quota state, so restoring "no quota" is now handled
+  like clearing the quota through the API: the flag is dropped and the
+  client's pending quota enforcement target is superseded. Before, the
+  rollback committed `depleted=true` with `quotaBytes=null` (a state every
+  writer refuses) to the clients table, `state.json` and the new revision.
+  A client whose restored revision still has a quota keeps its live
+  depletion as before.
 - #1270: `POST /api/apply/rollback` now runs the restored client rows
   through the same domain rules as every live writer, and refuses with 422
   (`selected immutable revision is invalid: ...`) instead of committing

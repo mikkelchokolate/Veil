@@ -298,9 +298,9 @@ func validateRollbackNormalizedSnapshot(snapshot managementSnapshot) error {
 // graft) but only for the clients the graft retained (merged.Clients). A
 // client deleted live since the snapshot is dropped by the graft (#1099) and
 // never written, so a legacy value on it must not veto the rollback. Using
-// the pre-graft values keeps the depletion clause scoped to the snapshot: a
-// live depleted flag OR-ed onto a quota-less snapshot client is the separate
-// carried-over gap, not something this revision introduced.
+// the pre-graft values keeps the depletion clause scoped to the snapshot; the
+// graft itself never carries a live depletion onto a quota-less client
+// (#1350).
 func validateRollbackRestoredClients(snapshotClients []client.Client, merged managementSnapshot) error {
 	retained := make(map[string]struct{}, len(merged.Clients))
 	for _, item := range merged.Clients {
@@ -382,7 +382,13 @@ func graftRollbackClientSecurityTx(tx *client.Tx, selected *managementSnapshot) 
 		}
 		retainedClients[snapshotClient.ID] = struct{}{}
 		snapshotClient.Enabled = snapshotClient.Enabled && live.Enabled
-		snapshotClient.Depleted = snapshotClient.Depleted || live.Depleted
+		// Depletion is derived quota state: it is carried forward only while
+		// the restored configuration still has a quota. Restoring "no quota"
+		// is an explicit transition to unlimited, exactly like a live quota
+		// clear (normalizeClearedQuota) — OR-ing the live flag onto it would
+		// commit the depleted-without-quota state every writer refuses
+		// (#1350).
+		snapshotClient.Depleted = snapshotClient.QuotaBytes != nil && (snapshotClient.Depleted || live.Depleted)
 		snapshotClient.ExpiresAt = earlierExpiry(snapshotClient.ExpiresAt, live.ExpiresAt)
 		clients = append(clients, snapshotClient)
 	}
