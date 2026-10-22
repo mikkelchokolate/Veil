@@ -205,9 +205,11 @@ resolve_shard_artifact_dir() { # <artifacts-root> <shard>
   # Say which attempt is merged so a fallback to an older attempt (e.g. the
   # newest attempt uploaded nothing) is visible in the log on success too.
   if [ -n "${best}" ]; then
-    echo "shard $2: using attempt ${best_n} (${found} attempt artifact(s) found)" >&2
-  else
+    echo "shard $2: using attempt ${best_n} (${found} attempt artifact dir(s) found)" >&2
+  elif [ -d "$1/ci-test-shard-$2" ]; then
     echo "shard $2: no attempt-scoped artifact, using legacy $1/ci-test-shard-$2" >&2
+  else
+    echo "shard $2: no attempt-scoped or legacy artifact under $1" >&2
   fi
   printf '%s\n' "${best:-$1/ci-test-shard-$2}"
 }
