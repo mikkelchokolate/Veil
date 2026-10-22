@@ -41,6 +41,8 @@ fetch_verified() { # <url> <file> <sha256>
 
 # SHA256 pins of every asset install_pinned_runtimes downloads. The CI cache
 # key is derived from this list, and a cache is only saved once it is complete.
+# Must list exactly the pins passed to fetch_verified in this file
+# (TestCIRuntimeDownloadShasMatchFetchSites enforces it).
 pinned_runtime_download_shas() {
   printf '%s\n' "${CI_HYSTERIA_SHA256}" "${CI_MITA_SHA256}" "${CI_MIERU_CLIENT_SHA256}" \
     "${CI_NAIVE_CLIENT_SHA256}" "${CI_SINGBOX_SHA256}"

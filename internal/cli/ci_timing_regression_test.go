@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -257,4 +258,47 @@ cat asset
 			t.Fatal("cache missing the naive client reported complete")
 		}
 	})
+}
+
+func TestCIRuntimeDownloadShasMatchFetchSites(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/ci/runtimes.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
+	start := strings.Index(script, "pinned_runtime_download_shas() {")
+	if start < 0 {
+		t.Fatal("pinned_runtime_download_shas is missing")
+	}
+	end := strings.Index(script[start:], "\n}")
+	if end < 0 {
+		t.Fatal("pinned_runtime_download_shas is unterminated")
+	}
+	pinVar := regexp.MustCompile(`\$\{(CI_[A-Z0-9_]+_SHA256)\}`)
+	listed := map[string]bool{}
+	for _, m := range pinVar.FindAllStringSubmatch(script[start:start+end], -1) {
+		listed[m[1]] = true
+	}
+	fetchSite := regexp.MustCompile(`(?m)^\s*fetch_verified\s+"[^"]*"\s+\S+\s+"\$\{(CI_[A-Z0-9_]+_SHA256)\}"`)
+	fetched := map[string]bool{}
+	for _, m := range fetchSite.FindAllStringSubmatch(script, -1) {
+		fetched[m[1]] = true
+	}
+	if len(fetched) == 0 {
+		t.Fatal("no fetch_verified call sites found")
+	}
+	// Any other fetch_verified call (e.g. a non-literal pin) would escape the set comparison.
+	if calls := regexp.MustCompile(`(?m)^\s*fetch_verified\s`).FindAllString(script, -1); len(calls) != len(fetchSite.FindAllString(script, -1)) {
+		t.Fatalf("every fetch_verified call must pass a literal ${CI_*_SHA256} pin: %d calls, %d recognised", len(calls), len(fetchSite.FindAllString(script, -1)))
+	}
+	for v := range fetched {
+		if !listed[v] {
+			t.Errorf("%s is downloaded via fetch_verified but missing from pinned_runtime_download_shas (cache key and completeness would ignore it)", v)
+		}
+	}
+	for v := range listed {
+		if !fetched[v] {
+			t.Errorf("%s is listed in pinned_runtime_download_shas but never fetched (cache could never be complete)", v)
+		}
+	}
 }

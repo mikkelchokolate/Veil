@@ -383,17 +383,22 @@ jobs:
       # their SHA256 pins: an upstream release losing its assets (as the
       # naiveproxy releases did on 2026-10-22) must not break e2e once a run
       # has downloaded and verified them. runtimes.sh re-verifies every entry.
+      # Best-effort insurance only: Actions evicts entries unused for 7 days
+      # (or over the repo budget) and PR-scoped entries are invisible to other
+      # branches, so the entry saved by a main run is what protects PRs.
       - name: Runtime download cache key
         id: runtime-downloads
         run: |
           source scripts/ci/runtimes.sh
-          echo "CI_RUNTIME_DOWNLOAD_CACHE=${HOME}/.cache/veil-runtime-downloads" >> "$GITHUB_ENV"
+          dir="${HOME}/.cache/veil-runtime-downloads"
+          echo "CI_RUNTIME_DOWNLOAD_CACHE=${dir}" >> "$GITHUB_ENV"
+          echo "dir=${dir}" >> "$GITHUB_OUTPUT"
           echo "key=$(pinned_runtime_download_shas | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - name: Restore pinned runtime downloads
         id: runtime-downloads-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.cache/veil-runtime-downloads
+          path: ${{ steps.runtime-downloads.outputs.dir }}
           key: ${{ runner.os }}-${{ runner.arch }}-veil-runtime-downloads-v1-${{ steps.runtime-downloads.outputs.key }}
       - name: e2e job (real pinned protocol runtimes)
         run: bash scripts/ci/e2e.sh
@@ -411,7 +416,7 @@ jobs:
         if: always() && steps.runtime-downloads-complete.outputs.complete == 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.cache/veil-runtime-downloads
+          path: ${{ steps.runtime-downloads.outputs.dir }}
           key: ${{ steps.runtime-downloads-cache.outputs.cache-primary-key }}
       - name: Upload CI artifacts (incl. protocol logs)
         if: always()
