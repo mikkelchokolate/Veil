@@ -173,6 +173,18 @@ func validate(c Client) error {
 	return nil
 }
 
+// ValidateRestoredClient applies the same domain rules every API and
+// migration writer enforces (validate) to a client row restored from an
+// immutable revision snapshot. A rollback must not commit values the live
+// write path would refuse: some (deviceLimit=0, quotaBytes<0, an unknown
+// reset policy) would only be caught by the storage triggers as an opaque
+// failure, and others (a non-positive expiresAt, an over-range quota, a
+// malformed name, depletion without a quota) are not caught by storage at
+// all (#1270).
+func ValidateRestoredClient(c Client) error {
+	return validate(c)
+}
+
 type quotaClearStore interface {
 	Get(id string) (Client, error)
 	SupersedeQuotaEnforcement(clientID string) error
