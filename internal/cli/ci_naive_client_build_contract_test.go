@@ -13,15 +13,18 @@ import (
 // this workflow).
 var quotedString = regexp.MustCompile(`"[^"]*"`)
 
-// blankPlainQuotedStrings empties double-quoted strings that contain no
-// command substitution, so their text is not mistaken for a command.
+// blankPlainQuotedStrings empties multi-word double-quoted strings without a
+// command substitution (message text such as the ::error:: hint), then drops
+// the remaining quotes so quoted command words (gh "release" "create") are
+// still scanned as a command.
 func blankPlainQuotedStrings(line string) string {
-	return quotedString.ReplaceAllStringFunc(line, func(q string) string {
-		if strings.Contains(q, "$(") || strings.Contains(q, "`") {
+	line = quotedString.ReplaceAllStringFunc(line, func(q string) string {
+		if strings.Contains(q, "$(") || strings.Contains(q, "`") || !strings.ContainsAny(q, " \t") {
 			return q
 		}
 		return `""`
 	})
+	return strings.ReplaceAll(line, `"`, "")
 }
 
 // Issue #1373: the source-built naiveproxy mirror must be manual-only and
