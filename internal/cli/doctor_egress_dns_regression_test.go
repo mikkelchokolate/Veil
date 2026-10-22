@@ -82,8 +82,8 @@ func TestEgressDNSCheckFromReportMapsEveryField(t *testing.T) {
 	}{
 		{
 			name:   "unreachable",
-			report: renderer.EgressDNSReport{Nameservers: []string{"172.31.0.2", "fe80::1%eth0"}, PinnedDoH: "[2606:4700:4700::1111]:443"},
-			want:   doctorflow.EgressDNSCheck{Nameservers: []string{"172.31.0.2", "fe80::1%eth0"}, PinnedDoH: "[2606:4700:4700::1111]:443"},
+			report: renderer.EgressDNSReport{Nameservers: []string{"172.31.0.2", "fe80::1%eth0"}, PinnedDoH: "[2606:4700:4700::1111]:443", MieruNameservers: []string{"2606:4700:4700::1111", "2606:4700:4700::1001"}},
+			want:   doctorflow.EgressDNSCheck{Nameservers: []string{"172.31.0.2", "fe80::1%eth0"}, PinnedDoH: "[2606:4700:4700::1111]:443", MieruNameservers: []string{"2606:4700:4700::1111", "2606:4700:4700::1001"}},
 		},
 		{
 			name:   "reachable",
@@ -111,7 +111,7 @@ func TestEgressDNSCheckFromReportMapsEveryField(t *testing.T) {
 	}
 	// Every exported report field must be consumed: a new field added to the
 	// renderer report without a doctor mapping fails here.
-	if n := reflect.TypeOf(renderer.EgressDNSReport{}).NumField(); n != 5 {
+	if n := reflect.TypeOf(renderer.EgressDNSReport{}).NumField(); n != 6 {
 		t.Fatalf("renderer.EgressDNSReport has %d fields; update egressDNSCheckFromReport and this test", n)
 	}
 }

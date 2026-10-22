@@ -23,6 +23,15 @@ Environment=MITA_LOG_NO_TIMESTAMP=true
 RuntimeDirectory=veil-mieru
 RuntimeDirectoryMode=0750
 StateDirectory=mita
+# DNS under the egress filter (#1288): mita has no resolver setting and
+# always reads /etc/resolv.conf. As root ("+", outside the sandbox) veil
+# writes a public fallback resolv.conf into the runtime directory only when
+# no host nameserver is reachable under the filter below, and removes it
+# otherwise. The read-only bind is skipped ("-") when the file is absent, so
+# those hosts keep the host resolver. The leading "-" keeps a probe failure
+# from blocking mita.
+ExecStartPre=-+/usr/local/bin/veil egress-resolv-conf --output /run/veil-mieru/resolv.conf
+BindReadOnlyPaths=-/run/veil-mieru/resolv.conf:/etc/resolv.conf
 ExecStart=/usr/local/bin/mita run
 ExecStartPost=/bin/sh -c 'i=0; while [ $$i -lt 50 ]; do if [ -S /run/veil-mieru/mita.sock ]; then "$$1" apply config "$$2" && "$$1" start && exit 0; fi; i=$$((i+1)); sleep 0.2; done; echo "mita activation timed out" >&2; exit 1' sh /usr/local/bin/mita /etc/veil/generated/mieru/server_config.json
 ExecStop=/usr/local/bin/mita stop

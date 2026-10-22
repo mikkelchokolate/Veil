@@ -47,6 +47,13 @@ func TestEgressDNSCheckStates(t *testing.T) {
 			wantOut:     []string{"- nameservers: 10.0.0.2, 192.168.1.1", "- reachable from protocol units: no (warning)", "- Mieru: domain lookups fail", "Warning: "},
 		},
 		{
+			name:        "unreachable with Mieru fallback",
+			check:       EgressDNSCheck{Nameservers: []string{"172.31.0.2"}, PinnedDoH: "1.1.1.1:443", MieruNameservers: []string{"1.1.1.1", "1.0.0.1"}},
+			wantWarning: []string{"veil-mieru resolves through 1.1.1.1, 1.0.0.1", "plain DNS", "1.1.1.1:443", "#1288"},
+			wantOut:     []string{"- reachable from protocol units: no (warning)", "- Mieru: public fallback resolv.conf (1.1.1.1, 1.0.0.1) at each start", "Warning: "},
+			notOut:      []string{"domain lookups fail"},
+		},
+		{
 			name:        "missing resolv.conf",
 			check:       EgressDNSCheck{ResolvConfMissing: true, PinnedDoH: "1.1.1.1:443"},
 			wantWarning: []string{"Mieru"},

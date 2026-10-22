@@ -26,13 +26,15 @@ type Summary struct {
 // systemd-resolved stubs. The units stay active while every lookup is
 // dropped, so this is the only place the outage surfaces before clients
 // report it. It is a warning and never flips Ready: Hysteria2 and WARP pin a
-// public DoH resolver on such hosts, and only Mieru is left without DNS.
+// public DoH resolver on such hosts, and veil-mieru bind-mounts a public
+// fallback resolv.conf at start, except when /etc/resolv.conf is missing.
 type EgressDNSCheck struct {
 	Nameservers       []string `json:"nameservers"`
 	Reachable         bool     `json:"reachable"`
 	ResolvConfMissing bool     `json:"resolvConfMissing,omitempty"`
 	ReadError         string   `json:"readError,omitempty"`
 	PinnedDoH         string   `json:"pinnedDoH,omitempty"`
+	MieruNameservers  []string `json:"mieruNameservers,omitempty"`
 	Warning           string   `json:"warning,omitempty"`
 }
 
@@ -67,6 +69,10 @@ const (
 	egressDNSWarningUnreachable = "no resolv.conf nameserver is reachable under the protocol egress filter: " +
 		"Hysteria2 and WARP pin Cloudflare DoH %s at apply, but Mieru domain lookups fail; " +
 		"enable systemd-resolved (127.0.0.53) or configure a public nameserver, then re-apply (#1288)"
+	egressDNSWarningMieruFallback = "no resolv.conf nameserver is reachable under the protocol egress filter: " +
+		"Hysteria2 and WARP pin Cloudflare DoH %s at apply, and veil-mieru resolves through %s " +
+		"(plain DNS) from its next start; enable systemd-resolved (127.0.0.53) or configure a public " +
+		"nameserver to keep the host resolver (#1288)"
 	egressDNSWarningUnknown = "cannot read /etc/resolv.conf (%s): protocol units keep the host resolver, " +
 		"which may be unreachable under their egress filter (#1288)"
 )
@@ -78,6 +84,8 @@ func EgressDNSWarning(check EgressDNSCheck) string {
 	switch {
 	case check.ReadError != "":
 		return fmt.Sprintf(egressDNSWarningUnknown, check.ReadError)
+	case !check.Reachable && len(check.MieruNameservers) > 0:
+		return fmt.Sprintf(egressDNSWarningMieruFallback, check.PinnedDoH, strings.Join(check.MieruNameservers, ", "))
 	case !check.Reachable:
 		return fmt.Sprintf(egressDNSWarningUnreachable, check.PinnedDoH)
 	}
@@ -206,7 +214,11 @@ func (p Presentation) renderEgressDNS(check EgressDNSCheck) {
 		} else {
 			fmt.Fprintln(p.out, "- reachable from protocol units: no (warning)")
 			fmt.Fprintf(p.out, "- Hysteria2, WARP: pinned to Cloudflare DoH %s at apply\n", check.PinnedDoH)
-			fmt.Fprintln(p.out, "- Mieru: domain lookups fail")
+			if len(check.MieruNameservers) > 0 {
+				fmt.Fprintf(p.out, "- Mieru: public fallback resolv.conf (%s) at each start\n", strings.Join(check.MieruNameservers, ", "))
+			} else {
+				fmt.Fprintln(p.out, "- Mieru: domain lookups fail")
+			}
 		}
 	}
 	if check.Warning != "" {

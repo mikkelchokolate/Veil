@@ -70,6 +70,7 @@ func NewRootCommandWithOptions(version string, options RootOptions) *cobra.Comma
 	cmd.AddCommand(newUpdateCommand(version))
 	cmd.AddCommand(newStatusCommand(version))
 	cmd.AddCommand(newHealthcheckCommand())
+	cmd.AddCommand(newEgressResolvConfCommand())
 	cmd.AddCommand(newConfigCommand())
 	cmd.AddCommand(newAdminCommand(options.PasswordHasher))
 	cmd.AddCommand(newBackupCommand(version))
@@ -112,6 +113,7 @@ func egressDNSCheckFromReport(report renderer.EgressDNSReport) doctorflow.Egress
 		ResolvConfMissing: report.ResolvConfMissing,
 		ReadError:         report.ReadError,
 		PinnedDoH:         report.PinnedDoH,
+		MieruNameservers:  append([]string(nil), report.MieruNameservers...),
 	}
 }
 

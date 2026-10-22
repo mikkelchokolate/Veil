@@ -21,18 +21,19 @@ func TestProbeEgressDNSMatchesRenderTimeProbe(t *testing.T) {
 		missing     bool
 		readErr     bool
 		pinned      string
+		mieru       []string
 	}{
 		{name: "resolved stub", conf: "nameserver 127.0.0.53\noptions edns0\n", v4: testIPv4DefaultRoute, nameservers: []string{"127.0.0.53"}, reachable: true},
 		{name: "public nameserver", conf: "nameserver 185.12.64.1\n", v4: testIPv4DefaultRoute, nameservers: []string{"185.12.64.1"}, reachable: true},
 		{name: "one reachable among denied", conf: "nameserver 10.0.0.2\nnameserver 1.1.1.1\n", v4: testIPv4DefaultRoute, nameservers: []string{"10.0.0.2", "1.1.1.1"}, reachable: true},
 		{name: "IPv4-mapped resolved stub", conf: "nameserver ::ffff:127.0.0.53\n", v4: testIPv4DefaultRoute, nameservers: []string{"::ffff:127.0.0.53"}, reachable: true},
-		{name: "AWS VPC resolver", conf: "search ec2.internal\nnameserver 172.31.0.2\n", v4: testIPv4DefaultRoute, nameservers: []string{"172.31.0.2"}, pinned: filteredHostDoHAddrV4},
-		{name: "local dnsmasq", conf: "nameserver 127.0.0.1\n", v4: testIPv4DefaultRoute, nameservers: []string{"127.0.0.1"}, pinned: filteredHostDoHAddrV4},
-		{name: "zoned IPv6 link-local", conf: "nameserver fe80::1%eth0\n", v4: testIPv4DefaultRoute, nameservers: []string{"fe80::1%eth0"}, pinned: filteredHostDoHAddrV4},
-		{name: "reachable nameserver past the third is ignored", conf: "nameserver 10.0.0.2\nnameserver 10.0.0.3\nnameserver 172.31.0.2\nnameserver 1.1.1.1\n", v4: testIPv4DefaultRoute, nameservers: []string{"10.0.0.2", "10.0.0.3", "172.31.0.2"}, pinned: filteredHostDoHAddrV4},
+		{name: "AWS VPC resolver", conf: "search ec2.internal\nnameserver 172.31.0.2\n", v4: testIPv4DefaultRoute, nameservers: []string{"172.31.0.2"}, pinned: filteredHostDoHAddrV4, mieru: []string{"1.1.1.1", "1.0.0.1"}},
+		{name: "local dnsmasq", conf: "nameserver 127.0.0.1\n", v4: testIPv4DefaultRoute, nameservers: []string{"127.0.0.1"}, pinned: filteredHostDoHAddrV4, mieru: []string{"1.1.1.1", "1.0.0.1"}},
+		{name: "zoned IPv6 link-local", conf: "nameserver fe80::1%eth0\n", v4: testIPv4DefaultRoute, nameservers: []string{"fe80::1%eth0"}, pinned: filteredHostDoHAddrV4, mieru: []string{"1.1.1.1", "1.0.0.1"}},
+		{name: "reachable nameserver past the third is ignored", conf: "nameserver 10.0.0.2\nnameserver 10.0.0.3\nnameserver 172.31.0.2\nnameserver 1.1.1.1\n", v4: testIPv4DefaultRoute, nameservers: []string{"10.0.0.2", "10.0.0.3", "172.31.0.2"}, pinned: filteredHostDoHAddrV4, mieru: []string{"1.1.1.1", "1.0.0.1"}},
 		{name: "unparseable nameserver does not count toward three", conf: "nameserver bogus\nnameserver 10.0.0.2\nnameserver 10.0.0.3\nnameserver 1.1.1.1\n", v4: testIPv4DefaultRoute, nameservers: []string{"10.0.0.2", "10.0.0.3", "1.1.1.1"}, reachable: true},
-		{name: "IPv6-only host denied nameserver", conf: "nameserver fd00::53\n", v4: testIPv4NoDefault, v6: testIPv6DefaultRoute, nameservers: []string{"fd00::53"}, pinned: filteredHostDoHAddrV6},
-		{name: "empty resolv.conf", conf: "", v4: testIPv4DefaultRoute, pinned: filteredHostDoHAddrV4},
+		{name: "IPv6-only host denied nameserver", conf: "nameserver fd00::53\n", v4: testIPv4NoDefault, v6: testIPv6DefaultRoute, nameservers: []string{"fd00::53"}, pinned: filteredHostDoHAddrV6, mieru: []string{"2606:4700:4700::1111", "2606:4700:4700::1001"}},
+		{name: "empty resolv.conf", conf: "", v4: testIPv4DefaultRoute, pinned: filteredHostDoHAddrV4, mieru: []string{"1.1.1.1", "1.0.0.1"}},
 		{name: "no resolv.conf", confErr: fs.ErrNotExist, v4: testIPv4DefaultRoute, missing: true, pinned: filteredHostDoHAddrV4},
 		{name: "unreadable resolv.conf", confErr: fs.ErrPermission, v4: testIPv4DefaultRoute, readErr: true},
 	}
@@ -45,6 +46,11 @@ func TestProbeEgressDNSMatchesRenderTimeProbe(t *testing.T) {
 			}
 			if got.Reachable != tc.reachable || got.ResolvConfMissing != tc.missing || (got.ReadError != "") != tc.readErr || got.PinnedDoH != tc.pinned {
 				t.Fatalf("report = %+v, want reachable=%v missing=%v readErr=%v pinned=%q", got, tc.reachable, tc.missing, tc.readErr, tc.pinned)
+			}
+			// A missing resolv.conf pins DoH for Hysteria2/WARP but gives
+			// Mieru no fallback: the bind would create /etc/resolv.conf.
+			if !reflect.DeepEqual(got.MieruNameservers, tc.mieru) {
+				t.Fatalf("MieruNameservers = %q, want %q", got.MieruNameservers, tc.mieru)
 			}
 			// The doctor must never disagree with what the renderers pin.
 			renderAddr, renderPins := filteredHostDoHAddr()
